@@ -36,6 +36,7 @@ export const APP_HEALTH_CHECK_CODES = {
   TAXONOMY_ROOTS: 'taxonomy-roots',
   RIBBON_RECONCILIATION: 'ribbon-reconciliation',
   COVERAGE: 'coverage-reconciliation',
+  CATALOGUE_COVERAGE: 'catalogue-identity-coverage',
   QUARANTINE: 'quarantine-impact',
   FRESHNESS: 'freshness-window',
   DETAILS_COMPLETENESS: 'details-completeness',
@@ -65,6 +66,7 @@ export const APP_HEALTH_EXPECTED_CHECK_IDS = [
   APP_HEALTH_CHECK_CODES.TAXONOMY_ROOTS,
   APP_HEALTH_CHECK_CODES.RIBBON_RECONCILIATION,
   APP_HEALTH_CHECK_CODES.COVERAGE,
+  APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE,
   APP_HEALTH_CHECK_CODES.QUARANTINE,
   APP_HEALTH_CHECK_CODES.FRESHNESS,
   APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS,
@@ -171,6 +173,8 @@ export interface AppHealthDataSnapshot {
   details?: AppHealthDetailsObservation | null;
   assets?: Partial<Record<AppHealthAssetKey, AppHealthAssetObservation>>;
   quarantine?: AppHealthQuarantineObservation | null;
+  /** Exhaustive selector reconciliation; distinct from sampled foreground rendering. */
+  catalogue?: import('./catalogueCoverage').AppHealthCatalogueObservation | null;
 }
 
 export type AppHealthDisplayEvidence =
@@ -236,6 +240,10 @@ export interface AppHealthSurfaceContract {
 export interface AppHealthSurfaceObservation {
   surfaceId: string;
   evidence: readonly AppHealthDisplayEvidence[];
+  /** Keep each distinct list failure with counts from that same visit. */
+  listFailureEvidence?: Partial<Record<
+    'list' | 'visible' | 'empty-state', readonly AppHealthDisplayEvidence[]
+  >>;
 }
 
 export type AppHealthNetworkPurpose = 'manifest' | 'dates-index' | 'asset' | 'external-link';
@@ -306,6 +314,8 @@ export interface FinalizeAppHealthReportInput {
   checks: readonly AppHealthCheck[];
   plannedCheckIds: readonly string[];
   limitations?: readonly string[];
+  /** A partial run cannot claim complete coverage merely by storing not-run placeholders. */
+  incompleteReason?: string;
 }
 
 export interface LegacyPerformanceAuditReportV6 {

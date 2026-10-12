@@ -54,12 +54,14 @@ function DebugLogScreenInner() {
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const logPathHint = debugLog.getAndroidLogPathHint();
-  const readVersionedExport = useCallback(async () => {
+  const readVersionedExport = useCallback(async (fullEvidence = false) => {
     const completeLog = await debugLog.readCompleteText();
     return formatVersionedLogExport(
       completeLog,
       Application.nativeApplicationVersion ?? 'unknown',
       Application.nativeBuildVersion ?? 'unknown',
+      {},
+      { fullEvidence },
     );
   }, []);
 
@@ -183,7 +185,7 @@ function DebugLogScreenInner() {
     try {
       const body = await readVersionedExport();
       await Clipboard.setStringAsync(body);
-      Alert.alert('Copied', 'Complete on-disk log and latest performance audit copied.');
+      Alert.alert('Copied', 'Compact diagnostic log copied. Full evidence remains available through Share full evidence.');
     } catch (err) {
       Alert.alert('Copy failed', String((err as Error)?.message ?? err));
     } finally {
@@ -192,13 +194,13 @@ function DebugLogScreenInner() {
     }
   }, [readVersionedExport]);
 
-  const onShare = useCallback(async () => {
+  const onShare = useCallback(async (fullEvidence = false) => {
     if (busyRef.current) return;
     busyRef.current = 'share';
     setBusy('share');
     let wroteShareFile = false;
     try {
-      const body = await readVersionedExport();
+      const body = await readVersionedExport(fullEvidence);
       const path = FileSystem.cacheDirectory ? DEBUG_LOG_SHARE_FILE : null;
       if (path && await Sharing.isAvailableAsync()) {
         // The screen renders a small tail for responsiveness; explicit export
@@ -251,8 +253,8 @@ function DebugLogScreenInner() {
 
   const onUpload = useCallback(() => {
     Alert.alert(
-      'Upload full log?',
-      'The log and complete audit report will be sent to paste.rs or paste.c-net.org. Anyone with the link can read it. After verification, the link is copied to your clipboard.' +
+      'Upload diagnostic log?',
+      'The compact log, including failure details and product identities, will be sent to paste.rs or paste.c-net.org. Anyone with the link can read it. After verification, the link is copied to your clipboard.' +
         (uploadState.mayHaveUploaded ? ' An earlier upload was not confirmed and may already exist without a deletion receipt. This creates another public copy.' : ''),
       [
         { text: 'Cancel', style: 'cancel' },
@@ -338,8 +340,8 @@ function DebugLogScreenInner() {
           </Card>
           <AppText variant="tiny" color="textMuted">
             Copy stays on this device. Share uses the operating-system share sheet and removes its
-            temporary file afterward. Upload sends the full log to public hosting and copies the
-            verified link.
+            temporary file afterward. Exports group routine audit results and retain failures.
+            Upload sends the compact log to public hosting and copies the verified link.
           </AppText>
           {clearFailed ? (
             <AppText accessibilityRole="alert" variant="tiny" color="danger">
@@ -375,6 +377,13 @@ function DebugLogScreenInner() {
               loading={busy === 'share'}
               disabled={busy !== null || clearFailed}
               onPress={() => void onShare()}
+            />
+            <Button
+              title="Share full evidence"
+              icon="document-text-outline"
+              variant="ghost"
+              disabled={busy !== null || clearFailed}
+              onPress={() => void onShare(true)}
             />
             <Button
               title="Upload and copy link"

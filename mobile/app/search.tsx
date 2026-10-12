@@ -4,7 +4,7 @@ import Ionicons from '../src/components/icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
 import { useIsFocused } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -113,6 +113,7 @@ export default function Search() {
   const searchIndexSha = useStore((s) => s.manifest?.files.search_index?.sha256 ?? null);
   const searchIndexStatus = useStore((s) => s.searchIndexStatus);
   const searchIndexError = useStore((s) => s.searchIndexError);
+  const source = useStore((s) => s.source);
   const deepSearchActive = useStore((s) => effectiveDeepSearch(s.prefs));
   const subscriptions = useStore((s) => s.subscriptions);
   const restoredSub = useMemo(
@@ -147,6 +148,19 @@ export default function Search() {
       if (deepSearchActive) void ensureSearchIndex();
     });
   }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey, searchIndexSha, isFocused]);
+  // A cached core reports deep search unavailable until a refresh confirms the
+  // same edition is live; that promotion changes only `source`, so retry on the
+  // transition itself. Status is read, not depended on: other unavailable
+  // results (e.g. local audits) cycle through loading and must not re-trigger.
+  const previousSource = useRef(source);
+  useEffect(() => {
+    const promotedToRemote = previousSource.current !== 'remote' && source === 'remote';
+    previousSource.current = source;
+    if (promotedToRemote && isFocused && deepSearchActive &&
+        useStore.getState().searchIndexStatus === 'unavailable') {
+      void ensureSearchIndex();
+    }
+  }, [deepSearchActive, ensureSearchIndex, isFocused, source]);
 
   const [query, setQuery] = useState(() => restoredSub?.query ?? queryRaw ?? '');
   const debouncedQuery = useDebouncedValue(query, 120);
@@ -216,6 +230,21 @@ export default function Search() {
       )
     ),
     [sortedBaseRows, effectiveFilters, debouncedQuery, section, deepSearchActive, details?.products, searchIndex, suitabilityRevision],
+  );
+
+  const draftResultCount = useCallback(
+    (draft: Filters) => (
+      // Suitability rebuilds can keep the same row array; count against the gate the list uses.
+      void suitabilityRevision,
+      filterRows(
+        baseRows,
+        { ...draft, query: debouncedQuery },
+        details?.products ?? null,
+        deepSearchActive ? searchIndex : null,
+        section,
+      ).length
+    ),
+    [baseRows, debouncedQuery, details?.products, deepSearchActive, searchIndex, section, suitabilityRevision],
   );
 
   const showDeepSearchHint =
@@ -301,6 +330,17 @@ export default function Search() {
     setSelectMode((value) => !value);
     setSelected([]);
   }, []);
+  const clearSearchFilters = useCallback(() => {
+    setQuery('');
+    setFilters({ ...EMPTY_FILTERS, includeNonStandard });
+  }, [includeNonStandard]);
+  const selectAuditToken = useCallback((...args: unknown[]) => {
+    const token = auditActionString(args, 'selectionToken');
+    if (!token || !baseRows.some(row => rowToken(row) === token)) {
+      return { unavailableReason: 'The selected exact rate is not in the current filtered search results' };
+    }
+    toggleSelect(token);
+  }, [baseRows, toggleSelect]);
   const auditActions = useMemo(() => ({
     'search.open': () => undefined,
     'search.query.product': (...args: unknown[]) => {
@@ -318,23 +358,18 @@ export default function Search() {
       if (provider) setFilters((current) => ({ ...current, providers: [provider] }));
     },
     'search.filters.apply': () => setFilterOpen(false),
+    'search.filters.clear': clearSearchFilters,
     'search.compare.mode': toggleCompareMode,
-    'search.compare.select.0': (...args: unknown[]) => {
-      const token = auditActionString(args, 'selectionToken');
-      if (token && baseRows.some((row) => rowToken(row) === token)) toggleSelect(token);
-    },
-    'search.compare.select.1': (...args: unknown[]) => {
-      const token = auditActionString(args, 'selectionToken');
-      if (token && baseRows.some((row) => rowToken(row) === token)) toggleSelect(token);
-    },
+    'search.compare.select.0': selectAuditToken,
+    'search.compare.select.1': selectAuditToken,
     'search.compare.open': (...args: unknown[]) => {
       const exactTokens = auditActionStrings(args, 'selectionTokens');
       const tokens = exactTokens.length >= 2 ? exactTokens : selected;
       if (tokens.length >= 2) openCompare(tokens);
     },
-  }), [baseRows, selected, sortOptions, toggleCompareMode, toggleSelect]);
+  }), [clearSearchFilters, selected, selectAuditToken, sortOptions, toggleCompareMode]);
   const searchPending = detailFiltersPending || searchIndexLoading;
-  const listRevision = JSON.stringify([
+  const listDataRevision = JSON.stringify([
     coreSha ?? core?.run_date ?? 'none',
     details?.run_date ?? 'none',
     section,
@@ -343,18 +378,16 @@ export default function Search() {
     debouncedQuery,
     sortKey,
     effectiveFilters,
-    filterOpen,
     deepSearchActive,
-    selectMode,
-    selected,
     searchIndex != null,
     suitabilityRevision,
     rows.length,
   ]);
+  // Selection and disclosure changes need a fresh committed render, but keep
+  // the same list and decoded logos while its result identities are unchanged.
+  const listRevision = JSON.stringify([listDataRevision, filterOpen, selectMode, selected]);
   const listReadiness = useVirtualizedListReadiness(listRevision, rows.length);
-  const logoReadiness = useLogoReadiness(
-    `${listRevision}:${selectMode ? 'select' : 'browse'}`,
-  );
+  const logoReadiness = useLogoReadiness(listDataRevision);
   usePerformanceAuditSurface({
     id: 'search.results',
     routeKey: '/search',
@@ -415,7 +448,7 @@ export default function Search() {
             accessibilityLabel="Filter products"
           />
           <ToolbarIconButton
-            icon={selectMode ? 'git-compare' : 'git-compare-outline'}
+            icon={selectMode ? 'checkbox' : 'square-outline'}
             active={selectMode}
             onPress={toggleCompareMode}
             accessibilityLabel="Select products to compare"
@@ -425,13 +458,19 @@ export default function Search() {
           {sortOptions.map((o) => (
             <Chip key={o.key} label={o.label} selected={sortKey === o.key} onPress={() => setSortKey(o.key)} />
           ))}
-          <Button title="More" variant="ghost" onPress={() => setToolsOpen(true)} />
+          <Button title="Alert or export" variant="ghost" onPress={() => setToolsOpen(true)} />
         </Row>
         <AppText variant="tiny" color="textFaint">
           {searchPending ? 'Preparing products…' : `${rows.length} ${rows.length === 1 ? 'product' : 'products'}`}
           {searchSub ? ` · alert saved as ${searchSub.label}` : ''}
         </AppText>
-        {searchIndexUnavailable ? (
+        {searchIndexUnavailable && searchIndexStatus === 'unavailable' ? (
+          // Not retryable: this edition or data source has no search index.
+          <AppText variant="tiny" color="textFaint">
+            Searching product names only.
+          </AppText>
+        ) : null}
+        {searchIndexUnavailable && searchIndexStatus === 'error' ? (
           <Card variant="outlined" accessibilityRole="alert" style={{ gap: theme.spacing(2) }}>
             <AppText variant="small" weight="700">Deep search unavailable</AppText>
             <AppText variant="small" color="textMuted">
@@ -455,9 +494,9 @@ export default function Search() {
 
       <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
         <FlashList
-          // Remount when the user-facing result identity changes so readiness
-          // cannot stall after FlashList recycles without a fresh viewability pass.
-          key={`search:${listRevision}`}
+          // Only changed result identities require a new list. Selection and
+          // filter-sheet visibility commit in place through extraData below.
+          key={`search:${listDataRevision}`}
           data={rows}
           onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
           onLoad={listReadiness.onLoad}
@@ -519,10 +558,7 @@ export default function Search() {
                 <Button
                   title="Clear search and filters"
                   variant="secondary"
-                  onPress={() => {
-                    setQuery('');
-                    setFilters({ ...EMPTY_FILTERS, includeNonStandard });
-                  }}
+                  onPress={clearSearchFilters}
                 />
                 <Button title="Edit product profile" variant="ghost" onPress={() => router.push('/profile')} />
               </View>
@@ -547,6 +583,7 @@ export default function Search() {
         filters={effectiveFilters}
         detailsProducts={details?.products}
         onApply={setFilters}
+        resultCount={draftResultCount}
       />
       <LedgerSheet visible={toolsOpen} title="Search tools" onClose={() => setToolsOpen(false)}>
         <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: theme.spacing(4) }}>

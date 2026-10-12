@@ -136,6 +136,8 @@ export interface PerformanceAuditReadinessSnapshot {
   surfaces: PerformanceAuditSurfaceSnapshot[];
   blockers: PerformanceAuditReadinessBlocker[];
   fingerprint: string;
+  /** A previous wait proved this unchanged surface stable for the requested duration. */
+  quietWindowReused?: true;
 }
 
 /**
@@ -171,6 +173,8 @@ export interface PerformanceAuditReadinessClock {
 
 export interface WaitForPerformanceAuditReadinessOptions {
   quietWindowMs?: number;
+  /** Reuse completed stability evidence only for unchanged mounted surfaces. */
+  reuseSettledEvidence?: boolean;
   timeoutMs?: number;
   signal?: AbortSignal;
   /** Only these mounted surfaces may satisfy this step. This prevents an
@@ -362,10 +366,17 @@ export class PerformanceAuditReadinessCaptureEndedError extends PerformanceAudit
 export class PerformanceAuditReadinessRegistry {
   private capture: PerformanceAuditCaptureHandle | null = null;
   private generation = 0;
+  private stabilityEpoch = 0;
   private nextInstance = 1;
   private readonly surfaces = new Map<string, MutableSurface>();
   /** Action proof keyed by surface ID; remounts must not erase completed-step evidence. */
   private readonly actionCompletions = new Map<string, PerformanceAuditActionCompletion>();
+  private readonly settledEvidence = new Map<string, {
+    instance: number;
+    quietWindowMs: number;
+    requiredProbeIds: ReadonlySet<string>;
+  }>();
+  private readonly activeActions = new Map<string, number>();
   private readonly listeners = new Set<Listener>();
   private readonly captureListeners = new Set<Listener>();
 
@@ -387,6 +398,13 @@ export class PerformanceAuditReadinessRegistry {
     return this.capture != null;
   }
 
+  /** App lifecycle transitions invalidate evidence even if render tokens stay equal. */
+  invalidateSettledReadiness(): void {
+    this.settledEvidence.clear();
+    this.stabilityEpoch += 1;
+    this.emit();
+  }
+
   beginCapture(sessionId: string): PerformanceAuditCaptureHandle {
     const normalizedSessionId = sessionId.trim();
     if (!normalizedSessionId) throw new Error('A readiness capture requires a session ID');
@@ -394,6 +412,8 @@ export class PerformanceAuditReadinessRegistry {
     this.capture = Object.freeze({ sessionId: normalizedSessionId, generation: this.generation });
     this.surfaces.clear();
     this.actionCompletions.clear();
+    this.settledEvidence.clear();
+    this.activeActions.clear();
     this.emit(true);
     return this.capture;
   }
@@ -404,6 +424,8 @@ export class PerformanceAuditReadinessRegistry {
     this.capture = null;
     this.surfaces.clear();
     this.actionCompletions.clear();
+    this.settledEvidence.clear();
+    this.activeActions.clear();
     this.generation += 1;
     this.emit(true);
   }
@@ -432,7 +454,7 @@ export class PerformanceAuditReadinessRegistry {
       surface.probes.set(probe.id, this.makeProbe(probe, at));
     }
     this.surfaces.set(id, surface);
-    this.emit();
+    this.emit(false, id);
     return Object.freeze({ surfaceId: id, generation: this.capture.generation, instance });
   }
 
@@ -458,7 +480,7 @@ export class PerformanceAuditReadinessRegistry {
     surface.renderRevision = nextRenderRevision;
     surface.actions = nextActions;
     surface.updatedAtMs = this.clock.now();
-    this.emit();
+    this.emit(false, surface.id);
     return true;
   }
 
@@ -466,7 +488,7 @@ export class PerformanceAuditReadinessRegistry {
     const surface = this.surfaceFor(handle);
     if (!surface) return false;
     this.surfaces.delete(handle.surfaceId);
-    this.emit();
+    this.emit(false, handle.surfaceId);
     return true;
   }
 
@@ -483,7 +505,7 @@ export class PerformanceAuditReadinessRegistry {
     const at = this.clock.now();
     surface.probes.set(id, this.makeProbe({ ...definition, id }, at));
     surface.updatedAtMs = at;
-    this.emit();
+    this.emit(false, surface.id);
     return true;
   }
 
@@ -548,7 +570,7 @@ export class PerformanceAuditReadinessRegistry {
     ) return true;
     Object.assign(probe, next, { updatedAtMs: this.clock.now() });
     surface.updatedAtMs = probe.updatedAtMs;
-    this.emit();
+    this.emit(false, surface.id);
     return true;
   }
 
@@ -556,7 +578,7 @@ export class PerformanceAuditReadinessRegistry {
     const surface = this.surfaceFor(handle);
     if (!surface || !surface.probes.delete(probeId)) return false;
     surface.updatedAtMs = this.clock.now();
-    this.emit();
+    this.emit(false, surface.id);
     return true;
   }
 
@@ -567,7 +589,19 @@ export class PerformanceAuditReadinessRegistry {
     if (!surface) throw new Error(`Readiness surface is not registered: ${surfaceId}`);
     const action = surface.actions.get(actionName);
     if (!action) throw new Error(`Readiness action is not registered: ${surfaceId}.${actionName}`);
-    const result = await action(...args);
+    this.settledEvidence.delete(surfaceId);
+    this.activeActions.set(surfaceId, (this.activeActions.get(surfaceId) ?? 0) + 1);
+    let result: unknown;
+    try {
+      result = await action(...args);
+    } finally {
+      if (this.capture?.generation === capture.generation) {
+        this.settledEvidence.delete(surfaceId);
+        const remaining = (this.activeActions.get(surfaceId) ?? 1) - 1;
+        if (remaining > 0) this.activeActions.set(surfaceId, remaining);
+        else this.activeActions.delete(surfaceId);
+      }
+    }
     // Capture can end/restart while the action awaits; never stamp a newer session.
     if (this.capture?.generation !== capture.generation) return result;
     // Terminal unavailability is skip evidence, not a successful semantic action.
@@ -585,7 +619,7 @@ export class PerformanceAuditReadinessRegistry {
     live.actionRevision = completion.actionRevision;
     live.lastCompletedAction = completion.actionName;
     live.updatedAtMs = this.clock.now();
-    this.emit();
+    this.emit(false, surfaceId);
     return result;
   }
 
@@ -620,7 +654,13 @@ export class PerformanceAuditReadinessRegistry {
         updatedAtMs: surface.updatedAtMs,
         probes: [...surface.probes.values()]
           .sort((left, right) => left.id.localeCompare(right.id))
-          .map((probe) => ({ ...probe })),
+          .map((probe) => ({ ...probe,
+            // Persist what this step actually waited for, including an optional
+            // chart promoted by an explicit chart action. Never mutate the
+            // registered probe's default for subsequent ordinary route visits.
+            required: limitedKinds ? limitedKinds.has(probe.kind)
+              : probe.required || Boolean(selectedKinds?.has(probe.kind)),
+          })),
         actions: [...surface.actions.keys()].sort(),
         actionRevision: surface.actionRevision,
         lastCompletedAction: surface.lastCompletedAction,
@@ -752,6 +792,7 @@ export class PerformanceAuditReadinessRegistry {
     return new Promise((resolve, reject) => {
       let settled = false;
       let stableFingerprint: string | null = null;
+      let stableEpoch = this.stabilityEpoch;
       let stableSinceMs = 0;
       let quietTimer: unknown = null;
       let timeoutTimer: unknown = null;
@@ -766,6 +807,19 @@ export class PerformanceAuditReadinessRegistry {
         if (settled) return;
         settled = true;
         cleanup();
+        if (!snapshot.quietWindowReused) {
+          for (const surface of snapshot.surfaces) {
+            const live = this.surfaces.get(surface.id);
+            if (live && !this.activeActions.has(surface.id)) {
+              this.settledEvidence.set(surface.id, {
+                instance: live.instance,
+                quietWindowMs,
+                requiredProbeIds: new Set(surface.probes.filter((probe) => probe.required)
+                  .map((probe) => probe.id)),
+              });
+            }
+          }
+        }
         resolve(snapshot);
       };
       const fail = (error: Error) => {
@@ -780,7 +834,14 @@ export class PerformanceAuditReadinessRegistry {
       };
       const evaluate = () => {
         if (settled) return;
+        // Notifications can arrive before the existing timer fires. Keep just
+        // one quiet timer instead of dropping its handle and leaking callbacks.
+        if (quietTimer != null) this.clock.clearTimeout(quietTimer);
         quietTimer = null;
+        if (stableEpoch !== this.stabilityEpoch) {
+          stableEpoch = this.stabilityEpoch;
+          stableFingerprint = null;
+        }
         const snapshot = this.snapshot(
           options.surfaceIds,
           options.requiredKinds,
@@ -813,6 +874,16 @@ export class PerformanceAuditReadinessRegistry {
         );
         if (!snapshot.ready || !renderedChange) {
           stableFingerprint = null;
+          return;
+        }
+        if (options.reuseSettledEvidence && snapshot.surfaces.every((surface) => {
+          const evidence = this.settledEvidence.get(surface.id);
+          return evidence != null && !this.activeActions.has(surface.id) &&
+            evidence.instance === this.surfaces.get(surface.id)?.instance &&
+            evidence.quietWindowMs >= quietWindowMs &&
+            surface.probes.every((probe) => !probe.required || evidence.requiredProbeIds.has(probe.id));
+        })) {
+          finish({ ...snapshot, quietWindowReused: true });
           return;
         }
         if (stableFingerprint !== snapshot.fingerprint) {
@@ -874,7 +945,8 @@ export class PerformanceAuditReadinessRegistry {
     return surface?.instance === handle.instance ? surface : null;
   }
 
-  private emit(captureChanged = false): void {
+  private emit(captureChanged = false, changedSurfaceId?: string): void {
+    if (changedSurfaceId) this.settledEvidence.delete(changedSurfaceId);
     for (const listener of this.listeners) listener();
     if (captureChanged) {
       for (const listener of this.captureListeners) listener();

@@ -1,13 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as BackgroundTask from 'expo-background-task';
-import * as TaskManager from 'expo-task-manager';
 import { create } from 'zustand';
 
 import { DEFAULT_INTERESTS, normalizeInterests, resolveInterestSection } from './interests';
 import { normalizeProfileFilters } from './profile';
 import { normalizeCalcInputs } from './calc';
 import { migrateLegacyCalculatorInputs } from './userRateScenario';
-import { BACKGROUND_TASK } from './notifications';
 import { bootstrapInitialState, createBootstrapActions } from './storeBootstrap';
 import { createRefreshActions } from './storeRefresh';
 import { createEnsureActions } from './storeEnsure';
@@ -20,6 +18,7 @@ import {
 } from './storeTypes';
 import type { SectionKey } from '../types';
 import { normalizeSavedRates } from './savedRates';
+import { refreshProductSubscriptionLabels } from './subscriptions';
 import { loadTrackedRatesSecureResult, normalizeTrackedRates } from './trackedRates';
 import { debugLog } from '../lib/debugLog';
 import { setCrashReportsEnabled } from '../lib/observability';
@@ -27,6 +26,7 @@ import { recoverInterruptedPerformanceAudit } from '../lib/performanceAuditRollb
 import { verifiedCatalogueDetails } from './detailsCatalogue';
 import { selectMandatoryEligibility } from './mandatoryEligibility';
 import { installMandatoryEligibility } from './eligibilityGate';
+import { configurePassiveAuditState, runPassiveAuditSlice } from '../lib/passiveAudit';
 
 // Expo/Metro emits Zustand's ESM middleware `import.meta.env` checks into a
 // classic web script. Use the package's CommonJS condition until upstream's
@@ -123,6 +123,9 @@ export const useStore = create<AppState>()(
         return {
           ...current,
           ...p,
+          ...(Array.isArray(p?.subscriptions)
+            ? { subscriptions: refreshProductSubscriptionLabels(p.subscriptions) }
+            : {}),
           prefs,
           savedRates,
           trackedRates,
@@ -174,6 +177,7 @@ export const useStore = create<AppState>()(
 );
 
 storeRef.current = useStore;
+configurePassiveAuditState(() => useStore.getState());
 
 function refreshMandatoryEligibility(state: AppState): void {
   const verified = verifiedCatalogueDetails(state.core, state.coreIntegrity, state.manifest, state.details);
@@ -187,51 +191,48 @@ useStore.subscribe((state, previous) => {
   }
 });
 
-try {
-  if (typeof TaskManager.isTaskDefined === 'function' && !TaskManager.isTaskDefined(BACKGROUND_TASK)) {
-    TaskManager.defineTask(BACKGROUND_TASK, async () => {
-      const startedAt = Date.now();
-      try {
-        try {
-          await useStore.persist?.rehydrate?.();
-        } catch {
-          // proceed with defaults if rehydrate fails
-        }
-        const prefs = useStore.getState().prefs;
-        await setCrashReportsEnabled(
-          prefs.privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION &&
-            prefs.crashReportsEnabled,
-        ).catch((error) => {
-          // Diagnostics are optional. A native consent-state failure must not
-          // prevent the scheduled rates refresh from running.
-          debugLog.warn(
-            'privacy',
-            `background crash-reporting confirmation failed: ${String((error as Error)?.message ?? error)}`,
-          );
-        });
-        debugLog.info('background-maintenance', 'scheduled refresh started');
-        await useStore.getState().ensureCoreLoaded();
-        useStore.setState({ refreshOutcome: null });
-        const changed = await useStore.getState().refresh({ background: true });
-        if (useStore.getState().refreshOutcome === 'failure') {
-          throw new Error('Scheduled rates refresh failed');
-        }
-        debugLog.info(
-          'background-maintenance',
-          `scheduled refresh complete changed=${changed} durationMs=${Date.now() - startedAt}`,
-        );
-        await debugLog.flushToFile();
-        return BackgroundTask.BackgroundTaskResult.Success;
-      } catch (error) {
-        debugLog.error(
-          'background-maintenance',
-          `scheduled refresh failed durationMs=${Date.now() - startedAt}: ${String((error as Error)?.message ?? error)}`,
-        );
-        await debugLog.flushToFile().catch(() => {});
-        return BackgroundTask.BackgroundTaskResult.Failed;
-      }
+export async function runScheduledBackgroundRefresh(): Promise<BackgroundTask.BackgroundTaskResult> {
+  const startedAt = Date.now();
+  try {
+    try {
+      await useStore.persist?.rehydrate?.();
+    } catch {
+      // proceed with defaults if rehydrate fails
+    }
+    const prefs = useStore.getState().prefs;
+    await setCrashReportsEnabled(
+      prefs.privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION &&
+        prefs.crashReportsEnabled,
+    ).catch((error) => {
+      // Diagnostics are optional. A native consent-state failure must not
+      // prevent the scheduled rates refresh from running.
+      debugLog.warn(
+        'privacy',
+        `background crash-reporting confirmation failed: ${String((error as Error)?.message ?? error)}`,
+      );
     });
+    debugLog.info('background-maintenance', 'scheduled refresh started');
+    await useStore.getState().ensureCoreLoaded();
+    useStore.setState({ refreshOutcome: null });
+    const changed = await useStore.getState().refresh({ background: true });
+    if (useStore.getState().refreshOutcome === 'failure') {
+      throw new Error('Scheduled rates refresh failed');
+    }
+    debugLog.info(
+      'background-maintenance',
+      `scheduled refresh complete changed=${changed} durationMs=${Date.now() - startedAt}`,
+    );
+    // Reuse the data this existing task already loaded. Passive audit never
+    // initiates its own refresh, history load, or network request.
+    await runPassiveAuditSlice(true);
+    await debugLog.flushToFile();
+    return BackgroundTask.BackgroundTaskResult.Success;
+  } catch (error) {
+    debugLog.error(
+      'background-maintenance',
+      `scheduled refresh failed durationMs=${Date.now() - startedAt}: ${String((error as Error)?.message ?? error)}`,
+    );
+    await debugLog.flushToFile().catch(() => {});
+    return BackgroundTask.BackgroundTaskResult.Failed;
   }
-} catch {
-  // TaskManager unavailable (e.g. web / test env) — background refresh is optional.
 }

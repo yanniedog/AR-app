@@ -274,3 +274,12 @@ it('preserves the distinction between basic and deep search in a passing export'
     durationMs: 10, metrics: { searchMode: 'basic', deepSearchAvailable: false } });
   expect(check.metrics).toMatchObject({ searchMode: 'basic', deepSearchAvailable: false });
 });
+
+it.each(['pass', 'skipped'])('preserves readiness wait savings in compact %s records', (status) => {
+  const check = compactAuditCheckForLog({ id: 'action', label: 'Action', kind: 'journey', status,
+    durationMs: status === 'skipped' ? null : 700,
+    metrics: { preActionWaitMs: 3, preActionQuietWindowReused: true, preActionQuietWindowAvoidedMs: 650 } });
+  expect(check.metrics).toMatchObject({
+    preActionWaitMs: 3, preActionQuietWindowReused: true, preActionQuietWindowAvoidedMs: 650,
+  });
+});

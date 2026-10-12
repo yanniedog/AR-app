@@ -211,9 +211,10 @@ export default function Market() {
     setRbaOpen(true);
   }, []);
   const queueEconomyAuditAction = useCallback((action: 'lens' | 'window' | 'date') => {
+    if (!economyOpen) setEconomicAuditState(null);
     setEconomyOpen(true);
     setPendingEconomyAuditAction(action);
-  }, []);
+  }, [economyOpen]);
   useEffect(() => setRbaGraphicState(null), [datasetRevision]);
   const historyDates = useMemo(
     () => explorerMode === 'pulse' || explorerMode === 'race'
@@ -317,17 +318,26 @@ export default function Market() {
     emptyStateRendered: historyOpen && historyGraphicState?.revision === renderRevision && historyGraphicState.emptyStateRendered,
     accessibleSummary: historyOpen && historyChartAvailable &&
       historyGraphicState?.revision === renderRevision && historyGraphicState.accessibleSummary,
-  });
+  }, historyOpen);
   usePerformanceAuditProbe(surface, {
     id: 'economic-graphics', kind: 'graphic', required: economyOpen,
-    status: !economyOpen ? 'ready' : economicAuditState?.status ?? 'pending', error: economicAuditState?.error,
+    status: !economyOpen || economicAuditState?.graphicReady ? 'ready' : 'pending',
     expectedCount: economyOpen ? economicAuditState?.expectedCount ?? 0 : 0,
     actualCount: economyOpen ? economicAuditState?.pointCount ?? 0 : 0,
     layoutMeasured: economyOpen ? economicAuditState?.layoutMeasured ?? false : false,
     emptyStateRendered: economyOpen ? economicAuditState?.emptyStateRendered ?? false : false,
     accessibleSummary: economyOpen ? economicAuditState?.accessibleSummary ?? false : false,
     datasetRevision, renderRevision,
-  });
+  }, economyOpen);
+  // Missing optional observations are a data-availability boundary. The chart
+  // still proves its actual measured empty state before that boundary is terminal.
+  usePerformanceAuditProbe(surface, {
+    id: 'economic-data', kind: 'data', required: economyOpen,
+    status: economicAuditState?.status ?? 'pending', error: economicAuditState?.error,
+    expectedCount: economicAuditState?.indicatorCount ?? 0,
+    actualCount: economicAuditState?.indicatorCount ?? 0,
+    datasetRevision, renderRevision,
+  }, economyOpen);
   usePerformanceAuditProbe(surface, {
     id: 'leader-logos', kind: 'logo', required: explorerMode === 'race',
     status: explorerMode !== 'race' || (
@@ -343,7 +353,7 @@ export default function Market() {
     id: 'outlook.rba-response', routeKey: '/research', datasetRevision,
     renderRevision: `${datasetRevision ?? 'none'}:${rbaSelectedDate ?? 'latest'}`,
     actions: {
-      'outlook.rba-response.decision.previous': previousRbaDate,
+      'outlook.rba-response.decision.previous': () => { openRba(); previousRbaDate(); },
     },
   });
   usePerformanceAuditProbe(rbaSurface, {
@@ -419,7 +429,10 @@ export default function Market() {
         title={`How have ${SECTIONS[activeSection].title.toLowerCase()} rates moved?`}
         summary="Leading advertised rate versus the median"
         open={historyOpen}
-        onToggle={() => setHistoryOpen((open) => !open)}
+        onToggle={() => {
+          setHistoryGraphicState(null);
+          setHistoryOpen((open) => !open);
+        }}
       >
         {!showHistoryRibbon ? (
           <Button title="Show market history" variant="secondary" onPress={() => setPref('showHistoryRibbon', true)} />
@@ -513,7 +526,10 @@ export default function Market() {
         title="What is shaping rates"
         summary="Inflation, labour, housing and market expectations"
         open={economyOpen}
-        onToggle={() => setEconomyOpen((open) => !open)}
+        onToggle={() => {
+          setEconomicAuditState(null);
+          setEconomyOpen((open) => !open);
+        }}
       >
         <RbaOutlook
           ref={rbaOutlookRef}

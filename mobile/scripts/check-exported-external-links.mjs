@@ -43,17 +43,28 @@ export function checkExternalLinksInBundle(code) {
     assert.equal(result.ok, true, `Compiled ${request.purpose} rejected: ${result.message}`);
     assert.equal(result.url, request.url.split('#')[0], 'Compiled URL changed path or query');
   }
-  for (const url of ['http://www.commbank.com.au/', 'https://localhost/', 'https://www.commbank.com.au/?token=secret']) {
+  assert.equal(trustedExternalUrl({ url: 'http://www.anz.com/terms', purpose: 'lender_source', label: 'Legacy CDR' }).url,
+    'https://www.anz.com/terms', 'Legacy CDR links must upgrade before any transport');
+  for (const url of ['http://example.com/', 'https://localhost/', 'https://www.commbank.com.au/?token=secret',
+    'https://cdn.bfldr.com/UNAPPROVED/as/document']) {
     assert.equal(trustedExternalUrl({ url, purpose: 'lender_source', label: 'Rejected' }).ok, false);
   }
   return requests.length;
 }
 
+export function exportedWebEntry(names) {
+  // Expo Router's default entry and our explicit headless-task entry use these
+  // basenames. Keep ambiguity/missing-bundle failures rather than choosing a
+  // stale bundle or a secondary chunk silently.
+  names = names.filter(name => /^(?:entry|index)-.+\.js$/.test(name));
+  assert.equal(names.length, 1, 'Expected one exported web entry');
+  return names[0];
+}
+
 export async function checkExportedExternalLinks(dist = path.resolve('dist')) {
   const folder = path.join(dist, '_expo/static/js/web');
-  const names = (await readdir(folder)).filter(name => /^entry-.+\.js$/.test(name));
-  assert.equal(names.length, 1, 'Expected one exported web entry');
-  const count = checkExternalLinksInBundle(await readFile(path.join(folder, names[0]), 'utf8'));
+  const name = exportedWebEntry(await readdir(folder));
+  const count = checkExternalLinksInBundle(await readFile(path.join(folder, name), 'utf8'));
   console.log(`Compiled external links passed: ${count} approved purposes and unsafe destinations rejected.`);
 }
 

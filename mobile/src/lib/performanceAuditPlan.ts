@@ -1,5 +1,7 @@
 import { ROOT } from '../data/taxonomy';
-import { SECTION_KEYS, type CorePayload, type RateRow, type SectionKey } from '../types';
+import { EMPTY_FILTERS, filterRows } from '../data/selectors';
+import { isSuitabilityFilterReady } from '../data/suitabilityGate';
+import { SECTION_KEYS, type CorePayload, type ProductDetail, type RateRow, type SectionKey } from '../types';
 import { MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID } from './performanceAuditProfile';
 
 export const DEEP_AUDIT_PLAN_SCHEMA_VERSION = 2 as const;
@@ -70,6 +72,26 @@ export interface DeepAuditDerivedInputs {
   primaryProduct: DeepAuditExactProduct | null;
   secondaryProduct: DeepAuditExactProduct | null;
   compareSelectionTokens: string[];
+  /** A bounded foreground sample, never evidence that the entire catalogue rendered. */
+  sampledProducts: DeepAuditExactProduct[];
+  sampling: {
+    seed: string;
+    method: 'section-provider-product-tier';
+    filterReady: boolean;
+    eligibleProducts: number | null;
+    eligibleProviders: number | null;
+    sampledProducts: number;
+    sampledProviders: number;
+    sampledSections: number;
+    fullCatalogueRendered: false;
+  };
+}
+
+export interface DeepAuditSelectionOptions {
+  /** Use the session ID, keeping the same seed for both passes and any plan rebuild. */
+  seed?: string;
+  includeNonStandard?: boolean;
+  detailsProducts?: Record<string, ProductDetail> | null;
 }
 
 export interface DeepAuditSkipSafety {
@@ -204,15 +226,56 @@ function taxonomyPath(row: RateRow, section: SectionKey): string[] {
   return segments[0] === ROOT[section] ? segments.slice(1) : [];
 }
 
-function compareRows(left: RateRow, right: RateRow, section: SectionKey): number {
-  const depth = taxonomyPath(right, section).length - taxonomyPath(left, section).length;
-  if (depth) return depth;
-  const key = left.product_key.localeCompare(right.product_key);
-  if (key) return key;
-  const leftIndex = exactRateIndex(left) ?? Number.MAX_SAFE_INTEGER;
-  const rightIndex = exactRateIndex(right) ?? Number.MAX_SAFE_INTEGER;
-  if (leftIndex !== rightIndex) return leftIndex - rightIndex;
-  return left.provider.localeCompare(right.provider);
+/** Seeded Fisher-Yates, with a canonical input order so a seed is reproducible. */
+function seededRandom(seed: string): () => number {
+  let state = 2166136261;
+  for (const character of seed) state = Math.imul(state ^ character.charCodeAt(0), 16777619);
+  return () => {
+    state += 0x6D2B79F5;
+    let value = Math.imul(state ^ (state >>> 15), 1 | state);
+    value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffled<T>(values: readonly T[], random: () => number): T[] {
+  const result = [...values];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const other = Math.floor(random() * (index + 1));
+    [result[index], result[other]] = [result[other], result[index]];
+  }
+  return result;
+}
+
+/** Give small banks the same opportunity as banks publishing many rate tiers. */
+function stratifiedRows(rows: RateRow[], random: () => number): RateRow[] {
+  const providers = new Map<string, Map<string, RateRow[]>>();
+  for (const row of rows) {
+    const products = providers.get(row.provider) ?? new Map<string, RateRow[]>();
+    const tiers = products.get(row.product_key) ?? [];
+    tiers.push(row);
+    products.set(row.product_key, tiers);
+    providers.set(row.provider, products);
+  }
+  const queues = shuffled([...providers.keys()].sort(), random).map(provider => {
+    const products = providers.get(provider)!;
+    return shuffled([...products.keys()].sort(), random).map(key => {
+      const tiers = products.get(key)!.slice().sort((a, b) =>
+        (exactRateIndex(a) ?? -1) - (exactRateIndex(b) ?? -1));
+      return tiers[Math.floor(random() * tiers.length)];
+    });
+  });
+  const selected: RateRow[] = [];
+  // Two products per section, different banks where possible. No top-N prefilter.
+  for (let round = 0; selected.length < 2; round += 1) {
+    let added = false;
+    for (const queue of queues) {
+      if (queue[round]) { selected.push(queue[round]); added = true; }
+      if (selected.length === 2) break;
+    }
+    if (!added) break;
+  }
+  return selected;
 }
 
 function exactProduct(row: RateRow, section: SectionKey): DeepAuditExactProduct {
@@ -229,87 +292,60 @@ function exactProduct(row: RateRow, section: SectionKey): DeepAuditExactProduct 
 }
 
 /**
- * Select deterministic exact rows without inventing a tier, provider, rate or
- * financial scenario. Two comparison rows always come from the same section
- * and different product keys.
+ * Sample only currently eligible rows. The mandatory profile gate remains in
+ * force even during the audit's temporary full-catalogue opt-in. Every eligible
+ * bank, product and exact tier is reachable, without alphabetical preference.
  */
-export function deriveDeepAuditInputs(core: CorePayload | null): DeepAuditDerivedInputs {
-  if (!core) {
-    return {
-      datasetDate: null,
-      section: null,
-      taxonomyPath: [],
-      provider: null,
-      searchQuery: null,
-      primaryProduct: null,
-      secondaryProduct: null,
-      compareSelectionTokens: [],
-    };
-  }
-
-  let chosenSection: SectionKey | null = null;
-  let chosenRows: RateRow[] = [];
-  let singleFallback: { section: SectionKey; rows: RateRow[] } | null = null;
-  const providerSections = new Map<string, Set<SectionKey>>();
+export function deriveDeepAuditInputs(
+  core: CorePayload | null,
+  options: DeepAuditSelectionOptions = {},
+): DeepAuditDerivedInputs {
+  const seed = options.seed ?? core?.run_date ?? 'no-payload';
+  const random = seededRandom(seed);
+  const filterReady = Boolean(core) && isSuitabilityFilterReady(options.includeNonStandard ?? false);
+  const eligibleProducts = new Set<string>();
+  const eligibleProviders = new Set<string>();
+  const samples = new Map<SectionKey, DeepAuditExactProduct[]>();
   for (const section of SECTION_KEYS) {
-    for (const row of core.sections[section]?.rates ?? []) {
-      if (!row.product_key.trim() || !row.provider.trim()) continue;
-      const sections = providerSections.get(row.provider) ?? new Set<SectionKey>();
-      sections.add(section);
-      providerSections.set(row.provider, sections);
+    const rows = core && filterReady ? filterRows(
+      core.sections[section]?.rates ?? [],
+      { ...EMPTY_FILTERS, includeNonStandard: options.includeNonStandard ?? false },
+      options.detailsProducts,
+      null,
+      section,
+    ).filter(row => row.product_key.trim() && row.provider.trim()) : [];
+    for (const row of rows) {
+      eligibleProducts.add(row.product_key);
+      eligibleProviders.add(row.provider);
     }
+    samples.set(section, stratifiedRows(rows, random).map(row => exactProduct(row, section)));
   }
-
-  for (const section of SECTION_KEYS) {
-    const sorted = (core.sections[section]?.rates ?? [])
-      .filter((row) => row.product_key.trim() && row.provider.trim())
-      .slice()
-      .sort((left, right) =>
-        (providerSections.get(right.provider)?.size ?? 0) -
-          (providerSections.get(left.provider)?.size ?? 0) ||
-        compareRows(left, right, section),
-      );
-    const uniqueProducts: RateRow[] = [];
-    const seen = new Set<string>();
-    for (const row of sorted) {
-      if (seen.has(row.product_key)) continue;
-      seen.add(row.product_key);
-      uniqueProducts.push(row);
-    }
-    if (!singleFallback && uniqueProducts.length) {
-      singleFallback = { section, rows: uniqueProducts };
-    }
-    if (uniqueProducts.length >= 2) {
-      chosenSection = section;
-      chosenRows = uniqueProducts;
-      break;
-    }
-  }
-
-  if (!chosenSection && singleFallback) {
-    chosenSection = singleFallback.section;
-    chosenRows = singleFallback.rows;
-  }
-
-  const primaryProduct = chosenSection && chosenRows[0]
-    ? exactProduct(chosenRows[0], chosenSection)
-    : null;
-  const secondaryProduct = chosenSection && chosenRows[1]
-    ? exactProduct(chosenRows[1], chosenSection)
-    : null;
-
+  const sections = shuffled(SECTION_KEYS, random);
+  const chosenSection = sections.find(section => samples.get(section)!.length >= 2)
+    ?? sections.find(section => samples.get(section)!.length > 0) ?? null;
+  const primaryProduct = chosenSection ? samples.get(chosenSection)![0] ?? null : null;
+  const secondaryProduct = chosenSection ? samples.get(chosenSection)![1] ?? null : null;
+  const sampledProducts = sections.flatMap(section => samples.get(section)!);
   return {
-    datasetDate: core.run_date,
+    datasetDate: core?.run_date ?? null,
     section: chosenSection,
     taxonomyPath: primaryProduct?.taxonomyPath ?? [],
-    provider: primaryProduct?.provider ?? Object.keys(core.brands).sort()[0] ?? null,
-    searchQuery: primaryProduct?.provider ?? primaryProduct?.productName ?? null,
+    provider: primaryProduct?.provider ?? null,
+    searchQuery: primaryProduct?.provider ?? null,
     primaryProduct,
     secondaryProduct,
-    compareSelectionTokens:
-      primaryProduct && secondaryProduct
-        ? [primaryProduct.selectionToken, secondaryProduct.selectionToken]
-        : [],
+    compareSelectionTokens: primaryProduct && secondaryProduct
+      ? [primaryProduct.selectionToken, secondaryProduct.selectionToken] : [],
+    sampledProducts,
+    sampling: {
+      seed, method: 'section-provider-product-tier', filterReady,
+      eligibleProducts: filterReady ? eligibleProducts.size : null,
+      eligibleProviders: filterReady ? eligibleProviders.size : null,
+      sampledProducts: sampledProducts.length,
+      sampledProviders: new Set(sampledProducts.map(product => product.provider)).size,
+      sampledSections: new Set(sampledProducts.map(product => product.section)).size,
+      fullCatalogueRendered: false,
+    },
   };
 }
 
@@ -432,7 +468,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
       semanticActionId: 'market.outlook.open',
       expectedPath: '/research',
       expectedSurface: 'outlook.dashboard',
-      readiness: ['data', 'graphics', 'rba-calendar', 'economic-data'],
+      readiness: ['data'],
       skipReason: missingCore,
       stateImpact: 'local-only',
     },
@@ -476,7 +512,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   scenario(templates, 'route.today', {
     expectedPath: '/matches',
     expectedSurface: 'today.hero',
-    readiness: ['app', 'data', 'suitability', 'details', 'graphics', 'logos'],
+    readiness: ['app', 'data', 'suitability', 'details', 'logos'],
     skipReason: missingCore,
     skipWhen: ['Core data is unavailable'],
     skipExplanation: 'My matches requires a pinned core revision and an honest suitability result.',
@@ -578,6 +614,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
       skipReason: missingProvider,
     },
     { depth: 2, semanticActionId: 'search.filters.apply', stateImpact: 'local-only' },
+    { depth: 2, semanticActionId: 'search.filters.clear', stateImpact: 'local-only' },
     {
       depth: 2,
       semanticActionId: 'search.compare.mode',
@@ -740,6 +777,29 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 2, semanticActionId: 'lenders.provider.open', expectedPath: lenderPath, expectedSurface: 'lender.details', readiness: ['logos', 'list'], parameters: { provider: inputs.provider }, optional: true, skipReason: missingProvider },
   ]);
 
+  // Category-stratified spot checks are separate independent entries. A failed
+  // product does not prevent the remaining sampled banks/products being tried.
+  for (const [index, product] of inputs.sampledProducts.entries()) {
+    scenario(templates, `sample.catalogue.${index}`, {
+      expectedPath: `/product/${encodeURIComponent(product.productKey)}`,
+      expectedSurface: 'product.details',
+      readiness: ['app', 'data', 'details', 'logos', 'list'],
+      unsafeActionsExcluded: ['external-link.open', 'share.open'],
+    }, [
+      {
+        depth: 0, semanticActionId: 'product.open',
+        parameters: { section: product.section, provider: product.provider,
+          productKey: product.productKey, rateIndex: product.rateIndex },
+      },
+      {
+        depth: 1, semanticActionId: 'product.lender.open',
+        expectedPath: `/bank/${encodeURIComponent(product.provider)}`,
+        expectedSurface: 'lender.details', readiness: ['data', 'suitability', 'logos', 'list'],
+        parameters: { provider: product.provider },
+      },
+    ]);
+  }
+
   scenario(templates, 'route.calculator', {
     expectedPath: '/calculator',
     expectedSurface: 'calculator.results',
@@ -821,7 +881,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     skipExplanation: 'Registered projection field/selection callbacks apply restorable canned parameter sets before chart interactions; financial-input.edit remains excluded.',
     unsafeActionsExcluded: ['financial-input.edit'],
   }, [
-    { depth: 0, semanticActionId: 'projections.open', parameters: { section: 'Mortgage' } },
+    { depth: 0, semanticActionId: 'projections.open', expectedSurface: 'projections.inputs', readiness: ['scenario-storage'], parameters: { section: 'Mortgage' } },
     {
       depth: 1,
       semanticActionId: 'projections.inputs.apply-primary',
@@ -897,7 +957,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   scenario(templates, 'route.outlook', {
     expectedPath: '/research',
     expectedSurface: 'outlook.dashboard',
-    readiness: ['app', 'data', 'graphics', 'rba-calendar', 'economic-data'],
+    readiness: ['app', 'data'],
     skipReason: missingCore,
     skipWhen: ['Core data is unavailable'],
     skipExplanation: 'Optional chart families skip at their own terminal readiness boundary.',
@@ -912,7 +972,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 2, semanticActionId: 'outlook.history.window.30d', readiness: ['graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.history.window.all', readiness: ['graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 3, semanticActionId: 'outlook.history.date.previous', readiness: ['graphics'], optional: true, ...optionalFeatureSkip },
-    { depth: 2, semanticActionId: 'outlook.rba-response.decision.previous', readiness: ['rba-calendar', 'graphics'], optional: true, ...optionalFeatureSkip },
+    { depth: 2, semanticActionId: 'outlook.rba-response.decision.previous', expectedSurface: 'outlook.rba-response', readiness: ['rba-calendar', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.economy.lens.next', readiness: ['economic-data', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.economy.window.next', readiness: ['economic-data', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 3, semanticActionId: 'outlook.economy.date.previous', readiness: ['economic-data', 'graphics'], optional: true, ...optionalFeatureSkip },
@@ -1082,8 +1142,9 @@ function materializeStep(template: StepTemplate, passId: DeepAuditPassId): DeepA
 
 export function buildDeepPerformanceAuditPlan(
   core: CorePayload | null,
+  options: DeepAuditSelectionOptions = {},
 ): DeepPerformanceAuditPlan {
-  const inputs = deriveDeepAuditInputs(core);
+  const inputs = deriveDeepAuditInputs(core, options);
   const templates = templatesFor(inputs);
   const passes = DEEP_AUDIT_PASS_IDS.map((passId): DeepAuditPass => ({
     id: passId,

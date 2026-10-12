@@ -327,8 +327,42 @@ describe('performance audit journeys', () => {
   it('matches normalized and decoded Expo Router paths', () => {
     expect(pathMatches('/(tabs)', '/')).toBe(true);
     expect(pathMatches('/settings/', '/settings')).toBe(true);
-    expect(pathMatches('/product/Bank%20A%7Chome', '/product/Bank A|home')).toBe(true);
+    expect(pathMatches('/product/Bank A|home', '/product/Bank%20A%7Chome')).toBe(true);
     expect(pathMatches('/browse', '/search')).toBe(false);
+  });
+
+  it('matches the logged percent-bearing product without accepting another product', () => {
+    const productKey = 'Police Credit Union Ltd|OO_STAND_VHL_MAX_80_LVR|RESIDENTIAL_MORTGAGES|Standard Variable Home Loan 80% LVR - Owner Occupied';
+    const actual = `/product/${productKey}`;
+    const expected = `/product/${encodeURIComponent(productKey)}`;
+    expect(pathMatches(actual, expected)).toBe(true);
+    expect(pathMatches(actual, actual, 'pathname')).toBe(true);
+    expect(pathMatches(actual, expected.replace('OO_STAND_VHL_MAX_80_LVR', 'ANOTHER_PRODUCT'))).toBe(false);
+    expect(pathMatches(actual, expected.replace('80%25', '90%25'))).toBe(false);
+    expect(pathMatches(actual, expected.replace('/product/', '/receipt/'))).toBe(false);
+  });
+
+  it('preserves literal percent sequences and never recursively decodes product IDs', () => {
+    expect(pathMatches('/product/Rate%20Plan', '/product/Rate%2520Plan')).toBe(true);
+    expect(pathMatches('/product/Rate%20Plan', '/product/Rate%20Plan')).toBe(false);
+    expect(pathMatches('/product/Rate%20Plan', '/product/Rate Plan')).toBe(false);
+    expect(pathMatches('/product/Rate%20Plan', '/product/Rate%20Plan', 'pathname')).toBe(true);
+    expect(pathMatches('/product/Rate%20Plan', '/product/Rate Plan', 'pathname')).toBe(false);
+    expect(pathMatches('/product/Rate Plan', '/product/Rate%2520Plan')).toBe(false);
+    expect(pathMatches('/product/Rate%252520Plan', '/product/Rate%20Plan')).toBe(false);
+  });
+
+  it('keeps malformed encodings literal and distinct', () => {
+    expect(pathMatches('/product/80%', '/product/80%25')).toBe(true);
+    expect(pathMatches('/product/%E0%A4%A', '/product/%25E0%25A4%25A')).toBe(true);
+    expect(pathMatches('/product/%E0%A4%A', '/product/%E0%A4%B')).toBe(false);
+    expect(pathMatches('/product/%ZZ', '/product/another')).toBe(false);
+  });
+
+  it('ignores query strings but preserves hashes within decoded product IDs', () => {
+    expect(pathMatches('/settings/?tab=one#section', '/settings?tab=two')).toBe(true);
+    expect(pathMatches('/product/Rate#one', '/product/Rate%23one')).toBe(true);
+    expect(pathMatches('/product/Rate#one', '/product/Rate#two')).toBe(false);
   });
 });
 
@@ -1004,11 +1038,11 @@ describe('foreground elapsed budget', () => {
 describe('performance audit inactivity watchdog', () => {
   beforeEach(() => resetPerformanceAuditForTests());
 
-  it('uses the five-minute default and accepts a custom timeout', () => {
+  it('uses the ten-second default and accepts a custom stall timeout', () => {
     let elapsedMs = 0;
     const clock = () => elapsedMs;
     expect(new PerformanceAuditInactivityWatchdog(undefined, clock).hangTimeoutMs).toBe(
-      300_000,
+      10_000,
     );
     expect(new PerformanceAuditInactivityWatchdog(420_000, clock).hangTimeoutMs).toBe(
       420_000,
@@ -1019,7 +1053,8 @@ describe('performance audit inactivity watchdog', () => {
     expect(parsePerformanceAuditHangTimeoutSeconds('300')).toBe(300);
     expect(parsePerformanceAuditHangTimeoutSeconds(' 420 ')).toBe(420);
     expect(parsePerformanceAuditHangTimeoutSeconds(null)).toBeNull();
-    expect(parsePerformanceAuditHangTimeoutSeconds('29')).toBeNull();
+    expect(parsePerformanceAuditHangTimeoutSeconds('0')).toBeNull();
+    expect(parsePerformanceAuditHangTimeoutSeconds('10')).toBe(10);
     expect(parsePerformanceAuditHangTimeoutSeconds('3601')).toBeNull();
     expect(parsePerformanceAuditHangTimeoutSeconds('5 minutes')).toBeNull();
   });

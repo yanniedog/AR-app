@@ -51,6 +51,7 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import type { RateRow, SectionKey } from '../../src/types';
+import { SAVED_EMPTY_COPY, savedEmptyState } from '../../src/lib/savedEmptyState';
 
 function compareToken(productKey: string, rateIndex: number | null): string {
   return rateIndex == null ? productKey : `${rateIndex}#${productKey}`;
@@ -258,8 +259,10 @@ export default function MyRates() {
       trackedRates: JSON.parse(JSON.stringify(useStore.getState().trackedRates)) as TrackedRate[],
       favorites: [...useStore.getState().favorites],
     };
-    const rows = tokens.map(findExactRow).filter((row): row is RateRow => row != null);
-    if (rows.length < 2) return;
+    const rows = mandatoryEligibleRows(tokens.map(findExactRow).filter((row): row is RateRow => row != null));
+    if (rows.length < 2 || rows.length !== tokens.length) {
+      return { unavailableReason: 'The selected exact comparison pair is absent from the eligible current catalogue' };
+    }
     useStore.setState((state) => {
       const fixtureKeys = new Set(rows.map((row) => row.product_key));
       const retained = state.savedRates.filter((ref) => !fixtureKeys.has(ref.productKey));
@@ -274,7 +277,10 @@ export default function MyRates() {
         favorites: [...new Set(next.map((ref) => ref.productKey))],
       };
     });
-    return queueTrackedRatesSecureSave(useStore.getState().trackedRates);
+    return queueTrackedRatesSecureSave(useStore.getState().trackedRates).then(() => ({
+      fixtureReady: true,
+      selectionTokens: tokens,
+    }));
   }, [findExactRow]);
   const restoreSavedFixture = useCallback(() => {
     const snapshot = auditSavedFixtureSnapshot;
@@ -404,20 +410,20 @@ export default function MyRates() {
 
   const hasAnyPrivateRate = positions.length > 0;
   if (!items.length && !hasAnyPrivateRate && scenarioStatus === 'ready') {
+    const emptyState = savedEmptyState({ savedCount: savedRates.length, unavailableCount: unavailableRefs.length });
     return (
       <Screen onLayout={() => setLayoutReady(true)}>
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 12 }}>
-          <EmptyState
-            icon="shield-checkmark-outline"
-            title="Check your rate"
-            subtitle="Add your current rate, then watch exact product tiers. No bank login."
-          />
-          {unavailableRefs.length ? (
+          <EmptyState icon="star-outline" {...SAVED_EMPTY_COPY[emptyState]} />
+          {emptyState === 'unavailable' ? (
             <Button
               title="Remove unavailable save"
               variant="secondary"
               onPress={() => unavailableRefs.forEach((ref) => removeSavedRate(ref.id))}
             />
+          ) : null}
+          {emptyState === 'hiddenByProfile' ? (
+            <Button title="Edit profile" variant="secondary" onPress={() => router.push('/profile')} />
           ) : null}
           <Button title="Check my rate" onPress={() => openRateEditor('Mortgage')} />
           <Button title="Browse products" variant="secondary" onPress={() => router.push('/(tabs)/browse')} />

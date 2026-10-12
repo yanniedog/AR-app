@@ -5,6 +5,7 @@ import { ActivityIndicator, AppState, Pressable, View } from 'react-native';
 import {
   ABS_CPI_RELEASE_URL,
   ECONOMIC_RECHECK_MS,
+  EconomicOutlookUnavailableError,
   loadEconomicOutlook,
   RBA_ECONOMIC_TABLE_URL,
   type EconomicOutlookPayload,
@@ -12,7 +13,7 @@ import {
 import type { EconomicWindow } from '../data/economicModels';
 import { relativeDate } from '../data/format';
 import { debugLog } from '../lib/debugLog';
-import type { ChartRenderEvidence } from '../lib/chartRenderEvidence';
+import { hasPositiveChartLayout, type ChartRenderEvidence } from '../lib/chartRenderEvidence';
 import { yieldToPaintFrames } from '../lib/yieldToUi';
 import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
@@ -198,6 +199,7 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
   const [selectionStep, setSelectionStep] = useState(0);
   const [layoutRevision, setLayoutRevision] = useState<string | null>(null);
   const [graphic, setGraphic] = useState<ChartRenderEvidence | null>(null);
+  const [unavailableLayoutMeasured, setUnavailableLayoutMeasured] = useState(false);
 
   const availableLenses = useMemo<EconomicExplorerLens[]>(() => {
     const indicatorLenses = data?.indicators.map((indicator) => indicator.id) ?? [];
@@ -218,6 +220,7 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
 
   const load = useCallback(async (force = false) => {
     if (!dataRef.current || force) setLoading(true);
+    setUnavailableLayoutMeasured(false);
     setError(null);
     try {
       const value = await loadEconomicOutlook(force);
@@ -227,9 +230,10 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
       }
     } catch (err) {
       const detail = String((err as Error)?.message ?? err);
-      debugLog.warn('economic-outlook', `official refresh failed: ${detail}`);
+      const localUnavailable = err instanceof EconomicOutlookUnavailableError;
+      if (!localUnavailable) debugLog.warn('economic-outlook', `official refresh failed: ${detail}`);
       if (mounted.current) {
-        setError('Official economic sources could not be refreshed.');
+        setError(localUnavailable ? detail : 'Official economic sources could not be refreshed.');
       }
     } finally {
       if (mounted.current) setLoading(false);
@@ -254,21 +258,22 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
   const expectedGraphicRevision = revision ? `${revision}:${lens}:${window}:${selectionStep}` : null;
   const layoutReady = revision != null && layoutRevision === revision;
   const graphicReady = expectedGraphicRevision != null && graphic?.revision === expectedGraphicRevision && graphic.layoutMeasured;
+  const unavailableReady = !data && !loading && !!error && unavailableLayoutMeasured;
   useEffect(() => {
     onAuditStateChange?.({
-      status: data && !loading && layoutReady && graphicReady ? 'ready' : !data && !loading && error ? 'error' : 'pending',
+      status: data && !loading && layoutReady && graphicReady ? 'ready' : unavailableReady ? 'error' : 'pending',
       revision,
       indicatorCount: data?.indicators.length ?? 0,
-      pointCount: graphic?.pointCount ?? 0,
-      expectedCount: graphic?.expectedCount ?? 0,
-      layoutMeasured: graphicReady,
-      emptyStateRendered: graphicReady && graphic.emptyStateRendered,
-      layoutReady,
-      graphicReady,
-      accessibleSummary: graphic?.accessibleSummary === true,
+      pointCount: data ? graphic?.pointCount ?? 0 : 0,
+      expectedCount: data ? graphic?.expectedCount ?? 0 : 0,
+      layoutMeasured: graphicReady || unavailableReady,
+      emptyStateRendered: unavailableReady || (graphicReady && graphic.emptyStateRendered),
+      layoutReady: layoutReady || unavailableReady,
+      graphicReady: graphicReady || unavailableReady,
+      accessibleSummary: unavailableReady || graphic?.accessibleSummary === true,
       error,
     });
-  }, [data, error, graphic, graphicReady, layoutReady, loading, onAuditStateChange, revision]);
+  }, [data, error, graphic, graphicReady, layoutReady, loading, onAuditStateChange, revision, unavailableReady]);
 
   return (
     <View
@@ -325,7 +330,9 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
         </>
       ) : (
         <View style={{ marginTop: 14 }}>
-          <AppText variant="small" color="textMuted">
+          <AppText variant="small" color="textMuted" onLayout={(event) => {
+            if (hasPositiveChartLayout(event)) setUnavailableLayoutMeasured(true);
+          }}>
             Economic signals are unavailable right now. Bank rates and cached app data still work normally.
           </AppText>
           {error ? <AppText variant="tiny" color="danger" style={{ marginTop: 5 }}>{error}</AppText> : null}

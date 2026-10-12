@@ -39,6 +39,7 @@ import {
   useAppUpdateBanner,
 } from '../src/components/AppUpdateBanner';
 import { SELF_UPDATE_ENABLED } from '../src/config';
+import { registerPassiveAuditBackground, startPassiveAuditPreloading } from '../src/lib/passiveAudit';
 import { RateMark } from '../src/components/RateMark';
 import { ScenarioRecoveryBanner } from '../src/components/ScenarioRecoveryBanner';
 import { SplashMorphProvider, type SplashMorphTarget } from '../src/components/BrandLockup';
@@ -334,6 +335,8 @@ function RootNavigator() {
   useEffect(() => {
     if (!appReady) return;
     void registerBackgroundRefresh();
+    void registerPassiveAuditBackground();
+    return startPassiveAuditPreloading();
   }, [appReady]);
 
   useEffect(() => {
@@ -531,8 +534,9 @@ function RootNavigator() {
             </NavigationMenuProvider>
           </View>
           <PerformanceAuditRunner />
+          {/* Ask after onboarding so the prompt does not cover first-run choices. */}
           <DiagnosticsConsentBanner
-            visible={appReady && !privacyChoiceCurrent}
+            visible={appReady && !privacyChoiceCurrent && onboarded}
             aboveTabBar={tabBarVisible}
             onAccept={acceptDiagnostics}
             onDecline={declineDiagnostics}

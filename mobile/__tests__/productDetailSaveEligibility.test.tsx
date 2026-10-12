@@ -3,6 +3,8 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import type { CorePayload, RateRow } from '../src/types';
 import { rateConditionFixture } from '../testUtils/rateConditions';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { bindVerifiedDetails } from '../src/data/detailsIdentity';
 
 type TestNode = {
   props: Record<string, any>;
@@ -123,6 +125,7 @@ jest.mock('../src/lib/proAccess', () => ({ effectiveBankInsights: () => false, e
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
     colors: { success: '#0a0', primary: '#00a', warning: '#fa0', rateLoan: '#00a', rateDeposit: '#0a0' },
+    ledger: { info: '#36c' },
   }),
 }));
 
@@ -186,6 +189,72 @@ it('opens verified details-only product through the actual route without fabrica
   act(() => tree.unmount()); mockRoute.ri = 'bad';
   await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
   expect(tree.root.findAllByProps({ title: 'Exact rate no longer available' })).toHaveLength(1);
+  const surface = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  expect(surface.probes?.find(probe => probe.id === 'product.data')).toMatchObject({
+    status: 'error', error: 'The selected exact rate is absent from the eligible current catalogue',
+  });
   expect(tree.root.findAllByType('OfficialLinks')).toHaveLength(0);
   act(() => tree.unmount());
+});
+
+describe('Product details audit availability', () => {
+  const probe = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0]
+    .probes?.find(value => value.id === 'product.details-data');
+  const setup = () => {
+    const f = rateConditionFixture();
+    Object.assign(mockState, { core: f.core, coreIntegrity: f.coreIntegrity, manifest: f.manifest,
+      details: null, detailsLoading: false, ensureDetails: jest.fn(async () => undefined) });
+    mockRoute.key = f.productKey; delete mockRoute.ri;
+    jest.mocked(usePerformanceAuditSurface).mockClear();
+    return f;
+  };
+
+  it('waits for the request, then reports an offline cache miss without an endless pending probe', async () => {
+    setup();
+    let finish!: () => void;
+    mockState.ensureDetails = jest.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    let tree!: InspectableRenderer;
+    act(() => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
+    expect(probe()).toMatchObject({ status: 'pending', error: null });
+    await act(async () => { finish(); });
+    expect(probe()).toMatchObject({ status: 'error',
+      error: 'Product details are unavailable for the active rates publication after loading finished' });
+    act(() => tree.unmount());
+  });
+
+  it.each(['stale date', 'wrong digest', 'unverified details', 'missing manifest', 'missing digest', 'missing product', 'valid'])(
+    'reports %s details against the exact current publication', async variant => {
+      const f = setup();
+      mockState.details = f.details;
+      if (variant === 'stale date') mockState.details = bindVerifiedDetails({ ...f.details, run_date: '2026-09-14' }, f.manifest.files.details.sha256);
+      if (variant === 'wrong digest') mockState.details = bindVerifiedDetails({ ...f.details }, 'e'.repeat(64));
+      if (variant === 'unverified details') mockState.details = { ...f.details };
+      if (variant === 'missing manifest') mockState.manifest = null;
+      if (variant === 'missing digest') mockState.manifest = { ...f.manifest, files: { ...f.manifest.files,
+        details: { ...f.manifest.files.details, sha256: '' } } };
+      if (variant === 'missing product') mockState.details = bindVerifiedDetails({ ...f.details, products: {} }, f.manifest.files.details.sha256);
+      let tree!: InspectableRenderer;
+      await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
+      expect(probe()?.status).toBe(variant === 'valid' ? 'ready' : 'error');
+      act(() => tree.unmount());
+    },
+  );
+
+  it('does not let an older request settle a new same-date publication', async () => {
+    const f = setup();
+    const finish: (() => void)[] = [];
+    mockState.ensureDetails = jest.fn(() => new Promise<void>(resolve => { finish.push(resolve); }));
+    let tree!: InspectableRenderer;
+    act(() => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
+    const nextSha = 'e'.repeat(64);
+    mockState.manifest = { ...f.manifest, files: { ...f.manifest.files,
+      details: { ...f.manifest.files.details, sha256: nextSha } } };
+    act(() => { tree.update(<ProductDetail />); });
+    await act(async () => { finish[0](); });
+    expect(probe()?.status).toBe('pending');
+    mockState.details = bindVerifiedDetails({ ...f.details }, nextSha);
+    await act(async () => { tree.update(<ProductDetail />); finish[1](); });
+    expect(probe()?.status).toBe('ready');
+    act(() => tree.unmount());
+  });
 });

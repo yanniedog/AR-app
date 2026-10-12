@@ -87,6 +87,7 @@
           "android": {
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "# Expo loads this manifest-declared class and Context constructor through reflection.\n-keep class expo.modules.adapters.react.apploader.RNHeadlessAppLoader {\n  public <init>(android.content.Context);\n}",
             "enablePngCrunchInReleaseBuilds": true,
             "useLegacyPackaging": false,
             "enableBundleCompression": false

@@ -84,6 +84,7 @@ function planIntegrity(
   checks: readonly AppHealthCheck[],
   plannedCheckIds: readonly string[],
   reservedPlanChecks: number,
+  incompleteReason?: string,
 ): { coverage: AppHealthCoverage; check: AppHealthCheck } {
   const duplicatePlannedCheckIds = repeated(plannedCheckIds);
   const expected = new Set(plannedCheckIds);
@@ -98,7 +99,7 @@ function planIntegrity(
     missingPlannedCheckIds.length === 0 &&
     duplicateStoredCheckIds.length === 0 &&
     unexpectedStoredCheckIds.length === 0 &&
-    reservedPlanChecks === 0;
+    reservedPlanChecks === 0 && !incompleteReason;
   const coverage: AppHealthCoverage = {
     plannedChecks: expected.size + 1,
     storedChecks: checks.length + 1,
@@ -124,11 +125,12 @@ function planIntegrity(
         duplicatePlannedChecks: duplicatePlannedCheckIds.length,
         reservedPlanChecks,
         complete,
+        ...(incompleteReason ? { interrupted: true } : {}),
       },
       ...(complete
         ? {}
         : {
-            summary: 'The stored audit results do not exactly cover the declared plan.',
+            summary: incompleteReason ?? 'The stored audit results do not exactly cover the declared plan.',
             localEvidence: {
               missingPlannedCheckIds,
               duplicateStoredCheckIds,
@@ -156,7 +158,7 @@ export function finalizeAppHealthReport(
   const plannedIds = input.plannedCheckIds.filter(
     (id) => id !== APP_HEALTH_CHECK_CODES.AUDIT_PLAN,
   );
-  const integrity = planIntegrity(baseChecks, plannedIds, reservedPlanChecks);
+  const integrity = planIntegrity(baseChecks, plannedIds, reservedPlanChecks, input.incompleteReason);
   const checks = [...baseChecks, integrity.check];
   return {
     schemaVersion: APP_HEALTH_SCHEMA_VERSION,
@@ -301,8 +303,15 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
     'providersSucceeded',
     'providersFailed',
     'providersPartial',
+    'unaccountedProviders',
     'limitations',
     'invalidCounts',
+  ],
+  [APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE]: [
+    'catalogueAvailable', 'exhaustiveLoadedCatalogueScan', 'sourceIdentityInventoryAvailable',
+    'allProductsRendered', 'publishedRates', 'publishedProducts', 'publishedProviders',
+    'sourceProducts', 'sourceRates', 'identityMismatches', 'missingDetails', 'missingSearchIndex',
+    'searchIndexRunMatches',
   ],
   [APP_HEALTH_CHECK_CODES.QUARANTINE]: [
     'evidenceAvailable',

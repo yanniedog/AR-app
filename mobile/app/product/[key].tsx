@@ -7,7 +7,17 @@ import { FixedDepositCalculation } from '../../src/components/product/FixedDepos
 import { ProductTermsDisclosure } from '../../src/components/product/ProductTermsDisclosure';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, InteractionManager, Share, View } from 'react-native';
+import { HeaderTitle } from '@react-navigation/elements';
+import {
+  Alert,
+  InteractionManager,
+  Share,
+  useWindowDimensions,
+  View,
+  type LayoutChangeEvent,
+  type StyleProp,
+  type TextStyle,
+} from 'react-native';
 
 import { BankAvatar } from '../../src/components/BankAvatar';
 import { NavigationMenuButton } from '../../src/components/AppNavigationMenu';
@@ -33,8 +43,10 @@ import { ScreenScrollView } from '../../src/components/Screen';
 import { AppText, Button, Card, IconButton, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
+import { formatEvidenceDate } from '../../src/data/displayEvidence';
 import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
 import { normalizedProductFacts } from '../../src/data/productFacts';
+import { verifiedDetailsSha } from '../../src/data/detailsIdentity';
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
 import { sortRows, findEligibleByKey } from '../../src/data/selectors';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
@@ -75,10 +87,16 @@ import {
 import { relativeDate } from '../../src/data/format';
 import { ratePresentation } from '../../src/data/ratePresentation';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { HEADER_TYPOGRAPHY } from '../../src/theme/typography';
 import {
   isCurrentHistoryGraphicEvidence,
   type HistoryGraphicEvidence,
 } from '../../src/lib/historyGraphicEvidence';
+
+/** Back button plus title margins in the JS stack header. */
+const HEADER_BACK_RESERVE = 72;
+/** Below this width the labelled Menu button leaves too little room for the title. */
+const COMPACT_HEADER_WIDTH = 400;
 
 export default function ProductDetail() {
   const suitabilityRevision = useSuitabilityRevision();
@@ -95,16 +113,20 @@ export default function ProductDetail() {
   );
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
+  const detailsSha = useStore((s) => s.manifest?.files.details.sha256);
   const historyBanksSha = useStore((s) => s.manifest?.files.history_banks?.sha256 ?? null);
   const bankInsightsSha = useStore((s) => s.manifest?.files.bank_history?.sha256 ?? null);
   const ensureDetails = useStore((s) => s.ensureDetails);
-  const detail = useStore((s) => s.details?.products[productKey] ?? null);
+  const detailsPayload = useStore((s) => s.details);
+  const detail = detailsPayload?.products[productKey] ?? null;
   const normalizedFactKinds = useMemo(
     () => new Set(normalizedProductFacts(detail).map((fact) => fact.kind)),
     [detail],
   );
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const detailsLoading = useStore((s) => s.detailsLoading);
+  const detailsRequestIdentity = `${core?.run_date ?? ''}|${coreSha ?? ''}|${detailsSha ?? ''}|${productKey}`;
+  const [settledDetailsRequest, setSettledDetailsRequest] = useState<string | null>(null);
   const savedRates = useStore((s) => s.savedRates);
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const notificationsEnabled = useStore((s) => s.prefs.notificationsEnabled);
@@ -133,13 +155,21 @@ export default function ProductDetail() {
   const insightsRequestKey = useRef<string | null>(null);
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
+  const { width: windowWidth } = useWindowDimensions();
+  const [headerActionsWidth, setHeaderActionsWidth] = useState(0);
   const [historyGraphicEvidence, setHistoryGraphicEvidence] =
     useState<HistoryGraphicEvidence | null>(null);
   const { scenario } = useUserRateScenario();
 
   useEffect(() => {
-    void ensureDetails({ forProductView: true });
-  }, [ensureDetails, found]);
+    let current = true;
+    const settled = () => { if (current) setSettledDetailsRequest(detailsRequestIdentity); };
+    void ensureDetails({ forProductView: true }).then(settled, (error) => {
+      logSwallowedError('product.ensureDetails', error);
+      settled();
+    });
+    return () => { current = false; };
+  }, [ensureDetails, detailsRequestIdentity]);
 
   useEffect(() => {
     if (!showBankInsights || !found) {
@@ -190,6 +220,11 @@ export default function ProductDetail() {
         ? null
         : found.siblings.find((candidate) => candidate.rate_index === rateIndex) ?? null
       : found.row
+    : null;
+  const auditProductError = core && isMandatoryEligibilityReady() && !row
+    ? !mandatoryProductAllowed(productKey)
+      ? 'The selected product does not meet the current mandatory profile requirements'
+      : 'The selected exact rate is absent from the eligible current catalogue'
     : null;
   const staySwitchProjection = useMemo(() => {
     if (!row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
@@ -320,6 +355,12 @@ export default function ProductDetail() {
     historyContentRevision,
   ) ? historyGraphicEvidence : null;
   const productRenderRevision = `${productKey}:${row?.rate_index ?? 'none'}:${detailsLoading ? 'loading' : 'settled'}:${historyContentRevision}:${currentHistoryGraphicEvidence?.graphicRevision ?? 'graphic-pending'}`;
+  const detailsRequestSettled = settledDetailsRequest === detailsRequestIdentity && !detailsLoading;
+  const auditDetailsError = !detailsRequestSettled ? null
+    : !core || !detailsSha || detailsPayload?.run_date !== core.run_date ||
+        verifiedDetailsSha(detailsPayload) !== detailsSha
+      ? 'Product details are unavailable for the active rates publication after loading finished'
+      : !detail ? 'The selected product is absent from the verified details payload' : null;
   const onHistoryGraphicReady = React.useCallback((evidence: HistoryGraphicEvidence) => {
     setHistoryGraphicEvidence((current) => {
       return current?.graphicRevision === evidence.graphicRevision &&
@@ -343,13 +384,15 @@ export default function ProductDetail() {
       {
         id: 'product.data',
         kind: 'data',
-        status: core && row ? 'ready' : 'pending',
+        status: auditProductError ? 'error' : core && row ? 'ready' : 'pending',
+        error: auditProductError,
         datasetRevision: core?.run_date ?? null,
       },
       {
         id: 'product.details-data',
         kind: 'data',
-        status: detailsProducts && !detailsLoading ? 'ready' : 'pending',
+        status: !detailsRequestSettled ? 'pending' : auditDetailsError ? 'error' : 'ready',
+        error: auditDetailsError,
         datasetRevision: core?.run_date ?? null,
       },
       {
@@ -449,8 +492,9 @@ export default function ProductDetail() {
   const presentation = ratePresentation(row, section, mortgageRateMetric);
 
   const sectionInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
-  // Distinct from the market ribbon ink so the product line/marker stays readable.
-  const productInk = theme.colors.warning;
+  // Distinct from the market ribbon ink (clay/eucalyptus) and the RBA line (wattle)
+  // in both appearances; `warning` matched clay in light and wattle in dark.
+  const productInk = theme.ledger.info;
   // Match productHistory's section-best pick so the seeded point aligns with synced series.
   let currentBest: number | null = null;
   for (const sibling of siblings) {
@@ -503,8 +547,38 @@ export default function ProductDetail() {
       <Stack.Screen
         options={{
           title: row.provider,
+          // The JS header (used with breadcrumbs) reserves ~52 dp for headerRight;
+          // these actions are wider, so cap the title to the space left beside them.
+          headerTitleAlign: 'left',
+          headerTitle: ({ children, style, allowFontScaling, onLayout }: {
+            children: string;
+            tintColor?: string;
+            style?: StyleProp<TextStyle>;
+            allowFontScaling?: boolean;
+            onLayout?: (event: LayoutChangeEvent) => void;
+          }) => (
+            <HeaderTitle
+              allowFontScaling={allowFontScaling}
+              onLayout={onLayout}
+              style={[
+                style ?? { color: theme.colors.text, ...HEADER_TYPOGRAPHY },
+                headerActionsWidth
+                  // No floor: on the narrowest phones the title ellipsises rather than overlap.
+                  ? { maxWidth: Math.max(0, windowWidth - HEADER_BACK_RESERVE - headerActionsWidth) }
+                  : null,
+              ]}
+            >
+              {children}
+            </HeaderTitle>
+          ),
           headerRight: () => (
-            <Row gap={2}>
+            <Row
+              gap={2}
+              onLayout={(e) => {
+                const next = Math.ceil(e.nativeEvent.layout.width);
+                setHeaderActionsWidth((current) => (current === next ? current : next));
+              }}
+            >
               {favorite || subscribed ? (
                 <IconButton
                   icon={subscribed ? 'notifications' : 'notifications-outline'}
@@ -522,7 +596,7 @@ export default function ProductDetail() {
                   : exactSaveEligible ? 'Save this exact rate to Saved' : 'Save all product variants to Saved'}
               />
               <IconButton icon="share-outline" onPress={onShare} accessibilityLabel="Share" />
-              <NavigationMenuButton />
+              <NavigationMenuButton compact={windowWidth < COMPACT_HEADER_WIDTH} />
             </Row>
           ),
         }}
@@ -564,7 +638,7 @@ export default function ProductDetail() {
             current={{ date: core?.run_date, rate: currentBest }}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-            Exact published tier · observed {core?.run_date}
+            This exact rate · checked {formatEvidenceDate(core?.run_date)}
           </AppText>
           {isNonStandard(row) ? (
             <View

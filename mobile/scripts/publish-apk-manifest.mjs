@@ -42,6 +42,7 @@ import {
 } from './app-release-utils.mjs';
 import { inspectApkIdentity } from './apk-identity.mjs';
 import { verifyNativeApkPrivacy } from './apk-payload-privacy.mjs';
+import { verifyApkHeadlessLoader } from './apk-headless-loader.mjs';
 import {
   artifactBudgetForChannel,
   assertApkSizeBudget,
@@ -348,6 +349,7 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     process.exit(1);
   }
   // Verify exact native bytecode before creating or changing any public release.
+  verifyApkHeadlessLoader(apkBuf);
   verifyNativeApkPrivacy(apkBuf, mobileRoot);
 
   const performanceBudgets = JSON.parse(

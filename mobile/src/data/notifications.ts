@@ -3,6 +3,7 @@ import * as BackgroundTask from 'expo-background-task';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import type { Href } from 'expo-router';
+import { BACKGROUND_TASK } from '../background/taskNames';
 
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import { debugLog } from '../lib/debugLog';
@@ -21,7 +22,7 @@ import {
   type TrackedRateValue,
 } from './subscriptions';
 
-export const BACKGROUND_TASK = 'ar-rates-daily-refresh';
+export { BACKGROUND_TASK } from '../background/taskNames';
 export const DEEP_LINK_SCHEME = 'arrates';
 
 // Foreground presentation. (SDK 53+ replaced shouldShowAlert with shouldShowBanner/List.)

@@ -20,6 +20,7 @@ import {
   type ReceiptFact,
 } from '../src/data/rateReceipt';
 import { findEligibleByKey } from '../src/data/selectors';
+import { isMandatoryEligibilityReady } from '../src/data/eligibilityGate';
 import { useStore } from '../src/data/store';
 import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
@@ -171,7 +172,10 @@ export default function RateReceiptScreen() {
       {
         id: 'receipt.data',
         kind: 'data',
-        status: receipt && brief ? 'ready' : 'pending',
+        status: core && isMandatoryEligibilityReady() && (!found || !row) ? 'error'
+          : receipt && brief ? 'ready' : 'pending',
+        error: core && isMandatoryEligibilityReady() && (!found || !row)
+          ? 'The selected exact rate is absent from the eligible current catalogue' : null,
         datasetRevision: core?.run_date ?? null,
       },
       {

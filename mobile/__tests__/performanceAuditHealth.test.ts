@@ -1,13 +1,21 @@
 import type { AuditCheck } from '../src/lib/performanceAudit';
+import { summarizePartialPerformanceAudit } from '../src/lib/performanceAudit';
 import {
   appHealthDataSnapshot,
   appHealthDisplayObservations,
   appHealthSurfaceContracts,
+  buildIntegratedAppHealthReport,
+  buildPartialAppHealthReport,
+  captureAppHealthDataEvidence,
+  combineAppHealthPerformanceSummary,
 } from '../src/lib/performanceAuditHealth';
 import type { AppState } from '../src/data/storeTypes';
 import type { DeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
 import { evaluateAppHealthDisplayQuality } from '../src/lib/appHealth/displayQuality';
 import { APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth/types';
+import { makeHealthyDataFixture } from '../__fixtures__/appHealth';
+import { normalizeCoreWithIntegrity } from '../src/data/sectionIntegrity';
+import { DEFAULT_PREFS } from '../src/data/storeTypes';
 
 function check(readinessEvidence: string): AuditCheck {
   return {
@@ -21,6 +29,88 @@ function check(readinessEvidence: string): AuditCheck {
 }
 
 describe('integrated app-health display evidence', () => {
+  it('includes app catalogue evidence in live-source reports only for the same verified publication', () => {
+    const { snapshot } = makeHealthyDataFixture();
+    const normalized = normalizeCoreWithIntegrity(snapshot.core!, { coreSha256: snapshot.manifest!.files.core.sha256 });
+    const state = { core: normalized.core, coreIntegrity: normalized.integrity, manifest: snapshot.manifest,
+      prefs: { ...DEFAULT_PREFS, includeNonStandard: true }, details: null, searchIndex: null } as unknown as AppState;
+    const report = (current: AppState, remote = snapshot) => buildIntegratedAppHealthReport({
+      sessionId: 'live-catalogue-binding', mode: 'live-source', startedAt: '2026-10-12T00:00:00Z',
+      finishedAt: '2026-10-12T00:00:01Z', state: current, appVersion: '1.0.0',
+      performanceChecks: [], journeys: [], plan: { passes: [] } as unknown as DeepPerformanceAuditPlan,
+      network: { mode: 'live-source', authorizationAttempts: 0, authorizedAttempts: 0, blockedAttempts: 0,
+        transportCalls: 0, policyViolations: 0 }, dataSnapshot: remote,
+    }).checks.find(check => check.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE)!;
+    expect(report(state).metrics.catalogueAvailable).toBe(true);
+    expect(report({ ...state, coreIntegrity: null })).toMatchObject({ status: 'unavailable', metrics: { catalogueAvailable: false } });
+    const revised = { ...snapshot, manifest: { ...snapshot.manifest!, files: { ...snapshot.manifest!.files,
+      core: { ...snapshot.manifest!.files.core, sha256: 'c'.repeat(64) } } } };
+    expect(report(state, revised)).toMatchObject({ status: 'unavailable', metrics: { catalogueAvailable: false } });
+    const wrongDate = { ...snapshot, core: { ...snapshot.core!, run_date: '2026-10-11' } };
+    expect(report(state, wrongDate)).toMatchObject({ status: 'unavailable', metrics: { catalogueAvailable: false } });
+  });
+
+  it.each([false, true])('keeps empty and populated list evidence coherent (reverse=%s)', reverse => {
+    const visits = [
+      check('search.results:items:list:ready:12/12:visible=4:empty=0'),
+      check('search.results:items:list:ready:0/0:visible=0:empty=1'),
+    ];
+    const result = evaluateAppHealthDisplayQuality(
+      [{ id: 'search.results', requiredRoles: ['list', 'visible', 'empty-state'], allowsIntentionalEmpty: true }],
+      appHealthDisplayObservations(reverse ? visits.reverse() : visits),
+    );
+    for (const code of [APP_HEALTH_CHECK_CODES.DISPLAY_LIST, APP_HEALTH_CHECK_CODES.DISPLAY_VISIBILITY,
+      APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE]) {
+      expect(result.find(entry => entry.code === code)?.status).toBe('pass');
+    }
+  });
+
+  it.each([false, true])('retains distinct list failures across visits (reverse=%s)', reverse => {
+    const visits = [
+      check('search.results:items:list:ready:0/0:visible=0:empty=0'),
+      check('search.results:items:list:ready:12/12:visible=0:empty=0'),
+    ];
+    const result = evaluateAppHealthDisplayQuality(
+      [{ id: 'search.results', requiredRoles: ['list', 'visible', 'empty-state'], allowsIntentionalEmpty: true }],
+      appHealthDisplayObservations([
+        ...(reverse ? visits.reverse() : visits),
+        check('search.results:items:list:ready:20/20:visible=4:empty=0'),
+      ]),
+    );
+    expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LIST)?.status).toBe('pass');
+    for (const code of [APP_HEALTH_CHECK_CODES.DISPLAY_VISIBILITY, APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE]) {
+      expect(result.find(entry => entry.code === code)).toMatchObject({
+        status: 'fail', metrics: { checked: 1, failed: 1 },
+        localEvidence: { failedSurfaceIds: ['search.results'] },
+      });
+    }
+  });
+
+  it.each([false, true])('retains missing rows alongside virtualized visits (reverse=%s)', reverse => {
+    const visits = [
+      check('search.results:items:list:ready:0/12:visible=0:empty=0'),
+      check('search.results:items:list:ready:4/12:visible=4:empty=0'),
+    ];
+    const result = evaluateAppHealthDisplayQuality(
+      [{ id: 'search.results', requiredRoles: ['list', 'visible', 'empty-state'] }],
+      appHealthDisplayObservations(reverse ? visits.reverse() : visits),
+    );
+    expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LIST))
+      .toMatchObject({ status: 'fail', metrics: { checked: 1, failed: 1 } });
+    expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE)?.status).toBe('pass');
+  });
+
+  it('does not erase a missing empty-state after a later populated visit', () => {
+    const result = evaluateAppHealthDisplayQuality(
+      [{ id: 'search.results', requiredRoles: ['list', 'empty-state'], allowsIntentionalEmpty: true }],
+      appHealthDisplayObservations([
+        check('search.results:items:list:ready:0/0:visible=0:empty=0'),
+        check('search.results:items:list:ready:12/12:visible=4:empty=0'),
+      ]),
+    );
+    expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE)?.status).toBe('fail');
+  });
+
   it('reports an attempted deep-search failure as a failed asset', () => {
     const snapshot = appHealthDataSnapshot({
       source: 'network',
@@ -115,6 +205,38 @@ describe('integrated app-health display evidence', () => {
       .find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)?.status).toBe('fail');
   });
 
+  it.each([false, true])('does not turn incidental optional chart loading into a failed completed chart check (reverse=%s)', reverse => {
+    const visits = [
+      check('product.details:history:graphic:pending:15/15:required=0:empty=0:measured=1:summary=1'),
+      check('product.details:history:graphic:ready:15/15:required=1:empty=0:measured=1:summary=1'),
+    ];
+    const result = evaluateAppHealthDisplayQuality(
+      [{ id: 'product.details', requiredRoles: ['chart'], chartRequired: true }],
+      appHealthDisplayObservations(reverse ? visits.reverse() : visits),
+    );
+    expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART))
+      .toMatchObject({ status: 'pass', metrics: { checked: 1, failed: 0 } });
+    // Loading alone is not rendered proof or positive coverage.
+    expect(appHealthDisplayObservations([check('product.details:history:graphic:pending:15/15:required=0:measured=1:summary=1')]))
+      .toEqual([]);
+  });
+
+  it.each([
+    'pending:15/15:required=1:measured=1:summary=1',
+    'ready:15/15:required=0:measured=1:summary=0',
+    'ready:14/15:required=0:measured=1:summary=1',
+    'error:15/15:required=0:measured=1:summary=1',
+  ])('retains actual chart failures after a later successful visit (%s)', failure => {
+    const result = evaluateAppHealthDisplayQuality(
+      [{ id: 'product.details', requiredRoles: ['chart'], chartRequired: true }],
+      appHealthDisplayObservations([
+        check(`product.details:history:graphic:${failure}`),
+        check('product.details:history:graphic:ready:15/15:required=1:measured=1:summary=1'),
+      ]),
+    );
+    expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)?.status).toBe('fail');
+  });
+
   it('distinguishes a measured no-data state from a rendered graph', () => {
     const contracts = [{ id: 'screen', requiredRoles: ['chart' as const], chartRequired: true }];
     expect(evaluateAppHealthDisplayQuality(contracts, appHealthDisplayObservations([
@@ -206,5 +328,90 @@ describe('integrated app-health display evidence', () => {
     );
     expect(missing.find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT)?.status)
       .toBe('fail');
+  });
+});
+
+describe('fatal app-health evidence', () => {
+  const plan = { passes: [{ steps: [
+    { expectedSurface: 'search.results', readiness: ['data', 'list', 'layout'] },
+    { expectedSurface: 'unvisited.screen', readiness: ['data', 'layout'] },
+  ] }] } as unknown as DeepPerformanceAuditPlan;
+  const input = {
+    sessionId: 'interrupted', mode: 'local' as const, startedAt: '2026-10-12T00:00:00Z',
+    finishedAt: '2026-10-12T00:00:10Z', journeys: [], plan,
+    network: { mode: 'local' as const, authorizationAttempts: 0, authorizedAttempts: 0,
+      blockedAttempts: 0, transportCalls: 0, policyViolations: 0 },
+  };
+
+  it('retains detached initial data and bank/category evidence after the store and profile change', () => {
+    const { snapshot } = makeHealthyDataFixture();
+    const normalized = normalizeCoreWithIntegrity(snapshot.core!, { coreSha256: snapshot.manifest!.files.core.sha256 });
+    const state = { source: 'network', core: normalized.core, coreIntegrity: normalized.integrity,
+      manifest: snapshot.manifest, prefs: { ...DEFAULT_PREFS, includeNonStandard: true },
+      details: null, searchIndex: null } as unknown as AppState;
+    const capturedData = captureAppHealthDataEvidence({ state, appVersion: '1.0.0' });
+    const retainedChecks = JSON.parse(JSON.stringify(capturedData.checks));
+    expect(capturedData.checks).toHaveLength(16);
+    const catalogue = capturedData.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE)!;
+    expect(catalogue).toMatchObject({ metrics: { catalogueAvailable: true, publishedProducts: 3,
+      publishedProviders: 3, includeNonStandard: true } });
+    expect(catalogue.localEvidence).toMatchObject({ sections: expect.arrayContaining([
+      expect.objectContaining({ section: 'Mortgage', providers: [expect.objectContaining({ provider: 'Provider 1' })] }),
+    ]) });
+
+    // A failed preference restore or changed publication must not be rescanned
+    // into the initial snapshot, including its nested producer evidence.
+    state.prefs.includeNonStandard = false;
+    state.core!.run_date = '2026-10-13';
+    state.core!.sections.Mortgage.rates.splice(0);
+    state.core!.coverage!.limitations!.push('Later publication limitation');
+    state.core = null;
+    state.manifest = null;
+    const report = buildPartialAppHealthReport({ ...input, capturedData, performanceChecks: [] });
+    expect(capturedData.checks).toEqual(retainedChecks);
+    expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE))
+      .toMatchObject({ ...catalogue, metrics: { ...catalogue.metrics,
+        evidenceCapturedAt: capturedData.capturedAt, capturedBeforeAuditMutations: true } });
+    expect(report.coverage).toMatchObject({ complete: false, plannedChecks: 26, storedChecks: 26 });
+    expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.AUDIT_PLAN))
+      .toMatchObject({ status: 'fail', metrics: { complete: false, interrupted: true } });
+    expect(report.limitations.join(' ')).toContain('before audit preference mutations');
+  });
+
+  it('preserves observed display failures while leaving successful incomplete groups unverified', () => {
+    const performanceChecks = [check([
+      'search.results:data:data:ready:3/3',
+      'search.results:items:list:ready:0/3:visible=0:empty=0',
+      'search.results:layout:layout:ready:1/1:measured=1',
+    ].join(' | '))];
+    Object.assign(performanceChecks[0].metrics, { executionAttempted: true, actionInvoked: true, actionCompleted: true });
+    const report = buildPartialAppHealthReport({ ...input, capturedData: null, performanceChecks });
+    expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LIST))
+      .toMatchObject({ status: 'fail', metrics: { observedSurfaces: 1, plannedSurfaces: 2 },
+        localEvidence: { failedSurfaceIds: ['search.results'] } });
+    expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT))
+      .toMatchObject({ status: 'not-run', metrics: { observedStatus: 'pass', partial: true } });
+    expect(report.checks.filter(entry => entry.domain === 'display-completeness')
+      .every(entry => entry.status === 'fail' || entry.status === 'not-run')).toBe(true);
+    const performanceSummary = summarizePartialPerformanceAudit(performanceChecks, 100, 1);
+    const summary = combineAppHealthPerformanceSummary(performanceSummary, report, 100);
+    expect(summary.executed).toBe(1 + report.summary.pass + report.summary.warn + report.summary.fail);
+    expect(summary.justifiedSkipped).toBe(performanceSummary.justifiedSkipped);
+    expect(summary.unexpectedSkipped).toBe(performanceSummary.unexpectedSkipped + report.summary.notRun);
+    expect(summary.coveragePercent).toBe(Math.round(summary.executed / 126 * 1000) / 10);
+    expect(summary.coveragePercent).toBeLessThan(10);
+    const completeSummary = combineAppHealthPerformanceSummary(performanceSummary,
+      { ...report, coverage: { ...report.coverage, complete: true } }, 100);
+    expect(completeSummary.justifiedSkipped).toBe(performanceSummary.justifiedSkipped + report.summary.notRun);
+    expect(completeSummary.unexpectedSkipped).toBe(performanceSummary.unexpectedSkipped);
+  });
+
+  it('reports data checks as not run if setup failed before evidence capture', () => {
+    const report = buildPartialAppHealthReport({ ...input, capturedData: null, performanceChecks: [] });
+    expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE))
+      .toMatchObject({ status: 'not-run', metrics: {} });
+    expect(report.checks.filter(entry => entry.status === 'not-run')).toHaveLength(24);
+    expect(report.coverage.complete).toBe(false);
+    expect(report.summary.coveragePercent).toBeLessThan(10);
   });
 });

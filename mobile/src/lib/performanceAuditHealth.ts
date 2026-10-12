@@ -1,14 +1,11 @@
 import type { AppState } from '../data/storeTypes';
-import type { AuditCheck, AuditJourney } from './performanceAudit';
+import { samePayloadIdentity } from '../data/payloadRevision';
+import { roundMetric, type AuditCheck, type AuditJourney, type PerformanceAuditSummary } from './performanceAudit';
 import type { DeepPerformanceAuditPlan } from './performanceAuditPlan';
 import {
   APP_HEALTH_EXPECTED_CHECK_IDS,
-  CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
-  evaluateAppHealthDataQuality,
   evaluateAppHealthDisplayQuality,
   finalizeAppHealthReport,
-  type AppHealthAssetObservation,
-  type AppHealthAssetKey,
   type AppHealthAuditMode,
   type AppHealthCheck,
   type AppHealthDataSnapshot,
@@ -20,105 +17,11 @@ import {
   type AppHealthSurfaceObservation,
 } from './appHealth';
 import { appHealthNetworkCheck } from './appHealth/networkPolicy';
-
-function countRecord(value: unknown): number | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? Object.keys(value as Record<string, unknown>).length
-    : null;
-}
-
-function asset(
-  ready: boolean,
-  failed: boolean,
-  runDate?: string | null,
-  itemCount?: number | null,
-): AppHealthAssetObservation {
-  return {
-    state: ready ? 'ready' : failed ? 'failed' : 'not-requested',
-    runDate: runDate ?? null,
-    itemCount: itemCount ?? null,
-  };
-}
-
-/** Snapshot the exact in-memory revision already pinned by the audit. No I/O. */
-export function appHealthDataSnapshot(
-  state: AppState,
-  appVersion: string,
-): AppHealthDataSnapshot {
-  const coreKeys = new Set(
-    Object.values(state.core?.sections ?? {})
-      .flatMap((section) => section.rates)
-      .map((row) => row.product_key),
-  );
-  const detailKeys = Object.keys(state.details?.products ?? {});
-  const assets: Partial<Record<AppHealthAssetKey, AppHealthAssetObservation>> = {
-    core: {
-      state: state.core ? 'ready' : state.coreAssetState.status === 'error' ? 'failed' : 'missing',
-      runDate: state.core?.run_date ?? null,
-      itemCount: coreKeys.size,
-    },
-    details: asset(
-      Boolean(state.details),
-      false,
-      state.details?.run_date,
-      detailKeys.length,
-    ),
-    search_index: asset(
-      Boolean(state.searchIndex),
-      state.searchIndexStatus === 'error',
-      state.searchIndex?.run_date,
-      countRecord(state.searchIndex?.products),
-    ),
-    history_banks: asset(
-      Boolean(state.historyBanks),
-      Boolean(state.historyBanksError),
-      state.historyBanks?.run_date,
-      state.historyBanks?.run_dates.length,
-    ),
-    bank_history: asset(
-      Boolean(state.bankInsights),
-      Boolean(state.bankInsightsError),
-      state.bankInsights?.run_date,
-      countRecord(state.bankInsights?.banks),
-    ),
-    bank_spread_history: asset(
-      Boolean(state.bankSpreadHistory),
-      Boolean(state.bankSpreadHistoryError),
-      state.bankSpreadHistory?.run_date,
-      countRecord(state.bankSpreadHistory?.banks),
-    ),
-    rba_calendar: asset(
-      Boolean(state.rbaCalendar),
-      Boolean(state.rbaCalendarError),
-      state.core?.run_date,
-      state.rbaCalendar
-        ? state.rbaCalendar.decisions.length + state.rbaCalendar.schedule.length
-        : null,
-    ),
-  };
-  return {
-    source: state.source,
-    core: state.core,
-    manifest: state.manifest,
-    appVersion,
-    details: state.details
-      ? {
-          runDate: state.details.run_date,
-          productCount: detailKeys.length,
-          matchedProductCount: detailKeys.filter((key) => coreKeys.has(key)).length,
-          orphanProductCount: detailKeys.filter((key) => !coreKeys.has(key)).length,
-        }
-      : null,
-    assets,
-    quarantine: state.coreIntegrity
-      ? {
-          rowsByReason: state.coreIntegrity.quarantines.rowsByReason,
-          bankHistoryPairs: state.coreIntegrity.quarantines.bankHistoryPairs.size,
-          countImpacts: state.coreIntegrity.quarantines.countImpacts,
-        }
-      : null,
-  };
-}
+import { appHealthDataSnapshot } from './performanceAuditDataSnapshot';
+import { passiveAuditDataChecks } from './passiveAudit';
+import { preparedAppHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
+import { APP_HEALTH_DATA_CHECKS } from './appHealth/dataQuality';
+export { appHealthDataSnapshot } from './performanceAuditDataSnapshot';
 
 interface ParsedProbe {
   surfaceId: string;
@@ -126,6 +29,7 @@ interface ParsedProbe {
   required: boolean;
   kind: 'data' | 'list' | 'logo' | 'graphic' | 'layout';
   ready: boolean;
+  pending: boolean;
   actual: number | null;
   expected: number | null;
   fallbackCount: number | null;
@@ -162,6 +66,7 @@ function parseProbe(line: string): ParsedProbe | null {
     required: !parts.includes('required=0'),
     kind: kind as ParsedProbe['kind'],
     ready: status === 'ready',
+    pending: status === 'pending',
     actual: match ? Number(match[1]) : null,
     expected: match ? Number(match[2]) : null,
     fallbackCount: fallback == null ? null : Number(fallback),
@@ -244,7 +149,10 @@ function observedEvidenceQuality(evidence: AppHealthDisplayEvidence): number {
     case 'empty-state': return evidence.rendered === evidence.expected ? 1 : 0;
     case 'logo': return evidence.decodedCount - evidence.fallbackCount - evidence.missingCount;
     case 'model': return evidence.modelCount === evidence.sourceCount ? 1 : 0;
-    case 'list': return evidence.renderedCount === evidence.modelCount ? 1 : 0;
+    // Virtualized lists may render only part of a non-empty model. This matches
+    // the display evaluator: zero rows or more rows than the model is a failure.
+    case 'list': return evidence.renderedCount <= evidence.modelCount &&
+      (evidence.modelCount === 0 || evidence.renderedCount > 0) ? 1 : 0;
     case 'visible': return evidence.visibleCount >= evidence.expectedMinimum ? 1 : 0;
   }
 }
@@ -254,6 +162,7 @@ export function appHealthDisplayObservations(
   checks: readonly AuditCheck[],
 ): AppHealthSurfaceObservation[] {
   const bySurface = new Map<string, Map<AppHealthDisplayRole, AppHealthDisplayEvidence>>();
+  const listFailuresBySurface = new Map<string, NonNullable<AppHealthSurfaceObservation['listFailureEvidence']>>();
   const chartsBySurface = new Map<string, Map<string, ParsedProbe>>();
   for (const check of checks) {
     const raw = check.metrics.readinessEvidence;
@@ -264,6 +173,10 @@ export function appHealthDisplayObservations(
       const probe = parseProbe(line);
       if (!probe) continue;
       if (probe.kind === 'graphic') {
+        // Ordinary navigation may finish while an optional chart is preparing.
+        // Its transient state is not a completed chart check. Explicit chart
+        // actions serialize effective required=true and retain failures below.
+        if (!probe.required && probe.pending) continue;
         // A closed optional chart is not a graph the journey expected to show.
         if (!probe.required && probe.expected === 0 && probe.actual === 0 &&
             probe.emptyStateRendered !== true) continue;
@@ -281,6 +194,34 @@ export function appHealthDisplayObservations(
         continue;
       }
       const roles = bySurface.get(probe.surfaceId) ?? new Map();
+      if (probe.kind === 'list') {
+        // Counts, visible rows and the empty-state belong to the same rendered
+        // list. Combining a populated visit with an empty visit invents a
+        // contradiction that never appeared on screen. Retain real failures.
+        const bundle = evidenceFor(probe);
+        const failures = listFailuresBySurface.get(probe.surfaceId) ?? {};
+        for (const evidence of bundle) {
+          if ((evidence.role === 'list' || evidence.role === 'visible' || evidence.role === 'empty-state') &&
+              observedEvidenceQuality(evidence) === 0 && !failures[evidence.role]) {
+            // At most three coherent bundles per surface; a later, different
+            // failure cannot erase an earlier failure of another list role.
+            failures[evidence.role] = bundle;
+          }
+        }
+        if (Object.keys(failures).length) listFailuresBySurface.set(probe.surfaceId, failures);
+        const previous = (['list', 'visible', 'empty-state'] as const)
+          .map(role => roles.get(role)).filter((entry): entry is AppHealthDisplayEvidence => entry != null);
+        const failed = bundle.some(entry => observedEvidenceQuality(entry) === 0);
+        const priorFailed = previous.some(entry => observedEvidenceQuality(entry) === 0);
+        const prior = roles.get('list');
+        if (!prior || (failed && !priorFailed) || (failed === priorFailed &&
+            observedEvidenceCount(bundle[0]) >= observedEvidenceCount(prior))) {
+          for (const role of ['list', 'visible', 'empty-state'] as const) roles.delete(role);
+          for (const evidence of bundle) roles.set(evidence.role, evidence);
+        }
+        bySurface.set(probe.surfaceId, roles);
+        continue;
+      }
       for (const evidence of evidenceFor(probe)) {
         const prior = roles.get(evidence.role);
         // Repeated cold/warm probes keep the strongest independently observed
@@ -316,6 +257,8 @@ export function appHealthDisplayObservations(
   return [...bySurface].map(([surfaceId, roles]) => ({
     surfaceId,
     evidence: [...roles.values()],
+    ...(listFailuresBySurface.has(surfaceId)
+      ? { listFailureEvidence: listFailuresBySurface.get(surfaceId)! } : {}),
   }));
 }
 
@@ -357,24 +300,57 @@ export function appHealthSurfaceContracts(
   }));
 }
 
-export function buildIntegratedAppHealthReport(input: {
+interface AppHealthDataInput {
+  state: AppState;
+  appVersion: string;
+  dataSnapshot?: AppHealthDataSnapshot;
+}
+
+function scopedHealthDataSnapshot(input: AppHealthDataInput): AppHealthDataSnapshot {
+  let data = input.dataSnapshot;
+  if (data) {
+    const { core, coreIntegrity, manifest } = input.state;
+    const matchesLocal = Boolean(core && coreIntegrity?.core === core && manifest && data.core && data.manifest &&
+      coreIntegrity.coreSha256 === manifest.files.core.sha256 && coreIntegrity.runDate === core.run_date &&
+      core.run_date === manifest.run_date && data.core.run_date === core.run_date &&
+      data.manifest.run_date === core.run_date && data.manifest.files.core.sha256 === manifest.files.core.sha256 &&
+      samePayloadIdentity(manifest, data.manifest));
+    data = { ...data, catalogue: matchesLocal ? preparedAppHealthCatalogueSnapshot(input.state) : null };
+  }
+  return data ?? appHealthDataSnapshot(input.state, input.appVersion);
+}
+
+export interface CapturedAppHealthDataEvidence {
+  readonly capturedAt: string;
+  readonly checks: readonly AppHealthCheck[];
+  readonly reused: number;
+}
+
+/** Resolve passive evidence before audit preference mutations; retain only the
+ * detached check results, never mutable store/core references or a later scan. */
+export function captureAppHealthDataEvidence(input: AppHealthDataInput): CapturedAppHealthDataEvidence {
+  const prepared = passiveAuditDataChecks(scopedHealthDataSnapshot(input));
+  return {
+    capturedAt: new Date().toISOString(),
+    checks: JSON.parse(JSON.stringify(prepared.checks)) as AppHealthCheck[],
+    reused: prepared.reused,
+  };
+}
+
+interface AppHealthRunInput {
   sessionId: string;
   mode: AppHealthAuditMode;
   startedAt: string;
   finishedAt: string;
-  state: AppState;
-  appVersion: string;
   performanceChecks: readonly AuditCheck[];
   journeys: readonly AuditJourney[];
   plan: DeepPerformanceAuditPlan;
   network: AppHealthNetworkSnapshot;
-  /** Validated remote payload for explicit live-source mode; otherwise use pinned app state. */
-  dataSnapshot?: AppHealthDataSnapshot;
-}): AppHealthReport {
-  const dataChecks = evaluateAppHealthDataQuality(
-    input.dataSnapshot ?? appHealthDataSnapshot(input.state, input.appVersion),
-    CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
-  );
+}
+
+export function buildIntegratedAppHealthReport(input: AppHealthRunInput & AppHealthDataInput): AppHealthReport {
+  const prepared = passiveAuditDataChecks(scopedHealthDataSnapshot(input));
+  const dataChecks = prepared.checks;
   const contracts = appHealthSurfaceContracts(input.journeys, input.plan);
   const displayChecks = evaluateAppHealthDisplayQuality(
     contracts,
@@ -393,10 +369,69 @@ export function buildIntegratedAppHealthReport(input: {
     checks,
     plannedCheckIds: APP_HEALTH_EXPECTED_CHECK_IDS,
     limitations: [
+      `${prepared.reused} data checks reused matching passive evidence; freshness and display observations are checked during this run.`,
       'Display checks use screen probes captured during this run; a physical-device review is still required for visual polish and assistive technology.',
       input.mode === 'local'
         ? 'Local mode performs no network transport.'
         : 'Live-source mode also checks exact approved external destinations with bounded HEAD requests; blocked sites and timeouts remain unverified.',
     ],
   });
+}
+
+/** Fatal reporting performs no data scan or I/O while an interrupted mutation
+ * may still be running. Successful partial display observations cannot stand
+ * in for the unvisited parts of the declared foreground plan. */
+export function buildPartialAppHealthReport(input: AppHealthRunInput & {
+  capturedData: CapturedAppHealthDataEvidence | null;
+}): AppHealthReport {
+  const observations = appHealthDisplayObservations(input.performanceChecks);
+  const observedIds = new Set(observations.map(observation => observation.surfaceId));
+  const contracts = appHealthSurfaceContracts(input.journeys, input.plan);
+  const observedContracts = contracts.filter(contract => observedIds.has(contract.id));
+  const displayChecks = evaluateAppHealthDisplayQuality(observedContracts, observations).map(check => ({
+    ...check,
+    status: check.status === 'fail' ? 'fail' as const : 'not-run' as const,
+    metrics: { ...check.metrics, partial: true, observedStatus: check.status,
+      plannedSurfaces: contracts.length, observedSurfaces: observedIds.size },
+    summary: check.status === 'fail' ? check.summary : 'Foreground display coverage stopped before the complete plan ran.',
+  }));
+  const dataChecks: AppHealthCheck[] = input.capturedData
+    ? input.capturedData.checks.map(check => ({ ...check, metrics: { ...check.metrics,
+        evidenceCapturedAt: input.capturedData!.capturedAt, capturedBeforeAuditMutations: true } }))
+    : APP_HEALTH_DATA_CHECKS.map(job => ({ id: job.code, code: job.code, label: job.code,
+        domain: 'data-integrity', status: 'not-run', metrics: {},
+        summary: 'The audit stopped before data evidence was captured.' }));
+  return finalizeAppHealthReport({
+    sessionId: input.sessionId, mode: input.mode, startedAt: input.startedAt, finishedAt: input.finishedAt,
+    checks: [...dataChecks, ...displayChecks, appHealthNetworkCheck(input.network)],
+    plannedCheckIds: APP_HEALTH_EXPECTED_CHECK_IDS,
+    incompleteReason: 'The audit stopped before all planned foreground checks completed.',
+    limitations: [
+      input.capturedData
+        ? `Data and catalogue evidence was captured at ${input.capturedData.capturedAt} before audit preference mutations (${input.capturedData.reused} matching passive checks reused); it does not describe unfinished changes at the time of failure.`
+        : 'No validated data evidence was captured before the audit stopped.',
+      'Observed display failures are retained; incomplete display groups are not counted as executed coverage.',
+    ],
+  });
+}
+
+/** The denominator remains the full declared plan even for a fatal partial report. */
+export function combineAppHealthPerformanceSummary(performance: PerformanceAuditSummary,
+  health: AppHealthReport, plannedPerformanceChecks: number): PerformanceAuditSummary {
+  const executed = performance.executed + health.summary.pass + health.summary.warn + health.summary.fail;
+  const total = plannedPerformanceChecks + health.summary.total;
+  return {
+    ...performance,
+    pass: performance.pass + health.summary.pass,
+    warn: performance.warn + health.summary.warn,
+    fail: performance.fail + health.summary.fail,
+    skipped: performance.skipped + health.summary.notRun,
+    unavailable: performance.unavailable + health.summary.unavailable,
+    executed,
+    justifiedSkipped: performance.justifiedSkipped + (health.coverage.complete ? health.summary.notRun : 0),
+    unexpectedSkipped: performance.unexpectedSkipped + (health.coverage.complete ? 0 : health.summary.notRun),
+    coveragePercent: total ? roundMetric((executed / total) * 100) : null,
+    overall: health.summary.overall === 'bottleneck' ? 'bottleneck'
+      : health.summary.overall === 'attention' && performance.overall === 'healthy' ? 'attention' : performance.overall,
+  };
 }

@@ -2,7 +2,7 @@
   "name": "ar-local-rates",
   "version": "1.0.0",
   "private": true,
-  "main": "expo-router/entry",
+  "main": "index.ts",
   "engines": {
     "node": ">=24"
   },
@@ -96,6 +96,11 @@
       "exclude": [
         "@react-navigation/native"
       ]
+    },
+    "autolinking": {
+      "android": {
+        "buildFromSource": ["expo-task-manager", "unimodules-app-loader"]
+      }
     }
   },
   "devDependencies": {
