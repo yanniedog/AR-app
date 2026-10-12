@@ -652,6 +652,20 @@ describe('uploadLogsToPasteRs', () => {
     expect(tailBody).not.toContain('\uFFFD');
   });
 
+  it('strips slash-marked scripts and keeps text after a length-changing character', async () => {
+    const mockFetch = jest.fn(async () => ({
+      status: 400,
+      text: async () => '<script/>alert(1)</script><script>İ</script>Geçersiz istek',
+    })) as unknown as typeof fetch;
+
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, { sleep: async () => {} }),
+    ).rejects.toThrow(/Geçersiz istek/);
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, { sleep: async () => {} }),
+    ).rejects.not.toThrow(/alert\(1\)/);
+  });
+
   it('strips a spaced script end tag and decodes entities only once', async () => {
     const mockFetch = jest.fn(async () => ({
       status: 400,
