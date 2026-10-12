@@ -1441,19 +1441,48 @@ function indexOfAscii(html: string, lowerNeedle: string, from: number): number {
 
 function findTagEnd(html: string, from: number): number {
   let quote = '';
+  let inUnquoted = false;
+  let expectValue = false;
   for (let cursor = from; cursor < html.length; cursor += 1) {
     const char = html[cursor];
     if (quote) {
       if (char === quote) quote = '';
       continue;
     }
-    if (char === '"' || char === "'") {
-      quote = char;
+    if (char === '>') return cursor;
+    if (inUnquoted) {
+      if (/\s/.test(char)) inUnquoted = false;
       continue;
     }
-    if (char === '>') return cursor;
+    if (expectValue) {
+      expectValue = false;
+      if (char === '"' || char === "'") {
+        quote = char;
+        continue;
+      }
+      if (!/\s/.test(char)) inUnquoted = true;
+      continue;
+    }
+    if (char === '=') expectValue = true;
   }
   return -1;
+}
+
+function isTagNameBoundary(char: string | undefined): boolean {
+  return char === '>' || char === '/' || (char != null && /\s/.test(char));
+}
+
+function exactClosingTagEnd(html: string, candidate: number, name: string): { end: number, next: number } {
+  const afterName = candidate + 2 + name.length;
+  if (!isTagNameBoundary(html[afterName])) {
+    return { end: -1, next: Math.min(html.length, afterName + 1) };
+  }
+  const closingEnd = findTagEnd(html, afterName);
+  if (closingEnd < 0) return { end: -1, next: html.length };
+  if (html.slice(afterName, closingEnd).includes('<')) {
+    return { end: -1, next: closingEnd + 1 };
+  }
+  return { end: closingEnd + 1, next: closingEnd + 1 };
 }
 
 function readTagName(html: string, start: number, end: number): string {
@@ -1484,10 +1513,7 @@ function stripElements(html: string, blocked: ReadonlySet<string>): string {
       continue;
     }
     const close = findTagEnd(html, open + 1);
-    if (close < 0) {
-      out += html.slice(open);
-      break;
-    }
+    if (close < 0) break;
     const isClosing = html[open + 1] === '/';
     const name = readTagName(html, open + (isClosing ? 2 : 1), close);
     if (!isClosing && blocked.has(name)) {
@@ -1497,12 +1523,12 @@ function stripElements(html: string, blocked: ReadonlySet<string>): string {
       while (searchFrom < html.length) {
         const candidate = indexOfAscii(html, closer, searchFrom);
         if (candidate < 0) break;
-        const closingEnd = findTagEnd(html, candidate + closer.length);
-        if (closingEnd >= 0 && !html.slice(candidate + closer.length, closingEnd).includes('<')) {
-          foundAt = closingEnd + 1;
+        const closing = exactClosingTagEnd(html, candidate, name);
+        if (closing.end >= 0) {
+          foundAt = closing.end;
           break;
         }
-        searchFrom = candidate + 1;
+        searchFrom = closing.next;
       }
       index = foundAt < 0 ? html.length : foundAt;
       out += ' ';
@@ -1525,10 +1551,7 @@ function stripTags(html: string): string {
     }
     out += html.slice(index, open);
     const close = findTagEnd(html, open + 1);
-    if (close < 0) {
-      out += html.slice(open);
-      break;
-    }
+    if (close < 0) break;
     index = close + 1;
     out += ' ';
   }
