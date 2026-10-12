@@ -212,7 +212,7 @@ jobs:
             "Reviewed commit: ``$env:HEAD_SHA``"
             'Review outcome: failed'
             ''
-            'Qwen Code Review did not complete successfully. This does not satisfy reviewer presence.'
+            'Qwen Code Review did not complete successfully. Qwen is not a required reviewer, so this notice does not block merge.'
             ''
             '```text'
             $errorText.Trim()
