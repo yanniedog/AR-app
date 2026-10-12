@@ -338,8 +338,8 @@ export default function ProductDetail() {
   const productRenderRevision = `${productKey}:${row?.rate_index ?? 'none'}:${detailsLoading ? 'loading' : 'settled'}:${historyContentRevision}:${currentHistoryGraphicEvidence?.graphicRevision ?? 'graphic-pending'}`;
   const detailsRequestSettled = settledDetailsRequest === detailsRequestIdentity && !detailsLoading;
   const auditDetailsError = !detailsRequestSettled ? null
-    : !core || detailsPayload?.run_date !== core.run_date ||
-        (detailsSha && verifiedDetailsSha(detailsPayload) !== detailsSha)
+    : !core || !detailsSha || detailsPayload?.run_date !== core.run_date ||
+        verifiedDetailsSha(detailsPayload) !== detailsSha
       ? 'Product details are unavailable for the active rates publication after loading finished'
       : !detail ? 'The selected product is absent from the verified details payload' : null;
   const onHistoryGraphicReady = React.useCallback((evidence: HistoryGraphicEvidence) => {

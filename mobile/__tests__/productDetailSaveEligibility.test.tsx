@@ -221,12 +221,16 @@ describe('Product details audit availability', () => {
     act(() => tree.unmount());
   });
 
-  it.each(['stale date', 'wrong digest', 'missing product', 'valid'])(
+  it.each(['stale date', 'wrong digest', 'unverified details', 'missing manifest', 'missing digest', 'missing product', 'valid'])(
     'reports %s details against the exact current publication', async variant => {
       const f = setup();
       mockState.details = f.details;
-      if (variant === 'stale date') mockState.details = { ...f.details, run_date: '2026-09-14' };
+      if (variant === 'stale date') mockState.details = bindVerifiedDetails({ ...f.details, run_date: '2026-09-14' }, f.manifest.files.details.sha256);
       if (variant === 'wrong digest') mockState.details = bindVerifiedDetails({ ...f.details }, 'e'.repeat(64));
+      if (variant === 'unverified details') mockState.details = { ...f.details };
+      if (variant === 'missing manifest') mockState.manifest = null;
+      if (variant === 'missing digest') mockState.manifest = { ...f.manifest, files: { ...f.manifest.files,
+        details: { ...f.manifest.files.details, sha256: '' } } };
       if (variant === 'missing product') mockState.details = bindVerifiedDetails({ ...f.details, products: {} }, f.manifest.files.details.sha256);
       let tree!: InspectableRenderer;
       await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
