@@ -82,7 +82,6 @@ import {
   buildPerformanceAuditJourneys,
   cancelPerformanceAudit,
   captureAuditTrace,
-  completePerformanceAudit,
   failPerformanceAudit,
   flattenAuditLogText,
   ForegroundElapsed,
@@ -132,6 +131,7 @@ import {
 } from '../lib/performanceAuditLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import { setPassiveAuditPaused } from '../lib/passiveAudit';
+import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAuditFinalization';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, estimatePerformanceAuditTime, formatPerformanceAuditEstimate } from '../lib/performanceAuditTiming';
 import { buildIntegratedAppHealthReport } from '../lib/performanceAuditHealth';
 import { useTheme } from '../theme/ThemeProvider';
@@ -320,7 +320,7 @@ async function awaitAuditWork<T>(
 }
 
 async function awaitAuditWorkWithTimeout<T>(
-  promise: Promise<T>,
+  work: Promise<T> | (() => Promise<T>),
   watchdog: PerformanceAuditInactivityWatchdog,
   label: string,
   timeoutMs: number,
@@ -355,6 +355,9 @@ async function awaitAuditWorkWithTimeout<T>(
     }, 50);
   });
   try {
+    // A thunk includes synchronous serialization before the first await in
+    // the same budget as the asynchronous write which follows it.
+    const promise = typeof work === 'function' ? work() : work;
     const result = await Promise.race([promise, control]);
     elapsed.accrue();
     assertSessionActive(watchdog);
@@ -3522,40 +3525,30 @@ export function PerformanceAuditRunner() {
         // user to leave, so re-check here rather than trusting the gate taken
         // before them.
         await waitWhilePaused(watchdog);
-        // Publish as soon as the report is durable.
-        // The remaining local log flush must not hide a complete result if it
-        // fails.
-        // Terminal state wakes the root update surfaces. Drop the audit-only
-        // transport interception first so their next check cannot race a guard
-        // that is about to be removed in finally.
-        restoreTransportGuard();
-        completePerformanceAudit(report);
-        await yieldToUi();
-
-        try {
-          logAuditEvent(app, {
-            kind: 'report',
-            schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
-            sessionId,
-            summary,
-            performanceSummary,
-            appHealth: toPublicAppHealthReport(appHealth),
-            routeAggregates: report.routeAggregates,
-            completeReportStored,
-          });
-          debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, summaryMarker);
+        await publishPerformanceAuditAfterFinalization(report, async () => {
           await awaitAuditWorkWithTimeout(
-            debugLog.flushToFile(),
+            async () => {
+              logAuditEvent(app, {
+                kind: 'report',
+                schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+                sessionId,
+                summary,
+                performanceSummary,
+                appHealth: toPublicAppHealthReport(appHealth),
+                routeAggregates: report.routeAggregates,
+                completeReportStored,
+              });
+              debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, summaryMarker);
+              await debugLog.flushToFile();
+            },
             watchdog,
             'Final audit log flush',
             FINALIZATION_FLUSH_TIMEOUT_MS,
           );
-        } catch (postPublishCaught) {
-          debugLog.warn(
-            PERFORMANCE_AUDIT_LOG_TAG,
-            `post-publish report logging failed: ${formatAuditErrorForLog(postPublishCaught)}`,
-          );
-        }
+          await waitWhilePaused(watchdog);
+          assertSessionActive(watchdog);
+        }, restoreTransportGuard);
+        await yieldToUi();
 
         // All checks, rollback, report storage and final log writes precede
         // sharing. The transport guard is already restored and results remain

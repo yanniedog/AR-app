@@ -6,6 +6,7 @@ import {
   hydrateSuitabilityIndex,
   installSuitabilityIndex,
   rebuildAndInstallSuitabilityIndex,
+  SUITABILITY_INDEX_SCHEMA_VERSION,
 } from '../src/data/suitabilityIndex';
 import { cache } from '../src/data/cache';
 import { setSuitabilityAllowed, getSuitabilityAllowed } from '../src/data/suitabilityGate';
@@ -132,6 +133,40 @@ describe('suitabilityIndex', () => {
     expect(isBroadlyAvailable(staff, details.products['a|2'] as ProductDetail)).toBe(false);
   });
 
+  it('rebuilds ordinary employment products without admitting staff or conditional products', async () => {
+    const mortgage = row({
+      product_key: 'UBank|3|RESIDENTIAL_MORTGAGES|Flex - Variable OO P&I',
+      product_name: 'Flex - Variable OO P&I', provider: 'UBank',
+      category: 'RESIDENTIAL_MORTGAGES', lvr_tier: 'lvr_70-80%',
+      taxonomy_path: 'HOME_LOAN.OO.PI.VARIABLE.LVR_70_80',
+    });
+    const staff = { ...mortgage, product_key: 'staff' };
+    const nonStandard = { ...mortgage, product_key: 'nonstandard', account_class: 'non_standard' };
+    const bonus = row({ product_key: 'bonus', product_name: 'Save account',
+      provider: 'UBank', category: 'TRANS_AND_SAVINGS_ACCOUNTS',
+      taxonomy_path: 'SAVINGS.SAVINGS_ACCT.BONUS.TIERED', ribbon_deposit_kind: 'bonus' });
+    const core = { run_date: '2026-10-12', sections: {
+      Mortgage: { rates: [mortgage, staff, nonStandard] }, Savings: { rates: [bonus] },
+    } } as unknown as CorePayload;
+    const employment: ProductDetail = { eligibility: [
+      { label: 'EMPLOYMENT_STATUS', value: 'Applicants must be a PAYG employee.', info: 'Applicants must be a PAYG employee.' },
+      { label: 'NATURAL_PERSON' },
+    ] };
+    const details: DetailsPayload = { schema_version: 1, run_date: core.run_date, products: {
+      [mortgage.product_key]: employment,
+      staff: { eligibility: [...employment.eligibility!, { label: 'STAFF' }] },
+      nonstandard: employment,
+      bonus: { eligibility: [{ label: 'NATURAL_PERSON' }] },
+    } };
+
+    const index = await rebuildAndInstallSuitabilityIndex(core, details, 'details', () => true, 'core');
+    expect(index?.allowed).toEqual(new Set([mortgage.product_key]));
+    expect(visibleAccountRows([mortgage, staff, nonStandard, bonus], false, details.products)).toEqual([mortgage]);
+    expect(cache.writeSuitabilityIndex).toHaveBeenCalledWith(expect.objectContaining({
+      schemaVersion: SUITABILITY_INDEX_SCHEMA_VERSION, allowed: [mortgage.product_key],
+    }));
+  });
+
   it('classifies duplicate rate tiers once and reports row versus identity counts', async () => {
     const open = row({ product_key: 'dup|1', product_name: 'Standard Variable' });
     const restricted = row({ product_key: 'dup|2', product_name: 'Staff Home Loan' });
@@ -216,7 +251,7 @@ describe('suitabilityIndex', () => {
 
   it('hydrates an exact core and details hash without loading details', async () => {
     jest.mocked(cache.readSuitabilityIndex).mockResolvedValue({
-      schemaVersion: 5,
+      schemaVersion: SUITABILITY_INDEX_SCHEMA_VERSION,
       runDate: '2026-07-15',
       coreSha: 'core-sha',
       detailsSha: 'details-sha',
@@ -232,7 +267,7 @@ describe('suitabilityIndex', () => {
     expect(getSuitabilityAllowed()).toBe(hydrated?.allowed);
   });
 
-  it.each([1, 4])('rejects a persisted gate built with schema %i access-classification rules', async (schemaVersion) => {
+  it.each([1, 4, 5])('rejects a persisted gate built with schema %i access-classification rules', async (schemaVersion) => {
     jest.mocked(cache.readSuitabilityIndex).mockResolvedValue({
       schemaVersion,
       runDate: '2026-07-15',
@@ -249,7 +284,7 @@ describe('suitabilityIndex', () => {
 
   it('rejects a persisted gate from another payload pair', async () => {
     jest.mocked(cache.readSuitabilityIndex).mockResolvedValue({
-      schemaVersion: 5,
+      schemaVersion: SUITABILITY_INDEX_SCHEMA_VERSION,
       runDate: '2026-07-14',
       coreSha: 'old-core',
       detailsSha: 'old-details',
@@ -274,7 +309,7 @@ describe('suitabilityIndex', () => {
 
     expect(cache.writeSuitabilityIndex).toHaveBeenCalledTimes(2);
     expect(jest.mocked(cache.writeSuitabilityIndex).mock.calls[1][0]).toMatchObject({
-      schemaVersion: 5,
+      schemaVersion: SUITABILITY_INDEX_SCHEMA_VERSION,
       coreSha: 'core-2',
       detailsSha: 'details-2',
       allowed: ['c|1'],

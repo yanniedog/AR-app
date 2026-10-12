@@ -161,9 +161,26 @@ function firstHomeNameRestricts(text: string): boolean {
     !FIRST_HOME_MARKETING_NAME_RE.test(text);
 }
 
-/** Application channels do not restrict a product to bank staff. */
+/** Ordinary income/employment requirements do not mean bank-staff membership. */
+function ordinaryEmploymentStatement(text: string): boolean {
+  const statement = text.trim()
+    .replace(/^(?:applicants?|borrowers?|customers?|you)\s+/i, '')
+    .replace(/^(?:(?:must|need\s+to|have\s+to)\s+be|be|are|is)\s+/i, '');
+  // Match the entire statement, never just "PAYG employee" inside a specific
+  // cohort such as "PAYG employees of Example Bank". Unrecognised qualifiers
+  // retain the existing conservative staff classification.
+  return statement.split(/\s+(?:or|and)\s+/i).every((term) =>
+    /^(?:an?\s+)?(?:(?:PAYG|salaried|full[-\s]time|part[-\s]time|casual|permanent)\s+employees?|self[-\s]employed|employed)$/i.test(term),
+  );
+}
+
+/** Application channels and ordinary employment do not restrict a product to bank staff. */
 function staffDetailRestricts(text: string): boolean {
-  return STAFF_RE.test(text.replace(/\bstaff[-\s]+assisted\b/gi, ''));
+  const withoutAssistedChannel = text.replace(/\bstaff[-\s]+assisted\b/gi, '');
+  if (!STAFF_RE.test(withoutAssistedChannel)) return false;
+  return withoutAssistedChannel
+    .split(/[•.!?]/)
+    .some((statement) => !ordinaryEmploymentStatement(statement) && STAFF_RE.test(statement));
 }
 
 /** A lender name in contact instructions is not a membership requirement. */

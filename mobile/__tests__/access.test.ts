@@ -58,6 +58,53 @@ describe('assessAccess', () => {
     expect(a.restricted).toBe(false);
   });
 
+  it.each([
+    'Applicants must be a PAYG employee.',
+    'Must be a salaried employee or self-employed.',
+    'You must be a full-time employee or a part-time employee.',
+    'Applicants must be employed or self-employed.',
+  ])('does not label ordinary employment evidence as staff-only: %s', (info) => {
+    const assessment = assessAccess('Flex - Variable OO P&I', {
+      eligibility: [
+        { label: 'EMPLOYMENT_STATUS', value: info, info },
+        { label: 'MIN_AGE', value: '18' },
+        { label: 'NATURAL_PERSON' },
+      ],
+    }, 'UBank');
+    expect(assessment.restricted).toBe(false);
+    expect(assessment.badge).toBeNull();
+    expect(accessExcludesFromStandard(assessment)).toBe(false);
+  });
+
+  it.each([
+    'Applicants must be a PAYG employee of Example Bank.',
+    'Available only to salaried employees at Example Bank.',
+    'Applicants must be a permanent employee with an approved employer.',
+    'Applicants must be a PAYG employee. Existing bank staff only.',
+    'Must be employed by a participating employer.',
+  ])('retains staff and employer cohorts encoded in employment evidence: %s', (info) => {
+    const assessment = assessAccess('Variable Home Loan', {
+      eligibility: [{ label: 'EMPLOYMENT_STATUS', value: info, info }],
+    });
+    expect(assessment.categories).toContain('staff');
+    expect(accessExcludesFromStandard(assessment)).toBe(true);
+  });
+
+  it('keeps explicit staff and other eligibility gates alongside ordinary employment text', () => {
+    const ordinary = { label: 'EMPLOYMENT_STATUS', info: 'Applicants must be a PAYG employee.' };
+    expect(assessAccess('Variable Home Loan', {
+      eligibility: [ordinary, { label: 'STAFF' }],
+    }).categories).toContain('staff');
+    expect(assessAccess('Employee Home Loan', { eligibility: [ordinary] }).categories).toContain('staff');
+    expect(assessAccess('Variable Home Loan', { eligibility: [ordinary] }, 'Employees Bank').categories).toContain('staff');
+    expect(assessAccess('Variable Home Loan', {
+      eligibility: [ordinary, { label: 'OTHER', info: 'Existing customers only' }],
+    }).categories).toEqual(['package']);
+    expect(assessAccess('Variable Home Loan', {
+      eligibility: [ordinary, { label: 'OTHER', info: 'Available only to residents of NSW' }],
+    }).categories).toEqual(['geographic']);
+  });
+
   it('flags occupation lenders with generic product titles via provider', () => {
     const a = assessAccess('RateSaver Home Loan', null, 'Police Bank');
     expect(a.categories).toContain('occupation');

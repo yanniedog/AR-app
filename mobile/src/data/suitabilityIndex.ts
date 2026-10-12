@@ -20,9 +20,9 @@ export type SuitabilityIndex = {
   allowed: Set<string>;
 };
 
-// Rebuild stale exclusions after correcting incidental eligibility text and
-// limiting conditional-deposit rules to deposits, including on cached starts.
-export const SUITABILITY_INDEX_SCHEMA_VERSION = 5 as const;
+// Rebuild stale staff-only exclusions caused by ordinary PAYG employment text,
+// including on cached starts whose payload hashes have not changed.
+export const SUITABILITY_INDEX_SCHEMA_VERSION = 6 as const;
 
 export type PersistedSuitabilityIndex = {
   schemaVersion: typeof SUITABILITY_INDEX_SCHEMA_VERSION;

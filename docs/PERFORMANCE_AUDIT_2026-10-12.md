@@ -18,6 +18,8 @@ saved-list fixtures. Its complete report contains 2,732 checks and 109 failures.
   Manual link inventory preparation also yields within bounded slices, checks
   cancellation and its ten-second budget, and reuses URL parsing within the run
   while rebuilding current source membership. Rejected links remain included.
+  Final log serialization and flushing remain inside the timed audit; a timeout
+  fails the run before completion can be published. Sharing starts afterward.
 - Data-quality checks and approved-link validation/installed-handler checks
   preload from data already on the device. Foreground work waits for idle and
   runs small slices every five seconds. A native background task can resume
@@ -52,6 +54,10 @@ waiting for a row that cannot render. An already-correct saved pair is verified
 as an idempotent result. The log I/O benchmark reads a bounded 16 KiB sample;
 complete export remains a separate operation.
 
+Ordinary PAYG employment requirements no longer classify a mortgage as staff-only.
+The saved suitability index is rebuilt after this change. Structured STAFF codes,
+named employer cohorts and other eligibility restrictions remain enforced.
+
 The URL policy now recognizes the lender domains and tenant-scoped document CDN
 paths present in the report. Known lender HTTP/trailing-dot source URLs are
 normalized to approved HTTPS destinations. Unknown hosts, credentials and
@@ -74,8 +80,13 @@ token-rate tiers, leaving 2,570 products across all 102 providers before user
 profile restrictions. The downloaded evidence did not include the search index,
 so its identity coverage remains unknown in that independent measurement.
 
-Standard suitability with no profile restrictions leaves 1,591 products across
-94 banks. Those exclusions are reported separately from missing identities.
+Standard suitability with no profile restrictions initially left 1,591 products
+across 94 banks. Investigating a fully excluded bank found that generic PAYG
+employment text incorrectly hid 11 UBank mortgage products (61 rate rows).
+The correction leaves 1,602 products across 95 banks. Comparing all 16,691 rows
+before and after found no other classification changes; UBank's eight bonus
+savings rows remain excluded by the conditional-rate policy. Other suitability
+exclusions are reported separately from missing identities.
 Five hundred reproducible random seeds reached all 102 bank identities.
 All 2,348 published link requests pass the updated URL policy; their HTTP
 reachability was not certified by this policy-only check.
@@ -94,4 +105,6 @@ history benchmarks, 229 script tests, 290 Jest suites / 3,302 tests, all-platfor
 exports and artifact size guards. Windows used Git Bash for the workflow shell
 fixture. Later cache/live-source integration refinements passed five focused
 suites / 29 tests, typecheck and scoped lint. Root PR automation verification
-also passed. Hosted checks validate the final committed revision.
+also passed. The foreground-inventory follow-up passed the complete canonical
+command with 292 Jest suites / 3,319 tests, all-platform exports and size guards.
+Hosted checks validate the final committed revision.

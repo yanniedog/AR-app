@@ -8,6 +8,7 @@ import {
   hydrateSuitabilityIndex,
   installSuitabilityIndex,
   rebuildAndInstallSuitabilityIndex,
+  SUITABILITY_INDEX_SCHEMA_VERSION,
 } from '../src/data/suitabilityIndex';
 import type { CorePayload, DetailsPayload, RateRow, SectionKey } from '../src/types';
 
@@ -87,7 +88,7 @@ describe('observed conditional and ordinary siblings in the suitability index', 
     await rebuildAndInstallSuitabilityIndex(core, details, DETAILS_SHA, () => true, CORE_SHA);
     expect(visible()).toEqual(ordinary);
     const persisted = jest.mocked(cache.writeSuitabilityIndex).mock.calls[0][0];
-    expect(persisted).toMatchObject({ schemaVersion: 5, allowed: caseIndex === 0 ? [] : [key] });
+    expect(persisted).toMatchObject({ schemaVersion: SUITABILITY_INDEX_SCHEMA_VERSION, allowed: caseIndex === 0 ? [] : [key] });
 
     clearSuitabilityIndex();
     jest.mocked(cache.readSuitabilityIndex).mockResolvedValue(persisted);

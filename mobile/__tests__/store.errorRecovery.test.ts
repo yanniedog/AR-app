@@ -56,7 +56,7 @@ jest.mock('../src/data/historyDaily', () => {
 // eslint-disable-next-line import/first -- store import must follow jest mocks
 import { useStore } from '../src/data/store';
 // eslint-disable-next-line import/first -- suitability modules share the mocked cache
-import { clearSuitabilityIndex } from '../src/data/suitabilityIndex';
+import { clearSuitabilityIndex, SUITABILITY_INDEX_SCHEMA_VERSION } from '../src/data/suitabilityIndex';
 // eslint-disable-next-line import/first -- suitability modules share the mocked cache
 import { getSuitabilityAllowed, setSuitabilityAllowed } from '../src/data/suitabilityGate';
 
@@ -272,7 +272,8 @@ describe('store error recovery', () => {
   });
 
   it.each([
-    { label: 'current', schemaVersion: 5, rebuild: false },
+    { label: 'current', schemaVersion: SUITABILITY_INDEX_SCHEMA_VERSION, rebuild: false },
+    { label: 'legacy employment false-positive', schemaVersion: 5, rebuild: true },
     { label: 'legacy over-filtering', schemaVersion: 4, rebuild: true },
     { label: 'legacy unspecified LVR', schemaVersion: 3, rebuild: true },
     { label: 'legacy conditionality', schemaVersion: 2, rebuild: true },
