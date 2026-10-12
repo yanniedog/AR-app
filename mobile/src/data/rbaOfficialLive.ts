@@ -11,11 +11,75 @@ const MONTHS: Record<string, string> = {
   july: '07', august: '08', september: '09', october: '10', november: '11', december: '12',
 };
 
+function stripElements(html: string, blocked: ReadonlySet<string>): string {
+  let out = '';
+  let index = 0;
+  while (index < html.length) {
+    const open = html.indexOf('<', index);
+    if (open < 0) {
+      out += html.slice(index);
+      break;
+    }
+    out += html.slice(index, open);
+    const close = html.indexOf('>', open + 1);
+    if (close < 0) {
+      out += html.slice(open);
+      break;
+    }
+    const token = html.slice(open + 1, close).trimStart();
+    const isClosing = token.startsWith('/');
+    const name = (isClosing ? token.slice(1) : token).match(/^[A-Za-z][\w:-]*/)?.[0]?.toLowerCase() ?? '';
+    const selfClosing = /\/\s*$/.test(token);
+    if (!isClosing && !selfClosing && blocked.has(name)) {
+      const closer = `</${name}`;
+      const lower = html.toLowerCase();
+      let searchFrom = close + 1;
+      let foundAt = -1;
+      while (searchFrom < html.length) {
+        const candidate = lower.indexOf(closer, searchFrom);
+        if (candidate < 0) break;
+        let cursor = candidate + closer.length;
+        while (cursor < html.length && /\s/.test(html[cursor])) cursor += 1;
+        if (html[cursor] === '>') {
+          foundAt = cursor + 1;
+          break;
+        }
+        searchFrom = candidate + closer.length;
+      }
+      index = foundAt < 0 ? html.length : foundAt;
+      out += ' ';
+      continue;
+    }
+    index = close + 1;
+    out += ' ';
+  }
+  return out;
+}
+
+function stripTags(html: string): string {
+  let out = '';
+  let index = 0;
+  while (index < html.length) {
+    const open = html.indexOf('<', index);
+    if (open < 0) {
+      out += html.slice(index);
+      break;
+    }
+    out += html.slice(index, open);
+    const close = html.indexOf('>', open + 1);
+    if (close < 0) {
+      out += html.slice(open);
+      break;
+    }
+    index = close + 1;
+    out += ' ';
+  }
+  return out;
+}
+
 function htmlText(html: string): string {
-  return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
+  const withoutEmbedded = stripElements(html, new Set(['script', 'style']));
+  return stripTags(withoutEmbedded)
     .replace(/&nbsp;|&#160;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/\s+/g, ' ')
