@@ -13,7 +13,7 @@ function escapeRegExpLiteral(value) {
 }
 
 function extractChangelogSection(content, version) {
-  const heading = new RegExp(`^##\\s+\\[?${escapeRegExpLiteral(version)}\\]?`, 'm');
+  const heading = new RegExp(`^##\\s+\\[?${escapeRegExpLiteral(version)}\\]?(?=$|\\s)`, 'm');
   const match = content.match(heading);
   if (!match || match.index == null) {
     return null;

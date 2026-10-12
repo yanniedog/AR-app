@@ -66,17 +66,20 @@ describe('app-release-meta', () => {
   it('extractChangelogSection treats version metacharacters as literals', () => {
     const md = `# Changelog
 
-## 1.0.0+build
-
-- Plus build
-
 ## 1.0.0
 
 - Plain
+
+## 1.0.0+build
+
+- Plus build
 `;
     const section = extractChangelogSection(md, '1.0.0+build');
     expect(section).toContain('Plus build');
     expect(section).not.toContain('Plain');
+    const plain = extractChangelogSection(md, '1.0.0');
+    expect(plain).toContain('Plain');
+    expect(plain).not.toContain('Plus build');
     const escaped = extractChangelogSection('## 1.0.0\\beta\n\n- Escaped\n', '1.0.0\\beta');
     expect(escaped).toContain('Escaped');
   });
