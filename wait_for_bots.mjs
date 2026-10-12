@@ -14,6 +14,7 @@ import {
   formatRequiredKeys,
   isGeminiCodeReviewBody,
   isQwenCodeReviewBody,
+  isReviewerNonsenseFailure,
   missingRequiredKeysFromEvents,
   parseRequiredKeys,
   resolveRequiredKeys,
@@ -160,7 +161,12 @@ function fetchBotActivity(owner, name, prNumber) {
       !isGeminiCodeReviewBody(body) &&
       !isQwenCodeReviewBody(body)
     ) return;
-    events.push({ login, at, body: body || '', noise: isBotNoise(body) });
+    events.push({
+      login,
+      at,
+      body: body || '',
+      noise: isBotNoise(body) || isReviewerNonsenseFailure(body),
+    });
   };
   for (const c of pr.comments?.nodes || []) {
     pushEvent(c.author?.login, c.createdAt, c.body);

@@ -22,9 +22,9 @@
  */
 
 const QUOTA_PATTERNS = [
-  /\brate[\s-]?limit(?:ed)?\b/i,
   /\bapi (?:limit|quota)\b/i,
   /\bquota (?:exceeded|reached|exhausted)\b/i,
+  /\brate[\s-]?limit(?:ed)?\s*(?:exceeded|reached|hit)\b/i,
   /\bout of (?:credits?|tokens?|quota|usage)\b/i,
   /\binsufficient (?:credits?|tokens?|funds|balance|quota)\b/i,
   /\bsubscription (?:required|expired)\b/i,
@@ -33,7 +33,6 @@ const QUOTA_PATTERNS = [
   /\bfree[\s-]tier (?:limit|quota)\b/i,
   /\bservice (?:temporarily )?unavailable\b/i,
   /\btoo many requests\b/i,
-  /\b429\b/,
   /\bplease (?:try|come back) (?:again )?later\b/i,
   /couldn'?t (?:review|process|complete)/i,
   /unable to (?:review|process|complete)/i,

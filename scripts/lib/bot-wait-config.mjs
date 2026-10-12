@@ -137,10 +137,10 @@ function eventsForRequiredKey(key, events) {
 
 /**
  * Gemini absence, quota, and other non-substantive failures never block.
- * Codex, Sourcery, and Qwen still block when they have not posted. A
- * quota-only or nonsense-only post from those reviewers is the same kind of
- * non-substantive failure and does not block; a real missing review does.
- * Substantive Gemini threads stay on the feedback gate.
+ * Qwen, including a missing review, never blocks. Codex and Sourcery still
+ * block when they have not posted. A quota-only or nonsense-only post from
+ * those reviewers does not block. Substantive Gemini threads stay on the
+ * feedback gate.
  */
 function qwenEventsForHead(events, expectedHeadSha) {
   if (!expectedHeadSha) return events;
@@ -154,7 +154,7 @@ function qwenEventsForHead(events, expectedHeadSha) {
 export function blockingMissingRequiredKeys(missing, events, opts = {}) {
   return (missing || []).filter((key) => {
     const normalized = String(key || '').toLowerCase();
-    if (normalized === 'gemini') return false;
+    if (normalized === 'gemini' || normalized === 'qwen') return false;
     const related = eventsForRequiredKey(normalized, events);
     const waiverEvents = normalized === 'qwen'
       ? qwenEventsForHead(related, opts.expectedHeadSha)
@@ -167,14 +167,20 @@ export function blockingMissingRequiredKeys(missing, events, opts = {}) {
 export function parseRequiredKeys(raw) {
   if (!raw || !String(raw).trim()) return [...DEFAULT_REQUIRED_KEYS];
   if (/^(?:off|none|disabled)$/i.test(String(raw).trim())) return [];
-  return String(raw)
+  return omitNeverRequiredKeys(String(raw)
     .split(',')
     .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+    .filter(Boolean));
+}
+
+const NEVER_REQUIRED_KEYS = new Set(['qwen']);
+
+export function omitNeverRequiredKeys(keys) {
+  return (keys || []).filter((key) => !NEVER_REQUIRED_KEYS.has(String(key || '').toLowerCase()));
 }
 
 export function resolveRequiredKeys(argvKeys, envRaw) {
-  if (argvKeys !== null && argvKeys !== undefined) return [...argvKeys];
+  if (argvKeys !== null && argvKeys !== undefined) return omitNeverRequiredKeys(argvKeys);
   const fromEnv = envRaw ?? process.env.AR_BOT_WAIT_REQUIRED ?? process.env.BOT_WAIT_REQUIRED ?? '';
   return parseRequiredKeys(fromEnv);
 }
@@ -186,8 +192,8 @@ export function resolveRequiredKeys(argvKeys, envRaw) {
  * @param {{ isFork?: boolean }} opts
  */
 export function adjustRequiredKeysForPrContext(requiredKeys, opts = {}) {
-  const keys = [...(requiredKeys || [])];
-  if (opts.isFork) return keys.filter((k) => k.toLowerCase() !== 'gemini');
+  let keys = omitNeverRequiredKeys(requiredKeys);
+  if (opts.isFork) keys = keys.filter((k) => k.toLowerCase() !== 'gemini');
   return keys;
 }
 

@@ -70,7 +70,7 @@ assert.equal(workflowNeedsStateChange("disabled_manually", true), true);
 assert.deepEqual(parseRequiredKeys("off"), []);
 assert.deepEqual(parseRequiredKeys("none"), []);
 assert.deepEqual(parseRequiredKeys("disabled"), []);
-assert.deepEqual(parseRequiredKeys("qwen,coderabbit"), ["qwen", "coderabbit"]);
+assert.deepEqual(parseRequiredKeys("qwen,coderabbit"), ["coderabbit"]);
 assert.deepEqual(resolveRequiredKeys([], "qwen"), []);
 assert.deepEqual(
   requiredChecksFromProtection({
@@ -315,9 +315,10 @@ assert.deepEqual(
       { login: "sourcery-ai[bot]", body: "Sorry, I couldn't review this pull request — rate limit" },
     ],
   ),
-  ["codex", "qwen"],
+  ["codex"],
 );
 assert.deepEqual(blockingMissingRequiredKeys(["gemini"], []), []);
+assert.deepEqual(blockingMissingRequiredKeys(["qwen"], []), []);
 assert.deepEqual(
   blockingMissingRequiredKeys(
     ["qwen"],
@@ -326,7 +327,23 @@ assert.deepEqual(
       body: "<!-- qwen-code-review -->\nReview outcome: findings\nReviewed commit: `abc`\nThe finding discusses HTTP 429 rate limit handling in the release path.",
     }],
   ),
-  ["qwen"],
+  [],
+);
+const codexQuotaFinding = "The retry path mishandles HTTP 429 rate limits and can drop the release artifact.";
+assert.equal(isBotNoise(codexQuotaFinding), false);
+assert.equal(
+  eventSatisfiesRequiredKey("chatgpt-codex-connector[bot]", codexQuotaFinding, "codex"),
+  true,
+);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    missingRequiredKeysFromEvents(
+      ["codex"],
+      [{ login: "chatgpt-codex-connector[bot]", body: codexQuotaFinding }],
+    ),
+    [{ login: "chatgpt-codex-connector[bot]", body: codexQuotaFinding }],
+  ),
+  [],
 );
 assert.deepEqual(
   blockingMissingRequiredKeys(
@@ -347,7 +364,7 @@ assert.deepEqual(
     }],
     { expectedHeadSha: "bbbbbbb" },
   ),
-  ["qwen"],
+  [],
 );
 assert.deepEqual(
   blockingMissingRequiredKeys(
