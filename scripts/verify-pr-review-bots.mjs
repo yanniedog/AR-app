@@ -74,6 +74,7 @@ assert.deepEqual(parseRequiredKeys("off"), []);
 assert.deepEqual(parseRequiredKeys("none"), []);
 assert.deepEqual(parseRequiredKeys("disabled"), []);
 assert.deepEqual(parseRequiredKeys("qwen,coderabbit"), ["coderabbit"]);
+assert.deepEqual(parseRequiredKeys("github-actions[bot],codex"), ["codex"]);
 assert.deepEqual(parseRequiredKeys("codex,qwen,sourcery"), ["codex", "sourcery"]);
 assert.deepEqual(resolveRequiredKeys(["codex", "qwen", "sourcery"]), ["codex", "sourcery"]);
 assert.deepEqual(adjustRequiredKeysForPrContext(["sourcery", "qwen"]), ["sourcery"]);
