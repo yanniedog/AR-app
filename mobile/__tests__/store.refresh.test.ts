@@ -1,8 +1,11 @@
-import type { CorePayload, Manifest } from '../src/types';
+import type { CorePayload, DetailsPayload, Manifest } from '../src/types';
 import { sampleCore, sampleCoreIntegrity, sampleManifest } from '../src/data/sample';
 import * as bankRateHistorySync from '../src/data/historicalBankRateReadySync';
 import { revisionHead, revisionManifest } from '../testUtils/payloadRevision';
 import * as payload from '../src/data/payload';
+import * as notifications from '../src/data/notifications';
+import { bindVerifiedDetails } from '../src/data/detailsIdentity';
+import { EMPTY_FILTERS } from '../src/data/selectors';
 
 const mockReadBundle = jest.fn();
 const mockReadMeta = jest.fn();
@@ -112,6 +115,7 @@ function resetStore() {
       profileFilters: { ...originalPrefs.profileFilters },
     },
     favorites: [],
+    subscriptions: [],
     ensureHistoryBanks: originalEnsureHistoryBanks,
     ensureBankInsights: originalEnsureBankInsights,
     ensureBankSpreadHistory: originalEnsureBankSpreadHistory,
@@ -142,6 +146,42 @@ describe('store refresh lifecycle', () => {
       min_date: remoteManifest.run_date,
       latest_date: remoteManifest.run_date,
     });
+  });
+
+  it.each([
+    ['cached', 'matching'], ['cached', 'wrong same-day revision'], ['cached', 'unverified'], ['live', 'wrong same-day revision'],
+  ] as const)('uses only previous-publication details for notifications (%s, %s)', async (location, identity) => {
+    const previous: Manifest = { ...remoteManifest, files: { ...remoteManifest.files,
+      core: { ...remoteManifest.files.core, sha256: 'a'.repeat(64) },
+      details: { ...remoteManifest.files.details, sha256: 'b'.repeat(64) } } };
+    const next: Manifest = { ...previous, files: { ...previous.files,
+      core: { ...previous.files.core, sha256: 'c'.repeat(64) },
+      details: { ...previous.files.details, sha256: 'd'.repeat(64) } } };
+    const details: DetailsPayload = { schema_version: 1, run_date: remoteCore.run_date, products: {} };
+    if (identity !== 'unverified') bindVerifiedDetails(details,
+      identity === 'matching' ? previous.files.details.sha256 : next.files.details.sha256);
+    const compute = jest.spyOn(notifications, 'computeChanges').mockReturnValue([]);
+    const notify = jest.spyOn(notifications, 'notify').mockResolvedValue(undefined);
+    try {
+      useStore.setState({ source: 'remote', manifest: previous, details: location === 'live' ? details : null,
+        prefs: { ...useStore.getState().prefs, notificationsEnabled: true },
+        subscriptions: [{ id: 'filtered-search', kind: 'search', section: 'Mortgage', path: [], hierarchyScoped: false,
+          query: '', label: 'Feature search', createdAt: previous.generated_at,
+          filters: { ...EMPTY_FILTERS, accountFeatures: ['OFFSET'] } }],
+        ensureDetails: mockEnsureDetails, ensureRbaCalendar: mockEnsureRbaCalendar,
+        ensureHistoryBanks: mockEnsureHistoryBanks, ensureBankInsights: mockEnsureBankInsights,
+        ensureBankSpreadHistory: mockEnsureBankSpreadHistory });
+      mockReadMeta.mockResolvedValue({ manifest: previous, source: 'remote', savedAt: previous.generated_at,
+        coreSha: previous.files.core.sha256, detailsSha: previous.files.details.sha256 });
+      mockReadDetails.mockResolvedValue(location === 'cached' ? details : null);
+      mockFetchManifest.mockResolvedValue(next);
+      mockDownloadCore.mockResolvedValue({ core: remoteCore, text: JSON.stringify(remoteCore), integrity: sampleCoreIntegrity });
+      await expect(useStore.getState().refresh({ background: true })).resolves.toBe(true);
+      expect(compute).toHaveBeenCalledTimes(1);
+      expect(compute.mock.calls[0][5]).toBe(identity === 'matching' ? details.products : null);
+      expect(mockReadDetails).toHaveBeenCalledTimes(1);
+      expect(useStore.getState().details).toBeNull();
+    } finally { compute.mockRestore(); notify.mockRestore(); }
   });
 
   it.each([false, true])('installs current rates before history finishes (quiet refresh=%s)', async background => {

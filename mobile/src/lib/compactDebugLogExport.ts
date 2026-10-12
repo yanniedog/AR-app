@@ -173,6 +173,24 @@ function journalCoveredByReport(check: RecordValue, final: RecordValue): boolean
   return true;
 }
 
+const checkpointKinds = new Set(['checkpoint', 'plan-step-start', 'deep-step-start', 'route-start', 'route-complete']);
+const checkpointTextFields = new Set(['kind', 'sessionId', 'stepId', 'passId', 'scenarioId',
+  'semanticActionId', 'expectedPath', 'expectedSurface', 'route', 'path']);
+const checkpointCountFields = new Set(['depth', 'storedChecks', 'plannedChecks', 'completed', 'total']);
+
+function routineCheckpoint(value: RecordValue, logPrefix: string): boolean {
+  // Only known, low-severity progress records may replace earlier evidence.
+  // Older/future schemas and nested payloads are retained rather than guessing
+  // that an unfamiliar error/status field is safe to discard.
+  return checkpointKinds.has(String(value.kind)) && /\[(?:INFO|DEBUG|TRACE)\s*\]$/i.test(logPrefix) &&
+    !/\[(?:WARN|ERROR|FATAL)\s*\]/i.test(logPrefix) &&
+    Object.entries(value).every(([key, nested]) => {
+      if (checkpointTextFields.has(key)) return typeof nested === 'string';
+      if (checkpointCountFields.has(key)) return finite(nested) && Number.isInteger(nested) && nested >= 0;
+      return key === 'durationMs' && finite(nested) && nested >= 0 && nested <= 10_000;
+    });
+}
+
 /** Only recognized audit JSON is summarized; unrelated/crash lines and malformed records survive verbatim. */
 export function compactDebugLogExport(text: string): string {
   const sessions = new Map<string, { checks: Map<string, RecordValue[]>; report?: RecordValue; events: RecordValue[]; checkpoints: Map<string, RecordValue>; checkLocations: unknown[][] }>();
@@ -209,11 +227,12 @@ export function compactDebugLogExport(text: string): string {
       if (!routineCheck(value.check)) session.checkLocations.push([value.check.id, sourceLine, logPrefix]);
       session.checks.set(value.check.id, prior); continue;
     }
-    // Preserve the final durable checkpoint of each kind, along with its original log timestamp.
+    // Collapse routine progress only. Anomalous or unfamiliar checkpoints must
+    // survive a later successful checkpoint of the same kind.
     const event = { ...value, sourceLine, logPrefix,
       ...(value.kind === 'report-fallback' && record(value.report) ? { report: compactReport(value.report) } : {}),
     };
-    if (['checkpoint', 'plan-step-start', 'deep-step-start', 'route-start', 'route-complete'].includes(String(value.kind))) {
+    if (routineCheckpoint(value, logPrefix)) {
       session.checkpoints.set(String(value.kind), event);
     } else session.events.push(event);
   }

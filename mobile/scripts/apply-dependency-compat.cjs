@@ -31,5 +31,6 @@ function patchQueryString(projectDir = path.resolve(__dirname, '..')) {
 if (require.main === module) {
   patchQueryString();
   require('./patch-task-manager-timers.cjs').patchTaskManagerTimers();
+  require('./patch-background-task-scheduler.cjs').patchBackgroundTaskScheduler();
 }
 module.exports = { patchExport, patchQueryString };
