@@ -321,3 +321,24 @@ Skipped checks, compact logs and deidentified exports retain the numeric/boolean
 reuse metrics without exporting private readiness evidence.
 These tests establish eliminated duplicate waiting; signed-APK timing is still
 needed to measure the complete run's improvement.
+
+## Reusing prepared catalogue coverage
+
+The manual health capture rebuilt all catalogue selectors before looking up the
+passive check results. It now shares one prepared coverage observation with the
+background scanner. Reuse requires the same immutable core, details and search
+index, interests and ranking settings, plus both eligibility gate revisions.
+Changing a relevant input regenerates the evidence; removing the core releases
+the retained observation even during a coreless passive wake or when catalogue
+capture is disabled. Each caller receives a detached copy, preventing mutations
+from corrupting later captures. The independent uncached scanner remains available.
+No profile or catalogue evidence is added to persistent storage.
+
+A local Node/Jest probe over the 16,691-row public payload measured 823.5 ms for
+an uncached scan, 473.3 ms for initial preparation and 4.93 ms for reuse including
+the detached copy, with identical coverage evidence. This is not a phone timing claim. Regressions prove
+200 consecutive unchanged captures invoke each Search/Banks selector only once
+per section, and changed assets, interests, rank preferences and gate revisions
+invalidate reuse. Initial capture took 30.197 seconds in one v1.0.229 emulator
+run overlapping another local CI job; that observation prompted this inspection
+but is not a quiet-host baseline or proof of this bottleneck's total cost.
