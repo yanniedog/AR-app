@@ -53,6 +53,24 @@ test('ends a non-doctype declaration at the first greater-than sign', () => {
   expect(htmlPlainText('<!foo "x>Cash rate target 4.35%').trim()).toBe('Cash rate target 4.35%');
 });
 
+test('keeps text after a slash following an attribute name', () => {
+  expect(htmlPlainText('<div a /=">Cash rate target 4.35%').trim()).toBe('Cash rate target 4.35%');
+});
+
+test('ends a doctype at the first greater-than sign outside an identifier', () => {
+  expect(htmlPlainText('<!DOCTYPE html "x>Cash rate target 4.35%">rest').trim()).toBe('Cash rate target 4.35%">rest');
+});
+
+test('returns a double-escaped comment end to script data', () => {
+  expect(htmlPlainText('<script><!--<script>--><script></script>Visible').trim()).toBe('Visible');
+});
+
+test('drops a processing instruction before the overview', () => {
+  const raw = '<?xml Cash rate target 9.99% Effective date 12 August 2026?>4.35';
+  expect(htmlPlainText(raw)).toBe(' 4.35');
+  expect(htmlPlainText(raw)).not.toContain('9.99');
+});
+
 test('keeps a less-than sign that cannot start a tag', () => {
   expect(htmlPlainText('<3 x=">Cash rate target 4.35%')).toBe('<3 x=">Cash rate target 4.35%');
   expect(htmlPlainText('</3>visible').trim()).toBe('visible');

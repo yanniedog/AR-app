@@ -13,7 +13,7 @@ function asciiEqualsAt(html: string, index: number, needle: string): boolean {
 
 function tagEnd(html: string, from: number): number {
   let quote = '';
-  let state: 'tagName' | 'beforeAttr' | 'attrName' | 'afterAttr' | 'beforeValue' | 'unquoted' = 'tagName';
+  let state: 'tagName' | 'beforeAttr' | 'attrName' | 'afterAttr' | 'beforeValue' | 'unquoted' | 'selfClosing' = 'tagName';
   for (let index = from; index < html.length; index += 1) {
     const char = html[index];
     if (quote) {
@@ -25,11 +25,21 @@ function tagEnd(html: string, from: number): number {
     }
     if (char === '>') return index;
     if (state === 'tagName') {
-      if (HTML_SPACE.test(char) || char === '/') state = 'beforeAttr';
+      if (HTML_SPACE.test(char)) state = 'beforeAttr';
+      else if (char === '/') state = 'selfClosing';
+      continue;
+    }
+    if (state === 'selfClosing') {
+      state = 'beforeAttr';
+      index -= 1;
       continue;
     }
     if (state === 'beforeAttr' || state === 'afterAttr') {
-      if (HTML_SPACE.test(char) || char === '/') continue;
+      if (HTML_SPACE.test(char)) continue;
+      if (char === '/') {
+        state = 'selfClosing';
+        continue;
+      }
       if (char === '=' && state === 'afterAttr') {
         state = 'beforeValue';
         continue;
@@ -42,7 +52,7 @@ function tagEnd(html: string, from: number): number {
     if (state === 'attrName') {
       if (HTML_SPACE.test(char)) state = 'afterAttr';
       else if (char === '=') state = 'beforeValue';
-      else if (char === '/') state = 'beforeAttr';
+      else if (char === '/') state = 'selfClosing';
       continue;
     }
     if (state === 'beforeValue') {
@@ -58,6 +68,8 @@ function tagEnd(html: string, from: number): number {
 
 function declarationEnd(html: string, from: number): number {
   let quote = '';
+  let keyword = '';
+  let identAllowed = false;
   for (let index = from; index < html.length; index += 1) {
     const char = html[index];
     if (quote) {
@@ -65,10 +77,18 @@ function declarationEnd(html: string, from: number): number {
       continue;
     }
     if (char === '"' || char === "'") {
-      quote = char;
+      if (identAllowed) quote = char;
+      identAllowed = false;
       continue;
     }
     if (char === '>') return index;
+    if (HTML_SPACE.test(char)) {
+      identAllowed = /^(?:public|system)$/i.test(keyword);
+      keyword = '';
+      continue;
+    }
+    keyword += char;
+    identAllowed = false;
   }
   return -1;
 }
@@ -114,7 +134,7 @@ function scriptRawTextEnd(html: string, from: number): number {
   let state: 'data' | 'escaped' | 'double' = 'data';
   for (let index = from; index < html.length; index += 1) {
     if (state !== 'data' && html.startsWith('-->', index)) {
-      state = state === 'double' ? 'escaped' : 'data';
+      state = 'data';
       index += 2;
       continue;
     }
@@ -155,6 +175,13 @@ export function htmlPlainText(html: string): string {
     }
     parts.push(html.slice(index, open));
     const next = html[open + 1] || '';
+    if (next === '?') {
+      const end = html.indexOf('>', open + 2);
+      if (end < 0) break;
+      parts.push(' ');
+      index = end + 1;
+      continue;
+    }
     if (next !== '!' && next !== '/' && !/[A-Za-z]/.test(next)) {
       parts.push('<');
       index = open + 1;
