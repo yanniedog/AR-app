@@ -23,6 +23,7 @@ import {
   capturePerformanceAuditUserSnapshot,
   PERFORMANCE_AUDIT_ROLLBACK_KEY,
   PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY,
+  PerformanceAuditRollbackOutcome,
   performanceAuditSnapshotFingerprint,
   recoverInterruptedPerformanceAudit,
   retryPerformanceAuditRollback,
@@ -30,6 +31,7 @@ import {
   tryRestorePerformanceAuditRollback,
   type PerformanceAuditRollbackStore,
 } from '../src/lib/performanceAuditRollback';
+import { PerformanceAuditMutationBarrier } from '../src/lib/performanceAuditTiming';
 
 const originalOs = Platform.OS;
 const secureStore = new Map<string, string>();
@@ -136,6 +138,46 @@ describe('performance audit rollback journal', () => {
     expect(secureStore.get(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY)).toMatch(/ar\.secure-value/);
   });
 
+  it.each([false, true])('keeps the actual late restoration outcome after timeout/drain (failure=%s)', async (failRestore) => {
+    const store = makeStore();
+    const before = await beginPerformanceAuditRollback(store);
+    store.setState({ favorites: ['audit mutation'] });
+    if (failRestore) store.setState = () => { throw new Error('late persistence failure'); };
+    const realRead = jest.mocked(AsyncStorage.getItem).getMockImplementation()!;
+    let release!: () => void;
+    const blockedRead = new Promise<void>(resolve => { release = resolve; });
+    jest.mocked(AsyncStorage.getItem).mockImplementationOnce(async (key) => {
+      await blockedRead;
+      return realRead(key);
+    });
+    jest.useFakeTimers();
+    const outcome = new PerformanceAuditRollbackOutcome();
+    const barrier = new PerformanceAuditMutationBarrier();
+    const operation = barrier.track(outcome.track(tryRestorePerformanceAuditRollback(store, before)));
+    const deadline = Promise.race([
+      operation,
+      new Promise<string>(resolve => setTimeout(() => resolve('timed out'), 5_000)),
+    ]);
+    await jest.advanceTimersByTimeAsync(5_000);
+    expect(await deadline).toBe('timed out');
+    expect(outcome.status).toBe('pending');
+    expect(outcome.restored).toBe(false);
+    expect(barrier.hasPending).toBe(true);
+    const drained = barrier.drain();
+    release();
+    expect(await drained).toBe(true);
+    expect(outcome.status).toBe(failRestore ? 'failed' : 'restored');
+    expect(outcome.restored).toBe(!failRestore);
+    if (failRestore) {
+      expect(outcome.result?.error).toContain('late persistence failure');
+      expect(await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).not.toBeNull();
+    } else {
+      expect(performanceAuditSnapshotFingerprint(capturePerformanceAuditUserSnapshot(store.getState())))
+        .toBe(performanceAuditSnapshotFingerprint(before));
+      expect(await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).toBeNull();
+    }
+  });
+
   it('keeps tracked dates in a dedicated rollback record and survives a live audit overwrite', async () => {
     const row: RateRow = {
       provider: 'Example Bank',
@@ -196,9 +238,64 @@ describe('performance audit rollback journal', () => {
     });
 
     const restarted = makeStore(store.getState());
+    resetUserRateScenarioStoreForTests();
     await expect(recoverInterruptedPerformanceAudit(restarted)).resolves.toBe(true);
     expect(performanceAuditSnapshotFingerprint(capturePerformanceAuditUserSnapshot(restarted.getState())))
       .toBe(performanceAuditSnapshotFingerprint(before));
+  });
+
+  it('retries a transient encrypted scenario write on a cold recovery and verifies the original inputs', async () => {
+    const store = makeStore();
+    await ensureUserRateScenarioLoaded();
+    updateUserRateScenario(value => ({ ...value, savings: { balance: '12345', currentRate: '4.25' } }));
+    const before = await beginPerformanceAuditRollback(store);
+    store.setState({ favorites: ['audit-only'] });
+    resetUserRateScenarioStoreForTests();
+    const realWrite = jest.mocked(SecureStore.setItemAsync).getMockImplementation()!;
+    let failures = 0;
+    jest.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value, options) => {
+      if (key.startsWith('user-rate-scenario-v1.chunk.') && failures++ === 0) {
+        throw new Error('keystore temporarily unavailable');
+      }
+      return realWrite(key, value, options);
+    });
+
+    await expect(recoverInterruptedPerformanceAudit(store)).resolves.toBe(true);
+    expect(failures).toBeGreaterThanOrEqual(2);
+    expect(capturePerformanceAuditUserSnapshot(store.getState())).toEqual(before);
+    await expect(AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).resolves.toBeNull();
+    resetUserRateScenarioStoreForTests();
+    await ensureUserRateScenarioLoaded();
+    expect(capturePerformanceAuditUserSnapshot(store.getState())).toEqual(before);
+  });
+
+  it('bounds failed cold recovery and retains the journal with the actual encrypted write error', async () => {
+    const store = makeStore();
+    await beginPerformanceAuditRollback(store);
+    resetUserRateScenarioStoreForTests();
+    let failures = 0;
+    jest.mocked(SecureStore.setItemAsync).mockImplementation(async (key) => {
+      if (key.startsWith('user-rate-scenario-v1.chunk.')) {
+        failures += 1;
+        throw new Error('native keystore write rejected');
+      }
+    });
+
+    await expect(recoverInterruptedPerformanceAudit(store)).rejects.toThrow(
+      'Encrypted rate scenario restore did not persist: native keystore write rejected',
+    );
+    expect(failures).toBe(3);
+    await expect(AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).resolves.not.toBeNull();
+    expect(secureStore.has(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY)).toBe(true);
+  });
+
+  it('does not retry or write when no interrupted audit exists', async () => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+    await expect(recoverInterruptedPerformanceAudit(makeStore())).resolves.toBe(false);
+    expect(jest.getTimerCount()).toBe(0);
+    expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+    expect(AsyncStorage.setItem).not.toHaveBeenCalledWith(PERFORMANCE_AUDIT_ROLLBACK_KEY, expect.anything());
   });
 
   it('refuses to clear the journal when persistence never confirms restoration', async () => {

@@ -9,6 +9,7 @@ import {
   makeSearchSubscription,
   migrateProductSubscriptionAliases,
   normalizeFilterSnapshot,
+  refreshProductSubscriptionLabels,
   removeSubscription,
   rowsForSearchSubscription,
   savedRatesWithAlerts,
@@ -244,5 +245,44 @@ describe('computeSubscriptionChanges', () => {
     const after = core([mk({ rate: '0.0550', rate_index: 1 })]);
     const sub = makeProductSubscription(mk({}), 1);
     expect(computeChanges(before, after, [], 5, [sub]).some((m) => m.body.includes('→'))).toBe(true);
+  });
+});
+
+describe('stored product alert labels', () => {
+  test('older LVR wording is refreshed while ids and search alerts are untouched', () => {
+    const legacy = {
+      ...makeProductSubscription(mk({ lvr_tier: 'lvr_=60%' }), 1),
+      label: 'Bank A · Home loan (Variable · LVR =60%)',
+    };
+    const range = { ...legacy, id: 'product:A|2#1', label: 'Bank A · LVR 80 Saver (Variable · LVR 70-80%)' };
+    const search = makeSearchSubscription({
+      section: 'Mortgage', path: [], hierarchyScoped: false, query: 'LVR =60%',
+      filters: normalizeFilterSnapshot({} as Parameters<typeof normalizeFilterSnapshot>[0]),
+    });
+
+    const refreshed = refreshProductSubscriptionLabels([legacy, range, search]);
+
+    expect(refreshed.map((sub) => sub.label)).toEqual([
+      'Bank A · Home loan (Variable · LVR ≤60%)',
+      // Product names outside the generated suffix keep their own wording.
+      'Bank A · LVR 80 Saver (Variable · LVR 70–80%)',
+      search.label,
+    ]);
+    expect(refreshed.map((sub) => sub.id)).toEqual([legacy.id, range.id, search.id]);
+    expect(refreshed[2]).toBe(search);
+  });
+
+  test('product-wide alerts keep the official product name verbatim', () => {
+    const productWide = {
+      ...makeProductSubscription(mk({ product_name: 'Home loan (LVR =60%)' }), null),
+    };
+    expect(productWide.label).toBe('Bank A · Home loan (LVR =60%)');
+    expect(refreshProductSubscriptionLabels([productWide])[0].label).toBe('Bank A · Home loan (LVR =60%)');
+  });
+
+  test('current labels are returned unchanged, including the list identity', () => {
+    const current = [makeProductSubscription(mk({ lvr_tier: 'lvr_=60%' }), 1)];
+    expect(current[0].label).toBe('Bank A · Home loan (Variable · LVR ≤60%)');
+    expect(refreshProductSubscriptionLabels(current)).toBe(current);
   });
 });
