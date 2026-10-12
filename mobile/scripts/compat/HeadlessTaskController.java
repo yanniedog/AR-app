@@ -32,6 +32,15 @@ final class HeadlessTaskController {
     Integer taskId;
   }
 
+  // The caller queued start() first. Loading on this same queue prevents the
+  // unsynchronized Expo factory from constructing a second, unused ReactHost.
+  void loadAppOnUiThread(Runnable load) {
+    UiThreadUtil.runOnUiThread(() -> {
+      Log.i(TAG, "AR_BACKGROUND_COLD_LOADER_UI_V1");
+      load.run();
+    });
+  }
+
   void start(Context context, String scope, String eventId) {
     UiThreadUtil.runOnUiThread(() -> {
       Lease existing = leases.get(scope);
