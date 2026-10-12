@@ -106,6 +106,7 @@ export function checkRequiredBotsOnPr(owner, name, prNumber, { requiredKeys, anc
       expectedHeadSha: pr.headRefOid,
     }),
     events,
+    { expectedHeadSha: pr.headRefOid },
   );
   return {
     requiredKeys: keys,

@@ -340,6 +340,28 @@ assert.deepEqual(
 );
 assert.deepEqual(
   blockingMissingRequiredKeys(
+    ["qwen"],
+    [{
+      login: "github-actions[bot]",
+      body: "<!-- qwen-code-review -->\nReview outcome: failed\nReviewed commit: `aaaaaaa`\nQwen review did not complete successfully.",
+    }],
+    { expectedHeadSha: "bbbbbbb" },
+  ),
+  ["qwen"],
+);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    ["qwen"],
+    [{
+      login: "github-actions[bot]",
+      body: "<!-- qwen-code-review -->\nReview outcome: failed\nReviewed commit: `bbbbbbb`\nQwen review did not complete successfully.",
+    }],
+    { expectedHeadSha: "bbbbbbb" },
+  ),
+  [],
+);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
     missingRequiredKeysFromEvents(
       ["codex"],
       [{ login: "chatgpt-codex-connector[bot]", body: "This reachable branch drops the release artifact." }],

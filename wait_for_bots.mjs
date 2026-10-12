@@ -314,7 +314,9 @@ function evaluate({
   const unsatisfied = missingRequiredKeysFromEvents(requiredKeys, botEventsSinceAnchor, {
     expectedHeadSha,
   });
-  const missing = blockingMissingRequiredKeys(unsatisfied, botEventsSinceAnchor);
+  const missing = blockingMissingRequiredKeys(unsatisfied, botEventsSinceAnchor, {
+    expectedHeadSha,
+  });
   const waived = unsatisfied.filter((key) => !missing.includes(key));
   const allRequiredPosted = missing.length === 0;
   const lastBotAt =
