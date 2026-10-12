@@ -44,6 +44,23 @@ function tagEnd(html: string, from: number): number {
   return -1;
 }
 
+function declarationEnd(html: string, from: number): number {
+  let quote = '';
+  for (let index = from; index < html.length; index += 1) {
+    const char = html[index];
+    if (quote) {
+      if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '>') return index;
+  }
+  return -1;
+}
+
 function commentEnd(html: string, from: number): number {
   for (let index = from; index < html.length - 2; index += 1) {
     if (html.charCodeAt(index) !== 45 || html.charCodeAt(index + 1) !== 45) continue;
@@ -105,9 +122,10 @@ function scriptRawTextEnd(html: string, from: number): number {
       return end < 0 ? html.length : end + 1;
     }
     if (state === 'double' && namedTagAt(html, index, 'script', true)) {
-      const end = tagEnd(html, index + '</script'.length);
+      // The name returns the tokenizer to the escaped state. A later "-->"
+      // in that suffix is still script data, so do not skip it as an attribute.
       state = 'escaped';
-      index = (end < 0 ? html.length : end) ;
+      index += '</script'.length - 1;
     }
   }
   return html.length;
@@ -129,6 +147,12 @@ export function htmlPlainText(html: string): string {
       if (html[after] === '>') index = after + 1;
       else if (html.startsWith('->', after)) index = after + 2;
       else index = commentEnd(html, after);
+      continue;
+    }
+    if (html[open + 1] === '!') {
+      const end = declarationEnd(html, open + 2);
+      if (end < 0) break;
+      index = end + 1;
       continue;
     }
     const end = tagEnd(html, open + 1);

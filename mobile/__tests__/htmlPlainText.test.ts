@@ -31,6 +31,16 @@ test('leaves a double-escaped script when the escape comment ends', () => {
   expect(htmlPlainText('<script><!--<script>--></script>Visible').trim()).toBe('Visible');
 });
 
+test('reads a comment end inside a double-escaped end-tag suffix', () => {
+  expect(htmlPlainText('<script><!--<script></script --> <script>foo</script>Visible').trim()).toBe('Visible');
+});
+
+test('keeps a quoted doctype identifier out of the text', () => {
+  const raw = '<!DOCTYPE html SYSTEM "x>Cash rate target 9.99% Effective date 12 August 2026">4.35';
+  expect(htmlPlainText(raw)).toBe(' 4.35');
+  expect(htmlPlainText(raw)).not.toContain('9.99');
+});
+
 test('keeps text after an equals sign inside a tag name', () => {
   expect(htmlPlainText('<x="y>Visible').trim()).toBe('Visible');
 });
