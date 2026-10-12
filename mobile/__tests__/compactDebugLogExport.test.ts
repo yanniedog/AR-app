@@ -50,15 +50,33 @@ it('does not aggregate unexpected pass errors, over-budget passes, or unknown ne
 it('preserves raw crash lines, malformed audit JSON, old-session boundaries and last durable checkpoints', () => {
   const raw = '# Previous app session\n2026-10-12T07:00:00Z [ERROR] recovery: write failed\nperf-audit: {broken';
   const output = compactDebugLogExport([raw,
-    event({ sessionId, kind: 'checkpoint', storedChecks: 3 }),
-    event({ sessionId, kind: 'checkpoint', storedChecks: 4 }),
+    event({ sessionId, kind: 'checkpoint', storedChecks: 3 }).replace('[WARN ]', '[INFO ]'),
+    event({ sessionId, kind: 'checkpoint', storedChecks: 4 }).replace('[WARN ]', '[INFO ]'),
     event({ sessionId, kind: 'check', check: check('fatal', 'fail', { reason: 'deadline' }) }),
   ].join('\n'));
   expect(output).toContain(raw);
   const report = unpack(output);
   expect(report.partial).toBe(true);
-  expect(report.lastCheckpoints).toEqual([expect.objectContaining({ storedChecks: 4, logPrefix: '2026-10-12T07:12:21.717Z [WARN ]' })]);
+  expect(report.lastCheckpoints).toEqual([expect.objectContaining({ storedChecks: 4, logPrefix: '2026-10-12T07:12:21.717Z [INFO ]' })]);
   expect(details(report.checks)[0].journalLogPrefix).toContain('2026-10-12T07:12:21.717Z');
+});
+
+it.each([
+  ['ERROR', {}], ['WARN', {}], ['INFO', { error: 'Previous write failed', trace: 'native stack' }],
+  ['INFO', { status: 'fail' }], ['INFO', { metrics: { nonTimingFailure: true } }],
+  ['INFO', { diagnosticDetails: { operation: 'restore', cause: 'disk full' } }],
+  ['INFO', { durationMs: 10_001 }], ['INFO', { storedChecks: 'unknown' }],
+  ['INFO', { storedChecks: null }],
+] as const)('preserves %s checkpoint evidence before later routine progress (%j)', (level, evidence) => {
+  const failed = { sessionId, kind: 'checkpoint', storedChecks: 3, ...evidence };
+  const report = unpack(compactDebugLogExport([
+    event(failed, '2026-10-12T07:00:00Z').replace('[WARN ]', `[${level} ]`),
+    event({ sessionId, kind: 'checkpoint', storedChecks: 4 }, '2026-10-12T07:00:01Z').replace('[WARN ]', '[INFO ]'),
+    event({ sessionId, kind: 'checkpoint', storedChecks: 5 }, '2026-10-12T07:00:02Z').replace('[WARN ]', '[INFO ]'),
+  ].join('\n')));
+  expect(report.journalEvents).toEqual([{ ...failed, sourceLine: 1, logPrefix: `2026-10-12T07:00:00Z [${level} ]` }]);
+  expect(report.lastCheckpoints).toEqual([{ sessionId, kind: 'checkpoint', storedChecks: 5,
+    sourceLine: 3, logPrefix: '2026-10-12T07:00:02Z [INFO ]' }]);
 });
 
 it('retains earlier failure evidence when a duplicate ID later passes or the report disagrees', () => {

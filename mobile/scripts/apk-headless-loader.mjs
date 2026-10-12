@@ -9,7 +9,7 @@ const MAX_DEX_BYTES = 64 * 1024 * 1024;
  * even when R8 removes/renames the reflected class. DEX layout specification:
  * https://source.android.com/docs/core/runtime/dex-format
  * This is a narrow release-contract check, not a general DEX verifier. */
-export function inspectHeadlessLoaderDex(bytes) {
+function readDex(bytes) {
   const dex = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const range = (offset, length) => {
     if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length)
@@ -53,6 +53,11 @@ export function inspectHeadlessLoaderDex(bytes) {
     return dex.subarray(cursor.offset, end).toString('utf8');
   };
   const type = index => string(u32(types(index)));
+  return { dex, range, u16, u32, strings, types, protos, methods, classes, uleb, string, type };
+}
+
+export function inspectHeadlessLoaderDex(bytes) {
+  const { range, u16, u32, protos, methods, classes, uleb, string, type } = readDex(bytes);
   for (let i = 0; i < u32(96); i++) {
     const item = classes(i), classIndex = u32(item);
     if (type(classIndex) !== DESCRIPTOR) continue;
@@ -84,7 +89,7 @@ export function inspectHeadlessLoaderDex(bytes) {
 
 /** Fail publication unless a public, concrete loader and its reflected public
  * Context constructor are present in the actual release APK's DEX tables. */
-export function verifyApkHeadlessLoader(apk) {
+function readApkDexFiles(apk) {
   let totalBytes = 0;
   const names = new Set();
   const files = unzipSync(new Uint8Array(apk), { filter(entry) {
@@ -97,10 +102,96 @@ export function verifyApkHeadlessLoader(apk) {
     }
     return true;
   } });
-  const definitions = Object.entries(files)
+  return files;
+}
+
+export function verifyApkHeadlessLoader(apk) {
+  const definitions = Object.entries(readApkDexFiles(apk))
     .map(([name, bytes]) => ({ name, ...inspectHeadlessLoaderDex(bytes) }))
     .filter(result => result.defined);
   if (definitions.length !== 1) throw new Error(`APK must define exactly one ${HEADLESS_LOADER}; found ${definitions.length}`);
   if (!definitions[0].constructible) throw new Error(`APK is missing public ${HEADLESS_LOADER}(android.content.Context)`);
   return { className: HEADLESS_LOADER, dex: definitions[0].name, publicContextConstructor: true };
+}
+
+export const COLD_BACKGROUND_PATCH_MARKERS = [
+  'AR_BACKGROUND_COLD_LOADER_UI_V1',
+  'AR_BACKGROUND_RESTORE_KEEP_V1',
+];
+
+// Decode instruction boundaries so marker text in a DEX string table, an
+// instruction operand, or switch/array data alone cannot satisfy the gate.
+function instructionWidth(unit, offset, u16, u32) {
+  const opcode = unit & 255;
+  if (opcode === 0) {
+    if (unit === 0) return 1;
+    if (unit === 0x100) return 4 + 2 * u16(offset + 2);
+    if (unit === 0x200) return 2 + 4 * u16(offset + 2);
+    if (unit === 0x300) return 4 + Math.ceil(u16(offset + 2) * u32(offset + 4) / 2);
+    throw new Error('Unsupported DEX instruction payload');
+  }
+  if ([1, 4, 7, 0x1d, 0x1e, 0x21, 0x27, 0x28].includes(opcode)
+    || (opcode >= 0x0a && opcode <= 0x12) || (opcode >= 0x7b && opcode <= 0x8f)
+    || (opcode >= 0xb0 && opcode <= 0xcf)) return 1;
+  if ([2, 5, 8, 0x13, 0x15, 0x16, 0x19, 0x1a, 0x1c, 0x1f, 0x20, 0x22, 0x23, 0x29, 0xfe, 0xff].includes(opcode)
+    || (opcode >= 0x2d && opcode <= 0x3d) || (opcode >= 0x44 && opcode <= 0x6d)
+    || (opcode >= 0x90 && opcode <= 0xaf) || (opcode >= 0xd0 && opcode <= 0xe2)) return 2;
+  if ([3, 6, 9, 0x14, 0x17, 0x1b, 0x24, 0x25, 0x26, 0x2a, 0x2b, 0x2c, 0xfc, 0xfd].includes(opcode)
+    || (opcode >= 0x6e && opcode <= 0x72) || (opcode >= 0x74 && opcode <= 0x78)) return 3;
+  if (opcode === 0xfa || opcode === 0xfb) return 4;
+  if (opcode === 0x18) return 5;
+  throw new Error(`Unsupported DEX opcode ${opcode} in background patch verification`);
+}
+
+/** Require executable const-string instructions in defined native methods.
+ * R8 can inline/rename the methods, so class names are intentionally irrelevant.
+ * Pinned source tests verify policy/dispatch semantics; this gate proves the
+ * compiled patches reached the APK instead of an unpatched prebuilt AAR. */
+export function inspectColdBackgroundPatchesDex(bytes) {
+  const { range, u16, u32, methods, classes, uleb, string } = readDex(bytes);
+  const expected = new Map();
+  for (let i = 0; i < u32(56); i++) {
+    const value = string(i);
+    if (COLD_BACKGROUND_PATCH_MARKERS.includes(value)) expected.set(i, value);
+  }
+  const found = new Set();
+  if (!expected.size) return [];
+  for (let i = 0; i < u32(96); i++) {
+    const item = classes(i), classIndex = u32(item), classData = u32(item + 24);
+    if (!classData) continue;
+    const cursor = { offset: classData };
+    const fields = uleb(cursor) + uleb(cursor);
+    const groups = [uleb(cursor), uleb(cursor)];
+    for (let f = 0; f < fields; f++) { uleb(cursor); uleb(cursor); }
+    for (const count of groups) {
+      let methodIndex = 0;
+      for (let m = 0; m < count; m++) {
+        methodIndex += uleb(cursor);
+        const flags = uleb(cursor), code = uleb(cursor);
+        if (u16(methods(methodIndex)) !== classIndex) throw new Error('Invalid DEX method owner');
+        if (!code || (flags & 0x500)) continue;
+        range(code, 16);
+        const start = code + 16, end = start + u32(code + 12) * 2;
+        range(start, end - start);
+        for (let at = start; at < end;) {
+          const unit = u16(at), opcode = unit & 255;
+          const width = instructionWidth(unit, at, u16, u32);
+          if (at + width * 2 > end) throw new Error('Truncated DEX instruction');
+          if (opcode === 0x1a || opcode === 0x1b) {
+            const index = opcode === 0x1a ? u16(at + 2) : u32(at + 2);
+            if (expected.has(index)) found.add(expected.get(index));
+          }
+          at += width * 2;
+        }
+      }
+    }
+  }
+  return [...found].sort();
+}
+
+export function verifyApkColdBackgroundPatches(apk) {
+  const found = new Set(Object.values(readApkDexFiles(apk)).flatMap(inspectColdBackgroundPatchesDex));
+  const missing = COLD_BACKGROUND_PATCH_MARKERS.filter(marker => !found.has(marker));
+  if (missing.length) throw new Error(`APK is missing compiled cold background repairs: ${missing.join(', ')}`);
+  return { compiledPatches: [...found].sort() };
 }
