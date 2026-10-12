@@ -11,6 +11,7 @@ test('discards an unterminated quoted attribute', () => {
 test.each([
   '<script data-x=foo">hidden</script>',
   '<script data-x="></script>">hidden</script>',
+  '<script data-x= "></script>">hidden</script>',
   '<script/>hidden</script>',
   '<script>İ</SCRIPT >',
   '<!-- <script> -->',
