@@ -1,4 +1,4 @@
-import { buildBreadcrumbs, shouldShowBreadcrumbs } from '../src/lib/breadcrumbs';
+import { breadcrumbsFitWidth, buildBreadcrumbs, shouldShowBreadcrumbs } from '../src/lib/breadcrumbs';
 import type { RateRow } from '../src/types';
 
 const build = (pathname: string) => buildBreadcrumbs({ pathname, section: 'Mortgage' });
@@ -69,4 +69,15 @@ it('keeps primary hubs free of duplicate breadcrumbs', () => {
     expect(shouldShowBreadcrumbs(path, true)).toBe(false);
   }
   expect(shouldShowBreadcrumbs('/onboarding/step', true)).toBe(false);
+});
+
+it('shows breadcrumbs only at the wide/tablet breakpoint, hiding them on phones', () => {
+  // Phone widths (and an unknown 0 first-render width) hide the redundant bar.
+  expect(breadcrumbsFitWidth(0)).toBe(false);
+  expect(breadcrumbsFitWidth(390)).toBe(false);
+  expect(breadcrumbsFitWidth(600)).toBe(false);
+  expect(breadcrumbsFitWidth(719)).toBe(false);
+  // At the wide breakpoint and above, the bar is a useful at-a-glance affordance.
+  expect(breadcrumbsFitWidth(720)).toBe(true);
+  expect(breadcrumbsFitWidth(1024)).toBe(true);
 });

@@ -58,7 +58,7 @@ import { shouldRefreshOnResume } from '../src/data/resumeRefresh';
 import { CURRENT_PRIVACY_CHOICE_VERSION } from '../src/data/storeTypes';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
 import { shouldShowAppTabBar } from '../src/lib/tabRouting';
-import { shouldShowBreadcrumbs } from '../src/lib/breadcrumbs';
+import { breadcrumbsFitWidth, shouldShowBreadcrumbs } from '../src/lib/breadcrumbs';
 import { useReducedMotion } from '../src/hooks/useReducedMotion';
 import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
 import { logSwallowedError } from '../src/lib/degradationLog';
@@ -265,12 +265,13 @@ function RootNavigator() {
   const appReady = hydrated && (status === 'ready' || status === 'error');
   const updateBanner = useAppUpdateBanner(appReady && SELF_UPDATE_ENABLED);
   const showUpdateBanner = updateBanner.visible && updateBanner.remote != null;
+  const { width: shellWidth } = useWindowDimensions();
 
   const privacyChoiceCurrent = privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
   // Section navigation stays visible throughout normal journeys. Comparison
   // uses a focused modal; onboarding precedes the main navigation shell.
   const tabBarVisible = shouldShowAppTabBar(pathname, onboarded);
-  const breadcrumbVisible = shouldShowBreadcrumbs(pathname, onboarded);
+  const breadcrumbVisible = shouldShowBreadcrumbs(pathname, onboarded) && breadcrumbsFitWidth(shellWidth);
 
   useLayoutEffect(() => {
     if (!hydrated) return;
@@ -452,7 +453,7 @@ function RootNavigator() {
           >
             <StatusBar style={theme.dark ? 'light' : 'dark'} />
             <NavigationMenuProvider>
-            <AppBreadcrumbBar />
+            {breadcrumbVisible ? <AppBreadcrumbBar /> : null}
             <NavigatorSafeArea topInsetConsumed={showUpdateBanner || breadcrumbVisible}>
             <View style={{ flex: 1 }}>
               <Stack
