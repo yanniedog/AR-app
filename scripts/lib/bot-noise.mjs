@@ -76,6 +76,13 @@ export function isTrivialBotMessage(bodyRaw) {
  * @param {string} bodyRaw
  * @returns {boolean}
  */
+function isFailedQwenNotice(bodyRaw) {
+  const body = String(bodyRaw || '');
+  return /<!--\s*qwen-code-review\s*-->/i.test(body)
+    && /Review outcome:\s*failed/i.test(body)
+    && /did not complete successfully/i.test(body);
+}
+
 export function isBotNoise(bodyRaw) {
-  return isQuotaBotMessage(bodyRaw) || isTrivialBotMessage(bodyRaw);
+  return isFailedQwenNotice(bodyRaw) || isQuotaBotMessage(bodyRaw) || isTrivialBotMessage(bodyRaw);
 }

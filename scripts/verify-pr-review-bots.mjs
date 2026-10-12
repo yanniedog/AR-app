@@ -370,6 +370,7 @@ const failedQwenNotice = [
   '```',
 ].join('\n');
 assert.equal(isReviewerNonsenseFailure(failedQwenNotice), true);
+assert.equal(isBotNoise(failedQwenNotice), true);
 assert.equal(isBotNoise(codexQuotaFinding), false);
 assert.equal(
   eventSatisfiesRequiredKey("chatgpt-codex-connector[bot]", codexQuotaFinding, "codex"),
