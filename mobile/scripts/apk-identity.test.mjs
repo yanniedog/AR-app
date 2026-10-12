@@ -1,20 +1,119 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import childProcess, { spawnSync } from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import {
   assertExpectedAbis,
   assertExpectedSigningCertificate,
+  inspectApkIdentity,
   parseAaptBadging,
   parseApksignerCertificateSha256,
+  resolveToolInvocation,
+  toolSpawnPlan,
 } from './apk-identity.mjs';
 import {
   fetchRemoteManifest,
   releaseFloorTags,
   validateReusedReleaseIdentity,
 } from './bump-android-version-code.mjs';
+
+test('runs SDK tools as an argument array and never through cmd.exe', () => {
+  assert.deepEqual(
+    resolveToolInvocation('C:\\Android\\build-tools\\aapt.exe', ['dump', 'badging', 'app.apk']),
+    {
+      executable: 'C:\\Android\\build-tools\\aapt.exe',
+      args: ['dump', 'badging', 'app.apk'],
+    },
+  );
+  assert.throws(
+    () => resolveToolInvocation('C:\\Android\\aapt.bat', ['dump', 'badging', 'app.apk']),
+    /cmd\.exe/,
+  );
+
+  const sdk = mkdtempSync(join(tmpdir(), 'apk-identity-'));
+  try {
+    writeFileSync(join(sdk, 'apksigner.bat'), '@echo off\r\n');
+    mkdirSync(join(sdk, 'lib'));
+    const jar = join(sdk, 'lib', 'apksigner.jar');
+    writeFileSync(jar, '');
+    const plan = toolSpawnPlan(join(sdk, 'apksigner.bat'), ['verify', '--print-certs', 'app.apk']);
+    assert.equal(plan.options.shell, false);
+    assert.equal(plan.options.windowsHide, true);
+    assert.doesNotMatch(plan.executable, /\.(?:bat|cmd)$/i);
+    assert.deepEqual(plan.args.slice(0, 2), ['-jar', jar]);
+    assert.deepEqual(plan.args.slice(2), ['verify', '--print-certs', 'app.apk']);
+  } finally {
+    rmSync(sdk, { recursive: true, force: true });
+  }
+});
+
+test('strips surrounding quotes from JAVA_HOME before locating java', () => {
+  const sdk = mkdtempSync(join(tmpdir(), 'apk-identity-java-'));
+  const home = join(sdk, 'jdk');
+  const previous = process.env.JAVA_HOME;
+  try {
+    mkdirSync(join(home, 'bin'), { recursive: true });
+    mkdirSync(join(sdk, 'lib'), { recursive: true });
+    const java = join(home, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
+    writeFileSync(java, '');
+    writeFileSync(join(sdk, 'apksigner.bat'), '');
+    writeFileSync(join(sdk, 'lib', 'apksigner.jar'), '');
+    process.env.JAVA_HOME = `"${home}"`;
+    const plan = resolveToolInvocation(join(sdk, 'apksigner.bat'), ['verify']);
+    assert.equal(plan.executable, java);
+  } finally {
+    if (previous === undefined) delete process.env.JAVA_HOME;
+    else process.env.JAVA_HOME = previous;
+    rmSync(sdk, { recursive: true, force: true });
+  }
+});
+
+test('APK inspection spawns both tools without interpreting shell metacharacters', (t) => {
+  const sdk = mkdtempSync(join(tmpdir(), 'apk-identity-spawn-'));
+  const oldAapt = process.env.ANDROID_AAPT;
+  const oldSigner = process.env.ANDROID_APKSIGNER;
+  const apk = join(sdk, 'app & echo "untrusted".apk');
+  const certificate = 'ab'.repeat(32);
+  const calls = [];
+  const mocked = t.mock.method(childProcess, 'spawnSync', (executable, args, options) => {
+    calls.push({ executable, args, options });
+    return { status: 0, stdout: calls.length === 1
+      ? "package: name='com.example.test' versionCode='1' versionName='1.0'\nnative-code: 'arm64-v8a'"
+      : `Signer #1 certificate SHA-256 digest: ${certificate}`, stderr: '' };
+  });
+  syncBuiltinESMExports();
+  try {
+    mkdirSync(join(sdk, 'lib'));
+    writeFileSync(join(sdk, 'lib', 'apksigner.jar'), '');
+    process.env.ANDROID_AAPT = join(sdk, 'aapt & literal.exe');
+    process.env.ANDROID_APKSIGNER = join(sdk, 'apksigner.bat');
+    inspectApkIdentity(apk, { packageName: 'com.example.test', versionName: '1.0',
+      versionCode: 1, supportedAbis: ['arm64-v8a'], certificateSha256: certificate });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].executable, process.env.ANDROID_AAPT);
+    assert.deepEqual(calls[0].args, ['dump', 'badging', apk]);
+    assert.deepEqual(calls[1].args, ['-jar', join(sdk, 'lib', 'apksigner.jar'),
+      'verify', '--verbose', '--print-certs', apk]);
+    for (const call of calls) {
+      assert.equal(call.options.shell, false);
+      assert.equal(call.options.windowsHide, true);
+      assert.doesNotMatch(call.executable, /(?:cmd\.exe|\.(?:bat|cmd))$/i);
+    }
+  } finally {
+    mocked.mock.restore();
+    syncBuiltinESMExports();
+    if (oldAapt === undefined) delete process.env.ANDROID_AAPT;
+    else process.env.ANDROID_AAPT = oldAapt;
+    if (oldSigner === undefined) delete process.env.ANDROID_APKSIGNER;
+    else process.env.ANDROID_APKSIGNER = oldSigner;
+    rmSync(sdk, { recursive: true, force: true });
+  }
+});
 
 test('parses the package and version identity reported by aapt', () => {
   assert.deepEqual(
