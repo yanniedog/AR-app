@@ -52,3 +52,13 @@ test('scans escaped script comment transitions in one forward pass', () => {
 test('keeps a comment closer inside a false script end tag', () => {
   expect(htmlPlainText('<script><!--<script></script --> <script>foo</script>Visible').trim()).toBe('Visible');
 });
+
+test('resumes double-escaped scanning after the script name', () => {
+  const raw = '<script><!--<script></script x="<script>"></script>alert(1)</script>Visible';
+  expect(htmlPlainText(raw).trim()).toBe('Visible');
+});
+
+test('drops a processing instruction before the error text', () => {
+  const raw = `${'<?xml-stylesheet ' + 'x'.repeat(120) + '?>'}<Error>Invalid key</Error>`;
+  expect(htmlPlainText(raw).replace(/\s+/g, ' ').trim()).toBe('Invalid key');
+});

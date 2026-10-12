@@ -119,6 +119,13 @@ export function htmlPlainText(html: string): string {
     }
     parts.push(html.slice(index, open));
     const next = html[open + 1] || '';
+    if (next === '?') {
+      const end = html.indexOf('>', open + 2);
+      if (end < 0) break;
+      parts.push(' ');
+      index = end + 1;
+      continue;
+    }
     if (!/[!/A-Za-z]/.test(next)) {
       parts.push('<');
       index = open + 1;
