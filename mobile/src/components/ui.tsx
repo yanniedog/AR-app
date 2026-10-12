@@ -141,6 +141,9 @@ export function Chip({
         paddingHorizontal: 12,
         paddingVertical: 7,
         borderRadius: theme.radius.pill,
+        // Unselected chips still need a visible control boundary to read as tappable.
+        borderWidth: 1,
+        borderColor: selected ? theme.ledger.eucalyptus : theme.ledger.controlRule,
         backgroundColor: selected ? theme.colors.primaryMuted : 'transparent',
         overflow: 'hidden',
         ...pressedOpacity(pressed, 0.7),
