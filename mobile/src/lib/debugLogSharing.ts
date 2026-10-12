@@ -114,10 +114,10 @@ async function executeUpload(): Promise<DebugLogUploadSnapshot> {
       phase: 'failed',
       mayHaveUploaded,
       error: snapshot.verified
-        ? 'The full log was uploaded and verified, but the link could not be copied. Tap Copy link to try again.'
+        ? 'The compact log was uploaded and verified, but the link could not be copied. Tap Copy link to try again.'
         : mayHaveUploaded
           ? `${error.message} A public copy may already exist without a saved deletion receipt. Upload another copy only if you accept that risk.`
-        : error instanceof Error ? error.message : 'The full log could not be uploaded. Try again or share the local log.',
+        : error instanceof Error ? error.message : 'The compact log could not be uploaded. Try again or share the local log.',
     });
     debugLog.warn('debugLogUpload', snapshot.error ?? 'Upload failed');
   }
