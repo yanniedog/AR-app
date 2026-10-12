@@ -1143,6 +1143,19 @@ describe('performance audit inactivity watchdog', () => {
   });
 });
 
+describe('performance audit session ids', () => {
+  beforeEach(() => resetPerformanceAuditForTests());
+
+  it('uses cryptographic randomness for session ids', () => {
+    const first = requestPerformanceAudit();
+    resetPerformanceAuditForTests();
+    const second = requestPerformanceAudit();
+    expect(first).toMatch(/^pa-[0-9a-z]+-[0-9a-f]{16}$/);
+    expect(second).toMatch(/^pa-[0-9a-z]+-[0-9a-f]{16}$/);
+    expect(first).not.toBe(second);
+  });
+});
+
 describe('audit logfile error formatting', () => {
   it('keeps UI-facing stacks multi-line and logfile stacks on one physical line', () => {
     const error = new Error('Mounted action completion was not observed');

@@ -280,7 +280,13 @@ function emit(next: PerformanceAuditState): void {
 }
 
 function makeSessionId(): string {
-  const random = Math.random().toString(36).slice(2, 10);
+  const bytes = new Uint8Array(8);
+  const cryptoApi = globalThis.crypto;
+  if (!cryptoApi?.getRandomValues) {
+    throw new Error('Cryptographic randomness is unavailable for performance audit session ids');
+  }
+  cryptoApi.getRandomValues(bytes);
+  const random = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
   return `pa-${Date.now().toString(36)}-${random}`;
 }
 
