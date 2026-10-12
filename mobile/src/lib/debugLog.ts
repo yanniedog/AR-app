@@ -183,6 +183,9 @@ async function ensureLogDir(): Promise<void> {
 }
 
 let pendingFileLines: string[] = [];
+let pendingFileBytes = 0;
+let pendingFileDroppedLines = 0;
+let reportedPendingFileDroppedLines = 0;
 let fileFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let fileFlushPromise: Promise<void> | null = null;
 let fileContentCache: string | null = null;
@@ -190,6 +193,7 @@ let fileContentCache: string | null = null;
 let fileByteLength: number | null = null;
 let fileWriteEpoch = 0;
 let coldStartResetPromise: Promise<void> | null = null;
+let pendingLogRotation = false;
 type NativeFileAccessModule = {
   FileSystem?: { appendFile?: (path: string, data: string, encoding?: string) => Promise<void> };
 };
@@ -228,7 +232,16 @@ export function getDebugLogFlushDiagnostics() {
     rewriteBytes: logFileRewriteBytes,
     fileBytes: fileByteLength,
     queuedLines: pendingFileLines.length,
+    queuedBytes: pendingFileBytes,
+    droppedPendingLines: pendingFileDroppedLines,
   };
+}
+
+function boundPendingFileLines(): void {
+  while (pendingFileBytes > MAX_LOG_FILE_BYTES && pendingFileLines.length) {
+    pendingFileBytes -= textEncoder.encode(pendingFileLines.shift()!).length;
+    pendingFileDroppedLines += 1;
+  }
 }
 
 function scheduleFileFlush(): void {
@@ -265,6 +278,34 @@ function nativeAppendFile(): ((path: string, data: string) => Promise<void>) | n
   return (path, data) => append(path, data, 'utf8');
 }
 
+/** Never reuse the previous process file until its archive is durable. */
+async function finishPendingLogRotation(): Promise<void> {
+  if (!pendingLogRotation) return;
+  const previous = await FileSystem.getInfoAsync(LOG_FILE);
+  if (previous.exists) {
+    await FileSystem.deleteAsync(PREVIOUS_LOG_FILE, { idempotent: true });
+    try {
+      await FileSystem.moveAsync({ from: LOG_FILE, to: PREVIOUS_LOG_FILE });
+    } catch {
+      // A native copy is slower than rename, but still avoids moving the log
+      // through JS and keeps new audit checkpoints durable if rename fails.
+      await FileSystem.copyAsync({ from: LOG_FILE, to: PREVIOUS_LOG_FILE });
+      const copied = await FileSystem.getInfoAsync(PREVIOUS_LOG_FILE);
+      if (!copied.exists || !Number.isFinite(previous.size) || previous.size < 0
+        || !Number.isFinite(copied.size) || copied.size !== previous.size) {
+        throw new Error('Previous app session copy could not be verified');
+      }
+      await FileSystem.deleteAsync(LOG_FILE, { idempotent: true });
+      if ((await FileSystem.getInfoAsync(LOG_FILE)).exists) {
+        throw new Error('Previous app session could not be separated from the current log');
+      }
+    }
+  }
+  pendingLogRotation = false;
+  fileContentCache = null;
+  fileByteLength = null;
+}
+
 async function rewriteLogFile(appendText: string, epoch: number, maxBytes = MAX_LOG_FILE_BYTES): Promise<void> {
   setLogFileStage('read');
   const existing = fileContentCache ?? (await FileSystem.readAsStringAsync(LOG_FILE).catch(() => ''));
@@ -287,6 +328,7 @@ async function syncLogFile(appendText: string, epoch: number): Promise<void> {
     throw new Error('documentDirectory unavailable');
   }
   await ensureLogDir();
+  await finishPendingLogRotation();
   const append = nativeAppendFile();
   if (!append) {
     await rewriteLogFile(appendText, epoch);
@@ -344,18 +386,28 @@ async function flushPendingToFile(requirePhysical = false): Promise<void> {
   }
 
   const batch = pendingFileLines.splice(0);
-  if (batch.length === 0) return;
+  const batchBytes = pendingFileBytes;
+  pendingFileBytes = 0;
+  if (batch.length === 0 && !pendingLogRotation
+    && pendingFileDroppedLines === reportedPendingFileDroppedLines) return;
   const epoch = fileWriteEpoch;
+  const droppedLines = pendingFileDroppedLines;
+  const lossNotice = droppedLines > reportedPendingFileDroppedLines
+    ? `${new Date().toISOString()} [WARN ] app: INCOMPLETE LOG: ${droppedLines} current-session entries exceeded the pending durable-log budget and were omitted\n`
+    : '';
   logFileFlushStarted = logFileClock();
 
   fileFlushPromise = (async () => {
     try {
-      await syncLogFile(batch.join(''), epoch);
+      await syncLogFile(batch.join('') + lossNotice, epoch);
+      if (epoch === fileWriteEpoch) reportedPendingFileDroppedLines = droppedLines;
       logFileLastFailedStage = null;
     } catch (error) {
       logFileLastFailedStage = logFileStage;
       if (epoch === fileWriteEpoch) {
         pendingFileLines.unshift(...batch);
+        pendingFileBytes += batchBytes;
+        boundPendingFileLines();
       }
       // The shared writer retains failure for strict callers even when an
       // automatic flush started it. Optional callers suppress only their wait.
@@ -501,7 +553,10 @@ function append(level: LogLevel, tag: string, message: string): void {
     message: messageRedacted,
   };
   buffer.append(entry);
-  pendingFileLines.push(formatEntry(entry) + '\n');
+  const line = formatEntry(entry) + '\n';
+  pendingFileLines.push(line);
+  pendingFileBytes += textEncoder.encode(line).length;
+  boundPendingFileLines();
   // Performance reports can be large and include device/app timing context.
   // Keep them local even when general Crashlytics diagnostics are enabled;
   // sharing remains an explicit action from the Debug log screen.
@@ -654,6 +709,7 @@ async function writeReservedPerformanceAuditBlock(
     throw new Error('documentDirectory unavailable');
   }
   await ensureLogDir();
+  await finishPendingLogRotation();
   const existing = fileContentCache ?? (await FileSystem.readAsStringAsync(LOG_FILE).catch(() => ''));
   if (epoch !== fileWriteEpoch) return;
   const cleaned = ensureTrailingNewline(stripPerformanceAuditReportLines(existing));
@@ -732,8 +788,12 @@ export const debugLog = {
     fileWriteEpoch += 1;
     buffer.clear();
     pendingFileLines = [];
+    pendingFileBytes = 0;
+    pendingFileDroppedLines = 0;
+    reportedPendingFileDroppedLines = 0;
     fileContentCache = null;
     fileByteLength = null;
+    pendingLogRotation = FileSystem.documentDirectory != null;
     if (fileFlushTimer) {
       clearTimeout(fileFlushTimer);
       fileFlushTimer = null;
@@ -746,17 +806,11 @@ export const debugLog = {
       await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
       if (FileSystem.documentDirectory) {
         try {
-          const previousSession = await FileSystem.getInfoAsync(LOG_FILE);
-          if (previousSession.exists) {
-            await FileSystem.deleteAsync(PREVIOUS_LOG_FILE, { idempotent: true });
-            // Move natively: do not parse/copy a multi-MiB log on the JS thread
-            // during startup. Normal writes already enforce the file budget.
-            await FileSystem.moveAsync({ from: LOG_FILE, to: PREVIOUS_LOG_FILE });
-          }
+          await finishPendingLogRotation();
         } catch {
-          // Retain the original file if rotation fails. Subsequent bounded
-          // appends may mix sessions, but must not erase the crash evidence.
-          debugLog.warn('app', 'Previous session log rotation failed; retaining the existing log');
+          // Physical flushes retry rotation and reject if it is still unsafe.
+          // Do not mix new writes into a crash log that rollover would trim.
+          debugLog.warn('app', 'Previous session log rotation failed; durable current-session writes will retry before modifying the log');
         }
       }
       // The audit sidecar deliberately survives. A run that crashes the app is
@@ -774,6 +828,9 @@ export const debugLog = {
     fileWriteEpoch += 1;
     buffer.clear();
     pendingFileLines = [];
+    pendingFileBytes = 0;
+    pendingFileDroppedLines = 0;
+    reportedPendingFileDroppedLines = 0;
     fileContentCache = null;
     fileByteLength = null;
     if (persistTimer) {
@@ -822,6 +879,7 @@ export const debugLog = {
             [...retainedStorageKeys, ...retainedFiles].join(', '),
           );
         }
+        pendingLogRotation = false;
         clearState = 'ready';
         if (buffer.getEntries().length > 0) schedulePersist();
         if (pendingFileLines.length > 0) scheduleFileFlush();
@@ -962,23 +1020,43 @@ export const debugLog = {
     }
     await flushPendingToFile();
     assertExportCurrent();
-    const text = !FileSystem.documentDirectory
+    const rotationPending = pendingLogRotation;
+    const text = !FileSystem.documentDirectory || rotationPending
       ? buffer.getText()
       : await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
     assertExportCurrent();
-    const previousText = FileSystem.documentDirectory
-      ? await FileSystem.readAsStringAsync(PREVIOUS_LOG_FILE).catch(() => '')
-      : '';
+    let previousText = '';
+    if (FileSystem.documentDirectory) {
+      const previousPath = rotationPending ? LOG_FILE : PREVIOUS_LOG_FILE;
+      try {
+        previousText = await FileSystem.readAsStringAsync(previousPath);
+      } catch {
+        // Missing is normal on a first launch or after Clear. A present or
+        // unstatable archive must never disappear from an apparently full export.
+        const previousInfo = await FileSystem.getInfoAsync(previousPath).catch(() => null);
+        if (previousInfo == null || previousInfo.exists) {
+          previousText = '[INCOMPLETE EXPORT: The previous app session could not be read.]';
+        }
+      }
+    }
     assertExportCurrent();
-    const clean = previousText
+    if (pendingLogRotation !== rotationPending) {
+      throw new Error('The previous log was safely archived during export; retry the export.');
+    }
+    const currentText = pendingFileDroppedLines
+      ? `[INCOMPLETE EXPORT: ${pendingFileDroppedLines} current-session entries exceeded the pending durable-log budget and were omitted.]\n${redactSecrets(text)}`
+      : redactSecrets(text);
+    const clean = previousText || rotationPending
       ? [
         '# Previous app session (retained before restart)',
         redactSecrets(previousText),
         '',
-        '# Current app session',
-        redactSecrets(text),
+        rotationPending
+          ? '# Current app session (memory only; log rotation is pending)\n[INCOMPLETE EXPORT: Current-session entries have not been durably saved.]'
+          : '# Current app session',
+        currentText,
       ].join('\n')
-      : redactSecrets(text);
+      : currentText;
     await yieldLogExport();
     await removeLegacyPerformanceAuditSnapshots();
     assertExportCurrent();
