@@ -165,7 +165,9 @@ function fetchBotActivity(owner, name, prNumber) {
       login,
       at,
       body: body || '',
-      noise: isBotNoise(body) || isReviewerNonsenseFailure(body),
+      noise: body === 'thumbs-up no-findings reaction'
+        ? false
+        : isBotNoise(body) || isReviewerNonsenseFailure(body),
     });
   };
   for (const c of pr.comments?.nodes || []) {
