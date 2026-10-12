@@ -89,7 +89,8 @@ export function eventSatisfiesRequiredKey(login, body, key, opts = {}) {
 }
 
 export function missingRequiredKeysFromEvents(requiredKeys, events, opts = {}) {
-  return (requiredKeys || []).filter(
+  const keys = omitNeverRequiredKeys(requiredKeys);
+  return keys.filter(
     (key) => !(events || []).some((e) => eventSatisfiesRequiredKey(e.login, e.body, key, opts)),
   );
 }
