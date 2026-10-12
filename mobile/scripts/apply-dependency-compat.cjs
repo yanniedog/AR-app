@@ -28,5 +28,8 @@ function patchQueryString(projectDir = path.resolve(__dirname, '..')) {
   });
 }
 
-if (require.main === module) patchQueryString();
+if (require.main === module) {
+  patchQueryString();
+  require('./patch-task-manager-timers.cjs').patchTaskManagerTimers();
+}
 module.exports = { patchExport, patchQueryString };

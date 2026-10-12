@@ -166,3 +166,66 @@ invoked; a passive-only wake never imports or hydrates the app store. Tests
 execute this entry without a React mount and invoke the real passive callback
 against persisted compact metadata with no store import or network request.
 The replacement signed APK still requires native cold-worker acceptance.
+
+## Android background timer follow-up
+
+The signed v1.0.227 / build 288 APK retained the headless loader and delivered
+both callbacks in a cold process while the device was asleep. Its debug log
+then recorded refresh durations of 107,544 ms and 132,690 ms: completion waited
+until the app was opened. Waking the screen while remaining in Home did not
+complete the work. These results establish a callback execution problem beyond
+entry registration; they are not evidence of successful background preloading.
+
+The installed SDK 54 TaskService does not register pending events with React
+Native's HeadlessJsTaskContext. JavaTimerManager therefore keeps timers paused
+without an Activity. This matches [Expo's timer fix](https://github.com/expo/expo/pull/43821).
+The pinned compatibility backport now holds one native timer lease per app
+while its events remain pending, including overlapping passive and daily jobs.
+It releases the lease after the last event or failed cold load. The JS handler
+stays pending because an immediately resolved handler would release the lease
+prematurely, as described in [Expo issue 51304](https://github.com/expo/expo/issues/51304).
+
+The patch rejects changed SDK versions or source hashes, is installed by the
+existing portable npm postinstall path, and compiles in required hosted CI
+against the installed React Native/Expo dependencies. Android autolinking builds
+this patched package and its required app-loader project dependency from source
+instead of consuming their prebuilt AARs.
+Scheduling intervals,
+audit time limits, network policy and foreground checks are unchanged. A signed
+replacement APK must still demonstrate both a cold screen-off completion and
+a later background completion after foreground reuse.
+
+The local v1.0.227 foreground audit completed both whole-app passes without an
+explicit readiness error, but its external-link inventory still stopped the run
+at the 10-second limit. Its retained partial report incorrectly failed the
+product-history display group: three ordinary repeat product entries sampled an
+optional chart while pending, with 15/15 points and an accessible summary already
+present. Both explicit history actions later completed with measured 15/15
+points. Readiness evidence now records when the current action promotes a chart
+to required, and aggregation excludes incidental optional loading states from
+completed chart checks. Required pending charts, settled missing points and
+missing accessible summaries still fail, and optional loading alone provides no
+rendering proof. The initial catalogue's unknown search-index coverage is
+retained honestly: it was captured before maximum-profile cache preparation,
+which subsequently made all seven requested assets available. These findings do
+not establish complete foreground coverage or performance on another phone.
+
+The final inventory now uses a private reusable cursor and purpose-specific
+lookup maps, and amortizes clock reads over cheap duplicate references. Each
+collection still re-enumerates current sources, preserving mutations, removed
+links, first labels and rejected URLs. On Android Hermes with the published
+53,771-reference input, the cached scan fell from 96 slices / 798 ms to 16 slices
+/ 125 ms, with exact ordered parity for 2,348 destinations. A separate native
+run with an extra 180 ms delay at every checkpoint completed in 3,385 ms. The
+8 ms cooperative CPU target, 16 new validations per slice and 10-second total
+limit remain unchanged. Failure reports now retain inventory CPU, yield and
+progress evidence. These isolated measurements do not replace the signed APK's
+complete foreground acceptance run.
+
+A deterministic concurrency regression also reproduced passive work returning
+success without progress when a simultaneous daily refresh installed a busy
+store getter during the initial storage read. Native slices now resume only
+their validated compact checkpoints in that case; idle foreground work still
+defers. The test advances eight metadata checks and a saved link while proving
+that busy live core, manifest and details are never read and no network request
+is made.

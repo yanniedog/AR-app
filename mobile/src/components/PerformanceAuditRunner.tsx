@@ -2657,6 +2657,7 @@ export function PerformanceAuditRunner() {
       let readinessCapture: ReturnType<typeof performanceAuditReadinessRegistry.beginCapture> | null = null;
       let auditEnvironment: AuditEnvironment | null = null;
       let activeDatasetRevision: AuditDatasetRevision | null = null;
+      let inventoryFailureEvidence: Record<string, string | number> = {};
       let auditApkDownloadSnapshot = getApkDownloadSnapshot();
       const transportGuard = installAppHealthTransportGuard({
         target: globalThis as unknown as AuditTransportTarget,
@@ -2718,6 +2719,8 @@ export function PerformanceAuditRunner() {
         const inventoryWatchdog = new PerformanceAuditStepWatchdog('External link inventory preparation');
         let lastProgress = -Infinity;
         let lastProgressCount = -1;
+        let yieldMs = 0;
+        let maxYieldMs = 0;
         let inventoryMetrics = { inventorySlices: 0, inventoryRawCandidates: 0,
           inventoryPolicyValidations: 0, inventoryCpuMs: 0, inventoryMaxSliceMs: 0 };
         const progress = (count: number, finished = false) => {
@@ -2738,12 +2741,21 @@ export function PerformanceAuditRunner() {
               inventoryPolicyValidations: evidence.policyValidations,
               inventoryCpuMs: roundMetric(evidence.activeCpuMs), inventoryMaxSliceMs: roundMetric(evidence.maxSliceMs),
             };
+            inventoryFailureEvidence = { ...inventoryMetrics, inventoryUniqueDestinations: count,
+              inventoryPhase: completed === 0 ? 'setup' : 'final', inventoryYieldMs: roundMetric(yieldMs),
+              inventoryMaxYieldMs: roundMetric(maxYieldMs), inventoryElapsedMs: roundMetric(inventoryWatchdog.elapsedMs) };
             await waitWhilePaused(inventoryWatchdog);
             assertSessionActive(watchdog);
             assertSessionActive(inventoryWatchdog);
             if (activeDatasetRevision) assertDatasetRevision(activeDatasetRevision);
             progress(count);
+            const yieldStarted = inventoryWatchdog.elapsedMs;
             await yieldToUi(0);
+            const waited = inventoryWatchdog.elapsedMs - yieldStarted;
+            yieldMs += waited;
+            maxYieldMs = Math.max(maxYieldMs, waited);
+            inventoryFailureEvidence = { ...inventoryFailureEvidence, inventoryYieldMs: roundMetric(yieldMs),
+              inventoryMaxYieldMs: roundMetric(maxYieldMs), inventoryElapsedMs: roundMetric(inventoryWatchdog.elapsedMs) };
             await waitWhilePaused(inventoryWatchdog);
             assertSessionActive(watchdog);
             assertSessionActive(inventoryWatchdog);
@@ -2752,7 +2764,9 @@ export function PerformanceAuditRunner() {
           assertSessionActive(inventoryWatchdog);
           progress(links.length, true);
           assertSessionActive(inventoryWatchdog);
-          return { links, durationMs: roundMetric(inventoryWatchdog.elapsedMs), metrics: inventoryMetrics };
+          inventoryFailureEvidence = {};
+          return { links, durationMs: roundMetric(inventoryWatchdog.elapsedMs), metrics: { ...inventoryMetrics,
+            inventoryYieldMs: roundMetric(yieldMs), inventoryMaxYieldMs: roundMetric(maxYieldMs) } };
         } finally {
           inventoryWatchdog.close();
         }
@@ -3647,6 +3661,7 @@ export function PerformanceAuditRunner() {
             metrics: {
               backgroundWorkWaitMs: backgroundWorkWait?.elapsedMs ?? null,
               backgroundWorkDetail: backgroundWorkWait ? describeAuditBackgroundWork(backgroundWorkWait) : null,
+              ...inventoryFailureEvidence,
               completedBeforeFailure: completed,
               recoveryRequired: mutationRecoveryRequired,
               rollbackRestored,

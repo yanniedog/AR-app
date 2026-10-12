@@ -205,6 +205,38 @@ describe('integrated app-health display evidence', () => {
       .find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)?.status).toBe('fail');
   });
 
+  it.each([false, true])('does not turn incidental optional chart loading into a failed completed chart check (reverse=%s)', reverse => {
+    const visits = [
+      check('product.details:history:graphic:pending:15/15:required=0:empty=0:measured=1:summary=1'),
+      check('product.details:history:graphic:ready:15/15:required=1:empty=0:measured=1:summary=1'),
+    ];
+    const result = evaluateAppHealthDisplayQuality(
+      [{ id: 'product.details', requiredRoles: ['chart'], chartRequired: true }],
+      appHealthDisplayObservations(reverse ? visits.reverse() : visits),
+    );
+    expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART))
+      .toMatchObject({ status: 'pass', metrics: { checked: 1, failed: 0 } });
+    // Loading alone is not rendered proof or positive coverage.
+    expect(appHealthDisplayObservations([check('product.details:history:graphic:pending:15/15:required=0:measured=1:summary=1')]))
+      .toEqual([]);
+  });
+
+  it.each([
+    'pending:15/15:required=1:measured=1:summary=1',
+    'ready:15/15:required=0:measured=1:summary=0',
+    'ready:14/15:required=0:measured=1:summary=1',
+    'error:15/15:required=0:measured=1:summary=1',
+  ])('retains actual chart failures after a later successful visit (%s)', failure => {
+    const result = evaluateAppHealthDisplayQuality(
+      [{ id: 'product.details', requiredRoles: ['chart'], chartRequired: true }],
+      appHealthDisplayObservations([
+        check(`product.details:history:graphic:${failure}`),
+        check('product.details:history:graphic:ready:15/15:required=1:measured=1:summary=1'),
+      ]),
+    );
+    expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)?.status).toBe('fail');
+  });
+
   it('distinguishes a measured no-data state from a rendered graph', () => {
     const contracts = [{ id: 'screen', requiredRoles: ['chart' as const], chartRequired: true }];
     expect(evaluateAppHealthDisplayQuality(contracts, appHealthDisplayObservations([

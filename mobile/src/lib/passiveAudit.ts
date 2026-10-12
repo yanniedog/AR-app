@@ -44,6 +44,7 @@ let references: unknown[] = [];
 let paused = false;
 let loaded = false;
 let inFlight: Promise<boolean> | null = null;
+let inFlightNative = false;
 let getState: (() => AppState) | null = null;
 
 export const passiveAuditAppBuild = (): string =>
@@ -83,7 +84,7 @@ function prepareLoadedState(state: AppState): void {
     state.bankInsights, state.bankInsightsError, state.bankSpreadHistory, state.bankSpreadHistoryError,
     state.rbaCalendar, state.rbaCalendarError, state.prefs.profileFilters, state.prefs.interests,
     state.prefs.includeNonStandard, getSuitabilityIndex(), getSuitabilityRevision(), getMandatoryEligibilityRevision()];
-  if (record && passiveAuditRecordFresh(record, Date.now()) &&
+  if (record && snapshot && passiveAuditRecordFresh(record, Date.now()) &&
     next.length === references.length && next.every((value, i) => value === references[i])) return;
   // A cold standard-only catalogue would invoke expensive fallback classifiers.
   // Wait for the app's ordinary suitability warm-up; never load/install it here.
@@ -123,13 +124,25 @@ async function load(): Promise<void> {
 /** A single serialized, bounded slice. The native task never loads the core or
  * history: it uses an already-loaded snapshot, or persisted compact metadata. */
 export function runPassiveAuditSlice(native = false): Promise<boolean> {
-  if (inFlight) return inFlight;
+  if (inFlight) {
+    // A native event must receive its native budget after any foreground slice.
+    // Once that slice settles, concurrent native callers join the same newly
+    // started native run instead of queueing one extra batch per event.
+    if (native && !inFlightNative) return inFlight.then(() => runPassiveAuditSlice(true));
+    return inFlight;
+  }
   if (blocked()) return Promise.resolve(true);
   const run = async () => {
     await load();
     if (blocked()) return true;
-    const state = getState?.();
-    if (state && stateBusy(state)) return true;
+    const liveState = getState?.();
+    const liveStateBusy = liveState && stateBusy(liveState);
+    if (liveStateBusy && !native) return true;
+    // Expo may dispatch daily refresh alongside this worker. Its lazy store
+    // import can install a busy getter while our storage read is pending.
+    // Native work can still resume its validated compact checkpoint without
+    // reading incomplete live inputs or initiating hydration/network work.
+    const state = liveStateBusy ? undefined : liveState;
     const previousRecord = record;
     const previousCount = Object.keys(record?.entries ?? {}).length;
     const start = Date.now();
@@ -159,11 +172,12 @@ export function runPassiveAuditSlice(native = false): Promise<boolean> {
     emit({ lastError: null });
     return true;
   };
+  inFlightNative = native;
   inFlight = run().catch(() => {
     // Persistence or native availability must never interrupt normal browsing.
     reportPassiveFailure();
     return false;
-  }).finally(() => { inFlight = null; emit({ busy: false }); });
+  }).finally(() => { inFlight = null; inFlightNative = false; emit({ busy: false }); });
   return inFlight;
 }
 

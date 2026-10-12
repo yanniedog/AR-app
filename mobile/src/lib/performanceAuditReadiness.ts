@@ -620,7 +620,13 @@ export class PerformanceAuditReadinessRegistry {
         updatedAtMs: surface.updatedAtMs,
         probes: [...surface.probes.values()]
           .sort((left, right) => left.id.localeCompare(right.id))
-          .map((probe) => ({ ...probe })),
+          .map((probe) => ({ ...probe,
+            // Persist what this step actually waited for, including an optional
+            // chart promoted by an explicit chart action. Never mutate the
+            // registered probe's default for subsequent ordinary route visits.
+            required: limitedKinds ? limitedKinds.has(probe.kind)
+              : probe.required || Boolean(selectedKinds?.has(probe.kind)),
+          })),
         actions: [...surface.actions.keys()].sort(),
         actionRevision: surface.actionRevision,
         lastCompletedAction: surface.lastCompletedAction,

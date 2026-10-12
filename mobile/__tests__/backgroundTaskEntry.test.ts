@@ -7,12 +7,24 @@ let order: string[];
 let storage: Map<string, string>;
 let storeImports: number;
 let passiveImports: number;
+let headless: Map<string, () => () => Promise<void>>;
 const dailyRefresh = jest.fn(async () => 1);
 
 beforeEach(() => {
   jest.resetModules();
   tasks = new Map(); order = []; storage = new Map();
   storeImports = 0; passiveImports = 0; dailyRefresh.mockReset().mockResolvedValue(1);
+  headless = new Map();
+  jest.doMock('react-native', () => {
+    const native = jest.requireActual('react-native');
+    // Preserve lazy native exports instead of evaluating unrelated modules.
+    return Object.defineProperties(Object.create(native), {
+      Platform: { value: { ...native.Platform, OS: 'android' } },
+      AppRegistry: { value: { ...native.AppRegistry, registerHeadlessTask: (name: string, task: () => () => Promise<void>) => {
+        order.push('headless'); headless.set(name, task);
+      } } },
+    });
+  });
   jest.doMock('@expo/metro-runtime', () => { order.push('metro'); return {}; });
   jest.doMock('expo-task-manager', () => ({
     isTaskDefined: (name: string) => tasks.has(name),
@@ -46,7 +58,7 @@ function enterProductionBundle() {
 
 it('defines both production tasks before Router without mounting React or loading either worker', () => {
   enterProductionBundle();
-  expect(order).toEqual(['metro', PASSIVE_AUDIT_TASK, BACKGROUND_TASK, 'router']);
+  expect(order).toEqual(['metro', 'headless', PASSIVE_AUDIT_TASK, BACKGROUND_TASK, 'router']);
   expect(storeImports).toBe(0);
   expect(passiveImports).toBe(0);
   expect(dailyRefresh).not.toHaveBeenCalled();
@@ -57,7 +69,20 @@ it('preserves an existing task definition when entry registration is repeated', 
   tasks.set(PASSIVE_AUDIT_TASK, existing);
   enterProductionBundle();
   expect(tasks.get(PASSIVE_AUDIT_TASK)).toBe(existing);
-  expect(order).toEqual(['metro', BACKGROUND_TASK, 'router']);
+  expect(order).toEqual(['metro', 'headless', BACKGROUND_TASK, 'router']);
+  expect(storeImports).toBe(0);
+  expect(passiveImports).toBe(0);
+});
+
+it('keeps the native timer lease pending instead of completing it as a no-op JS task', async () => {
+  enterProductionBundle();
+  const callback = headless.get('ar-expo-task-timers')!();
+  let finished = false;
+  void callback().then(() => { finished = true; });
+  // AppRegistry auto-notifies native completion when this promise resolves.
+  // Several microtask turns catch an async no-op handler's premature finish.
+  await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+  expect(finished).toBe(false);
   expect(storeImports).toBe(0);
   expect(passiveImports).toBe(0);
 });

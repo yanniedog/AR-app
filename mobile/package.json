@@ -96,6 +96,11 @@
       "exclude": [
         "@react-navigation/native"
       ]
+    },
+    "autolinking": {
+      "android": {
+        "buildFromSource": ["expo-task-manager", "unimodules-app-loader"]
+      }
     }
   },
   "devDependencies": {

@@ -29,6 +29,7 @@ interface ParsedProbe {
   required: boolean;
   kind: 'data' | 'list' | 'logo' | 'graphic' | 'layout';
   ready: boolean;
+  pending: boolean;
   actual: number | null;
   expected: number | null;
   fallbackCount: number | null;
@@ -65,6 +66,7 @@ function parseProbe(line: string): ParsedProbe | null {
     required: !parts.includes('required=0'),
     kind: kind as ParsedProbe['kind'],
     ready: status === 'ready',
+    pending: status === 'pending',
     actual: match ? Number(match[1]) : null,
     expected: match ? Number(match[2]) : null,
     fallbackCount: fallback == null ? null : Number(fallback),
@@ -171,6 +173,10 @@ export function appHealthDisplayObservations(
       const probe = parseProbe(line);
       if (!probe) continue;
       if (probe.kind === 'graphic') {
+        // Ordinary navigation may finish while an optional chart is preparing.
+        // Its transient state is not a completed chart check. Explicit chart
+        // actions serialize effective required=true and retain failures below.
+        if (!probe.required && probe.pending) continue;
         // A closed optional chart is not a graph the journey expected to show.
         if (!probe.required && probe.expected === 0 && probe.actual === 0 &&
             probe.emptyStateRendered !== true) continue;
