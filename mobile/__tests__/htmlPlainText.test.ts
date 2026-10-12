@@ -19,68 +19,67 @@ test.each([
   expect(htmlPlainText(`${prefix}Visible`).trim()).toBe('Visible');
 });
 
-test('stops an HTML comment at the bang terminator', () => {
-  expect(htmlPlainText('Before<!--hidden--!>Visible').trim()).toBe('Before Visible');
-});
-
-test.each(['<!-->Visible', '<!--->Visible'])('keeps text after an abruptly closed comment %s', (raw) => {
+test('handles thousands of false closer prefixes in one forward scan', () => {
+  const raw = `<script>${'</script'.repeat(8_000)}</script>Visible`;
   expect(htmlPlainText(raw).trim()).toBe('Visible');
 });
 
-test('leaves a double-escaped script when the escape comment ends', () => {
-  expect(htmlPlainText('<script><!--<script>--></script>Visible').trim()).toBe('Visible');
+test.each(['<!-- hidden --!>', '<!-->', '<!--->', '<!-- hidden --->'])('recognizes HTML comment ending %s', (comment) => {
+  expect(htmlPlainText(`${comment}Visible`).trim()).toBe('Visible');
 });
 
-test('reads a comment end inside a double-escaped end-tag suffix', () => {
-  expect(htmlPlainText('<script><!--<script></script --> <script>foo</script>Visible').trim()).toBe('Visible');
+test.each([
+  '<script><!--<script></script>alert(1)</script>',
+  '<script><!--<ScRiPt ></SCRIPT >alert(1)</script>',
+  '<script><!--<script/>hidden</script/>hidden</script>',
+  '<script><!--<script>--></script>',
+  '<script><!--<script>--><script></script>',
+  '<script><!--></script>',
+  '<script><!---></script>',
+  '<script><!--<scripture></script>',
+])('tracks script escape states in %s', (script) => {
+  expect(htmlPlainText(`${script}Visible`).trim()).toBe('Visible');
 });
 
-test('keeps a quoted doctype identifier out of the text', () => {
-  const raw = '<!DOCTYPE html SYSTEM "x>Cash rate target 9.99% Effective date 12 August 2026">4.35';
-  expect(htmlPlainText(raw)).toBe(' 4.35');
-  expect(htmlPlainText(raw)).not.toContain('9.99');
+test('does not expose text after an unclosed double-escaped script', () => {
+  expect(htmlPlainText('<script><!--<script></script>hidden')).toBe(' ');
 });
 
-test('keeps text after an equals sign inside a tag name', () => {
-  expect(htmlPlainText('<x="y>Visible').trim()).toBe('Visible');
+test.each(['<x="y>Visible', '</x="y>Visible'])('keeps equals signs inside tag names %s', (raw) => {
+  expect(htmlPlainText(raw).trim()).toBe('Visible');
 });
 
-test('keeps text after an equals sign before an attribute name', () => {
-  expect(htmlPlainText('<div =">Cash rate target 4.35%').trim()).toBe('Cash rate target 4.35%');
+test.each(['Invalid value: size must be < 10', 'x < y > z', 'trailing <'])('keeps literal less-than signs in %s', (raw) => {
+  expect(htmlPlainText(raw)).toBe(raw);
 });
 
-test('ends a non-doctype declaration at the first greater-than sign', () => {
-  expect(htmlPlainText('<!foo "x>Cash rate target 4.35%').trim()).toBe('Cash rate target 4.35%');
+test.each(['<div =">', '<div = ">', '<div x/ =">', '<div x="value"=">'])('does not treat a bare attribute-name equals sign as assignment in %s', (tag) => {
+  expect(htmlPlainText(`${tag}Visible`).trim()).toBe('Visible');
 });
 
-test('keeps text after a slash following an attribute name', () => {
-  expect(htmlPlainText('<div a /=">Cash rate target 4.35%').trim()).toBe('Cash rate target 4.35%');
+test.each(['<!foo "x>', '<!foo x=">', '</3 x=">', '<!DOCTYPE html SYSTEM "x>', '<!DOCTYPE html PUBLIC "x>'])('ends malformed declaration or end-tag markup at the first greater-than in %s', (tag) => {
+  expect(htmlPlainText(`${tag}Visible`).trim()).toBe('Visible');
 });
 
-test('ends a doctype at the first greater-than sign outside an identifier', () => {
-  expect(htmlPlainText('<!DOCTYPE html "x>Cash rate target 4.35%">rest').trim()).toBe('Cash rate target 4.35%">rest');
+test.each(['<3 x=">Visible', 'trailing </'])('preserves invalid tag-open text %s', (raw) => {
+  expect(htmlPlainText(raw)).toBe(raw);
 });
 
-test('returns a double-escaped comment end to script data', () => {
-  expect(htmlPlainText('<script><!--<script>--><script></script>Visible').trim()).toBe('Visible');
+test('preserves text after an abruptly ended quoted DOCTYPE identifier', () => {
+  expect(htmlPlainText('<!DOCTYPE html SYSTEM "x>Visible">Tail').trim()).toBe('Visible">Tail');
 });
 
-test('drops a processing instruction before the overview', () => {
+test('drops a processing instruction before the visible rate', () => {
   const raw = '<?xml Cash rate target 9.99% Effective date 12 August 2026?>4.35';
   expect(htmlPlainText(raw)).toBe(' 4.35');
   expect(htmlPlainText(raw)).not.toContain('9.99');
 });
 
-test('keeps a less-than sign that cannot start a tag', () => {
-  expect(htmlPlainText('<3 x=">Cash rate target 4.35%')).toBe('<3 x=">Cash rate target 4.35%');
-  expect(htmlPlainText('</3>visible').trim()).toBe('visible');
+test('keeps text after a slash and equals sign before an attribute value', () => {
+  expect(htmlPlainText('<div a /=">Cash rate target 4.35%').trim()).toBe('Cash rate target 4.35%');
 });
 
-test('keeps a double-escaped script body inside the script', () => {
-  expect(htmlPlainText('<script><!--<script></script>alert(1)</script>Visible').trim()).toBe('Visible');
-});
-
-test('handles thousands of false closer prefixes in one forward scan', () => {
-  const raw = `<script>${'</script'.repeat(8_000)}</script>Visible`;
+test('scans escaped script comment transitions in one forward pass', () => {
+  const raw = `<script><!--${'--><!--'.repeat(8_000)}</script>Visible`;
   expect(htmlPlainText(raw).trim()).toBe('Visible');
 });

@@ -24,6 +24,14 @@ const FEED = `
   </item>
 `;
 
+test('preserves RBA fields following an alternative HTML comment ending', () => {
+  expect(parseRbaOfficialOverview(`<!-- cache note --!>${HTML}`)).toEqual(parseRbaOfficialOverview(HTML));
+});
+
+test.each(['<div =">', '<!foo x=">', '</3 x=">'])('preserves overview fields after malformed but terminated markup %s', (prefix) => {
+  expect(parseRbaOfficialOverview(`${prefix}${HTML}`)).toEqual(parseRbaOfficialOverview(HTML));
+});
+
 const calendar = normalizeRbaCalendar({
   timezone: 'Australia/Sydney',
   decisions: [{ date: '2026-06-16', effective: null, rate: 4.35, delta_bps: 0, outcome: 'hold' }],
