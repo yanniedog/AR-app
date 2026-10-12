@@ -1,7 +1,7 @@
 name: qwen-code-review
 
-# pull_request_target loads this workflow from protected main. The target PR is
-# checked out separately and treated only as diff data on the laptop runner.
+# pull_request_target loads this workflow from protected main. The pull request
+# ref is fetched and used only as diff data; it is not checked out.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -66,7 +66,7 @@ jobs:
           if ($json.head.repo.full_name -ne $env:GITHUB_REPOSITORY) {
             throw "Fork PRs cannot run on the private Qwen runner."
           }
-          "number=$pr" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "number=$($json.number)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "head_sha=$($json.head.sha)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "base_ref=$($json.base.ref)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "author=$($json.user.login)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -106,22 +106,14 @@ jobs:
         with:
           ref: main
           path: _trusted-reviewer
-          persist-credentials: false
-          clean: true
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
-        with:
-          ref: ${{ steps.pr.outputs.head_sha }}
-          path: review-target
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
           clean: true
 
       - name: Run trusted Qwen reviewer
         id: qwen
         if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
-        working-directory: review-target
+        working-directory: _trusted-reviewer
         env:
           QWEN_API_BASE_URL: ${{ secrets.QWEN_API_BASE_URL }}
           QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
