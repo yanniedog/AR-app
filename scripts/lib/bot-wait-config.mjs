@@ -96,7 +96,7 @@ export function missingRequiredKeysFromEvents(requiredKeys, events, opts = {}) {
 }
 
 /** Qwen is an optional reviewer. It cannot be reintroduced through CLI, env, or saved state. */
-const NEVER_REQUIRED_KEYS = new Set(['qwen']);
+const NEVER_REQUIRED_KEYS = new Set(['qwen', 'github-actions[bot]']);
 
 export function omitNeverRequiredKeys(keys) {
   return (keys || []).filter((key) => !NEVER_REQUIRED_KEYS.has(String(key || '').toLowerCase()));
