@@ -6,10 +6,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BankAvatar } from '../src/components/BankAvatar';
 import { BrandLockup } from '../src/components/BrandLockup';
+import { OptionCard } from '../src/components/OptionCard';
 import { Chip } from '../src/components/ui';
 import { AppText, Button, Card, Row } from '../src/components/ui';
 import { SECTIONS, SECTION_ORDER } from '../src/constants';
-import { DEFAULT_INTERESTS, toggleInterest } from '../src/data/interests';
+import { toggleInterest } from '../src/data/interests';
 import { formatRankedFraction, formatRate, formatRunDate } from '../src/data/format';
 import { resolveSectionRibbonStats } from '../src/data/ribbonStats';
 import { bestRow, rankedRateLabelForSection, rankFraction } from '../src/data/selectors';
@@ -25,10 +26,10 @@ import { ScreenSkeleton } from '../src/components/feedback';
 
 type FirstJob = 'check' | 'find' | 'follow';
 
-const JOBS: { value: FirstJob; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { value: 'check', label: 'Check a rate I have', icon: 'shield-checkmark-outline' },
-  { value: 'find', label: 'Find or plan', icon: 'search-outline' },
-  { value: 'follow', label: 'Follow rate changes', icon: 'notifications-outline' },
+const JOBS: { value: FirstJob; label: string; description: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { value: 'check', label: 'Check a rate I have', description: 'See if your rate is still competitive', icon: 'shield-checkmark-outline' },
+  { value: 'find', label: 'Find or plan', description: 'Compare rates and plan a switch', icon: 'search-outline' },
+  { value: 'follow', label: 'Follow rate changes', description: 'Track lender and RBA moves', icon: 'notifications-outline' },
 ];
 
 function primaryInterest(interests: SectionKey[]): SectionKey {
@@ -61,7 +62,9 @@ export default function Onboarding() {
   const storeError = useStore((s) => s.error);
   const hydrated = useStore((s) => s.hydrated);
   const source = useStore((s) => s.source);
-  const [interests, setInterests] = useState<SectionKey[]>([DEFAULT_INTERESTS[0]]);
+  // Preselect every product family so the catalogue is populated by default;
+  // the person narrows it here or with the type switch on the Rates screen.
+  const [interests, setInterests] = useState<SectionKey[]>(() => [...SECTION_ORDER]);
   const [job, setJob] = useState<FirstJob>('check');
   const [layoutReady, setLayoutReady] = useState(false);
 
@@ -113,7 +116,7 @@ export default function Onboarding() {
     section,
     toggle,
   ]);
-  const needsSnapshotLogo = job === 'find' && snapshot?.best != null;
+  const needsSnapshotLogo = snapshot?.best != null;
   const onboardingLogoIds = useMemo(
     () => needsSnapshotLogo ? ['onboarding-best'] : [],
     [needsSnapshotLogo],
@@ -183,11 +186,6 @@ export default function Onboarding() {
   const comparison = snapshot
     ? snapshotComparison(section, snapshot.stats, snapshot.rba)
     : null;
-  const sourceIntro = source === 'remote'
-    ? 'Choose what matters. We’ll show the latest observed Australian rates.'
-    : source === 'cache'
-      ? 'Choose what matters. Start with rates saved on this device, then refresh when you’re online.'
-      : 'Choose what matters. Explore sample Australian rates, then refresh for the current market.';
   const snapshotLabel = source === 'remote'
     ? 'Latest observed rate'
     : source === 'cache'
@@ -209,34 +207,31 @@ export default function Onboarding() {
           flexGrow: 1,
           paddingTop: insets.top + 24,
           paddingHorizontal: 24,
-          paddingBottom: Math.max(insets.bottom, 16) + 16,
+          paddingBottom: 24,
         }}
         onContentSizeChange={() => setLayoutReady(true)}
         showsVerticalScrollIndicator
       >
-        <BrandLockup markSize={34} style={{ marginBottom: 24 }} />
+        <BrandLockup markSize={34} style={{ marginBottom: 20 }} />
         <AppText variant="h1">Choose what you want to do</AppText>
         <AppText variant="body" color="textMuted" style={{ marginTop: 8 }}>
-          {sourceIntro}
+          No account needed. Compare Australian rates and keep them on this device.
         </AppText>
 
-        <AppText variant="h3" style={{ marginTop: 28, marginBottom: 12 }}>
-          Start here
-        </AppText>
-        <View style={{ gap: 10 }}>
+        <View style={{ gap: 10, marginTop: 24 }}>
           {JOBS.map((item) => (
-            <Button
+            <OptionCard
               key={item.value}
-              title={item.label}
+              label={item.label}
+              description={item.description}
               icon={item.icon}
-              variant={job === item.value ? 'primary' : 'secondary'}
-              accessibilityState={{ selected: job === item.value }}
+              selected={job === item.value}
               onPress={() => setJob(item.value)}
             />
           ))}
         </View>
 
-        <AppText variant="h3" style={{ marginTop: 24, marginBottom: 12 }}>
+        <AppText variant="small" weight="700" style={{ marginTop: 24, marginBottom: 10 }}>
           Rates to include
         </AppText>
         <Row gap={10} style={{ flexWrap: 'wrap' }}>
@@ -251,7 +246,7 @@ export default function Onboarding() {
           ))}
         </Row>
 
-        {job === 'find' ? <Card style={{ marginTop: 24, borderColor: `${accent}44` }}>
+        <Card style={{ marginTop: 24, borderColor: `${accent}44` }}>
           <AppText variant="tiny" color="textFaint" weight="700">
             {meta.title.toUpperCase()}
           </AppText>
@@ -284,33 +279,25 @@ export default function Onboarding() {
               {comparison ? `vs ${comparison}` : 'Observed from published CDR data'}
             </AppText>
           ) : null}
-        </Card> : (
-          <Card style={{ marginTop: 24, borderColor: `${accent}44`, gap: 6 }}>
-            <Row gap={8}>
-              <Ionicons
-                name={job === 'check' ? 'lock-closed-outline' : 'notifications-outline'}
-                size={22}
-                color={accent}
-              />
-              <AppText variant="h3">
-                {job === 'check' ? 'Private rate check' : 'Watch exact rates'}
-              </AppText>
-            </Row>
-            <AppText variant="small" color="textMuted" style={{ lineHeight: 20 }}>
-              {job === 'check'
-                ? 'Enter only a rate and balance. On native devices, amounts stay in encrypted local storage.'
-                : 'See lender changes now. Alerts are offered only after you choose an exact rate to watch.'}
-            </AppText>
-          </Card>
-        )}
+        </Card>
+      </ScrollView>
 
-        <View style={{ flex: 1, minHeight: 28 }} />
+      <View
+        style={{
+          paddingHorizontal: 24,
+          paddingTop: 12,
+          paddingBottom: Math.max(insets.bottom, 16) + 8,
+          borderTopWidth: 1,
+          borderTopColor: theme.ledger.rule,
+          backgroundColor: theme.ledger.raised,
+        }}
+      >
         <Button
-          title={job === 'check' ? 'Check my rate' : job === 'find' ? 'Find rates' : 'Open Market'}
+          title={job === 'check' ? 'Check my rate' : job === 'find' ? 'Find rates' : 'Follow changes'}
           icon="arrow-forward"
           onPress={start}
         />
-      </ScrollView>
+      </View>
     </View>
   );
 }
