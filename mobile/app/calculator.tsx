@@ -33,7 +33,8 @@ import {
   termDepositInterestDifference,
   type CalcInputs,
 } from '../src/data/calc';
-import { formatRate, humanizeEnum, toFraction, visibleAccountRows } from '../src/data/format';
+import { formatRate, toFraction, visibleAccountRows } from '../src/data/format';
+import { lvrTierDisplay } from '../src/data/lvrTier';
 import type { CurrentProductReference, MortgageSwitchInputs } from '../src/data/userRateScenario';
 import { sectionSegmentOptions } from '../src/data/interests';
 import { bestRateForProduct, summarizeProductBestRate } from '../src/data/productHistory';
@@ -631,7 +632,7 @@ export default function Calculator() {
                     LVR {lvr.toFixed(lvr < 100 ? 1 : 0)}%
                   </AppText>
                   {lvrBand ? (
-                    <Badge label={humanizeEnum(lvrBand)} tone="success" />
+                    <Badge label={lvrTierDisplay(lvrBand)} tone="success" />
                   ) : (
                     <AppText variant="tiny" color="textFaint">above tracked LVR bands</AppText>
                   )}

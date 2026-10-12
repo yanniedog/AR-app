@@ -563,7 +563,8 @@ export default function ProductDetail() {
               style={[
                 style ?? { color: theme.colors.text, ...HEADER_TYPOGRAPHY },
                 headerActionsWidth
-                  ? { maxWidth: Math.max(64, windowWidth - HEADER_BACK_RESERVE - headerActionsWidth) }
+                  // No floor: on the narrowest phones the title ellipsises rather than overlap.
+                  ? { maxWidth: Math.max(0, windowWidth - HEADER_BACK_RESERVE - headerActionsWidth) }
                   : null,
               ]}
             >

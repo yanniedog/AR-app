@@ -414,8 +414,10 @@ export default function MyRates() {
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 12 }}>
           <EmptyState
             icon="star-outline"
-            title="No saved rates yet"
-            subtitle="Tap the star on any rate to watch it here, or add the rate you have now to see how it compares. No bank login."
+            title={unavailableRefs.length ? 'Saved rate no longer published' : 'No saved rates yet'}
+            subtitle={unavailableRefs.length
+              ? 'A rate you saved is not in the current data. Remove it, or tap the star on any rate to watch it here.'
+              : 'Tap the star on any rate to watch it here, or add the rate you have now to see how it compares. No bank login.'}
           />
           {unavailableRefs.length ? (
             <Button

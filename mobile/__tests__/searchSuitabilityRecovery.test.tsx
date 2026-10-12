@@ -134,3 +134,22 @@ test('audit comparison reports a missing filtered rate immediately and can clear
     expect(tree.root.findByType('FlashList' as any).props.data.length).toBeGreaterThan(0);
   } finally { act(() => tree.unmount()); }
 });
+
+test('deep search retries when a cached edition is confirmed live, without a retry card', () => {
+  const ensureSearchIndex = jest.fn(async () => undefined);
+  mockState = {
+    ...mockState, prefs: { ...mockState.prefs, enableDeepSearch: true }, source: 'cache',
+    searchIndex: null, searchIndexStatus: 'unavailable', ensureSearchIndex,
+    searchIndexError: 'Deep search needs the optional live search index.',
+  };
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    expect(ensureSearchIndex).not.toHaveBeenCalled();
+    expect(tree.root.findAllByProps({ title: 'Retry deep search' })).toHaveLength(0);
+    // A refresh that confirms the same edition only promotes the source.
+    mockState = { ...mockState, source: 'remote' };
+    act(() => tree.update(<Search />));
+    expect(ensureSearchIndex).toHaveBeenCalledTimes(1);
+  } finally { act(() => tree.unmount()); }
+});

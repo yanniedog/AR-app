@@ -113,6 +113,7 @@ export default function Search() {
   const searchIndexSha = useStore((s) => s.manifest?.files.search_index?.sha256 ?? null);
   const searchIndexStatus = useStore((s) => s.searchIndexStatus);
   const searchIndexError = useStore((s) => s.searchIndexError);
+  const source = useStore((s) => s.source);
   const deepSearchActive = useStore((s) => effectiveDeepSearch(s.prefs));
   const subscriptions = useStore((s) => s.subscriptions);
   const restoredSub = useMemo(
@@ -147,6 +148,13 @@ export default function Search() {
       if (deepSearchActive) void ensureSearchIndex();
     });
   }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey, searchIndexSha, isFocused]);
+  // A cached core reports deep search unavailable until a refresh confirms the
+  // same edition is live; that promotion changes only `source`, so retry then.
+  useEffect(() => {
+    if (isFocused && deepSearchActive && source === 'remote' && searchIndexStatus === 'unavailable') {
+      void ensureSearchIndex();
+    }
+  }, [deepSearchActive, ensureSearchIndex, isFocused, searchIndexStatus, source]);
 
   const [query, setQuery] = useState(() => restoredSub?.query ?? queryRaw ?? '');
   const debouncedQuery = useDebouncedValue(query, 120);
