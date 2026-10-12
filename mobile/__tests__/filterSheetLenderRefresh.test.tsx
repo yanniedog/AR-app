@@ -3,6 +3,7 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import { FilterSheet } from '../src/components/FilterSheet';
 import { EMPTY_FILTERS } from '../src/data/selectors';
+import { prepareSearchFilterOptions } from '../src/data/searchFilterOptions';
 import type { RateRow } from '../src/types';
 
 jest.mock('../src/components/controls', () => ({ SearchBar: 'SearchBar' }));
@@ -26,7 +27,7 @@ type TestNode = {
 };
 type InspectableRenderer = ReactTestRenderer & { root: TestNode };
 
-test('an active lender query stays clearable when live rows shrink below the search threshold', () => {
+test('an active lender query stays clearable when live rows shrink below the search threshold', async () => {
   const rows: RateRow[] = Array.from({ length: 13 }, (_, i) => ({
     provider: `Bank ${i + 1}`,
     product_name: 'Loan',
@@ -38,10 +39,10 @@ test('an active lender query stays clearable when live rows shrink below the sea
     onClose: jest.fn(),
     onApply: jest.fn(),
     filters: { ...EMPTY_FILTERS },
-    section: 'Mortgage' as const,
   };
+  const options = (await prepareSearchFilterOptions(rows, null, 'Mortgage', { yieldControl: async () => {} }))!;
   let tree!: InspectableRenderer;
-  act(() => { tree = TestRenderer.create(<FilterSheet {...props} rows={rows} />) as InspectableRenderer; });
+  act(() => { tree = TestRenderer.create(<FilterSheet {...props} options={options} />) as InspectableRenderer; });
   const nodes = (type: string) => tree.root.findAll(node => node.type === type);
   const lenderLabels = () => nodes('Chip').map(node => node.props.label).filter(label => label?.startsWith('Bank'));
   try {
@@ -51,7 +52,8 @@ test('an active lender query stays clearable when live rows shrink below the sea
 
     // Search keeps effectiveFilters memoized across a core/rows replacement.
     const refreshedRows = rows.slice(0, 12);
-    act(() => tree.update(<FilterSheet {...props} rows={refreshedRows} />));
+    const refreshedOptions = (await prepareSearchFilterOptions(refreshedRows, null, 'Mortgage', { yieldControl: async () => {} }))!;
+    act(() => tree.update(<FilterSheet {...props} options={refreshedOptions} />));
     expect(nodes('SearchBar')).toHaveLength(1);
     expect(nodes('SearchBar')[0].props.value).toBe('Bank 13');
     expect(lenderLabels()).toEqual([]);

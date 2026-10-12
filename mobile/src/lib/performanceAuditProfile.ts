@@ -54,3 +54,17 @@ export function canPrepareAuditSearchIndex(
     file?.sha256 === pinned?.files.search_index?.sha256 &&
     file?.url === pinned?.files.search_index?.url;
 }
+
+/** Bank intelligence may load online only from the authenticated pinned edition. */
+export function canPrepareAuditBankInsights(
+  mode: AppHealthAuditMode,
+  pinned: Manifest | null | undefined,
+  live: Manifest | null | undefined,
+): boolean {
+  const file = live?.files.bank_history;
+  return mode === 'live-source' && Boolean(live?.files.core.sha256) && Boolean(file?.sha256) &&
+    Boolean(file?.url) && live?.run_date === pinned?.run_date &&
+    live?.files.core.sha256 === pinned?.files.core.sha256 &&
+    file?.sha256 === pinned?.files.bank_history?.sha256 &&
+    file?.url === pinned?.files.bank_history?.url;
+}

@@ -172,6 +172,7 @@ export interface RbaOutlookAuditHandle {
 export interface RbaOutlookAuditState {
   status: 'pending' | 'ready' | 'error';
   revision: string | null;
+  renderRevision: string | null;
   indicatorCount: number;
   pointCount: number;
   expectedCount: number;
@@ -263,6 +264,7 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
     onAuditStateChange?.({
       status: data && !loading && layoutReady && graphicReady ? 'ready' : unavailableReady ? 'error' : 'pending',
       revision,
+      renderRevision: expectedGraphicRevision,
       indicatorCount: data?.indicators.length ?? 0,
       pointCount: data ? graphic?.pointCount ?? 0 : 0,
       expectedCount: data ? graphic?.expectedCount ?? 0 : 0,
@@ -273,7 +275,7 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
       accessibleSummary: unavailableReady || graphic?.accessibleSummary === true,
       error,
     });
-  }, [data, error, graphic, graphicReady, layoutReady, loading, onAuditStateChange, revision, unavailableReady]);
+  }, [data, error, expectedGraphicRevision, graphic, graphicReady, layoutReady, loading, onAuditStateChange, revision, unavailableReady]);
 
   return (
     <View

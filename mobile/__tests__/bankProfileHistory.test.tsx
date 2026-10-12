@@ -1,4 +1,5 @@
 import React from 'react';
+import mockReact from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
@@ -76,7 +77,13 @@ jest.mock('../src/components/BankInsights', () => ({ BankMoveRow: 'BankMoveRow' 
 jest.mock('../src/components/ChartErrorBoundary', () => ({ ChartErrorBoundary: 'ChartErrorBoundary' }));
 jest.mock('../src/components/feedback', () => ({ EmptyState: 'EmptyState', ScreenSkeleton: 'ScreenSkeleton' }));
 jest.mock('../src/components/ProductCard', () => ({ ProductCard: 'ProductCard' }));
-jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
+jest.mock('@shopify/flash-list', () => ({ FlashList: ({ data, renderItem, ListHeaderComponent, ListFooterComponent, ...props }: any) =>
+  mockReact.createElement('FlashList', { ...props, data }, ListHeaderComponent,
+    ...data.map((item: any, index: number) => mockReact.createElement(mockReact.Fragment,
+      { key: item.row.product_key }, renderItem({ item, index }))), ListFooterComponent) }));
+jest.mock('../src/components/Screen', () => ({ Screen: 'Screen', DataHealthBannerStrip: 'DataHealthBannerStrip',
+  responsiveScreenContentStyle: () => ({}) }));
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Chip: 'Chip', Divider: 'Divider', Row: 'Row' }));
 jest.mock('../src/data/bankInsights', () => ({

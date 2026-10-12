@@ -1129,6 +1129,82 @@ describe('optional feature prefs', () => {
     expect(mockDownloadBankInsights).not.toHaveBeenCalled();
   });
 
+  describe('cache-only bank intelligence preparation', () => {
+    const insights = {
+      schema_version: 1,
+      run_date: remoteCore.run_date,
+      run_dates: [remoteCore.run_date],
+      banks: { AlphaBank: { Mortgage: { median: [0.06], best: [0.055], count: [4] } } },
+      events: [],
+    };
+    const meta = {
+      coreSha: remoteManifest.files.core.sha256,
+      bankInsightsSha: remoteManifest.files.bank_history!.sha256,
+    };
+    beforeEach(() => {
+      store.setState({ prefs: proPrefs, source: 'remote', manifest: remoteManifest, core: remoteCore });
+      mockReadMeta.mockResolvedValue(meta);
+      mockReadBankInsights.mockResolvedValue(insights);
+    });
+    afterEach(() => { mockReadBankInsights.mockReset(); });
+
+    it('installs fresh saved intelligence before audit availability is assessed without transport or cache writes', async () => {
+      await store.getState().ensureBankInsights({ cacheOnly: true });
+      expect(store.getState().bankInsights).toMatchObject(insights);
+      expect(store.getState().bankInsightsError).toBeNull();
+      expect(mockReadBankInsights).toHaveBeenCalledTimes(1);
+      expect(mockDownloadBankInsights).not.toHaveBeenCalled();
+      expect(cache.writeBankInsights).not.toHaveBeenCalled();
+      expect(cache.writeOptionalMeta).not.toHaveBeenCalled();
+    });
+
+    it.each(['core', 'asset', 'date', 'missing', 'sample', 'undeclared'])(
+      'does not install or fetch unavailable %s evidence', async (condition) => {
+        if (condition === 'core') mockReadMeta.mockResolvedValue({ ...meta, coreSha: 'other-core' });
+        if (condition === 'asset') mockReadMeta.mockResolvedValue({ ...meta, bankInsightsSha: 'other-bank-history' });
+        if (condition === 'date') mockReadBankInsights.mockResolvedValue({ ...insights, run_date: '2000-01-01' });
+        if (condition === 'missing') mockReadBankInsights.mockResolvedValue(null);
+        if (condition === 'sample') store.setState({ source: 'sample' });
+        if (condition === 'undeclared') store.setState({
+          manifest: { ...remoteManifest, files: { ...remoteManifest.files, bank_history: undefined } },
+        });
+        await store.getState().ensureBankInsights({ cacheOnly: true });
+        expect(store.getState().bankInsights).toBeNull();
+        expect(store.getState().bankInsightsError).toBeNull();
+        expect(mockDownloadBankInsights).not.toHaveBeenCalled();
+      },
+    );
+
+    it('cache-only remains a no-transport contract even with force requested', async () => {
+      await store.getState().ensureBankInsights({ cacheOnly: true, force: true });
+      expect(store.getState().bankInsights).toMatchObject(insights);
+      expect(mockDownloadBankInsights).not.toHaveBeenCalled();
+    });
+
+    it.each(['core', 'asset', 'date'])('does not install an old cache completion after the %s edition changes', async (condition) => {
+      let finish!: (value: typeof insights) => void;
+      mockReadBankInsights.mockReturnValue(new Promise<typeof insights>((resolve) => { finish = resolve; }));
+      const pending = store.getState().ensureBankInsights({ cacheOnly: true });
+      await Promise.resolve();
+      expect(mockReadBankInsights).toHaveBeenCalledTimes(1);
+      store.setState({
+        bankInsightsError: 'new edition pending',
+        ...(condition === 'core' ? {
+          manifest: { ...remoteManifest, files: { ...remoteManifest.files, core: { ...remoteManifest.files.core, sha256: 'new-core' } } },
+        } : {}),
+        ...(condition === 'asset' ? {
+          manifest: { ...remoteManifest, files: { ...remoteManifest.files, bank_history: { ...remoteManifest.files.bank_history!, sha256: 'new-history' } } },
+        } : {}),
+        ...(condition === 'date' ? { core: { ...remoteCore, run_date: '2026-10-13' } } : {}),
+      });
+      finish(insights);
+      await pending;
+      expect(store.getState().bankInsights).toBeNull();
+      expect(store.getState().bankInsightsError).toBe('new edition pending');
+      expect(mockDownloadBankInsights).not.toHaveBeenCalled();
+    });
+  });
+
   it('shows a recoverable message instead of spinning forever on sample data', async () => {
     store.setState({ prefs: proPrefs, source: 'sample', manifest: remoteManifest, core: remoteCore });
 

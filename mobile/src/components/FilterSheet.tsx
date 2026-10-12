@@ -3,17 +3,14 @@ import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { distinctProviders, distinctValues, type Filters } from '../data/selectors';
-import { distinctEligibilityCriteria } from '../data/eligibility';
-import { distinctAccountFeatures } from '../data/features';
+import type { Filters } from '../data/selectors';
+import type { SearchFilterOptions } from '../data/searchFilterOptions';
 import { humanizeEnum } from '../data/format';
-import { compareLvrTiers, lvrTierDisplay } from '../data/lvrTier';
+import { lvrTierDisplay } from '../data/lvrTier';
 import {
   boundedPublishedFactFilterOptions,
   factCriterionId,
-  publishedFactFilterOptions,
 } from '../data/productFacts';
-import type { ProductDetail, RateRow, SectionKey } from '../types';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { matchingLenders, visibleFilterOptions } from '../lib/filterOptions';
 import { useTheme } from '../theme/ThemeProvider';
@@ -21,46 +18,27 @@ import { SearchBar } from './controls';
 import { TouchTarget } from './TouchTarget';
 import { AppText, Button, Chip, Disclosure, Divider, Row } from './ui';
 
-interface Group {
-  title: string;
-  field: keyof RateRow;
-  key: keyof Filters;
-}
-
-function groupsFor(section: SectionKey): Group[] {
-  if (section === 'Mortgage') {
-    return [
-      { title: 'Purpose', field: 'loan_purpose', key: 'loanPurposes' },
-      { title: 'Rate type', field: 'rate_type', key: 'rateTypes' },
-      { title: 'Repayment', field: 'ribbon_repayment_type', key: 'repaymentTypes' },
-      { title: 'LVR tier', field: 'lvr_tier', key: 'lvrTiers' },
-    ];
-  }
-  if (section === 'TD') {
-    return [{ title: 'Interest paid', field: 'interest_payment', key: 'interestPayments' }];
-  }
-  return [{ title: 'Account type', field: 'ribbon_deposit_kind', key: 'depositKinds' }];
-}
-
 // Plain RN Modal sheet: @gorhom/bottom-sheet modals silently failed to present
 // under Reanimated 4, leaving the filter button dead.
 export function FilterSheet({
   visible,
   onClose,
-  rows,
-  section,
+  options,
+  optionsPending = false,
+  optionsError,
+  onRetryOptions,
   filters,
   onApply,
-  detailsProducts,
   resultCount,
 }: {
   visible: boolean;
   onClose: () => void;
-  rows: RateRow[];
-  section: SectionKey;
+  options: SearchFilterOptions;
+  optionsPending?: boolean;
+  optionsError?: string | null;
+  onRetryOptions?: () => void;
   filters: Filters;
   onApply: (f: Filters) => void;
-  detailsProducts?: Record<string, ProductDetail> | null;
   /** Products the list would show for a draft; labels the apply action. */
   resultCount?: (draft: Filters) => number;
 }) {
@@ -81,42 +59,14 @@ export function FilterSheet({
     }
   }, [visible, filters]);
 
-  const groups = groupsFor(section);
-  // Facet option lists depend only on the (scoped) rows, never on the draft
-  // selection — memoize them so toggling a chip doesn't re-scan every row for
-  // every filter group (the open-sheet lag).
-  const groupOptions = useMemo(
-    () =>
-      groups
-        .map((g) => {
-          const values = distinctValues(rows, g.field);
-          // Bands read in order (≤60%, 60–70%, …), not by row frequency.
-          if (g.field === 'lvr_tier') values.sort(compareLvrTiers);
-          return { g, options: values };
-        })
-        .filter(({ options }) => options.length > 0),
-    [rows, section], // eslint-disable-line react-hooks/exhaustive-deps -- groups is derived from section
-  );
-  const providers = useMemo(() => distinctProviders(rows), [rows]);
-  const accountFeatures = useMemo(
-    () => distinctAccountFeatures(rows, detailsProducts, section),
-    [rows, detailsProducts, section],
-  );
-  const eligibilityCriteria = useMemo(
-    () => distinctEligibilityCriteria(rows, detailsProducts),
-    [rows, detailsProducts],
-  );
-  const availablePublishedDetails = useMemo(
-    () => publishedFactFilterOptions(rows, detailsProducts, section),
-    [rows, detailsProducts, section],
-  );
+  const { groups: groupOptions, providers, accountFeatures, eligibilityCriteria } = options;
   const publishedDetails = useMemo(
     () => boundedPublishedFactFilterOptions(
-      availablePublishedDetails,
+      options.publishedDetails,
       draft.factCriteria,
       32,
     ),
-    [availablePublishedDetails, draft.factCriteria],
+    [options.publishedDetails, draft.factCriteria],
   );
 
   // Counting re-runs the list filter, so let chip presses paint first.
@@ -239,6 +189,11 @@ export function FilterSheet({
           </Row>
           <Divider />
           <ScrollView contentContainerStyle={{ padding: 16, gap: 18, paddingBottom: 12 }} keyboardShouldPersistTaps="handled">
+            {optionsPending ? <AppText variant="small" color="textMuted">Preparing filters…</AppText> : null}
+            {optionsError ? <View style={{ gap: 8 }}>
+              <AppText variant="small" color="textMuted">Could not prepare filters. Try again.</AppText>
+              <Button title="Retry filters" variant="secondary" onPress={onRetryOptions} />
+            </View> : null}
             {groupOptions.map(({ g, options }) => {
               return (
                 <View key={g.key}>

@@ -36,6 +36,7 @@ import { useDebouncedValue } from '../src/hooks/useDebouncedValue';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
 import { useVirtualizedListReadiness } from '../src/hooks/useVirtualizedListReadiness';
+import { useSearchFilterOptions } from '../src/hooks/useSearchFilterOptions';
 import { breadcrumb, rowsForSearchScope } from '../src/data/taxonomy';
 import { hapticSelection } from '../src/lib/haptics';
 import { openCompare, openProduct, scalarRouteParam } from '../src/lib/nav';
@@ -201,6 +202,7 @@ export default function Search() {
     const all = core?.sections[section]?.rates ?? [];
     return rowsForSearchScope(all, section, path, hierarchyScoped);
   }, [core, section, path, hierarchyScoped, suitabilityRevision]);
+  const filterOptions = useSearchFilterOptions(baseRows, details?.products, section, suitabilityRevision);
 
   const effectiveFilters = useMemo(
     () => ({
@@ -428,6 +430,12 @@ export default function Search() {
         renderRevision: listRevision,
       },
       {
+        id: 'search.filters',
+        kind: 'data',
+        status: !filterOpen ? 'ready' : filterOptions.error ? 'error' : filterOptions.ready ? 'ready' : 'pending',
+        error: filterOpen ? filterOptions.error : null,
+      },
+      {
         id: 'search.logos',
         kind: 'logo',
         required: false,
@@ -589,10 +597,11 @@ export default function Search() {
       <FilterSheet
         visible={filterOpen}
         onClose={() => setFilterOpen(false)}
-        rows={baseRows}
-        section={section}
+        options={filterOptions.options}
+        optionsPending={!filterOptions.ready && !filterOptions.error}
+        optionsError={filterOptions.error}
+        onRetryOptions={filterOptions.retry}
         filters={effectiveFilters}
-        detailsProducts={details?.products}
         onApply={setFilters}
         resultCount={draftResultCount}
       />

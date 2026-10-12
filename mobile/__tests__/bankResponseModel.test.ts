@@ -57,4 +57,42 @@ describe('compact bank response windows', () => {
     expect(bankResponseDecisionLabel(calendar.decisions[2])).toBe('RBA held at 4.35%');
     expect(bankResponseDecisionLabel(calendar.decisions[3])).toContain('to 4.10%');
   });
+
+  it('reads the event ledger once across banks and decision windows', () => {
+    let ledgerReads = 0;
+    const events = new Proxy(payload.events, {
+      get(target, property, receiver) {
+        if (typeof property === 'string' && /^\d+$/.test(property)) ledgerReads++;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const windows = buildCompactBankResponseWindows({ ...payload, events }, calendar, 'Mortgage');
+    expect(windows).toEqual(buildCompactBankResponseWindows(payload, calendar, 'Mortgage'));
+    expect(ledgerReads).toBe(payload.events.length);
+  });
+
+  it('retains first same-day evidence and section boundaries without mutating the ledger', () => {
+    const first = payload.events[1];
+    const events = [payload.events[2], first, { ...first, avg_bps: -50 },
+      { ...payload.events[0], date: '2026-05-05', section: 'Savings' as const }, payload.events[0]];
+    const original = events.slice();
+    const windows = buildCompactBankResponseWindows({ ...payload, events }, calendar, 'Mortgage');
+    expect(windows.find(window => window.decision.date === '2026-05-10')?.rows[0])
+      .toMatchObject({ provider: 'Alpha', movePp: -0.15, daysAfter: 0 });
+    expect(windows.find(window => window.decision.date === '2026-05-05')?.rows[1])
+      .toMatchObject({ provider: 'Zeta', movePp: 0.1, daysAfter: 1 });
+    expect(events).toEqual(original);
+  });
+
+  it('keeps absent series observations blank and admits a measured zero count', () => {
+    const banks = { ...payload.banks,
+      Empty: { Mortgage: { median: [null, null, null], best: [null, null, null], count: [null, null, null] } },
+      Zero: { Mortgage: { median: [null, null, null], best: [null, null, null], count: [null, null, 0] } },
+    };
+    const windows = buildCompactBankResponseWindows({ ...payload, banks }, calendar, 'Mortgage');
+    expect(windows.every(window => window.rows.every(row => row.provider !== 'Empty'))).toBe(true);
+    expect(windows.find(window => window.decision.date === '2026-05-10')?.rows)
+      .toContainEqual({ provider: 'Zero', movePp: null, daysAfter: null, direction: null });
+    expect(windows.find(window => window.decision.date === '2026-05-05')?.rows.some(row => row.provider === 'Zero')).toBe(false);
+  });
 });

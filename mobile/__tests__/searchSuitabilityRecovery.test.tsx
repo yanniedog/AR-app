@@ -33,6 +33,9 @@ jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({
 }));
 jest.mock('../src/hooks/useLogoReadiness', () => ({ useLogoReadiness: () => ({ ready: true }) }));
 jest.mock('../src/hooks/useDebouncedValue', () => ({ useDebouncedValue: (value: string) => value }));
+jest.mock('../src/hooks/useSearchFilterOptions', () => ({
+  useSearchFilterOptions: () => ({ ready: true, options: {} }),
+}));
 jest.mock('@shopify/flash-list', () => {
   const React = jest.requireActual('react');
   return { FlashList: React.forwardRef(function MockFlashList(props: any, ref: any) {

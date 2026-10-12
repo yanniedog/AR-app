@@ -30,8 +30,8 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap, a
     const xCoordinates = new Map(model.dates.map(date => [date, model.dates.length === 1 ? (L + W - R) / 2
       : L + (timestamps.get(date)! - start) / Math.max(1, end - start) * (W - L - R)]));
     return model.lines.map(line => {
-      const markers: string[] = [];
       const isolatedMarkers: string[] = [];
+      const coordinates: { x: number; y: number }[] = [];
       const path = line.points.map((point, i) => {
         const previous = line.points[i - 1];
         const continuous = previous && positions.get(point.date)! === positions.get(previous.date)! + 1 &&
@@ -41,18 +41,22 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap, a
           timestamps.get(next.date)! - timestamps.get(point.date)! === 86_400_000;
         const px = xCoordinates.get(point.date)!;
         const py = T + (model.max - point.value) / (model.max - model.min) * (H - T - B);
+        coordinates.push({ x: px, y: py });
         // One SVG path retains every selected observation, including isolated
         // days, without allocating a native Circle for each bank and date.
-        const marker = `M${(px - 2).toFixed(1)},${py.toFixed(1)}a2,2 0 1,0 4,0a2,2 0 1,0 -4,0Z`;
-        markers.push(marker);
-        if (!continuous && !continues) isolatedMarkers.push(marker);
+        if (!continuous && !continues) isolatedMarkers.push(`M${(px - 2).toFixed(1)},${py.toFixed(1)}a2,2 0 1,0 4,0a2,2 0 1,0 -4,0Z`);
         return `${continuous ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`;
       }).join(' ');
-      return { path, markers: markers.join(' '), background: `${path} ${isolatedMarkers.join(' ')}`, pointCount: line.points.length };
+      return { path, coordinates, background: `${path} ${isolatedMarkers.join(' ')}`, pointCount: line.points.length };
     });
   }, [end, model, start]);
+  // Only the selected bank draws all observation markers. Keep coordinates for
+  // other banks so selection never rescans history, without formatting and
+  // retaining a large unused marker string for every bank during navigation.
+  const selectedMarkers = useMemo(() => paths[index]?.coordinates.map(point =>
+    `M${(point.x - 2).toFixed(1)},${point.y.toFixed(1)}a2,2 0 1,0 4,0a2,2 0 1,0 -4,0Z`).join(' ') ?? '', [index, paths]);
   // The context stays mounted unchanged when selecting another bank. The
-  // selected bank is drawn over it with just two already prepared paths.
+  // selected bank is drawn over it with just two paths.
   const background = useMemo(() => <Path testID="bank-rate-background" d={paths.map(item => item.background).join(' ')}
     fill="none" stroke={theme.colors.textFaint} strokeOpacity={0.28} strokeWidth={0.8} />,
   [paths, theme.colors.textFaint]);
@@ -86,7 +90,7 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap, a
           expectedCount: paths.reduce((count, item) => count + item.pointCount, 0),
           pointCount: paths.reduce((count, item) => count + (hasFiniteChartPath(item.background) ? item.pointCount : 0), 0),
           layoutMeasured: hasPositiveChartLayout(event),
-          accessibleSummary: summary.trim().length > 0 && hasFiniteChartPath(paths[index].markers),
+          accessibleSummary: summary.trim().length > 0 && hasFiniteChartPath(selectedMarkers),
           emptyStateRendered: false,
         })}>
         {[model.min, (model.min + model.max) / 2, model.max].map(value => <React.Fragment key={value}>
@@ -99,7 +103,7 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap, a
         </React.Fragment>)}
         {background}
         <Path testID="bank-rate-selected-line" d={paths[index].path} fill="none" stroke={theme.colors.primary} strokeWidth={2.6} />
-        <Path testID="bank-rate-selected-observations" d={paths[index].markers} fill={theme.colors.primary} />
+        <Path testID="bank-rate-selected-observations" d={selectedMarkers} fill={theme.colors.primary} />
         <ChartText x={L} y={H - 5} fontSize={10} fill={theme.colors.textMuted}>{model.dates[0]}</ChartText>
         {model.dates.length > 1 ? <ChartText x={W - R} y={H - 5} textAnchor="end" fontSize={10} fill={theme.colors.textMuted}>{model.dates.at(-1)}</ChartText> : null}
       </Svg>

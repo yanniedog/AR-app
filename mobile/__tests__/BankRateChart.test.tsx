@@ -81,6 +81,23 @@ test('bank switching reuses the model and prepared context without recalculating
   } finally { act(() => tree.unmount()); }
 });
 
+test('prepares full observation markers only for the selected bank', () => {
+  const model = fixture(73, 137);
+  const format = jest.spyOn(Number.prototype, 'toFixed');
+  let tree!: Renderer;
+  try {
+    tree = mount(model);
+    // Two coordinate formats per context point plus the selected bank's
+    // marker coordinates, rather than four formats for every bank and day.
+    expect(format.mock.calls.length).toBeLessThan(73 * 137 * 3);
+    expect(String(path(tree, 'bank-rate-selected-observations').props.d).match(/Z/g)).toHaveLength(137);
+    expect(String(path(tree, 'bank-rate-background').props.d).match(/[ML]/g)).toHaveLength(73 * 137);
+  } finally {
+    if (tree) act(() => tree.unmount());
+    format.mockRestore();
+  }
+});
+
 test.each(['bank', 'whole catalogue'])('missing %s observations break the line while isolated days retain visible markers', missing => {
   const model = fixture(1);
   model.lines[0].points.splice(2, 1);

@@ -1,4 +1,4 @@
-import { auditSearchUsesBasicFallback, canPrepareAuditSearchIndex } from '../src/lib/performanceAuditProfile';
+import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAuditSearchIndex } from '../src/lib/performanceAuditProfile';
 import type { Manifest } from '../src/types';
 import { SECTION_ORDER } from '../src/constants';
 import { DEFAULT_PREFS, type Prefs } from '../src/data/storeTypes';
@@ -78,4 +78,24 @@ it('requires live authorization for the exact pinned search descriptor', () => {
   expect(canPrepareAuditSearchIndex('live-source', pinned, null)).toBe(false);
   expect(canPrepareAuditSearchIndex('live-source', pinned, { ...pinned, files: { ...pinned.files, core: { ...pinned.files.core, sha256: 'new-core' } } })).toBe(false);
   expect(canPrepareAuditSearchIndex('live-source', pinned, { ...pinned, files: { ...pinned.files, search_index: { ...pinned.files.search_index!, url: 'https://other.test/index' } } })).toBe(false);
+});
+
+it('requires the authenticated pinned core, date and bank-intelligence descriptor for online preparation', () => {
+  const pinned = { run_date: '2026-10-12', files: {
+    core: { sha256: 'core' }, bank_history: { sha256: 'bank-history', url: 'https://github.com/bank-history' },
+  } } as Manifest;
+  expect(canPrepareAuditBankInsights('live-source', pinned, pinned)).toBe(true);
+  expect(canPrepareAuditBankInsights('local', pinned, pinned)).toBe(false);
+  expect(canPrepareAuditBankInsights('live-source', null, pinned)).toBe(false);
+  expect(canPrepareAuditBankInsights('live-source', pinned, null)).toBe(false);
+  for (const live of [
+    { ...pinned, run_date: '2026-10-13' },
+    { ...pinned, files: { ...pinned.files, core: { ...pinned.files.core, sha256: 'another-core' } } },
+    { ...pinned, files: { ...pinned.files, core: { ...pinned.files.core, sha256: '' } } },
+    { ...pinned, files: { ...pinned.files, bank_history: undefined } },
+    { ...pinned, files: { ...pinned.files, bank_history: { ...pinned.files.bank_history!, sha256: 'another-history' } } },
+    { ...pinned, files: { ...pinned.files, bank_history: { ...pinned.files.bank_history!, url: 'https://other.test/history' } } },
+  ]) {
+    expect(canPrepareAuditBankInsights('live-source', pinned, live)).toBe(false);
+  }
 });

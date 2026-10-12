@@ -205,7 +205,7 @@ export interface AppState {
   }) => Promise<void>;
   ensureSearchIndex: () => Promise<void>;
   ensureHistoryBanks: (opts?: { force?: boolean }) => Promise<void>;
-  ensureBankInsights: (opts?: { force?: boolean }) => Promise<void>;
+  ensureBankInsights: (opts?: { force?: boolean; cacheOnly?: boolean }) => Promise<void>;
   ensureBankSpreadHistory: (opts?: { force?: boolean }) => Promise<void>;
   ensureRbaCalendar: () => Promise<void>;
   ensureProductHistory: (opts?: {
