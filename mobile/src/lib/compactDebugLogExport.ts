@@ -49,13 +49,82 @@ function localLinkWarning(check: RecordValue): boolean {
     m.httpAttempted === false && m.nonTimingFailure === false;
 }
 
+function hasProbeEvidence(check: RecordValue): boolean {
+  const metrics = check.metrics;
+  // A successful performance check can still expose a display-health failure.
+  // Keep probe evidence independently of the later report, including partial logs.
+  return record(metrics) && ['readinessEvidence', 'graphicEvidence', 'readinessActionEvidence']
+    .some((key) => metrics[key] != null && metrics[key] !== '');
+}
+
+// AuditCheck, ResponsivenessMetrics and the current runner/link measurements.
+// New fields are evidence until explicitly reviewed; a suffix such as "Ms" or a
+// scalar value alone never makes an unfamiliar field safe to discard.
+const routineNumberMetrics = new Set([
+  'preloadedAgeMs', 'statusCode', 'rows', 'visibleRows', 'childNodes', 'rankedRows', 'statsCount',
+  'firstScopeMs', 'firstFilterMs', 'firstHierarchyMs', 'firstStatsMs', 'firstRankMs',
+  'repeatScopeMs', 'repeatFilterMs', 'repeatHierarchyMs', 'repeatStatsMs', 'repeatRankMs',
+  'payloadChars', 'rateRows', 'stringifyMs', 'parseMs', 'traversalMs',
+  'inventorySlices', 'inventoryRawCandidates', 'inventoryPolicyValidations', 'inventoryCpuMs',
+  'inventoryMaxSliceMs', 'inventoryYieldMs', 'inventoryMaxYieldMs', 'uniqueDestinations', 'observedDestinations',
+  'payloadBytes', 'iterations', 'maxWriteMs', 'maxReadMs', 'averageWriteMs', 'averageReadMs',
+  'writeMs', 'readMs', 'bytes', 'sampledBytes', 'flushMs', 'attempts',
+  'depth', 'readinessQuietWindowMs', 'forwardWorkMs', 'forwardMs', 'backgroundSettleMs',
+  'destinationReadinessMs', 'backMs', 'originReadinessMs', 'secondBackMs', 'replaceRecoveryMs', 'returnFallbackMs',
+]);
+const routineBooleanMetrics = new Set([
+  'executionAttempted', 'nonTimingFailure', 'preloaded', 'handlerAttempted', 'httpAttempted',
+  'measurementAvailable', 'lenderDetailsLoaded', 'temporaryKeyDeleted', 'temporaryFileDeleted',
+  'fullExportMeasured', 'restored', 'actionInvoked', 'actionCompleted', 'backChangedPath',
+  'backReturnedToAudit', 'deepSearchAvailable',
+]);
+for (const prefix of ['', 'forward', 'background', 'back']) {
+  const name = (key: string) => prefix ? `${prefix}${key[0].toUpperCase()}${key.slice(1)}` : key;
+  for (const key of ['eventLoopSamples', 'eventLoopP95Ms', 'maxEventLoopLagMs', 'stallsOver100Ms',
+    'frameSamples', 'frameP95Ms', 'maxFrameGapMs', 'framesOver50Ms']) routineNumberMetrics.add(name(key));
+  for (const key of ['eventLoopMeasurementAvailable', 'frameMeasurementAvailable']) routineBooleanMetrics.add(name(key));
+}
+const routineTextMetrics = new Set([
+  'host', 'destinationPath', 'purpose', 'validationDetail', 'handlerDetail', 'reachabilityDetail', 'reason',
+  'section', 'responsivenessClassification', 'measurementMode', 'journeyId', 'journeyLabel', 'iteration',
+  'passId', 'scenarioId', 'semanticActionId', 'plannedExpectedPath', 'expectedPath', 'expectedSurface',
+  'navigationKind', 'backgroundTasks', 'backDestination', 'returnNavigationKind', 'searchMode',
+  'renderRevisionBefore', 'renderRevisionAfter',
+]);
+const routineCheckTextFields = new Set(['id', 'label', 'journalLogPrefix']);
+const routineKinds = new Set(['journey', 'runtime', 'storage', 'network', 'data', 'update']);
+const routineStatuses = new Set(['pass', 'warn', 'fail', 'skipped']);
+
+function knownRoutineShape(check: RecordValue): boolean {
+  return Object.entries(check).every(([key, value]) => {
+    if (routineCheckTextFields.has(key)) return typeof value === 'string';
+    if (key === 'kind') return typeof value === 'string' && routineKinds.has(value);
+    if (key === 'status') return typeof value === 'string' && routineStatuses.has(value);
+    if (key === 'durationMs') return value === null || (finite(value) && value >= 0);
+    if (key === 'error' || key === 'trace') return value === null || typeof value === 'string';
+    if (key !== 'metrics' || !record(value)) return false;
+    return Object.entries(value).every(([metric, observation]) => {
+      if (routineNumberMetrics.has(metric)) return observation === null || (finite(observation) && observation >= 0);
+      if (routineBooleanMetrics.has(metric)) return typeof observation === 'boolean';
+      if (routineTextMetrics.has(metric)) return observation === null || typeof observation === 'string';
+      if (['urlValidation', 'browserHandler', 'httpReachability'].includes(metric)) {
+        return typeof observation === 'string' && ['pass', 'fail', 'unknown'].includes(observation);
+      }
+      if (['runtimeErrors', 'incidentalRuntimeErrors'].includes(metric)) return observation === 0;
+      if (['runtimeErrorMessages', 'incidentalRuntimeErrorMessages',
+        'readinessEvidence', 'graphicEvidence', 'readinessActionEvidence'].includes(metric)) return observation === null || observation === '';
+      return false;
+    });
+  });
+}
+
 function summarizeTimingWarning(check: RecordValue): RecordValue {
   const m = check.metrics;
-  if (check.kind !== 'journey' || check.status !== 'warn' || check.error || check.trace ||
+  if (!knownRoutineShape(check) || hasProbeEvidence(check) || check.kind !== 'journey' || check.status !== 'warn' || check.error || check.trace ||
     !record(m) || m.nonTimingFailure !== false || m.actionCompleted === false ||
     ['readinessEvidence', 'graphicEvidence'].some((key) => typeof m[key] === 'string' && /error|failed|pending/i.test(m[key]))) return check;
-  // Keep each warning and all numeric/boolean measurements; verbose successful probe/revision
-  // descriptions remain in the raw report. Unknown text fields are retained for forward compatibility.
+  // Warnings without probe evidence can omit routine identifiers/revision descriptions.
+  // Unknown text fields are retained for forward compatibility.
   const routineText = new Set(['journeyId', 'journeyLabel', 'iteration', 'passId', 'scenarioId',
     'semanticActionId', 'plannedExpectedPath', 'renderRevisionBefore', 'renderRevisionAfter',
     'readinessEvidence', 'graphicEvidence', 'readinessActionEvidence']);
@@ -67,20 +136,21 @@ function summarizeTimingWarning(check: RecordValue): RecordValue {
 }
 
 function routineCheck(check: RecordValue): boolean {
-  return (check.status === 'pass' && !check.error && !check.trace &&
+  return knownRoutineShape(check) && !hasProbeEvidence(check) && ((check.status === 'pass' && !check.error && !check.trace &&
     record(check.metrics) && check.metrics.nonTimingFailure !== true &&
-    !(finite(check.durationMs) && check.durationMs > 10_000)) || localLinkWarning(check);
+    !(finite(check.durationMs) && check.durationMs > 10_000)) || localLinkWarning(check));
 }
 
 function compactChecks(checks: unknown[]): RecordValue {
   const groups = new Map<string, RecordValue[]>();
   const detailed = new Map<string, RecordValue[]>();
+  const detailedIndexes = new Map<string, number[]>();
   const unknown: unknown[] = [];
-  for (const value of checks) {
+  for (const [index, value] of checks.entries()) {
     if (!record(value) || typeof value.id !== 'string' || typeof value.kind !== 'string' || typeof value.status !== 'string' || !record(value.metrics)) {
       unknown.push(value); continue;
     }
-    // Unexpected errors, traces and non-timing failures always retain their individual evidence.
+    // Probes, unexpected errors, traces and non-timing failures retain individual evidence.
     if (routineCheck(value)) {
       const m = record(value.metrics) ? value.metrics : {};
       const key = stable([value.kind, value.status, localLinkWarning(value) ?
@@ -91,6 +161,7 @@ function compactChecks(checks: unknown[]): RecordValue {
       const key = stable([value.kind, value.status, Object.keys(summarized).sort(),
         record(summarized.metrics) ? Object.keys(summarized.metrics).sort() : []]);
       const group = detailed.get(key) ?? []; group.push(summarized); detailed.set(key, group);
+      const indexes = detailedIndexes.get(key) ?? []; indexes.push(index); detailedIndexes.set(key, indexes);
     }
   }
   return {
@@ -102,7 +173,7 @@ function compactChecks(checks: unknown[]): RecordValue {
       // One actual, slowest result gives policy/measurement context. Target lists stay local.
       slowestExample: group.reduce((a, b) => Number(a.durationMs ?? 0) >= Number(b.durationMs ?? 0) ? a : b),
     })),
-    detailGroups: [...detailed.values()].map(checkTable),
+    detailGroups: [...detailed].map(([key, group]) => ({ ...checkTable(group), checkIndexes: detailedIndexes.get(key) })),
     ...(unknown.length ? { unrecognized: unknown } : {}),
   };
 }
@@ -160,14 +231,17 @@ function internEvidence(value: unknown): RecordValue {
 }
 
 function journalCoveredByReport(check: RecordValue, final: RecordValue): boolean {
-  if (check.status !== final.status || check.kind !== final.kind) return false;
-  for (const key of ['durationMs', 'error', 'trace']) {
-    if (check[key] != null && stable(check[key]) !== stable(final[key])) return false;
-  }
-  if (record(check.metrics)) {
-    if (!record(final.metrics)) return false;
-    for (const [key, value] of Object.entries(check.metrics)) {
-      if (stable(value) !== stable(final.metrics[key])) return false;
+  // Journal-only fields may carry evidence unknown to this exporter version.
+  // A sidecar covers a journal entry only when it retains every original field.
+  for (const [key, value] of Object.entries(check)) {
+    if (key === 'journalLogPrefix') continue;
+    if (key === 'metrics' && record(value)) {
+      if (!record(final.metrics)) return false;
+      for (const [metric, observation] of Object.entries(value)) {
+        if (stable(observation) !== stable(final.metrics[metric])) return false;
+      }
+    } else if (stable(value) !== stable(final[key])) {
+      return false;
     }
   }
   return true;
@@ -193,12 +267,12 @@ function routineCheckpoint(value: RecordValue, logPrefix: string): boolean {
 
 /** Only recognized audit JSON is summarized; unrelated/crash lines and malformed records survive verbatim. */
 export function compactDebugLogExport(text: string): string {
-  const sessions = new Map<string, { checks: Map<string, RecordValue[]>; report?: RecordValue; events: RecordValue[]; checkpoints: Map<string, RecordValue>; checkLocations: unknown[][] }>();
+  const sessions = new Map<string, { checks: Map<string, RecordValue[]>; journalChecks: RecordValue[]; report?: RecordValue; events: RecordValue[]; checkpoints: Map<string, RecordValue>; checkLocations: unknown[][] }>();
   type AuditRun = { sessionId: string; lines: [number, number]; first: string; last: string };
   const retained: (string | AuditRun)[] = [];
   const sessionFor = (id: string) => {
     let session = sessions.get(id);
-    if (!session) { session = { checks: new Map(), events: [], checkpoints: new Map(), checkLocations: [] }; sessions.set(id, session); }
+    if (!session) { session = { checks: new Map(), journalChecks: [], events: [], checkpoints: new Map(), checkLocations: [] }; sessions.set(id, session); }
     return session;
   };
   let sourceLine = 0;
@@ -223,7 +297,9 @@ export function compactDebugLogExport(text: string): string {
     if (eventStart < 0) { session.report = value; continue; }
     if (value.kind === 'check' && record(value.check) && typeof value.check.id === 'string') {
       const prior = session.checks.get(value.check.id) ?? [];
-      prior.push({ ...value.check, journalLogPrefix: logPrefix });
+      const journalCheck = { ...value.check, journalLogPrefix: logPrefix };
+      prior.push(journalCheck);
+      session.journalChecks.push(journalCheck);
       if (!routineCheck(value.check)) session.checkLocations.push([value.check.id, sourceLine, logPrefix]);
       session.checks.set(value.check.id, prior); continue;
     }
@@ -239,15 +315,15 @@ export function compactDebugLogExport(text: string): string {
   if (!sessions.size) return text;
   const output = [...retained.map((entry) => typeof entry === 'string' ? entry : `# Audit source ${JSON.stringify(entry)}`),
     '', '# Compact diagnostic export v1',
-    '# Routine passes and local-only link warnings are grouped with counts/timing; every failure, warning and skip outcome is retained.',
-    '# Tables: columns describe rows; metricColumns describe metrics; commonMetrics apply to every row; {$text:N} references texts[N].',
-    '# Audit source markers preserve input order and original line ranges. Check locations retain anomaly timestamps even when the saved report contains the check.',
-    '# Plan steps and successful timing-warning probe text are summarized. Provider tables retain source accounting and failure evidence. Full evidence remains on the device.',
+    '# Only known-shape routine passes and local-only link warnings are grouped with counts/timing; unfamiliar fields remain detailed; every failure, warning and skip outcome is retained.',
+    '# Tables: columns describe rows; metricColumns describe metrics; commonMetrics apply to every row; checkIndexes retain original collection order; {$text:N} references texts[N].',
+    '# Audit source markers preserve input order and original line ranges. Check locations retain anomaly and probe timestamps even when the saved report contains the check.',
+    '# Readiness, graphic and action probe checks retain every field regardless of outcome. Plan steps are summarized; provider tables retain source accounting and failure evidence. Full evidence remains on the device.',
   ];
   for (const [sessionId, session] of sessions) {
     const canonical = session.report;
     const finalChecks = new Map(Array.isArray(canonical?.checks) ? canonical.checks.filter(record).map((c) => [c.id, c]) : []);
-    const journalChecks = [...session.checks.values()].flat();
+    const journalChecks = session.journalChecks;
     const additionalChecks = journalChecks.filter((check) => {
       const final = finalChecks.get(check.id);
       return !final || !journalCoveredByReport(check, final);
@@ -255,8 +331,9 @@ export function compactDebugLogExport(text: string): string {
     const report = canonical ? compactReport(canonical) : { sessionId, partial: true, checks: compactChecks(journalChecks) };
     const duplicateJournalIds = [...session.checks].filter(([, variants]) => variants.length > 1).map(([id]) => id);
     if (duplicateJournalIds.length) report.duplicateJournalIds = duplicateJournalIds;
+    const duplicateIdSet = new Set(duplicateJournalIds);
     if (duplicateJournalIds.length) report.duplicateJournalChecks = compactChecks(
-      duplicateJournalIds.flatMap((id) => session.checks.get(id) ?? []),
+      journalChecks.filter((check) => duplicateIdSet.has(String(check.id))),
     );
     if (canonical && additionalChecks.length) report.additionalJournalChecks = compactChecks(additionalChecks);
     output.push(JSON.stringify(internEvidence(clean({ ...report,

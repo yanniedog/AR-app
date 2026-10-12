@@ -1,3 +1,4 @@
+import { getRandomBytes } from 'expo-crypto';
 import type { Href } from 'expo-router';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, type PerformanceAuditEstimate } from './performanceAuditTiming';
 import type { AuditBackgroundWorkWait } from './performanceAuditBackgroundWork';
@@ -8,7 +9,7 @@ import type { CorePayload, PayloadSource, SectionKey } from '../types';
 import type { AppHealthAuditMode, AppHealthReport } from './appHealth';
 import { buildBrowseRouteParams } from './browseRoute';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from './proAccess';
-import { deriveDeepAuditInputs, type DeepPerformanceAuditPlan, type DeepAuditSelectionOptions } from './performanceAuditPlan';
+import { deriveDeepAuditInputs, type DeepPerformanceAuditPlan, type DeepAuditSelectionOptions, type DeepAuditDerivedInputs } from './performanceAuditPlan';
 
 export { PERFORMANCE_AUDIT_SCHEMA_VERSION } from './performanceAuditSchema';
 
@@ -280,7 +281,8 @@ function emit(next: PerformanceAuditState): void {
 }
 
 function makeSessionId(): string {
-  const random = Math.random().toString(36).slice(2, 10);
+  const bytes = getRandomBytes(8);
+  const random = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
   return `pa-${Date.now().toString(36)}-${random}`;
 }
 
@@ -720,7 +722,13 @@ export function buildPerformanceAuditJourneys(
   interests: SectionKey[] = SECTION_ORDER,
   options: DeepAuditSelectionOptions = {},
 ): AuditJourney[] {
-  const inputs = deriveDeepAuditInputs(core, options);
+  return buildPerformanceAuditJourneysFromInputs(deriveDeepAuditInputs(core, options), interests);
+}
+
+export function buildPerformanceAuditJourneysFromInputs(
+  inputs: DeepAuditDerivedInputs,
+  interests: SectionKey[] = SECTION_ORDER,
+): AuditJourney[] {
   const first = inputs.primaryProduct;
   const second = inputs.secondaryProduct;
   const provider = inputs.provider;

@@ -84,8 +84,13 @@ export default function RateReceiptScreen() {
     void ensureDetails({ forProductView: true });
   }, [ensureDetails]);
 
-  void suitabilityRevision;
-  const found = core ? findEligibleByKey(core.sections, productKey) : null;
+  const found = useMemo(
+    () => {
+      void suitabilityRevision;
+      return core ? findEligibleByKey(core.sections, productKey) : null;
+    },
+    [core, productKey, suitabilityRevision],
+  );
   const row = found && validRateIndex
     ? requestedRateIndex == null
       ? found.row

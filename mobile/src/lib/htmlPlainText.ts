@@ -11,103 +11,105 @@ function asciiEqualsAt(html: string, index: number, needle: string): boolean {
   return true;
 }
 
-function tagEnd(html: string, from: number): number {
+function tagEnd(html: string, from: number, afterName = false): number {
   let quote = '';
-  let state: 'name' | 'beforeValue' | 'unquoted' = 'name';
-  for (let index = from; index < html.length; index += 1) {
+  let state: 'tagName' | 'beforeAttr' | 'attrName' | 'afterAttr' | 'beforeValue' | 'unquoted' | 'afterValue'
+    = afterName ? 'beforeAttr' : 'tagName';
+  const start = !afterName && html[from] === '/' ? from + 1 : from;
+  for (let index = start; index < html.length; index += 1) {
     const char = html[index];
     if (quote) {
       if (char === quote) quote = '';
     } else if (char === '>') {
       return index;
+    } else if (state === 'tagName') {
+      if (HTML_SPACE.test(char) || char === '/') state = 'beforeAttr';
     } else if (state === 'unquoted') {
-      if (HTML_SPACE.test(char)) state = 'name';
+      if (HTML_SPACE.test(char)) state = 'beforeAttr';
     } else if (state === 'beforeValue') {
       if (HTML_SPACE.test(char)) continue;
       if (char === '"' || char === "'") {
         quote = char;
-        state = 'name';
+        state = 'afterValue';
       } else {
         state = 'unquoted';
       }
-    } else if (char === '=') {
+    } else if ((state === 'attrName' || state === 'afterAttr') && char === '=') {
       state = 'beforeValue';
+    } else if (HTML_SPACE.test(char)) {
+      if (state === 'attrName') state = 'afterAttr';
+      else if (state === 'afterValue') state = 'beforeAttr';
+    } else if (char === '/') {
+      state = 'beforeAttr';
+    } else {
+      // A leading '=' belongs to a new attribute name. Only '=' after an
+      // existing name starts a value; quotes in names are ordinary characters.
+      state = 'attrName';
     }
   }
   return -1;
 }
 
-function commentEnd(html: string, from: number): number {
-  for (let index = from; index < html.length - 2; index += 1) {
-    if (html.charCodeAt(index) !== 45 || html.charCodeAt(index + 1) !== 45) continue;
-    if (html[index + 2] === '>') return index + 3;
-    if (html[index + 2] === '!' && html[index + 3] === '>') return index + 4;
+function rawTextEnd(html: string, name: string, from: number): number {
+  if (name === 'script') return scriptEnd(html, from);
+  const needle = `</${name}`;
+  let index = from;
+  while ((index = html.indexOf('</', index)) >= 0) {
+    const afterName = index + needle.length;
+    if (asciiEqualsAt(html, index, needle) && TAG_BOUNDARY.test(html[afterName] ?? '')) {
+      // Once a real end-tag name starts, scan its attributes only once. An
+      // incomplete end tag consumes the remainder instead of exposing it.
+      const end = tagEnd(html, afterName, true);
+      return end < 0 ? html.length : end + 1;
+    }
+    index += 2;
   }
   return html.length;
 }
 
-function nextNamedTag(html: string, from: number, name: string, closing: boolean): { start: number; end: number } | null {
-  const needle = `${closing ? '</' : '<'}${name}`;
-  let index = from;
-  while ((index = html.indexOf(closing ? '</' : '<', index)) >= 0) {
-    if (!closing && html.startsWith('<!--', index)) {
-      index += 4;
-      continue;
-    }
-    const afterName = index + needle.length;
-    if (asciiEqualsAt(html, index, needle) && TAG_BOUNDARY.test(html[afterName] ?? '')) {
-      const end = tagEnd(html, afterName);
-      return { start: index, end: end < 0 ? html.length : end + 1 };
-    }
-    index += closing ? 2 : 1;
-  }
-  return null;
-}
-
-function rawTextEnd(html: string, name: string, from: number): number {
-  const close = nextNamedTag(html, from, name, true);
-  return close === null ? html.length : close.end;
-}
-
-function namedTagAt(html: string, index: number, name: string, closing: boolean): boolean {
-  const needle = `${closing ? '</' : '<'}${name}`;
-  return asciiEqualsAt(html, index, needle) && TAG_BOUNDARY.test(html[index + needle.length] ?? '');
-}
-
-function scriptRawTextEnd(html: string, from: number): number {
+function scriptEnd(html: string, from: number): number {
+  // HTML script data has escaped and double-escaped states. In the latter,
+  // </script> leaves double escaping instead of closing the element.
   let state: 'data' | 'escaped' | 'double' = 'data';
+  let dashes = 0;
   for (let index = from; index < html.length; index += 1) {
-    if (state !== 'data' && html.startsWith('-->', index)) {
-      state = state === 'double' ? 'escaped' : 'data';
-      index += 2;
-      continue;
-    }
-    if (html[index] !== '<') continue;
     if (state === 'data' && html.startsWith('<!--', index)) {
-      const after = index + 4;
-      if (html[after] === '>' || html.startsWith('->', after)) {
-        index = html[after] === '>' ? after : after + 1;
-        continue;
-      }
       state = 'escaped';
+      dashes = 2;
       index += 3;
       continue;
     }
-    if (state === 'escaped' && namedTagAt(html, index, 'script', false)) {
-      state = 'double';
-      index += '<script'.length - 1;
+    if (state !== 'data' && html[index] === '-') {
+      dashes = Math.min(2, dashes + 1);
       continue;
     }
-    if ((state === 'data' || state === 'escaped') && namedTagAt(html, index, 'script', true)) {
-      const end = tagEnd(html, index + '</script'.length);
-      return end < 0 ? html.length : end + 1;
+    if (state !== 'data' && dashes === 2 && html[index] === '>') state = 'data';
+    dashes = 0;
+    if (html[index] !== '<') continue;
+    if (state === 'escaped' && asciiEqualsAt(html, index, '<script')
+      && TAG_BOUNDARY.test(html[index + 7] ?? '')) {
+      state = 'double';
+      index += 7;
+    } else if (asciiEqualsAt(html, index, '</script') && TAG_BOUNDARY.test(html[index + 8] ?? '')) {
+      if (state === 'double') {
+        state = 'escaped';
+        index += 8;
+      } else {
+        const end = tagEnd(html, index + 8, true);
+        return end < 0 ? html.length : end + 1;
+      }
     }
-    if (state === 'double' && namedTagAt(html, index, 'script', true)) {
-      // The name returns the tokenizer to the escaped state. A later "-->"
-      // in that suffix is still script data, so do not skip it as an attribute.
-      state = 'escaped';
-      index += '</script'.length - 1;
-    }
+  }
+  return html.length;
+}
+
+function commentEnd(html: string, from: number): number {
+  // HTML also closes empty comments abruptly, and accepts --!> as an ending.
+  if (html[from] === '>') return from + 1;
+  if (html.startsWith('->', from)) return from + 2;
+  for (let index = from; index < html.length; index += 1) {
+    if (html.startsWith('-->', index)) return index + 3;
+    if (html.startsWith('--!>', index)) return index + 4;
   }
   return html.length;
 }
@@ -123,25 +125,26 @@ export function htmlPlainText(html: string): string {
       break;
     }
     parts.push(html.slice(index, open));
-    const next = html[open + 1] || '';
-    if (next === '?') {
-      const end = html.indexOf('>', open + 2);
-      if (end < 0) break;
-      parts.push(' ');
-      index = end + 1;
-      continue;
-    }
-    if (!/[!/A-Za-z]/.test(next)) {
+    if (!/[!?/A-Za-z]/.test(html[open + 1] ?? '')) {
       parts.push('<');
       index = open + 1;
       continue;
     }
+    if (html.startsWith('</', open) && open + 2 === html.length) {
+      parts.push('</');
+      break;
+    }
     parts.push(' ');
     if (html.startsWith('<!--', open)) {
-      const after = open + 4;
-      if (html[after] === '>') index = after + 1;
-      else if (html.startsWith('->', after)) index = after + 2;
-      else index = commentEnd(html, after);
+      index = commentEnd(html, open + 4);
+      continue;
+    }
+    if (html[open + 1] === '!' || html[open + 1] === '?'
+      || (html[open + 1] === '/' && !/[A-Za-z]/.test(html[open + 2] ?? ''))) {
+      // Bogus comments and DOCTYPE tokens end at the first '>', even when
+      // malformed declarations contain quotes. Invalid start tags stay text.
+      const end = html.indexOf('>', open + 2);
+      index = end < 0 ? html.length : end + 1;
       continue;
     }
     const end = tagEnd(html, open + 1);
@@ -150,7 +153,7 @@ export function htmlPlainText(html: string): string {
     for (const name of ['script', 'style']) {
       const afterName = open + 1 + name.length;
       if (asciiEqualsAt(html, open + 1, name) && TAG_BOUNDARY.test(html[afterName] ?? '')) {
-        index = name === 'script' ? scriptRawTextEnd(html, index) : rawTextEnd(html, name, index);
+        index = rawTextEnd(html, name, index);
         break;
       }
     }

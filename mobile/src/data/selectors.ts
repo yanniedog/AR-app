@@ -3,7 +3,7 @@ import { mandatoryEligibleRows } from './eligibilityGate';
 import { isMeaningfulDepositRate, MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import {
-  rowMatchesSearchQuery,
+  prepareRowSearchQuery,
   type SearchIndexPayload,
 } from './detailSearch';
 import { productHasAllEligibilityCriteria } from './eligibility';
@@ -357,19 +357,13 @@ export function filterRows(
   // Detail-text search is Pro-only via searchIndex. Do not build a runtime
   // detailSearchIndex from detailsProducts — that would unlock fee/feature
   // matching for non-Pro users whenever suitability details are loaded.
-  return visibleAccountRows(rows, filters.includeNonStandard, detailsProducts).filter((row) => {
+  const visibleRows = visibleAccountRows(rows, filters.includeNonStandard, detailsProducts);
+  if (!visibleRows.length) return visibleRows;
+  const matchesSearch = prepareRowSearchQuery(filters.query, searchIndex);
+  return visibleRows.filter((row) => {
     if (!row) return false;
     if (section && !passesDepositTokenFloor(row, section)) return false;
-    if (
-      !rowMatchesSearchQuery(
-        row,
-        filters.query,
-        searchIndex,
-        undefined,
-      )
-    ) {
-      return false;
-    }
+    if (!matchesSearch(row)) return false;
     if (!inList(row.provider, filters.providers)) return false;
     if (!inList(row.rate_type, filters.rateTypes)) return false;
     if (!inList(row.lvr_tier, filters.lvrTiers)) return false;

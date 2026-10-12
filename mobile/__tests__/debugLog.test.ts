@@ -728,6 +728,16 @@ describe('uploadLogsToPasteRs', () => {
     ).rejects.toThrow('paste.rs rejected the upload (status 400): &lt;kept> Use Share or Copy instead.');
   });
 
+  it('excludes double-escaped script content from upload error details', async () => {
+    const mockFetch = jest.fn(async () => ({
+      status: 400,
+      text: async () => '<script><!--<script></script>alert(1)</script>Invalid request',
+    })) as unknown as typeof fetch;
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, { sleep: async () => {} }),
+    ).rejects.toThrow('paste.rs rejected the upload (status 400): Invalid request Use Share or Copy instead.');
+  });
+
   it('does not retry other 4xx responses and strips raw HTML from the error', async () => {
     const mockFetch = jest.fn(async () => ({
       status: 400,
