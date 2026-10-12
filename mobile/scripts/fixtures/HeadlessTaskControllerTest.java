@@ -5,6 +5,8 @@ import com.facebook.react.*;
 import com.facebook.react.bridge.*;
 import com.facebook.react.jstasks.*;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
 
 public class HeadlessTaskControllerTest {
   static class Host implements ReactHost {
@@ -26,11 +28,22 @@ public class HeadlessTaskControllerTest {
     final Host host = new Host();
     public ReactHost getReactHost() { return host; }
   }
+  static class LazyApp extends Context implements ReactApplication {
+    Host host;
+    final AtomicInteger creations = new AtomicInteger();
+    public ReactHost getReactHost() {
+      check(UiThreadUtil.isOnUiThread(), "cold host acquisition must run on UI");
+      // Deliberately unsynchronized, matching ExpoReactHostFactory. The queue,
+      // not this fake factory or a preconstructed host, prevents duplicates.
+      if (host == null) { creations.incrementAndGet(); Thread.yield(); host = new Host(); }
+      return host;
+    }
+  }
   static void check(boolean condition, String message) { if (!condition) throw new AssertionError(message); }
   static void drain() { UiThreadUtil.drain(); }
   static boolean timers(App app) { return HeadlessJsTaskContext.getInstance(app.host.context).timersRunning(); }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     HeadlessTaskController controller = new HeadlessTaskController();
     App app = new App();
     // No React Activity or mounted UI. Two Expo events share one cold runtime.
@@ -79,6 +92,37 @@ public class HeadlessTaskControllerTest {
     HeadlessJsTaskContext.reject = false;
     controller.start(app, "error", "retry"); drain(); check(timers(app), "native start failure permits retry");
     controller.finish("error", "retry"); drain(); check(!timers(app), "retry releases lease");
+
+    LazyApp lazy = new LazyApp();
+    CountDownLatch ready = new CountDownLatch(2), dispatch = new CountDownLatch(1);
+    AtomicReference<Throwable> failed = new AtomicReference<>();
+    AtomicInteger loaded = new AtomicInteger();
+    List<Thread> workers = new ArrayList<>();
+    for (String event : Arrays.asList("passive", "daily")) {
+      Thread worker = new Thread(() -> {
+        try {
+          ready.countDown(); dispatch.await();
+          controller.start(lazy, "lazy", event);
+          controller.loadAppOnUiThread(() -> {
+            check(lazy.getReactHost() == lazy.host, "loader shares helper host");
+            loaded.incrementAndGet();
+          });
+        } catch (Throwable error) { failed.set(error); }
+      });
+      workers.add(worker); worker.start();
+    }
+    check(ready.await(2, TimeUnit.SECONDS), "both worker submissions ready"); dispatch.countDown();
+    for (Thread worker : workers) { worker.join(2000); check(!worker.isAlive(), "submission finished"); }
+    check(failed.get() == null && lazy.creations.get() == 0, "workers cannot create ReactHost");
+    drain();
+    check(loaded.get() == 2 && lazy.creations.get() == 1, "concurrent cold loads create exactly one host");
+    check(lazy.host.listeners.size() == 1, "helper observes the host the loader starts");
+    lazy.host.ready(); drain();
+    check(HeadlessJsTaskContext.getInstance(lazy.host.context).timersRunning(), "cold timers run without Activity");
+    controller.finish("lazy", "passive"); drain();
+    check(HeadlessJsTaskContext.getInstance(lazy.host.context).timersRunning(), "second cold task retains lease");
+    controller.finish("lazy", "daily"); drain();
+    check(!HeadlessJsTaskContext.getInstance(lazy.host.context).timersRunning(), "all cold tasks release lease");
     check(HeadlessJsTaskContext.starts == HeadlessJsTaskContext.finishes, "all leases released");
     System.out.println("HEADLESS_TIMER_LIFECYCLE_PASS");
   }
