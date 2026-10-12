@@ -1,3 +1,4 @@
+import { getRandomBytes } from 'expo-crypto';
 import type { Href } from 'expo-router';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, type PerformanceAuditEstimate } from './performanceAuditTiming';
 import type { AuditBackgroundWorkWait } from './performanceAuditBackgroundWork';
@@ -280,12 +281,7 @@ function emit(next: PerformanceAuditState): void {
 }
 
 function makeSessionId(): string {
-  const bytes = new Uint8Array(8);
-  const cryptoApi = globalThis.crypto;
-  if (!cryptoApi?.getRandomValues) {
-    throw new Error('Cryptographic randomness is unavailable for performance audit session ids');
-  }
-  cryptoApi.getRandomValues(bytes);
+  const bytes = getRandomBytes(8);
   const random = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
   return `pa-${Date.now().toString(36)}-${random}`;
 }
