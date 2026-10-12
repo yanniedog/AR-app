@@ -137,6 +137,13 @@
     "metro-transform-worker@0.83.3": "0.83.8",
     "decode-uri-component": "0.5.0"
   },
+  "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": ["expo-task-manager"]
+      }
+    }
+  },
   "jest": {
     "preset": "jest-expo",
     "setupFiles": [

@@ -10,6 +10,17 @@ const require = createRequire(import.meta.url);
 const { patchSource, edits, gradleEdits, SOURCE_HASH, GRADLE_HASH } = require('./patch-task-manager-timers.cjs');
 const upstream = path.dirname(require.resolve('expo-task-manager/package.json'));
 
+test('Android autolinking builds the patched task manager source instead of its prebuilt AAR', async () => {
+  const autolinking = path.dirname(require.resolve('expo-modules-autolinking/package.json'));
+  const { createAutolinkingOptionsLoader } = require(path.join(autolinking, 'build/commands/autolinkingOptions'));
+  const { getConfiguration } = require(path.join(autolinking, 'build/platforms/android/android'));
+  const loader = createAutolinkingOptionsLoader({ projectRoot: process.cwd() });
+  const android = await loader.getPlatformOptions('android');
+  assert.deepEqual(getConfiguration(android), { buildFromSource: ['expo-task-manager'] });
+  const apple = await loader.getPlatformOptions('apple');
+  assert.equal(apple.buildFromSource, undefined);
+});
+
 test('SDK timer backport accepts only exact pinned input or exact patched output', () => {
   for (const [relative, changes, digest] of [
     ['android/src/main/java/expo/modules/taskManager/TaskService.java', edits, SOURCE_HASH],
