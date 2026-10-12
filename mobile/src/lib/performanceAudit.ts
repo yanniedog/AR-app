@@ -1,3 +1,4 @@
+import { getRandomBytes } from 'expo-crypto';
 import type { Href } from 'expo-router';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, type PerformanceAuditEstimate } from './performanceAuditTiming';
 import type { AuditBackgroundWorkWait } from './performanceAuditBackgroundWork';
@@ -280,7 +281,8 @@ function emit(next: PerformanceAuditState): void {
 }
 
 function makeSessionId(): string {
-  const random = Math.random().toString(36).slice(2, 10);
+  const bytes = getRandomBytes(8);
+  const random = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
   return `pa-${Date.now().toString(36)}-${random}`;
 }
 
