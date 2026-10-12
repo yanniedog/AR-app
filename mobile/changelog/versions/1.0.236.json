@@ -1,0 +1,32 @@
+{
+  "version": "1.0.236",
+  "releaseTag": "app-arm-v1.0.236",
+  "date": "2026-10-12",
+  "summaryBullets": [
+    "fix: reduce audit journey stalls and correct availability (#391)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix: reduce audit journey stalls and correct availability (#391)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.236"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.235"
+        }
+      ]
+    }
+  ]
+}

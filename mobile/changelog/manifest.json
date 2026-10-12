@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-10-12T17:20:11.114Z",
+  "generated_at": "2026-10-12T22:08:35.809Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -995,6 +995,14 @@
         "feat(ux): onboarding + navigation overhaul — radio-card onboarding, results-first Rates, dashboard Home (#388)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.234"
+    },
+    {
+      "version": "1.0.236",
+      "date": "2026-10-12",
+      "summaryBullets": [
+        "fix: reduce audit journey stalls and correct availability (#391)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.236"
     }
   ]
 }
