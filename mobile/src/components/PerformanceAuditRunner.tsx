@@ -1,4 +1,5 @@
 import { auditSearchUsesBasicFallback, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
+import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSelection';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { toPublicAppHealthReport } from '../lib/appHealth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -901,6 +902,9 @@ async function runDeepAuditStepBody(
       verifiedIdempotentFixture = expectedTokens.length === 2 && new Set(expectedTokens).size === 2 &&
         actualTokens.length === 2 && expectedTokens.every(token => actualTokens.includes(token));
     }
+    verifiedIdempotentFixture ||= isVerifiedCalculatorSectionSelection(
+      step.semanticActionId, step.parameters?.section, actionResult,
+    );
     if (
       actionResult != null &&
       typeof actionResult === 'object' &&
