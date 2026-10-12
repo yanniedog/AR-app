@@ -201,6 +201,14 @@ describe('formatLogUploadBody', () => {
     expect(body).toContain('build_version=456');
     expect(body).not.toContain('stale');
   });
+
+  it('uses compact review exports by default while allowing explicit full evidence sharing', () => {
+    const report = JSON.stringify({ sessionId: 'test-export', checks: [] });
+    expect(formatVersionedLogExport(report, '1.0.229', '290')).toContain('# Compact diagnostic export v1');
+    const full = formatVersionedLogExport(report, '1.0.229', '290', {}, { fullEvidence: true });
+    expect(full).toContain(report);
+    expect(full).not.toContain('# Compact diagnostic export v1');
+  });
 });
 
 describe('uploadDebugLog', () => {
@@ -818,7 +826,7 @@ describe('persistent log file', () => {
     expect(files[AUDIT_SIDECAR_PATH]).toContain('physical-complete-audit');
 
     const complete = await debugLog.readCompleteText();
-    expect(complete).toContain('# Latest complete performance audit');
+    expect(complete).toContain('# Latest saved performance audit (may be from an earlier app session)');
     expect(complete.match(/physical-complete-audit/g)).toHaveLength(1);
   });
 
@@ -885,7 +893,7 @@ describe('persistent log file', () => {
     expect(files[AUDIT_SIDECAR_PATH]).toContain(report.blob.slice(0, 64));
 
     const complete = await debugLog.readCompleteText();
-    expect(complete).toContain('# Latest complete performance audit');
+    expect(complete).toContain('# Latest saved performance audit (may be from an earlier app session)');
     expect(complete).toContain('oversized-audit-body');
     // The full export includes even fields larger than the rotating log budget.
     expect(JSON.parse(complete.split(`${marker}\n`).at(-1)!).blob).toBe(report.blob);
@@ -1179,7 +1187,7 @@ describe('persistent log file', () => {
     files[LOG_PATH] = 'log without reserved audit markers';
 
     const complete = await debugLog.readCompleteText();
-    expect(complete).toContain('# Latest complete performance audit');
+    expect(complete).toContain('# Latest saved performance audit (may be from an earlier app session)');
     expect(complete).toContain('sidecar-after-asyncstorage-failure');
   });
 
@@ -1251,7 +1259,7 @@ describe('persistent log file', () => {
 
     const complete = await debugLog.readCompleteText();
 
-    expect(complete).toContain('# Latest complete performance audit');
+    expect(complete).toContain('# Latest saved performance audit (may be from an earlier app session)');
     expect(complete).toContain(marker);
     expect(complete).not.toContain('compact report omitted from this export');
     expect(complete).toContain(detail);
@@ -1290,7 +1298,7 @@ describe('persistent log file', () => {
 
     const complete = await debugLog.readCompleteText();
 
-    expect(complete).toContain('# Latest complete performance audit');
+    expect(complete).toContain('# Latest saved performance audit (may be from an earlier app session)');
     expect(complete).toContain(marker);
     expect(complete).toContain('complete-audit-survived');
     expect(complete).toContain('"appVersion":"9.8.7"');
@@ -1303,7 +1311,8 @@ describe('persistent log file', () => {
       summaryMarker: 'old-schema-marker',
       reportJson: '{"sentinel":"old-schema-report"}',
     }));
-    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('current log only');
+    (FileSystem.readAsStringAsync as jest.Mock).mockImplementation(async (path: string) =>
+      path === LOG_PATH ? 'current log only' : '');
 
     const complete = await debugLog.readCompleteText();
 
@@ -1516,7 +1525,7 @@ describe('debug log display tail', () => {
     const text = ['old line', 'middle line', 'new line'].join('\n');
     const display = formatLogDisplayTail(text, 18);
 
-    expect(display).toContain('exports include the full log');
+    expect(display).toContain('compact export and Share full evidence are available');
     expect(display).not.toContain('old line');
     expect(display).toContain('new line');
   });
@@ -1534,7 +1543,7 @@ describe('debug log display tail', () => {
     const display = ring.getDisplayText(80);
 
     expect(getText).not.toHaveBeenCalled();
-    expect(display).toContain('exports include the full log');
+    expect(display).toContain('compact export and Share full evidence are available');
     expect(display).toContain('latest');
     expect(display).not.toContain('x'.repeat(20));
     getText.mockRestore();
@@ -1560,7 +1569,7 @@ describe('debug log display tail', () => {
 describe('cold-start log session', () => {
   it('clears stale entries synchronously and preserves new bootstrap entries', async () => {
     jest.clearAllMocks();
-    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: false });
+    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true });
     (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('stale disk log');
     debugLog.info('old', 'previous process');
 
@@ -1573,9 +1582,12 @@ describe('cold-start log session', () => {
 
     expect(debugLog.getText()).toContain('version=1.2.3 build=456');
     expect(debugLog.getText()).not.toContain('previous process');
-    expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
-      'file:///docs/logs/ar-local.log',
-      { idempotent: true },
+    expect(FileSystem.moveAsync).toHaveBeenCalledWith({
+      from: 'file:///docs/logs/ar-local.log',
+      to: 'file:///docs/logs/ar-local-previous.log',
+    });
+    expect(FileSystem.deleteAsync).not.toHaveBeenCalledWith(
+      'file:///docs/logs/ar-local.log', expect.anything(),
     );
     // The audit sidecar deliberately survives a cold start. A run that crashes
     // the app is exactly when its report matters, and deleting it on the next

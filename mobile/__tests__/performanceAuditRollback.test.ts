@@ -238,9 +238,64 @@ describe('performance audit rollback journal', () => {
     });
 
     const restarted = makeStore(store.getState());
+    resetUserRateScenarioStoreForTests();
     await expect(recoverInterruptedPerformanceAudit(restarted)).resolves.toBe(true);
     expect(performanceAuditSnapshotFingerprint(capturePerformanceAuditUserSnapshot(restarted.getState())))
       .toBe(performanceAuditSnapshotFingerprint(before));
+  });
+
+  it('retries a transient encrypted scenario write on a cold recovery and verifies the original inputs', async () => {
+    const store = makeStore();
+    await ensureUserRateScenarioLoaded();
+    updateUserRateScenario(value => ({ ...value, savings: { balance: '12345', currentRate: '4.25' } }));
+    const before = await beginPerformanceAuditRollback(store);
+    store.setState({ favorites: ['audit-only'] });
+    resetUserRateScenarioStoreForTests();
+    const realWrite = jest.mocked(SecureStore.setItemAsync).getMockImplementation()!;
+    let failures = 0;
+    jest.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value, options) => {
+      if (key.startsWith('user-rate-scenario-v1.chunk.') && failures++ === 0) {
+        throw new Error('keystore temporarily unavailable');
+      }
+      return realWrite(key, value, options);
+    });
+
+    await expect(recoverInterruptedPerformanceAudit(store)).resolves.toBe(true);
+    expect(failures).toBeGreaterThanOrEqual(2);
+    expect(capturePerformanceAuditUserSnapshot(store.getState())).toEqual(before);
+    await expect(AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).resolves.toBeNull();
+    resetUserRateScenarioStoreForTests();
+    await ensureUserRateScenarioLoaded();
+    expect(capturePerformanceAuditUserSnapshot(store.getState())).toEqual(before);
+  });
+
+  it('bounds failed cold recovery and retains the journal with the actual encrypted write error', async () => {
+    const store = makeStore();
+    await beginPerformanceAuditRollback(store);
+    resetUserRateScenarioStoreForTests();
+    let failures = 0;
+    jest.mocked(SecureStore.setItemAsync).mockImplementation(async (key) => {
+      if (key.startsWith('user-rate-scenario-v1.chunk.')) {
+        failures += 1;
+        throw new Error('native keystore write rejected');
+      }
+    });
+
+    await expect(recoverInterruptedPerformanceAudit(store)).rejects.toThrow(
+      'Encrypted rate scenario restore did not persist: native keystore write rejected',
+    );
+    expect(failures).toBe(3);
+    await expect(AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).resolves.not.toBeNull();
+    expect(secureStore.has(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY)).toBe(true);
+  });
+
+  it('does not retry or write when no interrupted audit exists', async () => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+    await expect(recoverInterruptedPerformanceAudit(makeStore())).resolves.toBe(false);
+    expect(jest.getTimerCount()).toBe(0);
+    expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+    expect(AsyncStorage.setItem).not.toHaveBeenCalledWith(PERFORMANCE_AUDIT_ROLLBACK_KEY, expect.anything());
   });
 
   it('refuses to clear the journal when persistence never confirms restoration', async () => {

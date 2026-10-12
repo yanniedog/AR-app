@@ -614,8 +614,9 @@ export default function Settings() {
           />
           <SettingsGap size={8} />
           <AppText variant="tiny" color="textFaint">
-            Session replay is not collected. Starting an audit uploads the full log and report after
-            completion and copies the verified paste link. Crash reporting is controlled separately.
+            Session replay is not collected. After an audit, a compact diagnostic log is uploaded
+            and its verified paste link is copied. Full evidence remains on this device through
+            Debug log → Share full evidence. Crash reporting is controlled separately.
           </AppText>
         </DisclosureGroup>
       </Section>
