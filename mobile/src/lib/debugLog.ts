@@ -1418,17 +1418,89 @@ export class PasteRsUploadError extends Error {
   }
 }
 
+function stripElements(html: string, blocked: ReadonlySet<string>): string {
+  let out = '';
+  let index = 0;
+  while (index < html.length) {
+    const open = html.indexOf('<', index);
+    if (open < 0) {
+      out += html.slice(index);
+      break;
+    }
+    out += html.slice(index, open);
+    const close = html.indexOf('>', open + 1);
+    if (close < 0) {
+      out += html.slice(open);
+      break;
+    }
+    const token = html.slice(open + 1, close).trimStart();
+    const isClosing = token.startsWith('/');
+    const name = (isClosing ? token.slice(1) : token).match(/^[A-Za-z][\w:-]*/)?.[0]?.toLowerCase() ?? '';
+    const selfClosing = /\/\s*$/.test(token);
+    if (!isClosing && !selfClosing && blocked.has(name)) {
+      const closer = `</${name}`;
+      const lower = html.toLowerCase();
+      let searchFrom = close + 1;
+      let foundAt = -1;
+      while (searchFrom < html.length) {
+        const candidate = lower.indexOf(closer, searchFrom);
+        if (candidate < 0) break;
+        let cursor = candidate + closer.length;
+        while (cursor < html.length && /\s/.test(html[cursor])) cursor += 1;
+        if (html[cursor] === '>') {
+          foundAt = cursor + 1;
+          break;
+        }
+        searchFrom = candidate + closer.length;
+      }
+      index = foundAt < 0 ? html.length : foundAt;
+      out += ' ';
+      continue;
+    }
+    index = close + 1;
+    out += ' ';
+  }
+  return out;
+}
+
+function stripTags(html: string): string {
+  let out = '';
+  let index = 0;
+  while (index < html.length) {
+    const open = html.indexOf('<', index);
+    if (open < 0) {
+      out += html.slice(index);
+      break;
+    }
+    out += html.slice(index, open);
+    const close = html.indexOf('>', open + 1);
+    if (close < 0) {
+      out += html.slice(open);
+      break;
+    }
+    index = close + 1;
+    out += ' ';
+  }
+  return out;
+}
+
+function decodePasteEntitiesOnce(text: string): string {
+  return text.replace(/&(?:nbsp|lt|gt|amp|quot|#39);/gi, (entity) => {
+    switch (entity.toLowerCase()) {
+      case '&nbsp;': return ' ';
+      case '&lt;': return '<';
+      case '&gt;': return '>';
+      case '&amp;': return '&';
+      case '&quot;': return '"';
+      case '&#39;': return "'";
+      default: return entity;
+    }
+  });
+}
+
 function sanitizePasteRsResponse(raw: string): string {
-  return raw
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
+  const withoutEmbedded = stripElements(raw, new Set(['script', 'style']));
+  return decodePasteEntitiesOnce(stripTags(withoutEmbedded))
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 120);
