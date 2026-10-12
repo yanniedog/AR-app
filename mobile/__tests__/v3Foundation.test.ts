@@ -655,7 +655,9 @@ describe('dormant loader and dual-read behavior', () => {
 
   test('rejects duplicate JSON keys before object validation', () => {
     const generation = buildGeneration();
-    const pointer = JSON.stringify(pointerFor(generation.head)).replace('{', '{"schema_version":3,');
+    const pointerJson = JSON.stringify(pointerFor(generation.head));
+    const firstBrace = pointerJson.indexOf('{');
+    const pointer = `${pointerJson.slice(0, firstBrace)}{"schema_version":3,${pointerJson.slice(firstBrace + 1)}`;
     expect(() => validateGenerationPointerTextV3(pointer)).toThrow(/duplicate JSON object key/);
   });
 
