@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 export function parseAaptBadging(output) {
   const lines = String(output || '').split(/\r?\n/);
@@ -71,7 +71,9 @@ function androidTool(name) {
     const buildTools = join(root, 'build-tools');
     if (existsSync(buildTools)) {
       for (const version of readdirSync(buildTools).sort().reverse()) {
-        const candidates = process.platform === 'win32' ? [`${name}.exe`] : [name];
+        const candidates = process.platform === 'win32'
+          ? (name === 'apksigner' ? ['apksigner.bat', `${name}.exe`] : [`${name}.exe`])
+          : [name];
         for (const candidateName of candidates) {
           const candidate = join(buildTools, version, candidateName);
           if (existsSync(candidate)) return candidate;
@@ -82,22 +84,47 @@ function androidTool(name) {
   return name;
 }
 
+function javaExecutable() {
+  const home = process.env.JAVA_HOME;
+  if (home) {
+    const candidate = join(home, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
+    if (existsSync(candidate)) return candidate;
+  }
+  return process.platform === 'win32' ? 'java.exe' : 'java';
+}
+
 export function resolveToolInvocation(command, args) {
   const executable = String(command || '');
+  if (/apksigner\.(?:bat|cmd)$/i.test(executable)) {
+    const jar = join(dirname(executable), 'lib', 'apksigner.jar');
+    if (!existsSync(jar)) {
+      throw new Error(`Refusing to run apksigner through cmd.exe; jar not found: ${jar}`);
+    }
+    return { executable: javaExecutable(), args: ['-jar', jar, ...args] };
+  }
   if (/\.(?:bat|cmd)$/i.test(executable)) {
     throw new Error(`Refusing to run APK identity tool through cmd.exe: ${executable}`);
   }
   return { executable, args: [...args] };
 }
 
-function runTool(command, args) {
+export function toolSpawnPlan(command, args) {
   const invocation = resolveToolInvocation(command, args);
-  const result = spawnSync(invocation.executable, invocation.args, {
-    encoding: 'utf8',
-    shell: false,
-    windowsHide: true,
-    maxBuffer: 8 * 1024 * 1024,
-  });
+  return {
+    executable: invocation.executable,
+    args: invocation.args,
+    options: {
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+      maxBuffer: 8 * 1024 * 1024,
+    },
+  };
+}
+
+function runTool(command, args) {
+  const plan = toolSpawnPlan(command, args);
+  const result = spawnSync(plan.executable, plan.args, plan.options);
   if (result.error || result.status !== 0) {
     throw new Error(
       `APK identity tool failed (${command}): ${result.error?.message || result.stderr || `exit ${result.status}`}`,

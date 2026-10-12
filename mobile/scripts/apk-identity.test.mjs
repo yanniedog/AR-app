@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
@@ -10,6 +12,7 @@ import {
   parseAaptBadging,
   parseApksignerCertificateSha256,
   resolveToolInvocation,
+  toolSpawnPlan,
 } from './apk-identity.mjs';
 import {
   fetchRemoteManifest,
@@ -29,6 +32,22 @@ test('runs SDK tools as an argument array and never through cmd.exe', () => {
     () => resolveToolInvocation('C:\\Android\\aapt.bat', ['dump', 'badging', 'app.apk']),
     /cmd\.exe/,
   );
+
+  const sdk = mkdtempSync(join(tmpdir(), 'apk-identity-'));
+  try {
+    writeFileSync(join(sdk, 'apksigner.bat'), '@echo off\r\n');
+    mkdirSync(join(sdk, 'lib'));
+    const jar = join(sdk, 'lib', 'apksigner.jar');
+    writeFileSync(jar, '');
+    const plan = toolSpawnPlan(join(sdk, 'apksigner.bat'), ['verify', '--print-certs', 'app.apk']);
+    assert.equal(plan.options.shell, false);
+    assert.equal(plan.options.windowsHide, true);
+    assert.doesNotMatch(plan.executable, /\.(?:bat|cmd)$/i);
+    assert.deepEqual(plan.args.slice(0, 2), ['-jar', jar]);
+    assert.deepEqual(plan.args.slice(2), ['verify', '--print-certs', 'app.apk']);
+  } finally {
+    rmSync(sdk, { recursive: true, force: true });
+  }
 });
 
 test('parses the package and version identity reported by aapt', () => {
