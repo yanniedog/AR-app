@@ -18,6 +18,7 @@ import {
 } from './storeTypes';
 import type { SectionKey } from '../types';
 import { normalizeSavedRates } from './savedRates';
+import { refreshProductSubscriptionLabels } from './subscriptions';
 import { loadTrackedRatesSecureResult, normalizeTrackedRates } from './trackedRates';
 import { debugLog } from '../lib/debugLog';
 import { setCrashReportsEnabled } from '../lib/observability';
@@ -122,6 +123,9 @@ export const useStore = create<AppState>()(
         return {
           ...current,
           ...p,
+          ...(Array.isArray(p?.subscriptions)
+            ? { subscriptions: refreshProductSubscriptionLabels(p.subscriptions) }
+            : {}),
           prefs,
           savedRates,
           trackedRates,

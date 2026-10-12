@@ -1,4 +1,4 @@
-import { compareLvrTiers, lvrTierDisplay, lvrTierLabel } from '../src/data/lvrTier';
+import { compareLvrTiers, lvrTierDisplay, lvrTierLabel, refreshLvrLabelText } from '../src/data/lvrTier';
 import { lvrTierForValue, parseLvrTier } from '../src/data/profile';
 
 // Real data values from core.sections.Mortgage.rates[].lvr_tier
@@ -61,5 +61,15 @@ describe('lvrTierLabel', () => {
     expect(lvrTierDisplay('lvr_=60%')).toBe('LVR ≤60%');
     expect(lvrTierDisplay('PRINCIPAL_AND_INTEREST')).toBe('Principal & interest');
     expect(lvrTierDisplay(undefined)).toBe('');
+  });
+});
+
+describe('refreshLvrLabelText', () => {
+  it('rewrites only percentage LVR tokens in the trailing suffix and is idempotent', () => {
+    expect(refreshLvrLabelText('Bank · Loan (Variable · LVR =60%)')).toBe('Bank · Loan (Variable · LVR ≤60%)');
+    expect(refreshLvrLabelText('Bank · Loan (Fixed · LVR >95%)')).toBe('Bank · Loan (Fixed · LVR over 95%)');
+    expect(refreshLvrLabelText('Bank · Loan (Variable · LVR unspecified)')).toBe('Bank · Loan (Variable · LVR unspecified)');
+    expect(refreshLvrLabelText('Bank · Loan (Variable · LVR ≤60%)')).toBe('Bank · Loan (Variable · LVR ≤60%)');
+    expect(refreshLvrLabelText('Bank · LVR 60% Special')).toBe('Bank · LVR 60% Special');
   });
 });

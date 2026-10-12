@@ -23,6 +23,19 @@ export function lvrTierLabel(value: string): string | null {
   return null;
 }
 
+/**
+ * Rewrite LVR wording in the trailing "(…)" suffix of a stored product label
+ * (e.g. an alert saved by an older build as "Bank · Loan (Variable · LVR =60%)")
+ * to the current band labels. Only percentage tokens are parsed back through
+ * `lvrTierLabel`, so product names and current labels pass unchanged.
+ */
+export function refreshLvrLabelText(label: string): string {
+  return label.replace(/\(([^()]*)\)$/, (_suffix, inner: string) => `(${inner.replace(
+    /\bLVR ([^\s·()]*%)/g,
+    (whole, token: string) => lvrTierLabel(`lvr_${token}`) ?? whole,
+  )})`);
+}
+
 /** `humanizeEnum` for an `lvr_tier` value, with recognised bands labelled exactly. */
 export function lvrTierDisplay(value: string | null | undefined): string {
   return (value ? lvrTierLabel(value) : null) ?? humanizeEnum(value);

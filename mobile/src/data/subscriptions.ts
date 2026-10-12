@@ -7,7 +7,7 @@ import type { SavedRateRef } from './savedRates';
 import { activeFilterCount, filterRows, rankFraction, type Filters, type MortgageRateMetric, type RankMetric, type SortKey } from './selectors';
 import { breadcrumb, rowsForSearchScope } from './taxonomy';
 import { factCriterionId, normalizeFactCriterion } from './productFacts';
-import { lvrTierDisplay } from './lvrTier';
+import { lvrTierDisplay, refreshLvrLabelText } from './lvrTier';
 
 /** factCriteria is optional only for persisted snapshots created before this field existed. */
 export type FilterSnapshot = Omit<Filters, 'query' | 'factCriteria'> & {
@@ -109,6 +109,19 @@ export function buildSearchLabel(
   const n = activeFilterCount({ ...filters, factCriteria: filters.factCriteria ?? [], query: '' });
   if (n) parts.push(`${n} filter${n === 1 ? '' : 's'}`);
   return parts.join(' · ');
+}
+
+/** Bring product-alert labels saved by older builds up to the current LVR wording. */
+export function refreshProductSubscriptionLabels(list: Subscription[]): Subscription[] {
+  let changed = false;
+  const next = list.map((sub) => {
+    if (sub.kind !== 'product' || typeof sub.label !== 'string') return sub;
+    const label = refreshLvrLabelText(sub.label);
+    if (label === sub.label) return sub;
+    changed = true;
+    return { ...sub, label };
+  });
+  return changed ? next : list;
 }
 
 export function makeProductSubscription(row: RateRow, rateIndex: number | null): ProductSubscription {
