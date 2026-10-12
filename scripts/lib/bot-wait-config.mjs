@@ -78,7 +78,7 @@ export function eventSatisfiesRequiredKey(login, body, key, opts = {}) {
     const expected = String(opts.expectedHeadSha).toLowerCase();
     return Boolean(reviewed && (reviewed === expected || expected.startsWith(reviewed)));
   }
-  if (isQuotaBotMessage(body)) return false;
+  if (isReviewerNonsenseFailure(body)) return false;
   if (k === 'gemini') {
     if (lower === 'github-actions[bot]') {
       return isGeminiCodeReviewBody(body) && !/^\s*ERROR:/i.test(String(body || ''));

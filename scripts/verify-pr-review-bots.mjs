@@ -359,6 +359,15 @@ assert.deepEqual(
 );
 assert.deepEqual(blockingMissingRequiredKeys(["gemini"], []), []);
 assert.deepEqual(blockingMissingRequiredKeys(["qwen"], []), []);
+for (const body of ['', '   ', 'empty review', 'ERROR: empty review.']) {
+  const events = [{ login: 'chatgpt-codex-connector', body }];
+  assert.equal(eventSatisfiesRequiredKey(events[0].login, body, 'codex'), false);
+  const missing = missingRequiredKeysFromEvents(['codex'], events);
+  assert.deepEqual(missing, ['codex']);
+  assert.deepEqual(blockingMissingRequiredKeys(missing, events), []);
+}
+assert.deepEqual(blockingMissingRequiredKeys(missingRequiredKeysFromEvents(['codex'], []), []), ['codex']);
+assert.equal(eventSatisfiesRequiredKey('chatgpt-codex-connector', 'thumbs-up no-findings reaction', 'codex'), true);
 assert.deepEqual(
   blockingMissingRequiredKeys(
     ["qwen"],
