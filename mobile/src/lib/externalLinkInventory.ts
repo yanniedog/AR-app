@@ -16,10 +16,18 @@ function targetKey(request: TrustedExternalUrlRequest): string {
   return JSON.stringify([request.purpose, trusted.ok ? trusted.url : request.url]);
 }
 
+function rawTargetKey(request: TrustedExternalUrlRequest): string {
+  return JSON.stringify([request.purpose, request.url]);
+}
+
 /** URLs retain their query for checking, while reports expose only host/path. */
-export function uniqueExternalAuditLinks(requests: readonly TrustedExternalUrlRequest[]): TrustedExternalUrlRequest[] {
+export function uniqueExternalAuditLinks(requests: Iterable<TrustedExternalUrlRequest>): TrustedExternalUrlRequest[] {
   const unique = new Map<string, TrustedExternalUrlRequest>();
+  const rawSeen = new Set<string>();
   for (const request of requests) {
+    const raw = rawTargetKey(request);
+    if (rawSeen.has(raw)) continue;
+    rawSeen.add(raw);
     const key = targetKey(request);
     if (!unique.has(key)) unique.set(key, { ...request });
   }
@@ -59,7 +67,53 @@ export function* iterateExternalAuditLinks({
 }
 
 export function collectExternalAuditLinks(input: Parameters<typeof iterateExternalAuditLinks>[0] = {}): TrustedExternalUrlRequest[] {
-  return uniqueExternalAuditLinks([...iterateExternalAuditLinks(input)]);
+  return uniqueExternalAuditLinks(iterateExternalAuditLinks(input));
+}
+
+/** Reuse policy work only within one audit. Every call still enumerates its
+ * current sources, so changed details, labels and mounted links remain visible.
+ * Rejected URLs are retained for foreground failure evidence, without a cap. */
+export function createExternalAuditLinkCollector() {
+  const keys = new Map<string, string>();
+  return async (
+    input: Parameters<typeof iterateExternalAuditLinks>[0],
+    checkpoint: (uniqueDestinations: number) => Promise<void>,
+    clock: () => number = () => globalThis.performance?.now?.() ?? Date.now(),
+  ): Promise<TrustedExternalUrlRequest[]> => {
+    const unique = new Map<string, TrustedExternalUrlRequest>();
+    const rawSeen = new Set<string>();
+    const iterator = iterateExternalAuditLinks(input);
+    let done = false;
+    try {
+      // The caller checks cancellation, pauses and its whole-operation deadline
+      // before each slice, then yields the native task queue for input/ETA work.
+      while (!done) {
+        await checkpoint(unique.size);
+        const started = clock();
+        let validations = 0;
+        for (let scanned = 0; scanned < 256 && validations < 16 && clock() - started < 8; scanned++) {
+          const next = iterator.next();
+          if (next.done) { done = true; break; }
+          const request = next.value;
+          const raw = rawTargetKey(request);
+          if (rawSeen.has(raw)) continue;
+          rawSeen.add(raw);
+          let key = keys.get(raw);
+          if (key == null) {
+            validations++;
+            key = targetKey(request);
+            keys.set(raw, key);
+          }
+          if (!unique.has(key)) unique.set(key, { ...request });
+        }
+      }
+      // Also catch synchronous work that finishes after the caller's deadline.
+      await checkpoint(unique.size);
+      return [...unique.values()];
+    } finally {
+      iterator.return(undefined);
+    }
+  };
 }
 
 export interface ExternalLinkCaptureHandle { generation: number }
