@@ -32,6 +32,8 @@ export const ANDROID_LOG_PATH_HINT = `Android/data/${ANDROID_PACKAGE}/files/logs
 const STORAGE_KEY = 'ar-debug-log-tail';
 const LOG_DIR = `${FileSystem.documentDirectory ?? ''}logs/`;
 const LOG_FILE = `${LOG_DIR}ar-local.log`;
+/** One bounded previous process log, retained for crashes before a report exists. */
+const PREVIOUS_LOG_FILE = `${LOG_DIR}ar-local-previous.log`;
 export const DEBUG_LOG_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-debug-log-share.txt`;
 /** Full audit JSON kept beside the bounded ring so trim cannot drop the diagnosis. */
 const PERFORMANCE_AUDIT_SIDECAR_FILE = `${LOG_DIR}ar-performance-audit-latest.json`;
@@ -327,7 +329,7 @@ async function syncLogFile(appendText: string, epoch: number): Promise<void> {
 }
 
 async function flushPendingToFile(requirePhysical = false): Promise<void> {
-  // The UI cold-start reset owns the file until stale content is deleted.
+  // The UI cold-start reset owns the file until the previous session is rotated.
   // New-session entries remain queued and are written immediately afterwards.
   if (coldStartResetPromise) await coldStartResetPromise;
   while (fileFlushPromise) {
@@ -721,7 +723,7 @@ export const debugLog = {
   },
   /**
    * Start one fresh log session for this UI process. Memory is cleared
-   * synchronously before any startup entry can be appended; disk cleanup runs
+   * synchronously before any startup entry can be appended; disk rotation runs
    * ahead of the first flush. Reopening an existing backgrounded process does
    * not reload this module, so its current session remains intact.
    */
@@ -742,7 +744,21 @@ export const debugLog = {
     coldStartResetPromise = (async () => {
       if (inFlight) await inFlight.catch(() => {});
       await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
-      await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
+      if (FileSystem.documentDirectory) {
+        try {
+          const previousSession = await FileSystem.getInfoAsync(LOG_FILE);
+          if (previousSession.exists) {
+            await FileSystem.deleteAsync(PREVIOUS_LOG_FILE, { idempotent: true });
+            // Move natively: do not parse/copy a multi-MiB log on the JS thread
+            // during startup. Normal writes already enforce the file budget.
+            await FileSystem.moveAsync({ from: LOG_FILE, to: PREVIOUS_LOG_FILE });
+          }
+        } catch {
+          // Retain the original file if rotation fails. Subsequent bounded
+          // appends may mix sessions, but must not erase the crash evidence.
+          debugLog.warn('app', 'Previous session log rotation failed; retaining the existing log');
+        }
+      }
       // The audit sidecar deliberately survives. A run that crashes the app is
       // precisely when its report matters, and deleting the sidecar on the next
       // launch destroyed the only copy before anyone could read it — which is
@@ -783,6 +799,7 @@ export const debugLog = {
         await Promise.all(storageKeys.map((key) => AsyncStorage.removeItem(key)));
         const filePaths = [
           LOG_FILE,
+          PREVIOUS_LOG_FILE,
           PERFORMANCE_AUDIT_SIDECAR_FILE,
           ...(FileSystem.cacheDirectory ? [DEBUG_LOG_SHARE_FILE] : []),
         ];
@@ -949,7 +966,19 @@ export const debugLog = {
       ? buffer.getText()
       : await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
     assertExportCurrent();
-    const clean = redactSecrets(text);
+    const previousText = FileSystem.documentDirectory
+      ? await FileSystem.readAsStringAsync(PREVIOUS_LOG_FILE).catch(() => '')
+      : '';
+    assertExportCurrent();
+    const clean = previousText
+      ? [
+        '# Previous app session (retained before restart)',
+        redactSecrets(previousText),
+        '',
+        '# Current app session',
+        redactSecrets(text),
+      ].join('\n')
+      : redactSecrets(text);
     await yieldLogExport();
     await removeLegacyPerformanceAuditSnapshots();
     assertExportCurrent();
@@ -987,7 +1016,7 @@ export const debugLog = {
     const complete = [
       clean,
       '',
-      '# Latest complete performance audit',
+      '# Latest saved performance audit (may be from an earlier app session)',
       redactSecrets(latest.summaryMarker),
       redactSecrets(reportJson),
     ].join('\n');
