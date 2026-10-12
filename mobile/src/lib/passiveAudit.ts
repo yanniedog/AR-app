@@ -12,6 +12,7 @@ import { APP_HEALTH_DATA_CHECKS } from './appHealth/dataQuality';
 import type { AppHealthDataSnapshot } from './appHealth/types';
 import { hasAppHealthFetchGuard } from './appHealthTransportGuard';
 import { appHealthDataSnapshot } from './performanceAuditDataSnapshot';
+import { clearPreparedAppHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
 import { flushPassiveLinks, passiveLinkProgress, preloadPassiveLinks, preloadedPassiveLink } from './passiveAuditLinks';
 import type { TrustedExternalUrlRequest } from './trustedExternalUrl';
 import {
@@ -83,7 +84,8 @@ function prepareLoadedState(state: AppState): void {
     state.details, state.searchIndex, state.searchIndexStatus, state.historyBanks, state.historyBanksError,
     state.bankInsights, state.bankInsightsError, state.bankSpreadHistory, state.bankSpreadHistoryError,
     state.rbaCalendar, state.rbaCalendarError, state.prefs.profileFilters, state.prefs.interests,
-    state.prefs.includeNonStandard, getSuitabilityIndex(), getSuitabilityRevision(), getMandatoryEligibilityRevision()];
+    state.prefs.includeNonStandard, state.prefs.depositRankMetric, state.prefs.mortgageRateMetric,
+    getSuitabilityIndex(), getSuitabilityRevision(), getMandatoryEligibilityRevision()];
   if (record && snapshot && passiveAuditRecordFresh(record, Date.now()) &&
     next.length === references.length && next.every((value, i) => value === references[i])) return;
   // A cold standard-only catalogue would invoke expensive fallback classifiers.
@@ -148,7 +150,23 @@ export function runPassiveAuditSlice(native = false): Promise<boolean> {
     const start = Date.now();
     let didWork = false;
     if (state?.core) prepareLoadedState(state);
-    else snapshot = null;
+    else {
+      snapshot = null;
+      if (!liveStateBusy) {
+        // Dropping the references also drops proof that a future loaded core
+        // is the very same normalized object. Recheck row jobs on that reload.
+        if (references.length && record) {
+          for (const job of APP_HEALTH_DATA_CHECKS) {
+            if (!job.backgroundMetadataOnly && record.entries[job.code]) {
+              delete record.entries[job.code];
+              recordDirty = true;
+            }
+          }
+        }
+        references = [];
+        clearPreparedAppHealthCatalogueSnapshot();
+      }
+    }
     if (record && !passiveAuditRecordFresh(record, Date.now())) record = null;
     emit({ busy: true });
     // Slow foreground preloading: one check every five seconds, after idle.

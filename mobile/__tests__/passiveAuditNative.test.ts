@@ -169,3 +169,46 @@ it('rebuilds a cleared snapshot after busy native work even when live data refer
     expect(network).not.toHaveBeenCalled();
   } finally { now.mockRestore(); network.mockRestore(); handler.mockRestore(); prepare.mockRestore(); }
 });
+
+it('releases prepared catalogue inputs when a passive wake observes a coreless store', async () => {
+  jest.resetModules(); mockStorage.clear();
+  const runtime = jest.requireActual<typeof import('../src/lib/passiveAudit')>('../src/lib/passiveAudit');
+  const catalogue = jest.requireActual<typeof import('../src/lib/performanceAuditCatalogueSnapshot')>('../src/lib/performanceAuditCatalogueSnapshot');
+  const selectors = jest.requireActual<typeof import('../src/data/selectors')>('../src/data/selectors');
+  const { snapshot } = makeHealthyDataFixture();
+  const state = { core: snapshot.core, prefs: { includeNonStandard: true, interests: ['Mortgage', 'Savings', 'TD'] } } as AppState;
+  catalogue.preparedAppHealthCatalogueSnapshot(state);
+  const scan = jest.spyOn(selectors, 'groupByProvider');
+  try {
+    runtime.configurePassiveAuditState(() => ({ ...state, core: null }));
+    await runtime.runPassiveAuditSlice();
+    catalogue.preparedAppHealthCatalogueSnapshot(state);
+    expect(scan).toHaveBeenCalledTimes(3);
+  } finally { scan.mockRestore(); }
+});
+
+
+it('rechecks row evidence after a coreless interval even when the publication identity matches', async () => {
+  jest.resetModules(); mockStorage.clear();
+  const now = jest.spyOn(Date, 'now').mockReturnValue(FIXTURE_NOW_MS);
+  const handler = jest.spyOn(jest.requireActual('react-native').Linking, 'canOpenURL').mockResolvedValue(true);
+  let { snapshot } = makeHealthyDataFixture();
+  const snapshots = jest.requireActual<typeof import('../src/lib/performanceAuditDataSnapshot')>('../src/lib/performanceAuditDataSnapshot');
+  const prepare = jest.spyOn(snapshots, 'appHealthDataSnapshot').mockImplementation(() => snapshot);
+  const runtime = jest.requireActual<typeof import('../src/lib/passiveAudit')>('../src/lib/passiveAudit');
+  let state = { core: snapshot.core, manifest: snapshot.manifest, source: snapshot.source,
+    prefs: { includeNonStandard: true, interests: [] } } as unknown as AppState;
+  runtime.configurePassiveAuditState(() => state);
+  try {
+    expect(await runtime.runPassiveAuditSlice(true)).toBe(true);
+    expect(JSON.parse(mockStorage.get('ar-passive-audit-v1')!).entries['rate-values'].check.status).toBe('pass');
+    state = { ...state, core: null };
+    expect(await runtime.runPassiveAuditSlice(true)).toBe(true);
+    expect(JSON.parse(mockStorage.get('ar-passive-audit-v1')!).entries['rate-values']).toBeUndefined();
+    snapshot = { ...snapshot, core: { ...snapshot.core!, sections: { ...snapshot.core!.sections,
+      Mortgage: { ...snapshot.core!.sections.Mortgage, rates: snapshot.core!.sections.Mortgage.rates.map(row => ({ ...row, rate: 'broken' })) } } } };
+    state = { ...state, core: snapshot.core };
+    expect(await runtime.runPassiveAuditSlice(true)).toBe(true);
+    expect(JSON.parse(mockStorage.get('ar-passive-audit-v1')!).entries['rate-values'].check.status).toBe('fail');
+  } finally { now.mockRestore(); handler.mockRestore(); prepare.mockRestore(); }
+});

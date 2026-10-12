@@ -216,6 +216,7 @@ jest.mock('expo-file-system/legacy', () => ({
   deleteAsync: jest.fn(async () => {}),
   makeDirectoryAsync: jest.fn(async () => {}),
   moveAsync: jest.fn(async () => {}),
+  copyAsync: jest.fn(async () => {}),
   writeAsStringAsync: jest.fn(async () => {}),
   createDownloadResumable: jest.fn(() => ({
     downloadAsync: jest.fn(async () => ({ uri: 'file:///cache/app-update.apk', status: 200 })),

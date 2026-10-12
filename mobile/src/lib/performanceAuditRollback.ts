@@ -440,5 +440,19 @@ export async function tryRestorePerformanceAuditRollback(
 export async function recoverInterruptedPerformanceAudit(
   store: PerformanceAuditRollbackStore,
 ): Promise<boolean> {
-  return restorePerformanceAuditRollback(store);
+  const first = await tryRestorePerformanceAuditRollback(store);
+  // Ordinary launches without a journal should not wait or write anything.
+  if (!first.error) return first.restored;
+  const result = await retryPerformanceAuditRollback(
+    (attempt) => attempt === 1
+      ? Promise.resolve(first)
+      : tryRestorePerformanceAuditRollback(store),
+    3,
+    () => new Promise((resolve) => setTimeout(resolve, 150)),
+  );
+  if (!result.restored) {
+    // Keep the journal on every failed attempt and preserve each write error.
+    throw new Error(result.error ?? 'Interrupted audit state restoration failed');
+  }
+  return true;
 }
