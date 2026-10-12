@@ -33,6 +33,7 @@ test.each([
   '<script><!--<ScRiPt ></SCRIPT >alert(1)</script>',
   '<script><!--<script/>hidden</script/>hidden</script>',
   '<script><!--<script>--></script>',
+  '<script><!--<script>--><script></script>',
   '<script><!--></script>',
   '<script><!---></script>',
   '<script><!--<scripture></script>',
