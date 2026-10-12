@@ -190,8 +190,8 @@ existing portable npm postinstall path, and compiles in required hosted CI
 against the installed React Native/Expo dependencies. Android autolinking builds
 this patched package and its required app-loader project dependency from source
 instead of consuming their prebuilt AARs.
-Scheduling intervals,
-audit time limits, network policy and foreground checks are unchanged. A signed
+The timer repair did not change scheduling intervals,
+audit time limits, network policy or foreground checks. A signed
 replacement APK must still demonstrate both a cold screen-off completion and
 a later background completion after foreground reuse.
 
@@ -247,7 +247,10 @@ saved-check timestamps fall within 04:32:16–04:32:47. The native timer lease
 closed and WorkManager reported success. After foreground reuse, another asleep
 window at 04:34:37–04:35:08 completed successfully; its lease ran from
 04:34:41.959 to 04:34:43.866. These observations establish cold and warm
-screen-off execution and persisted progress on this emulator.
+screen-off execution and persisted progress on this emulator after repeated
+forced dispatches. The v1.0.230 cold-start investigation below found that those
+retries concealed worker cancellation and concurrent host creation; this is not
+proof that the first cold dispatch was reliable.
 
 The private offline foreground run `pa-mv4re6t8-gc96ezyp` completed both UI
 passes and its final inventory: 53,808 references, 2,352 destinations, 37 slices,
@@ -342,3 +345,74 @@ per section, and changed assets, interests, rank preferences and gate revisions
 invalidate reuse. Initial capture took 30.197 seconds in one v1.0.229 emulator
 run overlapping another local CI job; that observation prompted this inspection
 but is not a quiet-host baseline or proof of this bottleneck's total cost.
+
+## First cold background dispatch reliability
+
+The v1.0.230 warm screen-off worker completed in about 2.2 seconds. Its cold
+dispatch at 09:13:29 UTC cancelled its own WorkManager job while restoring the
+first saved task. No timer lease started; JS tasks finished only after an
+Activity was opened at 09:16:11. The earlier v1.0.228 cold log also contains
+self-cancellation and two concurrently created ReactHosts/JS contexts. Repeated
+forced jobs had masked first-dispatch reliability.
+
+Two pinned SDK 54 compatibility repairs address these paths. TaskService queues
+the entire cold loader invocation and its existing failure cleanup on the UI
+queue after the timer helper's registration. Expo's unsynchronized lazy host
+factory is therefore accessed serially by both callers. Concurrent passive and
+daily events still share one lease, released when the last event finishes.
+First worker registration now uses WorkManager KEEP without cancelling pending
+one-time work. Only completion or foreground deferral appends a next run. The
+older periodic branch uses UPDATE, available in the pinned WorkManager 2.9.1;
+explicit unregistration of the last consumer still cancels its worker.
+
+Both app tasks currently request six hours. KEEP deliberately preserves the
+already scheduled one-time delay during restoration; it does not reset the
+clock or accumulate another child. If restored options change an interval, the
+next child uses the last registered consumer's interval, as the upstream
+scheduler does. Re-registering existing options in the same process still uses
+Expo's no-op consumer setOptions and does not immediately reschedule work. An
+immediate cadence change would require a separate explicit rescheduling design;
+this repair does not claim to add it. Periodic UPDATE preserves the current run
+and applies the new specification to its next iteration.
+
+Postinstall rejects unexpected SDK source/version drift. Android autolinking
+also builds expo-background-task from source, and required CI compiles it. The
+APK build and publication gates require both native repair markers loaded by
+instructions in defined DEX methods; marker text only in strings, data payloads
+or JS is insufficient. This proves inclusion, while source contracts and the
+lazy-host concurrency fixture check behavior. Signed-APK acceptance must still
+prove one cold dispatch while asleep: one ReactHost, a timer lease, both task
+completions, SUCCESS for the same worker, and the next scheduled job without a
+second forced dispatch or manually opening the Activity. No first-dispatch
+acceptance result is claimed here yet.
+
+## Bounded Android catalogue cache reads
+
+Two v1.0.230 emulator processes logged caught 134,283,272-byte native allocation
+failures shortly after entering Search with a roughly 35 MB details cache.
+Both processes continued. The logs do not identify the throwing Java frame;
+inspection found a reachable unbounded StringBuilder in Expo's whole-file
+UTF-8 reader. Prepared history had already completed, and a fresh Home/Tools
+session without Search did not reproduce the allocation failure.
+
+Android details-cache loading now requests at most 256 KiB of bytes per native
+Base64 read, validates and decodes UTF-8 across boundaries, yields between
+chunks, and joins the text once. Invalid sizes, malformed bytes, early EOF and
+size changes fail as ordinary cache misses without retrying the unbounded read.
+The existing exact SHA/receipt binding remains in place. Other platforms retain
+their current reader. The complete JSON text, parsing and hashing still use JS
+memory; this change does not claim to eliminate every full-payload allocation.
+The focused reader, cache-sidecar and inflation suites passed 98 tests. Signed
+Android Search/Product acceptance is still required to establish the native
+memory and timing result.
+
+## Audit entry through Expo's outer navigator
+
+The signed v1.0.230 app rejected a normal Tools > About > Audit run before its
+first check: the navigation anchor required the container's active route to be
+`performance-audit`. Pinned Expo Router wraps the app's root Stack in another
+StackRouter whose active route is `__root`. The app audit route is its child.
+The correction validates the active nested chain and retains the complete
+original container state. Restoration must compare nested state too; matching
+only the outer route keys cannot prove that inner scenario routes were removed.
+Native acceptance must confirm a real audit starts and restores that origin.
