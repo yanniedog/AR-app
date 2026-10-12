@@ -881,7 +881,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     skipExplanation: 'Registered projection field/selection callbacks apply restorable canned parameter sets before chart interactions; financial-input.edit remains excluded.',
     unsafeActionsExcluded: ['financial-input.edit'],
   }, [
-    { depth: 0, semanticActionId: 'projections.open', parameters: { section: 'Mortgage' } },
+    { depth: 0, semanticActionId: 'projections.open', expectedSurface: 'projections.inputs', readiness: ['scenario-storage'], parameters: { section: 'Mortgage' } },
     {
       depth: 1,
       semanticActionId: 'projections.inputs.apply-primary',
@@ -972,7 +972,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 2, semanticActionId: 'outlook.history.window.30d', readiness: ['graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.history.window.all', readiness: ['graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 3, semanticActionId: 'outlook.history.date.previous', readiness: ['graphics'], optional: true, ...optionalFeatureSkip },
-    { depth: 2, semanticActionId: 'outlook.rba-response.decision.previous', readiness: ['rba-calendar', 'graphics'], optional: true, ...optionalFeatureSkip },
+    { depth: 2, semanticActionId: 'outlook.rba-response.decision.previous', expectedSurface: 'outlook.rba-response', readiness: ['rba-calendar', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.economy.lens.next', readiness: ['economic-data', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.economy.window.next', readiness: ['economic-data', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 3, semanticActionId: 'outlook.economy.date.previous', readiness: ['economic-data', 'graphics'], optional: true, ...optionalFeatureSkip },

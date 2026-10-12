@@ -4,6 +4,7 @@ import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import { AppState as NativeAppState, Platform } from 'react-native';
 import type { AppState } from '../data/storeTypes';
+import { PASSIVE_AUDIT_TASK } from '../background/taskNames';
 import { getSuitabilityIndex } from '../data/suitabilityIndex';
 import { getSuitabilityRevision, isSuitabilityFilterReady } from '../data/suitabilityGate';
 import { getMandatoryEligibilityRevision } from '../data/eligibilityGate';
@@ -18,7 +19,7 @@ import {
   serializePassiveAuditRecord, reusePassiveAuditChecks, PASSIVE_AUDIT_MAX_AGE_MS, type PassiveAuditRecord,
 } from './passiveAuditCache';
 
-export const PASSIVE_AUDIT_TASK = 'ar-rates-passive-quality';
+export { PASSIVE_AUDIT_TASK } from '../background/taskNames';
 const STORAGE_KEY = 'ar-passive-audit-v1';
 const IDLE_INTERVAL_MS = 5_000;
 export interface PassiveAuditStatus {
@@ -69,8 +70,8 @@ function reportPassiveFailure(): void {
 export function setPassiveAuditPaused(value: boolean): void { paused = value; }
 const blocked = () => paused || hasAppHealthFetchGuard();
 
-/** Installed at module scope by the store, so headless task entry has a getter
- * without importing the store here (or invoking bootstrap/network work). */
+/** Installed when the app store exists. A cold passive task deliberately has
+ * no store getter and resumes only its persisted compact inputs. */
 export function configurePassiveAuditState(readState: () => AppState): void { getState = readState; }
 
 function stateBusy(state: AppState): boolean {
@@ -226,17 +227,13 @@ export async function registerPassiveAuditBackground(): Promise<boolean> {
   } catch { emit({ nativeStatus: 'unavailable' }); return false; }
 }
 
-try {
-  if (typeof TaskManager.isTaskDefined === 'function' && !TaskManager.isTaskDefined(PASSIVE_AUDIT_TASK)) {
-    TaskManager.defineTask(PASSIVE_AUDIT_TASK, async () => {
-      const succeeded = await runPassiveAuditSlice(true);
-      try {
-        await flushPassiveLinks();
-        return succeeded ? BackgroundTask.BackgroundTaskResult.Success : BackgroundTask.BackgroundTaskResult.Failed;
-      } catch {
-        reportPassiveFailure();
-        return BackgroundTask.BackgroundTaskResult.Failed;
-      }
-    });
+export async function runPassiveAuditBackgroundTask(): Promise<BackgroundTask.BackgroundTaskResult> {
+  const succeeded = await runPassiveAuditSlice(true);
+  try {
+    await flushPassiveLinks();
+    return succeeded ? BackgroundTask.BackgroundTaskResult.Success : BackgroundTask.BackgroundTaskResult.Failed;
+  } catch {
+    reportPassiveFailure();
+    return BackgroundTask.BackgroundTaskResult.Failed;
   }
-} catch { /* Web/native-unavailable runtimes retain passive foreground work. */ }
+}

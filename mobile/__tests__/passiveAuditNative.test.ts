@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
+import '../src/background/tasks';
 import { FIXTURE_NOW_MS, makeHealthyDataFixture } from '../__fixtures__/appHealth';
 import { newPassiveAuditRecord, serializePassiveAuditRecord } from '../src/lib/passiveAuditCache';
 import {
@@ -43,6 +44,7 @@ it('reports native read/write failures and retries dirty completed work without 
   mockStorage.clear();
   const now = jest.spyOn(Date, 'now').mockReturnValue(FIXTURE_NOW_MS);
   const runtime = jest.requireActual<typeof import('../src/lib/passiveAudit')>('../src/lib/passiveAudit');
+  jest.requireActual('../src/background/tasks');
   const storage = jest.requireMock('@react-native-async-storage/async-storage') as { getItem: jest.Mock; setItem: jest.Mock };
   const native = jest.requireMock('expo-task-manager') as { defineTask: jest.Mock };
   const task = native.defineTask.mock.calls.find(([name]) => name === PASSIVE_AUDIT_TASK)![1];

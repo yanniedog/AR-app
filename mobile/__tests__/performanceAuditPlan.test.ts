@@ -409,6 +409,18 @@ describe('deep performance audit plan', () => {
     expect(steps.find(step => step.semanticActionId === 'outlook.economy.lens.next')?.readiness).toContain('graphics');
   });
 
+  test('opens projection inputs before requiring the chart built from the audit scenario', () => {
+    for (const pass of buildDeepPerformanceAuditPlan(corePayload()).passes) {
+      const steps = pass.steps.filter(step => step.scenarioId === 'route.projections');
+      expect(steps[0]).toMatchObject({ semanticActionId: 'projections.open', expectedSurface: 'projections.inputs' });
+      expect(steps[0].readiness).not.toContain('graphics');
+      expect(steps[0].readiness).toContain('scenario-storage');
+      expect(steps[1].semanticActionId).toBe('projections.inputs.apply-primary');
+      expect(steps.find(step => step.semanticActionId === 'projections.chart.next'))
+        .toMatchObject({ expectedSurface: 'projections.lifecycle-chart', readiness: expect.arrayContaining(['graphics']) });
+    }
+  });
+
   test('does not inherit graphic readiness when compare.dismiss returns to search.results', () => {
     const dismiss = allSteps().find(
       (step) => step.passId === 'first-pass' && step.semanticActionId === 'compare.dismiss',
