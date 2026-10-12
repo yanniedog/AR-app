@@ -30,6 +30,7 @@ import { PRODUCT_HISTORY_SERIES_LABEL } from '../../lib/productHistoryCopy';
 import type { DetailItem, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { openProduct } from '../../lib/nav';
+import { lvrTierDisplay } from '../../data/lvrTier';
 export { SelectedRateConditions } from './RateConditionsDisclosure';
 
 export function RateRowLine({ row, section, accent }: { row: RateRow; section: SectionKey; accent: string }) {
@@ -46,7 +47,7 @@ export function RateRowLine({ row, section, accent }: { row: RateRow; section: S
   if (section === 'Mortgage') {
     if (row.ribbon_repayment_type ?? row.repayment_type)
       bits.push(humanizeEnum(row.ribbon_repayment_type ?? row.repayment_type));
-    if (row.lvr_tier) bits.push(humanizeEnum(row.lvr_tier));
+    if (row.lvr_tier) bits.push(lvrTierDisplay(row.lvr_tier));
   } else {
     const bal = formatBalanceRange(row.balance_min, row.balance_max);
     if (bal) bits.push(bal);
@@ -482,7 +483,7 @@ export function ProductSpecs({
     add('Structure', humanizeEnum(row.ribbon_rate_structure));
     add('Repayment', humanizeEnum(row.ribbon_repayment_type ?? row.repayment_type));
     add('Loan purpose', humanizeEnum(row.loan_purpose ?? row.security_purpose));
-    add('LVR tier', humanizeEnum(row.lvr_tier));
+    add('LVR tier', lvrTierDisplay(row.lvr_tier));
   } else {
     add('Deposit type', humanizeEnum(row.ribbon_deposit_kind));
     add('Balance range', formatBalanceRange(row.balance_min, row.balance_max));

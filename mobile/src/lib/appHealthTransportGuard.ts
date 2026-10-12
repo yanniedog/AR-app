@@ -21,6 +21,12 @@ interface XhrPrototype {
 }
 
 const guardedFetches = new WeakMap<typeof fetch, AppHealthAuditMode>();
+let localAuditGeneration = 0;
+
+/** Invalidates work begun before a local audit, even if it finishes after restore. */
+export function getLocalAppHealthAuditGeneration(): number {
+  return localAuditGeneration;
+}
 
 /** The payload transport must use guarded fetch so final redirects are checked. */
 export function hasAppHealthFetchGuard(): boolean {
@@ -170,6 +176,7 @@ export function installAppHealthTransportGuard(options: {
   };
   guardedFetches.set(guardedFetch, options.mode);
   target.fetch = guardedFetch;
+  if (mode === 'local' && target === globalThis) localAuditGeneration += 1;
 
   const xhrPrototype = target.XMLHttpRequest?.prototype;
   const originalOpen = xhrPrototype?.open;
