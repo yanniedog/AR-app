@@ -1524,7 +1524,7 @@ describe('debug log display tail', () => {
     const text = ['old line', 'middle line', 'new line'].join('\n');
     const display = formatLogDisplayTail(text, 18);
 
-    expect(display).toContain('exports include the full log');
+    expect(display).toContain('compact export and Share full evidence are available');
     expect(display).not.toContain('old line');
     expect(display).toContain('new line');
   });
@@ -1542,7 +1542,7 @@ describe('debug log display tail', () => {
     const display = ring.getDisplayText(80);
 
     expect(getText).not.toHaveBeenCalled();
-    expect(display).toContain('exports include the full log');
+    expect(display).toContain('compact export and Share full evidence are available');
     expect(display).toContain('latest');
     expect(display).not.toContain('x'.repeat(20));
     getText.mockRestore();

@@ -1,5 +1,5 @@
 import { cache } from './cache';
-import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
+import { getLocalAppHealthAuditGeneration, isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import {
   ABS_CPI_RELEASE_URL,
   ABS_HEADLINE_CPI_URL,
@@ -155,6 +155,7 @@ async function fetchText(url: string, timeoutMs = 15_000): Promise<string> {
 let inFlight: {
   promise: Promise<EconomicOutlookPayload>;
   force: boolean;
+  auditGeneration: number;
 } | null = null;
 let requestSequence = 0;
 let latestSuccessful: {
@@ -175,14 +176,26 @@ async function commitEconomicResult(
   sequence: number,
   payload: EconomicOutlookPayload,
   persist: boolean,
+  auditGeneration: number,
+  cached: EconomicOutlookPayload | null,
 ): Promise<EconomicOutlookPayload> {
   let accepted = payload;
   const commit = commitQueue.then(async () => {
+    if (isLocalAppHealthAudit() || auditGeneration !== getLocalAppHealthAuditGeneration()) {
+      accepted = localEconomicOutlook(latestSuccessful?.payload ?? cached);
+      return;
+    }
     if (latestSuccessful && latestSuccessful.sequence > sequence) {
       accepted = latestSuccessful.payload;
       return;
     }
     if (persist) await cache.writeEconomicOutlook(payload);
+    // A native write already started before audit entry cannot be cancelled,
+    // but its completion must not publish online observations into the chart.
+    if (isLocalAppHealthAudit() || auditGeneration !== getLocalAppHealthAuditGeneration()) {
+      accepted = localEconomicOutlook(latestSuccessful?.payload ?? cached);
+      return;
+    }
     latestSuccessful = { sequence, payload };
   });
   commitQueue = commit.catch(() => undefined);
@@ -198,6 +211,8 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       latestSuccessful?.payload ?? await cache.readEconomicOutlook(),
     ));
   }
+  const auditGeneration = getLocalAppHealthAuditGeneration();
+  if (inFlight && inFlight.auditGeneration !== auditGeneration) inFlight = null;
   if (inFlight && (!force || inFlight.force)) return inFlight.promise;
   if (!force && latestSuccessful) {
     const checkedAt = latestSuccessful.payload.checkedAt || latestSuccessful.payload.fetchedAt;
@@ -214,7 +229,8 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
   const sequence = ++requestSequence;
   const run = (async () => {
     const cached = normalizeCachedOutlook(await cache.readEconomicOutlook());
-    if (isLocalAppHealthAudit()) return localEconomicOutlook(cached);
+    const invalidatedByAudit = () => isLocalAppHealthAudit() || auditGeneration !== getLocalAppHealthAuditGeneration();
+    if (invalidatedByAudit()) return localEconomicOutlook(latestSuccessful?.payload ?? cached);
     const cacheAge = cached
       ? Date.now() - Date.parse(cached.checkedAt ?? cached.fetchedAt)
       : Number.POSITIVE_INFINITY;
@@ -224,7 +240,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       Number.isFinite(cacheAge) &&
       cacheAge < ECONOMIC_RECHECK_MS
     ) {
-      return commitEconomicResult(sequence, cached, false);
+      return commitEconomicResult(sequence, cached, false, auditGeneration, cached);
     }
 
     const checkedAt = new Date().toISOString();
@@ -285,6 +301,9 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         }
       })(),
     ]);
+    // Responses may have started online before the local transport guard was
+    // installed. Do not parse, persist or return those fresh observations.
+    if (invalidatedByAudit()) return localEconomicOutlook(latestSuccessful?.payload ?? cached);
     const textBySource = new Map(
       sourceEntries
         .filter((entry): entry is { source: RequiredSourceKey; text: string; error: null } => !!entry.text)
@@ -354,7 +373,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         checkedAt,
         refreshStatus: 'offline' as const,
         refreshErrors: errors,
-      }, false);
+      }, false, auditGeneration, cached);
     }
 
     const cachedById = new Map(cached?.indicators.map((indicator) => [indicator.id, indicator]));
@@ -394,11 +413,11 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       cashRateForecast: forecastEntry.forecast ?? cached?.cashRateForecast ?? null,
       cashRateHistory,
     };
-    return commitEconomicResult(sequence, fresh, true);
+    return commitEconomicResult(sequence, fresh, true, auditGeneration, cached);
   })();
   const tracked = run.finally(() => {
     if (inFlight?.promise === tracked) inFlight = null;
   });
-  inFlight = { promise: tracked, force };
+  inFlight = { promise: tracked, force, auditGeneration };
   return tracked;
 }

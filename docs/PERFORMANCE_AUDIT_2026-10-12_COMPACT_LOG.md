@@ -28,6 +28,8 @@ failure and 20 unexpected skipped journeys; these are distinct from a crash.
   reported absent cached observations as a chart-render failure. Use cached
   observations without changing source timestamps. Measure the rendered empty
   state and retain a distinct unavailable-data probe and skipped controls.
+  Invalidate online responses that cross a local audit, including queued
+  commits and responses completing after the audit has ended.
 
 ## Export contract
 
@@ -45,9 +47,11 @@ step lists are summarized explicitly. Provider census tables preserve source
 accounting and upstream failures, even when catalogue reconciliation passes.
 Malformed/unknown log lines, incomplete-export notices, session/build identity,
 last durable checkpoints and conflicting journal evidence remain visible.
+Original-position markers retain the order of audit runs and interleaved raw
+crash lines; anomaly check locations retain their source lines and timestamps.
 
 On the supplied log, the formatter reduced UTF-8 bytes from **4,556,549 to
-252,246 (94.46%)**. Independent decoding verified all 71 failed checks, all
+253,527 (94.44%)**. Independent decoding verified all 71 failed checks, all
 eight producer failure records and all 277 provider census rows. This is an
 export-size result; native formatting and UI timing require device acceptance.
 

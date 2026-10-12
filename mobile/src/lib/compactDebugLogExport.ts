@@ -66,6 +66,12 @@ function summarizeTimingWarning(check: RecordValue): RecordValue {
   } };
 }
 
+function routineCheck(check: RecordValue): boolean {
+  return (check.status === 'pass' && !check.error && !check.trace &&
+    record(check.metrics) && check.metrics.nonTimingFailure !== true &&
+    !(finite(check.durationMs) && check.durationMs > 10_000)) || localLinkWarning(check);
+}
+
 function compactChecks(checks: unknown[]): RecordValue {
   const groups = new Map<string, RecordValue[]>();
   const detailed = new Map<string, RecordValue[]>();
@@ -75,9 +81,7 @@ function compactChecks(checks: unknown[]): RecordValue {
       unknown.push(value); continue;
     }
     // Unexpected errors, traces and non-timing failures always retain their individual evidence.
-    const routinePass = value.status === 'pass' && !value.error && !value.trace &&
-      record(value.metrics) && value.metrics.nonTimingFailure !== true && !(finite(value.durationMs) && value.durationMs > 10_000);
-    if (routinePass || localLinkWarning(value)) {
+    if (routineCheck(value)) {
       const m = record(value.metrics) ? value.metrics : {};
       const key = stable([value.kind, value.status, localLinkWarning(value) ?
         [m.purpose, m.validationDetail, m.handlerDetail, m.reachabilityDetail] : null]);
@@ -171,38 +175,54 @@ function journalCoveredByReport(check: RecordValue, final: RecordValue): boolean
 
 /** Only recognized audit JSON is summarized; unrelated/crash lines and malformed records survive verbatim. */
 export function compactDebugLogExport(text: string): string {
-  const sessions = new Map<string, { checks: Map<string, RecordValue[]>; report?: RecordValue; events: RecordValue[]; checkpoints: Map<string, RecordValue> }>();
-  const retained: string[] = [];
+  const sessions = new Map<string, { checks: Map<string, RecordValue[]>; report?: RecordValue; events: RecordValue[]; checkpoints: Map<string, RecordValue>; checkLocations: unknown[][] }>();
+  type AuditRun = { sessionId: string; lines: [number, number]; first: string; last: string };
+  const retained: (string | AuditRun)[] = [];
   const sessionFor = (id: string) => {
     let session = sessions.get(id);
-    if (!session) { session = { checks: new Map(), events: [], checkpoints: new Map() }; sessions.set(id, session); }
+    if (!session) { session = { checks: new Map(), events: [], checkpoints: new Map(), checkLocations: [] }; sessions.set(id, session); }
     return session;
   };
+  let sourceLine = 0;
   for (const line of text.split('\n')) {
+    sourceLine += 1;
     const eventStart = line.indexOf('perf-audit: {');
     const json = eventStart >= 0 ? line.slice(eventStart + 'perf-audit: '.length) : line;
     let value: unknown;
     try { value = JSON.parse(json); } catch { retained.push(line); continue; }
     if (!record(value) || typeof value.sessionId !== 'string') { retained.push(line); continue; }
     if (eventStart < 0 && !Array.isArray(value.checks)) { retained.push(line); continue; }
+    const logPrefix = eventStart < 0 ? '' : line.slice(0, eventStart).trim();
+    const description = `${eventStart < 0 ? 'saved-report' : value.kind === 'check' && record(value.check) ? value.check.id : value.kind} ${logPrefix}`.trim();
+    const last = retained.at(-1);
+    if (typeof last === 'object' && last.sessionId === value.sessionId && last.lines[1] === sourceLine - 1) {
+      last.lines[1] = sourceLine;
+      last.last = description;
+    } else {
+      retained.push({ sessionId: value.sessionId, lines: [sourceLine, sourceLine], first: description, last: description });
+    }
     const session = sessionFor(value.sessionId);
     if (eventStart < 0) { session.report = value; continue; }
     if (value.kind === 'check' && record(value.check) && typeof value.check.id === 'string') {
       const prior = session.checks.get(value.check.id) ?? [];
-      prior.push({ ...value.check, journalLogPrefix: line.slice(0, eventStart).trim() });
+      prior.push({ ...value.check, journalLogPrefix: logPrefix });
+      if (!routineCheck(value.check)) session.checkLocations.push([value.check.id, sourceLine, logPrefix]);
       session.checks.set(value.check.id, prior); continue;
     }
     // Preserve the final durable checkpoint of each kind, along with its original log timestamp.
-    const event = { ...value, logPrefix: line.slice(0, eventStart).trim() };
+    const event = { ...value, sourceLine, logPrefix,
+      ...(value.kind === 'report-fallback' && record(value.report) ? { report: compactReport(value.report) } : {}),
+    };
     if (['checkpoint', 'plan-step-start', 'deep-step-start', 'route-start', 'route-complete'].includes(String(value.kind))) {
       session.checkpoints.set(String(value.kind), event);
     } else session.events.push(event);
   }
   if (!sessions.size) return text;
-  const output = [...retained,
+  const output = [...retained.map((entry) => typeof entry === 'string' ? entry : `# Audit source ${JSON.stringify(entry)}`),
     '', '# Compact diagnostic export v1',
     '# Routine passes and local-only link warnings are grouped with counts/timing; every failure, warning and skip outcome is retained.',
     '# Tables: columns describe rows; metricColumns describe metrics; commonMetrics apply to every row; {$text:N} references texts[N].',
+    '# Audit source markers preserve input order and original line ranges. Check locations retain anomaly timestamps even when the saved report contains the check.',
     '# Plan steps and successful timing-warning probe text are summarized. Provider tables retain source accounting and failure evidence. Full evidence remains on the device.',
   ];
   for (const [sessionId, session] of sessions) {
@@ -222,6 +242,7 @@ export function compactDebugLogExport(text: string): string {
     if (canonical && additionalChecks.length) report.additionalJournalChecks = compactChecks(additionalChecks);
     output.push(JSON.stringify(internEvidence(clean({ ...report,
       journalEvents: session.events, lastCheckpoints: [...session.checkpoints.values()],
+      ...(session.checkLocations.length ? { checkLocations: { columns: ['id', 'sourceLine', 'logPrefix'], rows: session.checkLocations } } : {}),
     }))));
   }
   return output.join('\n');

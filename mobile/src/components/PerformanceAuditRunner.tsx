@@ -3465,8 +3465,9 @@ export function PerformanceAuditRunner() {
               : 'Live-source mode permits public payload files and exact approved external destinations for credential-free HEAD checks. Link checks have a 90-second transport/handler budget; remaining destinations are validated but stay unverified. No browser or installer is launched.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
             auditMode === 'local'
-              ? 'Local audit measurements perform no network or clipboard action. After completion, the full log and report are uploaded to paste and the verified link is copied.'
-              : 'The live-source audit may read allowlisted public payload files during measurement. After completion, the full log and report are uploaded to paste and the verified link is copied.',
+              ? 'Local audit measurements perform no network or clipboard action. After completion, the compact diagnostic log is uploaded to paste and the verified link is copied.'
+              : 'The live-source audit may read allowlisted public payload files during measurement. After completion, the compact diagnostic log is uploaded to paste and the verified link is copied.',
+            'Full retained logs and the complete saved report remain on this device through Debug log → Share full evidence.',
           ],
         };
         const summaryMarker = [

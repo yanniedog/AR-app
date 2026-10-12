@@ -71,13 +71,17 @@ test('closed economics does not register graphic readiness and reopening require
   let tree!: InspectableRenderer;
   act(() => { tree = TestRenderer.create(<Research />) as InspectableRenderer; });
   const economics = () => jest.mocked(usePerformanceAuditProbe).mock.calls.filter(call => call[1].id === 'economic-graphics').at(-1)!;
+  const economicData = () => jest.mocked(usePerformanceAuditProbe).mock.calls.filter(call => call[1].id === 'economic-data').at(-1)!;
   const toggle = () => tree.root.findAll(node => node.props.title === 'What is shaping rates')[0].props.onToggle();
   try {
     expect(economics()[2]).toBe(false);
+    expect(economicData()[2]).toBe(false);
     await act(async () => { await mockSurfaces.get('outlook.dashboard')!.actions!['outlook.history.mode.spread'](); });
     expect(economics()[2]).toBe(false);
     act(toggle);
     expect(economics()[2]).toBe(true);
+    expect(economicData()[2]).toBe(true);
+    expect(economicData()[1]).toMatchObject({ required: true, status: 'pending' });
     expect(economics()[1]).toMatchObject({ required: true, status: 'pending', layoutMeasured: false });
     act(() => { tree.root.findAll(node => node.type === 'RbaOutlook')[0].props.onAuditStateChange({
       status: 'ready', expectedCount: 2, pointCount: 2, layoutMeasured: true, graphicReady: true, accessibleSummary: true,

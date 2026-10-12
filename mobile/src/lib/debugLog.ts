@@ -170,7 +170,7 @@ export function formatLogDisplayTail(
   const tail = textDecoder.decode(bytes.slice(bytes.length - limit));
   const newline = tail.indexOf('\n');
   const visible = newline >= 0 ? tail.slice(newline + 1) : tail;
-  return `[Showing newest ${limit} bytes of ${bytes.length}; exports include the full log]\n${visible}`;
+  return `[Showing newest ${limit} bytes of ${bytes.length}; compact export and Share full evidence are available]\n${visible}`;
 }
 
 async function ensureLogDir(): Promise<void> {
@@ -450,7 +450,7 @@ export class RingBuffer {
       visible.unshift(line);
       visibleBytes += lineBytes + separatorBytes;
     }
-    return `[Showing newest ${limit} bytes of ${fullBytes}; exports include the full log]\n${visible.join('\n')}`;
+    return `[Showing newest ${limit} bytes of ${fullBytes}; compact export and Share full evidence are available]\n${visible.join('\n')}`;
   }
 
   size(): number {
