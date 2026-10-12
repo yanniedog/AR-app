@@ -1439,6 +1439,23 @@ function indexOfAscii(html: string, lowerNeedle: string, from: number): number {
   return -1;
 }
 
+function findTagEnd(html: string, from: number): number {
+  let quote = '';
+  for (let cursor = from; cursor < html.length; cursor += 1) {
+    const char = html[cursor];
+    if (quote) {
+      if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '>') return cursor;
+  }
+  return -1;
+}
+
 function readTagName(html: string, start: number, end: number): string {
   let cursor = start;
   while (cursor < end && /\s/.test(html[cursor])) cursor += 1;
@@ -1466,7 +1483,7 @@ function stripElements(html: string, blocked: ReadonlySet<string>): string {
       out += ' ';
       continue;
     }
-    const close = html.indexOf('>', open + 1);
+    const close = findTagEnd(html, open + 1);
     if (close < 0) {
       out += html.slice(open);
       break;
@@ -1480,10 +1497,9 @@ function stripElements(html: string, blocked: ReadonlySet<string>): string {
       while (searchFrom < html.length) {
         const candidate = indexOfAscii(html, closer, searchFrom);
         if (candidate < 0) break;
-        let cursor = candidate + closer.length;
-        while (cursor < html.length && /\s/.test(html[cursor])) cursor += 1;
-        if (html[cursor] === '>') {
-          foundAt = cursor + 1;
+        const closingEnd = findTagEnd(html, candidate + closer.length);
+        if (closingEnd >= 0 && !html.slice(candidate + closer.length, closingEnd).includes('<')) {
+          foundAt = closingEnd + 1;
           break;
         }
         searchFrom = candidate + 1;
@@ -1508,7 +1524,7 @@ function stripTags(html: string): string {
       break;
     }
     out += html.slice(index, open);
-    const close = html.indexOf('>', open + 1);
+    const close = findTagEnd(html, open + 1);
     if (close < 0) {
       out += html.slice(open);
       break;

@@ -652,6 +652,20 @@ describe('uploadLogsToPasteRs', () => {
     expect(tailBody).not.toContain('\uFFFD');
   });
 
+  it('keeps scanning a blocked opener through a quoted greater-than', async () => {
+    const mockFetch = jest.fn(async () => ({
+      status: 400,
+      text: async () => '<script data-x="></script>">alert(1)</script>Invalid request',
+    })) as unknown as typeof fetch;
+
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, { sleep: async () => {} }),
+    ).rejects.toThrow(/Invalid request/);
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, { sleep: async () => {} }),
+    ).rejects.not.toThrow(/alert\(1\)/);
+  });
+
   it('strips slash-marked scripts and keeps text after a length-changing character', async () => {
     const mockFetch = jest.fn(async () => ({
       status: 400,
