@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
+import type { AppState } from '../src/data/storeTypes';
 import '../src/background/tasks';
 import { FIXTURE_NOW_MS, makeHealthyDataFixture } from '../__fixtures__/appHealth';
 import { newPassiveAuditRecord, serializePassiveAuditRecord } from '../src/lib/passiveAuditCache';
@@ -76,4 +77,38 @@ it('reports native read/write failures and retries dirty completed work without 
     expect(await task()).toBe(BackgroundTask.BackgroundTaskResult.Success);
     expect(runtime.getPassiveAuditStatus().lastError).toBeNull();
   } finally { now.mockRestore(); }
+});
+
+it.each([false, true])('keeps compact native work independent of a refresh starting during storage load (native=%s)', async native => {
+  jest.resetModules(); mockStorage.clear();
+  const now = jest.spyOn(Date, 'now').mockReturnValue(FIXTURE_NOW_MS);
+  const network = jest.spyOn(globalThis, 'fetch');
+  const handler = jest.spyOn(jest.requireActual('react-native').Linking, 'canOpenURL').mockResolvedValue(true);
+  const runtime = jest.requireActual<typeof import('../src/lib/passiveAudit')>('../src/lib/passiveAudit');
+  const storage = jest.requireMock('@react-native-async-storage/async-storage') as { getItem: jest.Mock; setItem: jest.Mock };
+  const appBuild = runtime.passiveAuditAppBuild();
+  const record = newPassiveAuditRecord(makeHealthyDataFixture().snapshot, appBuild, FIXTURE_NOW_MS)!;
+  const serialized = serializePassiveAuditRecord(record)!;
+  mockStorage.set('ar-passive-audit-v1', serialized);
+  mockStorage.set('ar-passive-links-v1', JSON.stringify({ schema: 1, appBuild, revision: 'verified-prior-publication',
+    createdAt: FIXTURE_NOW_MS, cursor: 0, entries: [], inventoryComplete: true,
+    pending: [{ url: 'https://bank.com.au/product/0', purpose: 'lender_source', label: 'Product overview' }] }));
+  let releaseRead!: (value: string) => void;
+  storage.getItem.mockImplementationOnce(() => new Promise<string>(resolve => { releaseRead = resolve; }));
+  try {
+    const completion = runtime.runPassiveAuditSlice(native);
+    // Expo dispatches the daily callback while passive AsyncStorage is pending.
+    // Its lazy store import installs the getter; refresh can then stay busy or
+    // fail without reaching the daily callback's success-only passive retry.
+    const busy = Object.defineProperties({ refreshing: true }, Object.fromEntries(
+      ['core', 'manifest', 'details'].map(key => [key, { get() { throw new Error('Busy live inputs must not be scanned'); } }]),
+    )) as AppState;
+    runtime.configurePassiveAuditState(() => busy);
+    releaseRead(serialized);
+    expect(await completion).toBe(true);
+    expect(Object.keys(JSON.parse(mockStorage.get('ar-passive-audit-v1')!).entries)).toHaveLength(native ? 8 : 0);
+    expect(JSON.parse(mockStorage.get('ar-passive-links-v1')!).cursor).toBe(native ? 1 : 0);
+    expect(runtime.getPassiveAuditStatus().lastError).toBeNull();
+    expect(network).not.toHaveBeenCalled();
+  } finally { now.mockRestore(); network.mockRestore(); handler.mockRestore(); }
 });

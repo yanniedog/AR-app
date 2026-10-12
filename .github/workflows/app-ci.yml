@@ -61,7 +61,7 @@ jobs:
           npm ci --prefix tools/eas-cli --ignore-scripts --no-audit --no-fund
           npm run compat --prefix tools/eas-cli
           npm test --prefix tools/eas-cli
-      - name: Compile native verifiers, audit screen awake view and background timer lifecycle
+      - name: Compile native APK identity verifier, history codec, audit screen awake view and background timer lifecycle
         run: |
           node scripts/ensure-firebase-config.mjs
           npx expo prebuild --platform android --no-install

@@ -2,6 +2,7 @@ import {
   collectExternalAuditLinks,
   createExternalAuditLinkCollector,
   FIXED_EXTERNAL_AUDIT_LINKS,
+  iterateExternalAuditLinks,
   uniqueExternalAuditLinks,
 } from '../src/lib/externalLinkInventory';
 import * as policy from '../src/lib/trustedExternalUrl';
@@ -17,6 +18,33 @@ const details = (urls: readonly string[]): DetailsPayload => ({
 });
 
 afterEach(() => jest.restoreAllMocks());
+
+it('keeps public iterator entries independent for passive consumers that retain requests', () => {
+  const source = details(['https://bank.com.au/first', 'https://bank.com.au/second']);
+  source.products['product-1'].sourceDocuments = [{ url: 'https://bank.com.au/terms', sourcePath: 'terms', relation: 'terms', label: 'Terms' }];
+  const iterator = iterateExternalAuditLinks({ details: source });
+  const retained: policy.TrustedExternalUrlRequest[] = [];
+  for (const value of iterator) retained.push(value);
+  const catalogue = retained.slice(FIXED_EXTERNAL_AUDIT_LINKS.length);
+  expect(catalogue.map(entry => entry.url)).toEqual([
+    'https://bank.com.au/first', 'https://bank.com.au/second', 'https://bank.com.au/terms',
+  ]);
+  expect(new Set(catalogue).size).toBe(3);
+});
+
+it('preserves purpose separation and the full source order while reusing private request storage', async () => {
+  const source = details(['https://bank.com.au/product']);
+  const observed = [request('https://bank.com.au/product', 'Mounted lender'),
+    { ...request('https://bank.com.au/product', 'Rejected app source'), purpose: 'app_release' as const }];
+  const input = { details: source, observed,
+    economicOutlook: { indicators: [{ sourceUrl: 'https://www.abs.gov.au/statistics/', label: 'Inflation' }] } as NonNullable<Parameters<typeof collectExternalAuditLinks>[0]>['economicOutlook'],
+    releaseNotes: [{ version: '1.0.227', releaseUrl: 'https://github.com/yanniedog/AR-app/releases/tag/v1.0.227' }] };
+  const collect = createExternalAuditLinkCollector();
+  const expected = collectExternalAuditLinks(input);
+  expect(await collect(input, async () => {})).toEqual(expected);
+  expect(await collect(input, async () => {})).toEqual(expected);
+  expect(expected.filter(entry => entry.url === observed[0].url)).toEqual(observed);
+});
 
 it('validates repeated raw destinations once while preserving canonical first-label and rejected-source semantics', () => {
   const first = request('http://bank.com.au./product#first', 'First source');
@@ -106,19 +134,45 @@ it('observes additions, removals, URL changes and labels mutated inside the same
   const source = details(['https://bank.com.au/old', 'https://bank.com.au/removed']);
   source.products['product-0'].sourceDocuments = [{ url: 'https://bank.com.au/document', sourcePath: 'documents.0', relation: 'terms', label: 'Old label' }];
   const collect = createExternalAuditLinkCollector();
-  await collect({ details: source }, async () => {});
+  await collect({ details: source, observed: [
+    request('https://bank.com.au/old', 'Old mounted label'),
+    request('https://bank.com.au/previously-mounted', 'Unmounted source'),
+  ] }, async () => {});
   source.products['product-0'].links!.overview = 'https://bank.com.au/new';
   source.products['product-0'].sourceDocuments![0].label = 'Updated label';
   source.products['product-0'].sourceDocuments!.push({ url: 'http://unapproved.test/rejected', sourcePath: 'documents.1', relation: 'terms', label: 'New rejected document' });
   delete source.products['product-1'];
-  const observed = [request('https://bank.com.au/new', 'Mounted label')];
+  const observed = [request('https://bank.com.au/new', 'Mounted label'),
+    request('https://bank.com.au/newly-mounted', 'New mounted source')];
   const expected = collectExternalAuditLinks({ details: source, observed });
   const actual = await collect({ details: source, observed }, async () => {});
   expect(actual).toEqual(expected);
   expect(actual.find(entry => entry.url.endsWith('/new'))?.label).toBe('Mounted label');
   expect(actual.find(entry => entry.url.endsWith('/document'))?.label).toBe('Updated label');
+  expect(actual.some(entry => entry.url.endsWith('/previously-mounted'))).toBe(false);
+  expect(actual.find(entry => entry.url.endsWith('/newly-mounted'))?.label).toBe('New mounted source');
   expect(actual.some(entry => /old|removed/.test(entry.url))).toBe(false);
   expect(actual.some(entry => entry.url === 'http://unapproved.test/rejected')).toBe(true);
+});
+
+it('amortizes native clock calls for cached references while still bounding their CPU slices', async () => {
+  const source = details(Array.from({ length: 12_000 }, (_, index) =>
+    `https://bank.com.au/product/${index % 20}`));
+  const collect = createExternalAuditLinkCollector();
+  const expected = await collect({ details: source }, async () => {}, () => 0);
+  let clockCalls = 0;
+  let elapsed = 0;
+  let previousScanned = 0;
+  const actual = await collect({ details: source }, async (_count, progress) => {
+    expect(progress.scannedCandidates - previousScanned).toBeLessThanOrEqual(4_096);
+    expect(progress.maxSliceMs).toBeLessThan(9);
+    expect(progress.policyValidations).toBe(0);
+    previousScanned = progress.scannedCandidates;
+  }, () => { clockCalls++; elapsed += 0.05; return elapsed; });
+  expect(actual).toEqual(expected);
+  // This models a nonzero host-clock cost and catches a return to reading the
+  // native clock once per duplicated reference in a large published catalogue.
+  expect(clockCalls).toBeLessThan(1_000);
 });
 
 it('checks its time budget between requests even when the count bound has not been reached', async () => {

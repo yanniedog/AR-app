@@ -460,6 +460,10 @@ describe('PerformanceAuditReadinessRegistry', () => {
       ready: false,
       blockers: [expect.objectContaining({ code: 'probe-pending', probeId: 'history-chart' })],
     });
+    expect(compactPerformanceAuditReadinessEvidence(registry.snapshot(['product.details'], ['graphic'])))
+      .toContain('product.details:history-chart:graphic:pending::required=1');
+    expect(compactPerformanceAuditReadinessEvidence(registry.snapshot(['product.details'])))
+      .toContain('product.details:history-chart:graphic:pending::required=0');
     expect(registry.snapshot(['product.details'], ['logo'])).toMatchObject({
       ready: false,
       blockers: [expect.objectContaining({ code: 'required-kind-missing' })],

@@ -128,8 +128,14 @@ export function runPassiveAuditSlice(native = false): Promise<boolean> {
   const run = async () => {
     await load();
     if (blocked()) return true;
-    const state = getState?.();
-    if (state && stateBusy(state)) return true;
+    const liveState = getState?.();
+    const liveStateBusy = liveState && stateBusy(liveState);
+    if (liveStateBusy && !native) return true;
+    // Expo may dispatch daily refresh alongside this worker. Its lazy store
+    // import can install a busy getter while our storage read is pending.
+    // Native work can still resume its validated compact checkpoint without
+    // reading incomplete live inputs or initiating hydration/network work.
+    const state = liveStateBusy ? undefined : liveState;
     const previousRecord = record;
     const previousCount = Object.keys(record?.entries ?? {}).length;
     const start = Date.now();

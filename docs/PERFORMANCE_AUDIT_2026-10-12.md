@@ -194,3 +194,38 @@ Scheduling intervals,
 audit time limits, network policy and foreground checks are unchanged. A signed
 replacement APK must still demonstrate both a cold screen-off completion and
 a later background completion after foreground reuse.
+
+The local v1.0.227 foreground audit completed both whole-app passes without an
+explicit readiness error, but its external-link inventory still stopped the run
+at the 10-second limit. Its retained partial report incorrectly failed the
+product-history display group: three ordinary repeat product entries sampled an
+optional chart while pending, with 15/15 points and an accessible summary already
+present. Both explicit history actions later completed with measured 15/15
+points. Readiness evidence now records when the current action promotes a chart
+to required, and aggregation excludes incidental optional loading states from
+completed chart checks. Required pending charts, settled missing points and
+missing accessible summaries still fail, and optional loading alone provides no
+rendering proof. The initial catalogue's unknown search-index coverage is
+retained honestly: it was captured before maximum-profile cache preparation,
+which subsequently made all seven requested assets available. These findings do
+not establish complete foreground coverage or performance on another phone.
+
+The final inventory now uses a private reusable cursor and purpose-specific
+lookup maps, and amortizes clock reads over cheap duplicate references. Each
+collection still re-enumerates current sources, preserving mutations, removed
+links, first labels and rejected URLs. On Android Hermes with the published
+53,771-reference input, the cached scan fell from 96 slices / 798 ms to 16 slices
+/ 125 ms, with exact ordered parity for 2,348 destinations. A separate native
+run with an extra 180 ms delay at every checkpoint completed in 3,385 ms. The
+8 ms cooperative CPU target, 16 new validations per slice and 10-second total
+limit remain unchanged. Failure reports now retain inventory CPU, yield and
+progress evidence. These isolated measurements do not replace the signed APK's
+complete foreground acceptance run.
+
+A deterministic concurrency regression also reproduced passive work returning
+success without progress when a simultaneous daily refresh installed a busy
+store getter during the initial storage read. Native slices now resume only
+their validated compact checkpoints in that case; idle foreground work still
+defers. The test advances eight metadata checks and a saved link while proving
+that busy live core, manifest and details are never read and no network request
+is made.
