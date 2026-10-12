@@ -85,7 +85,7 @@ function androidTool(name) {
 }
 
 function javaExecutable() {
-  const home = process.env.JAVA_HOME;
+  const home = String(process.env.JAVA_HOME || '').trim().replace(/^["']+|["']+$/g, '');
   if (home) {
     const candidate = join(home, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
     if (existsSync(candidate)) return candidate;

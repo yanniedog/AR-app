@@ -52,6 +52,27 @@ test('runs SDK tools as an argument array and never through cmd.exe', () => {
   }
 });
 
+test('strips surrounding quotes from JAVA_HOME before locating java', () => {
+  const sdk = mkdtempSync(join(tmpdir(), 'apk-identity-java-'));
+  const home = join(sdk, 'jdk');
+  const previous = process.env.JAVA_HOME;
+  try {
+    mkdirSync(join(home, 'bin'), { recursive: true });
+    mkdirSync(join(sdk, 'lib'), { recursive: true });
+    const java = join(home, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
+    writeFileSync(java, '');
+    writeFileSync(join(sdk, 'apksigner.bat'), '');
+    writeFileSync(join(sdk, 'lib', 'apksigner.jar'), '');
+    process.env.JAVA_HOME = `"${home}"`;
+    const plan = resolveToolInvocation(join(sdk, 'apksigner.bat'), ['verify']);
+    assert.equal(plan.executable, java);
+  } finally {
+    if (previous === undefined) delete process.env.JAVA_HOME;
+    else process.env.JAVA_HOME = previous;
+    rmSync(sdk, { recursive: true, force: true });
+  }
+});
+
 test('APK inspection spawns both tools without interpreting shell metacharacters', (t) => {
   const sdk = mkdtempSync(join(tmpdir(), 'apk-identity-spawn-'));
   const oldAapt = process.env.ANDROID_AAPT;
