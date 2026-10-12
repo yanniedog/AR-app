@@ -43,11 +43,18 @@ const TRIVIAL_PATTERNS = [
  * @param {string} bodyRaw
  * @returns {boolean}
  */
+const CODERABBIT_LIMIT = /\b(?:Review limit reached|reached your PR review limit|rate limited by coderabbit\.ai)\b/i;
+
+function looksLikeSubstantiveFinding(body) {
+  return /\b(?:this|that) (?:branch|change|handler|function)\b/i.test(body);
+}
+
 export function isQuotaBotMessage(bodyRaw) {
   if (!bodyRaw) return false;
   const body = String(bodyRaw).trim();
   if (!body) return false;
-  return QUOTA_PATTERNS.some((re) => re.test(body));
+  if (QUOTA_PATTERNS.some((re) => re.test(body))) return true;
+  return CODERABBIT_LIMIT.test(body) && !looksLikeSubstantiveFinding(body);
 }
 
 /**

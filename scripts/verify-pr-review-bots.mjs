@@ -345,6 +345,8 @@ for (const finding of [
 }
 const monthlyQuotaNotice = 'You have reached your monthly quota for code reviews; please upgrade your plan';
 assert.equal(isBotNoise(monthlyQuotaNotice), true);
+assert.equal(isBotNoise('Review limit reached. Please wait until the next window before requesting another review.'), true);
+assert.equal(isBotNoise('This branch treats Review limit reached as success and drops the retry.'), false);
 assert.equal(isReviewerNonsenseFailure(monthlyQuotaNotice), true);
 const failedQwenNotice = [
   '<!-- qwen-code-review -->',
