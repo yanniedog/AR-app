@@ -1,0 +1,53 @@
+{
+  "version": "1.0.232",
+  "releaseTag": "app-arm-v1.0.232",
+  "date": "2026-10-12",
+  "summaryBullets": [
+    "See product differences before comparison tools and supporting documents.",
+    "Get current connection advice when rates are unavailable, without guessing why loading failed.",
+    "Use clearer labels for rate conditions, eligibility, watched rates and document coverage.",
+    "Improve dependency security, search responsiveness and performance-audit reliability."
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Comparison differences now appear before terms, calculators and published product details."
+        },
+        {
+          "text": "The unavailable-data screen follows network changes immediately and keeps newer connection information when an earlier check finishes late."
+        },
+        {
+          "text": "Online loading failures use neutral advice; offline advice appears only when the device reports no connectivity."
+        },
+        {
+          "text": "Saved products use a consistent star icon, and product disclosures use clearer wording."
+        },
+        {
+          "text": "Security fixes update vulnerable dependencies and protect release tooling from shell interpretation."
+        },
+        {
+          "text": "Search remains responsive while suitability information loads, with more reliable recovery after delayed data."
+        },
+        {
+          "text": "Performance audits preserve diagnostic evidence, improve startup and navigation handling, and avoid redundant work."
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.232"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.229"
+        }
+      ]
+    }
+  ]
+}
