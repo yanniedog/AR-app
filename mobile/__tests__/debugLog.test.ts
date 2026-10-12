@@ -11,6 +11,7 @@ import {
   MAX_LOG_BYTES,
   MAX_LOG_FILE_BYTES,
   MAX_LOG_LINES,
+  LOG_FILE_ROLLOVER_TARGET_BYTES,
   PASTE_RS_ATTEMPT_TIMEOUT_MS,
   PASTE_RS_MAX_FULL_UPLOAD_BYTES,
   PASTE_RS_TAIL_MAX_BYTES,
@@ -24,6 +25,7 @@ import {
   formatLogUploadBody,
   formatVersionedLogExport,
   formatLogDisplayTail,
+  getDebugLogFlushDiagnostics,
   installGlobalErrorHandlers,
   loadDebugLogUploadReceipt,
   parseLogLine,
@@ -949,6 +951,128 @@ describe('persistent log file', () => {
       expect(files[LOG_PATH]).toContain('line past the cap');
       expect(new TextEncoder().encode(files[LOG_PATH]).length)
         .toBeLessThanOrEqual(MAX_LOG_FILE_BYTES);
+    } finally {
+      delete fileAccess.FileSystem.appendFile;
+    }
+  });
+
+  it.each([false, true])('waits for the next writer and preserves its physical failure=%s', async (failWrite) => {
+    const files = installPathAwareFiles();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- control the real optional append path
+    const fileAccess = require('react-native-file-access') as {
+      FileSystem: { appendFile?: (path: string, data: string) => Promise<void> };
+    };
+    const deferred = () => {
+      let resolve!: () => void;
+      const promise = new Promise<void>(done => { resolve = done; });
+      return { promise, resolve };
+    };
+    const entered = [deferred(), deferred()];
+    const release = [deferred(), deferred()];
+    let writes = 0;
+    fileAccess.FileSystem.appendFile = async (path, data) => {
+      const write = writes++;
+      if (write < 2) {
+        entered[write].resolve();
+        await release[write].promise;
+      }
+      if (failWrite && write === 1) throw new Error('append failed');
+      files[path] = (files[path] ?? '') + data;
+    };
+    const physicalFailure = new Error('physical write failed');
+    if (failWrite) jest.mocked(FileSystem.writeAsStringAsync).mockRejectedValueOnce(physicalFailure);
+    const pending: Promise<unknown>[] = [];
+    try {
+      debugLog.info('perf-audit', 'earlier batch');
+      const earlier = debugLog.flushToFile();
+      pending.push(earlier);
+      await entered[0].promise;
+      debugLog.info('perf-audit', 'durable audit checkpoint');
+      // Both wait on the old writer. The automatic caller resumes first and
+      // empties the queue, but its native append remains deliberately blocked.
+      const automatic = debugLog.flushToFile();
+      let strictSettled = false;
+      const strict = debugLog.flushToFile(true).then(
+        () => { strictSettled = true; return null; },
+        (error: unknown) => { strictSettled = true; return error; },
+      );
+      pending.push(automatic, strict);
+      release[0].resolve();
+      await entered[1].promise;
+      await earlier;
+      expect(strictSettled).toBe(false);
+      expect(files[LOG_PATH]).not.toContain('durable audit checkpoint');
+      expect(getDebugLogFlushDiagnostics()).toMatchObject({
+        stage: 'append', nativeAppendAvailable: true, queuedLines: 0,
+      });
+      release[1].resolve();
+      await automatic;
+      expect(await strict).toBe(failWrite ? physicalFailure : null);
+      expect(getDebugLogFlushDiagnostics()).toMatchObject({
+        stage: 'idle', lastFailedStage: failWrite ? 'rewrite' : null,
+      });
+      if (failWrite) {
+        expect(files[LOG_PATH]).not.toContain('durable audit checkpoint');
+        await debugLog.flushToFile(true);
+      }
+      // A failed shared writer queues the batch once, without loss/duplication.
+      expect(files[LOG_PATH].match(/durable audit checkpoint/g)).toHaveLength(1);
+    } finally {
+      release.forEach(gate => gate.resolve());
+      await Promise.allSettled(pending);
+      delete fileAccess.FileSystem.appendFile;
+    }
+  });
+
+  it('leaves rollover headroom across repeated UTF-8 appends while keeping complete newest lines', async () => {
+    const seedLine = `2026-10-12T00:00:00.000Z [INFO ] seed: ${'銀行🏦é'.repeat(256)}\n`;
+    const files = installPathAwareFiles({
+      [LOG_PATH]: seedLine.repeat(Math.ceil(MAX_LOG_FILE_BYTES / new TextEncoder().encode(seedLine).length)),
+    });
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- exercise native append and real rollover selection
+    const fileAccess = require('react-native-file-access') as {
+      FileSystem: { appendFile?: (path: string, data: string) => Promise<void> };
+    };
+    fileAccess.FileSystem.appendFile = async (path, data) => {
+      files[path] = (files[path] ?? '') + data;
+    };
+    const writes = jest.mocked(FileSystem.writeAsStringAsync);
+    try {
+      debugLog.info('perf-audit', `checkpoint-0 ${'銀行🏦é'.repeat(256)}`);
+      await debugLog.flushToFile(true);
+      expect(new TextEncoder().encode(files[LOG_PATH]).length).toBeLessThanOrEqual(LOG_FILE_ROLLOVER_TARGET_BYTES);
+      expect(writes).toHaveBeenCalledTimes(1);
+      for (let index = 1; index <= 220; index += 1) {
+        debugLog.info('perf-audit', `checkpoint-${index} ${'銀行🏦é'.repeat(256)}`);
+        await debugLog.flushToFile(true);
+      }
+      // More than half a MiB of new checkpoints crosses another cap. It needs
+      // one further rollover, not a full-file read/rewrite on every new line.
+      expect(writes).toHaveBeenCalledTimes(2);
+      const physical = files[LOG_PATH];
+      expect(new TextEncoder().encode(physical).length).toBeLessThanOrEqual(MAX_LOG_FILE_BYTES);
+      expect(physical).toContain('checkpoint-220');
+      expect(physical).not.toContain('\uFFFD');
+      expect(physical.split('\n').filter(Boolean).every(line => parseLogLine(line) != null)).toBe(true);
+    } finally {
+      delete fileAccess.FileSystem.appendFile;
+    }
+  });
+
+  it('retains a complete newest batch larger than the rollover target when it fits the hard cap', async () => {
+    const files = installPathAwareFiles({ [LOG_PATH]: `${'older log line\n'.repeat(100_000)}` });
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- enable bounded native rollover
+    const fileAccess = require('react-native-file-access') as {
+      FileSystem: { appendFile?: (path: string, data: string) => Promise<void> };
+    };
+    fileAccess.FileSystem.appendFile = jest.fn();
+    try {
+      const newest = `large-newest-batch ${'é'.repeat(LOG_FILE_ROLLOVER_TARGET_BYTES / 2 + 64)}`;
+      debugLog.info('perf-audit', newest);
+      await debugLog.flushToFile(true);
+      expect(files[LOG_PATH]).toContain(newest);
+      expect(new TextEncoder().encode(files[LOG_PATH]).length).toBeLessThanOrEqual(MAX_LOG_FILE_BYTES);
+      expect(fileAccess.FileSystem.appendFile).not.toHaveBeenCalled();
     } finally {
       delete fileAccess.FileSystem.appendFile;
     }

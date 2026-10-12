@@ -344,6 +344,33 @@ export interface PerformanceAuditRollbackRestoreResult {
   cause?: unknown;
 }
 
+/** Keep the real write outcome even when a caller's timeout wins the race. */
+export class PerformanceAuditRollbackOutcome {
+  private attempt = 0;
+  private latest: PerformanceAuditRollbackRestoreResult | null = null;
+
+  get result(): PerformanceAuditRollbackRestoreResult | null { return this.latest; }
+  get restored(): boolean { return this.latest?.restored === true; }
+  get status(): 'not-attempted' | 'pending' | 'restored' | 'failed' {
+    if (!this.attempt) return 'not-attempted';
+    return this.latest == null ? 'pending' : this.latest.restored ? 'restored' : 'failed';
+  }
+
+  track(operation: Promise<PerformanceAuditRollbackRestoreResult>): Promise<PerformanceAuditRollbackRestoreResult> {
+    const attempt = ++this.attempt;
+    this.latest = null;
+    return operation.then((result) => {
+      if (attempt === this.attempt) this.latest = result;
+      return result;
+    }, (cause: unknown) => {
+      if (attempt === this.attempt) {
+        this.latest = { restored: false, cause, error: cause instanceof Error ? cause.message : String(cause) };
+      }
+      throw cause;
+    });
+  }
+}
+
 export interface PerformanceAuditRollbackAttemptsResult
   extends PerformanceAuditRollbackRestoreResult {
   attempts: number;

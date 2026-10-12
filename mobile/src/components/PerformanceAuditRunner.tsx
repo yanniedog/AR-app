@@ -46,7 +46,7 @@ import {
   type AppHealthTransportGuard,
   type AuditTransportTarget,
 } from '../lib/appHealthTransportGuard';
-import { debugLog } from '../lib/debugLog';
+import { debugLog, getDebugLogFlushDiagnostics } from '../lib/debugLog';
 import { runExternalLinkAuditCheck } from '../lib/performanceAuditLinks';
 import { createExternalAuditLinkCollector, FIXED_EXTERNAL_AUDIT_LINKS, beginExternalLinkCapture, endExternalLinkCapture,
   getCapturedExternalAuditLinks } from '../lib/externalLinkInventory';
@@ -74,6 +74,7 @@ import {
 } from '../lib/performanceAuditReadiness';
 import {
   beginPerformanceAuditRollback,
+  PerformanceAuditRollbackOutcome,
   retryPerformanceAuditRollback,
   tryRestorePerformanceAuditRollback,
 } from '../lib/performanceAuditRollback';
@@ -132,7 +133,8 @@ import {
 import { yieldToUi } from '../lib/yieldToUi';
 import { setPassiveAuditPaused } from '../lib/passiveAudit';
 import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAuditFinalization';
-import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, estimatePerformanceAuditTime, formatPerformanceAuditEstimate } from '../lib/performanceAuditTiming';
+import { awaitPerformanceAuditWork } from '../lib/performanceAuditWork';
+import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, estimatePerformanceAuditTime, formatPerformanceAuditEstimate } from '../lib/performanceAuditTiming';
 import {
   buildIntegratedAppHealthReport, buildPartialAppHealthReport,
   captureAppHealthDataEvidence, combineAppHealthPerformanceSummary,
@@ -329,51 +331,14 @@ async function awaitAuditWorkWithTimeout<T>(
   label: string,
   timeoutMs: number,
 ): Promise<T> {
-  assertSessionActive(watchdog);
-  let timer: ReturnType<typeof setInterval> | null = null;
-  // Spend only foreground time against the budget. A wall-clock timeout would
-  // fire while the app sat in the background, failing the run for work the user
-  // simply stepped away from — the same mistake the hang watchdog makes if it
-  // is not suspended. Accruing on the pause and resume emissions as well as on
-  // the poll keeps a JS thread suspended mid-interval from charging the
-  // off-screen span once it resumes.
-  const elapsed = new ForegroundElapsed();
-  const unsubscribe = subscribePerformanceAudit(() => elapsed.accrue());
-  const control = new Promise<never>((_resolve, reject) => {
-    timer = setInterval(() => {
-      elapsed.accrue();
-      const stop = (error: unknown) => {
-        if (timer) clearInterval(timer);
-        timer = null;
-        reject(error);
-      };
-      try {
-        assertSessionActive(watchdog);
-      } catch (error) {
-        stop(error);
-        return;
-      }
-      if (elapsed.foregroundMs >= timeoutMs) {
-        stop(new Error(`${label} timed out after ${timeoutMs}ms`));
-      }
-    }, 50);
-  });
   try {
-    // A thunk includes synchronous serialization before the first await in
-    // the same budget as the asynchronous write which follows it.
-    const promise = typeof work === 'function' ? work() : work;
-    const result = await Promise.race([promise, control]);
-    elapsed.accrue();
-    assertSessionActive(watchdog);
-    if (elapsed.foregroundMs > timeoutMs) throw new PerformanceAuditStepTimeoutError(label, elapsed.foregroundMs);
-    return result;
+    return await awaitPerformanceAuditWork(work, {
+      assertActive: () => assertSessionActive(watchdog), label, timeoutMs,
+    });
   } catch (error) {
     rethrowAuditControl(error);
     if (error instanceof Error && error.message.includes('timed out after')) throw error;
     throw new Error(`${label} failed: ${formatAuditError(error)}`);
-  } finally {
-    if (timer) clearInterval(timer);
-    unsubscribe();
   }
 }
 
@@ -2651,7 +2616,10 @@ export function PerformanceAuditRunner() {
       let completed = 0;
       let lastStoredCheckAt: string | null = null;
       let rollbackSnapshot: Awaited<ReturnType<typeof beginPerformanceAuditRollback>> | null = null;
-      let rollbackRestored = false;
+      const rollbackOutcome = new PerformanceAuditRollbackOutcome();
+      const restoreRollback = () => mountedMutationBarrier.track(rollbackOutcome.track(
+        tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot ?? undefined),
+      ));
       let mutationRecoveryRequired = false;
       let rollbackAttempts = 0;
       let readinessCapture: ReturnType<typeof performanceAuditReadinessRegistry.beginCapture> | null = null;
@@ -2672,24 +2640,12 @@ export function PerformanceAuditRunner() {
       };
 
       const awaitStoredCheckFlush = async (): Promise<void> => {
-        let settled = false;
-        let failure: unknown;
-        const flush = debugLog.flushToFile(Platform.OS !== 'web').then(
-          () => {
-            settled = true;
-          },
-          (error: unknown) => {
-            failure = error;
-            settled = true;
-          },
+        await awaitAuditWorkWithTimeout(
+          () => debugLog.flushToFile(Platform.OS !== 'web'),
+          watchdog,
+          'Completed check log persistence',
+          PERFORMANCE_AUDIT_STEP_LIMIT_MS,
         );
-        while (!settled) {
-          assertSessionActive(watchdog);
-          await delay(Math.min(50, Math.max(1, watchdog.remainingMs())));
-        }
-        await flush;
-        assertSessionActive(watchdog);
-        if (failure) throw failure;
       };
 
       const record = async (rawCheck: AuditCheck) => {
@@ -3246,7 +3202,7 @@ export function PerformanceAuditRunner() {
           async (attemptNumber) => {
             rollbackAttempts = attemptNumber;
             return await awaitAuditWorkWithTimeout(
-              mountedMutationBarrier.track(tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot ?? undefined)),
+              restoreRollback(),
               watchdog,
               attemptNumber === 1
                 ? 'Audit state restoration'
@@ -3268,7 +3224,6 @@ export function PerformanceAuditRunner() {
           },
         );
         rollbackAttempts = rollbackResult.attempts;
-        rollbackRestored = rollbackResult.restored;
         // The outcome is reported either way — the state either was restored or
         // was not — but a duration spanning a pause must not become the
         // report's slowest check.
@@ -3294,7 +3249,7 @@ export function PerformanceAuditRunner() {
             trace: captureAuditTrace('audit state restoration failed'),
           } : {}),
         });
-        if (!rollbackRestored) {
+        if (!rollbackOutcome.restored) {
           throw rollbackResult.cause instanceof Error
             ? rollbackResult.cause
             : new Error(
@@ -3588,6 +3543,7 @@ export function PerformanceAuditRunner() {
         // Route recovery/rollback can change loading flags. Preserve failure-time
         // evidence before either starts, including preflight failures with no pin.
         const failedPayloadWork = captureAuditPayloadWork(useStore.getState());
+        const failedLogFlush = getDebugLogFlushDiagnostics();
         let recoveryError: string | null = null;
         if (mountedMutationBarrier.hasPending) {
           watchdog.beginFinalization();
@@ -3602,15 +3558,14 @@ export function PerformanceAuditRunner() {
         // Finish the last rollback attempt before publishing any terminal UI
         // state. A retry from finally could otherwise overwrite edits made
         // after the audit overlay disappears.
-        if (!mutationRecoveryRequired && !rollbackRestored && rollbackSnapshot && rollbackAttempts < 3) {
+        if (!mutationRecoveryRequired && !rollbackOutcome.restored && rollbackSnapshot && rollbackAttempts < 3) {
           try {
             rollbackAttempts += 1;
             const rollbackRetry = await timeoutAfter(
-              mountedMutationBarrier.track(tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot)),
+              restoreRollback(),
               5_000,
               'Pre-terminal audit rollback',
             );
-            rollbackRestored = rollbackRetry.restored;
             if (rollbackRetry.error) {
               debugLog.error(
                 PERFORMANCE_AUDIT_LOG_TAG,
@@ -3621,7 +3576,7 @@ export function PerformanceAuditRunner() {
           } catch (rollbackError) {
             debugLog.error(
               PERFORMANCE_AUDIT_LOG_TAG,
-              `audit rollback retained for launch recovery: ${formatAuditErrorForLog(rollbackError)}`,
+              `audit rollback outcome not yet confirmed: ${formatAuditErrorForLog(rollbackError)}`,
             );
             await timeoutAfter(debugLog.flushToFile(), 5_000, 'Rollback error log flush').catch(() => {});
           }
@@ -3640,6 +3595,9 @@ export function PerformanceAuditRunner() {
             lastStoredCheckAt,
             trace: formatAuditErrorForLog(caught),
             recoveryError: recoveryError ? flattenAuditLogText(recoveryError) : null,
+            rollbackRestored: rollbackOutcome.restored,
+            rollbackStatus: rollbackOutcome.status,
+            rollbackError: rollbackOutcome.result?.error ?? null,
             payloadWork: failedPayloadWork,
           }, 'warn');
           await timeoutAfter(debugLog.flushToFile(), 5_000, 'Cancellation log flush').catch(() => {});
@@ -3650,6 +3608,7 @@ export function PerformanceAuditRunner() {
             formatAuditError(caught),
             ...(mutationRecoveryRequired ? ['An interrupted action is still pending. The restoration journal has been retained. Close and reopen the app to recover before starting another audit.'] : []),
             ...(recoveryError ? [`Route recovery failed: ${recoveryError}`] : []),
+            ...(rollbackOutcome.result?.error ? [`Rollback failed: ${rollbackOutcome.result.error}`] : []),
           ].join('\n');
           const readinessSnapshot = performanceAuditReadinessRegistry.snapshot();
           const failedCheck: AuditCheck = boundAuditCheckEvidence({
@@ -3664,7 +3623,20 @@ export function PerformanceAuditRunner() {
               ...inventoryFailureEvidence,
               completedBeforeFailure: completed,
               recoveryRequired: mutationRecoveryRequired,
-              rollbackRestored,
+              rollbackRestored: rollbackOutcome.restored,
+              rollbackStatus: rollbackOutcome.status,
+              logFlushStage: failedLogFlush.stage,
+              logFlushStageMs: roundMetric(failedLogFlush.stageMs),
+              logFlushActiveMs: roundMetric(failedLogFlush.activeMs),
+              logFlushLastMs: roundMetric(failedLogFlush.lastFlushMs),
+              logFlushLastFailedStage: failedLogFlush.lastFailedStage,
+              logNativeAppendAvailable: failedLogFlush.nativeAppendAvailable,
+              logAppendAttempts: failedLogFlush.appendAttempts,
+              logAppendBytes: failedLogFlush.appendBytes,
+              logRewriteAttempts: failedLogFlush.rewriteAttempts,
+              logRewriteBytes: failedLogFlush.rewriteBytes,
+              logFileBytes: failedLogFlush.fileBytes,
+              logQueuedLines: failedLogFlush.queuedLines,
               plannedChecks: total,
               executionAttempted: false,
               currentPath: pathnameRef.current,
