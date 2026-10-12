@@ -117,9 +117,19 @@ export function htmlPlainText(html: string): string {
       parts.push(html.slice(index));
       break;
     }
-    parts.push(html.slice(index, open), ' ');
+    parts.push(html.slice(index, open));
+    const next = html[open + 1] || '';
+    if (!/[!/A-Za-z]/.test(next)) {
+      parts.push('<');
+      index = open + 1;
+      continue;
+    }
+    parts.push(' ');
     if (html.startsWith('<!--', open)) {
-      index = commentEnd(html, open + 4);
+      const after = open + 4;
+      if (html[after] === '>') index = after + 1;
+      else if (html.startsWith('->', after)) index = after + 2;
+      else index = commentEnd(html, after);
       continue;
     }
     const end = tagEnd(html, open + 1);

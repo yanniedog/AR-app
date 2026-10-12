@@ -19,6 +19,18 @@ test.each([
   expect(htmlPlainText(`${prefix}Visible`).trim()).toBe('Visible');
 });
 
+test('keeps a literal less-than sign in plain text', () => {
+  expect(htmlPlainText('Invalid value: size must be < 10')).toBe('Invalid value: size must be < 10');
+  expect(htmlPlainText('x < y > z')).toBe('x < y > z');
+});
+
+test.each(['Before<!-->Invalid request', 'Before<!--->Invalid request'])(
+  'keeps text after an abruptly closed comment %s',
+  (raw) => {
+    expect(htmlPlainText(raw).replace(/\s+/g, ' ').trim()).toBe('Before Invalid request');
+  },
+);
+
 test('stops an HTML comment at the bang terminator', () => {
   expect(htmlPlainText('Before<!--hidden--!>Visible').trim()).toBe('Before Visible');
 });
