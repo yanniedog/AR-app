@@ -1,3 +1,4 @@
+import { htmlPlainText } from './htmlPlainText';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
@@ -1420,17 +1421,24 @@ export class PasteRsUploadError extends Error {
   }
 }
 
+function decodePasteEntitiesOnce(text: string): string {
+  return text.replace(/&(?:nbsp|lt|gt|amp|quot|#39);/gi, (entity) => {
+    switch (entity.toLowerCase()) {
+      case '&nbsp;': return ' ';
+      case '&lt;': return '<';
+      case '&gt;': return '>';
+      case '&amp;': return '&';
+      case '&quot;': return '"';
+      case '&#39;': return "'";
+      default: return entity;
+    }
+  });
+}
+
 function sanitizePasteRsResponse(raw: string): string {
-  return raw
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
+  const bounded = raw.length > 65_536 ? raw.slice(0, 65_536) : raw;
+
+  return decodePasteEntitiesOnce(htmlPlainText(bounded))
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 120);

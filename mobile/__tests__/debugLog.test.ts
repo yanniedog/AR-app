@@ -660,6 +660,74 @@ describe('uploadLogsToPasteRs', () => {
     expect(tailBody).not.toContain('\uFFFD');
   });
 
+  it('keeps scanning a blocked opener through a quoted greater-than', async () => {
+    const mockFetch = jest.fn(async () => ({
+      status: 400,
+      text: async () => '<script data-x="></script>">alert(1)</script>Invalid request',
+    })) as unknown as typeof fetch;
+
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, { sleep: async () => {} }),
+    ).rejects.toThrow(/Invalid request/);
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, { sleep: async () => {} }),
+    ).rejects.not.toThrow(/alert\(1\)/);
+  });
+
+  it('does not stop a blocked body at a longer tag name or an unquoted quote', async () => {
+    const scripture = jest.fn(async () => ({
+      status: 400,
+      text: async () => '<script>hidden</scripture>alert(1)</script>Invalid',
+    })) as unknown as typeof fetch;
+    await expect(
+      uploadLogsToPasteRs('x', scripture, { sleep: async () => {} }),
+    ).rejects.toThrow(/Invalid/);
+    await expect(
+      uploadLogsToPasteRs('x', scripture, { sleep: async () => {} }),
+    ).rejects.not.toThrow(/alert\(1\)/);
+
+    const unquoted = jest.fn(async () => ({
+      status: 400,
+      text: async () => '<script data-x=foo">alert(1)</script>Invalid',
+    })) as unknown as typeof fetch;
+    await expect(
+      uploadLogsToPasteRs('x', unquoted, { sleep: async () => {} }),
+    ).rejects.not.toThrow(/alert\(1\)/);
+
+    const truncated = jest.fn(async () => ({
+      status: 400,
+      text: async () => '<div title="alert(1) >',
+    })) as unknown as typeof fetch;
+    await expect(
+      uploadLogsToPasteRs('x', truncated, { sleep: async () => {} }),
+    ).rejects.not.toThrow(/alert\(1\)/);
+  });
+
+  it('strips slash-marked scripts and keeps text after a length-changing character', async () => {
+    const mockFetch = jest.fn(async () => ({
+      status: 400,
+      text: async () => '<script/>alert(1)</script><script>İ</script>Geçersiz istek',
+    })) as unknown as typeof fetch;
+
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, { sleep: async () => {} }),
+    ).rejects.toThrow(/Geçersiz istek/);
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, { sleep: async () => {} }),
+    ).rejects.not.toThrow(/alert\(1\)/);
+  });
+
+  it('strips a spaced script end tag and decodes entities only once', async () => {
+    const mockFetch = jest.fn(async () => ({
+      status: 400,
+      text: async () => '<script>alert(1)</script >&amp;lt;kept&gt;',
+    })) as unknown as typeof fetch;
+
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, { sleep: async () => {} }),
+    ).rejects.toThrow('paste.rs rejected the upload (status 400): &lt;kept> Use Share or Copy instead.');
+  });
+
   it('does not retry other 4xx responses and strips raw HTML from the error', async () => {
     const mockFetch = jest.fn(async () => ({
       status: 400,
