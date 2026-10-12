@@ -110,6 +110,7 @@ test('drops slash-marked script bodies, comments, and length-changing characters
   const html = `
     <!-- <script>cash rate target 8.88%</script> -->
     <script/>cash rate target 9.99%</script>
+    <script data-x="></script>">cash rate target 7.77%</script>
     <script>İ</script >
     <h2>Cash rate target</h2><p>4.35 <span>%</span></p>
     <p>Effective date 12 August 2026</p>
