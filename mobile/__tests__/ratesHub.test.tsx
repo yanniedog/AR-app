@@ -5,6 +5,7 @@ import { EMPTY_PROFILE as mockEmptyProfile } from '../src/data/profile';
 
 type HubRenderer = ReturnType<typeof TestRenderer.create> & { root: {
   findAllByProps: (props: Record<string, unknown>) => unknown[];
+  findAllByType: (type: unknown) => unknown[];
   findByProps: (props: Record<string, unknown>) => { props: { onPress: () => void } };
 } };
 
