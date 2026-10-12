@@ -13,7 +13,8 @@ function asciiEqualsAt(html: string, index: number, needle: string): boolean {
 
 function tagEnd(html: string, from: number, afterName = false): number {
   let quote = '';
-  let state: 'tagName' | 'attr' | 'beforeValue' | 'unquoted' = afterName ? 'attr' : 'tagName';
+  let state: 'tagName' | 'beforeAttr' | 'attrName' | 'afterAttr' | 'beforeValue' | 'unquoted' | 'afterValue'
+    = afterName ? 'beforeAttr' : 'tagName';
   const start = !afterName && html[from] === '/' ? from + 1 : from;
   for (let index = start; index < html.length; index += 1) {
     const char = html[index];
@@ -22,19 +23,28 @@ function tagEnd(html: string, from: number, afterName = false): number {
     } else if (char === '>') {
       return index;
     } else if (state === 'tagName') {
-      if (HTML_SPACE.test(char) || char === '/') state = 'attr';
+      if (HTML_SPACE.test(char) || char === '/') state = 'beforeAttr';
     } else if (state === 'unquoted') {
-      if (HTML_SPACE.test(char)) state = 'attr';
+      if (HTML_SPACE.test(char)) state = 'beforeAttr';
     } else if (state === 'beforeValue') {
       if (HTML_SPACE.test(char)) continue;
       if (char === '"' || char === "'") {
         quote = char;
-        state = 'attr';
+        state = 'afterValue';
       } else {
         state = 'unquoted';
       }
-    } else if (char === '=') {
+    } else if ((state === 'attrName' || state === 'afterAttr') && char === '=') {
       state = 'beforeValue';
+    } else if (HTML_SPACE.test(char)) {
+      if (state === 'attrName') state = 'afterAttr';
+      else if (state === 'afterValue') state = 'beforeAttr';
+    } else if (char === '/') {
+      state = 'beforeAttr';
+    } else {
+      // A leading '=' belongs to a new attribute name. Only '=' after an
+      // existing name starts a value; quotes in names are ordinary characters.
+      state = 'attrName';
     }
   }
   return -1;
@@ -120,9 +130,21 @@ export function htmlPlainText(html: string): string {
       index = open + 1;
       continue;
     }
+    if (html.startsWith('</', open) && open + 2 === html.length) {
+      parts.push('</');
+      break;
+    }
     parts.push(' ');
     if (html.startsWith('<!--', open)) {
       index = commentEnd(html, open + 4);
+      continue;
+    }
+    if (html[open + 1] === '!' || html[open + 1] === '?'
+      || (html[open + 1] === '/' && !/[A-Za-z]/.test(html[open + 2] ?? ''))) {
+      // Bogus comments and DOCTYPE tokens end at the first '>', even when
+      // malformed declarations contain quotes. Invalid start tags stay text.
+      const end = html.indexOf('>', open + 2);
+      index = end < 0 ? html.length : end + 1;
       continue;
     }
     const end = tagEnd(html, open + 1);

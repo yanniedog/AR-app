@@ -31,7 +31,7 @@ const QUOTA_PATTERNS = [
   /^The consumer version has been (?:sunset|retired|deprecated); review activity has ceased[.!]*$/i,
   /^(?:You have|You've|We have|We've) (?:reached|exceeded|exhausted) (?:your |our |the )?(?:monthly|daily|free[- ]tier) (?:quota|limit)(?: for (?:code )?reviews)?(?:[.;:,]?\s*(?:please )?(?:upgrade your plan|try again tomorrow|try again next month))?[.!]*$/i,
   /^(?:Your |Our |The )?(?:monthly|daily|free[- ]tier) (?:review )?(?:quota|limit) (?:has been )?(?:reached|exceeded|exhausted)(?:[.;:,]?\s*(?:please )?(?:upgrade your plan|try again tomorrow|try again next month))?[.!]*$/i,
-  /^(?:#{1,6}\s*)?(?:Review limit reached|You have reached your PR review limit|rate limited by coderabbit\.ai)[.!]*(?:\s+Please wait until the next window before requesting another review[.!]*)?$/i,
+  /^(?:#{1,6}\s*)?(?:Review limit reached|You have reached your PR review limit|rate limited by coderabbit\.ai)[.!]*(?:\s+Please wait until the next window(?: before requesting another review)?[.!]*)?$/i,
 ];
 
 export function isQwenFailureNotice(bodyRaw) {

@@ -52,3 +52,19 @@ test.each(['<x="y>Visible', '</x="y>Visible'])('keeps equals signs inside tag na
 test.each(['Invalid value: size must be < 10', 'x < y > z', 'trailing <'])('keeps literal less-than signs in %s', (raw) => {
   expect(htmlPlainText(raw)).toBe(raw);
 });
+
+test.each(['<div =">', '<div = ">', '<div x/ =">', '<div x="value"=">'])('does not treat a bare attribute-name equals sign as assignment in %s', (tag) => {
+  expect(htmlPlainText(`${tag}Visible`).trim()).toBe('Visible');
+});
+
+test.each(['<!foo "x>', '<!foo x=">', '</3 x=">', '<!DOCTYPE html SYSTEM "x>', '<!DOCTYPE html PUBLIC "x>'])('ends malformed declaration or end-tag markup at the first greater-than in %s', (tag) => {
+  expect(htmlPlainText(`${tag}Visible`).trim()).toBe('Visible');
+});
+
+test.each(['<3 x=">Visible', 'trailing </'])('preserves invalid tag-open text %s', (raw) => {
+  expect(htmlPlainText(raw)).toBe(raw);
+});
+
+test('preserves text after an abruptly ended quoted DOCTYPE identifier', () => {
+  expect(htmlPlainText('<!DOCTYPE html SYSTEM "x>Visible">Tail').trim()).toBe('Visible">Tail');
+});

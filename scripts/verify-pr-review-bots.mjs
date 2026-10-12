@@ -308,6 +308,9 @@ assert.deepEqual(
 assert.equal(isBotNoise("ERROR: Gemini API returned HTTP 503"), true);
 assert.equal(isBotNoise('Review limit reached. Please wait until the next window before requesting another review.'), true);
 assert.equal(isBotNoise('## Review limit reached\nPlease wait until the next window before requesting another review.'), true);
+assert.equal(isBotNoise('## Review limit reached\nPlease wait until the next window.'), true);
+assert.equal(isReviewerNonsenseFailure('## Review limit reached\nPlease wait until the next window.'), true);
+assert.equal(isBotNoise('## Review limit reached\nPlease wait until the next window.\nThis branch then loses the queued deployment.'), false);
 assert.equal(isBotNoise('The retry workflow matches "Review limit reached" case-sensitively.'), false);
 assert.equal(isBotNoise('The failing service responds with:\nReview limit reached\nThis error loses the queued deployment.'), false);
 for (const notice of [
