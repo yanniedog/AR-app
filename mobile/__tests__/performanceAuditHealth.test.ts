@@ -1,9 +1,13 @@
 import type { AuditCheck } from '../src/lib/performanceAudit';
+import { summarizePartialPerformanceAudit } from '../src/lib/performanceAudit';
 import {
   appHealthDataSnapshot,
   appHealthDisplayObservations,
   appHealthSurfaceContracts,
   buildIntegratedAppHealthReport,
+  buildPartialAppHealthReport,
+  captureAppHealthDataEvidence,
+  combineAppHealthPerformanceSummary,
 } from '../src/lib/performanceAuditHealth';
 import type { AppState } from '../src/data/storeTypes';
 import type { DeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
@@ -292,5 +296,90 @@ describe('integrated app-health display evidence', () => {
     );
     expect(missing.find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT)?.status)
       .toBe('fail');
+  });
+});
+
+describe('fatal app-health evidence', () => {
+  const plan = { passes: [{ steps: [
+    { expectedSurface: 'search.results', readiness: ['data', 'list', 'layout'] },
+    { expectedSurface: 'unvisited.screen', readiness: ['data', 'layout'] },
+  ] }] } as unknown as DeepPerformanceAuditPlan;
+  const input = {
+    sessionId: 'interrupted', mode: 'local' as const, startedAt: '2026-10-12T00:00:00Z',
+    finishedAt: '2026-10-12T00:00:10Z', journeys: [], plan,
+    network: { mode: 'local' as const, authorizationAttempts: 0, authorizedAttempts: 0,
+      blockedAttempts: 0, transportCalls: 0, policyViolations: 0 },
+  };
+
+  it('retains detached initial data and bank/category evidence after the store and profile change', () => {
+    const { snapshot } = makeHealthyDataFixture();
+    const normalized = normalizeCoreWithIntegrity(snapshot.core!, { coreSha256: snapshot.manifest!.files.core.sha256 });
+    const state = { source: 'network', core: normalized.core, coreIntegrity: normalized.integrity,
+      manifest: snapshot.manifest, prefs: { ...DEFAULT_PREFS, includeNonStandard: true },
+      details: null, searchIndex: null } as unknown as AppState;
+    const capturedData = captureAppHealthDataEvidence({ state, appVersion: '1.0.0' });
+    const retainedChecks = JSON.parse(JSON.stringify(capturedData.checks));
+    expect(capturedData.checks).toHaveLength(16);
+    const catalogue = capturedData.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE)!;
+    expect(catalogue).toMatchObject({ metrics: { catalogueAvailable: true, publishedProducts: 3,
+      publishedProviders: 3, includeNonStandard: true } });
+    expect(catalogue.localEvidence).toMatchObject({ sections: expect.arrayContaining([
+      expect.objectContaining({ section: 'Mortgage', providers: [expect.objectContaining({ provider: 'Provider 1' })] }),
+    ]) });
+
+    // A failed preference restore or changed publication must not be rescanned
+    // into the initial snapshot, including its nested producer evidence.
+    state.prefs.includeNonStandard = false;
+    state.core!.run_date = '2026-10-13';
+    state.core!.sections.Mortgage.rates.splice(0);
+    state.core!.coverage!.limitations!.push('Later publication limitation');
+    state.core = null;
+    state.manifest = null;
+    const report = buildPartialAppHealthReport({ ...input, capturedData, performanceChecks: [] });
+    expect(capturedData.checks).toEqual(retainedChecks);
+    expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE))
+      .toMatchObject({ ...catalogue, metrics: { ...catalogue.metrics,
+        evidenceCapturedAt: capturedData.capturedAt, capturedBeforeAuditMutations: true } });
+    expect(report.coverage).toMatchObject({ complete: false, plannedChecks: 26, storedChecks: 26 });
+    expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.AUDIT_PLAN))
+      .toMatchObject({ status: 'fail', metrics: { complete: false, interrupted: true } });
+    expect(report.limitations.join(' ')).toContain('before audit preference mutations');
+  });
+
+  it('preserves observed display failures while leaving successful incomplete groups unverified', () => {
+    const performanceChecks = [check([
+      'search.results:data:data:ready:3/3',
+      'search.results:items:list:ready:0/3:visible=0:empty=0',
+      'search.results:layout:layout:ready:1/1:measured=1',
+    ].join(' | '))];
+    Object.assign(performanceChecks[0].metrics, { executionAttempted: true, actionInvoked: true, actionCompleted: true });
+    const report = buildPartialAppHealthReport({ ...input, capturedData: null, performanceChecks });
+    expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LIST))
+      .toMatchObject({ status: 'fail', metrics: { observedSurfaces: 1, plannedSurfaces: 2 },
+        localEvidence: { failedSurfaceIds: ['search.results'] } });
+    expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT))
+      .toMatchObject({ status: 'not-run', metrics: { observedStatus: 'pass', partial: true } });
+    expect(report.checks.filter(entry => entry.domain === 'display-completeness')
+      .every(entry => entry.status === 'fail' || entry.status === 'not-run')).toBe(true);
+    const performanceSummary = summarizePartialPerformanceAudit(performanceChecks, 100, 1);
+    const summary = combineAppHealthPerformanceSummary(performanceSummary, report, 100);
+    expect(summary.executed).toBe(1 + report.summary.pass + report.summary.warn + report.summary.fail);
+    expect(summary.justifiedSkipped).toBe(performanceSummary.justifiedSkipped);
+    expect(summary.unexpectedSkipped).toBe(performanceSummary.unexpectedSkipped + report.summary.notRun);
+    expect(summary.coveragePercent).toBe(Math.round(summary.executed / 126 * 1000) / 10);
+    expect(summary.coveragePercent).toBeLessThan(10);
+    const completeSummary = combineAppHealthPerformanceSummary(performanceSummary,
+      { ...report, coverage: { ...report.coverage, complete: true } }, 100);
+    expect(completeSummary.justifiedSkipped).toBe(performanceSummary.justifiedSkipped + report.summary.notRun);
+    expect(completeSummary.unexpectedSkipped).toBe(performanceSummary.unexpectedSkipped);
+  });
+
+  it('reports data checks as not run if setup failed before evidence capture', () => {
+    const report = buildPartialAppHealthReport({ ...input, capturedData: null, performanceChecks: [] });
+    expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE))
+      .toMatchObject({ status: 'not-run', metrics: {} });
+    expect(report.checks.filter(entry => entry.status === 'not-run')).toHaveLength(24);
+    expect(report.coverage.complete).toBe(false);
+    expect(report.summary.coveragePercent).toBeLessThan(10);
   });
 });

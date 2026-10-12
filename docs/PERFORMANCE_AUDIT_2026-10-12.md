@@ -131,3 +131,13 @@ and passes with the exact configured rule and public Context constructor.
 A replacement release still requires a cold-process, screen-off worker test
 against its signed APK. A passing build-time class check alone does not prove
 JavaScript task execution or OS scheduling guarantees.
+
+The same native session exposed two report defects during a local, deliberately
+offline audit. A settled details cache miss kept its product readiness probe
+pending, and a fatal stop discarded previously available data and catalogue
+evidence. Product readiness now reports terminal missing, stale or mismatched
+details after the exact publication-scoped request settles. Partial reports
+retain detached initial data and bank/category coverage, keep observed display
+failures, and leave unvisited display checks unverified against the full plan.
+The settings restoration and rollback time limits remain unchanged; host CPU
+contention during that run prevents a device-performance conclusion.

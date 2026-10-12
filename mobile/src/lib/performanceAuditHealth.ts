@@ -1,6 +1,6 @@
 import type { AppState } from '../data/storeTypes';
 import { samePayloadIdentity } from '../data/payloadRevision';
-import type { AuditCheck, AuditJourney } from './performanceAudit';
+import { roundMetric, type AuditCheck, type AuditJourney, type PerformanceAuditSummary } from './performanceAudit';
 import type { DeepPerformanceAuditPlan } from './performanceAuditPlan';
 import {
   APP_HEALTH_EXPECTED_CHECK_IDS,
@@ -20,6 +20,7 @@ import { appHealthNetworkCheck } from './appHealth/networkPolicy';
 import { appHealthDataSnapshot } from './performanceAuditDataSnapshot';
 import { passiveAuditDataChecks } from './passiveAudit';
 import { appHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
+import { APP_HEALTH_DATA_CHECKS } from './appHealth/dataQuality';
 export { appHealthDataSnapshot } from './performanceAuditDataSnapshot';
 
 interface ParsedProbe {
@@ -293,25 +294,16 @@ export function appHealthSurfaceContracts(
   }));
 }
 
-export function buildIntegratedAppHealthReport(input: {
-  sessionId: string;
-  mode: AppHealthAuditMode;
-  startedAt: string;
-  finishedAt: string;
+interface AppHealthDataInput {
   state: AppState;
   appVersion: string;
-  performanceChecks: readonly AuditCheck[];
-  journeys: readonly AuditJourney[];
-  plan: DeepPerformanceAuditPlan;
-  network: AppHealthNetworkSnapshot;
-  /** Validated remote payload for explicit live-source mode; otherwise use pinned app state. */
   dataSnapshot?: AppHealthDataSnapshot;
-}): AppHealthReport {
+}
+
+function scopedHealthDataSnapshot(input: AppHealthDataInput): AppHealthDataSnapshot {
   let data = input.dataSnapshot;
   if (data) {
     const { core, coreIntegrity, manifest } = input.state;
-    // Live-source validation owns its independent payload. App selector evidence
-    // can accompany it only when both describe the same verified publication.
     const matchesLocal = Boolean(core && coreIntegrity?.core === core && manifest && data.core && data.manifest &&
       coreIntegrity.coreSha256 === manifest.files.core.sha256 && coreIntegrity.runDate === core.run_date &&
       core.run_date === manifest.run_date && data.core.run_date === core.run_date &&
@@ -319,7 +311,39 @@ export function buildIntegratedAppHealthReport(input: {
       samePayloadIdentity(manifest, data.manifest));
     data = { ...data, catalogue: matchesLocal ? appHealthCatalogueSnapshot(input.state) : null };
   }
-  const prepared = passiveAuditDataChecks(data ?? appHealthDataSnapshot(input.state, input.appVersion));
+  return data ?? appHealthDataSnapshot(input.state, input.appVersion);
+}
+
+export interface CapturedAppHealthDataEvidence {
+  readonly capturedAt: string;
+  readonly checks: readonly AppHealthCheck[];
+  readonly reused: number;
+}
+
+/** Resolve passive evidence before audit preference mutations; retain only the
+ * detached check results, never mutable store/core references or a later scan. */
+export function captureAppHealthDataEvidence(input: AppHealthDataInput): CapturedAppHealthDataEvidence {
+  const prepared = passiveAuditDataChecks(scopedHealthDataSnapshot(input));
+  return {
+    capturedAt: new Date().toISOString(),
+    checks: JSON.parse(JSON.stringify(prepared.checks)) as AppHealthCheck[],
+    reused: prepared.reused,
+  };
+}
+
+interface AppHealthRunInput {
+  sessionId: string;
+  mode: AppHealthAuditMode;
+  startedAt: string;
+  finishedAt: string;
+  performanceChecks: readonly AuditCheck[];
+  journeys: readonly AuditJourney[];
+  plan: DeepPerformanceAuditPlan;
+  network: AppHealthNetworkSnapshot;
+}
+
+export function buildIntegratedAppHealthReport(input: AppHealthRunInput & AppHealthDataInput): AppHealthReport {
+  const prepared = passiveAuditDataChecks(scopedHealthDataSnapshot(input));
   const dataChecks = prepared.checks;
   const contracts = appHealthSurfaceContracts(input.journeys, input.plan);
   const displayChecks = evaluateAppHealthDisplayQuality(
@@ -346,4 +370,62 @@ export function buildIntegratedAppHealthReport(input: {
         : 'Live-source mode also checks exact approved external destinations with bounded HEAD requests; blocked sites and timeouts remain unverified.',
     ],
   });
+}
+
+/** Fatal reporting performs no data scan or I/O while an interrupted mutation
+ * may still be running. Successful partial display observations cannot stand
+ * in for the unvisited parts of the declared foreground plan. */
+export function buildPartialAppHealthReport(input: AppHealthRunInput & {
+  capturedData: CapturedAppHealthDataEvidence | null;
+}): AppHealthReport {
+  const observations = appHealthDisplayObservations(input.performanceChecks);
+  const observedIds = new Set(observations.map(observation => observation.surfaceId));
+  const contracts = appHealthSurfaceContracts(input.journeys, input.plan);
+  const observedContracts = contracts.filter(contract => observedIds.has(contract.id));
+  const displayChecks = evaluateAppHealthDisplayQuality(observedContracts, observations).map(check => ({
+    ...check,
+    status: check.status === 'fail' ? 'fail' as const : 'not-run' as const,
+    metrics: { ...check.metrics, partial: true, observedStatus: check.status,
+      plannedSurfaces: contracts.length, observedSurfaces: observedIds.size },
+    summary: check.status === 'fail' ? check.summary : 'Foreground display coverage stopped before the complete plan ran.',
+  }));
+  const dataChecks: AppHealthCheck[] = input.capturedData
+    ? input.capturedData.checks.map(check => ({ ...check, metrics: { ...check.metrics,
+        evidenceCapturedAt: input.capturedData!.capturedAt, capturedBeforeAuditMutations: true } }))
+    : APP_HEALTH_DATA_CHECKS.map(job => ({ id: job.code, code: job.code, label: job.code,
+        domain: 'data-integrity', status: 'not-run', metrics: {},
+        summary: 'The audit stopped before data evidence was captured.' }));
+  return finalizeAppHealthReport({
+    sessionId: input.sessionId, mode: input.mode, startedAt: input.startedAt, finishedAt: input.finishedAt,
+    checks: [...dataChecks, ...displayChecks, appHealthNetworkCheck(input.network)],
+    plannedCheckIds: APP_HEALTH_EXPECTED_CHECK_IDS,
+    incompleteReason: 'The audit stopped before all planned foreground checks completed.',
+    limitations: [
+      input.capturedData
+        ? `Data and catalogue evidence was captured at ${input.capturedData.capturedAt} before audit preference mutations (${input.capturedData.reused} matching passive checks reused); it does not describe unfinished changes at the time of failure.`
+        : 'No validated data evidence was captured before the audit stopped.',
+      'Observed display failures are retained; incomplete display groups are not counted as executed coverage.',
+    ],
+  });
+}
+
+/** The denominator remains the full declared plan even for a fatal partial report. */
+export function combineAppHealthPerformanceSummary(performance: PerformanceAuditSummary,
+  health: AppHealthReport, plannedPerformanceChecks: number): PerformanceAuditSummary {
+  const executed = performance.executed + health.summary.pass + health.summary.warn + health.summary.fail;
+  const total = plannedPerformanceChecks + health.summary.total;
+  return {
+    ...performance,
+    pass: performance.pass + health.summary.pass,
+    warn: performance.warn + health.summary.warn,
+    fail: performance.fail + health.summary.fail,
+    skipped: performance.skipped + health.summary.notRun,
+    unavailable: performance.unavailable + health.summary.unavailable,
+    executed,
+    justifiedSkipped: performance.justifiedSkipped + (health.coverage.complete ? health.summary.notRun : 0),
+    unexpectedSkipped: performance.unexpectedSkipped + (health.coverage.complete ? 0 : health.summary.notRun),
+    coveragePercent: total ? roundMetric((executed / total) * 100) : null,
+    overall: health.summary.overall === 'bottleneck' ? 'bottleneck'
+      : health.summary.overall === 'attention' && performance.overall === 'healthy' ? 'attention' : performance.overall,
+  };
 }

@@ -133,7 +133,11 @@ import { yieldToUi } from '../lib/yieldToUi';
 import { setPassiveAuditPaused } from '../lib/passiveAudit';
 import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAuditFinalization';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, estimatePerformanceAuditTime, formatPerformanceAuditEstimate } from '../lib/performanceAuditTiming';
-import { buildIntegratedAppHealthReport } from '../lib/performanceAuditHealth';
+import {
+  buildIntegratedAppHealthReport, buildPartialAppHealthReport,
+  captureAppHealthDataEvidence, combineAppHealthPerformanceSummary,
+  type CapturedAppHealthDataEvidence,
+} from '../lib/performanceAuditHealth';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from './ui';
 
@@ -2633,6 +2637,16 @@ export function PerformanceAuditRunner() {
       const linkCapture = beginExternalLinkCapture();
       const linkAbort = new AbortController();
       let liveSourceSnapshot: AppHealthDataSnapshot | null = null;
+      let capturedHealthData: CapturedAppHealthDataEvidence | null = null;
+      const captureInitialHealthData = (healthState: ReturnType<typeof useStore.getState>, dataSnapshot?: AppHealthDataSnapshot) => {
+        const captureWatchdog = new PerformanceAuditStepWatchdog('Capturing initial data and catalogue evidence');
+        try {
+          capturedHealthData = captureAppHealthDataEvidence({ state: healthState, appVersion: app.appVersion, dataSnapshot });
+          captureWatchdog.assertWithinBudget();
+        } finally {
+          captureWatchdog.close();
+        }
+      };
       const monitor = new ResponsivenessMonitor();
       let completed = 0;
       let lastStoredCheckAt: string | null = null;
@@ -2817,6 +2831,7 @@ export function PerformanceAuditRunner() {
         // too rather than only at the first measured check.
         await waitWhilePaused(watchdog);
         const initialStore = useStore.getState();
+        if (auditMode === 'local') captureInitialHealthData(initialStore);
         const datasetRevision = captureDatasetRevision();
         activeDatasetRevision = datasetRevision;
         assertDatasetRevision(datasetRevision);
@@ -2993,7 +3008,10 @@ export function PerformanceAuditRunner() {
             watchdog,
             auditMode,
             transportGuard,
-            (snapshot) => { liveSourceSnapshot = snapshot; },
+            (snapshot) => {
+              liveSourceSnapshot = snapshot;
+              captureInitialHealthData(initialStore, snapshot);
+            },
           ),
         );
         assertSessionActive(watchdog);
@@ -3353,27 +3371,7 @@ export function PerformanceAuditRunner() {
             }
             : undefined,
         });
-        const healthExecuted = appHealth.summary.pass + appHealth.summary.warn + appHealth.summary.fail;
-        const combinedExecuted = performanceSummary.executed + healthExecuted;
-        const combinedTotal = checks.length + appHealth.summary.total;
-        const summary = {
-          ...performanceSummary,
-          pass: performanceSummary.pass + appHealth.summary.pass,
-          warn: performanceSummary.warn + appHealth.summary.warn,
-          fail: performanceSummary.fail + appHealth.summary.fail,
-          skipped: performanceSummary.skipped + appHealth.summary.notRun,
-          unavailable: performanceSummary.unavailable + appHealth.summary.unavailable,
-          executed: combinedExecuted,
-          justifiedSkipped: performanceSummary.justifiedSkipped + appHealth.summary.notRun,
-          coveragePercent: combinedTotal
-            ? roundMetric((combinedExecuted / combinedTotal) * 100)
-            : null,
-          overall: appHealth.summary.overall === 'bottleneck'
-            ? 'bottleneck' as const
-            : appHealth.summary.overall === 'attention' && performanceSummary.overall === 'healthy'
-              ? 'attention' as const
-              : performanceSummary.overall,
-        };
+        const summary = combineAppHealthPerformanceSummary(performanceSummary, appHealth, checks.length);
         const report: PerformanceAuditReport = {
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
           sessionId,
@@ -3459,7 +3457,7 @@ export function PerformanceAuditRunner() {
           `app_version=${app.appVersion}`,
           `build_version=${app.buildVersion}`,
           `overall=${summary.overall}`,
-          `checks=${combinedTotal}`,
+          `checks=${checks.length + appHealth.summary.total}`,
           `performance_checks=${checks.length}`,
           `health_checks=${appHealth.summary.total}`,
           `pass=${summary.pass}`,
@@ -3725,12 +3723,21 @@ export function PerformanceAuditRunner() {
                 maxFrameGapMs: entry.metrics.maxFrameGapMs ?? undefined,
               })),
           }, 'error');
-          const partialSummary = summarizePartialPerformanceAudit(checks, total, completed);
+          const finishedAt = new Date().toISOString();
+          const partialHealth = buildPartialAppHealthReport({
+            sessionId, mode: auditMode, startedAt, finishedAt,
+            capturedData: capturedHealthData,
+            performanceChecks: checks.slice(0, completed), journeys: navigationJourneys, plan,
+            network: transportGuard.snapshot(),
+          });
+          const partialSummary = combineAppHealthPerformanceSummary(
+            summarizePartialPerformanceAudit(checks, total, completed), partialHealth, total,
+          );
           const partialReport: PerformanceAuditReport = {
             schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
             sessionId,
             startedAt,
-            finishedAt: new Date().toISOString(),
+            finishedAt,
             durationMs: activeDurationMs(),
             wallClockMs: Date.now() - startedMs,
             app,
@@ -3750,6 +3757,7 @@ export function PerformanceAuditRunner() {
             summary: partialSummary,
             checks,
             routeAggregates: aggregateRepeatedJourneys(checks),
+            appHealth: partialHealth,
             limitations: [
               `This is a structured partial schema-v${PERFORMANCE_AUDIT_SCHEMA_VERSION} report for an unrecoverable stop (cancel, hang watchdog, dataset revision change, or setup/teardown failure). Per-step journey failures no longer abort the plan; those produce a complete report with aggregated fail/warn checks.`,
               `Unrecoverable failure occurred after ${completed} of ${total} planned durable checks.`,
@@ -3764,7 +3772,9 @@ export function PerformanceAuditRunner() {
             `build_version=${app.buildVersion}`,
             'partial=true',
             `overall=${partialSummary.overall}`,
-            `checks=${checks.length}`,
+            `checks=${checks.length + partialHealth.summary.total}`,
+            `performance_checks=${checks.length}`,
+            `health_checks=${partialHealth.summary.total}`,
             `pass=${partialSummary.pass}`,
             `warn=${partialSummary.warn}`,
             `fail=${partialSummary.fail}`,

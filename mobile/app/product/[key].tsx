@@ -35,6 +35,7 @@ import { SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
 import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
 import { normalizedProductFacts } from '../../src/data/productFacts';
+import { verifiedDetailsSha } from '../../src/data/detailsIdentity';
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
 import { sortRows, findEligibleByKey } from '../../src/data/selectors';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
@@ -95,16 +96,20 @@ export default function ProductDetail() {
   );
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
+  const detailsSha = useStore((s) => s.manifest?.files.details.sha256);
   const historyBanksSha = useStore((s) => s.manifest?.files.history_banks?.sha256 ?? null);
   const bankInsightsSha = useStore((s) => s.manifest?.files.bank_history?.sha256 ?? null);
   const ensureDetails = useStore((s) => s.ensureDetails);
-  const detail = useStore((s) => s.details?.products[productKey] ?? null);
+  const detailsPayload = useStore((s) => s.details);
+  const detail = detailsPayload?.products[productKey] ?? null;
   const normalizedFactKinds = useMemo(
     () => new Set(normalizedProductFacts(detail).map((fact) => fact.kind)),
     [detail],
   );
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const detailsLoading = useStore((s) => s.detailsLoading);
+  const detailsRequestIdentity = `${core?.run_date ?? ''}|${coreSha ?? ''}|${detailsSha ?? ''}|${productKey}`;
+  const [settledDetailsRequest, setSettledDetailsRequest] = useState<string | null>(null);
   const savedRates = useStore((s) => s.savedRates);
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const notificationsEnabled = useStore((s) => s.prefs.notificationsEnabled);
@@ -138,8 +143,14 @@ export default function ProductDetail() {
   const { scenario } = useUserRateScenario();
 
   useEffect(() => {
-    void ensureDetails({ forProductView: true });
-  }, [ensureDetails, found]);
+    let current = true;
+    const settled = () => { if (current) setSettledDetailsRequest(detailsRequestIdentity); };
+    void ensureDetails({ forProductView: true }).then(settled, (error) => {
+      logSwallowedError('product.ensureDetails', error);
+      settled();
+    });
+    return () => { current = false; };
+  }, [ensureDetails, detailsRequestIdentity]);
 
   useEffect(() => {
     if (!showBankInsights || !found) {
@@ -325,6 +336,12 @@ export default function ProductDetail() {
     historyContentRevision,
   ) ? historyGraphicEvidence : null;
   const productRenderRevision = `${productKey}:${row?.rate_index ?? 'none'}:${detailsLoading ? 'loading' : 'settled'}:${historyContentRevision}:${currentHistoryGraphicEvidence?.graphicRevision ?? 'graphic-pending'}`;
+  const detailsRequestSettled = settledDetailsRequest === detailsRequestIdentity && !detailsLoading;
+  const auditDetailsError = !detailsRequestSettled ? null
+    : !core || detailsPayload?.run_date !== core.run_date ||
+        (detailsSha && verifiedDetailsSha(detailsPayload) !== detailsSha)
+      ? 'Product details are unavailable for the active rates publication after loading finished'
+      : !detail ? 'The selected product is absent from the verified details payload' : null;
   const onHistoryGraphicReady = React.useCallback((evidence: HistoryGraphicEvidence) => {
     setHistoryGraphicEvidence((current) => {
       return current?.graphicRevision === evidence.graphicRevision &&
@@ -355,7 +372,8 @@ export default function ProductDetail() {
       {
         id: 'product.details-data',
         kind: 'data',
-        status: detailsProducts && !detailsLoading ? 'ready' : 'pending',
+        status: !detailsRequestSettled ? 'pending' : auditDetailsError ? 'error' : 'ready',
+        error: auditDetailsError,
         datasetRevision: core?.run_date ?? null,
       },
       {

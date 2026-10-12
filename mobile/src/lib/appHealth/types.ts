@@ -314,6 +314,8 @@ export interface FinalizeAppHealthReportInput {
   checks: readonly AppHealthCheck[];
   plannedCheckIds: readonly string[];
   limitations?: readonly string[];
+  /** A partial run cannot claim complete coverage merely by storing not-run placeholders. */
+  incompleteReason?: string;
 }
 
 export interface LegacyPerformanceAuditReportV6 {
