@@ -323,10 +323,20 @@ assert.deepEqual(
     ["qwen"],
     [{
       login: "github-actions[bot]",
-      body: "<!-- qwen-code-review -->\nReview outcome: findings\nReviewed commit: `abc`\nThe finding discusses a real defect in the release path.",
+      body: "<!-- qwen-code-review -->\nReview outcome: findings\nReviewed commit: `abc`\nThe finding discusses HTTP 429 rate limit handling in the release path.",
     }],
   ),
   ["qwen"],
+);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    ["qwen"],
+    [{
+      login: "github-actions[bot]",
+      body: "<!-- qwen-code-review -->\nReview outcome: failed\nQwen review did not complete successfully.",
+    }],
+  ),
+  [],
 );
 assert.deepEqual(
   blockingMissingRequiredKeys(
