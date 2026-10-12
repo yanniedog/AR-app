@@ -230,6 +230,7 @@ test('comparison and filter disclosure commit without remounting unchanged searc
     expect(mockListMount).toHaveBeenCalledTimes(2);
     expect(mockListUnmount).toHaveBeenCalledTimes(1);
     expect(tree.root.findByType('FlashList' as any).props.data).toHaveLength(0);
+    expect(listProbe().visibleCount).toBe(0);
   } finally { act(() => tree.unmount()); }
 });
 
@@ -259,5 +260,11 @@ test('a missing fresh native callback leaves the current viewport unverified', (
     act(() => mockSurfaces.get('search.results').actions['search.compare.mode']());
     expect(mockListMount).toHaveBeenCalledTimes(1);
     expect(listProbe().visibleCount).toBeNull();
+    expect(listProbe().status).toBe('pending');
+    act(() => tree.root.findByType('FlashList' as any).props.onViewableItemsChanged({
+      viewableItems: [{ isViewable: true }],
+    }));
+    expect(listProbe().visibleCount).toBe(1);
+    expect(listProbe().status).toBe('ready');
   } finally { act(() => tree.unmount()); }
 });

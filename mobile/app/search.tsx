@@ -411,10 +411,13 @@ export default function Search() {
       {
         id: 'search.list',
         kind: 'list',
-        status: searchPending || !listReadiness.visiblyCommitted ? 'pending' : 'ready',
+        status: searchPending || !listReadiness.visiblyCommitted ||
+          (rows.length > 0 && (listReadiness.measuredVisibleCount ?? 0) === 0) ? 'pending' : 'ready',
         expectedCount: rows.length,
         actualCount: listReadiness.committedItemCount,
-        visibleCount: listReadiness.measuredVisibleCount,
+        // A committed empty data set has no product rows even if FlashList
+        // omits its empty viewability callback. Non-empty views require it.
+        visibleCount: rows.length === 0 && listReadiness.ready ? 0 : listReadiness.measuredVisibleCount,
         emptyStateRendered: rows.length === 0 && !searchPending && listReadiness.ready,
       },
       {
