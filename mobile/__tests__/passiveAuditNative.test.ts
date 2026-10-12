@@ -112,3 +112,60 @@ it.each([false, true])('keeps compact native work independent of a refresh start
     expect(network).not.toHaveBeenCalled();
   } finally { now.mockRestore(); network.mockRestore(); handler.mockRestore(); }
 });
+
+it.each([false, true])('shares one native slice after active work (already native=%s)', async initiallyNative => {
+  jest.resetModules(); mockStorage.clear();
+  const now = jest.spyOn(Date, 'now').mockReturnValue(FIXTURE_NOW_MS);
+  const network = jest.spyOn(globalThis, 'fetch');
+  const runtime = jest.requireActual<typeof import('../src/lib/passiveAudit')>('../src/lib/passiveAudit');
+  const storage = jest.requireMock('@react-native-async-storage/async-storage') as { getItem: jest.Mock; setItem: jest.Mock };
+  const cache = jest.requireActual<typeof import('../src/lib/passiveAuditCache')>('../src/lib/passiveAuditCache');
+  const execute = jest.spyOn(cache, 'runPassiveAuditCheck');
+  const record = newPassiveAuditRecord(makeHealthyDataFixture().snapshot, runtime.passiveAuditAppBuild(), FIXTURE_NOW_MS)!;
+  const serialized = serializePassiveAuditRecord(record)!;
+  mockStorage.set('ar-passive-audit-v1', serialized);
+  let releaseRead!: (value: string) => void;
+  storage.getItem.mockImplementationOnce(() => new Promise<string>(resolve => { releaseRead = resolve; }));
+  try {
+    const initial = runtime.runPassiveAuditSlice(initiallyNative);
+    const nativeOne = runtime.runPassiveAuditSlice(true);
+    const nativeTwo = runtime.runPassiveAuditSlice(true);
+    if (initiallyNative) expect(nativeOne).toBe(initial);
+    releaseRead(serialized);
+    expect(await Promise.all([initial, nativeOne, nativeTwo])).toEqual([true, true, true]);
+    expect(Object.keys(JSON.parse(mockStorage.get('ar-passive-audit-v1')!).entries)).toHaveLength(8);
+    // Eight completed metadata jobs plus one exhaustion check. An extra native
+    // batch from the second caller would add another exhaustion check.
+    expect(execute).toHaveBeenCalledTimes(9);
+    expect(network).not.toHaveBeenCalled();
+  } finally { now.mockRestore(); network.mockRestore(); execute.mockRestore(); }
+});
+
+it('rebuilds a cleared snapshot after busy native work even when live data references are unchanged', async () => {
+  jest.resetModules(); mockStorage.clear();
+  const now = jest.spyOn(Date, 'now').mockReturnValue(FIXTURE_NOW_MS);
+  const network = jest.spyOn(globalThis, 'fetch');
+  const handler = jest.spyOn(jest.requireActual('react-native').Linking, 'canOpenURL').mockResolvedValue(true);
+  const { snapshot } = makeHealthyDataFixture();
+  const snapshots = jest.requireActual<typeof import('../src/lib/performanceAuditDataSnapshot')>('../src/lib/performanceAuditDataSnapshot');
+  const prepare = jest.spyOn(snapshots, 'appHealthDataSnapshot').mockReturnValue(snapshot);
+  const runtime = jest.requireActual<typeof import('../src/lib/passiveAudit')>('../src/lib/passiveAudit');
+  const state = { core: snapshot.core, manifest: snapshot.manifest, source: snapshot.source,
+    refreshing: false, prefs: { profileFilters: {}, interests: [], includeNonStandard: true } } as unknown as AppState;
+  runtime.configurePassiveAuditState(() => state);
+  try {
+    expect(await runtime.runPassiveAuditSlice()).toBe(true);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    state.refreshing = true;
+    expect(await runtime.runPassiveAuditSlice(true)).toBe(true);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockStorage.get('ar-passive-audit-v1')!).entries['rate-values']).toBeUndefined();
+    state.refreshing = false;
+    expect(await runtime.runPassiveAuditSlice(true)).toBe(true);
+    expect(JSON.parse(mockStorage.get('ar-passive-audit-v1')!).entries['rate-values'].check.status).toBe('pass');
+    expect(prepare).toHaveBeenCalledTimes(2);
+    // This fixture supplies all row data but no catalogue projection.
+    expect(runtime.getPassiveAuditStatus().completed).toBe(15);
+    expect(network).not.toHaveBeenCalled();
+  } finally { now.mockRestore(); network.mockRestore(); handler.mockRestore(); prepare.mockRestore(); }
+});
