@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-10-11T12:33:47.035Z",
+  "generated_at": "2026-10-12T12:01:46.330Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -975,6 +975,18 @@
         "Prepare history upstream and deliver app data directly from GitHub (#350)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.224"
+    },
+    {
+      "version": "1.0.232",
+      "date": "2026-10-12",
+      "summaryBullets": [
+        "See product differences before comparison tools and supporting documents.",
+        "Get current connection advice when rates are unavailable, without guessing why loading failed.",
+        "Use clearer labels for rate conditions, eligibility, watched rates and document coverage.",
+        "Find filter options and lenders more easily, and see calculator prompts only after you use a field.",
+        "Improve dependency security, search responsiveness and performance-audit reliability."
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.232"
     }
   ]
 }

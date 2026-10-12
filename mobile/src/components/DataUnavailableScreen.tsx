@@ -20,24 +20,20 @@ export function DataUnavailableScreen() {
   const [connectivity, setConnectivity] = useState<Connectivity>(null);
   useEffect(() => {
     let active = true;
-    let heardChange = false;
-    // The first read can resolve after a change event; never let it overwrite newer state.
+    let receivedNetworkEvent = false;
+    const subscription = Network.addNetworkStateListener((state) => {
+      if (!active) return;
+      receivedNetworkEvent = true;
+      setConnectivity(connectivityFromNetworkState(state));
+    });
+    // Events observed after subscription are newer than this initial snapshot.
     Network.getNetworkStateAsync().then(
-      (state) => { if (active && !heardChange) setConnectivity(connectivityFromNetworkState(state)); },
-      () => { if (active && !heardChange) setConnectivity(null); },
+      (state) => { if (active && !receivedNetworkEvent) setConnectivity(connectivityFromNetworkState(state)); },
+      () => { if (active && !receivedNetworkEvent) setConnectivity(null); },
     );
-    let subscription: { remove(): void } | undefined;
-    try {
-      subscription = Network.addNetworkStateListener((state) => {
-        heardChange = true;
-        if (active) setConnectivity(connectivityFromNetworkState(state));
-      });
-    } catch {
-      // No listener on this platform: the one-off read above still applies.
-    }
     return () => {
       active = false;
-      subscription?.remove();
+      subscription.remove();
     };
   }, []);
 
