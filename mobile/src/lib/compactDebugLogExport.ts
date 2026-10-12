@@ -57,9 +57,70 @@ function hasProbeEvidence(check: RecordValue): boolean {
     .some((key) => metrics[key] != null && metrics[key] !== '');
 }
 
+// AuditCheck, ResponsivenessMetrics and the current runner/link measurements.
+// New fields are evidence until explicitly reviewed; a suffix such as "Ms" or a
+// scalar value alone never makes an unfamiliar field safe to discard.
+const routineNumberMetrics = new Set([
+  'preloadedAgeMs', 'statusCode', 'rows', 'visibleRows', 'childNodes', 'rankedRows', 'statsCount',
+  'firstScopeMs', 'firstFilterMs', 'firstHierarchyMs', 'firstStatsMs', 'firstRankMs',
+  'repeatScopeMs', 'repeatFilterMs', 'repeatHierarchyMs', 'repeatStatsMs', 'repeatRankMs',
+  'payloadChars', 'rateRows', 'stringifyMs', 'parseMs', 'traversalMs',
+  'inventorySlices', 'inventoryRawCandidates', 'inventoryPolicyValidations', 'inventoryCpuMs',
+  'inventoryMaxSliceMs', 'inventoryYieldMs', 'inventoryMaxYieldMs', 'uniqueDestinations', 'observedDestinations',
+  'payloadBytes', 'iterations', 'maxWriteMs', 'maxReadMs', 'averageWriteMs', 'averageReadMs',
+  'writeMs', 'readMs', 'bytes', 'sampledBytes', 'flushMs', 'attempts',
+  'depth', 'readinessQuietWindowMs', 'forwardWorkMs', 'forwardMs', 'backgroundSettleMs',
+  'destinationReadinessMs', 'backMs', 'originReadinessMs', 'secondBackMs', 'replaceRecoveryMs', 'returnFallbackMs',
+]);
+const routineBooleanMetrics = new Set([
+  'executionAttempted', 'nonTimingFailure', 'preloaded', 'handlerAttempted', 'httpAttempted',
+  'measurementAvailable', 'lenderDetailsLoaded', 'temporaryKeyDeleted', 'temporaryFileDeleted',
+  'fullExportMeasured', 'restored', 'actionInvoked', 'actionCompleted', 'backChangedPath',
+  'backReturnedToAudit', 'deepSearchAvailable',
+]);
+for (const prefix of ['', 'forward', 'background', 'back']) {
+  const name = (key: string) => prefix ? `${prefix}${key[0].toUpperCase()}${key.slice(1)}` : key;
+  for (const key of ['eventLoopSamples', 'eventLoopP95Ms', 'maxEventLoopLagMs', 'stallsOver100Ms',
+    'frameSamples', 'frameP95Ms', 'maxFrameGapMs', 'framesOver50Ms']) routineNumberMetrics.add(name(key));
+  for (const key of ['eventLoopMeasurementAvailable', 'frameMeasurementAvailable']) routineBooleanMetrics.add(name(key));
+}
+const routineTextMetrics = new Set([
+  'host', 'destinationPath', 'purpose', 'validationDetail', 'handlerDetail', 'reachabilityDetail', 'reason',
+  'section', 'responsivenessClassification', 'measurementMode', 'journeyId', 'journeyLabel', 'iteration',
+  'passId', 'scenarioId', 'semanticActionId', 'plannedExpectedPath', 'expectedPath', 'expectedSurface',
+  'navigationKind', 'backgroundTasks', 'backDestination', 'returnNavigationKind', 'searchMode',
+  'renderRevisionBefore', 'renderRevisionAfter',
+]);
+const routineCheckTextFields = new Set(['id', 'label', 'journalLogPrefix']);
+const routineKinds = new Set(['journey', 'runtime', 'storage', 'network', 'data', 'update']);
+const routineStatuses = new Set(['pass', 'warn', 'fail', 'skipped']);
+
+function knownRoutineShape(check: RecordValue): boolean {
+  return Object.entries(check).every(([key, value]) => {
+    if (routineCheckTextFields.has(key)) return typeof value === 'string';
+    if (key === 'kind') return typeof value === 'string' && routineKinds.has(value);
+    if (key === 'status') return typeof value === 'string' && routineStatuses.has(value);
+    if (key === 'durationMs') return value === null || (finite(value) && value >= 0);
+    if (key === 'error' || key === 'trace') return value === null || typeof value === 'string';
+    if (key !== 'metrics' || !record(value)) return false;
+    return Object.entries(value).every(([metric, observation]) => {
+      if (routineNumberMetrics.has(metric)) return observation === null || (finite(observation) && observation >= 0);
+      if (routineBooleanMetrics.has(metric)) return typeof observation === 'boolean';
+      if (routineTextMetrics.has(metric)) return observation === null || typeof observation === 'string';
+      if (['urlValidation', 'browserHandler', 'httpReachability'].includes(metric)) {
+        return typeof observation === 'string' && ['pass', 'fail', 'unknown'].includes(observation);
+      }
+      if (['runtimeErrors', 'incidentalRuntimeErrors'].includes(metric)) return observation === 0;
+      if (['runtimeErrorMessages', 'incidentalRuntimeErrorMessages',
+        'readinessEvidence', 'graphicEvidence', 'readinessActionEvidence'].includes(metric)) return observation === null || observation === '';
+      return false;
+    });
+  });
+}
+
 function summarizeTimingWarning(check: RecordValue): RecordValue {
   const m = check.metrics;
-  if (hasProbeEvidence(check) || check.kind !== 'journey' || check.status !== 'warn' || check.error || check.trace ||
+  if (!knownRoutineShape(check) || hasProbeEvidence(check) || check.kind !== 'journey' || check.status !== 'warn' || check.error || check.trace ||
     !record(m) || m.nonTimingFailure !== false || m.actionCompleted === false ||
     ['readinessEvidence', 'graphicEvidence'].some((key) => typeof m[key] === 'string' && /error|failed|pending/i.test(m[key]))) return check;
   // Warnings without probe evidence can omit routine identifiers/revision descriptions.
@@ -75,7 +136,7 @@ function summarizeTimingWarning(check: RecordValue): RecordValue {
 }
 
 function routineCheck(check: RecordValue): boolean {
-  return !hasProbeEvidence(check) && ((check.status === 'pass' && !check.error && !check.trace &&
+  return knownRoutineShape(check) && !hasProbeEvidence(check) && ((check.status === 'pass' && !check.error && !check.trace &&
     record(check.metrics) && check.metrics.nonTimingFailure !== true &&
     !(finite(check.durationMs) && check.durationMs > 10_000)) || localLinkWarning(check));
 }
@@ -254,7 +315,7 @@ export function compactDebugLogExport(text: string): string {
   if (!sessions.size) return text;
   const output = [...retained.map((entry) => typeof entry === 'string' ? entry : `# Audit source ${JSON.stringify(entry)}`),
     '', '# Compact diagnostic export v1',
-    '# Routine passes and local-only link warnings are grouped with counts/timing; every failure, warning and skip outcome is retained.',
+    '# Only known-shape routine passes and local-only link warnings are grouped with counts/timing; unfamiliar fields remain detailed; every failure, warning and skip outcome is retained.',
     '# Tables: columns describe rows; metricColumns describe metrics; commonMetrics apply to every row; checkIndexes retain original collection order; {$text:N} references texts[N].',
     '# Audit source markers preserve input order and original line ranges. Check locations retain anomaly and probe timestamps even when the saved report contains the check.',
     '# Readiness, graphic and action probe checks retain every field regardless of outcome. Plan steps are summarized; provider tables retain source accounting and failure evidence. Full evidence remains on the device.',

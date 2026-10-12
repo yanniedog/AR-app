@@ -257,3 +257,36 @@ it('keeps interleaved journal retries in source order for partial, additional an
     expect(report.checkLocations.rows).toEqual(checks.map((value, i) => [value.id, i + 1, expected[i].journalLogPrefix]));
   }
 });
+
+it.each([
+  ['top-level', 'pass'], ['metric', 'pass'], ['top-level', 'warn'], ['metric', 'warn'],
+])('retains unknown %s strings on non-slowest routine %s checks', (location, status) => {
+  const metrics = status === 'warn' ? { urlValidation: 'pass', browserHandler: 'unknown', handlerAttempted: false,
+    httpReachability: 'unknown', httpAttempted: false, nonTimingFailure: false, reason: 'Local mode' } : {};
+  const known = { ...check('known-slowest', status, metrics), kind: status === 'warn' ? 'network' : 'runtime', durationMs: 900 };
+  const unfamiliar = ['first context', 'second context'].map((context, i) => ({ ...known, id: `unfamiliar-${i}`, durationMs: i + 1,
+    ...(location === 'top-level' ? { futureContext: context } : { metrics: { ...metrics, futureContext: context } }),
+  }));
+  const report = unpack(compactDebugLogExport(JSON.stringify({ sessionId, checks: [...unfamiliar, known] })));
+  expect(details(report.checks)).toEqual(unfamiliar);
+  expect(report.checks.routineGroups).toEqual([expect.objectContaining({ count: 1, slowestExample: known })]);
+});
+
+it.each([null, 10, true, { details: 'future evidence' }, ['future evidence']])(
+  'retains unfamiliar field values regardless of their shape (%j)', (value) => {
+    const checks = [{ ...check('top-level', 'pass'), futureField: value }, check('metric', 'pass', { futureDurationMs: value }),
+      { ...check('known-slowest', 'pass'), durationMs: 900 }];
+    const report = unpack(compactDebugLogExport(JSON.stringify({ sessionId, checks })));
+    expect(details(report.checks)).toEqual(checks.slice(0, 2));
+    expect(report.checks.routineGroups[0].count).toBe(1);
+  },
+);
+
+it('keeps unknown timing-warning context verbatim and known metric names with unfamiliar value shapes', () => {
+  const warning = check('future-warning', 'warn', { nonTimingFailure: false, journeyId: 'original-journey',
+    renderRevisionBefore: 'original-before', renderRevisionAfter: 'original-after', futureContext: 'retain all fields' });
+  const malformedMetric = check('future-shape', 'pass', { frameSamples: { value: 12, observation: 'new schema' } });
+  const report = unpack(compactDebugLogExport(JSON.stringify({ sessionId, checks: [warning, malformedMetric] })));
+  expect(details(report.checks)).toEqual([warning, malformedMetric]);
+  expect(report.checks.routineGroups).toEqual([]);
+});
