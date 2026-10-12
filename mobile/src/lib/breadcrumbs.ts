@@ -2,6 +2,7 @@ import type { Href } from 'expo-router';
 
 import { SECTIONS } from '../constants';
 import { ROOT, segLabel } from '../data/taxonomy';
+import { LEDGER_LAYOUT } from '../theme/layout';
 import type { RateRow, SectionKey } from '../types';
 import { isPrimaryTabRootPath, normalizeAppPath, TAB_BAR_ORDER, tabHref } from './tabRouting';
 
@@ -123,4 +124,14 @@ export function shouldShowBreadcrumbs(pathname: string, onboarded: boolean): boo
     && path !== '/onboarding'
     && !path.startsWith('/onboarding/')
     && !TAB_BAR_ORDER.some((route) => isPrimaryTabRootPath(path, route));
+}
+
+/**
+ * Breadcrumbs are an at-a-glance wide/tablet affordance. On phones the bottom
+ * tab bar names the section and stack back shows the journey, so the extra bar
+ * is redundant and is hidden. An unknown/first-render width reads as a phone so
+ * the bar only ever appears (adding its top inset), never flashes then collapses.
+ */
+export function breadcrumbsFitWidth(width: number): boolean {
+  return width >= LEDGER_LAYOUT.wideBreakpoint;
 }

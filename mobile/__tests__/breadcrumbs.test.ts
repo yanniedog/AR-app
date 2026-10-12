@@ -1,4 +1,7 @@
-import { buildBreadcrumbs, shouldShowBreadcrumbs } from '../src/lib/breadcrumbs';
+import fs from 'node:fs';
+import path from 'node:path';
+
+import { breadcrumbsFitWidth, buildBreadcrumbs, shouldShowBreadcrumbs } from '../src/lib/breadcrumbs';
 import type { RateRow } from '../src/types';
 
 const build = (pathname: string) => buildBreadcrumbs({ pathname, section: 'Mortgage' });
@@ -69,4 +72,28 @@ it('keeps primary hubs free of duplicate breadcrumbs', () => {
     expect(shouldShowBreadcrumbs(path, true)).toBe(false);
   }
   expect(shouldShowBreadcrumbs('/onboarding/step', true)).toBe(false);
+});
+
+it('shows breadcrumbs only at the wide/tablet breakpoint, hiding them on phones', () => {
+  // Phone widths (and an unknown 0 first-render width) hide the redundant bar.
+  expect(breadcrumbsFitWidth(0)).toBe(false);
+  expect(breadcrumbsFitWidth(390)).toBe(false);
+  expect(breadcrumbsFitWidth(600)).toBe(false);
+  expect(breadcrumbsFitWidth(719)).toBe(false);
+  // At the wide breakpoint and above, the bar is a useful at-a-glance affordance.
+  expect(breadcrumbsFitWidth(720)).toBe(true);
+  expect(breadcrumbsFitWidth(1024)).toBe(true);
+});
+
+it('gates the breadcrumb bar by width in both layouts', () => {
+  // A unit check of breadcrumbsFitWidth cannot catch a layout that drops the
+  // gate, so assert each layout folds width into its breadcrumbVisible value
+  // (which controls both the bar's mount and the top-inset accounting).
+  const root = path.resolve(__dirname, '..');
+  for (const file of ['app/_layout.tsx', 'app/(tabs)/_layout.tsx']) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    const line = source.split('\n').find((l) => l.includes('breadcrumbVisible =')) ?? '';
+    expect(line).toContain('shouldShowBreadcrumbs(');
+    expect(line).toContain('breadcrumbsFitWidth(');
+  }
 });

@@ -1,19 +1,22 @@
 # App navigation
 
-The app has five permanent destinations, in this order. Navigation remains visible
-on ordinary detail screens. Onboarding and modal comparisons use their own controls.
+The app has five permanent destinations, in this order. The bottom bar and the
+labelled Menu stay visible on ordinary detail screens; the breadcrumb bar is a
+wide/tablet affordance and is hidden on phones, where the bottom bar names the
+section and stack back shows the journey. Onboarding and modal comparisons use
+their own controls.
 
 | Destination | Purpose | Screens it owns |
 | --- | --- | --- |
-| Home | A short task launcher | `/` |
-| Rates | Find and compare products | `/browse`, `/search`, `/matches`, `/categories`, `/banks`, `/bank/[provider]`, `/product/[key]`, `/catalogue`, `/compare`, `/rate-receipt` |
+| Home | A dashboard: watched rates, the best rate per followed type and the RBA | `/` |
+| Rates | Find and compare products; opens on a ranked list with a product-type switch | `/browse`, `/search`, `/matches`, `/categories`, `/banks`, `/bank/[provider]`, `/product/[key]`, `/catalogue`, `/compare`, `/rate-receipt` |
 | Saved | Watch a shortlist and manage alerts | `/watchlist` |
 | Market | Understand rates and changes | `/market`, `/bank-rates`, `/passthrough`, `/rba-response`, `/rba`, `/research`, legacy `/trends` |
 | Tools | Work with personal rates and needs | `/tools`, `/calculator`, `/projections`, `/calculation-receipt`, `/profile`; app settings and help |
 
 ## Finding things
 
-- Rates → Home loans, Savings accounts or Term deposits → searchable products.
+- Rates opens on the best products for the active type; switch type at the top, or open Search for the full filterable list.
 - Rates → Banks → bank → products and bank history.
 - Rates → Matched rates → exact eligible product → save or compare.
 - Rates → Product categories → category drill, with explicit ancestor navigation.

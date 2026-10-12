@@ -1,6 +1,6 @@
 import { Tabs, usePathname } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 
 import { useAppUpdateBannerVisible } from '../../src/components/AppUpdateBanner';
 import { NavigationMenuButton } from '../../src/components/AppNavigationMenu';
@@ -8,7 +8,7 @@ import { RefreshOutcomeSnackbar } from '../../src/components/feedback';
 import { useStore } from '../../src/data/store';
 import { primaryTabLabel, TAB_BAR_ORDER } from '../../src/lib/tabRouting';
 import { TAB_LEDGER_ICONS } from '../../src/lib/tabIcons';
-import { shouldShowBreadcrumbs } from '../../src/lib/breadcrumbs';
+import { breadcrumbsFitWidth, shouldShowBreadcrumbs } from '../../src/lib/breadcrumbs';
 import { logTabNoOp } from '../../src/lib/degradationLog';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { HEADER_TYPOGRAPHY } from '../../src/theme/typography';
@@ -23,7 +23,8 @@ export default function TabsLayout() {
   const theme = useTheme();
   const showUpdateBanner = useAppUpdateBannerVisible();
   const onboarded = useStore((state) => state.prefs.onboarded);
-  const breadcrumbVisible = shouldShowBreadcrumbs(usePathname(), onboarded);
+  const { width } = useWindowDimensions();
+  const breadcrumbVisible = shouldShowBreadcrumbs(usePathname(), onboarded) && breadcrumbsFitWidth(width);
 
   return (
     <>
