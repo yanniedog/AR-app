@@ -22,6 +22,7 @@ import {
 } from './format';
 import type { UserRateScenario } from './userRateScenario';
 import { scopedRateConditions, type RateConditionContext, type ScopedRateConditions } from './rateConditions';
+import { lvrTierDisplay } from './lvrTier';
 
 export interface ReceiptFact {
   label: string;
@@ -175,7 +176,7 @@ export function buildRateReceipt(input: {
     addFact(tier, 'Rate structure', humanizeEnum(row.ribbon_rate_structure));
     addFact(tier, 'Repayment', humanizeEnum(row.ribbon_repayment_type ?? row.repayment_type));
     addFact(tier, 'Loan purpose', humanizeEnum(row.loan_purpose ?? row.security_purpose));
-    addFact(tier, 'LVR tier', humanizeEnum(row.lvr_tier));
+    addFact(tier, 'LVR tier', lvrTierDisplay(row.lvr_tier));
   } else {
     addFact(tier, 'Deposit tier', humanizeEnum(row.ribbon_deposit_kind));
     addFact(tier, 'Balance range', formatBalanceRange(row.balance_min, row.balance_max));

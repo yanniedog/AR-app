@@ -321,12 +321,21 @@ export default function Market() {
   }, historyOpen);
   usePerformanceAuditProbe(surface, {
     id: 'economic-graphics', kind: 'graphic', required: economyOpen,
-    status: !economyOpen ? 'ready' : economicAuditState?.status ?? 'pending', error: economicAuditState?.error,
+    status: !economyOpen || economicAuditState?.graphicReady ? 'ready' : 'pending',
     expectedCount: economyOpen ? economicAuditState?.expectedCount ?? 0 : 0,
     actualCount: economyOpen ? economicAuditState?.pointCount ?? 0 : 0,
     layoutMeasured: economyOpen ? economicAuditState?.layoutMeasured ?? false : false,
     emptyStateRendered: economyOpen ? economicAuditState?.emptyStateRendered ?? false : false,
     accessibleSummary: economyOpen ? economicAuditState?.accessibleSummary ?? false : false,
+    datasetRevision, renderRevision,
+  }, economyOpen);
+  // Missing optional observations are a data-availability boundary. The chart
+  // still proves its actual measured empty state before that boundary is terminal.
+  usePerformanceAuditProbe(surface, {
+    id: 'economic-data', kind: 'data', required: economyOpen,
+    status: economicAuditState?.status ?? 'pending', error: economicAuditState?.error,
+    expectedCount: economicAuditState?.indicatorCount ?? 0,
+    actualCount: economicAuditState?.indicatorCount ?? 0,
     datasetRevision, renderRevision,
   }, economyOpen);
   usePerformanceAuditProbe(surface, {

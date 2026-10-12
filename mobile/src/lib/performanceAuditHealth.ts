@@ -19,7 +19,7 @@ import {
 import { appHealthNetworkCheck } from './appHealth/networkPolicy';
 import { appHealthDataSnapshot } from './performanceAuditDataSnapshot';
 import { passiveAuditDataChecks } from './passiveAudit';
-import { appHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
+import { preparedAppHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
 import { APP_HEALTH_DATA_CHECKS } from './appHealth/dataQuality';
 export { appHealthDataSnapshot } from './performanceAuditDataSnapshot';
 
@@ -315,7 +315,7 @@ function scopedHealthDataSnapshot(input: AppHealthDataInput): AppHealthDataSnaps
       core.run_date === manifest.run_date && data.core.run_date === core.run_date &&
       data.manifest.run_date === core.run_date && data.manifest.files.core.sha256 === manifest.files.core.sha256 &&
       samePayloadIdentity(manifest, data.manifest));
-    data = { ...data, catalogue: matchesLocal ? appHealthCatalogueSnapshot(input.state) : null };
+    data = { ...data, catalogue: matchesLocal ? preparedAppHealthCatalogueSnapshot(input.state) : null };
   }
   return data ?? appHealthDataSnapshot(input.state, input.appVersion);
 }
