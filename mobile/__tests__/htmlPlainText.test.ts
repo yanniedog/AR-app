@@ -43,3 +43,12 @@ test('handles thousands of false closer prefixes in one forward scan', () => {
   const raw = `<script>${'</script'.repeat(8_000)}</script>Visible`;
   expect(htmlPlainText(raw).trim()).toBe('Visible');
 });
+
+test('scans escaped script comment transitions in one forward pass', () => {
+  const raw = `<script><!--${'--><!--'.repeat(8_000)}</script>Visible`;
+  expect(htmlPlainText(raw).trim()).toBe('Visible');
+});
+
+test('keeps a comment closer inside a false script end tag', () => {
+  expect(htmlPlainText('<script><!--<script></script --> <script>foo</script>Visible').trim()).toBe('Visible');
+});
