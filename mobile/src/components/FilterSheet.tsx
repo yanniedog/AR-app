@@ -15,7 +15,10 @@ import {
 } from '../data/productFacts';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { matchingLenders, visibleFilterOptions } from '../lib/filterOptions';
 import { useTheme } from '../theme/ThemeProvider';
+import { SearchBar } from './controls';
+import { TouchTarget } from './TouchTarget';
 import { AppText, Button, Chip, Disclosure, Divider, Row } from './ui';
 
 interface Group {
@@ -66,11 +69,15 @@ export function FilterSheet({
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState<Filters>(filters);
   const [publishedOpen, setPublishedOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const [lenderQuery, setLenderQuery] = useState('');
 
   useEffect(() => {
     if (visible) {
       setDraft(filters);
       setPublishedOpen(false);
+      setExpandedGroups(new Set());
+      setLenderQuery('');
     }
   }, [visible, filters]);
 
@@ -85,18 +92,18 @@ export function FilterSheet({
           const values = distinctValues(rows, g.field);
           // Bands read in order (≤60%, 60–70%, …), not by row frequency.
           if (g.field === 'lvr_tier') values.sort(compareLvrTiers);
-          return { g, options: values.slice(0, 24) };
+          return { g, options: values };
         })
         .filter(({ options }) => options.length > 0),
     [rows, section], // eslint-disable-line react-hooks/exhaustive-deps -- groups is derived from section
   );
   const providers = useMemo(() => distinctProviders(rows), [rows]);
   const accountFeatures = useMemo(
-    () => distinctAccountFeatures(rows, detailsProducts, section).slice(0, 24),
+    () => distinctAccountFeatures(rows, detailsProducts, section),
     [rows, detailsProducts, section],
   );
   const eligibilityCriteria = useMemo(
-    () => distinctEligibilityCriteria(rows, detailsProducts).slice(0, 24),
+    () => distinctEligibilityCriteria(rows, detailsProducts),
     [rows, detailsProducts],
   );
   const availablePublishedDetails = useMemo(
@@ -144,6 +151,54 @@ export function FilterSheet({
     });
   };
 
+  // Long groups collapse behind "Show all" instead of silently dropping options.
+  const optionChips = ({
+    groupKey,
+    options,
+    selected,
+    label,
+    onToggle,
+    noun = 'options',
+    showAll = false,
+  }: {
+    groupKey: string;
+    options: readonly string[];
+    selected: readonly string[];
+    label: (option: string) => string;
+    onToggle: (option: string) => void;
+    noun?: string;
+    showAll?: boolean;
+  }) => {
+    const { visible: shown, hidden } = visibleFilterOptions(
+      options,
+      selected,
+      showAll || expandedGroups.has(groupKey),
+    );
+    return (
+      <>
+        <Row gap={8} style={{ flexWrap: 'wrap' }}>
+          {shown.map((option) => (
+            <Chip
+              key={option}
+              label={label(option)}
+              selected={selected.includes(option)}
+              onPress={() => onToggle(option)}
+            />
+          ))}
+        </Row>
+        {hidden > 0 ? (
+          <Button
+            title={`Show all ${options.length} ${noun}`}
+            variant="ghost"
+            style={{ alignSelf: 'flex-start', paddingHorizontal: 0, marginTop: 4 }}
+            onPress={() => setExpandedGroups((prev) => new Set(prev).add(groupKey))}
+          />
+        ) : null}
+      </>
+    );
+  };
+  const lenderMatches = matchingLenders(providers, lenderQuery, draft.providers);
+
   return (
     <Modal
       visible={visible}
@@ -178,28 +233,25 @@ export function FilterSheet({
           />
           <Row style={{ justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 }}>
             <AppText variant="h3">Filters</AppText>
-            <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close filters">
+            <TouchTarget square onPress={onClose} accessibilityRole="button" accessibilityLabel="Close filters" style={{ marginRight: -12 }}>
               <Ionicons name="close" size={24} color={theme.colors.text} />
-            </Pressable>
+            </TouchTarget>
           </Row>
           <Divider />
-          <ScrollView contentContainerStyle={{ padding: 16, gap: 18, paddingBottom: 12 }}>
+          <ScrollView contentContainerStyle={{ padding: 16, gap: 18, paddingBottom: 12 }} keyboardShouldPersistTaps="handled">
             {groupOptions.map(({ g, options }) => {
               return (
                 <View key={g.key}>
                   <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
                     {g.title}
                   </AppText>
-                  <Row gap={8} style={{ flexWrap: 'wrap' }}>
-                    {options.map((o) => (
-                      <Chip
-                        key={o}
-                        label={g.field === 'lvr_tier' ? lvrTierDisplay(o) : humanizeEnum(o)}
-                        selected={(draft[g.key] as string[]).includes(o)}
-                        onPress={() => toggle(g.key, o)}
-                      />
-                    ))}
-                  </Row>
+                  {optionChips({
+                    groupKey: g.key,
+                    options,
+                    selected: draft[g.key] as string[],
+                    label: (o) => (g.field === 'lvr_tier' ? lvrTierDisplay(o) : humanizeEnum(o)),
+                    onToggle: (o) => toggle(g.key, o),
+                  })}
                 </View>
               );
             })}
@@ -209,16 +261,14 @@ export function FilterSheet({
                 <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
                   Account features
                 </AppText>
-                <Row gap={8} style={{ flexWrap: 'wrap' }}>
-                  {accountFeatures.map((f) => (
-                    <Chip
-                      key={f}
-                      label={humanizeEnum(f)}
-                      selected={draft.accountFeatures.includes(f)}
-                      onPress={() => toggle('accountFeatures', f)}
-                    />
-                  ))}
-                </Row>
+                {optionChips({
+                  groupKey: 'accountFeatures',
+                  options: accountFeatures,
+                  selected: draft.accountFeatures,
+                  label: humanizeEnum,
+                  onToggle: (f) => toggle('accountFeatures', f),
+                  noun: 'features',
+                })}
               </View>
             ) : null}
 
@@ -227,16 +277,14 @@ export function FilterSheet({
                 <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
                   Eligibility
                 </AppText>
-                <Row gap={8} style={{ flexWrap: 'wrap' }}>
-                  {eligibilityCriteria.map((c) => (
-                    <Chip
-                      key={c}
-                      label={humanizeEnum(c)}
-                      selected={draft.eligibilityCriteria.includes(c)}
-                      onPress={() => toggle('eligibilityCriteria', c)}
-                    />
-                  ))}
-                </Row>
+                {optionChips({
+                  groupKey: 'eligibilityCriteria',
+                  options: eligibilityCriteria,
+                  selected: draft.eligibilityCriteria,
+                  label: humanizeEnum,
+                  onToggle: (c) => toggle('eligibilityCriteria', c),
+                  noun: 'criteria',
+                })}
               </View>
             ) : null}
 
@@ -268,16 +316,25 @@ export function FilterSheet({
               <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
                 Lenders
               </AppText>
-              <Row gap={8} style={{ flexWrap: 'wrap' }}>
-                {providers.map((p) => (
-                  <Chip
-                    key={p}
-                    label={p}
-                    selected={draft.providers.includes(p)}
-                    onPress={() => toggle('providers', p)}
-                  />
-                ))}
-              </Row>
+              {providers.length > 12 ? (
+                <View style={{ marginBottom: 10 }}>
+                  <SearchBar value={lenderQuery} onChangeText={setLenderQuery} placeholder="Search lenders" />
+                </View>
+              ) : null}
+              {lenderMatches.length ? (
+                // A search shows every match; otherwise the list collapses like the other groups.
+                optionChips({
+                  groupKey: 'providers',
+                  options: lenderMatches,
+                  selected: draft.providers,
+                  label: (p) => p,
+                  onToggle: (p) => toggle('providers', p),
+                  noun: 'lenders',
+                  showAll: lenderQuery.trim() !== '',
+                })
+              ) : lenderQuery.trim() ? (
+                <AppText variant="small" color="textMuted">No lenders match “{lenderQuery.trim()}”.</AppText>
+              ) : null}
             </View>
           </ScrollView>
           <Divider />
