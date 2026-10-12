@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import { zipSync } from 'fflate';
-import { HEADLESS_LOADER, inspectHeadlessLoaderDex, verifyApkHeadlessLoader } from './apk-headless-loader.mjs';
+import { HEADLESS_LOADER, inspectHeadlessLoaderDex, verifyApkHeadlessLoader,
+  COLD_BACKGROUND_PATCH_MARKERS, inspectColdBackgroundPatchesDex, verifyApkColdBackgroundPatches } from './apk-headless-loader.mjs';
 
 const require = createRequire(import.meta.url);
 const descriptor = name => `L${name.replaceAll('.', '/')};`;
@@ -14,9 +15,9 @@ const descriptor = name => `L${name.replaceAll('.', '/')};`;
 // including the dangerous case where only a reflection-name string survives.
 function dexFixture({ defined = true, className = HEADLESS_LOADER,
   parameter = 'android.content.Context', constructorFlags = 0x10001, classFlags = 1,
-  hasCode = true } = {}) {
+  hasCode = true, codeUnits = [0x000e] } = {}) {
   const bytes = Buffer.alloc(4096);
-  const strings = ['<init>', descriptor(HEADLESS_LOADER), descriptor(className), descriptor(parameter), 'V'];
+  const strings = ['<init>', descriptor(HEADLESS_LOADER), descriptor(className), descriptor(parameter), 'V', ...COLD_BACKGROUND_PATCH_MARKERS];
   const stringsOffset = 112, typesOffset = stringsOffset + strings.length * 4;
   const protosOffset = typesOffset + 3 * 4, methodsOffset = protosOffset + 12;
   const classesOffset = methodsOffset + 8;
@@ -36,7 +37,8 @@ function dexFixture({ defined = true, className = HEADLESS_LOADER,
   const parameters = offset;
   u32(offset, 1); u16(offset + 4, 1); offset += 8;
   const code = offset;
-  u16(offset, 2); u16(offset + 2, 2); u32(offset + 12, 1); u16(offset + 16, 0x000e); offset += 18;
+  u16(offset, 2); u16(offset + 2, 2); u32(offset + 12, codeUnits.length);
+  codeUnits.forEach((unit, index) => u16(offset + 16 + index * 2, unit)); offset += 16 + codeUnits.length * 2;
   const classData = offset;
   uleb(0); uleb(0); uleb(1); uleb(0);
   uleb(0); uleb(constructorFlags); uleb(hasCode ? code : 0);
@@ -85,6 +87,30 @@ test('malformed DEX bounds fail closed', () => {
   assert.throws(() => inspectHeadlessLoaderDex(fixture), /DEX bounds/);
 });
 
+test('cold background repair gate finds native code across DEX files after R8 renaming', () => {
+  const apk = zipSync({
+    'classes.dex': dexFixture({ className: 'a.b.C', codeUnits: [0x001a, 5, 0x000e] }),
+    'classes2.dex': dexFixture({ className: 'a.b.D', codeUnits: [0x001b, 6, 0, 0x000e] }),
+  });
+  assert.deepEqual(verifyApkColdBackgroundPatches(apk), { compiledPatches: [...COLD_BACKGROUND_PATCH_MARKERS].sort() });
+});
+
+test('marker strings, JS assets, operands and array data cannot impersonate compiled repairs', () => {
+  for (const options of [
+    {}, { defined: false }, { hasCode: false, codeUnits: [0x001a, 5, 0x001a, 6, 0x000e] },
+    // const-wide operands contain marker-shaped words; these are not instructions.
+    { codeUnits: [0x0018, 0x001a, 5, 0x001a, 6, 0x000e] },
+    // A fill-array payload contains the same words and must be skipped intact.
+    { codeUnits: [0x0300, 2, 4, 0, 0x001a, 5, 0x001a, 6, 0x000e] },
+    { codeUnits: [0x001a, 5, 0x000e] }, // Only one of the two repairs.
+  ]) {
+    const apk = zipSync({ 'classes.dex': dexFixture(options),
+      'assets/index.android.bundle': Buffer.from(COLD_BACKGROUND_PATCH_MARKERS.join('\n')) });
+    assert.throws(() => verifyApkColdBackgroundPatches(apk), /missing compiled cold background repairs/);
+  }
+  assert.throws(() => inspectColdBackgroundPatchesDex(dexFixture({ codeUnits: [0x001b, 5] })), /Truncated DEX/);
+});
+
 test('the installed Expo prebuild plugin writes the narrow reflected-class keep rule idempotently', async () => {
   const app = JSON.parse(await readFile(new URL('../app.json', import.meta.url), 'utf8')).expo;
   const options = app.plugins.find(plugin => Array.isArray(plugin) && plugin[0] === 'expo-build-properties')[1];
@@ -122,4 +148,8 @@ test('both built-APK validation and every publication path enforce the DEX contr
   const publishBody = publisher.slice(publisher.indexOf('async function publishRelease('));
   const guard = publishBody.indexOf('verifyApkHeadlessLoader(apkBuf)');
   assert.ok(guard > 0 && guard < publishBody.indexOf('await publishVersionedRelease('));
+  const coldBuild = workflow.indexOf('verifyApkColdBackgroundPatches(readFileSync');
+  assert.ok(coldBuild > 0 && coldBuild < workflow.indexOf('id: publish'));
+  const coldPublish = publishBody.indexOf('verifyApkColdBackgroundPatches(apkBuf)');
+  assert.ok(coldPublish > 0 && coldPublish < publishBody.indexOf('await publishVersionedRelease('));
 });

@@ -11,7 +11,7 @@ const GRADLE_HASH = 'cb948afd70863c094eedc6630fc198bfe74203f017985d3d5997a90fa30
 const normalize = source => source.replace(/\r\n/g, '\n');
 const hash = source => createHash('sha256').update(normalize(source)).digest('hex');
 
-const edits = [
+const previousEdits = [
   ['import java.util.UUID;', 'import java.util.UUID;\nimport java.util.concurrent.ConcurrentHashMap;'],
   ['private static final Map<String, List<String>> sEvents = new HashMap<>();',
     'private static final Map<String, List<String>> sEvents = new ConcurrentHashMap<>();\n  private static final HeadlessTaskController sHeadlessTasks = new HeadlessTaskController();'],
@@ -44,22 +44,36 @@ const edits = [
   ['      appEvents.remove(eventId);\n      mTasksAndEventsRepository.removeEvents(appScopeKey);',
     '      sHeadlessTasks.cancel(appScopeKey);\n      sEvents.remove(appScopeKey);\n      mTasksAndEventsRepository.removeEvents(appScopeKey);'],
 ];
+const edits = [...previousEdits,
+  ['    try {\n      getAppLoader().loadApp(',
+    `    // Expo's lazy ReactHost factory is not synchronized. The timer helper
+    // and cold loader must acquire the first host on the same UI queue.
+    sHeadlessTasks.loadAppOnUiThread(() -> {
+    try {
+      getAppLoader().loadApp(`],
+  ['      mTasksAndEventsRepository.removeEvents(appScopeKey);\n    }\n  }\n\n  //endregion\n  //region helpers',
+    '      mTasksAndEventsRepository.removeEvents(appScopeKey);\n    }\n    });\n  }\n\n  //endregion\n  //region helpers'],
+];
 const gradleEdits = [
   ['dependencies {', 'dependencies {\n  implementation "com.facebook.react:react-android"'],
 ];
 
-function patchSource(source, replacements, expectedHash) {
+function patchSource(source, replacements, expectedHash, previous = []) {
   source = normalize(source);
   // Recover the exact pinned upstream input from an already-applied patch.
   let original = source;
   for (const [before, after] of [...replacements].reverse()) original = original.replace(after, before);
-  if (hash(original) !== expectedHash) throw new Error('expo-task-manager timers: upstream source drift; review the pinned backport');
+  if (hash(original) !== expectedHash) throw new Error('Expo background compatibility: upstream source drift; review the pinned patch');
   let output = original;
   for (const [before, after] of replacements) {
-    if (output.split(before).length !== 2) throw new Error('expo-task-manager timers: ambiguous patch anchor');
+    if (output.split(before).length !== 2) throw new Error('Expo background compatibility: ambiguous patch anchor');
     output = output.replace(before, after);
   }
-  if (source !== original && source !== output) throw new Error('expo-task-manager timers: partial or conflicting patch');
+  let previousOutput = original;
+  for (const [before, after] of previous) previousOutput = previousOutput.replace(before, after);
+  if (source !== original && source !== output && (!previous.length || source !== previousOutput)) {
+    throw new Error('Expo background compatibility: partial or conflicting patch');
+  }
   return output;
 }
 
@@ -72,7 +86,7 @@ function patchTaskManagerTimers(projectDir = path.resolve(__dirname, '..')) {
   const servicePath = path.join(root, 'android/src/main/java/expo/modules/taskManager/TaskService.java');
   const gradlePath = path.join(root, 'android/build.gradle');
   // Validate every upstream input before writing either source.
-  const service = patchSource(fs.readFileSync(servicePath, 'utf8'), edits, SOURCE_HASH);
+  const service = patchSource(fs.readFileSync(servicePath, 'utf8'), edits, SOURCE_HASH, previousEdits);
   const gradle = patchSource(fs.readFileSync(gradlePath, 'utf8'), gradleEdits, GRADLE_HASH);
   const helper = fs.readFileSync(path.join(__dirname, 'compat/HeadlessTaskController.java'), 'utf8');
   fs.writeFileSync(servicePath, service);
@@ -81,4 +95,4 @@ function patchTaskManagerTimers(projectDir = path.resolve(__dirname, '..')) {
 }
 
 if (require.main === module) patchTaskManagerTimers();
-module.exports = { patchTaskManagerTimers, patchSource, edits, gradleEdits, SOURCE_HASH, GRADLE_HASH };
+module.exports = { patchTaskManagerTimers, patchSource, edits, previousEdits, gradleEdits, SOURCE_HASH, GRADLE_HASH };

@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { patchSource, edits, gradleEdits, SOURCE_HASH, GRADLE_HASH } = require('./patch-task-manager-timers.cjs');
+const { patchSource, edits, previousEdits, gradleEdits, SOURCE_HASH, GRADLE_HASH } = require('./patch-task-manager-timers.cjs');
 const upstream = path.dirname(require.resolve('expo-task-manager/package.json'));
 
 test('Android autolinking builds the patched task manager source instead of its prebuilt AAR', async () => {
@@ -17,7 +17,7 @@ test('Android autolinking builds the patched task manager source instead of its 
   const loader = createAutolinkingOptionsLoader({ projectRoot: process.cwd() });
   const android = await loader.getPlatformOptions('android');
   // TaskManager's pinned Gradle source requires this exact project dependency.
-  assert.deepEqual(getConfiguration(android), { buildFromSource: ['expo-task-manager', 'unimodules-app-loader'] });
+  assert.deepEqual(getConfiguration(android), { buildFromSource: ['expo-task-manager', 'unimodules-app-loader', 'expo-background-task'] });
   assert.deepEqual(require('../package.json').expo.install.exclude, ['@react-navigation/native']);
   const apple = await loader.getPlatformOptions('apple');
   assert.equal(apple.buildFromSource, undefined);
@@ -29,10 +29,16 @@ test('SDK timer backport accepts only exact pinned input or exact patched output
     ['android/build.gradle', gradleEdits, GRADLE_HASH],
   ]) {
     const installed = fs.readFileSync(path.join(upstream, relative), 'utf8');
-    const patched = patchSource(installed, changes, digest);
+    const prior = digest === SOURCE_HASH ? previousEdits : [];
+    const patched = patchSource(installed, changes, digest, prior);
     assert.equal(patchSource(patched, changes, digest), patched);
     let pristine = patched;
     for (const [before, after] of [...changes].reverse()) pristine = pristine.replace(after, before);
+    if (prior.length) {
+      let previous = pristine;
+      for (const [before, after] of prior) previous = previous.replace(before, after);
+      assert.equal(patchSource(previous, changes, digest, prior), patched);
+    }
     assert.equal(patchSource(pristine.replaceAll('\n', '\r\n'), changes, digest), patched);
     assert.throws(() => patchSource(`${pristine}\n// upstream changed`, changes, digest), /source drift/);
     if (changes.length > 1) {
@@ -43,12 +49,15 @@ test('SDK timer backport accepts only exact pinned input or exact patched output
 
 test('TaskService hooks start before dispatch and release on normal, failed-result and failed-loader paths', () => {
   const source = patchSource(fs.readFileSync(path.join(upstream,
-    'android/src/main/java/expo/modules/taskManager/TaskService.java'), 'utf8'), edits, SOURCE_HASH);
+    'android/src/main/java/expo/modules/taskManager/TaskService.java'), 'utf8'), edits, SOURCE_HASH, previousEdits);
   const execute = source.slice(source.indexOf('  public void executeTask('), source.indexOf('  //endregion', source.indexOf('  public void executeTask(')));
   assert.ok(execute.indexOf('sHeadlessTasks.start(') < execute.indexOf('taskManager.executeTaskWithBody(body)'));
   assert.match(execute, /synchronized \(sEvents\)[\s\S]*computeIfAbsent[\s\S]*appEvents.add\(eventId\)/);
   assert.match(execute, /if \(!success\) \{\s*sHeadlessTasks.cancel\(appScopeKey\)/);
   assert.match(execute, /catch \(HeadlessAppLoader.AppConfigurationError[\s\S]*sHeadlessTasks.cancel\(appScopeKey\)/);
+  assert.ok(execute.indexOf('sHeadlessTasks.start(') < execute.indexOf('sHeadlessTasks.loadAppOnUiThread('));
+  assert.match(execute, /loadAppOnUiThread\(\(\) -> \{\s*try \{\s*getAppLoader\(\).loadApp\(/);
+  assert.match(execute, /catch \(HeadlessAppLoader.AppConfigurationError[\s\S]*removeEvents\(appScopeKey\);\s*\}\s*\}\);/);
   const completion = source.slice(source.indexOf('  public void notifyTaskFinished('), source.indexOf('  public void setTaskManager('));
   assert.ok(completion.indexOf('sHeadlessTasks.finish(') < completion.indexOf('taskCallback.onFinished(response)'));
   assert.match(completion, /sTaskCallbacks.remove\(eventId\)/);
@@ -66,8 +75,11 @@ test('native lease enables cold timers for every pending event and cleans up aft
     'com/facebook/react/ReactInstanceEventListener.java': 'package com.facebook.react; import com.facebook.react.bridge.ReactContext; public interface ReactInstanceEventListener { void onReactContextInitialized(ReactContext context); }',
     'com/facebook/react/bridge/ReactContext.java': 'package com.facebook.react.bridge; public class ReactContext {}',
     'com/facebook/react/bridge/WritableNativeMap.java': 'package com.facebook.react.bridge; public class WritableNativeMap {}',
-    'com/facebook/react/bridge/UiThreadUtil.java': `package com.facebook.react.bridge; import java.util.*;
-      public class UiThreadUtil { public static final Queue<Runnable> queue=new ArrayDeque<>(); public static void runOnUiThread(Runnable run){queue.add(run);} public static void drain(){while(!queue.isEmpty())queue.remove().run();} }`,
+    'com/facebook/react/bridge/UiThreadUtil.java': `package com.facebook.react.bridge; import java.util.Queue; import java.util.concurrent.*;
+      public class UiThreadUtil { public static final Queue<Runnable> queue=new ConcurrentLinkedQueue<>(); private static Thread ui;
+      public static void runOnUiThread(Runnable run){if(isOnUiThread())run.run();else queue.add(run);}
+      public static boolean isOnUiThread(){return Thread.currentThread()==ui;}
+      public static void drain(){ui=Thread.currentThread();try{Runnable run;while((run=queue.poll())!=null)run.run();}finally{ui=null;}} }`,
     'com/facebook/react/jstasks/HeadlessJsTaskConfig.java': `package com.facebook.react.jstasks; import com.facebook.react.bridge.WritableNativeMap;
       public class HeadlessJsTaskConfig { public HeadlessJsTaskConfig(String key,WritableNativeMap data,long timeout,boolean foreground){if(!key.equals("ar-expo-task-timers")||timeout!=0||!foreground)throw new AssertionError("task configuration");} }`,
     'com/facebook/react/jstasks/HeadlessJsTaskContext.java': `package com.facebook.react.jstasks; import java.util.*; import com.facebook.react.bridge.ReactContext;
