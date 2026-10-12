@@ -18,7 +18,7 @@ import {
   loginToBotKey,
   SPREADSHEET_BOT_KEYS,
 } from "./lib/pr-bot-roster.mjs";
-import { changedLinesFromDiff, isReviewablePath } from "./qwen-pr-review.mjs";
+import { assertBranchName, canonicalPullNumber, changedLinesFromDiff, fetchedPullRequestRef, isReviewablePath } from "./qwen-pr-review.mjs";
 import {
   combineRequiredCheckState,
   renderDashboard,
@@ -27,6 +27,7 @@ import {
   workflowNeedsStateChange,
 } from "./review-bot-control.mjs";
 import { evaluateRequiredCheckState } from "./lib/required-ci-checks.mjs";
+import { verifyQwenDiff } from "./verify-qwen-diff.mjs";
 
 function indentedBlock(source, heading) {
   const lines = source.split(/\r?\n/);
@@ -515,6 +516,30 @@ assert.doesNotMatch(workflow, /queue:\s*max/);
 assert.match(workflow, /DIFF_MAX_CHARS:\s*"60000"/);
 assert.doesNotMatch(workflow, /DIFF_CHUNK_CHARS/);
 assert.match(workflow, /Fork PRs cannot run/);
+assert.doesNotMatch(workflow, /ref:\s*\$\{\{\s*steps\.pr\.outputs\.head_sha/);
+assert.doesNotMatch(workflow, /review-target/);
+assert.match(workflow, /working-directory:\s*_trusted-reviewer/);
+assert.match(workflow, /fetched and used only as diff data/);
+assert.doesNotMatch(workflow, /checked out separately/);
+assert.match(reviewer, /refs\/heads\/\$\{baseRef\}:\$\{baseRemote\}/);
+assert.match(reviewer, /check-ref-format', '--branch'/);
+assert.equal(fetchedPullRequestRef('12'), 'refs/review-fetch/pr-12');
+assert.equal(canonicalPullNumber('0012'), '12');
+assert.equal(fetchedPullRequestRef('0012'), 'refs/review-fetch/pr-12');
+assert.doesNotThrow(() => assertBranchName(`${'a'.repeat(130)}/${'b'.repeat(130)}`, 'BASE_REF'));
+assert.match(workflow, /number=\$\(\$json\.number\)/);
+assert.notEqual(fetchedPullRequestRef('12'), 'refs/remotes/origin/pr-review-12');
+assert.doesNotThrow(() => assertBranchName('release+hotfix', 'BASE_REF'));
+assert.doesNotThrow(() => assertBranchName('foo@bar', 'BASE_REF'));
+assert.throws(() => assertBranchName('has space', 'BASE_REF'), /branch name/);
+assert.match(reviewer, /\$\{baseRemote\}\.\.\.\$\{resolvedHead\}/);
+assert.match(reviewer, /--unshallow/);
+assert.match(workflow, /fetch-depth:\s*1/);
+assert.doesNotMatch(workflow, /fetch-depth:\s*0/);
+assert.match(reviewer, /refs\/review-fetch\/base-\$\{pullNumber\}/);
+assert.doesNotMatch(reviewer, /refs\/remotes\/origin\/\$\{baseRef\}/);
+assert.match(reviewer, /--refmap=/);
+verifyQwenDiff();
 assert.doesNotMatch(workflow, /Reviewed files:/);
 assert.doesNotMatch(workflow, /Omitted (?:reviewable )?files:/);
 assert.match(workflow, /\$exists\.ToString\(\)\.ToLowerInvariant\(\)/);
