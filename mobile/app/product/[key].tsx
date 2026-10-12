@@ -43,7 +43,8 @@ import { ScreenScrollView } from '../../src/components/Screen';
 import { AppText, Button, Card, IconButton, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
-import { formatRate, formatRunDate, isNonStandard, toFraction } from '../../src/data/format';
+import { formatEvidenceDate } from '../../src/data/displayEvidence';
+import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
 import { normalizedProductFacts } from '../../src/data/productFacts';
 import { verifiedDetailsSha } from '../../src/data/detailsIdentity';
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
@@ -636,7 +637,7 @@ export default function ProductDetail() {
             current={{ date: core?.run_date, rate: currentBest }}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-            This exact rate · checked {formatRunDate(core?.run_date)}
+            This exact rate · checked {formatEvidenceDate(core?.run_date)}
           </AppText>
           {isNonStandard(row) ? (
             <View
