@@ -1,0 +1,32 @@
+{
+  "version": "1.0.234",
+  "releaseTag": "app-arm-v1.0.234",
+  "date": "2026-10-12",
+  "summaryBullets": [
+    "feat(ux): onboarding + navigation overhaul — radio-card onboarding, results-first Rates, dashboard Home (#388)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "feat(ux): onboarding + navigation overhaul — radio-card onboarding, results-first Rates, dashboard Home (#388)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.234"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.233"
+        }
+      ]
+    }
+  ]
+}
