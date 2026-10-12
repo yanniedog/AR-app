@@ -161,6 +161,25 @@ test('deep search retries when a cached edition is confirmed live, without a ret
   } finally { act(() => tree.unmount()); }
 });
 
+test('unavailable results that cycle through loading on a live source do not re-run deep search', () => {
+  const ensureSearchIndex = jest.fn(async () => undefined);
+  mockState = {
+    ...mockState, prefs: { ...mockState.prefs, enableDeepSearch: true }, source: 'remote',
+    searchIndex: null, searchIndexStatus: 'unavailable', ensureSearchIndex,
+    searchIndexError: 'Deep search is not cached for this data edition. Basic name search still works.',
+  };
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    // A local audit's ensure reports loading, then unavailable again.
+    for (const searchIndexStatus of ['loading', 'unavailable', 'loading', 'unavailable']) {
+      mockState = { ...mockState, searchIndexStatus };
+      act(() => tree.update(<Search />));
+    }
+    expect(ensureSearchIndex).not.toHaveBeenCalled();
+  } finally { act(() => tree.unmount()); }
+});
+
 test('comparison and filter disclosure commit without remounting unchanged search results', () => {
   mockState.prefs.includeNonStandard = true;
   let tree: any;

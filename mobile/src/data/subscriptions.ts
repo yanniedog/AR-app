@@ -115,7 +115,8 @@ export function buildSearchLabel(
 export function refreshProductSubscriptionLabels(list: Subscription[]): Subscription[] {
   let changed = false;
   const next = list.map((sub) => {
-    if (sub.kind !== 'product' || typeof sub.label !== 'string') return sub;
+    // Product-wide alerts store only "provider · product name"; never rewrite a name.
+    if (sub.kind !== 'product' || sub.rateIndex == null || typeof sub.label !== 'string') return sub;
     const label = refreshLvrLabelText(sub.label);
     if (label === sub.label) return sub;
     changed = true;

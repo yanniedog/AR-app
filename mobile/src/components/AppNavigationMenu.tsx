@@ -55,6 +55,8 @@ export function NavigationMenuButton({ compact = false }: { compact?: boolean } 
       accessibilityRole="button"
       accessibilityLabel="Open app menu"
       accessibilityState={{ expanded: menu.open }}
+      // Icon-only still keeps the 48 dp minimum width.
+      square={compact}
       style={({ pressed }) => ({ flexDirection: 'row', gap: 5, paddingHorizontal: 10, opacity: pressed ? 0.6 : 1 })}
     >
       <LedgerIcon name="menu" size={21} color={theme.ledger.ink} />

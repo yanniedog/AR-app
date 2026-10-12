@@ -272,6 +272,14 @@ describe('stored product alert labels', () => {
     expect(refreshed[2]).toBe(search);
   });
 
+  test('product-wide alerts keep the official product name verbatim', () => {
+    const productWide = {
+      ...makeProductSubscription(mk({ product_name: 'Home loan (LVR =60%)' }), null),
+    };
+    expect(productWide.label).toBe('Bank A · Home loan (LVR =60%)');
+    expect(refreshProductSubscriptionLabels([productWide])[0].label).toBe('Bank A · Home loan (LVR =60%)');
+  });
+
   test('current labels are returned unchanged, including the list identity', () => {
     const current = [makeProductSubscription(mk({ lvr_tier: 'lvr_=60%' }), 1)];
     expect(current[0].label).toBe('Bank A · Home loan (Variable · LVR ≤60%)');

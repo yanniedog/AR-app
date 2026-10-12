@@ -4,7 +4,7 @@ import Ionicons from '../src/components/icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
 import { useIsFocused } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -149,12 +149,18 @@ export default function Search() {
     });
   }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey, searchIndexSha, isFocused]);
   // A cached core reports deep search unavailable until a refresh confirms the
-  // same edition is live; that promotion changes only `source`, so retry then.
+  // same edition is live; that promotion changes only `source`, so retry on the
+  // transition itself. Status is read, not depended on: other unavailable
+  // results (e.g. local audits) cycle through loading and must not re-trigger.
+  const previousSource = useRef(source);
   useEffect(() => {
-    if (isFocused && deepSearchActive && source === 'remote' && searchIndexStatus === 'unavailable') {
+    const promotedToRemote = previousSource.current !== 'remote' && source === 'remote';
+    previousSource.current = source;
+    if (promotedToRemote && isFocused && deepSearchActive &&
+        useStore.getState().searchIndexStatus === 'unavailable') {
       void ensureSearchIndex();
     }
-  }, [deepSearchActive, ensureSearchIndex, isFocused, searchIndexStatus, source]);
+  }, [deepSearchActive, ensureSearchIndex, isFocused, source]);
 
   const [query, setQuery] = useState(() => restoredSub?.query ?? queryRaw ?? '');
   const debouncedQuery = useDebouncedValue(query, 120);
@@ -227,14 +233,18 @@ export default function Search() {
   );
 
   const draftResultCount = useCallback(
-    (draft: Filters) => filterRows(
-      baseRows,
-      { ...draft, query: debouncedQuery },
-      details?.products ?? null,
-      deepSearchActive ? searchIndex : null,
-      section,
-    ).length,
-    [baseRows, debouncedQuery, details?.products, deepSearchActive, searchIndex, section],
+    (draft: Filters) => (
+      // Suitability rebuilds can keep the same row array; count against the gate the list uses.
+      void suitabilityRevision,
+      filterRows(
+        baseRows,
+        { ...draft, query: debouncedQuery },
+        details?.products ?? null,
+        deepSearchActive ? searchIndex : null,
+        section,
+      ).length
+    ),
+    [baseRows, debouncedQuery, details?.products, deepSearchActive, searchIndex, section, suitabilityRevision],
   );
 
   const showDeepSearchHint =
