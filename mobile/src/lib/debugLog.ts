@@ -23,6 +23,7 @@ export const MAX_LOG_LINES = 2000;
 export const MAX_LOG_BYTES = 512 * 1024;
 export const PERSIST_TAIL_LINES = 100;
 export const MAX_LOG_FILE_BYTES = 2 * 1024 * 1024;
+export const LOG_FILE_ROLLOVER_TARGET_BYTES = 1536 * 1024;
 export const MAX_LOG_DISPLAY_BYTES = 16 * 1024;
 export const LOG_FILE_FLUSH_MS = 100;
 export const ANDROID_PACKAGE = 'com.eyex.australianrates';
@@ -139,14 +140,17 @@ function trimToBudget(content: string, maxBytes: number): string {
   if (bytes.length <= limit) return content;
   if (limit === 0) return '';
   let start = bytes.length - limit;
-  while (start < bytes.length && bytes[start] !== 0x0a) start += 1;
-  start += 1;
+  // An exact line boundary already preserves a complete newest batch.
+  if (bytes[start - 1] !== 0x0a) {
+    while (start < bytes.length && bytes[start] !== 0x0a) start += 1;
+    start += 1;
+  }
   if (start >= bytes.length) return '';
   return textDecoder.decode(bytes.slice(start));
 }
 
-function trimFileTail(content: string): string {
-  return trimToBudget(content, MAX_LOG_FILE_BYTES);
+function trimFileTail(content: string, maxBytes = MAX_LOG_FILE_BYTES): string {
+  return trimToBudget(content, maxBytes);
 }
 
 /**
@@ -188,6 +192,42 @@ type NativeFileAccessModule = {
   FileSystem?: { appendFile?: (path: string, data: string, encoding?: string) => Promise<void> };
 };
 let nativeFileAccessModule: NativeFileAccessModule | null | undefined;
+type LogFileStage = 'idle' | 'directory' | 'read' | 'encode' | 'append' | 'rewrite';
+const logFileClock = () => globalThis.performance?.now?.() ?? Date.now();
+let logFileStage: LogFileStage = 'idle';
+let logFileStageStarted = 0;
+let logFileFlushStarted: number | null = null;
+let logFileLastFlushMs = 0;
+let logFileLastFailedStage: LogFileStage | null = null;
+let logFileAppendAttempts = 0;
+let logFileAppendBytes = 0;
+let logFileRewriteAttempts = 0;
+let logFileRewriteBytes = 0;
+
+function setLogFileStage(stage: LogFileStage): void {
+  logFileStage = stage;
+  logFileStageStarted = logFileClock();
+}
+
+/** Fixed-size, in-memory evidence; never writes another diagnostic log line. */
+export function getDebugLogFlushDiagnostics() {
+  const now = logFileClock();
+  return {
+    stage: logFileStage,
+    stageMs: logFileStage === 'idle' ? 0 : Math.max(0, now - logFileStageStarted),
+    activeMs: logFileFlushStarted == null ? 0 : Math.max(0, now - logFileFlushStarted),
+    lastFlushMs: logFileLastFlushMs,
+    lastFailedStage: logFileLastFailedStage,
+    nativeAppendAvailable: nativeFileAccessModule === undefined
+      ? null : typeof nativeFileAccessModule?.FileSystem?.appendFile === 'function',
+    appendAttempts: logFileAppendAttempts,
+    appendBytes: logFileAppendBytes,
+    rewriteAttempts: logFileRewriteAttempts,
+    rewriteBytes: logFileRewriteBytes,
+    fileBytes: fileByteLength,
+    queuedLines: pendingFileLines.length,
+  };
+}
 
 function scheduleFileFlush(): void {
   if (fileFlushTimer) return;
@@ -223,17 +263,24 @@ function nativeAppendFile(): ((path: string, data: string) => Promise<void>) | n
   return (path, data) => append(path, data, 'utf8');
 }
 
-async function rewriteLogFile(appendText: string, epoch: number): Promise<void> {
+async function rewriteLogFile(appendText: string, epoch: number, maxBytes = MAX_LOG_FILE_BYTES): Promise<void> {
+  setLogFileStage('read');
   const existing = fileContentCache ?? (await FileSystem.readAsStringAsync(LOG_FILE).catch(() => ''));
   if (epoch !== fileWriteEpoch) return;
-  const combined = trimFileTail(existing + appendText);
+  setLogFileStage('encode');
+  const combined = trimFileTail(existing + appendText, maxBytes);
+  const combinedBytes = textEncoder.encode(combined).length;
+  logFileRewriteAttempts += 1;
+  logFileRewriteBytes += combinedBytes;
+  setLogFileStage('rewrite');
   await FileSystem.writeAsStringAsync(LOG_FILE, combined);
   if (epoch !== fileWriteEpoch) return;
   fileContentCache = combined;
-  fileByteLength = textEncoder.encode(combined).length;
+  fileByteLength = combinedBytes;
 }
 
 async function syncLogFile(appendText: string, epoch: number): Promise<void> {
+  setLogFileStage('directory');
   if (!FileSystem.documentDirectory) {
     throw new Error('documentDirectory unavailable');
   }
@@ -244,19 +291,28 @@ async function syncLogFile(appendText: string, epoch: number): Promise<void> {
     return;
   }
   if (fileByteLength == null) {
+    setLogFileStage('read');
     const existing = fileContentCache
       ?? (await FileSystem.readAsStringAsync(LOG_FILE).catch(() => ''));
     if (epoch !== fileWriteEpoch) return;
     fileByteLength = textEncoder.encode(existing).length;
   }
+  setLogFileStage('encode');
   const appendBytes = textEncoder.encode(appendText).length;
   // Only a rollover needs the whole file in memory; ordinary flushes touch
   // nothing but the bytes they add.
   if (fileByteLength + appendBytes > MAX_LOG_FILE_BYTES) {
-    await rewriteLogFile(appendText, epoch);
+    // Leave room for subsequent batches, instead of reading/rewriting 2 MiB
+    // again on the next flush. Keep the newest complete batch when it fits.
+    const retentionBytes = Math.min(MAX_LOG_FILE_BYTES,
+      Math.max(LOG_FILE_ROLLOVER_TARGET_BYTES, appendBytes));
+    await rewriteLogFile(appendText, epoch, retentionBytes);
     return;
   }
   try {
+    logFileAppendAttempts += 1;
+    logFileAppendBytes += appendBytes;
+    setLogFileStage('append');
     await append(LOG_FILE, appendText);
   } catch {
     // A missing/rotated file or an unavailable native module must still land
@@ -274,34 +330,47 @@ async function flushPendingToFile(requirePhysical = false): Promise<void> {
   // The UI cold-start reset owns the file until stale content is deleted.
   // New-session entries remain queued and are written immediately afterwards.
   if (coldStartResetPromise) await coldStartResetPromise;
-  if (fileFlushPromise) {
-    await fileFlushPromise;
-    if (pendingFileLines.length === 0) return;
+  while (fileFlushPromise) {
+    try {
+      await fileFlushPromise;
+    } catch (error) {
+      if (requirePhysical) throw error;
+      return;
+    }
+    // Another waiter may have taken the queued batch and started its write.
+    // An empty queue proves nothing until that writer has also completed.
   }
 
   const batch = pendingFileLines.splice(0);
   if (batch.length === 0) return;
   const epoch = fileWriteEpoch;
+  logFileFlushStarted = logFileClock();
 
   fileFlushPromise = (async () => {
     try {
-      if (!FileSystem.documentDirectory) {
-        pendingFileLines.unshift(...batch);
-        if (requirePhysical) throw new Error('documentDirectory unavailable');
-        return;
-      }
       await syncLogFile(batch.join(''), epoch);
+      logFileLastFailedStage = null;
     } catch (error) {
+      logFileLastFailedStage = logFileStage;
       if (epoch === fileWriteEpoch) {
         pendingFileLines.unshift(...batch);
       }
-      if (requirePhysical) throw error;
+      // The shared writer retains failure for strict callers even when an
+      // automatic flush started it. Optional callers suppress only their wait.
+      throw error;
     } finally {
       fileFlushPromise = null;
+      logFileLastFlushMs = Math.max(0, logFileClock() - (logFileFlushStarted ?? logFileClock()));
+      logFileFlushStarted = null;
+      setLogFileStage('idle');
     }
   })();
 
-  await fileFlushPromise;
+  try {
+    await fileFlushPromise;
+  } catch (error) {
+    if (requirePhysical) throw error;
+  }
 }
 
 export class RingBuffer {
@@ -704,7 +773,7 @@ export const debugLog = {
     notify();
     clearPromise = (async () => {
       try {
-        if (inFlight) await inFlight;
+        if (inFlight) await inFlight.catch(() => {});
         if (coldStartResetPromise) await coldStartResetPromise;
         const storageKeys = [
           STORAGE_KEY,

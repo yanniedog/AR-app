@@ -229,3 +229,67 @@ their validated compact checkpoints in that case; idle foreground work still
 defers. The test advances eight metadata checks and a saved link while proving
 that busy live core, manifest and details are never read and no network request
 is made.
+
+## Published v1.0.228 native acceptance and checkpoint follow-up
+
+Both public build 289 APKs identify source
+`0cbdb0dbcdfca6c4cd4695aa565dd3689cd062ed`. The universal APK is 88,498,981
+bytes with SHA-256
+`5110d605d4eaef2a1c98cc211e979c4c0309b8295fcf57cfee1a0194651b119a`;
+the ARM APK is 46,773,937 bytes with SHA-256
+`ea4b77fea670df32a728a866347f21d2319a03f2d757d38c24d7a70fbf1970ad`.
+Public hashes, package identity, signature, ABIs, reflective loader and timer
+compatibility markers were verified.
+
+The installed universal APK completed cold background work while the emulator
+was asleep without an Activity. The asleep window was 04:31:42–04:33:07 UTC;
+saved-check timestamps fall within 04:32:16–04:32:47. The native timer lease
+closed and WorkManager reported success. After foreground reuse, another asleep
+window at 04:34:37–04:35:08 completed successfully; its lease ran from
+04:34:41.959 to 04:34:43.866. These observations establish cold and warm
+screen-off execution and persisted progress on this emulator.
+
+The private offline foreground run `pa-mv4re6t8-gc96ezyp` completed both UI
+passes and its final inventory: 53,808 references, 2,352 destinations, 37 slices,
+698.3 ms. It stopped at link 64 after 437 stored checks. The preloaded link
+evaluation itself took 12 ms; the next durable checkpoint exceeded the unchanged
+10-second inactivity limit. No check longer than 10 seconds was reported as a
+non-failure. The physical log was below its 2 MiB cap, so rollover is not an
+established cause. The subsequent rollback timed out with its eventual result
+unconfirmed in that report. This run does not establish complete foreground
+acceptance or performance on a physical phone.
+
+Controlled I/O reproduced a separate durability race: an automatic flush could
+take a queued batch after an earlier write completed, while a concurrent strict
+flush returned on the now-empty queue before the new physical write finished.
+Flush waiters now recheck the active writer and retain its failure for strict
+callers. Fatal reports capture bounded, in-memory write-stage diagnostics before
+recovery can change them. Restoration outcomes remain observable after a timeout
+and drain; only the actual settled result establishes success, and a late error
+remains attached to the report with its recovery journal. These corrections
+still require signed-APK acceptance and do not yet explain or resolve the
+v1.0.228 checkpoint stall.
+
+An isolated SDK 54 / React Native 0.81.5 release Hermes harness then replayed
+2,350 durable checkpoints from the run's 64-message corpus, starting with an
+898,958-byte log and a populated bounded memory ring. The original logger took
+56.959 seconds when awaited directly and 198.508 seconds with the runner's
+50 ms polling loop. Both completed without an append failure. Once the log
+reached capacity, retaining almost 2 MiB caused 446 full-file rewrites and
+1,876,083,571 bytes of UTF-8 encoding in each baseline replay. This demonstrates
+independent polling and rollover costs, not the earlier full-app failure below
+the cap.
+
+The corrected logger retains about 1.5 MiB on rollover, within the same 2 MiB
+hard cap, preserving complete UTF-8 lines and the newest batch when it fits.
+Its exact-source replay completed 2,350 checks in 4.886 seconds, with 2,348
+appends, 2 rewrites, no append failures, 3.44 ms p95 and 97.16 ms maximum flush
+time. Encoded bytes fell to 13,045,254; Hermes allocation growth fell from
+2,046,503,648 to 74,964,880 bytes, and collection count from 10,539 to 32. The
+runner now awaits actual settlement through its foreground-aware deadline
+helper, which keeps cancellation and pause handling without delaying every fast
+write until a poll. Its independent 10-second budget also applies to restoration
+checkpoints after global inactivity monitoring enters finalization. Controlled
+regressions cover fast settlement without timer advancement, blocked and late
+writes, pause/cancel, repeated UTF-8 rollovers, concurrent strict-flush failures,
+and successful or failed rollback results arriving after a timeout.
