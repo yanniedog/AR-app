@@ -88,7 +88,7 @@ export function EligibilityAssessment({ productKey, row, section }: { productKey
     void loadEligibilitySelections({ manifest, core, coreIntegrity, details }, target).then(selections => save({ selections, target }), () => save({ error: 'Reviewed criteria could not be verified for this publication.' }));
     return () => { active = false; };
   }, [open, identity, manifest, core, coreIntegrity, details, productKey, row, section, retry]);
-  return <Disclosure title="Check recorded eligibility criteria" summary="Reviewed scopes only" open={open} onToggle={() => setOpen(!open)}>
+  return <Disclosure title="Check recorded eligibility criteria" summary="Uses only criteria we have reviewed" open={open} onToggle={() => setOpen(!open)}>
     {!current ? <AppText variant="small">Checking reviewed criteria...</AppText> : current.selections?.length && current.target ? <EligibilityForm key={identity} selections={current.selections} target={current.target} context={{ manifest, core, coreIntegrity, details }} /> : <>
       <AppText variant="small">{current.error ?? 'Reviewed eligibility criteria are unavailable for this product in this publication.'}</AppText>
       <Button title="Retry criteria" variant="secondary" onPress={() => void ensureDetails({ forProductView: true }).catch(() => undefined).finally(() => setRetry(value => value + 1))} />

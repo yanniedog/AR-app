@@ -7,7 +7,7 @@ import type { RateRow, SectionKey } from '../../types';
 
 export function RateConditionsDisclosure({ model }: { model: ScopedRateConditions }) {
   const [open, setOpen] = useState(false);
-  return <Disclosure title="Rate conditions" summary={model.status === 'available' ? `${model.entries.length} published item${model.entries.length === 1 ? '' : 's'}` : 'Unavailable for this row'} open={open} onToggle={() => setOpen(!open)}>
+  return <Disclosure title="Rate conditions" summary={model.status === 'available' ? `${model.entries.length} published item${model.entries.length === 1 ? '' : 's'}` : 'Not available for this rate'} open={open} onToggle={() => setOpen(!open)}>
     {open ? <View style={{ gap: 12 }}>
       <AppText variant="small" color="textMuted">{model.reason}</AppText>
       {model.entries.map(entry => <AppText key={entry.id} variant="small">{entry.text}</AppText>)}
