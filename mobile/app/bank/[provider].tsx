@@ -56,8 +56,29 @@ import {
 import type { RateRow, SectionKey } from '../../src/types';
 import { SECTION_KEYS } from '../../src/types';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import type { LogoRenderState } from '../../src/lib/logoReadiness';
 
 interface LenderProductItem { row: RateRow; section: SectionKey; firstInSection: boolean }
+
+const LenderProductRow = React.memo(function LenderProductRow({ item, onLogoRenderStateChange }: {
+  item: LenderProductItem;
+  onLogoRenderStateChange: (id: string, state: LogoRenderState) => void;
+}) {
+  const onPress = useCallback(() => openProduct(item.row.product_key, item.row.rate_index), [item.row]);
+  return <View>
+    {item.firstInSection ? <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8, marginLeft: 4 }}>
+      {SECTIONS[item.section].title.toUpperCase()}
+    </AppText> : null}
+    <ProductCard
+      row={item.row}
+      section={item.section}
+      showLenderAction={false}
+      logoRenderStateId={`lender:${item.section}:${item.row.rate_index ?? 'default'}#${item.row.product_key}`}
+      onLogoRenderStateChange={onLogoRenderStateChange}
+      onPress={onPress}
+    />
+  </View>;
+});
 
 function bpsLabel(bps: number): string {
   const rounded = Math.round(bps * 10) / 10;
@@ -483,6 +504,9 @@ export default function BankDetail() {
     [provider],
   );
   const logoReadiness = useLogoReadiness(listRevision, lenderLogoIds);
+  const renderProductItem = useCallback(({ item }: { item: LenderProductItem }) => (
+    <LenderProductRow item={item} onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange} />
+  ), [logoReadiness.onLogoRenderStateChange]);
   const moveHistoryRequired = showBankInsights && !!(focusDate && focusSection);
   const currentHistoryGraphicEvidence = isCurrentHistoryGraphicEvidence(
     historyGraphicEvidence,
@@ -589,19 +613,7 @@ export default function BankDetail() {
           viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
           keyExtractor={item => `${item.section}:${item.row.product_key}`}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 + insets.bottom }}
-          renderItem={({ item }) => <View>
-            {item.firstInSection ? <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8, marginLeft: 4 }}>
-              {SECTIONS[item.section].title.toUpperCase()}
-            </AppText> : null}
-            <ProductCard
-              row={item.row}
-              section={item.section}
-              showLenderAction={false}
-              logoRenderStateId={`lender:${item.section}:${item.row.rate_index ?? 'default'}#${item.row.product_key}`}
-              onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
-              onPress={() => openProduct(item.row.product_key, item.row.rate_index)}
-            />
-          </View>}
+          renderItem={renderProductItem}
           ListEmptyComponent={<EmptyState title="No current products" subtitle="This lender has no rates in the current data set." />}
           ListHeaderComponent={<View>
         <DataHealthBannerStrip />

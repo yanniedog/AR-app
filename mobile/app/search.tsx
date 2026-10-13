@@ -22,7 +22,6 @@ import {
   EMPTY_FILTERS,
   filterRows,
   normalizeSortKey,
-  sortRows,
   type Filters,
   type SortKey,
 } from '../src/data/selectors';
@@ -37,6 +36,7 @@ import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditRead
 import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
 import { useVirtualizedListReadiness } from '../src/hooks/useVirtualizedListReadiness';
 import { useSearchFilterOptions } from '../src/hooks/useSearchFilterOptions';
+import { usePreparedSearchRows } from '../src/hooks/usePreparedSearchRows';
 import { breadcrumb, rowsForSearchScope } from '../src/data/taxonomy';
 import { hapticSelection } from '../src/lib/haptics';
 import { openCompare, openProduct, scalarRouteParam } from '../src/lib/nav';
@@ -47,6 +47,7 @@ import {
 import { effectiveDeepSearch } from '../src/lib/proAccess';
 import { scheduleAfterInteractions } from '../src/lib/yieldToUi';
 import type { RateRow, SectionKey } from '../src/types';
+import type { LogoRenderState } from '../src/lib/logoReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 function availableSortOptions(
@@ -81,6 +82,19 @@ function compatibleSortKey(
 
 const rowToken = (r: { rate_index?: number | string; product_key: string }) =>
   r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
+
+const SearchProductRow = React.memo(function SearchProductRow({ row, section, selectMode, selected, onToggleSelect,
+  onLogoRenderStateChange }: {
+  row: RateRow; section: SectionKey; selectMode: boolean; selected: boolean;
+  onToggleSelect: (token: string) => void;
+  onLogoRenderStateChange: (id: string, state: LogoRenderState) => void;
+}) {
+  const onPress = useCallback(() => selectMode ? onToggleSelect(rowToken(row)) : openProduct(row.product_key, row.rate_index),
+    [selectMode, onToggleSelect, row]);
+  return <ProductCard row={row} section={section}
+    logoRenderStateId={`search:${row.rate_index ?? 'default'}#${row.product_key}`}
+    onLogoRenderStateChange={onLogoRenderStateChange} selectMode={selectMode} selected={selected} onPress={onPress} />;
+});
 
 export default function Search() {
   const theme = useTheme();
@@ -212,27 +226,12 @@ export default function Search() {
     [filters, includeNonStandard, restoredSub],
   );
 
-  // Filtering preserves order, so sort the full section once instead of
-  // sorting thousands of rows again on every query and filter change.
-  const sortedBaseRows = useMemo(
-    () => sortRows(baseRows, sortKey, section, depositRankMetric, mortgageRateMetric),
-    [baseRows, sortKey, section, depositRankMetric, mortgageRateMetric, suitabilityRevision],
-  );
-  const rows = useMemo(
-    () => (
-      void suitabilityRevision,
-      filterRows(
-        sortedBaseRows,
-        { ...effectiveFilters, query: debouncedQuery },
-        // Always pass loaded details for suitability (standard-only) filtering —
-        // not only when Pro deep-search is on. Search indexing still requires Pro.
-        details?.products ?? null,
-        deepSearchActive ? searchIndex : null,
-        section,
-      )
-    ),
-    [sortedBaseRows, effectiveFilters, debouncedQuery, section, deepSearchActive, details?.products, searchIndex, suitabilityRevision],
-  );
+  const resultFilters = useMemo(() => ({ ...effectiveFilters, query: debouncedQuery }),
+    [effectiveFilters, debouncedQuery]);
+  const preparedResults = usePreparedSearchRows(baseRows, resultFilters, sortKey, section,
+    details?.products, deepSearchActive ? searchIndex : null, depositRankMetric, mortgageRateMetric,
+    suitabilityRevision, isFocused);
+  const rows = preparedResults.rows;
 
   const draftResultCount = useCallback(
     (draft: Filters) => (
@@ -250,6 +249,7 @@ export default function Search() {
   );
 
   const showDeepSearchHint =
+    preparedResults.ready &&
     isSuitabilityFilterReady(effectiveFilters.includeNonStandard) &&
     !!debouncedQuery.trim() && !deepSearchActive && rows.length === 0 && !activeFilterCount(effectiveFilters);
 
@@ -338,11 +338,11 @@ export default function Search() {
   }, [includeNonStandard]);
   const selectAuditToken = useCallback((...args: unknown[]) => {
     const token = auditActionString(args, 'selectionToken');
-    if (!token || !baseRows.some(row => rowToken(row) === token)) {
+    if (!token || !rows.some(row => rowToken(row) === token)) {
       return { unavailableReason: 'The selected exact rate is not in the current filtered search results' };
     }
     toggleSelect(token);
-  }, [baseRows, toggleSelect]);
+  }, [rows, toggleSelect]);
   const auditActions = useMemo(() => ({
     'search.open': () => undefined,
     'search.query.product': (...args: unknown[]) => {
@@ -370,7 +370,7 @@ export default function Search() {
       if (tokens.length >= 2) openCompare(tokens);
     },
   }), [clearSearchFilters, selected, selectAuditToken, sortOptions, toggleCompareMode]);
-  const searchPending = detailFiltersPending || searchIndexLoading;
+  const searchPending = detailFiltersPending || searchIndexLoading || !preparedResults.ready;
   const listDataRevision = JSON.stringify([
     coreSha ?? core?.run_date ?? 'none',
     details?.run_date ?? 'none',
@@ -397,6 +397,12 @@ export default function Search() {
     if (listReadiness.ready) listRef.current?.recomputeViewableItems();
   }, [listRevision, listReadiness.ready]);
   const logoReadiness = useLogoReadiness(listDataRevision);
+  const renderProduct = useCallback(({ item }: { item: RateRow }) => (
+    <SearchProductRow row={item} section={section}
+      onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
+      selectMode={selectMode} selected={selected.includes(rowToken(item))}
+      onToggleSelect={toggleSelect} />
+  ), [section, logoReadiness.onLogoRenderStateChange, selectMode, selected, toggleSelect]);
   usePerformanceAuditSurface({
     id: 'search.results',
     routeKey: '/search',
@@ -407,7 +413,8 @@ export default function Search() {
       {
         id: 'search.data',
         kind: 'data',
-        status: core ? 'ready' : 'pending',
+        status: preparedResults.error ? 'error' : core && preparedResults.ready ? 'ready' : 'pending',
+        error: preparedResults.error,
         datasetRevision: coreSha ?? core?.run_date ?? null,
       },
       {
@@ -513,6 +520,7 @@ export default function Search() {
       <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
         <FlashList
           ref={listRef}
+          drawDistance={120}
           // Only changed result identities require a new list. Selection and
           // filter-sheet visibility commit in place through extraData below.
           key={`search:${listDataRevision}`}
@@ -528,19 +536,7 @@ export default function Search() {
             ...screenScrollContentStyle(theme, insets.bottom, width),
             paddingBottom: theme.spacing(6) + insets.bottom + theme.spacing(8),
           }}
-          renderItem={({ item }) => (
-            <ProductCard
-              row={item}
-              section={section}
-              logoRenderStateId={`search:${item.rate_index ?? 'default'}#${item.product_key}`}
-              onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
-              selectMode={selectMode}
-              selected={selected.includes(rowToken(item))}
-              onPress={() =>
-                selectMode ? toggleSelect(rowToken(item)) : openProduct(item.product_key, item.rate_index)
-              }
-            />
-          )}
+          renderItem={renderProduct}
           ListEmptyComponent={
             detailFiltersPending ? (
               <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
@@ -566,7 +562,12 @@ export default function Search() {
                   </View>
                 )}
               </View>
-            ) : searchIndexLoading ? (
+            ) : preparedResults.error ? (
+              <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
+                <EmptyState title="Could not prepare products" subtitle={preparedResults.error} />
+                <Button title="Retry" variant="secondary" onPress={preparedResults.retry} />
+              </View>
+            ) : searchPending ? (
               <LoadingRows />
             ) : (
               <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>

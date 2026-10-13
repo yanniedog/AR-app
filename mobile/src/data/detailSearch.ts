@@ -1,6 +1,7 @@
 import { descriptiveValue } from './descriptiveValue';
 import type { ProductDetail } from '../types';
 import { productFactsSearchText } from './productFacts';
+import { yieldToUi } from '../lib/yieldToUi';
 
 export interface SearchIndexPayload {
   schema_version: number;
@@ -145,6 +146,33 @@ export function productKeysMatchingIndex(
 }
 
 type SearchRow = { provider: string; product_name: string; product_key: string };
+
+/** Bound a new deep query's full index scan as well as its result-row processing. */
+export async function prepareRowSearchQueryCooperatively(
+  query: string, index: SearchIndexPayload | null | undefined,
+  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
+): Promise<((row: SearchRow) => boolean) | null> {
+  if (control.cancelled?.()) return null;
+  const q = query.trim().toLowerCase();
+  if (!q || !index?.products) return prepareRowSearchQuery(query, null);
+  const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
+  const now = control.now ?? (() => performance.now());
+  const tokens = q.split(/\s+/).filter(Boolean);
+  const hits = new Set<string>();
+  let sliceStarted = now();
+  let processed = 0;
+  for (const key in index.products) {
+    if (!Object.prototype.hasOwnProperty.call(index.products, key)) continue;
+    if (tokens.every(token => index.products[key].includes(token))) hits.add(key);
+    processed += 1;
+    if (processed % 32 === 0 && now() - sliceStarted >= 6) {
+      await yieldControl();
+      sliceStarted = now();
+      if (control.cancelled?.()) return null;
+    }
+  }
+  return control.cancelled?.() ? null : row => hits.has(row.product_key);
+}
 
 /** Prepare once per filtering pass so indexed hits are not copied for every row. */
 export function prepareRowSearchQuery(

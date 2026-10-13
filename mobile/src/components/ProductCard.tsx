@@ -53,7 +53,7 @@ function chips(row: RateRow, section: SectionKey, qualifier: RateQualifier): str
   return out.slice(0, 2);
 }
 
-export function ProductCard({
+function ProductCardView({
   row,
   section,
   onPress,
@@ -293,3 +293,7 @@ export function ProductCard({
     </View>
   );
 }
+
+// Navigation and readiness updates in the containing list leave this row
+// unchanged. Its store, theme and dimension subscriptions remain live.
+export const ProductCard = React.memo(ProductCardView);

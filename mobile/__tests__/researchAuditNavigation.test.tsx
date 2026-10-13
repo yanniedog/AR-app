@@ -7,7 +7,7 @@ import { buildDeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
 import { compactPerformanceAuditReadinessEvidence, PerformanceAuditReadinessRegistry, type PerformanceAuditSurfaceDefinition } from '../src/lib/performanceAuditReadiness';
 import { appHealthDisplayObservations } from '../src/lib/performanceAuditHealth';
 import { evaluateAppHealthDisplayQuality } from '../src/lib/appHealth/displayQuality';
-import { usePerformanceAuditProbe } from '../src/hooks/usePerformanceAuditReadiness';
+import { PerformanceAuditReadinessProvider, usePerformanceAuditProbe } from '../src/hooks/usePerformanceAuditReadiness';
 import { makeHealthyCore } from '../__fixtures__/appHealth';
 import type { CorePayload } from '../src/types';
 
@@ -16,6 +16,8 @@ type InspectableRenderer = ReturnType<typeof TestRenderer.create> & { root: Test
 
 const mockNavigate = jest.fn();
 const mockSurfaces = new Map<string, PerformanceAuditSurfaceDefinition>();
+const mockEconomyControl = jest.fn();
+let mockUseLiveReadiness = false;
 let mockCore: CorePayload | null = null;
 jest.mock('expo-router', () => ({
   router: { navigate: (...args: unknown[]) => mockNavigate(...args) },
@@ -27,11 +29,15 @@ jest.mock('../src/data/store', () => ({
 }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 0 }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({
+  PerformanceAuditReadinessProvider: jest.requireActual('../src/hooks/usePerformanceAuditReadiness').PerformanceAuditReadinessProvider,
   usePerformanceAuditSurface: (surface: PerformanceAuditSurfaceDefinition) => {
     mockSurfaces.set(surface.id, surface);
+    if (mockUseLiveReadiness) return jest.requireActual('../src/hooks/usePerformanceAuditReadiness').usePerformanceAuditSurface(surface);
     return { surfaceId: surface.id };
   },
-  usePerformanceAuditProbe: jest.fn(),
+  usePerformanceAuditProbe: jest.fn((...args: Parameters<typeof import('../src/hooks/usePerformanceAuditReadiness').usePerformanceAuditProbe>) => {
+    if (mockUseLiveReadiness) return jest.requireActual('../src/hooks/usePerformanceAuditReadiness').usePerformanceAuditProbe(...args);
+  }),
 }));
 jest.mock('../src/lib/degradationLog', () => ({
   markDrillAttempt: () => undefined, logNavDrillAttempt: () => undefined, runStoreRetry: jest.fn(),
@@ -40,13 +46,101 @@ jest.mock('../src/components/charts', () => ({ RbaChart: 'RbaChart' }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
 jest.mock('../src/components/feedback', () => ({ ScreenSkeleton: 'ScreenSkeleton' }));
 jest.mock('../src/components/RbaCountdownCard', () => ({ RbaCountdownCard: 'RbaCountdownCard' }));
-jest.mock('../src/components/RbaOutlook', () => ({ RbaOutlook: 'RbaOutlook' }));
+jest.mock('../src/components/RbaOutlook', () => {
+  const React = jest.requireActual<typeof import('react')>('react');
+  return { RbaOutlook: React.forwardRef(function MockRbaOutlook(props, ref) {
+    React.useImperativeHandle(ref, () => ({
+      nextLens: () => mockEconomyControl('lens'),
+      nextWindow: () => mockEconomyControl('window'),
+      previousDate: () => mockEconomyControl('date'),
+    }));
+    return React.createElement('RbaOutlook', props);
+  }) };
+});
 jest.mock('../src/components/Ribbon', () => ({ Ribbon: 'Ribbon' }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Disclosure: 'Disclosure', Divider: 'Divider', Row: 'Row' }));
 jest.mock('../src/components/viz/HistoryExplorer', () => ({ HistoryExplorer: 'HistoryExplorer' }));
 
-beforeEach(() => { mockCore = null; mockNavigate.mockClear(); mockSurfaces.clear(); jest.mocked(usePerformanceAuditProbe).mockClear(); });
+beforeEach(() => {
+  mockCore = null; mockUseLiveReadiness = false; mockNavigate.mockClear(); mockSurfaces.clear();
+  mockEconomyControl.mockClear(); jest.mocked(usePerformanceAuditProbe).mockClear();
+});
+
+test.each(['lens', 'window', 'date'])(
+  'the queued economic %s action waits for its panel probes to commit, then requires actual chart and layout proof',
+  async (action) => {
+    mockCore = makeHealthyCore();
+    mockUseLiveReadiness = true;
+    const registry = new PerformanceAuditReadinessRegistry();
+    registry.beginCapture(`economic-${action}-commit`);
+    const abort = new AbortController();
+    let tree!: InspectableRenderer;
+    act(() => { tree = TestRenderer.create(<PerformanceAuditReadinessProvider registry={registry}>
+      <Research />
+    </PerformanceAuditReadinessProvider>) as InspectableRenderer; });
+    try {
+      const actionId = action === 'date' ? 'outlook.economy.date.previous' : `outlook.economy.${action}.next`;
+      let completion!: Promise<unknown>;
+      act(() => {
+        completion = registry.invokeAction('outlook.economy', actionId);
+        // React has not committed the newly opened disclosure yet. The action
+        // must stay in flight until its mounted controls and probes are present.
+        expect(mockEconomyControl).not.toHaveBeenCalled();
+        expect(registry.snapshot(['outlook.economy']).surfaces[0].probes.map(probe => probe.id)).toEqual(['core-data']);
+      });
+      await completion;
+      expect(mockEconomyControl).toHaveBeenCalledWith(action);
+      const ready = registry.waitForReady({ surfaceIds: ['outlook.economy'], requiredKinds: ['graphic'],
+        quietWindowMs: 0, timeoutMs: 10_000, signal: abort.signal });
+      const snapshot = () => registry.snapshot(['outlook.economy'], ['graphic']);
+      expect(snapshot().blockers.some(blocker => blocker.code === 'required-kind-missing')).toBe(false);
+      expect(snapshot().ready).toBe(false);
+      const report = (layoutReady: boolean) => act(() => {
+        tree.root.findAll(node => node.type === 'RbaOutlook')[0].props.onAuditStateChange({
+          status: layoutReady ? 'ready' : 'pending', revision: 'cached-economic-edition',
+          renderRevision: `cached-economic-edition:${action}`, indicatorCount: 1,
+          expectedCount: 2, pointCount: 2, layoutMeasured: true, graphicReady: true,
+          layoutReady, emptyStateRendered: false, accessibleSummary: true,
+        });
+      });
+      report(false);
+      expect(snapshot().blockers).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'probe-pending', probeId: 'economic-layout' }),
+      ]));
+      report(true);
+      await expect(ready).resolves.toMatchObject({ ready: true });
+      const observations = appHealthDisplayObservations([{
+        id: actionId, kind: 'journey', label: 'Economy', status: 'pass', durationMs: 1,
+        metrics: { readinessEvidence: compactPerformanceAuditReadinessEvidence(snapshot()) },
+      }]);
+      const quality = evaluateAppHealthDisplayQuality([
+        { id: 'outlook.economy', requiredRoles: ['critical-layout', 'chart'] },
+      ], observations);
+      expect(quality.find(check => check.id === 'display-layout')?.status).toBe('pass');
+      expect(quality.find(check => check.id === 'display-chart')?.status).toBe('pass');
+    } finally { abort.abort(); act(() => tree.unmount()); }
+  },
+);
+
+test('unmounting before an economic control commits rejects its pending action instead of leaking a mutation', async () => {
+  mockCore = makeHealthyCore();
+  mockUseLiveReadiness = true;
+  const registry = new PerformanceAuditReadinessRegistry();
+  registry.beginCapture('economic-control-unmount');
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<PerformanceAuditReadinessProvider registry={registry}>
+    <Research />
+  </PerformanceAuditReadinessProvider>) as InspectableRenderer; });
+  let result!: Promise<unknown>;
+  act(() => {
+    result = registry.invokeAction('outlook.economy', 'outlook.economy.lens.next');
+    tree.unmount();
+  });
+  await expect(result).rejects.toThrow('Economic audit panel unmounted before applying its control');
+  expect(mockEconomyControl).not.toHaveBeenCalled();
+  expect(registry.actionCompletion('outlook.economy')).toBeNull();
+});
 
 test.each(['Mortgage', 'Savings', 'TD'])('the research audit route override matches the real %s category navigation', async (section) => {
   let tree!: ReturnType<typeof TestRenderer.create>;
@@ -103,9 +197,9 @@ test('missing economics keeps its optional data error while a measured empty gra
     act(() => tree.root.findAll(node => node.type === 'RbaOutlook')[0].props.onAuditStateChange({
       status: 'error', error: 'Economic signals are not saved on this device.', indicatorCount: 0,
       expectedCount: 0, pointCount: 0, layoutMeasured: true, emptyStateRendered: true,
-      graphicReady: true, accessibleSummary: true,
+      layoutReady: true, graphicReady: true, accessibleSummary: true,
     }));
-    const probes = ['economic-graphics', 'economic-data'].map(id =>
+    const probes = ['economic-graphics', 'economic-data', 'economic-layout'].map(id =>
       jest.mocked(usePerformanceAuditProbe).mock.calls.filter(call => call[1].id === id).at(-1)![1]);
     const registry = new PerformanceAuditReadinessRegistry();
     registry.beginCapture('economic-unavailable');
@@ -126,9 +220,12 @@ test('missing economics keeps its optional data error while a measured empty gra
       metrics: { readinessEvidence: compactPerformanceAuditReadinessEvidence(snapshot) },
     }]);
     const chart = evaluateAppHealthDisplayQuality([
-      { id: economyStep.expectedSurface, requiredRoles: ['chart'] },
+      { id: economyStep.expectedSurface, requiredRoles: ['critical-layout', 'chart'] },
     ], observations).find(check => check.id === 'display-chart');
     expect(chart).toMatchObject({ status: 'unavailable', metrics: { failed: 0, unavailable: 1 } });
+    expect(evaluateAppHealthDisplayQuality([
+      { id: economyStep.expectedSurface, requiredRoles: ['critical-layout', 'chart'] },
+    ], observations).find(check => check.id === 'display-layout')?.status).toBe('pass');
   } finally { act(() => tree.unmount()); }
 });
 

@@ -2,6 +2,14 @@ import type { BankHistoryChartModel, BankHistoryPoint, SectionKey } from '../typ
 import { alignPointsToTimeline, normalizeTimelineDates, sanitizeRibbonPoint } from './bankHistoryTransform';
 import type { BankRateSnapshot, RateSummary } from './bankRateOverview';
 
+// History snapshots are immutable profile/publication projections. Detail routes
+// repeatedly mount for the same projection; reuse its timeline and exact bands
+// without keeping a previous profile or a replaced same-day capture alive.
+const chartModels = new WeakMap<Record<string, BankRateSnapshot>, {
+  dates: string[];
+  sections: Map<SectionKey, Map<string | undefined, BankHistoryChartModel | null>>;
+}>();
+
 function historyPoint(date: string, summary: RateSummary | undefined): BankHistoryPoint {
   if (!summary || !Number.isInteger(summary.count) || summary.count <= 0 ||
     ![summary.min, summary.max, summary.mean, summary.median].every(value => Number.isFinite(value) && value >= 0)) {
@@ -22,12 +30,24 @@ export function rateHistoryChartModel(
   provider?: string,
 ): BankHistoryChartModel | null {
   if (!snapshots) return null;
-  const dates = normalizeTimelineDates(Object.keys(snapshots));
+  let cache = chartModels.get(snapshots);
+  if (!cache) {
+    cache = { dates: normalizeTimelineDates(Object.keys(snapshots)), sections: new Map() };
+    chartModels.set(snapshots, cache);
+  }
+  let sectionModels = cache.sections.get(section);
+  if (!sectionModels) {
+    sectionModels = new Map();
+    cache.sections.set(section, sectionModels);
+  }
+  if (sectionModels.has(provider)) return sectionModels.get(provider) ?? null;
+  const dates = cache.dates;
   const points = dates.map(date => historyPoint(date, provider === undefined
     ? snapshots[date]?.sectionTotals?.[section]
     : snapshots[date]?.[section]?.[provider]));
-  if (!points.some(point => point.count)) return null;
-  return { section, dates, allDates: dates, points };
+  const model = points.some(point => point.count) ? { section, dates, allDates: dates, points } : null;
+  sectionModels.set(provider, model);
+  return model;
 }
 
 /** A product ledger owns its dates independently of available market context.

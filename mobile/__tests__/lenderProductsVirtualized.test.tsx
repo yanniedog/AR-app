@@ -42,7 +42,6 @@ jest.mock('../src/components/Screen', () => ({ Screen: 'Screen', DataHealthBanne
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Chip: 'Chip', Divider: 'Divider', Row: 'Row' }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
-jest.mock('../src/hooks/useLogoReadiness', () => ({ useLogoReadiness: () => ({ ready: true, expectedCount: 1, terminalCount: 1, onLogoRenderStateChange: jest.fn() }) }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 1 }));
 jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: () => ({ snapshots: null,
   updating: false, failed: false, historyAvailable: false, revision: 'disabled', missingDates: [] }) }));
@@ -61,6 +60,7 @@ test('retains every lender product while mounting viewport cards and measuring t
   expect(list.props.data).toHaveLength(31);
   expect(tree.root.findAllByType('ProductCard' as any)).toHaveLength(4);
   expect(new Set(mockMountedProducts.mock.calls.map(([key]) => key)).size).toBe(4);
+  const initialCardRenders = mockMountedProducts.mock.calls.length;
   let audit = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
   expect(audit.probes!.find(probe => probe.id === 'lender.products')!.status).toBe('pending');
   act(() => {
@@ -71,6 +71,9 @@ test('retains every lender product while mounting viewport cards and measuring t
   expect(audit.probes!.find(probe => probe.id === 'lender.products')).toMatchObject({
     status: 'ready', expectedCount: 31, actualCount: 31, visibleCount: 4,
   });
+  // Readiness/layout commits retain the same row objects and callbacks, so they
+  // must not render all viewport cards again while recording genuine evidence.
+  expect(mockMountedProducts).toHaveBeenCalledTimes(initialCardRenders);
   mockStart = 27;
   act(() => tree.update(<BankDetail />));
   const last = tree.root.findAllByType('ProductCard' as any).at(-1)!;

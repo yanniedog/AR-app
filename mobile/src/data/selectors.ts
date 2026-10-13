@@ -1,9 +1,11 @@
 import { SECTIONS } from '../constants';
 import { mandatoryEligibleRows } from './eligibilityGate';
+import { yieldToUi } from '../lib/yieldToUi';
 import { isMeaningfulDepositRate, MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import {
   prepareRowSearchQuery,
+  prepareRowSearchQueryCooperatively,
   type SearchIndexPayload,
 } from './detailSearch';
 import { productHasAllEligibilityCriteria } from './eligibility';
@@ -332,6 +334,65 @@ export function sortRows(
     .map(({ row }) => row);
 }
 
+/** Same ranking as sortRows, with bounded preparation and merge slices. */
+export async function sortRowsCooperatively(
+  rows: RateRow[],
+  sortKey: SortKey,
+  section: SectionKey,
+  metric: RankMetric = 'base',
+  mortgageMetric: MortgageRateMetric = 'comparison',
+  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
+): Promise<RateRow[] | null> {
+  const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
+  const now = control.now ?? (() => performance.now());
+  const cancelled = control.cancelled ?? (() => false);
+  await yieldControl();
+  if (cancelled()) return null;
+  let sliceStarted = now();
+  const checkpoint = async () => {
+    if (now() - sliceStarted >= 6) {
+      await yieldControl();
+      sliceStarted = now();
+    }
+    return !cancelled();
+  };
+  const lowerIsBetter = SECTIONS[section].lowerIsBetter;
+  const compare = (a: PreparedSortRow, b: PreparedSortRow) =>
+    comparePreparedRows(a, b, sortKey, section, lowerIsBetter, mortgageMetric);
+  let prepared: PreparedSortRow[] = [];
+  for (let offset = 0; offset < rows.length; offset += 32) {
+    const batch = mandatoryEligibleRows(rows.slice(offset, offset + 32));
+    for (const row of batch) {
+      prepared.push(prepareSortRow(row, prepared.length, sortKey, section, metric, mortgageMetric));
+    }
+    if (!await checkpoint()) return null;
+  }
+  // Bottom-up merging avoids the single native Array.sort burst on a full section.
+  let target = new Array<PreparedSortRow>(prepared.length);
+  let operations = 0;
+  for (let width = 1; width < prepared.length; width *= 2) {
+    for (let start = 0; start < prepared.length; start += width * 2) {
+      const middle = Math.min(start + width, prepared.length);
+      const end = Math.min(start + width * 2, prepared.length);
+      let left = start;
+      let right = middle;
+      for (let output = start; output < end; output += 1) {
+        target[output] = right >= end || (left < middle && compare(prepared[left], prepared[right]) <= 0)
+          ? prepared[left++] : prepared[right++];
+        operations += 1;
+        if (operations % 32 === 0 && !await checkpoint()) return null;
+      }
+    }
+    [prepared, target] = [target, prepared];
+  }
+  const result: RateRow[] = [];
+  for (let index = 0; index < prepared.length; index += 32) {
+    for (const item of prepared.slice(index, index + 32)) result.push(item.row);
+    if (!await checkpoint()) return null;
+  }
+  return cancelled() ? null : result;
+}
+
 function compareProviderThenName(a: RateRow, b: RateRow): number {
   return ROW_TEXT_COLLATOR.compare(a.provider, b.provider) ||
     ROW_TEXT_COLLATOR.compare(a.product_name, b.product_name);
@@ -359,8 +420,17 @@ export function filterRows(
   // matching for non-Pro users whenever suitability details are loaded.
   const visibleRows = visibleAccountRows(rows, filters.includeNonStandard, detailsProducts);
   if (!visibleRows.length) return visibleRows;
-  const matchesSearch = prepareRowSearchQuery(filters.query, searchIndex);
-  return visibleRows.filter((row) => {
+  return visibleRows.filter(prepareRowFilter(filters, detailsProducts, searchIndex, section));
+}
+
+function prepareRowFilter(
+  filters: Filters,
+  detailsProducts?: Record<string, ProductDetail> | null,
+  searchIndex?: SearchIndexPayload | null,
+  section?: SectionKey | null,
+  matchesSearch = prepareRowSearchQuery(filters.query, searchIndex),
+): (row: RateRow) => boolean {
+  return (row) => {
     if (!row) return false;
     if (section && !passesDepositTokenFloor(row, section)) return false;
     if (!matchesSearch(row)) return false;
@@ -391,7 +461,36 @@ export function filterRows(
       return false;
     }
     return true;
-  });
+  };
+}
+
+/** Prepare a whole result set without a full-catalogue render-time CPU burst. */
+export async function prepareSearchRows(
+  rows: RateRow[], filters: Filters, sortKey: SortKey, section: SectionKey,
+  detailsProducts?: Record<string, ProductDetail> | null, searchIndex?: SearchIndexPayload | null,
+  metric: RankMetric = 'base', mortgageMetric: MortgageRateMetric = 'comparison',
+  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
+): Promise<RateRow[] | null> {
+  const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
+  const now = control.now ?? (() => performance.now());
+  const cancelled = control.cancelled ?? (() => false);
+  await yieldControl();
+  if (cancelled()) return null;
+  const matchesSearch = rows.length ? await prepareRowSearchQueryCooperatively(filters.query, searchIndex, control) : () => false;
+  if (!matchesSearch || cancelled()) return null;
+  const predicate = prepareRowFilter(filters, detailsProducts, searchIndex, section, matchesSearch);
+  const filtered: RateRow[] = [];
+  let sliceStarted = now();
+  for (let offset = 0; offset < rows.length; offset += 32) {
+    const batch = visibleAccountRows(rows.slice(offset, offset + 32), filters.includeNonStandard, detailsProducts);
+    for (const row of batch) if (predicate(row)) filtered.push(row);
+    if (now() - sliceStarted >= 6) {
+      await yieldControl();
+      sliceStarted = now();
+    }
+    if (cancelled()) return null;
+  }
+  return sortRowsCooperatively(filtered, sortKey, section, metric, mortgageMetric, control);
 }
 
 export function queryAndSort(
@@ -590,7 +689,7 @@ export function findEligibleByKey(
   productKey: string,
 ): ReturnType<typeof findByKey> {
   for (const section of Object.keys(sections) as SectionKey[]) {
-    const siblings = mandatoryEligibleRows(sections[section].rates).filter(row => row.product_key === productKey);
+    const siblings = mandatoryEligibleRows(sections[section].rates.filter(row => row.product_key === productKey));
     if (siblings.length) return { row: siblings[0], section, siblings };
   }
   return null;

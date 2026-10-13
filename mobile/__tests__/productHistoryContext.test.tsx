@@ -157,6 +157,22 @@ describe('product-wide history context on an exact-tier page', () => {
     mockSelectLegacyHistory.mockClear();
   });
 
+  it('retains chart and exact-tier inputs across product layout readiness commits', async () => {
+    mockState.prefs.showHistoryRibbon = true;
+    const tree = await renderProduct();
+    try {
+      const chart = tree.root.findAllByType('BankHistoryChart')[0];
+      const tiers = tree.root.findAllByType('ProductRatesList')[0].props.rows;
+      const values = chart.props.highlightSeries;
+      expect(tiers).toContain(row);
+      expect(tiers).toContain(prize);
+      act(() => tree.root.findAllByType('ScreenScrollView')[0].props.onLayout());
+      expect(tree.root.findAllByType('BankHistoryChart')[0].props.highlightSeries).toBe(values);
+      expect(tree.root.findAllByType('ProductRatesList')[0].props.rows).toBe(tiers);
+      expect(tree.root.findAllByType('BankHistoryChart')[0].props.points).toBe(chart.props.points);
+    } finally { act(() => tree.unmount()); }
+  });
+
   it.each([false, true])('does not call an older cached capture current with history enabled=%s', async (enabled) => {
     // Controlled date context only: the rate rows remain the retained real fixture.
     mockState.core = { ...core, run_date: '2026-09-12' };

@@ -43,6 +43,25 @@ test('empty or invalid summaries cannot become observed zeros', () => {
   expect(rateHistoryChartModel({ [dates[0]]: { sectionTotals: { Mortgage: { ...summary, median: NaN } } } }, 'Mortgage')).toBeNull();
 });
 
+test('reuses exact chart inputs across route mounts but isolates providers, sections and replaced captures', () => {
+  const snapshots: Record<string, BankRateSnapshot> = {
+    [dates[0]]: { Mortgage: { A: summary, B: { ...summary, mean: 8 } }, sectionTotals: { Mortgage: summary } },
+    [dates[1]]: {},
+  };
+  const provider = rateHistoryChartModel(snapshots, 'Mortgage', 'A')!;
+  expect(rateHistoryChartModel(snapshots, 'Mortgage', 'A')).toBe(provider);
+  expect(rateHistoryChartModel(snapshots, 'Mortgage', 'B')).not.toBe(provider);
+  expect(rateHistoryChartModel(snapshots, 'Mortgage')).not.toBe(provider);
+  expect(rateHistoryChartModel(snapshots, 'Savings', 'A')).toBeNull();
+  expect(rateHistoryChartModel(snapshots, 'Mortgage', 'Missing')).toBeNull();
+  const corrected = { ...snapshots, [dates[0]]: { Mortgage: { A: { ...summary, mean: 6 } } } };
+  const next = rateHistoryChartModel(corrected, 'Mortgage', 'A')!;
+  expect(next).not.toBe(provider);
+  expect(next.points[0].mean).toBe(0.06);
+  expect(provider.points[0].mean).toBe(0.03);
+  expect(next.points[1]).toEqual(blank(dates[1]));
+});
+
 test('independent product dates expand a shorter market timeline without filling market gaps', () => {
   const market = rateHistoryChartModel({ [dates[2]]: { sectionTotals: { Mortgage: summary } } }, 'Mortgage')!;
   const before = JSON.stringify(market);
