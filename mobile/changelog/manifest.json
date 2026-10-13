@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-10-12T22:08:35.809Z",
+  "generated_at": "2026-10-13T20:55:13.935Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -1003,6 +1003,14 @@
         "fix: reduce audit journey stalls and correct availability (#391)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.236"
+    },
+    {
+      "version": "1.0.238",
+      "date": "2026-10-13",
+      "summaryBullets": [
+        "Fix audit action evidence and reduce repeated list rendering (#394)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.238"
     }
   ]
 }

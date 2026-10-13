@@ -1,0 +1,32 @@
+{
+  "version": "1.0.238",
+  "releaseTag": "app-arm-v1.0.238",
+  "date": "2026-10-13",
+  "summaryBullets": [
+    "Fix audit action evidence and reduce repeated list rendering (#394)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Fix audit action evidence and reduce repeated list rendering (#394)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.238"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.237"
+        }
+      ]
+    }
+  ]
+}
