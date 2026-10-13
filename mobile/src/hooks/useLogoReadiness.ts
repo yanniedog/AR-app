@@ -22,14 +22,21 @@ export function useLogoReadiness(scopeKey: string, fixedExpectedIds: readonly st
   const states = snapshot.scopeKey === scopeKey ? snapshot.states : EMPTY_LOGO_STATES;
 
   const onLogoRenderStateChange = useCallback((id: string, state: LogoRenderState) => {
-    setSnapshot((current) => ({
-      scopeKey,
-      states: applyLogoRenderState(
-        current.scopeKey === scopeKey ? current.states : new Map(),
-        id,
-        state,
-      ),
-    }));
+    setSnapshot((current) => {
+      if (current.scopeKey === scopeKey && (state === 'unmounted'
+        ? !current.states.has(id)
+        : current.states.has(id) && current.states.get(id) === (state === 'pending' ? null : state))) {
+        return current;
+      }
+      return {
+        scopeKey,
+        states: applyLogoRenderState(
+          current.scopeKey === scopeKey ? current.states : new Map(),
+          id,
+          state,
+        ),
+      };
+    });
   }, [scopeKey]);
   const summary = useMemo(
     () => summarizeLogoRenderStates(states, fixedExpectedIds),

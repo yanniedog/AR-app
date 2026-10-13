@@ -87,7 +87,12 @@ export default function Market() {
     terminalCount: number;
   } | null>(null);
   const [economicAuditState, setEconomicAuditState] = useState<RbaOutlookAuditState | null>(null);
-  const [pendingEconomyAuditAction, setPendingEconomyAuditAction] = useState<'lens' | 'window' | 'date' | null>(null);
+  const [pendingEconomyAuditAction, setPendingEconomyAuditAction] = useState<{
+    action: 'lens' | 'window' | 'date';
+    complete: () => void;
+    fail: (error: Error) => void;
+  } | null>(null);
+  const pendingEconomyAuditActionRef = useRef<typeof pendingEconomyAuditAction>(null);
   const [rbaLayoutY, setRbaLayoutY] = useState<number | null>(null);
   const [rbaLayoutReady, setRbaLayoutReady] = useState(false);
   const rbaOutlookRef = useRef<RbaOutlookAuditHandle>(null);
@@ -145,11 +150,21 @@ export default function Market() {
     if (!economyOpen || !pendingEconomyAuditAction) return;
     const audit = rbaOutlookRef.current;
     if (!audit) return;
-    if (pendingEconomyAuditAction === 'lens') audit.nextLens();
-    else if (pendingEconomyAuditAction === 'window') audit.nextWindow();
+    if (pendingEconomyAuditAction.action === 'lens') audit.nextLens();
+    else if (pendingEconomyAuditAction.action === 'window') audit.nextWindow();
     else audit.previousDate();
+    // Complete only after the open panel and its conditional probes have
+    // committed. The runner must not see a closed panel as a missing graphic.
+    pendingEconomyAuditAction.complete();
+    if (pendingEconomyAuditActionRef.current === pendingEconomyAuditAction) {
+      pendingEconomyAuditActionRef.current = null;
+    }
     setPendingEconomyAuditAction(null);
   }, [economyOpen, pendingEconomyAuditAction]);
+  useEffect(() => () => {
+    pendingEconomyAuditActionRef.current?.fail(new Error('Economic audit panel unmounted before applying its control'));
+    pendingEconomyAuditActionRef.current = null;
+  }, []);
 
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
@@ -213,7 +228,11 @@ export default function Market() {
   const queueEconomyAuditAction = useCallback((action: 'lens' | 'window' | 'date') => {
     if (!economyOpen) setEconomicAuditState(null);
     setEconomyOpen(true);
-    setPendingEconomyAuditAction(action);
+    return new Promise<void>((complete, fail) => {
+      const pending = { action, complete, fail };
+      pendingEconomyAuditActionRef.current = pending;
+      setPendingEconomyAuditAction(pending);
+    });
   }, [economyOpen]);
   useEffect(() => setRbaGraphicState(null), [datasetRevision]);
   const historyDates = useMemo(
@@ -333,6 +352,12 @@ export default function Market() {
     id: 'core-data', kind: 'data', status: core ? 'ready' : 'pending', datasetRevision, renderRevision: economyRenderRevision,
     expectedCount: core ? 1 : 0, actualCount: core ? 1 : 0,
   });
+  usePerformanceAuditProbe(economySurface, {
+    id: 'economic-layout', kind: 'layout', required: economyOpen,
+    status: economicAuditState?.layoutReady ? 'ready' : 'pending',
+    layoutMeasured: economicAuditState?.layoutReady ?? false,
+    datasetRevision, renderRevision: economyRenderRevision,
+  }, economyOpen);
   usePerformanceAuditProbe(economySurface, {
     id: 'economic-graphics', kind: 'graphic', required: economyOpen,
     status: !economyOpen || economicAuditState?.graphicReady ? 'ready' : 'pending',

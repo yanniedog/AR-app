@@ -1,5 +1,6 @@
 import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
 import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSelection';
+import { assertObservableAuditActionEffect } from '../lib/performanceAuditActionEvidence';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { toPublicAppHealthReport } from '../lib/appHealth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1040,19 +1041,14 @@ async function runDeepAuditStepBody(
         `last action ${completedActionName ?? 'none'}`,
       );
     }
-    const pathChanged = !pathMatches(currentPath(), pathBeforeAction, 'pathname');
-    const requiresChangedRender = step.safety.stateImpact !== 'none' &&
-      !step.semanticActionId.includes('.scroll.');
-    if (
-      requiresChangedRender &&
-      !pathChanged &&
-      renderRevisionBefore === renderRevisionAfter
-    ) {
-      throw new Error(
-        `Mounted action completed without an observable path or render-state change: ` +
-        `${step.semanticActionId} (${renderRevisionBefore ?? 'no render revision'})`,
-      );
-    }
+    assertObservableAuditActionEffect({
+      semanticActionId: step.semanticActionId,
+      stateImpact: step.safety.stateImpact,
+      verifiedIdempotentFixture,
+      pathChanged: !pathMatches(currentPath(), pathBeforeAction, 'pathname'),
+      renderRevisionBefore,
+      renderRevisionAfter,
+    });
   }
   await settleUi();
   assertDatasetRevision(datasetRevision);

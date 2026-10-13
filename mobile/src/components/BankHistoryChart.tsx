@@ -119,7 +119,7 @@ function stepPath(
 }
 
 /** Time-slice ribbon chart: min/max band, mean + median lines, optional RBA + highlight series. */
-export function BankHistoryChart({
+function BankHistoryChartView({
   dates,
   points,
   rba,
@@ -718,6 +718,10 @@ export function BankHistoryChart({
     </View>
   );
 }
+
+// Parent layout/logo/audit commits do not change chart data. Keep the SVG and
+// controls mounted; chart state and theme updates still render normally.
+export const BankHistoryChart = React.memo(BankHistoryChartView);
 
 function CrossMarker({ cx, cy, color }: { cx: number; cy: number; color: string }) {
   if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;

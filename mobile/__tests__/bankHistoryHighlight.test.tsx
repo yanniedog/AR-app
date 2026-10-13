@@ -36,6 +36,25 @@ const highlightSeries = {
   values: { '2026-09-25': 0.045, '2026-09-26': 0.046, '2026-09-27': null, '2026-09-28': 0.05 },
 };
 
+test('keeps the SVG mounted through unchanged parent commits while chart date controls still update', () => {
+  const props = { section: 'Savings' as const, dates, points: emptyMarket, allDates: dates, highlightSeries };
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankHistoryChart {...props} />) as Renderer; });
+  try {
+    const chart = tree.root.findByProps({ accessibilityRole: 'image' });
+    act(() => chart.props.onLayout({ nativeEvent: { layout: { width: 320 } } }));
+    const controls = tree.root.findAllByType('ChartSliceControls')[0];
+    const callback = controls.props.onChangeIndex;
+    act(() => tree.update(<BankHistoryChart {...props} />));
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.onChangeIndex).toBe(callback);
+    act(() => callback(0));
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('4.50%');
+    act(() => tree.update(<BankHistoryChart {...props} highlightSeries={{ ...highlightSeries,
+      values: { ...highlightSeries.values, '2026-09-25': 0.06 } }} />));
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('6.00%');
+  } finally { act(() => tree.unmount()); }
+});
+
 test('product-only observations render after layout and retain gaps without inventing market statistics', () => {
   const onGraphicReady = jest.fn();
   let tree!: Renderer;

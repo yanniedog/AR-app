@@ -54,7 +54,7 @@ import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditRead
 const THRESHOLDS = [1, 5, 10, 25];
 
 export default function Settings() {
-  useSuitabilityRevision();
+  const suitabilityRevision = useSuitabilityRevision();
   const router = useRouter();
   const prefs = useStore((s) => s.prefs);
   const hydrated = useStore((s) => s.hydrated);
@@ -191,6 +191,12 @@ export default function Settings() {
   const orderedInterests = orderedInterestSections(prefs.interests);
   const hiddenSections = SECTION_ORDER.filter((key) => !prefs.interests.includes(key));
   const sectionsSummary = orderedInterests.map((key) => SECTIONS[key].title).join(' · ');
+  const matchingCounts = useMemo(() => {
+    if (!core || !dataDetailsOpen) return null;
+    const rows = mandatoryEligibleRows(Object.values(core.sections).flatMap(item => item.rates));
+    return { providers: new Set(rows.map(row => row.provider)).size,
+      products: new Set(rows.map(row => row.product_key)).size, rates: rows.length };
+  }, [core, dataDetailsOpen, suitabilityRevision]);
 
   const settingsRenderRevision = JSON.stringify([
     hydrated ? 'hydrated' : 'loading',
@@ -538,14 +544,14 @@ export default function Settings() {
           <InfoRow label="Data set" value={core ? formatRunDate(core.run_date) : '—'} />
           <InfoRow label="Source" value={dataSourceLabel(source)} />
           <InfoRow label="Last checked" value={lastCheckedAt ? relativeDate(lastCheckedAt) : 'never'} />
-          <InfoRow label="Matching banks" value={core ? String(new Set(mandatoryEligibleRows(Object.values(core.sections).flatMap(item => item.rates)).map(row => row.provider)).size) : '—'} />
+          <InfoRow label="Matching banks" value={matchingCounts ? String(matchingCounts.providers) : '—'} />
           <InfoRow
             label="Matching products"
-            value={core ? String(new Set(mandatoryEligibleRows(Object.values(core.sections).flatMap(item => item.rates)).map(row => row.product_key)).size) : '—'}
+            value={matchingCounts ? String(matchingCounts.products) : '—'}
           />
           <InfoRow
             label="Matching rates"
-            value={core ? String(mandatoryEligibleRows(Object.values(core.sections).flatMap(item => item.rates)).length) : '—'}
+            value={matchingCounts ? String(matchingCounts.rates) : '—'}
           />
           <InfoRow
             label="Coverage observed"

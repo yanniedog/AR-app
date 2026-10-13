@@ -8,6 +8,32 @@ import {
 } from '../src/lib/logoReadiness';
 
 describe('logo readiness', () => {
+  test('repeated identical image notifications do not commit the containing screen again', () => {
+    type Api = ReturnType<typeof useLogoReadiness>;
+    let latest: Api | null = null;
+    const committed = jest.fn();
+    function Probe() {
+      const readiness = useLogoReadiness('same-publication', ['header']);
+      useEffect(() => { latest = readiness; committed(); });
+      return null;
+    }
+    let tree!: ReactTestRenderer;
+    act(() => { tree = TestRenderer.create(React.createElement(Probe)); });
+    const api = () => latest as unknown as Api;
+    try {
+      act(() => api().onLogoRenderStateChange('header', 'decoded'));
+      const count = committed.mock.calls.length;
+      act(() => api().onLogoRenderStateChange('header', 'decoded'));
+      act(() => api().onLogoRenderStateChange('not-mounted', 'unmounted'));
+      expect(committed).toHaveBeenCalledTimes(count);
+      expect(api()).toMatchObject({ ready: true, terminalCount: 1 });
+      act(() => api().onLogoRenderStateChange('header', 'pending'));
+      expect(api()).toMatchObject({ ready: false, terminalCount: 0 });
+      act(() => api().onLogoRenderStateChange('header', 'initials'));
+      expect(api()).toMatchObject({ ready: true, fallbackCount: 1 });
+    } finally { act(() => tree.unmount()); }
+  });
+
   test('is ready only after every expected rendered logo reaches a terminal state', () => {
     let states = new Map();
     states = applyLogoRenderState(states, 'row:1', 'pending');

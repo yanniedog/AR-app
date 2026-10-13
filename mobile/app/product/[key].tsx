@@ -98,6 +98,16 @@ const HEADER_BACK_RESERVE = 72;
 /** Below this width the labelled Menu button leaves too little room for the title. */
 const COMPACT_HEADER_WIDTH = 400;
 
+const MemoProductSpecs = React.memo(ProductSpecs);
+const MemoProductFacts = React.memo(ProductFacts);
+const MemoSelectedRateConditions = React.memo(SelectedRateConditions);
+const MemoProductRatesList = React.memo(ProductRatesList);
+const MemoEligibilityAssessment = React.memo(EligibilityAssessment);
+const MemoFixedDepositCalculation = React.memo(FixedDepositCalculation);
+const MemoSavingsPeriodCalculation = React.memo(SavingsPeriodCalculation);
+const MemoActivityPeriodCalculation = React.memo(ActivityPeriodCalculation);
+const MemoMortgagePeriodCalculation = React.memo(MortgagePeriodCalculation);
+
 export default function ProductDetail() {
   const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
@@ -108,7 +118,10 @@ export default function ProductDetail() {
   const rateIndex = parsedRateIndex != null && Number.isInteger(parsedRateIndex) ? parsedRateIndex : null;
   const core = useStore((s) => s.core);
   const found = useMemo(
-    () => core ? findEligibleByKey(core.sections, productKey) : null,
+    () => {
+      void suitabilityRevision;
+      return core ? findEligibleByKey(core.sections, productKey) : null;
+    },
     [core, productKey, suitabilityRevision],
   );
   const coreIntegrity = useStore((s) => s.coreIntegrity);
@@ -221,6 +234,20 @@ export default function ProductDetail() {
         : found.siblings.find((candidate) => candidate.rate_index === rateIndex) ?? null
       : found.row
     : null;
+  const rateRows = useMemo(() => found
+    ? sortRows(found.siblings, 'rate', found.section, depositRankMetric, mortgageRateMetric)
+    : [], [found, depositRankMetric, mortgageRateMetric]);
+  // Product history is explicitly product-wide: preserve the section-best
+  // headline across every eligible sibling, independently of the selected tier.
+  const currentBest = useMemo(() => {
+    let best: number | null = null;
+    for (const sibling of found?.siblings ?? []) {
+      const rate = toFraction(sibling.rate);
+      if (rate == null || rate <= 0) continue;
+      best = best == null ? rate : found?.section === 'Mortgage' ? Math.min(best, rate) : Math.max(best, rate);
+    }
+    return best;
+  }, [found]);
   const auditProductError = core && isMandatoryEligibilityReady() && !row
     ? !mandatoryProductAllowed(productKey)
       ? 'The selected product does not meet the current mandatory profile requirements'
@@ -290,6 +317,16 @@ export default function ProductDetail() {
   const historyModel = useMemo(() => !historyEnabled || !found ? null : mergeProductHistoryTimeline(
     marketHistoryModel, found.section, productHistory?.run_dates, core?.run_date,
   ), [marketHistoryModel, found, historyEnabled, productHistory, core?.run_date]);
+  const seededProductValues = useMemo(() => productSeriesRecordWithCurrent(
+    productHistory, productKey, core?.run_date, currentBest,
+  ), [productHistory, productKey, core?.run_date, currentBest]);
+  const productSeries = useMemo(() => ({
+    values: productSeriesRecordForChart(productHistory, productKey,
+      historyModel?.allDates ?? historyModel?.dates ?? [], core?.run_date, currentBest),
+    label: `${row?.product_name ?? ''} · ${PRODUCT_HISTORY_SERIES_LABEL}`,
+    valueScope: 'best · all tiers',
+    color: theme.ledger.info,
+  }), [productHistory, productKey, historyModel, core?.run_date, currentBest, row?.product_name, theme.ledger.info]);
 
   // Single-day fallback is a misleading solid RBA block; wait for multi-day context
   // when Standard-only mode is relying on bank insights that have not arrived yet.
@@ -465,7 +502,7 @@ export default function ProductDetail() {
     return <DetailsOnlyProduct productKey={productKey} />;
   }
 
-  const { section, siblings } = found;
+  const { section } = found;
   if (!row) {
     return (
       <>
@@ -487,7 +524,6 @@ export default function ProductDetail() {
   );
   const meta = SECTIONS[section];
   const accent = meta.lowerIsBetter ? theme.colors.success : theme.colors.primary;
-  const rateRows = sortRows(siblings, 'rate', section, depositRankMetric, mortgageRateMetric);
   const qualifier = rateQualifier(row, section);
   const presentation = ratePresentation(row, section, mortgageRateMetric);
 
@@ -495,28 +531,6 @@ export default function ProductDetail() {
   // Distinct from the market ribbon ink (clay/eucalyptus) and the RBA line (wattle)
   // in both appearances; `warning` matched clay in light and wattle in dark.
   const productInk = theme.ledger.info;
-  // Match productHistory's section-best pick so the seeded point aligns with synced series.
-  let currentBest: number | null = null;
-  for (const sibling of siblings) {
-    const rate = toFraction(sibling.rate);
-    if (rate == null || rate <= 0) continue;
-    if (currentBest == null) currentBest = rate;
-    else currentBest = meta.lowerIsBetter ? Math.min(currentBest, rate) : Math.max(currentBest, rate);
-  }
-  const chartDates = historyModel?.allDates ?? historyModel?.dates ?? [];
-  // Build seeded series once — avoid a second full scan just for point counts.
-  const seededProductValues = productSeriesRecordWithCurrent(
-    productHistory,
-    productKey,
-    core?.run_date,
-    currentBest,
-  );
-  const productSeries = {
-    values: productSeriesRecordForChart(productHistory, productKey, chartDates, core?.run_date, currentBest),
-    label: `${row.product_name} · ${PRODUCT_HISTORY_SERIES_LABEL}`,
-    valueScope: 'best · all tiers',
-    color: productInk,
-  };
   const observedProductPoints = countFiniteSeriesPoints(seededProductValues);
   const productHasHighlight = observedProductPoints > 0;
   const selectedHistoryContext = selectedTierHistoryContext(row, currentBest);
@@ -720,7 +734,7 @@ export default function ProductDetail() {
           </AppText>
         ) : null}
 
-        <ProductSpecs row={row} section={section} detail={detail} />
+        <MemoProductSpecs row={row} section={section} detail={detail} />
 
         <Button
           title={favorite
@@ -820,10 +834,10 @@ export default function ProductDetail() {
           )}
         </Card>
 
-        <ProductFacts detail={detail} />
-        <SelectedRateConditions row={row} section={section} />
-        {section === 'TD' ? <FixedDepositCalculation row={row} /> : null}
-        <EligibilityAssessment productKey={productKey} row={row} section={section} /><SavingsPeriodCalculation productKey={row.product_key} row={row} section={section} /><ActivityPeriodCalculation productKey={row.product_key} row={row} section={section} /><MortgagePeriodCalculation productKey={row.product_key} row={row} section={section} />
+        <MemoProductFacts detail={detail} />
+        <MemoSelectedRateConditions row={row} section={section} />
+        {section === 'TD' ? <MemoFixedDepositCalculation row={row} /> : null}
+        <MemoEligibilityAssessment productKey={productKey} row={row} section={section} /><MemoSavingsPeriodCalculation productKey={row.product_key} row={row} section={section} /><MemoActivityPeriodCalculation productKey={row.product_key} row={row} section={section} /><MemoMortgagePeriodCalculation productKey={row.product_key} row={row} section={section} />
         <DetailGroup title="Features" icon="checkmark-circle-outline" items={normalizedFactKinds.has('feature') ? undefined : detail?.features} loading={detailsLoading && !normalizedFactKinds.has('feature')} />
         <DetailGroup title="Fees" icon="cash-outline" items={detail?.fees} loading={detailsLoading} />
         <DetailGroup title="Eligibility" icon="person-outline" items={normalizedFactKinds.has('eligibility') ? undefined : detail?.eligibility} loading={detailsLoading && !normalizedFactKinds.has('eligibility')} />
@@ -840,7 +854,7 @@ export default function ProductDetail() {
           onPress={() => openBank(row.provider)}
         />
 
-        <ProductRatesList rows={rateRows} section={section} accent={accent} />
+        <MemoProductRatesList rows={rateRows} section={section} accent={accent} />
 
         <Button
           title={productWideSaved ? 'Stop watching all rates' : 'Watch all rates for this product'}
