@@ -9,6 +9,8 @@ import { normalizeCoreWithIntegrity } from '../src/data/sectionIntegrity';
 import { savingsHarness, savingsInputs } from '../test-support/savingsMonetaryHarness';
 import { compareSavingsHoldings, type HoldingsDraft } from '../src/data/portfolioContracts/adapter';
 import { profile as mockProfile } from '../test-support/executableDepositHarness';
+import { calculateLedger } from '../src/lib/productTermsEngine/ledger';
+import { example } from '../src/lib/productTermsEngine/testSupport';
 jest.mock('../src/data/payload', () => ({ downloadInflate: jest.fn() }));
 let mockState: any;
 jest.mock('../src/data/store', () => ({ useStore: (selector: any) => selector(mockState) }));
@@ -72,7 +74,11 @@ test.each([
  ['temporary lead', {firstPositive:'2026-01-02',sustainedFrom:null,through:'2026-01-10',transient:true,tiedDates:[]}, 'Temporary lead: Yes'],
  ['sustained lead', {firstPositive:'2026-01-02',sustainedFrom:'2026-01-04',through:'2026-01-10',transient:true,tiedDates:[]}, 'Sustained positive advantage: 4 Jan 2026 · Through: 10 Jan 2026'],
 ])('shows receipt %s without manufacturing a crossing', (_name, breakEven, expected) => {
- const result:any={id:'set-2',advantage:breakEven?'1.00':null,breakEven,receipt:{accounts:{savings:{claimAvailable:false,status:'incomplete',completeness:'incomplete',issues:['technical-unavailable'],assumptions:[],inputSha256:'a'.repeat(64),totals:{openingBalance:'1000.00',interestAccrued:'1.000000000000',feesCharged:null}}}}};
+ const {contract,scenario}=example();
+ const baseline=calculateLedger(contract,scenario);
+ // Keep the evaluator's required schema (including its real ledger), then
+ // deliberately control unknown/withheld presentation facts in this fixture.
+ const result:any={id:'set-2',advantage:breakEven?'1.00':null,breakEven,receipt:{accounts:{savings:{...baseline,claimAvailable:false,status:'incomplete',completeness:'incomplete',eligibility:null,issues:['technical-unavailable'],assumptions:[],inputSha256:'a'.repeat(64),totals:{...baseline.totals,openingBalance:'1000.00',interestAccrued:'1.000000000000',feesCharged:null}}}}};
  let tree:any;act(()=>{tree=TestRenderer.create(<HoldingsResultDetails result={result} referenceId="set-1"/>);});
  expect(JSON.stringify(tree.toJSON())).not.toContain('Interest accrued');
  act(()=>tree.root.findByProps({title:'set-2 · Results'}).props.onToggle());
