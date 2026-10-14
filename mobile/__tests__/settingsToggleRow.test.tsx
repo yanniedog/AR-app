@@ -7,6 +7,9 @@ import { ToggleRow } from '../src/components/settings/settingsUi';
 
 jest.mock('../src/hooks/useReducedMotion', () => ({ useReducedMotion: () => true }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => jest.requireActual('../src/theme/theme').lightTheme }));
+// This fixture checks actual switch geometry and confirmation, independently
+// of the application store's asynchronous private-data hydration.
+jest.mock('../src/data/store', () => ({ useStore: (selector: (state: { prefs: { themeMode: 'light' } }) => unknown) => selector({ prefs: { themeMode: 'light' } }) }));
 jest.mock('react-native/Libraries/Components/Pressable/Pressable', () => ({
   __esModule: true,
   default: ({ children, ...props }: any) => mockReact.createElement('Pressable', props,

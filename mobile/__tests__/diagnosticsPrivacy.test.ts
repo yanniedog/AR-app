@@ -197,7 +197,9 @@ describe('deidentified diagnostics privacy boundary', () => {
     expect(debugScreen).toContain("uiJoin('Public hosting', ': ', uiIdentifier('paste.rs'), ' / ', uiIdentifier('paste.c-net.org')");
     expect(screen).toContain("'Operating-system share sheet'");
     expect(screen).toContain("'Raw logs / tracebacks / routes / product keys / device IDs / timestamps'");
-    expect(screen).toContain('uploadLog: publicUpload');
+    expect(screen).toContain('const requestedUpload = publicUpload');
+    expect(screen).toContain('uploadLog: requestedUpload');
+    expect(screen.indexOf('const requestedUpload = publicUpload')).toBeLessThan(screen.indexOf('await getHydratedApkDownloadSnapshot()'));
     expect(screen).toContain('useState(false)');
     expect(screen).toContain('Public upload');
     const completion = runner.indexOf('await publishPerformanceAuditAfterFinalization(report');

@@ -19,7 +19,10 @@ jest.mock('../src/lib/appUpdate', () => ({
 jest.mock('../src/lib/debugLogSharing', () => ({
   getDebugLogUploadSnapshot: () => mockUpload, isDebugLogUploadBusy: () => mockUploadBusy, subscribeDebugLogUpload: () => () => undefined,
 }));
-jest.mock('../src/lib/passiveAudit', () => ({ getPassiveAuditStatus: () => mockPassive, subscribePassiveAudit: () => () => undefined }));
+jest.mock('../src/lib/passiveAudit', () => ({ getPassiveAuditStatus: () => mockPassive, subscribePassiveAudit: () => () => undefined, configurePassiveAuditState: jest.fn() }));
+// Request controls use the real audit lifecycle; catalogue hydration has its
+// own tests and must not start asynchronous persistence in this UI fixture.
+jest.mock('../src/data/store', () => ({ useStore: (selector: (state: { details: null }) => unknown) => selector({ details: null }) }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: { textMuted: '#777', success: '#070', warning: '#a60', danger: '#c00', border: '#ddd', surfaceAlt: '#eee', text: '#111' }, radius: { md: 12 }, font: { body: 16 } }) }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
