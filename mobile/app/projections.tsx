@@ -1,4 +1,4 @@
-import { commissionerFamily } from '../src/theme/fonts';
+import { fontStyle } from '../src/theme/fonts';
 import { LocalRateEditor } from '../src/components/scenario/LocalRateEditor';
 import { PublicRateEvidence } from '../src/components/scenario/PublicRateEvidence';
 import { PublicCostComparison } from '../src/components/scenario/PublicCostComparison';
@@ -160,7 +160,7 @@ function NumericField({
           editable={editable}
           maxLength={20}
           style={{
-            fontFamily: commissionerFamily(),
+            ...fontStyle(),
             flex: 1,
             minWidth: 0,
             color: theme.colors.text,

@@ -1,4 +1,4 @@
-import { commissionerFamily } from '../../theme/fonts';
+import { fontStyle } from '../../theme/fonts';
 import React, { useMemo, useState } from 'react';
 import { Platform, TextInput, View } from 'react-native';
 
@@ -51,7 +51,7 @@ function AmountField({
         accessibilityLabel={accessibilityLabel}
         accessibilityState={{ disabled: !editable }}
         style={{
-          fontFamily: commissionerFamily(),
+          ...fontStyle(),
           fontSize: theme.font.body,
           minHeight: 48,
           color: theme.colors.text,

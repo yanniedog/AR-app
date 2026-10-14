@@ -1,5 +1,5 @@
-import { mandatoryEligibleRows } from '../../src/data/eligibilityGate';
-import { commissionerFamily } from '../../src/theme/fonts';
+import { mandatoryEligibleRows, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
+import { fontStyle } from '../../src/theme/fonts';
 import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
 import { payableRateForRow, publicComparisonCore, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolveRowPublicRate, resolvedPublicRankingRows } from '../../src/data/publicRateIntegration';
 import { PublicPricingCoverage } from '../../src/components/scenario/PublicPricingCoverage';
@@ -482,7 +482,7 @@ export default function MyRates() {
         {unavailableRefs.length ? (
           <View style={{ gap: 8 }}>
             <AppText variant="small" color="textMuted">
-              {unavailableRefs.length} watched {unavailableRefs.length === 1 ? 'tier needs' : 'tiers need'} a current pricing selection. Product identities remain available; old tiers are not rebound automatically.
+              Unresolved watched tiers: {unavailableRefs.length} · Current pricing selection: required · Automatic rebinding: disabled
             </AppText>
             {unavailableRefs.map(ref => <Button key={ref.id} title={`Identify ${publicCatalogue.getProduct(ref.productKey)?.name ?? ref.productKey}`}
               variant="ghost" onPress={() => openProduct(ref.productKey)} />)}
@@ -563,7 +563,7 @@ export default function MyRates() {
                               {ref.scope === 'product'
                                 ? 'All product variants · legacy save'
                                 : changeBps
-                                ? `Public product rate ${changeBps > 0 ? 'up' : 'down'} ${(Math.abs(changeBps) / 100).toFixed(2)} percentage points since watched; this does not confirm your charged rate`
+                                ? `Public rate change: ${changeBps > 0 ? '+' : '−'}${(Math.abs(changeBps) / 100).toFixed(2)} percentage points since watched · Charged rate: unverified`
                                 : `Rate last updated ${formatRateChangeDate(row.last_updated ?? core.run_date)}`}
                               {relevantDate ? ` · ${relevantDate}` : ''}
                             </AppText>
@@ -721,7 +721,7 @@ export default function MyRates() {
               maxLength={10}
               accessibilityLabel="Date in year month day format"
               style={{
-                fontFamily: commissionerFamily(),
+                ...fontStyle(),
                 minHeight: 48,
                 borderWidth: 1,
                 borderColor: theme.colors.border,

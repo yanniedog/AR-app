@@ -80,6 +80,58 @@ class FakeClock implements PerformanceAuditReadinessClock {
 }
 
 describe('PerformanceAuditReadinessRegistry', () => {
+  it('pauses timeout and requires fresh foreground stability after resuming', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('pause');
+    registry.registerSurface({ id: 'screen', probes: [{ id: 'data', kind: 'data', status: 'ready' }] });
+    let paused = false;
+    const listeners = new Set<() => void>();
+    const pauseState = { getPaused: () => paused, subscribe: (listener: () => void) => {
+      listeners.add(listener); return () => { listeners.delete(listener); };
+    } };
+    let done = false;
+    const wait = registry.waitForReady({ quietWindowMs: 100, timeoutMs: 200, pauseState })
+      .then(() => { done = true; });
+    clock.advanceBy(50);
+    paused = true;
+    listeners.forEach(listener => listener());
+    clock.advanceBy(1000);
+    await Promise.resolve();
+    expect(done).toBe(false);
+    expect(clock.pendingTimers()).toBe(0);
+    paused = false;
+    listeners.forEach(listener => listener());
+    clock.advanceBy(99);
+    await Promise.resolve();
+    expect(done).toBe(false);
+    clock.advanceBy(1);
+    await wait;
+    expect(done).toBe(true);
+    expect(listeners.size).toBe(0);
+  });
+
+  it('retains the foreground timeout budget across a background pause', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('pause-timeout');
+    registry.registerSurface({ id: 'screen', probes: [{ id: 'data', kind: 'data', status: 'pending' }] });
+    let paused = false;
+    let notify = () => {};
+    const wait = registry.waitForReady({ timeoutMs: 200, pauseState: {
+      getPaused: () => paused, subscribe: listener => { notify = listener; return () => {}; },
+    } });
+    const rejected = expect(wait).rejects.toBeInstanceOf(PerformanceAuditReadinessTimeoutError);
+    clock.advanceBy(75);
+    paused = true; notify();
+    clock.advanceBy(1000);
+    paused = false; notify();
+    clock.advanceBy(124);
+    expect(clock.pendingTimers()).toBe(1);
+    clock.advanceBy(1);
+    await rejected;
+  });
+
   function settledFixture() {
     const clock = new FakeClock();
     const registry = new PerformanceAuditReadinessRegistry(clock);

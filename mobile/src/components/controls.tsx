@@ -1,7 +1,6 @@
 import Ionicons from './icons/AppIcon';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Pressable,
   Switch,
   TextInput,
   type StyleProp,
@@ -17,9 +16,10 @@ import Animated, {
 
 import { hapticSelection } from '../lib/haptics';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { commissionerFamily } from '../theme/fonts';
+import { fontStyle } from '../theme/fonts';
 import { useTheme } from '../theme/ThemeProvider';
 import { TouchTarget } from './TouchTarget';
+import { PressFeedback } from './PressFeedback';
 import { androidRipple, AppText } from './ui';
 
 export interface SegOption<T extends string> {
@@ -53,8 +53,8 @@ export function SectionCrossfade({
       return;
     }
     opacity.value = withSequence(
-      withTiming(0.22, { duration: 90 }),
-      withTiming(1, { duration: 200 }),
+      withTiming(0.65, { duration: 80 }),
+      withTiming(1, { duration: 160 }),
     );
   }, [section, opacity, reducedMotion]);
 
@@ -140,10 +140,10 @@ export function SearchBar({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        backgroundColor: theme.ledger.raised,
+        backgroundColor: theme.colors.surfaceAlt,
         borderRadius: theme.radius.md,
         borderWidth: 1,
-        borderColor: focused ? theme.ledger.eucalyptus : theme.ledger.controlRule,
+        borderColor: focused ? theme.ledger.primary : theme.ledger.controlRule,
         paddingHorizontal: 12,
         minHeight: 48,
         paddingVertical: 4,
@@ -162,7 +162,7 @@ export function SearchBar({
           flex: 1,
           minHeight: 48,
           color: theme.colors.text,
-          fontFamily: commissionerFamily(),
+          ...fontStyle(),
           fontSize: theme.font.body,
         }}
         autoCorrect={false}
@@ -171,7 +171,7 @@ export function SearchBar({
         returnKeyType="search"
       />
       {value.length > 0 ? (
-        <Pressable
+        <PressFeedback
           onPress={() => onChangeText('')}
           accessibilityRole="button"
           accessibilityLabel="Clear search"
@@ -186,7 +186,7 @@ export function SearchBar({
           }}
         >
           <Ionicons name="close-circle" size={18} color={theme.colors.textFaint} />
-        </Pressable>
+        </PressFeedback>
       ) : null}
     </View>
   );

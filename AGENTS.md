@@ -8,6 +8,14 @@ This repo owns only the installable Expo app and app-release automation.
 - Use `cd mobile && npm run ci` as the primary local verification path.
 - Keep the `mobile/` directory layout until a separate flattening migration is planned.
 
+## Consumer interface hard rules
+
+- Follow [the Android redesign contract](docs/ANDROID_REDESIGN_CONTRACT.md): optimise friction, task completion, app complexity and sitemap complexity together.
+- Explanatory application prose is prohibited everywhere, including helper/description/subtitle text, tooltips, native dialogs, accessibility hints and dynamically supplied marketing text. Keep concise headings, explicit actions/field labels and necessary financial/status facts. Do not move prose into a collapsed panel or rename its prop.
+- Preserve rate metrics, eligibility, conditions, fees, assumptions, dates and unknown/unverified states as structured facts. Required legal/licence documents have a narrow document boundary, not a general help/diagnostics exemption.
+- Core tasks must be discoverable without instructions: direct results, stable Rates/Saved/Market navigation, contextual actions and preserved input/filter/scroll state. No mandatory onboarding or directory gates.
+- New UI changes comply immediately; phase 4 completes the legacy copy migration and enables the zero-violation CI guard. Do not grandfather explanatory prose into that guard.
+
 ## Global ship bar (canonical)
 
 PR bot babysitting follows **[yanniedog/cursor-global-workflow](https://github.com/yanniedog/cursor-global-workflow)** — especially `WORKFLOW.md` steps 4–7, `skills/pr-fix-agent/SKILL.md`, and always-on rules `respond-to-each-review-comment.mdc`, `pr-review-bot-replies.mdc`, and `no-early-stop-after-pr.mdc`. Repo notes below specialize that bar for AR-app; when they conflict, prefer the global workflow unless this file states an AR-app exception.

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 import type { DisplayEvidence } from '../../data/displayEvidence';
 import type { LedgerPalette } from '../../theme/colors';
@@ -8,6 +8,7 @@ import { LedgerIcon, type LedgerIconName } from '../icons/LedgerIcon';
 import { LedgerRow } from './LedgerRow';
 import { LedgerSheet } from './LedgerSheet';
 import { LedgerText } from './LedgerText';
+import { PressFeedback } from '../PressFeedback';
 
 const ICONS: Record<DisplayEvidence['kind'], LedgerIconName> = {
   current: 'success',
@@ -21,8 +22,8 @@ const ICONS: Record<DisplayEvidence['kind'], LedgerIconName> = {
 };
 
 const TONES: Record<DisplayEvidence['tone'], keyof LedgerPalette> = {
-  positive: 'eucalyptus',
-  caution: 'clay',
+  positive: 'success',
+  caution: 'warning',
   neutral: 'mutedInk',
   danger: 'danger',
 };
@@ -47,18 +48,18 @@ export function DataEvidenceLine({
 
   return (
     <>
-      <Pressable
+      <PressFeedback
         accessibilityRole="button"
         accessibilityLabel={`${evidence.label}. ${evidence.detail} Open data details.`}
         onPress={openDetails}
-        style={({ pressed }) => ({
+        contentStyle={{ flexGrow: 1 }}
+        style={{
           minHeight: 48,
           flexDirection: 'row',
           alignItems: 'center',
           gap: 10,
           paddingVertical: 8,
-          opacity: pressed ? 0.62 : 1,
-        })}
+        }}
       >
         <LedgerIcon name={ICONS[evidence.kind]} size={18} color={theme.ledger[tone]} />
         <View style={{ flex: 1 }}>
@@ -68,7 +69,7 @@ export function DataEvidenceLine({
           </LedgerText>
         </View>
         <LedgerIcon name="chevron-right" size={16} color={theme.ledger.mutedInk} />
-      </Pressable>
+      </PressFeedback>
 
       {!onPress ? (
         <LedgerSheet visible={open} title={detailsTitle} onClose={() => setOpen(false)}>

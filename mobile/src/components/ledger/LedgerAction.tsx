@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
-  Pressable,
+  View,
   type PressableProps,
   type StyleProp,
   type ViewStyle,
@@ -11,6 +11,7 @@ import { LEDGER_LAYOUT } from '../../theme/layout';
 import { useTheme } from '../../theme/ThemeProvider';
 import { LedgerIcon, type LedgerIconName } from '../icons/LedgerIcon';
 import { LedgerText } from './LedgerText';
+import { PressFeedback } from '../PressFeedback';
 
 export type LedgerActionVariant = 'primary' | 'secondary' | 'quiet' | 'destructive';
 
@@ -37,24 +38,25 @@ export function LedgerAction({
   const primary = variant === 'primary';
   const destructive = variant === 'destructive';
   const foreground = primary
-    ? theme.ledger.onWattle
+    ? theme.ledger.onPrimary
     : destructive
       ? theme.ledger.danger
       : theme.ledger.ink;
-  const background = primary ? theme.ledger.wattle : 'transparent';
+  const background = primary ? theme.ledger.primary : variant === 'secondary' ? theme.colors.surfaceAlt : 'transparent';
 
   return (
-    <Pressable
+    <PressFeedback
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ ...accessibilityState, disabled: inactive, busy: loading }}
       disabled={inactive}
-      style={({ pressed }) => [
+      style={[
         {
           minHeight: LEDGER_LAYOUT.touchTarget,
+          minWidth: LEDGER_LAYOUT.touchTarget,
           paddingHorizontal: 16,
           paddingVertical: 11,
-          borderRadius: 4,
+          borderRadius: theme.radius.sm,
           borderWidth: primary || variant === 'quiet' ? 0 : 1,
           borderColor: destructive ? theme.ledger.danger : theme.ledger.controlRule,
           backgroundColor: background,
@@ -62,22 +64,20 @@ export function LedgerAction({
           alignItems: 'center',
           justifyContent: 'center',
           gap: 8,
-          opacity: inactive ? 0.48 : pressed ? 0.76 : 1,
+          opacity: inactive ? 0.48 : 1,
+          overflow: 'hidden',
         },
         style,
       ]}
       {...rest}
     >
-      {loading ? (
-        <ActivityIndicator color={foreground} />
-      ) : (
-        <>
+      <View style={{ opacity: loading ? 0 : 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, flexShrink: 1 }}>
           {icon ? <LedgerIcon name={icon} size={19} color={foreground} /> : null}
-          <LedgerText variant="label" tone={primary ? 'onWattle' : destructive ? 'danger' : 'ink'}>
+          <LedgerText variant="body" weight="600" tone={primary ? 'onPrimary' : destructive ? 'danger' : 'ink'} style={{ flexShrink: 1, textAlign: 'center' }}>
             {label}
           </LedgerText>
-        </>
-      )}
-    </Pressable>
+      </View>
+      {loading ? <ActivityIndicator color={foreground} style={{ position: 'absolute', alignSelf: 'center' }} /> : null}
+    </PressFeedback>
   );
 }

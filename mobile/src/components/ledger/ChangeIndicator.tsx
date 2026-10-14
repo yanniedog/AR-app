@@ -7,8 +7,8 @@ import { LedgerText } from './LedgerText';
 export type ChangeDirection = 'up' | 'down' | 'unchanged' | 'mixed' | 'unknown';
 
 const PRESENTATION: Record<ChangeDirection, { symbol: string; word: string; tone: keyof LedgerPalette }> = {
-  up: { symbol: '↑', word: 'Up', tone: 'clay' },
-  down: { symbol: '↓', word: 'Down', tone: 'eucalyptus' },
+  up: { symbol: '↑', word: 'Up', tone: 'warning' },
+  down: { symbol: '↓', word: 'Down', tone: 'success' },
   unchanged: { symbol: '—', word: 'Unchanged', tone: 'mutedInk' },
   mixed: { symbol: '↕', word: 'Mixed', tone: 'info' },
   unknown: { symbol: '?', word: 'Not known', tone: 'mutedInk' },

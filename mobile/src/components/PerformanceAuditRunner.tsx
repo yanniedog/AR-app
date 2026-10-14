@@ -16,11 +16,8 @@ import {
   AppState,
   InteractionManager,
   Platform,
-  ScrollView,
   useWindowDimensions,
-  View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { visibleAccountRows } from '../data/format';
 import { resolveSectionRibbonStats } from '../data/ribbonStats';
@@ -31,7 +28,6 @@ import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
 import { PerformanceAuditNavigationAnchor } from '../lib/performanceAuditNavigation';
 import { createPerformanceAuditWakeLock } from '../lib/performanceAuditWakeLock';
-import { AuditScreenAwake } from '../../modules/audit-screen-awake';
 import {
   getApkDownloadSnapshot,
   getHydratedApkDownloadSnapshot,
@@ -55,6 +51,7 @@ import { createExternalAuditLinkCollector, FIXED_EXTERNAL_AUDIT_LINKS, beginExte
   getCapturedExternalAuditLinks } from '../lib/externalLinkInventory';
 import type { TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
 import { captureAuditPayloadWork } from '../lib/performanceAuditPayloadWork';
+import { benchmarkPayloadCapacity } from '../lib/performanceAuditCapacity';
 import { waitForAuditBackgroundWork, describeAuditBackgroundWork, type AuditBackgroundWorkWait } from '../lib/performanceAuditBackgroundWork';
 import { isDebugLogUploadBusy, startDebugLogUpload, subscribeDebugLogUpload } from '../lib/debugLogSharing';
 import {
@@ -136,14 +133,13 @@ import { setPassiveAuditPaused } from '../lib/passiveAudit';
 import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAuditFinalization';
 import { awaitPerformanceAuditWork } from '../lib/performanceAuditWork';
 import { buildPerformanceAuditSetupPlans, measurePerformanceAuditSetupStage, PERFORMANCE_AUDIT_SETUP_STAGES, PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from '../lib/performanceAuditSetup';
-import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, estimatePerformanceAuditTime, formatPerformanceAuditEstimate } from '../lib/performanceAuditTiming';
+import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, estimatePerformanceAuditTime } from '../lib/performanceAuditTiming';
 import {
   buildIntegratedAppHealthReport, buildPartialAppHealthReport,
   captureAppHealthDataEvidence, combineAppHealthPerformanceSummary,
   type CapturedAppHealthDataEvidence,
 } from '../lib/performanceAuditHealth';
-import { useTheme } from '../theme/ThemeProvider';
-import { AppText, Button, Card, Row } from './ui';
+import { PerformanceAuditOverlay } from './PerformanceAuditOverlay';
 
 const AUDIT_HOME_PATH = '/performance-audit';
 const ROUTE_TIMEOUT_MS = 8_000;
@@ -840,6 +836,7 @@ async function runDeepAuditStepBody(
     }, 50);
     try {
       const preActionReadiness = await performanceAuditReadinessRegistry.waitForReady({
+        pauseState: { getPaused: () => getPerformanceAuditState().paused, subscribe: subscribePerformanceAudit },
         surfaceIds: [source.id],
         onlyKinds: PRE_ACTION_READINESS_KINDS,
         quietWindowMs: READINESS_QUIET_WINDOW_MS,
@@ -985,6 +982,7 @@ async function runDeepAuditStepBody(
   let readiness: PerformanceAuditReadinessSnapshot;
   try {
     readiness = await performanceAuditReadinessRegistry.waitForReady({
+      pauseState: { getPaused: () => getPerformanceAuditState().paused, subscribe: subscribePerformanceAudit },
       surfaceIds: [step.expectedSurface],
       requiredKinds: requiredProbeKinds(step),
       ...(actionSource === step.expectedSurface &&
@@ -1680,35 +1678,16 @@ async function runDataCheck(
   let traversalMs: number | null = null;
   let payloadChars: number | null = null;
   let rateRows: number | null = null;
+  let capacityMetrics: Record<string, string | number> = {};
   let error: string | undefined;
   try {
     assertSessionActive(watchdog);
-    let at = now();
-    const serialized = JSON.stringify(core);
-    stringifyMs = now() - at;
-    payloadChars = serialized.length;
-    // This is a capacity benchmark, not a production cache transaction. Yield
-    // between its deliberately heavy phases so the audit itself does not create
-    // one long JS-thread freeze and then attribute that freeze to the app.
-    await nextFrame();
-    assertSessionActive(watchdog);
-    at = now();
-    const parsed = JSON.parse(serialized) as typeof core;
-    parseMs = now() - at;
-    await nextFrame();
-    assertSessionActive(watchdog);
-    at = now();
-    rateRows = 0;
-    for (const section of Object.values(parsed.sections)) {
-      const rates = [...(section.rates ?? [])];
-      rateRows += rates.length;
-      rates
-        .filter((row) => Number.isFinite(Number(row.rate)))
-        .sort((left, right) => Number(left.rate) - Number(right.rate))
-        .slice(0, 25);
-    }
-    traversalMs = now() - at;
-    await nextFrame();
+    const result = await benchmarkPayloadCapacity(core, {
+      assertActive: () => assertSessionActive(watchdog),
+      now,
+    });
+    ({ stringifyMs, parseMs, traversalMs, payloadChars, rateRows } = result.metrics);
+    capacityMetrics = result.metrics;
     assertSessionActive(watchdog);
   } catch (caught) {
     rethrowAuditControl(caught);
@@ -1727,6 +1706,7 @@ async function runDataCheck(
     status: error ? 'fail' : processingStatus,
     durationMs: roundMetric(now() - started),
     metrics: {
+      ...capacityMetrics,
       payloadChars,
       rateRows,
       stringifyMs: stringifyMs == null ? null : roundMetric(stringifyMs),
@@ -2339,6 +2319,7 @@ export async function runJourney(
     }, 50);
     try {
       await performanceAuditReadinessRegistry.waitForReady({
+        pauseState: { getPaused: () => getPerformanceAuditState().paused, subscribe: subscribePerformanceAudit },
         surfaceIds: [journey.expectedSurface],
         quietWindowMs: READINESS_QUIET_WINDOW_MS,
         timeoutMs: readinessTimeoutMs(watchdog),
@@ -2430,6 +2411,7 @@ export async function runJourney(
     }, 50);
     try {
       await performanceAuditReadinessRegistry.waitForReady({
+        pauseState: { getPaused: () => getPerformanceAuditState().paused, subscribe: subscribePerformanceAudit },
         surfaceIds: ['audit.progress'],
         quietWindowMs: READINESS_QUIET_WINDOW_MS,
         timeoutMs: readinessTimeoutMs(watchdog),
@@ -2536,8 +2518,6 @@ export function usePerformanceAuditActiveState(): boolean {
 }
 
 export function PerformanceAuditRunner() {
-  const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const dimensions = useWindowDimensions();
   const pathname = usePathname();
   const navigation = useNavigationContainerRef();
@@ -3988,82 +3968,5 @@ export function PerformanceAuditRunner() {
     };
   }, [state.status]);
 
-  if (state.status !== 'queued' && state.status !== 'running') return null;
-
-  const total = Math.max(1, state.progress.total);
-  const fraction = Math.max(0, Math.min(1, state.progress.completed / total));
-  const percent = Math.round(fraction * 100);
-
-  return (
-    <View
-      accessibilityViewIsModal
-      style={{
-        position: 'absolute',
-        inset: 0,
-        zIndex: 500,
-        elevation: 500,
-        backgroundColor: 'rgba(3, 10, 18, 0.42)',
-        justifyContent: 'flex-end',
-        paddingHorizontal: 16,
-        paddingBottom: Math.max(16, insets.bottom + 12),
-      }}
-    >
-      <AuditScreenAwake />
-      <Card variant="elevated" style={{ gap: 12, borderWidth: 1, borderColor: theme.colors.border }}>
-        <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <AppText variant="body" weight="700">
-            App health audit
-          </AppText>
-          <AppText variant="small" weight="700" color="primary">
-            {percent}%
-          </AppText>
-        </Row>
-        <AppText variant="small" color="textMuted" accessibilityLiveRegion="polite">
-          {formatPerformanceAuditEstimate(state.estimate, state.paused)}
-        </AppText>
-        {!state.paused && state.progress.label.startsWith('Background work:') ? (
-          <ScrollView style={{ maxHeight: 180 }}>
-            <AppText variant="small" color="textMuted">{state.progress.label}</AppText>
-          </ScrollView>
-        ) : (
-          <AppText variant="small" color="textMuted" numberOfLines={2}>
-            {state.paused ? 'Paused — the audit continues when you return' : state.progress.label}
-          </AppText>
-        )}
-        <View
-          accessibilityRole="progressbar"
-          accessibilityLabel="App health audit progress"
-          accessibilityValue={{ min: 0, max: 100, now: percent }}
-          style={{
-            height: 8,
-            borderRadius: theme.radius.pill,
-            backgroundColor: theme.colors.chip,
-            overflow: 'hidden',
-          }}
-        >
-          <View
-            style={{
-              height: '100%',
-              width: `${percent}%`,
-              borderRadius: theme.radius.pill,
-              backgroundColor: theme.colors.primary,
-            }}
-          />
-        </View>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <AppText variant="tiny" color="textFaint">
-            {state.progress.completed} of {state.progress.total || '...'} checks
-          </AppText>
-          <Button
-            title={state.cancelRequested ? 'Cancelling...' : 'Cancel audit'}
-            icon="close"
-            variant="ghost"
-            disabled={state.cancelRequested}
-            onPress={cancelPerformanceAudit}
-            style={{ paddingVertical: 8 }}
-          />
-        </Row>
-      </Card>
-    </View>
-  );
+  return <PerformanceAuditOverlay state={state} />;
 }

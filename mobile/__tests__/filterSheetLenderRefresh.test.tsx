@@ -1,4 +1,5 @@
 import React from 'react';
+import mockReact from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import { FilterSheet } from '../src/components/FilterSheet';
@@ -9,6 +10,7 @@ import type { RateRow } from '../src/types';
 jest.mock('../src/components/controls', () => ({ SearchBar: 'SearchBar' }));
 jest.mock('../src/components/icons/AppIcon', () => 'AppIcon');
 jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }));
+jest.mock('../src/components/SheetSurface', () => ({ SheetSurface: ({ children, footer }: any) => mockReact.createElement('SheetSurface', null, children, footer) }));
 jest.mock('../src/components/ui', () => ({
   AppText: 'AppText', Button: 'Button', Chip: 'Chip', Disclosure: 'Disclosure', Divider: 'Divider', Row: 'Row',
 }));
