@@ -100,7 +100,7 @@ jest.mock('../src/components/feedback', () => ({
   EmptyState: 'EmptyState', IndeterminateProgressBar: 'IndeterminateProgressBar', LoadingRows: 'LoadingRows', ScreenSkeleton: 'ScreenSkeleton',
 }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Card: 'Card', Chip: 'Chip', Row: 'Row' }));
-jest.mock('../src/components/SheetSurface', () => ({ SheetSurface: 'SheetSurface' }), { virtual: true });
+jest.mock('../src/components/SheetSurface', () => ({ SheetSurface: 'SheetSurface' }));
 jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }));
 
 beforeEach(() => {
