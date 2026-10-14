@@ -1,10 +1,23 @@
 import {
   buildHistoryGraphicRevision,
   isCurrentHistoryGraphicEvidence,
+  isMeasuredEmptyHistoryGraphic,
   type HistoryGraphicEvidence,
 } from '../src/lib/historyGraphicEvidence';
 
 describe('history graphic audit evidence', () => {
+  it('accepts a measured empty window without hiding missing expected observations', () => {
+    const empty: HistoryGraphicEvidence = {
+      contentRevision: 'sha-a', graphicRevision: 'sha-a:Mortgage:30D:none:0',
+      window: '30D', availability: 'unavailable', expectedCount: 0, pointCount: 0,
+      accessibleSummary: false, layoutMeasured: true, emptyStateRendered: true,
+    };
+    expect(isMeasuredEmptyHistoryGraphic(empty)).toBe(true);
+    expect(isMeasuredEmptyHistoryGraphic({ ...empty, expectedCount: 1 })).toBe(false);
+    expect(isMeasuredEmptyHistoryGraphic({ ...empty, layoutMeasured: false })).toBe(false);
+    expect(isMeasuredEmptyHistoryGraphic({ ...empty, emptyStateRendered: false })).toBe(false);
+    expect(isMeasuredEmptyHistoryGraphic(null)).toBe(false);
+  });
   it('changes for content corrections and selected windows even when shape is unchanged', () => {
     const dates = ['2026-08-01', '2026-09-01'];
     expect(buildHistoryGraphicRevision('sha-a', 'Mortgage', '30D', dates)).not.toBe(
