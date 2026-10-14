@@ -11,6 +11,7 @@ import { CustomerProfilePanel } from '../CustomerProfilePanel';
 import { FinancialFactRows } from './FinancialFactRows';
 import { uiTermsStageStatus, uiTermRevisionValue } from '../../lib/productTermsUiFacts';
 import { uiCount, uiDate, uiIdentifier, uiJoin, uiLabel, type UiLabel } from '../../lib/uiCopy';
+import { isValidCalendarDate } from '../../lib/calendarDate';
 const STAGE_LABELS: Record<TermsStage, UiLabel> = { discovery: 'Discovery', acquisition: 'Acquisition', extraction: 'Extraction', interpretation: 'Interpretation', calculation: 'Calculation' };
 function EvidenceRows({ terms }: { terms: ProductTerms }) {
   const [sourcesOpen, setSourcesOpen] = useState(false), [termsOpen, setTermsOpen] = useState(false), [changesOpen, setChangesOpen] = useState(false);
@@ -58,12 +59,20 @@ export function ProductTermsDisclosure({ productKey }: { productKey: string }) {
     return () => { active = false; };
   }, [identity, manifest, open, productKey, retry]);
   const hasAsset = Boolean(manifest?.files.terms_index);
+  const reference = prior?.identity === identity ? prior.reference : null;
+  const referencePublication: UiLabel = !reference || !manifest?.payload_revision?.bundle_sha256 || !manifest.files.terms_index?.sha256 ? 'Unverified'
+    : reference.edition === manifest.payload_revision.bundle_sha256 && reference.indexSha256 === manifest.files.terms_index.sha256 ? 'Matching'
+    : reference.edition === manifest.payload_revision.bundle_sha256 ? 'Different'
+    : !isValidCalendarDate(reference.runDate) || !isValidCalendarDate(manifest.run_date) ? 'Unverified'
+    : reference.runDate < manifest.run_date ? 'Earlier' : 'Different';
   return <Disclosure title="Terms" open={open} onToggle={() => setOpen(!open)}>
     <CustomerProfilePanel productKey={productKey} />
     <AppText variant="small" color="textMuted">{uiJoin('Eligibility unverified', ' · ', 'Fees unverified')}</AppText>
     {selected?.terms ? <EvidenceRows terms={selected.terms} /> : selected?.failed ? <View style={{ gap: 8 }}><AppText variant="small">{uiLabel("Unverified")}</AppText><Button title="Retry" variant="secondary" onPress={() => setRetry(retry + 1)} /></View> : <AppText variant="small" color="textMuted">{uiLabel(hasAsset && !selected ? 'Loading' : 'Unavailable')}</AppText>}
-    {!selected?.terms && selected && prior?.identity === identity && prior.reference ? <Disclosure title="Cached" open={priorOpen} onToggle={() => setPriorOpen(!priorOpen)}>
-      <AppText variant="small">{uiJoin('Cached', ' · ', 'Unverified', ' · ', uiDate(prior.reference.runDate))}</AppText><AppText variant="tiny">{uiIdentifier(prior.reference.edition)}</AppText><EvidenceRows terms={prior.reference.terms} />
+    {!selected?.terms && selected && reference ? <Disclosure title="Cached" open={priorOpen} onToggle={() => setPriorOpen(!priorOpen)}>
+      <AppText variant="small">{uiJoin('Cached', ' · ', 'Unverified', ' · ', uiDate(reference.runDate))}</AppText><AppText variant="tiny">{uiIdentifier(reference.edition)}</AppText>
+      <FinancialFactRows rows={[{ label: 'Publication revision', value: uiLabel(referencePublication) }, { label: 'Calculation', value: uiLabel('No approval') }]} />
+      <EvidenceRows terms={reference.terms} />
     </Disclosure> : null}
   </Disclosure>;
 }

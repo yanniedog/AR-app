@@ -113,7 +113,7 @@ test('a closed suitability gate offers recovery instead of claiming no products 
   let tree: any;
   act(() => { tree = TestRenderer.create(<Search />); });
   try {
-    expect(tree.root.findByType('EmptyState' as any).props.title).toBe('Could not prepare rates');
+    expect(tree.root.findByType('EmptyState' as any).props.title).toBe('Rates unavailable');
     expect(tree.root.findAllByProps({ title: 'Clear filters' })).toHaveLength(0);
     expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(true);
     expect(mockSurfaces.get('rates.results').probes.find((probe: any) => probe.id === 'search.list').status).toBe('pending');
@@ -163,7 +163,7 @@ test('full catalogue opt-in still waits for mandatory profile verification', () 
   act(() => { tree = TestRenderer.create(<Search />); });
   try {
     expect(tree.root.findByType('FlashList' as any).props.data).toHaveLength(0);
-    expect(tree.root.findByType('EmptyState' as any).props.title).toBe('Could not prepare rates');
+    expect(tree.root.findByType('EmptyState' as any).props.title).toBe('Rates unavailable');
     expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(true);
   } finally { act(() => tree.unmount()); }
 });

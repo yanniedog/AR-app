@@ -9,7 +9,7 @@ describe('compact mobile UX contracts', () => {
     expect(source).toContain('useWindowDimensions');
     expect(source).toContain('usesCompactCompareLayout(width, fontScale)');
     expect(source).toContain('<ScrollView contentContainerStyle={styles.scrollContent}');
-    expect(source).toContain('Key differences');
+    expect(source).toContain('Differences');
     expect(source).toContain('const differingRows');
     expect(source).toContain('Shared details');
     expect(source).toContain('showsHorizontalScrollIndicator');
@@ -38,16 +38,17 @@ describe('compact mobile UX contracts', () => {
     expect(source).toContain('onPress={handleDelete}');
     expect(source).toContain('accessibilityRole="button"');
     expect(source).toContain('accessibilityLabel={deleteLabel}');
-    expect(source).toContain('accessibilityHint="Removes this item"');
+    expect(source).not.toContain('accessibilityHint=');
     expect(source).toContain('Remove');
     expect(source).not.toContain('onSwipeableOpen={handleDelete}');
   });
 
-  it('lets the chart headline wrap without crushing its explanation', () => {
+  it('lets the observed spread headline wrap with its factual basis', () => {
     const source = read('../src/components/viz/SwitcherEdgeChart.tsx');
 
     expect(source).toContain("flexWrap: 'wrap'");
-    expect(source).toContain('median and leading advertised rates');
+    expect(source).toContain('Advertised spread');
+    expect(source).toContain('uiChartBps(activeGapBps)');
   });
 
   it('opens receipt evidence before the audit scroll and avoids redundant lender navigation', () => {

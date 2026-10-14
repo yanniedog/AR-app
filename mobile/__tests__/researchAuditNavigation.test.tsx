@@ -178,7 +178,7 @@ test('closed economics does not register graphic readiness and reopening require
   act(() => { tree = TestRenderer.create(<Research />) as InspectableRenderer; });
   const economics = () => jest.mocked(usePerformanceAuditProbe).mock.calls.filter(call => call[1].id === 'economic-graphics').at(-1)!;
   const economicData = () => jest.mocked(usePerformanceAuditProbe).mock.calls.filter(call => call[1].id === 'economic-data').at(-1)!;
-  const toggle = () => tree.root.findAll(node => node.props.title === 'What is shaping rates')[0].props.onToggle();
+  const toggle = () => tree.root.findAll(node => node.props.title === 'Economy')[0].props.onToggle();
   try {
     expect(economics()[2]).toBe(false);
     expect(economicData()[2]).toBe(false);
@@ -205,7 +205,7 @@ test('missing economics keeps its optional data error while a measured empty gra
   let tree!: InspectableRenderer;
   act(() => { tree = TestRenderer.create(<Research />) as InspectableRenderer; });
   try {
-    act(() => tree.root.findAll(node => node.props.title === 'What is shaping rates')[0].props.onToggle());
+    act(() => tree.root.findAll(node => node.props.title === 'Economy')[0].props.onToggle());
     act(() => tree.root.findAll(node => node.type === 'RbaOutlook')[0].props.onAuditStateChange({
       status: 'error', error: 'Economic signals are not saved on this device.', indicatorCount: 0,
       expectedCount: 0, pointCount: 0, layoutMeasured: true, emptyStateRendered: true,
@@ -246,7 +246,7 @@ test('uncached economics cannot block the mounted market browse action', async (
   let tree!: InspectableRenderer;
   act(() => { tree = TestRenderer.create(<Research />) as InspectableRenderer; });
   try {
-    act(() => tree.root.findAll(node => node.props.title === 'What is shaping rates')[0].props.onToggle());
+    act(() => tree.root.findAll(node => node.props.title === 'Economy')[0].props.onToggle());
     act(() => tree.root.findAll(node => node.type === 'RbaOutlook')[0].props.onAuditStateChange({
       status: 'error', error: 'Economic signals are not saved on this device.', indicatorCount: 0,
       expectedCount: 0, pointCount: 0, layoutMeasured: true, emptyStateRendered: true,
@@ -285,7 +285,7 @@ test('economic view changes update the scoped surface and probes independently o
   let tree!: InspectableRenderer;
   act(() => { tree = TestRenderer.create(<Research />) as InspectableRenderer; });
   try {
-    act(() => tree.root.findAll(node => node.props.title === 'What is shaping rates')[0].props.onToggle());
+    act(() => tree.root.findAll(node => node.props.title === 'Economy')[0].props.onToggle());
     const reportEconomicRender = (renderRevision: string, graphicReady: boolean) => act(() => {
       tree.root.findAll(node => node.type === 'RbaOutlook')[0].props.onAuditStateChange({
         status: graphicReady ? 'ready' : 'pending', revision: 'cached-economic-edition', renderRevision,

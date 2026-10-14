@@ -36,7 +36,7 @@ export function EngineReceiptFacts({ receipt }: { receipt: CalculationReceipt })
     <AppText>{uiJoin('Bank approval', ': ', 'Not assessed')}</AppText>
     <AppText>{uiJoin('Issues', ': ', uiCount(receipt.issues.length), ' · ', 'Assumption count', ': ', uiCount(receipt.assumptions.length))}</AppText>
     <AppText variant="small">{uiJoin('Receipt', ': ', uiIdentifier(receipt.inputSha256))}</AppText>
-    {receipt.totals ? TOTAL_FIELDS.map(([key, label]) => <Row key={key} style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+    {receipt.claimAvailable && receipt.totals ? TOTAL_FIELDS.map(([key, label]) => <Row key={key} style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
       <AppText variant="small">{label}</AppText><AppText variant="small">{uiDecimal(receipt.totals![key])}</AppText>
     </Row>) : <AppText>{uiLabel("Unavailable")}</AppText>}
   </>;

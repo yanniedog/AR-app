@@ -532,7 +532,9 @@ export default function ProductDetail() {
   const productInk = theme.ledger.info;
   const observedProductPoints = countFiniteSeriesPoints(seededProductValues);
   const productHasHighlight = observedProductPoints > 0;
-  const selectedHistoryContext = uiJoin('Selected rate', ' ', formatRate(row.rate), ' · ', 'Leading advertised', ' ', formatRate(currentBest), ' · ', 'All tiers');
+  const selectedHistoryContext = currentBest !== null && toFraction(row.rate) !== currentBest
+    ? uiJoin('Selected rate', ' ', formatRate(row.rate), ' · ', 'Leading advertised', ' ', formatRate(currentBest), ' · ', 'All tiers')
+    : null;
 
   const onShare = () =>
     Share.share({
@@ -699,7 +701,7 @@ export default function ProductDetail() {
         <SectionTitle text="Published product history" icon="trending-up-outline" />
         <Card style={{ marginBottom: 16 }}>
           <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-            {uiJoin('Leading advertised', ' · ', 'All tiers')}
+            {uiJoin('Leading advertised', ' · ', 'All tiers', ' · ', 'Conditional rate', ' / ', 'Restricted')}
           </AppText>
           {selectedHistoryContext ? (
             <AppText variant="tiny" color="textMuted" style={{ marginBottom: 8 }}>

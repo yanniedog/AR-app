@@ -271,7 +271,7 @@ export const UI_LABELS = [
   'Account features', 'Published details', 'Options', 'Lowest', 'Highest', 'Incomplete',
   'Receipt unavailable', 'Paste calculation receipt', 'Receipt text', 'Read receipt',
   'Saved result', 'Check current sources', 'Recalculate with current sources',
-  'Copy recalculated receipt', 'Matching', 'Matched rate unavailable', 'No better matched rate',
+  'Copy recalculated receipt', 'Matching', 'Earlier', 'Different', 'Matched rate unavailable', 'No better matched rate',
   'Matures', 'Fixed rate ends', 'Saved rate unavailable', 'Hidden by profile',
   'Remove unavailable saves', 'All product variants · Legacy save', 'Since saved', 'Last updated',
   'Maximum 4 rates', 'Mixed rate categories', 'Rate unavailable', 'Minimum 2 rates',

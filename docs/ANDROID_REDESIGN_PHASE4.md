@@ -12,6 +12,10 @@ The Android emulator runs the existing compatible development client, version 1.
 
 Calculate carries the selected Unloan row and its advertised 5.89% rate into both modes. Native Back returns through the product to Rates. This is development-client navigation and layout evidence. It does not establish final public-APK acceptance, physical-device behaviour, haptics, human-user validation or app performance. Phase 5 supplies paired friction journeys and the Android matrix.
 
+Screenshot review found that intrinsic animated contents hid full-row destination and disclosure titles. Full-row callers now explicitly fill their stationary targets; chips and buttons retain intrinsic sizing. The initial captures retain this defect as discovery evidence. Phase 5 records the repaired native controls and large-text result viewport.
+
+Focused financial regressions also preserve matching, earlier and different publication identities on cached references and the conditional/restricted scope of all-tier history. Normal result views withhold modeled totals when the actual receipt has no available claim. Private receipt totals, canonical hashes, export and replay remain intact.
+
 ## Verification
 
 The initial canonical run passed Expo Doctor, typecheck, lint and zero production copy violations, then correctly rejected a stale history compiler. Its source graph had acquired frontend dependencies; the pure helper separation addresses that cause. The PR records the final exact-head canonical result and review dispositions after the compiler and scanner fixes.

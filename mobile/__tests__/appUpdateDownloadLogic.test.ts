@@ -151,7 +151,7 @@ describe('appUpdateDownloadLogic', () => {
 
   it('formats banner copy for download phases', () => {
     expect(updateBannerCopy('ready', '1.0.44', null)).toEqual({
-      title: 'Update verified and ready — v1.0.44',
+      title: 'Verified · 1.0.44',
       actionLabel: 'Install',
       actionEnabled: true,
     });
@@ -159,15 +159,17 @@ describe('appUpdateDownloadLogic', () => {
     expect(updateBannerCopy('downloading', '1.0.44', 37).actionEnabled).toBe(false);
     expect(updateBannerCopy('error', '1.0.44', null).actionLabel).toBe('Retry');
     expect(updateBannerCopy('cancelled', '1.0.44', null)).toEqual({
-      title: 'Update download cancelled — v1.0.44',
+      title: 'Cancelled · 1.0.44',
       actionLabel: 'Retry',
       actionEnabled: true,
     });
-    expect(updateBannerCopy('waiting', '1.0.44', 93).title).toContain('waiting for Wi-Fi');
-    expect(updateBannerCopy('verifying', '1.0.44', 93).title).toContain('integrity');
+    expect(updateBannerCopy('waiting', '1.0.44', 93).title).toBe('Waiting for Wi-Fi');
+    expect(updateBannerCopy('verifying', '1.0.44', 93)).toEqual({
+      title: 'Verifying · 1.0.44', actionLabel: 'Checking', actionEnabled: false,
+    });
     expect(updateBannerCopy('retrying', '1.0.44', 93).actionEnabled).toBe(false);
     expect(updateBannerCopy('idle', '1.0.44', null)).toEqual({
-      title: 'Update available — v1.0.44',
+      title: 'Update available · 1.0.44',
       actionLabel: 'Download & install',
       actionEnabled: true,
     });

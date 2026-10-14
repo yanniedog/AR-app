@@ -18,11 +18,13 @@ test('private import clears the masked field and reports only the key ID', async
   expect(input().props.secureTextEntry).toBe(true);
   act(() => input().props.onChangeText('private-input-not-for-output'));
   await act(async () => tree.root.findByProps({ title: 'Import key' }).props.onPress());
+  expect(importPayloadSetupKey).toHaveBeenCalledWith('private-input-not-for-output');
   expect(input().props.value).toBe('');
   expect(input().props.editable).toBe(false);
   await act(async () => finish('12345678'));
   expect(JSON.stringify(tree.toJSON())).not.toContain('private-input-not-for-output');
-  expect(JSON.stringify(tree.toJSON())).toContain('Key 12345678 imported');
+  expect(JSON.stringify(tree.toJSON())).toContain('Key imported: 12345678');
+  expect(input().props.editable).toBe(true);
   act(() => tree.unmount());
 });
 
@@ -34,6 +36,7 @@ test('failed import never displays a native error or private input', async () =>
   await act(async () => tree.root.findByProps({ title: 'Import key' }).props.onPress());
   expect(JSON.stringify(tree.toJSON())).toContain('Import failed');
   expect(JSON.stringify(tree.toJSON())).not.toContain('private-value-in-native-error');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('private-input');
   expect(tree.root.findByType(TextInput).props.value).toBe('');
   act(() => tree.unmount());
 });
