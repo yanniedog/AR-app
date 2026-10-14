@@ -70,19 +70,22 @@ It shows onboarding, despite the filename; no paired hierarchy was retained.
 It does not replace the historical v1.0.237 friction ledger or establish native
 acceptance of source `7e4caee`. No APK or competitor artwork is committed here.
 
-### Friction ledger: verified actions and gaps
+### Friction ledger: operator-reported scoped actions and gaps
 
-Verified counts use the exact sequence reported by the native baseline operator,
-with hierarchy evidence where available. Source-derived minima are marked and
-must not be presented as measured totals. A route change is counted separately
-from an interaction. Data-entry/calculation completion is not implied.
+The [retained scoped operator report](evidence/android-baseline-2026-10-14/operator-report.md)
+describes the named actions below. Counts are operator-reported observations,
+not independently verified complete journey totals. Native PNG/XML prove rendered
+states, not every input event. No original instrumented input/timestamp log is
+available. Source-derived minima are marked separately. Route changes are
+reported/inferred from the described transitions, not measured navigation traces.
+Data-entry/calculation completion is not implied.
 
-| Trigger -> verified end | Interaction taps | App route changes | Other observed effort | Target / outstanding measurement |
+| Trigger -> reported/rendered end | Reported scoped taps | Reported route changes | Other observed effort | Target / outstanding measurement |
 | --- | ---: | ---: | --- | --- |
 | Fresh onboarding, default “Check my rate” already selected -> Calculator | 1 CTA + 1 “Not now” privacy choice = 2 | 1 | Job/type choices appear before entry; no verified amount/bank entry | Browse launch requires 0 setup choices/taps; measure fresh-install loading/offline and optional-consent placement |
 | Active app -> Rates preview | 1 tab tap | 1 | Initial viewport is a five-row preview | Rates arrival is the full list |
 | Rates -> first visible Budget Home Loan detail | 1 | 1 | Product top/middle captured | Already minimal; preserve 1 tap and distinguish exact variants |
-| Product -> same exact rate saved | 1 Save tap | 0 | Header adds controls/factual lines after save | Already minimal; preserve 1 tap and stable row/header geometry |
+| Product -> saved visual state | 1 Save tap | 0 | Header adds controls/factual lines after save; exact numeric tier identity not independently audited | Source permits one-tap Save; verify complete effort/identity and stable row/header geometry |
 | Saved product detail -> Saved list containing 1 rate | 1 tab tap | 1 | `16-saved.xml` contains the saved rate | Preserve exact tier and direct return; verify state/offset restoration |
 | Rates preview -> full Search with 6243 products | 1 “See all” tap | 1 | Downward scroll needed to reach below-preview gate; exact scroll count/distance unrecorded | Remove the gate; 0 navigation taps from launch/full Rates arrival |
 | Market arrival | Unmeasured; source minimum 1 tab tap | Source minimum 1 | Five link rows and their descriptions captured; complete action sequence not recorded | Movements/RBA facts visible on arrival; contextual taps measured later |
@@ -95,6 +98,8 @@ from an interaction. Data-entry/calculation completion is not implied.
 Complete native journey timings, typed-field counts, scroll counts, first-attempt
 success and unassisted usability remain Phase 2/5 measurements. Do not replace
 these gaps with invented totals or claim the Phase 1 friction exit gate is complete.
+Phase 5 retains complete instrumented baseline/final action ledgers; this report
+cannot establish a measured before/after improvement on its own.
 
 ## Every route and handler
 

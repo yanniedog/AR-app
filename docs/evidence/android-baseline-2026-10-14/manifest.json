@@ -307,6 +307,18 @@
       "apk_source_sha": "f756137cddcb9a0a360b13150424af6f2ccea9bc",
       "kind": "published-release-manifest",
       "retained_on": "2026-10-14"
+    },
+    {
+      "path": "docs\\evidence\\android-baseline-2026-10-14\\operator-report.md",
+      "sha256": "699185e2c48bff27d585c14f68488fdd45c637f42f623efd9df6f07738acd63f",
+      "bytes": 3053,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "kind": "operator-report",
+      "recorded_on": "2026-10-14",
+      "independently_verified": false
     }
   ],
   "limitations": [
@@ -314,6 +326,7 @@
     "Historical v1.0.237 captures are not native acceptance of the newer source inventory.",
     "The v1.0.239 capture shows onboarding; its filename does not establish a completed user journey.",
     "No paired hierarchy exists for phase1-settled.png or the held-button screenshot.",
-    "Motion recording is retained evidence, not measured frame timing or physical haptic proof."
+    "Motion recording is retained evidence, not measured frame timing or physical haptic proof.",
+    "The operator report preserves scoped observations, not a retained original input/timestamp log or independently verified complete totals."
   ]
 }

@@ -28,7 +28,7 @@ versioned download URL, APK SHA-256/size and signer identity.
 | [13-product-top.png](v1.0.237-b295/13-product-top.png) / [XML](v1.0.237-b295/13-product-top.xml) | Opened product header/facts |
 | [14-product-middle.png](v1.0.237-b295/14-product-middle.png) / [XML](v1.0.237-b295/14-product-middle.xml) | Product facts/history controls after scrolling |
 | [15-product-saved.png](v1.0.237-b295/15-product-saved.png) / [XML](v1.0.237-b295/15-product-saved.xml) | Saved state and changed product-header geometry |
-| [16-saved.png](v1.0.237-b295/16-saved.png) / [XML](v1.0.237-b295/16-saved.xml) | One saved exact rate displayed |
+| [16-saved.png](v1.0.237-b295/16-saved.png) / [XML](v1.0.237-b295/16-saved.xml) | One saved rate displayed; not an independent exact-identity audit |
 | [17-market.png](v1.0.237-b295/17-market.png) / [XML](v1.0.237-b295/17-market.xml) | Market directory baseline |
 | [19-tools-hub.png](v1.0.237-b295/19-tools-hub.png) / [XML](v1.0.237-b295/19-tools-hub.xml) | Tools directory baseline |
 | [24-rates-bottom.png](v1.0.237-b295/24-rates-bottom.png) / [XML](v1.0.237-b295/24-rates-bottom.xml) | Below-preview “See all 6243 home loans” and additional directories |
@@ -36,9 +36,12 @@ versioned download URL, APK SHA-256/size and signer identity.
 | [28-search-results.png](v1.0.237-b295/28-search-results.png) / [XML](v1.0.237-b295/28-search-results.xml) | Full Search list, 6243 products |
 | [baseline-motion.mp4](v1.0.237-b295/baseline-motion.mp4) | Retained native interaction recording; no measured frame-timing or physical-haptic claim |
 
-The screenshots/hierarchies are state evidence. Complete tap sequences derive
-only from the operator record identified in the inventory. File names, screen
-clocks and a pair of states are not a substitute for a timestamped action log.
+The screenshots/hierarchies are state evidence. The linked
+[scoped operator report](operator-report.md) preserves the retained sequence
+description. Its counts are operator-reported scoped observations, not complete
+independently verified task totals. No original instrumented input/timestamp log
+is available. File names, screen clocks and a pair of states are not a substitute
+for that log; Phase 5 will retain fresh instrumented baseline/final ledgers.
 The startup System UI ANR prevents reliable baseline completion-time claims.
 
 ## Later published context: v1.0.239/build 296

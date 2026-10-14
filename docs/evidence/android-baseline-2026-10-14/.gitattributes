@@ -3,4 +3,4 @@
 *.mp4 -text
 *.xml -text
 *.json text eol=lf
-README.md text eol=lf
+*.md text eol=lf
