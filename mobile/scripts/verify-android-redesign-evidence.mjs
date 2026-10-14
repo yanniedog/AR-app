@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parseAaptBadging } from './apk-identity.mjs';
+import { validateNativeInputEvidence, verifyNativeInputArtifacts } from './android-native-input-evidence.mjs';
 
 export const REQUIRED_JOURNEYS = Object.freeze([
   'launch-rates', 'change-product-type', 'open-product', 'save-rate', 'search',
@@ -26,7 +27,7 @@ export const REQUIRED_CASES = Object.freeze([
 ]);
 const COUNT_METRICS = ['taps', 'routeChanges', 'mandatoryChoices', 'typedFields',
   'repeatedFields', 'scrollDetours', 'mistakes', 'recoverySteps'];
-const ARTIFACT_KINDS = ['apk', 'screenshot', 'recording', 'log', 'report'];
+const ARTIFACT_KINDS = ['apk', 'screenshot', 'recording', 'log', 'report', 'trace', 'query'];
 const ABIS = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'];
 const HASH = /^[a-f0-9]{64}$/;
 const SHA = /^[a-f0-9]{40}$/;
@@ -168,6 +169,7 @@ export function validateAndroidRedesignEvidence(record, expected) {
     && whole(timing?.droppedFrameCount) && timing.droppedFrameCount <= timing.frameCount,
   'Native frame measurements missing or invalid; audit durations do not prove smoothness');
   check(Number.isFinite(timing?.inputLatencyP95Ms) && timing.inputLatencyP95Ms >= 0, 'Native input latency measurement missing');
+  errors.push(...validateNativeInputEvidence(timing, expected, artifacts));
   const usability = record?.usability;
   check(record?.usabilityScope === 'emulator-operator', 'Required usability assessment scope must be emulator-operator');
   evidence(usability, 'Emulator operator usability assessment', ['report']);
@@ -223,6 +225,8 @@ export async function verifyAndroidRedesignEvidence(recordPath, expected) {
     || Number(/\bversionCode=(\d+)/.exec(readback)?.[1]) !== expected?.versionCode) {
     result.errors.push('Installed package readback does not match trusted package/version identity');
   }
+  result.errors.push(...verifyNativeInputArtifacts(record?.frontendTiming, expected, contents,
+    new Map((Array.isArray(record?.artifacts) ? record.artifacts : []).map(item => [item?.id, item]))));
   result.ok = result.errors.length === 0;
   return result;
 }
@@ -235,9 +239,11 @@ function argumentsFrom(argv) {
   const expected = {};
   if (!recordPath || recordPath.startsWith('--') || flags.length % 2) throw new Error('Evidence JSON and all trusted identity flags are required');
   for (let index = 0; index < flags.length; index += 2) {
-    const key = keys.get(flags[index]);
-    if (!key || Object.hasOwn(expected, key)) throw new Error(`Unknown or repeated flag: ${flags[index]}`);
-    expected[key] = key === 'versionCode' ? Number(flags[index + 1])
+    const baseline = flags[index].startsWith('--baseline-');
+    const key = keys.get(baseline ? flags[index].replace('--baseline-', '--') : flags[index]);
+    const target = baseline ? (expected.baseline ??= {}) : expected;
+    if (!key || Object.hasOwn(target, key)) throw new Error(`Unknown or repeated flag: ${flags[index]}`);
+    target[key] = key === 'versionCode' ? Number(flags[index + 1])
       : key === 'apkAbis' ? flags[index + 1].split(',') : flags[index + 1];
   }
   return { recordPath, expected };

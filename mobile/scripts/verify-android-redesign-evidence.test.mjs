@@ -11,6 +11,10 @@ import {
   REQUIRED_CASES, REQUIRED_INVARIANTS, REQUIRED_JOURNEYS,
   validateAndroidRedesignEvidence, verifyAndroidRedesignEvidence,
 } from './verify-android-redesign-evidence.mjs';
+import { buildNativeInputFixture } from './fixtures/android-native-input.fixture.mjs';
+import { parseNativeInputCsv, summarizeNativeInputCsv } from './android-native-input-latency.mjs';
+import { nativeSampleListSha256 } from './android-native-input-evidence.mjs';
+import { nativeCsv, nativeRow } from './fixtures/android-native-input.fixture.mjs';
 
 // Synthetic records test the validator only. They are never native acceptance evidence.
 const expected = {
@@ -18,6 +22,8 @@ const expected = {
   apkSha256: createHash('sha256').update('synthetic APK fixture').digest('hex'),
   packageName: 'example.test.rates', versionName: '1.2.3', versionCode: 123,
   apkAbis: ['arm64-v8a', 'x86_64'],
+  baseline: { sourceSha: 'b'.repeat(40), apkSha256: createHash('sha256').update('synthetic baseline APK fixture').digest('hex'),
+    packageName: 'example.test.rates', versionName: '1.2.2', versionCode: 122, apkAbis: ['arm64-v8a', 'x86_64'] },
 };
 const files = {
   apk: 'synthetic APK fixture', installed: 'synthetic APK fixture',
@@ -28,6 +34,9 @@ const files = {
 };
 const kinds = { apk: 'apk', installed: 'apk', screenshot: 'screenshot', recording: 'recording',
   log: 'log', report: 'report', badging: 'log', readback: 'log' };
+const nativeFixture = buildNativeInputFixture(expected);
+Object.assign(files, nativeFixture.files);
+Object.assign(kinds, nativeFixture.kinds);
 
 function fixture() {
   const pass = { result: 'pass', captureRefs: ['screenshot', 'recording', 'log', 'report'] };
@@ -66,7 +75,8 @@ function fixture() {
     audit: { stepLimitMs: 10_000, inventoryRef: 'report', expectedStepIds: ['rates.open'],
       steps: [{ id: 'rates.open', result: 'pass', rendered: true, durationMs: 10_000, ref: 'log' }] },
     frontendTiming: { ...structuredClone(pass), method: 'android-frame-trace', frameCount: 120,
-      droppedFrameCount: 2, inputLatencyP95Ms: 80 },
+      droppedFrameCount: 2, inputLatencyP95Ms: 80, inputLatencyAggregation: 'maximum-final-cohort-p95',
+      nativeInput: structuredClone(nativeFixture.nativeInput) },
     usabilityScope: 'emulator-operator',
     usability: { ...structuredClone(pass), humanValidationClaimed: false, coreTasksCompleted: true,
       criticalFinancialMisunderstandings: 0, coreJourneyRegressions: 0 },
@@ -91,6 +101,20 @@ async function onDisk(run) {
     await writeFile(filename, JSON.stringify(record));
     await run({ directory, filename, record });
   } finally { await rm(directory, { recursive: true, force: true }); }
+}
+
+async function replaceArtifact(directory, record, id, value) {
+  const artifact = record.artifacts.find(item => item.id === id);
+  await writeFile(path.join(directory, artifact.path), value);
+  Object.assign(artifact, { bytes: Buffer.byteLength(value), sha256: createHash('sha256').update(value).digest('hex') });
+}
+
+async function replaceNativeCsv(directory, record, stage, value) {
+  await replaceArtifact(directory, record, stage.csvRef, value);
+  const filename = path.join(directory, record.artifacts.find(item => item.id === stage.analysisRef).path);
+  const analysis = JSON.parse(await readFile(filename, 'utf8'));
+  analysis.csvSha256 = record.artifacts.find(item => item.id === stage.csvRef).sha256;
+  await replaceArtifact(directory, record, stage.analysisRef, JSON.stringify(analysis));
 }
 
 test('accepts complete synthetic records without calling them native or human proof', () => {
@@ -197,6 +221,133 @@ test('enforces every finalized audit step at 10,000ms independently of journey d
   reject((record) => { record.frontendTiming.method = 'audit-duration'; }, /do not prove smoothness/);
 });
 
+test('scalar latency, speculative fallback, pooled actions and omitted cohorts cannot pass native timing', () => {
+  reject(record => { delete record.frontendTiming.nativeInput; }, /direct native method/);
+  reject(record => { record.frontendTiming.nativeInput.associationMethod = 'legacy-next-frame'; }, /direct native method/);
+  reject(record => { record.frontendTiming.nativeInput.moveRepresentative = 'fastest-assigned-move'; }, /first MOVE/);
+  reject(record => { record.frontendTiming.inputLatencyAggregation = 'pooled-p95'; }, /never pooled input actions/);
+  reject(record => { record.frontendTiming.nativeInput.cohorts.pop(); }, /DOWN, UP and MOVE/);
+  reject(record => { record.frontendTiming.nativeInput.cohorts[0].final.summary.admittedGestureCount = 29; }, /30 unique/);
+  reject(record => { record.frontendTiming.nativeInput.cohorts[0].final.summary.p95Ms = 0; }, /exact percentile/);
+});
+
+test('requires independently trusted baseline identity, idle release pairing, attempts and matched measured context', () => {
+  reject(() => {}, /independently trusted baseline/, { ...expected, baseline: undefined });
+  reject(record => { record.frontendTiming.nativeInput.cohorts[0].baseline.identity.sourceSha = 'c'.repeat(40); }, /trusted identity mismatch/);
+  reject(record => { record.frontendTiming.nativeInput.scope = 'exploration'; }, /exploration/);
+  reject(record => { record.frontendTiming.nativeInput.semanticReadinessSeparate = false; }, /semantic readiness/);
+  reject(record => { record.frontendTiming.nativeInput.cohorts[0].baseline.hostWorkload = 'canonical-ci-running'; }, /competing-workload/);
+  reject(record => { record.frontendTiming.nativeInput.cohorts[0].final.environment.fontScale = 2; }, /environment must match/);
+  reject(record => { record.frontendTiming.nativeInput.cohorts[0].baseline.environment.ramMiB = undefined; }, /measured paired environment/);
+  reject(record => { record.frontendTiming.nativeInput.registeredAt = '2026-10-15T08:00:00Z'; }, /follow preregistration/);
+  reject(record => { record.frontendTiming.nativeInput.cohorts[0].final.attemptedGestureCount = 31; }, /missing attempted gestures/);
+  reject(record => { record.frontendTiming.nativeInput.cohorts[0].final.summary.unavailableGestureCount = 1; }, /qualifying gestures/);
+  reject(record => { record.frontendTiming.nativeInput.cohorts[0].final.status = 'unavailable'; }, /unavailable capture/);
+  reject(record => { record.frontendTiming.nativeInput.cohorts[0].final.operatorCorrections = [{ attemptId: 'a', gestureKey: null, reason: 'slow-app', ref: 'log' }]; }, /bounded operator correction/);
+});
+
+test('links tap DOWN and UP to one workload and capture rather than claiming two independent taps', () => {
+  reject(record => { record.frontendTiming.nativeInput.cohorts[1].gestureSetId = 'other-taps'; }, /link one DOWN/);
+  reject(record => { record.frontendTiming.nativeInput.cohorts[1].final.csvRef = 'final-swipe-csv'; }, /same captured tap gestures/);
+  reject(record => { record.frontendTiming.nativeInput.cohorts[1].trigger = 'Different workload'; }, /paired tap workload differs/);
+});
+
+test('recomputes CSV counts and exact ns, verifies query/command bindings, and checks preregistered workload bytes', async () => {
+  await onDisk(async ({ directory, filename, record }) => {
+    const stage = record.frontendTiming.nativeInput.cohorts[0].final;
+    const artifact = record.artifacts.find(item => item.id === stage.csvRef);
+    const samples = parseNativeInputCsv(await readFile(path.join(directory, artifact.path), 'utf8'));
+    samples[0].original_input_to_present_ns = '1';
+    await replaceNativeCsv(directory, record, stage, nativeCsv(samples));
+    await writeFile(filename, JSON.stringify(record));
+    assert.match((await verifyAndroidRedesignEvidence(filename, expected)).errors.join('\n'), /ns arithmetic/);
+  });
+  await onDisk(async ({ directory, filename, record }) => {
+    const stage = record.frontendTiming.nativeInput.cohorts[0].final;
+    const csv = nativeFixture.files[stage.csvRef];
+    await replaceNativeCsv(directory, record, stage, nativeCsv(parseNativeInputCsv(csv).slice(2)));
+    await writeFile(filename, JSON.stringify(record));
+    assert.match((await verifyAndroidRedesignEvidence(filename, expected)).errors.join('\n'), /counts\/percentile\/sample list/);
+  });
+  await onDisk(async ({ directory, filename, record }) => {
+    await replaceArtifact(directory, record, 'native-query', files['native-query'] + '\n-- changed query\n');
+    await writeFile(filename, JSON.stringify(record));
+    assert.match((await verifyAndroidRedesignEvidence(filename, expected)).errors.join('\n'), /checked-in native bridge query/);
+  });
+  await onDisk(async ({ directory, filename, record }) => {
+    const stage = record.frontendTiming.nativeInput.cohorts[0].final;
+    const analysis = JSON.parse(files[stage.analysisRef]);
+    analysis.traceSha256 = 'a'.repeat(64);
+    await replaceArtifact(directory, record, stage.analysisRef, JSON.stringify(analysis));
+    await writeFile(filename, JSON.stringify(record));
+    assert.match((await verifyAndroidRedesignEvidence(filename, expected)).errors.join('\n'), /command\/hash bindings/);
+  });
+  await onDisk(async ({ directory, filename, record }) => {
+    const plan = JSON.parse(files['native-plan']);
+    plan.cohorts[0].expectedAttemptCount = 31;
+    await replaceArtifact(directory, record, 'native-plan', JSON.stringify(plan));
+    await writeFile(filename, JSON.stringify(record));
+    assert.match((await verifyAndroidRedesignEvidence(filename, expected)).errors.join('\n'), /preregistered plan differs/);
+  });
+});
+
+test('even consistently recalculated UP rows must retain the actual linked tap gestures', async () => {
+  await onDisk(async ({ directory, filename, record }) => {
+    const cohorts = record.frontendTiming.nativeInput.cohorts;
+    const stage = cohorts[1].final;
+    const samples = parseNativeInputCsv(files[stage.csvRef]);
+    for (const row of samples.filter(item => item.action === '1')) row.down_time_monotonic = String(BigInt(row.down_time_monotonic) + 1n);
+    const csv = nativeCsv(samples);
+    await replaceNativeCsv(directory, record, stage, csv);
+    for (const cohort of cohorts.filter(item => item.gestureSetId === 'tap')) {
+      const summary = summarizeNativeInputCsv(csv, { packageName: expected.packageName, actionKind: cohort.actionKind });
+      const { observations: _observations, gestures: _gestures, ...counts } = summary;
+      cohort.final.summary = { ...counts, sampleListSha256: nativeSampleListSha256(summary) };
+    }
+    await writeFile(filename, JSON.stringify(record));
+    assert.match((await verifyAndroidRedesignEvidence(filename, expected)).errors.join('\n'), /DOWN\/UP must link the same taps/);
+  });
+});
+
+test('an explicitly corrected partial tap stays in raw evidence and cannot become an independent extra UP', async () => {
+  await onDisk(async ({ directory, filename, record }) => {
+    const input = record.frontendTiming.nativeInput;
+    const tapCohorts = input.cohorts.filter(item => item.gestureSetId === 'tap');
+    const partial = nativeRow(30);
+    const key = `${partial.device_id}/${partial.source}/${partial.down_time_monotonic}`;
+    for (const stageName of ['baseline', 'final']) {
+      const stage = tapCohorts[0][stageName];
+      const csv = nativeCsv([...parseNativeInputCsv(files[stage.csvRef]), partial]);
+      await replaceNativeCsv(directory, record, stage, csv);
+      for (const cohort of tapCohorts) {
+        cohort.expectedAttemptCount = 31;
+        const capture = cohort[stageName];
+        capture.attemptedGestureCount = 31;
+        const correction = { attemptId: 'partial-31', gestureKey: cohort.actionKind === 'down-feedback' ? key : null,
+          reason: 'input-command-rejected', ref: 'log' };
+        capture.operatorCorrections = [correction];
+        const summary = summarizeNativeInputCsv(csv, { packageName: expected.packageName, actionKind: cohort.actionKind,
+          excludedGestureKeys: correction.gestureKey === null ? [] : [key] });
+        const { observations: _observations, gestures: _gestures, ...counts } = summary;
+        capture.summary = { ...counts, sampleListSha256: nativeSampleListSha256(summary) };
+      }
+    }
+    const plan = JSON.parse(files['native-plan']);
+    for (const cohort of plan.cohorts.filter(item => item.gestureSetId === 'tap')) cohort.expectedAttemptCount = 31;
+    await replaceArtifact(directory, record, 'native-plan', JSON.stringify(plan));
+    await writeFile(filename, JSON.stringify(record));
+    const result = await verifyAndroidRedesignEvidence(filename, expected);
+    assert.equal(result.ok, true, result.errors.join('\n'));
+    assert.equal(tapCohorts[0].final.summary.receivedGestureCount, 31);
+    assert.equal(tapCohorts[1].final.summary.receivedGestureCount, 30);
+    assert.equal(tapCohorts[0].final.summary.admittedGestureCount, 30);
+    assert.equal(tapCohorts[1].final.summary.admittedGestureCount, 30);
+    tapCohorts[1].final.operatorCorrections[0].attemptId = 'unlinked-correction';
+    await writeFile(filename, JSON.stringify(record));
+    assert.match((await verifyAndroidRedesignEvidence(filename, expected)).errors.join('\n'), /same taps and operator corrections/);
+  });
+});
+
 test('requires truthful operator assessment but treats a human study as separately reported optional evidence', () => {
   const noStudy = fixture();
   delete noStudy.humanStudy;
@@ -264,7 +415,10 @@ test('CLI fails incomplete records and explains the limit of a successful record
     const command = fileURLToPath(new URL('./verify-android-redesign-evidence.mjs', import.meta.url));
     const args = [command, filename, '--source-sha', expected.sourceSha, '--apk-sha256', expected.apkSha256,
       '--package-name', expected.packageName, '--version-name', expected.versionName,
-      '--version-code', String(expected.versionCode), '--abis', expected.apkAbis.join(',')];
+      '--version-code', String(expected.versionCode), '--abis', expected.apkAbis.join(','),
+      '--baseline-source-sha', expected.baseline.sourceSha, '--baseline-apk-sha256', expected.baseline.apkSha256,
+      '--baseline-package-name', expected.baseline.packageName, '--baseline-version-name', expected.baseline.versionName,
+      '--baseline-version-code', String(expected.baseline.versionCode), '--baseline-abis', expected.baseline.apkAbis.join(',')];
     const good = spawnSync(process.execPath, args, { encoding: 'utf8', windowsHide: true, shell: false });
     assert.equal(good.status, 0, good.stderr);
     assert.match(good.stdout, /not human judgement/);

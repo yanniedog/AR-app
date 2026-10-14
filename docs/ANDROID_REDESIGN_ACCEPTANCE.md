@@ -65,8 +65,8 @@ are performed by the checker. Tests run in the existing Node script toolchain:
 
 ```sh
 cd mobile
-node --test scripts/verify-android-redesign-evidence.test.mjs
-node scripts/verify-android-redesign-evidence.mjs /path/to/evidence.json --source-sha SOURCE_SHA --apk-sha256 APK_SHA256 --package-name PACKAGE --version-name VERSION --version-code BUILD --abis arm64-v8a,x86_64
+node --test scripts/android-native-input-latency.test.mjs scripts/verify-android-redesign-evidence.test.mjs
+node scripts/verify-android-redesign-evidence.mjs /path/to/evidence.json --source-sha SOURCE_SHA --apk-sha256 APK_SHA256 --package-name PACKAGE --version-name VERSION --version-code BUILD --abis arm64-v8a,x86_64 --baseline-source-sha BASELINE_SOURCE_SHA --baseline-apk-sha256 BASELINE_APK_SHA256 --baseline-package-name PACKAGE --baseline-version-name BASELINE_VERSION --baseline-version-code BASELINE_BUILD --baseline-abis arm64-v8a,x86_64
 ```
 
 Use the actual ABI list reported by the specific APK, not the example list.
@@ -74,7 +74,9 @@ Supply trusted identity flags from independently verified build/publication
 metadata, not by reading them back from the evidence JSON. Exit 0 means that
 the **record is complete**, required recorded outcomes pass, artifact bytes
 match their hashes, and actual aapt/installed-package logs match that trusted
-identity. Exit 1 means incomplete or inconsistent evidence. Missing, skipped,
+identity for **both** final and baseline APKs. The native-input CSV/query and
+declared cohorts are checked as described below; this is not trace authentication.
+Exit 1 means incomplete or inconsistent evidence. Missing, skipped,
 unavailable, failed and non-rendered results must stay honest and fail complete
 acceptance; do not edit them into passes.
 
@@ -87,7 +89,7 @@ release evidence. Retain original captures and raw measurements for review.
 
 Keep the record and referenced files together. `artifacts` is an array of
 `{id, kind, path, bytes, sha256}`; kinds are `apk`, `screenshot`, `recording`,
-`log` and `report`. Paths are relative to the record directory; traversal,
+`log`, `report`, `trace` and `query`. Paths are relative to the record directory; traversal,
 absolute paths and symlinks escaping it fail. Files must exist, be nonempty and
 match their SHA-256/size. A capture may document multiple journeys, but each
 referencing entry must identify the relevant segment in its report/log.
@@ -104,7 +106,7 @@ The record contains:
 | `invariants` | One entry for every invariant below |
 | `cases` | One entry for every Android case below |
 | `audit` | `stepLimitMs: 10000`, `inventoryRef`, finalized `expectedStepIds`, actual `steps` |
-| `frontendTiming` | `result`, `captureRefs`, `method: "android-frame-trace"`, `frameCount`, `droppedFrameCount`, measured `inputLatencyP95Ms` |
+| `frontendTiming` | `result`, `captureRefs`, `method: "android-frame-trace"`, `frameCount`, `droppedFrameCount`, `nativeInput` below; `inputLatencyAggregation: "maximum-final-cohort-p95"` and `inputLatencyP95Ms` equal the largest final cohort P95, never a pooled percentile |
 | `usabilityScope` | `"emulator-operator"`; this required technical assessment does not claim representative human validation |
 | `usability` | `result`, `captureRefs`, `humanValidationClaimed: false`, `coreTasksCompleted: true`, `criticalFinancialMisunderstandings: 0`, `coreJourneyRegressions: 0` |
 | `humanStudy` (optional) | `status: "not-run"` with `humanValidationClaimed: false`, or `status: "completed"` with report references and the completed-study results below |
@@ -229,6 +231,135 @@ traces and a reviewed summary, recorded in `frontendTiming`. Preserve raw
 frames, latency measurement method, device conditions and pilot tuning results.
 A 60-second calculation journey can be valid; a 10,001ms audit step fails.
 Neither a fast audit step nor JSON `result: "pass"` proves smooth animation.
+
+### Direct native input evidence
+
+`frontendTiming.nativeInput` strengthens the existing schemaVersion 1 contract.
+Scalar-only records are incomplete. No new minimum regression percentage is
+introduced: retain the reviewed performance budget and frame/drop assessment.
+The scalar remains a compatibility summary of the **maximum final cohort P95**;
+review baseline and final per-cohort values rather than pooling actions.
+
+Required fields are `schemaVersion: 1`,
+`associationMethod: "native-frame-info-id"`,
+`metric: "original-input-to-first-uniquely-attributable-native-presented-frame"`,
+`percentileRule: "nearest-rank"`, `minimumUniqueGestures: 30`,
+`moveRepresentative: "first-original-move"`, `scope: "release-paired"`,
+`semanticReadinessSeparate: true`, `registeredAt`, `planRef` and `cohorts`.
+
+Preregister the exact paired workload before either capture. `planRef` is a
+hash-bound JSON report containing `schemaVersion: 1`, `registeredAt`, both
+trusted APK/source `identity` objects, the measured paired `environment` fields
+below, and the ordered cohort descriptors. Each descriptor has `id`,
+`gestureSetId`, `journeyId`, `actionKind`, `trigger`, `endState` and
+`expectedAttemptCount`. The record adds `baseline` and `final` capture stages
+to each descriptor. Retain capture dates after preregistration and match the
+actual attempt count to the planned count. Never revise a workload after
+seeing a slower sample. Reviewer inspection establishes that preregistration
+and the operator's account are truthful; an ordinary JSON timestamp cannot.
+
+All three actions are required, as separate paired cohorts:
+
+| Action | Independent sample |
+| --- | --- |
+| `down-feedback` | One DOWN event per tap gesture |
+| `up-activation` | One UP event from that **same** tap gesture |
+| `move-scroll` | The first MOVE by original event time per actual swipe |
+
+Require at least **30 unique qualifying gestures in each baseline/final
+cohort**. DOWN and UP share a `gestureSetId`, workload and trace/CSV: they
+describe two phases of the same 30 or more taps, not 60 independent taps. Link
+them by captured device/source/`down_time_nanos`. A swipe counts once, even
+with many batched moves. Use its preregistered **first original MOVE**, never
+the fastest move or earliest later move with a frame assignment. If that first
+MOVE is unassigned, ambiguous, dropped or otherwise unsupported, the swipe is
+unavailable. Keep subsequent events and their status in the CSV; they do not
+replace that representative event. Unsupported required taps stay unavailable
+and block complete timing acceptance, even when a legacy estimate exists.
+
+Each stage records `status: "measured"`, `hostWorkload: "idle-verified"`,
+`capturedAt`, fresh exact-APK `identity` with the same fields/references as the
+top-level identity, `traceRef` (trace), `queryRef` (query), `csvRef` (report),
+`configRef` (query), `analysisRef`, `stderrRef`, `environmentRef`, `workloadRef`
+(logs), `datasetRef` (report), exact `analyzerVersion`, `environment`,
+`attemptedGestureCount`, `operatorCorrections` and `summary`. Supply the
+independently verified **baseline** identity using the additional CLI flags;
+do not obtain those expectations solely from the acceptance record.
+
+Measured environment fields are `deviceFingerprint`, `bootId`, `apiLevel: 36`,
+`runtimeAbi`, `widthPx`, `heightPx`, `densityDpi`, `fontScale`, `refreshRateHz`,
+actual `ramMiB`, `cpuCores`, `gpuMode`, `theme`, `reducedMotion`,
+`appState` (`ready-cached` or `ready-online`) and `datasetSha256` matching the
+retained dataset bytes. Pair every field except the boot ID; retain each boot
+ID anyway. Match the analyzer version and capture configuration too. Evidence
+captured during host CI or other competing workloads is exploration, not a
+final percentile. Record guest display timing honestly; x86 emulator results
+do not establish physical input latency, haptics or ARM runtime behavior.
+
+Keep all attempted/received/unavailable/operator-excluded observations.
+`operatorCorrections` entries are `{attemptId, gestureKey, reason, ref}` with
+unique attempt IDs, a captured gesture key or `null` for a rejected input that
+never arrived, and a log/report reference. Closed reasons are `wrong-target`,
+`input-command-rejected`, `interrupted-capture`. These are operator errors,
+not exclusions for a slow or dropped app response. Linked tap cohorts share
+the correction attempt IDs/reasons and any known gesture key. Missing
+uncorrected attempts or unavailable representative gestures block a measured
+P95; none becomes zero. Partial corrected trials may have no received UP;
+both raw observations and the explicit missing-event correction remain visible.
+
+`summary` contains `receivedInputCount`, `receivedGestureCount`,
+`admittedGestureCount`, `unavailableGestureCount`,
+`operatorExcludedGestureCount`, `unavailableObservationCount`,
+`unclassifiedInputCount`, `percentileStatus`, exact decimal-string `p95Ns`, numeric `p95Ms` and
+`sampleListSha256`. An unavailable percentile is `null`, not zero. The sample
+hash covers the lexically ordered JSON array of
+`[gestureKey, representativeInputId, latencyNs]` for admitted gestures. P95
+is nearest rank `ceil(0.95*n)`, computed with integer nanoseconds; converted
+milliseconds must agree. The checker recomputes all counts, samples and P95
+from the retained CSV and keeps raw legacy speculative flags unchanged.
+An unidentified input action remains in the raw observations and makes the
+percentile unavailable; it cannot silently vanish from every action cohort.
+
+The checked-in `mobile/scripts/android-native-input-latency.sql` joins original
+motion proto event ID/time to the same app's RenderThread
+`frameTimelineInfo` input-ID/vsync-ID, then the same receiving window's actual
+surface-frame token, then its actual SurfaceFlinger display frame. Require one
+original identity, receiving window, reader time, native candidate, app frame
+and display frame. Duplicate critical identities do not inflate gestures;
+reused IDs, different windows or multiple candidates remain ambiguous. Require
+real InputReader evidence, completed non-dropped verified present states and
+captured MONOTONIC clock conversion. Subtract original `event_time_nanos` from
+`to_monotonic(display.ts + display.dur)`, **not** app/GPU completion or operator
+wall-clock time. Preserve raw duplicate counts and legacy flags 0/1/null;
+neither UI-thread overlap nor next-frame fallback enters the direct cohort.
+See Android 16 [renderer ID publication](https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-16.0.0_r4/libs/hwui/renderthread/CanvasContext.cpp),
+[input assignment](https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-16.0.0_r4/core/java/android/view/InputEventAssigner.java),
+[presentation fence/clock source](https://android.googlesource.com/platform/frameworks/native/+/refs/tags/android-16.0.0_r1/services/surfaceflinger/FrameTimeline/FrameTimeline.cpp),
+[FrameTimeline semantics](https://perfetto.dev/docs/data-sources/frametimeline) and the
+[tested Perfetto 58.2 legacy analyzer](https://github.com/google/perfetto/blob/add693d8b338ba9599dbcbc3e300b1ab8c000897/src/trace_processor/perfetto_sql/stdlib/android/input.sql).
+
+Render the exact query for the independently verified package, run the already
+verified trace processor offline, and retain its clean CSV stdout and separate
+stderr. These commands do not run Android or create acceptance records:
+
+```sh
+node scripts/android-native-input-latency.mjs --query PACKAGE > native-input.sql
+trace_processor_shell query -f native-input.sql capture.pftrace > native-input.csv 2> native-input-stderr.log
+node scripts/android-native-input-latency.mjs --summarize native-input.csv PACKAGE down-feedback
+```
+
+`analysisRef` contains a JSON command record with `schemaVersion: 1`, `exitCode: 0`,
+`analyzerVersion`, `traceRef`, `queryRef`, `csvRef`, `configRef`, `stderrRef` and
+the SHA-256 fields `traceSha256`, `querySha256`, `csvSha256`, `configSha256`.
+Retain the actual invocation in its accompanying command log. The capture
+config must include original input events, window dispatch, app gfx/view/input
+atrace and actual FrameTimeline. The query must exactly match the rendered
+checked-in SQL; parse errors, trace errors/data loss or mixed stdout cannot
+silently remove observations. The checker hashes the raw trace and command
+bindings but does not execute a downloaded analyzer, authenticate a trace, or
+prove CSV provenance merely by hashing it. A reviewer can replay the retained
+query against the raw trace. This metric measures a native presented response;
+use the separate journey/audit evidence for useful semantic readiness.
 
 ## Final evidence ledger
 
