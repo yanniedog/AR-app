@@ -1,6 +1,7 @@
 import { uiCount,uiJoin,uiLabel,uiRatesQuery,uiProductName,uiProviderName,type UiCopy } from '../../lib/uiCopy';
 import { humanizeEnum } from '../../data/format';
 import { useReadyNavigationEffect } from '../../hooks/useReadyNavigationEffect';
+import { useBackOwnedSheetState } from '../../hooks/useBackOwnedSheetState';
 import { SheetSurface } from '../SheetSurface';
 import { TouchTarget } from '../TouchTarget';
 import { SegmentedControl } from '../controls';
@@ -14,7 +15,7 @@ import { SearchReportExport } from '../../components/SearchReportExport';
 import { isSuitabilityFilterReady } from '../../data/suitabilityGate';
 import Ionicons from '../../components/icons/AppIcon';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, ScrollView, useWindowDimensions, View } from 'react-native';
@@ -98,6 +99,7 @@ const SearchProductRow = React.memo(function SearchProductRow({ row, section, se
 export default function RatesWorkspace() {
   const theme = useTheme();
   const isFocused = useIsFocused();
+  const sheetNavigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { width, fontScale } = useWindowDimensions();
   const params = useLocalSearchParams() as RatesRouteParams;
@@ -186,13 +188,15 @@ export default function RatesWorkspace() {
   const debouncedQuery = useDebouncedValue(query, 120);
   const sortOptions = useMemo(() => availableSortOptions(section, mortgageRateMetric, depositRankMetric),
     [depositRankMetric, mortgageRateMetric, section]);
-  const [filterOpen, setFilterOpen] = useState(false), [sortOpen, setSortOpen] = useState(false), [toolsOpen, setToolsOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useBackOwnedSheetState(sheetNavigation);
+  const [sortOpen, setSortOpen] = useBackOwnedSheetState(sheetNavigation);
+  const [toolsOpen, setToolsOpen] = useBackOwnedSheetState(sheetNavigation);
   const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const [draftAvailability, setDraftAvailability] = useState<RateAvailability>(availability);
   const openFilters = useCallback(() => {
     setDraftAvailability(availability); setDraftFilters({ ...filters, includeNonStandard: task.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard }); setFilterOpen(true);
-  }, [availability, filters, task.includeNonStandardOverride]);
-  const cancelFilters = useCallback(() => setFilterOpen(false), []);
+  }, [availability, filters, setFilterOpen, task.includeNonStandardOverride]);
+  const cancelFilters = useCallback(() => setFilterOpen(false), [setFilterOpen]);
   const applyFilters = useCallback((draft: Filters) => {
     const current = useRatesSession.getState().sections[section];
     const nextFilters = draftAvailability === 'unlisted' ? { ...EMPTY_FILTERS, providers: draft.providers }
@@ -204,11 +208,11 @@ export default function RatesWorkspace() {
         ...(draftAvailability === 'unlisted' ? { path: [], hierarchyScoped: false, selectMode: false, selected: [] } : {}) }, true);
     }
     setFilterOpen(false);
-  }, [draftAvailability, section]);
+  }, [draftAvailability, section, setFilterOpen]);
   const changeSection = useCallback((next: SectionKey) => {
     changeRatesSection(next); useStore.getState().setActiveSection(next);
     setFilterOpen(false); setSortOpen(false); setToolsOpen(false);
-  }, []);
+  }, [setFilterOpen, setSortOpen, setToolsOpen]);
   useEffect(() => {
     if (sortKey === 'comparison' && (section !== 'Mortgage' || mortgageRateMetric === 'comparison')) setSortKey('rate');
   }, [mortgageRateMetric, section, setSortKey, sortKey]);
@@ -386,7 +390,7 @@ export default function RatesWorkspace() {
       const tokens = exactTokens.length >= 2 ? exactTokens : selected;
       if (tokens.length >= 2) openCompare(tokens);
     },
-  }), [applyFilters, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, section, selected, selectAuditToken, setQuery, setSortKey, sortOptions, toggleCompareMode]);
+  }), [applyFilters, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
   const intentPending = Boolean(intentKey && consumedIntent.current !== intentKey) || !session.initialized;
   const searchPending = intentPending || (availability === 'unlisted' ? !catalogueDetails : detailFiltersPending || searchIndexLoading || !preparedResults.ready);
   const dataTracker = useRef(new OpaquePerformanceAuditRenderRevision());

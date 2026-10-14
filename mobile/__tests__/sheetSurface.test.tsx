@@ -53,3 +53,33 @@ test('native Back dismisses the keyboard before closing a reduced-motion sheet',
     expect(onClose).toHaveBeenCalledTimes(1);
   } finally { act(() => tree.unmount()); }
 });
+
+
+test('the opening render exposes the native Modal before passive animation effects', () => {
+  let tree!: Renderer;
+  const measured: boolean[] = [];
+  function Observed({ visible }: { visible: boolean }) {
+    React.useLayoutEffect(() => { measured.push(tree.root.findByType(Modal).props.visible); }, [visible]);
+    return <SheetSurface visible={visible} title="Sort" onClose={() => undefined}><Text>Rate</Text></SheetSurface>;
+  }
+  act(() => { tree = TestRenderer.create(<Observed visible={false} />) as Renderer; });
+  try {
+    act(() => tree.update(<Observed visible />));
+    expect(measured).toEqual([false, true]);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('duplicate native close events deliver one close and a reopened intent can close again', () => {
+  mockReducedMotion = true;
+  jest.spyOn(Keyboard, 'isVisible').mockReturnValue(false);
+  const onClose = jest.fn();
+  const sheet = (visible: boolean) => <SheetSurface visible={visible} title="Sort" onClose={onClose}><Text>Rate</Text></SheetSurface>;
+  let tree!: Renderer; act(() => { tree = TestRenderer.create(sheet(true)) as Renderer; });
+  try {
+    const close = tree.root.findByType(Modal).props.onRequestClose;
+    act(() => { close(); close(); }); expect(onClose).toHaveBeenCalledTimes(1);
+    act(() => tree.update(sheet(false))); act(() => tree.update(sheet(true)));
+    act(() => tree.root.findByType(Modal).props.onRequestClose());
+    expect(onClose).toHaveBeenCalledTimes(2);
+  } finally { act(() => tree.unmount()); }
+});

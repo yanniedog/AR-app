@@ -24,10 +24,11 @@ let mockVisibleCount: number | null = null;
 let mockSuppressViewability = false;
 let mockNavigationReady = true;
 let mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
-const mockNavigationListeners = { ready: new Set<() => void>(), state: new Set<() => void>() };
+const mockNavigationListeners = { ready: new Set<() => void>(), state: new Set<() => void>(), blur: new Set<() => void>() };
 const mockNavigation = {
   isReady: () => mockNavigationReady,
-  addListener: (event: 'ready' | 'state', listener: () => void) => {
+  isFocused: () => true,
+  addListener: (event: 'ready' | 'state' | 'blur', listener: () => void) => {
     mockNavigationListeners[event].add(listener); return () => mockNavigationListeners[event].delete(listener);
   },
 };
@@ -39,7 +40,7 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useNavigationContainerRef: () => mockNavigation,
 }));
-jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
+jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true, useNavigation: () => mockNavigation }));
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ default: () => mockDimensions }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 jest.mock('../src/theme/ThemeProvider', () => ({
@@ -104,7 +105,7 @@ jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }
 
 beforeEach(() => {
   mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
-  mockNavigationReady = true; mockNavigationListeners.ready.clear(); mockNavigationListeners.state.clear();
+  mockNavigationReady = true; mockNavigationListeners.ready.clear(); mockNavigationListeners.state.clear(); mockNavigationListeners.blur.clear();
   (router.setParams as jest.Mock).mockClear();
   restoreRatesSession(originalRatesSession); mockParams = { section: 'TD' };
   mockEnsureDetails.mockClear(); mockSurfaces.clear();

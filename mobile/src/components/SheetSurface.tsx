@@ -29,6 +29,8 @@ export function SheetSurface({ visible, title, onClose, children, footer, style 
   const mountedRef = useRef(visible);
   const progress = useRef(new Animated.Value(0)).current;
   const transition = useRef(0);
+  const closePending = useRef(!visible);
+  closePending.current = !visible;
 
   useEffect(() => {
     const currentTransition = ++transition.current;
@@ -61,16 +63,22 @@ export function SheetSurface({ visible, title, onClose, children, footer, style 
     };
   }, [visible, reducedMotion, progress]);
 
+  const dismiss = () => {
+    if (closePending.current) return;
+    closePending.current = true;
+    onClose();
+  };
   const close = () => {
+    if (closePending.current) return;
     if (Keyboard.isVisible()) Keyboard.dismiss();
-    else onClose();
+    else dismiss();
   };
 
   return (
-    <Modal transparent statusBarTranslucent visible={mounted} animationType="none" onRequestClose={close}>
+    <Modal transparent statusBarTranslucent visible={visible || mounted} animationType="none" onRequestClose={close}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: theme.ledger.scrim, opacity: progress }} />
-        <Pressable accessible={false} accessibilityElementsHidden onPress={onClose} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+        <Pressable accessible={false} accessibilityElementsHidden onPress={dismiss} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
         <Animated.View
           accessibilityViewIsModal
           style={[{

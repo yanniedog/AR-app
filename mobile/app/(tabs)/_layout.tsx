@@ -29,6 +29,8 @@ export default function TabsLayout() {
   return (
     <>
       <Tabs
+        initialRouteName="browse"
+        backBehavior="initialRoute"
         tabBar={() => null}
         screenOptions={{
           freezeOnBlur: true,
