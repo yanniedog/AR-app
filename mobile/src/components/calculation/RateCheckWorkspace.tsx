@@ -59,6 +59,7 @@ import { type RateRow, type SectionKey } from '../../types';
 import { useScenarioSection } from '../../hooks/useScenarioSection';
 import { useTheme } from '../../theme/ThemeProvider';
 import { resolveCalculationTarget } from '../../lib/calculationTarget';
+import { selectedTargetConstraint, selectedTargetConstraintLabel, targetConstraintContradicted } from '../../lib/selectedTargetConstraints';
 import { SelectedCalculationTarget } from './SelectedCalculationTarget';
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
 
@@ -88,6 +89,8 @@ export function RateCheckWorkspace() {
   const storeStatus = useStore((s) => s.status);
   const storeError = useStore((s) => s.error);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
+  const manifest = useStore((s) => s.manifest);
+  const coreIntegrity = useStore((s) => s.coreIntegrity);
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
   const productHistory = useStore((s) => s.productHistory);
@@ -239,6 +242,10 @@ export function RateCheckWorkspace() {
   const balance = isMortgage ? lvrResult.loan ?? 0 : depositBalance ?? 0;
   const currentRateInput = isMortgage ? inputs.currentRate : depositInputs.currentRate;
   const currentRate = calculatorRateFraction(currentRateInput);
+  const rateConditionContext = useMemo(() => ({ core, details, manifest, coreIntegrity }), [core, details, manifest, coreIntegrity]);
+  const targetConstraint = useMemo(() => target.status === 'available'
+    ? selectedTargetConstraint(target.row, section, scenario, rateConditionContext) : undefined,
+  [target, section, scenario, rateConditionContext]);
   const years = calculatorYears(inputs.years);
   const months = years == null ? 0 : Math.round(years * 12);
   const issues: CalculatorIssue[] = [];
@@ -296,6 +303,11 @@ export function RateCheckWorkspace() {
     const out: Candidate[] = [];
     for (const { row, rate, projectionRate } of bestByProvider.values()) {
       if (target.status === 'none' && (isLoan ? projectionRate >= currentRate : projectionRate <= currentRate)) continue;
+      if (targetConstraint && targetConstraintContradicted(targetConstraint)) {
+        out.push({ row, rate, projectionRate, perMonth: null, total: null, totalLabel: 'Rate only',
+          unavailableReason: selectedTargetConstraintLabel(targetConstraint) });
+        continue;
+      }
       if (isLoan) {
         const perMonth = monthlyPayment(balance, currentRate, months) - monthlyPayment(balance, projectionRate, months);
         const fixedMonths = isPublishedFixedRate(row) ? advertisedTermMonths(row) : null;
@@ -342,7 +354,7 @@ export function RateCheckWorkspace() {
       if (bEstimate == null) return -1;
       return bEstimate - aEstimate;
     }).slice(0, 10);
-  }, [rows, target, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric, inputIssueKey]);
+  }, [rows, target, targetConstraint, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric, inputIssueKey]);
   const currentProductDetail = currentProduct.productKey
     ? details?.products?.[currentProduct.productKey] ?? null
     : null;
@@ -597,7 +609,7 @@ export function RateCheckWorkspace() {
       keyboardShouldPersistTaps="handled"
       onContentSizeChange={() => setLayoutReady(true)}
     >
-      <SelectedCalculationTarget target={target} scenario={scenario} identityOnly />
+      <SelectedCalculationTarget target={target} scenario={scenario} identityOnly constraint={targetConstraint} rateConditionContext={rateConditionContext} />
       <Button title="Open calculation receipt" variant="secondary" onPress={() => router.push('/calculation-receipt')} />
       {sectionOptions.length > 1 ? (
         <View style={{ marginBottom: 12 }}>
@@ -799,6 +811,8 @@ export function RateCheckWorkspace() {
           ? detailsLoading
             ? 'Preparing your matches…'
             : 'Could not prepare your matches'
+          : target.status === 'available'
+            ? 'Selected rate'
           : candidates.length
             ? isLoan
               ? 'Lower matched rates'

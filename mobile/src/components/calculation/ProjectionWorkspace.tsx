@@ -39,6 +39,7 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { openBrowse } from '../../lib/nav';
 import { buildStaySwitchProjection } from '../../data/staySwitchProjection';
 import { resolveCalculationTarget } from '../../lib/calculationTarget';
+import { selectedTargetConstraint, targetConstraintContradicted } from '../../lib/selectedTargetConstraints';
 import { SelectedCalculationTarget } from './SelectedCalculationTarget';
 import { NOT_LISTED_PROVIDER } from '../../data/userRateScenario';
 import { auditActionString } from '../../lib/performanceAuditActionParams';
@@ -200,6 +201,9 @@ export function ProjectionWorkspace() {
   const params = useLocalSearchParams<{ section?: string; target?: string | string[]; ri?: string | string[] }>();
   const core = useStore((s) => s.core);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
+  const manifest = useStore((s) => s.manifest);
+  const coreIntegrity = useStore((s) => s.coreIntegrity);
+  const details = useStore((s) => s.details);
   const storeStatus = useStore((s) => s.status);
   const storeError = useStore((s) => s.error);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
@@ -265,12 +269,18 @@ export function ProjectionWorkspace() {
     return resolveCalculationTarget(core, section, { target: params.target, ri: params.ri });
   }, [core, params.ri, params.target, section, suitabilityRevision]);
   const targetRow = target.status === 'available' && target.section === 'Mortgage' ? target.row : null;
+  const rateConditionContext = useMemo(() => ({ core, details, manifest, coreIntegrity }), [core, details, manifest, coreIntegrity]);
+  const targetConstraint = useMemo(() => target.status === 'available'
+    ? selectedTargetConstraint(target.row, section, scenario, rateConditionContext) : undefined,
+  [target, section, scenario, rateConditionContext]);
+  const targetContradicted = targetConstraintContradicted(targetConstraint);
   useEffect(() => {
     if (!params.target || detailsProducts) return;
     void ensureDetails({ forProductView: true });
   }, [detailsProducts, ensureDetails, params.target]);
   const staySwitch = useMemo(() => {
-    if (!targetRow) return null;
+    if (!targetRow || targetContradicted
+      || targetConstraintContradicted(selectedTargetConstraint(targetRow, 'Mortgage', deferredScenario, rateConditionContext))) return null;
     const currentRef = deferredScenario.currentProducts.mortgage;
     return buildStaySwitchProjection({
       scenario: deferredScenario,
@@ -278,7 +288,7 @@ export function ProjectionWorkspace() {
       currentDetail: currentRef.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts?.[currentRef.productKey] : null,
       targetDetail: detailsProducts?.[targetRow.product_key],
     });
-  }, [deferredScenario, detailsProducts, targetRow]);
+  }, [deferredScenario, detailsProducts, targetRow, targetContradicted, rateConditionContext]);
   const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
     && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
     ? scenario.currentProducts.mortgage.provider
@@ -947,7 +957,7 @@ export function ProjectionWorkspace() {
       keyboardShouldPersistTaps="handled"
       onContentSizeChange={() => setLayoutReady(true)}
     >
-      <SelectedCalculationTarget target={target} scenario={scenario} />
+      <SelectedCalculationTarget target={target} scenario={scenario} constraint={targetConstraint} rateConditionContext={rateConditionContext} />
       <Card style={{ gap: 8, borderColor: `${theme.colors.primary}55` }}>
         <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <View style={{ flex: 1, minWidth: 220 }}>

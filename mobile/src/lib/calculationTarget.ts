@@ -4,6 +4,8 @@ import { toFraction } from '../data/format';
 import { isMandatoryEligibilityReady } from '../data/eligibilityGate';
 import type { UserRateScenario } from '../data/userRateScenario';
 import type { CorePayload, RateRow, SectionKey } from '../types';
+import type { RateConditionContext } from '../data/rateConditions';
+import { selectedTargetConstraint, targetConstraintContradicted, type SelectedTargetConstraint } from './selectedTargetConstraints';
 
 type Param = string | string[] | undefined;
 export interface CalculationTargetParams { target?: Param; ri?: Param }
@@ -51,21 +53,24 @@ export interface SelectedDepositCalculation {
   difference: number | null;
   months: number | null;
   basis: 'annual-simple-interest' | 'published-maturity';
+  constraint: SelectedTargetConstraint;
 }
 
 /** Compare the published target with actual entered values; never mutate inputs. */
-export function selectedDepositCalculation(row: RateRow, section: 'Savings' | 'TD', scenario: UserRateScenario): SelectedDepositCalculation {
+export function selectedDepositCalculation(row: RateRow, section: 'Savings' | 'TD', scenario: UserRateScenario, context?: RateConditionContext): SelectedDepositCalculation {
   const inputs = section === 'TD' ? scenario.termDeposit : scenario.savings;
   const targetRate = toFraction(row.rate);
   const months = section === 'TD' ? advertisedTermMonths(row) : null;
   const basis = section === 'TD' ? 'published-maturity' : 'annual-simple-interest';
-  const unavailable: SelectedDepositCalculation = { status: 'rate-only', targetRate, months, basis, difference: null };
+  const constraint = selectedTargetConstraint(row, section, scenario, context);
+  const unavailable: SelectedDepositCalculation = { status: 'rate-only', targetRate, months, basis, difference: null, constraint };
   if (targetRate === null || quickEstimateUnavailableReason(row, section) || (section === 'TD' && !months)) return unavailable;
   const balance = calculatorAmount(inputs.balance, MAX_CALCULATOR_DEPOSIT_AMOUNT);
   const currentRate = calculatorRateFraction(inputs.currentRate);
   if (balance === null || balance <= 0 || currentRate === null) return { ...unavailable, status: 'inputs-required' };
+  if (targetConstraintContradicted(constraint)) return unavailable;
   const difference = section === 'TD'
     ? termDepositInterestDifference(balance, currentRate, targetRate, months!)
     : balance * (targetRate - currentRate);
-  return { status: 'ready', targetRate, months, basis, difference };
+  return { status: 'ready', targetRate, months, basis, difference, constraint };
 }
