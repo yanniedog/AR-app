@@ -49,7 +49,7 @@ export const UI_LABELS = [
   'Data key', 'Encryption', 'Encrypted', 'Local storage', 'Receipts', 'Receipt',
   'Open calculation receipt', 'Bank-call brief', 'Fees', 'Costs', 'Tax', 'Compounding',
   'Included', 'Excluded', 'Payments', 'Repayment', 'Payment', 'Offset', 'Reversion',
-  'Bonus conditions', 'Bonus actions required', 'Introductory', 'Ongoing', 'Standard',
+  'Bonus conditions', 'Bonus actions required', 'Introductory', 'Ongoing', 'Standard', 'Annually', 'Basic',
   'Restricted', 'Non-standard', 'Pending', 'Ready', 'Failed', 'Error', 'Required',
   'Invalid amount', 'Invalid rate', 'Invalid term', 'Zero', 'Today', 'Yesterday',
   'Show', 'Hide', 'Expand', 'Collapse', 'More', 'Less', 'Ascending', 'Descending',

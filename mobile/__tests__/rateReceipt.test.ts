@@ -40,6 +40,16 @@ const detail: ProductDetail = {
 };
 
 describe('rate receipt', () => {
+  test('reviewed lowercase deposit enums retain their meaning in visible and shared receipt facts', () => {
+    const receipt = buildRateReceipt({ row: row({ account_type: 'savings', account_class: 'standard', interest_payment: 'annually', ribbon_deposit_kind: 'basic' }), section: 'Savings', evidenceDate: '2026-10-15' });
+    for (const [label, value] of [['Account type', 'Savings'], ['Account class', 'Standard'], ['Interest paid', 'Annually'], ['Tier', 'Basic']]) {
+      expect(receipt.tier).toContainEqual({ label, value });
+      expect(rateReceiptShareText(receipt)).toContain(`${label}: ${value}`);
+    }
+    const unreviewed = buildRateReceipt({ row: row({ account_type: 'Here is an explanatory source paragraph.' }), section: 'Savings', evidenceDate: '2026-10-15' });
+    expect(rateReceiptShareText(unreviewed)).not.toContain('Here is an explanatory source paragraph.');
+    expect(unreviewed.tier).toContainEqual({ label: 'Account type', value: 'Unknown' });
+  });
   test('public share facts retain exact identity, known fees and sources without source prose', () => {
     const receipt = buildRateReceipt({ row: row(), section: 'Mortgage', evidenceDate: '2026-08-04', detail: { ...detail, features: [{ name: 'Marketing', info: 'This paragraph must never appear in sharing.' }] } });
     const text = rateReceiptShareText(receipt);
