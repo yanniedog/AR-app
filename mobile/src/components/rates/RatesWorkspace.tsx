@@ -97,7 +97,7 @@ export default function RatesWorkspace() {
   const theme = useTheme();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
   const params = useLocalSearchParams() as RatesRouteParams;
   const intentKey = ratesIntentKey(params);
   const session = useRatesSession();
@@ -471,21 +471,26 @@ export default function RatesWorkspace() {
   if (!core || intentPending) return <ScreenSkeleton />;
   const filterCount = availability === 'unlisted' ? filters.providers.length : activeFilterCount(effectiveFilters);
   const sortLabel = availability === 'unlisted' ? 'All product types · No listed rate' : sortOptions.find(option => option.key === sortKey)?.label ?? 'Rate';
+  // Keep whole 16sp action labels; narrower or enlarged text adds a row.
+  const actionMinWidth = Math.min(Math.max(48, width - theme.spacing(8)), Math.ceil(80 * Math.max(1, fontScale) + 36));
+  const actionStyle = { flexGrow: 1, flexShrink: 0, flexBasis: actionMinWidth, minWidth: actionMinWidth };
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Rates' }} />
       <View style={[screenEdgeStyle(theme), { gap: 8, paddingTop: 8, paddingBottom: 8 }]}>
         <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
         <SearchBar value={query} onChangeText={setQuery} placeholder="Search rates or banks" />
-        <Row gap={8}>
-          <Button title={filterCount ? 'Filter (' + filterCount + ')' : 'Filter'} variant="secondary" onPress={openFilters} style={{ flex: 1 }} />
-          <Button title="Sort" variant="secondary" onPress={() => setSortOpen(true)} disabled={availability === 'unlisted'} style={{ flex: 1 }} />
-          <Button title={selectMode ? 'Done' : 'Compare'} variant="secondary" onPress={toggleCompareMode} disabled={availability === 'unlisted'} style={{ flex: 1 }} />
-          <ToolbarIconButton icon="share-outline" onPress={() => setToolsOpen(true)} accessibilityLabel="Search actions" />
+        <Row gap={8} style={{ flexWrap: 'wrap' }}>
+          <Button title={filterCount ? 'Filter (' + filterCount + ')' : 'Filter'} variant="secondary" onPress={openFilters} style={actionStyle} />
+          <Button title="Sort" variant="secondary" onPress={() => setSortOpen(true)} disabled={availability === 'unlisted'} style={actionStyle} />
+          <Button title={selectMode ? 'Done' : 'Compare'} variant="secondary" onPress={toggleCompareMode} disabled={availability === 'unlisted'} style={actionStyle} />
         </Row>
-        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
-          <AppText variant="tiny" color="textMuted">{searchPending ? 'Loading' : resultRows.length + ' results'}{searchSub ? ' · Alert on' : ''}</AppText>
-          <AppText variant="tiny" color="textMuted">{sortLabel}</AppText>
+        <Row gap={8}>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <AppText variant="tiny" color="textMuted">{searchPending ? 'Loading' : resultRows.length + ' results'}{searchSub ? ' · Alert on' : ''}</AppText>
+            <AppText variant="tiny" color="textMuted">{sortLabel}</AppText>
+          </View>
+          <ToolbarIconButton icon="share-outline" onPress={() => setToolsOpen(true)} accessibilityLabel="Search actions" />
         </Row>
         {path.length ? <Button title={path.join(' · ')} variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
         {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">Name search</AppText>
@@ -519,6 +524,7 @@ export default function RatesWorkspace() {
           scrollEventThrottle={64}
           contentContainerStyle={{
             ...screenScrollContentStyle(theme, insets.bottom, width),
+            paddingTop: 0,
             paddingBottom: theme.spacing(6) + insets.bottom + theme.spacing(8),
           }}
           renderItem={renderProduct}

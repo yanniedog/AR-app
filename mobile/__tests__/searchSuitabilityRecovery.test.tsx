@@ -21,6 +21,7 @@ const mockScrollToOffset = jest.fn();
 let mockVisibleCount: number | null = null;
 let mockSuppressViewability = false;
 let mockNavigationReady = true;
+let mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
 const mockNavigationListeners = { ready: new Set<() => void>(), state: new Set<() => void>() };
 const mockNavigation = {
   isReady: () => mockNavigationReady,
@@ -37,6 +38,7 @@ jest.mock('expo-router', () => ({
   useNavigationContainerRef: () => mockNavigation,
 }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ default: () => mockDimensions }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => jest.requireActual('../src/theme/theme').lightTheme,
@@ -89,6 +91,7 @@ jest.mock('../src/components/SheetSurface', () => ({ SheetSurface: 'SheetSurface
 jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }));
 
 beforeEach(() => {
+  mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
   mockNavigationReady = true; mockNavigationListeners.ready.clear(); mockNavigationListeners.state.clear();
   (router.setParams as jest.Mock).mockClear();
   restoreRatesSession(originalRatesSession); mockParams = { section: 'TD' };
@@ -368,5 +371,43 @@ test('cold parameterized Rates waits for container-ready before consuming and cl
     expect(tree.root.findByType('FlashList' as any).props.data.length).toBeGreaterThan(0);
     act(() => [...mockNavigationListeners.state].forEach(listener => listener()));
     expect(router.setParams).toHaveBeenCalledTimes(1);
+  } finally { act(() => tree.unmount()); }
+});
+
+
+test.each([
+  [411, 1, 3],
+  [360, 1.3, 2],
+  [320, 2, 1],
+])('Rates actions retain usable columns at %s dp and font scale %s', (width, fontScale, columns) => {
+  mockDimensions = { ...mockDimensions, width, fontScale };
+  mockState.prefs.includeNonStandard = true;
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const controls = ['Filter', 'Sort', 'Compare'].map(title =>
+      tree.root.findAllByType('Button' as any).find((node: any) => node.props.title === title));
+    const toolbar = controls[0].parent;
+    expect(controls.every(control => control.parent === toolbar)).toBe(true);
+    expect(toolbar.props.style.flexWrap).toBe('wrap');
+    const contentWidth = width - 32;
+    for (const control of controls) {
+      expect(control.props.style.minWidth).toBeGreaterThanOrEqual(48);
+      expect(control.props.style.minWidth).toBeLessThanOrEqual(contentWidth);
+      expect(control.props.style.flexShrink).toBe(0);
+      expect(Math.floor((contentWidth + 8) / (control.props.style.flexBasis + 8))).toBe(columns);
+    }
+    const actions = tree.root.findByProps({ accessibilityLabel: 'Search actions' });
+    expect(actions.parent).not.toBe(toolbar);
+    expect(actions.parent.findAllByType('AppText' as any).map((node: any) =>
+      React.Children.toArray(node.props.children).join(''))).toEqual([
+        tree.root.findByType('FlashList' as any).props.data.length + ' results', 'Advertised rate',
+      ]);
+    expect(tree.root.findByType('FlashList' as any).props.contentContainerStyle.paddingTop).toBe(0);
+    act(() => controls[1].props.onPress());
+    expect(tree.root.findAllByType('SheetSurface' as any).some((node: any) => node.props.visible && node.props.title === 'Sort')).toBe(true);
+    act(() => controls[2].props.onPress());
+    expect(tree.root.findAllByProps({ title: 'Done' })).toHaveLength(1);
+    act(() => actions.props.onPress());
+    expect(tree.root.findAllByType('SheetSurface' as any).some((node: any) => node.props.visible && node.props.title === 'Search')).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
