@@ -8,6 +8,7 @@ import { selectPublicReference } from '../../data/publicRateLocal';
 import { useStore } from '../../data/store';
 import { ensurePermissions } from '../../data/notifications';
 import type { LocalRateInputs, UserRateScenario } from '../../data/userRateScenario';
+import { EMPTY_LOCAL_RATE_INPUTS } from '../../data/userRateScenario';
 import type { RateScenario } from '../../data/publicRateModel';
 import type { SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -24,14 +25,14 @@ export function LocalRateEditor({ section, scenario, onChange, editable, childre
 }) {
   const theme = useTheme();
   const manifest = useStore(state => state.manifest);
-  const profile = useStore(state => state.prefs.profileFilters);
+  const profile = useStore(state => state.prefs?.profileFilters);
   const catalogue = usePublicRateCatalogue(manifest);
   const [selecting, setSelecting] = useState(false);
   const key = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
-  const local = scenario.localRates[key];
-  const current = scenario.currentProducts[key];
-  const product = catalogue.getProduct(current.productKey);
-  const providerName = current.provider.trim().toLocaleLowerCase('en-AU');
+  const local = scenario?.localRates?.[key] ?? EMPTY_LOCAL_RATE_INPUTS;
+  const current = scenario?.currentProducts?.[key];
+  const product = catalogue.getProduct(current?.productKey ?? '');
+  const providerName = current?.provider?.trim().toLocaleLowerCase('en-AU') ?? '';
   const providerIds = new Set([...catalogue.products, ...catalogue.coverage]
     .filter(item => item.providerName.trim().toLocaleLowerCase('en-AU') === providerName).map(item => item.providerId));
   const providerNames = new Map([...catalogue.products, ...catalogue.coverage]

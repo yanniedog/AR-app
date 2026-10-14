@@ -1,6 +1,7 @@
 import { bindCurrentPublicRow, payableRateForRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate,
   resolveProductPublicRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
+import type { UserRateScenario } from '../src/data/userRateScenario';
 import { normalizeProfileFilters } from '../src/data/profile';
 import { installMandatoryEligibility, mandatoryEligibleRows } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
@@ -9,11 +10,27 @@ import { isProductSubscribed, makeProductSubscription } from '../src/data/subscr
 import { currentProductDiscovery, currentProductSelectionMatches, alphabeticalScenarioProviders } from '../src/data/scenarioCatalog';
 import { publicReferenceScope } from '../src/data/publicRatePresentation';
 import { resolveCompareSelections } from '../src/data/compareSelection';
-import { AS_OF, catalogue, core, product, programme, reference, row } from './fixtures/publicRateJourney';
+import { AS_OF, catalogue, core, product, programme, reference, row } from '../testUtils/publicRateJourney';
 
 const profile = normalizeProfileFilters({ loanPurposes: ['OWNER_OCCUPIED'], repaymentTypes: ['PRINCIPAL_AND_INTEREST'] });
 beforeEach(() => { jest.useFakeTimers(); jest.setSystemTime(new Date(AS_OF)); installMandatoryEligibility(selectMandatoryEligibility(null, null, null)); });
 afterEach(() => jest.useRealTimers());
+
+it('keeps missing legacy scenario subtrees unknown while preserving an entered legacy rate', () => {
+  const absent = {} as UserRateScenario;
+  for (const section of ['Mortgage', 'Savings', 'TD'] as const) {
+    const scope = publicRateScenario(section, absent);
+    expect(scope.amount).toBeUndefined(); expect(scope.balance).toBeUndefined(); expect(scope.lvr).toBeUndefined();
+    expect(scope.termMonths).toBeUndefined(); expect(scope.qualification).toBeUndefined();
+    const local = resolveLocalCurrentRate(section, absent, [], AS_OF);
+    expect(local.status).toBe('unresolved'); expect(local.payableRate).toBeUndefined();
+    expect(scenarioWithLocalCurrentRate(section, absent, local)).toBe(absent);
+  }
+  const entered = { mortgage: { currentRate: '6.27' } } as UserRateScenario;
+  expect(resolveLocalCurrentRate('Mortgage', entered, [], AS_OF)).toMatchObject({ status: 'exact', payableRate: '0.0627', origin: 'user_entered' });
+  expect(entered.mortgage.currentRate).toBe('6.27');
+  expect(publicRateScenario('Mortgage', { mortgage: { propertyValue: '500000' } } as UserRateScenario).amount).toBeUndefined();
+});
 
 it('preserves entered rates across reference calculations and never adds public discounts to a total local adjustment', () => {
   const scenario = normalizeUserRateScenario({ version: 3, mortgage: { currentRate: '6.27' },

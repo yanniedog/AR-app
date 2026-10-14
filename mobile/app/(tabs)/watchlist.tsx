@@ -1,4 +1,4 @@
-import { mandatoryEligibleRows, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
+import { mandatoryEligibleRows } from '../../src/data/eligibilityGate';
 import { fontStyle } from '../../src/theme/fonts';
 import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
 import { payableRateForRow, publicComparisonCore, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolveRowPublicRate, resolvedPublicRankingRows } from '../../src/data/publicRateIntegration';

@@ -72,7 +72,7 @@ export default function RateReceiptScreen() {
   const core = useStore((state) => state.core);
   const details = useStore((state) => state.details);
   const manifest = useStore((state) => state.manifest);
-  const profile = useStore((state) => state.prefs.profileFilters);
+  const profile = useStore((state) => state.prefs?.profileFilters);
   const publicCatalogue = usePublicRateCatalogue(manifest);
   const publicProduct = publicCatalogue.getProduct(productKey);
   const coreIntegrity = useStore((state) => state.coreIntegrity);

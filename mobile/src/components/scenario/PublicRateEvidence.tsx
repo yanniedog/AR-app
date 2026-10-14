@@ -27,7 +27,7 @@ export function PublicRateEvidence({ productKey, programmeId, row, scenario: sup
 }) {
   const theme = useTheme();
   const manifest = useStore(state => state.manifest);
-  const profile = useStore(state => state.prefs.profileFilters);
+  const profile = useStore(state => state.prefs?.profileFilters);
   const catalogue = usePublicRateCatalogue(manifest);
   const { scenario } = useUserRateScenario();
   const [open, setOpen] = useState(false);

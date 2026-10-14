@@ -22,7 +22,7 @@ export function PublicPricingCoverage({ section, rows, scenario, compact = false
   section: SectionKey; rows: readonly RateRow[]; scenario?: UserRateScenario; compact?: boolean;
 }) {
   const manifest = useStore(state => state.manifest);
-  const profile = useStore(state => state.prefs.profileFilters);
+  const profile = useStore(state => state.prefs?.profileFilters);
   const catalogue = usePublicRateCatalogue(manifest);
   const [open, setOpen] = useState(false);
   const { status: catalogueStatus, allLoaded, loadAll } = catalogue;

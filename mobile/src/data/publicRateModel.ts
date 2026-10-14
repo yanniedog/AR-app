@@ -72,6 +72,8 @@ export interface PublicProgramme {
   effectiveTo?: string;
   freshness: PublicFreshness;
   reasonCodes: string[];
+  /** Public raw notes retained for deterministic adapter review; never consumer prose. */
+  materialFootnotes?: string[];
   sourceBindings?: { pointer: string; rateIndex: number }[];
   fees?: PublicFee[];
   feeCoverage?: { status: 'complete' | 'partial' | 'unknown'; reasonCodes: string[]; evidenceIds: string[] };

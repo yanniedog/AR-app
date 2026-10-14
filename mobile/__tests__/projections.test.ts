@@ -149,7 +149,7 @@ describe('lifecycle projections', () => {
     expect(result.rateSeries[1].points).toHaveLength(25);
     expect(result.rateSeries[1].endBalance).toBeGreaterThan(0);
     expect(result.warnings.join(' ')).not.toMatch(/end of term/i);
-    expect(result.assumptions.join(' ')).toMatch(/no unknown reversion rate/i);
+    expect(result.assumptions).toContain('Reversion rate: unknown; excluded');
   });
 
   it('models term-deposit maturity interest without savings-style monthly compounding', () => {

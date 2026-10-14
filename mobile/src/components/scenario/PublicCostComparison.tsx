@@ -14,7 +14,7 @@ const dollars = (value?: string) => value == null ? 'Unavailable' : `$${Number(v
 
 export function PublicCostComparison({ section, target, scenario }: { section: SectionKey; target: RateRow; scenario: UserRateScenario }) {
   const manifest = useStore(state => state.manifest);
-  const profile = useStore(state => state.prefs.profileFilters);
+  const profile = useStore(state => state.prefs?.profileFilters);
   const details = useStore(state => state.details?.products);
   const catalogue = usePublicRateCatalogue(manifest);
   const [open, setOpen] = useState(false);
@@ -27,7 +27,7 @@ export function PublicCostComparison({ section, target, scenario }: { section: S
     const programme = product ? catalogue.getProgrammes(product.productId).find(item => item.programmeId === row.public_programme_id) : undefined;
     const key = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
     const bridge = scenarioPublicCost({ section, scenario, row, programme, rateScenario: selectedScenario,
-      targetDetail: details?.[row.product_key], currentDetail: details?.[scenario.currentProducts[key].productKey] });
+      targetDetail: details?.[row.product_key], currentDetail: details?.[scenario.currentProducts?.[key]?.productKey ?? ''] });
     return { estimate: bridge.scenario ? estimatePublicCost(rate, bridge.scenario) : undefined,
       reasons: bridge.reasonCodes, assumptions: bridge.assumptions };
   }, [target, catalogue, section, scenario, profile, details]);

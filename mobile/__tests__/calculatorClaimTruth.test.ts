@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { estimateEnteredRate } from '../src/data/publicRateLocal';
 
 const calculatorSource = fs.readFileSync(path.join(__dirname, '..', 'app', 'calculator.tsx'), 'utf8');
 
@@ -20,7 +21,16 @@ describe('quick calculator claim truth', () => {
 
   it('shows explicit input bounds before producing candidate claims', () => {
     expect(calculatorSource).toContain('Property value must be a valid amount up to $100 million.');
-    expect(calculatorSource).toContain('Current rate must be greater than 0% and no more than 100%.');
-    expect(calculatorSource).toContain("if (inputIssueKey || currentRate === null || balance <= 0");
+    expect(calculatorSource).toContain('Current rate must be from 0% to 100%.');
+    expect(calculatorSource).toContain("if (!comparisonsReady || inputIssueKey || currentRate === null || balance <= 0");
+  });
+
+  it('distinguishes an explicit zero rate from missing inputs and rejects values outside the percentage bounds', () => {
+    expect(estimateEnteredRate('0')).toMatchObject({ status: 'exact', payableRate: '0', origin: 'user_entered' });
+    expect(estimateEnteredRate('100')).toMatchObject({ status: 'exact', payableRate: '1' });
+    for (const value of ['', '-0.01', '100.01']) {
+      const rate = estimateEnteredRate(value);
+      expect(rate.status).toBe('unresolved'); expect(rate.payableRate).toBeUndefined();
+    }
   });
 });

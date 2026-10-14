@@ -30,7 +30,15 @@ export function scenarioPublicCost({ section, scenario, row, programme, rateScen
   targetDetail?: ProductDetail | null; currentDetail?: ProductDetail | null; operation?: 'new' | 'existing'; asOf?: string;
 }): { scenario?: PublicCostScenario; reasonCodes: string[]; assumptions: string[] } {
   const key = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
-  const inputs = scenario.projections[key];
+  const inputs = scenario?.projections?.[key];
+  if (!inputs || !scenario?.[key] || typeof inputs.offsetBalance !== 'string'
+    || typeof inputs.horizonYears !== 'string'
+    || section === 'Savings' && ['periodicAmount', 'periodicFrequency', 'withdrawalAmount', 'withdrawalFrequency'].some(field => typeof inputs[field as keyof typeof inputs] !== 'string')
+    || section === 'Mortgage' && (!scenario.mortgageSwitch || !['buy', 'refi'].includes(scenario.mortgage.mode)
+      || ['propertyValue', 'deposit', 'costs', 'loanBalance', 'years'].some(field => typeof scenario.mortgage[field as keyof typeof scenario.mortgage] !== 'string')
+      || typeof inputs.extraRepaymentAmount !== 'string' || typeof inputs.extraRepaymentFrequency !== 'string')) {
+    return { reasonCodes: ['scenario_inputs_missing'], assumptions: [] };
+  }
   const offset = clean(inputs.offsetBalance) || '0';
   const feeContext = programme ? publicProgrammeCostFees(programme, {
     operation, switchingCostsKnown: false,

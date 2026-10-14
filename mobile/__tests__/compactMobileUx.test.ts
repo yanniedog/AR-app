@@ -89,7 +89,7 @@ describe('compact mobile UX contracts', () => {
   it('does not build hidden bank and product picker lists during calculator entry', () => {
     const picker = read('../src/components/scenario/CurrentBankPicker.tsx');
 
-    expect(picker).toContain("open === 'bank' ? alphabeticalScenarioProviders(rows) : []");
+    expect(picker).toMatch(/open === 'bank' \? alphabeticalScenarioProviders\(rows, discovery, catalogue\.coverage[^;]+ : \[\]/);
     expect(picker).toContain("open !== 'product'");
     expect(picker).toContain(") : open === 'product' ? (");
   });

@@ -5,7 +5,7 @@ import { makeProductSubscription, makeSearchSubscription } from '../src/data/sub
 import { EMPTY_FILTERS } from '../src/data/selectors';
 import { makeSavedRateRef } from '../src/data/savedRates';
 import { bindCurrentPublicRow } from '../src/data/publicRateIntegration';
-import { AS_OF, catalogue, core, programme, row } from './fixtures/publicRateJourney';
+import { AS_OF, catalogue, core, programme, row } from '../testUtils/publicRateJourney';
 
 it('uses semantic programme identities for alerts after reordering and describes public scenario pricing', () => {
   const previous = catalogue(), current = catalogue([programme({ sourceBindings: [{ rateIndex: 3, pointer: '/lendingRates/3' }],

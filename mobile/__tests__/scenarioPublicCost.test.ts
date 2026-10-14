@@ -3,7 +3,7 @@ import { scenarioPublicCost } from '../src/data/scenarioPublicCost';
 import { estimatePublicCost } from '../src/data/publicCost';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import { resolvePublicRate } from '../src/data/publicRateResolver';
-import { AS_OF, programme, row } from './fixtures/publicRateJourney';
+import { AS_OF, programme, row } from '../testUtils/publicRateJourney';
 
 it('defaults to three mortgage years, twelve savings months and quoted maturity, requiring an explicit variable-rate assumption', () => {
   const initial = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' },

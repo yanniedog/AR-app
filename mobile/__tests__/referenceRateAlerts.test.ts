@@ -6,7 +6,7 @@ import { loadUserRateScenario, normalizeUserRateScenario, saveUserRateScenario }
 import { readSecureStoreValue, writeSecureStoreValue } from '../src/lib/secureStoreValue';
 import { SECURE_STORE_KEYS } from '../src/lib/secureStoreKey';
 import type { Manifest } from '../src/types';
-import { AS_OF, catalogue, reference } from './fixtures/publicRateJourney';
+import { AS_OF, catalogue, reference } from '../testUtils/publicRateJourney';
 
 jest.mock('../src/data/publicRateCatalogue', () => ({ ensurePublicRateCatalogueLoaded: jest.fn() }));
 jest.mock('../src/data/notifications', () => ({ notify: jest.fn(async () => undefined) }));

@@ -1,6 +1,6 @@
-import type { CorePayload, RateRow } from '../../src/types';
-import type { PublicCatalogueView } from '../../src/data/publicRateIntegration';
-import type { PublicProduct, PublicProgramme, PublicReferenceRate } from '../../src/data/publicRateModel';
+import type { CorePayload, RateRow } from '../src/types';
+import type { PublicCatalogueView } from '../src/data/publicRateIntegration';
+import type { PublicProduct, PublicProgramme, PublicReferenceRate } from '../src/data/publicRateModel';
 
 // Synthetic unit cases exercise app state transitions. Public-source acceptance
 // is covered separately by the retained lender captures in publicRateAcceptance.

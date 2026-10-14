@@ -32,6 +32,16 @@ it('keeps legacy editions readable and never borrows the pricing capability from
   expect(() => validatePublicRateCapability({ ...legacy, public_rate_catalogue: manifest.public_rate_catalogue })).toThrow();
 });
 
+it('retains optional bounded raw material notes without changing legacy programmes', () => {
+  const { manifest, capability, index, shard } = catalogueFixture();
+  expect(validatePublicRateShard(shard, manifest, index, capability.shards[0]).programmes[0].materialFootnotes).toBeUndefined();
+  shard.programmes[0].materialFootnotes = ['Public material clause retained verbatim for adapter review.'];
+  expect(validatePublicRateShard(shard, manifest, index, capability.shards[0]).programmes[0].materialFootnotes).toEqual(shard.programmes[0].materialFootnotes);
+  for (const notes of [[''], ['x'.repeat(16385)], Array.from({ length: 65 }, () => 'note'), [123]]) {
+    expect(() => validatePublicRateShard({ ...shard, programmes: [{ ...shard.programmes[0], materialFootnotes: notes }] }, manifest, index, capability.shards[0])).toThrow();
+  }
+});
+
 it('binds capability hashes while publication URL retagging leaves the bundle identity stable', () => {
   const { manifest } = catalogueFixture();
   const before = payloadBundleIdentity(manifest);

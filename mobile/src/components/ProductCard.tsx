@@ -110,7 +110,7 @@ function ProductCardView({
   const detail = useStore((s) => s.details?.products[row.product_key] ?? null);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const manifest = useStore((s) => s.manifest);
-  const profile = useStore((s) => s.prefs.profileFilters);
+  const profile = useStore((s) => s.prefs?.profileFilters);
   const { scenario } = useUserRateScenario();
   const publicCatalogue = usePublicRateCatalogue(manifest);
   const publicProduct = publicCatalogue.getProduct(row.product_key);

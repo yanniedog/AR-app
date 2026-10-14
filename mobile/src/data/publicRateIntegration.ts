@@ -157,8 +157,8 @@ export function publicRateScenario(
   scope: 'comparison' | 'published' = 'comparison',
 ): RateScenario {
   const selected = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
-  const input = scenario?.projections[selected];
-  const result: RateScenario = { allowHistorical: scenario?.localRates[selected].allowHistorical === true };
+  const input = scenario?.projections?.[selected];
+  const result: RateScenario = { allowHistorical: scenario?.localRates?.[selected]?.allowHistorical === true };
   const single = (values?: string[]) => values?.length === 1 ? values[0] : undefined;
   const purpose = single(profile?.loanPurposes) ?? (scope === 'published' ? row?.loan_purpose ?? row?.security_purpose : undefined);
   const repayment = single(profile?.repaymentTypes) ?? (scope === 'published' ? row?.repayment_type ?? row?.ribbon_repayment_type : undefined);
@@ -168,8 +168,11 @@ export function publicRateScenario(
   // Public applicability uses the canonical CDR values above.
   result.profileLoanPurpose = single(profile?.loanPurposes);
   result.profileRepayment = single(profile?.repaymentTypes);
-  if (section === 'Mortgage' && scenario) {
-    const loan = scenario.mortgage.mode === 'refi' ? calculatorAmount(scenario.mortgage.loanBalance, MAX_CALCULATOR_MORTGAGE_AMOUNT) : computeLvr(scenario.mortgage).loan;
+  const mortgage = scenario?.mortgage;
+  if (section === 'Mortgage' && mortgage) {
+    const loan = mortgage.mode === 'refi' ? calculatorAmount(mortgage.loanBalance ?? '', MAX_CALCULATOR_MORTGAGE_AMOUNT)
+      : mortgage.mode === 'buy' && typeof mortgage.propertyValue === 'string' && typeof mortgage.deposit === 'string' && typeof mortgage.costs === 'string'
+        ? computeLvr(mortgage).loan : null;
     if (loan != null) result.amount = String(loan);
     try {
       const money = (value: string) => {
@@ -177,26 +180,26 @@ export function publicRateScenario(
         if (amount == null) throw new Error('invalid_local_amount');
         return Decimal.parse(String(amount));
       };
-      const property = money(scenario.mortgage.propertyValue);
+      const property = money(mortgage.propertyValue ?? '');
       if (property.compare(Decimal.parse('0')) > 0) {
-        if (scenario.mortgage.mode === 'refi') {
-          const balance = money(scenario.mortgage.loanBalance);
+        if (mortgage.mode === 'refi') {
+          const balance = money(mortgage.loanBalance ?? '');
           result.amount = decimalText(balance); result.lvr = decimalText(balance.div(property));
-        } else {
-          const deposit = money(scenario.mortgage.deposit.trim() || '0');
-          const costs = money(scenario.mortgage.costs.trim() || '0');
+        } else if (mortgage.mode === 'buy' && typeof mortgage.deposit === 'string' && typeof mortgage.costs === 'string') {
+          const deposit = money(mortgage.deposit.trim() || '0');
+          const costs = money(mortgage.costs.trim() || '0');
           const applied = deposit.sub(costs).compare(Decimal.parse('0')) > 0 ? deposit.sub(costs) : Decimal.parse('0');
           const balance = property.sub(applied);
           result.amount = decimalText(balance); result.lvr = decimalText(balance.div(property));
         }
       }
     } catch { /* Missing numerical input remains unknown. */ }
-  } else if (scenario) {
-    const balance = section === 'TD' ? scenario.termDeposit.balance : scenario.savings.balance;
-    if (balance.trim()) result.balance = balance.replace(/[$,\s]/g, '');
+  } else if (section !== 'Mortgage' && scenario) {
+    const balance = section === 'TD' ? scenario.termDeposit?.balance : scenario.savings?.balance;
+    if (balance?.trim()) result.balance = balance.replace(/[$,\s]/g, '');
   }
-  if (section === 'Mortgage' && input?.mortgageRateStructure === 'fixed' && input.fixedPeriodMonths.trim()) result.termMonths = input.fixedPeriodMonths;
-  else if (input?.termMonths.trim()) result.termMonths = input.termMonths;
+  if (section === 'Mortgage' && input?.mortgageRateStructure === 'fixed' && input.fixedPeriodMonths?.trim()) result.termMonths = input.fixedPeriodMonths;
+  else if (input?.termMonths?.trim()) result.termMonths = input.termMonths;
   else if (row?.term_months != null) result.termMonths = String(row.term_months);
   if (row?.term && /^P\d+D$/.test(row.term)) result.termDays = row.term.slice(1, -1);
   if (input?.bonusQualification === 'met') result.qualification = true;
@@ -214,25 +217,25 @@ export function resolveLocalCurrentRate(
   profile?: ProfileFilters,
 ): RateResolution {
   const key = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
-  const local = scenario.localRates[key];
-  if (local.mode === 'entered') {
-    const value = section === 'Mortgage' ? scenario.mortgage.currentRate
-      : section === 'TD' ? scenario.termDeposit.currentRate : scenario.savings.currentRate;
-    return estimateEnteredRate(value);
+  const local = scenario?.localRates?.[key];
+  if (local?.mode !== 'reference') {
+    const value = section === 'Mortgage' ? scenario?.mortgage?.currentRate
+      : section === 'TD' ? scenario?.termDeposit?.currentRate : scenario?.savings?.currentRate;
+    return estimateEnteredRate(value ?? '');
   }
-  const selected = selectPublicReference(references, local.referenceId, asOf);
+  const selected = selectPublicReference(references, local.referenceId ?? '', asOf);
   const reference = selected.reference;
   if (!reference) return { ...unresolvedPublicRate(selected.reasonCodes[0] ?? 'selected_reference_unavailable'), origin: 'locally_calculated' };
-  const current = scenario.currentProducts[key];
-  const product = catalogue?.getProduct(current.productKey);
-  const providerName = current.provider.trim().toLocaleLowerCase('en-AU');
+  const current = scenario?.currentProducts?.[key];
+  const product = current?.productKey ? catalogue?.getProduct(current.productKey) : undefined;
+  const providerName = current?.provider?.trim().toLocaleLowerCase('en-AU') ?? '';
   const providerIds = [...(catalogue?.products ?? []), ...(catalogue?.coverage ?? [])]
     .filter(item => item.providerName.trim().toLocaleLowerCase('en-AU') === providerName).map(item => item.providerId);
   if (product && !product.referenceIds.includes(local.referenceId)
     || !product && providerName && catalogue && !providerIds.includes(reference.providerId)) {
     return { ...unresolvedPublicRate('selected_reference_product_mismatch'), origin: 'locally_calculated' };
   }
-  return estimateReferenceAdjustment(reference, local.totalAdjustment, asOf, local.allowHistorical,
+  return estimateReferenceAdjustment(reference, local.totalAdjustment ?? '', asOf, local.allowHistorical === true,
     { ...publicRateScenario(section, scenario, profile), ...local.referenceScenario });
 }
 
@@ -241,7 +244,7 @@ export function scenarioWithLocalCurrentRate(
   section: SectionKey, scenario: UserRateScenario, resolution: RateResolution,
 ): UserRateScenario {
   const key = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
-  if (resolution.status !== 'exact' && scenario.localRates[key].mode === 'entered') return scenario;
+  if (resolution.status !== 'exact' && scenario?.localRates?.[key]?.mode !== 'reference') return scenario;
   const rate = resolution.status === 'exact' && resolution.payableRate != null
     ? decimalText(Decimal.parse(resolution.payableRate).mul(Decimal.parse('100'))) : '';
   if (section === 'Mortgage') return { ...scenario, mortgage: { ...scenario.mortgage, currentRate: rate } };

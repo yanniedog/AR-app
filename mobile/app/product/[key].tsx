@@ -121,20 +121,21 @@ export default function ProductDetail() {
   const rateIndex = parsedRateIndex != null && Number.isInteger(parsedRateIndex) ? parsedRateIndex : null;
   const core = useStore((s) => s.core);
   const manifest = useStore((s) => s.manifest);
-  const profile = useStore((s) => s.prefs.profileFilters);
+  const profile = useStore((s) => s.prefs?.profileFilters);
   const publicCatalogue = usePublicRateCatalogue(manifest);
   const publicProduct = publicCatalogue.getProduct(productKey);
   const { scenario } = useUserRateScenario();
+  const pricingScenario = publicProduct ? scenario : undefined;
   const found = useMemo(
     () => {
       void suitabilityRevision;
       if (!core) return null;
       const sections = publicProduct ? { ...core.sections, [publicProduct.section]: { ...core.sections[publicProduct.section],
         rates: publicRecommendationRows(core.sections[publicProduct.section].rates, publicCatalogue, publicProduct.section,
-          publicRateScenario(publicProduct.section, scenario, profile)) } } : core.sections;
+          publicRateScenario(publicProduct.section, pricingScenario, profile)) } } : core.sections;
       return findEligibleByKey(sections, productKey);
     },
-    [core, productKey, suitabilityRevision, publicCatalogue, publicProduct, scenario, profile],
+    [core, productKey, suitabilityRevision, publicCatalogue, publicProduct, pricingScenario, profile],
   );
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
@@ -271,17 +272,18 @@ export default function ProductDetail() {
     : null;
   const staySwitchProjection = useMemo(() => {
     if (!row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
-    const currentRef = scenario.currentProducts.mortgage;
+    const currentRef = scenario?.currentProducts?.mortgage;
     return buildStaySwitchProjection({
       scenario: calculationScenario,
       target: row,
-      currentDetail: currentRef.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts[currentRef.productKey] : null,
+      currentDetail: currentRef?.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts[currentRef.productKey] : null,
       targetDetail: detail,
     });
   }, [detail, detailsProducts, found?.section, row, scenario, calculationScenario]);
-  const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
-    && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
-    ? scenario.currentProducts.mortgage.provider
+  const currentMortgageRef = scenario?.currentProducts?.mortgage;
+  const currentBankLabel = (!currentMortgageRef?.productKey || mandatoryProductAllowed(currentMortgageRef.productKey)) && currentMortgageRef?.provider
+    && currentMortgageRef.provider !== NOT_LISTED_PROVIDER
+    ? currentMortgageRef.provider
     : 'Current bank';
 
   const explorerInsights = useMemo(() => {

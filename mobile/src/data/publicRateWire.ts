@@ -98,7 +98,7 @@ function formulaEvidence(value: PublicFormula): string[] {
   return [];
 }
 function programme(value: unknown): value is PublicProgramme {
-  if (!object(value) || !keys(value, ['schemaVersion', 'programmeId', 'productId', 'section', 'offerId', 'conditions', 'components', 'evidenceIds', 'freshness', 'reasonCodes', 'sourceBindings'], ['formula', 'phases', 'effectiveFrom', 'effectiveTo', 'fees', 'feeCoverage', 'feeSetId', 'metadata']) ||
+  if (!object(value) || !keys(value, ['schemaVersion', 'programmeId', 'productId', 'section', 'offerId', 'conditions', 'components', 'evidenceIds', 'freshness', 'reasonCodes', 'sourceBindings'], ['formula', 'phases', 'effectiveFrom', 'effectiveTo', 'fees', 'feeCoverage', 'feeSetId', 'metadata', 'materialFootnotes']) ||
       value.schemaVersion !== 1 || !text(value.programmeId, 256) || !text(value.productId, 256) || !text(value.offerId, 256) || !SECTIONS.includes(String(value.section)) ||
       !conditions(value.conditions) || !strings(value.evidenceIds) || !strings(value.reasonCodes) || !freshness(value.freshness) || !time(value.effectiveFrom) || !time(value.effectiveTo) ||
       !Array.isArray(value.sourceBindings) || value.sourceBindings.length > 256 || !value.sourceBindings.every(item => object(item) && keys(item, ['pointer', 'rateIndex']) && text(item.pointer) && Number.isSafeInteger(item.rateIndex) && Number(item.rateIndex) > 0) ||
@@ -111,6 +111,8 @@ function programme(value: unknown): value is PublicProgramme {
         (component.source.rawValue !== undefined && typeof component.source.rawValue !== 'string') ||
         (component.includedInPayable !== undefined && typeof component.includedInPayable !== 'boolean') || (component.referenceId !== undefined && !text(component.referenceId, 256))) ||
       value.formula !== undefined && !formula(value.formula)) return false;
+  if (value.materialFootnotes !== undefined && (!Array.isArray(value.materialFootnotes)
+      || value.materialFootnotes.length > 64 || !value.materialFootnotes.every(note => text(note, 16384)))) return false;
   if (duplicates(value.components.map(item => String(item.componentId)))) return false;
   if (value.feeSetId !== undefined && (!text(value.feeSetId, 256) || value.fees !== undefined || value.feeCoverage !== undefined)) return false;
   if (value.metadata !== undefined) {
