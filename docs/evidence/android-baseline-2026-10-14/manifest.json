@@ -8,7 +8,7 @@
     "emulator_abi": "x86_64",
     "pixels": "1080x2400",
     "density_dpi": 420,
-    "font_scale": 1.0
+    "font_scale": 1
   },
   "artifacts": [
     {
@@ -309,7 +309,7 @@
       "retained_on": "2026-10-14"
     },
     {
-      "path": "docs\\evidence\\android-baseline-2026-10-14\\operator-report.md",
+      "path": "docs/evidence/android-baseline-2026-10-14/operator-report.md",
       "sha256": "699185e2c48bff27d585c14f68488fdd45c637f42f623efd9df6f07738acd63f",
       "bytes": 3053,
       "app_version": "1.0.237",
