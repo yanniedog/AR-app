@@ -1,6 +1,7 @@
 import { findEligibleByKey } from '../data/selectors';
 import { advertisedTermMonths, calculatorAmount, calculatorRateFraction, MAX_CALCULATOR_DEPOSIT_AMOUNT, quickEstimateUnavailableReason, termDepositInterestDifference } from '../data/calc';
 import { toFraction } from '../data/format';
+import { isMandatoryEligibilityReady } from '../data/eligibilityGate';
 import type { UserRateScenario } from '../data/userRateScenario';
 import type { CorePayload, RateRow, SectionKey } from '../types';
 
@@ -38,6 +39,7 @@ export function resolveCalculationTarget(core: CorePayload | null, section: Sect
   if (params.ri !== undefined && (index === undefined || (index !== '' && (!/^\d+$/.test(index) || !Number.isSafeInteger(Number(index)))))) return { status: 'unavailable' };
   if (!core) return { status: 'pending' };
   const found = findEligibleByKey(core.sections, key);
+  if (!found && !isMandatoryEligibilityReady()) return { status: 'pending' };
   if (!found || found.section !== section) return { status: 'unavailable' };
   const row = !index ? found.row : found.siblings.find(item => item.rate_index === Number(index));
   return row ? { status: 'available', row, section } : { status: 'unavailable' };

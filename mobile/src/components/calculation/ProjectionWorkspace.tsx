@@ -204,9 +204,10 @@ export function ProjectionWorkspace() {
   const storeError = useStore((s) => s.error);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const ensureDetails = useStore((s) => s.ensureDetails);
+  const activeSection = useStore((s) => s.activeSection);
   const { width, fontScale } = useWindowDimensions();
   const wide = width >= 860 && fontScale < 1.5;
-  const [section] = useScenarioSection('Mortgage');
+  const [section] = useScenarioSection(activeSection);
   const changeSection = useCallback((next: SectionKey) => router.setParams({ section: next, target: undefined, ri: undefined }), []);
   const {
     scenario,

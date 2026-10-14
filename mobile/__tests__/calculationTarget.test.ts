@@ -1,4 +1,7 @@
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
+import { installMandatoryEligibility } from '../src/data/eligibilityGate';
+import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
+import { EMPTY_PROFILE } from '../src/data/profile';
 import { buildCalculationRoute, calculationMode, resolveCalculationTarget, selectedDepositCalculation } from '../src/lib/calculationTarget';
 import type { CorePayload, RateRow } from '../src/types';
 
@@ -7,6 +10,21 @@ const first: RateRow = { product_key: key, product_id: key, product_name: 'Savin
   rate: '0.04', rate_index: 1, ribbon_deposit_kind: 'base', account_class: 'standard' };
 const second = { ...first, rate_index: 7, rate: '0.03' };
 const core = { sections: { Mortgage: { rates: [] }, Savings: { rates: [first, second] }, TD: { rates: [] } } } as unknown as CorePayload;
+afterEach(() => installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null)));
+
+test('waits for required profile evidence, without blocking an already eligible deposit target', () => {
+  const mortgage = { ...first, product_key: 'profile-mortgage', taxonomy_path: 'HOME_LOAN.OO.PI.VARIABLE', rate_type: 'VARIABLE' };
+  const publication = { ...core, sections: { ...core.sections, Mortgage: { rates: [mortgage] } } } as CorePayload;
+  const profile = { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] };
+  installMandatoryEligibility(selectMandatoryEligibility(publication, profile, null));
+  expect(resolveCalculationTarget(publication, 'Mortgage', { target: mortgage.product_key, ri: '1' })).toEqual({ status: 'pending' });
+  expect(resolveCalculationTarget(publication, 'Savings', { target: first.product_key, ri: '1' })).toMatchObject({ status: 'available', row: first });
+  const facts = { 'profile-mortgage': { facts: [{ id: 'offset', kind: 'feature' as const, canonicalKey: 'OFFSET', unit: 'boolean', value: true }] } };
+  installMandatoryEligibility(selectMandatoryEligibility(publication, profile, facts));
+  expect(resolveCalculationTarget(publication, 'Mortgage', { target: mortgage.product_key, ri: '1' })).toMatchObject({ status: 'available', row: mortgage });
+  installMandatoryEligibility(selectMandatoryEligibility(publication, profile, { 'profile-mortgage': { facts: [] } }));
+  expect(resolveCalculationTarget(publication, 'Mortgage', { target: mortgage.product_key, ri: '1' })).toEqual({ status: 'unavailable' });
+});
 
 test('uses an opaque key and exact tier across repeated identical route parameters', () => {
   expect(buildCalculationRoute(second, 'Savings')).toEqual({ pathname: '/calculator', params: {

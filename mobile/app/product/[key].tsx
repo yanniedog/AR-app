@@ -673,15 +673,12 @@ export default function ProductDetail() {
             accessibilityState={{ selected: favorite }}
             onPress={() => toggleSavedRate(row, saveScope)}
           />
-          {section === 'Mortgage' ? <Button
+          <Button
             title="Calculate"
             variant="secondary"
             style={{ flex: 1 }}
-            onPress={() => router.push({ pathname: '/projections', params: {
-              section, target: row.product_key,
-              ri: row.rate_index != null ? String(row.rate_index) : undefined,
-            } })}
-          /> : null}
+            onPress={openCalculate}
+          />
         </Row>
 
         {staySwitchProjection?.ready ? (
@@ -690,14 +687,7 @@ export default function ProductDetail() {
               projection={staySwitchProjection}
               currentBank={currentBankLabel}
               compact
-              onOpenFull={() => router.push({
-                pathname: '/projections',
-                params: {
-                  section: 'Mortgage',
-                  target: row.product_key,
-                  ri: row.rate_index != null ? String(row.rate_index) : undefined,
-                },
-              } as never)}
+              onOpenFull={() => router.push(buildCalculationRoute(row, section, 'project'))}
             />
           </View>
         ) : null}
