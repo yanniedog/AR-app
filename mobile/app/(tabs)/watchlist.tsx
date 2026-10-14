@@ -328,15 +328,27 @@ export default function MyRates() {
     [items, selectMode],
   );
   const savedLogos = useLogoReadiness(savedRenderRevision, savedLogoIds);
+  const calculateSavedRate = useCallback((row: RateRow, section: SectionKey) => {
+    router.push(buildCalculationRoute(row, section));
+    return { expectedPath: '/calculator' };
+  }, []);
+  const calculateSavedRateForAudit = useCallback((...args: unknown[]) => {
+    if (selectMode) return { unavailableReason: 'Saved rate calculation is unavailable during comparison selection' };
+    const id = auditActionString(args, 'savedId');
+    const item = id ? items.find(value => value.ref.id === id) : items[0];
+    if (!item) return { unavailableReason: 'Selected saved rate is unavailable' };
+    return calculateSavedRate(item.row, item.section);
+  }, [calculateSavedRate, items, selectMode]);
   const auditActions = useMemo(() => ({
     'saved.open': () => undefined,
+    'saved.calculate.open': calculateSavedRateForAudit,
     'saved.fixture.ensure-exact-pair': ensureExactPair,
     'saved.compare.mode': toggleCompareMode,
     'saved.compare.select.0': selectAuditToken,
     'saved.compare.select.1': selectAuditToken,
     'saved.compare.open': openSelectedCompare,
     'saved.fixture.restore': restoreSavedFixture,
-  }), [ensureExactPair, openSelectedCompare, restoreSavedFixture, selectAuditToken, toggleCompareMode]);
+  }), [calculateSavedRateForAudit, ensureExactPair, openSelectedCompare, restoreSavedFixture, selectAuditToken, toggleCompareMode]);
   usePerformanceAuditSurface({
     id: 'saved.list',
     routeKey: '/watchlist',
@@ -562,7 +574,7 @@ export default function MyRates() {
                           <Button
                             title="Calculate"
                             variant="ghost"
-                            onPress={() => router.push(buildCalculationRoute(row, section))}
+                            onPress={() => calculateSavedRate(row, section)}
                           />
                           <Pressable
                             onPress={() => void toggleAlert(row)}

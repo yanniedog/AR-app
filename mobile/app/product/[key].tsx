@@ -68,6 +68,7 @@ import { StaySwitchChart } from '../../src/components/scenario/StaySwitchChart';
 import { buildStaySwitchProjection } from '../../src/data/staySwitchProjection';
 import { NOT_LISTED_PROVIDER } from '../../src/data/userRateScenario';
 import { openBank, openRateReceipt } from '../../src/lib/nav';
+import { buildCalculationRoute } from '../../src/lib/calculationTarget';
 import { rateQualifier } from '../../src/lib/rateQualifier';
 import {
   PRODUCT_HISTORY_TITLE,
@@ -354,9 +355,15 @@ export default function ProductDetail() {
     historyModel?.dates.at(-1) ?? 'none',
     historyModel?.dates.length ?? 0,
   ].join(':');
+  const openCalculate = useCallback(() => {
+    if (!row || !section) return { unavailableReason: 'Selected product has no eligible rate' };
+    router.push(buildCalculationRoute(row, section));
+    return { expectedPath: '/calculator' };
+  }, [row, section]);
   const auditActions = useMemo(() => {
     const actions: Record<string, (...args: unknown[]) => unknown> = {
       'product.open': () => undefined,
+      'product.calculate.open': openCalculate,
       'product.receipt.open': () => {
         if (row) openRateReceipt(productKey, row.rate_index);
       },
@@ -381,7 +388,7 @@ export default function ProductDetail() {
         : { unavailableReason: 'The mounted product has no multi-date history chart' },
     };
     return actions;
-  }, [historyGraphicEvidence?.window, productKey, row]);
+  }, [historyGraphicEvidence?.window, productKey, row, openCalculate]);
   const productLogoIds = useMemo(
     () => row ? [`product:${row.rate_index ?? 'default'}#${row.product_key}`] : [],
     [row],
