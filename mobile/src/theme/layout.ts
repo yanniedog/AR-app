@@ -9,9 +9,9 @@ export const LEDGER_SPACE = {
 } as const;
 
 export const LEDGER_RADIUS = {
-  small: 4,
-  control: 10,
-  sheet: 18,
+  small: 12,
+  control: 14,
+  sheet: 24,
   pill: 999,
 } as const;
 

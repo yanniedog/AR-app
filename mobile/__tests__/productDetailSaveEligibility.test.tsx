@@ -1,5 +1,6 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
+import { router } from 'expo-router';
 
 import type { CorePayload, RateRow } from '../src/types';
 import { rateConditionFixture } from '../testUtils/rateConditions';
@@ -135,7 +136,7 @@ import ProductDetail from '../app/product/[key]';
 describe('Product detail save eligibility', () => {
   beforeEach(() => toggleSavedRate.mockClear());
 
-  it('routes both header and body actions to a non-crashing product-wide save', async () => {
+  it('keeps the visible Save and all-rates action safe for a product without an exact tier', async () => {
     let tree!: InspectableRenderer;
     await act(async () => {
       tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer;
@@ -147,12 +148,13 @@ describe('Product detail save eligibility', () => {
     act(() => {
       header = TestRenderer.create(stack.props.options.headerRight()) as InspectableRenderer;
     });
-    const headerSave = header.root.findByProps({ accessibilityLabel: 'Save all product variants to Saved' });
-    const bodySave = tree.root.findByProps({ title: 'Save product to Saved' });
+    expect(header.root.findAllByProps({ accessibilityLabel: 'Save all product variants to Saved' })).toHaveLength(0);
+    const bodySave = tree.root.findByProps({ title: 'Save' });
+    const allRatesSave = tree.root.findByProps({ title: 'Watch all rates for this product' });
 
     expect(() => {
-      act(() => headerSave.props.onPress());
       act(() => bodySave.props.onPress());
+      act(() => allRatesSave.props.onPress());
     }).not.toThrow();
     expect(toggleSavedRate).toHaveBeenNthCalledWith(1, row, 'product');
     expect(toggleSavedRate).toHaveBeenNthCalledWith(2, row, 'product');
@@ -172,6 +174,20 @@ describe('Product detail save eligibility', () => {
     const visible = tree.root.findAllByType('AppText').map(node => String(node.props.children ?? '')).join('\n');
     expect(visible).toContain('For balances of over 1 million dollars');
     expect(visible).not.toContain('For balances of 1 million dollars and under');
+    act(() => tree.unmount());
+  });
+  it('calculates the selected mortgage tier without replacing it with another sibling', async () => {
+    const selected = { ...row, rate_index: 7, exact_alert_eligible: true };
+    Object.assign(mockState, { core: { ...core, sections: { ...core.sections,
+      Mortgage: { ...core.sections.Mortgage, rates: [{ ...selected, rate_index: 2 }, selected] },
+    } }, coreIntegrity: null, manifest: null, details: null });
+    mockRoute.key = selected.product_key; mockRoute.ri = '7';
+    let tree!: InspectableRenderer;
+    await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
+    act(() => tree.root.findByProps({ title: 'Calculate' }).props.onPress());
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: '/projections', params: {
+      section: 'Mortgage', target: selected.product_key, ri: '7',
+    } });
     act(() => tree.unmount());
   });
 });

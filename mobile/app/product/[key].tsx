@@ -9,7 +9,6 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { HeaderTitle } from '@react-navigation/elements';
 import {
-  Alert,
   InteractionManager,
   Share,
   useWindowDimensions,
@@ -56,7 +55,6 @@ import {
   productSeriesRecordForChart,
   productSeriesRecordWithCurrent,
 } from '../../src/data/productHistory';
-import { ensurePermissions } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
 import { isSavedRate } from '../../src/data/savedRates';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
@@ -142,11 +140,7 @@ export default function ProductDetail() {
   const [settledDetailsRequest, setSettledDetailsRequest] = useState<string | null>(null);
   const savedRates = useStore((s) => s.savedRates);
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
-  const notificationsEnabled = useStore((s) => s.prefs.notificationsEnabled);
   const setPref = useStore((s) => s.setPref);
-  const subscribed = useStore((s) => s.isProductSubscribed(productKey, rateIndex));
-  const subscribeProduct = useStore((s) => s.subscribeProduct);
-  const unsubscribeProduct = useStore((s) => s.unsubscribeProduct);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
@@ -523,7 +517,6 @@ export default function ProductDetail() {
     (ref) => ref.scope === 'product' && ref.productKey === productKey,
   );
   const meta = SECTIONS[section];
-  const accent = meta.lowerIsBetter ? theme.colors.success : theme.colors.primary;
   const qualifier = rateQualifier(row, section);
   const presentation = ratePresentation(row, section, mortgageRateMetric);
 
@@ -539,22 +532,6 @@ export default function ProductDetail() {
     Share.share({
       message: `${row.provider} — ${row.product_name}: ${formatRate(presentation.primary)} ${presentation.primaryLabel.toLowerCase()} (${meta.title}, Australian Rates)`,
     }).catch((err) => logSwallowedError('product.share', err));
-
-  const onToggleNotify = async () => {
-    if (subscribed) {
-      unsubscribeProduct(productKey, rateIndex);
-      return;
-    }
-    const ok = await ensurePermissions();
-    if (!ok) {
-      Alert.alert('Notifications disabled', 'Enable notifications for Australian Rates in system settings.');
-      return;
-    }
-    if (!notificationsEnabled) {
-      setPref('notificationsEnabled', true);
-    }
-    subscribeProduct(productKey, rateIndex, row);
-  };
 
   return (
     <>
@@ -593,22 +570,6 @@ export default function ProductDetail() {
                 setHeaderActionsWidth((current) => (current === next ? current : next));
               }}
             >
-              {favorite || subscribed ? (
-                <IconButton
-                  icon={subscribed ? 'notifications' : 'notifications-outline'}
-                  color={subscribed ? 'primary' : 'text'}
-                  onPress={() => void onToggleNotify()}
-                  accessibilityLabel={subscribed ? 'Remove rate alert' : 'Notify on rate change'}
-                />
-              ) : null}
-              <IconButton
-                icon={favorite ? 'star' : 'star-outline'}
-                color={favorite ? 'warning' : 'text'}
-                onPress={() => toggleSavedRate(row, saveScope)}
-                accessibilityLabel={favorite
-                  ? exactSaveEligible ? 'Remove this rate from Saved' : 'Remove this product from Saved'
-                  : exactSaveEligible ? 'Save this exact rate to Saved' : 'Save all product variants to Saved'}
-              />
               <IconButton icon="share-outline" onPress={onShare} accessibilityLabel="Share" />
               <NavigationMenuButton compact={windowWidth < COMPACT_HEADER_WIDTH} />
             </Row>
@@ -622,7 +583,7 @@ export default function ProductDetail() {
         <Row gap={14} style={{ marginBottom: 16 }}>
           <BankAvatar
             provider={row.provider}
-            size={56}
+            size={40}
             renderStateId={productLogoIds[0]}
             onRenderStateChange={logoReadiness.onLogoRenderStateChange}
           />
@@ -634,11 +595,11 @@ export default function ProductDetail() {
           </View>
         </Row>
 
-        <Card style={{ marginBottom: 16, alignItems: 'center' }}>
+        <View style={{ marginBottom: 16, gap: 4 }}>
           <AppText variant="small" color="textMuted">
             {presentation.primaryLabel}
           </AppText>
-          <AppText variant="h1" weight="800" style={{ color: accent, marginVertical: 2 }}>
+          <AppText variant="rateHero" weight="700" style={{ color: theme.colors.text }}>
             {formatRate(presentation.primary)}
           </AppText>
           {presentation.secondary !== null && presentation.secondaryLabel ? (
@@ -652,7 +613,7 @@ export default function ProductDetail() {
             current={{ date: core?.run_date, rate: currentBest }}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-            This exact rate · checked {formatEvidenceDate(core?.run_date)}
+            Checked {formatEvidenceDate(core?.run_date)}
           </AppText>
           {isNonStandard(row) ? (
             <View
@@ -694,7 +655,26 @@ export default function ProductDetail() {
               </AppText>
             </>
           ) : null}
-        </Card>
+        </View>
+
+        <Row gap={12} style={{ marginBottom: 16 }}>
+          <Button
+            title={favorite ? 'Saved' : 'Save'}
+            icon={favorite ? 'star' : 'star-outline'}
+            style={{ flex: 1 }}
+            accessibilityState={{ selected: favorite }}
+            onPress={() => toggleSavedRate(row, saveScope)}
+          />
+          {section === 'Mortgage' ? <Button
+            title="Calculate"
+            variant="secondary"
+            style={{ flex: 1 }}
+            onPress={() => router.push({ pathname: '/projections', params: {
+              section, target: row.product_key,
+              ri: row.rate_index != null ? String(row.rate_index) : undefined,
+            } })}
+          /> : null}
+        </Row>
 
         {staySwitchProjection?.ready ? (
           <View style={{ marginBottom: 16 }}>
@@ -712,40 +692,14 @@ export default function ProductDetail() {
               } as never)}
             />
           </View>
-        ) : (
-          <Card variant="outlined" style={{ marginBottom: 16, gap: 10 }}>
-            <AppText variant="body" weight="700">Compare this observed rate with your scenario</AppText>
-            <AppText variant="tiny" color="textMuted">
-              Full projections keep assumptions, unknown fees and unavailable results visible.
-            </AppText>
-            <Button
-              title="Add my rate"
-              variant="secondary"
-              onPress={() => router.push({ pathname: '/calculator', params: { intent: 'check', section } })}
-            />
-          </Card>
-        )}
+        ) : null}
 
         <AccessNotice name={row.product_name} provider={row.provider} detail={detail} loading={detailsLoading} />
-
-        {detail?.description ? (
-          <AppText variant="small" color="textMuted" style={{ marginBottom: 16, lineHeight: 20 }}>
-            {detail.description}
-          </AppText>
-        ) : null}
 
         <MemoProductSpecs row={row} section={section} detail={detail} />
 
         <Button
-          title={favorite
-            ? 'Saved to Saved'
-            : exactSaveEligible ? 'Save exact rate to Saved' : 'Save product to Saved'}
-          icon={favorite ? 'star' : 'star-outline'}
-          style={{ marginBottom: 10 }}
-          onPress={() => toggleSavedRate(row, saveScope)}
-        />
-        <Button
-          title="Prepare a bank call"
+          title="Bank-call brief"
           icon="receipt-outline"
           variant="secondary"
           style={{ marginBottom: 16 }}
@@ -854,7 +808,7 @@ export default function ProductDetail() {
           onPress={() => openBank(row.provider)}
         />
 
-        <MemoProductRatesList rows={rateRows} section={section} accent={accent} />
+        <MemoProductRatesList rows={rateRows} section={section} accent={theme.colors.primary} />
 
         <Button
           title={productWideSaved ? 'Stop watching all rates' : 'Watch all rates for this product'}

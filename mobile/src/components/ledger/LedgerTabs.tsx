@@ -1,9 +1,10 @@
 import React from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 import { LEDGER_LAYOUT } from '../../theme/layout';
 import { useTheme } from '../../theme/ThemeProvider';
 import { LedgerText } from './LedgerText';
+import { PressFeedback } from '../PressFeedback';
 
 export interface LedgerTabOption<T extends string> {
   value: T;
@@ -33,18 +34,18 @@ export function LedgerTabs<T extends string>({
       {options.map((option) => {
         const selected = option.value === value;
         return (
-          <Pressable
+          <PressFeedback
             key={option.value}
             accessibilityRole="tab"
             accessibilityLabel={option.label}
             accessibilityState={{ selected }}
             onPress={() => onChange(option.value)}
-            style={({ pressed }) => ({
+            style={{
               minHeight: LEDGER_LAYOUT.touchTarget,
+              minWidth: LEDGER_LAYOUT.touchTarget,
               paddingVertical: 12,
               justifyContent: 'center',
-              opacity: pressed ? 0.62 : 1,
-            })}
+            }}
           >
             <LedgerText variant="label" tone={selected ? 'ink' : 'mutedInk'}>
               {option.label}
@@ -52,14 +53,14 @@ export function LedgerTabs<T extends string>({
             <View
               style={{
                 position: 'absolute',
-                height: selected ? 3 : 1,
+                height: 3,
                 left: 0,
                 right: 0,
                 bottom: 0,
-                backgroundColor: selected ? theme.ledger.wattle : theme.ledger.rule,
+                backgroundColor: selected ? theme.ledger.primary : 'transparent',
               }}
             />
-          </Pressable>
+          </PressFeedback>
         );
       })}
     </ScrollView>

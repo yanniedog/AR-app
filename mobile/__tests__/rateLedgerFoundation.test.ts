@@ -166,7 +166,7 @@ describe('Rate Ledger visual tokens', () => {
     expect(contrastRatio(LEDGER_DARK.mutedInk, LEDGER_DARK.paper)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('uses accessible ink on the wattle action fill', () => {
+  it('uses accessible ink on the primary action fill and compatibility alias', () => {
     expect(contrastRatio(LEDGER_LIGHT.onWattle, LEDGER_LIGHT.wattle)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(LEDGER_DARK.onWattle, LEDGER_DARK.wattle)).toBeGreaterThanOrEqual(4.5);
   });
@@ -175,5 +175,8 @@ describe('Rate Ledger visual tokens', () => {
     expect(ledgerMotionDuration(false, 'state')).toBe(160);
     expect(ledgerMotionDuration(true, 'navigation')).toBe(0);
     expect(ledgerMotionDuration(null, 'navigation')).toBe(0);
+    expect(ledgerMotionDuration(false, 'press')).toBe(80);
+    expect(ledgerMotionDuration(false, 'release')).toBe(160);
+    expect(ledgerMotionDuration(null, 'press')).toBe(0);
   });
 });
