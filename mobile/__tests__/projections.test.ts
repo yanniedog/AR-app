@@ -8,10 +8,20 @@ import {
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 
 const NOW = new Date('2026-08-04T10:00:00Z');
+// Full-term numerical regression cases explicitly opt in to their historical
+// constant-rate assumptions. New defaults and missing assumptions have separate tests.
+function constantRateScenario(value: unknown) {
+  const scenario = normalizeUserRateScenario(value);
+  scenario.projections.mortgage.holdVariableRate = true;
+  scenario.projections.savings.holdVariableRate = true;
+  scenario.projections.termDeposit.holdVariableRate = true;
+  scenario.projections.mortgage.horizonYears = scenario.mortgage.years || '3';
+  return scenario;
+}
 
 describe('lifecycle projections', () => {
   it('models mortgage rate and offset scenarios through payoff', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       mortgage: {
         mode: 'refi',
         loanBalance: '500000',
@@ -53,7 +63,7 @@ describe('lifecycle projections', () => {
   });
 
   it('preserves the constant-balance offset calculation from AR-local PR #427', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       mortgage: {
         mode: 'refi',
         loanBalance: '500000',
@@ -71,7 +81,7 @@ describe('lifecycle projections', () => {
   });
 
   it('adds an explicitly approximate historical segment and re-anchors future points to today', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       mortgage: { mode: 'refi', loanBalance: '460000', currentRate: '6.2', years: '22' },
       projections: {
         mortgage: {
@@ -92,7 +102,7 @@ describe('lifecycle projections', () => {
   });
 
   it('models savings contributions, withdrawals and rate outcomes', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       savings: { balance: '20000', currentRate: '4.5' },
       projections: {
         savings: {
@@ -115,7 +125,7 @@ describe('lifecycle projections', () => {
   });
 
   it('ends a term-deposit projection at maturity or the requested rollovers', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       termDeposit: { balance: '50000', currentRate: '4.8' },
       projections: {
         termDeposit: { termMonths: '12', rollovers: '2', reinvestInterest: true },
@@ -129,7 +139,7 @@ describe('lifecycle projections', () => {
   });
 
   it('stops a fixed mortgage at the known fixed period without inventing a reversion rate', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' },
       projections: { mortgage: { mortgageRateStructure: 'fixed', fixedPeriodMonths: '24' } },
     });
@@ -143,7 +153,7 @@ describe('lifecycle projections', () => {
   });
 
   it('models term-deposit maturity interest without savings-style monthly compounding', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       termDeposit: { balance: '50000', currentRate: '4.8' },
       projections: { termDeposit: { termMonths: '12', rollovers: '0', reinvestInterest: false } },
     });
@@ -156,7 +166,7 @@ describe('lifecycle projections', () => {
   });
 
   it('uses rate scenarios only for term-deposit rollovers, not the contracted first term', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       termDeposit: { balance: '50000', currentRate: '4.8' },
       projections: {
         termDeposit: { termMonths: '12', rollovers: '1', reinvestInterest: true, lowerRate: '3', higherRate: '6' },
@@ -170,7 +180,7 @@ describe('lifecycle projections', () => {
   });
 
   it('steps a conditional savings rate down only after its entered bonus period', () => {
-    const met = normalizeUserRateScenario({
+    const met = constantRateScenario({
       savings: { balance: '5000', currentRate: '5' },
       projections: {
         savings: {
@@ -182,9 +192,9 @@ describe('lifecycle projections', () => {
         },
       },
     });
-    const unmet = normalizeUserRateScenario({
+    const unmet = constantRateScenario({
       ...met,
-      projections: { savings: { ...met.projections.savings, bonusConditionsMet: false } },
+      projections: { savings: { ...met.projections.savings, bonusConditionsMet: false, bonusQualification: 'unmet' } },
     });
     const metResult = buildLifecycleProjection('Savings', met, NOW);
     const unmetResult = buildLifecycleProjection('Savings', unmet, NOW);
@@ -194,7 +204,7 @@ describe('lifecycle projections', () => {
   });
 
   it('honours an explicit 0% lower scenario and omits an empty offset boost', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       mortgage: { mode: 'refi', loanBalance: '300000', currentRate: '5', years: '20' },
       projections: { mortgage: { lowerRate: '0', offsetBoostAmount: '' } },
     });
@@ -204,7 +214,7 @@ describe('lifecycle projections', () => {
   });
 
   it('blocks incomplete history and invalid directional scenarios instead of silently replacing them', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       savings: { balance: '1000', currentRate: '4' },
       projections: { savings: { horizonYears: '2', startDate: '2024-01-01', lowerRate: '5' } },
     });
@@ -217,7 +227,7 @@ describe('lifecycle projections', () => {
   });
 
   it('blocks negative or unbounded optional cash-flow inputs', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       savings: { balance: '1000', currentRate: '4' },
       projections: { savings: { horizonYears: '2', periodicAmount: '-1' } },
     });
@@ -227,7 +237,7 @@ describe('lifecycle projections', () => {
   });
 
   it('preserves month-end dates and uses section-correct savings labels', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       savings: { balance: '1000', currentRate: '4' },
       projections: { savings: { horizonYears: '1' } },
     });
@@ -239,7 +249,7 @@ describe('lifecycle projections', () => {
   });
 
   it('reports the exact missing basics instead of inventing a projection', () => {
-    const result = buildLifecycleProjection('Mortgage', normalizeUserRateScenario({}), NOW);
+    const result = buildLifecycleProjection('Mortgage', constantRateScenario({}), NOW);
     expect(result.ready).toBe(false);
     expect(result.missing).toEqual([
       'current loan balance up to $100 million',
@@ -249,7 +259,7 @@ describe('lifecycle projections', () => {
   });
 
   it('uses LVR-derived loan balance in buy mode', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       mortgage: {
         mode: 'buy',
         propertyValue: '800000',
@@ -266,11 +276,11 @@ describe('lifecycle projections', () => {
   });
 
   it('accepts remaining terms up to the shared maximum and rejects above it', () => {
-    const atMax = normalizeUserRateScenario({
+    const atMax = constantRateScenario({
       mortgage: { mode: 'refi', loanBalance: '300000', currentRate: '5', years: String(MAX_PROJECTION_YEARS) },
       projections: { mortgage: {} },
     });
-    const aboveMax = normalizeUserRateScenario({
+    const aboveMax = constantRateScenario({
       mortgage: { mode: 'refi', loanBalance: '300000', currentRate: '5', years: String(MAX_PROJECTION_YEARS + 1) },
       projections: { mortgage: {} },
     });
@@ -281,7 +291,7 @@ describe('lifecycle projections', () => {
   });
 
   it('rejects an offset above the current loan instead of silently presenting a clamped result', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' },
       projections: { mortgage: { offsetBalance: '500001' } },
     });
@@ -292,7 +302,7 @@ describe('lifecycle projections', () => {
   });
 
   it('keeps a fixed-period offset comparison interest-only and withholds a payoff delta', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' },
       projections: {
         mortgage: {
@@ -309,7 +319,7 @@ describe('lifecycle projections', () => {
   });
 
   it('carries historical offset into forward scenarios and warns on mismatch', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       mortgage: { mode: 'refi', loanBalance: '460000', currentRate: '6.2', years: '22' },
       projections: {
         mortgage: {
@@ -333,7 +343,7 @@ describe('lifecycle projections', () => {
   });
 
   it('labels conditional savings ongoing rate distinctly during the bonus period', () => {
-    const scenario = normalizeUserRateScenario({
+    const scenario = constantRateScenario({
       savings: { balance: '5000', currentRate: '5' },
       projections: {
         savings: {
@@ -351,14 +361,14 @@ describe('lifecycle projections', () => {
     expect(result.rateSeries[0].detail).toMatch(/5\.00% conditional for 3 months, then 1\.00% ongoing/);
   });
 
-  it('parses fraction-form rate strings consistently with toFraction', () => {
-    const scenario = normalizeUserRateScenario({
+  it('treats every local rate field as percentage points without magnitude guessing', () => {
+    const scenario = constantRateScenario({
       mortgage: { mode: 'refi', loanBalance: '100000', currentRate: '0.064', years: '10' },
       projections: { mortgage: {} },
     });
     const result = buildLifecycleProjection('Mortgage', scenario, NOW);
     expect(result.ready).toBe(true);
-    expect(result.rateSeries[1].annualRate).toBeCloseTo(0.064, 6);
-    expect(result.rateSeries[1].points[1].periodInterest).toBeCloseTo(100000 * 0.064 / 12, 6);
+    expect(result.rateSeries[1].annualRate).toBeCloseTo(0.00064, 6);
+    expect(result.rateSeries[1].points[1].periodInterest).toBeCloseTo(100000 * 0.00064 / 12, 6);
   });
 });

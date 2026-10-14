@@ -14,6 +14,10 @@ import { bestRow } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
 import { openProduct } from '../../src/lib/nav';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
+import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
+import { publicRateScenario, publicRecommendationRows, resolvedPublicRankingRows } from '../../src/data/publicRateIntegration';
+import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
+import { PublicPricingCoverage } from '../../src/components/scenario/PublicPricingCoverage';
 
 const findRates = () => router.navigate('/(tabs)/browse');
 const actions = { 'home.open': () => undefined, 'redirect.root.verify': () => undefined, 'home.rates.open': findRates };
@@ -22,6 +26,9 @@ const SAVED_PREVIEW = 3;
 
 export default function Home() {
   const core = useStore((s) => s.core);
+  const manifest = useStore((s) => s.manifest);
+  const publicCatalogue = usePublicRateCatalogue(manifest);
+  const { scenario } = useUserRateScenario();
   const savedRates = useStore((s) => s.savedRates);
   const interests = useStore((s) => s.prefs.interests);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
@@ -33,9 +40,9 @@ export default function Home() {
   const detailsProducts = details?.products ?? null;
 
   const saved = useMemo(
-    () => (core ? resolveSavedRates(core, savedRates).filter((item) => mandatoryEligibleRows([item.row]).length > 0) : []),
+    () => (core ? resolveSavedRates(core, savedRates, publicCatalogue, section => publicRateScenario(section, scenario, profileFilters)).filter((item) => mandatoryEligibleRows([item.row]).length > 0) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- suitabilityRevision re-ranks on same-day corrections
-    [core, savedRates, suitabilityRevision],
+    [core, savedRates, suitabilityRevision, publicCatalogue, scenario, profileFilters],
   );
   const savedUnavailable = useMemo(
     () => (core ? unresolvedSavedRateRefs(savedRates.filter((ref) => mandatoryProductAllowed(ref.productKey)), saved).length : 0),
@@ -50,9 +57,13 @@ export default function Home() {
     if (!core) return [];
     return interests
       .map((section) => {
-        const rows = core.sections[section]?.rates ?? [];
+        const rows = publicRecommendationRows(core.sections[section]?.rates ?? [], publicCatalogue, section,
+          publicRateScenario(section, scenario, profileFilters));
+        const eligible = profileFilterRows(rows, profileFilters, section, detailsProducts);
+        const pricing = resolvedPublicRankingRows(eligible, publicCatalogue, row => publicRateScenario(section, scenario, profileFilters, row));
+        if (publicCatalogue.status !== 'unavailable' && !pricing.complete) return null;
         const row = bestRow(
-          profileFilterRows(rows, profileFilters, section, detailsProducts),
+          pricing.rows,
           section,
           includeNonStandard,
           depositRankMetric,
@@ -62,7 +73,7 @@ export default function Home() {
         return row ? { section, row } : null;
       })
       .filter((entry): entry is { section: (typeof interests)[number]; row: NonNullable<ReturnType<typeof bestRow>> } => entry !== null);
-  }, [core, interests, profileFilters, detailsProducts, includeNonStandard, depositRankMetric, mortgageRateMetric, suitabilityRevision]);
+  }, [core, interests, profileFilters, detailsProducts, includeNonStandard, depositRankMetric, mortgageRateMetric, suitabilityRevision, publicCatalogue, scenario]);
 
   const openSaved = useCallback(() => router.navigate('/(tabs)/watchlist'), []);
 
@@ -80,7 +91,7 @@ export default function Home() {
               key={`${item.row.product_key}:${item.row.rate_index ?? 'none'}`}
               row={item.row}
               section={item.section}
-              onPress={() => openProduct(item.row.product_key, item.row.rate_index)}
+              onPress={() => openProduct(item.row.product_key, item.row.rate_index, item.row.public_programme_id)}
             />
           ))
         ) : (
@@ -89,20 +100,21 @@ export default function Home() {
       </LedgerSection>
 
       {bestByType.length ? (
-        <LedgerSection title="Best rates for your profile">
-          <LedgerText tone="mutedInk">The best rate in each product type you follow, with your profile applied.</LedgerText>
+        <LedgerSection title="Published rates for your profile">
+          <LedgerText tone="mutedInk">Resolved products matched to your profile, ordered by your selected rate metric. Comparison rates remain separate from payable interest.</LedgerText>
           {bestByType.map(({ section, row }) => (
             <ProductCard
               key={`best:${section}`}
               row={row}
               section={section}
-              onPress={() => openProduct(row.product_key, row.rate_index)}
+              onPress={() => openProduct(row.product_key, row.rate_index, row.public_programme_id)}
             />
           ))}
         </LedgerSection>
       ) : null}
 
       <RbaCountdownCard />
+      {interests.map(section => <PublicPricingCoverage key={section} section={section} rows={core?.sections[section]?.rates ?? []} scenario={scenario} compact />)}
 
       <LedgerAction label="Set up your profile" variant="quiet" onPress={() => router.push('/profile')} />
     </NavigationHub>

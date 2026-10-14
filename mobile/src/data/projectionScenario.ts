@@ -7,7 +7,7 @@ export interface ProjectionInputs {
   startDate: string;
   startBalance: string;
   startRate: string;
-  /** User-selected projection window for savings; mortgages use remaining term. */
+  /** Comparison window, capped at the remaining term or quoted maturity. */
   horizonYears: string;
   /** Mortgage repayment or savings contribution. */
   periodicAmount: string;
@@ -35,8 +35,17 @@ export interface ProjectionInputs {
   ongoingRate: string;
   bonusMonthsRemaining: string;
   bonusConditionsMet: boolean;
+  bonusQualification: 'met' | 'unmet' | 'unknown';
+  /** Explicit local assumption required for a variable-rate projection. */
+  holdVariableRate: boolean;
+  /** Optional explicit qualification assumptions; blank values remain unknown. */
+  monthlyDeposit: string;
+  withdrawals: string;
+  balanceGrowth: string;
+  cardTransactions: string;
   /** Term-deposit lifecycle assumptions. */
   termMonths: string;
+  renewalRate: string;
   rollovers: string;
   reinvestInterest: boolean;
 }
@@ -71,14 +80,18 @@ export const EMPTY_PROJECTION_INPUTS: ProjectionInputs = {
   ongoingRate: '',
   bonusMonthsRemaining: '',
   bonusConditionsMet: false,
+  bonusQualification: 'unknown',
+  holdVariableRate: false,
+  monthlyDeposit: '', withdrawals: '', balanceGrowth: '', cardTransactions: '',
   termMonths: '',
+  renewalRate: '',
   rollovers: '0',
   reinvestInterest: true,
 };
 
 export const EMPTY_PROJECTION_INPUTS_BY_SECTION: ProjectionInputsBySection = {
-  mortgage: { ...EMPTY_PROJECTION_INPUTS },
-  savings: { ...EMPTY_PROJECTION_INPUTS },
+  mortgage: { ...EMPTY_PROJECTION_INPUTS, horizonYears: '3' },
+  savings: { ...EMPTY_PROJECTION_INPUTS, horizonYears: '1' },
   termDeposit: { ...EMPTY_PROJECTION_INPUTS },
 };
 
@@ -126,7 +139,14 @@ export function normalizeProjectionInputs(value: unknown): ProjectionInputs {
     ongoingRate: stringValue(input.ongoingRate),
     bonusMonthsRemaining: stringValue(input.bonusMonthsRemaining),
     bonusConditionsMet: input.bonusConditionsMet === true,
+    bonusQualification: input.bonusQualification === 'met' || input.bonusQualification === 'unmet'
+      ? input.bonusQualification
+      : input.bonusConditionsMet === true ? 'met' : 'unknown',
+    holdVariableRate: input.holdVariableRate === true,
+    monthlyDeposit: stringValue(input.monthlyDeposit), withdrawals: stringValue(input.withdrawals),
+    balanceGrowth: stringValue(input.balanceGrowth), cardTransactions: stringValue(input.cardTransactions),
     termMonths: stringValue(input.termMonths),
+    renewalRate: stringValue(input.renewalRate),
     rollovers: stringValue(input.rollovers) || '0',
     reinvestInterest: input.reinvestInterest !== false,
   };
@@ -137,8 +157,8 @@ export function normalizeProjectionInputsBySection(value: unknown): ProjectionIn
     ? value as Partial<ProjectionInputsBySection>
     : {};
   return {
-    mortgage: normalizeProjectionInputs(input.mortgage),
-    savings: normalizeProjectionInputs(input.savings),
+    mortgage: normalizeProjectionInputs({ horizonYears: '3', ...input.mortgage }),
+    savings: normalizeProjectionInputs({ horizonYears: '1', ...input.savings }),
     termDeposit: normalizeProjectionInputs(input.termDeposit),
   };
 }

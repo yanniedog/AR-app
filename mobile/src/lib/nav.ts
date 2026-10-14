@@ -13,17 +13,17 @@ export const scalarRouteParam = (value?: string | string[]): string | undefined 
 // pre-encoded strings caused double-decode crashes for keys containing '%' and
 // ambiguous splits for keys containing ','. useLocalSearchParams returns the
 // original (decoded) values on the other side.
-export const openProduct = (productKey: string, rateIndex?: number) =>
+export const openProduct = (productKey: string, rateIndex?: number, programmeId?: string) =>
   router.push({
     pathname: '/product/[key]',
-    params: { key: productKey, ...(rateIndex != null ? { ri: String(rateIndex) } : {}) },
+    params: { key: productKey, ...(programmeId ? { programme: programmeId } : rateIndex != null ? { ri: String(rateIndex) } : {}) },
   });
 
 /** Open the on-device receipt for one exact product-rate row. */
-export const openRateReceipt = (productKey: string, rateIndex?: number) =>
+export const openRateReceipt = (productKey: string, rateIndex?: number, programmeId?: string) =>
   router.push({
     pathname: '/rate-receipt',
-    params: { key: productKey, ...(rateIndex != null ? { ri: String(rateIndex) } : {}) },
+    params: { key: productKey, ...(programmeId ? { programme: programmeId } : rateIndex != null ? { ri: String(rateIndex) } : {}) },
   } as unknown as Href);
 
 /** Open a lender page; optional date/section focus a specific bank-move drill-down. */

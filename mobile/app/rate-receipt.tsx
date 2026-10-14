@@ -1,4 +1,8 @@
 import Ionicons from '../src/components/icons/AppIcon';
+import { usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
+import { bindCurrentPublicRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolveRowPublicRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
+import { PublicRateEvidence } from '../src/components/scenario/PublicRateEvidence';
+import { PublicCostComparison } from '../src/components/scenario/PublicCostComparison';
 import * as Clipboard from 'expo-clipboard';
 import { Stack, router, useLocalSearchParams, type Href } from 'expo-router';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
@@ -61,13 +65,16 @@ export default function RateReceiptScreen() {
   const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
   const { requestExternalUrl } = useTrustedExternalUrl();
-  const { key, ri } = useLocalSearchParams<{ key?: string; ri?: string }>();
+  const { key, ri, programme: requestedProgramme } = useLocalSearchParams<{ key?: string; ri?: string; programme?: string }>();
   const productKey = key ?? '';
   const requestedRateIndex = ri == null || ri === '' ? null : Number(ri);
   const validRateIndex = requestedRateIndex == null || Number.isInteger(requestedRateIndex);
   const core = useStore((state) => state.core);
   const details = useStore((state) => state.details);
   const manifest = useStore((state) => state.manifest);
+  const profile = useStore((state) => state.prefs.profileFilters);
+  const publicCatalogue = usePublicRateCatalogue(manifest);
+  const publicProduct = publicCatalogue.getProduct(productKey);
   const coreIntegrity = useStore((state) => state.coreIntegrity);
   const detailsProducts = useStore((state) => state.details?.products ?? null);
   const detail = detailsProducts?.[productKey] ?? null;
@@ -87,15 +94,25 @@ export default function RateReceiptScreen() {
   const found = useMemo(
     () => {
       void suitabilityRevision;
-      return core ? findEligibleByKey(core.sections, productKey) : null;
+      if (!core) return null;
+      const sections = publicProduct ? { ...core.sections, [publicProduct.section]: { ...core.sections[publicProduct.section],
+        rates: publicRecommendationRows(core.sections[publicProduct.section].rates, publicCatalogue, publicProduct.section,
+          publicRateScenario(publicProduct.section, scenario, profile)) } } : core.sections;
+      return findEligibleByKey(sections, productKey);
     },
-    [core, productKey, suitabilityRevision],
+    [core, productKey, suitabilityRevision, publicProduct, publicCatalogue, scenario, profile],
   );
-  const row = found && validRateIndex
-    ? requestedRateIndex == null
+  const selectedRow = found && validRateIndex
+    ? requestedProgramme ? found.siblings.find(candidate => bindCurrentPublicRow(candidate, publicCatalogue).public_programme_id === requestedProgramme) ?? null
+    : requestedRateIndex == null
       ? found.row
       : found.siblings.find((candidate) => candidate.rate_index === requestedRateIndex) ?? null
     : null;
+  const publicResolution = selectedRow && found ? resolveRowPublicRate(selectedRow, publicCatalogue, publicRateScenario(found.section, scenario, profile, selectedRow)) : undefined;
+  const row = useMemo(() => selectedRow && publicResolution?.status === 'exact' && publicResolution.verifiedCurrent
+    ? { ...selectedRow, rate: publicResolution.payableRate ?? '' } : selectedRow, [selectedRow, publicResolution]);
+  const calculationScenario = found ? scenarioWithLocalCurrentRate(found.section, scenario,
+    resolveLocalCurrentRate(found.section, scenario, publicCatalogue.references, undefined, publicCatalogue, profile)) : scenario;
   const receipt = useMemo(
     () => row && found && core
       ? buildRateReceipt({ row, section: found.section, evidenceDate: core.run_date, detail, rateConditionContext: { core, details, manifest, coreIntegrity } })
@@ -106,12 +123,13 @@ export default function RateReceiptScreen() {
     () => receipt && found
       ? buildNegotiationBrief({
           receipt,
-          scenario,
-          sectionRows: core?.sections[found.section].rates ?? [],
+          scenario: calculationScenario,
+          sectionRows: resolvedPublicRankingRows(core?.sections[found.section].rates ?? [], publicCatalogue,
+            row => publicRateScenario(found.section, scenario, profile, row)).rows,
           detailsProducts,
         })
       : null,
-    [core, detailsProducts, found, receipt, scenario],
+    [core, detailsProducts, found, receipt, scenario, calculationScenario, publicCatalogue, profile],
   );
   useAuditExternalLinks((receipt?.officialSources ?? []).map((source) => ({ url: source.url, purpose: 'lender_source', label: source.label })));
   const shareText = useMemo(() => {
@@ -124,7 +142,7 @@ export default function RateReceiptScreen() {
     if (brief.illustration) {
       lines.push(
         `${money(brief.illustration.periodDifference)} ${brief.illustration.periodLabel}`,
-        `${brief.illustration.currentRate} entered rate vs ${brief.illustration.selectedRate} observed rate`,
+        `${brief.illustration.currentRate} local current-rate assumption vs ${brief.illustration.selectedRate} public rate`,
       );
     }
     if (brief.comparables.length) {
@@ -216,6 +234,12 @@ export default function RateReceiptScreen() {
   });
 
   if (!core) return <ScreenSkeleton />;
+  if (publicProduct && (!found || !row) || publicResolution && (publicResolution.status !== 'exact' || !publicResolution.verifiedCurrent)) return <>
+    <Stack.Screen options={{ title: 'Public pricing evidence' }} />
+    <ScreenScrollView><AppText variant="small">A rate-specific bank brief requires exact, current public pricing. This product remains identifiable.</AppText>
+      <PublicRateEvidence productKey={productKey} row={selectedRow ?? undefined} programmeId={requestedProgramme} />
+    </ScreenScrollView>
+  </>;
   if (!found || !row || !receipt || !brief) {
     return (
       <>
@@ -270,7 +294,7 @@ export default function RateReceiptScreen() {
             {receipt.advertisedRate}
           </AppText>
           <AppText variant="tiny" color="textMuted" style={{ marginTop: 4 }}>
-            Exact rate row {receipt.rateIndex ?? 'default'} · observed {receipt.evidenceDate}
+            Published rate row {receipt.rateIndex ?? 'default'} · observed {receipt.evidenceDate}
           </AppText>
           {receipt.comparisonRate ? (
             <AppText variant="small" color="textMuted" style={{ marginTop: 6 }}>
@@ -284,6 +308,8 @@ export default function RateReceiptScreen() {
           ) : null}
         </Card>
 
+        <PublicRateEvidence productKey={productKey} row={row} />
+        <PublicCostComparison section={found.section} target={row} scenario={calculationScenario} />
         {brief.illustration ? (
           <Card style={{ marginBottom: 16, borderLeftWidth: 3, borderLeftColor: theme.colors.success }}>
             <AppText variant="small" color="textMuted">Your entered rate difference</AppText>

@@ -1,0 +1,150 @@
+{
+  "publicSource": {
+    "fixture": "nab-indicator-20261014.pdf",
+    "url": "https://www.nab.com.au/content/dam/nabrwd/documents/rates-and-fees/loans/indicator-rates-for-home-lending.pdf",
+    "sha256": "8529d91aeb66d3ab3e547d5c7107dfee5a2f28c37d63eb5602b6aa26eb6b4781"
+  },
+  "asOf": "2026-10-14T12:00:00Z",
+  "referenceRates": [
+    {
+      "referenceId": "reference:v1:75b764ee8a52b541c7b1fbb304f25a9ae9d99cbf57987c14d3877f640e1cdc80",
+      "providerId": "National Australia Bank Limited",
+      "name": "Base Variable Rate for Home Loans",
+      "value": "8.89",
+      "unit": "percentage_points",
+      "scopeId": "scope:reference:75b764ee8a52b541c7b1fbb304f25a9ae9d99cbf57987c14d3877f640e1cdc80",
+      "conditions": [
+        {
+          "conditionId": "condition:public:6a55e427936b2ccb7a8c556bc8a3d7746a93e6717ee1c8da07787d0c2fcb4900",
+          "field": "purpose",
+          "operator": "eq",
+          "value": "OWNER_OCCUPIED",
+          "evidenceIds": [
+            "evidence:public:88a0c4bc785f3aa345b76783e721d91d95b5cc7dc484c32841531956839d7bb1"
+          ]
+        },
+        {
+          "conditionId": "condition:public:12b2266aab5177c11522c31cb62961133d5f5bf830e2f381717da6cde4157a8e",
+          "field": "repayment",
+          "operator": "eq",
+          "value": "PRINCIPAL_AND_INTEREST",
+          "evidenceIds": [
+            "evidence:public:88a0c4bc785f3aa345b76783e721d91d95b5cc7dc484c32841531956839d7bb1"
+          ]
+        }
+      ],
+      "evidenceIds": [
+        "evidence:public:88a0c4bc785f3aa345b76783e721d91d95b5cc7dc484c32841531956839d7bb1"
+      ],
+      "effectiveFrom": "2026-10-12T00:00:00+11:00",
+      "freshness": {
+        "state": "current",
+        "checkedAt": "2026-10-14T11:50:00Z",
+        "lastSuccessAt": "2026-10-14T11:50:00Z",
+        "reasonCodes": []
+      }
+    },
+    {
+      "referenceId": "reference:v1:f2ee5d16aac4ba0a8dbbd6210fc8b96ef2bfbc38d9d3db138e4ec4f37a14b5aa",
+      "providerId": "National Australia Bank Limited",
+      "name": "Base Variable Rate for Residential Investment Home loans",
+      "value": "9.41",
+      "unit": "percentage_points",
+      "scopeId": "scope:reference:f2ee5d16aac4ba0a8dbbd6210fc8b96ef2bfbc38d9d3db138e4ec4f37a14b5aa",
+      "conditions": [
+        {
+          "conditionId": "condition:public:741c4a2486efafdbbb08610d303b98623b31e79e30a85e743fbc58dd3b5be352",
+          "field": "purpose",
+          "operator": "eq",
+          "value": "INVESTMENT",
+          "evidenceIds": [
+            "evidence:public:c9b8199e3ad2fd3f13b0e2ed2fa49c12c2bc51b66f1eda77050d9a1e0d67137c"
+          ]
+        },
+        {
+          "conditionId": "condition:public:12b2266aab5177c11522c31cb62961133d5f5bf830e2f381717da6cde4157a8e",
+          "field": "repayment",
+          "operator": "eq",
+          "value": "PRINCIPAL_AND_INTEREST",
+          "evidenceIds": [
+            "evidence:public:c9b8199e3ad2fd3f13b0e2ed2fa49c12c2bc51b66f1eda77050d9a1e0d67137c"
+          ]
+        }
+      ],
+      "evidenceIds": [
+        "evidence:public:c9b8199e3ad2fd3f13b0e2ed2fa49c12c2bc51b66f1eda77050d9a1e0d67137c"
+      ],
+      "effectiveFrom": "2026-10-12T00:00:00+11:00",
+      "freshness": {
+        "state": "current",
+        "checkedAt": "2026-10-14T11:50:00Z",
+        "lastSuccessAt": "2026-10-14T11:50:00Z",
+        "reasonCodes": []
+      }
+    },
+    {
+      "referenceId": "reference:v1:4c7e4be82e991289ff26459495d83b1890832a49508a931f4f4283602812df4c",
+      "providerId": "National Australia Bank Limited",
+      "name": "Base Variable Rate for Home Loans",
+      "value": "9.77",
+      "unit": "percentage_points",
+      "scopeId": "scope:reference:4c7e4be82e991289ff26459495d83b1890832a49508a931f4f4283602812df4c",
+      "conditions": [
+        {
+          "conditionId": "condition:public:35e69d831f273342d149543363ba03d948592240305c3fb8e3231e3c5df1e6b0",
+          "field": "customerCategory",
+          "operator": "eq",
+          "value": "OVERSEAS_BORROWER",
+          "evidenceIds": [
+            "evidence:public:2b929efea191fb79906b51fc8533ea5a62d33ad0ed02c23d58db77b1475e5a49"
+          ]
+        },
+        {
+          "conditionId": "condition:public:12b2266aab5177c11522c31cb62961133d5f5bf830e2f381717da6cde4157a8e",
+          "field": "repayment",
+          "operator": "eq",
+          "value": "PRINCIPAL_AND_INTEREST",
+          "evidenceIds": [
+            "evidence:public:2b929efea191fb79906b51fc8533ea5a62d33ad0ed02c23d58db77b1475e5a49"
+          ]
+        }
+      ],
+      "evidenceIds": [
+        "evidence:public:2b929efea191fb79906b51fc8533ea5a62d33ad0ed02c23d58db77b1475e5a49"
+      ],
+      "effectiveFrom": "2026-10-12T00:00:00+11:00",
+      "freshness": {
+        "state": "current",
+        "checkedAt": "2026-10-14T11:50:00Z",
+        "lastSuccessAt": "2026-10-14T11:50:00Z",
+        "reasonCodes": []
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "evidence:public:88a0c4bc785f3aa345b76783e721d91d95b5cc7dc484c32841531956839d7bb1",
+      "url": "https://www.nab.com.au/content/dam/nabrwd/documents/rates-and-fees/loans/indicator-rates-for-home-lending.pdf",
+      "sha256": "8529d91aeb66d3ab3e547d5c7107dfee5a2f28c37d63eb5602b6aa26eb6b4781",
+      "checkedAt": "2026-10-14T11:50:00Z",
+      "extractionVersion": "1",
+      "locator": "{\"line\": 3, \"page\": 1, \"text\": \"NAB Base - Variable Base Variable Rate for Home Loans 8.89%\"}"
+    },
+    {
+      "evidenceId": "evidence:public:c9b8199e3ad2fd3f13b0e2ed2fa49c12c2bc51b66f1eda77050d9a1e0d67137c",
+      "url": "https://www.nab.com.au/content/dam/nabrwd/documents/rates-and-fees/loans/indicator-rates-for-home-lending.pdf",
+      "sha256": "8529d91aeb66d3ab3e547d5c7107dfee5a2f28c37d63eb5602b6aa26eb6b4781",
+      "checkedAt": "2026-10-14T11:50:00Z",
+      "extractionVersion": "1",
+      "locator": "{\"line\": 3, \"page\": 2, \"text\": \"NAB Base - Variable Base Variable Rate for Residential Investment Home loans 9.41%\"}"
+    },
+    {
+      "evidenceId": "evidence:public:2b929efea191fb79906b51fc8533ea5a62d33ad0ed02c23d58db77b1475e5a49",
+      "url": "https://www.nab.com.au/content/dam/nabrwd/documents/rates-and-fees/loans/indicator-rates-for-home-lending.pdf",
+      "sha256": "8529d91aeb66d3ab3e547d5c7107dfee5a2f28c37d63eb5602b6aa26eb6b4781",
+      "checkedAt": "2026-10-14T11:50:00Z",
+      "extractionVersion": "1",
+      "locator": "{\"line\": 4, \"page\": 3, \"text\": \"NAB Base - Variable Overseas Borrower Base Variable Rate for Home Loans 9.77%\"}"
+    }
+  ]
+}

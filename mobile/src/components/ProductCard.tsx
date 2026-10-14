@@ -11,8 +11,12 @@ import {
   toFraction,
 } from '../data/format';
 import { useStore } from '../data/store';
+import { useUserRateScenario } from '../hooks/useUserRateScenario';
 import { assessAccess } from '../data/access';
 import { ratePresentation } from '../data/ratePresentation';
+import { usePublicRateCatalogue } from '../data/publicRateCatalogue';
+import { bindCurrentPublicRow, publicRateScenario, resolveRowPublicRate } from '../data/publicRateIntegration';
+import { publicRateOriginLabel, publicRateText } from '../data/publicRatePresentation';
 import { rateQualifier, type RateQualifier } from '../lib/rateQualifier';
 import { openBank } from '../lib/nav';
 import type { LogoRenderState } from '../lib/logoReadiness';
@@ -91,10 +95,17 @@ function ProductCardView({
   const { width, fontScale } = useWindowDimensions();
   const compact = width < 480 || fontScale >= 1.3;
   const textLines = fontScale >= 1.3 ? undefined : 2;
-  const favorite = useStore((s) => s.isRateSaved(row.product_key, row.rate_index ?? null));
+  const favorite = useStore((s) => s.isRateSaved(row.product_key, row.rate_index ?? null, row.public_offer_id));
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const detail = useStore((s) => s.details?.products[row.product_key] ?? null);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
+  const manifest = useStore((s) => s.manifest);
+  const profile = useStore((s) => s.prefs.profileFilters);
+  const { scenario } = useUserRateScenario();
+  const publicCatalogue = usePublicRateCatalogue(manifest);
+  const publicProduct = publicCatalogue.getProduct(row.product_key);
+  const publicResolution = resolveRowPublicRate(row, publicCatalogue, publicRateScenario(section, scenario, profile, row, 'published'));
+  const boundRow = bindCurrentPublicRow(row, publicCatalogue);
   const nonStandard = isNonStandard(row);
   const qualifier = rateQualifier(row, section);
   const access = React.useMemo(
@@ -108,7 +119,9 @@ function ProductCardView({
     ? displayedRateLabel ?? presentation.primaryLabel
     : presentation.primaryLabel;
   const rateValue = hasDisplayedRateOverride ? displayedRate : presentation.primary;
-  const rateText = formatRate(rateValue);
+  const rateText = publicResolution && publicResolution.status !== 'exact' ? publicRateText(publicResolution)
+    : publicResolution?.payableRate && !hasDisplayedRateOverride && rateLabel !== 'Comparison rate'
+      ? publicRateText(publicResolution) : formatRate(rateValue);
   const showingComparisonRate = rateLabel === 'Comparison rate';
   const secondaryRate = section === 'Mortgage'
     ? showingComparisonRate
@@ -191,6 +204,10 @@ function ProductCardView({
               {row.provider}
             </AppText>
             <ProductRateChangeSummaryLine summary={rateChange} section={section} compact />
+            {publicResolution ? <AppText variant="tiny" color="textMuted">
+              {publicRateOriginLabel(publicResolution)}{publicResolution.freshness.lastSuccessAt ? ` · ${publicResolution.freshness.lastSuccessAt.slice(0, 10)}` : ''}
+            </AppText> : null}
+            {publicProduct?.status === 'legacy' ? <AppText variant="tiny" color="textMuted">Not available for new applications.</AppText> : null}
             {tags.length || qualifier.conditional || nonStandard || access.badge ? (
               <Row gap={8} style={{ flexWrap: 'wrap', marginTop: 8 }}>
                 {access.badge ? (
@@ -264,11 +281,11 @@ function ProductCardView({
             </Pressable>
           ) : null}
           <Pressable
-            onPress={() => toggleSavedRate(row, Number.isInteger(row.rate_index) ? 'rate' : 'product')}
+            onPress={() => toggleSavedRate(boundRow, boundRow.public_offer_id || Number.isInteger(row.rate_index) ? 'rate' : 'product')}
             accessibilityRole="button"
             accessibilityLabel={favorite
               ? 'Remove this rate from saved'
-              : Number.isInteger(row.rate_index)
+              : boundRow.public_offer_id || Number.isInteger(row.rate_index)
                 ? 'Save this exact rate'
                 : 'Save all product variants'}
             accessibilityState={{ selected: favorite }}

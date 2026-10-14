@@ -1,4 +1,8 @@
 import { SearchReportExport } from '../src/components/SearchReportExport';
+import { PublicPricingCoverage, PublicProductDiscovery } from '../src/components/scenario/PublicPricingCoverage';
+import { usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
+import { publicComparisonCore, publicRateScenario, publicRecommendationRows, resolvedPublicRankingRows } from '../src/data/publicRateIntegration';
+import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
 import Ionicons from '../src/components/icons/AppIcon';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
@@ -80,8 +84,8 @@ function compatibleSortKey(
   return section === 'Mortgage' && mortgageMetric === 'headline' ? normalized : 'rate';
 }
 
-const rowToken = (r: { rate_index?: number | string; product_key: string }) =>
-  r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
+const rowToken = (r: RateRow) =>
+  r.public_offer_id ? `offer:${r.public_offer_id}#${r.product_key}` : r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
 
 const SearchProductRow = React.memo(function SearchProductRow({ row, section, selectMode, selected, onToggleSelect,
   onLogoRenderStateChange }: {
@@ -89,7 +93,7 @@ const SearchProductRow = React.memo(function SearchProductRow({ row, section, se
   onToggleSelect: (token: string) => void;
   onLogoRenderStateChange: (id: string, state: LogoRenderState) => void;
 }) {
-  const onPress = useCallback(() => selectMode ? onToggleSelect(rowToken(row)) : openProduct(row.product_key, row.rate_index),
+  const onPress = useCallback(() => selectMode ? onToggleSelect(rowToken(row)) : openProduct(row.product_key, row.rate_index, row.public_programme_id),
     [selectMode, onToggleSelect, row]);
   return <ProductCard row={row} section={section}
     logoRenderStateId={`search:${row.rate_index ?? 'default'}#${row.product_key}`}
@@ -121,6 +125,10 @@ export default function Search() {
   const path = useMemo(() => (pathRaw ?? '').split('.').filter(Boolean), [pathRaw]);
   const hierarchyScoped = scopeRaw === 'hierarchy';
   const core = useStore((s) => s.core);
+  const manifest = useStore((s) => s.manifest);
+  const profile = useStore((s) => s.prefs.profileFilters);
+  const publicCatalogue = usePublicRateCatalogue(manifest);
+  const { scenario } = useUserRateScenario();
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? null);
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
@@ -213,9 +221,12 @@ export default function Search() {
   }, [mortgageRateMetric, restoredSub, section]);
 
   const baseRows = useMemo(() => {
-    const all = core?.sections[section]?.rates ?? [];
+    void suitabilityRevision;
+    const all = resolvedPublicRankingRows(publicRecommendationRows(core?.sections[section]?.rates ?? [], publicCatalogue, section,
+      publicRateScenario(section, scenario, profile)), publicCatalogue,
+      row => publicRateScenario(section, scenario, profile, row)).rows;
     return rowsForSearchScope(all, section, path, hierarchyScoped);
-  }, [core, section, path, hierarchyScoped, suitabilityRevision]);
+  }, [core, section, path, hierarchyScoped, suitabilityRevision, publicCatalogue, scenario, profile]);
   const filterOptions = useSearchFilterOptions(baseRows, details?.products, section, suitabilityRevision);
 
   const effectiveFilters = useMemo(
@@ -311,7 +322,8 @@ export default function Search() {
 
   const toggleSelect = useCallback((key: string) => {
     if (!core) return;
-    const update = toggleCompareSelection(core, selected, key);
+    const update = toggleCompareSelection(publicComparisonCore(core, publicCatalogue,
+      section => publicRateScenario(section, scenario, profile)), selected, key);
     if (update.rejection === 'limit_reached') {
       Alert.alert('Compare up to four', 'Remove one product before adding another.');
       return;
@@ -325,7 +337,7 @@ export default function Search() {
       return;
     }
     setSelected(update.tokens);
-  }, [core, selected]);
+  }, [core, selected, publicCatalogue, scenario, profile]);
 
   const toggleCompareMode = useCallback(() => {
     hapticSelection();
@@ -489,6 +501,7 @@ export default function Search() {
           {searchPending ? 'Preparing products…' : `${rows.length} ${rows.length === 1 ? 'product' : 'products'}`}
           {searchSub ? ` · alert saved as ${searchSub.label}` : ''}
         </AppText>
+        <PublicPricingCoverage section={section} rows={core?.sections[section]?.rates ?? []} scenario={scenario} compact />
         {searchIndexUnavailable && searchIndexStatus === 'unavailable' ? (
           // Not retryable: this edition or data source has no search index.
           <AppText variant="tiny" color="textFaint">
@@ -521,6 +534,7 @@ export default function Search() {
         <FlashList
           ref={listRef}
           drawDistance={120}
+          ListFooterComponent={<PublicProductDiscovery section={section} query={query} rows={rows} />}
           // Only changed result identities require a new list. Selection and
           // filter-sheet visibility commit in place through extraData below.
           key={`search:${listDataRevision}`}

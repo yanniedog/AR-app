@@ -14,10 +14,9 @@ export function toFraction(rate: string | number | null | undefined): number | n
 
 /**
  * The metric every ranking/aggregation should use: the comparison rate (which
- * folds in fees and is the honest cost of a loan) when the row publishes a valid
- * one, else the headline rate. Deposits carry no comparison rate, so this is a
- * no-op for them. Keeping this in one place is what makes "comparison rate is the
- * default metric for all calculations" true everywhere rather than per-call.
+ * summarizes a lender's standardized comparison scenario) when the row publishes
+ * one, else the headline rate. This is a display/sort metric. Amortisation,
+ * interest and cost calculations must use payable nominal interest instead.
  */
 export function effectiveRate(
   row: { rate: string | number; comparison_rate?: string | number } | null | undefined,

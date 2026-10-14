@@ -1,4 +1,3 @@
-import { mandatoryEligibleRows, mandatoryProductAllowed } from '../../data/eligibilityGate';
 import { useSuitabilityRevision } from '../../hooks/useSuitabilityRevision';
 import Ionicons from '../icons/AppIcon';
 import React, { useMemo, useState } from 'react';
@@ -7,8 +6,12 @@ import { Modal, Pressable, ScrollView, View } from 'react-native';
 import type { CurrentProductReference } from '../../data/userRateScenario';
 import { NOT_LISTED_PROVIDER } from '../../data/userRateScenario';
 import { formatRate } from '../../data/format';
-import { alphabeticalScenarioProviders, currentProductOptions } from '../../data/scenarioCatalog';
-import type { RateRow } from '../../types';
+import { alphabeticalScenarioProviders, currentProductDiscovery, currentProductSelectionMatches, type CurrentProductOption } from '../../data/scenarioCatalog';
+import type { RateRow, SectionKey } from '../../types';
+import { useStore } from '../../data/store';
+import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
+import { PublicRateEvidence } from './PublicRateEvidence';
+import { bindCurrentPublicRow } from '../../data/publicRateIntegration';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from '../ui';
@@ -24,41 +27,53 @@ export function CurrentBankPicker({
   value,
   onChange,
   editable = true,
+  section,
 }: {
   label: string;
   rows: RateRow[];
   value: CurrentProductReference;
   onChange: (value: CurrentProductReference) => void;
   editable?: boolean;
+  section?: SectionKey;
 }) {
   const revision = useSuitabilityRevision();
   const theme = useTheme();
-  if (value.productKey && !mandatoryProductAllowed(value.productKey)) value = { provider: '', productKey: '', rateIndex: null };
   const reducedMotion = useReducedMotion();
   const [open, setOpen] = useState<'bank' | 'product' | null>(null);
+  const manifest = useStore(state => state.manifest);
+  const catalogue = usePublicRateCatalogue(manifest);
+  const publicRows = useMemo(() => rows.map(row => bindCurrentPublicRow(row, catalogue)), [rows, catalogue]);
+  const discovery = useMemo(() => catalogue.products.filter(product => !section || product.section === section), [catalogue.products, section]);
   const providers = useMemo(
-    () => open === 'bank' ? alphabeticalScenarioProviders(rows) : [],
-    [open, rows, revision],
+    () => { void revision; return open === 'bank' ? alphabeticalScenarioProviders(rows, discovery, catalogue.coverage.filter(item => !section || item.section === section).map(item => item.providerName)) : []; },
+    [open, rows, discovery, catalogue.coverage, section, revision],
   );
   const products = useMemo(() => {
+    void revision;
     if (open !== 'product' || !value.provider || value.provider === NOT_LISTED_PROVIDER) return [];
-    return currentProductOptions(rows, value.provider);
-  }, [open, rows, value.provider, revision]);
+    return currentProductDiscovery(publicRows, discovery, value.provider, section);
+  }, [open, publicRows, discovery, value.provider, section, revision]);
   const selectedProduct = useMemo(() => {
+    void revision;
     if (!value.productKey) return undefined;
-    return mandatoryEligibleRows(rows).find((row) =>
-      row.product_key === value.productKey && (row.rate_index ?? null) === value.rateIndex,
-    );
-  }, [rows, value.productKey, value.rateIndex, revision]);
+    return currentProductDiscovery(publicRows, discovery, value.provider, section).find(option => currentProductSelectionMatches(option, value));
+  }, [publicRows, discovery, value, section, revision]);
   const chooseBank = (provider: string) => {
     onChange({ provider, productKey: '', rateIndex: null });
     setOpen(null);
   };
-  const chooseProduct = (row: RateRow | null) => {
+  const chooseProduct = async (option: CurrentProductOption | null) => {
+    if (option?.row && option.product && catalogue.status === 'ready' && !option.offerId) {
+      await catalogue.loadProduct(option.product.productId).catch(() => undefined);
+      const bound = bindCurrentPublicRow(option.row, catalogue);
+      option = { ...option, offerId: bound.public_offer_id, programmeId: bound.public_programme_id };
+    }
     onChange({
       provider: value.provider,
-      productKey: row?.product_key ?? '',
-      rateIndex: row?.rate_index ?? null,
+      productKey: option?.productKey ?? '',
+      rateIndex: option?.row?.rate_index ?? null,
+      ...(option?.offerId ? { offerId: option.offerId } : {}),
+      ...(option?.programmeId ? { programmeId: option.programmeId } : {}),
     });
     setOpen(null);
   };
@@ -91,21 +106,24 @@ export function CurrentBankPicker({
         <Pressable
           onPress={() => editable && setOpen('product')}
           accessibilityRole="button"
-          accessibilityLabel={`Current product, ${selectedProduct?.product_name ?? 'not matched'}`}
-          accessibilityHint="Optional. Match the exact current product tier for published fee evidence."
+          accessibilityLabel={`Current product, ${selectedProduct?.name ?? 'not matched'}`}
+          accessibilityHint="Select the product and pricing regime explicitly; entered rates stay unchanged."
           accessibilityState={{ disabled: !editable }}
           style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1, paddingVertical: 3 })}
         >
           <AppText variant="small" color="primary" weight="700">
-            {selectedProduct ? selectedProduct.product_name : 'Match current product (optional)'}
+            {selectedProduct ? selectedProduct.name : 'Find current product (optional)'}
           </AppText>
           {selectedProduct ? (
             <AppText variant="tiny" color="textMuted">
-              {formatRate(selectedProduct.rate)} advertised{selectedProduct.comparison_rate ? ` · ${formatRate(selectedProduct.comparison_rate)} comparison` : ''}
+              {selectedProduct.row ? `${formatRate(selectedProduct.row.rate)} published rate` : 'Product identified · pricing needs public evidence'}
             </AppText>
           ) : null}
         </Pressable>
       ) : null}
+      {selectedProduct ? <PublicRateEvidence productKey={selectedProduct.productKey} programmeId={value.programmeId} row={selectedProduct.row} compact
+        onSelectProgramme={(programmeId, offerId) => onChange({ ...value, programmeId, offerId })} /> : null}
+      {catalogue.status === 'error' ? <AppText variant="tiny" color="textMuted">Public product discovery could not load. {catalogue.error}</AppText> : null}
       <Modal
         visible={open != null}
         transparent
@@ -125,7 +143,7 @@ export function CurrentBankPicker({
               <View style={{ flex: 1 }}>
                 <AppText variant="h3">{modalTitle}</AppText>
                 <AppText variant="tiny" color="textMuted">
-                  {open === 'bank' ? 'Banks are listed A–Z.' : 'Optional published-data match.'}
+                  {open === 'bank' ? 'Banks are listed A–Z, including products without a resolved rate.' : 'Choose the exact product and pricing regime. Your entered rate stays unchanged.'}
                 </AppText>
               </View>
               <Button title="Close" variant="ghost" onPress={() => setOpen(null)} />
@@ -169,22 +187,23 @@ export function CurrentBankPicker({
               ) : open === 'product' ? (
                 <>
                   <Pressable
-                    onPress={() => chooseProduct(null)}
+                    onPress={() => void chooseProduct(null)}
                     accessibilityRole="radio"
                     accessibilityState={{ checked: !value.productKey }}
                     style={{ minHeight: 48, justifyContent: 'center', paddingHorizontal: 10 }}
                   >
                     <AppText weight="700">No exact match</AppText>
                   </Pressable>
-                  {products.map((row) => {
-                    const checked = row.product_key === value.productKey && (row.rate_index ?? null) === value.rateIndex;
+                  {products.map((option) => {
+                    const row = option.row;
+                    const checked = currentProductSelectionMatches(option, value);
                     return (
                       <Pressable
-                        key={`${row.product_key}:${row.rate_index ?? ''}`}
-                        onPress={() => chooseProduct(row)}
+                        key={`${option.productKey}:${option.offerId ?? row?.rate_index ?? 'discovery'}`}
+                        onPress={() => void chooseProduct(option)}
                         accessibilityRole="radio"
                         accessibilityState={{ checked }}
-                        accessibilityLabel={`${row.product_name}, ${formatRate(row.rate)} advertised rate`}
+                        accessibilityLabel={`${option.name}, ${row ? `${formatRate(row.rate)} published rate` : 'pricing unresolved'}`}
                         style={({ pressed }) => ({
                           minHeight: 56,
                           justifyContent: 'center',
@@ -195,10 +214,12 @@ export function CurrentBankPicker({
                           opacity: pressed ? 0.65 : 1,
                         })}
                       >
-                        <AppText weight={checked ? '800' : '500'}>{row.product_name}</AppText>
+                        <AppText weight={checked ? '800' : '500'}>{option.name}</AppText>
                         <AppText variant="tiny" color="textMuted">
-                          {formatRate(row.rate)} advertised{row.comparison_rate ? ` · ${formatRate(row.comparison_rate)} comparison` : ''}
+                          {row ? `${formatRate(row.rate)} published${row.comparison_rate ? ` · ${formatRate(row.comparison_rate)} comparison` : ''}` : 'Pricing unresolved · available to identify'}
                         </AppText>
+                        {option.aliases.length ? <AppText variant="tiny" color="textMuted">Also known as {option.aliases.join(', ')}</AppText> : null}
+                        {option.status === 'legacy' ? <AppText variant="tiny" color="textMuted">Not available for new applications</AppText> : null}
                       </Pressable>
                     );
                   })}

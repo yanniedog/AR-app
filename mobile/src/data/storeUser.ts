@@ -3,6 +3,8 @@ import type { SectionKey } from '../types';
 import { cache } from './cache';
 import { resetRbaMarketOutlookRuntimeCache } from './rbaMarketOutlook';
 import { resetDetailSearchIndexCache } from './detailSearch';
+import { getPublicRateCatalogueSnapshot } from './publicRateCatalogue';
+import { bindCurrentPublicRow } from './publicRateIntegration';
 import {
   addSubscription,
   findSearchSubscription as lookupSearchSubscription,
@@ -135,7 +137,10 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
     },
 
     toggleSavedRate(row: Parameters<AppState['toggleSavedRate']>[0], scope: Parameters<AppState['toggleSavedRate']>[1] = 'rate') {
-      const savedRates = toggleSavedRateRefs(get().savedRates, row, scope);
+      const catalogue = get().manifest?.public_rate_catalogue ? getPublicRateCatalogueSnapshot(get().manifest) : undefined;
+      const bound = catalogue ? bindCurrentPublicRow(row, catalogue) : row;
+      const selectedScope = scope === 'rate' && catalogue && !bound.public_offer_id ? 'product' : scope;
+      const savedRates = toggleSavedRateRefs(get().savedRates, bound, selectedScope);
       const trackedRates = normalizeTrackedRates(get().trackedRates, savedRates);
       set({
         savedRates,
@@ -186,23 +191,36 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       }
     },
 
-    isRateSaved(productKey: string, rateIndex: number | null) {
-      return savedRateExists(get().savedRates, productKey, rateIndex);
+    isRateSaved(productKey: string, rateIndex: number | null, selectedOfferId?: string) {
+      if (selectedOfferId) return savedRateExists(get().savedRates, productKey, rateIndex, selectedOfferId);
+      const catalogue = get().manifest?.public_rate_catalogue ? getPublicRateCatalogueSnapshot(get().manifest) : undefined;
+      if (!catalogue || !get().savedRates.some(ref => ref.productKey === productKey)) return savedRateExists(get().savedRates, productKey, rateIndex);
+      const row = Object.values(get().core?.sections ?? {}).flatMap(section => section.rates)
+        .find(candidate => candidate.product_key === productKey && (candidate.rate_index ?? null) === rateIndex);
+      const offerId = catalogue && row ? bindCurrentPublicRow(row, catalogue).public_offer_id : undefined;
+      return savedRateExists(get().savedRates, productKey, rateIndex, offerId);
     },
 
     subscribeProduct(productKey: string, rateIndex: number | null, labelRow: Parameters<AppState['subscribeProduct']>[2]) {
-      if (productIsSubscribed(get().subscriptions, productKey, rateIndex)) return false;
+      const catalogue = get().manifest?.public_rate_catalogue ? getPublicRateCatalogueSnapshot(get().manifest) : undefined;
+      const row = catalogue ? bindCurrentPublicRow(labelRow, catalogue) : labelRow;
+      if (catalogue && rateIndex != null && !row.public_offer_id) return false;
+      if (productIsSubscribed(get().subscriptions, productKey, rateIndex, row.public_offer_id)) return false;
       set({
         subscriptions: addSubscription(
           get().subscriptions,
-          makeProductSubscription(labelRow, rateIndex),
+          makeProductSubscription(row, rateIndex),
         ),
       });
       return true;
     },
 
-    unsubscribeProduct(productKey: string, rateIndex: number | null) {
-      const id = productSubscriptionId(productKey, rateIndex);
+    unsubscribeProduct(productKey: string, rateIndex: number | null, selectedOfferId?: string) {
+      const catalogue = get().manifest?.public_rate_catalogue ? getPublicRateCatalogueSnapshot(get().manifest) : undefined;
+      const row = catalogue ? Object.values(get().core?.sections ?? {}).flatMap(section => section.rates)
+        .find(candidate => candidate.product_key === productKey && (candidate.rate_index ?? null) === rateIndex) : undefined;
+      const offerId = selectedOfferId ?? (row && catalogue ? bindCurrentPublicRow(row, catalogue).public_offer_id : undefined);
+      const id = productSubscriptionId(productKey, rateIndex, offerId);
       set({ subscriptions: dropSubscription(get().subscriptions, id) });
     },
 
@@ -227,8 +245,12 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       set({ subscriptions: addSubscription(get().subscriptions, sub) });
     },
 
-    isProductSubscribed(productKey: string, rateIndex: number | null) {
-      return productIsSubscribed(get().subscriptions, productKey, rateIndex);
+    isProductSubscribed(productKey: string, rateIndex: number | null, selectedOfferId?: string) {
+      if (selectedOfferId) return productIsSubscribed(get().subscriptions, productKey, rateIndex, selectedOfferId);
+      const catalogue = get().manifest?.public_rate_catalogue ? getPublicRateCatalogueSnapshot(get().manifest) : undefined;
+      if (!catalogue || !get().subscriptions.some(sub => sub.kind === 'product' && sub.productKey === productKey)) return productIsSubscribed(get().subscriptions, productKey, rateIndex);
+      const row = Object.values(get().core?.sections ?? {}).flatMap(section => section.rates).find(candidate => candidate.product_key === productKey && (candidate.rate_index ?? null) === rateIndex);
+      return productIsSubscribed(get().subscriptions, productKey, rateIndex, row ? bindCurrentPublicRow(row, catalogue).public_offer_id : undefined);
     },
 
     findSearchSubscription(input: Parameters<AppState['findSearchSubscription']>[0]) {

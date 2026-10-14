@@ -1,6 +1,5 @@
 import { commissionerFamily } from '../src/theme/fonts';
 import { router, useLocalSearchParams } from 'expo-router';
-import { mandatoryProductAllowed } from '../src/data/eligibilityGate';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, TextInput, useWindowDimensions, View } from 'react-native';
 
@@ -12,16 +11,19 @@ import {
 } from '../src/components/product/ProductRateChangeLine';
 import { ProfileEditor } from '../src/components/ProfileEditor';
 import { CurrentBankPicker } from '../src/components/scenario/CurrentBankPicker';
+import { LocalRateEditor } from '../src/components/scenario/LocalRateEditor';
+import { PublicPricingCoverage } from '../src/components/scenario/PublicPricingCoverage';
+import { PublicCostComparison } from '../src/components/scenario/PublicCostComparison';
+import { SavingsQualificationEditor } from '../src/components/scenario/SavingsQualificationEditor';
 import { SwitchCostEditor } from '../src/components/scenario/SwitchCostEditor';
 import { ScreenScrollView } from '../src/components/Screen';
-import { SegmentedControl } from '../src/components/controls';
+import { CompactToggle, SegmentedControl } from '../src/components/controls';
 import { AppText, Badge, Button, Card, Disclosure, Row } from '../src/components/ui';
 import { SECTIONS } from '../src/constants';
 import { assessAccess } from '../src/data/access';
 import {
   advertisedTermMonths,
   calculatorAmount,
-  calculatorRateFraction,
   calculatorYears,
   computeLvr,
   depositToReachLvr,
@@ -33,7 +35,7 @@ import {
   termDepositInterestDifference,
   type CalcInputs,
 } from '../src/data/calc';
-import { formatRate, toFraction, visibleAccountRows } from '../src/data/format';
+import { formatRate, visibleAccountRows } from '../src/data/format';
 import { lvrTierDisplay } from '../src/data/lvrTier';
 import type { CurrentProductReference, MortgageSwitchInputs } from '../src/data/userRateScenario';
 import { sectionSegmentOptions } from '../src/data/interests';
@@ -48,6 +50,8 @@ import { distinctValues, rankFraction } from '../src/data/selectors';
 import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
 import { useStore } from '../src/data/store';
 import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
+import { usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
+import { publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { rowsUnder, statsFor } from '../src/data/taxonomy';
@@ -83,6 +87,8 @@ export default function Calculator() {
   const { width } = useWindowDimensions();
   const compactFields = width < 380;
   const core = useStore((s) => s.core);
+  const manifest = useStore((s) => s.manifest);
+  const publicCatalogue = usePublicRateCatalogue(manifest);
   const storeStatus = useStore((s) => s.status);
   const storeError = useStore((s) => s.error);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
@@ -146,12 +152,19 @@ export default function Calculator() {
     retryLoad: retryScenarioLoad,
   } = useUserRateScenario();
   const inputs = scenario.mortgage;
+  const localRateResolution = resolveLocalCurrentRate(section, scenario, publicCatalogue.references, undefined, publicCatalogue, profileFilters);
+  const calculationScenario = scenarioWithLocalCurrentRate(section, scenario, localRateResolution);
+  const privateRenderCounter = useRef(0);
+  const privateRenderRevision = useMemo(() => { void scenario; return ++privateRenderCounter.current; }, [scenario]);
+  const { status: publicCatalogueStatus, allLoaded: publicAllLoaded, loadAll: loadPublicCatalogue } = publicCatalogue;
+  useEffect(() => {
+    if (publicCatalogueStatus === 'ready' && !publicAllLoaded) void loadPublicCatalogue().catch(() => undefined);
+  }, [publicCatalogueStatus, publicAllLoaded, loadPublicCatalogue]);
   const upd = (patch: Partial<CalcInputs>) =>
     updateScenario((prev) => ({ ...prev, mortgage: { ...prev.mortgage, ...patch } }));
   const scenarioSectionKey = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
   const savedCurrentProduct = scenario.currentProducts[scenarioSectionKey];
-  const currentProduct = savedCurrentProduct.productKey && !mandatoryProductAllowed(savedCurrentProduct.productKey)
-    ? { provider: '', productKey: '', rateIndex: null } : savedCurrentProduct;
+  const currentProduct = savedCurrentProduct;
   const updateCurrentProduct = (value: CurrentProductReference) => updateScenario((prev) => ({
     ...prev,
     currentProducts: { ...prev.currentProducts, [scenarioSectionKey]: value },
@@ -193,9 +206,10 @@ export default function Calculator() {
 
   // Profile-matched comparable rows. A calculated LVR applies only to this
   // scenario and never silently rewrites the saved browsing profile.
-  const rows = useMemo(() => {
+  const eligibleRows = useMemo(() => {
     void suitabilityRevision;
-    const all = core?.sections?.[section]?.rates ?? [];
+    const all = publicRecommendationRows(core?.sections?.[section]?.rates ?? [], publicCatalogue, section,
+      publicRateScenario(section, scenario, profileFilters));
     const scenarioProfile =
       section === 'Mortgage' && lvrBand
         ? { ...profileFilters, lvrTiers: [lvrBand] }
@@ -210,7 +224,10 @@ export default function Calculator() {
       includeNonStandard,
       details?.products,
     );
-  }, [core, section, profileFilters, includeNonStandard, details, lvrBand, suitabilityRevision]);
+  }, [core, section, profileFilters, includeNonStandard, details, lvrBand, suitabilityRevision, publicCatalogue, scenario]);
+  const publicPricing = useMemo(() => resolvedPublicRankingRows(eligibleRows, publicCatalogue,
+    row => publicRateScenario(section, scenario, profileFilters, row)), [eligibleRows, publicCatalogue, section, scenario, profileFilters]);
+  const rows = publicPricing.rows;
 
   const median = useMemo(() => statsFor(rows, true, section).median, [rows, section]);
 
@@ -230,8 +247,10 @@ export default function Calculator() {
   const depositInputs = section === 'TD' ? scenario.termDeposit : scenario.savings;
   const depositBalance = calculatorAmount(depositInputs.balance, MAX_CALCULATOR_DEPOSIT_AMOUNT);
   const balance = isMortgage ? lvrResult.loan ?? 0 : depositBalance ?? 0;
-  const currentRateInput = isMortgage ? inputs.currentRate : depositInputs.currentRate;
-  const currentRate = calculatorRateFraction(currentRateInput);
+  const currentRateInput = isMortgage ? calculationScenario.mortgage.currentRate
+    : section === 'TD' ? calculationScenario.termDeposit.currentRate : calculationScenario.savings.currentRate;
+  const currentRate = localRateResolution.status === 'exact' && localRateResolution.payableRate != null
+    ? Number(localRateResolution.payableRate) : null;
   const years = calculatorYears(inputs.years);
   const months = years == null ? 0 : Math.round(years * 12);
   const issues: CalculatorIssue[] = [];
@@ -264,8 +283,9 @@ export default function Calculator() {
   } else if (depositBalance == null || depositBalance <= 0) {
     invalid(`Balance must be greater than $0 and no more than $${MAX_CALCULATOR_DEPOSIT_AMOUNT.toLocaleString('en-AU')}.`);
   }
-  if (!currentRateInput.trim()) empty(CALCULATOR_FIELDS.currentRate, 'Enter the current interest rate.');
-  else if (currentRate == null) invalid('Current rate must be greater than 0% and no more than 100%.');
+  if (!currentRateInput.trim()) empty(CALCULATOR_FIELDS.currentRate, scenario.localRates[scenarioSectionKey].mode === 'reference'
+    ? 'Choose an available public reference and enter its total adjustment.' : 'Enter the current interest rate.');
+  else if (currentRate == null) invalid('Current rate must be from 0% to 100%.');
   const inputIssues = issues.map((issue) => issue.message);
   // Empty fields are flagged once they have been left, not before any input.
   const shownInputIssues = visibleCalculatorIssues(issues, leftFields);
@@ -273,22 +293,26 @@ export default function Calculator() {
 
   const candidates = useMemo<Candidate[]>(() => {
     if (inputIssueKey || currentRate === null || balance <= 0 || (isLoan && months <= 0)) return [];
-    const bestByProvider = new Map<string, { row: RateRow; rate: number; projectionRate: number }>();
+    const pricedOffers: { row: RateRow; rate: number; projectionRate: number }[] = [];
+    const seen = new Set<string>();
     for (const row of rows) {
       const v = rankFraction(row, section, depositRankMetric, mortgageRateMetric);
       if (v === null) continue;
-      const prev = bestByProvider.get(row.provider);
-      if (!prev || (isLoan ? v < prev.rate : v > prev.rate)) {
-        // Comparison rate is a ranking aid, not the contractual interest rate
-        // used by an amortisation formula.
-        const projectionRate = section === 'Mortgage' ? toFraction(row.rate) : v;
-        if (projectionRate !== null) bestByProvider.set(row.provider, { row, rate: v, projectionRate });
-      }
+      const token = row.public_offer_id ?? `${row.product_key}:${row.rate_index ?? ''}`;
+      if (seen.has(token)) continue;
+      seen.add(token);
+      // Every eligible offer is evaluated before limiting the displayed list.
+      const projectionRate = Number(row.rate);
+      if (Number.isFinite(projectionRate) && projectionRate >= 0 && projectionRate <= 1) pricedOffers.push({ row, rate: v, projectionRate });
     }
     const out: Candidate[] = [];
-    for (const { row, rate, projectionRate } of bestByProvider.values()) {
+    for (const { row, rate, projectionRate } of pricedOffers) {
       if (isLoan ? projectionRate >= currentRate : projectionRate <= currentRate) continue;
       if (isLoan) {
+        if (!scenario.projections.mortgage.holdVariableRate) {
+          out.push({ row, rate, projectionRate, perMonth: null, total: null, totalLabel: 'Rate only', unavailableReason: 'Select the assumption to hold variable/reference rates unchanged before calculating.' });
+          continue;
+        }
         const perMonth = monthlyPayment(balance, currentRate, months) - monthlyPayment(balance, projectionRate, months);
         const fixedMonths = isPublishedFixedRate(row) ? advertisedTermMonths(row) : null;
         out.push({
@@ -303,12 +327,14 @@ export default function Calculator() {
           unavailableReason: null,
         });
       } else {
-        const unavailableReason = quickEstimateUnavailableReason(row, section);
+        const unavailableReason = quickEstimateUnavailableReason(row, section)
+          ?? (section === 'Savings' && !scenario.projections.savings.holdVariableRate
+            ? 'Select the assumption to hold variable rates unchanged before calculating.' : null);
         if (unavailableReason) {
           out.push({ row, rate, projectionRate, perMonth: null, total: null, totalLabel: 'Rate only', unavailableReason });
           continue;
         }
-        const perYear = balance * (rate - currentRate);
+        const perYear = balance * (projectionRate - currentRate);
         const maturityMonths = section === 'TD' ? advertisedTermMonths(row) : null;
         const total = maturityMonths
           ? termDepositInterestDifference(balance, currentRate, projectionRate, maturityMonths)
@@ -334,7 +360,7 @@ export default function Calculator() {
       if (bEstimate == null) return -1;
       return bEstimate - aEstimate;
     }).slice(0, 10);
-  }, [rows, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric, inputIssueKey]);
+  }, [rows, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric, inputIssueKey, scenario.projections]);
   const currentProductDetail = currentProduct.productKey
     ? details?.products?.[currentProduct.productKey] ?? null
     : null;
@@ -359,7 +385,7 @@ export default function Calculator() {
           'No better comparable calculator candidates are available for the current scenario inputs',
       };
     }
-    openProduct(candidate.row.product_key, candidate.row.rate_index);
+    openProduct(candidate.row.product_key, candidate.row.rate_index, candidate.row.public_programme_id);
     return { expectedPath: `/product/${encodeURIComponent(candidate.row.product_key)}` };
   }, [candidates]);
   const openProjections = useCallback(async () => {
@@ -409,6 +435,7 @@ export default function Calculator() {
       }
       updateScenario((prev) => ({
         ...prev,
+        localRates: { ...prev.localRates, mortgage: { ...prev.localRates.mortgage, mode: 'entered' } },
         mortgage: {
           ...prev.mortgage,
           ...(mode ? { mode } : {}),
@@ -423,8 +450,6 @@ export default function Calculator() {
       return {
         applied: 'mortgage',
         mode: mode ?? inputs.mode,
-        propertyValue: propertyValue ?? null,
-        currentRate: currentRate ?? null,
       };
     }
     if (!balance && !currentRate) {
@@ -439,12 +464,13 @@ export default function Calculator() {
           ...(balance ? { balance } : {}),
           ...(currentRate ? { currentRate } : {}),
         },
+        localRates: { ...prev.localRates, [key]: { ...prev.localRates[key], mode: 'entered' } },
       };
     });
-    return { applied: section === 'TD' ? 'termDeposit' : 'savings', balance: balance ?? null, currentRate: currentRate ?? null };
+    return { applied: section === 'TD' ? 'termDeposit' : 'savings' };
   }, [inputs.mode, scenarioStorageStatus, section, updateScenario]);
   const coreRevision = core ? `${core.run_date}:${coreSha}` : null;
-  const calculatorRenderRevision = `${coreRevision ?? 'none'}:${section}:${scenarioStorageStatus}:${candidates.length}:${inputs.mode}:${inputs.propertyValue}:${inputs.currentRate}:${depositInputs.balance}`;
+  const calculatorRenderRevision = `${coreRevision ?? 'none'}:${section}:${scenarioStorageStatus}:${candidates.length}:${privateRenderRevision}`;
   const calculatorLogoIds = useMemo(
     () => candidates.map((candidate) =>
       `calculator:${candidate.row.product_key}:${candidate.row.rate_index ?? 'none'}`),
@@ -590,6 +616,7 @@ export default function Calculator() {
       <Card style={{ marginBottom: 16 }}>
         <View style={{ marginBottom: 14 }}>
           <CurrentBankPicker
+            section={section}
             label={section === 'Mortgage' ? 'Current mortgage bank' : section === 'TD' ? 'Current term deposit bank' : 'Current savings bank'}
             rows={core?.sections?.[section]?.rates ?? []}
             value={currentProduct}
@@ -597,6 +624,29 @@ export default function Calculator() {
             editable={scenarioStorageStatus === 'ready'}
           />
         </View>
+        <LocalRateEditor section={section} scenario={scenario} editable={scenarioStorageStatus === 'ready'}
+          onChange={patch => updateScenario(previous => ({ ...previous, localRates: {
+            ...previous.localRates, [scenarioSectionKey]: { ...previous.localRates[scenarioSectionKey], ...patch },
+          } }))}>
+          {field('Current rate (%)', isMortgage ? inputs.currentRate : depositInputs.currentRate, currentRate => updateScenario(previous => ({
+            ...previous, [scenarioSectionKey]: { ...previous[scenarioSectionKey], currentRate },
+          })), median !== null ? (median * 100).toFixed(2) : '6.00', CALCULATOR_FIELDS.currentRate)}
+        </LocalRateEditor>
+        {section === 'Savings' ? <SavingsQualificationEditor inputs={scenario.projections.savings} editable={scenarioStorageStatus === 'ready'}
+          onChange={patch => updateScenario(previous => ({ ...previous, projections: {
+            ...previous.projections, savings: { ...previous.projections.savings, ...patch },
+          } }))} /> : null}
+        {section !== 'TD' ? <View style={{ marginVertical: 12, gap: 8 }}>
+          <CompactToggle label="Assume variable/reference rates stay unchanged for this scenario"
+            value={scenario.projections[scenarioSectionKey].holdVariableRate}
+            onChange={holdVariableRate => updateScenario(previous => ({ ...previous, projections: {
+              ...previous.projections, [scenarioSectionKey]: { ...previous.projections[scenarioSectionKey], holdVariableRate },
+            } }))} />
+          {field('Comparison period (years)', scenario.projections[scenarioSectionKey].horizonYears,
+            horizonYears => updateScenario(previous => ({ ...previous, projections: {
+              ...previous.projections, [scenarioSectionKey]: { ...previous.projections[scenarioSectionKey], horizonYears },
+            } })), section === 'Mortgage' ? '3' : '1', 'Comparison period')}
+        </View> : null}
         {isMortgage ? (
           <>
             <View style={{ marginBottom: 10 }}>
@@ -667,7 +717,6 @@ export default function Calculator() {
             )}
 
             <Row gap={10} style={{ marginTop: 12, ...(compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : null) }}>
-              {field('Current rate (%)', inputs.currentRate, (t) => upd({ currentRate: t }), median !== null ? (median * 100).toFixed(2) : '6.00', CALCULATOR_FIELDS.currentRate)}
               {field('Years left', inputs.years, (t) => upd({ years: t }), '25', CALCULATOR_FIELDS.years, 86)}
             </Row>
             <View style={{ marginTop: 14 }}>
@@ -700,19 +749,6 @@ export default function Calculator() {
                 '50,000',
                 CALCULATOR_FIELDS.depositBalance,
               )}
-              {field(
-                'Current rate (%)',
-                depositInputs.currentRate,
-                (currentRate) => updateScenario((prev) => ({
-                  ...prev,
-                  [section === 'TD' ? 'termDeposit' : 'savings']: {
-                    ...(section === 'TD' ? prev.termDeposit : prev.savings),
-                    currentRate,
-                  },
-                })),
-                median !== null ? (median * 100).toFixed(2) : '4.50',
-                CALCULATOR_FIELDS.currentRate,
-              )}
             </Row>
           </>
         )}
@@ -724,6 +760,9 @@ export default function Calculator() {
           </View>
         ) : null}
       </Card>
+
+      <PublicPricingCoverage section={section} rows={eligibleRows} scenario={scenario} />
+      {candidates[0] ? <PublicCostComparison section={section} target={candidates[0].row} scenario={calculationScenario} /> : null}
 
       <Card style={{ marginBottom: 16, gap: 10 }}>
         <AppText variant="h3">What if rates change?</AppText>
@@ -837,7 +876,7 @@ export default function Calculator() {
             key={c.row.provider}
             onPress={c === candidates[0]
               ? openFirstCandidate
-              : () => openProduct(c.row.product_key, c.row.rate_index)}
+              : () => openProduct(c.row.product_key, c.row.rate_index, c.row.public_programme_id)}
             accessibilityRole="button"
             accessibilityLabel={`View ${c.row.provider} ${c.row.product_name}, ${rateDescriptor}${
               rateChangeLabel ? `, ${rateChangeLabel}` : ''

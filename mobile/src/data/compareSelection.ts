@@ -26,11 +26,16 @@ export interface CompareSelectionUpdate {
 
 export function resolveCompareSelections(core: CorePayload, tokens: readonly string[]): CompareSelection[] {
   return [...new Set(tokens)].flatMap((token) => {
+    const semantic = /^offer:([^#]+)#([\s\S]+)$/.exec(token);
     const match = /^(\d+)#([\s\S]+)$/.exec(token);
     const rateIndex = match ? Number(match[1]) : null;
-    const productKey = match ? match[2] : token;
+    const productKey = semantic ? semantic[2] : match ? match[2] : token;
     const found = findEligibleByKey(core.sections, productKey);
     if (!found) return [];
+    if (semantic) {
+      const matches = found.siblings.filter(row => row.public_offer_id === semantic[1]);
+      return matches.length === 1 ? [{ row: matches[0], section: found.section }] : [];
+    }
     if (rateIndex == null) return [{ row: found.row, section: found.section }];
     const exact = found.siblings.find((row) => row.rate_index === rateIndex);
     return exact ? [{ row: exact, section: found.section }] : [];

@@ -21,6 +21,8 @@ export interface ProductSubscription {
   rateIndex: number | null;
   label: string;
   createdAt: string;
+  offerId?: string;
+  programmeId?: string;
 }
 
 export interface SearchSubscription {
@@ -42,7 +44,8 @@ export function rowIdentity(row: RateRow): string {
   return `${row.product_key}#${row.rate_index ?? 0}`;
 }
 
-export function productSubscriptionId(productKey: string, rateIndex: number | null): string {
+export function productSubscriptionId(productKey: string, rateIndex: number | null, offerId?: string): string {
+  if (offerId) return `product:${productKey}:offer:${offerId}`;
   return `product:${productKey}:${rateIndex ?? 'all'}`;
 }
 
@@ -126,13 +129,16 @@ export function refreshProductSubscriptionLabels(list: Subscription[]): Subscrip
 }
 
 export function makeProductSubscription(row: RateRow, rateIndex: number | null): ProductSubscription {
+  const exact = rateIndex != null || row.rate_index == null && row.exact_alert_eligible === true;
   return {
-    id: productSubscriptionId(row.product_key, rateIndex),
+    id: productSubscriptionId(row.product_key, rateIndex, exact ? row.public_offer_id : undefined),
     kind: 'product',
     productKey: row.product_key,
     rateIndex,
     label: buildProductLabel(row, rateIndex),
     createdAt: new Date().toISOString(),
+    ...(exact && row.public_offer_id ? { offerId: row.public_offer_id } : {}),
+    ...(exact && row.public_programme_id ? { programmeId: row.public_programme_id } : {}),
   };
 }
 
@@ -209,12 +215,13 @@ export function isProductSubscribed(
   list: Subscription[],
   productKey: string,
   rateIndex: number | null,
+  offerId?: string,
 ): boolean {
   return list.some(
     (s) =>
       s.kind === 'product' &&
       s.productKey === productKey &&
-      (s.rateIndex === rateIndex || (s.rateIndex === null && rateIndex === null)),
+      (offerId ? s.offerId === offerId : !s.offerId && s.rateIndex === rateIndex),
   );
 }
 
@@ -227,6 +234,7 @@ export function savedRatesWithAlerts(
     subscriptions,
     ref.productKey,
     ref.scope === 'product' ? null : ref.rateIndex,
+    ref.offerId,
   ));
 }
 
@@ -393,6 +401,7 @@ export function computeSubscriptionChanges(
 
   for (const sub of subscriptions) {
     if (sub.kind === 'product') {
+      if (sub.offerId) continue; // Public semantic watches use the shared resolver path.
       const hit = largestRateChange(
         productRatesByIndex(oldCore, sub.productKey, sub.rateIndex, depositRankMetric, mortgageRateMetric),
         productRatesByIndex(newCore, sub.productKey, sub.rateIndex, depositRankMetric, mortgageRateMetric),

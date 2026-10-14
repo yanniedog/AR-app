@@ -11,16 +11,21 @@ import { ScreenScrollView } from '../Screen';
 import { AppText, Button } from '../ui';
 import { DetailGroup, OfficialLinks, ProductFacts } from './ProductDetailParts';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
-export function DetailsOnlyProduct({ productKey }: { productKey: string }) {
+import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
+import { PublicRateEvidence } from '../scenario/PublicRateEvidence';
+export function DetailsOnlyProduct({ productKey, programmeId }: { productKey: string; programmeId?: string }) {
   const { details, manifest, loading, retry } = useDetailsCatalogue();
   const detail = details && Object.hasOwn(details.products, productKey) ? details.products[productKey] : null;
   const identity = detailsDisplayIdentity(detail);
+  const catalogue = usePublicRateCatalogue(manifest);
+  const product = catalogue.getProduct(productKey);
   return <ScreenScrollView><Stack.Screen options={{ title: 'Product details' }} /><View style={{ gap: 12 }}>
-    <AppText weight="700">{identity.name ?? `Product key: ${productKey}`}
+    <AppText weight="700">{product?.name ?? identity.name ?? `Product key: ${productKey}`}
     </AppText>
     {(identity.provider || identity.productCategory) && <AppText variant="small">{[identity.provider, identity.productCategory].filter(Boolean).join(' · ')}</AppText>}
+    {product ? <><AppText variant="small">{product.providerName} · Public product identity</AppText><PublicRateEvidence productKey={productKey} programmeId={programmeId} /></> : null}
     {detail ? <>
-      <AppText variant="small">Published details · {manifest?.run_date}. No rate is listed for this product.</AppText>
+      <AppText variant="small">Published details · {manifest?.run_date}.{product ? ' Public pricing and its limitations are described above.' : ' No rate is listed for this product.'}</AppText>
       {detail.description ? <AppText>{detail.description}</AppText> : <AppText variant="small">A product description was not supplied.</AppText>}
       <DetailGroup loading={false} icon="cash-outline" title="Fees" items={detail.fees} /><DetailGroup loading={false} icon="person-outline" title="Eligibility" items={detail.eligibility} />
       <DetailGroup loading={false} icon="information-circle-outline" title="Features" items={detail.features} /><DetailGroup loading={false} icon="information-circle-outline" title="Constraints" items={detail.constraints} />

@@ -1,4 +1,10 @@
 import { commissionerFamily } from '../src/theme/fonts';
+import { LocalRateEditor } from '../src/components/scenario/LocalRateEditor';
+import { PublicRateEvidence } from '../src/components/scenario/PublicRateEvidence';
+import { PublicCostComparison } from '../src/components/scenario/PublicCostComparison';
+import { SavingsQualificationEditor } from '../src/components/scenario/SavingsQualificationEditor';
+import { usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
+import { publicComparisonCore, publicRateScenario, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
 import { prepareProjectionAuditScenario } from '../src/lib/performanceAuditScenario';
 import { mandatoryProductAllowed } from '../src/data/eligibilityGate';
 import Ionicons from '../src/components/icons/AppIcon';
@@ -199,8 +205,11 @@ function FrequencyField({
 export default function Projections() {
   const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
-  const params = useLocalSearchParams<{ section?: string; target?: string; ri?: string }>();
+  const params = useLocalSearchParams<{ section?: string; target?: string; ri?: string; programme?: string }>();
   const core = useStore((s) => s.core);
+  const manifest = useStore((s) => s.manifest);
+  const profile = useStore((s) => s.prefs.profileFilters);
+  const publicCatalogue = usePublicRateCatalogue(manifest);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const storeStatus = useStore((s) => s.status);
   const storeError = useStore((s) => s.error);
@@ -255,20 +264,25 @@ export default function Projections() {
   const updateDeposit = (patch: { balance?: string; currentRate?: string }) => updateScenario((current) => section === 'TD'
     ? { ...current, termDeposit: { ...current.termDeposit, ...patch } }
     : { ...current, savings: { ...current.savings, ...patch } });
-  const deferredScenario = useDeferredValue(scenario);
+  const localCurrent = useMemo(() => resolveLocalCurrentRate(section, scenario, publicCatalogue.references, undefined, publicCatalogue, profile), [section, scenario, publicCatalogue, profile]);
+  const calculationScenario = useMemo(() => scenarioWithLocalCurrentRate(section, scenario, localCurrent), [section, scenario, localCurrent]);
+  const deferredScenario = useDeferredValue(calculationScenario);
   const result = useMemo(
     () => buildLifecycleProjection(section, deferredScenario),
     [deferredScenario, section],
   );
   const targetRow = useMemo(() => {
+    void suitabilityRevision;
     if (!core || section !== 'Mortgage' || !params.target) return null;
-    const found = findEligibleByKey(core.sections, params.target);
+    const found = findEligibleByKey(publicComparisonCore(core, publicCatalogue,
+      section => publicRateScenario(section, deferredScenario, profile)).sections, params.target);
     if (!found || found.section !== 'Mortgage') return null;
+    if (params.programme) return found.siblings.find(row => row.public_programme_id === params.programme) ?? null;
     const parsedIndex = params.ri != null && params.ri !== '' ? Number(params.ri) : null;
     return Number.isInteger(parsedIndex)
       ? found.siblings.find((row) => row.rate_index === parsedIndex) ?? null
       : found.row;
-  }, [core, params.ri, params.target, section, suitabilityRevision]);
+  }, [core, params.ri, params.target, params.programme, section, suitabilityRevision, publicCatalogue, deferredScenario, profile]);
   useEffect(() => {
     if (!params.target || detailsProducts) return;
     void ensureDetails({ forProductView: true });
@@ -278,11 +292,14 @@ export default function Projections() {
     const currentRef = deferredScenario.currentProducts.mortgage;
     return buildStaySwitchProjection({
       scenario: deferredScenario,
-      target: targetRow,
+      target: (() => {
+        const resolution = resolveRowPublicRate(targetRow, publicCatalogue, publicRateScenario(section, deferredScenario, profile, targetRow));
+        return resolution ? { ...targetRow, rate: resolution.status === 'exact' && resolution.verifiedCurrent ? resolution.payableRate ?? '' : '' } : targetRow;
+      })(),
       currentDetail: currentRef.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts?.[currentRef.productKey] : null,
       targetDetail: detailsProducts?.[targetRow.product_key],
     });
-  }, [deferredScenario, detailsProducts, targetRow]);
+  }, [deferredScenario, detailsProducts, targetRow, publicCatalogue, section, profile]);
   const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
     && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
     ? scenario.currentProducts.mortgage.provider
@@ -515,7 +532,7 @@ export default function Projections() {
           },
         };
       });
-      return { applied: 'mortgage', currentRate: currentRate ?? null, years: years ?? null };
+      return { applied: 'mortgage' };
     }
     if (!balance && !currentRate && !horizonYears && !lowerRate && !higherRate && !termMonths) {
       return {
@@ -544,7 +561,7 @@ export default function Projections() {
         },
       };
     });
-    return { applied: section === 'TD' ? 'termDeposit' : 'savings', balance: balance ?? null, currentRate: currentRate ?? null };
+    return { applied: section === 'TD' ? 'termDeposit' : 'savings' };
   }, [section, storageStatus, updateScenario]);
   const auditRateStructureNext = useCallback(() => {
     if (storageStatus !== 'ready') {
@@ -689,6 +706,14 @@ export default function Projections() {
           These values are shared with your rate calculator. Editing them updates only your private local scenario.
         </AppText>
       </View>
+      <LocalRateEditor section={section} scenario={scenario} editable={inputsEditable}
+        onChange={patch => updateScenario(previous => ({ ...previous, localRates: {
+          ...previous.localRates, [projectionKey]: { ...previous.localRates[projectionKey], ...patch },
+        } }))}>
+        <NumericField label="Current interest rate" value={section === 'Mortgage' ? scenario.mortgage.currentRate : section === 'TD' ? scenario.termDeposit.currentRate : scenario.savings.currentRate}
+          onChangeText={currentRate => section === 'Mortgage' ? updateMortgage({ currentRate }) : updateDeposit({ currentRate })}
+          placeholder="6.00" suffix="%" editable={inputsEditable} error={errors.currentRate} />
+      </LocalRateEditor>
       {section === 'Mortgage' ? (
         <>
           <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -701,8 +726,8 @@ export default function Projections() {
               editable={inputsEditable && scenario.mortgage.mode !== 'buy'}
               error={errors.mortgageBalance}
             />
-            <NumericField label="Current interest rate" value={scenario.mortgage.currentRate} onChangeText={(currentRate) => updateMortgage({ currentRate })} placeholder="6.00" suffix="%" editable={inputsEditable} error={errors.currentRate} />
             <NumericField label="Years remaining" value={scenario.mortgage.years} onChangeText={(years) => updateMortgage({ years })} placeholder="25" suffix="years" editable={inputsEditable} error={errors.years} />
+            <NumericField label="Comparison period" value={projectionInputs.horizonYears} onChangeText={horizonYears => updateProjection({ horizonYears })} placeholder="3" suffix="years" editable={inputsEditable} />
           </Row>
           {scenario.mortgage.mode === 'buy' ? (
             <AppText variant="tiny" color="textMuted">
@@ -751,8 +776,7 @@ export default function Projections() {
         <>
           <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
             <NumericField label="Current balance" value={scenario.savings.balance} onChangeText={(balance) => updateDeposit({ balance })} placeholder="25,000" prefix="$" editable={inputsEditable} error={errors.savingsBalance} />
-            <NumericField label={projectionInputs.savingsRateStructure === 'conditional-bonus' ? 'Current conditional rate' : 'Current interest rate'} value={scenario.savings.currentRate} onChangeText={(currentRate) => updateDeposit({ currentRate })} placeholder="4.50" suffix="%" editable={inputsEditable} error={errors.currentRate} />
-            <NumericField label="Projection horizon" value={projectionInputs.horizonYears} onChangeText={(horizonYears) => updateProjection({ horizonYears })} placeholder="10" suffix="years" editable={inputsEditable} error={errors.horizon} />
+            <NumericField label="Projection horizon" value={projectionInputs.horizonYears} onChangeText={(horizonYears) => updateProjection({ horizonYears })} placeholder="1" suffix="years" editable={inputsEditable} error={errors.horizon} />
           </Row>
           <SegmentedControl
             options={[
@@ -768,11 +792,7 @@ export default function Projections() {
                 <NumericField label="Ongoing rate" value={projectionInputs.ongoingRate} onChangeText={(ongoingRate) => updateProjection({ ongoingRate })} placeholder="1.50" suffix="%" editable={inputsEditable} error={errors.ongoingRate} />
                 <NumericField label="Bonus period remaining" value={projectionInputs.bonusMonthsRemaining} onChangeText={(bonusMonthsRemaining) => updateProjection({ bonusMonthsRemaining })} placeholder="4" suffix="months" editable={inputsEditable} error={errors.bonusMonths} />
               </Row>
-              <CompactToggle
-                label="I expect to meet the bonus conditions"
-                value={projectionInputs.bonusConditionsMet}
-                onChange={(bonusConditionsMet) => { if (inputsEditable) updateProjection({ bonusConditionsMet }); }}
-              />
+              <SavingsQualificationEditor inputs={projectionInputs} editable={inputsEditable} onChange={updateProjection} />
             </>
           ) : null}
           <FrequencyField
@@ -789,11 +809,15 @@ export default function Projections() {
         <>
           <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
             <NumericField label="Deposit amount" value={scenario.termDeposit.balance} onChangeText={(balance) => updateDeposit({ balance })} placeholder="50,000" prefix="$" editable={inputsEditable} error={errors.tdBalance} />
-            <NumericField label="Fixed interest rate" value={scenario.termDeposit.currentRate} onChangeText={(currentRate) => updateDeposit({ currentRate })} placeholder="4.50" suffix="%" editable={inputsEditable} error={errors.currentRate} />
             <NumericField label="Term" value={projectionInputs.termMonths} onChangeText={(termMonths) => updateProjection({ termMonths })} placeholder="12" suffix="months" editable={inputsEditable} error={errors.termMonths} />
           </Row>
         </>
       )}
+      {section !== 'TD' && (section === 'Savings' || projectionInputs.mortgageRateStructure === 'variable') ? <CompactToggle
+        label="Assume variable/reference rates stay unchanged for this scenario" value={projectionInputs.holdVariableRate}
+        onChange={holdVariableRate => { if (inputsEditable) updateProjection({ holdVariableRate }); }} /> : null}
+      {scenario.currentProducts[projectionKey].productKey ? <PublicRateEvidence productKey={scenario.currentProducts[projectionKey].productKey} programmeId={scenario.currentProducts[projectionKey].programmeId} compact /> : null}
+      {targetRow ? <><PublicRateEvidence productKey={targetRow.product_key} row={targetRow} /><PublicCostComparison section={section} target={targetRow} scenario={calculationScenario} /></> : null}
       <Pressable
         onPress={toggleAdvanced}
         accessibilityRole="button"
@@ -861,6 +885,9 @@ export default function Projections() {
       ) : (
         <>
           <NumericField label="Rollovers after first maturity" value={projectionInputs.rollovers} onChangeText={(rollovers) => updateProjection({ rollovers })} placeholder="0" editable={inputsEditable} error={errors.rollovers} />
+          <NumericField label="Local renewal rate (%)" value={projectionInputs.renewalRate} onChangeText={renewalRate => updateProjection({ renewalRate })} placeholder="Unknown until entered" editable={inputsEditable} />
+          <CompactToggle label="Reuse the quoted rate for renewals as a local assumption" value={projectionInputs.holdVariableRate} onChange={holdVariableRate => { if (inputsEditable) updateProjection({ holdVariableRate }); }} />
+          <AppText variant="tiny" color="textMuted">Renewal rates are unknown. These optional estimates use your entered renewal rate or explicit reuse assumption; they are separate from the current quoted term.</AppText>
           <CompactToggle label="Reinvest modelled interest" value={projectionInputs.reinvestInterest} onChange={(reinvestInterest) => { if (inputsEditable) updateProjection({ reinvestInterest }); }} />
         </>
       )}

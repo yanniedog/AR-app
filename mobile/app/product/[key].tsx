@@ -86,6 +86,11 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { relativeDate } from '../../src/data/format';
 import { ratePresentation } from '../../src/data/ratePresentation';
+import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
+import { bindCurrentPublicRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
+import { publicRateOriginLabel, publicRateText } from '../../src/data/publicRatePresentation';
+import { PublicRateEvidence } from '../../src/components/scenario/PublicRateEvidence';
+import { PublicCostComparison } from '../../src/components/scenario/PublicCostComparison';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { HEADER_TYPOGRAPHY } from '../../src/theme/typography';
 import {
@@ -111,18 +116,27 @@ const MemoMortgagePeriodCalculation = React.memo(MortgagePeriodCalculation);
 export default function ProductDetail() {
   const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
-  const { key, ri } = useLocalSearchParams<{ key: string; ri?: string }>();
+  const { key, ri, programme: requestedProgramme } = useLocalSearchParams<{ key: string; ri?: string; programme?: string }>();
   const productKey = key ?? '';
   const exactRateRequested = ri != null && ri !== '';
   const parsedRateIndex = exactRateRequested ? Number(ri) : null;
   const rateIndex = parsedRateIndex != null && Number.isInteger(parsedRateIndex) ? parsedRateIndex : null;
   const core = useStore((s) => s.core);
+  const manifest = useStore((s) => s.manifest);
+  const profile = useStore((s) => s.prefs.profileFilters);
+  const publicCatalogue = usePublicRateCatalogue(manifest);
+  const publicProduct = publicCatalogue.getProduct(productKey);
+  const { scenario } = useUserRateScenario();
   const found = useMemo(
     () => {
       void suitabilityRevision;
-      return core ? findEligibleByKey(core.sections, productKey) : null;
+      if (!core) return null;
+      const sections = publicProduct ? { ...core.sections, [publicProduct.section]: { ...core.sections[publicProduct.section],
+        rates: publicRecommendationRows(core.sections[publicProduct.section].rates, publicCatalogue, publicProduct.section,
+          publicRateScenario(publicProduct.section, scenario, profile)) } } : core.sections;
+      return findEligibleByKey(sections, productKey);
     },
-    [core, productKey, suitabilityRevision],
+    [core, productKey, suitabilityRevision, publicCatalogue, publicProduct, scenario, profile],
   );
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
@@ -144,7 +158,8 @@ export default function ProductDetail() {
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const notificationsEnabled = useStore((s) => s.prefs.notificationsEnabled);
   const setPref = useStore((s) => s.setPref);
-  const subscribed = useStore((s) => s.isProductSubscribed(productKey, rateIndex));
+  const selectedOfferId = publicProduct && requestedProgramme ? publicCatalogue.getProgrammes(publicProduct.productId).find(item => item.programmeId === requestedProgramme)?.offerId : undefined;
+  const subscribed = useStore((s) => s.isProductSubscribed(productKey, rateIndex, selectedOfferId));
   const subscribeProduct = useStore((s) => s.subscribeProduct);
   const unsubscribeProduct = useStore((s) => s.unsubscribeProduct);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
@@ -172,7 +187,6 @@ export default function ProductDetail() {
   const [headerActionsWidth, setHeaderActionsWidth] = useState(0);
   const [historyGraphicEvidence, setHistoryGraphicEvidence] =
     useState<HistoryGraphicEvidence | null>(null);
-  const { scenario } = useUserRateScenario();
 
   useEffect(() => {
     let current = true;
@@ -227,13 +241,22 @@ export default function ProductDetail() {
     productKey,
   ]);
 
-  const row = found
-    ? exactRateRequested
+  const unboundRow = found
+    ? requestedProgramme ? found.siblings.find(candidate => bindCurrentPublicRow(candidate, publicCatalogue).public_programme_id === requestedProgramme) ?? null
+    : exactRateRequested
       ? rateIndex == null
         ? null
         : found.siblings.find((candidate) => candidate.rate_index === rateIndex) ?? null
       : found.row
     : null;
+  const boundRow = useMemo(() => unboundRow ? bindCurrentPublicRow(unboundRow, publicCatalogue) : null, [unboundRow, publicCatalogue]);
+  const publicResolution = useMemo(() => boundRow && found ? resolveRowPublicRate(boundRow, publicCatalogue, publicRateScenario(found.section, scenario, profile, boundRow)) : undefined,
+    [boundRow, found, publicCatalogue, scenario, profile]);
+  const row = useMemo(() => boundRow && publicResolution ? { ...boundRow, rate: publicResolution.status === 'exact' && publicResolution.verifiedCurrent ? publicResolution.payableRate ?? '' : '' } : boundRow,
+    [boundRow, publicResolution]);
+  const calculationScenario = useMemo(() => found ? scenarioWithLocalCurrentRate(found.section, scenario,
+    resolveLocalCurrentRate(found.section, scenario, publicCatalogue.references, undefined, publicCatalogue, profile)) : scenario,
+  [found, scenario, publicCatalogue, profile]);
   const rateRows = useMemo(() => found
     ? sortRows(found.siblings, 'rate', found.section, depositRankMetric, mortgageRateMetric)
     : [], [found, depositRankMetric, mortgageRateMetric]);
@@ -257,12 +280,12 @@ export default function ProductDetail() {
     if (!row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
     const currentRef = scenario.currentProducts.mortgage;
     return buildStaySwitchProjection({
-      scenario,
+      scenario: calculationScenario,
       target: row,
       currentDetail: currentRef.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts[currentRef.productKey] : null,
       targetDetail: detail,
     });
-  }, [detail, detailsProducts, found?.section, row, scenario]);
+  }, [detail, detailsProducts, found?.section, row, scenario, calculationScenario]);
   const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
     && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
     ? scenario.currentProducts.mortgage.provider
@@ -358,7 +381,7 @@ export default function ProductDetail() {
     const actions: Record<string, (...args: unknown[]) => unknown> = {
       'product.open': () => undefined,
       'product.receipt.open': () => {
-        if (row) openRateReceipt(productKey, row.rate_index);
+        if (row) openRateReceipt(productKey, row.rate_index, row.public_programme_id);
       },
       'product.lender.open': (...args: unknown[]) => {
         const provider = auditActionString(args, 'provider') || row?.provider || null;
@@ -494,16 +517,19 @@ export default function ProductDetail() {
     ],
   });
 
-  if (!isMandatoryEligibilityReady() || !mandatoryProductAllowed(productKey)) {
+  if (!isMandatoryEligibilityReady() || !mandatoryProductAllowed(productKey) && !found?.row.public_offer_id) {
+    if (publicProduct) return <DetailsOnlyProduct productKey={productKey} programmeId={requestedProgramme} />;
     return <><Stack.Screen options={{ title: 'Product unavailable' }} /><EmptyState icon="alert-circle-outline" title={!isMandatoryEligibilityReady() ? 'Loading required evidence…' : 'Does not meet your requirements'} /></>;
   }
   if (!found) {
+    if (publicProduct) return <DetailsOnlyProduct productKey={productKey} programmeId={requestedProgramme} />;
     if (exactRateRequested) return <><Stack.Screen options={{ title: 'Product rate unavailable' }} /><EmptyState icon="alert-circle-outline" title="Exact rate no longer available" /></>;
     return <DetailsOnlyProduct productKey={productKey} />;
   }
 
   const { section } = found;
   if (!row) {
+    if (publicProduct) return <DetailsOnlyProduct productKey={productKey} programmeId={requestedProgramme} />;
     return (
       <>
         <Stack.Screen options={{ title: 'Product rate unavailable' }} />
@@ -516,9 +542,9 @@ export default function ProductDetail() {
       </>
     );
   }
-  const exactSaveEligible = row.exact_alert_eligible !== false && Number.isInteger(row.rate_index);
+  const exactSaveEligible = row.exact_alert_eligible !== false && (!!row.public_offer_id || Number.isInteger(row.rate_index));
   const saveScope = exactSaveEligible ? 'rate' : 'product';
-  const favorite = isSavedRate(savedRates, productKey, exactSaveEligible ? row.rate_index! : null);
+  const favorite = isSavedRate(savedRates, productKey, exactSaveEligible ? row.rate_index ?? null : null, row.public_offer_id);
   const productWideSaved = savedRates.some(
     (ref) => ref.scope === 'product' && ref.productKey === productKey,
   );
@@ -537,12 +563,12 @@ export default function ProductDetail() {
 
   const onShare = () =>
     Share.share({
-      message: `${row.provider} — ${row.product_name}: ${formatRate(presentation.primary)} ${presentation.primaryLabel.toLowerCase()} (${meta.title}, Australian Rates)`,
+      message: `${row.provider} — ${row.product_name}: ${publicResolution ? publicRateText(publicResolution) : `${formatRate(presentation.primary)} ${presentation.primaryLabel.toLowerCase()}`} (${meta.title}, Australian Rates). Public product pricing does not confirm a negotiated customer rate.`,
     }).catch((err) => logSwallowedError('product.share', err));
 
   const onToggleNotify = async () => {
     if (subscribed) {
-      unsubscribeProduct(productKey, rateIndex);
+      unsubscribeProduct(productKey, rateIndex, selectedOfferId);
       return;
     }
     const ok = await ensurePermissions();
@@ -636,10 +662,10 @@ export default function ProductDetail() {
 
         <Card style={{ marginBottom: 16, alignItems: 'center' }}>
           <AppText variant="small" color="textMuted">
-            {presentation.primaryLabel}
+            {publicResolution ? publicRateOriginLabel(publicResolution) : presentation.primaryLabel}
           </AppText>
           <AppText variant="h1" weight="800" style={{ color: accent, marginVertical: 2 }}>
-            {formatRate(presentation.primary)}
+            {publicResolution ? publicRateText(publicResolution) : formatRate(presentation.primary)}
           </AppText>
           {presentation.secondary !== null && presentation.secondaryLabel ? (
             <AppText variant="small" color="textFaint">
@@ -652,7 +678,7 @@ export default function ProductDetail() {
             current={{ date: core?.run_date, rate: currentBest }}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-            This exact rate · checked {formatEvidenceDate(core?.run_date)}
+            Published catalogue observation · {formatEvidenceDate(core?.run_date)}
           </AppText>
           {isNonStandard(row) ? (
             <View
@@ -695,6 +721,8 @@ export default function ProductDetail() {
             </>
           ) : null}
         </Card>
+        <PublicRateEvidence productKey={productKey} row={row} programmeId={requestedProgramme} />
+        <PublicCostComparison section={section} target={row} scenario={calculationScenario} />
 
         {staySwitchProjection?.ready ? (
           <View style={{ marginBottom: 16 }}>
@@ -707,6 +735,7 @@ export default function ProductDetail() {
                 params: {
                   section: 'Mortgage',
                   target: row.product_key,
+                  programme: row.public_programme_id,
                   ri: row.rate_index != null ? String(row.rate_index) : undefined,
                 },
               } as never)}
@@ -749,7 +778,7 @@ export default function ProductDetail() {
           icon="receipt-outline"
           variant="secondary"
           style={{ marginBottom: 16 }}
-          onPress={() => openRateReceipt(productKey, row.rate_index)}
+          onPress={() => openRateReceipt(productKey, row.rate_index, row.public_programme_id)}
         />
 
         <SectionTitle text={PRODUCT_HISTORY_TITLE} icon="trending-up-outline" />
