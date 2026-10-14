@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "phase": 3,
+  "capturedOn": "2026-10-15",
+  "platform": "Android emulator API36.1 x86_64",
+  "buildKind": "existing compatible development APK with current Metro JavaScript",
+  "nativeVersion": "1.0.238 (192)",
+  "subject": "navigation and contextual calculation prototype",
+  "humanUserStudy": false,
+  "physicalDevice": false,
+  "timingMeasured": false,
+  "finalReleaseAcceptance": false,
+  "captures": [
+    {
+      "name": "phase3-ready-first-launch",
+      "sourceRevision": "bacbd70",
+      "observation": "Fresh debug-client app data opens full Rates without setup questions; optional old prototype banners still present.",
+      "files": [
+        {
+          "path": "phase3-ready-first-launch.png",
+          "bytes": 274393,
+          "sha256": "95872b4b3eb71e90b3fbf7bd965af0a8f7f201d2045033f1c8241db9fdbc3776"
+        },
+        {
+          "path": "phase3-ready-first-launch.xml",
+          "bytes": 27884,
+          "sha256": "f5d8b8b501dfe015b60b377cf85aa5ed518f1ec39884ac5025736f285281f9d1"
+        }
+      ]
+    },
+    {
+      "name": "phase3-clean-results",
+      "sourceRevision": "7bbb253",
+      "observation": "411dp, font1.0; three direct toolbar actions, Compare whole word.",
+      "files": [
+        {
+          "path": "phase3-clean-results.png",
+          "bytes": 275799,
+          "sha256": "09ef210f55e0543b688264e3e80d659a6b5f7a54080898b57e039f47bb789001"
+        },
+        {
+          "path": "phase3-clean-results.xml",
+          "bytes": 25615,
+          "sha256": "b1a2addfe8f2b092cfabe44b3e62be66d20c10bf0351896cb76ba3c04b6ed92f"
+        }
+      ]
+    },
+    {
+      "name": "phase3-responsive-360-large",
+      "sourceRevision": "7bbb253",
+      "observation": "360dp, font1.5; toolbar wraps without shrinking button text.",
+      "files": [
+        {
+          "path": "phase3-responsive-360-large.png",
+          "bytes": 201077,
+          "sha256": "c64351b2a461ff26f37f2f25f81a336ae48b1c21d3c2711d3f3da9fbc70ce247"
+        },
+        {
+          "path": "phase3-responsive-360-large.xml",
+          "bytes": 14632,
+          "sha256": "3e39a31529334d0e6f4655a3901a181a4f3756c23309336bea27756de99fd4ea"
+        }
+      ]
+    },
+    {
+      "name": "phase3-context-calculation/product",
+      "sourceRevision": "7bbb253",
+      "observation": "Selected published mortgage product before Calculate.",
+      "files": [
+        {
+          "path": "phase3-context-calculation-product.png",
+          "bytes": 160552,
+          "sha256": "fb70aa35fd8c5a9a8f0ae14d4cf0bdae41e32edcc72f5952feaa836b1d503c21"
+        },
+        {
+          "path": "phase3-context-calculation-product.xml",
+          "bytes": 12761,
+          "sha256": "accf89a5b2d6f741a4960792839d76e47e847b41829294ec2866a8210daaaf2e"
+        }
+      ]
+    },
+    {
+      "name": "phase3-context-calculation/rate-check-selected",
+      "sourceRevision": "7bbb253",
+      "observation": "Calculate retains exact selected identity; initial inputs empty.",
+      "files": [
+        {
+          "path": "phase3-context-calculation-rate-check-selected.png",
+          "bytes": 196505,
+          "sha256": "0881dc8b1a84124cb0dd537aaa5e21136b512240c7edd9dfca7d3daabd56ac74"
+        },
+        {
+          "path": "phase3-context-calculation-rate-check-selected.xml",
+          "bytes": 18675,
+          "sha256": "473a681b3c70ef414052a63eeb2a612ea617a0b808d2bb09883e7ee6c6647291"
+        }
+      ]
+    },
+    {
+      "name": "phase3-context-calculation/projection-same-selection",
+      "sourceRevision": "7bbb253",
+      "observation": "Mode switch keeps selected identity on the same calculator route.",
+      "files": [
+        {
+          "path": "phase3-context-calculation-projection-same-selection.png",
+          "bytes": 237849,
+          "sha256": "d04b588109074c0808b9e472946d4cd742d10856492d5a9f9bc76e41fc92b661"
+        },
+        {
+          "path": "phase3-context-calculation-projection-same-selection.xml",
+          "bytes": 16274,
+          "sha256": "dd1c7716eb10084bd043c524c4f2bbb88d3e1e48e8fa22b65a6a10ddade233b1"
+        }
+      ]
+    },
+    {
+      "name": "phase3-context-calculation/rates-restored",
+      "sourceRevision": "7bbb253",
+      "observation": "Native Back returns to initial result state; nonempty query/filter restoration reserved for Phase5.",
+      "files": [
+        {
+          "path": "phase3-context-calculation-rates-restored.png",
+          "bytes": 278529,
+          "sha256": "90a9c490177d27177ed67aca1cf7d3439b3478e436d2e019b6dd9a810ba0191b"
+        },
+        {
+          "path": "phase3-context-calculation-rates-restored.xml",
+          "bytes": 23437,
+          "sha256": "614009dfce01e6c5e99101c51ad6bb03a0577f1516e9f2384661c0261860444a"
+        }
+      ]
+    },
+    {
+      "name": "phase3-selected-result-ready",
+      "sourceRevision": "ee3968f",
+      "observation": "Exact ECO Home Loan retained with synthetic entered scenario. Source qualifications unparsed; eligibility unverified; no outside-source assertion.",
+      "files": [
+        {
+          "path": "phase3-selected-result-ready.png",
+          "bytes": 201025,
+          "sha256": "788580e9401d298c97264f65d7e24ca09a5b8b15067b1b81e0a8f507dc6df1bb"
+        },
+        {
+          "path": "phase3-selected-result-ready.xml",
+          "bytes": 13426,
+          "sha256": "9ec8d0a48ec2b8adb72cac6cb4bde60adade0612560ecf93bf9951a221b104f4"
+        }
+      ]
+    }
+  ]
+}
