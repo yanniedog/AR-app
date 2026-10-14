@@ -23,6 +23,7 @@ import { visibleAccountRows } from '../data/format';
 import { resolveSectionRibbonStats } from '../data/ribbonStats';
 import { excludeTokenDepositRates, rankFraction, sortRows } from '../data/selectors';
 import { useStore } from '../data/store';
+import { captureRatesSession, restoreRatesSession } from '../data/ratesSession';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
@@ -466,20 +467,15 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
   const rateIndex = numberParameter(step, 'rateIndex');
   const selectionTokens = stringArrayParameter(step, 'selectionTokens');
   switch (step.semanticActionId) {
-    case 'onboarding.open': return '/onboarding' as Href;
-    case 'home.open': return '/(tabs)' as Href;
     case 'rates.open': return '/browse' as Href;
     case 'market.open': return '/market' as Href;
-    case 'tools.open': return '/tools' as Href;
     case 'bank-rates.open': return '/bank-rates' as Href;
-    case 'today.open': return '/matches' as Href;
-    case 'browse.open': return '/categories' as Href;
     case 'search.open':
       return {
-        pathname: '/search',
+        pathname: '/browse',
         params: section ? { section } : {},
       } as unknown as Href;
-    case 'changes.open': return '/passthrough' as Href;
+    case 'changes.open': return '/market' as Href;
     case 'compare.open':
       return {
         pathname: '/compare',
@@ -505,12 +501,15 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
             },
           } as unknown as Href)
         : null;
-    case 'lenders.open': return '/banks' as Href;
-    case 'calculator.open': return '/calculator' as Href;
+    case 'calculator.open':
+      return {
+        pathname: '/calculator',
+        params: { mode: 'check', ...(section ? { section } : {}) },
+      } as unknown as Href;
     case 'projections.open':
       return {
-        pathname: '/projections',
-        params: section ? { section } : {},
+        pathname: '/calculator',
+        params: { mode: 'project', ...(section ? { section } : {}) },
       } as unknown as Href;
     case 'moves.open': return '/rba-response' as Href;
     case 'rba.open': return '/rba' as Href;
@@ -523,6 +522,19 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
     case 'not-found.open': return '/__audit-not-found__' as Href;
     case 'audit.pass.complete': return AUDIT_HOME_PATH as Href;
     case 'redirect.root.verify': return '/' as Href;
+    case 'redirect.onboarding.verify': return '/onboarding' as Href;
+    case 'redirect.tools.verify': return '/tools' as Href;
+    case 'redirect.matches.verify': return '/matches' as Href;
+    case 'redirect.banks.verify': return '/banks' as Href;
+    case 'redirect.catalogue.verify': return '/catalogue' as Href;
+    case 'redirect.changes.verify': return '/passthrough' as Href;
+    case 'redirect.search.verify':
+    case 'redirect.categories.verify':
+    case 'redirect.projections.verify': {
+      const pathname = step.semanticActionId === 'redirect.search.verify' ? '/search'
+        : step.semanticActionId === 'redirect.categories.verify' ? '/categories' : '/projections';
+      return { pathname, params: section ? { section } : {} } as unknown as Href;
+    }
     case 'redirect.node.verify': {
       const taxonomyPath = stringArrayParameter(step, 'taxonomyPath');
       return {
@@ -572,20 +584,14 @@ function inferMountedActionEntryRoute(semanticActionId: string): string | null {
   const root = semanticActionId.split('.')[0];
   switch (root) {
     case 'calculator': return '/calculator';
-    case 'search': return '/search';
-    case 'home': return '/';
+    case 'search': return '/browse';
     case 'rates': return '/browse';
     case 'market': return '/market';
-    case 'tools': return '/tools';
     case 'bank-rates': return '/bank-rates';
-    case 'browse': return '/categories';
-    case 'projections': return '/projections';
-    case 'lenders': return '/banks';
+    case 'projections': return '/calculator';
     case 'saved': return '/watchlist';
     case 'settings': return '/settings';
-    case 'onboarding': return '/onboarding';
-    case 'today': return '/matches';
-    case 'changes': return '/passthrough';
+    case 'changes': return '/market';
     case 'moves': return '/rba-response';
     case 'rba': return '/rba';
     case 'outlook': return '/research';
@@ -1221,6 +1227,17 @@ async function ensureMountedActionRoute(
 ): Promise<void> {
   if (resolveMountedActionSurface(semanticActionId, '', currentPath())) return;
   const entryRoute = inferMountedActionEntryRoute(semanticActionId);
+  if (entryRoute === '/calculator') {
+    const mode = semanticActionId.startsWith('projections.') ? 'project' : 'check';
+    if (pathMatches(currentPath(), entryRoute)) router.setParams({ mode });
+    else router.push({ pathname: '/calculator', params: { mode } });
+    await waitForPath(currentPath, entryRoute, label, { watchdog });
+    while (!resolveMountedActionSurface(semanticActionId, '', currentPath())) {
+      assertSessionActive(watchdog);
+      await delay(25);
+    }
+    return;
+  }
   if (!entryRoute || pathMatches(currentPath(), entryRoute)) return;
   router.push(entryRoute as Href);
   await waitForPath(currentPath, entryRoute, label, { watchdog });
@@ -1435,7 +1452,6 @@ async function runMaximumCoverageProfileCheck(
     state.prefs.enableDeepSearch &&
     state.prefs.showHistoryRibbon &&
     state.prefs.rateIntelligencePro &&
-    state.prefs.onboarded &&
     state.prefs.depositRankMetric === 'max' &&
     state.prefs.mortgageRateMetric === 'comparison';
   const assetsUnavailableWithoutPreparation = missingAssets.length > 0 && errors.length === 0;
@@ -2111,7 +2127,7 @@ function journeyDataRequirements(
     );
   }
 
-  if (journey.id === 'search') {
+  if (journey.expectedSurface === 'rates.results') {
     add(
       'Product details',
       (state) => !state.detailsLoading && detailsPayloadMatches(state),
@@ -2142,7 +2158,7 @@ function journeyDataRequirements(
   const needsRbaCalendar =
     source === 'remote' &&
     !!manifest?.files.rba_calendar &&
-    ['response', 'outlook', 'rba'].includes(journey.id);
+    ['market', 'response', 'outlook', 'rba'].includes(journey.id);
   if (needsRbaCalendar) {
     add(
       'RBA calendar',
@@ -2455,7 +2471,7 @@ export async function runJourney(
       executionAttempted: true,
       actionInvoked: true,
       actionCompleted: routeError == null,
-      ...(journey.id === 'search' ? {
+      ...(journey.expectedSurface === 'rates.results' ? {
         searchMode: useStore.getState().searchIndexStatus === 'ready' && useStore.getState().searchIndex ? 'deep' : 'basic',
         deepSearchAvailable: useStore.getState().searchIndexStatus === 'ready' && !!useStore.getState().searchIndex,
       } : {}),
@@ -2631,10 +2647,21 @@ export function PerformanceAuditRunner() {
       let completed = 0;
       let lastStoredCheckAt: string | null = null;
       let rollbackSnapshot: Awaited<ReturnType<typeof beginPerformanceAuditRollback>> | null = null;
+      let ratesSessionSnapshot: ReturnType<typeof captureRatesSession> | null = null;
+      let ratesSessionRestored = false;
+      const restoreRatesUi = () => {
+        if (ratesSessionSnapshot && !ratesSessionRestored) {
+          restoreRatesSession(ratesSessionSnapshot);
+          ratesSessionRestored = true;
+        }
+      };
       const rollbackOutcome = new PerformanceAuditRollbackOutcome();
       const restoreRollback = () => mountedMutationBarrier.track(rollbackOutcome.track(
         tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot ?? undefined),
-      ));
+      ).then((result) => {
+        if (result.restored) restoreRatesUi();
+        return result;
+      }));
       let mutationRecoveryRequired = false;
       let rollbackAttempts = 0;
       let readinessCapture: ReturnType<typeof performanceAuditReadinessRegistry.beginCapture> | null = null;
@@ -2768,6 +2795,7 @@ export function PerformanceAuditRunner() {
 
       try {
         await runSetupStage(PERFORMANCE_AUDIT_SETUP_STAGES.safety, async (stageWatchdog) => {
+          ratesSessionSnapshot = captureRatesSession();
           navigationAnchor = new PerformanceAuditNavigationAnchor(navigation, pathnameRef.current);
           refreshEstimate();
           wakeLockSubscription.current = AppState.addEventListener('change', (nextState) => {
@@ -3301,6 +3329,7 @@ export function PerformanceAuditRunner() {
           durationMs: restoreInterrupted ? null : roundMetric(now() - restoreStarted),
           metrics: {
             restored: rollbackResult.restored,
+            ratesSessionRestored,
             attempts: rollbackAttempts,
             ...(restoreInterrupted
               ? {
@@ -3651,6 +3680,7 @@ export function PerformanceAuditRunner() {
         // A timed-out native restoration also must finish before terminal UI.
         // Never start another restoration or expose a new run while it can write.
         if (mountedMutationBarrier.hasPending) mutationRecoveryRequired = !(await mountedMutationBarrier.drain());
+        if (!mutationRecoveryRequired) restoreRatesUi();
         if (!mutationRecoveryRequired && (caught instanceof AuditCancelledError || getPerformanceAuditState().cancelRequested)) {
           logAuditEvent(app, {
             kind: 'cancelled',
@@ -3878,6 +3908,7 @@ export function PerformanceAuditRunner() {
           });
         }
       } finally {
+        if (!mutationRecoveryRequired) restoreRatesUi();
         setPassiveAuditPaused(mutationRecoveryRequired);
         wakeLockSubscription.current?.remove();
         restoreTransportGuard();

@@ -37,7 +37,6 @@ export function maximumPerformanceAuditPrefs(original: Prefs): Prefs {
     enableDeepSearch: true,
     showHistoryRibbon: true,
     rateIntelligencePro: true,
-    onboarded: true,
     dismissedUpdateBuild: null,
   };
 }

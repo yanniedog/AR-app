@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import ts from 'typescript';
 
 import {
   DEEP_AUDIT_EXCLUDED_ACTION_IDS,
@@ -100,7 +101,7 @@ describe('deep performance audit plan', () => {
 
     const ids = plan.passes.flatMap((pass) => pass.steps.map((step) => step.id));
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids[0]).toBe('first-pass.route.onboarding.onboarding.open');
+    expect(ids[0]).toBe('first-pass.route.rates.search.open');
     expect(ids.at(-1)).toBe('repeat.route.audit.audit.pass.complete');
 
     const shape = (step: DeepAuditStep) => ({
@@ -141,164 +142,87 @@ describe('deep performance audit plan', () => {
     }
   });
 
-  test('audits semantic onboarding jobs and mounted receipt evidence', () => {
+  test('uses real result actions without onboarding jobs and retains receipt evidence', () => {
     const steps = buildDeepPerformanceAuditPlan(corePayload()).passes[0].steps;
-    const onboardingActions = steps
-      .filter((step) => step.scenarioId === 'route.onboarding')
-      .map((step) => step.semanticActionId);
-    expect(onboardingActions).toEqual([
-      'onboarding.open',
-      'onboarding.section.toggle',
-      'onboarding.job.find',
-      'onboarding.job.follow',
-      'onboarding.job.check',
-    ]);
-    expect(onboardingActions).not.toEqual(expect.arrayContaining([
-      'onboarding.step.next',
-      'onboarding.notify.preview',
-      'onboarding.step.back',
-    ]));
-
-    expect(steps.find((step) => step.semanticActionId === 'receipt.scroll.evidence')?.readiness)
-      .toContain('list');
+    expect(steps.filter(item => item.scenarioId === 'route.rates').map(item => item.semanticActionId))
+      .toEqual(expect.arrayContaining(['search.open', 'search.query.product', 'search.filters.open', 'search.filter.provider.first', 'search.compare.open']));
+    expect(steps.some(item => /^(onboarding|home|tools|today|browse|lenders)\./.test(item.semanticActionId))).toBe(false);
+    expect(steps.find(item => item.semanticActionId === 'receipt.scroll.evidence')?.readiness).toContain('list');
   });
 
-  test('covers every steady route, compatibility redirect, and deep workflow family', () => {
+  test('covers canonical workflows and compatibility aliases without obsolete surfaces', () => {
     const steps = buildDeepPerformanceAuditPlan(corePayload()).passes[0].steps;
-    const scenarios = new Set(steps.map((step) => step.scenarioId));
-    expect(scenarios).toEqual(new Set([
-      'route.onboarding',
-      'route.home',
-      'route.rates',
-      'route.market',
-      'route.tools',
-      'route.bank-rates',
-      'route.today',
-      'route.browse',
-      'route.changes',
-      'redirect.node',
-      'route.search',
-      'route.compare',
-      'route.product',
-      'route.receipt',
-      'route.lender',
-      'route.lenders',
-      'route.calculator',
-      'route.projections',
-      'route.moves',
-      'route.rba',
-      'route.outlook',
-      'route.saved',
-      'route.profile',
-      'route.settings',
-      'route.terms',
-      'route.debug-log',
-      'route.not-found',
-      'redirect.root',
-      'route.audit',
-      'sample.catalogue.0',
-      'sample.catalogue.1',
-      'sample.catalogue.2',
-    ]));
-
-    const actions = new Set(steps.map((step) => step.semanticActionId));
-    expect(steps.find((step) => step.semanticActionId === 'moves.open')).toMatchObject({
-      expectedPath: '/rba-response',
-      expectedSurface: 'moves.response-chart',
-    });
-    [
-      'browse.category.deepest',
-      'browse.products.all',
-      'search.query.product',
-      'search.filter.provider.first',
-      'search.compare.open',
-      'compare.scroll.last-column',
-      'product.receipt.open',
-      'receipt.back-to-product',
-      'lender.history.date.previous',
-      'lender.product.first',
-      'calculator.projections.open',
-      'projections.chart.previous',
-      'projections.chart.next',
-      'moves.decision.previous',
-      'moves.section.next',
-      'moves.response-chart.provider.next',
-      'rba.open',
-      'rba.forecast.next',
-      'rba.bonds.next',
-      'outlook.history.mode.spread',
-      'outlook.history.mode.calendar',
-      'outlook.history.mode.pulse',
-      'outlook.history.mode.leaders',
-      'outlook.rba-response.decision.previous',
-      'outlook.economy.date.previous',
-      'saved.fixture.ensure-exact-pair',
-      'saved.fixture.restore',
-      'profile.filter.restore',
-      'settings.theme.restore',
-      'settings.update-status.observe',
-      'debug-log.scroll.end',
-    ].forEach((action) => expect(actions).toContain(action));
+    const scenarios = new Set(steps.map(item => item.scenarioId));
+    for (const id of ['route.rates', 'route.market', 'route.bank-rates', 'route.compare', 'route.product',
+      'route.receipt', 'route.lender', 'route.calculator', 'route.projections', 'route.moves',
+      'route.rba', 'route.outlook', 'route.saved', 'route.profile', 'route.settings', 'route.terms',
+      'route.debug-log', 'route.not-found', 'route.audit', 'redirect.root', 'redirect.node',
+      'redirect.search', 'redirect.categories', 'redirect.banks', 'redirect.matches',
+      'redirect.catalogue', 'redirect.onboarding', 'redirect.tools', 'redirect.projections', 'redirect.changes']) {
+      expect(scenarios.has(id)).toBe(true);
+    }
+    expect([...scenarios].some(id => ['route.onboarding', 'route.home', 'route.tools', 'route.today', 'route.browse', 'route.search', 'route.lenders', 'route.changes'].includes(id))).toBe(false);
+    expect(steps.some(item => ['home.hub', 'rates.hub', 'market.hub', 'tools.hub', 'today.hero', 'browse.hierarchy', 'lenders.list', 'changes.feed', 'search.results'].includes(item.expectedSurface))).toBe(false);
+    const actions = steps.map(item => item.semanticActionId);
+    expect(actions).toEqual(expect.arrayContaining(['search.query.product', 'search.compare.open',
+      'search.filter.provider.first', 'compare.scroll.last-column', 'product.receipt.open',
+      'receipt.back-to-product', 'lender.history.date.previous', 'calculator.projections.open',
+      'projections.chart.previous', 'projections.chart.next', 'outlook.economy.date.previous',
+      'saved.fixture.ensure-exact-pair', 'saved.fixture.restore', 'profile.filter.restore', 'settings.update-status.observe']));
   });
 
-  test('plans exactly every registered safe mounted action after normalising aliases', () => {
+  test('covers safe actions reachable from real app routes and canonical components', () => {
     const mobileRoot = path.resolve(__dirname, '..');
-    const roots = [path.join(mobileRoot, 'app'), path.join(mobileRoot, 'src', 'components')];
-    const files: string[] = [];
-    const visit = (directory: string) => {
-      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-        const target = path.join(directory, entry.name);
-        if (entry.isDirectory()) visit(target);
-        else if (/\.tsx?$/.test(entry.name)) files.push(target);
+    const visited = new Set<string>();
+    const registered = new Set<string>();
+    const pattern = /['"]([a-z][a-z0-9-]*(?:\.[a-z0-9-]+)+)['"]\s*:/g;
+    const visitFile = (file: string) => {
+      if (visited.has(file)) return;
+      visited.add(file);
+      const source = fs.readFileSync(file, 'utf8');
+      if (source.includes('usePerformanceAuditSurface(') || source.includes('<NavigationHub ')) {
+        for (const match of source.matchAll(pattern)) registered.add(match[1]);
+      }
+      for (const imported of ts.preProcessFile(source, true, true).importedFiles) {
+        if (!imported.fileName.startsWith('.')) continue;
+        const base = path.resolve(path.dirname(file), imported.fileName);
+        const candidate = [base, ...['.ts', '.tsx', '.native.ts', '.android.tsx', '/index.ts', '/index.tsx'].map(ext => base + ext)]
+          .find(target => fs.existsSync(target) && fs.statSync(target).isFile());
+        if (candidate && candidate.startsWith(mobileRoot + path.sep)) visitFile(candidate);
       }
     };
-    roots.forEach(visit);
-    const actionPattern = /['"]([a-z][a-z0-9-]*(?:\.[a-z0-9-]+)+)['"]\s*:/g;
-    const registered = new Set<string>();
-    for (const file of files) {
-      const source = fs.readFileSync(file, 'utf8');
-      if (!source.includes('usePerformanceAuditSurface(') && !source.includes('<NavigationHub ')) continue;
-      for (const match of source.matchAll(actionPattern)) registered.add(match[1]);
-    }
-    const planned = new Set(
-      buildDeepPerformanceAuditPlan(corePayload()).passes[0].steps
-        .map((step) => step.semanticActionId),
-    );
-    const expected = new Set(registered);
-    expected.delete('calculator.section.next');
-    expected.add('redirect.node.verify');
-    expect([...expected].filter((action) => !planned.has(action))).toEqual([]);
-    expect([...planned].filter((action) => !expected.has(action))).toEqual([]);
+    const visitRoutes = (directory: string) => {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const target = path.join(directory, entry.name);
+        if (entry.isDirectory()) visitRoutes(target);
+        else if (/\.tsx?$/.test(entry.name)) visitFile(target);
+      }
+    };
+    visitRoutes(path.join(mobileRoot, 'app'));
+    registered.delete('calculator.section.next');
+    registered.delete('changes.open'); // Alias of the canonical Market entry.
+    const planned = new Set(allSteps().filter(item => item.passId === 'first-pass'
+      && !item.semanticActionId.startsWith('redirect.')).map(item => item.semanticActionId));
+    expect([...registered].filter(action => !planned.has(action))).toEqual([]);
+    expect([...planned].filter(action => !registered.has(action))).toEqual([]);
   });
 
-  test('requires current hubs and their real destination actions instead of passing on former home or browse surfaces', () => {
+  test('waits on real canonical destinations for controls and compatibility entries', () => {
     const steps = buildDeepPerformanceAuditPlan(corePayload()).passes[0].steps;
     const step = (id: string) => steps.find(item => item.semanticActionId === id);
-    for (const [id, expectedPath, expectedSurface] of [
-      ['home.open', '/', 'home.hub'],
-      ['rates.open', '/browse', 'rates.hub'],
-      ['market.open', '/market', 'market.hub'],
-      ['tools.open', '/tools', 'tools.hub'],
-      ['bank-rates.open', '/bank-rates', 'bank-rates.dashboard'],
-      ['today.open', '/matches', 'today.hero'],
-      ['browse.open', '/categories', 'browse.hierarchy'],
-      ['redirect.node.verify', '/categories', 'browse.hierarchy'],
-      ['not-found.home', '/', 'home.hub'],
-      ['redirect.root.verify', '/', 'home.hub'],
-    ]) {
-      expect(step(id)).toMatchObject({ expectedPath, expectedSurface });
+    for (const id of ['search.open', 'redirect.root.verify', 'redirect.node.verify', 'redirect.search.verify', 'redirect.categories.verify', 'redirect.banks.verify', 'redirect.matches.verify', 'redirect.catalogue.verify', 'redirect.onboarding.verify', 'not-found.home']) {
+      expect(step(id)).toMatchObject({ expectedPath: '/browse', expectedSurface: 'rates.results' });
     }
+    expect(step('search.open')?.readiness).toEqual(expect.arrayContaining(['data', 'suitability', 'list']));
+    expect(step('market.open')).toMatchObject({ expectedPath: '/market', expectedSurface: 'market.overview', readiness: expect.arrayContaining(['bank-insights', 'rba-calendar', 'list']) });
     for (const [id, expectedPath, expectedSurface] of [
-      ['home.rates.open', '/browse', 'rates.hub'],
-      ['rates.categories.open', '/categories', 'browse.hierarchy'],
       ['market.outlook.open', '/research', 'outlook.dashboard'],
-      ['tools.calculator.open', '/calculator', 'calculator.results'],
-    ]) {
-      expect(step(id)).toMatchObject({ depth: 1, expectedPath, expectedSurface });
-    }
-    expect(step('bank-rates.section.next')?.readiness).toContain('graphics');
-    expect(steps.filter(item => item.expectedPath === '/').every(item => item.expectedSurface === 'home.hub')).toBe(true);
-    expect(steps.filter(item => item.expectedPath === '/browse').every(item => item.expectedSurface === 'rates.hub')).toBe(true);
+      ['market.history.open', '/bank-rates', 'bank-rates.dashboard'],
+      ['market.rba.open', '/rba', 'rba.dashboard'],
+      ['market.response.open', '/rba-response', 'moves.response-chart'],
+    ]) expect(step(id)).toMatchObject({ depth: 1, expectedPath, expectedSurface });
+    expect(step('calculator.projections.open')).toMatchObject({ expectedPath: '/calculator', expectedSurface: 'projections.inputs' });
+    expect(step('redirect.projections.verify')).toMatchObject({ expectedPath: '/calculator', expectedSurface: 'projections.inputs' });
   });
 
   test('opens the RBA page before exercising its optional market chart controls', () => {
@@ -329,23 +253,37 @@ describe('deep performance audit plan', () => {
     }
   });
 
-  test('exercises the available matched card before cycling to a section without a winner', () => {
+  test('never uses a removed matched-card journey to fabricate product readiness', () => {
+    const steps = allSteps();
+    expect(steps.some(item => item.scenarioId === 'route.today' || item.semanticActionId.startsWith('today.'))).toBe(false);
+    const product = steps.find(item => item.semanticActionId === 'product.open');
+    expect(product).toMatchObject({ expectedSurface: 'product.details', parameters: { productKey: expect.any(String), rateIndex: expect.any(Number) } });
+  });
+
+  test('exercises real sheet cancellation and type selection without losing Apply coverage', () => {
+    for (const pass of buildDeepPerformanceAuditPlan(corePayload()).passes) {
+      expect(pass.steps.filter(item => item.scenarioId === 'route.rates-sheets').map(item => item.semanticActionId))
+        .toEqual(['search.open', 'search.filters.open', 'search.filter.provider.first',
+          'search.filters.cancel', 'search.sort.open', 'search.sort.cancel', 'search.section.next']);
+      expect(pass.steps.filter(item => item.scenarioId === 'route.rates').map(item => item.semanticActionId))
+        .toEqual(expect.arrayContaining(['search.filters.apply', 'search.filters.clear', 'search.compare.open']));
+    }
+  });
+
+  test('targets contextual calculation from the exact product and saved fixture before comparison selection', () => {
     const plan = buildDeepPerformanceAuditPlan(corePayload());
+    const primary = plan.inputs.primaryProduct!;
     for (const pass of plan.passes) {
-      let bestAvailable = false;
-      const opened: string[] = [];
-      const actions: Record<string, () => void> = {
-        'today.open': () => { bestAvailable = true; },
-        'today.best.open': () => {
-          if (bestAvailable) opened.push('the mounted exact matched product');
-        },
-        'today.section.next': () => { bestAvailable = false; },
-      };
-      for (const step of pass.steps.filter(item => item.scenarioId === 'route.today')) {
-        actions[step.semanticActionId]();
-      }
-      expect(opened).toEqual(['the mounted exact matched product']);
-      expect(bestAvailable).toBe(false);
+      const product = pass.steps.filter(item => item.scenarioId === 'route.product-calculation');
+      expect(product.map(item => item.semanticActionId)).toEqual(['product.open', 'product.calculate.open']);
+      expect(product[1]).toMatchObject({ expectedPath: '/calculator', expectedSurface: 'calculator.results',
+        parameters: { productKey: primary.productKey, rateIndex: primary.rateIndex } });
+      const saved = pass.steps.filter(item => item.scenarioId === 'route.saved');
+      const calculate = saved.findIndex(item => item.semanticActionId === 'saved.calculate.open');
+      expect(calculate).toBeGreaterThan(saved.findIndex(item => item.semanticActionId === 'saved.fixture.ensure-exact-pair'));
+      expect(calculate).toBeLessThan(saved.findIndex(item => item.semanticActionId === 'saved.compare.mode'));
+      expect(saved[calculate]).toMatchObject({ expectedPath: '/calculator', expectedSurface: 'calculator.results',
+        parameters: { savedId: primary.rateIndex == null ? `product:${primary.productKey}` : `rate:${primary.productKey}:${primary.rateIndex}` } });
     }
   });
 
@@ -383,8 +321,8 @@ describe('deep performance audit plan', () => {
     expect(steps.find(step => step.semanticActionId === 'search.compare.open')?.parameters)
       .toMatchObject({ section: 'Mortgage', selectionTokens: inputs.compareSelectionTokens,
         primaryRateIndex: inputs.primaryProduct?.rateIndex, secondaryRateIndex: inputs.secondaryProduct?.rateIndex });
-    expect(steps.find(step => step.semanticActionId === 'today.best.open'))
-      .toMatchObject({ expectedPath: '/product', parameters: {} });
+    expect(steps.find(step => step.scenarioId === 'route.product' && step.semanticActionId === 'product.open'))
+      .toMatchObject({ parameters: { productKey: inputs.primaryProduct?.productKey, rateIndex: inputs.primaryProduct?.rateIndex } });
   });
 
   test('randomizes across all eligible banks, products and tiers while sampling every non-empty category', () => {
@@ -459,8 +397,8 @@ describe('deep performance audit plan', () => {
       (step) => step.passId === 'first-pass' && step.semanticActionId === 'compare.dismiss',
     );
     expect(dismiss).toMatchObject({
-      expectedPath: '/search',
-      expectedSurface: 'search.results',
+      expectedPath: '/browse',
+      expectedSurface: 'rates.results',
     });
     expect(dismiss?.readiness).toEqual(expect.arrayContaining(['list']));
     expect(dismiss?.readiness).not.toContain('graphics');
@@ -542,7 +480,7 @@ describe('scenario re-entry gate', () => {
   // and acted on at depth 2, all local-only state that route recovery discards.
   const searchSteps = () =>
     allSteps().filter(
-      (step) => step.passId === 'first-pass' && step.scenarioId === 'route.search',
+      (step) => step.passId === 'first-pass' && step.scenarioId === 'route.rates',
     );
   // Mirrors routeEntryHref in the runner: depth-0 opens push their own route,
   // as do the redirect verifications. Deeper `.open` actions such as
@@ -584,7 +522,7 @@ describe('scenario re-entry gate', () => {
     const gate = new ScenarioReentryGate();
     gate.markRecovered(steps[searchIndex]);
 
-    const next = steps.slice(searchIndex + 1).find((step) => step.scenarioId !== 'route.search');
+    const next = steps.slice(searchIndex + 1).find((step) => step.scenarioId !== 'route.rates');
     expect(next).toBeDefined();
     expect(gate.shouldSkip(next!, routeEntry(next!))).toBe(false);
   });
@@ -596,7 +534,7 @@ describe('scenario re-entry gate', () => {
 
     const open = steps.find((step) => step.semanticActionId === 'search.open');
     expect(open).toBeDefined();
-    // search.open pushes /search itself, so it re-establishes the screen.
+    // search.open enters the canonical /browse results, so it re-establishes the screen.
     expect(gate.shouldSkip(open!, true)).toBe(false);
   });
 
