@@ -1,4 +1,4 @@
-import { uiCount, uiDate, uiIdentifier, uiInputIdentifier, uiInputNumber, uiJoin, uiProductName, uiRate, type UiCopy } from "../../lib/uiCopy";
+import { uiCount, uiDate, uiIdentifier, uiInputIdentifier, uiInputNumber, uiJoin, uiPrivateOfferInput, uiProductName, uiRate, type UiCopy } from "../../lib/uiCopy";
 import { toFraction } from '../../data/format';
 import { InfoRow } from "../settings/settingsUi";
 import { ActivityEvents } from '../product/ActivityEvents';
@@ -17,28 +17,50 @@ import { EligibilityScenarioFields } from '../product/EligibilityScenarioFields'
 import { eligibilityRequirements } from '../../data/eligibilityContracts/facts';
 import type { EligibilitySelection } from '../../data/eligibilityContracts/transport';
 import { replayQuestionSource } from '../../lib/customerQuestionBinding';
+import { replayInputControl } from '../../data/receiptReplay/inputSchema';
+import type { MortgageInputs } from '../../data/mortgageContracts/types';
 const INPUT_LABELS:Readonly<Record<string,UiCopy>>={
   openingBalance:'Opening balance',principal:'Principal',fundedDate:'Funded date',maturityDate:'Maturity date',
   confirmedAnnualRate:'Confirmed annual rate',confirmedAt:'Confirmation date',accountId:'Account ID',
   noWithholdingConfirmed:'Withholding excluded',confirmed:'Confirmed',startDate:'Starting date',endDateExclusive:'End excluded',
   openingOffsetBalance:'Opening offset',assessmentDate:'Assessment date',amount:'Amount',rate:'Rate',
   date:'Date',balance:'Balance',value:'Value',type:'Type',id:'ID',annualRate:'Annual rate',
+  offerId:'Local offer reference',sourceVersion:'Offer version reference',snapshotId:'Opening statement reference',
+  from:'Starting date',toExclusive:'End excluded',openingOutstanding:'Opening total debt (AUD)',
+  openingComponents:'Debt',postedInterest:'Interest posted',accruedInterest:'Interest unposted',
+  capitalizedCharges:'Capitalised charges',otherDebt:'Other debt',
+  noCarriedArrearsOrDefault:'No arrears / default',noExcludedMovements:'No excluded movements',
+  obligationAmount:'Confirmed monthly amount due (AUD)',originalAnchor:'Original monthly due date',
+  executionCoverage:'Payments complete',payments:'Payments',obligationId:'Obligation reference',
+  phase:'Payment phase',order:'Payment order',status:'Status',provenance:'Source',
+  feeSettlements:'Fees',occurrenceId:'Fee occurrence reference',externalAccountId:'External fee account reference',
+  externalAccounts:'Account',role:'External account role',customerFacts:'Customer facts',field:'Customer field',
+  state:'State',unit:'Unit',confirmedOfferFacts:'Offer facts',purpose:'Loan purpose',security:'Security',repaymentType:'Repayment',
 };
-const IDENTIFIER_INPUTS=new Set(['accountId','id','intervalId','tierId','componentId','timezone','type','field','metric','state','status']);
 function inputLabel(path:readonly string[]):UiCopy {
   return uiJoin(...path.flatMap<UiCopy>((key,index)=>index?[' / ',INPUT_LABELS[key]??uiIdentifier(key)]:[INPUT_LABELS[key]??uiIdentifier(key)]));
 }
-function InputValues({value,onChange,path=[]}:{value:any;onChange:(v:any)=>void;path?:readonly string[]}) {
-  const label=inputLabel(path),key=path.at(-1)??'';
+function InputValues({value,onChange,path=[],kind,mortgage,factType}:{value:any;onChange:(v:any)=>void;path?:readonly string[];kind:ReplayItem['kind'];mortgage?:MortgageInputs;factType?:unknown}) {
+  const label=inputLabel(path),control=replayInputControl(kind,path,factType);
+  if(mortgage&&path.length===1&&path[0]==='confirmedOfferFacts'&&value&&typeof value==='object'&&!Array.isArray(value)&&Object.values(value).every(field=>typeof field==='string'))return <View style={{gap:6}}>{(['purpose','security','repaymentType'] as const).map(field=><LedgerField key={field} label={inputLabel([...path,field])} value={uiPrivateOfferInput(mortgage,field)} onChangeText={text=>onChange({...value,[field]:text})}/>)}</View>;
   if(value===null)return <InfoRow label={label} value="Unknown"/>;
   if(typeof value==='boolean')return <Chip label={label} selected={value} onPress={()=>onChange(!value)}/>;
   if(typeof value==='string'||typeof value==='number') {
-    const numeric=typeof value==='number'||/^[\d.,+\- $%]*$/.test(value);
-    if(!numeric&&!IDENTIFIER_INPUTS.has(key))return <InfoRow label={label} value="Source review required"/>;
-    return <LedgerField label={label} value={numeric?uiInputNumber(String(value)):uiInputIdentifier(value)}
+    if(control==='phase'||control==='coverage') {
+      const choices=control==='phase'?[{value:'before_accrual',label:'Before daily interest'},{value:'after_accrual',label:'After daily interest'}] as const:[{value:'complete',label:'Complete'},{value:'unknown',label:'Unknown'}] as const;
+      return <View style={{gap:6}}><InfoRow label={label} value={choices.find(choice=>choice.value===value)?.label??'Unknown'}/>{choices.map(choice=><Chip key={choice.value} label={uiJoin(label,' · ',choice.label)} selected={value===choice.value} onPress={()=>onChange(choice.value)}/>)}</View>;
+    }
+    if(control==='factState')return <InfoRow label={label} value={value==='known'?'Known':value==='unknown'?'Unknown':value==='unavailable'?'Unavailable':value==='not_applicable'?'Not applicable':'Source review required'}/>;
+    if(control==='provenance')return <InfoRow label={label} value={value==='user_reported_bank_offer_and_statement'?'Entered facts':'Source review required'}/>;
+    if(control==='cleared')return <InfoRow label={label} value={value==='cleared'?'Cleared':'Source review required'}/>;
+    if(control==='factType')return <InfoRow label={label} value={value==='boolean'?'Boolean':value==='decimal'?'Decimal':value==='date'?'Date':value==='text'?'Text':'Source review required'}/>;
+    if(control==='unit')return <InfoRow label={label} value={value==='AUD'?'AUD':value==='fraction'?'Fraction':value==='percent'?'Percent':value==='count'?'Count':'Source review required'}/>;
+    const numeric=control!=='identifier'&&(control==='number'||typeof value==='number'||kind!=='mortgage_calculation'&&/^[\d.,+\- $%]*$/.test(value));
+    if(!numeric&&control!=='identifier')return <InfoRow label={label} value="Source review required"/>;
+    return <LedgerField label={label} value={numeric?uiInputNumber(String(value)):uiInputIdentifier(String(value))} keyboardType={numeric?'numbers-and-punctuation':'default'}
       onChangeText={v=>onChange(typeof value==='number'&&/^\d+$/.test(v)?Number(v):v)}/>;
   }
-  return <View style={{gap:6}}>{Object.entries(value??{}).map(([key,v])=><InputValues key={key} path={[...path,key]} value={v}
+  return <View style={{gap:6}}>{Object.entries(value??{}).map(([key,v])=><InputValues key={key} path={[...path,key]} value={v} kind={kind} mortgage={mortgage} factType={value?.type}
     onChange={changed=>{const copy=Array.isArray(value)?[...value]:{...value};copy[key]=changed;onChange(copy);}}/>)}</View>;
 }
 const KIND:Record<ReplayItem['kind'],UiCopy>={td:'Term deposits',eligibility_only:'Eligibility',savings_calculation:'Savings',savings_activity_calculation:'Savings activity',mortgage_calculation:'Mortgage'};
@@ -63,7 +85,7 @@ export function ReplayAccount({item,context,onChange}:{item:ReplayItem;context:E
   {!!rows.length&&<Disclosure title="Choose current rate variant" open={variants} onToggle={()=>setVariants(!variants)}>{rows.map((r,i)=><Chip key={i} label={uiJoin(uiProductName(r),' · ',uiRate(toFraction(r.rate)),' · ','Rate index',': ',uiCount(r.rate_index))} selected={row===r} onPress={()=>setRow(r)}/>)}</Disclosure>}
   {!!error&&<AppText variant="small">{error}</AppText>}
   {options.map((o,index)=><Chip key={o.id} label={optionLabel(o,index)} selected={option===o} onPress={()=>{setOption(o);if(o.id!==item.sourceId){if(item.kind==='mortgage_calculation')setInputs((v:any)=>({...v,customerFacts:[]}));if(item.kind==='savings_activity_calculation'){const p=(o.selection as ActivitySelection).subject.policy;setInputs((v:any)=>({...v,startDate:(o.selection as ActivitySelection).subject.scope.from,endDateExclusive:(o.selection as ActivitySelection).subject.scope.toExclusive,confirmedAt:null,confirmedAnnualRates:p.intervals.flatMap(i=>i.tiers.map(t=>({intervalId:i.id,tierId:t.id,annualRate:''}))),confirmedBonusAnnualRates:p.bonus.tiers.map(t=>({componentId:p.bonus.componentId,tierId:t.id,annualRate:''})),activity:{events:[],coverage:[{accountId:v.accountId,from:p.bonus.assessment.from,toExclusive:p.bonus.assessment.toExclusive,status:'unknown'}]}}));}if(item.kind==='eligibility_only')setInputs((v:any)=>({...v,values:{}}));}setConfirmed(false);setChanged(false);setAnswers({});}}/>)}
-  <Disclosure title="Review local inputs" open={open} onToggle={()=>setOpen(!open)}>{item.kind==='eligibility_only'?<LedgerField label="Assessment date" value={uiInputNumber(inputs.assessmentDate??'')} onChangeText={assessmentDate=>{setInputs((v:any)=>({...v,assessmentDate}));setConfirmed(false);}}/>:<InputValues value={item.kind==='savings_activity_calculation'?Object.fromEntries(Object.entries(inputs).filter(([k])=>k!=='activity')):inputs} onChange={v=>{setInputs(item.kind==='savings_activity_calculation'?{...v,activity:inputs.activity}:v);setConfirmed(false);}}/>}</Disclosure>
+  <Disclosure title="Review local inputs" open={open} onToggle={()=>setOpen(!open)}>{item.kind==='eligibility_only'?<LedgerField label="Assessment date" value={uiInputNumber(inputs.assessmentDate??'')} onChangeText={assessmentDate=>{setInputs((v:any)=>({...v,assessmentDate}));setConfirmed(false);}}/>:<InputValues kind={item.kind} mortgage={item.kind==='mortgage_calculation'?inputs:undefined} value={item.kind==='savings_activity_calculation'?Object.fromEntries(Object.entries(inputs).filter(([k])=>k!=='activity')):inputs} onChange={v=>{setInputs(item.kind==='savings_activity_calculation'?{...v,activity:inputs.activity}:v);setConfirmed(false);}}/>}</Disclosure>
   {option&&item.kind==='savings_activity_calculation'&&<ActivityEvents assessment={(option.selection as ActivitySelection).subject.policy.bonus.assessment} accountId={inputs.accountId} events={inputs.activity?.events??[]} complete={inputs.activity?.coverage?.[0]?.status==='complete'} onChange={events=>{setInputs((v:any)=>({...v,activity:{...v.activity,events}}));setConfirmed(false);}} onCoverage={complete=>{const a=(option.selection as ActivitySelection).subject.policy.bonus.assessment;setInputs((v:any)=>({...v,activity:{...v.activity,coverage:[{accountId:v.accountId,from:a.from,toExclusive:a.toExclusive,status:complete?'complete':'unknown'}]}}));setConfirmed(false);}}/>}
   {eligibilitySubject&&<EligibilityScenarioFields definitions={eligibilitySubject.inputDefinitions} needed={scenarioNeeded} values={inputs.values??{}} onChange={values=>{setInputs((v:any)=>({...v,values}));setConfirmed(false);}}/>}
   {option&&<>{option.changed&&<><InfoRow label="Source" value="Changed"/><InfoRow label="Transferred answers" value="None"/><Chip label="Use current source" selected={changed} onPress={()=>{setChanged(!changed);setConfirmed(false);}}/></>}

@@ -157,7 +157,8 @@ function ProductCardView({
   const joinFacts = (facts: readonly UiText[]) => uiJoin(...facts.flatMap((fact, index) => index ? [uiLabel(' · '), fact] : [fact]));
   const cardA11yLabel = uiJoin(uiProductName(row), ', ', uiProviderName(row), ', ', rateLabel, ' ', rateText,
     metadata.length ? uiJoin(', ', joinFacts(metadata)) : null,
-    access.badge ? uiJoin(', ', uiAccessBadge(access)) : nonStandard ? uiJoin(', ', 'Non-standard') : null,
+    access.badge ? uiJoin(', ', uiAccessBadge(access)) : null,
+    nonStandard ? uiJoin(', ', 'Non-standard') : null,
     qualifier.conditional ? uiJoin(', ', qualifier.label) : null,
     rateChangeText ? uiJoin(', ', rateChangeText) : null);
 

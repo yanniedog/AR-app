@@ -2,9 +2,9 @@ import React from 'react';
 import { View } from 'react-native';
 
 // Closed facts emitted alongside projection simulations.
-import type { ProjectionFact, ProjectionFrequency, ProjectionSeriesId } from '../../data/projectionFacts';
+import type { ProjectionCashflowSnapshot, ProjectionFact, ProjectionFrequency, ProjectionSeriesId } from '../../data/projectionFacts';
 import { AppText, Row } from '../ui';
-import { uiCount, uiDate, uiDuration, uiJoin, uiLabel, uiMoney, uiRate } from '../../lib/uiCopy';
+import { uiCount, uiDate, uiDuration, uiJoin, uiLabel, uiMoney, uiRate, type UiCopy } from '../../lib/uiCopy';
 
 const FREQUENCY = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly' } as const satisfies Record<ProjectionFrequency, string>;
 const SCENARIO = {
@@ -13,6 +13,15 @@ const SCENARIO = {
 } as const satisfies Record<ProjectionSeriesId, string>;
 const HORIZON = { 'full-term': 'Remaining term', 'fixed-period': 'Fixed period', 'savings-horizon': 'Savings horizon', 'deposit-maturity': 'Deposit maturity' } as const;
 
+function CashflowRows({ label, amount, enteredAmount, enteredFrequency, annualPeriods }: {
+  label: UiCopy; amount: number;
+} & Omit<ProjectionCashflowSnapshot, 'monthlyAmount'>) {
+  return <View style={{ gap: 4 }}>
+    <Row><AppText variant="small" color="textMuted">{label}</AppText><AppText variant="small">{uiJoin(uiMoney(enteredAmount, 2),' · ',FREQUENCY[enteredFrequency])}</AppText></Row>
+    <Row><AppText variant="small" color="textMuted">{uiLabel('Monthly equivalent')}</AppText><AppText variant="small">{uiJoin(uiMoney(amount, 2),' / ','month')}</AppText></Row>
+    {annualPeriods !== 12 ? <Row><AppText variant="small" color="textMuted">{uiLabel('Conversion')}</AppText><AppText variant="small">{uiJoin(uiCount(annualPeriods),' / ',uiCount(12))}</AppText></Row> : null}
+  </View>;
+}
 
 function renderFact(fact: ProjectionFact): React.ReactElement {
   switch (fact.kind) {
@@ -25,18 +34,18 @@ function renderFact(fact: ProjectionFact): React.ReactElement {
       <Row><AppText variant="small" color="textMuted">{uiLabel("Scenario rates")}</AppText><AppText variant="small">{uiLabel("Constant")}</AppText></Row>
     </View>;
     case 'monthly-repayment': return <View style={{ gap: 4 }}>
-      <Row><AppText variant="small" color="textMuted">{uiLabel("Monthly repayment")}</AppText><AppText variant="small">{uiMoney(fact.amount)}</AppText></Row>
-      <Row><AppText variant="small" color="textMuted">{uiLabel("Repayment basis")}</AppText><AppText variant="small">{uiJoin(fact.source==='entered'?'Entered':'Illustrative',' · ',FREQUENCY[fact.enteredFrequency])}</AppText></Row>
+      {fact.source === 'entered' ? <CashflowRows label="Repayment" {...fact}/> : <Row><AppText variant="small" color="textMuted">{uiLabel('Monthly repayment')}</AppText><AppText variant="small">{uiJoin(uiMoney(fact.amount, 2),' / ','month')}</AppText></Row>}
+      <Row><AppText variant="small" color="textMuted">{uiLabel("Repayment basis")}</AppText><AppText variant="small">{uiLabel(fact.source==='entered'?'Entered':'Illustrative')}</AppText></Row>
     </View>;
-    case 'monthly-extra-repayment': return <Row><AppText variant="small" color="textMuted">{uiLabel("Extra repayment")}</AppText><AppText variant="small">{uiJoin(uiMoney(fact.amount),' / ','month',' · ',FREQUENCY[fact.enteredFrequency])}</AppText></Row>;
+    case 'monthly-extra-repayment': return <CashflowRows label="Extra repayment" {...fact}/>;
     case 'offset-model': return <View style={{ gap: 4 }}>
       <Row><AppText variant="small" color="textMuted">{uiLabel("Opening offset")}</AppText><AppText variant="small">{uiJoin(uiMoney(fact.openingAmount),' · ',fact.openingSource==='entered'?'Entered':'Simulated history')}</AppText></Row>
       <Row><AppText variant="small" color="textMuted">{uiLabel("Offset basis")}</AppText><AppText variant="small">{uiLabel("Interest reduction")}</AppText></Row>
       <Row><AppText variant="small" color="textMuted">{uiLabel("Offset as repayment")}</AppText><AppText variant="small">{uiLabel("Excluded")}</AppText></Row>
     </View>;
     case 'monthly-offset-contribution': return <View style={{ gap: 4 }}>
-      <Row><AppText variant="small" color="textMuted">{uiLabel("Offset contribution")}</AppText><AppText variant="small">{uiJoin(uiMoney(fact.amount),' / ','month')}</AppText></Row>
-      <Row><AppText variant="small" color="textMuted">{uiLabel("Offset boost")}</AppText><AppText variant="small">{uiJoin(uiMoney(fact.boostAmount),' / ','month',' · ',FREQUENCY[fact.enteredFrequency])}</AppText></Row>
+      <CashflowRows label="Offset contribution" {...fact}/>
+      <CashflowRows label="Offset boost" {...fact} amount={fact.boostAmount} enteredAmount={fact.enteredBoostAmount}/>
     </View>;
     case 'net-offset-difference': return <View style={{ gap: 4 }}>
       <Row><AppText variant="small" color="textMuted">{uiLabel("Net offset difference")}</AppText><AppText variant="small">{uiLabel("Unavailable")}</AppText></Row>
@@ -71,8 +80,8 @@ function renderFact(fact: ProjectionFact): React.ReactElement {
       <AppText variant="small" color="danger">{uiLabel("Balance at term end")}</AppText>
       {fact.scenarios.map(item => <Row key={item.id}><AppText variant="small" color="textMuted">{SCENARIO[item.id]}</AppText><AppText variant="small">{uiMoney(item.amount)}</AppText></Row>)}
     </View>;
-    case 'monthly-contribution': return <Row><AppText variant="small" color="textMuted">{uiLabel("Contribution")}</AppText><AppText variant="small">{uiJoin(uiMoney(fact.amount),' / ','month',' · ',FREQUENCY[fact.enteredFrequency])}</AppText></Row>;
-    case 'monthly-withdrawal': return <Row><AppText variant="small" color="textMuted">{uiLabel("Withdrawal")}</AppText><AppText variant="small">{uiJoin(uiMoney(fact.amount),' / ','month',' · ',FREQUENCY[fact.enteredFrequency])}</AppText></Row>;
+    case 'monthly-contribution': return <CashflowRows label="Contribution" {...fact}/>;
+    case 'monthly-withdrawal': return <CashflowRows label="Withdrawal" {...fact}/>;
     case 'deposit-interest-model': return <View style={{ gap: 4 }}>
       <Row><AppText variant="small" color="textMuted">{uiLabel("Interest accrual / payment")}</AppText><AppText variant="small">{uiLabel("Monthly nominal / maturity")}</AppText></Row>
       <Row><AppText variant="small" color="textMuted">{uiLabel("Provider day count / payment timing")}</AppText><AppText variant="small">{uiLabel("Unverified")}</AppText></Row>

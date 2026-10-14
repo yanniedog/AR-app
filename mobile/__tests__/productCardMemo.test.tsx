@@ -97,3 +97,19 @@ test('shows the whole financial variant and saves the exact tier without opening
     expect(onPress).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });
+
+test.each([
+  { account_class: 'non_standard', product_name: 'Home loan for a teacher', restricted: true, nonStandard: true },
+  { account_class: 'standard', product_name: 'Home loan for a teacher', restricted: true, nonStandard: false },
+  { account_class: 'non_standard', product_name: 'Home loan', restricted: false, nonStandard: true },
+])('announces each independent access fact on the main card target: $account_class / $product_name', variant => {
+  const exact: RateRow = { ...row, ...variant, lvr_tier: 'lvr_60-70%' };
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<ProductCard row={exact} section="Mortgage" />) as Renderer; });
+  try {
+    const target = tree.root.findAllByProps({ accessibilityRole: 'button' }).find(node => String(node.props.accessibilityLabel).startsWith(exact.product_name + ','))!;
+    expect(target).toBeDefined();
+    expect(String(target.props.accessibilityLabel).includes('Occupation · Eligibility unverified')).toBe(variant.restricted);
+    expect(String(target.props.accessibilityLabel).includes('Non-standard')).toBe(variant.nonStandard);
+  } finally { act(() => tree.unmount()); }
+});

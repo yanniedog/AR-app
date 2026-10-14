@@ -89,7 +89,14 @@ export function uiConditionTag(fact: PublishedNumericConditionFact): UiText {
   const row = uiConditionFact(fact); return uiJoin(row.label, ' ', row.value);
 }
 export function uiListedLvrRange(row: Pick<RateRow, 'lvr_tier'>): UiText {
-  const range = row.lvr_tier ? parseLvrTier(row.lvr_tier) : null;
+  const value = row.lvr_tier?.trim() ?? '';
+  const catalogueBand = /^LVR_(\d+(?:\.\d+)?)_(\d+(?:\.\d+)?)$/i.exec(value);
+  const upper = /^(?:LVR_)?(?:LE|<=|≤)(\d+(?:\.\d+)?)(?:%)?$/i.exec(value);
+  const ordinary = /^(?:LVR_)?(?:=?\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?|>\d+(?:\.\d+)?|\d+(?:\.\d+)?\+)%?$/i.test(value);
+  // The catalogue's underscore spelling represents the same (lo, hi] band
+  // as the existing hyphen spelling; this affects presentation only.
+  const range = catalogueBand ? { lo: Number(catalogueBand[1]), hi: Number(catalogueBand[2]) }
+    : upper ? { lo: 0, hi: Number(upper[1]) } : ordinary ? parseLvrTier(value) : null;
   if (!range || !Number.isFinite(range.lo) || range.lo < 0 || range.lo > 100 || range.hi < range.lo
     || (Number.isFinite(range.hi) && range.hi > 100)) return uiLabel('Unverified');
   return numericRange(range.lo > 0 ? { state: 'known', value: range.lo, inclusive: false } : { state: 'unspecified' },

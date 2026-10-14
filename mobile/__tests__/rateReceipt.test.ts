@@ -79,7 +79,7 @@ describe('rate receipt', () => {
     });
     expect(receipt.tier).toEqual(expect.arrayContaining([
       { label: 'Rate index', value: '4' },
-      { label: 'Listed LVR', value: 'Unverified' },
+      { label: 'Listed LVR', value: '>70%–80%' },
     ]));
     expect(receipt.conditions).toEqual(expect.arrayContaining([
       { label: 'Minimum age', value: '18 years · Australian resident' },

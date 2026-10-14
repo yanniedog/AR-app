@@ -22,21 +22,27 @@ interface ProjectionSnapshotBase {
   rateRange: readonly [number, number, number];
   history: ProjectionHistorySnapshot | null;
 }
+export interface ProjectionCashflowSnapshot {
+  monthlyAmount: number;
+  enteredAmount: number;
+  enteredFrequency: ProjectionFrequency;
+  annualPeriods: 12 | 26 | 52;
+}
 export type ProjectionFactSnapshot =
   | (ProjectionSnapshotBase & {
     section: 'Mortgage';
     fixed: boolean;
     remainingYears: number;
-    repayment: { monthlyAmount: number; source: 'entered' | 'illustrative'; enteredFrequency: ProjectionFrequency };
-    extraRepayment: { monthlyAmount: number; enteredFrequency: ProjectionFrequency };
+    repayment: ProjectionCashflowSnapshot & { source: 'entered' | 'illustrative' };
+    extraRepayment: ProjectionCashflowSnapshot;
     offset: { openingAmount: number; openingSource: 'entered' | 'simulated-history'; growthMonthlyAmount: number;
-      boostMonthlyAmount: number; enteredFrequency: ProjectionFrequency };
+      boostMonthlyAmount: number; enteredAmount: number; enteredBoostAmount: number; enteredFrequency: ProjectionFrequency; annualPeriods: 12 | 26 | 52 };
     outcomes: readonly { id: ProjectionSeriesId; negativeAmortisation: boolean; closingBalance: number }[];
   })
   | (ProjectionSnapshotBase & {
     section: 'Savings'; horizonYears: number;
-    contribution: { monthlyAmount: number; enteredFrequency: ProjectionFrequency };
-    withdrawal: { monthlyAmount: number; enteredFrequency: ProjectionFrequency };
+    contribution: ProjectionCashflowSnapshot;
+    withdrawal: ProjectionCashflowSnapshot;
     bonus: { conditionsMet: boolean; months: number; conditionalRateFraction: number; ongoingRateFraction: number } | null;
   })
   | (ProjectionSnapshotBase & {
@@ -50,10 +56,10 @@ export type ProjectionFact =
   | { readonly kind: 'remaining-term'; readonly years: number }
   | { readonly kind: 'savings-horizon-years'; readonly years: number }
   | { readonly kind: 'rate-scenarios'; readonly lowerFraction: number; readonly baseFraction: number; readonly higherFraction: number; readonly holding: 'constant' }
-  | { readonly kind: 'monthly-repayment'; readonly amount: number; readonly source: 'entered' | 'illustrative'; readonly enteredFrequency: ProjectionFrequency }
-  | { readonly kind: 'monthly-extra-repayment'; readonly amount: number; readonly enteredFrequency: ProjectionFrequency }
+  | ({ readonly kind: 'monthly-repayment'; readonly amount: number; readonly source: 'entered' | 'illustrative' } & Omit<ProjectionCashflowSnapshot, 'monthlyAmount'>)
+  | ({ readonly kind: 'monthly-extra-repayment'; readonly amount: number } & Omit<ProjectionCashflowSnapshot, 'monthlyAmount'>)
   | { readonly kind: 'offset-model'; readonly openingAmount: number; readonly openingSource: 'entered' | 'simulated-history'; readonly role: 'interest-reduction'; readonly repayment: 'excluded' }
-  | { readonly kind: 'monthly-offset-contribution'; readonly amount: number; readonly boostAmount: number; readonly enteredFrequency: ProjectionFrequency }
+  | ({ readonly kind: 'monthly-offset-contribution'; readonly amount: number; readonly boostAmount: number; readonly enteredBoostAmount: number } & Omit<ProjectionCashflowSnapshot, 'monthlyAmount'>)
   | { readonly kind: 'net-offset-difference'; readonly state: 'unavailable'; readonly feeCoverage: 'unverified' }
   | { readonly kind: 'future-reversion-rate'; readonly state: 'unknown' }
   | { readonly kind: 'history-model'; readonly basis: 'approximate'; readonly anchorDay: string; readonly anchorBalance: number; readonly anchorRateFraction: number; readonly reanchor: 'current-entered-balance' }
@@ -62,8 +68,8 @@ export type ProjectionFact =
   | { readonly kind: 'history-offset-mismatch'; readonly differenceAmount: number; readonly simulatedEndAmount: number; readonly currentEnteredAmount: number; readonly forwardSource: 'simulated-history' }
   | { readonly kind: 'negative-amortisation'; readonly scenarios: readonly ProjectionSeriesId[] }
   | { readonly kind: 'residual-loan-balance'; readonly scenarios: readonly { readonly id: ProjectionSeriesId; readonly amount: number }[] }
-  | { readonly kind: 'monthly-contribution'; readonly amount: number; readonly enteredFrequency: ProjectionFrequency }
-  | { readonly kind: 'monthly-withdrawal'; readonly amount: number; readonly enteredFrequency: ProjectionFrequency }
+  | ({ readonly kind: 'monthly-contribution'; readonly amount: number } & Omit<ProjectionCashflowSnapshot, 'monthlyAmount'>)
+  | ({ readonly kind: 'monthly-withdrawal'; readonly amount: number } & Omit<ProjectionCashflowSnapshot, 'monthlyAmount'>)
   | { readonly kind: 'deposit-interest-model'; readonly accrual: 'monthly-nominal'; readonly payment: 'maturity'; readonly providerDayCount: 'unverified'; readonly providerPaymentTiming: 'unverified' }
   | { readonly kind: 'deposit-interest-treatment'; readonly value: 'reinvest-at-maturity' | 'paid-out-at-maturity' }
   | { readonly kind: 'deposit-term'; readonly months: number; readonly currentRateFraction: number }
@@ -83,6 +89,12 @@ function months(value: number, zero = false): void {
 }
 function frequency(value: ProjectionFrequency): void {
   if (!['weekly', 'fortnightly', 'monthly'].includes(value)) throw new TypeError('Invalid projection frequency snapshot');
+}
+function cashflow(value: ProjectionCashflowSnapshot): Omit<ProjectionCashflowSnapshot, 'monthlyAmount'> {
+  money(value.monthlyAmount); money(value.enteredAmount); frequency(value.enteredFrequency);
+  const periods = value.enteredFrequency === 'weekly' ? 52 : value.enteredFrequency === 'fortnightly' ? 26 : 12;
+  if (value.annualPeriods !== periods) throw new TypeError('Invalid projection conversion basis');
+  return { enteredAmount: value.enteredAmount, enteredFrequency: value.enteredFrequency, annualPeriods: value.annualPeriods };
 }
 function day(value: string): void {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -129,20 +141,21 @@ export function projectionFacts(snapshot: ProjectionFactSnapshot): readonly Proj
   if (snapshot.section === 'Mortgage') {
     if (!Number.isFinite(snapshot.remainingYears) || snapshot.remainingYears <= 0)
       throw new TypeError('Invalid remaining term snapshot');
-    money(snapshot.repayment.monthlyAmount); money(snapshot.extraRepayment.monthlyAmount);
+    const repaymentInput = cashflow(snapshot.repayment), extraInput = cashflow(snapshot.extraRepayment);
     frequency(snapshot.repayment.enteredFrequency); frequency(snapshot.extraRepayment.enteredFrequency); frequency(snapshot.offset.enteredFrequency);
     if (!['entered', 'illustrative'].includes(snapshot.repayment.source) || !['entered', 'simulated-history'].includes(snapshot.offset.openingSource))
       throw new TypeError('Invalid projection input source snapshot');
-    money(snapshot.offset.openingAmount); money(snapshot.offset.growthMonthlyAmount); money(snapshot.offset.boostMonthlyAmount);
+    money(snapshot.offset.openingAmount); money(snapshot.offset.growthMonthlyAmount); money(snapshot.offset.boostMonthlyAmount); money(snapshot.offset.enteredBoostAmount);
+    const offsetInput = cashflow({ ...snapshot.offset, monthlyAmount: snapshot.offset.growthMonthlyAmount });
     facts.push({ kind: 'remaining-term', years: snapshot.remainingYears },
       { kind: 'monthly-repayment', amount: snapshot.repayment.monthlyAmount, source: snapshot.repayment.source,
-        enteredFrequency: snapshot.repayment.enteredFrequency },
+        ...repaymentInput },
       { kind: 'monthly-extra-repayment', amount: snapshot.extraRepayment.monthlyAmount,
-        enteredFrequency: snapshot.extraRepayment.enteredFrequency },
+        ...extraInput },
       { kind: 'offset-model', openingAmount: snapshot.offset.openingAmount, openingSource: snapshot.offset.openingSource,
         role: 'interest-reduction', repayment: 'excluded' },
       { kind: 'monthly-offset-contribution', amount: snapshot.offset.growthMonthlyAmount,
-        boostAmount: snapshot.offset.boostMonthlyAmount, enteredFrequency: snapshot.offset.enteredFrequency },
+        boostAmount: snapshot.offset.boostMonthlyAmount, enteredBoostAmount: snapshot.offset.enteredBoostAmount, ...offsetInput },
       { kind: 'net-offset-difference', state: 'unavailable', feeCoverage: 'unverified' });
     if (snapshot.fixed) facts.push({ kind: 'future-reversion-rate', state: 'unknown' });
     snapshot.outcomes.forEach(outcome => {
@@ -158,13 +171,13 @@ export function projectionFacts(snapshot: ProjectionFactSnapshot): readonly Proj
   } else if (snapshot.section === 'Savings') {
     if (!Number.isFinite(snapshot.horizonYears) || snapshot.horizonYears <= 0)
       throw new TypeError('Invalid savings horizon snapshot');
-    money(snapshot.contribution.monthlyAmount); money(snapshot.withdrawal.monthlyAmount);
+    const contributionInput = cashflow(snapshot.contribution), withdrawalInput = cashflow(snapshot.withdrawal);
     frequency(snapshot.contribution.enteredFrequency); frequency(snapshot.withdrawal.enteredFrequency);
     facts.push({ kind: 'savings-horizon-years', years: snapshot.horizonYears },
       { kind: 'monthly-contribution', amount: snapshot.contribution.monthlyAmount,
-      enteredFrequency: snapshot.contribution.enteredFrequency },
+        ...contributionInput },
       { kind: 'monthly-withdrawal', amount: snapshot.withdrawal.monthlyAmount,
-        enteredFrequency: snapshot.withdrawal.enteredFrequency },
+        ...withdrawalInput },
       { kind: 'savings-interest-model', compounding: 'monthly', providerTiming: 'unverified', bonusApplicability: 'unverified' });
     if (snapshot.bonus) {
       months(snapshot.bonus.months, true); rate(snapshot.bonus.conditionalRateFraction); rate(snapshot.bonus.ongoingRateFraction);

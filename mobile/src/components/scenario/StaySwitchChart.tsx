@@ -23,11 +23,14 @@ export function StaySwitchChart({ projection, currentBank, compact = false, onOp
   const current = currentBank?.trim() ? uiProviderName({ provider: currentBank }) : uiLabel('Current bank');
   const target = uiProviderName({ provider: projection.targetProvider });
   const date = (value: string | null | undefined) => value ? uiDate(value) : uiLabel('Not reached');
+  const horizon = projection.facts.filter(fact => fact.kind === 'switch-horizon').flatMap(uiStaySwitchFact);
+  const horizonSummary = uiJoin(...horizon.flatMap((fact, index) => [index ? uiLabel(' · ') : null, fact.label, uiLabel(': '), fact.value]));
   const summary = uiJoin(current, ' · ', 'Total interest', ' ', uiMoney(projection.stay?.totalInterest), ' / ', target, ' · ', 'Total interest', ' ', uiMoney(projection.switching?.totalInterest),
-    ' · ', 'Total-cost difference', ' ', projection.totalCostSaving == null ? uiLabel('Unavailable') : uiMoney(projection.totalCostSaving));
+    ' · ', 'Total-cost difference', ' ', projection.totalCostSaving == null ? uiLabel('Unavailable') : uiMoney(projection.totalCostSaving), horizon.length ? uiJoin(' · ', horizonSummary) : null);
   return <Card variant="outlined" style={{ gap: 12 }}>
     <AppText variant={compact ? 'h3' : 'h2'}>{uiLabel("Stay or switch")}</AppText>
     <AppText variant="small" color="textMuted">{uiJoin('Monthly illustration', ' · ', 'Net loan after offset')}</AppText>
+    {compact ? <FinancialFactRows rows={horizon} /> : null}
     <View accessibilityRole="image" accessibilityLabel={summary}><Svg width={chartWidth} height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
       <Line x1="4" x2={chartWidth - 4} y1={plot.bottom} y2={plot.bottom} stroke={theme.colors.border} />
       <Path d={plot.stay} fill="none" stroke={theme.colors.textMuted} strokeWidth={3} strokeLinecap="round" />

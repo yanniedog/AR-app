@@ -131,6 +131,12 @@ function monthlyAmount(value: string, frequency: ProjectionFrequency): number {
   return amount;
 }
 
+// Presentation only: keep the original amount beside the existing converted local.
+function cashflowInput(value: string, frequency: ProjectionFrequency, monthlyValue: number) {
+  return { monthlyAmount: monthlyValue, enteredAmount: cleanNumber(value), enteredFrequency: frequency,
+    annualPeriods: (frequency === 'weekly' ? 52 : frequency === 'fortnightly' ? 26 : 12) as 12 | 26 | 52 };
+}
+
 function repaymentFor(balance: number, annualRate: number, months: number): number {
   if (months <= 0) return 0;
   const monthlyRate = annualRate / 12;
@@ -590,10 +596,11 @@ export function buildLifecycleProjection(
       offsetSeries,
       facts: projectionFacts({ section: 'Mortgage', months, remainingYears: enteredYears, fixed: fixedRate,
         rateRange: [lowerRate, baseRate, higherRate], history: historySnapshot,
-        repayment: { monthlyAmount: repayment, source: enteredRepayment ? 'entered' : 'illustrative', enteredFrequency: inputs.periodicFrequency },
-        extraRepayment: { monthlyAmount: extraRepayment, enteredFrequency: inputs.extraRepaymentFrequency },
+        repayment: { ...cashflowInput(inputs.periodicAmount, inputs.periodicFrequency, repayment), source: enteredRepayment ? 'entered' : 'illustrative' },
+        extraRepayment: cashflowInput(inputs.extraRepaymentAmount, inputs.extraRepaymentFrequency, extraRepayment),
         offset: { openingAmount: forwardOpeningOffset, openingSource: anchor ? 'simulated-history' : 'entered',
-          growthMonthlyAmount: offsetGrowth, boostMonthlyAmount: offsetBoost, enteredFrequency: inputs.offsetContributionFrequency }, outcomes }),
+          growthMonthlyAmount: offsetGrowth, boostMonthlyAmount: offsetBoost, enteredBoostAmount: cleanNumber(inputs.offsetBoostAmount),
+          ...cashflowInput(inputs.offsetContributionAmount, inputs.offsetContributionFrequency, offsetGrowth) }, outcomes }),
       defaultMetric: 'balance',
       availableMetrics: [
         'balance',
@@ -732,8 +739,8 @@ export function buildLifecycleProjection(
         rateRange: [lowerRate, baseRate, higherRate], history: historySnapshot }
       : { section: 'Savings', months: Math.round(enteredHorizonYears * 12), horizonYears: enteredHorizonYears,
         rateRange: [lowerRate, baseRate, higherRate], history: historySnapshot,
-        contribution: { monthlyAmount: contribution, enteredFrequency: inputs.periodicFrequency },
-        withdrawal: { monthlyAmount: withdrawal, enteredFrequency: inputs.withdrawalFrequency },
+        contribution: cashflowInput(inputs.periodicAmount, inputs.periodicFrequency, contribution),
+        withdrawal: cashflowInput(inputs.withdrawalAmount, inputs.withdrawalFrequency, withdrawal),
         bonus: bonusSavings ? { conditionsMet: inputs.bonusConditionsMet, months: bonusMonths,
           conditionalRateFraction: annualRate!, ongoingRateFraction: ongoingRate! } : null }),
     defaultMetric: 'balance',

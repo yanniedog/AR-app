@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import type { Subscription } from '../data/subscriptions';
-import type { CorePayload, DetailItem } from '../types';
+import type { CorePayload, DetailItem, DetailsPayload } from '../types';
+import { SECTION_KEYS } from '../types';
 import type { EligibilityScenario, ScenarioRole } from '../data/eligibilityContracts/facts';
 import { resolveBrandShort } from '../data/bankBrand';
 import type { RatesSectionState } from '../data/ratesSession';
@@ -11,6 +12,7 @@ import { THIRD_PARTY_NOTICES } from '../content/thirdPartyNotices';
 import { LENDER_ARTWORK_TERMS, OPTIONAL_DIAGNOSTICS_TERMS } from './privacyPolicy';
 import { Decimal } from './productTermsEngine/decimal';
 import { readBoundCustomerQuestion, type CustomerQuestionBinding } from './customerQuestionBinding';
+import type { BackgroundWorkSnapshot } from './backgroundPayloadWork';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
@@ -344,6 +346,24 @@ export const UI_LABELS = [
   'Share report', 'Not found',
   'Product details', 'Product unavailable', 'Product rate unavailable', 'Rate kind',
   'Currency', 'Current', 'Section', 'Path',
+  'Monthly equivalent', 'Conversion', 'Repayment', 'Note', 'Missing input', 'Invalid input',
+  'Obligation reference', 'Fee occurrence reference', 'External account role', 'Customer field', 'Customer facts', 'Offer facts', 'Payment order',
+  'Boolean', 'Decimal', 'Text', 'Fraction', 'Percent', 'Count',
+  'Payload refresh', 'Prepared bank history', 'Historical catalogue', 'Bank history preparation',
+  'Details / matching', 'Post-refresh warming', 'Bank summary history', 'Bank insights', 'Bank spread history', 'RBA calendar',
+  'Asset cache', 'History envelope', 'Prepared chart data', 'Catalogue decoding', 'Catalogue validation',
+  'Cached asset validation', 'History inflation', 'History download', 'Cache encoding', 'Cache saving',
+  'Source dates', 'Fallback', 'Superseded', 'Suitability index', 'Details cache', 'Details download',
+  'History checkpoint', 'Baseline receipts', 'Catalogue edition', 'Catalogue merge', 'Preparation queue',
+  'Catalogue receipt', 'Fallback catalogue', 'First frame', 'Native decoder', 'Prepared history',
+  'Historical publications', 'History views', 'Optional assets', 'Product details', 'Search index',
+  'Notification calculation', 'Notification delivery', 'Manifest', 'Download', 'Byte verification', 'Inflation',
+  'Parsing', 'Installation', 'Archive dates', 'Characters', 'Finalization',
+  'Starting',
+  'Assumption', 'Acknowledged', 'Applicability', 'Material terms', 'Fee inventory', 'Fee timing',
+  'Fee waiver', 'Fee ordering', 'Payment allocation', 'Payment obligation', 'Business calendar',
+  'Posting calendar', 'Payment destination', 'Tax treatment', 'Break fee', 'Principal recovery',
+  'Bonus qualification', 'Projected payments', 'Contract scope', 'Issue code', 'Unpaid', 'Activity', 'Holdings', 'Repayment due', 'Paid',
 ] as const;
 
 export type UiLabel = typeof UI_LABELS[number];
@@ -438,6 +458,65 @@ export function uiDate(value: string | null | undefined): UiText {
 export function uiIdentifier(value: string | null | undefined): UiText {
   return known(value && /^[A-Za-z0-9_./:@%+\-=#?&]{1,512}$/.test(value) ? value : 'Unknown');
 }
+const BACKGROUND_WORK_NAMES: Readonly<Record<string, UiLabel>> = {
+  'Payload refresh': 'Payload refresh', 'Prepared bank history': 'Prepared bank history',
+  'Detached historical catalogue': 'Historical catalogue', 'Historical catalogue preparation': 'Historical catalogue',
+  'Bank rate history preparation': 'Bank history preparation', 'Product details and suitability index': 'Details / matching',
+  'Post-refresh warming': 'Post-refresh warming', 'Bank summary history': 'Bank summary history',
+  'Bank insights': 'Bank insights', 'Bank spread history': 'Bank spread history', 'RBA calendar': 'RBA calendar',
+};
+const BACKGROUND_STAGE_NAMES: Readonly<Record<string, UiLabel>> = {
+  'Starting': 'Starting', 'Reading asset cache': 'Asset cache', 'asset cache read': 'Asset cache',
+  'Parsing and validating history envelope': 'History envelope', 'Opening prepared chart data': 'Prepared chart data',
+  'Decoding compressed historical catalogue': 'Catalogue decoding', 'inner decode begin': 'Catalogue decoding',
+  'Validating historical catalogue': 'Catalogue validation', 'inner decode complete; validation begin': 'Catalogue validation',
+  'Decoding and verifying cached asset bytes': 'Cached asset validation', 'Inflating cached history asset': 'History inflation',
+  'Downloading, verifying and inflating history asset': 'History download', 'asset download begin': 'History download',
+  'Encoding verified asset for cache': 'Cache encoding', 'Saving verified asset cache': 'Cache saving',
+  'Catalogue contains dates after payload date; using fallback': 'Source dates',
+  'Catalogue validation rejected; using fallback': 'Fallback', 'History request superseded': 'Superseded',
+  'Abandoning superseded details request': 'Superseded', 'Reading details cache metadata': 'Details cache',
+  'Rebuilding suitability index from loaded details': 'Suitability index', 'Reading and validating cached product details': 'Details cache',
+  'Rebuilding suitability index from cached details': 'Suitability index', 'Downloading and decoding product details': 'Details download',
+  'Saving verified product details': 'Cache saving', 'Rebuilding suitability index from downloaded details': 'Suitability index',
+  'Recovering suitability index from trusted details': 'Suitability index', 'Reading and decoding legacy history checkpoint': 'History checkpoint',
+  'Reusing verified baseline receipts': 'Baseline receipts', 'Decoding and validating bundled fallback catalogue': 'Fallback catalogue',
+  'Preparing legacy catalogue edition': 'Catalogue edition', 'Merging legacy history observations': 'Catalogue merge',
+  'Encoding legacy history checkpoint': 'Cache encoding', 'Saving legacy history checkpoint': 'Cache saving',
+  'Queued behind previous catalogue preparation': 'Preparation queue', 'Checking prepared catalogue receipt': 'Catalogue receipt',
+  'Validating embedded historical catalogue': 'Catalogue validation', 'Reconciling fallback catalogue': 'Fallback catalogue',
+  'Reading and decoding history checkpoint': 'History checkpoint', 'Saving history checkpoint': 'Cache saving',
+  'Opening prepared fallback': 'Fallback catalogue', 'Selecting exact historical publications': 'Historical publications',
+  'Retaining verified prepared public dates': 'Historical publications', 'Waiting for first paint': 'First frame',
+  'Configuring native history decoder': 'Native decoder', 'Loading prepared bank history': 'Prepared history',
+  'Selecting verified prepared history': 'Prepared history', 'Warming bank/section/profile history views': 'History views',
+  'Preparing optional history assets': 'Optional assets', 'Loading and validating optional asset': 'Optional assets',
+  'Loading RBA calendar': 'RBA calendar', 'Waiting for in-flight product details': 'Product details',
+  'Warming product details': 'Product details', 'Loading search index': 'Search index', 'Rebuilding product suitability index': 'Suitability index',
+  'Computing rate-change notifications': 'Notification calculation', 'Delivering rate-change notifications': 'Notification delivery',
+  'Fetching current manifest': 'Manifest', 'Waiting for post-refresh warming': 'Post-refresh warming',
+  'Waiting for bank rate history preparation': 'Bank history preparation', 'prepare start': 'Starting', 'checkpoint read': 'History checkpoint',
+  'Merging verified history observations': 'Catalogue merge', 'merge installed': 'Catalogue merge', 'persist saved': 'Cache saving',
+  'embedded ready': 'Ready', 'verified catalogue ready': 'Ready', 'prepared cache hit': 'Prepared history',
+  'matching preparation joined': 'Preparation queue', 'verified asset cache hit': 'Asset cache',
+  'offline asset cache miss': 'Unavailable', 'asset bytes verified': 'Byte verification',
+};
+/** Exact worker/stage identities from the real registry; arbitrary labels stay opaque. */
+export function uiBackgroundWorkName(job: BackgroundWorkSnapshot): UiText {
+  return uiLabel(Object.hasOwn(BACKGROUND_WORK_NAMES, job.label) ? BACKGROUND_WORK_NAMES[job.label] : 'Source review required');
+}
+export function uiBackgroundWorkStage(job: BackgroundWorkSnapshot, index?: number): UiText {
+  const value = index === undefined ? job.stage : job.stages[index]?.label;
+  if (!value) return uiLabel('Source review required');
+  if (Object.hasOwn(BACKGROUND_STAGE_NAMES, value)) return uiLabel(BACKGROUND_STAGE_NAMES[value]);
+  const progress = /^(manifest|finalize|download|verify|inflate|parse|install): ([A-Za-z0-9][A-Za-z0-9_.-]{0,159})$/.exec(value);
+  if (progress) {
+    const phases: Readonly<Record<string, UiLabel>> = { manifest: 'Manifest', finalize: 'Finalization', download: 'Download', verify: 'Byte verification', inflate: 'Inflation', parse: 'Parsing', install: 'Installation' };
+    return uiJoin(phases[progress[1]], ' · ', uiIdentifier(progress[2]));
+  }
+  const metric = /^persist (begin archive_dates|encoded characters)=(\d{1,12})$/.exec(value);
+  return metric ? uiJoin(metric[1] === 'begin archive_dates' ? 'Archive dates' : 'Characters', ': ', uiCount(Number(metric[2]))) : uiLabel('Source review required');
+}
 function identity(value: string | null | undefined): UiText {
   return known(value?.replace(/[\r\n\t]/g, ' ').trim() || 'Unknown');
 }
@@ -469,6 +548,24 @@ export function uiProductName(row: Pick<RateRow, 'product_name'>): UiText { retu
 export function uiProductReference(row: RateRow): UiText {
   const expected = [row.provider, row.product_id ?? '', row.category ?? '', row.product_name].join('|');
   return row.product_key === expected ? identity(row.product_key) : uiIdentifier(row.product_key);
+}
+/** A canonical product key owned by the actual details catalogue, never body text. */
+export function uiDetailsProductReference(details: DetailsPayload | null | undefined, productKey: string): UiText {
+  const products = details?.products;
+  if (!products || typeof products !== 'object' || Array.isArray(products) || !Object.hasOwn(products, productKey)
+    || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(productKey) || productKey.length > 1024) return uiLabel('Source review required');
+  const detail = products[productKey], [provider, productId, category, ...nameParts] = productKey.split('|'), name = nameParts.join('|');
+  // Closed BankingProductCategory values; legacy section-based keys use the
+  // repository's SECTION_KEYS. Unknown categories never become identity copy.
+  const categories: readonly string[] = ['BUSINESS_LOANS', 'BUY_NOW_PAY_LATER', 'CRED_AND_CHRG_CARDS', 'LEASES', 'MARGIN_LOANS', 'OVERDRAFTS', 'PERS_LOANS',
+    'REGULATED_TRUST_ACCOUNTS', 'RESIDENTIAL_MORTGAGES', 'TERM_DEPOSITS', 'TRADE_FINANCE', 'TRANS_AND_SAVINGS_ACCOUNTS', 'TRAVEL_CARDS', ...SECTION_KEYS];
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail) || !provider?.trim() || !/^[A-Za-z0-9_./:@%+\-=#?&]{1,512}$/.test(productId ?? '') || !name.trim()
+    || !categories.includes(category)) return uiLabel('Source review required');
+  const bound = detail.displayIdentity;
+  if (bound && (typeof bound !== 'object' || Array.isArray(bound))) return uiLabel('Source review required');
+  if (bound && (bound.name !== undefined && bound.name !== name || bound.provider !== undefined && bound.provider !== provider
+    || bound.productCategory !== undefined && bound.productCategory !== category)) return uiLabel('Source review required');
+  return identity(productKey);
 }
 export function uiProviderName(row: Pick<RateRow, 'provider'>): UiText { return identity(row.provider); }
 /** Rebind navigator titles to reviewed labels or current catalogue identities. */
@@ -549,11 +646,19 @@ export function useCustomerAnswerInput(answer: CustomerAnswer | undefined, defin
   }, [signature, definitionSignature]);
   return { value, onChangeText: (text: string) => setValue(inputText(text)) };
 }
-type PrivateTermField = 'label' | 'value' | 'unit' | 'from' | 'to';
+type PrivateTermField = 'label' | 'value' | 'unit' | 'note' | 'from' | 'to';
 export function useNegotiatedTermDraft() {
-  const empty = () => ({ label: inputText(''), value: inputText(''), unit: inputText(''), from: inputText(''), to: inputText('') });
+  const empty = () => ({ label: inputText(''), value: inputText(''), unit: inputText(''), note: inputText(''), from: inputText(''), to: inputText('') });
   const [values, setValues] = useState(empty);
-  return { values, change: (field: PrivateTermField, text: string) => setValues(current => ({ ...current, [field]: inputText(text) })), reset: () => setValues(empty()) };
+  const reset = useCallback(() => setValues({ label: inputText(''), value: inputText(''), unit: inputText(''), note: inputText(''), from: inputText(''), to: inputText('') }), []);
+  return { values, change: (field: PrivateTermField, text: string) => setValues(current => ({ ...current, [field]: inputText(text) })), reset,
+    load: (term: NegotiatedTerm): boolean => {
+      if (!safeId(term.id) || !validProvenance(term.provenance) || term.provenance.source !== 'user_input' || !term.provenance.productKey
+        || typeof term.note !== 'string' || term.note.length > 2000) return false;
+      setValues({ label: inputText(term.label), value: inputText(term.value), unit: inputText(term.unit), note: inputText(term.note),
+        from: inputText(term.provenance.effectiveFrom ?? ''), to: inputText(term.provenance.effectiveToExclusive ?? '') });
+      return true;
+    } };
 }
 export function uiInputDefinitionLabel(definition: InputDefinition, question?: CustomerQuestionBinding | null): UiText {
   if (!validDefinition(definition)) return uiLabel('Source review required');

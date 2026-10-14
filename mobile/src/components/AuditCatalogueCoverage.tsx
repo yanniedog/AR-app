@@ -4,7 +4,8 @@ import { View } from 'react-native';
 import type { AppHealthCheck, AppHealthMetricValue } from '../lib/appHealth/types';
 import type { CatalogueCounts, CatalogueSectionCoverage } from '../lib/appHealth/catalogueCoverage';
 import type { DeepAuditDerivedInputs } from '../lib/performanceAuditPlan';
-import { uiCount, uiIdentifier, uiJoin, uiProviderName, uiSectionName } from '../lib/uiCopy';
+import { uiCount, uiDetailsProductReference, uiIdentifier, uiJoin, uiProviderName, uiSectionName } from '../lib/uiCopy';
+import { useStore } from '../data/store';
 import { AppText, Button, Card } from './ui';
 
 const catalogueCounts = (value: CatalogueCounts | null) => uiJoin(uiCount(value?.products), ' ', 'products', ' · ', uiCount(value?.providers), ' ', 'banks', ' · ', uiCount(value?.rates), ' ', 'rates');
@@ -39,6 +40,7 @@ function SectionCoverage({ section }: { section: CatalogueSectionCoverage }) {
 }
 /** Retains count reconciliation and separates model coverage from rendered samples. */
 export function AuditCatalogueCoverage({ check, sampling }: { check: AppHealthCheck | undefined; sampling?: DeepAuditDerivedInputs['sampling'] }) {
+  const details = useStore(state => state.details);
   const [showDetailsOnly, setShowDetailsOnly] = useState(false), [showUnrepresentedBanks, setShowUnrepresentedBanks] = useState(false);
   if (!check && !sampling) return null;
   const sections = Array.isArray(check?.localEvidence?.sections) ? check!.localEvidence!.sections as CatalogueSectionCoverage[] : [];
@@ -61,7 +63,7 @@ export function AuditCatalogueCoverage({ check, sampling }: { check: AppHealthCh
     <AppText variant="tiny">{uiJoin('Source products', ': ', metricCount(metrics.sourceProducts), ' · ', 'Source rates', ': ', metricCount(metrics.sourceRates), ' · ', 'Explained exclusions', ': ', metricCount(metrics.explainedSourceRateExclusions))}</AppText>
     <AppText variant="tiny">{uiJoin('Upstream completeness', ': ', 'Unverified')}</AppText>
     <AppText variant="tiny">{uiJoin('Details without listed rates', ': ', metricCount(metrics.detailsOnlyProducts))}</AppText>
-    {detailsOnly?.length ? <><Button title={showDetailsOnly ? 'Hide' : 'Show'} variant="ghost" accessibilityState={{ expanded: showDetailsOnly }} onPress={() => setShowDetailsOnly(!showDetailsOnly)} />{showDetailsOnly ? detailsOnly.map(key => <AppText key={key} variant="tiny" selectable>{uiIdentifier(key)}</AppText>) : null}</> : null}
+    {detailsOnly?.length ? <><Button title={showDetailsOnly ? 'Hide' : 'Show'} variant="ghost" accessibilityState={{ expanded: showDetailsOnly }} onPress={() => setShowDetailsOnly(!showDetailsOnly)} />{showDetailsOnly ? detailsOnly.map(key => <AppText key={key} variant="tiny" selectable>{uiDetailsProductReference(details, key)}</AppText>) : null}</> : null}
     {!sections.length ? <AppText variant="small">{uiLabel("Unavailable")}</AppText> : null}
     {sections.map(section => <SectionCoverage key={section.section} section={section} />)}
   </Card>;

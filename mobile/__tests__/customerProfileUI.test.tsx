@@ -33,7 +33,7 @@ test('answer UI saves explicit false and zero separately from unavailable', () =
   act(() => tree.root.findByProps({ accessibilityLabel: 'Save Balance' }).props.onPress());
   expect(onSave.mock.calls[2][0]).toMatchObject({ state: 'known', fact: { value: '0', unit: 'AUD' } });
 });
-test('real missing contract shows pending and negotiated terms save separately with product provenance', () => {
+test('real missing contract shows pending and negotiated terms save separately with product provenance', async () => {
   const profile = migrateCustomerProfile(null);
   const update = jest.fn(async (change: (p: CustomerProfile) => CustomerProfile) => { Object.assign(profile, change(profile)); return true; });
   jest.mocked(useCustomerProfile).mockReturnValue({ profile, busy: false, error: null, retry: jest.fn(), update });
@@ -44,7 +44,7 @@ test('real missing contract shows pending and negotiated terms save separately w
   for (const [label, value] of [['Term', 'Negotiated rate'], ['Value', '0'], ['Unit', 'percent']]) {
     act(() => tree.root.findByProps({ label }).props.onChangeText(value));
   }
-  act(() => tree.root.findByProps({ accessibilityLabel: 'Save Negotiated terms' }).props.onPress());
+  await act(async () => { await tree.root.findByProps({ accessibilityLabel: 'Save Negotiated terms' }).props.onPress(); });
   expect(profile.answers).toEqual({});
   expect(profile.negotiatedTerms[0]).toMatchObject({ value: '0', unit: 'percent', provenance: { source: 'user_input', productKey: 'bank|product', effectiveFrom: null } });
 });
