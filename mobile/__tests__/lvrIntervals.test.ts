@@ -64,6 +64,25 @@ test('inclusive, exclusive and legacy endpoints retain their individual meanings
   expect(segLabel('LVR_GE80p01_95')).toBe('≥80.01–95% LVR');
 });
 
+test.each([
+  ['LVR_LE60', 60, true], ['LVR_LT60', 60, false], ['LVR_70_80', 75, true],
+  ['LVR_GE80p01_95', 80.01, true], ['LVR_GT80p01_95', 80.01, false],
+  ['≥80.01%', 80.01, true], ['<80%', 80, false],
+] as const)('legacy interval %s preserves its endpoint and standard classification', (tier, value, expected) => {
+  expect(lvrRangeContains(parseLvrRange(tier)!, value)).toBe(expected);
+  expect(hasUnspecifiedMortgageLvr({ ...high[0], lvr_tier: tier })).toBe(false);
+});
+
+test('legacy profile coverage respects explicit caps and upper exclusivity', () => {
+  expect(matchesLvrTier('LVR_LE60', ['lvr_=60%'])).toBe(true);
+  expect(matchesLvrTier('LVR_70_80', ['lvr_70-80%'])).toBe(true);
+  expect(matchesLvrTier('LVR_LT80', ['lvr_70-80%'])).toBe(false);
+  expect(lvrTierForValue(79.99, ['LVR_LT80'])).toBe('LVR_LT80');
+  expect(lvrTierForValue(80, ['LVR_LT80'])).toBeNull();
+  expect(hasUnspecifiedMortgageLvr({ ...high[0], lvr_tier: undefined,
+    taxonomy_path: 'HOME_LOAN.OO.PI.VARIABLE.LVR_GE80p01_95' })).toBe(false);
+});
+
 test.each(['lvr_80-85%', 'lvr_85-90%', 'lvr_90-95%'])('prepared history keeps the same %s profile semantics as current rows', tier => {
   const day = capture.observed_on;
   const groups = new Map<string, { row: Record<string, unknown>; spans: [number, number, number[], number][] }>();

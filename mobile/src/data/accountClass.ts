@@ -12,12 +12,7 @@ export function hasUnspecifiedMortgageLvr(row: RateRow): boolean {
 
   // Legacy rows may carry the band only in their hierarchy. Explicit unknown
   // lvr_tier values take precedence over a conflicting numeric hierarchy band.
-  const tier = (row.lvr_tier?.trim() || path.find(token => token.startsWith('LVR_')) || '')
-    .toUpperCase().replace(/^LVR_/, '').replace(/%/g, '').trim();
-  const range = /^(?:>=|>)?(\d+(?:\.\d+)?)\s*[-–_]\s*(\d+(?:\.\d+)?)$/.exec(tier);
-  if (range) return !(Number(range[1]) >= 0 && Number(range[2]) > Number(range[1]));
-  const bound = /^(?:LE|GE|LT|GT|<=|>=|[<>=≤≥])?(\d+(?:\.\d+)?)\+?$/.exec(tier);
-  return !bound || Number(bound[1]) <= 0;
+  return parseLvrRange(path.find(token => token.startsWith('LVR_'))) === null;
 }
 
 /**

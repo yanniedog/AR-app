@@ -72,15 +72,15 @@ function lvrLabel(seg: string): string {
   const v = seg.replace(/^LVR_/, '');
   if (v === 'LE60') return '≤60% LVR';
   if (v === 'UNSP' || v === 'UNSPECIFIED' || v === 'NA') return 'LVR n/a';
+  let m = /^GT?(\d+)$/.exec(v);
+  if (m) return `${m[1]}%+ LVR`;
   const exact = /^(GE|GT|LE)(\d+(?:p\d+)?)(?:_(\d+(?:p\d+)?))?$/.exec(v);
   if (exact) {
     const operator = exact[1] === 'GE' ? '≥' : exact[1] === 'GT' ? '>' : '≤';
     return `${operator}${exact[2].replace('p', '.')}${exact[3] ? `–${exact[3].replace('p', '.')}` : ''}% LVR`;
   }
-  let m = /^(\d+)_(\d+)$/.exec(v);
+  m = /^(\d+)_(\d+)$/.exec(v);
   if (m) return `${m[1]}–${m[2]}% LVR`;
-  m = /^GT?(\d+)$/.exec(v);
-  if (m) return `${m[1]}%+ LVR`;
   m = /^(\d+)$/.exec(v);
   if (m) return `≤${m[1]}% LVR`;
   return `${v} LVR`;

@@ -1,14 +1,17 @@
 /** Existing canonical facets are (lo, hi]; >= preserves inclusive CDR minima. */
-export interface LvrRange { lo: number; hi: number; inclusive: boolean }
+export interface LvrRange { lo: number; hi: number; inclusive: boolean; hiInclusive?: boolean }
 
 export function parseLvrRange(value: string | undefined): LvrRange | null {
-  const text = (value ?? '').trim().toLowerCase().replace(/^lvr_/, '').replace(/%/g, '');
-  let match = /^(?:=|<=|≤)?(\d+(?:\.\d+)?)$/.exec(text);
+  const text = (value ?? '').trim().toLowerCase().replace(/^lvr_/, '').replace(/%/g, '')
+    .replace(/^le/, '<=').replace(/^lt/, '<').replace(/^ge/, '>=').replace(/^gt/, '>')
+    .replace(/^≤/, '<=').replace(/^≥/, '>=').replace(/(\d)p(?=\d)/g, '$1.');
+  let match = /^(=|<=|<)?(\d+(?:\.\d+)?)$/.exec(text);
   if (match) {
-    const hi = Number(match[1]);
-    return hi > 0 && hi <= 100 ? { lo: 0, hi, inclusive: false } : null;
+    const hi = Number(match[2]);
+    return hi > 0 && hi <= 100 ? { lo: 0, hi, inclusive: false,
+      ...(match[1] === '<' ? { hiInclusive: false } : {}) } : null;
   }
-  match = /^(>=|>)?(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/.exec(text);
+  match = /^(>=|>)?(\d+(?:\.\d+)?)\s*[-–_]\s*(\d+(?:\.\d+)?)$/.exec(text);
   if (match) {
     const lo = Number(match[2]), hi = Number(match[3]), inclusive = match[1] === '>=';
     return lo >= 0 && hi <= 100 && (lo < hi || (inclusive && lo === hi))
@@ -21,7 +24,8 @@ export function parseLvrRange(value: string | undefined): LvrRange | null {
 }
 
 export function lvrRangeContains(range: LvrRange, value: number): boolean {
-  return Number.isFinite(value) && value > 0 && value <= range.hi &&
+  return Number.isFinite(value) && value > 0 &&
+    (range.hiInclusive === false ? value < range.hi : value <= range.hi) &&
     (range.inclusive ? value >= range.lo : value > range.lo);
 }
 
@@ -36,6 +40,8 @@ export function matchesLvrTier(value: string | undefined | null, selected: reado
     const required = parseLvrRange(tier);
     if (!required) return false;
     const first = required.inclusive ? required.lo : Math.round((required.lo + 0.01) * 100) / 100;
-    return lvrRangeContains(available, first) && required.hi <= available.hi;
+    const coversUpper = required.hi < available.hi || (required.hi === available.hi &&
+      (required.hiInclusive === false || available.hiInclusive !== false));
+    return lvrRangeContains(available, first) && coversUpper;
   });
 }
