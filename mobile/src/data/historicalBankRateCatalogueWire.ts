@@ -1,6 +1,6 @@
 import { SECTION_KEYS, type ProductDetail, type RateRow, type SectionKey } from '../types';
 import { isValidCalendarDate } from '../lib/calendarDate';
-import { normalizedProductFacts } from './productFacts';
+import { normalizedProductFacts } from './productFactsCore';
 import { MAX_BANK_RATE_PERCENT, RATE_OBSERVATION_FIELDS } from './bankRateOverview';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';

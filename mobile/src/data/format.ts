@@ -1,38 +1,12 @@
 import type { ProductDetail, RateRow } from '../types';
-import { hasUnspecifiedMortgageLvr, isKnownNonStandardProduct } from './accountClass';
-import { accessExcludesFromStandard, assessAccess } from './access';
+import { toFraction, isoDurationMonths } from './rateNumbers';
+import { isBroadlyAvailable, isConditionalDepositRate, isNonStandard } from './rateClassification';
 import { getSuitabilityAllowed } from './suitabilityGate';
 import { mandatoryEligibleRows } from './eligibilityGate';
 import { uiDate, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiRate, type UiLabel, type UiText } from '../lib/uiCopy';
 
-/** Parse a rate that may be a normalized fraction ("0.0634") or a raw percent ("6.34"). */
-export function toFraction(rate: string | number | null | undefined): number | null {
-  if (rate === null || rate === undefined || (typeof rate === 'string' && !rate.trim())) return null;
-  const n = typeof rate === 'number' ? rate : Number(rate);
-  if (!isFinite(n) || n < 0) return null;
-  return n > 1 ? n / 100 : n;
-}
-
-/**
- * The metric every ranking/aggregation should use: the comparison rate (which
- * folds in fees and is the honest cost of a loan) when the row publishes a valid
- * one, else the headline rate. Deposits carry no comparison rate, so this is a
- * no-op for them. Keeping this in one place is what makes "comparison rate is the
- * default metric for all calculations" true everywhere rather than per-call.
- */
-export function effectiveRate(
-  row: { rate: string | number; comparison_rate?: string | number } | null | undefined,
-): string | number | undefined {
-  if (!row) return undefined;
-  return toFraction(row.comparison_rate) !== null ? row.comparison_rate : row.rate;
-}
-
-/** {@link effectiveRate} parsed to a fraction (null when neither rate is usable). */
-export function effectiveFraction(
-  row: { rate: string | number; comparison_rate?: string | number } | null | undefined,
-): number | null {
-  return toFraction(effectiveRate(row));
-}
+export { toFraction, effectiveRate, effectiveFraction, ratePercentValue, bpsBetween, isoDurationMonths } from './rateNumbers';
+export { isNonStandard, isConditionalDepositRate, isBroadlyAvailable } from './rateClassification';
 
 /** Format a fraction (0.0634) or percent (6.34) as an en-AU percentage string ("6.34%"). */
 export function formatRate(rate: string | number | null | undefined, digits = 2): UiText {
@@ -53,17 +27,6 @@ export function formatRankedFraction(fraction: number | null | undefined, digits
 export function formatRateDigits(rate: string | number | null | undefined, digits = 2): UiText {
   const f = toFraction(rate);
   return f === null ? uiLabel('—') : uiNumber(f * 100, digits);
-}
-
-export function ratePercentValue(rate: string | number | null | undefined): number | null {
-  const f = toFraction(rate);
-  return f === null ? null : f * 100;
-}
-
-/** Difference between two fractions expressed in basis points. */
-export function bpsBetween(a: number | null, b: number | null): number | null {
-  if (a === null || b === null) return null;
-  return Math.round((a - b) * 10000);
 }
 
 const ENUM_LABEL_OVERRIDES: Readonly<Record<string, UiLabel>> = {
@@ -138,15 +101,6 @@ export function formatBalanceRange(
   return uiJoin('Up to', ' ', formatMoneyShort(hi));
 }
 
-/** Parse an ISO-8601 duration like "P3Y", "P36M", "P1Y6M" to a month count. */
-export function isoDurationMonths(term: string | undefined): number | null {
-  if (typeof term !== 'string') return null;
-  const m = /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?$/.exec(term.trim());
-  if (!m || (!m[1] && !m[2])) return null;
-  const months = Number(m[1] ?? 0) * 12 + Number(m[2] ?? 0);
-  return months > 0 ? months : null;
-}
-
 export function formatTerm(row: RateRow): UiText {
   // term_months is authoritative; otherwise parse the ISO `term` (e.g. "P36M" = 3 yrs).
   // NB: ribbon_fixed_term only mirrors the *number* in `term` (P3Y→3, P36M→36), so its
@@ -165,61 +119,6 @@ export function formatTerm(row: RateRow): UiText {
   const fixed = toNumber(row.ribbon_fixed_term);
   if (fixed !== null && fixed > 0) return uiJoin(uiNumber(fixed, Math.min(6, (String(fixed).split('.')[1] ?? '').length)), ' ', fixed > 1 ? 'yrs' : 'yr', ' ', 'fixed');
   return uiLabel('');
-}
-
-export function isNonStandard(row: RateRow): boolean {
-  if ((row.account_class ?? '') === 'non_standard') return true;
-  if (hasUnspecifiedMortgageLvr(row)) return true;
-  return isKnownNonStandardProduct(row);
-}
-
-/**
- * Whether a deposit row's advertised rate depends on bonus actions or an
- * introductory window. These remain available in the opt-in full catalogue,
- * but are not unconditional rates that broadly apply without further steps.
- */
-export function isConditionalDepositRate(row: RateRow): boolean {
-  // Mortgage introductory/discounted rates are loan structures, not savings
-  // bonus actions. The producer also uses ribbon_rate_structure for home loans.
-  if (row.category === 'RESIDENTIAL_MORTGAGES' || row.taxonomy_path === 'HOME_LOAN' || row.taxonomy_path?.startsWith('HOME_LOAN.')) return false;
-  const depositKind = (row.ribbon_deposit_kind ?? '').toLowerCase().trim();
-  const rateStructure = (row.ribbon_rate_structure ?? '').toLowerCase().trim();
-  if (depositKind === 'bonus' || depositKind === 'introductory' || depositKind === 'intro') {
-    return true;
-  }
-  if (rateStructure === 'bonus' || rateStructure === 'introductory' || rateStructure === 'intro') {
-    return true;
-  }
-  const pathTokens = (row.taxonomy_path ?? '').toUpperCase().split('.');
-  return pathTokens.some(
-    (token) => token === 'BONUS' || token === 'INTRO' || token === 'INTRODUCTORY',
-  );
-}
-
-/**
- * The unified default-suitability gate. A product is shown to ordinary users by
- * default only when it is *broadly available*: not a non-standard account class,
- * not a curated non-standard cohort, not a conditional bonus/introductory rate,
- * and not access-restricted (youth, region, staff, occupation, membership,
- * business, student, pension, package/existing-customer gates — via product
- * name, lender brand, or loaded eligibility).
- * Known LVR bands, deposit size, TD term, OO/investor and fixed/variable
- * structure are allowed; mortgages with unspecified LVR are non-standard.
- * Advanced users opt everything back in via the
- * "Broadly applicable products" setting (`includeNonStandard`). This is the ONE
- * predicate every surface must use; it shares {@link assessAccess} with the
- * orange restricted badge so badge and filter never disagree.
- */
-export function isBroadlyAvailable(
-  row: RateRow | null | undefined,
-  detail?: ProductDetail | null,
-): boolean {
-  if (!row) return false;
-  if (isNonStandard(row)) return false;
-  if (isConditionalDepositRate(row)) return false;
-  const access = assessAccess(row.product_name, detail ?? null, row.provider);
-  if (accessExcludesFromStandard(access)) return false;
-  return true;
 }
 
 export function visibleAccountRows(

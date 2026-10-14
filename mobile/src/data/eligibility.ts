@@ -1,6 +1,6 @@
 import type { DetailItem, ProductDetail, RateRow } from '../types';
 import { sortByDisplayLabel } from './format';
-import { curatedEligibilityFactKey, normalizedProductFacts } from './productFacts';
+import { curatedEligibilityFactKey, normalizedProductFacts } from './productFactsCore';
 
 /** CDR eligibilityType code from a details payload eligibility row (label or name). */
 export function eligibilityTypeKey(item: DetailItem): string {

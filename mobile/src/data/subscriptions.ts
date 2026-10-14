@@ -8,7 +8,7 @@ import { bpsBetween, formatRate, humanizeEnum, toFraction } from './format';
 import type { SavedRateRef } from './savedRates';
 import { activeFilterCount, filterRows, rankFraction, type Filters, type MortgageRateMetric, type RankMetric, type SortKey } from './selectors';
 import { breadcrumb, rowsForSearchScope } from './taxonomy';
-import { factCriterionId, normalizeFactCriterion } from './productFacts';
+import { factCriterionId, normalizeFactCriterion } from './productFactsCore';
 import { lvrTierDisplay, refreshLvrLabelText } from './lvrTier';
 
 /** factCriteria is optional only for persisted snapshots created before this field existed. */

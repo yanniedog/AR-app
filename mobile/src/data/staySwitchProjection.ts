@@ -2,7 +2,7 @@ import type { DetailItem, ProductDetail, RateRow } from '../types';
 import { advertisedTermMonths, computeLvr, num } from './calc';
 import { percentageInputFraction } from './decisionInsights';
 import { toFraction } from './format';
-import { normalizedProductFacts } from './productFacts';
+import { normalizedProductFacts } from './productFactsCore';
 import type { ProjectionFrequency } from './projectionScenario';
 import type { MortgageSwitchInputs, UserRateScenario } from './userRateScenario';
 import { staySwitchFacts, type StaySwitchFact } from './projectionFacts';
