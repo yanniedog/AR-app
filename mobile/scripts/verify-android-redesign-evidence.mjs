@@ -156,12 +156,28 @@ export function validateAndroidRedesignEvidence(record, expected) {
   'Native frame measurements missing or invalid; audit durations do not prove smoothness');
   check(Number.isFinite(timing?.inputLatencyP95Ms) && timing.inputLatencyP95Ms >= 0, 'Native input latency measurement missing');
   const usability = record?.usability;
-  evidence(usability, 'Recorded usability study', ['report']);
-  check(whole(usability?.participantCount) && usability.participantCount >= 5 && usability.participantCount <= 8,
-    'Usability study requires 5–8 representative participants');
-  check(usability?.unassistedCoreTasks === true && usability?.criticalFinancialMisunderstandings === 0
-    && usability?.coreJourneyRegressions === 0, 'Usability gate failed or incomplete');
-  return { ok: errors.length === 0, errors, scope: 'recorded-evidence-completeness' };
+  check(record?.usabilityScope === 'emulator-operator', 'Required usability assessment scope must be emulator-operator');
+  evidence(usability, 'Emulator operator usability assessment', ['report']);
+  check(usability?.humanValidationClaimed === false, 'Emulator operator assessment must not claim human validation');
+  check(usability?.coreTasksCompleted === true && usability?.criticalFinancialMisunderstandings === 0
+    && usability?.coreJourneyRegressions === 0, 'Emulator operator usability assessment failed or incomplete');
+  const humanStudy = record?.humanStudy;
+  const humanStudyStatus = humanStudy?.status ?? 'not-run';
+  if (humanStudy != null) {
+    check(['not-run', 'completed'].includes(humanStudy.status), 'Human study status must be not-run or completed');
+    if (humanStudy.status === 'completed') {
+      evidence(humanStudy, 'Recorded human usability study', ['report']);
+      check(whole(humanStudy.participantCount) && humanStudy.participantCount >= 5 && humanStudy.participantCount <= 8,
+        'Completed human study requires 5–8 representative participants');
+      check(humanStudy.unassistedCoreTasks === true && humanStudy.criticalFinancialMisunderstandings === 0
+        && humanStudy.coreJourneyRegressions === 0, 'Recorded human usability study failed or incomplete');
+    } else if (humanStudy.status === 'not-run') {
+      check(humanStudy.humanValidationClaimed === false, 'A not-run human study must explicitly disclaim human validation');
+      check(humanStudy.result == null && humanStudy.participantCount == null,
+        'A not-run human study must not contain completed-study result or participant claims');
+    }
+  }
+  return { ok: errors.length === 0, errors, scope: 'recorded-evidence-completeness', humanStudyStatus };
 }
 
 /** Hashes actual referenced files. No network, Android process control, uploads or mutation. */
@@ -223,6 +239,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       process.exitCode = 1;
     } else {
       console.log('Recorded Android redesign evidence is complete and artifact hashes match.');
+      console.log(`Human study: ${result.humanStudyStatus}${result.humanStudyStatus === 'not-run' ? ' (no human validation claimed)' : ' (recorded separately)'}.`);
       console.log('This validates records, not human judgement, screenshot content, smoothness, public delivery or physical-device acceptance.');
     }
   } catch (error) { console.error(`Android redesign evidence: ${error.message}`); process.exitCode = 1; }

@@ -30,7 +30,10 @@ Qwen configuration or producer/Pi services to implement this checklist.
    output. A fast blank surface, redirected obsolete audit surface or skipped
    journey cannot pass.
 5. Run the evidence verifier. Have the reviewer inspect the actual captures,
-   raw traces and study report. A complete JSON record alone cannot establish
+   raw traces and the emulator operator's usability assessment. When
+   representative participants are available, report their separate human
+   study; otherwise explicitly report it as not run without claiming human
+   validation. A complete JSON record alone cannot establish
    interaction quality, human usability or the truth of an assessor's claims.
 6. Once publication is authorised, verify the public universal/ARM APK pair,
    rolling manifests, SHA-256, bytes, signing identity, version/build, ABI and
@@ -87,15 +90,29 @@ The record contains:
 | `cases` | One entry for every Android case below |
 | `audit` | `stepLimitMs: 10000`, `inventoryRef`, finalized `expectedStepIds`, actual `steps` |
 | `frontendTiming` | `result`, `captureRefs`, `method: "android-frame-trace"`, `frameCount`, `droppedFrameCount`, measured `inputLatencyP95Ms` |
-| `usability` | `result`, `captureRefs`, `participantCount` from 5–8, `unassistedCoreTasks: true`, `criticalFinancialMisunderstandings: 0`, `coreJourneyRegressions: 0` |
+| `usabilityScope` | `"emulator-operator"`; this required technical assessment does not claim representative human validation |
+| `usability` | `result`, `captureRefs`, `humanValidationClaimed: false`, `coreTasksCompleted: true`, `criticalFinancialMisunderstandings: 0`, `coreJourneyRegressions: 0` |
+| `humanStudy` (optional) | `status: "not-run"` with `humanValidationClaimed: false`, or `status: "completed"` with report references and the completed-study results below |
 
 Every outcome entry uses `result: "pass"` and `captureRefs: [artifact IDs]`
 only after genuine verification. `copyGuard` requires its command log;
 `nativeReview` and journeys require screenshot, recording and log references;
 invariants require report and screenshot references; cases require screenshot
-and Android log references. Usability requires its anonymised assessor report,
-not an emulator-script success flag. Do not collect participant identities in
-the manifest or publish private financial/tester information.
+and Android log references. Usability requires a recorded emulator-operator
+assessment report, not an emulator-script success flag. Its financial
+interpretation and effort findings describe what that operator observed; they
+do not establish how representative users understand the app.
+
+A human study is separately optional. Omission is reported as `not-run`;
+an explicit `not-run` object must include `humanValidationClaimed: false` and
+must not contain completed-study results or participant counts. Neither case
+blocks complete technical acceptance when the operator assessment and all
+other required evidence pass. A `completed` study requires `result: "pass"`,
+`captureRefs` containing its anonymised report, `participantCount` from 5–8,
+`unassistedCoreTasks: true`, `criticalFinancialMisunderstandings: 0` and
+`coreJourneyRegressions: 0`. These remain recorded claims for reviewer
+inspection. Do not collect participant identities in the manifest or publish
+private financial/tester information.
 
 ### Journeys and effort budgets
 
@@ -178,7 +195,9 @@ Neither a fast audit step nor JSON `result: "pass"` proves smooth animation.
 ## Final evidence ledger
 
 Report these states independently: local script checks; canonical local CI;
-exact-head GitHub gates; merged source; build identity; emulator acceptance;
-human study; public APK/manifest verification; exact published-byte reinstall;
+exact-head GitHub gates; merged source; build identity; emulator acceptance and
+operator assessment; optional human study (completed/not run); public
+APK/manifest verification; exact published-byte reinstall;
 physical device/haptics. Keep incomplete states explicit. The draft harness
-alone completes none of the redesign's native, human or release gates.
+alone completes none of the redesign's native or release gates and never
+converts emulator work into human validation.

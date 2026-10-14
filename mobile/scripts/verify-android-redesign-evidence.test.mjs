@@ -60,8 +60,10 @@ function fixture() {
       steps: [{ id: 'rates.open', result: 'pass', rendered: true, durationMs: 10_000, ref: 'log' }] },
     frontendTiming: { ...structuredClone(pass), method: 'android-frame-trace', frameCount: 120,
       droppedFrameCount: 2, inputLatencyP95Ms: 80 },
-    usability: { ...structuredClone(pass), participantCount: 5, unassistedCoreTasks: true,
+    usabilityScope: 'emulator-operator',
+    usability: { ...structuredClone(pass), humanValidationClaimed: false, coreTasksCompleted: true,
       criticalFinancialMisunderstandings: 0, coreJourneyRegressions: 0 },
+    humanStudy: { status: 'not-run', humanValidationClaimed: false },
   };
 }
 
@@ -151,10 +153,39 @@ test('enforces every finalized audit step at 10,000ms independently of journey d
   reject((record) => { record.frontendTiming.method = 'audit-duration'; }, /do not prove smoothness/);
 });
 
-test('rejects missing human-study evidence and misinterpreted financial facts', () => {
-  reject((record) => { record.usability.result = 'not-run'; }, /Recorded usability study: result/);
-  reject((record) => { record.usability.participantCount = 1; }, /representative participants/);
-  reject((record) => { record.usability.criticalFinancialMisunderstandings = 1; }, /Usability gate/);
+test('requires truthful operator assessment but treats a human study as separately reported optional evidence', () => {
+  const noStudy = fixture();
+  delete noStudy.humanStudy;
+  const noStudyResult = validateAndroidRedesignEvidence(noStudy, expected);
+  assert.equal(noStudyResult.ok, true, noStudyResult.errors.join('\n'));
+  assert.equal(noStudyResult.humanStudyStatus, 'not-run');
+  assert.equal(validateAndroidRedesignEvidence(fixture(), expected).ok, true);
+  reject((record) => { record.usabilityScope = 'representative-users'; }, /scope must be emulator-operator/);
+  reject((record) => { record.usability.result = 'not-run'; }, /Emulator operator usability assessment: result/);
+  reject((record) => { record.usability.coreTasksCompleted = false; }, /assessment failed or incomplete/);
+  reject((record) => { record.usability.humanValidationClaimed = true; }, /must not claim human validation/);
+  reject((record) => { record.usability.criticalFinancialMisunderstandings = 1; }, /assessment failed or incomplete/);
+  reject((record) => { record.humanStudy.humanValidationClaimed = true; }, /explicitly disclaim human validation/);
+  reject((record) => { record.humanStudy.result = 'pass'; }, /completed-study result or participant claims/);
+  reject((record) => { record.humanStudy.status = 'pass'; }, /status must be not-run or completed/);
+  const completed = fixture();
+  completed.humanStudy = { status: 'completed', result: 'pass', captureRefs: ['report'],
+    participantCount: 5, unassistedCoreTasks: true, criticalFinancialMisunderstandings: 0,
+    coreJourneyRegressions: 0 };
+  assert.equal(validateAndroidRedesignEvidence(completed, expected).ok, true);
+  for (const [key, value, pattern] of [
+    ['participantCount', 1, /representative participants/],
+    ['captureRefs', [], /human usability study: report evidence missing/],
+    ['result', 'not-run', /human usability study: result/],
+    ['unassistedCoreTasks', false, /human usability study failed or incomplete/],
+    ['criticalFinancialMisunderstandings', 1, /human usability study failed or incomplete/],
+  ]) {
+    const changed = structuredClone(completed);
+    changed.humanStudy[key] = value;
+    const result = validateAndroidRedesignEvidence(changed, expected);
+    assert.equal(result.ok, false);
+    assert.match(result.errors.join('\n'), pattern);
+  }
 });
 
 test('checks actual file hashes, missing captures and actual aapt/installed readbacks', async () => {
@@ -193,6 +224,7 @@ test('CLI fails incomplete records and explains the limit of a successful record
     const good = spawnSync(process.execPath, args, { encoding: 'utf8', windowsHide: true, shell: false });
     assert.equal(good.status, 0, good.stderr);
     assert.match(good.stdout, /not human judgement/);
+    assert.match(good.stdout, /Human study: not-run \(no human validation claimed\)/);
     const record = JSON.parse(await readFile(filename, 'utf8'));
     record.design.copyGuard.result = 'fail';
     await writeFile(filename, JSON.stringify(record));
