@@ -6,7 +6,7 @@ import { DetailsOnlyProduct } from '../../src/components/product/DetailsOnlyProd
 import { FixedDepositCalculation } from '../../src/components/product/FixedDepositCalculation';
 import { ProductTermsDisclosure } from '../../src/components/product/ProductTermsDisclosure';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HeaderTitle } from '@react-navigation/elements';
 import {
   Alert,
@@ -356,10 +356,11 @@ export default function ProductDetail() {
     historyModel?.dates.length ?? 0,
   ].join(':');
   const openCalculate = useCallback(() => {
-    if (!row || !section) return { unavailableReason: 'Selected product has no eligible rate' };
-    router.push(buildCalculationRoute(row, section));
+    const selectedSection = found?.section;
+    if (!row || !selectedSection) return { unavailableReason: 'Selected product has no eligible rate' };
+    router.push(buildCalculationRoute(row, selectedSection));
     return { expectedPath: '/calculator' };
-  }, [row, section]);
+  }, [row, found?.section]);
   const auditActions = useMemo(() => {
     const actions: Record<string, (...args: unknown[]) => unknown> = {
       'product.open': () => undefined,
