@@ -45,10 +45,17 @@ function fixture() {
       copyGuard: structuredClone(pass), nativeReview: structuredClone(pass) },
     journeys: REQUIRED_JOURNEYS.map((id) => {
       const pilot = { ...counts, taps: id === 'launch-rates' ? 0 : id === 'compare-two' ? 4 : 1 };
-      return { id, ...structuredClone(pass), trigger: 'Synthetic trigger', endState: 'Synthetic end state',
+      const journey = { id, ...structuredClone(pass), trigger: 'Synthetic trigger', endState: 'Synthetic end state',
         ...pilot, durationMs: 60_000, baseline: { ...pilot, alreadyMinimal: true, ref: 'report' },
         selectedRates: 2, launchTaps: 0, submitTaps: 0, openTaps: 1, sheetDepth: 1,
         applyCommits: 1, cancelRestoredState: true, statePreserved: true, directoryTaps: 0 };
+      if (id === 'sort') Object.assign(journey, {
+        mode: 'quickPreset', quickPresetVisible: true, openTaps: 0, sheetDepth: 0,
+        advancedOptions: { ...structuredClone(pass), trigger: 'Synthetic advanced Sort trigger', endState: 'Synthetic selected sort committed',
+          taps: 2, openTaps: 1, selectionTaps: 1, applyTaps: 0, sheetDepth: 1, applyCommits: 1,
+          closesAfterSelection: true, cancelRestoredState: true, backRestoredState: true },
+      });
+      return journey;
     }),
     invariants: REQUIRED_INVARIANTS.map((id) => ({ id, ...structuredClone(pass) })),
     cases: REQUIRED_CASES.map((id) => ({ id, ...structuredClone(pass), environment: {
@@ -123,6 +130,43 @@ test('rejects hidden setup, tap detours, partial comparison selection and lost s
   reject((record) => { record.journeys.find((item) => item.id === 'switch-tabs').statePreserved = false; }, /state restoration/);
   reject((record) => { record.journeys[1].repeatedFields = 1; }, /repeatedFields regressed/);
   reject((record) => { record.journeys[1].baseline.alreadyMinimal = false; }, /no effort improvement/);
+});
+
+test('keeps the one-tap sort preset comparable to its direct baseline and verifies advanced options separately', () => {
+  const record = fixture(), sort = record.journeys.find(item => item.id === 'sort');
+  assert.equal(sort.baseline.taps, 1);
+  assert.equal(sort.taps, 1);
+  assert.equal(sort.advancedOptions.taps, 2);
+  assert.equal(validateAndroidRedesignEvidence(record, expected).ok, true);
+  for (const [key, value] of [['mode', 'advancedOptions'], ['quickPresetVisible', false], ['taps', 2],
+    ['openTaps', 1], ['sheetDepth', 1], ['applyCommits', 0]]) {
+    reject(record => { record.journeys.find(item => item.id === 'sort')[key] = value; }, /sort: visible quickPreset/);
+  }
+  reject(record => { record.journeys.find(item => item.id === 'sort').scrollDetours = 1; }, /sort: scrollDetours regressed/);
+  reject(record => { delete record.journeys.find(item => item.id === 'sort').advancedOptions; }, /sort.advancedOptions/);
+});
+
+test('rejects unverified, nested, extra-Apply or irreversible advanced Sort claims', () => {
+  for (const [key, value, pattern] of [
+    ['result', 'not-run', /sort.advancedOptions: result must be pass/],
+    ['trigger', '', /sort.advancedOptions: trigger\/end state missing/],
+    ['endState', '', /sort.advancedOptions: trigger\/end state missing/],
+    ['taps', 3, /sort.advancedOptions: one open and one selection/],
+    ['openTaps', 2, /sort.advancedOptions: one open and one selection/],
+    ['selectionTaps', 2, /sort.advancedOptions: one open and one selection/],
+    ['applyTaps', 1, /without an extra Apply tap/],
+    ['sheetDepth', 2, /one sheet/],
+    ['applyCommits', 2, /one open and one selection/],
+    ['closesAfterSelection', false, /commit and close/],
+    ['cancelRestoredState', false, /explicit Cancel and native Back/],
+    ['backRestoredState', false, /explicit Cancel and native Back/],
+  ]) {
+    reject(record => { record.journeys.find(item => item.id === 'sort').advancedOptions[key] = value; }, pattern);
+  }
+  for (const kind of ['screenshot', 'recording', 'log', 'report']) {
+    reject(record => { record.journeys.find(item => item.id === 'sort').advancedOptions.captureRefs =
+      ['screenshot', 'recording', 'log', 'report'].filter(id => id !== kind); }, new RegExp(`sort.advancedOptions: ${kind} evidence missing`));
+  }
 });
 
 test('requires all core journeys, financial/privacy invariants and actual capture references', () => {

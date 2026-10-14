@@ -119,8 +119,21 @@ export function validateAndroidRedesignEvidence(record, expected) {
     if (journey?.id === 'launch-rates') check(journey.taps === 0 && journey.mandatoryChoices === 0 && journey.typedFields === 0, 'Launch must show rates without setup or navigation taps');
     if (journey?.id === 'compare-two') check(journey.taps <= 4 && journey.selectedRates === 2, 'Compare two requires two selections and at most four total taps');
     if (journey?.id === 'search') check(journey.launchTaps === 0 && journey.submitTaps === 0, 'Search must be inline without launch/Submit taps');
-    if (['filter', 'sort'].includes(journey?.id)) check(journey.openTaps === 1 && journey.sheetDepth === 1
-      && journey.applyCommits === 1 && journey.cancelRestoredState === true, `${journey.id}: direct single sheet with one Apply and reversible Cancel required`);
+    if (journey?.id === 'filter') check(journey.openTaps === 1 && journey.sheetDepth === 1
+      && journey.applyCommits === 1 && journey.cancelRestoredState === true, 'filter: direct single sheet with one Apply and reversible Cancel required');
+    if (journey?.id === 'sort') {
+      check(journey.mode === 'quickPreset' && journey.quickPresetVisible === true && journey.taps === 1
+        && journey.openTaps === 0 && journey.sheetDepth === 0 && journey.applyCommits === 1,
+      'sort: visible quickPreset must commit in one tap without opening a sheet');
+      const options = journey.advancedOptions;
+      evidence(options, 'sort.advancedOptions', ['screenshot', 'recording', 'log', 'report']);
+      check(nonempty(options?.trigger) && nonempty(options?.endState), 'sort.advancedOptions: trigger/end state missing');
+      check(options?.taps === 2 && options.openTaps === 1 && options.selectionTaps === 1 && options.applyTaps === 0
+        && options.sheetDepth === 1 && options.applyCommits === 1 && options.closesAfterSelection === true,
+      'sort.advancedOptions: one open and one selection must commit and close one sheet without an extra Apply tap');
+      check(options?.cancelRestoredState === true && options?.backRestoredState === true,
+        'sort.advancedOptions: explicit Cancel and native Back must preserve the committed state before selection');
+    }
     if (['return-from-product', 'switch-tabs'].includes(journey?.id)) check(journey.statePreserved === true, `${journey.id}: state restoration failed or missing`);
     if (journey?.id === 'market-arrival') check(journey.directoryTaps === 0, 'Market must display useful content without directory taps');
   }

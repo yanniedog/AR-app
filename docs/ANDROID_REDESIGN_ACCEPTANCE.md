@@ -139,10 +139,33 @@ Additional fields and budgets:
 | `launch-rates` | `taps`, `mandatoryChoices`, `typedFields` all 0; full results or truthful availability state on launch |
 | `change-product-type`, `open-product`, `save-rate`, `calculate-from-rate` | Exactly 1 contextual tap |
 | `search` | `launchTaps: 0`, `submitTaps: 0` |
-| `filter`, `sort` | `openTaps: 1`, `sheetDepth: 1`, `applyCommits: 1`, `cancelRestoredState: true` |
+| `filter` | `openTaps: 1`, `sheetDepth: 1`, `applyCommits: 1`, `cancelRestoredState: true` |
+| `sort` | `mode: "quickPreset"`, `quickPresetVisible: true`, `taps: 1`, `openTaps: 0`, `sheetDepth: 0`, `applyCommits: 1`; separate `advancedOptions` verification below |
 | `compare-two` | `selectedRates: 2`, at most 4 total taps |
 | `market-arrival` | `directoryTaps: 0`; dated useful market content on arrival |
 | `return-from-product`, `switch-tabs` | `statePreserved: true`; prove query/type/filter/sort/list position and correct stack |
+
+The `sort` baseline/pilot journey measures the visible **Bank A–Z / current
+rate** shortcut in the Rates controls. Its single tap commits through the
+canonical sort owner without opening a sheet. Match the baseline trigger,
+selected sort and successful end state; record any scrolling or recovery in
+the normal effort counts. A two-tap options-sheet path cannot substitute for
+the measured one-tap baseline, even when both paths reach the same ordering.
+
+The same `sort` entry must contain an `advancedOptions` object. This is separate
+secondary verification, with its own `result`, `trigger`, `endState` and
+`captureRefs` containing screenshot, recording, Android log and review report
+artifacts. Record `taps: 2`, `openTaps: 1`, `selectionTaps: 1`, `applyTaps: 0`,
+`sheetDepth: 1`, `applyCommits: 1` and `closesAfterSelection: true`: opening Sort
+then selecting an option commits once and closes the sheet. There is no extra
+Apply-button tap. Require `cancelRestoredState: true` and
+`backRestoredState: true` from separate explicit Cancel and native Back trials
+before any option is selected. Their referenced report/log segments must show
+the unchanged query, product type, filters, selected sort and list position.
+Count the two successful selection-path taps separately from these cancellation
+trials; retain the full recorded interactions for all three trials. Verify
+both paths use the same state owner. These secondary checks do not alter the
+common-path baseline or relax any other journey, invariant or matrix budget.
 
 ### Financial, privacy and interaction invariants
 
