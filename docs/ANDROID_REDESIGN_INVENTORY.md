@@ -1,6 +1,13 @@
 # Android redesign: route, capability, state and copy inventory
 
-Recorded 14 October 2026 against `79f274b583ecb76daa9573c744ecfdb93c84750c`.
+Initial native/source discovery was recorded 14 October 2026 against
+`79f274b583ecb76daa9573c744ecfdb93c84750c`. The production source inventory and
+copy appendix were refreshed against reviewed PR source
+`7e4caee4e4fbd1957449c372761aece5cf6a7e5b`, based on
+`c8893a39c65eaf7984c408a225a9a7f6ed86ed9b`. This includes the intervening audit
+overlay/capacity and readiness changes. These source revisions are distinct from
+the installed APK revisions below; a subsequent app-source push requires another
+inventory reconciliation.
 This is the Phase 1 inventory for the [Android redesign contract](ANDROID_REDESIGN_CONTRACT.md). Target behavior below is a contract for later phases,
 not a claim that the app has changed or that native acceptance has passed.
 
@@ -29,13 +36,21 @@ Source has **five tabs** and **20 menu entries in six groups**. Rates has
 rows. Source: `mobile/src/lib/tabIcons.ts`, `appDestinations.ts` under the same
 `mobile/src/lib/` directory, and `mobile/app/(tabs)/{browse,market,tools}.tsx`.
 
-Native baseline evidence is the retained `ar-app-ux-review` artifact set:
+Native baseline evidence is committed in
+[the baseline artifact set](evidence/android-baseline-2026-10-14/README.md), with
+[per-capture SHA-256, bytes, package, version/build and APK source revision](evidence/android-baseline-2026-10-14/manifest.json).
+Use that repository-relative location to retrieve the exact set from this commit;
+the original operator folder name was `ar-app-ux-review`. Historical captures use
 published universal v1.0.237/build 295, Android 16/API 36.1, x86_64,
 1080 x 2400, 420 dpi, font scale 1.0. It is older than the source revision above.
+Its retained [published APK manifest](evidence/android-baseline-2026-10-14/v1.0.237-b295/published-apk-manifest.json)
+identifies package `com.eyex.australianrates`, APK source
+`947884a4daf0323c30401453de38d579e75b193d`, SHA-256 and the versioned download.
 Use `12-rates`, `13-product-top`, `14-product-middle`, `15-product-saved`,
 `16-saved`, `17-market`, `19-tools-hub`, `24-rates-bottom`,
-`26-before-press`, `27-held-button`, `28-search-results` PNG/XML captures and
-`baseline-motion.mp4`. `05-fresh-ready.xml` records the onboarding choices.
+`26-before-press`, `28-search-results` PNG/XML captures, the unpaired
+`27-held-button.png` and `baseline-motion.mp4`. `05-fresh-ready.xml` records the
+onboarding choices.
 `24-rates-bottom.xml` records “See all 6243 home loans”; that control is absent
 from the initial viewport in `12-rates.xml`. `28-search-results.xml` records
 6243 results. Adjacent Budget Home Loan rows expose the same two visible metadata
@@ -46,6 +61,14 @@ external search page, so it is excluded from app assertions. `capture.ps1` recor
 capture mechanics, not a timestamped action log. The host had a System UI startup
 ANR; no reliable baseline completion time or frame-time measurements exist.
 Competitor screenshots do not establish live competitor animation timings.
+
+The separate [v1.0.239/build 296 capture](evidence/android-baseline-2026-10-14/v1.0.239-b296/phase1-settled.png)
+was produced after the operator verified that published APK; its
+[release manifest](evidence/android-baseline-2026-10-14/v1.0.239-b296/published-apk-manifest.json)
+identifies source `f756137cddcb9a0a360b13150424af6f2ccea9bc` and exact APK bytes.
+It shows onboarding, despite the filename; no paired hierarchy was retained.
+It does not replace the historical v1.0.237 friction ledger or establish native
+acceptance of source `7e4caee`. No APK or competitor artwork is committed here.
 
 ### Friction ledger: verified actions and gaps
 
@@ -160,12 +183,62 @@ The public route omits `(tabs)`; group-qualified legacy links must still work.
 | Tab/Back history | Expo navigation state; `lib/primaryNavigation.ts` returns via `router.dismissTo`; root/tab `unstable_settings` | Preserve mounted navigator/key/nested state; no duplicate `(tabs)` route; sheet/keyboard Back first, actual caller next; cold links get real Rates/Market ancestry |
 | Audit restoration/readiness | `performanceAuditNavigation.ts`, readiness hooks, `PerformanceAuditRunner.tsx` | Preserve complete hydrated outer `__root` snapshot; validate before restoring; never restore stale/replaced navigator |
 
+### Retire onboarding completion without changing consent
+
+`prefs.onboarded` currently mixes UI access, startup presentation, history scope
+and audit preparation. Phase 3 retires its gating meaning atomically; changing
+only the root redirect is insufficient. The flag is **not privacy consent**.
+
+1. After persisted preferences hydrate, both fresh and existing users may access
+   Rates/Saved/Market and the account controls. Navigation readiness derives from
+   hydration, route/task presentation and actual data state, not `onboarded`.
+2. Existing `interests`, `defaultSection`, profile filters, saved/subscription
+   identities and entered scenarios survive unchanged. All three product types
+   remain directly selectable; legacy interests become optional defaults, never
+   access controls. Missing/invalid preferences use existing normalization; do
+   not rewrite an existing user selection as part of the redirect.
+3. Preserve `crashReportsEnabled`, session-replay settings, `privacyChoiceVersion`
+   and explicit prior decisions. Fresh missing privacy choices remain undecided;
+   never set consent/version, grant permissions or enable telemetry merely to
+   remove onboarding. The actual optional choice remains accessible after the
+   browse shell renders, without blocking results. App-lock choices survive too.
+4. Stop new writes to `onboarded` and remove it from `DEFAULT_PREFS`/the active
+   `Prefs` schema when the consumers below migrate. Old persisted objects may
+   contain the obsolete field; hydration ignores it without resetting other
+   preferences. `completeOnboarding` and the old first-job/setup mutations become
+   removable implementation, while `/onboarding` remains a thin compatibility
+   adapter. An audit fixture must not resurrect the retired flag as UI access.
+
+Every current consumer must change in the same migration:
+
+| Consumer | Atomic replacement |
+| --- | --- |
+| `app/index.tsx`, `app/onboarding.tsx`, `data/storeTypes.ts`, `data/storeUser.ts` | Hydration -> Rates for both flag values; retire default/schema/completion writes and mandatory setup |
+| `components/AppTabBar.tsx`, `AppNavigationMenu.tsx`, `AppBreadcrumbBar.tsx`; `lib/tabRouting.ts`, `breadcrumbs.ts`; both layouts | Navigation available from hydrated browsing; retain only route-specific focused-task exclusions |
+| Root branded-splash morph and `DiagnosticsConsentBanner` visibility in `app/_layout.tsx` | Startup/surface readiness and actual privacy-choice state independently; no onboarding prerequisite or inferred consent |
+| `hooks/useBankRateHistory.ts`, `data/bankRateHistoryScope.ts`, `storeBankRateHistory.ts`, `components/passthrough/BankRatesPanel.tsx` | Explicit optional interest/section scope, with all product types reachable; preserve profile/eligibility semantics independently of completed setup |
+| `components/PerformanceAuditRunner.tsx`, `lib/performanceAuditProfile.ts`, affected readiness/navigation/history tests | Hydrated canonical app readiness and explicit fixtures; restore interests/consent exactly; never enable privacy options as audit setup |
+
+Acceptance covers fresh defaults; old persisted `onboarded=false` and `true`;
+absent/invalid obsolete fields; explicit diagnostics acceptance/decline; and
+undecided privacy state. Verify navigation, history scope, splash completion,
+choice visibility and audit restoration for each case, with no profile reset or
+automatic telemetry/notification activation.
+
 ### Compatibility acceptance matrix
 
 Exercise both cold external entry and already-mounted navigation for `/`,
 `/(tabs)`, `/tools`, `/(tabs)/tools`, `/search`, `/browse`, `/categories`, `/node`,
 `/banks`, `/catalogue`, `/matches`, `/trends`, `/(tabs)/trends`, `/privacy`,
+`/onboarding`,
 product/receipt/bank/compare/calculator/projection and notification entries.
+
+For both cold and mounted `/onboarding` entry, assert direct canonical Rates
+arrival with no first-job/setup questions, no repeated redirect and no lost
+navigation history. Stored interests, default section, profile/saved/scenario
+state and explicit privacy choices survive; undecided consent remains undecided.
+Repeat with old persisted `onboarded=false`, `true` and no flag. Back must recover
+the canonical existing browsing context rather than reopen mandatory setup.
 
 Include empty path/provider/query resets; section keys and slugs; repeated params;
 invalid section/sort; hierarchy scope; current and unavailable subscriptions;
@@ -232,7 +305,7 @@ are short or outside a screen file.
 | Market/history/chart/economic text | `RbaOutlook.tsx`, `RbaCountdownCard.tsx`, `BankInsights.tsx`, `MarketSnapshot.tsx`, `Ribbon.tsx`, `charts*`, `viz/*`, `economy/*`, `rba/*`, `passthrough/*`; `data/{bankInsights,bankInsightsQuery,rbaCalendar,rbaMarketOutlook*,economicOutlook*,historySelectors,productHistory,productHistoryModel}.ts` | Structured axes/date/window/series/status/source labels; external forecast/releases/notes need curated factual display; raw provider narrative is not UI copy |
 | App update and changelog | `AppUpdateBanner.tsx`, `settings/AppUpdateSection.tsx`, `lib/{appUpdate,appUpdateLogic,appUpdateDownload,appUpdateInstall,changelog,releaseTransport}.ts` | Version/bytes/progress/channel/status/action facts; remote release notes and raw errors cannot enter ordinary UI unchecked |
 | Reports, share and exported receipts | `SearchReportExport.tsx`, `lib/{exportSearchReport,searchReportPdf,searchReportTables,searchReportWorkbook}.ts`, `data/{filteredSearchSnapshot,rateReceipt}.ts`, `data/receiptReplay/tdExport.ts` | Preserve factual output, data/source basis and export consent. App-generated text outside React/JSX remains in scope |
-| Audit/log/diagnosis | `PerformanceAuditRunner.tsx`, `AuditCatalogueCoverage.tsx`, `BackgroundWorkDiagnosis.tsx`, `DebugLogUploadStatus.tsx`, debug/audit screens, `lib/{debugLog,degradationLog,performanceAudit*,passiveAudit*,appHealth*}.ts` | UI shows structured result/status/count/time facts. Raw evidence stays complete in explicit export/document boundary; arbitrary log/server error rendered as prose is not an exemption |
+| Audit/log/diagnosis | `PerformanceAuditRunner.tsx`, `PerformanceAuditOverlay.tsx`, `AuditCatalogueCoverage.tsx`, `BackgroundWorkDiagnosis.tsx`, `DebugLogUploadStatus.tsx`, debug/audit screens, `lib/{debugLog,degradationLog,performanceAuditCapacity,performanceAuditTiming,performanceAudit*,passiveAudit*,appHealth*}.ts` | UI shows structured result/status/count/time facts. Overlay paused text, dynamic progress labels and estimate/capacity/error producers are explicitly in scope. Raw evidence stays complete in explicit export/document boundary; arbitrary log/server error rendered as prose is not an exemption |
 | Legal/licence documents | `terms.tsx`, `third-party-notices.tsx`, `lib/privacyPolicy.ts`, `src/content/thirdPartyNotices.ts` | Narrow explicit legal/licence/source document boundary. No screen help, design-reference descriptions, decks or general app explanations accepted by location alone |
 
 ### Native dialog index
@@ -284,10 +357,11 @@ and native QA. No backend/Pi/ingest/systemd changes are part of this document.
 
 ## Source-scan appendix
 
-The entries below are production candidates found at the recorded revision. The
+The entries below are production candidates refreshed from reviewed source
+`7e4caee4e4fbd1957449c372761aece5cf6a7e5b`, not the historical APK. The
 JSX scan covers text components, common text-bearing/accessibility props and native
 alerts. The dynamic scan additionally indexes TS producers of text/status/reason/
-error/remote descriptions. It is an inventory input, not a semantic allowlist.
+error/remote descriptions and diagnostic benchmarkEvidence. It is an inventory input, not a semantic allowlist.
 
 ### JSX/native text sink candidates
 
@@ -301,7 +375,7 @@ error/remote descriptions. It is an inventory input, not a semantic allowlist.
 | mobile/app/(tabs)/watchlist.tsx | 228 |
 | mobile/app/+not-found.tsx | 39 |
 | mobile/app/about.tsx | 23 |
-| mobile/app/bank/[provider].tsx | 69 |
+| mobile/app/bank/[provider].tsx | 70 |
 | mobile/app/banks.tsx | 229 |
 | mobile/app/calculation-receipt.tsx | 23 |
 | mobile/app/calculator.tsx | 559 |
@@ -381,7 +455,7 @@ error/remote descriptions. It is an inventory input, not a semantic allowlist.
 | mobile/src/components/passthrough/ResponseComposition.tsx | 12 |
 | mobile/src/components/passthrough/ResponseScatter.tsx | 84 |
 | mobile/src/components/passthrough/ResponseWindowHeader.tsx | 29 |
-| mobile/src/components/PerformanceAuditRunner.tsx | 4014 |
+| mobile/src/components/PerformanceAuditOverlay.tsx | 40 |
 | mobile/src/components/product/ActivityEvents.tsx | 11 |
 | mobile/src/components/product/ActivityPeriodCalculation.tsx | 24 |
 | mobile/src/components/product/ActivityPeriodForm.tsx | 32 |
@@ -572,7 +646,7 @@ Some candidates produce internal diagnostics or validation only. Their path to a
 | mobile/src/data/v3Payload.ts | 81 |
 | mobile/src/data/vizModels.ts | 37 |
 | mobile/src/hooks/useCustomerProfile.ts | 5 |
-| mobile/src/hooks/usePreparedSearchRows.ts | 22 |
+| mobile/src/hooks/usePreparedSearchRows.ts | 23 |
 | mobile/src/hooks/useSearchFilterOptions.ts | 28 |
 | mobile/src/hooks/useUndoSnackbar.ts | 4 |
 | mobile/src/hooks/useUserRateScenario.ts | 18 |
@@ -620,6 +694,7 @@ Some candidates produce internal diagnostics or validation only. Their path to a
 | mobile/src/lib/payloadCrypto.ts | 37 |
 | mobile/src/lib/performanceAudit.ts | 37 |
 | mobile/src/lib/performanceAuditActionEvidence.ts | 21 |
+| mobile/src/lib/performanceAuditCapacity.ts | 124 |
 | mobile/src/lib/performanceAuditHealth.ts | 396 |
 | mobile/src/lib/performanceAuditLinks.ts | 13 |
 | mobile/src/lib/performanceAuditLog.ts | 118 |
@@ -674,4 +749,4 @@ Some candidates produce internal diagnostics or validation only. Their path to a
 | mobile/src/theme/typography.ts | 8 |
 | mobile/src/types.ts | 153 |
 
-Scan totals: 146 JSX/native candidate files and 227 dynamic TS candidate files. First lines are locations for inspection, not the only relevant lines.
+Scan totals at reviewed source 7e4caee: 146 JSX/native candidate files and 228 dynamic TS candidate files. First lines are locations for inspection, not the only relevant lines.
