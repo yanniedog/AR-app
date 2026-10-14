@@ -441,11 +441,28 @@ export function uiIdentifier(value: string | null | undefined): UiText {
 function identity(value: string | null | undefined): UiText {
   return known(value?.replace(/[\r\n\t]/g, ' ').trim() || 'Unknown');
 }
-/** Published charge identity only; fee descriptions and conditions are never labels. */
+// Explicit fee identities reviewed against the retained Bankwest and
+// Dnister/BCU source fixtures, plus the bundled primary-source details sample.
+// New publisher wording requires identity review; source presence alone never
+// admits marketing, descriptions or conditions as consumer copy.
+const REVIEWED_PUBLISHED_FEE_NAMES = new Set([
+  'Annual fee', 'Monthly fee', 'Maintenance Fee', 'Search Handling Fee',
+  'Company Search', 'Title Search', 'Bank Production', 'Withdrawal of Caveat',
+  'ASIC Lodgement', 'Bank Cheque', 'Discharge of Mortgage', 'Redraw Fee',
+  'Loan Establishment Fee', 'Split Fee', 'Annual Fee Intro Var HL Pkg',
+  'Overseas Telegraphic Transfer', 'International Transfer Fee', 'Cash Handling Fee',
+  'Bank Cheque Fee', 'Manual Trace Fee', 'Cash Passport Fee', 'Statement Retrieval Fee',
+  'Audit Certificate Fee', 'RTGS From Another Bank', 'Manual External Transfer Fee',
+  'RTGS To Another Bank', 'Referral Fee', 'Dishonour Fee', 'Auto Transfer Dishonour Fee',
+  'Overdrawn Account Management Fee', 'Application fee', 'Valuation fee',
+  'Discharge administration fee', 'Account service fee', 'Package fee',
+].map(name => name.toLowerCase()));
+/** Reviewed published charge identity only; descriptions and conditions are never labels. */
 export function uiPublishedFeeName(item: DetailItem): UiText {
   const name = item.name;
   return typeof name === 'string' && name.trim() && name.length <= 160
     && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(name)
+    && REVIEWED_PUBLISHED_FEE_NAMES.has(name.trim().toLowerCase())
     ? known(name.trim()) : uiLabel('Unknown');
 }
 export function uiProductName(row: Pick<RateRow, 'product_name'>): UiText { return identity(row.product_name); }

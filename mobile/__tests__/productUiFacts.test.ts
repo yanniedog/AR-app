@@ -1,4 +1,6 @@
 import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
+import siblings from './fixtures/suitability-conditional-siblings-20260913.json';
+import sample from '../assets/sample/details.json';
 import type { ProductDetail } from '../src/types';
 import { uiDetailItem } from '../src/lib/productUiFacts';
 import { uiPublishedFeeName } from '../src/lib/uiCopy';
@@ -17,10 +19,38 @@ test('the published Bankwest charge names, categories, amounts and conditions su
 });
 
 test('same-name charges remain distinct by category, amount and condition reference', () => {
-  const periodic = uiDetailItem({ name: 'Service fee', label: 'PERIODIC', amount: '0', additionalValue: 'P1M' }, 0, 'Fees');
-  const event = uiDetailItem({ name: 'Service fee', label: 'EVENT', amount: '20', info: 'Only charged for an additional request.' }, 1, 'Fees');
-  expect(periodic).toMatchObject({ label: 'Service fee · PERIODIC', value: '$0 · per month', reference: '1', conditions: 'none' });
-  expect(event).toMatchObject({ label: 'Service fee · EVENT', value: '$20', reference: '2', conditions: 'source-review-required' });
+  const periodic = uiDetailItem({ name: 'Redraw Fee', label: 'PERIODIC', amount: '0', additionalValue: 'P1M' }, 0, 'Fees');
+  const event = uiDetailItem({ name: 'Redraw Fee', label: 'EVENT', amount: '20', info: 'Only charged for an additional request.' }, 1, 'Fees');
+  expect(periodic).toMatchObject({ label: 'Redraw Fee · PERIODIC', value: '$0 · per month', reference: '1', conditions: 'none' });
+  expect(event).toMatchObject({ label: 'Redraw Fee · EVENT', value: '$20', reference: '2', conditions: 'source-review-required' });
+});
+
+test('reviewed source identities retain publisher case and do not duplicate identical categories', () => {
+  expect(uiPublishedFeeName({ name: ' AnNuAl FeE ' })).toBe('AnNuAl FeE');
+  expect(uiDetailItem({ name: 'Annual fee', amount: '0' }, 0, 'Fees')).toMatchObject({ label: 'Annual fee', value: '$0', reference: '1', conditions: 'none' });
+  expect(uiDetailItem({ name: 'MONTHLY FEE', amount: '10', label: 'PERIODIC' }, 1, 'Fees')).toMatchObject({ label: 'MONTHLY FEE', value: '$10', reference: '2', conditions: 'none' });
+});
+
+test('reviewed identities are bound to retained source fee names rather than descriptions', () => {
+  for (const source of siblings.cases) {
+    const fees = (source.detail as ProductDetail).fees!;
+    for (const [index, item] of fees.entries()) {
+      expect(uiPublishedFeeName(item)).toBe(item.name);
+      expect(uiDetailItem(item, index, 'Fees').reference).toBe(String(index + 1));
+    }
+  }
+  for (const name of ['Annual fee', 'Monthly fee', 'Application fee', 'Valuation fee', 'Discharge administration fee', 'Account service fee', 'Package fee']) {
+    const actual = Object.values(sample.products as Record<string, ProductDetail>).flatMap(product => product.fees ?? [])
+      .find(item => item.name?.trim().toLowerCase() === name.toLowerCase());
+    expect(actual).toBeDefined();
+    expect(uiPublishedFeeName(actual!)).toBe(actual!.name!.trim());
+  }
+});
+
+test.each(['Arbitrary promotional fee label.', 'Maintenance Fee. Conditions apply.', 'Annual fee | Great benefits', 'Service fee'])('unreviewed source fee name %j cannot become consumer or report copy', name => {
+  expect(uiPublishedFeeName({ name, label: 'EVENT', info: 'Maintenance Fee' })).toBe('Unknown');
+  expect(uiDetailItem({ name, label: 'EVENT', amount: '40' }, 2, 'Fees')).toMatchObject({ label: 'EVENT', value: '$40', reference: '3', conditions: 'source-review-required' });
+  expect(JSON.stringify(uiDetailItem({ name, amount: '0' }, 0, 'Fees'))).not.toContain(name);
 });
 
 test.each(['Fee\nDescription', 'Fee\tDescription', 'Fee\u0000Description', 'Fee\u2028Description', 'x'.repeat(161)])('invalid fee identity %j cannot admit a description', name => {

@@ -97,7 +97,8 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
   const controlled = codes[item.label ?? ''] ?? names[(item.name ?? '').toLowerCase()];
   const category = controlled ? uiLabel(controlled) : humanizeEnum(item.label);
   const feeName = group === 'Fees' ? uiPublishedFeeName(item) : null;
-  const label = feeName && feeName !== 'Unknown' ? uiJoin(feeName, category ? uiJoin(' · ', category) : null) : category;
+  const label = feeName && feeName !== 'Unknown' ? uiJoin(feeName,
+    category && feeName.trim().toLowerCase() !== category.trim().toLowerCase() ? uiJoin(' · ', category) : null) : category;
   const info = /^(?:Australian resident|Permanent resident)\.?$/i.exec(item.info?.trim() ?? '');
   const knownInfo = info ? uiLabel(/^Australian/i.test(info[0]) ? 'Australian resident' : 'Permanent resident') : null;
   const scalar = descriptiveValue(item.value);
