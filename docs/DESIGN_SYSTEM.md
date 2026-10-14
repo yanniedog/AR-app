@@ -1,6 +1,6 @@
 # Rate Ledger design system
 
-Status: implementation contract
+Status: historical baseline; consumer direction superseded by [Android redesign contract](ANDROID_REDESIGN_CONTRACT.md). Phase 2 updates the implementation tokens and this document together.
 Product: Australian Rates mobile app
 Language: Australian English
 

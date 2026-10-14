@@ -1,5 +1,10 @@
 # App navigation
 
+Historical September 2026 baseline. The [Android redesign contract](ANDROID_REDESIGN_CONTRACT.md)
+supersedes this five-destination map with Rates, Saved and Market. The
+[redesign inventory](ANDROID_REDESIGN_INVENTORY.md) governs capability migration
+and legacy compatibility during implementation.
+
 The app has five permanent destinations, in this order. The bottom bar and the
 labelled Menu stay visible on ordinary detail screens; the breadcrumb bar is a
 wide/tablet affordance and is hidden on phones, where the bottom bar names the
