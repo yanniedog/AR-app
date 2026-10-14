@@ -1,6 +1,8 @@
+import type { UiChild } from '../../lib/uiCopy';
 import React from 'react';
 import { View, type ViewStyle } from 'react-native';
 import { SheetSurface } from '../SheetSurface';
+import type { UiCopy } from '../../lib/uiCopy';
 
 export function LedgerSheet({
   visible,
@@ -10,9 +12,9 @@ export function LedgerSheet({
   style,
 }: {
   visible: boolean;
-  title: string;
+  title: UiCopy;
   onClose: () => void;
-  children: React.ReactNode;
+  children: UiChild;
   style?: ViewStyle;
 }) {
   return (

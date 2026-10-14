@@ -1,3 +1,4 @@
+import type { UiChild } from '../lib/uiCopy';
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import React, { useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -8,15 +9,15 @@ import { useTheme } from '../theme/ThemeProvider';
 import { LedgerIcon, type LedgerIconName } from './icons/LedgerIcon';
 import { LedgerRow, LedgerText } from './ledger';
 import { ScreenScrollView } from './Screen';
+import type { UiCopy } from '../lib/uiCopy';
 
 /** Lightweight destination roots render before any optional rate/history models. */
-export function NavigationHub({ title, description, surface, route, actions, children }: {
-  title: string;
-  description: string;
+export function NavigationHub({ title, surface, route, actions, children }: {
+  title: UiCopy;
   surface: string;
   route: string;
   actions: Record<string, PerformanceAuditSemanticAction>;
-  children: React.ReactNode;
+  children: UiChild;
 }) {
   const focused = useIsFocused();
   const [laidOut, setLaidOut] = useState(false);
@@ -33,16 +34,14 @@ export function NavigationHub({ title, description, surface, route, actions, chi
     <ScreenScrollView ref={scrollRef} showDataHealthBanner={false}>
       <View onLayout={() => setLaidOut(true)} style={{ gap: 6 }}>
         <LedgerText variant="title" accessibilityRole="header">{title}</LedgerText>
-        <LedgerText tone="mutedInk">{description}</LedgerText>
       </View>
       {children}
     </ScreenScrollView>
   );
 }
 
-export function DestinationRow({ title, description, icon, onPress }: {
-  title: string;
-  description: string;
+export function DestinationRow({ title, icon, onPress }: {
+  title: UiCopy;
   icon: LedgerIconName;
   onPress: () => void;
 }) {
@@ -50,8 +49,6 @@ export function DestinationRow({ title, description, icon, onPress }: {
   return (
     <LedgerRow
       title={title}
-      detail={description}
-      accessibilityHint={description}
       onPress={onPress}
       leading={<LedgerIcon name={icon} size={24} color={theme.ledger.eucalyptus} />}
       style={{ minHeight: 80, paddingVertical: 16 }}

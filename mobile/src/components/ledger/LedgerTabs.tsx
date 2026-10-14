@@ -5,10 +5,11 @@ import { LEDGER_LAYOUT } from '../../theme/layout';
 import { useTheme } from '../../theme/ThemeProvider';
 import { LedgerText } from './LedgerText';
 import { PressFeedback } from '../PressFeedback';
+import type { UiCopy } from '../../lib/uiCopy';
 
 export interface LedgerTabOption<T extends string> {
   value: T;
-  label: string;
+  label: UiCopy;
 }
 
 export function LedgerTabs<T extends string>({
@@ -20,7 +21,7 @@ export function LedgerTabs<T extends string>({
   options: readonly LedgerTabOption<T>[];
   value: T;
   onChange: (value: T) => void;
-  accessibilityLabel?: string;
+  accessibilityLabel?: UiCopy;
 }) {
   const theme = useTheme();
   return (

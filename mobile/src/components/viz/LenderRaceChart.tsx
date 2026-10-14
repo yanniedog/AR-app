@@ -4,9 +4,8 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { ChartText as SvgText } from '../charts/ChartText';
 
 import type { BankInsightsPayload } from '../../data/bankInsights';
-import { formatRate } from '../../data/format';
 import { lenderRaceModel } from '../../data/vizModels';
-import { formatAxisDateLabel, sliceIndexFromPlotX } from '../../data/bankHistoryTransform';
+import { sliceIndexFromPlotX } from '../../data/bankHistoryTransform';
 import { openBank } from '../../lib/nav';
 import type { Brand, HistoryWindow, SectionKey } from '../../types';
 import { withAlpha } from '../../theme/colors';
@@ -16,6 +15,8 @@ import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls'
 import { BankAvatar } from '../BankAvatar';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText, Row } from '../ui';
+import { uiCount, uiDate, uiJoin, uiLabel, uiProviderName, uiRate } from '../../lib/uiCopy';
+import { uiChartDate } from '../../lib/chartUiCopy';
 
 const FALLBACK_PALETTE = ['#3b82f6', '#14b8a6', '#d97706', '#a855f7', '#ef4444', '#0ea5e9', '#84cc16', '#ec4899'];
 
@@ -124,8 +125,7 @@ export function LenderRaceChart({
         if (auditRevision) onGraphicReadiness?.({ revision: auditRevision, expectedCount: 0, pointCount: 0,
           accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
       }}>
-        Not enough ranking history in this window yet. Leaders need at least two lenders with observations.
-      </AppText>
+        {uiLabel("No observations")}</AppText>
     );
   }
 
@@ -144,8 +144,7 @@ export function LenderRaceChart({
       <View
         accessible
         accessibilityRole="adjustable"
-        accessibilityLabel={`Lender ranking on ${formatAxisDateLabel(model.dates[activeIndex])}. ${ranked.length ? ranked.slice(0, 3).map((entry) => `Rank ${entry.rank}, ${entry.provider}, ${formatRate(entry.rate)}`).join('. ') : 'No ranked lenders.'}`}
-        accessibilityHint="Swipe up or down to move between observation dates."
+        accessibilityLabel={uiJoin('Rank', ' · ', uiDate(model.dates[activeIndex]), ' · ', ...ranked.slice(0, 3).map(entry => uiJoin(uiCount(entry.rank), ' ', uiProviderName(entry), ' ', uiRate(entry.rate), ' · ')))}
         accessibilityActions={[
           { name: 'increment', label: 'Next date' },
           { name: 'decrement', label: 'Previous date' },
@@ -199,7 +198,7 @@ export function LenderRaceChart({
                   fill={theme.colors.textFaint}
                   textAnchor="end"
                 >
-                  {`#${lane + 1}`}
+                  {uiCount(lane + 1)}
                 </SvgText>
               </React.Fragment>
             ))}
@@ -239,10 +238,10 @@ export function LenderRaceChart({
               strokeDasharray="3 3"
             />
             <SvgText x={padL} y={height - 4} fontSize={9} fill={theme.colors.textFaint}>
-              {formatAxisDateLabel(model.dates[0])}
+              {uiChartDate(model.dates[0])}
             </SvgText>
             <SvgText x={width - padR} y={height - 4} fontSize={9} fill={theme.colors.textFaint} textAnchor="end">
-              {formatAxisDateLabel(model.dates[model.dates.length - 1])}
+              {uiChartDate(model.dates[model.dates.length - 1])}
             </SvgText>
           </Svg>
         ) : null}
@@ -252,8 +251,8 @@ export function LenderRaceChart({
         dates={model.dates}
         activeIndex={activeIndex}
         onChangeIndex={(index) => onDateSelect?.(model.dates[index] ?? null)}
-        valueLabel={ranked.length ? ranked.slice(0, 3).map((entry) => `#${entry.rank} ${entry.provider}`).join(' · ') : 'No ranks'}
-        detail={`Leaders on ${formatAxisDateLabel(model.dates[activeIndex])}`}
+        valueLabel={ranked.length ? uiJoin(...ranked.slice(0, 3).map(entry => uiJoin(uiCount(entry.rank), ' ', uiProviderName(entry), ' · '))) : uiLabel('No ranks')}
+        facts={[{ label: 'Lenders', value: uiCount(model.fieldSizes[activeIndex]) }]}
       />
 
       {ranked.map((entry) => (
@@ -261,24 +260,22 @@ export function LenderRaceChart({
           key={entry.provider}
           onPress={() => openBank(entry.provider, { date: model.dates[activeIndex], section })}
           accessibilityRole="button"
-          accessibilityLabel={`Rank ${entry.rank}, ${entry.provider}, ${formatRate(entry.rate)}, observed ${formatAxisDateLabel(model.dates[activeIndex])}${
-            entry.moved ? `, ${entry.moved > 0 ? 'up' : 'down'} ${Math.abs(entry.moved)} places since the previous observation` : ''
-          }`}
+          accessibilityLabel={uiJoin('Rank', ' ', uiCount(entry.rank), ' · ', uiProviderName(entry), ' · ', uiRate(entry.rate), ' · ', uiDate(model.dates[activeIndex]), entry.moved ? uiJoin(' · ', entry.moved > 0 ? '↑' : '↓', uiCount(Math.abs(entry.moved))) : null)}
           style={{ minHeight: 48, justifyContent: 'center' }}
         >
           <Row gap={8} style={{ paddingVertical: 5 }}>
             <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colorFor(entry.provider, entry.seriesIndex) }} />
             <AppText variant="tiny" weight="700" color="textFaint" style={{ width: 22 }}>
-              #{entry.rank}
+              {uiCount(entry.rank)}
             </AppText>
             <BankAvatar
-              provider={entry.provider}
+              provider={uiProviderName(entry)}
               size={22}
               onAssetPending={markLogoPending}
               onAssetTerminal={markLogoTerminal}
             />
             <AppText variant="small" weight="600" numberOfLines={1} style={{ flex: 1 }}>
-              {entry.provider}
+              {uiProviderName(entry)}
             </AppText>
             {entry.moved !== 0 ? (
               <AppText
@@ -286,17 +283,17 @@ export function LenderRaceChart({
                 weight="700"
                 style={{ color: entry.moved > 0 ? theme.colors.success : theme.colors.danger }}
               >
-                {entry.moved > 0 ? '▲' : '▼'} {Math.abs(entry.moved)}
+                {uiJoin(entry.moved > 0 ? '↑' : '↓', ' ', uiCount(Math.abs(entry.moved)))}
               </AppText>
             ) : null}
             <AppText variant="small" weight="800">
-              {formatRate(entry.rate)}
+              {uiRate(entry.rate)}
             </AppText>
           </Row>
         </Pressable>
       ))}
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
-        Observed {formatAxisDateLabel(model.dates[activeIndex])} ranking across {model.fieldSizes[activeIndex]} lenders · tap a lender for their dated profile
+        {uiJoin('Observed', ' · ', uiDate(model.dates[activeIndex]), ' · ', uiCount(model.fieldSizes[activeIndex]), ' ', 'Lenders')}
       </AppText>
     </View>
   );

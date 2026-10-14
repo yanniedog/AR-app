@@ -1,6 +1,7 @@
 import type { AssetState } from './assetState';
 import { coverageFailures, coverageFailureProvenanceReported } from './coverage';
 import type { PayloadCoverage, PayloadSource } from '../types';
+import { displayEvidenceFacts, type EvidencePresentation } from './displayEvidenceFacts';
 
 export type DisplayEvidenceKind =
   | 'current'
@@ -17,6 +18,7 @@ export type DisplayCoverageState = 'complete' | 'partial' | 'unknown';
 export type DisplayAssetStatus = AssetState<unknown>['status'];
 
 export interface DisplayEvidence {
+  presentation: EvidencePresentation;
   kind: DisplayEvidenceKind;
   tone: DisplayEvidenceTone;
   label: string;
@@ -155,6 +157,11 @@ export function freshnessDeadlineUtc(
  * It never infers full coverage merely from the absence of a displayed error.
  */
 export function mapDisplayEvidence(input: DisplayEvidenceInput): DisplayEvidence {
+  return { ...legacyDisplayEvidence(input), presentation: displayEvidenceFacts(input) };
+}
+
+/** Internal compatibility metadata. Consumer text uses presentation only. */
+function legacyDisplayEvidence(input: DisplayEvidenceInput): Omit<DisplayEvidence, 'presentation'> {
   const now = input.now ?? new Date();
   const observedOn = safeDay(input.runDate ?? input.coverage?.observed_on ?? input.coverage?.observed_at);
   const coverage = coverageSummary(input.coverage);

@@ -16,7 +16,7 @@ jest.mock('expo-router', () => ({ router: { dismissTo: (...args: unknown[]) => m
   useLocalSearchParams: () => mockParams, useNavigationContainerRef: () => mockNavigation, Redirect: 'Redirect' }));
 beforeEach(() => { mockParams = {}; mockDismissTo.mockClear(); mockPush.mockClear(); });
 it('Rates mounts the sole full results workspace, without a preview hub', () => expect(Rates).toBe(RatesWorkspace));
-it.each([[Search, { query: '', path: '' }], [Categories, { path: '', scope: 'hierarchy' }],
+it.each([[Search, { query: '', path: '' }], [Categories, { path: '', scope: 'hierarchy', availability: 'listed' }],
   [Catalogue, { availability: 'unlisted', query: '', path: '', scope: '' }], [Onboarding, {}]] as const)(
   'adapts an old entry to the existing canonical navigator, once per parameter identity', (Entry, defaults) => {
     mockParams = { section: ['term-deposits', 'Mortgage'], path: '12M', query: 'Exact % Bank', sub: 'saved' };

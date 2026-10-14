@@ -8,6 +8,8 @@ import { SECTIONS } from '../../constants';
 import type { ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { ChartErrorBoundary } from '../ChartErrorBoundary';
 import { AppText, Chip, Row } from '../ui';
+import { uiLabel,  uiJoin, type UiCopy } from '../../lib/uiCopy';
+import { uiChartWindow } from '../../lib/chartUiCopy';
 import { LenderRaceChart } from './LenderRaceChart';
 import { MarketSeismograph } from './MarketSeismograph';
 import { RateHeatCalendar } from './RateHeatCalendar';
@@ -15,11 +17,11 @@ import { SwitcherEdgeChart } from './SwitcherEdgeChart';
 
 export type HistoryViewMode = 'edge' | 'calendar' | 'pulse' | 'race';
 
-const MODE_META: Record<HistoryViewMode, { label: string; icon: keyof typeof Ionicons.glyphMap; blurb: string }> = {
-  edge: { label: 'Spread', icon: 'flash-outline', blurb: 'Leading advertised rate versus the median' },
-  calendar: { label: 'Calendar', icon: 'calendar-outline', blurb: 'Every day, coloured by which way rates moved' },
-  pulse: { label: 'Pulse', icon: 'pulse-outline', blurb: 'Daily rate-move activity across all lenders' },
-  race: { label: 'Leaders', icon: 'podium-outline', blurb: "Today's leading rates, traced back through the rankings" },
+const MODE_META: Record<HistoryViewMode, { label: UiCopy; icon: keyof typeof Ionicons.glyphMap }> = {
+  edge: { label: 'Spread', icon: 'flash-outline' },
+  calendar: { label: 'Calendar', icon: 'calendar-outline' },
+  pulse: { label: 'Pulse', icon: 'pulse-outline' },
+  race: { label: 'Leaders', icon: 'podium-outline' },
 };
 
 const WINDOW_OPTIONS: HistoryWindow[] = ['30D', '90D', '1Y', 'All'];
@@ -124,9 +126,6 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
               ))}
             </Row>
           </ScrollView>
-          <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
-            {MODE_META[activeMode].blurb}
-          </AppText>
         </>
       ) : null}
       {standardOnly &&
@@ -134,30 +133,27 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
       (activeMode === 'calendar' || activeMode === 'edge') &&
       (historyModel?.dates.length ?? 0) <= 1 ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-          More history is needed for Spread and Calendar. Pulse and Leaders are available now.
+          {uiJoin('History', ' · ', 'Partial')}
         </AppText>
       ) : null}
 
       {showWindowChips ? (
         <Row gap={6} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
           {WINDOW_OPTIONS.map((w) => (
-            <Chip key={w} label={w} selected={window === w} onPress={() => changeWindow(w)} />
+            <Chip key={w} label={uiChartWindow(w)} selected={window === w} onPress={() => changeWindow(w)} />
           ))}
         </Row>
       ) : null}
 
       {standardFilterWarming ? (
         <AppText variant="small" color="textMuted">
-          Filtering the latest standard products…
-        </AppText>
+          {uiLabel("Loading")}</AppText>
       ) : needsInsights && !insightsAvailable ? (
         <AppText variant="small" color="textMuted">
-          This view compares bank-level rate movements — included with Pro.
-        </AppText>
+          {uiLabel("Unavailable")}</AppText>
       ) : needsInsights && !insights ? (
         <AppText variant="small" color="textMuted">
-          Loading bank history…
-        </AppText>
+          {uiLabel("Loading")}</AppText>
       ) : (
         <>
           {activeMode === 'calendar' && historyModel ? (
@@ -220,8 +216,7 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
           ) : null}
           {(activeMode === 'calendar' || activeMode === 'edge') && !historyModel ? (
             <AppText variant="small" color="textMuted">
-              Bank history is still loading.
-            </AppText>
+              {uiLabel("Loading")}</AppText>
           ) : null}
         </>
       )}

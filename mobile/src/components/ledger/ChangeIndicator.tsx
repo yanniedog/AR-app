@@ -3,15 +3,16 @@ import { View, type ViewProps } from 'react-native';
 
 import type { LedgerPalette } from '../../theme/colors';
 import { LedgerText } from './LedgerText';
+import { uiJoin, type UiCopy, type UiNativeProps } from '../../lib/uiCopy';
 
 export type ChangeDirection = 'up' | 'down' | 'unchanged' | 'mixed' | 'unknown';
 
-const PRESENTATION: Record<ChangeDirection, { symbol: string; word: string; tone: keyof LedgerPalette }> = {
-  up: { symbol: '↑', word: 'Up', tone: 'warning' },
-  down: { symbol: '↓', word: 'Down', tone: 'success' },
+const PRESENTATION: Record<ChangeDirection, { symbol: UiCopy; word: UiCopy; tone: keyof LedgerPalette }> = {
+  up: { symbol: '↑', word: 'Higher', tone: 'warning' },
+  down: { symbol: '↓', word: 'Lower', tone: 'success' },
   unchanged: { symbol: '—', word: 'Unchanged', tone: 'mutedInk' },
   mixed: { symbol: '↕', word: 'Mixed', tone: 'info' },
-  unknown: { symbol: '?', word: 'Not known', tone: 'mutedInk' },
+  unknown: { symbol: '—', word: 'Unknown', tone: 'mutedInk' },
 };
 
 export function ChangeIndicator({
@@ -21,14 +22,14 @@ export function ChangeIndicator({
   context,
   style,
   ...rest
-}: ViewProps & {
+}: UiNativeProps<ViewProps> & {
   direction: ChangeDirection;
-  value?: string;
-  date?: string;
-  context?: string;
+  value?: UiCopy;
+  date?: UiCopy;
+  context?: UiCopy;
 }) {
   const presentation = PRESENTATION[direction];
-  const label = [presentation.word, value, context, date].filter(Boolean).join(' · ');
+  const label = uiJoin(presentation.word, value ? uiJoin(' · ', value) : null, context ? uiJoin(' · ', context) : null, date ? uiJoin(' · ', date) : null);
   return (
     <View
       accessible
@@ -37,7 +38,7 @@ export function ChangeIndicator({
       {...rest}
     >
       <LedgerText variant="label" tone={presentation.tone} accessibilityElementsHidden>
-        {presentation.symbol} {presentation.word}
+        {uiJoin(presentation.symbol, ' ', presentation.word)}
       </LedgerText>
       {value ? <LedgerText variant="label">{value}</LedgerText> : null}
       {context ? <LedgerText variant="caption" tone="mutedInk">{context}</LedgerText> : null}

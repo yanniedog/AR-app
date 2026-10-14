@@ -6,12 +6,12 @@ import { SvgUri } from 'react-native-svg';
 import {
   isSvgLogoSource,
   resolveBankLogoSourcesForRuntime,
-  resolveBrandShort,
 } from '../data/bankBrand';
 import { useStore } from '../data/store';
 import type { LogoRenderState } from '../lib/logoReadiness';
 import { isPerformanceAuditActive, subscribePerformanceAudit } from '../lib/performanceAudit';
 import { useTheme } from '../theme/ThemeProvider';
+import { uiBankInitials, uiProviderName } from '../lib/uiCopy';
 
 function contrastText(hex: string): string {
   const c = hex.replace('#', '');
@@ -68,7 +68,7 @@ export function BankAvatar({
   }
 
   const color = brand?.color ?? theme.colors.chipText;
-  const short = resolveBrandShort(provider, brand?.short).toUpperCase().slice(0, 5);
+  const short = uiBankInitials({ provider }, brand);
   const fontSize = short.length <= 3 ? size * 0.34 : size * 0.26;
   const activeSource = sources[sourceIdx];
   const terminalState = decoded
@@ -109,7 +109,7 @@ export function BankAvatar({
           justifyContent: 'center',
         }}
         accessible
-        accessibilityLabel={provider}
+        accessibilityLabel={uiProviderName({ provider })}
       >
         {isSvgLogoSource(activeSource) ? (
           <SvgUri
@@ -150,7 +150,7 @@ export function BankAvatar({
         justifyContent: 'center',
       }}
       accessible
-      accessibilityLabel={provider}
+      accessibilityLabel={uiProviderName({ provider })}
     >
       <Text accessible={false} style={{ color: contrastText(color), ...fontStyle('700'), fontSize }}>
         {short}

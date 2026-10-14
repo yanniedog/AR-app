@@ -2,9 +2,10 @@ import type { DetailItem, ProductDetail, RateRow } from '../types';
 import { advertisedTermMonths, computeLvr, num } from './calc';
 import { percentageInputFraction } from './decisionInsights';
 import { toFraction } from './format';
-import { normalizedProductFacts } from './productFacts';
+import { normalizedProductFacts } from './productFactsCore';
 import type { ProjectionFrequency } from './projectionScenario';
 import type { MortgageSwitchInputs, UserRateScenario } from './userRateScenario';
+import { staySwitchFacts, type StaySwitchFact } from './projectionFacts';
 
 export type SwitchFeeKey =
   | 'currentBankExitFees'
@@ -102,8 +103,7 @@ export interface StaySwitchProjection {
   breakEvenDate: string | null;
   totalInterestSaving: number;
   totalCostSaving: number | null;
-  assumptions: string[];
-  warnings: string[];
+  facts: readonly StaySwitchFact[];
 }
 
 const FEE_KEYS: SwitchFeeKey[] = [
@@ -427,8 +427,7 @@ function emptyProjection(
     breakEvenDate: null,
     totalInterestSaving: 0,
     totalCostSaving: null,
-    assumptions: [],
-    warnings: [],
+    facts: [],
   };
 }
 
@@ -593,20 +592,6 @@ export function buildStaySwitchProjection({
   const switchTotalCost = fees.costClaimsAvailable
     ? switching.interest + fees.netSwitchCost + fees.targetPeriodicFeesMonthly * switchFeeMonths
     : null;
-  const warnings: string[] = [];
-  if (targetAllocationShortfall > 0.005) {
-    warnings.push(`The target minimum repayment is $${Math.round(targetAllocationShortfall).toLocaleString('en-AU')} per month above the current household allocation.`);
-  }
-  if (offsetEvidence === 'not-published') {
-    warnings.push('No target offset feature was found in published product data; spare allocation is modelled as principal repayments.');
-  }
-  if (offsetEvidence === 'unavailable') {
-    warnings.push('Target product details are unavailable; no target offset is assumed until they load.');
-  }
-  if (!fees.costClaimsAvailable) warnings.push('Total-cost difference and break-even require verified material terms, customer applicability and a supported calculation.');
-  if (fees.netSwitchCost < 0) warnings.push('Entered cashback exceeds modelled fees; confirm eligibility and payment timing.');
-  if (targetIsFixed) warnings.push('The comparison stops at the published fixed-period end; no unknown reversion rate is invented.');
-
   return {
     ready: true,
     missing: [],
@@ -656,24 +641,11 @@ export function buildStaySwitchProjection({
     totalCostSaving: stayTotalCost != null && switchTotalCost != null
       ? stayTotalCost - switchTotalCost
       : null,
-    assumptions: [
-      'Both paths start with the same loan balance, remaining term and current offset balance.',
-      'The target cash flow uses its advertised rate; comparison rate is not an amortisation rate.',
-      targetAllocationShortfall > 0.005
-        ? 'The current repayment, extra repayment and offset contribution form the baseline allocation; the target contractual minimum requires the disclosed additional amount.'
-        : 'The current repayment, extra repayment and offset contribution form one fixed monthly household allocation for both paths.',
-      targetHasOffset
-        ? 'After the target minimum repayment, spare household allocation is added to an independent, uncapped offset balance.'
-        : 'Without a published or entered target offset, spare household allocation is paid to principal.',
-      scenario.mortgageSwitch.fundingMethod === 'new-loan'
-        ? 'Positive net switch costs are added to the new loan balance.'
-        : 'Positive net switch costs are paid from cash or offset rather than added to the new loan.',
-      'Rates and the entered cash allocation are held constant; tax, refinancing timing and future rate changes are not forecast.',
-      ...(!fees.costClaimsAvailable
-        ? ['The loan and interest paths use known inputs only; unknown fee amounts are not treated as zero.']
-        : []),
-      ...(targetIsFixed ? [`The target advertised rate is modelled for ${modelMonths} months only.`] : []),
-    ],
-    warnings,
+    facts: staySwitchFacts({ openingBalance: balance, remainingYears: years, openingOffset,
+      householdMonthlyAllocation: householdAllocation, targetMonthlyShortfall: targetAllocationShortfall,
+      targetHasOffset, offsetEvidence, funding: scenario.mortgageSwitch.fundingMethod === 'new-loan' ? 'new-loan' : 'cash', fixed: targetIsFixed, months: modelMonths,
+      fees: { entries: fees.fees, costClaimsAvailable: fees.costClaimsAvailable, feeInputsComplete: fees.feeInputsComplete,
+        grossFees: fees.grossFees, cashback: fees.cashback, netSwitchCost: fees.netSwitchCost,
+        unpricedUpfrontCount: fees.unpricedUpfrontFees.length, unpricedPeriodicCount: fees.unpricedPeriodicFees.length } }),
   };
 }

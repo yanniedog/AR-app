@@ -3,9 +3,9 @@ import Svg, { Circle, Path, type SvgProps } from 'react-native-svg';
 
 import { useTheme } from '../theme/ThemeProvider';
 
-export interface RateMarkProps extends Omit<SvgProps, 'color'> {
+export interface RateMarkProps extends Omit<import('../lib/uiCopy').UiNativeProps<SvgProps>, 'color'> {
   size?: number;
-  accessibilityLabel?: string;
+  accessibilityLabel?: import('../lib/uiCopy').UiCopy;
 }
 
 /**

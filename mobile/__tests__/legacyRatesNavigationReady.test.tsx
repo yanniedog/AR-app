@@ -5,6 +5,11 @@ import Index from '../app/index';
 import Categories from '../app/categories';
 import Tools from '../app/(tabs)/tools';
 import Changes from '../app/passthrough';
+import { DEFAULT_PREFS } from '../src/data/storeTypes';
+import { captureRatesSession, initializeRatesSession, restoreRatesSession, updateRatesSection, useRatesSession } from '../src/data/ratesSession';
+import { resolveRatesIntent } from '../src/lib/ratesIntent';
+const originalSession = captureRatesSession();
+afterEach(() => restoreRatesSession(originalSession));
 
 let mockReady = false;
 let mockHydrated = true;
@@ -70,7 +75,7 @@ test('only the latest scoped intent is delivered after readiness arrives', () =>
     expect(mockDismissTo).not.toHaveBeenCalled();
     act(() => { mockReady = true; emit('state'); });
     expect(mockDismissTo).toHaveBeenCalledTimes(1);
-    expect(mockDismissTo).toHaveBeenCalledWith({ pathname: '/(tabs)/browse', params: { scope: 'hierarchy', ...mockParams } });
+    expect(mockDismissTo).toHaveBeenCalledWith({ pathname: '/(tabs)/browse', params: { scope: 'hierarchy', availability: 'listed', ...mockParams } });
   } finally { act(() => tree.unmount()); }
 });
 
@@ -116,4 +121,25 @@ test('Strict Mode effect replay cannot duplicate an already-ready Tools handoff'
     expect(mockDismissTo).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledTimes(1);
   } finally { act(() => tree.unmount()); }
+});
+
+
+test('legacy categories restores listed hierarchy after an unlisted catalogue session', () => {
+  initializeRatesSession(DEFAULT_PREFS, 'Mortgage');
+  updateRatesSection('Mortgage', { availability: 'unlisted', query: 'retained', sort: 'bank', scrollOffset: 700 });
+  mockParams = { section: 'home-loans', path: 'OO.PI' }; mockReady = true;
+  let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Categories/>); });
+  try {
+    const delivered = mockDismissTo.mock.calls[0][0];
+    expect(delivered).toEqual({ pathname: '/(tabs)/browse', params: { scope: 'hierarchy', availability: 'listed', ...mockParams } });
+    const intent = resolveRatesIntent(delivered.params, useRatesSession.getState().section, []);
+    updateRatesSection(intent.section, intent.patch, true);
+    expect(useRatesSession.getState().sections.Mortgage).toMatchObject({ availability: 'listed', path: ['OO','PI'], hierarchyScoped: true, query: 'retained', sort: 'bank', scrollOffset: 0 });
+  } finally { act(() => tree.unmount()); }
+});
+
+test('an explicit legacy availability parameter still overrides the default', () => {
+  mockParams = { section: 'Savings', availability: 'unlisted', query: 'explicit' }; mockReady = true;
+  let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Categories/>); });
+  try { expect(mockDismissTo).toHaveBeenCalledWith({ pathname: '/(tabs)/browse', params: { path: '', scope: 'hierarchy', ...mockParams } }); } finally { act(() => tree.unmount()); }
 });

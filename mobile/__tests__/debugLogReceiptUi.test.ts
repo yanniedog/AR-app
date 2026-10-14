@@ -3,11 +3,13 @@ import { readFileSync } from 'fs';
 const readScreen = () => readFileSync(require.resolve('../app/debug-log.tsx'), 'utf8');
 
 describe('debug-log upload receipt recovery copy', () => {
-  it('keeps SecureStore detail in the local log and shows stable user-facing guidance', () => {
+  it('keeps SecureStore detail in the local log and shows a closed unverified status', () => {
     const screen = readScreen();
 
-    expect(screen).toContain('A previous public upload could not be checked.');
-    expect(screen).toContain("debugLog.warn('debugLogUploadReceipt'");
+    expect(screen).toContain("uiLabel('Upload receipt unverified')");
+    expect(screen).toContain("debugLog.warn('debugLogUploadReceipt', `read failed: ${errorDetail(error)}`)");
+    expect(screen).toContain('if (active) setReceiptError(RECEIPT_CHECK_FAILED_MESSAGE)');
+    expect(screen).toContain('!receiptLoaded || receiptError != null');
     expect(screen).not.toContain(
       'setReceiptError(error instanceof Error ? error.message : String(error))',
     );

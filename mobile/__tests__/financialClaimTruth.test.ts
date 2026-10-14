@@ -17,8 +17,9 @@ describe('financial claim truth contracts', () => {
     expect(read('app/matches.tsx')).toContain('<LegacyRatesRoute');
     expect(today).toContain('usePreparedSearchRows');
     expect(today).toContain('effectiveFilters');
-    expect(myRates).toContain('percentage point gap');
-    expect(myRates).toContain('matched to your filters');
+    expect(myRates).toContain('percentage points');
+    expect(myRates).toContain('Matched observed rate');
+    expect(myRates).toContain('Match / gap basis');
   });
 
   it('does not put simple personal dollar arithmetic on product detail', () => {
@@ -38,13 +39,15 @@ describe('financial claim truth contracts', () => {
     const editor = read('src/components/scenario/SwitchCostEditor.tsx');
 
     expect(chart).toContain('Total-cost difference');
-    expect(chart).toContain("? 'Unavailable'");
-    expect(chart).toContain('Complete terms and customer applicability remain unverified');
-    expect(chart).toContain('Known-cost subtotal');
+    expect(chart).toContain("projection.totalCostSaving == null ? uiLabel('Unavailable')");
+    expect(chart).toContain('Eligibility unverified');
+    expect(chart).toContain('Fees unverified');
+    expect(chart).toContain('Monthly illustration');
+    expect(chart).toContain('Known costs');
     expect(chart).not.toContain("'Save '");
     expect(chart).not.toContain("'Costs '");
     expect(editor).toContain("'Unknown'");
-    expect(editor).toContain('Enter 0 only after confirming there is no charge.');
+    expect(editor).toContain('Fees unverified');
     expect(editor).not.toContain("placeholder=\"0\"");
   });
 });

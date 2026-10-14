@@ -4,7 +4,8 @@ import { Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle, Line } from 'react-native-svg';
 import { ChartText as SvgText } from '../charts/ChartText';
 
-import { SECTIONS } from '../../constants';
+import { uiLabel,  uiCount, uiDate, uiDuration, uiJoin, uiProviderName, type UiCopy } from '../../lib/uiCopy';
+import { uiChartBps, uiChartPercent, uiChartSection } from '../../lib/chartUiCopy';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import type {
   MultiSectionPassThroughModel,
@@ -37,7 +38,7 @@ const ScatterDot = memo(function ScatterDot({
   selected,
   fill,
   surface,
-  text,
+  inkColor,
   primary,
   zoom = 1,
 }: {
@@ -46,7 +47,7 @@ const ScatterDot = memo(function ScatterDot({
   selected: boolean;
   fill: string;
   surface: string;
-  text: string;
+  inkColor: string;
   primary: string;
   zoom?: number;
 }) {
@@ -57,7 +58,7 @@ const ScatterDot = memo(function ScatterDot({
       r={(selected ? 7 : 4.5) * zoom}
       fill={selected ? primary : fill}
       opacity={selected ? 1 : 0.68}
-      stroke={selected ? text : surface}
+      stroke={selected ? inkColor : surface}
       strokeWidth={(selected ? 2 : 1) * zoom}
       pointerEvents="none"
     />
@@ -70,8 +71,8 @@ function ZoomButton({
   disabled,
   onPress,
 }: {
-  label: string;
-  accessibilityLabel: string;
+  label: UiCopy;
+  accessibilityLabel: UiCopy;
   disabled?: boolean;
   onPress: () => void;
 }) {
@@ -215,11 +216,7 @@ export const ResponseScatter = memo(function ResponseScatter({
       unchanged: rows.length - withRba - opposite,
     };
   }, [rows]);
-  const upperBound = model.decision.partialObservation ? ' Timing values are upper bounds.' : '';
-  const decisionSummary = decisionMarkers.length
-    ? ` ${decisionMarkers.length} RBA decision guide${decisionMarkers.length === 1 ? '' : 's'} shown.`
-    : '';
-  const summary = `${SECTIONS[section].title} response map. All ${rows.length} eligible lenders are shown: ${rowStats.timed} have a linked response time, ${rowStats.withRba - rowStats.timed} moved with the RBA without a linked event, ${rowStats.opposite} moved in the opposite direction, and ${rowStats.unchanged} were unchanged.${upperBound}${decisionSummary}`;
+  const summary = uiJoin(uiChartSection(section), ' · ', 'Response', ' · ', 'Lenders', ' ', uiCount(rows.length), ' · ', 'Timed', ' ', uiCount(rowStats.timed), ' · ', 'Timing unknown', ' ', uiCount(rowStats.withRba - rowStats.timed), ' · ', 'Opposite', ' ', uiCount(rowStats.opposite), ' · ', 'Unchanged', ' ', uiCount(rowStats.unchanged), model.decision.partialObservation ? uiJoin(' · ', 'Partial', ' · ', '≤', ' ', 'days') : null, ' · ', 'Decisions', ' ', uiCount(decisionMarkers.length));
 
   const fontScale = zoom;
   const canZoomOut = zoom > 1;
@@ -294,7 +291,7 @@ export const ResponseScatter = memo(function ResponseScatter({
               fill={active ? theme.colors.rba : withAlpha(theme.colors.rba, 0.75)}
               fontWeight={active ? '700' : '500'}
             >
-              {active ? `Active · ${line.label}` : line.label}
+              {uiJoin(active ? 'Selected' : 'RBA', ' · ', uiDate(line.date), ' · ', uiChartBps(line.bps))}
             </SvgText>
           </React.Fragment>
         );
@@ -305,7 +302,7 @@ export const ResponseScatter = memo(function ResponseScatter({
         fontSize={10 * fontScale}
         fill={theme.colors.textFaint}
       >
-        {model.decision.partialObservation ? '≤ days from decision' : 'days from decision'}
+        {uiJoin(model.decision.partialObservation ? '≤' : '', 'days')}
       </SvgText>
       <SvgText
         x={plotSize.padL + plot.timedW}
@@ -314,7 +311,7 @@ export const ResponseScatter = memo(function ResponseScatter({
         fill={theme.colors.textFaint}
         textAnchor="end"
       >
-        {model.windowDays}d
+        {uiDuration(model.windowDays, 'days')}
       </SvgText>
       <SvgText
         x={plot.untimedX}
@@ -323,21 +320,19 @@ export const ResponseScatter = memo(function ResponseScatter({
         fill={theme.colors.textFaint}
         textAnchor="middle"
       >
-        untimed
-      </SvgText>
+        {uiLabel("Timing unknown")}</SvgText>
       <SvgText x={4 * zoom} y={plotSize.padT + 4 * zoom} fontSize={10 * fontScale} fill={theme.colors.textFaint}>
-        +{Math.round(plot.maxBps)}
+        {uiChartBps(Math.round(plot.maxBps))}
       </SvgText>
       <SvgText x={18 * zoom} y={plot.zeroY + 4 * zoom} fontSize={10 * fontScale} fill={theme.colors.textFaint}>
-        0
-      </SvgText>
+        {0}</SvgText>
       <SvgText
         x={4 * zoom}
         y={plotSize.padT + plot.innerH + 4 * zoom}
         fontSize={10 * fontScale}
         fill={theme.colors.textFaint}
       >
-        −{Math.round(plot.maxBps)}
+        {uiChartBps(-Math.round(plot.maxBps))}
       </SvgText>
       {plot.points.map((point) => {
         const selected = point.provider === paintedProvider;
@@ -356,7 +351,7 @@ export const ResponseScatter = memo(function ResponseScatter({
             selected={selected}
             fill={fill}
             surface={theme.colors.surface}
-            text={theme.colors.text}
+            inkColor={theme.colors.text}
             primary={theme.colors.primary}
             zoom={zoom}
           />
@@ -370,28 +365,25 @@ export const ResponseScatter = memo(function ResponseScatter({
       <Row gap={8} style={{ marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <ZoomButton
           label="−"
-          accessibilityLabel="Zoom out response chart"
+          accessibilityLabel="Zoom out"
           disabled={!canZoomOut}
           onPress={() => updateZoom((current) => nextScatterZoom(current, -1))}
         />
         <AppText variant="tiny" color="textMuted" weight="700">
-          {Math.round(clampScatterZoom(zoom) * 100)}%
+          {uiChartPercent(clampScatterZoom(zoom) * 100, 0)}
         </AppText>
         <ZoomButton
           label="+"
-          accessibilityLabel="Zoom in response chart"
+          accessibilityLabel="Zoom in"
           disabled={!canZoomIn}
           onPress={() => updateZoom((current) => nextScatterZoom(current, 1))}
         />
         <ZoomButton
           label="Reset"
-          accessibilityLabel="Reset response chart zoom"
+          accessibilityLabel="Reset zoom"
           disabled={!canZoomOut}
           onPress={() => updateZoom(1)}
         />
-        <AppText variant="tiny" color="textFaint" style={{ flex: 1, minWidth: 120 }}>
-          {zoom > 1 ? 'Scroll the chart to pan while zoomed' : 'Zoom to inspect dense clusters'}
-        </AppText>
       </Row>
       <View
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
@@ -438,18 +430,15 @@ export const ResponseScatter = memo(function ResponseScatter({
           }}
         >
           <AppText variant="small" weight="700" color="primary">
-            Filtered to {paintedProvider}
-          </AppText>
-          <AppText variant="tiny" color="textMuted">
-            Lender list below shows only this bank.
+            {uiJoin('Filter', ' · ', uiProviderName({ provider: paintedProvider }))}
           </AppText>
           <Pressable
             onPress={clearSelection}
             accessibilityRole="button"
-            accessibilityLabel="Clear chart selection and show all lenders"
+            accessibilityLabel="Clear selection"
             style={{
               alignSelf: 'flex-start',
-              minHeight: 44,
+              minHeight: 48,
               paddingHorizontal: 12,
               borderRadius: theme.radius.md,
               backgroundColor: theme.colors.card,
@@ -462,8 +451,7 @@ export const ResponseScatter = memo(function ResponseScatter({
           >
             <Ionicons name="close-circle-outline" size={16} color={theme.colors.primary} />
             <AppText variant="tiny" weight="700" color="primary">
-              CLEAR SELECTION · SHOW ALL
-            </AppText>
+              {uiLabel("Clear selection")}</AppText>
           </Pressable>
         </View>
       ) : null}

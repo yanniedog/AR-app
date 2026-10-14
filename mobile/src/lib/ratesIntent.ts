@@ -15,11 +15,11 @@ export function ratesIntentKey(params: RatesRouteParams): string | null {
 export function resolveRatesIntent(params: RatesRouteParams, currentSection: SectionKey,
   subscriptions: readonly SearchSubscription[]): { section: SectionKey; patch: Partial<RatesSectionState> } {
   const raw = Object.fromEntries(RATES_INTENT_KEYS.map(key => [key, scalarRouteParam(params[key])]));
-  const section = SECTION_ORDER.includes(raw.section as SectionKey) ? raw.section as SectionKey
-    : sectionFromSlug(raw.section ?? '') ?? currentSection;
+  const canonicalSection = SECTION_ORDER.find(section => section === raw.section);
+  const section = canonicalSection ?? sectionFromSlug(raw.section ?? '') ?? currentSection;
   const subscription = raw.sub ? subscriptions.find(item => item.id === raw.sub) : undefined;
   const patch: Partial<RatesSectionState> = { intentError: null, scrollOffset: 0 };
-  if (raw.section && !SECTION_ORDER.includes(raw.section as SectionKey) && !sectionFromSlug(raw.section)) patch.intentError = 'Invalid rate type';
+  if (raw.section && !canonicalSection && !sectionFromSlug(raw.section)) patch.intentError = 'Invalid rate type';
   if (raw.sub) {
     if (!subscription) patch.intentError = 'Saved search unavailable';
     else Object.assign(patch, { query: subscription.query, path: [...subscription.path],

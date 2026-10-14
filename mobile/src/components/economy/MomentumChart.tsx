@@ -9,6 +9,8 @@ import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText } from '../ui';
+import { uiJoin } from '../../lib/uiCopy';
+import { uiChartPp, uiMomentumWindow, uiEconomicIndicator, uiEconomicPressure } from '../../lib/chartUiCopy';
 
 export function MomentumChart({ model, auditRevision = '', onGraphicReady }: {
   model: EconomicMomentumModel; auditRevision?: string; onGraphicReady?: (evidence: ChartRenderEvidence) => void;
@@ -30,13 +32,14 @@ export function MomentumChart({ model, auditRevision = '', onGraphicReady }: {
         ? theme.colors.primary
         : theme.colors.textMuted;
 
+  const summary = uiJoin('Momentum', ' · ', ...model.rows.map(row => uiJoin(uiEconomicIndicator(row.id), ' · ', uiChartPp(row.change), ' · ', uiEconomicPressure(row.policyPressure), ' · ')));
   return (
     <View>
       <View
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         accessible
         accessibilityRole="image"
-        accessibilityLabel={model.summary}
+        accessibilityLabel={summary}
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
@@ -44,7 +47,7 @@ export function MomentumChart({ model, auditRevision = '', onGraphicReady }: {
             onLayout={(event) => onGraphicReady?.({ revision: auditRevision, expectedCount: model.rows.length,
               pointCount: Number.isFinite(model.maxAbsChange) && model.maxAbsChange > 0
                 ? model.rows.filter((row) => Number.isFinite(row.change)).length : 0,
-              accessibleSummary: model.summary.trim().length > 0,
+              accessibleSummary: summary.trim().length > 0,
               layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: false })}>
             <Line
               x1={zeroX}
@@ -63,10 +66,10 @@ export function MomentumChart({ model, auditRevision = '', onGraphicReady }: {
               return (
                 <React.Fragment key={row.id}>
                   <SvgText x={0} y={y + 14} fontSize={10} fontWeight="600" fill={theme.colors.text}>
-                    {row.label}
+                    {uiEconomicIndicator(row.id)}
                   </SvgText>
                   <SvgText x={0} y={y + 29} fontSize={8.5} fill={theme.colors.textFaint}>
-                    {row.periodLabel}
+                    {uiMomentumWindow(row)}
                   </SvgText>
                   <Rect
                     x={x}
@@ -84,7 +87,7 @@ export function MomentumChart({ model, auditRevision = '', onGraphicReady }: {
                     fontWeight="700"
                     fill={color}
                   >
-                    {row.change > 0 ? '+' : ''}{row.change.toFixed(2)} pp
+                    {uiChartPp(row.change)}
                   </SvgText>
                 </React.Fragment>
               );
@@ -93,7 +96,7 @@ export function MomentumChart({ model, auditRevision = '', onGraphicReady }: {
         ) : null}
       </View>
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
-        Bars show raw percentage-point change. Colour indicates the broad rate-pressure direction; this is not a forecast.
+        {uiJoin('Basis', ' · ', 'pp', ' · ', 'Forecast', ' · ', 'Excluded')}
       </AppText>
     </View>
   );

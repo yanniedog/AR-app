@@ -1,10 +1,11 @@
+import { uiLabel } from '../lib/uiCopy';
 import React, { memo } from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AuditScreenAwake } from '../../modules/audit-screen-awake';
 import { cancelPerformanceAudit, getPerformanceAuditState } from '../lib/performanceAudit';
-import { formatPerformanceAuditEstimate } from '../lib/performanceAuditTiming';
+import { uiCount, uiJoin, uiNumber } from '../lib/uiCopy';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from './ui';
 
@@ -37,28 +38,18 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
       <AuditScreenAwake />
       <Card variant="elevated" style={{ gap: 12, borderWidth: 1, borderColor: theme.colors.border }}>
         <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <AppText variant="body" weight="700">
-            App health audit
-          </AppText>
+          <AppText variant="body" weight="700">{uiLabel("App health audit")}</AppText>
           <AppText variant="small" weight="700" color="primary">
-            {percent}%
+            {uiJoin(uiCount(percent), '%')}
           </AppText>
         </Row>
         <AppText variant="small" color="textMuted" accessibilityLiveRegion="polite">
-          {formatPerformanceAuditEstimate(state.estimate, state.paused)}
+          {state.paused ? uiLabel('Paused') : state.estimate ? uiJoin('Estimate', ': ', uiNumber(state.estimate.remainingMinMs / 1000), ' – ', uiNumber(state.estimate.remainingMaxMs / 1000), ' ', 'seconds') : uiLabel('Preparing')}
         </AppText>
-        {!state.paused && state.progress.label.startsWith('Background work:') ? (
-          <ScrollView style={{ maxHeight: 180 }}>
-            <AppText variant="small" color="textMuted">{state.progress.label}</AppText>
-          </ScrollView>
-        ) : (
-          <AppText variant="small" color="textMuted" numberOfLines={2}>
-            {state.paused ? 'Paused — the audit continues when you return' : state.progress.label}
-          </AppText>
-        )}
+        <AppText variant="small" color="textMuted">{uiLabel(state.paused ? 'Paused' : state.progress.label.startsWith('Background work:') ? 'Background checks' : 'Checking')}</AppText>
         <View
           accessibilityRole="progressbar"
-          accessibilityLabel="App health audit progress"
+          accessibilityLabel="App health audit"
           accessibilityValue={{ min: 0, max: 100, now: percent }}
           style={{
             height: 8,
@@ -78,10 +69,10 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
         </View>
         <Row style={{ justifyContent: 'space-between' }}>
           <AppText variant="tiny" color="textFaint">
-            {state.progress.completed} of {state.progress.total || '...'} checks
+            {uiJoin(uiCount(state.progress.completed), ' / ', state.progress.total ? uiCount(state.progress.total) : 'Unknown', ' ', 'Checks')}
           </AppText>
           <Button
-            title={state.cancelRequested ? 'Cancelling...' : 'Cancel audit'}
+            title={state.cancelRequested ? 'Cancelling' : 'Cancel'}
             icon="close"
             variant="ghost"
             disabled={state.cancelRequested}

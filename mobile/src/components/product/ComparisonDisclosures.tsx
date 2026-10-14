@@ -4,38 +4,36 @@ import type { ProductDetail } from '../../types';
 import { AppText, Card, Disclosure } from '../ui';
 import { DetailGroup, OfficialLinks, ProductFacts } from './ProductDetailParts';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
+import { uiCount, uiJoin, uiLabel, uiProductName, uiProviderName, type UiText } from '../../lib/uiCopy';
 
-export function publishedItemCount(items: unknown[] | undefined): string {
-  return items?.length ? `${items.length} reported` : 'Not captured';
+export function publishedItemCount(items: unknown[] | undefined): UiText {
+  return items?.length ? uiCount(items.length) : uiLabel('Unknown');
 }
 
 /** All reported items remain reachable; a count never implies complete terms. */
 export function ComparisonDisclosures({
-  name, provider, productKey, detail, loading,
+  name, provider, productKey, productDetails, loading,
 }: {
   name: string;
   provider: string;
   productKey: string;
-  detail?: ProductDetail;
+  productDetails?: ProductDetail;
   loading: boolean;
 }) {
   return (
     <Card variant="outlined" style={{ gap: 12 }}>
       <View>
-        <AppText variant="body" weight="700">{name}</AppText>
-        <AppText variant="small" color="textMuted">{provider}</AppText>
+        <AppText variant="body" weight="700">{uiProductName({ product_name: name })}</AppText>
+        <AppText variant="small" color="textMuted">{uiProviderName({ provider })}</AppText>
       </View>
-      <AppText variant="small" color="textMuted">
-        Document completeness unverified. Eligibility has not been assessed for you.
-      </AppText>
-      {detail?.description ? <AppText variant="small">{detail.description}</AppText> : null}
-      <DetailGroup title="Fees" icon="cash-outline" items={detail?.fees} loading={loading} />
-      <DetailGroup title="Eligibility" icon="person-outline" items={detail?.eligibility} loading={loading} />
-      <DetailGroup title="Features" icon="information-circle-outline" items={detail?.features} loading={loading} />
-      <DetailGroup title="Constraints" icon="information-circle-outline" items={detail?.constraints} loading={loading} />
-      {!loading && !detail ? <AppText variant="small">Product details unavailable.</AppText> : null}
-      <ProductFacts detail={detail ?? null} />
-      <OfficialLinks links={detail?.links} sourceDocuments={detail?.sourceDocuments} />
+      <AppText variant="small" color="textMuted">{uiJoin('Coverage', ' · ', 'Unverified', ' · ', 'Eligibility unverified')}</AppText>
+      <DetailGroup title="Fees" icon="cash-outline" items={productDetails?.fees} loading={loading} />
+      <DetailGroup title="Eligibility" icon="person-outline" items={productDetails?.eligibility} loading={loading} />
+      <DetailGroup title="Features" icon="information-circle-outline" items={productDetails?.features} loading={loading} />
+      <DetailGroup title="Constraints" icon="information-circle-outline" items={productDetails?.constraints} loading={loading} />
+      {!loading && !productDetails ? <AppText variant="small">{uiLabel("Product details unavailable")}</AppText> : null}
+      <ProductFacts productDetails={productDetails ?? null} />
+      <OfficialLinks links={productDetails?.links} sourceDocuments={productDetails?.sourceDocuments} />
       <ProductTermsDisclosure productKey={productKey} />
     </Card>
   );
@@ -44,8 +42,8 @@ export function ComparisonDisclosures({
 /** Engine support does not establish approved product contracts or customer scenarios. */
 export function PersonalCostComparisonDisclosure() {
   const [open, setOpen] = useState(false);
-  return <Disclosure title="Personal cost comparison" summary="Unavailable" open={open} onToggle={() => setOpen(value => !value)}>
-    <AppText variant="small">Complete fees and conditions are not yet verified for calculation.</AppText>
-    <AppText variant="small" color="textMuted">Rankings compare published rates. They do not compare your full costs or assess your eligibility.</AppText>
+  return <Disclosure title="Total-cost difference" open={open} onToggle={() => setOpen(value => !value)}>
+    <AppText variant="small">{uiLabel("Unavailable")}</AppText>
+    <AppText variant="small" color="textMuted">{uiJoin('Fees unverified', ' · ', 'Eligibility unverified')}</AppText>
   </Disclosure>;
 }

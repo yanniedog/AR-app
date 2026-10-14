@@ -1,3 +1,4 @@
+import type { UiChild } from '../lib/uiCopy';
 import Ionicons from './icons/AppIcon';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -21,10 +22,11 @@ import { useTheme } from '../theme/ThemeProvider';
 import { TouchTarget } from './TouchTarget';
 import { PressFeedback } from './PressFeedback';
 import { androidRipple, AppText } from './ui';
+import type { UiCopy, UiInputText } from '../lib/uiCopy';
 
 export interface SegOption<T extends string> {
   value: T;
-  label: string;
+  label: UiCopy;
 }
 
 /** Brief opacity dip when `section` changes — keeps content mounted (no hard remount). */
@@ -34,7 +36,7 @@ export function SectionCrossfade({
   style,
 }: {
   section: string;
-  children: React.ReactNode;
+  children: UiChild;
   style?: StyleProp<ViewStyle>;
 }) {
   const opacity = useSharedValue(1);
@@ -126,11 +128,11 @@ export function SegmentedControl<T extends string>({
 export function SearchBar({
   value,
   onChangeText,
-  placeholder = 'Search products or banks',
+  placeholder = 'Search rates or banks',
 }: {
-  value: string;
+  value: UiCopy | UiInputText;
   onChangeText: (t: string) => void;
-  placeholder?: string;
+  placeholder?: UiCopy;
 }) {
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
@@ -197,7 +199,7 @@ export function CompactToggle({
   value,
   onChange,
 }: {
-  label: string;
+  label: UiCopy;
   value: boolean;
   onChange: (value: boolean) => void;
 }) {

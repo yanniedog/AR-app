@@ -1,6 +1,6 @@
 import type { Href } from 'expo-router';
 
-import { SECTIONS } from '../constants';
+import { uiIdentifier, uiLabel, uiProductName, uiProviderName, uiSectionName, type UiCopy } from './uiCopy';
 import { segLabel } from '../data/taxonomy';
 import { LEDGER_LAYOUT } from '../theme/layout';
 import type { RateRow, SectionKey } from '../types';
@@ -11,7 +11,7 @@ export type BreadcrumbTarget =
   | { section: SectionKey; path: string[] };
 
 export interface Breadcrumb {
-  label: string;
+  label: UiCopy;
   target?: BreadcrumbTarget;
 }
 
@@ -26,23 +26,23 @@ const ROUTES: Record<string, Breadcrumb[]> = {
   '/watchlist': [{ label: 'Saved' }],
   '/market': [market],
   '/tools': [rates, scenario],
-  '/matches': [rates, { label: 'Matched rates' }],
+  '/matches': [rates, { label: 'Matching rates' }],
   '/banks': [rates, { label: 'Banks' }],
-  '/catalogue': [rates, { label: 'Products without listed rates' }],
+  '/catalogue': [rates, { label: 'No listed rate' }],
   '/compare': [rates, { label: 'Compare' }],
   '/calculator': [rates, scenario],
   '/calculation-receipt': [rates, scenario, { label: 'Calculation receipt' }],
-  '/projections': [rates, scenario, { label: 'Project my balance' }],
-  '/bank-rates': [market, { label: 'Bank rates over time' }],
-  '/passthrough': [market, { label: 'Recent rate changes' }],
+  '/projections': [rates, scenario, { label: 'Projection' }],
+  '/bank-rates': [market, { label: 'Bank rates' }],
+  '/passthrough': [market, { label: 'Changes' }],
   '/research': [market, { label: 'Market research' }],
   '/trends': [market, { label: 'Market research' }],
-  '/rba': [market, { label: 'RBA rates and outlook' }],
+  '/rba': [market, { label: 'Outlook' }],
   '/rba-response': [market, { label: 'Bank response' }],
-  '/profile': [rates, { label: 'Your profile' }],
+  '/profile': [rates, { label: 'Profile' }],
   '/settings': [rates, { label: 'Settings' }],
   '/about': [rates, about],
-  '/terms': [rates, about, { label: 'Terms' }],
+  '/terms': [rates, about, { label: 'Terms and privacy' }],
   '/third-party-notices': [rates, about, { label: 'Open-source notices' }],
   '/debug-log': [rates, about, { label: 'Debug log' }],
   '/performance-audit': [rates, about, { label: 'App health audit' }],
@@ -51,7 +51,7 @@ const ROUTES: Record<string, Breadcrumb[]> = {
 function categoryTrail(section: SectionKey, path: string[]): Breadcrumb[] {
   return [
     rates,
-    { label: SECTIONS[section].title, target: { section, path: [] } },
+    { label: uiSectionName(section), target: { section, path: [] } },
     ...path.map((segment, index) => ({
       label: segLabel(segment),
       target: { section, path: path.slice(0, index + 1) },
@@ -85,25 +85,26 @@ export function buildBreadcrumbs({
     trail = categoryTrail(section, path);
     if (route === '/search') trail.push({ label: 'Search' });
   } else if (route.startsWith('/bank/')) {
-    trail = [rates, { label: provider || 'Bank' }];
+    trail = [rates, { label: provider ? uiProviderName({ provider }) : uiLabel('Bank') }];
   } else if (route.startsWith('/product/') || route === '/rate-receipt') {
     if (!product && catalogueProductName && route.startsWith('/product/')) {
       return [
         rates,
-        { label: catalogueProductName },
+        { label: uiProductName({ product_name: catalogueProductName }) },
       ];
     }
     trail = [rates];
-    trail.push({
-      label: product?.row.product_name || 'Product',
-      ...(product ? { target: { href: {
-        pathname: '/product/[key]',
-        params: { key: product.row.product_key, ...(rateIndex != null ? { ri: rateIndex } : {}) },
-      } as Href } } : {}),
-    });
+    const productCrumb: Breadcrumb = {
+      label: product ? product.row.product_name ? uiProductName(product.row) : uiIdentifier(product.row.product_key) : uiLabel('Product'),
+    };
+    if (product) productCrumb.target = { href: {
+      pathname: '/product/[key]',
+      params: { key: product.row.product_key, ...(rateIndex != null ? { ri: rateIndex } : {}) },
+    } };
+    trail.push(productCrumb);
     if (route === '/rate-receipt') trail.push({ label: 'Bank-call brief' });
   } else {
-    trail = ROUTES[route] ?? [{ label: 'Page not found' }];
+    trail = ROUTES[route] ?? [{ label: 'Unavailable' }];
   }
   // The final item describes the current page; only ancestors are interactive.
   return trail.map((crumb, index) => {

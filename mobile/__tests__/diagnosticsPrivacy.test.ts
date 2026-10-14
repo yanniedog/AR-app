@@ -194,7 +194,11 @@ describe('deidentified diagnostics privacy boundary', () => {
     expect(screen).not.toContain('uploadDebugLog');
     expect(screen).not.toContain('fetch(');
     expect(debugScreen).toContain('Upload diagnostic log?');
-    expect(screen).toContain('Anyone with the link can read the log.');
+    expect(screen).toContain('<InfoRow label="Audit upload" value="Public" />');
+    expect(screen).toContain('<InfoRow label="Destination" value="Public hosting" />');
+    expect(debugScreen).toContain("uiJoin('Public hosting', ': ', uiIdentifier('paste.rs'), ' / ', uiIdentifier('paste.c-net.org')");
+    expect(screen).toContain("'Operating-system share sheet'");
+    expect(screen).toContain("'Raw logs / tracebacks / routes / product keys / device IDs / timestamps'");
     const completion = runner.indexOf('await publishPerformanceAuditAfterFinalization(report');
     const upload = runner.indexOf('void startDebugLogUpload(');
     expect(runner).not.toContain('await startDebugLogUpload(');

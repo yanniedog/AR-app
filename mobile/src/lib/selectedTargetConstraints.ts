@@ -4,6 +4,7 @@ import { scopedRateConditions, type RateConditionContext } from '../data/rateCon
 import { scopedFinancialConditionFacts, type NumericConditionBoundary } from '../data/scopedFinancialConditionFacts';
 import type { UserRateScenario } from '../data/userRateScenario';
 import type { RateRow, SectionKey } from '../types';
+import type { UiLabel } from './uiCopy';
 
 export interface SelectedTargetConstraint {
   status: 'outside-lvr' | 'outside-balance' | 'not-contradicted' | 'unverified';
@@ -71,7 +72,7 @@ export function targetConstraintContradicted(model: SelectedTargetConstraint | u
 }
 
 /** Closed status labels, not payload text or an eligibility verdict. */
-export function selectedTargetConstraintLabel(model: SelectedTargetConstraint): string {
+export function selectedTargetConstraintLabel(model: SelectedTargetConstraint): UiLabel {
   if (model.status === 'outside-lvr') return model.basis === 'source-condition' ? 'Outside published LVR' : 'Outside listed LVR tier';
   if (model.status === 'outside-balance') return model.basis === 'source-condition' ? 'Outside published balance' : 'Outside listed balance tier';
   return 'Eligibility unverified';

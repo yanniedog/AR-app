@@ -1,13 +1,11 @@
 import * as Application from 'expo-application';
-import { Header, getHeaderTitle } from '@react-navigation/elements';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, router, usePathname, type Href } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import {
-  Alert,
   AppState,
   Platform,
   useWindowDimensions,
@@ -17,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppLockGate } from '../src/components/AppLockGate';
+import { ConsumedInsetHeader } from '../src/components/ConsumedInsetHeader';
 import {
   AppNavigationMenu,
   NavigationMenuButton,
@@ -34,7 +33,6 @@ import { SELF_UPDATE_ENABLED } from '../src/config';
 import { registerPassiveAuditBackground, startPassiveAuditPreloading } from '../src/lib/passiveAudit';
 import { ScenarioRecoveryBanner } from '../src/components/ScenarioRecoveryBanner';
 import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
-import { DiagnosticsConsentBanner } from '../src/components/DiagnosticsConsentBanner';
 import { ErrorScreen } from '../src/components/ErrorScreen';
 import { TrustedExternalUrlProvider } from '../src/components/ExternalLinkConfirmation';
 import {
@@ -46,7 +44,6 @@ import { useStore } from '../src/data/store';
 import { shouldRefreshOnResume } from '../src/data/resumeRefresh';
 import { CURRENT_PRIVACY_CHOICE_VERSION } from '../src/data/storeTypes';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
-import { shouldShowAppTabBar } from '../src/lib/tabRouting';
 import { breadcrumbsFitWidth, shouldShowBreadcrumbs } from '../src/lib/breadcrumbs';
 import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
 import { logSwallowedError } from '../src/lib/degradationLog';
@@ -56,6 +53,20 @@ import {
 } from '../src/lib/observability';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
 import { HEADER_TYPOGRAPHY } from '../src/theme/typography';
+import { uiLabel, type UiLabel } from '../src/lib/uiCopy';
+
+const ROUTE_TITLES: readonly (readonly [string,UiLabel])[] = [
+  ['calculator','Calculate'],['product/[key]','Product'],['bank/[provider]','Bank'],['compare','Compare'],
+  ['rate-receipt','Bank-call brief'],['calculation-receipt','Open calculation receipt'],
+  ['profile','Profile'],['settings','Settings'],['about','About'],['terms','Terms and privacy'],
+  ['third-party-notices','Third-party notices'],['research','Outlook'],['rba','RBA'],
+  ['rba-response','Bank response'],['bank-rates','Bank rates'],['debug-log','Debug log'],
+  ['performance-audit','Performance audit'],['+not-found','Screen unavailable'],
+];
+function routeTitle(name:string,path:string) {
+  if(name === '(tabs)') return uiLabel(path.includes('watchlist') ? 'Saved':path.includes('market') ? 'Market':'Rates');
+  return uiLabel(ROUTE_TITLES.find(([routeName])=>routeName === name)?.[1]??'Rates');
+}
 
 // Deep links retain the canonical tab navigator for native Back.
 export const unstable_settings = {
@@ -89,6 +100,7 @@ function navigateFromNotification(href: Href): void {
 function RootNavigator() {
   const theme = useTheme();
   const status = useStore((s) => s.status);
+  const core = useStore((s) => s.core);
   const hydrated = useStore((s) => s.hydrated);
   const dataUnavailable = hydrated && status === 'error';
   const crashReportsEnabled = useStore((s) => s.prefs.crashReportsEnabled);
@@ -110,7 +122,6 @@ function RootNavigator() {
 
   const privacyChoiceCurrent = privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
   // Hydration controls the shell. Privacy choices never control browsing.
-  const tabBarVisible = shouldShowAppTabBar(pathname, hydrated);
   const breadcrumbVisible = shouldShowBreadcrumbs(pathname, hydrated) && breadcrumbsFitWidth(shellWidth);
 
   useLayoutEffect(() => {
@@ -132,36 +143,6 @@ function RootNavigator() {
     sessionReplayEnabled,
     setPref,
   ]);
-
-  const confirmDiagnosticsChoice = useCallback(
-    (crashReports: boolean) => {
-      void setCrashReportsEnabled(crashReports)
-        .then(() => {
-          setPref('crashReportsEnabled', crashReports);
-          setPref('sessionReplayEnabled', false);
-          setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
-        })
-        .catch(() => {
-          Alert.alert(
-            'Privacy choice not saved',
-            'The native crash-reporting state could not be confirmed. Nothing changed; try again.',
-          );
-        });
-    },
-    [setPref],
-  );
-
-  // Consent is only ever recorded from an explicit tap on the banner's own
-  // buttons. Session replay remains disabled, so "Allow" grants exactly what
-  // the banner names: crash reports only.
-  const acceptDiagnostics = useCallback(() => {
-    if (privacyChoiceCurrent) return;
-    confirmDiagnosticsChoice(true);
-  }, [confirmDiagnosticsChoice, privacyChoiceCurrent]);
-
-  const declineDiagnostics = useCallback(() => {
-    confirmDiagnosticsChoice(false);
-  }, [confirmDiagnosticsChoice]);
 
   useEffect(() => {
     installGlobalErrorHandlers();
@@ -248,11 +229,6 @@ function RootNavigator() {
           ) : null}
           <ScenarioRecoveryBanner />
           <DataUnavailableScreen />
-          <DiagnosticsConsentBanner
-            visible={appReady && !privacyChoiceCurrent}
-            onAccept={acceptDiagnostics}
-            onDecline={declineDiagnostics}
-          />
         </View>
       </AppUpdateBannerLayoutProvider>
     );
@@ -299,14 +275,8 @@ function RootNavigator() {
                   // edge-to-edge mode. A JS header respects the consumed inset.
                   header: showUpdateBanner || breadcrumbVisible
                     ? ({ options, route, back }) => (
-                      <Header
-                        {...options}
-                        title={getHeaderTitle(options, route.name)}
-                        back={options.headerBackVisible === false ? undefined : back && {
-                          ...back, title: options.headerBackTitle ?? back.title,
-                        }}
-                        headerStatusBarHeight={0}
-                      />
+                      <ConsumedInsetHeader navigationOptions={options} back={back} core={core}
+                        fallbackTitle={routeTitle(route.name,pathname)} />
                     )
                     : undefined,
                   headerRight: () => <NavigationMenuButton />,
@@ -315,20 +285,20 @@ function RootNavigator() {
               <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen name="onboarding" options={{ headerShown: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="node" options={{ title: 'Categories' }} />
-              <Stack.Screen name="categories" options={{ title: 'Product categories' }} />
-              <Stack.Screen name="matches" options={{ title: 'Matched rates' }} />
-              <Stack.Screen name="catalogue" options={{ title: 'Products without listed rates' }} />
-              <Stack.Screen name="bank-rates" options={{ title: 'Bank rates over time' }} />
-              <Stack.Screen name="passthrough" options={{ title: 'Recent rate changes' }} />
+              <Stack.Screen name="node" options={{ title: 'Rates' }} />
+              <Stack.Screen name="categories" options={{ title: 'Rates' }} />
+              <Stack.Screen name="matches" options={{ title: 'Rates' }} />
+              <Stack.Screen name="catalogue" options={{ title: 'Rates' }} />
+              <Stack.Screen name="bank-rates" options={{ title: 'Bank rates' }} />
+              <Stack.Screen name="passthrough" options={{ title: 'Market' }} />
               <Stack.Screen name="search" options={{ title: 'Search' }} />
               <Stack.Screen name="product/[key]" options={{ title: 'Product', headerBackTitle: 'Back' }} />
               <Stack.Screen name="bank/[provider]" options={{ title: 'Bank' }} />
               <Stack.Screen name="banks" options={{ title: 'Banks' }} />
               <Stack.Screen name="compare" options={{ title: 'Compare', presentation: 'modal' }} />
               <Stack.Screen name="calculator" options={{ title: 'Calculate' }} />
-              <Stack.Screen name="calculation-receipt" options={{ title: 'Calculation receipt' }} />
-              <Stack.Screen name="projections" options={{ title: 'Project my balance' }} />
+              <Stack.Screen name="calculation-receipt" options={{ title: 'Open calculation receipt' }} />
+              <Stack.Screen name="projections" options={{ title: 'Calculate' }} />
               <Stack.Screen name="rba-response" options={{ title: 'Bank response' }} />
               <Stack.Screen
                 name="rate-receipt"
@@ -336,9 +306,9 @@ function RootNavigator() {
               />
               <Stack.Screen
                 name="rba"
-                options={{ title: 'RBA rates and outlook', animation: 'none' }}
+                options={{ title: 'RBA', animation: 'none' }}
               />
-              <Stack.Screen name="profile" options={{ title: 'Your profile' }} />
+              <Stack.Screen name="profile" options={{ title: 'Profile' }} />
               <Stack.Screen name="settings" options={{ title: 'Settings' }} />
               <Stack.Screen name="research" options={{ title: 'Market research' }} />
               <Stack.Screen name="trends" options={{ headerShown: false }} />
@@ -361,12 +331,6 @@ function RootNavigator() {
             </NavigationMenuProvider>
           </View>
           <PerformanceAuditRunner />
-          <DiagnosticsConsentBanner
-            visible={appReady && !privacyChoiceCurrent}
-            aboveTabBar={tabBarVisible}
-            onAccept={acceptDiagnostics}
-            onDecline={declineDiagnostics}
-          />
         </View>
       </AppUpdateBannerLayoutProvider>
   );

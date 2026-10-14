@@ -17,11 +17,11 @@ test('lazy comparison exposes source-bound cells and invalidates old edition bef
   expect(loadProductTerms).not.toHaveBeenCalled();
   await act(async () => tree.root.findByProps({ title: 'Compare terms and conditions' }).props.onToggle());
   act(() => tree.root.findByProps({ title: 'fee.amount' }).props.onToggle());
-  expect(JSON.stringify(tree.toJSON())).toContain('Technical clause'); expect(JSON.stringify(tree.toJSON())).toContain('Unknown in this exact scope');
+  const rendered = JSON.stringify(tree.toJSON()); expect(rendered).not.toContain('Technical clause'); expect(rendered).toContain('Source review required'); expect(rendered).toContain('Unknown'); expect(rendered).toContain('AUD'); expect(rendered).toContain('standard');
   act(() => tree.root.findByProps({ title: 'Open source' }).props.onPress()); expect(mockOpen).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://example.org/terms' }));
   mockState = { manifest: { ...mockState.manifest, payload_revision: { bundle_sha256: 'new' } } };
   (loadProductTerms as jest.Mock).mockImplementation(() => new Promise(() => undefined));
   await act(async () => tree.update(<CanonicalTermsComparison rows={rows} />));
-  expect(JSON.stringify(tree.toJSON())).not.toContain('Technical clause');
+  expect(tree.root.findAllByProps({ title: 'Open source' })).toHaveLength(0); expect(JSON.stringify(tree.toJSON())).not.toContain('fee.amount');
   act(() => tree.unmount());
 });

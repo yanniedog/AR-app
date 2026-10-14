@@ -13,7 +13,7 @@ import {
 import { useStore } from '../data/store';
 import { assessAccess } from '../data/access';
 import { ratePresentation } from '../data/ratePresentation';
-import { rateQualifier, type RateQualifier } from '../lib/rateQualifier';
+import { rateQualifier } from '../lib/rateQualifier';
 import { openBank } from '../lib/nav';
 import type { LogoRenderState } from '../lib/logoReadiness';
 import type { RateRow, SectionKey } from '../types';
@@ -25,11 +25,17 @@ import {
   useProductRateChangeSummary,
 } from './product/ProductRateChangeLine';
 import { androidRipple, AppText, Row } from './ui';
-import { lvrTierDisplay } from '../data/lvrTier';
 import { PressFeedback } from './PressFeedback';
+import { scopedRateConditions } from '../data/rateConditions';
+import { scopedFinancialConditionFacts, type ScopedFinancialConditionPresentation } from '../data/scopedFinancialConditionFacts';
+import { uiAccessBadge, uiConditionTag, uiListedLvr } from '../lib/financialUiCopy';
+import { uiCount, uiJoin, uiLabel, uiProductName, uiProviderName, type UiCopy, type UiText } from '../lib/uiCopy';
 
-function chips(row: RateRow, section: SectionKey, qualifier: RateQualifier): string[] {
-  const out: string[] = [];
+function chips(row: RateRow, section: SectionKey, conditional: boolean, conditions: ScopedFinancialConditionPresentation): UiText[] {
+  const out: UiText[] = [];
+  const sourceLvr = conditions.facts.filter(f => f.kind === 'published-lvr-range');
+  const sourceBalance = conditions.facts.filter(f => f.kind === 'published-balance-range' && (section === 'Mortgage' || f.subject === 'balance' || f.subject === 'deposit-balance'));
+  const sourceTerm = conditions.facts.filter(f => f.kind === 'published-term-range');
   if (section === 'Mortgage') {
     if (row.ribbon_rate_structure) out.push(humanizeEnum(row.ribbon_rate_structure));
     const term = formatTerm(row);
@@ -37,28 +43,30 @@ function chips(row: RateRow, section: SectionKey, qualifier: RateQualifier): str
     if (row.ribbon_repayment_type ?? row.repayment_type)
       out.push(humanizeEnum(row.ribbon_repayment_type ?? row.repayment_type));
     if (row.loan_purpose) out.push(humanizeEnum(row.loan_purpose));
-    if (row.lvr_tier) out.push(lvrTierDisplay(row.lvr_tier));
+    out.push(...(sourceLvr.length ? sourceLvr.map(uiConditionTag) : [uiListedLvr(row)]));
   } else if (section === 'TD') {
     const term = formatTerm(row);
     if (term) out.push(term);
     const bal = formatBalanceRange(row.balance_min, row.balance_max);
-    if (bal) out.push(bal);
+    if (bal && !sourceBalance.length) out.push(bal);
     if (row.interest_payment) out.push(humanizeEnum(row.interest_payment));
   } else {
     // Conditional rates have their own caution label below. Reuse the central
     // classifier so the caption and caution label can never disagree.
-    if (row.ribbon_deposit_kind && !qualifier.conditional) {
+    if (row.ribbon_deposit_kind && !conditional) {
       out.push(humanizeEnum(row.ribbon_deposit_kind));
     }
     const bal = formatBalanceRange(row.balance_min, row.balance_max);
-    if (bal) out.push(bal);
+    if (bal && !sourceBalance.length) out.push(bal);
     const term = formatTerm(row);
     if (term) out.push(term);
   }
+  out.push(...sourceBalance.map(uiConditionTag), ...sourceTerm.map(uiConditionTag));
+  if (conditions.unresolved.length) out.push(uiLabel('Source review required'));
   return [...new Set(out)];
 }
 
-const COMPACT_METRIC_LABELS: Readonly<Record<string, string>> = {
+const COMPACT_METRIC_LABELS: Readonly<Record<string, UiCopy>> = {
   'Comparison rate': 'Comparison',
   'Advertised rate': 'Advertised',
   'Ongoing rate': 'Ongoing',
@@ -92,7 +100,7 @@ function ProductCardView({
   /** Exact fraction used to rank this row when it differs from the headline. */
   displayedRate?: number | string | null;
   /** Metric-specific label for displayedRate, such as Ongoing or Comparison rate. */
-  displayedRateLabel?: string;
+  displayedRateLabel?: UiCopy;
   /** Hide redundant lender navigation when already rendered on that lender's page. */
   showLenderAction?: boolean;
   logoRenderStateId?: string;
@@ -106,13 +114,16 @@ function ProductCardView({
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const detail = useStore((s) => s.details?.products[row.product_key] ?? null);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
+  const core = useStore(s => s.core), details = useStore(s => s.details), manifest = useStore(s => s.manifest), coreIntegrity = useStore(s => s.coreIntegrity);
+  const conditions = React.useMemo(() => scopedFinancialConditionFacts(scopedRateConditions(row, section, { core, details, manifest, coreIntegrity })),
+    [row, section, core, details, manifest, coreIntegrity]);
   const nonStandard = isNonStandard(row);
   const qualifier = rateQualifier(row, section);
   const access = React.useMemo(
     () => assessAccess(row.product_name, detail, row.provider),
     [row.product_name, row.provider, detail],
   );
-  const tags = chips(row, section, qualifier);
+  const tags = chips(row, section, qualifier.conditional, conditions);
   const presentation = ratePresentation(row, section, mortgageRateMetric);
   const hasDisplayedRateOverride = displayedRate !== undefined;
   const rateLabel = hasDisplayedRateOverride
@@ -136,20 +147,25 @@ function ProductCardView({
   const visibleRateLabel = COMPACT_METRIC_LABELS[rateLabel] ?? rateLabel;
   const metadata = [
     ...(secondaryRate !== null && secondaryLabel
-      ? [`${COMPACT_METRIC_LABELS[secondaryLabel] ?? secondaryLabel} ${formatRate(secondaryRate)}`]
+      ? [uiJoin(COMPACT_METRIC_LABELS[secondaryLabel] ?? secondaryLabel, ' ', formatRate(secondaryRate))]
       : []),
     ...tags,
   ];
   const rateChange = useProductRateChangeSummary(row.product_key);
   const rateChangeText = productRateChangeText(rateChange, true);
   const openLender = onLongPress ?? (() => openBank(row.provider, { section }));
-  const cardA11yLabel = `${row.product_name}, ${row.provider}, ${rateLabel} ${rateText}${
-    secondaryRate !== null && secondaryLabel
-      ? `, ${secondaryLabel.toLowerCase()} ${formatRate(secondaryRate)}`
-      : ''
-  }${tags.length ? `, ${tags.join(', ')}` : ''}${access.badge ? `, ${access.badge}${access.verify ? ' unverified' : ''}` : ''}${nonStandard ? ', Special eligibility' : ''}${qualifier.conditional ? `, ${qualifier.label}, conditions apply` : ''}${
-    rateChangeText ? `, ${rateChangeText.replace('↑', 'up').replace('↓', 'down')}` : ''
-  }`;
+  const joinFacts = (facts: readonly UiText[]) => uiJoin(...facts.flatMap((fact, index) => index ? [uiLabel(' · '), fact] : [fact]));
+  const cardA11yLabel = uiJoin(uiProductName(row), ', ', uiProviderName(row), ', ', rateLabel, ' ', rateText,
+    metadata.length ? uiJoin(', ', joinFacts(metadata)) : null,
+    access.badge ? uiJoin(', ', uiAccessBadge(access)) : null,
+    nonStandard ? uiJoin(', ', 'Non-standard') : null,
+    qualifier.conditional ? uiJoin(', ', qualifier.label) : null,
+    rateChangeText ? uiJoin(', ', rateChangeText) : null);
+  const saveA11yLabel = uiJoin(Number.isInteger(row.rate_index)
+    ? favorite ? 'Remove' : 'Save'
+    : favorite ? 'Remove all rates' : 'Save all rates',
+    Number.isInteger(row.rate_index) ? uiJoin(', ', 'Rate index', ' ', uiCount(row.rate_index)) : null,
+    ', ', cardA11yLabel);
 
   return (
     // Card container is a plain View; the nav target and the favorite star are
@@ -204,10 +220,10 @@ function ProductCardView({
 
           <View style={{ flex: 1, minWidth: 0 }}>
             <AppText variant="body" weight="600" numberOfLines={textLines}>
-              {row.product_name}
+              {uiProductName(row)}
             </AppText>
             <AppText variant="small" color="textMuted" numberOfLines={fontScale >= 1.3 ? undefined : 1}>
-              {row.provider}
+              {uiProviderName(row)}
             </AppText>
           </View>
         </View>
@@ -235,13 +251,13 @@ function ProductCardView({
         </View>
         {metadata.length || qualifier.conditional || nonStandard || access.badge ? (
           <Row gap={8} style={{ flexWrap: 'wrap' }}>
-            {metadata.length ? <AppText variant="small" color="textMuted" style={{ flexShrink: 1 }}>{metadata.join(' · ')}</AppText> : null}
-            {access.badge ? <AppText variant="small" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="500">{access.verify ? `${access.badge}?` : access.badge}</AppText> : null}
+            {metadata.length ? <AppText variant="small" color="textMuted" style={{ flexShrink: 1 }}>{joinFacts(metadata)}</AppText> : null}
+            {access.badge ? <AppText variant="small" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="500">{uiAccessBadge(access)}</AppText> : null}
             {qualifier.conditional ? <AppText variant="small" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="500">{qualifier.shortLabel}</AppText> : null}
-            {nonStandard ? <AppText variant="small" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="500">Special eligibility</AppText> : null}
+            {nonStandard ? <AppText variant="small" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="500">{uiLabel("Non-standard")}</AppText> : null}
           </Row>
         ) : null}
-        <ProductRateChangeSummaryLine summary={rateChange} section={section} compact />
+        <ProductRateChangeSummaryLine model={rateChange} section={section} compact />
       </PressFeedback>
 
         <View style={{ width: 48, alignItems: 'center', opacity: selectMode ? 0 : 1 }} pointerEvents={selectMode ? 'none' : 'auto'} accessibilityElementsHidden={!!selectMode} importantForAccessibility={selectMode ? 'no-hide-descendants' : 'auto'}>
@@ -250,7 +266,7 @@ function ProductCardView({
               onPress={openLender}
               disabled={!!selectMode}
               accessibilityRole="button"
-              accessibilityLabel={`View ${row.provider} bank history`}
+              accessibilityLabel={uiJoin('View', ' ', uiProviderName(row), ' · ', 'History')}
               android_ripple={androidRipple(theme.colors.primaryMuted, true)}
               style={{
                 width: 48,
@@ -268,11 +284,7 @@ function ProductCardView({
             onPress={() => toggleSavedRate(row, Number.isInteger(row.rate_index) ? 'rate' : 'product')}
             disabled={!!selectMode}
             accessibilityRole="button"
-            accessibilityLabel={favorite
-              ? 'Remove this rate from saved'
-              : Number.isInteger(row.rate_index)
-                ? 'Save this exact rate'
-                : 'Save all product variants'}
+            accessibilityLabel={saveA11yLabel}
             accessibilityState={{ selected: favorite }}
             android_ripple={androidRipple(theme.colors.primaryMuted, true)}
             style={{

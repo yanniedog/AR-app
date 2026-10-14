@@ -1,3 +1,3 @@
 import React from 'react';
 import { LegacyRatesRoute } from '../src/components/LegacyRatesRoute';
-export default function LegacyEntry() { return <LegacyRatesRoute defaults={{ path: '', scope: 'hierarchy' }} />; }
+export default function LegacyEntry() { return <LegacyRatesRoute defaults={{ path: '', scope: 'hierarchy', availability: 'listed' }} />; }

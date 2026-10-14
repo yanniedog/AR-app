@@ -12,6 +12,10 @@ import { resolveOfflineBanner } from './bannerState';
 import { PayloadProgressBar } from './feedbackProgress';
 import { AppText, Row } from './ui';
 import { LedgerIcon, type LedgerIconName } from './icons/LedgerIcon';
+import { uiJoin, uiDate, type UiLabel } from '../lib/uiCopy';
+const STATUS_LABELS: Record<BannerSurface, UiLabel> = {
+  offline: 'Offline', connecting: 'Loading', syncing: 'Loading', success: 'Updated', pending: 'Pending',
+};
 
 const BANNER_FADE_MS = 320;
 const SUCCESS_HOLD_MS = 900;
@@ -135,7 +139,9 @@ export function OfflineBanner({
   );
   if (!bannerView || !hasUsableData) return null;
 
-  const { surface, message, showProgress } = bannerView;
+  const { surface, showProgress } = bannerView;
+  const message = uiJoin(STATUS_LABELS[surface], ' · ', source === 'sample' ? 'Sample data' : 'Observed', ': ', uiDate(showingRunDate),
+    pendingIngestRunDate ? uiJoin(' · ', 'Pending', ': ', uiDate(pendingIngestRunDate)) : '');
   const sampleTone = surface === 'connecting' || surface === 'success';
   const pendingTone = surface === 'pending';
   const iconName: LedgerIconName =

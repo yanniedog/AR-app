@@ -1,3 +1,4 @@
+import { uiLabel } from "../src/lib/uiCopy";
 import { router, Stack } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
@@ -9,7 +10,7 @@ import { useTheme } from '../src/theme/ThemeProvider';
 export default function NotFound() {
   const theme = useTheme();
   const [layoutReady, setLayoutReady] = useState(false);
-  const goHome = useCallback(() => router.replace('/(tabs)'), []);
+  const goHome = useCallback(() => router.replace('/(tabs)/browse'), []);
   const auditActions = useMemo(() => ({
     'not-found.open': () => undefined,
     'not-found.home': goHome,
@@ -31,21 +32,19 @@ export default function NotFound() {
   });
   return (
     <>
-      <Stack.Screen options={{ title: 'Not found' }} />
+      <Stack.Screen options={{ title: uiLabel('Screen unavailable') }} />
       <View
         onLayout={() => setLayoutReady(true)}
         style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: theme.colors.bg }}
       >
-        <AppText variant="h2">This screen doesn&apos;t exist</AppText>
+        <AppText variant="h2">{uiLabel("Screen unavailable")}</AppText>
         <Pressable
           accessibilityRole="link"
-          accessibilityLabel="Go to Home"
+          accessibilityLabel="Rates"
           onPress={goHome}
           style={{ marginTop: 16 }}
         >
-          <AppText variant="body" style={{ color: theme.colors.primary }} weight="700">
-            Go to Home
-          </AppText>
+          <AppText variant="body" style={{ color: theme.colors.primary }} weight="700">{uiLabel("Rates")}</AppText>
         </Pressable>
       </View>
     </>

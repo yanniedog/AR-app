@@ -1,10 +1,11 @@
+import type { UiChild } from '../lib/uiCopy';
 import React, { useMemo } from 'react';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** The fixed shell has already consumed the top inset; preserve the other edges. */
 export function NavigatorSafeArea({ topInsetConsumed, children }: {
   topInsetConsumed: boolean;
-  children: React.ReactNode;
+  children: UiChild;
 }) {
   const insets = useSafeAreaInsets();
   const remainingInsets = useMemo(

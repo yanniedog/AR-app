@@ -8,19 +8,18 @@ import type { ProductDetail } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { SegmentedControl } from '../controls';
 import { AppText, Disclosure, Row } from '../ui';
+import { uiLabel, uiCount, uiInputNumber, uiJoin, uiNumber, type UiCopy, type UiText } from '../../lib/uiCopy';
+import { uiStaySwitchMoney } from '../../lib/staySwitchUiFacts';
 
-const labels: { key: SwitchFeeKey; label: string; accessibilityLabel: string }[] = [
-  { key: 'currentBankExitFees', label: 'Current bank exit fees', accessibilityLabel: 'Current bank exit fees in dollars' },
-  { key: 'applicationFees', label: 'Application fees', accessibilityLabel: 'New bank application fees in dollars' },
-  { key: 'valuationFees', label: 'Valuation fees', accessibilityLabel: 'Valuation fees in dollars' },
-  { key: 'settlementFees', label: 'Settlement fees', accessibilityLabel: 'Settlement fees in dollars' },
-  { key: 'governmentAndLegalFees', label: 'Government & legal', accessibilityLabel: 'Government and legal fees in dollars' },
-  { key: 'otherUpfrontFees', label: 'Other upfront fees', accessibilityLabel: 'Other upfront fees in dollars' },
+const labels: { key: SwitchFeeKey; label: UiCopy; accessibilityLabel: UiCopy }[] = [
+  { key: 'currentBankExitFees', accessibilityLabel: 'Current bank exit fees', label: 'Current bank exit fees' },
+  { key: 'applicationFees', accessibilityLabel: 'Application fees', label: 'Application fees' },
+  { key: 'valuationFees', accessibilityLabel: 'Valuation fees', label: 'Valuation fees' },
+  { key: 'settlementFees', accessibilityLabel: 'Settlement fees', label: 'Settlement fees' },
+  { key: 'governmentAndLegalFees', accessibilityLabel: 'Government & legal', label: 'Government & legal' },
+  { key: 'otherUpfrontFees', accessibilityLabel: 'Other upfront fees', label: 'Other upfront fees' },
 ];
 
-function dollars(value: number): string {
-  return `$${Math.round(value).toLocaleString('en-AU')}`;
-}
 function AmountField({
   label,
   accessibilityLabel,
@@ -29,17 +28,17 @@ function AmountField({
   editable,
   onChangeText,
 }: {
-  label: string;
-  accessibilityLabel: string;
-  value: string;
-  placeholder: string;
+  label: UiCopy;
+  accessibilityLabel: UiCopy;
+  value: UiText;
+  placeholder: UiCopy;
   editable: boolean;
   onChangeText: (value: string) => void;
 }) {
   const theme = useTheme();
   return (
     <View style={{ flex: 1, minWidth: 150, gap: 4 }}>
-      <AppText variant="tiny" color="textMuted" weight="700">{label}</AppText>
+      <AppText variant="tiny" color="textMuted" weight="700">{uiJoin(label, ' (', 'AUD', ')')}</AppText>
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -48,7 +47,7 @@ function AmountField({
         keyboardType="decimal-pad"
         editable={editable}
         maxLength={20}
-        accessibilityLabel={accessibilityLabel}
+        accessibilityLabel={uiJoin(accessibilityLabel, ' (', 'AUD', ')')}
         accessibilityState={{ disabled: !editable }}
         style={{
           ...fontStyle(),
@@ -87,20 +86,17 @@ export function SwitchCostEditor({
     () => resolveSwitchCosts(inputs, currentDetail, targetDetail),
     [currentDetail, inputs, targetDetail],
   );
-  const placeholder = (key: SwitchFeeKey): string => {
+  const placeholder = (key: SwitchFeeKey): UiCopy => {
     const resolved = costs.fees.find((item) => item.key === key);
-    return resolved?.source === 'published' ? String(resolved.amount) : 'Unknown';
+    return resolved?.source === 'published' ? uiNumber(resolved.amount, 2) : 'Unknown';
   };
   return (
     <Disclosure
       title="Switch costs"
-      summary={`${dollars(costs.netSwitchCost)} known net upfront · full cost unverified`}
       open={open}
       onToggle={() => setOpen((value) => !value)}
     >
-      <AppText variant="tiny" color="textMuted" style={{ marginBottom: 10 }}>
-        Blank means unknown unless a fixed published amount is shown. Enter 0 only after confirming there is no charge.
-      </AppText>
+      <AppText variant="small" color="textMuted">{uiJoin('Known costs', ': ', uiStaySwitchMoney(costs.netSwitchCost), ' · ', 'Fees unverified')}</AppText>
       {labels.map((item, index) => index % 2 === 0 ? (
         <Row
           key={item.key}
@@ -115,7 +111,7 @@ export function SwitchCostEditor({
               key={field.key}
               label={field.label}
               accessibilityLabel={field.accessibilityLabel}
-              value={inputs[field.key]}
+              value={uiInputNumber(inputs[field.key])}
               placeholder={placeholder(field.key)}
               editable={editable}
               onChangeText={(value) => onChange({ [field.key]: value })}
@@ -126,14 +122,14 @@ export function SwitchCostEditor({
       <View style={{ marginTop: 10 }}>
         <AmountField
           label="Cashback"
-          accessibilityLabel="Eligible cashback in dollars"
-          value={inputs.cashback}
-          placeholder="None entered"
+          accessibilityLabel="Cashback"
+          value={uiInputNumber(inputs.cashback)}
+          placeholder="Unknown"
           editable={editable}
           onChangeText={(cashback) => onChange({ cashback })}
         />
       </View>
-      <AppText variant="tiny" color="textMuted" weight="700" style={{ marginTop: 12, marginBottom: 7 }}>FUND NET COSTS</AppText>
+      <AppText variant="tiny" color="textMuted" weight="700" style={{ marginTop: 12, marginBottom: 7 }}>{uiLabel("Funding")}</AppText>
       <SegmentedControl<MortgageSwitchInputs['fundingMethod']>
         options={[
           { label: 'Cash / offset', value: 'cash-or-offset' },
@@ -142,7 +138,7 @@ export function SwitchCostEditor({
         value={inputs.fundingMethod}
         onChange={(fundingMethod) => editable && onChange({ fundingMethod })}
       />
-      <AppText variant="tiny" color="textMuted" weight="700" style={{ marginTop: 12, marginBottom: 7 }}>TARGET OFFSET</AppText>
+      <AppText variant="tiny" color="textMuted" weight="700" style={{ marginTop: 12, marginBottom: 7 }}>{uiLabel("Target offset")}</AppText>
       <SegmentedControl<MortgageSwitchInputs['targetOffsetAvailable']>
         options={[
           { label: 'Published', value: 'auto' },
@@ -152,16 +148,8 @@ export function SwitchCostEditor({
         value={inputs.targetOffsetAvailable}
         onChange={(targetOffsetAvailable) => editable && onChange({ targetOffsetAvailable })}
       />
-      {costs.unpricedPeriodicFees.length ? (
-        <AppText variant="tiny" color="textMuted" style={{ marginTop: 10 }}>
-          {costs.unpricedPeriodicFees.length} periodic fee{costs.unpricedPeriodicFees.length === 1 ? '' : 's'} lack a reliable published amount or cadence, so cost difference and break-even remain unavailable.
-        </AppText>
-      ) : null}
-      {!costs.costClaimsAvailable ? (
-        <AppText variant="tiny" color="danger" style={{ marginTop: 10 }}>
-          Full-cost and break-even claims require verified bank terms, customer applicability and a supported calculation. Entered fees alone do not establish complete coverage.
-        </AppText>
-      ) : null}
+      {costs.unpricedPeriodicFees.length ? <AppText variant="tiny" color="textMuted">{uiJoin('Unpriced fees', ': ', uiCount(costs.unpricedPeriodicFees.length))}</AppText> : null}
+      {!costs.costClaimsAvailable ? <AppText variant="tiny" color="warning">{uiJoin('Total-cost difference', ' · ', 'Unavailable', ' · ', 'Eligibility unverified')}</AppText> : null}
     </Disclosure>
   );
 }

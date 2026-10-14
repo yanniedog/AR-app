@@ -28,8 +28,8 @@ it.each([
   ['/debug-log', ['Rates', 'About', 'Debug log'], '/(tabs)/browse'],
   ['/third-party-notices', ['Rates', 'About', 'Open-source notices'], '/(tabs)/browse'],
   ['/rba-response', ['Market', 'Bank response'], '/(tabs)/market'],
-  ['/bank-rates', ['Market', 'Bank rates over time'], '/(tabs)/market'],
-  ['/matches', ['Rates', 'Matched rates'], '/(tabs)/browse'],
+  ['/bank-rates', ['Market', 'Bank rates'], '/(tabs)/market'],
+  ['/matches', ['Rates', 'Matching rates'], '/(tabs)/browse'],
 ])('gives %s a working parent even without navigation history', (pathname, labels, href) => {
   const crumbs = build(pathname);
   expect(crumbs.map((crumb) => crumb.label)).toEqual(labels);

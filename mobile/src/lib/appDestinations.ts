@@ -1,4 +1,5 @@
 import type { Href } from 'expo-router';
+import type { UiCopy } from './uiCopy';
 
 import { SECTION_ORDER, sectionFromSlug } from '../constants';
 import type { SectionKey } from '../types';
@@ -9,7 +10,7 @@ export type AppDestinationId = 'profile' | 'settings' | 'about';
 
 export interface AppDestination {
   id: AppDestinationId;
-  label: string;
+  label: UiCopy;
   icon: LedgerIconName;
   href: Href;
   path: string;
@@ -17,7 +18,7 @@ export interface AppDestination {
 
 export interface AppDestinationGroup {
   id: 'account';
-  label: string;
+  label: UiCopy;
   destinations: readonly AppDestination[];
 }
 
@@ -39,7 +40,8 @@ export function destinationHref(destination: AppDestination): Href {
 export function destinationSectionFromParam(value: string | string[] | undefined): SectionKey | undefined {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw) return undefined;
-  if (SECTION_ORDER.includes(raw as SectionKey)) return raw as SectionKey;
+  const section = SECTION_ORDER.find(section => section === raw);
+  if (section) return section;
   return sectionFromSlug(raw);
 }
 

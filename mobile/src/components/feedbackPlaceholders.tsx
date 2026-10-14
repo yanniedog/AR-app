@@ -4,16 +4,15 @@ import { Animated as RNAnimated, Easing as RNEasing, View, type DimensionValue, 
 import { useTheme } from '../theme/ThemeProvider';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { AppText } from './ui';
+import type { UiCopy } from '../lib/uiCopy';
 
 export function EmptyState({
   icon = 'search',
   title,
-  subtitle,
   fill,
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
-  title: string;
-  subtitle?: string;
+  title: UiCopy;
   /** When true, fills the screen with the themed background (tab empty states). */
   fill?: boolean;
 }) {
@@ -29,11 +28,6 @@ export function EmptyState({
       <AppText variant="h3" style={{ marginTop: 12, textAlign: 'center' }}>
         {title}
       </AppText>
-      {subtitle ? (
-        <AppText variant="small" color="textMuted" style={{ marginTop: 6, textAlign: 'center' }}>
-          {subtitle}
-        </AppText>
-      ) : null}
     </View>
   );
 }
@@ -127,11 +121,11 @@ function ProductCardSkeleton() {
         gap: 12,
         paddingVertical: 12,
         paddingHorizontal: 14,
-        backgroundColor: theme.colors.card,
-        borderRadius: theme.radius.lg,
-        borderWidth: 1,
+        backgroundColor: 'transparent',
+        borderRadius: 0,
+        borderBottomWidth: 1,
         borderColor: theme.colors.border,
-        marginBottom: 10,
+        minHeight: 96,
       }}
     >
       <ShimmerBox height={44} width={44} borderRadius={22} />

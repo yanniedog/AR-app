@@ -1,5 +1,6 @@
+import { uiCount, uiDate, uiJoin, uiLabel, uiNumber } from "../../lib/uiCopy";
 import { useIsFocused } from '@react-navigation/native';
-import { currentCashRate, formatRbaDate, nextMeeting, rbaCalendarCoverage, sydneyYmd } from '../../data/rbaCalendar';
+import { currentCashRate, nextMeeting, rbaCalendarCoverage, sydneyYmd } from '../../data/rbaCalendar';
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -20,7 +21,6 @@ import { useStore } from '../../data/store';
 import { isSuitabilityFilterReady } from '../../data/suitabilityGate';
 import { useSuitabilityRevision } from '../../hooks/useSuitabilityRevision';
 import { usePerformanceAuditSurface } from '../../hooks/usePerformanceAuditReadiness';
-import { formatRunDate } from '../../data/format';
 import { scalarRouteParam } from '../../lib/nav';
 import {
   isFeedRenderEvidenceReady,
@@ -230,15 +230,14 @@ export default function MarketOverview() {
       <View key={factsRevision} onLayout={event => {
         if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) setFactsLayout(factsRevision);
       }} style={{ gap: 16 }}>
-        <AppText variant="small" color="textMuted">{verifiedCalendarRate == null || coverage.unresolvedMeeting ? 'Last confirmed cash rate' : 'Cash rate'}</AppText>
-        <AppText variant="rateHero">{cashRate == null ? 'Unavailable' : cashRate.toFixed(2) + '%'}</AppText>
+        <AppText variant="small" color="textMuted">{uiLabel(verifiedCalendarRate == null || coverage.unresolvedMeeting ? 'Last confirmed cash rate' : 'Cash rate')}</AppText>
+        <AppText variant="rateHero">{cashRate == null ? uiLabel("Unavailable") : uiJoin(uiNumber(cashRate,2),'%')}</AppText>
         {cashRate != null ? <AppText variant="small" color="textMuted">
-          {cashRateDate ? formatRbaDate(cashRateDate) + ' ' + cashRateDate.slice(0, 4) : 'Unknown date'}
-          {source === 'cache' || offline ? ' · Cached' : ''}{coverage.unresolvedMeeting ? ' · Awaiting decision' : ''}
+          {uiJoin(uiDate(cashRateDate),source==='cache'||offline?uiJoin(' · ','Cached'):null,coverage.unresolvedMeeting?uiJoin(' · ','Awaiting decision'):null)}
         </AppText> : null}
         <View style={{ gap: 4 }}>
-          <AppText variant="small" color="textMuted">{coverage.unresolvedMeeting ? 'Awaiting decision' : 'Next decision'}</AppText>
-          <AppText variant="body" weight="600">{meeting ? formatRbaDate(meeting.date) + ' ' + meeting.date.slice(0, 4) : calendarAttempted ? 'Unavailable' : 'Loading'}</AppText>
+          <AppText variant="small" color="textMuted">{uiLabel(coverage.unresolvedMeeting ? 'Awaiting decision' : 'Next decision')}</AppText>
+          <AppText variant="body" weight="600">{meeting ? uiDate(meeting.date) : calendarAttempted ? uiLabel("Unavailable") : uiLabel("Loading")}</AppText>
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           <Button title="History" variant="secondary" onPress={openHistory} />
@@ -250,26 +249,26 @@ export default function MarketOverview() {
       <View style={{ gap: 12 }}>
         <SectionHeading title="Last 7 days" />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 24 }}>
-          {[['Banks', pulse?.banksMoved], ['Increases', pulse?.hikes], ['Cuts', pulse?.cuts]].map(([label, value]) =>
-            <View key={String(label)} style={{ gap: 4 }}><AppText variant="h2">{value ?? 'Unknown'}</AppText><AppText variant="small" color="textMuted">{label}</AppText></View>)}
+          {([{label:uiLabel("Banks"),value:pulse?.banksMoved},{label:uiLabel("Increases"),value:pulse?.hikes},{label:uiLabel("Cuts"),value:pulse?.cuts}] as const).map(({label,value}) =>
+            <View key={String(label)} style={{ gap: 4 }}><AppText variant="h2">{uiCount(value)}</AppText><AppText variant="small" color="textMuted">{label}</AppText></View>)}
         </View>
       </View>
       <View style={{ gap: 12 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
           <SectionHeading title="Recent movements" />
-          <AppText variant="small" color="textMuted">{payload ? formatRunDate(payload.run_date) : 'Unavailable'}</AppText>
+          <AppText variant="small" color="textMuted">{payload ? uiDate(payload.run_date) : uiLabel("Unavailable")}</AppText>
         </View>
         {payload ? <BankMovesFeed payload={payload} error={error} sections={[activeSection]} limit={14}
           contentRevision={feedRenderRevision} onRenderEvidence={recordFeedEvidence} /> : suitabilityWarming ? (
-          <View style={{ gap: 8 }}><AppText variant="small">Loading</AppText><Button title="Retry" variant="secondary" onPress={() => void ensureDetails({ force: true, abandonInFlight: true })} /></View>
+          <View style={{ gap: 8 }}><AppText variant="small">{uiLabel("Loading")}</AppText><Button title="Retry" variant="secondary" onPress={() => void ensureDetails({ force: true, abandonInFlight: true })} /></View>
         ) : filteredEmpty ? (
           <View key={'empty:' + feedRenderRevision} onLayout={event => {
             if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) recordFeedEvidence({ expectedCount: 0, actualCount: 0, emptyStateRendered: true });
-          }}><AppText variant="body">No movements</AppText></View>
-        ) : error ? <View style={{ gap: 8 }}><AppText variant="small">Movements unavailable</AppText>
+          }}><AppText variant="body">{uiLabel("No movements")}</AppText></View>
+        ) : error ? <View style={{ gap: 8 }}><AppText variant="small">{uiLabel("Movements unavailable")}</AppText>
           <Button title="Retry" loading={retrying} onPress={() => { setRetrying(true); void retryBankInsights().finally(() => setRetrying(false)); }} />
-        </View> : <AppText variant="small">Loading</AppText>}
-        {payload && error ? <AppText variant="small" color="textMuted">Cached observations</AppText> : null}
+        </View> : <AppText variant="small">{uiLabel("Loading")}</AppText>}
+        {payload && error ? <AppText variant="small" color="textMuted">{uiLabel("Cached observations")}</AppText> : null}
       </View>
       {payload ? <Disclosure title="30-day movers" open={moversOpen} onToggle={toggleMovers}>
         <MoversLeaderboard payload={payload} section={activeSection} />

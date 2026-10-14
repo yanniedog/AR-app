@@ -3,7 +3,7 @@ import { SECTIONS } from '../constants';
 import type { CorePayload, RateRow, SectionKey } from '../types';
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates } from './bankHistoryTransform';
-import { toFraction } from './format';
+import { toFraction } from './rateNumbers';
 import { historicalRevisionHighWater, normalizeHistoryIdentities } from './historyIdentity';
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;

@@ -37,27 +37,12 @@ export function ErrorScreen({ error, retry }: { error: Error; retry: () => void 
       >
         <Ionicons name="warning-outline" size={40} color={colors.primary} />
         <Text style={{ color: colors.text, fontSize: 18, ...fontStyle('700'), marginTop: 12 }}>
-          Something went wrong
-        </Text>
-        <Text
-          style={{
-            color: colors.textMuted,
-            fontSize: 14,
-            ...fontStyle(),
-            textAlign: 'center',
-            marginTop: 8,
-            lineHeight: 20,
-          }}
-        >
-          The app hit an unexpected error. Your downloaded rates are safe — try again.
-        </Text>
-        <Text style={{ color: colors.textMuted, fontSize: 12, ...fontStyle(), textAlign: 'center', marginTop: 10 }}>
-          Technical details are saved on this device for support.
+          Error
         </Text>
         <Pressable
           onPress={retry}
           accessibilityRole="button"
-          accessibilityLabel="Try loading Australian Rates again"
+          accessibilityLabel="Retry"
           style={({ pressed }) => ({
             minHeight: 48,
             justifyContent: 'center',

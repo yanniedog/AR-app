@@ -3,6 +3,7 @@ import {
   buildNegotiationBrief,
   buildRateReceipt,
   officialReceiptSources,
+  rateReceiptShareText,
 } from '../src/data/rateReceipt';
 import { EMPTY_USER_RATE_SCENARIO, normalizeUserRateScenario } from '../src/data/userRateScenario';
 import type { ProductDetail, RateRow } from '../src/types';
@@ -39,6 +40,25 @@ const detail: ProductDetail = {
 };
 
 describe('rate receipt', () => {
+  test('reviewed lowercase deposit enums retain their meaning in visible and shared receipt facts', () => {
+    const receipt = buildRateReceipt({ row: row({ account_type: 'savings', account_class: 'standard', interest_payment: 'annually', ribbon_deposit_kind: 'basic' }), section: 'Savings', evidenceDate: '2026-10-15' });
+    for (const [label, value] of [['Account type', 'Savings'], ['Account class', 'Standard'], ['Interest paid', 'Annually'], ['Tier', 'Basic']]) {
+      expect(receipt.tier).toContainEqual({ label, value });
+      expect(rateReceiptShareText(receipt)).toContain(`${label}: ${value}`);
+    }
+    const unreviewed = buildRateReceipt({ row: row({ account_type: 'Here is an explanatory source paragraph.' }), section: 'Savings', evidenceDate: '2026-10-15' });
+    expect(rateReceiptShareText(unreviewed)).not.toContain('Here is an explanatory source paragraph.');
+    expect(unreviewed.tier).toContainEqual({ label: 'Account type', value: 'Unknown' });
+  });
+  test('public share facts retain exact identity, known fees and sources without source prose', () => {
+    const receipt = buildRateReceipt({ row: row(), section: 'Mortgage', evidenceDate: '2026-08-04', detail: { ...detail, features: [{ name: 'Marketing', info: 'This paragraph must never appear in sharing.' }] } });
+    const text = rateReceiptShareText(receipt);
+    expect(text).toContain('Example Bank · Clear Variable Loan · Rate index: 4');
+    expect(text).toContain('Advertised: 5.50%'); expect(text).toContain('Comparison: 5.70%');
+    expect(text).toContain('Annual fee: $0'); expect(text).toContain('https://examplebank.test/products/clear');
+    expect(text).toContain('Eligibility unverified'); expect(text).toContain('Fees unverified');
+    expect(text).not.toContain('paragraph'); expect(text).not.toContain('Marketing');
+  });
   test('captures an exact dated tier, conditions, fees and safe official evidence', () => {
     const receipt = buildRateReceipt({
       row: row(),
@@ -58,12 +78,12 @@ describe('rate receipt', () => {
       cohort: 'standard',
     });
     expect(receipt.tier).toEqual(expect.arrayContaining([
-      { label: 'Exact rate row', value: 'Rate index 4' },
-      { label: 'LVR tier', value: 'LVR 70 80' },
+      { label: 'Rate index', value: '4' },
+      { label: 'Listed LVR', value: '>70%–80%' },
     ]));
     expect(receipt.conditions).toEqual(expect.arrayContaining([
-      { label: 'Minimum age', value: '18 — Australian resident' },
-      { label: 'Min limit', value: '$150,000' },
+      { label: 'Minimum age', value: '18 years · Australian resident' },
+      { label: 'Minimum limit', value: '$150,000' },
     ]));
     expect(receipt.fees).toContainEqual({ label: 'Annual fee', value: '$0' });
     expect(receipt.officialSources.map((source) => source.kind)).toEqual(['overview', 'eligibility']);
@@ -77,7 +97,7 @@ describe('rate receipt', () => {
       fees: 'javascript:alert(1)',
       terms: 'http://bank.test/terms',
     })).toEqual([
-      { kind: 'overview', label: 'Published product overview', url: 'https://bank.test/product', hostname: 'bank.test' },
+      { kind: 'overview', label: 'Product', url: 'https://bank.test/product', hostname: 'bank.test' },
     ]);
 
     const receipt = buildRateReceipt({
@@ -86,10 +106,7 @@ describe('rate receipt', () => {
       evidenceDate: '2026-08-04',
     });
     expect(receipt.ongoingRate).toBe('0.00%');
-    expect(receipt.limitations).toEqual(expect.arrayContaining([
-      expect.stringMatching(/No valid HTTPS lender document link/),
-      expect.stringMatching(/did not publish detailed eligibility/),
-    ]));
+    expect(receipt.facts).toEqual(expect.arrayContaining([{ kind: 'source', state: 'unavailable' }, { kind: 'detailed-eligibility', state: 'unavailable' }]));
   });
 });
 
@@ -124,9 +141,9 @@ describe('local negotiation brief', () => {
     });
 
     expect(brief.scenario).toEqual(expect.arrayContaining([
-      { label: 'Scenario', value: 'Refinancing' },
+      { label: 'Your rate scenario', value: 'Refinancing' },
       { label: 'Loan amount', value: '$500,000' },
-      { label: 'Current rate entered', value: '6.00%' },
+      { label: 'Current entered rate', value: '6.00%' },
     ]));
     expect(brief.comparables.map((item) => item.productKey)).toEqual(['best|1', 'other|1']);
     expect(brief.comparables.some((item) => item.productKey === selected.product_key)).toBe(false);
@@ -139,8 +156,8 @@ describe('local negotiation brief', () => {
       direction: 'lower-cost',
     });
     expect(brief.illustration?.monthlyDifference).toBeCloseTo(416.67, 1);
-    expect(brief.limitations.join(' ')).toMatch(/not matched to your eligibility/i);
-    expect(brief.disclaimer).toMatch(/generated locally/i);
+    expect(brief.facts).toContainEqual({ kind: 'comparables', state: 'unmatched' });
+    expect(brief.facts).toContainEqual({ kind: 'privacy', state: 'local-only' });
   });
 
   test('does not treat a variable mortgage loan term as a fixed rate period', () => {
@@ -190,11 +207,11 @@ describe('local negotiation brief', () => {
     expect(brief.illustration).toMatchObject({
       annualDifference: 1000,
       periodDifference: 1000,
-      periodLabel: 'at 1 yr maturity',
+      periodLabel: '12 months · at maturity',
       monthlyDifference: null,
       direction: 'higher-return',
     });
-    expect(brief.illustration?.assumption).toMatch(/maturity instructions/i);
+    expect(brief.illustration?.exclusions).toContain('maturity-instructions');
   });
 
   test('bounds TD and introductory illustrations to their published period', () => {
@@ -208,7 +225,7 @@ describe('local negotiation brief', () => {
     expect(tdBrief.illustration).toMatchObject({
       annualDifference: 1000,
       periodDifference: 250,
-      periodLabel: 'at 3 mo maturity',
+      periodLabel: '3 months · at maturity',
       monthlyDifference: null,
     });
 
@@ -217,7 +234,7 @@ describe('local negotiation brief', () => {
     const introBrief = buildNegotiationBrief({ receipt: introReceipt, scenario, sectionRows: [introRow] });
     expect(introBrief.illustration).toMatchObject({
       periodDifference: 250,
-      periodLabel: 'over the published 3 mo period',
+      periodLabel: '3 months · Published period',
       monthlyDifference: null,
     });
   });
@@ -267,7 +284,7 @@ describe('local negotiation brief', () => {
     });
 
     expect(brief.comparables.map((item) => item.productKey)).toEqual([open.product_key]);
-    expect(brief.cohortSummary).toMatch(/^2 comparable/);
+    expect(brief.cohortSummary).toMatch(/^2 rates/);
   });
 
   test('does not call bonus or introductory savings tiers broadly available', () => {
@@ -299,7 +316,7 @@ describe('local negotiation brief', () => {
     });
 
     expect(brief.comparables.map((item) => item.productKey)).toEqual([open.product_key]);
-    expect(brief.cohortSummary).toMatch(/^2 comparable/);
+    expect(brief.cohortSummary).toMatch(/^2 rates/);
   });
 });
 
@@ -312,5 +329,5 @@ test('published label-only eligibility survives descriptive placeholder suppress
   for (const fact of receipt.conditions) { expect(fact.label).toBeTruthy(); expect(fact.value).not.toMatch(/\bnull\b/i); }
   expect(JSON.stringify(eligibility)).toBe(original);
   const explicit = buildRateReceipt({ row: row(), section: 'Mortgage', evidenceDate: '2026-09-15', detail: { constraints: [{ label: 'Zero', value: 0 }, { label: 'False', value: 'false' }] } });
-  expect(explicit.conditions).toEqual([{ label: 'Zero', value: '0' }, { label: 'False', value: 'false' }]);
+  expect(explicit.conditions.map(fact => fact.value)).toEqual(['0', 'No']);
 });

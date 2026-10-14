@@ -1,10 +1,11 @@
+import { uiLabel } from '../lib/uiCopy';
 import Ionicons from './icons/AppIcon';
 import * as Network from 'expo-network';
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { useStore } from '../data/store';
-import { connectivityFromNetworkState, dataUnavailableMessage, type Connectivity } from '../lib/dataUnavailableCopy';
+import { connectivityFromNetworkState, type Connectivity } from '../lib/dataUnavailableCopy';
 import { useTheme } from '../theme/ThemeProvider';
 import { BrandLockup } from './BrandLockup';
 import { Screen } from './Screen';
@@ -54,14 +55,9 @@ export function DataUnavailableScreen() {
       >
         <BrandLockup markSize={32} style={{ marginBottom: 20 }} />
         <Ionicons name="cloud-offline-outline" size={40} color={theme.colors.primary} />
-        <AppText variant="h2" style={{ marginTop: 14, textAlign: 'center' }}>
-          Data unavailable
-        </AppText>
+        <AppText variant="h2" style={{ marginTop: 14, textAlign: 'center' }}>{uiLabel("Data unavailable")}</AppText>
         <AppText variant="small" color="textMuted" style={{ marginTop: 8, textAlign: 'center', lineHeight: 20 }}>
-          {dataUnavailableMessage(connectivity)}
-        </AppText>
-        <AppText variant="tiny" color="textMuted" style={{ marginTop: 10, textAlign: 'center' }}>
-          Technical details are saved on this device for support.
+          {uiLabel(connectivity === 'offline' ? 'Offline' : connectivity === 'online' ? 'Online' : 'Unknown')}
         </AppText>
         <View style={{ marginTop: 22, width: '100%', gap: 10 }}>
           <Button title="Try again" icon="refresh" onPress={() => void retryDataLoad()} loading={busy} disabled={busy} />

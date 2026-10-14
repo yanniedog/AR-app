@@ -1,3 +1,5 @@
+import { uiCount,uiJoin,uiLabel,uiRatesQuery,uiProductName,uiProviderName,type UiCopy } from '../../lib/uiCopy';
+import { humanizeEnum } from '../../data/format';
 import { useReadyNavigationEffect } from '../../hooks/useReadyNavigationEffect';
 import { SheetSurface } from '../SheetSurface';
 import { TouchTarget } from '../TouchTarget';
@@ -61,19 +63,19 @@ function availableSortOptions(
   section: SectionKey,
   mortgageMetric: 'headline' | 'comparison',
   depositMetric: 'base' | 'max',
-): { key: SortKey; label: string }[] {
+): { key: SortKey; label: UiCopy }[] {
   if (section === 'Mortgage') {
     return mortgageMetric === 'comparison'
-      ? [{ key: 'rate', label: 'Comparison rate' }, { key: 'bank', label: 'Bank A-Z' }]
+      ? [{ key: 'rate', label: uiLabel("Comparison rate") }, { key: 'bank', label: uiLabel("Bank A–Z") }]
       : [
-          { key: 'rate', label: 'Advertised rate' },
-          { key: 'comparison', label: 'Comparison rate' },
-          { key: 'bank', label: 'Bank A-Z' },
+          { key: 'rate', label: uiLabel("Advertised rate") },
+          { key: 'comparison', label: uiLabel("Comparison rate") },
+          { key: 'bank', label: uiLabel("Bank A–Z") },
         ];
   }
   return [
     { key: 'rate', label: section === 'TD' ? 'Advertised rate' : depositMetric === 'base' ? 'Ongoing rate' : 'Headline rate' },
-    { key: 'bank', label: 'Bank A-Z' },
+    { key: 'bank', label: uiLabel("Bank A–Z") },
   ];
 }
 
@@ -412,10 +414,10 @@ export default function RatesWorkspace() {
     <SearchProductRow row={item} section={section} onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
       selectMode={selectMode} selected={selected.includes(rowToken(item))} onToggleSelect={toggleSelect} />
   ) : <TouchTarget fill onPress={() => openProduct(item.key)} accessibilityRole="button"
-      accessibilityLabel={item.name ?? item.key} style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-      <AppText variant="body" weight="600">{item.name ?? item.key}</AppText>
-      <AppText variant="small" color="textMuted">{[item.provider, item.productCategory].filter(Boolean).join(' · ')}</AppText>
-      <AppText variant="small" color="textMuted">No listed rate</AppText>
+      accessibilityLabel={uiProductName({product_name:item.name??''})} style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+      <AppText variant="body" weight="600">{uiProductName({product_name:item.name??''})}</AppText>
+      <AppText variant="small" color="textMuted">{uiJoin(uiProviderName({provider:item.provider??''}),' · ',humanizeEnum(item.productCategory??''))}</AppText>
+      <AppText variant="small" color="textMuted">{uiLabel("No listed rate")}</AppText>
     </TouchTarget>, [section, logoReadiness.onLogoRenderStateChange, selectMode, selected, toggleSelect, theme.colors.border]);
   usePerformanceAuditSurface({
     id: 'rates.results',
@@ -479,21 +481,21 @@ export default function RatesWorkspace() {
       <Stack.Screen options={{ title: 'Rates' }} />
       <View style={[screenEdgeStyle(theme), { gap: 8, paddingTop: 8, paddingBottom: 8 }]}>
         <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
-        <SearchBar value={query} onChangeText={setQuery} placeholder="Search rates or banks" />
+        <SearchBar value={uiRatesQuery(task)} onChangeText={setQuery} placeholder="Search rates or banks" />
         <Row gap={8} style={{ flexWrap: 'wrap' }}>
-          <Button title={filterCount ? 'Filter (' + filterCount + ')' : 'Filter'} variant="secondary" onPress={openFilters} style={actionStyle} />
+          <Button title={filterCount ? uiJoin('Filter',' (',uiCount(filterCount),')'):uiLabel("Filter")} variant="secondary" onPress={openFilters} style={actionStyle} />
           <Button title="Sort" variant="secondary" onPress={() => setSortOpen(true)} disabled={availability === 'unlisted'} style={actionStyle} />
-          <Button title={selectMode ? 'Done' : 'Compare'} variant="secondary" onPress={toggleCompareMode} disabled={availability === 'unlisted'} style={actionStyle} />
+          <Button title={uiLabel(selectMode ? 'Done' : 'Compare')} variant="secondary" onPress={toggleCompareMode} disabled={availability === 'unlisted'} style={actionStyle} />
         </Row>
         <Row gap={8}>
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <AppText variant="tiny" color="textMuted">{searchPending ? 'Loading' : resultRows.length + ' results'}{searchSub ? ' · Alert on' : ''}</AppText>
+            <AppText variant="tiny" color="textMuted">{uiJoin(searchPending ? 'Loading':uiJoin(uiCount(resultRows.length),' ','results'),searchSub?uiJoin(' · ','Alert on'):null)}</AppText>
             <AppText variant="tiny" color="textMuted">{sortLabel}</AppText>
           </View>
           <ToolbarIconButton icon="share-outline" onPress={() => setToolsOpen(true)} accessibilityLabel="Search actions" />
         </Row>
-        {path.length ? <Button title={path.join(' · ')} variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
-        {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">Name search</AppText>
+        {path.length ? <Button title="Clear scope" variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
+        {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">{uiLabel("Name search")}</AppText>
           {searchIndexStatus === 'error' ? <Button title="Retry search" variant="ghost" onPress={() => void ensureSearchIndex()} /> : null}</Row> : null}
       </View>
 
@@ -529,8 +531,8 @@ export default function RatesWorkspace() {
           }}
           renderItem={renderProduct}
           ListEmptyComponent={
-            task.intentError ? <EmptyState title={task.intentError} /> : availability === 'unlisted' && !catalogueDetails ? (
-              <View style={{ paddingTop: 16, gap: 12 }}><EmptyState title={detailsLoading ? 'Loading' : 'Catalogue unavailable'} />
+            task.intentError ? <EmptyState title="Scope unavailable" /> : availability === 'unlisted' && !catalogueDetails ? (
+              <View style={{ paddingTop: 16, gap: 12 }}><EmptyState title={uiLabel(detailsLoading ? 'Loading' : 'Catalogue unavailable')} />
                 {!detailsLoading ? <Button title="Retry" onPress={() => void ensureDetails({ forProductView: true, force: true, abandonInFlight: true })} /> : null}</View>
             ) : availability === 'listed' && detailFiltersPending ? (
               <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
@@ -545,7 +547,7 @@ export default function RatesWorkspace() {
                 ) : (
                   <View style={{ gap: theme.spacing(3) }}>
                     <EmptyState
-                      title="Could not prepare rates"
+                      title="Rates unavailable"
                     />
                     <Button
                       title="Retry"
@@ -557,7 +559,7 @@ export default function RatesWorkspace() {
               </View>
             ) : preparedResults.error ? (
               <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
-                <EmptyState title="Could not prepare products"  />
+                <EmptyState title="Products unavailable"  />
                 <Button title="Retry" variant="secondary" onPress={preparedResults.retry} />
               </View>
             ) : searchPending ? (
@@ -603,15 +605,15 @@ export default function RatesWorkspace() {
           (!draft.providers.length || draft.providers.includes(item.provider ?? '')) &&
           (!debouncedQuery.trim() || [item.key, item.name, item.provider, item.productCategory, item.description].filter(Boolean).join(' ').toLocaleLowerCase().includes(debouncedQuery.trim().toLocaleLowerCase()))).length}
       >
-        <View style={{ gap: 8 }}><AppText variant="small" weight="700">Availability</AppText>
-          <SegmentedControl value={draftAvailability} options={[{ value: 'listed', label: 'Listed rate' }, { value: 'unlisted', label: 'No listed rate' }]} onChange={setDraftAvailability} />
+        <View style={{ gap: 8 }}><AppText variant="small" weight="700">{uiLabel("Availability")}</AppText>
+          <SegmentedControl value={draftAvailability} options={[{ value: 'listed', label: uiLabel("Listed rate") }, { value: 'unlisted', label: uiLabel("No listed rate") }]} onChange={setDraftAvailability} />
         </View>
       </FilterSheet>
       <SheetSurface visible={sortOpen} title="Sort" onClose={() => setSortOpen(false)}>
         <ScrollView contentContainerStyle={{ padding: 16, gap: 8 }}>
-          {(section === 'Mortgage' ? [{ label: 'Advertised rate', metric: 'headline' }, { label: 'Comparison rate', metric: 'comparison' }]
-            : section === 'Savings' ? [{ label: 'Ongoing rate', metric: 'base' }, { label: 'Headline rate', metric: 'max' }]
-            : [{ label: 'Advertised rate', metric: 'base' }]).map(option => <Button key={option.metric} title={option.label} variant="ghost" onPress={() => {
+          {(section === 'Mortgage' ? [{ label: uiLabel("Advertised rate"), metric: 'headline' }, { label: uiLabel("Comparison rate"), metric: 'comparison' }]
+            : section === 'Savings' ? [{ label: uiLabel("Ongoing rate"), metric: 'base' }, { label: uiLabel("Headline rate"), metric: 'max' }]
+            : [{ label: uiLabel("Advertised rate"), metric: 'base' }] as const).map(option => <Button key={option.metric} title={option.label} variant="ghost" onPress={() => {
               if (section === 'Mortgage') setPref('mortgageRateMetric', option.metric as 'headline' | 'comparison');
               else if (section === 'Savings') setPref('depositRankMetric', option.metric as 'base' | 'max');
               setSortKey('rate'); setSortOpen(false);
@@ -623,7 +625,7 @@ export default function RatesWorkspace() {
         <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: theme.spacing(4) }}>
           <Button
             icon={searchSub ? 'notifications' : 'notifications-outline'}
-            title={searchSub ? 'Alert off' : 'Alert on'}
+            title={uiLabel(searchSub ? 'Alert off' : 'Alert on')}
             disabled={availability === 'unlisted'}
             variant="ghost"
             onPress={() => void onToggleSearchAlert()}
@@ -645,7 +647,7 @@ function CompareFab({
   onPress: () => void;
 }) {
   const theme = useTheme();
-  const label = `Compare ${count} rate${count === 1 ? '' : 's'}`;
+  const label=uiJoin('Compare',' ',uiCount(count));
   const isAndroid = Platform.OS === 'android';
   const edge = theme.spacing(4);
   const bottom = theme.spacing(6) + bottomInset;
@@ -675,7 +677,7 @@ function CompareFab({
     >
       <Ionicons name="git-compare" size={isAndroid ? 24 : 18} color={theme.colors.onPrimary} />
       <AppText variant="body" weight="800" style={{ color: theme.colors.onPrimary }}>
-        {isAndroid ? `Compare ${count}` : label}
+        {label}
       </AppText>
     </TouchTarget>
   );

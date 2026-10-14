@@ -1,3 +1,4 @@
+import { uiLabel } from '../../lib/uiCopy';
 import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Alert, Platform, Pressable, ScrollView, View } from 'react-native';
 
@@ -21,6 +22,7 @@ import {
 import { IDLE_APK_DOWNLOAD } from '../../lib/appUpdateDownloadLogic';
 import { getPerformanceAuditState, subscribePerformanceAudit } from '../../lib/performanceAudit';
 import { DisclosureGroup, InfoRow, Section, SettingsGap, ToggleRow } from './settingsUi';
+import { uiJoin, uiIdentifier, uiNumber, type UiCopy } from '../../lib/uiCopy';
 
 export interface AppUpdateSurfaceStatus {
   terminal: boolean;
@@ -114,7 +116,7 @@ export function AppUpdateSection({
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
-      Alert.alert('Update failed', message);
+      Alert.alert('Update failed');
     } finally {
       setUpgrading(false);
     }
@@ -130,35 +132,35 @@ export function AppUpdateSection({
   const phase = forThisBuild ? download.phase : 'idle';
   const downloadPct = forThisBuild ? getApkDownloadPercent(download) : null;
   const latestLabel = remote
-    ? `${remote.version} (${remote.build_number})`
+    ? uiJoin(uiIdentifier(remote.version), ' (', uiIdentifier(String(remote.build_number)), ')')
     : isCurrent
-      ? `${installed.version} (${installed.buildNumber})`
+      ? uiJoin(uiIdentifier(installed.version), ' (', uiIdentifier(String(installed.buildNumber)), ')')
       : '—';
-  const statusValue = auditOwnsNetwork
-    ? 'Not checked during app audit'
+  const statusValue: UiCopy = auditOwnsNetwork
+    ? 'Audit'
     : updateAvailable
       ? phase === 'ready'
-      ? `Verified and ready to install · ${latestLabel}`
+      ? 'Ready'
       : phase === 'verifying'
-        ? `Verifying download · ${latestLabel}`
+        ? 'Verifying'
         : phase === 'retrying'
-          ? `Recovering download · ${latestLabel}`
+          ? 'Retry'
           : phase === 'waiting'
-            ? `Waiting for Wi-Fi · ${latestLabel}`
+            ? 'Waiting for Wi-Fi'
           : phase === 'cancelled'
-            ? `Download cancelled · ${latestLabel}`
+            ? 'Cancelled'
       : phase === 'downloading'
-        ? `Downloading in background · ${latestLabel}`
-        : `Update available · ${latestLabel}`
+        ? 'Downloading'
+        : 'Update available'
     : isCurrent
-      ? `Up to date · ${installed.version} (${installed.buildNumber})`
+      ? 'Up to date'
       : isIncompatible
-        ? `Update unavailable on this device · ${installed.version} (${installed.buildNumber})`
+        ? 'Incompatible device'
         : checking || (!checkResult && !error)
-        ? 'Checking…'
+        ? 'Checking'
         : error
           ? 'Check failed'
-          : `${installed.version} (${installed.buildNumber})`;
+          : uiJoin(uiIdentifier(installed.version), ' (', uiIdentifier(String(installed.buildNumber)), ')');
 
   const upgradeTitle =
     phase === 'downloading' || phase === 'retrying' || phase === 'verifying'
@@ -176,8 +178,8 @@ export function AppUpdateSection({
       return;
     }
     Alert.alert(
-      'Download app update?',
-      `Version ${remote.version} will download a verified APK from GitHub${wifiOnly ? ' when Wi-Fi is available' : ' using the current network'}. Android will ask again before installation.`,
+      'Download update',
+      uiJoin('Version', ': ', uiIdentifier(remote.version), ' · ', 'Verified APK', ' · ', 'GitHub', ' · ', wifiOnly ? 'Wi-Fi only' : 'Current network', ' · ', 'Android installation permission'),
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Download', onPress: () => void performUpgrade() },
@@ -207,9 +209,6 @@ export function AppUpdateSection({
     return (
       <Section title="App update">
         <InfoRow label="Status" value="Managed by Google Play" />
-        <AppText variant="small" color="textMuted">
-          This store build receives verified updates through Google Play. In-app APK downloads are disabled.
-        </AppText>
       </Section>
     );
   }
@@ -219,7 +218,6 @@ export function AppUpdateSection({
       <ToggleRow
         icon="cloud-download-outline"
         label="Download app updates automatically"
-        sub="Optional standing consent after automatic checks; verified APKs only"
         value={autoDownload}
         onChange={(value) => setPref('apkUpdatesAutoDownload', value)}
       />
@@ -227,40 +225,29 @@ export function AppUpdateSection({
       <ToggleRow
         icon="wifi-outline"
         label="Download APKs on Wi-Fi only"
-        sub="Recommended for large app updates; rate-data refresh settings are separate"
         value={wifiOnly}
         onChange={(value) => setPref('apkUpdatesWifiOnly', value)}
       />
       <SettingsGap size={8} />
       <InfoRow label="Status" value={statusValue} />
+      <InfoRow label="Version" value={latestLabel} />
+      <InfoRow label="Source" value="GitHub" />
+      <InfoRow label="APK" value="Verified" />
+      <InfoRow label="Consent" value="Optional" />
+      <InfoRow label="Install" value="Android installation permission" />
       {downloadPct !== null && phase === 'downloading' ? (
-        <InfoRow label="Download" value={`${downloadPct}%`} />
+        <InfoRow label="Download" value={uiJoin(uiNumber(downloadPct), '%')} />
       ) : null}
       {error || (phase === 'error' && download.error) ? (
-        <AppText variant="tiny" color="danger" style={{ marginTop: 4 }}>
-          {error ?? download.error}
-        </AppText>
+        <AppText variant="tiny" color="danger" style={{ marginTop: 4 }}>{uiLabel("Update failed")}</AppText>
       ) : null}
       {isIncompatible ? (
-        <AppText variant="tiny" color="warning" style={{ marginTop: 4, lineHeight: 16 }}>
-          {checkResult.message}
-        </AppText>
-      ) : null}
-      {updateAvailable ? (
-        <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
-          {autoDownload
-            ? wifiOnly
-              ? 'Standing consent is on, so the verified APK downloads automatically when Wi-Fi is available.'
-              : 'Standing consent is on, so the verified APK may download automatically using Wi-Fi or mobile data.'
-            : 'Automatic checks stay on. The APK downloads only after you approve this update.'}
-          {' '}When it is ready, Install opens any one-time Android permission and resumes automatically when you return.
-        </AppText>
+        <AppText variant="tiny" color="warning" style={{ marginTop: 4, lineHeight: 16 }}>{uiLabel("Incompatible device")}</AppText>
       ) : null}
 
       {updateAvailable ? (
         <DisclosureGroup
           title="What's new"
-          summary={changelogs[0] ? changelogs[0].version : latestLabel}
           defaultOpen
         >
           {changelogs.length ? (
@@ -311,18 +298,8 @@ export function UpdateChangelogList({
       {entries.map((entry) => (
         <View key={entry.version} style={{ marginBottom: 8 }}>
           <AppText variant="small" weight="700">
-            {entry.version}
+            {uiIdentifier(entry.version)}
           </AppText>
-          {entry.summaryBullets.map((bullet, idx) => (
-            <AppText
-              key={`${entry.version}-${idx}`}
-              variant="tiny"
-              color="textFaint"
-              style={{ marginLeft: 8 }}
-            >
-              • {bullet}
-            </AppText>
-          ))}
           <Pressable
             onPress={() => requestExternalUrl({
               url: entry.releaseUrl,
@@ -330,11 +307,9 @@ export function UpdateChangelogList({
               label: `Australian Rates ${entry.version} changelog`,
             })}
             accessibilityRole="link"
-            accessibilityLabel={`Full changelog for version ${entry.version}`}
+            accessibilityLabel={uiJoin('Changelog', ' ', uiIdentifier(entry.version))}
           >
-            <AppText variant="tiny" color="primary" style={{ marginTop: 4 }}>
-              Full changelog
-            </AppText>
+            <AppText variant="tiny" color="primary" style={{ marginTop: 4 }}>{uiLabel("Full changelog")}</AppText>
           </Pressable>
         </View>
       ))}
@@ -345,9 +320,7 @@ export function UpdateChangelogList({
 
   return (
     <View style={{ marginTop: 10, maxHeight: 220 }}>
-      <AppText variant="tiny" weight="700" color="textFaint" style={{ marginBottom: 6, letterSpacing: 0.6 }}>
-        WHAT&apos;S NEW
-      </AppText>
+      <AppText variant="tiny" weight="700" color="textFaint" style={{ marginBottom: 6, letterSpacing: 0.6 }}>{uiLabel("Changelog")}</AppText>
       {list}
     </View>
   );

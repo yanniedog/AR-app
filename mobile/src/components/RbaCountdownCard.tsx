@@ -4,8 +4,6 @@ import { Pressable, View } from 'react-native';
 
 import { AppText, Card, Divider, Row } from './ui';
 import {
-  decisionLine,
-  formatRbaDate,
   rbaCalendarCoverage,
   rbaCountdown,
   recentDecisions,
@@ -13,6 +11,8 @@ import {
 import { useStore } from '../data/store';
 import { withAlpha } from '../theme/colors';
 import { useTheme } from '../theme/ThemeProvider';
+import { uiDate, uiDuration, uiJoin, uiLabel } from '../lib/uiCopy';
+import { uiChartBps, uiChartPercent } from '../lib/chartUiCopy';
 
 /** Countdown to the next RBA cash-rate decision; tap to reveal recent decisions
  * when expandable. Renders nothing until the rba-calendar asset has synced. */
@@ -31,22 +31,9 @@ export function RbaCountdownCard({ expandable = true }: { expandable?: boolean }
   }, [ensureRbaCalendar, unresolved]);
   if (!countdown && !unresolved) return null;
   const days = countdown?.calendarDays ?? 0;
-  const when = unresolved
-    ? 'today'
-    : days <= 0
-      ? 'today'
-      : days === 1
-        ? 'tomorrow'
-        : `in ${days} days`;
   const meetingDate = unresolved?.date ?? countdown!.meeting.date;
-  const meetingYear = meetingDate.slice(0, 4);
-  const hero = unresolved
-    ? 'Today'
-    : days <= 0
-      ? 'Today'
-      : days === 1
-        ? 'Tomorrow'
-        : `${days} days`;
+  const hero = unresolved ? uiLabel('Awaiting result') : days <= 0 ? uiLabel('Today')
+    : days === 1 ? uiLabel('Tomorrow') : uiDuration(days, 'days');
   const recent = recentDecisions(calendar, 4);
   const showDisclosure = expandable && recent.length > 0;
 
@@ -71,7 +58,7 @@ export function RbaCountdownCard({ expandable = true }: { expandable?: boolean }
             weight="800"
             style={{ color: theme.colors.rba, letterSpacing: 0.7, flexShrink: 1 }}
           >
-            {unresolved ? 'RBA DECISION TODAY' : 'NEXT RBA DECISION'}
+            {uiJoin('RBA', ' · ', 'Next decision')}
           </AppText>
         </Row>
         {showDisclosure ? (
@@ -89,10 +76,7 @@ export function RbaCountdownCard({ expandable = true }: { expandable?: boolean }
         {hero}
       </AppText>
       <AppText variant="body" weight="700" style={{ marginTop: theme.spacing(1) }}>
-        {formatRbaDate(meetingDate)} {meetingYear}
-      </AppText>
-      <AppText variant="small" color="textMuted" style={{ marginTop: theme.spacing(1) }}>
-        {`Scheduled announcement · ${when}`}
+        {uiDate(meetingDate)}
       </AppText>
     </View>
   );
@@ -101,11 +85,7 @@ export function RbaCountdownCard({ expandable = true }: { expandable?: boolean }
     <Card
       variant="outlined"
       accessible={!showDisclosure}
-      accessibilityLabel={
-        unresolved
-          ? `RBA decision today, ${formatRbaDate(meetingDate)} ${meetingYear}.`
-          : `Next RBA decision ${hero}, ${formatRbaDate(meetingDate)} ${meetingYear}.`
-      }
+      accessibilityLabel={uiJoin('RBA', ' · ', 'Next decision', ' · ', hero, ' · ', uiDate(meetingDate))}
       style={{
         padding: theme.spacing(5),
         borderWidth: 2,
@@ -118,7 +98,7 @@ export function RbaCountdownCard({ expandable = true }: { expandable?: boolean }
           onPress={() => setExpanded((value) => !value)}
           accessibilityRole="button"
           accessibilityState={{ expanded }}
-          accessibilityHint={expanded ? 'Hide recent RBA decisions' : 'Show recent RBA decisions'}
+          accessibilityLabel={uiJoin('RBA', ' · ', 'Decisions')}
         >
           {header}
         </Pressable>
@@ -134,10 +114,10 @@ export function RbaCountdownCard({ expandable = true }: { expandable?: boolean }
               style={{ justifyContent: 'space-between', marginTop: theme.spacing(2) }}
             >
               <AppText variant="small" color="textMuted">
-                {formatRbaDate(decision.date)}
+                {uiDate(decision.date)}
               </AppText>
               <AppText variant="small" weight="600">
-                {decisionLine(decision)}
+                {uiJoin(decision.outcome === 'hold' ? uiLabel('Held') : uiChartBps(decision.delta_bps), ' · ', uiChartPercent(decision.rate))}
               </AppText>
             </Row>
           ))}

@@ -8,11 +8,12 @@ import { useTheme } from '../theme/ThemeProvider';
 import { SheetSurface } from './SheetSurface';
 import { TouchTarget } from './TouchTarget';
 import { AppText } from './ui';
+import type { UiChild } from '../lib/uiCopy';
 import { LedgerIcon } from './icons/LedgerIcon';
 
 interface NavigationMenuContextValue { open: boolean; show: () => void; hide: () => void }
 const NavigationMenuContext = createContext<NavigationMenuContextValue | null>(null);
-export function NavigationMenuProvider({ children }: { children: React.ReactNode }) {
+export function NavigationMenuProvider({ children }: { children: UiChild }) {
   const [open, setOpen] = useState(false);
   const value = useMemo(() => ({ open, show: () => setOpen(true), hide: () => setOpen(false) }), [open]);
   return <NavigationMenuContext.Provider value={value}>{children}</NavigationMenuContext.Provider>;
@@ -41,7 +42,7 @@ export function AppNavigationMenu() {
     <ScrollView contentContainerStyle={{ padding: 16, gap: 4 }}>
       {APP_DESTINATION_GROUPS.flatMap(group => group.destinations).map(destination => {
         const selected = destinationIsActive(destination.id, pathname);
-        return <TouchTarget key={destination.id} onPress={() => openDestination(destination)}
+        return <TouchTarget fill key={destination.id} onPress={() => openDestination(destination)}
           accessibilityRole="button" accessibilityLabel={destination.label} accessibilityState={{ selected }}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 16, padding: 12,
             borderRadius: theme.radius.md, backgroundColor: selected ? theme.colors.primaryMuted : 'transparent' }}>

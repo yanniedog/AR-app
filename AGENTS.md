@@ -14,7 +14,7 @@ This repo owns only the installable Expo app and app-release automation.
 - Explanatory application prose is prohibited everywhere, including helper/description/subtitle text, tooltips, native dialogs, accessibility hints and dynamically supplied marketing text. Keep concise headings, explicit actions/field labels and necessary financial/status facts. Do not move prose into a collapsed panel or rename its prop.
 - Preserve rate metrics, eligibility, conditions, fees, assumptions, dates and unknown/unverified states as structured facts. Required legal/licence documents have a narrow document boundary, not a general help/diagnostics exemption.
 - Core tasks must be discoverable without instructions: direct results, stable Rates/Saved/Market navigation, contextual actions and preserved input/filter/scroll state. No mandatory onboarding or directory gates.
-- New UI changes comply immediately; phase 4 completes the legacy copy migration and enables the zero-violation CI guard. Do not grandfather explanatory prose into that guard.
+- `cd mobile && npm run check:ui-copy` must report zero violations; the canonical `npm run ci` includes this guard. Follow [the copy contract](docs/UI_COPY_CONTRACT.md). No grandfather baseline, route exemption, arbitrary string branding or renamed help prop.
 
 ## Global ship bar (canonical)
 
