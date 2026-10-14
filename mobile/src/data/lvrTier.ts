@@ -16,8 +16,10 @@ export function lvrTierLabel(value: string): string | null {
   if (!v || v.includes('unspec') || v === 'na' || v === 'n/a') return 'LVR unspecified';
   let m = /^(?:=|<=|≤)?(\d+(?:\.\d+)?)$/.exec(v);
   if (m) return `LVR ≤${m[1]}%`;
-  m = /^(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/.exec(v);
-  if (m) return `LVR ${m[1]}–${m[2]}%`;
+  m = /^(>=|>)?(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/.exec(v);
+  if (m) return `LVR ${m[1] === '>=' ? '≥' : m[1] === '>' ? '>' : ''}${m[2]}–${m[3]}%`;
+  m = /^>=(\d+(?:\.\d+)?)$/.exec(v);
+  if (m) return `LVR ≥${m[1]}%`;
   m = /^(?:>|gt)(\d+(?:\.\d+)?)$|^(\d+(?:\.\d+)?)\+$/.exec(v);
   if (m) return `LVR over ${m[1] ?? m[2]}%`;
   return null;
