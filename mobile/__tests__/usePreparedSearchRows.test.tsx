@@ -8,14 +8,18 @@ import type { SearchIndexPayload } from '../src/data/detailSearch';
 import sample from '../assets/sample/core.json';
 
 const mockPrepare = jest.fn();
-const mockJobs: { run: () => void; cancelled: boolean }[] = [];
+const mockJobs: { run: () => void; cancelled: boolean; navigation: boolean }[] = [];
 jest.mock('../src/data/selectors', () => ({
   ...jest.requireActual('../src/data/selectors'),
   prepareSearchRows: (...args: unknown[]) => mockPrepare(...args),
 }));
 jest.mock('../src/lib/yieldToUi', () => ({
   scheduleAfterNavigation: (run: () => void) => {
-    const job = { run, cancelled: false }; mockJobs.push(job);
+    const job = { run, cancelled: false, navigation: true }; mockJobs.push(job);
+    return () => { job.cancelled = true; };
+  },
+  scheduleAfterInteractions: (run: () => void) => {
+    const job = { run, cancelled: false, navigation: false }; mockJobs.push(job);
     return () => { job.cancelled = true; };
   },
 }));
@@ -45,10 +49,15 @@ test('large results stay pending until the full active request completes', async
     act(() => mockJobs[0].run());
     await act(async () => { job.resolve(rows); await job.promise; });
     expect(latest.ready).toBe(true); expect(latest.rows).toBe(rows);
+    expect(mockJobs[0].navigation).toBe(true);
+    act(() => tree.update(<Probe sort="bank" />));
+    expect(mockJobs[1].navigation).toBe(false);
+    await act(async () => { mockJobs[1].run(); });
     act(() => tree.update(<Probe focused={false} />));
     act(() => tree.update(<Probe />));
-    expect(mockJobs).toHaveLength(1);
-    expect(mockPrepare).toHaveBeenCalledTimes(1);
+    expect(mockJobs[2].navigation).toBe(true);
+    expect(latest.ready).toBe(false);
+    await act(async () => { mockJobs[2].run(); });
     expect(latest.rows).toBe(rows);
   } finally { act(() => tree.unmount()); }
 });

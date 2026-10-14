@@ -51,6 +51,7 @@ import { yieldToUi } from '../../src/lib/yieldToUi';
 import { isPerformanceAuditActive } from '../../src/lib/performanceAudit';
 import {
   isCurrentHistoryGraphicEvidence,
+  isMeasuredEmptyHistoryGraphic,
   type HistoryGraphicEvidence,
 } from '../../src/lib/historyGraphicEvidence';
 import type { RateRow, SectionKey } from '../../src/types';
@@ -563,11 +564,13 @@ export default function BankDetail() {
           ? 'ready'
           : !currentHistoryGraphicEvidence
             ? 'pending'
-            : currentHistoryGraphicEvidence.availability === 'rendered'
+            : currentHistoryGraphicEvidence.availability === 'rendered' ||
+              isMeasuredEmptyHistoryGraphic(currentHistoryGraphicEvidence)
               ? 'ready'
               : 'error',
         error: rateHistory.failed ? 'Historical rates could not be prepared'
-          : currentHistoryGraphicEvidence?.availability === 'unavailable'
+          : currentHistoryGraphicEvidence?.availability === 'unavailable' &&
+            !isMeasuredEmptyHistoryGraphic(currentHistoryGraphicEvidence)
           ? 'Lender history has no finite values to plot'
           : null,
         expectedCount: currentHistoryGraphicEvidence?.expectedCount ?? 0,
