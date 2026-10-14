@@ -18,7 +18,7 @@ export default function Calculate() {
       <Stack.Screen options={{ title: 'Calculate' }} />
       <View style={{ paddingHorizontal: 16 }}>
         <SegmentedControl
-          options={[{ label: 'Compare rates', value: 'check' }, { label: 'Projection', value: 'project' }]}
+          options={[{ label: 'Rate check', value: 'check' }, { label: 'Projection', value: 'project' }]}
           value={mode}
           onChange={(next) => router.setParams({ mode: next })}
         />
