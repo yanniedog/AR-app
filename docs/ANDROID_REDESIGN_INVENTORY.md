@@ -1,7 +1,7 @@
 # Android redesign: route, capability, state and copy inventory
 
 Recorded 14 October 2026 against `79f274b583ecb76daa9573c744ecfdb93c84750c`.
-This is the Phase 1 inventory. Target behavior below is a contract for later phases,
+This is the Phase 1 inventory for the [Android redesign contract](ANDROID_REDESIGN_CONTRACT.md). Target behavior below is a contract for later phases,
 not a claim that the app has changed or that native acceptance has passed.
 
 ## Scope and classification

@@ -48,6 +48,8 @@ These are project prototype targets, not measurements of competitor timings. Hap
 
 ## Six PRs and verification
 
+The [route, capability, state and copy inventory](ANDROID_REDESIGN_INVENTORY.md) records the baseline, migration decisions and unmeasured evidence gaps.
+
 1. Inventory, capability migration, baseline friction ledger and contracts.
 2. Native pilot: results, product, filter and shared interaction/design components.
 3. Three-tab map, direct results, legacy adapters, state restoration and genuine audit-surface migration.
