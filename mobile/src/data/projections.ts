@@ -529,7 +529,7 @@ export function buildLifecycleProjection(
       'Offset money reduces the balance charged interest but is not treated as a loan repayment.',
     );
     if (fixedRate) {
-      assumptions.push(`The projection stops after ${months} month${months === 1 ? '' : 's'}, when the entered fixed period ends; no unknown reversion rate is invented.`);
+      assumptions.push(`Projection boundary: ${months} months; entered fixed period`, 'Reversion rate: unknown; excluded');
     }
 
     const anchor = historyAnchor(inputs, today);

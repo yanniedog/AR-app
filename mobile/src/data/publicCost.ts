@@ -87,8 +87,8 @@ function prepare(resolution: RateResolution, scenario: PublicCostScenario, resul
   if (resolution.status !== 'exact' || resolution.payableRate === undefined) throw new Error('exact_payable_rate_required');
   if (!Number.isFinite(Date.parse(scenario.asOf))) throw new Error('invalid_as_of');
   if (scenario.rateBehaviour === 'variable' && !scenario.holdCurrentRate) throw new Error('variable_rate_assumption_required');
-  if (scenario.rateBehaviour === 'variable') result.assumptions.push('Variable and reference rates are held at the selected levels; published phases still apply.');
-  if (resolution.origin === 'user_entered' || resolution.origin === 'locally_calculated') result.assumptions.push('The current rate is a local numerical assumption.');
+  if (scenario.rateBehaviour === 'variable') result.assumptions.push('Variable/reference rates: held at selected levels', 'Published rate phases: applied');
+  if (resolution.origin === 'user_entered' || resolution.origin === 'locally_calculated') result.assumptions.push('Current rate: local numerical input');
   const fees = resolveFees(scenario);
   result.reasonCodes.push(...fees.reasons); result.evidenceIds.push(...fees.evidenceIds);
   result.completeness = resolution.freshness.state !== 'current' && resolution.origin !== 'user_entered' ? 'stale' : fees.complete ? 'complete' : 'partial';
@@ -106,7 +106,7 @@ function mortgage(resolution: RateResolution, scenario: Extract<PublicCostScenar
   let interestTotal = PUBLIC_ZERO, feeTotal = PUBLIC_ZERO, cashbackTotal = PUBLIC_ZERO, principalTotal = PUBLIC_ZERO;
   let previousRate = '', scheduledPayment = PUBLIC_ZERO;
   const limit = Math.min(result.requestedMonths, scenario.remainingTermMonths);
-  result.assumptions.push('Monthly nominal accrual and month-end repayments; rounded to cents monthly. Offset balance stays constant unless fees draw from it.');
+  result.assumptions.push('Accrual: monthly nominal', 'Repayments: month end', 'Rounding: cents each month', 'Offset: constant, less offset-funded fees');
   for (let month = 0; month < limit; month += 1) {
     let monthlyFees = PUBLIC_ZERO, monthlyCashback = PUBLIC_ZERO, nextBalance = balance, nextOffset = offset, financed = PUBLIC_ZERO;
     for (const fee of fees.applicable.filter(fee => due(fee, month))) {
@@ -135,7 +135,7 @@ function mortgage(resolution: RateResolution, scenario: Extract<PublicCostScenar
         const updatedScenario = { ...scenario, rateScenario: scope };
         if (phaseRate(adjusted, updatedScenario, month, nextBalance).compare(phaseRate(resolution, scenario, month, balance)) !== 0) throw new Error('financed_fees_change_payable_rate');
         pricing = adjusted; pricingScenario = updatedScenario;
-        result.assumptions.push('Financed upfront fees are included in the loan amount and LVR before validating the selected pricing programme.');
+        result.assumptions.push('Financed upfront fees: included in principal and LVR', 'Pricing eligibility: revalidated after financing');
       } else if (financed.compare(PUBLIC_ZERO) > 0 && ['published', 'publicly_calculated'].includes(resolution.origin)) {
         result.reasonCodes.push('financed_fee_scope_unknown'); result.completeness = result.completeness === 'stale' ? 'stale' : 'partial';
       }
@@ -184,17 +184,27 @@ function deposit(resolution: RateResolution, scenario: Extract<PublicCostScenari
   let balance = money(scenario.section === 'Savings' ? scenario.startingBalance : scenario.deposit);
   const contribution = money(scenario.section === 'Savings' ? scenario.monthlyContribution ?? '0' : '0');
   const withdrawal = money(scenario.section === 'Savings' ? scenario.monthlyWithdrawal ?? '0' : '0');
+  if (scenario.section === 'Savings') {
+    const fields = new Set(resolution.conditions.met.map(condition => condition.field));
+    const claimedDeposits = scenario.rateScenario?.monthlyDeposit;
+    const claimedWithdrawals = scenario.rateScenario?.withdrawals;
+    if (fields.has('monthlyDeposit') && typeof claimedDeposits === 'string' && money(claimedDeposits).compare(contribution) > 0
+      || fields.has('withdrawals') && typeof claimedWithdrawals === 'string' && money(claimedWithdrawals).compare(PUBLIC_ZERO) === 0 && withdrawal.compare(PUBLIC_ZERO) > 0) {
+      result.assumptions.push('Savings qualification: conflicts with projected cash flows', 'Qualifying deposits/withdrawal counts: explicit inputs');
+      throw new Error('qualification_cashflow_conflict');
+    }
+  }
   let interestTotal = PUBLIC_ZERO, accrued = PUBLIC_ZERO, feeTotal = PUBLIC_ZERO, cashbackTotal = PUBLIC_ZERO;
   const limit = scenario.section === 'TD' ? Math.min(result.requestedMonths, scenario.quotedTermMonths!) : result.requestedMonths;
   if (scenario.section === 'TD' && result.requestedMonths > scenario.quotedTermMonths!) { result.completeness = 'partial'; result.reasonCodes.push('renewal_rate_unknown'); }
-  result.assumptions.push(scenario.interestBasis === 'actual_365' ? 'Interest uses actual calendar days divided by 365; balance changes occur at month boundaries.' : 'Monthly nominal interest; contributions and withdrawals occur at month boundaries.');
-  if (scenario.section === 'TD') result.assumptions.push('Calculation stops at quoted maturity. Future renewal pricing is absent.');
+  result.assumptions.push(scenario.interestBasis === 'actual_365' ? 'Interest basis: actual days/365' : 'Interest basis: monthly nominal', 'Cash flows: month boundaries');
+  if (scenario.section === 'TD') result.assumptions.push('Projection end: quoted maturity', 'Renewal rate: unavailable');
   if (scenario.section === 'TD') {
-    result.assumptions.push('Quoted term-deposit principal stays fixed; periodic interest is paid outside the deposit.');
+    result.assumptions.push('Term-deposit principal: fixed', 'Periodic interest: paid outside deposit');
     if (scenario.reinvestPaidInterest === true && frequency > 0 && frequency < limit) {
       result.completeness = result.completeness === 'stale' ? 'stale' : 'partial';
       result.reasonCodes.push('reinvestment_return_unknown');
-      result.assumptions.push('Returns from reinvesting periodic interest require a separate local rate assumption and are excluded.');
+      result.assumptions.push('Reinvestment return: excluded; local rate missing');
     }
   }
   for (let month = 0; month < limit; month += 1) {
@@ -250,7 +260,7 @@ function dayTermDeposit(resolution: RateResolution, scenario: Extract<PublicCost
   const opening = anniversary(0), limit = Math.min(days, requested);
   let balance = money(scenario.deposit), earned = PUBLIC_ZERO, accrued = PUBLIC_ZERO, feeTotal = PUBLIC_ZERO, cashback = PUBLIC_ZERO, month = 0;
   if (requested > days) { result.completeness = 'partial'; result.reasonCodes.push('renewal_rate_unknown'); }
-  result.assumptions.push('Actual calendar days divided by 365; quoted day maturity ends the calculation. Charges are paid outside the fixed deposit principal.');
+  result.assumptions.push('Interest basis: actual days/365', 'Projection end: quoted day maturity', 'Charges: paid outside fixed deposit principal');
   for (let day = 0; day < limit; day += 1) {
     const date = opening + day * 86400000;
     while (date >= anniversary(month + 1)) month += 1;
@@ -266,7 +276,7 @@ function dayTermDeposit(resolution: RateResolution, scenario: Extract<PublicCost
       if (scenario.reinvestPaidInterest && day + 1 < limit && !result.reasonCodes.includes('reinvestment_return_unknown')) {
         result.completeness = result.completeness === 'stale' ? 'stale' : 'partial';
         result.reasonCodes.push('reinvestment_return_unknown');
-        result.assumptions.push('Periodic term-deposit interest is paid outside the locked principal; returns from reinvesting it require a separate local rate assumption and are excluded.');
+        result.assumptions.push('Periodic interest: paid outside deposit', 'Reinvestment return: excluded; local rate missing');
       }
     }
     result.projectedDays = day + 1; result.projectedMonths = month;

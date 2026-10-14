@@ -70,7 +70,7 @@ export function scenarioPublicCost({ section, scenario, row, programme, rateScen
       }
       if (scenario.mortgageSwitch.cashback.trim()) fees.push({ feeId: 'local-switch:cashback', kind: 'cashback', amount: clean(scenario.mortgageSwitch.cashback),
         atMonth: 0, conditions: [], evidenceIds: [], origin: 'user', funding: 'cash' });
-      assumptions.push('Entered switching-fee buckets and cashback are local assumptions. Unspecified costs remain unknown.');
+      assumptions.push('Switching fees/cashback: local assumptions', 'Unspecified costs: unknown');
       base.feesKnown = false;
     }
     const offsetSupported = scenario.mortgageSwitch.targetOffsetAvailable === 'no' ? false
@@ -92,7 +92,7 @@ export function scenarioPublicCost({ section, scenario, row, programme, rateScen
   if (interestPayment === 'daily') return { reasonCodes: ['interest_payment_frequency_unsupported'], assumptions };
   const dayTerm = programme?.metadata?.quotedTerm?.unit === 'day' ? Number(programme.metadata.quotedTerm.value)
     : row.term && /^P\d+D$/.test(row.term) ? Number(row.term.slice(1, -1)) : undefined;
-  assumptions.push('The quoted term-deposit principal stays fixed until maturity. External reinvestment and renewal returns require separate local rate assumptions.');
+  assumptions.push('Quoted principal: fixed until maturity', 'Reinvestment/renewal rates: separate local assumptions');
   return { scenario: { ...base, section: 'TD', deposit: clean(scenario.termDeposit.balance),
     ...(dayTerm ? { quotedTermDays: dayTerm } : { quotedTermMonths: programme?.metadata?.quotedTerm?.unit === 'month'
       ? Number(programme.metadata.quotedTerm.value) : advertisedTermMonths(row) ?? Number(inputs.termMonths) }),

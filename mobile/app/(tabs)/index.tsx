@@ -101,7 +101,7 @@ export default function Home() {
 
       {bestByType.length ? (
         <LedgerSection title="Published rates for your profile">
-          <LedgerText tone="mutedInk">Resolved products matched to your profile, ordered by your selected rate metric. Comparison rates remain separate from payable interest.</LedgerText>
+          <LedgerText tone="mutedInk">Scope: resolved profile matches · Order: selected rate metric · Comparison rate: separate</LedgerText>
           {bestByType.map(({ section, row }) => (
             <ProductCard
               key={`best:${section}`}

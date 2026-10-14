@@ -814,7 +814,7 @@ export default function Projections() {
         </>
       )}
       {section !== 'TD' && (section === 'Savings' || projectionInputs.mortgageRateStructure === 'variable') ? <CompactToggle
-        label="Assume variable/reference rates stay unchanged for this scenario" value={projectionInputs.holdVariableRate}
+        label="Variable/reference rates: unchanged assumption" value={projectionInputs.holdVariableRate}
         onChange={holdVariableRate => { if (inputsEditable) updateProjection({ holdVariableRate }); }} /> : null}
       {scenario.currentProducts[projectionKey].productKey ? <PublicRateEvidence productKey={scenario.currentProducts[projectionKey].productKey} programmeId={scenario.currentProducts[projectionKey].programmeId} compact /> : null}
       {targetRow ? <><PublicRateEvidence productKey={targetRow.product_key} row={targetRow} /><PublicCostComparison section={section} target={targetRow} scenario={calculationScenario} /></> : null}
@@ -885,9 +885,9 @@ export default function Projections() {
       ) : (
         <>
           <NumericField label="Rollovers after first maturity" value={projectionInputs.rollovers} onChangeText={(rollovers) => updateProjection({ rollovers })} placeholder="0" editable={inputsEditable} error={errors.rollovers} />
-          <NumericField label="Local renewal rate (%)" value={projectionInputs.renewalRate} onChangeText={renewalRate => updateProjection({ renewalRate })} placeholder="Unknown until entered" editable={inputsEditable} />
-          <CompactToggle label="Reuse the quoted rate for renewals as a local assumption" value={projectionInputs.holdVariableRate} onChange={holdVariableRate => { if (inputsEditable) updateProjection({ holdVariableRate }); }} />
-          <AppText variant="tiny" color="textMuted">Renewal rates are unknown. These optional estimates use your entered renewal rate or explicit reuse assumption; they are separate from the current quoted term.</AppText>
+          <NumericField label="Local renewal rate (%)" value={projectionInputs.renewalRate} onChangeText={renewalRate => updateProjection({ renewalRate })} placeholder="Unknown" editable={inputsEditable} />
+          <CompactToggle label="Renewal assumption: quoted rate unchanged" value={projectionInputs.holdVariableRate} onChange={holdVariableRate => { if (inputsEditable) updateProjection({ holdVariableRate }); }} />
+          <AppText variant="tiny" color="textMuted">Public renewal rate: unknown · Renewal estimate: local assumption · Quoted maturity: separate</AppText>
           <CompactToggle label="Reinvest modelled interest" value={projectionInputs.reinvestInterest} onChange={(reinvestInterest) => { if (inputsEditable) updateProjection({ reinvestInterest }); }} />
         </>
       )}

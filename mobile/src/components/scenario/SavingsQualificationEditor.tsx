@@ -16,10 +16,10 @@ export function SavingsQualificationEditor({ inputs, onChange, editable }: {
     ['balanceGrowth', 'Expected qualifying balance growth ($)'],
     ['cardTransactions', 'Expected qualifying card purchases (count)'],
   ] as const;
-  return <Disclosure title="Savings qualification assumptions" summary="Blank values stay unknown; these are private local assumptions." open={open} onToggle={() => setOpen(value => !value)}>
+  return <Disclosure title="Savings qualification assumptions" summary="Storage: private · Blank values: unknown" open={open} onToggle={() => setOpen(value => !value)}>
     <View style={{ gap: 10 }}>
       <SegmentedControl options={[
-        { value: 'unknown', label: 'Unknown' }, { value: 'met', label: 'Expect to qualify' }, { value: 'unmet', label: 'Will not qualify' },
+        { value: 'unknown', label: 'Unknown' }, { value: 'met', label: 'Met assumption' }, { value: 'unmet', label: 'Unmet assumption' },
       ]} value={inputs.bonusQualification} onChange={bonusQualification => { if (editable) onChange({ bonusQualification, bonusConditionsMet: bonusQualification === 'met' }); }} />
       {fields.map(([field, label]) => <View key={field} style={{ gap: 3 }}>
         <AppText variant="tiny" color="textMuted">{label}</AppText>
@@ -28,7 +28,7 @@ export function SavingsQualificationEditor({ inputs, onChange, editable }: {
           placeholder="Unknown" placeholderTextColor={theme.colors.textFaint}
           style={{ minHeight: 48, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: 10, color: theme.colors.text }} />
       </View>)}
-      <AppText variant="tiny" color="textMuted">The bank's public rules define which deposits, withdrawals and transactions qualify. These selections do not confirm eligibility or approval.</AppText>
+      <AppText variant="tiny" color="textMuted">Qualification basis: public bank rules · Eligibility: unverified · Approval: unverified</AppText>
     </View>
   </Disclosure>;
 }

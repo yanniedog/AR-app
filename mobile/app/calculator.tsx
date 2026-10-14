@@ -227,6 +227,7 @@ export default function Calculator() {
   }, [core, section, profileFilters, includeNonStandard, details, lvrBand, suitabilityRevision, publicCatalogue, scenario]);
   const publicPricing = useMemo(() => resolvedPublicRankingRows(eligibleRows, publicCatalogue,
     row => publicRateScenario(section, scenario, profileFilters, row)), [eligibleRows, publicCatalogue, section, scenario, profileFilters]);
+  const comparisonsReady = publicCatalogue.status === 'unavailable' || publicPricing.complete;
   const rows = publicPricing.rows;
 
   const median = useMemo(() => statsFor(rows, true, section).median, [rows, section]);
@@ -292,7 +293,7 @@ export default function Calculator() {
   const inputIssueKey = inputIssues.join('|');
 
   const candidates = useMemo<Candidate[]>(() => {
-    if (inputIssueKey || currentRate === null || balance <= 0 || (isLoan && months <= 0)) return [];
+    if (!comparisonsReady || inputIssueKey || currentRate === null || balance <= 0 || (isLoan && months <= 0)) return [];
     const pricedOffers: { row: RateRow; rate: number; projectionRate: number }[] = [];
     const seen = new Set<string>();
     for (const row of rows) {
@@ -310,7 +311,7 @@ export default function Calculator() {
       if (isLoan ? projectionRate >= currentRate : projectionRate <= currentRate) continue;
       if (isLoan) {
         if (!scenario.projections.mortgage.holdVariableRate) {
-          out.push({ row, rate, projectionRate, perMonth: null, total: null, totalLabel: 'Rate only', unavailableReason: 'Select the assumption to hold variable/reference rates unchanged before calculating.' });
+          out.push({ row, rate, projectionRate, perMonth: null, total: null, totalLabel: 'Rate only', unavailableReason: 'Variable/reference rate assumption: missing' });
           continue;
         }
         const perMonth = monthlyPayment(balance, currentRate, months) - monthlyPayment(balance, projectionRate, months);
@@ -329,7 +330,7 @@ export default function Calculator() {
       } else {
         const unavailableReason = quickEstimateUnavailableReason(row, section)
           ?? (section === 'Savings' && !scenario.projections.savings.holdVariableRate
-            ? 'Select the assumption to hold variable rates unchanged before calculating.' : null);
+            ? 'Variable rate assumption: missing' : null);
         if (unavailableReason) {
           out.push({ row, rate, projectionRate, perMonth: null, total: null, totalLabel: 'Rate only', unavailableReason });
           continue;
@@ -360,7 +361,7 @@ export default function Calculator() {
       if (bEstimate == null) return -1;
       return bEstimate - aEstimate;
     }).slice(0, 10);
-  }, [rows, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric, inputIssueKey, scenario.projections]);
+  }, [rows, comparisonsReady, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric, inputIssueKey, scenario.projections]);
   const currentProductDetail = currentProduct.productKey
     ? details?.products?.[currentProduct.productKey] ?? null
     : null;
@@ -637,7 +638,7 @@ export default function Calculator() {
             ...previous.projections, savings: { ...previous.projections.savings, ...patch },
           } }))} /> : null}
         {section !== 'TD' ? <View style={{ marginVertical: 12, gap: 8 }}>
-          <CompactToggle label="Assume variable/reference rates stay unchanged for this scenario"
+          <CompactToggle label="Variable/reference rates: unchanged assumption"
             value={scenario.projections[scenarioSectionKey].holdVariableRate}
             onChange={holdVariableRate => updateScenario(previous => ({ ...previous, projections: {
               ...previous.projections, [scenarioSectionKey]: { ...previous.projections[scenarioSectionKey], holdVariableRate },
@@ -820,6 +821,8 @@ export default function Calculator() {
           ? detailsLoading
             ? 'Preparing your matches…'
             : 'Could not prepare your matches'
+          : !comparisonsReady
+            ? publicCatalogue.status === 'error' ? 'Public pricing unavailable' : 'Public comparisons loading'
           : candidates.length
             ? isLoan
               ? 'Lower matched rates'
@@ -828,7 +831,7 @@ export default function Calculator() {
               ? 'Enter your current rate'
               : balance <= 0
                 ? 'Enter your loan details above'
-                : 'No better comparable rates found'}
+                : 'No better rates among resolved offers'}
       </AppText>
       {profileFeaturesPending ? (
         <Card style={{ marginBottom: 16 }}>

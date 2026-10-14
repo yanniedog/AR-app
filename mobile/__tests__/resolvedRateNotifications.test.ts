@@ -17,7 +17,7 @@ it('uses semantic programme identities for alerts after reordering and describes
   expect(messages).toHaveLength(1);
   expect(messages[0]).toMatchObject({ rateIndex: 3 });
   expect(messages[0].body).toContain('6.00% → 6.25%');
-  expect(messages[0].body).toMatch(/selected public scenario.*does not confirm/i);
+  expect(messages[0].body).toMatch(/selected public scenario.*charged rate: unverified/i);
   expect(messages[0].body).not.toContain('8.374');
 });
 

@@ -207,7 +207,7 @@ function ProductCardView({
             {publicResolution ? <AppText variant="tiny" color="textMuted">
               {publicRateOriginLabel(publicResolution)}{publicResolution.freshness.lastSuccessAt ? ` · ${publicResolution.freshness.lastSuccessAt.slice(0, 10)}` : ''}
             </AppText> : null}
-            {publicProduct?.status === 'legacy' ? <AppText variant="tiny" color="textMuted">Not available for new applications.</AppText> : null}
+            {publicProduct?.status === 'legacy' ? <AppText variant="tiny" color="textMuted">New applications: unavailable</AppText> : null}
             {tags.length || qualifier.conditional || nonStandard || access.badge ? (
               <Row gap={8} style={{ flexWrap: 'wrap', marginTop: 8 }}>
                 {access.badge ? (

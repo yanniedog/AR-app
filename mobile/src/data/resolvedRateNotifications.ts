@@ -49,7 +49,7 @@ export function resolvedRateNotificationChanges({ previous, current, oldCore, ne
       if (magnitude.compare(threshold) < 0 || magnitude.compare(Decimal.parse('0')) === 0) continue;
       const row = bindingRow(newCore, programme.sourceBindings);
       messages.push({ title: `${product.providerName} public product rate changed`,
-        body: `${product.name}: ${(Number(oldRate.payableRate) * 100).toFixed(2)}% → ${(Number(rate.payableRate) * 100).toFixed(2)}% for the selected public scenario. This does not confirm your bank's charged rate.`,
+        body: `${product.name}: ${(Number(oldRate.payableRate) * 100).toFixed(2)}% → ${(Number(rate.payableRate) * 100).toFixed(2)}% · Basis: selected public scenario · Charged rate: unverified`,
         productKey: product.productKey, ...(row?.rate_index != null ? { rateIndex: row.rate_index } : {}),
       });
     }
@@ -81,7 +81,7 @@ export function resolvedRateNotificationChanges({ previous, current, oldCore, ne
         Number.isFinite(thresholdBps) && thresholdBps >= 0 ? thresholdBps : 1);
       if (!hit) continue;
       const metric = trackedRateValue(hit.row, subscription.section, depositRankMetric, mortgageRateMetric).metric;
-      messages.push({ title: 'Public search rate changed', body: `${hit.row.provider} ${hit.row.product_name}: ${formatRate(hit.from)} → ${formatRate(hit.to)} (${metric === 'comparison' ? 'published comparison rate' : metric === 'ranked' ? 'selected published rate metric' : 'public payable rate'}). This public scenario does not confirm your bank's charged rate.`,
+      messages.push({ title: 'Public search rate changed', body: `${hit.row.provider} ${hit.row.product_name}: ${formatRate(hit.from)} → ${formatRate(hit.to)} · Metric: ${metric === 'comparison' ? 'published comparison rate' : metric === 'ranked' ? 'selected published rate metric' : 'public payable rate'} · Basis: public scenario · Charged rate: unverified`,
         search: { section: subscription.section, path: subscription.path, subscriptionId: subscription.id, sort: subscription.sort, hierarchyScoped: subscription.hierarchyScoped } });
     }
   }

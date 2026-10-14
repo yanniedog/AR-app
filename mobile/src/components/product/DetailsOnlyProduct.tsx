@@ -25,7 +25,7 @@ export function DetailsOnlyProduct({ productKey, programmeId }: { productKey: st
     {(identity.provider || identity.productCategory) && <AppText variant="small">{[identity.provider, identity.productCategory].filter(Boolean).join(' · ')}</AppText>}
     {product ? <><AppText variant="small">{product.providerName} · Public product identity</AppText><PublicRateEvidence productKey={productKey} programmeId={programmeId} /></> : null}
     {detail ? <>
-      <AppText variant="small">Published details · {manifest?.run_date}.{product ? ' Public pricing and its limitations are described above.' : ' No rate is listed for this product.'}</AppText>
+      <AppText variant="small">Published details: {manifest?.run_date} · {product ? 'Pricing: public evidence' : 'Listed rate: unavailable'}</AppText>
       {detail.description ? <AppText>{detail.description}</AppText> : <AppText variant="small">A product description was not supplied.</AppText>}
       <DetailGroup loading={false} icon="cash-outline" title="Fees" items={detail.fees} /><DetailGroup loading={false} icon="person-outline" title="Eligibility" items={detail.eligibility} />
       <DetailGroup loading={false} icon="information-circle-outline" title="Features" items={detail.features} /><DetailGroup loading={false} icon="information-circle-outline" title="Constraints" items={detail.constraints} />

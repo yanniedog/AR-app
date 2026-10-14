@@ -199,6 +199,10 @@ export default function Compare() {
   });
 
   if (!core) return <ScreenSkeleton />;
+  const comparisonLoading = catalogue.status !== 'unavailable' && !(catalogue.status === 'ready' && catalogue.allLoaded);
+  if (comparisonLoading && comparison?.issue) return <Screen>
+    <AppText variant="small" color="textMuted">{catalogue.status === 'error' ? 'Public pricing unavailable' : 'Public comparisons loading'}</AppText>
+  </Screen>;
   if (comparison?.issue) {
     const copy = comparisonIssueCopy(comparison.issue);
     return (
@@ -217,7 +221,8 @@ export default function Compare() {
   );
   const valid = fractions.filter((f): f is number => f !== null);
   const bestVal =
-    valid.length ? (lowerIsBetter ? Math.min(...valid) : Math.max(...valid)) : null;
+    !comparisonLoading && valid.length === entries.length && valid.length
+      ? (lowerIsBetter ? Math.min(...valid) : Math.max(...valid)) : null;
   const bestTone = lowerIsBetter ? 'success' : 'primary';
   const bestHighlightBg =
     bestTone === 'success' ? `${theme.colors.success}33` : theme.colors.primaryMuted;

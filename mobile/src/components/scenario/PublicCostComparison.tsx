@@ -34,18 +34,18 @@ export function PublicCostComparison({ section, target, scenario }: { section: S
   if (!result) return null;
   const estimate = result.estimate;
   const summary = estimate ? `${estimate.completeness === 'complete' ? 'Complete under stated assumptions' : estimate.completeness} · ${estimate.requestedDays != null ? `${estimate.projectedDays ?? 0} of ${estimate.requestedDays} days` : `${estimate.projectedMonths} of ${estimate.requestedMonths} months`}`
-    : 'Cost calculation needs further public terms or scenario selections';
+    : 'Cost calculation: terms or assumptions missing';
   return <View style={{ marginBottom: 16 }}><Disclosure title="Estimated cost or return" summary={summary} open={open} onToggle={() => setOpen(value => !value)}>
     <View style={{ gap: 6 }}>
       <AppText variant="small" weight="700">{target.provider} · {target.product_name}</AppText>
-      <AppText variant="tiny" color="textMuted">Uses the payable nominal interest rate. The published comparison rate is separate. These calculations use your local assumptions and do not confirm your bank's charged rate.</AppText>
+      <AppText variant="tiny" color="textMuted">Interest basis: payable nominal rate · Comparison rate: separate metric · Inputs: local assumptions · Charged rate: unverified</AppText>
       {estimate?.interest != null ? <AppText variant="small">{section === 'Mortgage' ? 'Interest cost' : 'Interest earned'}: {dollars(estimate.interest)}</AppText> : null}
       {estimate?.knownFees != null ? <AppText variant="small">Known fees: {dollars(estimate.knownFees)}</AppText> : null}
       {estimate?.knownCostSubtotal != null ? <AppText variant="small">Interest and known-fee subtotal: {dollars(estimate.knownCostSubtotal)}</AppText> : null}
       {estimate?.knownReturnSubtotal != null ? <AppText variant="small">Known return subtotal: {dollars(estimate.knownReturnSubtotal)}</AppText> : null}
       {estimate?.principalRepaid != null ? <AppText variant="small">Principal repaid: {dollars(estimate.principalRepaid)}</AppText> : null}
       {estimate?.endingBalance != null ? <AppText variant="small">Ending {section === 'Mortgage' ? 'loan balance' : 'balance'}: {dollars(estimate.endingBalance)}</AppText> : null}
-      {estimate?.completeness !== 'complete' ? <AppText variant="tiny" color="textMuted">This is an incomplete subtotal. Missing fees are not free; complete-cost and verified-savings claims are unavailable.</AppText> : null}
+      {estimate?.completeness !== 'complete' ? <AppText variant="tiny" color="textMuted">Subtotal: incomplete · Missing fees: unknown · Complete-cost ranking: unavailable · Verified savings: unavailable</AppText> : null}
       {[...new Set([...result.reasons, ...(estimate?.reasonCodes ?? [])])].map(reason => <AppText variant="tiny" color="textMuted" key={reason}>{publicRateReason(reason)}</AppText>)}
       {[...result.assumptions, ...(estimate?.assumptions ?? [])].map((assumption, index) => <AppText variant="tiny" color="textMuted" key={index}>{assumption}</AppText>)}
     </View>

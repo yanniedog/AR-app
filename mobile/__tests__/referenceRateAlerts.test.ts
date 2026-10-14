@@ -27,7 +27,7 @@ it('notifies only public reference movements with distinct scope and never inclu
   expect(result.messages).toHaveLength(1);
   expect(result.messages[0].body).toContain('8.89% → 9.14%');
   expect(result.messages[0].body).toContain('Purpose: owner occupied');
-  expect(result.messages[0].body).toMatch(/does not confirm.*charged/i);
+  expect(result.messages[0].body).toMatch(/charged rate: unverified/i);
   for (const privateValue of ['487321', '6.271', '-2.619']) expect(JSON.stringify(result.messages)).not.toContain(privateValue);
   expect(JSON.stringify(input)).toBe(before);
 });

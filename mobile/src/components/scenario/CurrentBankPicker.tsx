@@ -85,7 +85,6 @@ export function CurrentBankPicker({
         onPress={() => editable && setOpen('bank')}
         accessibilityRole="button"
         accessibilityLabel={`${label}, ${selectionLabel(value)}`}
-        accessibilityHint="Opens an alphabetically sorted bank list"
         accessibilityState={{ disabled: !editable }}
         style={({ pressed }) => ({
           minHeight: 48,
@@ -107,7 +106,6 @@ export function CurrentBankPicker({
           onPress={() => editable && setOpen('product')}
           accessibilityRole="button"
           accessibilityLabel={`Current product, ${selectedProduct?.name ?? 'not matched'}`}
-          accessibilityHint="Select the product and pricing regime explicitly; entered rates stay unchanged."
           accessibilityState={{ disabled: !editable }}
           style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1, paddingVertical: 3 })}
         >
@@ -116,14 +114,14 @@ export function CurrentBankPicker({
           </AppText>
           {selectedProduct ? (
             <AppText variant="tiny" color="textMuted">
-              {selectedProduct.row ? `${formatRate(selectedProduct.row.rate)} published rate` : 'Product identified · pricing needs public evidence'}
+              {selectedProduct.row ? `${formatRate(selectedProduct.row.rate)} published rate` : 'Product: identified · Pricing: unresolved'}
             </AppText>
           ) : null}
         </Pressable>
       ) : null}
       {selectedProduct ? <PublicRateEvidence productKey={selectedProduct.productKey} programmeId={value.programmeId} row={selectedProduct.row} compact
         onSelectProgramme={(programmeId, offerId) => onChange({ ...value, programmeId, offerId })} /> : null}
-      {catalogue.status === 'error' ? <AppText variant="tiny" color="textMuted">Public product discovery could not load. {catalogue.error}</AppText> : null}
+      {catalogue.status === 'error' ? <AppText variant="tiny" color="textMuted">Public product discovery: unavailable</AppText> : null}
       <Modal
         visible={open != null}
         transparent
@@ -143,7 +141,7 @@ export function CurrentBankPicker({
               <View style={{ flex: 1 }}>
                 <AppText variant="h3">{modalTitle}</AppText>
                 <AppText variant="tiny" color="textMuted">
-                  {open === 'bank' ? 'Banks are listed A–Z, including products without a resolved rate.' : 'Choose the exact product and pricing regime. Your entered rate stays unchanged.'}
+                  {open === 'bank' ? 'Order: A–Z · Unpriced products: included' : 'Pricing programme: explicit selection · Entered rate: unchanged'}
                 </AppText>
               </View>
               <Button title="Close" variant="ghost" onPress={() => setOpen(null)} />
@@ -216,10 +214,10 @@ export function CurrentBankPicker({
                       >
                         <AppText weight={checked ? '800' : '500'}>{option.name}</AppText>
                         <AppText variant="tiny" color="textMuted">
-                          {row ? `${formatRate(row.rate)} published${row.comparison_rate ? ` · ${formatRate(row.comparison_rate)} comparison` : ''}` : 'Pricing unresolved · available to identify'}
+                          {row ? `${formatRate(row.rate)} published${row.comparison_rate ? ` · ${formatRate(row.comparison_rate)} comparison` : ''}` : 'Product: identified · Pricing: unresolved'}
                         </AppText>
-                        {option.aliases.length ? <AppText variant="tiny" color="textMuted">Also known as {option.aliases.join(', ')}</AppText> : null}
-                        {option.status === 'legacy' ? <AppText variant="tiny" color="textMuted">Not available for new applications</AppText> : null}
+                        {option.aliases.length ? <AppText variant="tiny" color="textMuted">Aliases: {option.aliases.join(', ')}</AppText> : null}
+                        {option.status === 'legacy' ? <AppText variant="tiny" color="textMuted">New applications: unavailable</AppText> : null}
                       </Pressable>
                     );
                   })}

@@ -30,16 +30,16 @@ export function PublicPricingCoverage({ section, rows, scenario, compact = false
     if (catalogueStatus === 'ready' && !allLoaded) void loadAll().catch(() => undefined);
   }, [catalogueStatus, allLoaded, loadAll]);
   const pricing = useMemo(() => resolvedPublicRankingRows(rows, catalogue, row => publicRateScenario(section, scenario, profile, row)), [rows, catalogue, section, scenario, profile]);
-  if (catalogue.status === 'unavailable') return <AppText variant="tiny" color="textMuted">Public pricing details are unavailable in this edition. These are published catalogue rates; individual customer pricing is not verified.</AppText>;
+  if (catalogue.status === 'unavailable') return <AppText variant="tiny" color="textMuted">Public pricing details: unavailable · Rates: published catalogue · Customer pricing: unverified</AppText>;
   const products = catalogue.products.filter(product => product.section === section);
   const represented = new Set(rows.map(row => row.product_key));
   const discoveryOnly = products.filter(product => !represented.has(product.productKey)).length;
   const summary = catalogue.status === 'ready' && catalogue.allLoaded
     ? `${pricing.priced} selected offers priced · ${pricing.unresolved} unresolved selected offers · ${discoveryOnly} other products identifiable`
-    : 'Public pricing is incomplete while evidence loads; a lowest-rate or complete-cost claim is unavailable.';
+    : 'Public pricing: incomplete · Lowest-rate ranking: unavailable · Complete-cost ranking: unavailable';
   const details = <View style={{ gap: 6 }}>
-    <AppText variant="small">{products.length} public products identified in this category.</AppText>
-    <AppText variant="tiny" color="textMuted">Published minimums, ranges, unknown conditions, stale sources and failed checks are excluded from exact current-rate rankings. Cost completeness is evaluated separately; missing fees are not free.</AppText>
+    <AppText variant="small">Identified public products: {products.length}</AppText>
+    <AppText variant="tiny" color="textMuted">Exact ranking exclusions: minimums, ranges, unknown conditions, stale sources, failed checks · Cost completeness: separate · Missing fees: unknown</AppText>
     {catalogue.coverage.filter(item => item.section === section).map(item => <AppText key={`${item.providerId}:${item.section}`} variant="tiny" color="textMuted">
       {item.providerName}: source {coverageStatus(item.sourceStatus)} · acquisition {coverageStatus(item.sourceAcquisition)} · extraction {coverageStatus(item.extraction)} · reference sources {coverageStatus(item.referenceSourceStatus)} · rate {coverageStatus(item.resolutionStatus)} · cost {coverageStatus(item.costCompleteness)} · publication {coverageStatus(item.publicationStatus)}
     </AppText>)}
@@ -62,11 +62,11 @@ export function PublicProductDiscovery({ section, query = '', rows = [] }: {
   if (!products.length) return null;
   return <Card style={{ marginVertical: 12, gap: 8 }}>
     <AppText variant="h3">Other identifiable products</AppText>
-    <AppText variant="tiny" color="textMuted">{products.length} products have discovery records. Their rate, eligibility or evidence may be unresolved; they are not recommendations.</AppText>
+    <AppText variant="tiny" color="textMuted">Identified products: {products.length} · Resolution: per product · Recommendation status: excluded</AppText>
     {products.slice(0, limit).map(product => <View key={product.productId} style={{ gap: 2 }}>
       <Button title={`${product.providerName} · ${product.name}`} variant="ghost" onPress={() => openProduct(product.productKey)} />
-      {product.aliases.length ? <AppText variant="tiny" color="textMuted">Also known as {product.aliases.map(alias => alias.name).join(', ')}</AppText> : null}
-      {product.status === 'legacy' ? <AppText variant="tiny" color="textMuted">Not available for new applications.</AppText> : null}
+      {product.aliases.length ? <AppText variant="tiny" color="textMuted">Aliases: {product.aliases.map(alias => alias.name).join(', ')}</AppText> : null}
+      {product.status === 'legacy' ? <AppText variant="tiny" color="textMuted">New applications: unavailable</AppText> : null}
     </View>)}
     {products.length > limit ? <Button title="Show more identifiable products" variant="secondary" onPress={() => setLimit(value => value + 20)} /> : null}
   </Card>;

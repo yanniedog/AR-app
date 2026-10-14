@@ -90,6 +90,11 @@ export default function RateReceiptScreen() {
   useEffect(() => {
     void ensureDetails({ forProductView: true });
   }, [ensureDetails]);
+  const { status: catalogueStatus, allLoaded, loadAll } = publicCatalogue;
+  useEffect(() => {
+    if (catalogueStatus === 'ready' && !allLoaded) void loadAll().catch(() => undefined);
+  }, [catalogueStatus, allLoaded, loadAll]);
+  const comparisonsReady = catalogueStatus === 'unavailable' || catalogueStatus === 'ready' && allLoaded;
 
   const found = useMemo(
     () => {
@@ -124,12 +129,15 @@ export default function RateReceiptScreen() {
       ? buildNegotiationBrief({
           receipt,
           scenario: calculationScenario,
-          sectionRows: resolvedPublicRankingRows(core?.sections[found.section].rates ?? [], publicCatalogue,
-            row => publicRateScenario(found.section, scenario, profile, row)).rows,
+          sectionRows: comparisonsReady ? resolvedPublicRankingRows(publicRecommendationRows(
+            core?.sections[found.section].rates ?? [], publicCatalogue, found.section,
+            publicRateScenario(found.section, scenario, profile)), publicCatalogue,
+            row => publicRateScenario(found.section, scenario, profile, row)).rows : [],
+          comparisonsReady,
           detailsProducts,
         })
       : null,
-    [core, detailsProducts, found, receipt, scenario, calculationScenario, publicCatalogue, profile],
+    [core, detailsProducts, found, receipt, scenario, calculationScenario, publicCatalogue, profile, comparisonsReady],
   );
   useAuditExternalLinks((receipt?.officialSources ?? []).map((source) => ({ url: source.url, purpose: 'lender_source', label: source.label })));
   const shareText = useMemo(() => {
@@ -373,7 +381,7 @@ export default function RateReceiptScreen() {
               </Row>
             </Pressable>
           )) : (
-            <AppText variant="small" color="textMuted">No comparable widely available rates were observed.</AppText>
+            <AppText variant="small" color="textMuted">{comparisonsReady ? 'No resolved comparable offers' : 'Public comparisons incomplete'}</AppText>
           )}
         </Card>
 

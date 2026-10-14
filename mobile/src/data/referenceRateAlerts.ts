@@ -36,7 +36,7 @@ export function referenceRateChanges(scenario: UserRateScenario, references: rea
       const magnitude = change.compare(Decimal.parse('0')) < 0 ? Decimal.parse('0').sub(change) : change;
       if (magnitude.compare(threshold) < 0) continue;
       messages.push({ title: 'Public reference rate changed',
-        body: `${reference.name} (${publicReferenceScope(reference)}): public reference ${(Number(prior.fraction) * 100).toFixed(2)}% → ${(Number(fraction) * 100).toFixed(2)}%. Your local estimate may change. This does not confirm the rate charged by your bank.`,
+        body: `${reference.name} · ${publicReferenceScope(reference)} · Public reference: ${(Number(prior.fraction) * 100).toFixed(2)}% → ${(Number(fraction) * 100).toFixed(2)}% · Local estimate: calculated from reference · Charged rate: unverified`,
         href: 'arrates://calculator',
       });
     } catch { /* Invalid retained public metadata cannot produce an alert. */ }

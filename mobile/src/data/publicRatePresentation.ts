@@ -1,35 +1,51 @@
-import type { PublicReferenceRate, RateResolution } from './publicRateModel';
+import type { PublicComponent, PublicCondition, PublicReferenceRate, RateResolution } from './publicRateModel';
+import { Decimal, decimalText, rateDecimal } from './publicRateDecimal';
+
+export function publicComponentFact(component: PublicComponent): string {
+  const labels: Record<PublicComponent['role'], string> = { payable: 'Payable rate', reference: 'Reference rate', discount: 'Discount', margin: 'Margin', bonus: 'Bonus', comparison: 'Comparison rate', reversion: 'Reversion rate' };
+  const adjustment = component.role === 'discount' || component.role === 'margin' || component.role === 'bonus';
+  let value = 'Unavailable';
+  if (component.value != null) {
+    try {
+      const percent = decimalText(rateDecimal(component.value, component.unit).mul(Decimal.parse('100')));
+      value = `${percent}${adjustment ? ' percentage points' : '% p.a.'}`;
+    } catch { /* Invalid numerical source values remain unavailable. */ }
+  }
+  return `${labels[component.role]}: ${value}${component.includedInPayable ? ' · Included in payable rate' : ''}`;
+}
+
+export function publicConditionFact(condition: PublicCondition): string {
+  const label: Record<string, string> = { purpose: 'Purpose', repayment: 'Repayment', package: 'Package', customerCategory: 'Customer category', channel: 'Channel', termMonths: 'Term (months)', termDays: 'Term (days)', amount: 'Amount ($)', balance: 'Balance ($)', lvr: 'LVR', qualification: 'Qualification', monthlyDeposit: 'Monthly qualifying deposits ($)', withdrawals: 'Monthly withdrawals (count)', balanceGrowth: 'Qualifying balance growth ($)', cardTransactions: 'Qualifying card purchases (count)' };
+  const name = label[condition.field] ?? condition.field;
+  const text = (value: string | boolean) => String(value).toLowerCase().replace(/_/g, ' ');
+  if (condition.operator === 'eq' && condition.value != null) return `${name}: ${text(condition.value)}`;
+  if (condition.operator === 'in') return `${name}: ${(condition.values ?? []).map(text).join(' or ')}`;
+  if (condition.operator === 'bounds') return `${name}: ${condition.minimum != null ? `${condition.minimumInclusive === false ? '>' : '≥'}${condition.minimum}` : ''}${condition.minimum != null && condition.maximum != null ? ', ' : ''}${condition.maximum != null ? `${condition.maximumInclusive === false ? '<' : '≤'}${condition.maximum}` : ''}`;
+  return `${name}: required`;
+}
 
 export function publicReferenceScope(reference: PublicReferenceRate): string {
-  const label: Record<string, string> = { purpose: 'Purpose', repayment: 'Repayment', package: 'Package', customerCategory: 'Customer category', channel: 'Channel', termMonths: 'Term (months)', termDays: 'Term (days)' };
-  const text = (value: string | boolean) => String(value).toLowerCase().replace(/_/g, ' ');
-  return (reference.conditions ?? []).map(condition => {
-    const name = label[condition.field] ?? condition.field;
-    if (condition.operator === 'eq' && condition.value != null) return `${name}: ${text(condition.value)}`;
-    if (condition.operator === 'in') return `${name}: ${(condition.values ?? []).map(text).join(' or ')}`;
-    if (condition.operator === 'bounds') return `${name}: ${condition.minimum != null ? `${condition.minimumInclusive === false ? '>' : '≥'}${condition.minimum}` : ''}${condition.minimum != null && condition.maximum != null ? ', ' : ''}${condition.maximum != null ? `${condition.maximumInclusive === false ? '<' : '≤'}${condition.maximum}` : ''}`;
-    return condition.description ?? `${name}: required`;
-  }).join(' · ') || 'Scope not stated';
+  return (reference.conditions ?? []).map(publicConditionFact).join(' · ') || 'Scope: not stated';
 }
 
 export function publicRateReason(reason: string): string {
   const messages: Record<string, string> = {
-    catalogue_not_ready: 'Public pricing is still loading.',
-    programme_not_loaded: 'The pricing evidence for this product has not loaded.',
-    public_pricing_unavailable: 'No usable public pricing is available for this product.',
-    product_pricing_not_available: 'This edition has no public pricing for this product.',
-    pricing_programme_selection_required: 'Choose the exact pricing programme; several regimes share this product name.',
-    semantic_offer_binding_missing: 'This legacy rate has no stable binding to the public pricing programme.',
-    selected_reference_unavailable: 'The selected public reference is unavailable in this edition.',
-    reference_conditions_unknown: 'Enter the missing purpose, repayment, package or customer-category assumptions for this reference.',
-    reference_conditions_unmet: 'Your selected assumptions do not meet this reference family’s scope.',
-    selected_reference_product_mismatch: 'This reference family is not bound to the selected product or provider.',
-    unknown_condition: 'A material eligibility condition needs a scenario selection.',
-    source_conflict: 'Public sources disagree about this pricing.',
-    source_stale: 'The public source has not been successfully checked within 48 hours.',
-    source_failed: 'The latest public-source check failed.',
-    unsupported_rate_type: 'The public rate type needs a reviewed source adapter.',
-    future_effective: 'This rate takes effect in the future.',
+    catalogue_not_ready: 'Public pricing: loading',
+    programme_not_loaded: 'Pricing evidence: not loaded',
+    public_pricing_unavailable: 'Public pricing: unavailable',
+    product_pricing_not_available: 'Product pricing: unavailable in this edition',
+    pricing_programme_selection_required: 'Pricing programme: explicit selection required',
+    semantic_offer_binding_missing: 'Legacy offer binding: unavailable',
+    selected_reference_unavailable: 'Selected reference: unavailable in this edition',
+    reference_conditions_unknown: 'Reference scope: assumptions missing',
+    reference_conditions_unmet: 'Reference scope: not met',
+    selected_reference_product_mismatch: 'Reference product/provider binding: mismatch',
+    unknown_condition: 'Eligibility condition: unknown',
+    source_conflict: 'Public sources: conflicting',
+    source_stale: 'Source: stale; successful check older than 48 hours',
+    source_failed: 'Latest source check: failed',
+    unsupported_rate_type: 'Rate type: unsupported by reviewed adapter',
+    future_effective: 'Rate: scheduled; not yet effective',
   };
   return messages[reason] ?? reason.replace(/_/g, ' ').replace(/^./, initial => initial.toUpperCase());
 }

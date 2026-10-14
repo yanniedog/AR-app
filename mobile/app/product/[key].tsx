@@ -743,10 +743,8 @@ export default function ProductDetail() {
           </View>
         ) : (
           <Card variant="outlined" style={{ marginBottom: 16, gap: 10 }}>
-            <AppText variant="body" weight="700">Compare this observed rate with your scenario</AppText>
-            <AppText variant="tiny" color="textMuted">
-              Full projections keep assumptions, unknown fees and unavailable results visible.
-            </AppText>
+            <AppText variant="body" weight="700">Rate comparison</AppText>
+            <AppText variant="tiny" color="textMuted">Current rate assumption: missing · Fees: unknown</AppText>
             <Button
               title="Add my rate"
               variant="secondary"

@@ -71,6 +71,24 @@ it('recalculates capped per-tier savings when the balance grows', () => {
   expect(estimate).toMatchObject({ interest: '20.00', endingBalance: '2020.00' });
 });
 
+it('refuses bonus projections when explicit qualification inputs contradict the modelled cash flows', () => {
+  const source = programme({ section: 'Savings', conditions: [condition('monthlyDeposit', { operator: 'bounds', minimum: '10' }),
+    condition('withdrawals', { operator: 'bounds', maximum: '0' })] });
+  const scope = { monthlyDeposit: '10', withdrawals: '0' };
+  const resolved = resolvePublicRate(source, scope, PUBLIC_AS_OF);
+  const scenario: PublicCostScenario = { ...base, section: 'Savings', startingBalance: '1000', interestPayment: 'monthly', programme: source,
+    rateScenario: scope, monthlyContribution: '10', monthlyWithdrawal: '0' };
+  for (const conflicting of [{ ...scenario, monthlyContribution: '0' }, { ...scenario, monthlyWithdrawal: '1' }]) {
+    const estimate = estimatePublicCost(resolved, conflicting);
+    expect(estimate).toMatchObject({ completeness: 'unsupported', projectedMonths: 0, verifiedCurrent: false });
+    expect(estimate.reasonCodes).toContain('qualification_cashflow_conflict');
+    expect(estimate.netReturn).toBeUndefined();
+  }
+  expect(estimatePublicCost(resolved, scenario).completeness).toBe('complete');
+  expect(scope).toEqual({ monthlyDeposit: '10', withdrawals: '0' });
+  expect(estimatePublicCost(resolution(), { ...scenario, programme: undefined, monthlyContribution: '0' }).completeness).toBe('complete');
+});
+
 it('stops term deposits at quoted maturity without inventing renewal rates', () => {
   const scenario: PublicCostScenario = { ...base, section: 'TD', deposit: '1200', quotedTermMonths: 3, interestPayment: 'maturity' };
   expect(estimatePublicCost(resolution({ payableRate: '0.12' }), scenario)).toMatchObject({ requestedMonths: 3, projectedMonths: 3, interest: '36.00', netReturn: '36.00' });
