@@ -2,7 +2,6 @@ import Ionicons from './icons/AppIcon';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { SECTIONS } from '../constants';
 import {
   bankEventMedianContext,
   marketPulse,
@@ -12,14 +11,14 @@ import {
   type BankInsightsPayload,
   type BankRateEvent,
 } from '../data/bankInsights';
-import { formatRate, formatRunDate } from '../data/format';
+import { uiCount, uiDate, uiDuration, uiJoin, uiLabel, uiProviderName, uiRate, type UiText } from '../lib/uiCopy';
+import { uiChartBps, uiChartMove, uiChartSection } from '../lib/chartUiCopy';
 import { buildFeedRowRevision } from '../lib/feedRenderEvidence';
 import {
   DEPOSIT_SECTIONS,
   LOAN_SECTIONS,
   isLoanSection,
   moveTone,
-  moveVerb,
   type MoveTone,
 } from '../lib/moveSemantics';
 import { openBank } from '../lib/nav';
@@ -27,11 +26,6 @@ import type { SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { BankAvatar } from './BankAvatar';
 import { AppText, Badge, Divider, Row } from './ui';
-
-function bpsLabel(bps: number): string {
-  const rounded = Math.round(bps * 10) / 10;
-  return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${Math.abs(rounded)} bps`;
-}
 
 /** Arrow shows the actual direction; colour reflects what it means for the section's customer. */
 function MoveArrow({ section, bps, size = 14 }: { section: SectionKey; bps: number; size?: number }) {
@@ -54,14 +48,10 @@ function toneColor(tone: MoveTone, theme: ReturnType<typeof useTheme>): string {
       : theme.colors.textMuted;
 }
 
-function eventA11yLabel(event: BankRateEvent, rateCtx: BankEventRateContext | null): string {
-  const verb = moveVerb(event.section, event.dir);
-  const rateBit = rateCtx
-    ? `, median ${formatRate(rateCtx.before)} to ${formatRate(rateCtx.after)}`
-    : '';
-  return `${event.provider} ${verb} ${SECTIONS[event.section].title} rates by average ${bpsLabel(
-    event.avg_bps,
-  )} across ${event.moved} of ${event.total} products on ${formatRunDate(event.date)}${rateBit}`;
+function eventA11yLabel(event: BankRateEvent, rateCtx: BankEventRateContext | null): UiText {
+  return uiJoin(uiProviderName(event), ' · ', uiChartMove(event.section, event.dir), ' · ', uiChartSection(event.section),
+    ' · ', 'Average', ' ', uiChartBps(event.avg_bps), ' · ', uiCount(event.moved), '/', uiCount(event.total), ' ', 'products', ' · ', uiDate(event.date),
+    rateCtx ? uiJoin(' · ', 'Median', ' ', uiRate(rateCtx.before), ' → ', uiRate(rateCtx.after)) : null);
 }
 
 export const BankMoveRow = React.memo(function BankMoveRow({
@@ -84,7 +74,7 @@ export const BankMoveRow = React.memo(function BankMoveRow({
   onSelect?: (event: BankRateEvent) => void;
 }) {
   const theme = useTheme();
-  const verb = moveVerb(event.section, event.dir);
+  const verb = uiChartMove(event.section, event.dir);
   const tone = moveTone(event.section, event.avg_bps);
   return (
     <Pressable
@@ -95,7 +85,6 @@ export const BankMoveRow = React.memo(function BankMoveRow({
       }
       accessibilityRole="button"
       accessibilityLabel={eventA11yLabel(event, rateContext)}
-      accessibilityHint="Shows which products moved and by how much"
     >
       <Row
         gap={10}
@@ -110,21 +99,19 @@ export const BankMoveRow = React.memo(function BankMoveRow({
         <BankAvatar provider={event.provider} size={34} />
         <View style={{ flex: 1, gap: 2 }}>
           <AppText variant="small" weight="700" numberOfLines={1}>
-            {event.provider}
+            {uiProviderName(event)}
           </AppText>
           <AppText variant="tiny" color="textFaint" numberOfLines={2}>
-            {verb} {SECTIONS[event.section].short.toLowerCase()} · {event.moved} of {event.total}{' '}
-            products
-            {showDate ? ` · ${formatRunDate(event.date)}` : ''}
+            {uiJoin(verb, ' · ', uiChartSection(event.section), ' · ', uiCount(event.moved), '/', uiCount(event.total), ' ', 'products', showDate ? uiJoin(' · ', uiDate(event.date)) : null)}
           </AppText>
           {rateContext ? (
             <AppText variant="tiny" weight="600" numberOfLines={1}>
-              Median {formatRate(rateContext.before)} → {formatRate(rateContext.after)}
+              {uiJoin('Median', ' ', uiRate(rateContext.before), ' → ', uiRate(rateContext.after))}
             </AppText>
           ) : null}
           {showProductHint ? (
             <AppText variant="tiny" weight="700" style={{ color: theme.colors.primary }}>
-              See which {event.moved} changed
+              {uiJoin('Changes', ' · ', uiCount(event.moved))}
             </AppText>
           ) : null}
         </View>
@@ -132,11 +119,11 @@ export const BankMoveRow = React.memo(function BankMoveRow({
           <Row gap={4}>
             <MoveArrow section={event.section} bps={event.avg_bps} />
             <AppText variant="small" weight="800" style={{ color: toneColor(tone, theme) }}>
-              {bpsLabel(event.avg_bps)}
+              {uiChartBps(event.avg_bps)}
             </AppText>
           </Row>
           <AppText variant="tiny" color="textFaint">
-            avg across movers
+            {uiJoin('Average', ' · ', 'Movers')}
           </AppText>
         </View>
       </Row>
@@ -155,27 +142,25 @@ export const MarketPulseStrip = React.memo(function MarketPulseStrip({ payload }
     <Row gap={6} style={{ flexWrap: 'wrap' }}>
       <Badge
         label={
-          quiet
-            ? 'No bank rate moves this week'
-            : `${pulse.banksMoved} bank${pulse.banksMoved === 1 ? '' : 's'} moved this week`
+          uiJoin('Banks', ' · ', uiCount(pulse.banksMoved), ' · ', uiDuration(7, 'days'))
         }
         tone={quiet ? 'muted' : 'primary'}
       />
       {loanPulse?.cuts ? (
-        <Badge label={`${loanPulse.cuts} loan ${loanPulse.cuts === 1 ? 'cut' : 'cuts'}`} tone="success" />
+        <Badge label={uiJoin('Home loans', ' · ', 'Cut', ' ', uiCount(loanPulse.cuts))} tone="success" />
       ) : null}
       {loanPulse?.hikes ? (
-        <Badge label={`${loanPulse.hikes} loan ${loanPulse.hikes === 1 ? 'hike' : 'hikes'}`} tone="danger" />
+        <Badge label={uiJoin('Home loans', ' · ', 'Hike', ' ', uiCount(loanPulse.hikes))} tone="danger" />
       ) : null}
       {depositPulse?.hikes ? (
         <Badge
-          label={`${depositPulse.hikes} savings/TD ${depositPulse.hikes === 1 ? 'increase' : 'increases'}`}
+          label={uiJoin('Savings', '/', 'TD', ' · ', 'Increase', ' ', uiCount(depositPulse.hikes))}
           tone="success"
         />
       ) : null}
       {depositPulse?.cuts ? (
         <Badge
-          label={`${depositPulse.cuts} savings/TD ${depositPulse.cuts === 1 ? 'decrease' : 'decreases'}`}
+          label={uiJoin('Savings', '/', 'TD', ' · ', 'Decrease', ' ', uiCount(depositPulse.cuts))}
           tone="danger"
         />
       ) : null}
@@ -248,15 +233,13 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
     if (error) return null;
     return (
       <AppText variant="small" color="textMuted">
-        Loading bank changes…
-      </AppText>
+        {uiLabel("Loading")}</AppText>
     );
   }
   if (!rows.length) {
     return (
       <AppText key={rowRevision} variant="small" color="textMuted" onLayout={reportEmptyLayout}>
-        No rate moves detected yet — the feed fills as banks reprice day by day.
-      </AppText>
+        {uiLabel("No observations")}</AppText>
     );
   }
   return (
@@ -291,7 +274,7 @@ export const MoversLeaderboard = React.memo(function MoversLeaderboard({
   if (!moved.length) {
     return (
       <AppText variant="small" color="textMuted">
-        No {SECTIONS[section].short.toLowerCase()} median moves in the last {windowDays} days.
+        {uiJoin(uiChartSection(section), ' · ', 'No observations', ' · ', uiDuration(windowDays, 'days'))}
       </AppText>
     );
   }
@@ -304,15 +287,15 @@ export const MoversLeaderboard = React.memo(function MoversLeaderboard({
   // Good news first: cuts for loans, increases for savings/TD.
   const groups = loan
     ? [
-        { heading: 'BIGGEST CUTS', rows: downs },
-        { heading: 'BIGGEST HIKES', rows: ups },
+        { heading: uiLabel('Cut'), rows: downs },
+        { heading: uiLabel('Hike'), rows: ups },
       ]
     : [
-        { heading: 'BIGGEST INCREASES', rows: ups },
-        { heading: 'BIGGEST DECREASES', rows: downs },
+        { heading: uiLabel('Increase'), rows: ups },
+        { heading: uiLabel('Decrease'), rows: downs },
       ];
   const renderRow = (provider: string, netBps: number, current: number, movedOn: string | null) => {
-    const movedLabel = movedOn ? formatRunDate(movedOn) : `last ${windowDays}d`;
+    const movedLabel = movedOn ? uiDate(movedOn) : uiDuration(windowDays, 'days');
     return (
       <Pressable
         key={provider}
@@ -320,17 +303,16 @@ export const MoversLeaderboard = React.memo(function MoversLeaderboard({
           openBank(provider, movedOn ? { date: movedOn, section } : { section })
         }
         accessibilityRole="button"
-        accessibilityLabel={`${provider}, net ${bpsLabel(netBps)} on ${movedLabel}, now ${formatRate(current)}`}
+        accessibilityLabel={uiJoin(uiProviderName({ provider }), ' · ', uiChartBps(netBps), ' · ', movedLabel, ' · ', uiRate(current))}
       >
         <Row gap={10} style={{ paddingVertical: 6 }}>
           <BankAvatar provider={provider} size={28} />
           <View style={{ flex: 1 }}>
             <AppText variant="small" weight="600" numberOfLines={1}>
-              {provider}
+              {uiProviderName({ provider })}
             </AppText>
             <AppText variant="tiny" color="textFaint" numberOfLines={1}>
-              {movedOn ? `Moved ${movedLabel}` : `Over ${windowDays} days`}
-              {' · '}now {formatRate(current)}
+              {uiJoin('Changes', ' · ', movedLabel, ' · ', uiRate(current))}
             </AppText>
           </View>
           <AppText
@@ -338,7 +320,7 @@ export const MoversLeaderboard = React.memo(function MoversLeaderboard({
             weight="800"
             style={{ color: toneColor(moveTone(section, netBps), theme), minWidth: 64, textAlign: 'right' }}
           >
-            {bpsLabel(netBps)}
+            {uiChartBps(netBps)}
           </AppText>
         </Row>
       </Pressable>
@@ -355,7 +337,7 @@ export const MoversLeaderboard = React.memo(function MoversLeaderboard({
               color="textFaint"
               style={{ marginBottom: 2, marginTop: gi > 0 && groups[0].rows.length ? 8 : 0 }}
             >
-              {group.heading} · {windowDays}D
+              {uiJoin(group.heading, ' · ', uiDuration(windowDays, 'days'))}
             </AppText>
             {group.rows.map((m) => renderRow(m.provider, m.netBps, m.current, m.movedOn))}
           </React.Fragment>

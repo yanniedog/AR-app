@@ -5,10 +5,10 @@ import { fontStyle } from '../../theme/fonts';
 import { LEDGER_LAYOUT } from '../../theme/layout';
 import { useTheme } from '../../theme/ThemeProvider';
 import { LedgerText } from './LedgerText';
+import type { UiCopy, UiNativeProps, UiInputText } from '../../lib/uiCopy';
 
 export function LedgerField({
   label,
-  hint,
   error,
   style,
   onFocus,
@@ -16,10 +16,12 @@ export function LedgerField({
   accessibilityLabel,
   multiline,
   ...rest
-}: TextInputProps & {
-  label: string;
-  hint?: string;
-  error?: string;
+}: Omit<UiNativeProps<TextInputProps>, 'value' | 'defaultValue' | 'placeholder'> & {
+  label: UiCopy;
+  value?: UiCopy | UiInputText;
+  defaultValue?: UiCopy | UiInputText;
+  placeholder?: UiCopy;
+  error?: UiCopy;
 }) {
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
@@ -65,8 +67,6 @@ export function LedgerField({
       />
       {error ? (
         <LedgerText variant="caption" tone="danger">{error}</LedgerText>
-      ) : hint ? (
-        <LedgerText variant="caption" tone="mutedInk">{hint}</LedgerText>
       ) : null}
     </View>
   );

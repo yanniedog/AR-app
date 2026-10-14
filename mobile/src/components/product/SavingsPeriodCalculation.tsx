@@ -4,6 +4,7 @@ import { canonical, hashText } from '../../lib/productTermsEngine/validation';
 import type { RateRow, SectionKey } from '../../types';
 import { loadSavingsSelections, type SavingsSelection, type SavingsTarget } from '../../data/monetaryContracts/transport';
 import { AppText, Button, Disclosure } from '../ui';
+import { uiJoin, uiLabel } from '../../lib/uiCopy';
 import { SavingsPeriodForm } from './SavingsPeriodForm';
 export function SavingsPeriodCalculation({ productKey, row, section }: { productKey: string; row?: RateRow; section?: SectionKey }) {
   const manifest = useStore(s => s.manifest), core = useStore(s => s.core), coreIntegrity = useStore(s => s.coreIntegrity), details = useStore(s => s.details), ensureDetails = useStore(s => s.ensureDetails);
@@ -20,7 +21,7 @@ export function SavingsPeriodCalculation({ productKey, row, section }: { product
     return () => { active = false; };
   }, [open, retry, identity, manifest, core, coreIntegrity, details, productKey, row, section]);
   if (row && section !== 'Savings') return null;
-  return <Disclosure title="Calculate a historical savings period" summary="Uses only policies we have reviewed" open={open} onToggle={() => setOpen(!open)}>
-    {!current ? <AppText variant="small">Checking savings policies...</AppText> : current.selections?.length && current.target ? <SavingsPeriodForm key={identity} selections={current.selections} context={{ manifest, core, coreIntegrity, details }} target={current.target} /> : <><AppText variant="small">{current.error ?? 'A reviewed savings calculation is unavailable for this product in this publication.'}</AppText><Button title="Retry savings policies" variant="secondary" onPress={() => void ensureDetails({ forProductView: true }).catch(() => undefined).finally(() => setRetry(r => r + 1))} /></>}
+  return <Disclosure title={uiJoin('Savings', ' · ', 'History')} open={open} onToggle={() => setOpen(!open)}>
+    {!current ? <AppText variant="small">{uiLabel('Loading')}</AppText> : current.selections?.length && current.target ? <SavingsPeriodForm key={identity} selections={current.selections} context={{ manifest, core, coreIntegrity, details }} target={current.target} /> : <><AppText variant="small">{uiLabel('Unavailable')}</AppText><Button title="Retry" variant="secondary" onPress={() => void ensureDetails({ forProductView: true }).catch(() => undefined).finally(() => setRetry(r => r + 1))} /></>}
   </Disclosure>;
 }

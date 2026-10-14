@@ -15,10 +15,9 @@ import {
   rbaSeriesThroughDate,
   rbaTimelineDates,
 } from '../data/bankHistoryTransform';
-import { formatRate, formatRateDigits, formatRunDate } from '../data/format';
 import { useFirstMountDrawIn } from '../hooks/useFirstMountDrawIn';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { rbaChartA11ySummary } from '../lib/a11ySummaries';
+import { uiLabel,  uiCount, uiDate, uiJoin, uiNumber, uiRate } from '../lib/uiCopy';
 import { hasFiniteChartDate, hasFiniteChartPath, hasPositiveChartLayout, type ChartRenderEvidence } from '../lib/chartRenderEvidence';
 import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
@@ -175,16 +174,16 @@ export const RbaChart = React.memo(function RbaChart({
   if (!data.length) return <AppText variant="small" color="textMuted" onLayout={(event) => {
     onGraphicReady?.({ revision: graphicRevision, expectedCount: 0, pointCount: 0,
       accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
-  }}>No cash-rate observations available.</AppText>;
+  }}>{uiLabel("No observations")}</AppText>;
 
-  const a11ySummary = rbaChartA11ySummary(data, holdMarks.length);
+  const a11ySummary = uiJoin('Cash rate', ' · ', uiCount(data.length), ' ', 'Observed', ' · ', uiDate(data[0]?.date), uiJoin(' ', '–', ' '), uiDate(data.at(-1)?.date));
 
   return (
     <View>
       <View
         accessible
         accessibilityRole="adjustable"
-        accessibilityLabel={`${a11ySummary}. Selected ${formatRunDate(activeDate)}, ${activeRate != null ? formatRate(activeRate) : 'no rate'}${isHold ? ', held' : ''}.`}
+        accessibilityLabel={uiJoin(a11ySummary, ' · ', 'Selected', ' · ', uiDate(activeDate), ' · ', uiRate(activeRate), isHold ? uiJoin(' · ', 'Held') : null)}
         accessibilityActions={[{ name: 'increment', label: 'Next date' }, { name: 'decrement', label: 'Previous date' }]}
         onAccessibilityAction={(event) => {
           if (event.nativeEvent.actionName === 'increment') setSelectedDate(timeline[Math.min(timeline.length - 1, activeIndex + 1)]);
@@ -203,10 +202,10 @@ export const RbaChart = React.memo(function RbaChart({
           <Line x1={padL} y1={y(maxR)} x2={width - padR} y2={y(maxR)} stroke={theme.colors.border} strokeWidth={1} />
           <Line x1={padL} y1={y(minR)} x2={width - padR} y2={y(minR)} stroke={theme.colors.border} strokeWidth={1} />
           <SvgText x={width - padR + 4} y={y(maxR) + 4} fontSize={10} fill={theme.colors.textFaint}>
-            {formatRateDigits(maxR)}
+            {uiNumber(maxR * 100, 2)}
           </SvgText>
           <SvgText x={width - padR + 4} y={y(minR) + 4} fontSize={10} fill={theme.colors.textFaint}>
-            {formatRateDigits(minR)}
+            {uiNumber(minR * 100, 2)}
           </SvgText>
           <AnimatedPath
             animatedProps={pathAnimatedProps}
@@ -244,7 +243,7 @@ export const RbaChart = React.memo(function RbaChart({
                 fill={theme.colors.text}
                 textAnchor="end"
               >
-                {formatRate(activeRate)}
+                {uiRate(activeRate)}
               </SvgText>
             </>
           ) : null}
@@ -255,8 +254,8 @@ export const RbaChart = React.memo(function RbaChart({
         dates={timeline}
         activeIndex={activeIndex}
         onChangeIndex={(index) => setSelectedDate(timeline[index] ?? null)}
-        valueLabel={activeRate != null ? formatRate(activeRate) : '—'}
-        detail={isHold ? 'On hold — no change' : priorRate != null && activeRate != null ? `${formatRate(priorRate)} → ${formatRate(activeRate)}` : null}
+        valueLabel={uiRate(activeRate)}
+        facts={isHold ? [{ label: 'Held', value: 'No change' }] : priorRate != null && activeRate != null ? [{ label: 'Prior', value: uiJoin(uiRate(priorRate), ' → ', uiRate(activeRate)) }] : undefined}
       />
     </View>
   );

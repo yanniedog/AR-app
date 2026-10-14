@@ -89,7 +89,7 @@ test('actual selected worse mortgage retains a negative hypothetical amount inst
   prepare('Mortgage', [{ ...loan, rate: '0.09' }, { ...loan, rate_index: 5, rate: '0.05' }],
     [{ rateIndex: 4, text: 'LVR up to 59.99%.' }, { rateIndex: 5, text: 'LVR up to 59.99%.' }], mortgageScenario('250000'), '4');
   let tree!: InspectableRenderer; act(() => { tree = TestRenderer.create(<RateCheckWorkspace />) as InspectableRenderer; });
-  expect(texts(tree).some(text => text.startsWith('$-') && text.endsWith('/mo'))).toBe(true);
+  expect(texts(tree).some(text => /-\$[\d,.]+\s*\/\s*mo$/.test(text))).toBe(true);
   expect(texts(tree)).toContain('Eligibility unverified'); expect(texts(tree)).not.toContain('Lower matched rates');
   expect(tree.root.findAllByType('BankAvatar' as never).map(node => node.props.renderStateId)).toEqual(['calculator:loan:4']);
   act(() => tree.unmount());
@@ -124,4 +124,45 @@ test('actual deposit projection does not show whole-balance interest outside sel
   expect(texts(tree).some(text => /\$1,500 interest difference/.test(text))).toBe(false);
   expect(texts(tree)).toContain('Selected saver');
   act(() => tree.unmount());
+});
+
+test('an exact target requests and awaits verified details with no saved current product', async () => {
+  const fixture=prepare('Mortgage',[loan,{...loan,rate_index:5,rate:'0.04',lvr_tier:'lvr_0-90%'}],
+    [{rateIndex:4,text:'LVR up to 59.99%.'},{rateIndex:5,text:'LVR up to 90%.'}],mortgageScenario('300000'),'4');
+  expect(mockScenario.currentProducts.mortgage.productKey).toBe('');
+  mockState.details=null;
+  let complete!:()=>void;
+  mockState.ensureDetails=jest.fn(()=>new Promise<void>(resolve=>{complete=resolve;}));
+  let tree!:InspectableRenderer;
+  act(()=>{tree=TestRenderer.create(<RateCheckWorkspace/>) as InspectableRenderer;});
+  expect(mockState.ensureDetails).toHaveBeenCalledWith({forProductView:true});
+  expect(texts(tree)).toContain('Selected loan');expect(texts(tree)).toContain('Rate only');
+  expect(texts(tree).some(value=>/\/\s*mo$/.test(value))).toBe(false);
+  expect(surface('calculator.results').probes?.find(probe=>probe.id==='calculator.details')?.status).toBe('pending');
+  expect(surface('calculator.results').probes?.find(probe=>probe.id==='calculator.details')?.actualCount).toBe(0);
+  mockState.details=fixture.details;
+  await act(async()=>{complete();tree.update(<RateCheckWorkspace/>);});
+  expect(texts(tree)).toContain('Outside published LVR');
+  expect(texts(tree).some(value=>/\/\s*mo$/.test(value))).toBe(false);
+  expect(tree.root.findAllByType('BankAvatar' as never).map(node=>node.props.renderStateId)).toEqual(['calculator:loan:4']);
+  expect(surface('calculator.results').probes?.find(probe=>probe.id==='calculator.details')?.status).toBe('ready');
+  expect(surface('calculator.results').probes?.find(probe=>probe.id==='calculator.target')?.status).toBe('ready');
+  act(()=>tree.unmount());
+});
+
+test('failed same-publication details admission stays rate-only without a sibling or a ready probe', async()=>{
+  prepare('Mortgage',[loan,{...loan,rate_index:5,rate:'0.04'}],[{rateIndex:4,text:'LVR up to 59.99%.'}],mortgageScenario('250000'),'4');
+  // A structurally similar copied object has no loader-established details hash binding.
+  mockState.details=JSON.parse(JSON.stringify(mockState.details));
+  let tree!:InspectableRenderer;
+  await act(async()=>{tree=TestRenderer.create(<RateCheckWorkspace/>) as InspectableRenderer;});
+  expect(mockState.ensureDetails).toHaveBeenCalledTimes(1);
+  expect(texts(tree)).toContain('Sources unverified');
+  expect(texts(tree).some(value=>/\/\s*mo$/.test(value))).toBe(false);
+  expect(tree.root.findAllByType('BankAvatar' as never).map(node=>node.props.renderStateId)).toEqual(['calculator:loan:4']);
+  const probes=surface('calculator.results').probes;
+  expect(probes?.find(probe=>probe.id==='calculator.details')?.status).toBe('error');
+  expect(probes?.find(probe=>probe.id==='calculator.details')?.actualCount).toBe(0);
+  expect(probes?.find(probe=>probe.id==='calculator.candidates')?.status).toBe('error');
+  act(()=>tree.unmount());
 });

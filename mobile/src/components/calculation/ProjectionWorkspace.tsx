@@ -1,3 +1,4 @@
+import { uiDate, uiDuration, uiInputNumber, uiJoin, uiLabel, uiMoney, uiSectionName, type UiCopy, type UiText } from "../../lib/uiCopy";
 import { fontStyle } from '../../theme/fonts';
 import { prepareProjectionAuditScenario } from '../../lib/performanceAuditScenario';
 import { mandatoryProductAllowed } from '../../data/eligibilityGate';
@@ -41,17 +42,18 @@ import { buildStaySwitchProjection } from '../../data/staySwitchProjection';
 import { resolveCalculationTarget } from '../../lib/calculationTarget';
 import { selectedTargetConstraint, targetConstraintContradicted } from '../../lib/selectedTargetConstraints';
 import { SelectedCalculationTarget } from './SelectedCalculationTarget';
+import { ProjectionFactRows } from './ProjectionFactRows';
 import { NOT_LISTED_PROVIDER } from '../../data/userRateScenario';
 import { auditActionString } from '../../lib/performanceAuditActionParams';
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
-import { SECTIONS, SECTION_ORDER } from '../../constants';
+import { SECTION_ORDER } from '../../constants';
 
-const SECTION_OPTIONS = SECTION_ORDER.map(value => ({ value, label: SECTIONS[value].title }));
+const SECTION_OPTIONS = SECTION_ORDER.map(value => ({ value, label: uiSectionName(value) }));
 
-const FREQUENCY_OPTIONS: { label: string; value: ProjectionFrequency }[] = [
-  { label: 'Weekly', value: 'weekly' },
-  { label: 'Fortnightly', value: 'fortnightly' },
-  { label: 'Monthly', value: 'monthly' },
+const FREQUENCY_OPTIONS: { label: UiCopy; value: ProjectionFrequency }[] = [
+  { label: uiLabel("Weekly"), value: 'weekly' },
+  { label: uiLabel("Fortnightly"), value: 'fortnightly' },
+  { label: uiLabel("Monthly"), value: 'monthly' },
 ];
 
 function enteredNumber(value: string): number | null {
@@ -60,31 +62,30 @@ function enteredNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function rateError(value: string, required: boolean): string | undefined {
+function rateError(value: string, required: boolean): UiText | undefined {
   const parsed = enteredNumber(value);
-  if (parsed == null) return required || value.trim() ? 'Enter a rate from 0% to 100%.' : undefined;
-  return parsed < 0 || parsed > 100 ? 'Use a rate from 0% to 100%.' : undefined;
+  if (parsed == null) return required || value.trim() ? uiJoin('Rate',': ',0,'–',100,'%') : undefined;
+  return parsed < 0 || parsed > 100 ? uiJoin('Rate',': ',0,'–',100,'%') : undefined;
 }
 
 function positiveAmountError(
   value: string,
-  label: string,
+  label: UiCopy,
   maximum: number,
-  maximumLabel: string,
   required = false,
-): string | undefined {
+): UiText | undefined {
   const parsed = enteredNumber(value);
-  if (parsed == null) return required || value.trim() ? `Enter ${label}.` : undefined;
-  if (parsed <= 0) return `Enter ${label}.`;
-  if (parsed > maximum) return `Use ${label} no greater than ${maximumLabel}.`;
+  if (parsed == null) return required || value.trim() ? uiJoin(label,': ','Required') : undefined;
+  if (parsed <= 0) return uiJoin(label,': ','Required');
+  if (parsed > maximum) return uiJoin(label,': ','≤',uiMoney(maximum));
   return undefined;
 }
 
-function optionalAmountError(value: string, maximum: number, maximumLabel: string): string | undefined {
+function optionalAmountError(value: string, maximum: number): UiText | undefined {
   if (!value.trim()) return undefined;
   const parsed = enteredNumber(value);
   if (parsed == null || parsed < 0 || parsed > maximum) {
-    return `Use an amount from $0 to ${maximumLabel}.`;
+    return uiJoin('Amount',': ',uiMoney(0),'–',uiMoney(maximum));
   }
   return undefined;
 }
@@ -112,15 +113,15 @@ function NumericField({
   editable = true,
   error,
 }: {
-  label: string;
+  label: UiCopy;
   value: string;
   onChangeText: (value: string) => void;
-  placeholder: string;
-  prefix?: string;
-  suffix?: string;
+  placeholder: UiCopy;
+  prefix?: UiCopy;
+  suffix?: UiCopy;
   date?: boolean;
   editable?: boolean;
-  error?: string;
+  error?: UiCopy;
 }) {
   const theme = useTheme();
   return (
@@ -140,7 +141,7 @@ function NumericField({
       >
         {prefix ? <AppText color="textMuted">{prefix}</AppText> : null}
         <TextInput
-          value={value}
+          value={uiInputNumber(value)}
           onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor={theme.colors.textFaint}
@@ -148,7 +149,7 @@ function NumericField({
           autoCapitalize="none"
           autoCorrect={false}
           accessibilityLabel={label}
-          accessibilityHint={error ?? `${prefix ?? ''}${suffix ? ` Value in ${suffix}.` : ''}`}
+
           accessibilityState={{ disabled: !editable }}
           editable={editable}
           maxLength={20}
@@ -179,17 +180,17 @@ function FrequencyField({
   editable = true,
   error,
 }: {
-  label: string;
+  label: UiCopy;
   value: ProjectionFrequency;
   amount: string;
   onAmount: (value: string) => void;
   onFrequency: (value: ProjectionFrequency) => void;
   editable?: boolean;
-  error?: string;
+  error?: UiCopy;
 }) {
   return (
     <View style={{ gap: 8 }}>
-      <NumericField label={label} value={amount} onChangeText={onAmount} placeholder="0" prefix="$" editable={editable} error={error} />
+      <NumericField label={label} value={amount} onChangeText={onAmount} placeholder={uiInputNumber('0')} prefix="$" editable={editable} error={error} />
       <SegmentedControl options={FREQUENCY_OPTIONS} value={value} onChange={(next) => { if (editable) onFrequency(next); }} />
     </View>
   );
@@ -317,15 +318,15 @@ export function ProjectionWorkspace() {
   const historyValues = [projectionInputs.startDate, projectionInputs.startBalance, projectionInputs.startRate];
   const hasHistoryInput = historyValues.some((value) => value.trim().length > 0);
   const startDateValid = validPastIsoDate(projectionInputs.startDate);
-  const errors: Record<string, string | undefined> = {
+  const errors: Record<string, UiCopy | undefined> = {
     mortgageBalance: section === 'Mortgage'
-      ? positiveAmountError(currentMortgageBalance, 'the current loan balance', MAX_MORTGAGE_BALANCE, '$100 million')
+      ? positiveAmountError(currentMortgageBalance, 'Loan balance', MAX_MORTGAGE_BALANCE)
       : undefined,
     savingsBalance: section === 'Savings'
-      ? positiveAmountError(scenario.savings.balance, 'the current balance', MAX_DEPOSIT_BALANCE, '$20 million')
+      ? positiveAmountError(scenario.savings.balance, 'Balance', MAX_DEPOSIT_BALANCE)
       : undefined,
     tdBalance: section === 'TD'
-      ? positiveAmountError(scenario.termDeposit.balance, 'the deposit amount', MAX_DEPOSIT_BALANCE, '$20 million')
+      ? positiveAmountError(scenario.termDeposit.balance, 'Deposit amount', MAX_DEPOSIT_BALANCE)
       : undefined,
     currentRate: rateError(
       section === 'Mortgage' ? scenario.mortgage.currentRate : section === 'TD' ? scenario.termDeposit.currentRate : scenario.savings.currentRate,
@@ -333,16 +334,16 @@ export function ProjectionWorkspace() {
     ),
     years: section === 'Mortgage' && scenario.mortgage.years.trim()
       && (!(enteredNumber(scenario.mortgage.years)! > 0) || enteredNumber(scenario.mortgage.years)! > MAX_PROJECTION_YEARS)
-      ? `Use a remaining term above 0 and up to ${MAX_PROJECTION_YEARS} years.`
+      ? uiJoin('Remaining term',': ','>',0,'–',uiDuration(MAX_PROJECTION_YEARS,'years'))
       : undefined,
     fixedPeriod: projectionInputs.mortgageRateStructure === 'fixed'
       && (!(enteredNumber(projectionInputs.fixedPeriodMonths)! > 0)
         || enteredNumber(projectionInputs.fixedPeriodMonths)! > (enteredNumber(scenario.mortgage.years) ?? 0) * 12)
-      ? 'Use a fixed period above 0 and no longer than the remaining loan term.'
+      ? uiJoin('Fixed period',': ','>',0,'–','Remaining term')
       : undefined,
     horizon: section === 'Savings' && projectionInputs.horizonYears.trim()
       && (!(enteredNumber(projectionInputs.horizonYears)! > 0) || enteredNumber(projectionInputs.horizonYears)! > MAX_PROJECTION_YEARS)
-      ? `Use a horizon above 0 and up to ${MAX_PROJECTION_YEARS} years.`
+      ? uiJoin('Projection horizon',': ','>',0,'–',uiDuration(MAX_PROJECTION_YEARS,'years'))
       : undefined,
     ongoingRate: projectionInputs.savingsRateStructure === 'conditional-bonus'
       ? rateError(projectionInputs.ongoingRate, true)
@@ -351,50 +352,48 @@ export function ProjectionWorkspace() {
       && (!Number.isInteger(enteredNumber(projectionInputs.bonusMonthsRemaining))
         || enteredNumber(projectionInputs.bonusMonthsRemaining)! < 0
         || enteredNumber(projectionInputs.bonusMonthsRemaining)! > 60)
-      ? 'Use a whole-number bonus period from 0 to 60 months.'
+      ? uiJoin('Bonus period',': ',0,'–',60,' · ','Whole months')
       : undefined,
     termMonths: section === 'TD' && projectionInputs.termMonths.trim()
       && (!Number.isInteger(enteredNumber(projectionInputs.termMonths))
         || enteredNumber(projectionInputs.termMonths)! < 1
         || enteredNumber(projectionInputs.termMonths)! > 120)
-      ? 'Use a whole-number term from 1 to 120 months.'
+      ? uiJoin('Term',': ',1,'–',120,' · ','Whole months')
       : undefined,
     rollovers: section === 'TD'
       && (!Number.isInteger(enteredNumber(projectionInputs.rollovers))
         || enteredNumber(projectionInputs.rollovers)! < 0
         || enteredNumber(projectionInputs.rollovers)! > 10)
-      ? 'Use a whole number from 0 to 10.'
+      ? uiJoin('Rollovers',': ',0,'–',10,' · ','Whole numbers')
       : undefined,
-    startDate: hasHistoryInput && !startDateValid ? 'Use a valid past date in YYYY-MM-DD format.' : undefined,
+    startDate: hasHistoryInput && !startDateValid ? uiJoin('Past date',': ','YYYY-MM-DD') : undefined,
     startBalance: hasHistoryInput
       ? positiveAmountError(
         projectionInputs.startBalance,
-        'a starting balance',
+        'Starting balance',
         section === 'Mortgage' ? MAX_MORTGAGE_BALANCE : MAX_DEPOSIT_BALANCE,
-        section === 'Mortgage' ? '$100 million' : '$20 million',
         true,
       )
       : undefined,
     startRate: hasHistoryInput ? rateError(projectionInputs.startRate, true) : undefined,
     lowerRate: projectionInputs.lowerRate.trim()
       && (rateError(projectionInputs.lowerRate, false) || enteredNumber(projectionInputs.lowerRate)! > (rangeBaseRateNumber ?? -1))
-      ? 'Use a rate from 0% up to the current or ongoing rate.'
+      ? uiJoin('Rate',': ',0,'%','–','Current / ongoing')
       : undefined,
     higherRate: projectionInputs.higherRate.trim()
       && (rateError(projectionInputs.higherRate, false) || enteredNumber(projectionInputs.higherRate)! < (rangeBaseRateNumber ?? 101))
-      ? 'Use a rate from the current or ongoing rate up to 100%.'
+      ? uiJoin('Rate',': ','Current / ongoing','–',100,'%')
       : undefined,
-    periodicAmount: optionalAmountError(projectionInputs.periodicAmount, MAX_PERIODIC_AMOUNT, '$1 million per selected period'),
-    withdrawalAmount: optionalAmountError(projectionInputs.withdrawalAmount, MAX_PERIODIC_AMOUNT, '$1 million per selected period'),
+    periodicAmount: optionalAmountError(projectionInputs.periodicAmount, MAX_PERIODIC_AMOUNT),
+    withdrawalAmount: optionalAmountError(projectionInputs.withdrawalAmount, MAX_PERIODIC_AMOUNT),
     offsetBalance: optionalAmountError(
       projectionInputs.offsetBalance,
       Math.min(enteredNumber(currentMortgageBalance) ?? MAX_MORTGAGE_BALANCE, MAX_MORTGAGE_BALANCE),
-      'the current loan balance',
     ),
-    startOffsetBalance: optionalAmountError(projectionInputs.startOffsetBalance, MAX_MORTGAGE_BALANCE, '$100 million'),
-    offsetContributionAmount: optionalAmountError(projectionInputs.offsetContributionAmount, MAX_PERIODIC_AMOUNT, '$1 million per selected period'),
-    offsetBoostAmount: optionalAmountError(projectionInputs.offsetBoostAmount, MAX_PERIODIC_AMOUNT, '$1 million per selected period'),
-    extraRepaymentAmount: optionalAmountError(projectionInputs.extraRepaymentAmount, MAX_PERIODIC_AMOUNT, '$1 million per selected period'),
+    startOffsetBalance: optionalAmountError(projectionInputs.startOffsetBalance, MAX_MORTGAGE_BALANCE),
+    offsetContributionAmount: optionalAmountError(projectionInputs.offsetContributionAmount, MAX_PERIODIC_AMOUNT),
+    offsetBoostAmount: optionalAmountError(projectionInputs.offsetBoostAmount, MAX_PERIODIC_AMOUNT),
+    extraRepaymentAmount: optionalAmountError(projectionInputs.extraRepaymentAmount, MAX_PERIODIC_AMOUNT),
   };
   const coreRevision = core ? `${core.run_date}:${coreSha}` : null;
   const activeBaseScenario = section === 'Mortgage'
@@ -441,8 +440,9 @@ export function ProjectionWorkspace() {
   }, []);
   const auditSelectSection = useCallback((...args: unknown[]) => {
     const requested = auditActionString(args, 'section');
-    if (typeof requested === 'string' && SECTION_OPTIONS.some((item) => item.value === requested)) {
-      changeSection(requested as SectionKey);
+    const requestedSection=SECTION_OPTIONS.find(item=>item.value===requested)?.value;
+    if (requestedSection) {
+      changeSection(requestedSection);
       return;
     }
     const currentIndex = SECTION_OPTIONS.findIndex((item) => item.value === section);
@@ -632,7 +632,7 @@ export function ProjectionWorkspace() {
         id: 'projections.scenario-storage',
         kind: 'data',
         status: storageStatus === 'ready' ? 'ready' : storageStatus === 'error' ? 'error' : 'pending',
-        error: storageStatus === 'error' ? storageError ?? 'Encrypted scenario unavailable' : null,
+        error: storageStatus === 'error' ? storageError ?? 'Scenario unavailable' : null,
       },
       {
         id: 'projections.model',
@@ -683,7 +683,7 @@ export function ProjectionWorkspace() {
         id: 'projections-inputs.scenario-storage',
         kind: 'data',
         status: storageStatus === 'ready' ? 'ready' : storageStatus === 'error' ? 'error' : 'pending',
-        error: storageStatus === 'error' ? storageError ?? 'Encrypted scenario unavailable' : null,
+        error: storageStatus === 'error' ? storageError ?? 'Scenario unavailable' : null,
       },
       {
         id: 'projections-inputs.layout',
@@ -697,36 +697,31 @@ export function ProjectionWorkspace() {
 
   const basicFields = (
     <Card style={{ gap: 14 }}>
-      <View>
-        <AppText variant="h3">Start with today</AppText>
-        <AppText variant="small" color="textMuted" style={{ marginTop: 3 }}>
-          These values are shared with your rate calculator. Editing them updates only your private local scenario.
-        </AppText>
-      </View>
+      <AppText variant="h3">{uiLabel("Current values")}</AppText>
       {section === 'Mortgage' ? (
         <>
           <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
             <NumericField
-              label={scenario.mortgage.mode === 'buy' ? 'Calculated loan amount' : 'Current loan balance'}
+              label={uiLabel(scenario.mortgage.mode === 'buy' ? 'Calculated loan amount' : 'Current loan balance')}
               value={currentMortgageBalance}
               onChangeText={(loanBalance) => updateMortgage({ loanBalance })}
-              placeholder="600,000"
+              placeholder={uiInputNumber('600,000')}
               prefix="$"
               editable={inputsEditable && scenario.mortgage.mode !== 'buy'}
               error={errors.mortgageBalance}
             />
-            <NumericField label="Current interest rate" value={scenario.mortgage.currentRate} onChangeText={(currentRate) => updateMortgage({ currentRate })} placeholder="6.00" suffix="%" editable={inputsEditable} error={errors.currentRate} />
-            <NumericField label="Years remaining" value={scenario.mortgage.years} onChangeText={(years) => updateMortgage({ years })} placeholder="25" suffix="years" editable={inputsEditable} error={errors.years} />
+            <NumericField label="Current interest rate" value={scenario.mortgage.currentRate} onChangeText={(currentRate) => updateMortgage({ currentRate })} placeholder={uiInputNumber('6.00')} suffix="%" editable={inputsEditable} error={errors.currentRate} />
+            <NumericField label="Years remaining" value={scenario.mortgage.years} onChangeText={(years) => updateMortgage({ years })} placeholder={uiInputNumber('25')} suffix="years" editable={inputsEditable} error={errors.years} />
           </Row>
           {scenario.mortgage.mode === 'buy' ? (
-            <AppText variant="tiny" color="textMuted">
-              Loan amount is calculated from the purchase details in Switch &amp; save. Edit those details there rather than silently changing this to a refinance scenario.
-            </AppText>
+            <Button title="Purchase details" variant="secondary" onPress={() => {
+              void flush().then(saved => { if (saved) router.setParams({ mode: 'check' }); });
+            }} />
           ) : null}
           <SegmentedControl
             options={[
-              { label: 'Variable rate', value: 'variable' },
-              { label: 'Fixed rate', value: 'fixed' },
+              { label: uiLabel("Variable rate"), value: 'variable' },
+              { label: uiLabel("Fixed rate"), value: 'fixed' },
             ]}
             value={projectionInputs.mortgageRateStructure}
             onChange={(mortgageRateStructure) => { if (inputsEditable) updateProjection({ mortgageRateStructure }); }}
@@ -736,7 +731,7 @@ export function ProjectionWorkspace() {
               label="Fixed period remaining"
               value={projectionInputs.fixedPeriodMonths}
               onChangeText={(fixedPeriodMonths) => updateProjection({ fixedPeriodMonths })}
-              placeholder="12"
+              placeholder={uiInputNumber('12')}
               suffix="months"
               editable={inputsEditable}
               error={errors.fixedPeriod}
@@ -752,8 +747,8 @@ export function ProjectionWorkspace() {
             error={errors.periodicAmount}
           />
           <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <NumericField label="Current offset balance" value={projectionInputs.offsetBalance} onChangeText={(offsetBalance) => updateProjection({ offsetBalance })} placeholder="0" prefix="$" editable={inputsEditable} error={errors.offsetBalance} />
-            <NumericField label="Amount added to offset" value={projectionInputs.offsetContributionAmount} onChangeText={(offsetContributionAmount) => updateProjection({ offsetContributionAmount })} placeholder="0" prefix="$" editable={inputsEditable} error={errors.offsetContributionAmount} />
+            <NumericField label="Current offset balance" value={projectionInputs.offsetBalance} onChangeText={(offsetBalance) => updateProjection({ offsetBalance })} placeholder={uiInputNumber('0')} prefix="$" editable={inputsEditable} error={errors.offsetBalance} />
+            <NumericField label="Amount added to offset" value={projectionInputs.offsetContributionAmount} onChangeText={(offsetContributionAmount) => updateProjection({ offsetContributionAmount })} placeholder={uiInputNumber('0')} prefix="$" editable={inputsEditable} error={errors.offsetContributionAmount} />
           </Row>
           <SegmentedControl
             options={FREQUENCY_OPTIONS}
@@ -764,14 +759,14 @@ export function ProjectionWorkspace() {
       ) : section === 'Savings' ? (
         <>
           <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <NumericField label="Current balance" value={scenario.savings.balance} onChangeText={(balance) => updateDeposit({ balance })} placeholder="25,000" prefix="$" editable={inputsEditable} error={errors.savingsBalance} />
-            <NumericField label={projectionInputs.savingsRateStructure === 'conditional-bonus' ? 'Current conditional rate' : 'Current interest rate'} value={scenario.savings.currentRate} onChangeText={(currentRate) => updateDeposit({ currentRate })} placeholder="4.50" suffix="%" editable={inputsEditable} error={errors.currentRate} />
-            <NumericField label="Projection horizon" value={projectionInputs.horizonYears} onChangeText={(horizonYears) => updateProjection({ horizonYears })} placeholder="10" suffix="years" editable={inputsEditable} error={errors.horizon} />
+            <NumericField label="Current balance" value={scenario.savings.balance} onChangeText={(balance) => updateDeposit({ balance })} placeholder={uiInputNumber('25,000')} prefix="$" editable={inputsEditable} error={errors.savingsBalance} />
+            <NumericField label={uiLabel(projectionInputs.savingsRateStructure === 'conditional-bonus' ? 'Current conditional rate' : 'Current interest rate')} value={scenario.savings.currentRate} onChangeText={(currentRate) => updateDeposit({ currentRate })} placeholder={uiInputNumber('4.50')} suffix="%" editable={inputsEditable} error={errors.currentRate} />
+            <NumericField label="Projection horizon" value={projectionInputs.horizonYears} onChangeText={(horizonYears) => updateProjection({ horizonYears })} placeholder={uiInputNumber('10')} suffix="years" editable={inputsEditable} error={errors.horizon} />
           </Row>
           <SegmentedControl
             options={[
-              { label: 'Ongoing rate', value: 'ongoing' },
-              { label: 'Conditional bonus', value: 'conditional-bonus' },
+              { label: uiLabel("Ongoing rate"), value: 'ongoing' },
+              { label: uiLabel("Conditional bonus"), value: 'conditional-bonus' },
             ]}
             value={projectionInputs.savingsRateStructure}
             onChange={(savingsRateStructure) => { if (inputsEditable) updateProjection({ savingsRateStructure }); }}
@@ -779,11 +774,11 @@ export function ProjectionWorkspace() {
           {projectionInputs.savingsRateStructure === 'conditional-bonus' ? (
             <>
               <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                <NumericField label="Ongoing rate" value={projectionInputs.ongoingRate} onChangeText={(ongoingRate) => updateProjection({ ongoingRate })} placeholder="1.50" suffix="%" editable={inputsEditable} error={errors.ongoingRate} />
-                <NumericField label="Bonus period remaining" value={projectionInputs.bonusMonthsRemaining} onChangeText={(bonusMonthsRemaining) => updateProjection({ bonusMonthsRemaining })} placeholder="4" suffix="months" editable={inputsEditable} error={errors.bonusMonths} />
+                <NumericField label="Ongoing rate" value={projectionInputs.ongoingRate} onChangeText={(ongoingRate) => updateProjection({ ongoingRate })} placeholder={uiInputNumber('1.50')} suffix="%" editable={inputsEditable} error={errors.ongoingRate} />
+                <NumericField label="Bonus period remaining" value={projectionInputs.bonusMonthsRemaining} onChangeText={(bonusMonthsRemaining) => updateProjection({ bonusMonthsRemaining })} placeholder={uiInputNumber('4')} suffix="months" editable={inputsEditable} error={errors.bonusMonths} />
               </Row>
               <CompactToggle
-                label="I expect to meet the bonus conditions"
+                label="Bonus conditions met"
                 value={projectionInputs.bonusConditionsMet}
                 onChange={(bonusConditionsMet) => { if (inputsEditable) updateProjection({ bonusConditionsMet }); }}
               />
@@ -802,22 +797,19 @@ export function ProjectionWorkspace() {
       ) : (
         <>
           <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <NumericField label="Deposit amount" value={scenario.termDeposit.balance} onChangeText={(balance) => updateDeposit({ balance })} placeholder="50,000" prefix="$" editable={inputsEditable} error={errors.tdBalance} />
-            <NumericField label="Fixed interest rate" value={scenario.termDeposit.currentRate} onChangeText={(currentRate) => updateDeposit({ currentRate })} placeholder="4.50" suffix="%" editable={inputsEditable} error={errors.currentRate} />
-            <NumericField label="Term" value={projectionInputs.termMonths} onChangeText={(termMonths) => updateProjection({ termMonths })} placeholder="12" suffix="months" editable={inputsEditable} error={errors.termMonths} />
+            <NumericField label="Deposit amount" value={scenario.termDeposit.balance} onChangeText={(balance) => updateDeposit({ balance })} placeholder={uiInputNumber('50,000')} prefix="$" editable={inputsEditable} error={errors.tdBalance} />
+            <NumericField label="Fixed interest rate" value={scenario.termDeposit.currentRate} onChangeText={(currentRate) => updateDeposit({ currentRate })} placeholder={uiInputNumber('4.50')} suffix="%" editable={inputsEditable} error={errors.currentRate} />
+            <NumericField label="Term" value={projectionInputs.termMonths} onChangeText={(termMonths) => updateProjection({ termMonths })} placeholder={uiInputNumber('12')} suffix="months" editable={inputsEditable} error={errors.termMonths} />
           </Row>
         </>
       )}
       <Pressable
         onPress={toggleAdvanced}
         accessibilityRole="button"
-        accessibilityLabel={advanced ? 'Hide optional projection assumptions' : 'Show optional projection assumptions'}
+        accessibilityLabel={uiJoin(advanced ? 'Hide':'Show',' ','Assumptions')}
         style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
       >
-        <View style={{ flex: 1 }}>
-          <AppText variant="body" weight="700">More assumptions</AppText>
-          <AppText variant="tiny" color="textMuted">History, contributions and alternative rates</AppText>
-        </View>
+        <AppText variant="body" weight="700" style={{ flex: 1 }}>{uiLabel("Assumptions")}</AppText>
         <Ionicons name={advanced ? 'chevron-up' : 'chevron-down'} size={20} color={theme.colors.primary} />
       </Pressable>
     </Card>
@@ -827,21 +819,18 @@ export function ProjectionWorkspace() {
     <Card style={{ gap: 14 }}>
       <View>
         <Row style={{ justifyContent: 'space-between' }}>
-          <AppText variant="h3">Approximate history</AppText>
-          <Badge label="optional" tone="muted" />
+          <AppText variant="h3">{uiLabel("Approximate history")}</AppText>
+          <Badge label="Optional" tone="muted" />
         </Row>
-        <AppText variant="small" color="textMuted" style={{ marginTop: 3 }}>
-          Enter all three anchors to estimate progress before today. This is not a statement history and will show any mismatch with your current balance.
-        </AppText>
       </View>
       <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <NumericField label="Starting date" value={projectionInputs.startDate} onChangeText={(startDate) => updateProjection({ startDate })} placeholder="2021-08-04" date editable={inputsEditable} error={errors.startDate} />
-        <NumericField label="Starting balance" value={projectionInputs.startBalance} onChangeText={(startBalance) => updateProjection({ startBalance })} placeholder="700,000" prefix="$" editable={inputsEditable} error={errors.startBalance} />
-        <NumericField label="Starting rate" value={projectionInputs.startRate} onChangeText={(startRate) => updateProjection({ startRate })} placeholder="3.50" suffix="%" editable={inputsEditable} error={errors.startRate} />
+        <NumericField label="Starting date" value={projectionInputs.startDate} onChangeText={(startDate) => updateProjection({ startDate })} placeholder={uiLabel('YYYY-MM-DD')} date editable={inputsEditable} error={errors.startDate} />
+        <NumericField label="Starting balance" value={projectionInputs.startBalance} onChangeText={(startBalance) => updateProjection({ startBalance })} placeholder={uiInputNumber('700,000')} prefix="$" editable={inputsEditable} error={errors.startBalance} />
+        <NumericField label="Starting rate" value={projectionInputs.startRate} onChangeText={(startRate) => updateProjection({ startRate })} placeholder={uiInputNumber('3.50')} suffix="%" editable={inputsEditable} error={errors.startRate} />
       </Row>
       {section === 'Mortgage' ? (
         <>
-          <NumericField label="Starting offset balance" value={projectionInputs.startOffsetBalance} onChangeText={(startOffsetBalance) => updateProjection({ startOffsetBalance })} placeholder="0" prefix="$" editable={inputsEditable} error={errors.startOffsetBalance} />
+          <NumericField label="Starting offset balance" value={projectionInputs.startOffsetBalance} onChangeText={(startOffsetBalance) => updateProjection({ startOffsetBalance })} placeholder={uiInputNumber('0')} prefix="$" editable={inputsEditable} error={errors.startOffsetBalance} />
           <FrequencyField
             label="Extra repayment"
             amount={projectionInputs.extraRepaymentAmount}
@@ -852,10 +841,10 @@ export function ProjectionWorkspace() {
             error={errors.extraRepaymentAmount}
           />
           <NumericField
-            label="Boosted-offset scenario adds another"
+            label="Offset boost"
             value={projectionInputs.offsetBoostAmount}
             onChangeText={(offsetBoostAmount) => updateProjection({ offsetBoostAmount })}
-            placeholder="100"
+            placeholder={uiInputNumber('100')}
             prefix="$"
             suffix={`/${projectionInputs.offsetContributionFrequency === 'monthly' ? 'month' : projectionInputs.offsetContributionFrequency === 'weekly' ? 'week' : 'fortnight'}`}
             editable={inputsEditable}
@@ -874,20 +863,18 @@ export function ProjectionWorkspace() {
         />
       ) : (
         <>
-          <NumericField label="Rollovers after first maturity" value={projectionInputs.rollovers} onChangeText={(rollovers) => updateProjection({ rollovers })} placeholder="0" editable={inputsEditable} error={errors.rollovers} />
+          <NumericField label="Rollovers after first maturity" value={projectionInputs.rollovers} onChangeText={(rollovers) => updateProjection({ rollovers })} placeholder={uiInputNumber('0')} editable={inputsEditable} error={errors.rollovers} />
           <CompactToggle label="Reinvest modelled interest" value={projectionInputs.reinvestInterest} onChange={(reinvestInterest) => { if (inputsEditable) updateProjection({ reinvestInterest }); }} />
         </>
       )}
       <View style={{ height: 1, backgroundColor: theme.colors.border }} />
-      <View>
-        <AppText variant="body" weight="700">Future interest-rate range</AppText>
-        <AppText variant="tiny" color="textMuted" style={{ marginTop: 3 }}>
-          Leave blank to use one percentage point below and above your current rate.
-        </AppText>
-      </View>
+      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <AppText variant="body" weight="700">{uiLabel("Rate range")}</AppText>
+        <AppText variant="tiny" color="textMuted">{uiLabel("Default ±1 pp")}</AppText>
+      </Row>
       <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <NumericField label="Lower scenario" value={projectionInputs.lowerRate} onChangeText={(lowerRate) => updateProjection({ lowerRate })} placeholder="auto" suffix="%" editable={inputsEditable} error={errors.lowerRate} />
-        <NumericField label="Higher scenario" value={projectionInputs.higherRate} onChangeText={(higherRate) => updateProjection({ higherRate })} placeholder="auto" suffix="%" editable={inputsEditable} error={errors.higherRate} />
+        <NumericField label="Lower scenario" value={projectionInputs.lowerRate} onChangeText={(lowerRate) => updateProjection({ lowerRate })} placeholder={uiLabel('Automatic')} suffix="%" editable={inputsEditable} error={errors.lowerRate} />
+        <NumericField label="Higher scenario" value={projectionInputs.higherRate} onChangeText={(higherRate) => updateProjection({ higherRate })} placeholder={uiLabel('Automatic')} suffix="%" editable={inputsEditable} error={errors.higherRate} />
       </Row>
     </Card>
   ) : null;
@@ -897,23 +884,19 @@ export function ProjectionWorkspace() {
       <View>
         <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <View style={{ flex: 1, minWidth: 180 }}>
-            <AppText variant="h3">Your rate scenario</AppText>
-            <AppText variant="small" color="textMuted" style={{ marginTop: 3 }}>
-              From {result.history.length > 1 ? 'your optional starting point' : 'today'} through the modelled end date
-            </AppText>
+            <AppText variant="h3">{uiLabel("Your rate scenario")}</AppText>
+            <AppText variant="tiny" color="textMuted">{uiJoin("As at",": ",uiDate(result.asAt))}</AppText>
           </View>
           <Badge label="Illustrative" tone="primary" />
         </Row>
       </View>
       {!result.ready ? (
         <View style={{ gap: 12 }}>
-          <AppText variant="body" color="textMuted">
-            Fix or add {result.missing.join(', ')} above to build this projection.
-          </AppText>
+          <AppText variant="body" color="textMuted">{uiLabel("Inputs incomplete")}</AppText>
           <Button
-            title="Edit Check my rate"
+            title="Rate check"
             variant="secondary"
-            onPress={() => { void flush().then((saved) => { if (saved) router.push('/calculator'); }); }}
+            onPress={() => { void flush().then((saved) => { if (saved) router.setParams({ mode: 'check' }); }); }}
           />
         </View>
       ) : (
@@ -921,15 +904,15 @@ export function ProjectionWorkspace() {
           {section === 'Mortgage' ? (
             <SegmentedControl
               options={[
-                { label: 'Rate scenarios', value: 'rates' },
-                { label: 'Offset scenarios', value: 'offsets' },
+                { label: uiLabel("Rate scenarios"), value: 'rates' },
+                { label: uiLabel("Offset scenarios"), value: 'offsets' },
               ]}
               value={dimension}
               onChange={changeDimension}
             />
           ) : null}
           <View>
-            <AppText variant="tiny" color="textFaint" weight="700" style={{ marginBottom: 8 }}>Y-AXIS</AppText>
+            <AppText variant="tiny" color="textFaint" weight="700" style={{ marginBottom: 8 }}>{uiLabel('Y-axis')}</AppText>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
               {result.availableMetrics.map((item) => (
                 <Chip key={item} label={projectionMetricLabel(section, item)} selected={metric === item} onPress={() => changeMetric(item)} />
@@ -957,43 +940,26 @@ export function ProjectionWorkspace() {
       keyboardShouldPersistTaps="handled"
       onContentSizeChange={() => setLayoutReady(true)}
     >
-      <SelectedCalculationTarget target={target} scenario={scenario} constraint={targetConstraint} rateConditionContext={rateConditionContext} />
-      <Card style={{ gap: 8, borderColor: `${theme.colors.primary}55` }}>
-        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <View style={{ flex: 1, minWidth: 220 }}>
-            <AppText variant="h2">What if rates change?</AppText>
-            <AppText variant="body" color="textMuted" style={{ marginTop: 5 }}>
-              Test repayments, interest and balances under different rates.
-            </AppText>
-          </View>
-          <Ionicons name="analytics-outline" size={32} color={theme.colors.primary} />
-        </Row>
-        <AppText variant="tiny" color="textFaint">
-          {Platform.OS === 'web'
-            ? 'On web, these amounts stay only in this tab and disappear when it closes. Session replay is blocked on this screen.'
-            : 'Your amounts stay in encrypted local storage on this device. Session replay is blocked on this screen.'}
-        </AppText>
-      </Card>
-      {storageStatus !== 'ready' || saveStatus === 'saving' || saveStatus === 'saved' || storageError ? (
+      <SelectedCalculationTarget target={target} scenario={scenario} identityOnly constraint={targetConstraint} rateConditionContext={rateConditionContext} />
+      {storageStatus !== 'ready' || storageError ? (
         <Card style={{ gap: 8 }}>
           <AppText variant="small" weight="700">
-            {storageStatus === 'loading' || storageStatus === 'idle'
-              ? 'Loading encrypted scenario...'
+            {uiLabel(storageStatus === 'loading' || storageStatus === 'idle'
+              ? 'Loading'
               : saveStatus === 'saving'
-                ? 'Saving encrypted scenario...'
+                ? 'Saving'
                 : saveStatus === 'saved'
-                  ? 'Encrypted scenario saved'
+                  ? 'Saved'
                   : storageStatus === 'error'
-                    ? 'Encrypted scenario unavailable'
-                    : 'Encrypted scenario reset'}
+                    ? 'Scenario unavailable'
+                    : 'Reset')}
           </AppText>
-          {storageError ? <AppText variant="tiny" color="danger">{storageError}</AppText> : null}
           {storageStatus === 'error' ? (
             <Button title="Retry encrypted storage" variant="secondary" onPress={() => void retryLoad()} />
           ) : null}
         </Card>
       ) : null}
-      <SegmentedControl options={SECTION_OPTIONS} value={section} onChange={changeSection} />
+      {target.status !== 'available' ? <SegmentedControl options={SECTION_OPTIONS} value={section} onChange={changeSection} /> : null}
       {wide ? (
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 16 }}>
           <View style={{ flex: 0.9, gap: 12 }}>{basicFields}{advancedFields}</View>
@@ -1002,41 +968,35 @@ export function ProjectionWorkspace() {
       ) : (
         <View style={{ gap: 12 }}>{basicFields}{advancedFields}{chartCard}</View>
       )}
+      {target.status === 'available' && section !== 'Mortgage' ? (
+        <Card style={{ gap: 8 }}>
+          <SelectedCalculationTarget target={target} scenario={scenario} constraint={targetConstraint} rateConditionContext={rateConditionContext} />
+        </Card>
+      ) : null}
+      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <AppText variant="tiny" color="textMuted">{uiLabel("Storage")}</AppText>
+        <AppText variant="tiny">{Platform.OS === 'web' ? uiJoin('This tab',' · ','Until close') : uiJoin('This device',' · ','Encrypted')}</AppText>
+        <AppText variant="tiny" color="textMuted">{uiLabel("Session replay")}</AppText>
+        <AppText variant="tiny">{uiLabel("Blocked")}</AppText>
+      </Row>
+      {saveStatus === 'saving' || saveStatus === 'saved' ? <AppText variant="tiny" color="textMuted">{uiLabel(saveStatus === 'saving' ? 'Saving':'Saved')}</AppText>:null}
       {result.ready ? (
-        <Card style={{ gap: 10 }}>
-          <AppText variant="h3">Assumptions and limits</AppText>
-          {result.warnings.map((item) => (
-            <Row key={item} style={{ alignItems: 'flex-start' }}>
-              <Ionicons name="warning-outline" size={17} color={theme.colors.warning} />
-              <AppText variant="small" style={{ flex: 1 }}>{item}</AppText>
-            </Row>
-          ))}
-          {result.assumptions.map((item) => (
-            <Row key={item} style={{ alignItems: 'flex-start' }}>
-              <Ionicons name="information-circle-outline" size={17} color={theme.colors.textFaint} />
-              <AppText variant="small" color="textMuted" style={{ flex: 1 }}>{item}</AppText>
-            </Row>
-          ))}
-          <AppText variant="tiny" color="textFaint">
-            Illustrative. Check fees, product conditions and lender calculations before acting.
-          </AppText>
+        <Card style={{ gap: 8 }}>
+          <AppText variant="h3">{uiLabel("Model facts")}</AppText>
+          <ProjectionFactRows facts={result.facts} />
         </Card>
       ) : null}
       {staySwitch?.ready ? (
         <StaySwitchChart projection={staySwitch} currentBank={currentBankLabel} />
       ) : null}
-      <Card style={{ gap: 10 }}>
-        <AppText variant="h3">Compare this scenario</AppText>
-        <AppText variant="small" color="textMuted">
-          Browse matching rates, then prepare a bank-call brief for an exact tier.
-        </AppText>
+      <View>
         <Button
-          title="Browse matching products"
+          title="Matching rates"
           icon="search-outline"
           onPress={() => { void flush().then((saved) => { if (saved) openBrowse(section); }); }}
           disabled={storageStatus !== 'ready'}
         />
-      </Card>
+      </View>
     </ScreenScrollView>
   );
 }

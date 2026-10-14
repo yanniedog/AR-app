@@ -1,3 +1,4 @@
+import type { UiChild } from '../lib/uiCopy';
 import Ionicons from './icons/AppIcon';
 import React from 'react';
 import {
@@ -22,6 +23,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { LedgerText } from './ledger/LedgerText';
 import { TouchTarget } from './TouchTarget';
 import { PressFeedback } from './PressFeedback';
+import { uiJoin, type UiCopy, type UiTextProps, type UiNativeProps } from '../lib/uiCopy';
 
 export function androidRipple(color: string, borderless = false) {
   return Platform.OS === 'android' ? { color, borderless } : undefined;
@@ -33,7 +35,7 @@ export function AppText({
   weight,
   style,
   ...rest
-}: TextProps & {
+}: Omit<UiNativeProps<TextProps>, 'children'> & UiTextProps & {
   variant?: FontVariant;
   color?: keyof Palette;
   weight?: '400' | '500' | '600' | '700' | '800';
@@ -70,7 +72,7 @@ export function Card({
   variant = 'plain',
   accessibilityViewIsModal,
   ...rest
-}: ViewProps & { variant?: 'plain' | 'outlined' | 'elevated' }) {
+}: UiNativeProps<ViewProps> & { variant?: 'plain' | 'outlined' | 'elevated' }) {
   const theme = useTheme();
   // Working sheets need their own surface; ordinary content belongs to the page.
   const contained = accessibilityViewIsModal || variant === 'elevated';
@@ -96,7 +98,7 @@ export function Card({
   );
 }
 
-export function Row({ style, gap = 8, ...rest }: ViewProps & { gap?: number }) {
+export function Row({ style, gap = 8, ...rest }: UiNativeProps<ViewProps> & { gap?: number }) {
   return <View style={[{ flexDirection: 'row', alignItems: 'center', gap }, style]} {...rest} />;
 }
 
@@ -113,7 +115,7 @@ export function Chip({
   onPress,
   icon,
 }: {
-  label: string;
+  label: UiCopy;
   selected?: boolean;
   onPress?: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
@@ -173,8 +175,9 @@ export function Button({
   style,
   hapticOnPress,
   accessibilityState,
+  accessibilityLabel,
 }: {
-  title: string;
+  title: UiCopy;
   onPress?: () => void;
   variant?: 'primary' | 'secondary' | 'ghost';
   icon?: keyof typeof Ionicons.glyphMap;
@@ -184,6 +187,7 @@ export function Button({
   /** Light impact on press (e.g. filter Apply). */
   hapticOnPress?: boolean;
   accessibilityState?: PressableProps['accessibilityState'];
+  accessibilityLabel?: UiCopy;
 }) {
   const theme = useTheme();
   const bg = variant === 'primary' ? theme.ledger.primary : variant === 'secondary' ? theme.colors.surfaceAlt : 'transparent';
@@ -193,7 +197,7 @@ export function Button({
   return (
     <PressFeedback
       accessibilityRole="button"
-      accessibilityLabel={title}
+      accessibilityLabel={accessibilityLabel ?? title}
       accessibilityState={{
         ...accessibilityState,
         disabled: !!(disabled || loading),
@@ -236,22 +240,15 @@ export function Button({
 
 export function SectionHeading({
   title,
-  subtitle,
   action,
 }: {
-  title: string;
-  subtitle?: string;
-  action?: React.ReactNode;
+  title: UiCopy;
+  action?: UiChild;
 }) {
   return (
     <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
       <View style={{ flex: 1, paddingRight: action ? 12 : 0 }}>
         <LedgerText variant="heading">{title}</LedgerText>
-        {subtitle ? (
-          <AppText variant="small" color="textMuted" style={{ marginTop: 8 }}>
-            {subtitle}
-          </AppText>
-        ) : null}
       </View>
       {action}
     </Row>
@@ -260,17 +257,15 @@ export function SectionHeading({
 
 export function Disclosure({
   title,
-  summary,
   open,
   onToggle,
   children,
   icon = 'chevron-down',
 }: {
-  title: string;
-  summary?: string;
+  title: UiCopy;
   open: boolean;
   onToggle: () => void;
-  children: React.ReactNode;
+  children: UiChild;
   icon?: keyof typeof Ionicons.glyphMap;
 }) {
   const theme = useTheme();
@@ -279,7 +274,7 @@ export function Disclosure({
       <PressFeedback
         onPress={onToggle}
         accessibilityRole="button"
-        accessibilityLabel={`${open ? 'Hide' : 'Show'} ${title}`}
+        accessibilityLabel={uiJoin(open ? 'Hide' : 'Show', ' ', title)}
         accessibilityState={{ expanded: open }}
         android_ripple={androidRipple(theme.colors.primaryMuted)}
         style={{
@@ -293,7 +288,6 @@ export function Disclosure({
       >
         <View style={{ flex: 1 }}>
           <AppText variant="body" weight="600">{title}</AppText>
-          {summary ? <AppText variant="small" color="textMuted" style={{ marginTop: 4 }}>{summary}</AppText> : null}
         </View>
         <Ionicons
           name={open ? 'chevron-up' : icon}
@@ -315,7 +309,7 @@ export function IconButton({
   disabled,
   style,
   ...rest
-}: PressableProps & {
+}: UiNativeProps<PressableProps> & {
   icon: keyof typeof Ionicons.glyphMap;
   onPress?: () => void;
   color?: keyof Palette;
@@ -355,7 +349,7 @@ export function IconButton({
   );
 }
 
-export function Badge({ label, tone = 'muted' }: { label: string; tone?: 'muted' | 'success' | 'warning' | 'danger' | 'primary' }) {
+export function Badge({ label, tone = 'muted' }: { label: UiCopy; tone?: 'muted' | 'success' | 'warning' | 'danger' | 'primary' }) {
   const theme = useTheme();
   const map: Record<string, string> = {
     muted: theme.colors.chipText,

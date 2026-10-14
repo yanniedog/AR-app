@@ -1,5 +1,6 @@
+import type { UiChild } from '../lib/uiCopy';
 import Ionicons from './icons/AppIcon';
-import { createContext, type ReactNode, useContext, useEffect, useState, useSyncExternalStore } from 'react';
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { Alert, AppState, Platform, Pressable, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -19,6 +20,7 @@ import { getPerformanceAuditState, isPerformanceAuditActive, subscribePerformanc
 import { shouldShowUpdateBanner } from '../lib/updateBanner';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Row } from './ui';
+import { uiIdentifier, uiJoin } from '../lib/uiCopy';
 
 export interface AppUpdateBannerState {
   visible: boolean;
@@ -34,7 +36,7 @@ export function AppUpdateBannerLayoutProvider({
   children,
 }: {
   visible: boolean;
-  children: ReactNode;
+  children: UiChild;
 }) {
   return (
     <AppUpdateBannerVisibleContext.Provider value={visible}>
@@ -148,9 +150,8 @@ export function AppUpdateBanner({
     setBusy(true);
     try {
       await upgradeFromBackgroundDownload(remote, { wifiOnly });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      Alert.alert('Update failed', message);
+    } catch {
+      Alert.alert('Update failed');
     } finally {
       setBusy(false);
     }
@@ -162,8 +163,8 @@ export function AppUpdateBanner({
       return;
     }
     Alert.alert(
-      'Download app update?',
-      `Version ${remote.version} will download a verified APK from GitHub${wifiOnly ? ' when Wi-Fi is available' : ' using the current network'}. Android will ask again before installation.`,
+      'Download update',
+      uiJoin('Version', ': ', uiIdentifier(remote.version), ' · ', 'Verified APK', ' · ', 'GitHub', ' · ', wifiOnly ? 'Wi-Fi only' : 'Current network', ' · ', 'Android installation permission'),
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Download', onPress: () => void onUpgrade() },

@@ -9,7 +9,9 @@ import { SECTIONS, SECTION_ORDER } from '../constants';
 import { debugLog } from '../lib/debugLog';
 import type { CorePayload, ProductDetail, RateRow, SectionKey } from '../types';
 import type { SavedRateRef } from './savedRates';
-import { ongoingRateCaveat } from '../lib/rateQualifier';
+import { uiJoin, uiSectionName, uiProviderName, uiProductName, uiRate, type UiCopy } from '../lib/uiCopy';
+import { rateConditionalFacts } from './rateConditionalFacts';
+import { uiConditionalRateFacts } from '../lib/financialUiCopy';
 import { bpsBetween, formatRate } from './format';
 import { bestRow, type MortgageRateMetric, type RankMetric } from './selectors';
 import {
@@ -46,8 +48,8 @@ export interface NotifySearchRoute {
 }
 
 export interface NotifyMessage {
-  title: string;
-  body: string;
+  title: UiCopy;
+  body: UiCopy;
   productKey?: string;
   rateIndex?: number | null;
   search?: NotifySearchRoute;
@@ -267,7 +269,7 @@ function subscriptionWouldNotify(
 }
 
 function enrichSubscriptionRouting(
-  raw: { title: string; body: string }[],
+  raw: { title: UiCopy; body: UiCopy }[],
   subscriptions: Subscription[],
   oldCore: CorePayload,
   newCore: CorePayload,
@@ -375,10 +377,11 @@ export function computeChanges(
       : after.fraction > before.fraction;
     // When the new best is a bonus/intro headline, say what it reverts to so the
     // alert can't overstate the rate a typical customer keeps.
-    const caveat = ongoingRateCaveat(after.row, section);
+    const conditions = uiConditionalRateFacts(rateConditionalFacts(after.row, section));
+    const caveat = conditions ? uiJoin(' · ', conditions) : '';
     messages.push({
-      title: `${meta.title}: best rate ${improved ? 'improved' : 'changed'}`,
-      body: `Now ${formatRate(after.fraction)} (was ${formatRate(before.fraction)}).${caveat ? ` ${caveat}` : ''}`,
+      title: uiJoin(uiSectionName(section), ': ', 'Best rate', ' · ', improved ? 'Improved' : 'Changed'),
+      body: uiJoin(formatRate(before.fraction), ' → ', formatRate(after.fraction), caveat),
       search: { section },
     });
   }
@@ -389,7 +392,7 @@ export function computeChanges(
   if (oldRba && newRba && newRba.date !== oldRba.date && newRba.rate !== oldRba.rate) {
     messages.push({
       title: 'RBA cash rate changed',
-      body: `Cash rate is now ${newRba.rate.toFixed(2)}% (was ${oldRba.rate.toFixed(2)}%).`,
+      body: uiJoin(uiRate(oldRba.rate / 100), ' → ', uiRate(newRba.rate / 100)),
       href: `${DEEP_LINK_SCHEME}://rba-response?date=${encodeURIComponent(newRba.date)}`,
     });
   }
@@ -404,7 +407,7 @@ export function computeChanges(
   if (newHold && heldRate != null) {
     messages.push({
       title: 'RBA cash rate held',
-      body: `Cash rate remains ${heldRate.toFixed(2)}%.`,
+      body: uiJoin('Held', ': ', uiRate(heldRate / 100)),
       href: `${DEEP_LINK_SCHEME}://rba`,
     });
   }
@@ -434,10 +437,11 @@ export function computeChanges(
       const section = SECTION_ORDER.find((s) =>
         (newCore.sections[s]?.rates ?? []).some((r) => r === biggest!.row),
       );
-      const caveat = section ? ongoingRateCaveat(biggest.row, section) : '';
+      const conditions = section ? uiConditionalRateFacts(rateConditionalFacts(biggest.row, section)) : '';
+      const caveat = conditions ? uiJoin(' · ', conditions) : '';
       messages.push({
-        title: `${biggest.row.provider} rate changed`,
-        body: `${biggest.row.product_name}: ${formatRate(biggest.from)} → ${formatRate(biggest.to)}.${caveat ? ` ${caveat}` : ''}`,
+        title: uiJoin(uiProviderName(biggest.row), ' · ', 'Rate changed'),
+        body: uiJoin(uiProductName(biggest.row), ': ', formatRate(biggest.from), ' → ', formatRate(biggest.to), caveat),
         productKey: key,
         rateIndex: biggest.row.rate_index ?? null,
       });

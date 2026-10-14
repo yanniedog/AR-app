@@ -8,11 +8,12 @@ import { useTheme } from '../theme/ThemeProvider';
 import { SheetSurface } from './SheetSurface';
 import { TouchTarget } from './TouchTarget';
 import { AppText } from './ui';
+import type { UiChild } from '../lib/uiCopy';
 import { LedgerIcon } from './icons/LedgerIcon';
 
 interface NavigationMenuContextValue { open: boolean; show: () => void; hide: () => void }
 const NavigationMenuContext = createContext<NavigationMenuContextValue | null>(null);
-export function NavigationMenuProvider({ children }: { children: React.ReactNode }) {
+export function NavigationMenuProvider({ children }: { children: UiChild }) {
   const [open, setOpen] = useState(false);
   const value = useMemo(() => ({ open, show: () => setOpen(true), hide: () => setOpen(false) }), [open]);
   return <NavigationMenuContext.Provider value={value}>{children}</NavigationMenuContext.Provider>;

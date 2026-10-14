@@ -42,7 +42,9 @@ import { ScreenScrollView } from '../../src/components/Screen';
 import { AppText, Button, Card, IconButton, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
-import { formatEvidenceDate } from '../../src/data/displayEvidence';
+import { uiDate, uiJoin, uiLabel, uiProductName, uiProviderName, uiSectionName } from '../../src/lib/uiCopy';
+import { selectedTargetConstraint, targetConstraintContradicted } from '../../src/lib/selectedTargetConstraints';
+import { uiTargetConstraint } from '../../src/lib/financialUiCopy';
 import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
 import { normalizedProductFacts } from '../../src/data/productFacts';
 import { verifiedDetailsSha } from '../../src/data/detailsIdentity';
@@ -68,12 +70,7 @@ import { NOT_LISTED_PROVIDER } from '../../src/data/userRateScenario';
 import { openBank, openRateReceipt } from '../../src/lib/nav';
 import { buildCalculationRoute } from '../../src/lib/calculationTarget';
 import { rateQualifier } from '../../src/lib/rateQualifier';
-import {
-  PRODUCT_HISTORY_TITLE,
-  PRODUCT_HISTORY_SERIES_LABEL,
-  PRODUCT_HISTORY_SCOPE,
-  selectedTierHistoryContext,
-} from '../../src/lib/productHistoryCopy';
+import { buildRateReceipt, rateReceiptShareText } from '../../src/data/rateReceipt';
 import { logSwallowedError } from '../../src/lib/degradationLog';
 import {
   effectiveBankInsights,
@@ -83,7 +80,6 @@ import { yieldToUi } from '../../src/lib/yieldToUi';
 import {
   auditActionString,
 } from '../../src/lib/performanceAuditActionParams';
-import { relativeDate } from '../../src/data/format';
 import { ratePresentation } from '../../src/data/ratePresentation';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { HEADER_TYPOGRAPHY } from '../../src/theme/typography';
@@ -124,6 +120,7 @@ export default function ProductDetail() {
     [core, productKey, suitabilityRevision],
   );
   const coreIntegrity = useStore((s) => s.coreIntegrity);
+  const rateConditionManifest = useStore(s => s.manifest);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
   const detailsSha = useStore((s) => s.manifest?.files.details.sha256);
   const historyBanksSha = useStore((s) => s.manifest?.files.history_banks?.sha256 ?? null);
@@ -250,6 +247,8 @@ export default function ProductDetail() {
     : null;
   const staySwitchProjection = useMemo(() => {
     if (!row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
+    if (targetConstraintContradicted(selectedTargetConstraint(row, 'Mortgage', scenario,
+      { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity }))) return null;
     const currentRef = scenario.currentProducts.mortgage;
     return buildStaySwitchProjection({
       scenario,
@@ -257,7 +256,7 @@ export default function ProductDetail() {
       currentDetail: currentRef.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts[currentRef.productKey] : null,
       targetDetail: detail,
     });
-  }, [detail, detailsProducts, found?.section, row, scenario]);
+  }, [detail, detailsProducts, found?.section, row, scenario, core, detailsPayload, rateConditionManifest, coreIntegrity]);
   const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
     && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
     ? scenario.currentProducts.mortgage.provider
@@ -318,10 +317,10 @@ export default function ProductDetail() {
   const productSeries = useMemo(() => ({
     values: productSeriesRecordForChart(productHistory, productKey,
       historyModel?.allDates ?? historyModel?.dates ?? [], core?.run_date, currentBest),
-    label: `${row?.product_name ?? ''} · ${PRODUCT_HISTORY_SERIES_LABEL}`,
-    valueScope: 'best · all tiers',
+    label: row ? uiProductName(row) : uiLabel('Product'),
+    valueScope: uiJoin('Leading advertised', ' · ', 'All tiers'),
     color: theme.ledger.info,
-  }), [productHistory, productKey, historyModel, core?.run_date, currentBest, row?.product_name, theme.ledger.info]);
+  }), [productHistory, productKey, historyModel, core?.run_date, currentBest, row, theme.ledger.info]);
 
   // Single-day fallback is a misleading solid RBA block; wait for multi-day context
   // when Standard-only mode is relying on bank insights that have not arrived yet.
@@ -497,7 +496,7 @@ export default function ProductDetail() {
   });
 
   if (!isMandatoryEligibilityReady() || !mandatoryProductAllowed(productKey)) {
-    return <><Stack.Screen options={{ title: 'Product unavailable' }} /><EmptyState icon="alert-circle-outline" title={!isMandatoryEligibilityReady() ? 'Loading required evidence…' : 'Does not meet your requirements'} /></>;
+    return <><Stack.Screen options={{ title: 'Product unavailable' }} /><EmptyState icon="alert-circle-outline" title={!isMandatoryEligibilityReady() ? 'Loading' : 'Unavailable'} /></>;
   }
   if (!found) {
     if (exactRateRequested) return <><Stack.Screen options={{ title: 'Product rate unavailable' }} /><EmptyState icon="alert-circle-outline" title="Exact rate no longer available" /></>;
@@ -512,7 +511,6 @@ export default function ProductDetail() {
         <EmptyState
           icon="alert-circle-outline"
           title="Exact rate no longer available"
-          subtitle="This rate is no longer in the current catalogue. Choose a current product tier instead."
           fill
         />
       </>
@@ -534,23 +532,23 @@ export default function ProductDetail() {
   const productInk = theme.ledger.info;
   const observedProductPoints = countFiniteSeriesPoints(seededProductValues);
   const productHasHighlight = observedProductPoints > 0;
-  const selectedHistoryContext = selectedTierHistoryContext(row, currentBest);
+  const selectedHistoryContext = uiJoin('Selected rate', ' ', formatRate(row.rate), ' · ', 'Leading advertised', ' ', formatRate(currentBest), ' · ', 'All tiers');
 
   const onShare = () =>
     Share.share({
-      message: `${row.provider} — ${row.product_name}: ${formatRate(presentation.primary)} ${presentation.primaryLabel.toLowerCase()} (${meta.title}, Australian Rates)`,
+      message: rateReceiptShareText(buildRateReceipt({ row, section, evidenceDate: core?.run_date ?? '', detail,
+        rateConditionContext: { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity } })),
     }).catch((err) => logSwallowedError('product.share', err));
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: row.provider,
+          title: uiProviderName(row),
           // The JS header (used with breadcrumbs) reserves ~52 dp for headerRight;
           // these actions are wider, so cap the title to the space left beside them.
           headerTitleAlign: 'left',
-          headerTitle: ({ children, style, allowFontScaling, onLayout }: {
-            children: string;
+          headerTitle: ({ style, allowFontScaling, onLayout }: {
             tintColor?: string;
             style?: StyleProp<TextStyle>;
             allowFontScaling?: boolean;
@@ -567,7 +565,7 @@ export default function ProductDetail() {
                   : null,
               ]}
             >
-              {children}
+              {uiProductName(row)}
             </HeaderTitle>
           ),
           headerRight: () => (
@@ -596,9 +594,9 @@ export default function ProductDetail() {
             onRenderStateChange={logoReadiness.onLogoRenderStateChange}
           />
           <View style={{ flex: 1 }}>
-            <AppText variant="h3">{row.product_name}</AppText>
+            <AppText variant="h3">{uiProductName(row)}</AppText>
             <AppText variant="small" color="textMuted">
-              {row.provider} · {meta.title}
+              {uiJoin(uiProviderName(row), ' · ', uiSectionName(section))}
             </AppText>
           </View>
         </Row>
@@ -612,7 +610,7 @@ export default function ProductDetail() {
           </AppText>
           {presentation.secondary !== null && presentation.secondaryLabel ? (
             <AppText variant="small" color="textFaint">
-              {formatRate(presentation.secondary)} {presentation.secondaryLabel.toLowerCase()}
+              {uiJoin(formatRate(presentation.secondary), ' ', presentation.secondaryLabel)}
             </AppText>
           ) : null}
           <ProductRateChangeLine
@@ -621,7 +619,7 @@ export default function ProductDetail() {
             current={{ date: core?.run_date, rate: currentBest }}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-            Checked {formatEvidenceDate(core?.run_date)}
+            {uiJoin('Checked', ' ', uiDate(core?.run_date))}
           </AppText>
           {isNonStandard(row) ? (
             <View
@@ -634,8 +632,7 @@ export default function ProductDetail() {
               }}
             >
               <AppText variant="tiny" weight="700" style={{ color: theme.colors.warning }}>
-                Special eligibility
-              </AppText>
+                {uiLabel("Non-standard")}</AppText>
             </View>
           ) : null}
           {qualifier.conditional ? (
@@ -654,13 +651,6 @@ export default function ProductDetail() {
                   {qualifier.label}
                 </AppText>
               </View>
-              <AppText
-                variant="small"
-                color="textMuted"
-                style={{ marginTop: 8, textAlign: 'center', lineHeight: 18 }}
-              >
-                {qualifier.note}
-              </AppText>
             </>
           ) : null}
         </View>
@@ -692,9 +682,11 @@ export default function ProductDetail() {
           </View>
         ) : null}
 
-        <AccessNotice name={row.product_name} provider={row.provider} detail={detail} loading={detailsLoading} />
+        <AccessNotice name={row.product_name} provider={row.provider} productDetails={detail} loading={detailsLoading} />
+        <AppText variant="small" color="textMuted">{uiTargetConstraint(selectedTargetConstraint(row, section, scenario,
+          { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity }))}</AppText>
 
-        <MemoProductSpecs row={row} section={section} detail={detail} />
+        <MemoProductSpecs row={row} section={section} productDetails={detail} />
 
         <Button
           title="Bank-call brief"
@@ -704,10 +696,10 @@ export default function ProductDetail() {
           onPress={() => openRateReceipt(productKey, row.rate_index)}
         />
 
-        <SectionTitle text={PRODUCT_HISTORY_TITLE} icon="trending-up-outline" />
+        <SectionTitle text="Published product history" icon="trending-up-outline" />
         <Card style={{ marginBottom: 16 }}>
           <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-            {PRODUCT_HISTORY_SCOPE}
+            {uiJoin('Leading advertised', ' · ', 'All tiers')}
           </AppText>
           {selectedHistoryContext ? (
             <AppText variant="tiny" color="textMuted" style={{ marginBottom: 8 }}>
@@ -717,12 +709,11 @@ export default function ProductDetail() {
           {historyEnabled ? (
             !rateHistory.failed && (historyWaitingForInsights || rateHistory.updating) && (!historyModel || historyModel.dates.length < 2) ? (
               <AppText variant="small" color="textMuted">
-                Loading market history…
-              </AppText>
+                {uiLabel("Loading")}</AppText>
             ) : historyModel && historyModel.dates.length >= 2 ? (
               <>
                 <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-                  {row.product_name} vs {meta.title.toLowerCase()} rates matching your settings
+                  {uiJoin(uiProductName(row), ' · ', uiSectionName(section), ' · ', 'Matching rates')}
                 </AppText>
                 <ChartErrorBoundary name="ProductHistoryChart">
                   <BankHistoryChart
@@ -742,16 +733,13 @@ export default function ProductDetail() {
                 <HistoryLegend productColor={productInk} sectionColor={sectionInk} />
                 {rateHistory.updating || rateHistory.failed || rateHistory.missingDates.length ? (
                   <AppText variant="tiny" color="textMuted" style={{ marginTop: 6 }}>
-                    {rateHistory.failed ? 'Market history could not be prepared. Try refreshing the data.'
-                      : rateHistory.updating ? 'Updating market history for your settings…'
-                        : 'Missing historical observations remain blank.'}
+                    {uiLabel(rateHistory.failed ? 'Unavailable' : rateHistory.updating ? 'Loading' : 'Missing details')}
                   </AppText>
                 ) : null}
                 {productHistoryError && observedProductPoints < 2 ? (
                   <Row style={{ justifyContent: 'space-between', marginTop: 8 }}>
                     <AppText variant="tiny" color="danger" style={{ flex: 1 }}>
-                      Couldn&apos;t load this product-wide history.
-                    </AppText>
+                      {uiLabel("History unavailable")}</AppText>
                     <Button
                       title="Retry"
                       variant="ghost"
@@ -760,24 +748,19 @@ export default function ProductDetail() {
                   </Row>
                 ) : observedProductPoints < 2 ? (
                   <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-                    {formatRate(currentBest)} best across all tiers in this capture · gathering prior daily rates so the full line
-                    can draw
+                    {uiJoin('Leading advertised', ' ', formatRate(currentBest), ' · ', 'All tiers')}
                   </AppText>
                 ) : null}
               </>
             ) : (
               <AppText variant="small" color="textMuted">
-                {rateHistory.failed ? 'Historical rates could not be prepared. Try refreshing the data.'
-                  : 'Product-wide history appears once more daily observations are available.'}
+                {uiLabel(rateHistory.failed ? 'History unavailable' : 'No observations')}
               </AppText>
             )
           ) : (
             <>
-              <AppText variant="small" color="textMuted" style={{ marginBottom: 10, lineHeight: 20 }}>
-                See {row.product_name}&apos;s best advertised rate across all tiers against the market&apos;s mean and median.
-              </AppText>
               <Button
-                title="Show product-wide history"
+                title="Show market history"
                 icon="analytics-outline"
                 variant="secondary"
                 onPress={() => setPref('showHistoryRibbon', true)}
@@ -786,7 +769,7 @@ export default function ProductDetail() {
           )}
         </Card>
 
-        <MemoProductFacts detail={detail} />
+        <MemoProductFacts productDetails={detail} />
         <MemoSelectedRateConditions row={row} section={section} />
         {section === 'TD' ? <MemoFixedDepositCalculation row={row} /> : null}
         <MemoEligibilityAssessment productKey={productKey} row={row} section={section} /><MemoSavingsPeriodCalculation productKey={row.product_key} row={row} section={section} /><MemoActivityPeriodCalculation productKey={row.product_key} row={row} section={section} /><MemoMortgagePeriodCalculation productKey={row.product_key} row={row} section={section} />
@@ -799,7 +782,7 @@ export default function ProductDetail() {
         <ProductTermsDisclosure productKey={productKey} />
 
         <Button
-          title={`View all ${row.provider} products`}
+          title={uiJoin('View', ' ', uiProviderName(row), ' ', 'Products')}
           icon="business-outline"
           variant="secondary"
           style={{ marginTop: 4 }}
@@ -808,17 +791,17 @@ export default function ProductDetail() {
 
         <MemoProductRatesList rows={rateRows} section={section} accent={theme.colors.primary} />
 
-        <Button
-          title={productWideSaved ? 'Stop watching all rates' : 'Watch all rates for this product'}
+        {exactSaveEligible ? <Button
+          title={productWideSaved ? 'Remove all rates' : 'Save all rates'}
           icon={productWideSaved ? 'star' : 'star-outline'}
           variant="ghost"
           style={{ marginBottom: 16 }}
           onPress={() => toggleSavedRate(row, 'product')}
-        />
+        /> : null}
 
         {row.last_updated ? (
           <AppText variant="tiny" color="textFaint" style={{ textAlign: 'center', marginTop: 14 }}>
-            Lender data updated {relativeDate(row.last_updated)}
+            {uiJoin('Source date', ' ', uiDate(row.last_updated))}
           </AppText>
         ) : null}
       </ScreenScrollView>

@@ -10,6 +10,7 @@ import {
   boundedPublishedFactFilterOptions,
 } from '../src/data/productFacts';
 import type { NormalizedProductFact, ProductDetail } from '../src/types';
+import { uiJoin } from '../src/lib/uiCopy';
 
 describe('productFacts', () => {
   test('validates downloaded facts without collapsing same-key variants', () => {
@@ -91,7 +92,7 @@ describe('productFacts', () => {
       'Maximum balance: $250,000',
       'Maximum LVR: 80.00%',
       'Minimum age: 18 years',
-      'No redraw',
+      'No Redraw facility',
       'Offset account',
     ]);
     expect(publishedFactFilterOptions(rows, lookup).map((option) => option.criterion.operator))
@@ -108,7 +109,7 @@ describe('productFacts', () => {
         value: index,
         unit: 'count' as const,
       };
-      return { id: factCriterionId(criterion), label: `Option ${index}`, criterion };
+      return { id: factCriterionId(criterion), label: uiJoin('Options', ' ', index), criterion };
     });
     const selected = [options[39].criterion, {
       sourceType: 'OFFSET', operator: 'eq' as const, value: true, unit: 'boolean' as const,
@@ -165,7 +166,7 @@ describe('productFacts', () => {
     ] };
     const options = publishedFactFilterOptions(rows, { 'A|1': detail });
 
-    expect(options.map((option) => option.label)).toEqual(['No redraw', 'Offset account']);
+    expect(options.map((option) => option.label)).toEqual(['No Redraw facility', 'Offset account']);
     expect(productMatchesAllFactCriteria(detail, [
       { sourceType: 'REDRAW', operator: 'eq', value: false, unit: 'boolean' },
     ])).toBe(true);

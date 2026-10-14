@@ -73,11 +73,11 @@ export type LedgerIconName =
   | 'warning'
   | 'wifi';
 
-export interface LedgerIconProps extends Omit<SvgProps, 'color'> {
+export interface LedgerIconProps extends Omit<import('../../lib/uiCopy').UiNativeProps<SvgProps>, 'color'> {
   name: LedgerIconName;
   size?: number;
   color?: string;
-  accessibilityLabel?: string;
+  accessibilityLabel?: import('../../lib/uiCopy').UiCopy;
 }
 
 function IconDrawing({ name, color }: { name: LedgerIconName; color: string }) {

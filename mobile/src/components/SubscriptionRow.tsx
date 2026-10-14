@@ -5,6 +5,7 @@ import { Alert, Pressable, View } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
 import { SwipeableRow } from './SwipeableRow';
 import { AppText } from './ui';
+import { uiLabel, type UiCopy } from '../lib/uiCopy';
 
 /** Material list row minimum height (dp). */
 const ROW_MIN_HEIGHT = 48;
@@ -16,7 +17,7 @@ export function SubscriptionRow({
   onConfirmRemove,
 }: {
   kind: 'Product' | 'Search';
-  label: string;
+  label: UiCopy;
   /** Swipe-to-delete — caller shows undo snackbar after removal. */
   onSwipeRemove: () => void;
   /** Tap close — confirm before removing. */
@@ -25,7 +26,7 @@ export function SubscriptionRow({
   const theme = useTheme();
 
   const confirmRemove = () => {
-    Alert.alert('Remove subscription?', label, [
+    Alert.alert(uiLabel('Remove subscription?'), label, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: onConfirmRemove },
     ]);
@@ -48,7 +49,7 @@ export function SubscriptionRow({
       >
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <AppText variant="tiny" color="textFaint" numberOfLines={1}>
-            {kind}
+            {uiLabel(kind)}
           </AppText>
           <AppText variant="small" weight="600" numberOfLines={1}>
             {label}

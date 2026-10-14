@@ -16,23 +16,27 @@ import { CustomerAnswerEditor } from '../CustomerProfilePanel';
 import { LedgerField } from '../ledger/LedgerField';
 import { AppText, Chip, Button, Disclosure } from '../ui';
 import { ReviewedCriteria } from './DepositCriteria';
-const labels = {principal:'Principal',postedInterest:'Posted interest',accruedInterest:'Unposted interest',capitalizedCharges:'Capitalised charges',otherDebt:'Other debt'};
-const scopeLabel = (s:string) => s === 'all_source_declared' ? 'All reviewed customers' : s === 'none_source_declared' ? 'None' : s;
+import { EngineReceiptFacts, uiEngineStatus } from './EngineReceiptFacts';
+import { uiEngineScope } from './engineComparisonUi';
+import { uiCount, uiDate, uiDecimal, uiIdentifier, uiInputIdentifier, uiInputNumber, uiJoin, uiLabel, uiPrivateOfferInput, type UiCopy, type UiLabel } from '../../lib/uiCopy';
+const labels = { principal: 'Principal', postedInterest: 'Interest posted', accruedInterest: 'Interest unposted', capitalizedCharges: 'Capitalised charges', otherDebt: 'Other debt' } as const;
 export function MortgageResultDetails({ receipt }: { receipt: CalculationReceipt }) {
  const [open,setOpen]=useState(false),loan=receipt.loan,t=receipt.totals;
- return <><AppText>Closing debt: {loan?.outstandingDebt ?? 'unknown'} AUD</AppText>
-  {!receipt.claimAvailable&&<AppText variant="small">Known components only; not a complete borrowing cost or guaranteed bound.</AppText>}
-  <Disclosure title="Debt, interest and fee details" open={open} onToggle={()=>setOpen(!open)}>
-   <AppText variant="small">Known component debt: {loan?.knownComponentDebt ?? 'unknown'} AUD. Outstanding debt is not a fee.</AppText>
-   <AppText variant="small">Principal remaining: {loan?.closing.principal ?? 'unknown'} AUD; principal repaid: {loan?.principalRepaid ?? 'unknown'} AUD.</AppText>
-   <AppText variant="small">Interest accrued: {t?.interestAccrued ?? 'unknown'} AUD; interest paid: {loan?.interestPaid ?? 'unknown'} AUD.</AppText>
-   <AppText variant="small">Capitalised charges remaining: {loan?.closing.capitalizedCharges ?? 'unknown'} AUD; charges paid: {loan?.chargesPaid ?? 'unknown'} AUD.</AppText>
-   <AppText variant="small">Fees paid externally: {t?.feesPaidExternal ?? 'unknown'} AUD. External fees do not increase the loan balance. Tax effects are not calculated.</AppText>
+ const fact=(label:UiCopy,value:string|null|undefined)=><AppText variant="small">{uiJoin(label, ': ', uiDecimal(value))}</AppText>;
+ return <>{fact('Outstanding debt',loan?.outstandingDebt)}
+  {!receipt.claimAvailable&&<AppText variant="small">{uiLabel('Known components')}</AppText>}
+  <Disclosure title={uiJoin('Debt', ' / ', 'Interest', ' / ', 'Fees')} open={open} onToggle={()=>setOpen(!open)}>
+   {fact('Known component debt',loan?.knownComponentDebt)}
+   {fact('Principal remaining',loan?.closing.principal)}{fact('Principal repaid',loan?.principalRepaid)}
+   {fact('Interest accrued',t?.interestAccrued)}{fact('Interest paid',loan?.interestPaid)}
+   {fact('Capitalised charges remaining',loan?.closing.capitalizedCharges)}{fact('Charges paid',loan?.chargesPaid)}
+   {fact('Fees paid externally',t?.feesPaidExternal)}
+   <AppText variant="small">{uiJoin('Tax', ' · ', 'Excluded')}</AppText>
   </Disclosure></>;
 }
 export interface MortgageFormInput { selection: MortgageSelection; inputs: MortgageInputs }
 export function MortgagePeriodForm({selections,context,target,onComparisonInput}:{selections:MortgageSelection[];context:MortgageContext;target:MortgageTarget;onComparisonInput?:(value:MortgageFormInput|null)=>void}) {
- const customer=useCustomerProfile(),[selectedId,setSelectedId]=useState<string|null>(null),[text,setText]=useState<Record<string,string>>({}),[confirmed,setConfirmed]=useState(''),[clear,setClear]=useState(false),[noEffects,setNoEffects]=useState(false),[complete,setComplete]=useState(false),[feeConfirmed,setFeeConfirmed]=useState<Record<string,boolean>>({}),[detailOpen,setDetailOpen]=useState(false),[savedOpen,setSavedOpen]=useState(false),[copy,setCopy]=useState('');
+ const customer=useCustomerProfile(),[selectedId,setSelectedId]=useState<string|null>(null),[text,setText]=useState<Record<string,string>>({}),[confirmed,setConfirmed]=useState(''),[clear,setClear]=useState(false),[noEffects,setNoEffects]=useState(false),[complete,setComplete]=useState(false),[feeConfirmed,setFeeConfirmed]=useState<Record<string,boolean>>({}),[detailOpen,setDetailOpen]=useState(false),[savedOpen,setSavedOpen]=useState(false),[copy,setCopy]=useState<UiLabel>('');
  const selection=selections.find(s=>s.subject.id===selectedId),s=selection?.subject;
  function change(key:string,value:string){setText(v=>({...v,[key]:value}));setConfirmed('');setCopy('');}
  let annualRate='';try{const d=Decimal.parse(text.rate??'').div(Decimal.parse('100'));if(d.compare(Decimal.parse(d.fixed(12)))===0)annualRate=d.fixed(12);}catch{/* Unconfirmed until exact decimal. */}
@@ -42,38 +46,43 @@ export function MortgagePeriodForm({selections,context,target,onComparisonInput}
  const identity=hashText(canonical([selectedId,inputs,customer.profile?.revision??null])),[result,setResult]=useState<{identity:string;value?:ReturnType<typeof calculateMortgagePeriod>;error?:string}|null>(null),current=result?.identity===identity?result:null;
  const inputKey=canonical(inputs);
  useEffect(()=>{onComparisonInput?.(selection?{selection,inputs:JSON.parse(inputKey)}:null);},[selection,inputKey,onComparisonInput]);
- if(!customer.profile)return <AppText variant="small">{customer.error??'Opening encrypted local inputs...'}</AppText>;
+ if(!customer.profile)return <AppText variant="small">{uiLabel(customer.error?'Unavailable':'Loading')}</AppText>;
  const requirements=s?mortgageRequirements(s,inputs,customer.profile):null,criteria=s?evaluateEligibility(s.policy.eligibility,mortgageFacts(s,inputs,customer.profile).facts):null;
- const field=(key:string,label:string,decimal=false,hint?:string)=><LedgerField key={key} label={label} value={text[key]??''} hint={hint} keyboardType={decimal?'decimal-pad':'default'} onChangeText={value=>change(key,value)}/>;
+ const field=(key:string,label:UiCopy,decimal=false)=>{
+  const value=key==='purpose'||key==='security'||key==='repaymentType'?uiPrivateOfferInput(inputs,key):decimal?uiInputNumber(text[key]??''):uiInputIdentifier(text[key]??'');
+  return <LedgerField key={key} label={label} value={value} keyboardType={decimal?'decimal-pad':'default'} onChangeText={value=>change(key,value)}/>;
+ };
  return <View style={{gap:12}}>
-  <AppText variant="small">One historical loan account. Enter confirmed offer and statement records; inputs stay on this device. This is not credit approval or a full borrowing-cost comparison.</AppText>
-  <AppText variant="small">Source publication: {context.manifest?.run_date}. The producer verifies original source records; this app verifies the reviewed policy and publication.</AppText>
-  {selections.map(x=><View key={x.subject.id}><AppText variant="small">Recorded criteria: {evaluateEligibility(x.subject.policy.eligibility,mortgageFacts(x.subject,inputs,customer.profile!).facts).status.replace(/_/g,' ')}</AppText><Chip label={`Choose ${[x.subject.scope.cohortKey,x.subject.scope.tierKey,x.subject.scope.packageKey].map(scopeLabel).join(' / ')}`} selected={selectedId===x.subject.id} onPress={()=>{setSelectedId(x.subject.id);setConfirmed('');setText({});setFeeConfirmed({});setClear(false);setNoEffects(false);setComplete(false);}}/></View>)}
+  <AppText variant="small">{uiJoin('Basis', ' · ', 'History', ' · ', 'Local storage', ' · ', 'No approval')}</AppText>
+  <AppText variant="small">{uiJoin('Published', ' · ', uiDate(context.manifest?.run_date))}</AppText>
+  {selections.map(x=><View key={x.subject.id}><AppText variant="small">{uiJoin('Eligibility', ' · ', uiEngineStatus(evaluateEligibility(x.subject.policy.eligibility,mortgageFacts(x.subject,inputs,customer.profile!).facts).status))}</AppText><Chip label={uiJoin(uiEngineScope(x.subject.scope.cohortKey), ' / ', uiEngineScope(x.subject.scope.tierKey), ' / ', uiEngineScope(x.subject.scope.packageKey))} selected={selectedId===x.subject.id} onPress={()=>{setSelectedId(x.subject.id);setConfirmed('');setText({});setFeeConfirmed({});setClear(false);setNoEffects(false);setComplete(false);}}/></View>)}
   {s&&<>
-   <AppText variant="small">Reviewed period: {s.scope.from} to {s.scope.toExclusive} (end excluded). Data coverage, not a bank expiry date.</AppText>
+   <AppText variant="small">{uiJoin('Coverage', ' · ', uiDate(s.scope.from), ' ', '–', ' ', uiDate(s.scope.toExclusive), ' · ', 'End excluded')}</AppText>
    {field('account','Local loan account reference')}{field('offer','Local offer reference')}{field('version','Offer version reference')}{field('snapshot','Opening statement reference')}
    {field('rate','Confirmed annual rate (%)',true)}{field('outstanding','Opening total debt (AUD)',true)}
-   {LOAN_COMPONENTS.map(k=>field(k,`${labels[k]} (AUD)`,true,k==='accruedInterest'?'Up to 12 decimal places; enter zero explicitly':'Enter zero explicitly if none'))}
-   {field('obligation','Confirmed monthly amount due (AUD)',true)}{field('anchor','Original monthly due date',false,'YYYY-MM-DD; use the original anchor, not an adjusted later date')}
-   <AppText variant="small">Payments must clear on the exact due date, {s.policy.paymentPhase==='before_accrual'?'before':'after'} daily interest. Late or excess payments are unavailable in this calculation.</AppText>
-   {due.map(date=>field(`paid:${date}`,`Cleared payment on ${date} (AUD)`,true,'Leave blank only if no payment cleared; partial payments remain incomplete'))}
-   {roles.map(role=>field(`external:${role}`,`External fee account reference: ${role}`))}
-   {positiveFees.map(f=><Chip key={f.id} label={`Fee ${f.id}: $${f.amount} cleared externally on ${f.dueDate}`} selected={!!feeConfirmed[f.id]} onPress={()=>{setFeeConfirmed(v=>({...v,[f.id]:!v[f.id]}));setConfirmed('');}}/>)}
-   <Chip label="No opening overdue obligations or default" selected={clear} onPress={()=>{setClear(!clear);setConfirmed('');}}/>
-   <Chip label="No advances, redraw, offsets, reversals, rate changes or closure" selected={noEffects} onPress={()=>{setNoEffects(!noEffects);setConfirmed('');}}/>
-   <Chip label="All cleared payments for this period are recorded" selected={complete} onPress={()=>{setComplete(!complete);setConfirmed('');}}/>
-   {requirements?.needed.map(d=>{const def=s.policy.inputDefinitions.find(x=>mortgageAnswerId(s,x.field)===d.id)!;if(def.binding!=='customer_fact'){const key=({offer_purpose:'purpose',offer_security:'security',repayment_type:'repaymentType'} as Record<string,string>)[def.binding];return key?field(key,d.label):null;}return <CustomerAnswerEditor key={d.id} definition={d} answer={customer.profile!.answers[d.id]} productKey={target.productKey} disabled={customer.busy} onSave={answer=>void customer.update(p=>({...p,definitions:{...p.definitions,[d.id]:d},answers:{...p.answers,[d.id]:answer}}))}/>;})}
-   {!!requirements?.deferred.length&&<AppText variant="small">Unresolved: {requirements.deferred.map(d=>d.label).join(', ')}.</AppText>}
-   <Disclosure title="Criteria and source evidence" open={detailOpen} onToggle={()=>setDetailOpen(!detailOpen)}><AppText variant="small">Recorded criteria: {criteria?.status.replace(/_/g,' ')}.</AppText><ReviewedCriteria contract={{eligibility:s.policy.eligibility,inputDefinitions:s.policy.inputDefinitions.map(d=>({key:d.field,label:d.label})),evidence:s.evidence}} trace={criteria!.trace}/></Disclosure>
-   <Disclosure title="Saved criteria answers" open={savedOpen} onToggle={()=>setSavedOpen(!savedOpen)}>{requirements?.saved.map(d=><CustomerAnswerEditor key={d.id} definition={d} answer={customer.profile!.answers[d.id]} productKey={target.productKey} disabled={customer.busy} onSave={answer=>void customer.update(p=>({...p,answers:{...p.answers,[d.id]:answer}}))}/>)}</Disclosure>
-   <Chip label="I confirm these offer, statement and payment details" selected={!!confirmed} onPress={()=>setConfirmed(confirmed?'':new Date().toISOString())}/>
-   {!onComparisonInput&&<Button title="Calculate mortgage period" disabled={customer.busy} onPress={()=>{try{setResult({identity,value:calculateMortgagePeriod(selection!,context,target,inputs,customer.profile!)});}catch(e){setResult({identity,error:e instanceof Error?e.message:'Calculation unavailable'});}}}/>}
+   {LOAN_COMPONENTS.map(k=>field(k,uiJoin(labels[k], ' (', 'AUD', ')'),true))}
+   {field('obligation','Confirmed monthly amount due (AUD)',true)}{field('anchor',uiJoin('Original monthly due date', ' · ', 'YYYY-MM-DD'))}
+   <AppText variant="small">{uiJoin('Payment phase', ' · ', s.policy.paymentPhase==='before_accrual'?'Before daily interest':'After daily interest')}</AppText>
+   {due.map(date=>field('paid:'+date,uiJoin('Cleared payment', ' · ', uiDate(date), ' (', 'AUD', ')'),true))}
+   {roles.map(role=>field('external:'+role,uiJoin('External fee account reference', ': ', uiIdentifier(role))))}
+   {positiveFees.map(f=><Chip key={f.id} label={uiJoin('Fee', ' · ', uiIdentifier(f.id), ' · ', uiDecimal(f.amount), ' · ', 'Cleared', ' · ', uiDate(f.dueDate))} selected={!!feeConfirmed[f.id]} onPress={()=>{setFeeConfirmed(v=>({...v,[f.id]:!v[f.id]}));setConfirmed('');}}/>)}
+   <Chip label="No arrears / default" selected={clear} onPress={()=>{setClear(!clear);setConfirmed('');}}/>
+   <Chip label="No excluded movements" selected={noEffects} onPress={()=>{setNoEffects(!noEffects);setConfirmed('');}}/>
+   <AppText variant="small">{uiJoin('Excluded', ' · ', 'Advances', ' / ', 'Redraw', ' / ', 'Offset', ' / ', 'Reversals', ' / ', 'Rate changes', ' / ', 'Closure')}</AppText>
+   <Chip label="Payments complete" selected={complete} onPress={()=>{setComplete(!complete);setConfirmed('');}}/>
+   {requirements?.needed.map(d=>{const def=s.policy.inputDefinitions.find(x=>mortgageAnswerId(s,x.field)===d.id)!;if(def.binding!=='customer_fact'){switch(def.binding){case 'offer_purpose':return field('purpose','Loan purpose');case 'offer_security':return field('security','Security');case 'repayment_type':return field('repaymentType','Repayment');default:return null;}}return <CustomerAnswerEditor key={d.id} definition={d} answer={customer.profile!.answers[d.id]} productKey={target.productKey} disabled={customer.busy} onSave={answer=>void customer.update(p=>({...p,definitions:{...p.definitions,[d.id]:d},answers:{...p.answers,[d.id]:answer}}))}/>;})}
+   {!!requirements?.deferred.length&&<AppText variant="small">{uiJoin('Unresolved inputs', ' · ', uiCount(requirements.deferred.length))}</AppText>}
+   <Disclosure title="Criteria" open={detailOpen} onToggle={()=>setDetailOpen(!detailOpen)}><AppText variant="small">{uiJoin('Eligibility', ' · ', uiEngineStatus(criteria?.status))}</AppText><ReviewedCriteria contract={{eligibility:s.policy.eligibility,inputDefinitions:s.policy.inputDefinitions.map(d=>({key:d.field,label:d.label})),evidence:s.evidence}} trace={criteria!.trace}/></Disclosure>
+   <Disclosure title="Saved answers" open={savedOpen} onToggle={()=>setSavedOpen(!savedOpen)}>{requirements?.saved.map(d=><CustomerAnswerEditor key={d.id} definition={d} answer={customer.profile!.answers[d.id]} productKey={target.productKey} disabled={customer.busy} onSave={answer=>void customer.update(p=>({...p,answers:{...p.answers,[d.id]:answer}}))}/>)}</Disclosure>
+   <Chip label="Confirmed" selected={!!confirmed} onPress={()=>setConfirmed(confirmed?'':new Date().toISOString())}/>
+   {!onComparisonInput&&<Button title={uiJoin('Calculate', ' ', 'Mortgage')} disabled={customer.busy} onPress={()=>{try{setResult({identity,value:calculateMortgagePeriod(selection!,context,target,inputs,customer.profile!)});}catch(e){setResult({identity,error:e instanceof Error?e.message:'Calculation unavailable'});}}}/>}
   </>}
-  {current?.error&&<AppText variant="small">{current.error}</AppText>}
-  {current?.value&&<><AppText variant="small">{current.value.receipt.claimAvailable?'Complete for this confirmed account period.':`Incomplete: ${current.value.receipt.issues.join('; ')}`}</AppText>
-   {current.value.receipt.loan?.obligations.map(o=><AppText key={o.id} variant="small">{o.dueDate}: due ${o.due??'unknown'}, cleared ${o.paid} — {o.status}.</AppText>)}
+  {current?.error&&<AppText variant="small">{uiLabel('Unavailable')}</AppText>}
+  {current?.value&&<><EngineReceiptFacts receipt={current.value.receipt}/>
+   {current.value.receipt.loan?.obligations.map(o=><AppText key={o.id} variant="small">{uiJoin(uiDate(o.dueDate), ' · ', 'Due', ': ', uiDecimal(o.due), ' · ', 'Cleared', ': ', uiDecimal(o.paid), ' · ', uiLabel(o.status==='paid'?'Complete':o.status==='partial'?'Partial':o.status==='unpaid'?'Pending':'Unknown'))}</AppText>)}
    <MortgageResultDetails receipt={current.value.receipt}/>
-   <Button title="Copy mortgage receipt" onPress={()=>{try{assertMortgageSelection(selection!,context,target);void Clipboard.setStringAsync(JSON.stringify(current.value,null,2)).then(()=>setCopy('Receipt copied.'),()=>setCopy('Copy failed.'));}catch{setCopy('Source changed. Calculate again.');}}}/><AppText variant="small">Receipt includes private entries, due obligations, cleared executions, source identities and the daily trace.</AppText>
-  </>}{!!copy&&current&&<AppText variant="small">{copy}</AppText>}
+   <Button title={uiJoin('Copy', ' ', 'Receipt')} onPress={()=>{try{assertMortgageSelection(selection!,context,target);void Clipboard.setStringAsync(JSON.stringify(current.value,null,2)).then(()=>setCopy('Copied'),()=>setCopy('Copy failed'));}catch{setCopy('Source changed');}}}/><AppText variant="small">{uiJoin('Receipt', ' · ', 'Private', ' · ', 'Entered facts', ' · ', 'Obligations', ' · ', 'Source')}</AppText>
+  </>}{!!copy&&current&&<AppText variant="small">{uiLabel(copy)}</AppText>}
  </View>;
+
 }

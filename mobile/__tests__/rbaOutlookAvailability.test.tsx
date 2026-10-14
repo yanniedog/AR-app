@@ -34,7 +34,7 @@ test.each([new EconomicOutlookUnavailableError(), new Error('offline')])(
     try {
       expect(states.at(-1)).toMatchObject({ status: 'pending', layoutMeasured: false, emptyStateRendered: false });
       const empty = tree.root.findAll(node => typeof node.props.children === 'string' &&
-        node.props.children.startsWith('Economic signals are unavailable'))[0];
+        node.props.children === 'Economy · Unavailable')[0];
       act(() => empty.props.onLayout({ nativeEvent: { layout: { width: 0, height: 20 } } }));
       expect(states.at(-1)?.status).toBe('pending');
       act(() => empty.props.onLayout({ nativeEvent: { layout: { width: 300, height: 40 } } }));

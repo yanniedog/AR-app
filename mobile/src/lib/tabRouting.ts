@@ -1,4 +1,5 @@
 import type { Href } from 'expo-router';
+import type { UiCopy } from './uiCopy';
 
 import { TAB_LABELS, TAB_ROUTES, type TabRouteName } from './tabIcons';
 
@@ -17,7 +18,7 @@ export function tabHref(route: TabRouteName): Href {
   return TAB_HREFS[route];
 }
 
-export function primaryTabLabel(route: PrimaryTabRouteName): string {
+export function primaryTabLabel(route: PrimaryTabRouteName): UiCopy {
   return TAB_LABELS[route];
 }
 

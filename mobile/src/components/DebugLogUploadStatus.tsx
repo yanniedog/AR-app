@@ -1,3 +1,4 @@
+import { uiLabel } from '../lib/uiCopy';
 import React, { useSyncExternalStore } from 'react';
 
 import {
@@ -6,15 +7,16 @@ import {
   subscribeDebugLogUpload,
 } from '../lib/debugLogSharing';
 import { AppText, Button, Card } from './ui';
+import { uiIdentifier, uiJoin, type UiLabel } from '../lib/uiCopy';
 
-const LABELS = {
+const LABELS: Record<ReturnType<typeof getDebugLogUploadSnapshot>['phase'], UiLabel> = {
   idle: '',
-  preparing: 'Preparing the compact log…',
-  uploading: 'Uploading the compact log…',
-  verifying: 'Verifying the compact log…',
-  copying: 'Copying the paste link…',
-  copied: 'Compact log uploaded. Link copied to clipboard.',
-  failed: 'Log sharing needs attention',
+  preparing: 'Preparing',
+  uploading: 'Uploading',
+  verifying: 'Verifying',
+  copying: 'Copying',
+  copied: 'Copied',
+  failed: 'Upload failed',
 };
 
 export function DebugLogUploadStatus({ sessionId }: { sessionId?: string | null }) {
@@ -27,8 +29,9 @@ export function DebugLogUploadStatus({ sessionId }: { sessionId?: string | null 
       <AppText variant="small" weight="700" accessibilityLiveRegion="polite">
         {LABELS[state.phase]}
       </AppText>
-      {state.url ? <AppText variant="small" selectable>{state.url}</AppText> : null}
-      {state.error ? <AppText variant="small" color="danger">{state.error}</AppText> : null}
+      {state.url ? <AppText variant="small" selectable>{uiIdentifier(state.url)}</AppText> : null}
+      {state.error ? <AppText variant="small" color="danger">{uiLabel("Upload failed")}</AppText> : null}
+      {state.mayHaveUploaded && !state.verified ? <AppText variant="small">{uiJoin('Public copy', ': ', 'Unverified', ' · ', 'Duplicate public copy possible')}</AppText> : null}
       {state.phase === 'failed' || state.phase === 'copied' ? (
         <Button
           title={state.verified ? 'Copy link' : state.url ? 'Retry verification' : state.mayHaveUploaded ? 'Upload another copy' : 'Retry upload'}

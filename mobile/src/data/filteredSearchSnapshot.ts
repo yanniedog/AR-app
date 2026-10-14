@@ -5,6 +5,16 @@ import { filterRows, sortRows } from './selectors';
 import { rowsForSearchScope } from './taxonomy';
 import { getMandatoryEligibilityRevision, isMandatoryEligibilityReady, mandatoryEligibleRows } from './eligibilityGate';
 import type { SearchIndexPayload } from './detailSearch';
+import type { CoreIntegrityContext } from './sectionIntegrity';
+import { scopedRateConditions, type ScopedRateConditions } from './rateConditions';
+
+export type SearchCoverageFact =
+  | { kind: 'matching-set'; state: 'complete'; variants: 'matching'; ranking: 'selected' }
+  | { kind: 'specifications'; absent: 'unavailable'; emptyArrays: 'explicit' }
+  | { kind: 'sources'; references: 'included'; documentBodies: 'excluded'; independentReview: 'unverified' }
+  | { kind: 'history'; completeness: 'unverified' }
+  | { kind: 'calculations'; unsupportedPatterns: 'unverified' }
+  | { kind: 'publication-day'; state: 'current' | 'older'; publicationDate: string; australianDate: string };
 
 export interface SearchReportRequest {
   section: SectionKey; path: string[]; hierarchyScoped: boolean; query: string;
@@ -17,7 +27,9 @@ export interface FilteredSearchSnapshot {
   generatedAt: string; australianDate: string; request: SearchReportRequest;
   mandatoryRequirements: ProfileFilters; rows: RateRow[];
   products: { productKey: string; rank: number; detail: ProductDetail | null }[];
-  coverage: string[];
+  coverage: SearchCoverageFact[];
+  /** Exact admission captured while rows still belong to the verified core. */
+  rateConditions?: ScopedRateConditions[];
 }
 
 export function australianPublicationDate(now = new Date()): string {
@@ -34,7 +46,7 @@ function freezeDeep<T>(value: T): T {
 /** Caller supplies integrity-verified current details, never a stale details cache. */
 export function captureFilteredSearchSnapshot(input: {
   core: CorePayload; manifest: Manifest; details: DetailsPayload; profile: ProfileFilters;
-  request: SearchReportRequest; searchIndex?: SearchIndexPayload | null; now?: Date;
+  request: SearchReportRequest; searchIndex?: SearchIndexPayload | null; now?: Date; coreIntegrity?: CoreIntegrityContext | null;
 }): FilteredSearchSnapshot {
   const { core, manifest, details, request } = input;
   if (!isMandatoryEligibilityReady() || core.run_date !== manifest.run_date || details.run_date !== core.run_date) throw Error('Required publication evidence is not ready.');
@@ -50,12 +62,14 @@ export function captureFilteredSearchSnapshot(input: {
     bundleSha256: manifest.payload_revision?.bundle_sha256 ?? null, coreSha256: manifest.files.core.sha256, detailsSha256: manifest.files.details.sha256,
     generatedAt: now.toISOString(), australianDate: australianPublicationDate(now), request, mandatoryRequirements: input.profile, rows,
     products: keys.map((productKey, index) => ({ productKey, rank: index + 1, detail: details.products[productKey] ?? null })),
+    rateConditions: rows.map(row => scopedRateConditions(row, request.section, { core, manifest, details, coreIntegrity: input.coreIntegrity ?? null })),
     coverage: [
-      'Complete matching result set; matching rate variants only. Ranking follows the selected Search sorting.',
-      'Absent specifications are unavailable, not confirmed absence. Empty supplied arrays are preserved as empty supplied arrays.',
-      'Published terms and source references are included. Referenced document bodies and independent applicability reviews are not bundled in this export.',
-      'Historical completeness and unsupported calculation patterns are not established by this report.',
-      ...(core.run_date !== australianPublicationDate(now) ? [`Older publication: ${core.run_date}; not today’s data.`] : []),
+      { kind: 'matching-set', state: 'complete', variants: 'matching', ranking: 'selected' },
+      { kind: 'specifications', absent: 'unavailable', emptyArrays: 'explicit' },
+      { kind: 'sources', references: 'included', documentBodies: 'excluded', independentReview: 'unverified' },
+      { kind: 'history', completeness: 'unverified' },
+      { kind: 'calculations', unsupportedPatterns: 'unverified' },
+      { kind: 'publication-day', state: core.run_date === australianPublicationDate(now) ? 'current' : 'older', publicationDate: core.run_date, australianDate: australianPublicationDate(now) },
     ],
   };
   return freezeDeep(JSON.parse(JSON.stringify(snapshot)) as FilteredSearchSnapshot);

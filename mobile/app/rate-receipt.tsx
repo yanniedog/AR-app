@@ -1,3 +1,5 @@
+import { uiCount, uiDate, uiJoin, uiLabel, uiMoney, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
+import { uiConditionalRateFact } from "../src/lib/financialUiCopy";
 import Ionicons from '../src/components/icons/AppIcon';
 import * as Clipboard from 'expo-clipboard';
 import { Stack, router, useLocalSearchParams, type Href } from 'expo-router';
@@ -18,6 +20,7 @@ import {
   buildRateReceipt,
   rateConditionReceiptLines,
   type ReceiptFact,
+  type ReceiptStatusFact,
 } from '../src/data/rateReceipt';
 import { findEligibleByKey } from '../src/data/selectors';
 import { isMandatoryEligibilityReady } from '../src/data/eligibilityGate';
@@ -26,7 +29,7 @@ import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 
-function Facts({ items, empty }: { items: ReceiptFact[]; empty?: string }) {
+function Facts({ items, empty }: { items: readonly ReceiptFact[]; empty?: UiCopy }) {
   if (!items.length) {
     return empty ? <AppText variant="small" color="textMuted">{empty}</AppText> : null;
   }
@@ -49,13 +52,21 @@ function Facts({ items, empty }: { items: ReceiptFact[]; empty?: string }) {
   );
 }
 
-function money(value: number): string {
-  return value.toLocaleString('en-AU', {
-    style: 'currency',
-    currency: 'AUD',
-    maximumFractionDigits: 0,
-  });
+const money=(value:number):UiText=>uiMoney(value);
+function statusFact(fact:ReceiptStatusFact):ReceiptFact {
+  switch(fact.kind) {
+    case 'eligibility':return {label:uiLabel("Eligibility"),value:uiLabel('Unverified')};
+    case 'quote':return {label:uiLabel("Lender quote / approval"),value:uiLabel('Unavailable')};
+    case 'advice':return {label:uiLabel("Personal advice"),value:uiLabel('Excluded')};
+    case 'privacy':return {label:uiLabel("Privacy"),value:uiLabel('Local only')};
+    case 'costs':return {label:uiLabel("Total costs"),value:uiLabel('Unverified')};
+    case 'comparables':return {label:uiLabel("Comparable criteria"),value:uiLabel('Unmatched')};
+    case 'source':return {label:uiLabel("Source"),value:uiLabel('Unavailable')};
+    case 'detailed-eligibility':return {label:uiLabel("Detailed eligibility"),value:uiLabel('Unavailable')};
+  }
 }
+const TOPICS:Record<'current-rate'|'selected-tier'|'fees'|'conditions',UiLabel>={'current-rate':'Current rate','selected-tier':'Selected tier',fees:'Fees',conditions:'Conditions'};
+const EXCLUSIONS:Record<'repayments'|'fees'|'loan-structure'|'switching-costs'|'compounding'|'maturity-instructions'|'bonus-eligibility'|'tax'|'balance-changes',UiLabel>={repayments:'Repayments',fees:'Fees','loan-structure':'Loan structure','switching-costs':'Switching costs',compounding:'Compounding','maturity-instructions':'Maturity instructions','bonus-eligibility':'Bonus qualification',tax:'Tax','balance-changes':'Balance changes'};
 
 export default function RateReceiptScreen() {
   const suitabilityRevision = useSuitabilityRevision();
@@ -77,8 +88,7 @@ export default function RateReceiptScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [limitsOpen, setLimitsOpen] = useState(false);
+  const [scenarioOpen, setScenarioOpen] = useState(false);
 
   useEffect(() => {
     void ensureDetails({ forProductView: true });
@@ -115,28 +125,16 @@ export default function RateReceiptScreen() {
   );
   useAuditExternalLinks((receipt?.officialSources ?? []).map((source) => ({ url: source.url, purpose: 'lender_source', label: source.label })));
   const shareText = useMemo(() => {
-    if (!receipt || !brief) return '';
-    const lines = [
-      `Bank-call brief · ${receipt.provider}`,
-      `${receipt.productName} · ${receipt.advertisedRate} · observed ${receipt.evidenceDate}`,
-      ...rateConditionReceiptLines(receipt),
-    ];
-    if (brief.illustration) {
-      lines.push(
-        `${money(brief.illustration.periodDifference)} ${brief.illustration.periodLabel}`,
-        `${brief.illustration.currentRate} entered rate vs ${brief.illustration.selectedRate} observed rate`,
-      );
-    }
-    if (brief.comparables.length) {
-      lines.push('', 'Comparable observed rates (individual rate conditions unassessed):');
-      for (const item of brief.comparables) {
-        lines.push(`- ${item.provider}: ${item.advertisedRate} · ${item.productName}`);
-      }
-    }
-    lines.push('', 'Questions to ask:');
-    brief.prompts.forEach((prompt, index) => lines.push(`${index + 1}. ${prompt}`));
-    lines.push('', 'Australian Rates · general information');
-    return lines.join('\n');
+    if (!receipt || !brief) return uiLabel('Unavailable');
+    const lines:UiCopy[]=[uiJoin('Bank-call brief',': ',uiProviderName({provider:receipt.provider})),
+      uiJoin(uiProductName({product_name:receipt.productName}),' · ',receipt.advertisedRate,' · ','Observed',': ',uiDate(receipt.evidenceDate)),
+      ...rateConditionReceiptLines(receipt),...brief.facts.map(fact=>{const row=statusFact(fact);return uiJoin(row.label,': ',row.value);})];
+    if(brief.illustration) lines.push(uiJoin('Simple interest-rate difference',': ',money(brief.illustration.periodDifference),' · ',brief.illustration.periodLabel),
+      uiJoin('Entered / observed',': ',brief.illustration.currentRate,' / ',brief.illustration.selectedRate),
+      ...brief.illustration.exclusions.map(code=>uiJoin('Excluded',': ',EXCLUSIONS[code])));
+    for(const item of brief.comparables) lines.push(uiJoin(uiProviderName({provider:item.provider}),': ',item.advertisedRate,' · ',uiProductName({product_name:item.productName})),...item.conditionalFacts.map(uiConditionalRateFact));
+    lines.push(uiJoin('Topics',': ',...brief.topics.flatMap<UiCopy>((topic,index)=>index?[' / ',TOPICS[topic]]:[TOPICS[topic]])));
+    return uiJoin(...lines.flatMap<UiCopy>((line,index)=>index?[' · ',line]:[line]));
   }, [brief, receipt]);
   const auditActions = useMemo(() => ({
     'receipt.open': () => undefined,
@@ -223,313 +221,61 @@ export default function RateReceiptScreen() {
         <EmptyState
           icon="receipt-outline"
           title="Exact rate no longer available"
-          subtitle="This rate is no longer in the current catalogue. Return to the product and choose a current rate."
           fill
         />
       </>
     );
   }
 
-  return (
-    <>
-      <Stack.Screen options={{ title: 'Bank-call brief' }} />
-      <ScreenScrollView
-        ref={scrollRef}
-        onLayout={() => setLayoutReady(true)}
-        contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
-      >
-        <Card style={{ marginBottom: 16, gap: 10, borderLeftWidth: 3, borderLeftColor: theme.colors.primary }}>
-          <Row gap={8} style={{ alignItems: 'center' }}>
-            <Ionicons name="shield-checkmark-outline" size={20} color={theme.colors.primary} />
-            <View style={{ flex: 1 }}>
-              <AppText variant="h3">Prepare your bank call</AppText>
-              <AppText variant="tiny" color="textMuted">Private on this device · observed {receipt.evidenceDate}</AppText>
-            </View>
-          </Row>
-          <Row gap={8}>
-            <Button
-              title="Copy"
-              icon="copy-outline"
-              variant="secondary"
-              style={{ flex: 1 }}
-              onPress={() => void Clipboard.setStringAsync(shareText)}
-            />
-            <Button
-              title="Share"
-              icon="share-outline"
-              style={{ flex: 1 }}
-              onPress={() => void Share.share({ title: 'Bank-call brief', message: shareText })}
-            />
-          </Row>
-        </Card>
-
-        <Card style={{ marginBottom: 16, alignItems: 'center' }}>
-          <AppText variant="small" color="textMuted">{receipt.provider}</AppText>
-          <AppText variant="h3" style={{ marginTop: 2, textAlign: 'center' }}>{receipt.productName}</AppText>
-          <AppText variant="h1" weight="800" style={{ marginTop: 10, color: theme.colors.primary }}>
-            {receipt.advertisedRate}
-          </AppText>
-          <AppText variant="tiny" color="textMuted" style={{ marginTop: 4 }}>
-            Exact rate row {receipt.rateIndex ?? 'default'} · observed {receipt.evidenceDate}
-          </AppText>
-          {receipt.comparisonRate ? (
-            <AppText variant="small" color="textMuted" style={{ marginTop: 6 }}>
-              {receipt.comparisonRate} comparison rate
-            </AppText>
-          ) : null}
-          {receipt.ongoingRate ? (
-            <AppText variant="small" color="textMuted">
-              {receipt.ongoingRate} published ongoing rate
-            </AppText>
-          ) : null}
-        </Card>
-
-        {brief.illustration ? (
-          <Card style={{ marginBottom: 16, borderLeftWidth: 3, borderLeftColor: theme.colors.success }}>
-            <AppText variant="small" color="textMuted">Your entered rate difference</AppText>
-            <AppText variant="h2" style={{ color: theme.colors.success, marginTop: 3 }}>
-              {money(brief.illustration.periodDifference)} {brief.illustration.periodLabel}
-            </AppText>
-            {brief.illustration.monthlyDifference != null ? (
-              <AppText variant="body" weight="700">about {money(brief.illustration.monthlyDifference)} per month</AppText>
-            ) : null}
-            <AppText variant="tiny" color="textMuted" style={{ marginTop: 6, lineHeight: 16 }}>
-              {brief.illustration.currentRate} entered rate vs {brief.illustration.selectedRate} observed rate. Illustrative; fees not included.
-            </AppText>
-          </Card>
-        ) : (
-          <Card variant="outlined" style={{ marginBottom: 16, gap: 10 }}>
-            <AppText variant="body" weight="700">Add your current rate for a dollar comparison</AppText>
-            <Button
-              title="Add my rate"
-              variant="secondary"
-              onPress={() => router.push({ pathname: '/calculator', params: { intent: 'check', section: receipt.section } })}
-            />
-          </Card>
-        )}
-
-        <SectionTitle text="Questions to ask" icon="help-circle-outline" />
-        <Card style={{ marginBottom: 16 }}>
-          {brief.prompts.map((prompt, index) => (
-            <Row key={prompt} style={{ alignItems: 'flex-start', marginBottom: index === brief.prompts.length - 1 ? 0 : 10 }}>
-              <AppText variant="small" weight="700" style={{ color: theme.colors.primary }}>{index + 1}.</AppText>
-              <AppText variant="small" style={{ flex: 1, lineHeight: 20 }}>{prompt}</AppText>
-            </Row>
-          ))}
-        </Card>
-
-        <SectionTitle text="Comparable observed rates" icon="git-compare-outline" />
-        <Card style={{ marginBottom: 16 }}>
-          <AppText variant="tiny" color="textFaint" style={{ marginBottom: 10, lineHeight: 16 }}>
-            {brief.cohortSummary}{brief.typicalAdvertisedRate ? ` · typical ${brief.typicalAdvertisedRate}` : ''}. Compare conditions before relying on a rate.
-          </AppText>
-          {brief.comparables.length ? brief.comparables.map((comparable, index) => (
-            <Pressable
-              key={`${comparable.productKey}#${comparable.rateIndex ?? 'default'}`}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${comparable.provider} ${comparable.productName}`}
-              onPress={() => router.push({
-                pathname: '/product/[key]',
-                params: {
-                  key: comparable.productKey,
-                  ...(comparable.rateIndex != null ? { ri: String(comparable.rateIndex) } : {}),
-                },
-              } as Href)}
-              style={{ minHeight: TOUCH_TARGET_MIN, justifyContent: 'center' }}
-            >
-              {index > 0 ? <Divider style={{ marginBottom: 10 }} /> : null}
-              <Row style={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <AppText variant="small" weight="700">{comparable.provider}</AppText>
-                  <AppText variant="tiny" color="textMuted">{comparable.productName}</AppText>
-                </View>
-                <AppText variant="body" weight="800">{comparable.advertisedRate}</AppText>
-              </Row>
+  return <><Stack.Screen options={{title:'Bank-call brief'}}/>
+    <ScreenScrollView ref={scrollRef} onLayout={()=>setLayoutReady(true)} contentContainerStyle={{padding:16,paddingBottom:32,gap:12}}>
+      <Card style={{gap:8}}>
+        <AppText variant="small" color="textMuted">{uiProviderName(row)}</AppText>
+        <AppText variant="h3">{uiProductName(row)}</AppText>
+        <AppText variant="rateHero" style={{color:theme.colors.primary}}>{receipt.advertisedRate}</AppText>
+        <AppText variant="tiny" color="textMuted">{uiJoin('Tier',': ',receipt.rateIndex == null ? 'Unknown':uiCount(receipt.rateIndex),' · ','Observed',': ',uiDate(receipt.evidenceDate))}</AppText>
+        {receipt.comparisonRate ? <AppText variant="small">{uiJoin('Comparison rate',': ',receipt.comparisonRate)}</AppText>:null}
+        {receipt.ongoingRate ? <AppText variant="small">{uiJoin('Ongoing rate',': ',receipt.ongoingRate)}</AppText>:null}
+      </Card>
+      {brief.illustration ? <Card style={{gap:8}}>
+        <AppText variant="small" color="textMuted">{uiLabel('Simple interest-rate difference')}</AppText>
+        <AppText variant="h2">{uiJoin(money(brief.illustration.periodDifference),' ',brief.illustration.periodLabel)}</AppText>
+        {brief.illustration.monthlyDifference != null ? <AppText weight="700">{uiJoin('Approximate',': ',money(brief.illustration.monthlyDifference),' ','per month')}</AppText>:null}
+        <Facts items={[{label:uiLabel("Entered / observed"),value:uiJoin(brief.illustration.currentRate,' / ',brief.illustration.selectedRate)},
+          {label:uiLabel("Basis"),value:uiLabel('Illustrative')},...brief.illustration.exclusions.map(code=>({label:'Excluded' as const,value:uiLabel(EXCLUSIONS[code])}))]}/>
+      </Card>:<Button title="Add my rate" variant="secondary" onPress={()=>router.push({pathname:'/calculator',params:{intent:'check',section:receipt.section}})}/>}
+      <Card style={{gap:8}}><Facts items={brief.facts.map(statusFact)}/></Card>
+      <SectionTitle text="Comparable observed rates" icon="git-compare-outline"/>
+      <Card style={{gap:8}}>
+        <AppText variant="tiny" color="textMuted">{uiJoin(brief.cohortSummary,brief.typicalAdvertisedRate ? uiJoin(' · ','Median',': ',brief.typicalAdvertisedRate):null)}</AppText>
+        {brief.comparables.length ? brief.comparables.map((comparable,index)=><Pressable key={`${comparable.productKey}#${comparable.rateIndex??'default'}`}
+          accessibilityRole="button" accessibilityLabel={uiJoin('Open',' ',uiProviderName({provider:comparable.provider}),' · ',uiProductName({product_name:comparable.productName}))}
+          onPress={()=>router.push({pathname:'/product/[key]',params:{key:comparable.productKey,...(comparable.rateIndex!=null?{ri:String(comparable.rateIndex)}:{})}} as Href)}
+          style={{minHeight:TOUCH_TARGET_MIN,justifyContent:'center',gap:4}}>
+          {index ? <Divider/>:null}
+          <Row style={{justifyContent:'space-between',gap:12}}><View style={{flex:1}}><AppText weight="700">{uiProviderName({provider:comparable.provider})}</AppText><AppText variant="tiny" color="textMuted">{uiProductName({product_name:comparable.productName})}</AppText></View><AppText weight="800">{comparable.advertisedRate}</AppText></Row>
+          {comparable.conditionalFacts.map((fact,i)=><AppText key={i} variant="tiny" color="textMuted">{uiConditionalRateFact(fact)}</AppText>)}
+        </Pressable>):<AppText>{uiLabel('No comparable rates observed')}</AppText>}
+      </Card>
+      <Row gap={8}><Button title="Copy" variant="secondary" icon="copy-outline" style={{flex:1}} onPress={()=>void Clipboard.setStringAsync(shareText)}/><Button title="Share" icon="share-outline" style={{flex:1}} onPress={()=>void Share.share({title:'Bank-call brief',message:shareText})}/></Row>
+      <Disclosure title="Your entered scenario" open={scenarioOpen} onToggle={()=>setScenarioOpen(!scenarioOpen)}><Card>
+        {!scenarioLoaded ? <AppText>{uiLabel('Loading')}</AppText>:brief.scenario.length ? <Facts items={brief.scenario}/>:<Button title="Add scenario" variant="secondary" onPress={()=>router.push('/calculator')}/>}
+      </Card></Disclosure>
+      <Disclosure title="Published evidence" open={evidenceOpen} onToggle={()=>setEvidenceOpen(!evidenceOpen)}>
+        <SectionTitle text="Exact published tier" icon="layers-outline"/><Card><Facts items={receipt.tier}/></Card>
+        <SectionTitle text="Conditions recorded" icon="checkmark-done-outline"/><RateConditionsDisclosure model={receipt.rateConditions}/><Card><Facts items={receipt.conditions} empty="Eligibility / constraints unpublished"/></Card>
+        {receipt.fees.length ? <><SectionTitle text="Fees recorded" icon="cash-outline"/><Card><Facts items={receipt.fees}/></Card></>:null}
+        <SectionTitle text="Published source links" icon="link-outline"/><Card>
+          {receipt.officialSources.length ? receipt.officialSources.map((source,index)=><View key={source.url}>
+            {index ? <Divider/>:null}
+            <Pressable accessibilityRole="link" accessibilityLabel={uiJoin(source.label,' · ',source.hostname,' · ','External link')}
+              onPress={()=>requestExternalUrl({url:source.url,purpose:'lender_source',label:source.label})}
+              style={({pressed})=>({minHeight:TOUCH_TARGET_MIN,flexDirection:'row',alignItems:'center',gap:10,opacity:pressed?0.7:1})}>
+              <Ionicons name="open-outline" size={17} color={theme.colors.primary}/><View style={{flex:1}}><AppText weight="700">{source.label}</AppText><AppText variant="tiny" color="textMuted">{source.hostname}</AppText></View>
             </Pressable>
-          )) : (
-            <AppText variant="small" color="textMuted">No comparable widely available rates were observed.</AppText>
-          )}
+          </View>):<AppText>{uiLabel('Published source unavailable')}</AppText>}
         </Card>
-
-        <Disclosure
-          title="Published evidence"
-          summary="Exact tier, conditions, fees and lender sources"
-          open={evidenceOpen}
-          onToggle={() => setEvidenceOpen((value) => !value)}
-        >
-
-        <SectionTitle text="Exact published tier" icon="layers-outline" />
-        <Card style={{ marginBottom: 16 }}><Facts items={receipt.tier} /></Card>
-
-        <SectionTitle text="Conditions recorded" icon="checkmark-done-outline" />
-        <RateConditionsDisclosure model={receipt.rateConditions} />
-        <Card style={{ marginBottom: 16 }}>
-          <Facts
-            items={receipt.conditions}
-            empty="No detailed eligibility or constraint text was published. Confirm directly with the bank."
-          />
-        </Card>
-
-        {receipt.fees.length ? (
-          <>
-            <SectionTitle text="Fees recorded" icon="cash-outline" />
-            <Card style={{ marginBottom: 16 }}><Facts items={receipt.fees} /></Card>
-          </>
-        ) : null}
-
-        <SectionTitle text="Published source links" icon="link-outline" />
-        <Card style={{ marginBottom: 16 }}>
-          {receipt.officialSources.length ? receipt.officialSources.map((source, index) => (
-            <View key={source.url}>
-              {index > 0 ? <Divider /> : null}
-              <Pressable
-                accessibilityRole="link"
-                accessibilityLabel={`${source.label} on ${source.hostname}, opens external website`}
-                onPress={() => requestExternalUrl({
-                  url: source.url,
-                  purpose: 'lender_source',
-                  label: source.label,
-                })}
-                style={({ pressed }) => ({
-                  minHeight: TOUCH_TARGET_MIN,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 10,
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <Ionicons name="open-outline" size={17} color={theme.colors.primary} />
-                <View style={{ flex: 1 }}>
-                  <AppText variant="small" weight="700" style={{ color: theme.colors.primary }}>
-                    {source.label}
-                  </AppText>
-                  <AppText variant="tiny" color="textMuted">{source.hostname}</AppText>
-                </View>
-              </Pressable>
-            </View>
-          )) : (
-            <AppText variant="small" color="textMuted">
-              No valid HTTPS source link was published for this product.
-            </AppText>
-          )}
-        </Card>
-        </Disclosure>
-
-        <Disclosure
-          title="Full brief details"
-          summary="Entered scenario and calculation record"
-          open={detailsOpen}
-          onToggle={() => setDetailsOpen((value) => !value)}
-        >
-
-        <SectionTitle text="Calculation record" icon="chatbubbles-outline" />
-        <Card style={{ marginBottom: 16 }}>
-          <AppText variant="h3">{brief.title}</AppText>
-          <AppText variant="small" color="textMuted" style={{ marginTop: 6, lineHeight: 20 }}>
-            {brief.disclaimer}
-          </AppText>
-        </Card>
-
-        <SectionTitle text="Your entered scenario" icon="person-outline" />
-        <Card style={{ marginBottom: 16 }}>
-          {!scenarioLoaded ? (
-            <AppText variant="small" color="textMuted">Loading encrypted scenario…</AppText>
-          ) : brief.scenario.length > 0 ? (
-            <Facts items={brief.scenario} />
-          ) : (
-            <>
-              <AppText variant="small" color="textMuted" style={{ marginBottom: 12, lineHeight: 20 }}>
-                Add your current rate and balance in Check my rate to make this brief specific.
-              </AppText>
-              <Button title="Add scenario" variant="secondary" onPress={() => router.push('/calculator')} />
-            </>
-          )}
-        </Card>
-
-        <SectionTitle text="Selected evidence" icon="receipt-outline" />
-        <Card style={{ marginBottom: 16 }}><Facts items={brief.selectedProduct} /></Card>
-
-        {brief.illustration ? (
-          <>
-            <SectionTitle text="Illustrative difference" icon="calculator-outline" />
-            <Card style={{ marginBottom: 16 }}>
-              <AppText variant="h2" style={{ color: theme.colors.success }}>
-                {money(brief.illustration.periodDifference)} {brief.illustration.periodLabel}
-              </AppText>
-              {brief.illustration.monthlyDifference != null ? (
-                <AppText variant="body" weight="700" style={{ marginTop: 2 }}>
-                  about {money(brief.illustration.monthlyDifference)} per month
-                </AppText>
-              ) : null}
-              <AppText variant="small" color="textMuted" style={{ marginTop: 8, lineHeight: 20 }}>
-                {brief.illustration.currentRate} entered current rate vs {brief.illustration.selectedRate} observed selected rate on {brief.evidenceDate}. {brief.illustration.assumption}
-              </AppText>
-            </Card>
-          </>
-        ) : null}
-
-        <SectionTitle text="Comparable observed rates" icon="git-compare-outline" />
-        <Card style={{ marginBottom: 16 }}>
-          <AppText variant="tiny" color="textFaint" style={{ marginBottom: 10, lineHeight: 16 }}>
-            {brief.cohortSummary}{brief.typicalAdvertisedRate ? ` · typical ${brief.typicalAdvertisedRate}` : ''}. Compare conditions before relying on a rate.
-          </AppText>
-          {brief.comparables.length ? brief.comparables.map((comparable, index) => (
-            <View key={`${comparable.productKey}#${comparable.rateIndex ?? 'default'}`}>
-              {index > 0 ? <Divider style={{ marginVertical: 10 }} /> : null}
-              <Row style={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <AppText variant="small" weight="700">{comparable.provider}</AppText>
-                  <AppText variant="tiny" color="textMuted">{comparable.productName}</AppText>
-                  {comparable.condition ? (
-                    <AppText variant="tiny" color="textFaint" style={{ marginTop: 3 }}>
-                      Conditions apply
-                    </AppText>
-                  ) : null}
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <AppText variant="body" weight="800">{comparable.advertisedRate}</AppText>
-                  {comparable.comparisonRate ? (
-                    <AppText variant="tiny" color="textFaint">{comparable.comparisonRate} comparison</AppText>
-                  ) : comparable.ongoingRate ? (
-                    <AppText variant="tiny" color="textFaint">{comparable.ongoingRate} ongoing</AppText>
-                  ) : null}
-                </View>
-              </Row>
-            </View>
-          )) : (
-            <AppText variant="small" color="textMuted">No other widely available comparable rates were observed.</AppText>
-          )}
-        </Card>
-
-        <SectionTitle text="Questions to ask" icon="help-circle-outline" />
-        <Card style={{ marginBottom: 16 }}>
-          {brief.prompts.map((prompt, index) => (
-            <Row key={prompt} style={{ alignItems: 'flex-start', marginBottom: index === brief.prompts.length - 1 ? 0 : 10 }}>
-              <AppText variant="small" weight="700" style={{ color: theme.colors.primary }}>{index + 1}.</AppText>
-              <AppText variant="small" style={{ flex: 1, lineHeight: 20 }}>{prompt}</AppText>
-            </Row>
-          ))}
-        </Card>
-        </Disclosure>
-
-        <Disclosure
-          title="How this was calculated"
-          summary="Assumptions and limits"
-          open={limitsOpen}
-          onToggle={() => setLimitsOpen((value) => !value)}
-        >
-          <View>
-          {brief.limitations.map((limitation) => (
-            <Row key={limitation} style={{ alignItems: 'flex-start', marginBottom: 8 }}>
-              <AppText variant="small" color="textMuted">•</AppText>
-              <AppText variant="small" color="textMuted" style={{ flex: 1, lineHeight: 20 }}>
-                {limitation}
-              </AppText>
-            </Row>
-          ))}
-          </View>
-        </Disclosure>
-      </ScreenScrollView>
-    </>
-  );
+      </Disclosure>
+    </ScreenScrollView>
+  </>;
 }

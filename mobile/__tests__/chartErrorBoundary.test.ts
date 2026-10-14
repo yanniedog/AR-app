@@ -1,3 +1,5 @@
+import React from 'react';
+import Svg from 'react-native-svg';
 import { ChartErrorBoundary } from '../src/components/ChartErrorBoundary';
 import { debugLog } from '../src/lib/debugLog';
 
@@ -19,7 +21,7 @@ describe('ChartErrorBoundary', () => {
   });
 
   it('renders children while no error has been captured', () => {
-    const child = 'chart contents';
+    const child = React.createElement(Svg, { viewBox: '0 0 10 10' });
     const boundary = new ChartErrorBoundary({ name: 'BankHistoryChart', children: child });
 
     expect(boundary.render()).toBe(child);

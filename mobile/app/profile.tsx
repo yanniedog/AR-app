@@ -1,13 +1,14 @@
+import { uiCount,uiJoin,uiSectionName } from "../src/lib/uiCopy";
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 
 import { ProfileEditor } from '../src/components/ProfileEditor';
 import { CustomerProfilePanel } from '../src/components/CustomerProfilePanel';
 import { ScreenScrollView } from '../src/components/Screen';
-import { AppText, Button, Card } from '../src/components/ui';
+import { Button, Card } from '../src/components/ui';
 import { LedgerRow, LedgerSection } from '../src/components/ledger';
 import { LedgerIcon } from '../src/components/icons/LedgerIcon';
-import { SECTION_ORDER, SECTIONS } from '../src/constants';
+import { SECTION_ORDER } from '../src/constants';
 import { toggleInterest } from '../src/data/interests';
 import {
   EMPTY_PROFILE,
@@ -90,20 +91,17 @@ export default function Profile() {
       contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
       onLayout={() => setLayoutReady(true)}
     >
-      <LedgerSection title="Product types" deck="Choose at least one. These are the products you see across the app." ruled={false}>
+      <LedgerSection title="Preferred types" ruled={false}>
         {SECTION_ORDER.map(section => {
           const selected = interests.includes(section);
           const disabled = selected && interests.length === 1;
-          return <LedgerRow key={section} title={SECTIONS[section].title}
+          return <LedgerRow key={section} title={uiSectionName(section)}
             accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled }}
             aria-checked={selected} aria-disabled={disabled}
             disabled={disabled} onPress={() => setPref('interests', toggleInterest(interests, section))}
             trailing={<LedgerIcon name={selected ? 'checkbox' : 'checkbox-empty'} size={24} color={theme.colors.primary} />} />;
         })}
       </LedgerSection>
-      <AppText variant="body" color="textMuted" style={{ marginBottom: 16, lineHeight: 22 }}>
-        Choose the features you need. Your choices apply across products, matches and charts.
-      </AppText>
       <Card>
         <ProfileEditor
           sections={interests}
@@ -114,7 +112,7 @@ export default function Profile() {
       {count > 0 ? (
         <View style={{ marginTop: theme.spacing(4) }}>
           <Button
-            title={`Clear profile (${count} selected)`}
+            title={uiJoin('Clear profile',' (',uiCount(count),')')}
             variant="ghost"
             onPress={() => setPref('profileFilters', { ...EMPTY_PROFILE })}
           />

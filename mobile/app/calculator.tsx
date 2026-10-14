@@ -1,3 +1,4 @@
+import { uiLabel } from "../src/lib/uiCopy";
 import React from 'react';
 import { View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -22,7 +23,7 @@ export default function Calculate() {
       <Stack.Screen options={{ title: 'Calculate' }} />
       <View style={{ paddingHorizontal: 16 }}>
         <SegmentedControl
-          options={[{ label: 'Rate check', value: 'check' }, { label: 'Projection', value: 'project' }]}
+          options={[{ label: uiLabel("Rate check"), value: 'check' }, { label: uiLabel("Projection"), value: 'project' }]}
           value={mode}
           onChange={(next) => router.setParams({ mode: next, section })}
         />

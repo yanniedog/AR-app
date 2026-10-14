@@ -1,7 +1,9 @@
 import { hasMandatoryRequirements } from './eligibilityGate';
 import { SECTIONS } from '../constants';
+import { uiJoin, uiProviderName, uiProductName } from '../lib/uiCopy';
 import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter';
 import type { CorePayload, ProductDetail, RateRow, SectionKey } from '../types';
+import { SECTION_KEYS } from '../types';
 import { bpsBetween, formatRate, humanizeEnum, toFraction } from './format';
 import type { SavedRateRef } from './savedRates';
 import { activeFilterCount, filterRows, rankFraction, type Filters, type MortgageRateMetric, type RankMetric, type SortKey } from './selectors';
@@ -327,7 +329,9 @@ function productRatesByIndex(
   mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): Map<number, TrackedRateValue> {
   const out = new Map<number, TrackedRateValue>();
-  for (const section of Object.keys(core.sections) as SectionKey[]) {
+  for (const sectionKey of Object.keys(core.sections)) {
+    const section = SECTION_KEYS.find(known => known === sectionKey);
+    if (!section) continue;
     for (const row of core.sections[section]?.rates ?? []) {
       if (row.product_key !== productKey) continue;
       if (rateIndex != null && row.exact_alert_eligible === false) continue;
@@ -371,8 +375,8 @@ export function largestRateChange(
 }
 
 export interface NotifyMessage {
-  title: string;
-  body: string;
+  title: import('../lib/uiCopy').UiCopy;
+  body: import('../lib/uiCopy').UiCopy;
 }
 
 export function computeSubscriptionChanges(
@@ -400,8 +404,8 @@ export function computeSubscriptionChanges(
       );
       if (hit) {
         messages.push({
-          title: `${hit.row.provider} rate changed`,
-          body: `${hit.row.product_name}: ${formatRate(hit.from)} → ${formatRate(hit.to)}.`,
+          title: uiJoin(uiProviderName(hit.row), ' · ', 'Rate changed'),
+          body: uiJoin(uiProductName(hit.row), ': ', formatRate(hit.from), ' → ', formatRate(hit.to)),
         });
       }
       continue;
@@ -414,8 +418,8 @@ export function computeSubscriptionChanges(
     );
     if (hit) {
       messages.push({
-        title: `Search alert: ${sub.label}`,
-        body: `${hit.row.provider} ${hit.row.product_name}: ${formatRate(hit.from)} → ${formatRate(hit.to)}.`,
+        title: 'Search alert',
+        body: uiJoin(uiProviderName(hit.row), ' · ', uiProductName(hit.row), ': ', formatRate(hit.from), ' → ', formatRate(hit.to)),
       });
     }
   }

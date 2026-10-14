@@ -35,16 +35,16 @@ test.each(['product', 'rate_variant'] as const)('technical Mortgage %s flow requ
   const props = { productKey: h.target.productKey, ...(kind === 'rate_variant' ? { row, section: 'Mortgage' as const } : {}) };
   mockState = { ...h.context, ensureDetails: jest.fn(async () => undefined) };
   let tree: any; await act(async () => { tree = TestRenderer.create(<EligibilityAssessment {...props} />); });
-  expect(tree.root.findAllByProps({ title: 'Assess selected scope' })).toHaveLength(0);
-  await act(async () => tree.root.findByProps({ title: 'Check recorded eligibility criteria' }).props.onToggle());
+  expect(tree.root.findAllByProps({ title: 'Assess scope' })).toHaveLength(0);
+  await act(async () => tree.root.findByProps({ title: 'Recorded criteria' }).props.onToggle());
   act(() => tree.root.findByProps({ label: 'Assessment date' }).props.onChangeText('2028-01-02'));
-  act(() => tree.root.findByProps({ title: 'Assess selected scope' }).props.onPress());
-  expect(JSON.stringify(tree.toJSON())).toContain('Choose the reviewed scope');
-  act(() => tree.root.findByProps({ title: 'Review scope protocol-cohort' }).props.onToggle());
-  act(() => tree.root.findByProps({ label: 'Selected amount' }).props.onChangeText('1000'));
-  act(() => tree.root.findByProps({ label: 'Choose protocol-cohort / protocol-tier / No package' }).props.onPress());
-  act(() => tree.root.findByProps({ title: 'Assess selected scope' }).props.onPress());
-  await act(async () => tree.root.findByProps({ title: 'Copy eligibility receipt' }).props.onPress());
+  act(() => tree.root.findByProps({ title: 'Assess scope' }).props.onPress());
+  expect(JSON.stringify(tree.toJSON())).toContain('Unavailable');
+  act(() => tree.root.findByProps({ title: 'Scope · protocol-cohort' }).props.onToggle());
+  act(() => tree.root.findByProps({ label: 'Amount (AUD)' }).props.onChangeText('1000'));
+  act(() => tree.root.findByProps({ label: 'protocol-cohort / protocol-tier / None' }).props.onPress());
+  act(() => tree.root.findByProps({ title: 'Assess scope' }).props.onPress());
+  await act(async () => tree.root.findByProps({ title: 'Copy Receipt' }).props.onPress());
   const copied = JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls[0][0]);
   expect(copied.eligibility.status).toBe('meets'); expect(copied.evaluationInputs.scenario.values.scenario_amount.value).toBe('1000');
   expect(copied.evaluationKind).toBe('eligibility_only'); expect(copied).not.toHaveProperty('totals');
@@ -52,11 +52,11 @@ test.each(['product', 'rate_variant'] as const)('technical Mortgage %s flow requ
   if (kind === 'rate_variant') expect(copied.evaluationInputs.target).toMatchObject({ section: 'Mortgage', coreRowIndex: 0, rateIndex: 1, rowSha256: hashText(canonical(row)) });
   expect((downloadInflate as jest.Mock).mock.calls).toHaveLength(2);
   expect((downloadInflate as jest.Mock).mock.calls.every(([url]) => /executable_v2_(index|shard_000)-/.test(url))).toBe(true);
-  act(() => tree.root.findByProps({ label: 'Selected amount' }).props.onChangeText('0'));
-  expect(tree.root.findAllByProps({ title: 'Copy eligibility receipt' })).toHaveLength(0);
+  act(() => tree.root.findByProps({ label: 'Amount (AUD)' }).props.onChangeText('0'));
+  expect(tree.root.findAllByProps({ title: 'Copy Receipt' })).toHaveLength(0);
   mockState = { ...mockState, manifest: { ...mockState.manifest } }; delete mockState.manifest.executable_v2;
   await act(async () => tree.update(<EligibilityAssessment {...props} />));
-  expect(JSON.stringify(tree.toJSON())).toContain('unavailable for this product');
+  expect(JSON.stringify(tree.toJSON())).toContain('Unavailable');
   act(() => tree.unmount());
 });
 
@@ -64,9 +64,9 @@ test('failed refresh retry rejection remains handled and bounded', async () => {
   const h = await eligibilityTransportHarness(); delete (h.context.manifest as any).executable_v2;
   mockState = { ...h.context, ensureDetails: jest.fn(async () => { throw new Error('offline'); }) };
   let tree: any; await act(async () => { tree = TestRenderer.create(<EligibilityAssessment productKey={h.target.productKey} />); });
-  await act(async () => tree.root.findByProps({ title: 'Check recorded eligibility criteria' }).props.onToggle());
-  await act(async () => tree.root.findByProps({ title: 'Retry criteria' }).props.onPress());
-  expect(mockState.ensureDetails).toHaveBeenCalledTimes(1); expect(JSON.stringify(tree.toJSON())).toContain('unavailable');
+  await act(async () => tree.root.findByProps({ title: 'Recorded criteria' }).props.onToggle());
+  await act(async () => tree.root.findByProps({ title: 'Retry' }).props.onPress());
+  expect(mockState.ensureDetails).toHaveBeenCalledTimes(1); expect(JSON.stringify(tree.toJSON())).toContain('Unavailable');
 });
 
 
@@ -77,16 +77,16 @@ test('overlapping scopes remain independently entered and require explicit choic
   h.asset.subjects.push(second); h.asset.identitySha256 = eligibilityIdentity(h.asset, 'identitySha256');
   mockState = { ...h.context, ensureDetails: jest.fn(async () => undefined) };
   let tree: any; await act(async () => { tree = TestRenderer.create(<EligibilityAssessment productKey={h.target.productKey} />); });
-  await act(async () => tree.root.findByProps({ title: 'Check recorded eligibility criteria' }).props.onToggle());
+  await act(async () => tree.root.findByProps({ title: 'Recorded criteria' }).props.onToggle());
   act(() => tree.root.findByProps({ label: 'Assessment date' }).props.onChangeText('2028-01-02'));
   for (const cohort of ['protocol-cohort', 'second-cohort']) {
-    act(() => tree.root.findByProps({ title: `Review scope ${cohort}` }).props.onToggle());
-    act(() => tree.root.findByProps({ label: 'Selected amount' }).props.onChangeText('1000'));
+    act(() => tree.root.findByProps({ title: `Scope · ${cohort}` }).props.onToggle());
+    act(() => tree.root.findByProps({ label: 'Amount (AUD)' }).props.onChangeText('1000'));
   }
-  expect(JSON.stringify(tree.toJSON())).toContain('More than one scope meets');
+  expect(JSON.stringify(tree.toJSON())).toContain('Scopes · 2');
   expect(tree.root.findAllByType('Chip').every((node: any) => node.props.selected === false)).toBe(true);
-  act(() => tree.root.findByProps({ title: 'Assess selected scope' }).props.onPress());
-  expect(tree.root.findAllByProps({ title: 'Copy eligibility receipt' })).toHaveLength(0);
+  act(() => tree.root.findByProps({ title: 'Assess scope' }).props.onPress());
+  expect(tree.root.findAllByProps({ title: 'Copy Receipt' })).toHaveLength(0);
 });
 
 
@@ -97,10 +97,10 @@ test.each(['unavailable', 'not_applicable'] as const)('saved scenario %s cannot 
   let tree: any;
   try {
     await act(async () => { tree = TestRenderer.create(<EligibilityAssessment productKey={h.target.productKey} />); });
-    await act(async () => tree.root.findByProps({ title: 'Check recorded eligibility criteria' }).props.onToggle());
+    await act(async () => tree.root.findByProps({ title: 'Recorded criteria' }).props.onToggle());
     act(() => tree.root.findByProps({ label: 'Assessment date' }).props.onChangeText('2028-01-02'));
-    act(() => tree.root.findByProps({ title: 'Review scope protocol-cohort' }).props.onToggle());
-    expect(tree.root.findAllByProps({ label: 'Selected amount' })).toHaveLength(1);
-    expect(JSON.stringify(tree.toJSON())).toContain('needs information');
+    act(() => tree.root.findByProps({ title: 'Scope · protocol-cohort' }).props.onToggle());
+    expect(tree.root.findAllByProps({ label: 'Amount (AUD)' })).toHaveLength(1);
+    expect(JSON.stringify(tree.toJSON())).toContain('Needs information');
   } finally { delete mockProfile.answers[id]; if (tree) act(() => tree.unmount()); }
 });

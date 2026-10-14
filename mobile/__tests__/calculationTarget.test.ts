@@ -75,3 +75,13 @@ test('uses the selected published term instead of a generic yearly multiplier', 
   expect(result).toMatchObject({ status: 'ready', months: 6, basis: 'published-maturity' });
   expect(result.difference).toBeCloseTo(500, 8);
 });
+
+test('zero index remains the exact sibling when a different sibling is preferred', () => {
+  const zero = { ...second, rate_index: 0 };
+  const publication = { ...core, sections: { ...core.sections, Savings: { rates: [first, zero] } } } as CorePayload;
+  const route = buildCalculationRoute(zero, 'Savings');
+  expect(route.params.ri).toBe('0');
+  expect(resolveCalculationTarget(publication, 'Savings', route.params)).toEqual({ status: 'available', section: 'Savings', row: zero });
+  expect(resolveCalculationTarget(publication, 'Savings', { target: key, ri: ['0','0'] })).toEqual({ status: 'available', section: 'Savings', row: zero });
+  expect(resolveCalculationTarget(publication, 'Savings', { target: key, ri: '' })).toMatchObject({ status: 'available', row: first });
+});

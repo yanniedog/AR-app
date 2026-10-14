@@ -3,6 +3,7 @@ import { hasUnspecifiedMortgageLvr, isKnownNonStandardProduct } from './accountC
 import { accessExcludesFromStandard, assessAccess } from './access';
 import { getSuitabilityAllowed } from './suitabilityGate';
 import { mandatoryEligibleRows } from './eligibilityGate';
+import { uiDate, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiRate, type UiLabel, type UiText } from '../lib/uiCopy';
 
 /** Parse a rate that may be a normalized fraction ("0.0634") or a raw percent ("6.34"). */
 export function toFraction(rate: string | number | null | undefined): number | null {
@@ -33,33 +34,10 @@ export function effectiveFraction(
   return toFraction(effectiveRate(row));
 }
 
-const RATE_PERCENT_FORMATTERS = new Map<number, Intl.NumberFormat>();
-
-function normalizedFractionDigits(digits: number): number {
-  if (!Number.isFinite(digits)) return 2;
-  // Intl.NumberFormat's integer option coercion floors fractional values.
-  // Preserve that behaviour while avoiding RangeErrors for out-of-range input.
-  return Math.max(0, Math.min(20, Math.floor(digits)));
-}
-
-function ratePercentFormatter(digits: number): Intl.NumberFormat {
-  const normalized = normalizedFractionDigits(digits);
-  let formatter = RATE_PERCENT_FORMATTERS.get(normalized);
-  if (!formatter) {
-    formatter = new Intl.NumberFormat('en-AU', {
-      minimumFractionDigits: normalized,
-      maximumFractionDigits: normalized,
-    });
-    RATE_PERCENT_FORMATTERS.set(normalized, formatter);
-  }
-  return formatter;
-}
-
 /** Format a fraction (0.0634) or percent (6.34) as an en-AU percentage string ("6.34%"). */
-export function formatRate(rate: string | number | null | undefined, digits = 2): string {
+export function formatRate(rate: string | number | null | undefined, digits = 2): UiText {
   const f = toFraction(rate);
-  if (f === null) return '—';
-  return `${ratePercentFormatter(digits).format(f * 100)}%`;
+  return f === null ? uiLabel('—') : uiRate(f, digits);
 }
 
 /**
@@ -67,16 +45,14 @@ export function formatRate(rate: string | number | null | undefined, digits = 2)
  * Unlike {@link formatRate}/{@link toFraction}, a published 0% ranks as 0 and
  * must render as "0.00%" rather than the missing-rate em dash.
  */
-export function formatRankedFraction(fraction: number | null | undefined, digits = 2): string {
-  if (fraction === null || fraction === undefined || !isFinite(fraction) || fraction < 0) return '—';
-  return `${ratePercentFormatter(digits).format(fraction * 100)}%`;
+export function formatRankedFraction(fraction: number | null | undefined, digits = 2): UiText {
+  return fraction === null || fraction === undefined || !isFinite(fraction) || fraction < 0 ? uiLabel('—') : uiRate(fraction, digits);
 }
 
 /** Percent digits only (no suffix) — chart axis labels. */
-export function formatRateDigits(rate: string | number | null | undefined, digits = 2): string {
+export function formatRateDigits(rate: string | number | null | undefined, digits = 2): UiText {
   const f = toFraction(rate);
-  if (f === null) return '—';
-  return ratePercentFormatter(digits).format(f * 100);
+  return f === null ? uiLabel('—') : uiNumber(f * 100, digits);
 }
 
 export function ratePercentValue(rate: string | number | null | undefined): number | null {
@@ -90,9 +66,7 @@ export function bpsBetween(a: number | null, b: number | null): number | null {
   return Math.round((a - b) * 10000);
 }
 
-const ACRONYMS = new Set(['LVR', 'TD', 'PI', 'IO', 'FX', 'SMSF', 'P&I']);
-
-const ENUM_LABEL_OVERRIDES: Record<string, string> = {
+const ENUM_LABEL_OVERRIDES: Readonly<Record<string, UiLabel>> = {
   OFFSET: 'Offset account',
   EXTRA_REPAYMENTS: 'Early / extra repayments',
   REDRAW: 'Redraw facility',
@@ -104,25 +78,24 @@ const ENUM_LABEL_OVERRIDES: Record<string, string> = {
   BILL_PAYMENT: 'Bill payment',
   CARD_ACCESS: 'Card access',
   DIGITAL_BANKING: 'Digital banking',
+  PRINCIPAL_AND_INTEREST: 'Principal & interest', PRINCIPAL_INTEREST: 'Principal & interest', PI: 'Principal & interest', 'P&I': 'Principal & interest',
+  INTEREST_ONLY: 'Interest only', IO: 'Interest only',
+  OWNER_OCCUPIED: 'Owner occupied', OWNER_OCCUPIER: 'Owner occupied', OO: 'Owner occupied',
+  INVESTOR: 'Investor', INVESTMENT: 'Investor', INV: 'Investor',
+  VARIABLE: 'Variable', FIXED: 'Fixed', BASE: 'Ongoing', BONUS: 'Bonus rate', INTRO: 'Introductory', INTRODUCTORY: 'Introductory',
+  MONTHLY: 'Monthly', AT_MATURITY: 'at maturity', LVR: 'LVR', TD: 'TD',
+  MIN_AGE: 'Minimum age', MAX_AGE: 'Maximum age', MIN_BALANCE: 'Minimum balance', MAX_BALANCE: 'Maximum balance',
+  MIN_LVR: 'Minimum LVR', MAX_LVR: 'Maximum LVR', MIN_TERM: 'Minimum term', MAX_TERM: 'Maximum term',
+  MIN_LIMIT: 'Minimum limit', MAX_LIMIT: 'Maximum limit',
 };
 
 /** Humanize a CDR enum like "PRINCIPAL_AND_INTEREST" -> "Principal & interest". */
-export function humanizeEnum(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '';
+export function humanizeEnum(value: string | number | null | undefined): UiText {
+  if (value === null || value === undefined || value === '') return uiLabel('');
   const raw = String(value).trim();
-  if (!raw) return '';
+  if (!raw) return uiLabel('');
   const override = ENUM_LABEL_OVERRIDES[raw.toUpperCase()];
-  if (override) return override;
-  const withAmp = raw.replace(/_AND_/gi, ' & ');
-  const words = withAmp.replace(/_/g, ' ').toLowerCase().split(/\s+/);
-  return words
-    .map((w, i) => {
-      const upper = w.toUpperCase();
-      if (ACRONYMS.has(upper)) return upper;
-      if (w === '&') return '&';
-      return i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w;
-    })
-    .join(' ');
+  return override ? uiLabel(override) : uiOpaqueEnum(raw);
 }
 
 /** Case-insensitive sort by display label (defaults to humanizeEnum). */
@@ -145,24 +118,24 @@ function toNumber(value: string | number | null | undefined): number | null {
   return isFinite(n) ? n : null;
 }
 
-export function formatMoneyShort(value: string | number | null | undefined): string {
+export function formatMoneyShort(value: string | number | null | undefined): UiText {
   const n = toNumber(value);
-  if (n === null) return '';
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0)}m`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(n % 1_000 ? 1 : 0)}k`;
-  return `$${n.toLocaleString()}`;
+  if (n === null) return uiLabel('');
+  if (n >= 1_000_000) return uiJoin('$', uiNumber(Number((n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0)), n % 1_000_000 ? 1 : 0), 'm');
+  if (n >= 1_000) return uiJoin('$', uiNumber(Number((n / 1_000).toFixed(n % 1_000 ? 1 : 0)), n % 1_000 ? 1 : 0), 'k');
+  return uiJoin('$', uiNumber(n, Math.min(3, (String(n).split('.')[1] ?? '').length)));
 }
 
 export function formatBalanceRange(
   min: string | number | null | undefined,
   max: string | number | null | undefined,
-): string {
+): UiText {
   const lo = toNumber(min);
   const hi = toNumber(max);
-  if (lo === null && hi === null) return '';
-  if (lo !== null && hi !== null) return `${formatMoneyShort(lo)}–${formatMoneyShort(hi)}`;
-  if (lo !== null) return `${formatMoneyShort(lo)}+`;
-  return `Up to ${formatMoneyShort(hi)}`;
+  if (lo === null && hi === null) return uiLabel('');
+  if (lo !== null && hi !== null) return uiJoin(formatMoneyShort(lo), '–', formatMoneyShort(hi));
+  if (lo !== null) return uiJoin(formatMoneyShort(lo), '+');
+  return uiJoin('Up to', ' ', formatMoneyShort(hi));
 }
 
 /** Parse an ISO-8601 duration like "P3Y", "P36M", "P1Y6M" to a month count. */
@@ -174,7 +147,7 @@ export function isoDurationMonths(term: string | undefined): number | null {
   return months > 0 ? months : null;
 }
 
-export function formatTerm(row: RateRow): string {
+export function formatTerm(row: RateRow): UiText {
   // term_months is authoritative; otherwise parse the ISO `term` (e.g. "P36M" = 3 yrs).
   // NB: ribbon_fixed_term only mirrors the *number* in `term` (P3Y→3, P36M→36), so its
   // unit is ambiguous on its own — only fall back to it (as years) when nothing else.
@@ -185,13 +158,13 @@ export function formatTerm(row: RateRow): string {
   if (months !== null && months > 0) {
     if (months % 12 === 0) {
       const years = months / 12;
-      return `${years} yr${years > 1 ? 's' : ''}`;
+      return uiJoin(uiNumber(years), ' ', years > 1 ? 'yrs' : 'yr');
     }
-    return `${months} mo`;
+    return uiJoin(uiNumber(months, Math.min(6, (String(months).split('.')[1] ?? '').length)), ' ', 'mo');
   }
   const fixed = toNumber(row.ribbon_fixed_term);
-  if (fixed !== null && fixed > 0) return `${fixed} yr${fixed > 1 ? 's' : ''} fixed`;
-  return '';
+  if (fixed !== null && fixed > 0) return uiJoin(uiNumber(fixed, Math.min(6, (String(fixed).split('.')[1] ?? '').length)), ' ', fixed > 1 ? 'yrs' : 'yr', ' ', 'fixed');
+  return uiLabel('');
 }
 
 export function isNonStandard(row: RateRow): boolean {
@@ -271,24 +244,21 @@ export function visibleAccountRows(
 }
 
 /** Short, friendly "Updated 3 days ago" / "Updated today". */
-export function relativeDate(iso: string | null | undefined): string {
-  if (!iso) return '';
+export function relativeDate(iso: string | null | undefined): UiText {
+  if (!iso) return uiLabel('');
   const then = new Date(iso).getTime();
-  if (isNaN(then)) return '';
+  if (isNaN(then)) return uiLabel('');
   const days = Math.floor((Date.now() - then) / 86_400_000);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 30) return `${days} days ago`;
+  if (days <= 0) return uiLabel('today');
+  if (days === 1) return uiLabel('yesterday');
+  if (days < 30) return uiJoin(uiNumber(days), ' ', 'days ago');
   const months = Math.round(days / 30);
-  if (months < 12) return `${months} mo ago`;
-  return `${Math.round(months / 12)} yr ago`;
+  if (months < 12) return uiJoin(uiNumber(months), ' ', 'mo ago');
+  return uiJoin(uiNumber(Math.round(months / 12)), ' ', 'yr ago');
 }
 
-export function formatRunDate(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const d = new Date(`${iso}T00:00:00Z`);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+export function formatRunDate(iso: string | null | undefined): UiText {
+  return iso ? uiDate(iso) : uiLabel('');
 }
 
 /**
@@ -298,23 +268,15 @@ export function formatRunDate(iso: string | null | undefined): string {
 export function formatRateChangeDate(
   iso: string | null | undefined,
   now: Date = new Date(),
-): string {
+): UiText {
   const ymd = String(iso || '').slice(0, 10);
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
-  if (!match) return '';
+  if (!match || uiDate(ymd) === 'Unknown') return uiLabel('');
   const observedDay = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
   const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   const days = Math.floor((today - observedDay) / 86_400_000);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days} days ago`;
-  return new Date(
-    Number(match[1]),
-    Number(match[2]) - 1,
-    Number(match[3]),
-  ).toLocaleDateString('en-AU', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+  if (days <= 0) return uiLabel('today');
+  if (days === 1) return uiLabel('yesterday');
+  if (days < 7) return uiJoin(uiNumber(days), ' ', 'days ago');
+  return uiDate(ymd);
 }

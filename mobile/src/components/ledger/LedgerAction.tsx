@@ -12,11 +12,12 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { LedgerIcon, type LedgerIconName } from '../icons/LedgerIcon';
 import { LedgerText } from './LedgerText';
 import { PressFeedback } from '../PressFeedback';
+import type { UiCopy, UiNativeProps } from '../../lib/uiCopy';
 
 export type LedgerActionVariant = 'primary' | 'secondary' | 'quiet' | 'destructive';
 
-export interface LedgerActionProps extends Omit<PressableProps, 'children' | 'style'> {
-  label: string;
+export interface LedgerActionProps extends Omit<UiNativeProps<PressableProps>, 'children' | 'style'> {
+  label: UiCopy;
   variant?: LedgerActionVariant;
   icon?: LedgerIconName;
   loading?: boolean;

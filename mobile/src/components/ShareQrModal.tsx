@@ -22,6 +22,8 @@ import { resolveShareInstallTarget } from '../lib/shareInstallTarget';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button } from './ui';
+import { rateReceiptShareText, type RateReceipt } from '../data/rateReceipt';
+import { uiIdentifier, uiJoin, uiLabel } from '../lib/uiCopy';
 
 /**
  * Share dialog with a platform-correct install destination. Android sideload
@@ -31,11 +33,11 @@ import { AppText, Button } from './ui';
 export function ShareQrModal({
   visible,
   onClose,
-  shareMessage,
+  receipt,
 }: {
   visible: boolean;
   onClose: () => void;
-  shareMessage: string | null;
+  receipt?: RateReceipt | null;
 }) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
@@ -75,6 +77,7 @@ export function ShareQrModal({
     iosInstallUrl: IOS_INSTALL_URL,
   });
   const qrValue = installTarget?.url ?? null;
+  const shareMessage = receipt ? rateReceiptShareText(receipt) : null;
 
   return (
     <Modal
@@ -86,7 +89,8 @@ export function ShareQrModal({
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <Pressable
           onPress={onClose}
-          accessibilityLabel="Dismiss share dialog"
+          accessibilityLabel="Dismiss"
+          accessibilityRole="button"
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)' }}
         />
         <View
@@ -102,14 +106,10 @@ export function ShareQrModal({
           }}
         >
           <AppText variant="h3" style={{ marginBottom: 4 }}>
-            Share Australian Rates
+            {uiJoin('Share', ' · ', 'Australian Rates')}
           </AppText>
           <AppText variant="small" color="textMuted" style={{ marginBottom: 16, textAlign: 'center' }}>
-            {installTarget
-              ? `Scan with a phone camera to ${installTarget.description}.`
-              : Platform.OS === 'ios'
-                ? 'An iOS install link has not been published yet. You can still share these rate details.'
-                : 'An install link is not available on this platform. You can still share these rate details.'}
+            {uiJoin('Install', ' · ', installTarget ? 'Available' : 'Unavailable')}
           </AppText>
           {qrValue ? (
             <View style={{ padding: 12, backgroundColor: '#fff', borderRadius: theme.radius.md }}>
@@ -117,14 +117,14 @@ export function ShareQrModal({
             </View>
           ) : null}
           <View style={{ alignSelf: 'stretch', marginTop: 20, gap: 10 }}>
-            {shareMessage ? (
+            {Boolean(shareMessage || qrValue) ? (
               <Button
-                title={qrValue ? 'Share link instead' : 'Share rate details'}
+                title="Share"
                 icon="share-social-outline"
                 variant="secondary"
                 onPress={() => {
                   void Share.share({
-                    message: qrValue ? `${shareMessage}\nGet the app: ${qrValue}` : shareMessage,
+                    message: qrValue ? uiJoin(shareMessage, shareMessage ? ' · ' : '', 'Install', ': ', uiIdentifier(qrValue)) : shareMessage ?? uiLabel('Australian Rates'),
                   });
                 }}
               />

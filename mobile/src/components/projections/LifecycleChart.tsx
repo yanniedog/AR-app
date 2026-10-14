@@ -17,28 +17,25 @@ import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText, Row } from '../ui';
+import { uiDate, uiJoin, uiLabel, uiNumber, type UiText } from '../../lib/uiCopy';
+import { formatRate } from '../../data/format';
 import { useChartScrub } from '../charts/ChartSliceControls';
 
 const SERIES_STYLES = [
-  { color: 'primary', dash: undefined, description: 'solid line' },
-  { color: 'success', dash: '8 4', description: 'long-dashed line' },
-  { color: 'warning', dash: '2 4', description: 'dotted line' },
+  { color: 'primary', dash: undefined, description: 'Solid' },
+  { color: 'success', dash: '8 4', description: 'Long-dashed' },
+  { color: 'warning', dash: '2 4', description: 'Dotted' },
 ] as const;
 
 function dateMs(date: string): number {
   return new Date(`${date}T00:00:00Z`).getTime();
 }
 
-function shortDate(date: string): string {
-  return new Intl.DateTimeFormat('en-AU', { month: 'short', year: 'numeric', timeZone: 'UTC' })
-    .format(new Date(`${date}T00:00:00Z`));
-}
-
-function formatValue(value: number | null, metric: ProjectionMetric): string {
-  if (value == null || !Number.isFinite(value)) return '—';
+function shortDate(date: string): UiText { return uiDate(date); }
+function formatValue(value: number | null, metric: ProjectionMetric): UiText {
+  if (value == null || !Number.isFinite(value)) return uiLabel('—');
   return metric === 'periodRatio' || metric === 'cumulativeRatio'
-    ? `${value.toFixed(value >= 10 ? 1 : 2)}×`
-    : projectionCurrency(value);
+    ? uiJoin(uiNumber(Number(value.toFixed(value >= 10 ? 1 : 2)), value >= 10 ? 1 : 2), '×') : projectionCurrency(value);
 }
 
 function pathFor(
@@ -205,11 +202,11 @@ export function LifecycleChart({
   }));
   const activeHistory = activeDate < asAt ? nearestPoint(history, activeMs) : null;
   const metricLabel = projectionMetricLabel(section, metric);
-  const accessibilitySummary = [
-    ...(activeHistory ? [`Approximate history ${formatValue(metricValue(activeHistory, metric), metric)}`] : []),
-    ...activeValues
-    .map(({ series: item, point: selected }) => `${item.label} ${formatValue(selected ? metricValue(selected, metric) : null, metric)}`)
-  ].join(', ');
+  const summaries = [
+    ...(activeHistory ? [uiJoin('Approximate history', ' ', formatValue(metricValue(activeHistory, metric), metric))] : []),
+    ...activeValues.map(({ series: item, point: selected }) => uiJoin(item.label, ' ', formatValue(selected ? metricValue(selected, metric) : null, metric))),
+  ];
+  const accessibilitySummary = uiJoin(...summaries.flatMap((fact, i) => i ? [uiLabel(', '), fact] : [fact]));
   const graphicCounts = useMemo(() => {
     const points = [...history, ...series.flatMap((item) => item.points)];
     return {
@@ -226,7 +223,7 @@ export function LifecycleChart({
       onRenderReadyRef.current?.({ renderRevision, selectionIndex: boundedActiveIndex,
         expectedCount: 0, pointCount: 0, accessibleSummary: false,
         layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
-    }}>No observations are available for this metric.</AppText>;
+    }}>{uiLabel("No observations")}</AppText>;
   }
 
   return (
@@ -234,19 +231,15 @@ export function LifecycleChart({
       <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <View>
           <AppText variant="tiny" color="textFaint" weight="700">
-            {metricLabel.toUpperCase()}
+            {metricLabel}
           </AppText>
           <AppText variant="h3">{shortDate(activeDate)}</AppText>
         </View>
-        <AppText variant="tiny" color="textMuted">
-          Drag horizontally, then release, to inspect a month
-        </AppText>
       </Row>
       <View
         accessible
         accessibilityRole="adjustable"
-        accessibilityLabel={`${metricLabel} projection for ${shortDate(activeDate)}. ${accessibilitySummary}`}
-        accessibilityHint="Swipe up or down to inspect the next or previous month."
+        accessibilityLabel={uiJoin(metricLabel, ' · ', shortDate(activeDate), ' · ', accessibilitySummary)}
         accessibilityValue={{ min: 1, max: Math.max(1, dates.length), now: boundedActiveIndex + 1, text: shortDate(activeDate) }}
         accessibilityActions={[
           { name: 'increment', label: 'Next month' },
@@ -360,8 +353,7 @@ export function LifecycleChart({
               {shortDate(dates[0])}
             </SvgText>
             <SvgText x={xAt(asAt)} y={height - 7} fontSize={labelSize} fill={theme.colors.textMuted} textAnchor="middle">
-              Today
-            </SvgText>
+              {uiLabel("Today")}</SvgText>
             <SvgText x={width - padR} y={height - 7} fontSize={labelSize} fill={theme.colors.textFaint} textAnchor="end">
               {shortDate(dates.at(-1)!)}
             </SvgText>
@@ -374,8 +366,7 @@ export function LifecycleChart({
             <Row style={{ flex: 1 }}>
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.textMuted }} />
               <View style={{ flex: 1 }}>
-                <AppText variant="small" weight="700">Approximate history</AppText>
-                <AppText variant="tiny" color="textFaint">Repeated from your optional starting assumptions</AppText>
+                <AppText variant="small" weight="700">{uiLabel("Approximate history")}</AppText>
               </View>
             </Row>
             <AppText variant="body" weight="800">
@@ -397,7 +388,7 @@ export function LifecycleChart({
               <View style={{ flex: 1 }}>
                 <AppText variant="small" weight="700">{item.label}</AppText>
                 <AppText variant="tiny" color="textFaint">
-                  {SERIES_STYLES[index % SERIES_STYLES.length].description} · {item.detail}
+                  {uiJoin(SERIES_STYLES[index % SERIES_STYLES.length].description, ' · ', formatRate(item.annualRate))}
                 </AppText>
               </View>
             </Row>
@@ -406,9 +397,6 @@ export function LifecycleChart({
             </AppText>
           </Row>
         ))}
-        {history.length > 1 ? (
-          <AppText variant="tiny" color="textMuted">Dashed line = approximate history · vertical marker = today</AppText>
-        ) : null}
       </View>
     </View>
   );

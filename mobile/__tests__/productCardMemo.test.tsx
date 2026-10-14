@@ -61,7 +61,7 @@ test('unchanged list commits skip card work while saved/ranking/theme subscripti
     expect(mockCardRender).toHaveBeenCalledTimes(initial);
     act(() => mockStore.setState({ favorite: true }));
     expect(mockCardRender).toHaveBeenCalledTimes(initial + 1);
-    expect(tree.root.findAllByProps({ accessibilityLabel: 'Remove this rate from saved' }).length).toBeGreaterThan(0);
+    expect(tree.root.findAllByProps({ accessibilityLabel: 'Remove' }).length).toBeGreaterThan(0);
     act(() => mockStore.setState({ prefs: { mortgageRateMetric: 'comparison' } }));
     expect(tree.root.findAllByProps({ accessibilityRole: 'button' }).some(node =>
       String(node.props.accessibilityLabel).includes('Comparison rate 6.00%'))).toBe(true);
@@ -87,11 +87,11 @@ test('shows the whole financial variant and saves the exact tier without opening
     expect(serialized).toContain('Fixed');
     expect(serialized).toContain('3 yrs');
     expect(serialized).toContain('Principal & interest');
-    expect(serialized).toContain('LVR 60–70%');
+    expect(serialized).toContain('LVR >60%–70%');
     const metadata = tree.root.findAllByProps({ variant: 'small', color: 'textMuted' }).map(node => node.props.children);
     expect(metadata.some(text => typeof text === 'string' && text.startsWith('Advertised 4.00% · Fixed'))).toBe(true);
     const save = tree.root.findAllByProps({ accessibilityRole: 'button' }).find(node =>
-      String(node.props.accessibilityLabel).includes('saved') || String(node.props.accessibilityLabel).includes('Save this exact rate'))!;
+      String(node.props.accessibilityLabel).includes('Remove') || String(node.props.accessibilityLabel) === 'Save')!;
     act(() => save.props.onPress());
     expect(mockToggleSavedRate).toHaveBeenCalledWith(variant, 'rate');
     expect(onPress).not.toHaveBeenCalled();

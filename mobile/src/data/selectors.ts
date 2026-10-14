@@ -16,7 +16,7 @@ import {
   toFraction,
   visibleAccountRows,
 } from './format';
-import { rateConditionality } from '../lib/rateQualifier';
+import { rateConditionality } from './rateConditionalFacts';
 import {
   featureEvidenceScope,
   productMatchesAllFactCriteria,

@@ -1,3 +1,5 @@
+import { uiCount, uiDuration, uiInputNumber, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../lib/uiCopy";
+import { uiAccessBadge, uiListedLvr, uiTargetConstraint } from "../../lib/financialUiCopy";
 import { fontStyle } from '../../theme/fonts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { mandatoryProductAllowed } from '../../data/eligibilityGate';
@@ -7,7 +9,6 @@ import { Pressable, TextInput, useWindowDimensions, View } from 'react-native';
 import { IndeterminateProgressBar, ScreenSkeleton } from '../../components/feedback';
 import { BankAvatar } from '../../components/BankAvatar';
 import {
-  productRateChangeText,
   ProductRateChangeSummaryLine,
 } from '../../components/product/ProductRateChangeLine';
 import { ProfileEditor } from '../../components/ProfileEditor';
@@ -18,6 +19,8 @@ import { SegmentedControl } from '../../components/controls';
 import { AppText, Badge, Button, Card, Disclosure, Row } from '../../components/ui';
 import { SECTIONS, SECTION_ORDER } from '../../constants';
 import { assessAccess } from '../../data/access';
+import { verifiedDetailsSha } from '../../data/detailsIdentity';
+import type { RateConditionContext } from '../../data/rateConditions';
 import {
   advertisedTermMonths,
   calculatorAmount,
@@ -34,7 +37,6 @@ import {
   type CalcInputs,
 } from '../../data/calc';
 import { formatRate, toFraction, visibleAccountRows } from '../../data/format';
-import { lvrTierDisplay } from '../../data/lvrTier';
 import type { CurrentProductReference, MortgageSwitchInputs } from '../../data/userRateScenario';
 import { bestRateForProduct, summarizeProductBestRate } from '../../data/productHistory';
 import {
@@ -50,7 +52,7 @@ import { useUserRateScenario } from '../../hooks/useUserRateScenario';
 import { usePerformanceAuditSurface } from '../../hooks/usePerformanceAuditReadiness';
 import { useSuitabilityRevision } from '../../hooks/useSuitabilityRevision';
 import { rowsUnder, statsFor } from '../../data/taxonomy';
-import { CALCULATOR_FIELDS, type CalculatorIssue, visibleCalculatorIssues } from '../../lib/calculatorIssues';
+import { CALCULATOR_FIELDS } from '../../lib/calculatorIssues';
 import { openProduct } from '../../lib/nav';
 import { auditActionString } from '../../lib/performanceAuditActionParams';
 import { applyCalculatorAuditSection } from '../../lib/calculatorAuditSelection';
@@ -69,7 +71,7 @@ function monthlyPayment(balance: number, annualRate: number, months: number): nu
   return (r * balance) / (1 - Math.pow(1 + r, -months));
 }
 
-const formatDollars = (n: number): string => `$${Math.round(n).toLocaleString('en-AU')}`;
+const formatDollars = (n: number): UiText => uiMoney(n);
 
 interface Candidate {
   row: RateRow;
@@ -77,8 +79,19 @@ interface Candidate {
   projectionRate: number; // contractual/headline rate used for arithmetic
   perMonth: number | null; // mortgage: initial repayment difference per month
   total: number | null; // deposits: simple annual or published-maturity difference
-  totalLabel: string;
+  totalLabel: UiCopy;
   unavailableReason: string | null;
+}
+
+function verifiedSelectedDetails(row:RateRow,section:SectionKey,context:RateConditionContext):boolean {
+  const {core,details,manifest,coreIntegrity}=context;
+  return !!core && !!details && !!manifest && !!coreIntegrity
+    && coreIntegrity.core===core && coreIntegrity.runDate===core.run_date
+    && coreIntegrity.coreSha256===manifest.files.core.sha256
+    && !!manifest.files.details.sha256 && verifiedDetailsSha(details)===manifest.files.details.sha256
+    && core.run_date===details.run_date && core.run_date===manifest.run_date
+    && core.sections[section].rates.includes(row) && Object.hasOwn(details.products,row.product_key)
+    && !!details.products[row.product_key];
 }
 
 export function RateCheckWorkspace() {
@@ -106,11 +119,13 @@ export function RateCheckWorkspace() {
   const changeSection = useCallback((next: SectionKey) => router.setParams({ section: next, target: undefined, ri: undefined }), []);
   const [layoutReady, setLayoutReady] = useState(false);
   const [detailsTerminalError, setDetailsTerminalError] = useState(false);
+  const [targetDetailsTerminalKey,setTargetDetailsTerminalKey]=useState<string|null>(null);
+  const [targetDetailsRetry,setTargetDetailsRetry]=useState<{key:string;count:number}|null>(null);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   const [leftFields, setLeftFields] = useState<ReadonlySet<string>>(() => new Set());
   const appliedCheckIntent = useRef('');
   const renderRevisionTracker = useRef(new OpaquePerformanceAuditRenderRevision());
-  const sectionOptions = useMemo(() => SECTION_ORDER.map(value => ({ value, label: SECTIONS[value].title })), []);
+  const sectionOptions = useMemo(() => SECTION_ORDER.map(value => ({ value, label: uiSectionName(value) })), []);
   const suitabilityRevision = useSuitabilityRevision();
   const target = useMemo(() => {
     void suitabilityRevision;
@@ -120,6 +135,25 @@ export function RateCheckWorkspace() {
     void suitabilityRevision;
     return isSuitabilityFilterReady(includeNonStandard);
   }, [includeNonStandard, suitabilityRevision]);
+  const targetDetailsKey=JSON.stringify([coreSha,manifest?.files.details.sha256,
+    target.status==='available'?target.row.product_key:null,target.status==='available'?target.row.rate_index:null]);
+  const targetDetailsRetryCount=targetDetailsRetry?.key===targetDetailsKey?targetDetailsRetry.count:0;
+  const targetDetailsVerified=target.status==='available' && verifiedSelectedDetails(target.row,section,{core,details,manifest,coreIntegrity});
+  const targetDetailsMissing=target.status==='available' && !targetDetailsVerified;
+  const targetDetailsFailed=targetDetailsMissing && targetDetailsTerminalKey===targetDetailsKey;
+  useEffect(()=>{
+    if(target.status!=='available' || targetDetailsVerified) return;
+    let active=true;
+    setTargetDetailsTerminalKey(null);
+    void (async()=>{
+      try {
+        await ensureDetails({forProductView:true,...(targetDetailsRetryCount>0?{force:true,abandonInFlight:true}:{})});
+      } catch { /* The closed error state retains the exact selected rate. */ }
+      const current=useStore.getState();
+      if(active && !verifiedSelectedDetails(target.row,section,current)) setTargetDetailsTerminalKey(targetDetailsKey);
+    })();
+    return()=>{active=false;};
+  },[ensureDetails,section,target,targetDetailsKey,targetDetailsRetryCount,targetDetailsVerified]);
 
   const profileFeaturesPending =
     profileFeaturesForSection(profileFilters, section).length > 0 && !details?.products;
@@ -248,41 +282,41 @@ export function RateCheckWorkspace() {
   [target, section, scenario, rateConditionContext]);
   const years = calculatorYears(inputs.years);
   const months = years == null ? 0 : Math.round(years * 12);
-  const issues: CalculatorIssue[] = [];
-  const invalid = (message: string) => { issues.push({ message }); };
-  const empty = (emptyField: string, message: string) => { issues.push({ message, emptyField }); };
+  const issues: {message:UiCopy;emptyField?:string}[] = [];
+  const invalid = (message: UiCopy) => { issues.push({ message }); };
+  const empty = (emptyField: string, message: UiCopy) => { issues.push({ message, emptyField }); };
   if (isMortgage) {
     const propertyField = inputs.mode === 'refi' ? CALCULATOR_FIELDS.propertyValue : CALCULATOR_FIELDS.propertyPrice;
-    if (!inputs.propertyValue.trim()) empty(propertyField, 'Enter a property value.');
+    if (!inputs.propertyValue.trim()) empty(propertyField, uiJoin('Property value',': ','Required'));
     else if (calculatorAmount(inputs.propertyValue, MAX_CALCULATOR_MORTGAGE_AMOUNT) == null) {
-      invalid('Property value must be a valid amount up to $100 million.');
+      invalid(uiJoin('Property value',': ',uiMoney(0),'–',uiMoney(MAX_CALCULATOR_MORTGAGE_AMOUNT)));
     }
     if (inputs.mode === 'refi') {
-      if (!inputs.loanBalance.trim()) empty(CALCULATOR_FIELDS.loanBalance, 'Enter the current loan balance.');
+      if (!inputs.loanBalance.trim()) empty(CALCULATOR_FIELDS.loanBalance, uiJoin('Loan balance',': ','Required'));
       else if (calculatorAmount(inputs.loanBalance, MAX_CALCULATOR_MORTGAGE_AMOUNT) == null) {
-        invalid('Current loan must be a valid amount up to $100 million.');
+        invalid(uiJoin('Loan balance',': ',uiMoney(0),'–',uiMoney(MAX_CALCULATOR_MORTGAGE_AMOUNT)));
       }
     } else {
       if (inputs.deposit.trim() && calculatorAmount(inputs.deposit, MAX_CALCULATOR_MORTGAGE_AMOUNT) == null) {
-        invalid('Savings must be a valid non-negative amount up to $100 million.');
+        invalid(uiJoin('Savings',': ',uiMoney(0),'–',uiMoney(MAX_CALCULATOR_MORTGAGE_AMOUNT)));
       }
       if (inputs.costs.trim() && calculatorAmount(inputs.costs, MAX_CALCULATOR_MORTGAGE_AMOUNT) == null) {
-        invalid('Upfront costs must be a valid non-negative amount up to $100 million.');
+        invalid(uiJoin('Upfront costs',': ',uiMoney(0),'–',uiMoney(MAX_CALCULATOR_MORTGAGE_AMOUNT)));
       }
     }
-    if (lvrResult.loan != null && lvrResult.loan <= 0) invalid('Loan needed must be greater than $0.');
-    if (!inputs.years.trim()) empty(CALCULATOR_FIELDS.years, 'Enter the years left on the loan.');
-    else if (years == null) invalid(`Years left must be greater than 0 and no more than ${MAX_CALCULATOR_YEARS}.`);
+    if (lvrResult.loan != null && lvrResult.loan <= 0) invalid(uiJoin('Loan needed',': ','>',uiMoney(0)));
+    if (!inputs.years.trim()) empty(CALCULATOR_FIELDS.years, uiJoin('Years remaining',': ','Required'));
+    else if (years == null) invalid(uiJoin('Years remaining',': ','>',0,'–',uiCount(MAX_CALCULATOR_YEARS),' ','years'));
   } else if (!depositInputs.balance.trim()) {
-    empty(CALCULATOR_FIELDS.depositBalance, section === 'TD' ? 'Enter the deposit amount.' : 'Enter the current balance.');
+    empty(CALCULATOR_FIELDS.depositBalance, section === 'TD' ? uiJoin('Deposit amount',': ','Required') : uiJoin('Balance',': ','Required'));
   } else if (depositBalance == null || depositBalance <= 0) {
-    invalid(`Balance must be greater than $0 and no more than $${MAX_CALCULATOR_DEPOSIT_AMOUNT.toLocaleString('en-AU')}.`);
+    invalid(uiJoin('Balance',': ','>',uiMoney(0),'–',uiMoney(MAX_CALCULATOR_DEPOSIT_AMOUNT)));
   }
-  if (!currentRateInput.trim()) empty(CALCULATOR_FIELDS.currentRate, 'Enter the current interest rate.');
-  else if (currentRate == null) invalid('Current rate must be greater than 0% and no more than 100%.');
+  if (!currentRateInput.trim()) empty(CALCULATOR_FIELDS.currentRate, uiJoin('Current rate',': ','Required'));
+  else if (currentRate == null) invalid(uiJoin('Current rate',': ','>',0,'–',100,'%'));
   const inputIssues = issues.map((issue) => issue.message);
   // Empty fields are flagged once they have been left, not before any input.
-  const shownInputIssues = visibleCalculatorIssues(issues, leftFields);
+  const shownInputIssues = issues.filter(issue => !issue.emptyField || leftFields.has(issue.emptyField)).map(issue => issue.message);
   const inputIssueKey = inputIssues.join('|');
 
   const candidates = useMemo<Candidate[]>(() => {
@@ -303,6 +337,10 @@ export function RateCheckWorkspace() {
     const out: Candidate[] = [];
     for (const { row, rate, projectionRate } of bestByProvider.values()) {
       if (target.status === 'none' && (isLoan ? projectionRate >= currentRate : projectionRate <= currentRate)) continue;
+      if(target.status==='available' && !targetDetailsVerified) {
+        out.push({row,rate,projectionRate,perMonth:null,total:null,totalLabel:'Rate only',unavailableReason:'Sources unverified'});
+        continue;
+      }
       if (targetConstraint && targetConstraintContradicted(targetConstraint)) {
         out.push({ row, rate, projectionRate, perMonth: null, total: null, totalLabel: 'Rate only',
           unavailableReason: selectedTargetConstraintLabel(targetConstraint) });
@@ -318,8 +356,8 @@ export function RateCheckWorkspace() {
           perMonth,
           total: null,
           totalLabel: fixedMonths
-            ? `initial repayment difference during the published ${Math.min(months, fixedMonths)} month fixed period`
-            : 'initial monthly repayment difference',
+            ? uiJoin('Initial repayment',' · ',uiDuration(Math.min(months,fixedMonths),'months'),' · ','Fixed period')
+            : 'Initial monthly repayment',
           unavailableReason: null,
         });
       } else {
@@ -339,7 +377,7 @@ export function RateCheckWorkspace() {
           projectionRate,
           perMonth: null,
           total,
-          totalLabel: maturityMonths ? `at ${maturityMonths} month maturity` : 'simple interest difference per year',
+          totalLabel: maturityMonths ? uiJoin(uiDuration(maturityMonths,'months'),' · ','Maturity') : 'Simple annual interest',
           unavailableReason: null,
         });
       }
@@ -354,7 +392,7 @@ export function RateCheckWorkspace() {
       if (bEstimate == null) return -1;
       return bEstimate - aEstimate;
     }).slice(0, 10);
-  }, [rows, target, targetConstraint, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric, inputIssueKey]);
+  }, [rows, target, targetConstraint,targetDetailsVerified, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric, inputIssueKey]);
   const currentProductDetail = currentProduct.productKey
     ? details?.products?.[currentProduct.productKey] ?? null
     : null;
@@ -365,8 +403,9 @@ export function RateCheckWorkspace() {
 
   const auditSelectSection = useCallback((...args: unknown[]) => {
     const requested = auditActionString(args, 'section');
-    if (typeof requested === 'string' && requested in SECTIONS) {
-      return applyCalculatorAuditSection(section, requested as SectionKey, changeSection);
+    const requestedSection=SECTION_ORDER.find(value=>value===requested);
+    if (requestedSection) {
+      return applyCalculatorAuditSection(section, requestedSection, changeSection);
     }
     const currentIndex = sectionOptions.findIndex((option) => option.value === section);
     const next = sectionOptions[(currentIndex + 1) % Math.max(1, sectionOptions.length)]?.value;
@@ -520,16 +559,16 @@ export function RateCheckWorkspace() {
       {
         id: 'calculator.details',
         kind: 'data',
-        status: !profileFeaturesPending || details?.products
+        status: !targetDetailsMissing && (!profileFeaturesPending || details?.products)
           ? 'ready'
-          : detailsTerminalError
+          : targetDetailsFailed || detailsTerminalError
             ? 'error'
             : 'pending',
-        error: detailsTerminalError
-          ? 'Profile-required product details are unavailable'
+        error: targetDetailsFailed || detailsTerminalError
+          ? 'Required product details are unavailable'
           : null,
-        expectedCount: profileFeaturesPending ? 1 : 0,
-        actualCount: profileFeaturesPending && details?.products ? 1 : 0,
+        expectedCount: profileFeaturesPending || target.status==='available' ? 1 : 0,
+        actualCount: !targetDetailsMissing && (profileFeaturesPending || target.status==='available') && details?.products ? 1 : 0,
       },
       {
         id: 'calculator.suitability',
@@ -540,7 +579,8 @@ export function RateCheckWorkspace() {
       {
         id: 'calculator.candidates',
         kind: 'list',
-        status: !core || detailsLoading || !suitabilityReady ? 'pending' : 'ready',
+        status: targetDetailsFailed ? 'error' : !core || detailsLoading || targetDetailsMissing || !suitabilityReady ? 'pending' : 'ready',
+        error:targetDetailsFailed?'Selected product details are unavailable':null,
         expectedCount: candidates.length,
         actualCount: candidates.length,
       },
@@ -577,11 +617,11 @@ export function RateCheckWorkspace() {
   } as const;
 
   const field = (
-    label: string,
+    label: UiCopy,
     value: string,
     onChangeText: (t: string) => void,
     placeholder: string,
-    a11y: string,
+    a11y: UiCopy,
     explicitWidth?: number,
   ) => (
     <View style={explicitWidth && !compactFields ? { width: explicitWidth } : { flex: 1, width: compactFields ? '100%' : undefined }}>
@@ -589,9 +629,9 @@ export function RateCheckWorkspace() {
         {label}
       </AppText>
       <TextInput
-        value={value}
+        value={uiInputNumber(value)}
         onChangeText={onChangeText}
-        placeholder={placeholder}
+        placeholder={uiInputNumber(placeholder)}
         placeholderTextColor={theme.colors.textFaint}
         keyboardType="numeric"
         editable={scenarioStorageStatus === 'ready'}
@@ -610,30 +650,20 @@ export function RateCheckWorkspace() {
       onContentSizeChange={() => setLayoutReady(true)}
     >
       <SelectedCalculationTarget target={target} scenario={scenario} identityOnly constraint={targetConstraint} rateConditionContext={rateConditionContext} />
-      <Button title="Open calculation receipt" variant="secondary" onPress={() => router.push('/calculation-receipt')} />
-      {sectionOptions.length > 1 ? (
+      {target.status !== 'available' && sectionOptions.length > 1 ? (
         <View style={{ marginBottom: 12 }}>
           <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
         </View>
       ) : null}
 
       <Card style={{ marginBottom: 16 }}>
-        <View style={{ marginBottom: 14 }}>
-          <CurrentBankPicker
-            label={section === 'Mortgage' ? 'Current mortgage bank' : section === 'TD' ? 'Current term deposit bank' : 'Current savings bank'}
-            rows={core?.sections?.[section]?.rates ?? []}
-            value={currentProduct}
-            onChange={updateCurrentProduct}
-            editable={scenarioStorageStatus === 'ready'}
-          />
-        </View>
         {isMortgage ? (
           <>
             <View style={{ marginBottom: 10 }}>
               <SegmentedControl<CalcInputs['mode']>
                 options={[
-                  { label: 'Buying', value: 'buy' },
-                  { label: 'Refinancing', value: 'refi' },
+                  { label: uiLabel("Buying"), value: 'buy' },
+                  { label: uiLabel("Refinancing"), value: 'refi' },
                 ]}
                 value={inputs.mode}
                 onChange={(mode) => upd({ mode })}
@@ -646,13 +676,11 @@ export function RateCheckWorkspace() {
                   {field('Your savings ($)', inputs.deposit, (t) => upd({ deposit: t }), '130,000', 'Savings available as deposit')}
                 </Row>
                 <Row gap={10} style={{ marginTop: 10, ...(compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : null) }}>
-                  {field('Upfront costs ($)', inputs.costs, (t) => upd({ costs: t }), 'stamp duty + fees', 'Upfront costs paid from savings')}
+                  {field('Upfront costs ($)', inputs.costs, (t) => upd({ costs: t }), '0', 'Upfront costs paid from savings')}
                   <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-                    <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
-                      Loan needed
-                    </AppText>
+                    <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>{uiLabel("Loan needed")}</AppText>
                     <AppText variant="body" weight="800" style={{ paddingVertical: 10 }}>
-                      {lvrResult.loan != null ? formatDollars(lvrResult.loan) : '—'}
+                      {lvrResult.loan != null ? formatDollars(lvrResult.loan) : uiLabel("—")}
                     </AppText>
                   </View>
                 </Row>
@@ -667,34 +695,21 @@ export function RateCheckWorkspace() {
             {lvr !== null ? (
               <View style={{ marginTop: 12 }}>
                 <Row gap={8} style={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                  <AppText variant="small" weight="800">
-                    LVR {lvr.toFixed(lvr < 100 ? 1 : 0)}%
-                  </AppText>
+                  <AppText variant="small" weight="800">{uiJoin("Scenario LVR",": ",uiNumber(lvr,lvr < 100 ? 1 : 0),"%")}</AppText>
                   {lvrBand ? (
-                    <Badge label={lvrTierDisplay(lvrBand)} tone="success" />
+                    <Badge label={uiListedLvr({lvr_tier:lvrBand})} tone="success" />
                   ) : (
-                    <AppText variant="tiny" color="textFaint">above tracked LVR bands</AppText>
+                    <AppText variant="tiny" color="textFaint">{uiLabel('Above tracked LVR bands')}</AppText>
                   )}
                 </Row>
-                {lvrBand ? (
-                  <AppText variant="tiny" style={{ color: theme.colors.success, marginTop: 4 }}>
-                    Applied to this calculation only — your saved browsing profile is unchanged.
-                  </AppText>
-                ) : null}
                 {nextBandHint ? (
-                  <AppText variant="tiny" color="textMuted" style={{ marginTop: 4 }}>
-                    Add {formatDollars(nextBandHint.extra)} deposit to reach the ≤{nextBandHint.targetPct}% band and
-                    unlock lower-LVR rates.
-                  </AppText>
+                  <Row style={{ justifyContent: 'space-between', marginTop: 4, flexWrap: 'wrap' }}>
+                    <AppText variant="tiny" color="textMuted">{uiJoin('Deposit to LVR',' ','≤',uiNumber(nextBandHint.targetPct),'%')}</AppText>
+                    <AppText variant="tiny">{formatDollars(nextBandHint.extra)}</AppText>
+                  </Row>
                 ) : null}
               </View>
-            ) : (
-              <AppText variant="tiny" color="textFaint" style={{ marginTop: 10 }}>
-                {inputs.mode === 'buy'
-                  ? 'Enter the property price and your savings to calculate your LVR for this scenario.'
-                  : 'Enter the property value and current loan to calculate your LVR.'}
-              </AppText>
-            )}
+            ) : null}
 
             <Row gap={10} style={{ marginTop: 12, ...(compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : null) }}>
               {field('Current rate (%)', inputs.currentRate, (t) => upd({ currentRate: t }), median !== null ? (median * 100).toFixed(2) : '6.00', CALCULATOR_FIELDS.currentRate)}
@@ -713,9 +728,7 @@ export function RateCheckWorkspace() {
           </>
         ) : (
           <>
-            <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
-              Your current balance
-            </AppText>
+            <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>{uiLabel("Your current balance")}</AppText>
             <Row gap={10} style={compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}>
               {field(
                 section === 'TD' ? 'Deposit amount ($)' : 'Balance ($)',
@@ -746,6 +759,15 @@ export function RateCheckWorkspace() {
             </Row>
           </>
         )}
+        <View style={{ marginTop: 14 }}>
+          <CurrentBankPicker
+            label={uiLabel(section === 'Mortgage' ? 'Current mortgage bank' : section === 'TD' ? 'Current term deposit bank' : 'Current savings bank')}
+            rows={core?.sections?.[section]?.rates ?? []}
+            value={currentProduct}
+            onChange={updateCurrentProduct}
+            editable={scenarioStorageStatus === 'ready'}
+          />
+        </View>
         {shownInputIssues.length ? (
           <View style={{ marginTop: 12, gap: 4 }}>
             {shownInputIssues.map((issue) => (
@@ -755,91 +777,39 @@ export function RateCheckWorkspace() {
         ) : null}
       </Card>
 
-      <Card style={{ marginBottom: 16, gap: 10 }}>
-        <AppText variant="h3">What if rates change?</AppText>
-        <AppText variant="small" color="textMuted">
-          See repayments, interest or maturity value under different rate scenarios.
-        </AppText>
-        <Button
-          title="Explore rate scenarios"
-          icon="analytics-outline"
-          onPress={() => void openProjections()}
-          disabled={scenarioStorageStatus !== 'ready'}
-        />
-        {scenarioStorageStatus === 'loading' || scenarioStorageStatus === 'idle' ? (
-          <AppText variant="tiny" color="textMuted">Loading encrypted scenario...</AppText>
-        ) : null}
-        {scenarioSaveStatus === 'saving' || scenarioSaveStatus === 'saved' ? (
-          <AppText variant="tiny" color="textMuted">
-            {scenarioSaveStatus === 'saving' ? 'Saving encrypted scenario...' : 'Encrypted scenario saved'}
-          </AppText>
-        ) : null}
-        {scenarioError ? (
-          <>
-            <AppText variant="tiny" color="danger">{scenarioError}</AppText>
-            {scenarioStorageStatus === 'error' ? (
-              <Button title="Retry encrypted storage" variant="secondary" onPress={() => void retryScenarioLoad()} />
-            ) : null}
-          </>
-        ) : null}
-      </Card>
-
-      {isMortgage ? (
-        <View style={{ marginBottom: 16 }}>
-          <Disclosure
-            title="Match assumptions"
-            summary="Purpose, rate type, repayment, LVR and features"
-            open={assumptionsOpen}
-            onToggle={() => setAssumptionsOpen((open) => !open)}
-          >
-            <AppText variant="tiny" color="textFaint" style={{ marginBottom: 12 }}>
-              These settings find comparable products. Your calculated LVR applies to this scenario only.
-            </AppText>
-            <ProfileEditor
-              sections={['Mortgage']}
-              value={profileFilters}
-              onChange={(next) => setPref('profileFilters', next)}
-            />
-          </Disclosure>
-        </View>
-      ) : null}
-
       <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8 }}>
         {inputIssues.length
-          ? shownInputIssues.length ? 'Check your inputs' : 'Enter your details above'
+          ? shownInputIssues.length ? uiLabel("Invalid inputs") : uiLabel("Inputs incomplete")
           : profileFeaturesPending
           ? detailsLoading
-            ? 'Preparing your matches…'
-            : 'Could not prepare your matches'
+            ? uiLabel("Loading")
+            : uiLabel("Matches unavailable")
           : target.status === 'available'
-            ? 'Selected rate'
+            ? uiLabel("Selected rate")
           : candidates.length
             ? isLoan
-              ? 'Lower matched rates'
-              : 'Higher matched rates'
+              ? uiLabel("Lower matched rates")
+              : uiLabel("Higher matched rates")
             : currentRate === null
-              ? 'Enter your current rate'
+              ? uiLabel("Current rate required")
               : balance <= 0
-                ? 'Enter your loan details above'
-                : 'No better comparable rates found'}
+                ? uiLabel("Loan inputs incomplete")
+                : uiLabel("No better comparable rates")}
       </AppText>
-      {profileFeaturesPending ? (
+      {profileFeaturesPending || targetDetailsMissing ? (
         <Card style={{ marginBottom: 16 }}>
-          {detailsLoading ? (
+          {detailsLoading || (targetDetailsMissing && !targetDetailsFailed) ? (
             <IndeterminateProgressBar
-              caption="Loading product features so profile must-haves can be applied."
-              accessibilityLabel="Preparing profile features"
+              caption="Loading"
+              accessibilityLabel="Loading"
             />
           ) : (
-            <View style={{ gap: 12 }}>
-              <AppText variant="small" color="textMuted">
-                Published product details are unavailable. Retry online, or clear account
-                features in your profile to compare without them.
-              </AppText>
+            <View style={{ gap: 8 }}>
+              <AppText variant="small" color="textMuted">{uiLabel("Product details unavailable")}</AppText>
               <Button
                 title="Retry"
                 variant="secondary"
-                onPress={() => void ensureDetails({ force: true, abandonInFlight: true })}
+                onPress={() => targetDetailsMissing ? setTargetDetailsRetry(value=>({key:targetDetailsKey,count:(value?.key===targetDetailsKey?value.count:0)+1})) : void ensureDetails({ force: true, abandonInFlight: true })}
               />
             </View>
           )}
@@ -860,10 +830,9 @@ export function RateCheckWorkspace() {
             rate: bestRateForProduct(core, c.row.product_key),
           },
         );
-        const rateChangeLabel = productRateChangeText(rateChange, true);
         const rateDescriptor = section === 'Mortgage'
-          ? `${formatRate(c.projectionRate)} advertised${c.rate !== c.projectionRate ? ` · ${formatRate(c.rate)} comparison` : ''}`
-          : `${formatRate(c.projectionRate)} ${depositRankMetric === 'base' ? 'ongoing/base' : 'headline'}`;
+          ? uiJoin(formatRate(c.projectionRate),' ','Advertised',c.rate !== c.projectionRate ? uiJoin(' · ',formatRate(c.rate),' ','Comparison'):null)
+          : uiJoin(formatRate(c.projectionRate),' ',depositRankMetric === 'base' ? 'Ongoing':'Headline');
         return (
           <Pressable
             key={c.row.provider}
@@ -871,9 +840,7 @@ export function RateCheckWorkspace() {
               ? openFirstCandidate
               : () => openProduct(c.row.product_key, c.row.rate_index)}
             accessibilityRole="button"
-            accessibilityLabel={`View ${c.row.provider} ${c.row.product_name}, ${rateDescriptor}${
-              rateChangeLabel ? `, ${rateChangeLabel}` : ''
-            }`}
+            accessibilityLabel={uiJoin('View',' ',uiProviderName(c.row),' · ',uiProductName(c.row),' · ',rateDescriptor)}
           >
             <Card style={{ marginBottom: 10 }}>
               <Row gap={12} style={{ alignItems: 'center' }}>
@@ -885,34 +852,34 @@ export function RateCheckWorkspace() {
                 />
                 <View style={{ flex: 1 }}>
                   <AppText variant="body" weight="700" numberOfLines={1}>
-                    {c.row.provider}
+                    {uiProviderName(c.row)}
                   </AppText>
                    <AppText variant="tiny" color="textMuted" numberOfLines={1}>
-                     {c.row.product_name} · {rateDescriptor}
+                     {uiJoin(uiProductName(c.row)," · ",rateDescriptor)}
                    </AppText>
                    <ProductRateChangeSummaryLine
-                     summary={rateChange}
+                     model={rateChange}
                      section={section}
                      compact
                    />
                   {access.badge ? (
                     <AppText variant="tiny" weight="700" style={{ color: theme.colors.warning, marginTop: 2 }}>
-                      {access.verify ? `${access.badge}?` : access.badge}
+                      {uiAccessBadge(access)}
                     </AppText>
                   ) : null}
                 </View>
                 <View style={{ alignItems: 'flex-end', maxWidth: '42%' }}>
                   {c.unavailableReason ? (
                     <>
-                      <AppText variant="body" weight="800">Rate only</AppText>
+                      <AppText variant="body" weight="800">{uiLabel("Rate only")}</AppText>
                       <AppText variant="tiny" color="textFaint" style={{ textAlign: 'right' }}>
-                        {c.unavailableReason}
+                        {targetDetailsMissing ? targetDetailsFailed ? uiLabel("Sources unverified"):uiLabel("Loading") : targetConstraint && targetConstraintContradicted(targetConstraint) ? uiTargetConstraint(targetConstraint) : section === 'TD' && advertisedTermMonths(c.row) == null ? uiLabel("Maturity unpublished") : uiLabel("Eligibility / rate conditions unverified")}
                       </AppText>
                     </>
                   ) : section === 'Mortgage' && c.perMonth != null ? (
                     <>
                       <AppText variant="body" weight="800" style={{ color: c.perMonth < 0 ? theme.colors.danger : theme.colors.success }}>
-                        {formatDollars(c.perMonth)}/mo
+                        {uiJoin(formatDollars(c.perMonth),' / ','mo')}
                       </AppText>
                       <AppText variant="tiny" color="textFaint" style={{ textAlign: 'right' }}>
                         {c.totalLabel}
@@ -930,7 +897,7 @@ export function RateCheckWorkspace() {
                   ) : null}
                 </View>
                 <AppText variant="body" color="textFaint" style={{ marginLeft: 2 }}>
-                  ›
+                  {uiLabel('→')}
                 </AppText>
               </Row>
             </Card>
@@ -939,13 +906,70 @@ export function RateCheckWorkspace() {
       })
         : null}
 
-      <AppText variant="tiny" color="textFaint" style={{ marginTop: 8, lineHeight: 16 }}>
-        Illustrative; excludes fees, tax, switching costs and unverified conditions. {isMortgage
-          ? 'LVR is loan ÷ property value. The dollar figure is an initial contractual repayment difference, not a total saving; fixed-rate scope stops at the published period.'
-          : section === 'TD'
-            ? 'A dollar difference is shown only for a published maturity and a non-conditional rate; check payment timing and early-withdrawal terms.'
-            : 'The dollar figure is a simple annual interest difference shown only for a non-conditional rate; it excludes compounding and tax.'}
-      </AppText>
+      <Card style={{ gap: 8 }}>
+        <AppText variant="tiny" color="textMuted">{uiLabel("Illustrative")}</AppText>
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <AppText variant="tiny" color="textMuted">{uiLabel("Excluded")}</AppText>
+          <AppText variant="tiny">{uiLabel("Fees · Tax · Switching costs")}</AppText>
+        </Row>
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <AppText variant="tiny" color="textMuted">{uiLabel("Conditions")}</AppText>
+          <AppText variant="tiny">{uiLabel("Unverified")}</AppText>
+        </Row>
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <AppText variant="tiny" color="textMuted">{uiLabel("Difference basis")}</AppText>
+          <AppText variant="tiny">{isMortgage ? uiLabel("Initial repayment") : section === 'TD' ? uiLabel("Published maturity · Non-conditional rate") : uiLabel("Simple annual interest · Non-conditional rate")}</AppText>
+        </Row>
+        {isMortgage ? <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <AppText variant="tiny" color="textMuted">{uiLabel("Fixed-rate scope")}</AppText>
+          <AppText variant="tiny">{uiLabel("Published period")}</AppText>
+        </Row> : <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <AppText variant="tiny" color="textMuted">{uiLabel("Compounding")}</AppText>
+          <AppText variant="tiny">{uiLabel("Excluded")}</AppText>
+        </Row>}
+      </Card>
+      <Card style={{ marginBottom: 16, gap: 10 }}>
+        <Button
+          title="Projection"
+          icon="analytics-outline"
+          onPress={() => void openProjections()}
+          disabled={scenarioStorageStatus !== 'ready'}
+        />
+        {scenarioStorageStatus === 'loading' || scenarioStorageStatus === 'idle' ? (
+          <AppText variant="tiny" color="textMuted">{uiLabel("Loading")}</AppText>
+        ) : null}
+        {scenarioSaveStatus === 'saving' || scenarioSaveStatus === 'saved' ? (
+          <AppText variant="tiny" color="textMuted">
+            {uiLabel(scenarioSaveStatus === 'saving' ? 'Saving' : 'Saved')}
+          </AppText>
+        ) : null}
+        {scenarioError ? (
+          <>
+            <AppText variant="tiny" color="danger">{uiLabel("Scenario unavailable")}</AppText>
+            {scenarioStorageStatus === 'error' ? (
+              <Button title="Retry encrypted storage" variant="secondary" onPress={() => void retryScenarioLoad()} />
+            ) : null}
+          </>
+        ) : null}
+      </Card>
+
+      {isMortgage ? (
+        <View style={{ marginBottom: 16 }}>
+          <Disclosure
+            title="Profile needs"
+            open={assumptionsOpen}
+            onToggle={() => setAssumptionsOpen((open) => !open)}
+          >
+            <ProfileEditor
+              sections={['Mortgage']}
+              value={profileFilters}
+              onChange={(next) => setPref('profileFilters', next)}
+            />
+          </Disclosure>
+        </View>
+      ) : null}
+
+      <Button title="Calculation receipt" variant="secondary" onPress={() => router.push('/calculation-receipt')} />
     </ScreenScrollView>
   );
 }

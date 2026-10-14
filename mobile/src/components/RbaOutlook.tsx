@@ -11,7 +11,7 @@ import {
   type EconomicOutlookPayload,
 } from '../data/economicOutlook';
 import type { EconomicWindow } from '../data/economicModels';
-import { relativeDate } from '../data/format';
+import { uiCount, uiDate, uiJoin, uiLabel } from '../lib/uiCopy';
 import { debugLog } from '../lib/debugLog';
 import { hasPositiveChartLayout, type ChartRenderEvidence } from '../lib/chartRenderEvidence';
 import { yieldToPaintFrames } from '../lib/yieldToUi';
@@ -64,24 +64,19 @@ function OutlookContent({
     (acc, indicator) => ({ ...acc, [indicator.signal.direction]: acc[indicator.signal.direction] + 1 }),
     { higher: 0, lower: 0, balanced: 0 },
   );
-  const pressureLine = [
-    counts.higher ? `${counts.higher} point higher` : null,
-    counts.lower ? `${counts.lower} point lower` : null,
-    counts.balanced ? `${counts.balanced} mixed` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const pressureLine = uiJoin('Signals', ' · ', 'Higher', ' ', uiCount(counts.higher), ' · ',
+    'Lower', ' ', uiCount(counts.lower), ' · ', 'Balanced', ' ', uiCount(counts.balanced));
   const usesAbsCpi = data.indicators.some((indicator) => indicator.sourceAgency === 'abs');
   useAuditExternalLinks([
-    { url: RBA_ECONOMIC_TABLE_URL, purpose: 'official_economic_source', label: 'RBA statistics tables' },
-    ...(usesAbsCpi ? [{ url: ABS_CPI_RELEASE_URL, purpose: 'official_economic_source' as const, label: 'ABS CPI release' }] : []),
+    { url: RBA_ECONOMIC_TABLE_URL, purpose: 'official_economic_source', label: uiLabel('RBA source') },
+    ...(usesAbsCpi ? [{ url: ABS_CPI_RELEASE_URL, purpose: 'official_economic_source' as const, label: uiLabel('ABS CPI') }] : []),
   ]);
 
   return (
     <View style={{ marginTop: 12 }}>
       {pressureLine ? (
         <AppText variant="tiny" color="textMuted" style={{ marginBottom: 10 }}>
-          {pressureLine} · not a rate forecast
+          {uiJoin(pressureLine, ' · ', 'Forecast', ' · ', 'Excluded')}
         </AppText>
       ) : null}
       <EconomicReleasesList data={data} />
@@ -108,20 +103,15 @@ function OutlookContent({
           }}
           accessible
           accessibilityRole="progressbar"
-          accessibilityLabel="Preparing economic charts"
+          accessibilityLabel="Loading"
         >
-          <AppText variant="tiny" color="textFaint">Preparing economic charts…</AppText>
+          <AppText variant="tiny" color="textFaint">{uiLabel("Loading")}</AppText>
         </View>
       )}
       <Row gap={4} style={{ marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <AppText variant="tiny" color="textFaint">
-          Checked {relativeDate(data.checkedAt)}
-          {data.refreshStatus && data.refreshStatus !== 'current'
-            ? data.refreshStatus === 'offline'
-              ? ' · could not verify latest release'
-              : ' · some series retained from last known values'
-            : ''}
-          {' · '}
+          {uiJoin('Checked', ' · ', uiDate(data.checkedAt), data.refreshStatus && data.refreshStatus !== 'current'
+            ? uiJoin(' · ', data.refreshStatus === 'offline' ? 'Offline' : 'Partial', ' · ', 'Cached') : null)}
         </AppText>
         {usesAbsCpi ? (
           <>
@@ -129,18 +119,17 @@ function OutlookContent({
               onPress={() => requestExternalUrl({
                 url: ABS_CPI_RELEASE_URL,
                 purpose: 'official_economic_source',
-                label: 'ABS CPI release',
+                label: uiLabel('ABS CPI'),
               })}
               accessibilityRole="link"
-              accessibilityLabel="Open ABS CPI release"
+              accessibilityLabel="ABS CPI"
               hitSlop={6}
             >
               <AppText variant="tiny" color="primary" weight="600">
-                ABS CPI
-              </AppText>
+                {uiLabel("ABS CPI")}</AppText>
             </Pressable>
             <AppText variant="tiny" color="textFaint">
-              {' · '}
+              {uiLabel(" · ")}
             </AppText>
           </>
         ) : null}
@@ -148,15 +137,14 @@ function OutlookContent({
           onPress={() => requestExternalUrl({
             url: RBA_ECONOMIC_TABLE_URL,
             purpose: 'official_economic_source',
-            label: 'RBA statistics tables',
+            label: uiLabel('RBA source'),
           })}
           accessibilityRole="link"
-          accessibilityLabel="Open RBA statistics tables"
+          accessibilityLabel="RBA source"
           hitSlop={6}
         >
           <AppText variant="tiny" color="primary" weight="600">
-            RBA sources
-          </AppText>
+            {uiLabel("RBA source")}</AppText>
         </Pressable>
       </Row>
     </View>
@@ -288,28 +276,25 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
     >
       <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ flex: 1, paddingRight: 8 }}>
-          <AppText variant="h2">Decision context</AppText>
-          <AppText variant="small" color="textMuted" style={{ marginTop: 3 }}>
-            Inflation, jobs, housing and policy expectations
-          </AppText>
+          <AppText variant="h2">{uiLabel("Economy")}</AppText>
         </View>
         <Pressable
           onPress={() => void load(true)}
           disabled={loading && !!data}
           accessibilityRole="button"
-          accessibilityLabel="Refresh economic signals"
+          accessibilityLabel="Refresh"
           hitSlop={8}
           style={{ paddingVertical: 4, paddingHorizontal: 2 }}
         >
           <AppText variant="tiny" weight="700" color={loading && data ? 'textFaint' : 'primary'}>
-            {loading && data ? 'Updating…' : 'Refresh'}
+            {uiLabel(loading && data ? 'Loading' : 'Refresh')}
           </AppText>
         </Pressable>
       </Row>
       {loading && !data ? (
         <View style={{ minHeight: 120, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={theme.colors.rba} />
-          <AppText variant="tiny" color="textMuted" style={{ marginTop: 8 }}>Loading official data…</AppText>
+          <AppText variant="tiny" color="textMuted" style={{ marginTop: 8 }}>{uiLabel("Loading")}</AppText>
         </View>
       ) : data ? (
         <>
@@ -326,7 +311,7 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
           />
           {error ? (
             <AppText variant="tiny" color="warning" style={{ marginTop: 8 }}>
-              {error} Showing the last verified observations.
+              {uiJoin('Cached', ' · ', 'Source unverified')}
             </AppText>
           ) : null}
         </>
@@ -335,9 +320,8 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
           <AppText variant="small" color="textMuted" onLayout={(event) => {
             if (hasPositiveChartLayout(event)) setUnavailableLayoutMeasured(true);
           }}>
-            Economic signals are unavailable right now. Bank rates and cached app data still work normally.
+            {uiJoin('Economy', ' · ', 'Unavailable')}
           </AppText>
-          {error ? <AppText variant="tiny" color="danger" style={{ marginTop: 5 }}>{error}</AppText> : null}
           <View style={{ alignSelf: 'flex-start', marginTop: 10 }}>
             <Button title="Retry" variant="secondary" onPress={() => void load(true)} loading={loading} />
           </View>

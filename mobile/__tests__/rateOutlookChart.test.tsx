@@ -82,7 +82,7 @@ test('flat and tiny rate changes retain a readable nonzero axis instead of exagg
 
 test('render-ready requires enough measured width to draw the SVG', () => {
   const onReady = jest.fn();
-  const tree = render(<RateOutlookChart label="Bond-market outlook" points={points} cashRate={4.35}
+  const tree = render(<RateOutlookChart label="Bond-market forward rates" points={points} cashRate={4.35}
     selectedIndex={0} onSelect={jest.fn()} onReady={onReady} />);
   try {
     expect(onReady).not.toHaveBeenCalled();
@@ -108,7 +108,7 @@ test('render-ready does not loop when its parent updates state and recreates the
   function Harness() {
     const [readyCount, setReadyCount] = useState(0);
     observedReadyCount = readyCount;
-    return <RateOutlookChart label="Bond-market outlook" points={points} cashRate={4.35}
+    return <RateOutlookChart label="Bond-market forward rates" points={points} cashRate={4.35}
       selectedIndex={0} onSelect={jest.fn()} onReady={() => {
         // Bound a regression so the test reports repeated readiness without an infinite render loop.
         if (readyCount < 3) setReadyCount((count) => count + 1);
@@ -124,13 +124,13 @@ test('render-ready does not loop when its parent updates state and recreates the
 });
 
 test('accessible plot summary contains each date and value, excluding unusable observations', () => {
-  const tree = render(<RateOutlookChart label="Bond-market outlook"
+  const tree = render(<RateOutlookChart label="Bond-market forward rates"
     points={[...points, { date: 'not-a-date', value: 5 }, { date: '2028-01-01', value: NaN }]}
     cashRate={4.35} selectedIndex={0} onSelect={jest.fn()} />);
   try {
     const summary = String(plot(tree).props.accessibilityLabel);
-    expect(summary).toContain('Bond-market outlook');
-    for (const point of points) expect(summary).toContain(`${outlookMonth(point.date)}: ${point.value.toFixed(2)} percent`);
+    expect(summary).toContain('Bond-market forward rates');
+    for (const point of points) expect(summary).toContain(`${outlookMonth(point.date)} · ${point.value.toFixed(2)}%`);
     expect(summary).not.toMatch(/NaN|not-a-date|Jan 28/);
     expect(buttons(tree)).toHaveLength(points.length);
   } finally {
@@ -142,14 +142,14 @@ test('selecting a month updates the displayed rate, highlight and accessible sel
   const onSelect = jest.fn();
   function Harness() {
     const [selected, setSelected] = useState(0);
-    return <RateOutlookChart label="Bond-market outlook" points={points} cashRate={4.35}
+    return <RateOutlookChart label="Bond-market forward rates" points={points} cashRate={4.35}
       selectedIndex={selected} onSelect={(index) => { onSelect(index); setSelected(index); }} />;
   }
   const tree = render(<Harness />);
   try {
     layout(tree, 320);
     const initial = buttons(tree);
-    expect(initial[2].props.accessibilityLabel).toBe('Bond-market outlook, Feb 27, 4.67 percent');
+    expect(initial[2].props.accessibilityLabel).toBe('Bond-market forward rates · Feb 27 · 4.67%');
     const target = StyleSheet.flatten(initial[2].props.style as ViewStyle);
     expect(target.minHeight).toBeGreaterThanOrEqual(48);
     act(() => { (initial[2].props.onPress as () => void)(); });
@@ -157,7 +157,7 @@ test('selecting a month updates the displayed rate, highlight and accessible sel
     const next = buttons(tree);
     expect(next[2].props.accessibilityState).toEqual({ selected: true });
     expect(next[0].props.accessibilityState).toEqual({ selected: false });
-    expect(tree.root.findAllByType(LedgerText).find((node) => node.props.variant === 'rateLarge')?.props.children).toEqual(['4.67', '%']);
+    expect(tree.root.findAllByType(LedgerText).find((node) => node.props.variant === 'rateLarge')?.props.children).toBe('4.67%');
     const dots = tree.root.findAllByType(Circle);
     expect(dots[2].props.r).toBeGreaterThan(dots[0].props.r as number);
   } finally {
@@ -184,14 +184,14 @@ test('an out-of-range selection remains usable after the source shortens', () =>
 
 test('a dense monthly series keeps sparse axis labels while all points stay accessible', () => {
   const monthly = Array.from({ length: 12 }, (_, index) => ({ date: `2027-${String(index + 1).padStart(2, '0')}-01`, value: 4 + index * 0.05 }));
-  const tree = render(<RateOutlookChart label="Monthly outlook" points={monthly} cashRate={4.35}
+  const tree = render(<RateOutlookChart label="Forecast" points={monthly} cashRate={4.35}
     selectedIndex={0} onSelect={jest.fn()} />);
   try {
     layout(tree, 320);
     const labels = tree.root.findAllByType(SvgText).map(content).filter((label) => !label.endsWith('%'));
     expect(labels).toEqual(['Jan 27', 'Jun 27', 'Dec 27']);
     expect(buttons(tree)).toHaveLength(12);
-    expect(plot(tree).props.accessibilityLabel).toEqual(expect.stringContaining('Nov 27: 4.50 percent'));
+    expect(plot(tree).props.accessibilityLabel).toEqual(expect.stringContaining('Nov 27 · 4.50%'));
   } finally {
     act(() => tree.unmount());
   }
@@ -202,7 +202,7 @@ test('empty or entirely invalid input has an explicit empty state and never repo
   const tree = render(<RateOutlookChart label="Survey" points={[{ date: 'invalid', value: NaN }]}
     cashRate={4.35} selectedIndex={0} onSelect={jest.fn()} onReady={onReady} />);
   try {
-    expect(tree.root.findAllByType(LedgerText).map(content)).toContain('No forecast observations published.');
+    expect(tree.root.findAllByType(LedgerText).map(content)).toContain('No observations');
     expect(tree.root.findAllByType(Svg)).toHaveLength(0);
     expect(buttons(tree)).toHaveLength(0);
     expect(onReady).not.toHaveBeenCalled();

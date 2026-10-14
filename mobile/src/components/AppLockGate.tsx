@@ -1,3 +1,5 @@
+import { uiLabel } from '../lib/uiCopy';
+import type { UiChild } from '../lib/uiCopy';
 import Ionicons from './icons/AppIcon';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Modal, Platform, View } from 'react-native';
@@ -26,7 +28,7 @@ import { AppText, Button } from './ui';
  * Authentication results are epoch-bound so a late success from an older
  * foreground session cannot reveal a newer one.
  */
-export function AppLockGate({ children }: { children: React.ReactNode }) {
+export function AppLockGate({ children }: { children: UiChild }) {
   const theme = useTheme();
   const hydrated = useStore((s) => s.hydrated);
   const enabled = useStore((s) => s.prefs.appLockEnabled);
@@ -128,10 +130,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
       accessibilityLiveRegion="polite"
     >
       <Ionicons name="lock-closed" size={40} color={theme.colors.primary} />
-      <AppText variant="h3">Locked</AppText>
-      <AppText variant="small" color="textMuted" style={{ textAlign: 'center' }}>
-        Unlock with your fingerprint, face, or device PIN.
-      </AppText>
+      <AppText variant="h3">{uiLabel("Locked")}</AppText>
       <Button
         title="Unlock"
         icon="finger-print"

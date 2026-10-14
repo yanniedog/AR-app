@@ -19,18 +19,18 @@ let tree: Tree;
 afterEach(() => { if (tree) act(() => tree.unmount()); });
 test('answer UI saves explicit false and zero separately from unavailable', () => {
   const onSave = jest.fn();
-  act(() => { tree = TestRenderer.create(<CustomerAnswerEditor definition={{ id: 'flag', label: 'Flag', type: 'boolean' }} disabled={false} onSave={onSave} />) as Tree; });
+  act(() => { tree = TestRenderer.create(<CustomerAnswerEditor definition={{ id: 'flag', label: 'Bonus conditions', type: 'boolean' }} disabled={false} onSave={onSave} />) as Tree; });
   act(() => tree.root.findByProps({ label: 'Entered' }).props.onPress());
   act(() => tree.root.findByProps({ label: 'No' }).props.onPress());
-  act(() => tree.root.findByProps({ title: 'Save Flag' }).props.onPress());
+  act(() => tree.root.findByProps({ accessibilityLabel: 'Save Bonus conditions' }).props.onPress());
   expect(onSave.mock.calls[0][0]).toMatchObject({ state: 'known', fact: { value: false }, provenance: { source: 'user_input' } });
   act(() => tree.root.findByProps({ label: 'Unavailable' }).props.onPress());
-  act(() => tree.root.findByProps({ title: 'Save Flag' }).props.onPress());
+  act(() => tree.root.findByProps({ accessibilityLabel: 'Save Bonus conditions' }).props.onPress());
   expect(onSave.mock.calls[1][0].state).toBe('unavailable');
-  act(() => tree.update(<CustomerAnswerEditor key="amount" definition={{ id: 'amount', label: 'Amount', type: 'decimal', unit: 'AUD' }} disabled={false} onSave={onSave} />));
+  act(() => tree.update(<CustomerAnswerEditor key="amount" definition={{ id: 'amount', label: 'Balance', type: 'decimal', unit: 'AUD' }} disabled={false} onSave={onSave} />));
   act(() => tree.root.findByProps({ label: 'Entered' }).props.onPress());
-  act(() => tree.root.findByProps({ accessibilityLabel: 'Value: Amount' }).props.onChangeText('0'));
-  act(() => tree.root.findByProps({ title: 'Save Amount' }).props.onPress());
+  act(() => tree.root.findByProps({ accessibilityLabel: 'Balance' }).props.onChangeText('0'));
+  act(() => tree.root.findByProps({ accessibilityLabel: 'Save Balance' }).props.onPress());
   expect(onSave.mock.calls[2][0]).toMatchObject({ state: 'known', fact: { value: '0', unit: 'AUD' } });
 });
 test('real missing contract shows pending and negotiated terms save separately with product provenance', () => {
@@ -38,13 +38,13 @@ test('real missing contract shows pending and negotiated terms save separately w
   const update = jest.fn(async (change: (p: CustomerProfile) => CustomerProfile) => { Object.assign(profile, change(profile)); return true; });
   jest.mocked(useCustomerProfile).mockReturnValue({ profile, busy: false, error: null, retry: jest.fn(), update });
   act(() => { tree = TestRenderer.create(<CustomerProfileContent productKey="bank|product" />) as Tree; });
-  expect(JSON.stringify(tree.toJSON())).toContain('Eligibility remains unassessed');
+  expect(JSON.stringify(tree.toJSON())).toContain('Eligibility unverified');
   expect(tree.root.findAllByType('LedgerField')).toHaveLength(0);
   act(() => tree.root.findByProps({ title: 'Negotiated terms' }).props.onToggle());
   for (const [label, value] of [['Term', 'Negotiated rate'], ['Value', '0'], ['Unit', 'percent']]) {
     act(() => tree.root.findByProps({ label }).props.onChangeText(value));
   }
-  act(() => tree.root.findByProps({ title: 'Save negotiated term' }).props.onPress());
+  act(() => tree.root.findByProps({ accessibilityLabel: 'Save Negotiated terms' }).props.onPress());
   expect(profile.answers).toEqual({});
   expect(profile.negotiatedTerms[0]).toMatchObject({ value: '0', unit: 'percent', provenance: { source: 'user_input', productKey: 'bank|product', effectiveFrom: null } });
 });
@@ -65,11 +65,11 @@ test('saving one field preserves another editor draft across profile revisions',
   });
   jest.mocked(useCustomerProfile).mockImplementation(() => ({ profile, busy: false, error: null, retry: jest.fn(), update }));
   act(() => { tree = TestRenderer.create(<CustomerProfileContent />) as Tree; });
-  act(() => tree.root.findByProps({ title: 'Saved inputs' }).props.onToggle());
-  act(() => tree.root.findByProps({ accessibilityLabel: 'Value: Savings rate' }).props.onChangeText('4.25'));
-  act(() => tree.root.findByProps({ title: 'Save Savings balance' }).props.onPress());
+  act(() => tree.root.findByProps({ title: 'Saved inputs (2)' }).props.onToggle());
+  act(() => tree.root.findByProps({ accessibilityLabel: 'Savings rate' }).props.onChangeText('4.25'));
+  act(() => tree.root.findByProps({ accessibilityLabel: 'Save Savings balance' }).props.onPress());
   act(() => tree.update(<CustomerProfileContent />));
-  expect(tree.root.findByProps({ accessibilityLabel: 'Value: Savings rate' }).props.value).toBe('4.25');
+  expect(tree.root.findByProps({ accessibilityLabel: 'Savings rate' }).props.value).toBe('4.25');
 });
 
 test('negotiated draft survives failure and clears only after a confirmed successful save', async () => {
@@ -83,9 +83,9 @@ test('negotiated draft survives failure and clears only after a confirmed succes
   act(() => { tree = TestRenderer.create(<CustomerProfileContent productKey="bank|product" />) as Tree; });
   act(() => tree.root.findByProps({ title: 'Negotiated terms' }).props.onToggle());
   for (const [label, value] of [['Term', 'Discount'], ['Value', '0'], ['Unit', 'AUD']]) act(() => tree.root.findByProps({ label }).props.onChangeText(value));
-  await act(async () => { tree.root.findByProps({ title: 'Save negotiated term' }).props.onPress(); });
+  await act(async () => { tree.root.findByProps({ accessibilityLabel: 'Save Negotiated terms' }).props.onPress(); });
   expect(tree.root.findByProps({ label: 'Value' }).props.value).toBe('0');
-  await act(async () => { tree.root.findByProps({ title: 'Save negotiated term' }).props.onPress(); });
+  await act(async () => { tree.root.findByProps({ accessibilityLabel: 'Save Negotiated terms' }).props.onPress(); });
   expect(tree.root.findByProps({ label: 'Value' }).props.value).toBe('');
   expect(profile.negotiatedTerms).toHaveLength(1);
 });
@@ -94,9 +94,9 @@ test('a supported explicit contract renders its labelled input and no inferred q
   const profile = migrateCustomerProfile(null);
   jest.mocked(useCustomerProfile).mockReturnValue({ profile, busy: false, error: null, retry: jest.fn(), update: jest.fn() });
   const contract = { schemaVersion: 1 as const, productKey: 'bank|product', revisionSha256: 'a'.repeat(64), effectiveFrom: '2020-01-01', effectiveToExclusive: '2099-01-01',
-    inputs: [{ id: 'age', label: 'Age in years', type: 'decimal' as const, unit: 'years' }],
+    inputs: [{ id: 'age', label: 'Minimum age', type: 'decimal' as const, unit: 'years' }],
     rule: { id: 'age-rule', op: 'compare' as const, field: 'age', comparison: 'gte' as const, expected: { type: 'decimal' as const, value: '18', unit: 'years' } } };
   act(() => { tree = TestRenderer.create(<CustomerProfileContent productKey="bank|product" contract={contract} />) as Tree; });
-  expect(tree.root.findByProps({ title: 'Save Age in years' })).toBeTruthy();
+  expect(tree.root.findByProps({ accessibilityLabel: 'Save Minimum age' })).toBeTruthy();
   expect(JSON.stringify(tree.toJSON())).not.toContain('approved');
 });

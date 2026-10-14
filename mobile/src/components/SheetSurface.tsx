@@ -1,3 +1,4 @@
+import type { UiChild } from '../lib/uiCopy';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,14 +10,15 @@ import { useTheme } from '../theme/ThemeProvider';
 import { LedgerIcon } from './icons/LedgerIcon';
 import { LedgerText } from './ledger/LedgerText';
 import { TouchTarget } from './TouchTarget';
+import { uiJoin, type UiCopy } from '../lib/uiCopy';
 
 /** One interruptible native sheet layer, shared by filters and compact tasks. */
 export function SheetSurface({ visible, title, onClose, children, footer, style }: {
   visible: boolean;
-  title: string;
+  title: UiCopy;
   onClose: () => void;
-  children: React.ReactNode;
-  footer?: React.ReactNode;
+  children: UiChild;
+  footer?: UiChild;
   style?: StyleProp<ViewStyle>;
 }) {
   const theme = useTheme();
@@ -86,7 +88,7 @@ export function SheetSurface({ visible, title, onClose, children, footer, style 
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
             <LedgerText variant="heading" style={{ flex: 1 }}>{title}</LedgerText>
-            <TouchTarget square hitSlop={0} onPress={onClose} accessibilityRole="button" accessibilityLabel={`Close ${title}`} style={{ borderRadius: theme.radius.sm, overflow: 'hidden' }}>
+            <TouchTarget square hitSlop={0} onPress={onClose} accessibilityRole="button" accessibilityLabel={uiJoin('Close', ' ', title)} style={{ borderRadius: theme.radius.sm, overflow: 'hidden' }}>
               <LedgerIcon name="close" color={theme.ledger.ink} />
             </TouchTarget>
           </View>

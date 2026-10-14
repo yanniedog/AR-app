@@ -3,6 +3,8 @@ import { toFraction } from './format';
 import type { ProjectionFrequency, ProjectionInputs } from './projectionScenario';
 import type { UserRateScenario } from './userRateScenario';
 import type { SectionKey } from '../types';
+import { uiJoin, uiNumber, type UiLabel, type UiText } from '../lib/uiCopy';
+import { projectionFacts, type ProjectionFact, type ProjectionHistorySnapshot, type ProjectionSeriesId } from './projectionFacts';
 
 export type ProjectionMetric =
   | 'balance'
@@ -28,9 +30,8 @@ export interface ProjectionPoint {
 }
 
 export interface ProjectionSeries {
-  id: string;
-  label: string;
-  detail: string;
+  id: ProjectionSeriesId;
+  label: UiLabel;
   annualRate: number;
   points: ProjectionPoint[];
   payoffDate: string | null;
@@ -50,8 +51,7 @@ export interface LifecycleProjection {
   history: ProjectionPoint[];
   rateSeries: ProjectionSeries[];
   offsetSeries: ProjectionSeries[];
-  assumptions: string[];
-  warnings: string[];
+  facts: readonly ProjectionFact[];
   defaultMetric: ProjectionMetric;
   availableMetrics: ProjectionMetric[];
   projectionScope: 'full-term' | 'fixed-period' | 'savings-horizon' | 'term-deposit-maturity';
@@ -66,8 +66,9 @@ export interface MortgageOffsetImpact {
   payoffMonthsEarlier: number | null;
   /** A net saving cannot be stated until applicable offset/package fees are known. */
   netDifference: null;
-  netDifferenceUnavailableReason: string;
-  comparisonWindow: string;
+  feeCoverage: 'unverified';
+  comparisonScope: 'fixed-period' | 'remaining-term';
+  comparisonMonths: number;
 }
 
 export const MAX_PROJECTION_YEARS = 50;
@@ -321,9 +322,8 @@ function simulateTermDeposit({
 }
 
 function toSeries(
-  id: string,
-  label: string,
-  detail: string,
+  id: ProjectionSeriesId,
+  label: UiLabel,
   annualRate: number,
   points: ProjectionPoint[],
   totalValue?: number,
@@ -334,7 +334,6 @@ function toSeries(
   return {
     id,
     label,
-    detail,
     annualRate,
     points,
     payoffDate: payoff,
@@ -425,8 +424,7 @@ function emptyProjection(section: SectionKey, today: Date, missing: string[]): L
     history: [],
     rateSeries: [],
     offsetSeries: [],
-    assumptions: [],
-    warnings: [],
+    facts: [],
     defaultMetric: 'balance',
     availableMetrics: ['balance'],
     projectionScope: section === 'Mortgage'
@@ -472,10 +470,9 @@ export function mortgageOffsetImpact(result: LifecycleProjection): MortgageOffse
     interestDifference,
     payoffMonthsEarlier,
     netDifference: null,
-    netDifferenceUnavailableReason: 'Applicable offset or package fees are not available in this model.',
-    comparisonWindow: result.projectionScope === 'fixed-period'
-      ? `over the ${projectedMonths}-month fixed-rate projection`
-      : 'over the entered remaining term',
+    feeCoverage: 'unverified',
+    comparisonScope: result.projectionScope === 'fixed-period' ? 'fixed-period' : 'remaining-term',
+    comparisonMonths: projectedMonths,
   };
 }
 
@@ -487,8 +484,7 @@ export function buildLifecycleProjection(
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const key = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
   const inputs = scenario.projections[key];
-  const assumptions: string[] = [];
-  const warnings: string[] = [];
+  let historySnapshot: ProjectionHistorySnapshot | null = null;
   const historySeed: SimulationSeed = { cumulativeInterest: 0, cumulativePrincipal: 0 };
   let history: ProjectionPoint[] = [];
 
@@ -520,17 +516,6 @@ export function buildLifecycleProjection(
     const offsetBalance = Math.min(balance, cleanNumber(inputs.offsetBalance));
     const offsetGrowth = monthlyAmount(inputs.offsetContributionAmount, inputs.offsetContributionFrequency);
     const offsetBoost = monthlyAmount(inputs.offsetBoostAmount, inputs.offsetContributionFrequency);
-    assumptions.push(
-      enteredRepayment
-        ? `${inputs.periodicFrequency} repayment converted to an average $${Math.round(repayment).toLocaleString('en-AU')} per month.`
-        : `No repayment entered; an illustrative principal-and-interest payment of $${Math.round(repayment).toLocaleString('en-AU')} per month is calculated over ${enteredYears} years.`,
-      'Rates are held constant within each scenario; future lender changes are not forecasts.',
-      'Offset money reduces the balance charged interest but is not treated as a loan repayment.',
-    );
-    if (fixedRate) {
-      assumptions.push(`The projection stops after ${months} month${months === 1 ? '' : 's'}, when the entered fixed period ends; no unknown reversion rate is invented.`);
-    }
-
     const anchor = historyAnchor(inputs, today);
     let forwardOpeningOffset = offsetBalance;
     if (anchor) {
@@ -551,21 +536,19 @@ export function buildLifecycleProjection(
       historySeed.cumulativePrincipal = historicalLast.cumulativePrincipal;
       forwardOpeningOffset = historicalLast.offsetBalance;
       const mismatch = Math.abs(historicalLast.balance - balance);
-      if (mismatch > Math.max(100, balance * 0.01)) {
-        warnings.push(`Approximate history ends $${Math.round(mismatch).toLocaleString('en-AU')} from the current balance because past rate, repayment and offset changes are not known.`);
-      }
       const offsetMismatch = Math.abs(forwardOpeningOffset - offsetBalance);
-      if (offsetMismatch > Math.max(100, balance * 0.01)) {
-        warnings.push(`Approximate history ends with $${Math.round(forwardOpeningOffset).toLocaleString('en-AU')} offset, $${Math.round(offsetMismatch).toLocaleString('en-AU')} from today's entered offset; forward scenarios continue from the simulated offset.`);
-      }
-      assumptions.push('History is an approximation from the optional starting inputs; the future is re-anchored to today\'s entered balance.');
+      historySnapshot = { anchorDay: isoDate(anchor.date), anchorBalance: anchor.balance, anchorRateFraction: anchor.rate,
+        simulatedEndBalance: historicalLast.balance, currentEnteredBalance: balance, balanceDifference: mismatch,
+        balanceMismatchReported: mismatch > Math.max(100, balance * 0.01),
+        offset: { simulatedEndAmount: forwardOpeningOffset, currentEnteredAmount: offsetBalance, difference: offsetMismatch,
+          mismatchReported: offsetMismatch > Math.max(100, balance * 0.01) } };
     }
 
     const [lowerRate, baseRate, higherRate] = rateRange(annualRate!, inputs);
+    const outcomes: { id: ProjectionSeriesId; negativeAmortisation: boolean; closingBalance: number }[] = [];
     const mortgageSeries = (
-      id: string,
-      label: string,
-      detail: string,
+      id: ProjectionSeriesId,
+      label: UiLabel,
       rate: number,
       openingOffset: number,
       monthlyOffsetGrowth: number,
@@ -581,25 +564,20 @@ export function buildLifecycleProjection(
         offsetGrowth: monthlyOffsetGrowth,
         seed: historySeed,
       });
-      if (simulated.negativeAmortisation && !warnings.includes('One or more scenarios grow the loan because repayments do not cover interest.')) {
-        warnings.push('One or more scenarios grow the loan because repayments do not cover interest.');
-      }
-      if (!fixedRate && simulated.points.at(-1)!.balance > 0.01 && !warnings.includes('One or more scenarios still have a balance at the entered end of term.')) {
-        warnings.push('One or more scenarios still have a balance at the entered end of term.');
-      }
-      return toSeries(id, label, detail, rate, simulated.points);
+      outcomes.push({ id, negativeAmortisation: simulated.negativeAmortisation, closingBalance: simulated.points.at(-1)!.balance });
+      return toSeries(id, label, rate, simulated.points);
     };
     const rateSeries = [
-      mortgageSeries('rate-lower', 'Lower rate', `${(lowerRate * 100).toFixed(2)}% with your offset plan`, lowerRate, forwardOpeningOffset, offsetGrowth),
-      mortgageSeries('rate-base', 'Current rate', `${(baseRate * 100).toFixed(2)}% with your offset plan`, baseRate, forwardOpeningOffset, offsetGrowth),
-      mortgageSeries('rate-higher', 'Higher rate', `${(higherRate * 100).toFixed(2)}% with your offset plan`, higherRate, forwardOpeningOffset, offsetGrowth),
+      mortgageSeries('rate-lower', 'Lower rate', lowerRate, forwardOpeningOffset, offsetGrowth),
+      mortgageSeries('rate-base', 'Current rate', baseRate, forwardOpeningOffset, offsetGrowth),
+      mortgageSeries('rate-higher', 'Higher rate', higherRate, forwardOpeningOffset, offsetGrowth),
     ];
     const offsetSeries = [
-      mortgageSeries('offset-none', 'No offset', 'Same rate and repayments with no offset balance or contributions', baseRate, 0, 0),
-      mortgageSeries('offset-steady', 'Offset stays level', `$${Math.round(forwardOpeningOffset).toLocaleString('en-AU')} offset with no added savings`, baseRate, forwardOpeningOffset, 0),
-      mortgageSeries('offset-plan', 'Your offset plan', `$${Math.round(offsetGrowth).toLocaleString('en-AU')} added per month on average`, baseRate, forwardOpeningOffset, offsetGrowth),
+      mortgageSeries('offset-none', 'No offset', baseRate, 0, 0),
+      mortgageSeries('offset-steady', 'Offset stays level', baseRate, forwardOpeningOffset, 0),
+      mortgageSeries('offset-plan', 'Your offset plan', baseRate, forwardOpeningOffset, offsetGrowth),
       ...(offsetBoost > 0
-        ? [mortgageSeries('offset-boost', 'Boosted offset', `$${Math.round(offsetGrowth + offsetBoost).toLocaleString('en-AU')} added per month on average`, baseRate, forwardOpeningOffset, offsetGrowth + offsetBoost)]
+        ? [mortgageSeries('offset-boost', 'Boosted offset', baseRate, forwardOpeningOffset, offsetGrowth + offsetBoost)]
         : []),
     ];
     return {
@@ -610,8 +588,12 @@ export function buildLifecycleProjection(
       history,
       rateSeries,
       offsetSeries,
-      assumptions,
-      warnings,
+      facts: projectionFacts({ section: 'Mortgage', months, remainingYears: enteredYears, fixed: fixedRate,
+        rateRange: [lowerRate, baseRate, higherRate], history: historySnapshot,
+        repayment: { monthlyAmount: repayment, source: enteredRepayment ? 'entered' : 'illustrative', enteredFrequency: inputs.periodicFrequency },
+        extraRepayment: { monthlyAmount: extraRepayment, enteredFrequency: inputs.extraRepaymentFrequency },
+        offset: { openingAmount: forwardOpeningOffset, openingSource: anchor ? 'simulated-history' : 'entered',
+          growthMonthlyAmount: offsetGrowth, boostMonthlyAmount: offsetBoost, enteredFrequency: inputs.offsetContributionFrequency }, outcomes }),
       defaultMetric: 'balance',
       availableMetrics: [
         'balance',
@@ -681,17 +663,14 @@ export function buildLifecycleProjection(
     historySeed.cumulativeInterest = historicalLast.cumulativeInterest;
     historySeed.cumulativePrincipal = historicalLast.cumulativePrincipal;
     const mismatch = Math.abs(historicalLast.balance - balance);
-    if (mismatch > Math.max(100, balance * 0.01)) {
-      warnings.push(`Approximate history ends $${Math.round(mismatch).toLocaleString('en-AU')} from the current entered balance.`);
-    }
-    assumptions.push(section === 'TD'
-      ? 'History repeats the entered term, rate and maturity treatment, then re-anchors to today\'s deposit balance.'
-      : 'History repeats the entered contribution and rate assumptions and then re-anchors to today\'s balance.');
+    historySnapshot = { anchorDay: isoDate(anchor.date), anchorBalance: anchor.balance, anchorRateFraction: anchor.rate,
+      simulatedEndBalance: historicalLast.balance, currentEnteredBalance: balance, balanceDifference: mismatch,
+      balanceMismatchReported: mismatch > Math.max(100, balance * 0.01) };
   }
 
   const [lowerRate, baseRate, higherRate] = rateRange(ongoingRate!, inputs);
   const ongoingBaseLabel = bonusSavings && inputs.bonusConditionsMet ? 'Ongoing rate' : 'Current rate';
-  const rates: [string, string, number][] = [
+  const rates: [ProjectionSeriesId, UiLabel, number][] = [
     ['rate-lower', 'Lower rate', lowerRate],
     ['rate-base', ongoingBaseLabel, baseRate],
     ['rate-higher', 'Higher rate', higherRate],
@@ -715,31 +694,16 @@ export function buildLifecycleProjection(
       return toSeries(
         id,
         label,
-        rollovers
-          ? `${(annualRate! * 100).toFixed(2)}% current term; ${(rate * 100).toFixed(2)}% assumed for ${rollovers} rollover${rollovers === 1 ? '' : 's'}`
-          : `${(annualRate! * 100).toFixed(2)}% through the entered maturity`,
         rate,
         points,
         points.at(-1)!.balance + (inputs.reinvestInterest ? 0 : projectedInterest),
       );
     });
-    assumptions.push(
-      'Interest is accrued monthly at a simple nominal rate and paid at maturity for illustration; provider day-count and payment timing may differ.',
-      inputs.reinvestInterest ? 'Illustrative interest is added to the deposit at each maturity.' : 'Illustrative interest is paid out at maturity and excluded from the deposit balance.',
-      rollovers ? 'The selected scenario rate is reused for each rollover; actual renewal rates are unknown.' : 'The projection ends at the entered maturity.',
-    );
   } else {
     const months = Math.round(enteredHorizonYears * 12);
-    const netCashFlow = Math.round(contribution - withdrawal);
-    const savingsDetail = (rate: number) => (
-      bonusSavings && inputs.bonusConditionsMet && bonusMonths > 0
-        ? `${(annualRate! * 100).toFixed(2)}% conditional for ${bonusMonths} month${bonusMonths === 1 ? '' : 's'}, then ${(rate * 100).toFixed(2)}% ongoing; net monthly cash flow $${netCashFlow.toLocaleString('en-AU')}`
-        : `${(rate * 100).toFixed(2)}% with net monthly cash flow of $${netCashFlow.toLocaleString('en-AU')}`
-    );
     rateSeries = rates.map(([id, label, rate]) => toSeries(
       id,
       label,
-      savingsDetail(rate),
       rate,
       simulateSavings({
         date: today,
@@ -753,16 +717,6 @@ export function buildLifecycleProjection(
         seed: historySeed,
       }),
     ));
-    assumptions.push(
-      `${inputs.periodicFrequency} contributions and ${inputs.withdrawalFrequency} withdrawals are converted to monthly averages.`,
-      'Interest compounds monthly for illustration; product calculation timing and bonus conditions may differ.',
-      'Rates are held constant within each scenario and are not forecasts.',
-    );
-    if (bonusSavings) {
-      assumptions.push(inputs.bonusConditionsMet
-        ? `The entered ${(annualRate! * 100).toFixed(2)}% conditional rate is used for ${bonusMonths} month${bonusMonths === 1 ? '' : 's'}, then each ongoing-rate scenario applies.`
-        : 'Bonus conditions are marked unmet, so the entered ongoing rate and its scenarios apply from today.');
-    }
   }
   return {
     section,
@@ -772,8 +726,16 @@ export function buildLifecycleProjection(
     history,
     rateSeries,
     offsetSeries: rateSeries,
-    assumptions,
-    warnings,
+    facts: projectionFacts(section === 'TD'
+      ? { section: 'TD', months: Math.max(0, rateSeries[0].points.length - 1), termMonths: enteredTermMonths,
+        rollovers: enteredRollovers, reinvestInterest: inputs.reinvestInterest, currentRateFraction: annualRate!,
+        rateRange: [lowerRate, baseRate, higherRate], history: historySnapshot }
+      : { section: 'Savings', months: Math.round(enteredHorizonYears * 12), horizonYears: enteredHorizonYears,
+        rateRange: [lowerRate, baseRate, higherRate], history: historySnapshot,
+        contribution: { monthlyAmount: contribution, enteredFrequency: inputs.periodicFrequency },
+        withdrawal: { monthlyAmount: withdrawal, enteredFrequency: inputs.withdrawalFrequency },
+        bonus: bonusSavings ? { conditionsMet: inputs.bonusConditionsMet, months: bonusMonths,
+          conditionalRateFraction: annualRate!, ongoingRateFraction: ongoingRate! } : null }),
     defaultMetric: 'balance',
     availableMetrics: section === 'TD'
       ? ['balance', 'periodInterest', 'cumulativeInterest']
@@ -782,7 +744,7 @@ export function buildLifecycleProjection(
   };
 }
 
-export const PROJECTION_METRIC_LABELS: Record<ProjectionMetric, string> = {
+export const PROJECTION_METRIC_LABELS: Record<ProjectionMetric, UiLabel> = {
   balance: 'Balance',
   periodInterest: 'Interest / month',
   cumulativeInterest: 'Total interest',
@@ -792,16 +754,16 @@ export const PROJECTION_METRIC_LABELS: Record<ProjectionMetric, string> = {
   cumulativeRatio: 'Total interest ÷ principal',
 };
 
-export function projectionMetricLabel(section: SectionKey, metric: ProjectionMetric): string {
+export function projectionMetricLabel(section: SectionKey, metric: ProjectionMetric): UiLabel {
   if (section !== 'Savings') return PROJECTION_METRIC_LABELS[metric];
   if (metric === 'periodPrincipal') return 'Net deposits / month';
   if (metric === 'cumulativePrincipal') return 'Total net deposits';
   return PROJECTION_METRIC_LABELS[metric];
 }
 
-export function projectionCurrency(value: number): string {
+export function projectionCurrency(value: number): UiText {
   const abs = Math.abs(value);
-  if (abs >= 1_000_000) return `$${(value / 1_000_000).toFixed(abs >= 10_000_000 ? 1 : 2)}m`;
-  if (abs >= 1_000) return `$${(value / 1_000).toFixed(abs >= 100_000 ? 0 : 1)}k`;
-  return `$${Math.round(value).toLocaleString('en-AU')}`;
+  if (abs >= 1_000_000) return uiJoin('$', uiNumber(Number((value / 1_000_000).toFixed(abs >= 10_000_000 ? 1 : 2)), abs >= 10_000_000 ? 1 : 2), 'm');
+  if (abs >= 1_000) return uiJoin('$', uiNumber(Number((value / 1_000).toFixed(abs >= 100_000 ? 0 : 1)), abs >= 100_000 ? 0 : 1), 'k');
+  return uiJoin('$', uiNumber(Math.round(value)));
 }

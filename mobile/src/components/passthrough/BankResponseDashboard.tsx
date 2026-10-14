@@ -5,7 +5,7 @@ import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import type { BankInsightsPayload } from '../../data/bankInsights';
-import { buildCompactBankResponseWindows, bankResponseDecisionLabel, type CompactBankResponseRow } from '../../data/bankResponseModel';
+import { buildCompactBankResponseWindows, type CompactBankResponseRow } from '../../data/bankResponseModel';
 import type { BankRateChartModel } from '../../data/bankRateOverview';
 import type { RbaCalendar } from '../../data/rbaCalendar';
 import { useStore } from '../../data/store';
@@ -21,13 +21,15 @@ import { SegmentedControl } from '../controls';
 import { responsiveScreenContentStyle } from '../Screen';
 import { AppText, Row } from '../ui';
 import { BankRatesPanel, type BankRatesAuditState } from './BankRatesPanel';
+import { uiLabel,  uiDate, uiJoin, uiProviderName } from '../../lib/uiCopy';
+import { uiChartBps, uiChartPercent, uiChartPp, uiResponseDays } from '../../lib/chartUiCopy';
 
 function DecisionArrow({ newer, disabled, onPress }: { newer: boolean; disabled: boolean; onPress: () => void }) {
   const theme = useTheme();
   return <Pressable
     onPress={onPress}
     accessibilityRole="button"
-    accessibilityLabel={newer ? 'Newer RBA decision' : 'Older RBA decision'}
+    accessibilityLabel={newer ? 'Next date' : 'Previous date'}
     accessibilityState={{ disabled }}
     disabled={disabled}
     style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.4 : 1 }}
@@ -38,16 +40,16 @@ function DecisionArrow({ newer, disabled, onPress }: { newer: boolean; disabled:
 
 const CompactRow = memo(function CompactRow({ row }: { row: CompactBankResponseRow }) {
   const theme = useTheme();
-  const move = row.movePp == null ? '—' : `${row.movePp > 0 ? '+' : row.movePp < 0 ? '−' : ''}${Math.abs(row.movePp).toFixed(2)} pp`;
-  const after = row.daysAfter == null ? '—' : `${row.daysAfter}d`;
+  const move = uiChartPp(row.movePp);
+  const after = uiResponseDays(row.daysAfter);
   return <View
     accessible
-    accessibilityLabel={`${row.provider}. First observed move ${row.movePp == null ? 'not observed' : move}, ${row.daysAfter == null ? 'timing unavailable' : `${row.daysAfter} days after the decision`}.`}
+    accessibilityLabel={uiJoin(uiProviderName(row), ' · ', 'First move', ' · ', move, ' · ', 'After', ' · ', after)}
     style={{ minHeight: 64, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderColor: theme.colors.border }}
   >
     <Row gap={7} style={{ width: '54%', minWidth: 0 }}>
       <BankAvatar provider={row.provider} size={28} />
-      <AppText variant="small" weight="600" style={{ minWidth: 0, flex: 1 }}>{row.provider}</AppText>
+      <AppText variant="small" weight="600" style={{ minWidth: 0, flex: 1 }}>{uiProviderName(row)}</AppText>
     </Row>
     <AppText variant="small" weight="600" style={{ width: '28%', textAlign: 'right', fontVariant: ['tabular-nums'] }}>{move}</AppText>
     <AppText variant="small" color="textMuted" style={{ width: '18%', textAlign: 'right' }}>{after}</AppText>
@@ -179,28 +181,24 @@ export function BankResponseDashboard({
     emptyStateRendered: chartAuditState?.emptyStateRendered ?? false,
   });
   const overview = <BankRatesPanel section={section} onSectionChange={setSection} selectedProvider={selectedProvider} onProviderChange={setSelectedProvider} onModelChange={setChartModel} onAuditStateChange={setChartAuditState} />;
-  if (!active) return <ScrollView contentContainerStyle={{ ...responsiveScreenContentStyle(width), paddingVertical: 24, gap: 28 }}>{overview}<AppText>No recorded RBA decisions overlap the available history.</AppText></ScrollView>;
+  if (!active) return <ScrollView contentContainerStyle={{ ...responsiveScreenContentStyle(width), paddingVertical: 24, gap: 28 }}>{overview}<AppText>{uiLabel("No observations")}</AppText></ScrollView>;
 
   const header = <View style={{ gap: 28, paddingBottom: 16 }}>
     {overview}
     <View style={{ gap: 16 }}>
       <View style={{ gap: 8 }}>
-        <AppText variant="h2" accessibilityRole="header">Response to the RBA</AppText>
+        <AppText variant="h2" accessibilityRole="header">{uiLabel("Response")}</AppText>
         <AppText variant="small" color="textMuted">
-          First observed advertised product move after each decision.
+          {uiJoin('Basis', ' · ', 'First move', ' · ', 'Advertised rate')}
         </AppText>
       </View>
       <Row style={{ alignItems: 'center', justifyContent: 'space-between' }}>
         <DecisionArrow newer={false} disabled={decisionIndex >= windows.length - 1} onPress={() => setDecisionIndex((index) => Math.min(windows.length - 1, index + 1))} />
         <View style={{ flex: 1, alignItems: 'center' }}>
-          <AppText variant="tiny" color="textMuted">{active.decision.date}</AppText>
-          <AppText variant="h3" style={{ textAlign: 'center' }}>{bankResponseDecisionLabel(active.decision)}</AppText>
+          <AppText variant="tiny" color="textMuted">{uiDate(active.decision.date)}</AppText>
+          <AppText variant="h3" style={{ textAlign: 'center' }}>{uiJoin(uiChartBps(active.decision.delta_bps), ' · ', uiChartPercent(active.decision.rate))}</AppText>
           <AppText variant="tiny" color="textMuted">
-            {active.partialHistory
-              ? `Partial history from ${active.observationStart}`
-              : active.open
-                ? `Observed to ${active.observedThrough}`
-                : `Window ended ${active.windowEnd}`}
+            {uiJoin(active.partialHistory ? 'Partial' : active.open ? 'Open window' : 'Closed window', ' · ', active.partialHistory ? uiDate(active.observationStart) : active.open ? uiDate(active.observedThrough) : uiDate(active.windowEnd))}
           </AppText>
         </View>
         <DecisionArrow newer disabled={decisionIndex <= 0} onPress={() => setDecisionIndex((index) => Math.max(0, index - 1))} />
@@ -208,9 +206,9 @@ export function BankResponseDashboard({
       <SegmentedControl options={sectionOptions} value={section} onChange={setSection} />
     </View>
     <View style={{ flexDirection: 'row', paddingBottom: 5 }}>
-      <AppText variant="tiny" color="textFaint" weight="600" style={{ width: '54%' }}>Bank · A–Z</AppText>
-      <AppText variant="tiny" color="textFaint" weight="600" style={{ width: '28%', textAlign: 'right' }}>Move</AppText>
-      <AppText variant="tiny" color="textFaint" weight="600" style={{ width: '18%', textAlign: 'right' }}>After</AppText>
+      <AppText variant="tiny" color="textFaint" weight="600" style={{ width: '54%' }}>{uiLabel("Bank A–Z")}</AppText>
+      <AppText variant="tiny" color="textFaint" weight="600" style={{ width: '28%', textAlign: 'right' }}>{uiLabel("Changes")}</AppText>
+      <AppText variant="tiny" color="textFaint" weight="600" style={{ width: '18%', textAlign: 'right' }}>{uiLabel("After")}</AppText>
     </View>
   </View>;
   return <View style={{ ...responsiveScreenContentStyle(width), flex: 1 }}><FlashList
@@ -220,7 +218,7 @@ export function BankResponseDashboard({
     renderItem={({ item }) => <CompactRow row={item} />}
     ListHeaderComponent={header}
     ListEmptyComponent={
-      <AppText variant="small" color="textMuted">No bank moves were observed in this response window.</AppText>
+      <AppText variant="small" color="textMuted">{uiLabel("No observed move")}</AppText>
     }
     contentContainerStyle={{ paddingTop: 24, paddingBottom: 36 }}
     onLayout={(event) => {

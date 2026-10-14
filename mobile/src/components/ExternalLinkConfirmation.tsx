@@ -1,4 +1,5 @@
-import React, { createContext, type ReactNode, useCallback, useContext, useState } from 'react';
+import type { UiChild } from '../lib/uiCopy';
+import React, { createContext, useCallback, useContext, useState } from 'react';
 import { Linking, Modal, Pressable, View } from 'react-native';
 
 import {
@@ -9,6 +10,7 @@ import {
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Row } from './ui';
+import { uiIdentifier, uiLabel } from '../lib/uiCopy';
 
 interface TrustedExternalUrlContextValue {
   requestExternalUrl: (request: TrustedExternalUrlRequest) => void;
@@ -50,7 +52,7 @@ export function ExternalLinkConfirmation({
         <Pressable
           testID="external-link-backdrop"
           onPress={opening ? undefined : onClose}
-          accessibilityLabel="Stay in Australian Rates"
+          accessibilityLabel="Cancel"
           style={{
             position: 'absolute',
             top: 0,
@@ -74,13 +76,10 @@ export function ExternalLinkConfirmation({
           }}
         >
           <AppText variant="h3">
-            {isError ? 'Link unavailable' : 'Open external website?'}
+            {uiLabel(isError ? 'Link unavailable' : 'Open external website')}
           </AppText>
           {state?.kind === 'confirm' ? (
             <>
-              <AppText variant="small" color="textMuted" style={{ marginTop: 8, lineHeight: 20 }}>
-                {state.trusted.label} will open outside Australian Rates.
-              </AppText>
               <AppText
                 testID="external-link-host"
                 variant="body"
@@ -88,19 +87,7 @@ export function ExternalLinkConfirmation({
                 selectable
                 style={{ marginTop: 12 }}
               >
-                {state.trusted.host}
-              </AppText>
-              <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 17 }}>
-                Check the destination before continuing. The external site has its own privacy and security practices.
-              </AppText>
-            </>
-          ) : state?.kind === 'error' ? (
-            <>
-              <AppText variant="small" color="textMuted" style={{ marginTop: 8, lineHeight: 20 }}>
-                {state.message}
-              </AppText>
-              <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 17 }}>
-                Stay in the app or choose another official source.
+                {uiIdentifier(state.trusted.host)}
               </AppText>
             </>
           ) : null}
@@ -135,7 +122,7 @@ export function TrustedExternalUrlProvider({
   children,
   openUrl = openExternalUrl,
 }: {
-  children: ReactNode;
+  children: UiChild;
   openUrl?: (url: string) => Promise<unknown>;
 }) {
   const [dialog, setDialog] = useState<DialogState | null>(null);

@@ -1,9 +1,8 @@
 import React, { useMemo } from 'react';
 import { View } from 'react-native';
 
-import { SECTIONS } from '../constants';
 import { humanizeEnum } from '../data/format';
-import { compareLvrTiers, lvrTierDisplay } from '../data/lvrTier';
+import { compareLvrTiers } from '../data/lvrTier';
 import {
   PROFILE_FEATURE_OPTIONS,
   PROFILE_GROUPS,
@@ -14,12 +13,18 @@ import { useStore } from '../data/store';
 import type { SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Chip, Row } from './ui';
+import { uiListedLvr } from '../lib/financialUiCopy';
+import { uiLabel, type UiLabel } from '../lib/uiCopy';
 
 type EditorGroup = {
   section: SectionKey;
   title: string;
   key: keyof ProfileFilters;
   options: string[];
+};
+const GROUP_LABELS: Readonly<Record<keyof ProfileFilters, UiLabel>> = {
+  loanPurposes: 'Loan purpose', rateTypes: 'Rate type', repaymentTypes: 'Repayment', lvrTiers: 'LVR',
+  depositKinds: 'Account type', interestPayments: 'Interest paid', accountFeatures: 'Features',
 };
 
 /** Chip groups for the saved product profile — shared by onboarding and the Profile screen. */
@@ -89,22 +94,17 @@ export function ProfileEditor({
                 color="textFaint"
                 style={{ marginBottom: 8, letterSpacing: 0.6 }}
               >
-                {SECTIONS[g.section].title.toUpperCase()}
+                {uiLabel(g.section === 'Mortgage' ? 'Home loans' : g.section === 'Savings' ? 'Savings' : 'Term deposits')}
               </AppText>
             ) : null}
             <AppText variant="small" weight="700" style={{ marginBottom: theme.spacing(2) }}>
-              {g.title}
+              {GROUP_LABELS[g.key]}
             </AppText>
-            {g.key === 'accountFeatures' ? (
-              <AppText variant="tiny" color="textFaint" style={{ marginBottom: theme.spacing(2) }}>
-                Narrow the next search to products that include these — leave empty for any.
-              </AppText>
-            ) : null}
             <Row gap={8} style={{ flexWrap: 'wrap' }}>
               {g.options.map((o) => (
                 <Chip
                   key={o}
-                  label={g.key === 'lvrTiers' ? lvrTierDisplay(o) : humanizeEnum(o)}
+                  label={g.key === 'lvrTiers' ? uiListedLvr({ lvr_tier: o }) : humanizeEnum(o)}
                   selected={value[g.key].includes(o)}
                   onPress={() => toggle(g.key, o)}
                 />

@@ -1,3 +1,4 @@
+import { uiLabel } from '../../lib/uiCopy';
 import React from 'react';
 import { Alert } from 'react-native';
 
@@ -15,26 +16,23 @@ export function AccountSecurityRows({
   const handleAppLockChange = async (next: boolean) => {
     if (next && !(await biometricsAvailable())) {
       Alert.alert(
-        'No screen lock set up',
-        'Add a fingerprint, face unlock, or device PIN in your system settings first.',
+        'Device lock required',
+        'Device settings',
       );
       return;
     }
-    if (await authenticateBiometric(next ? 'Confirm to enable app lock' : 'Confirm to disable app lock')) {
+    if (await authenticateBiometric('Confirm app lock')) {
       onAppLockChange(next);
     }
   };
 
   return (
     <>
-      <AppText variant="tiny" color="textFaint" style={{ lineHeight: 16 }}>
-        No account required. Your rates and scenarios stay on this device.
-      </AppText>
+      <AppText variant="tiny" color="textFaint">{uiLabel("Local only")}</AppText>
       <SettingsGap size={10} />
       <ToggleRow
         icon="finger-print"
         label="App lock"
-        sub="Require unlock when opening the app"
         value={appLockEnabled}
         onChange={(v) => void handleAppLockChange(v)}
       />

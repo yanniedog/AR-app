@@ -118,7 +118,7 @@ jest.mock('../src/hooks/useLogoReadiness', () => ({
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 1 }));
 jest.mock('../src/hooks/useUserRateScenario', () => ({
   useUserRateScenario: () => ({
-    scenario: { currentProducts: { mortgage: { provider: null, productKey: null } } },
+    scenario: jest.requireActual('../src/data/userRateScenario').EMPTY_USER_RATE_SCENARIO,
   }),
 }));
 jest.mock('../src/lib/nav', () => ({ openBank: jest.fn(), openRateReceipt: jest.fn() }));
@@ -151,14 +151,12 @@ describe('Product detail save eligibility', () => {
     });
     expect(header.root.findAllByProps({ accessibilityLabel: 'Save all product variants to Saved' })).toHaveLength(0);
     const bodySave = tree.root.findByProps({ title: 'Save' });
-    const allRatesSave = tree.root.findByProps({ title: 'Watch all rates for this product' });
+    expect(tree.root.findAllByProps({ title: 'Save all rates' })).toHaveLength(0);
 
     expect(() => {
       act(() => bodySave.props.onPress());
-      act(() => allRatesSave.props.onPress());
     }).not.toThrow();
     expect(toggleSavedRate).toHaveBeenNthCalledWith(1, row, 'product');
-    expect(toggleSavedRate).toHaveBeenNthCalledWith(2, row, 'product');
 
     act(() => header.unmount());
     act(() => tree.unmount());
@@ -169,11 +167,10 @@ describe('Product detail save eligibility', () => {
     mockRoute.key = f.productKey; mockRoute.ri = '5';
     let tree!: InspectableRenderer;
     await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
-    const disclosure = tree.root.findAllByType('Disclosure').find(node => node.props.title === 'Rate conditions')!;
-    expect(disclosure.props.summary).toBe('1 published item');
-    act(() => disclosure.props.onToggle());
     const visible = tree.root.findAllByType('AppText').map(node => String(node.props.children ?? '')).join('\n');
-    expect(visible).toContain('For balances of over 1 million dollars');
+    expect(visible).toContain('Source review required');
+    expect(visible).toContain('/data/depositRates/4/tiers/0/applicabilityConditions/additionalInfo');
+    expect(visible).not.toContain('/data/depositRates/0/tiers/0/applicabilityConditions/additionalInfo');
     expect(visible).not.toContain('For balances of 1 million dollars and under');
     act(() => tree.unmount());
   });
@@ -200,7 +197,7 @@ it('opens verified details-only product through the actual route without fabrica
   Object.assign(mockState, { core: f.core, coreIntegrity: f.coreIntegrity, manifest: f.manifest, details: f.details, detailsLoading: false });
   mockRoute.key = key; delete mockRoute.ri;
   let tree!: InspectableRenderer; await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
-  expect(tree.root.findAllByType('AppText').map(node => String(node.props.children ?? '')).join(' ')).toContain('Published descriptive text');
+  expect(tree.root.findAllByType('AppText').map(node => String(node.props.children ?? '')).join(' ')).not.toContain('Published descriptive text');
   expect(tree.root.findAllByType('ProductRatesList')).toHaveLength(0);
   expect(tree.root.findAllByType('OfficialLinks')).toHaveLength(1);
   expect(tree.root.findAllByType('ProductTermsDisclosure')[0].props.productKey).toBe(key);

@@ -12,10 +12,11 @@ import type { RateRow } from '../../types';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from '../ui';
+import { uiJoin, uiLabel, uiProductName, uiProviderName, type UiCopy, type UiText } from '../../lib/uiCopy';
 
-function selectionLabel(value: CurrentProductReference): string {
-  if (value.provider === NOT_LISTED_PROVIDER) return 'Not listed';
-  return value.provider || 'Select bank';
+function selectionLabel(value: CurrentProductReference): UiText {
+  if (value.provider === NOT_LISTED_PROVIDER) return uiLabel('Not listed');
+  return value.provider ? uiProviderName({ provider: value.provider }) : uiLabel('Select bank');
 }
 
 export function CurrentBankPicker({
@@ -25,7 +26,7 @@ export function CurrentBankPicker({
   onChange,
   editable = true,
 }: {
-  label: string;
+  label: UiCopy;
   rows: RateRow[];
   value: CurrentProductReference;
   onChange: (value: CurrentProductReference) => void;
@@ -36,15 +37,14 @@ export function CurrentBankPicker({
   if (value.productKey && !mandatoryProductAllowed(value.productKey)) value = { provider: '', productKey: '', rateIndex: null };
   const reducedMotion = useReducedMotion();
   const [open, setOpen] = useState<'bank' | 'product' | null>(null);
-  const providers = useMemo(
-    () => open === 'bank' ? alphabeticalScenarioProviders(rows) : [],
-    [open, rows, revision],
-  );
+  const providers = useMemo(() => { void revision; return open === 'bank' ? alphabeticalScenarioProviders(rows) : []; }, [open, rows, revision]);
   const products = useMemo(() => {
+    void revision;
     if (open !== 'product' || !value.provider || value.provider === NOT_LISTED_PROVIDER) return [];
     return currentProductOptions(rows, value.provider);
   }, [open, rows, value.provider, revision]);
   const selectedProduct = useMemo(() => {
+    void revision;
     if (!value.productKey) return undefined;
     return mandatoryEligibleRows(rows).find((row) =>
       row.product_key === value.productKey && (row.rate_index ?? null) === value.rateIndex,
@@ -69,8 +69,7 @@ export function CurrentBankPicker({
       <Pressable
         onPress={() => editable && setOpen('bank')}
         accessibilityRole="button"
-        accessibilityLabel={`${label}, ${selectionLabel(value)}`}
-        accessibilityHint="Opens an alphabetically sorted bank list"
+        accessibilityLabel={uiJoin(label, ', ', selectionLabel(value))}
         accessibilityState={{ disabled: !editable }}
         style={({ pressed }) => ({
           minHeight: 48,
@@ -91,17 +90,16 @@ export function CurrentBankPicker({
         <Pressable
           onPress={() => editable && setOpen('product')}
           accessibilityRole="button"
-          accessibilityLabel={`Current product, ${selectedProduct?.product_name ?? 'not matched'}`}
-          accessibilityHint="Optional. Match the exact current product tier for published fee evidence."
+          accessibilityLabel={uiJoin('Current product', ', ', selectedProduct ? uiProductName(selectedProduct) : uiLabel('No exact match'))}
           accessibilityState={{ disabled: !editable }}
           style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1, paddingVertical: 3 })}
         >
           <AppText variant="small" color="primary" weight="700">
-            {selectedProduct ? selectedProduct.product_name : 'Match current product (optional)'}
+            {selectedProduct ? uiProductName(selectedProduct) : uiLabel('Choose product')}
           </AppText>
           {selectedProduct ? (
             <AppText variant="tiny" color="textMuted">
-              {formatRate(selectedProduct.rate)} advertised{selectedProduct.comparison_rate ? ` · ${formatRate(selectedProduct.comparison_rate)} comparison` : ''}
+              {uiJoin('Advertised', ' ', formatRate(selectedProduct.rate), selectedProduct.comparison_rate ? uiJoin(' · ', 'Comparison', ' ', formatRate(selectedProduct.comparison_rate)) : null)}
             </AppText>
           ) : null}
         </Pressable>
@@ -124,9 +122,6 @@ export function CurrentBankPicker({
             <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <View style={{ flex: 1 }}>
                 <AppText variant="h3">{modalTitle}</AppText>
-                <AppText variant="tiny" color="textMuted">
-                  {open === 'bank' ? 'Banks are listed A–Z.' : 'Optional published-data match.'}
-                </AppText>
               </View>
               <Button title="Close" variant="ghost" onPress={() => setOpen(null)} />
             </Row>
@@ -149,7 +144,7 @@ export function CurrentBankPicker({
                         opacity: pressed ? 0.65 : 1,
                       })}
                     >
-                      <AppText weight={value.provider === provider ? '800' : '500'}>{provider}</AppText>
+                      <AppText weight={value.provider === provider ? '800' : '500'}>{uiProviderName({ provider })}</AppText>
                     </Pressable>
                   ))}
                   <Pressable
@@ -163,7 +158,7 @@ export function CurrentBankPicker({
                       opacity: pressed ? 0.65 : 1,
                     })}
                   >
-                    <AppText weight="700">Not listed</AppText>
+                    <AppText weight="700">{uiLabel("Not listed")}</AppText>
                   </Pressable>
                 </>
               ) : open === 'product' ? (
@@ -174,7 +169,7 @@ export function CurrentBankPicker({
                     accessibilityState={{ checked: !value.productKey }}
                     style={{ minHeight: 48, justifyContent: 'center', paddingHorizontal: 10 }}
                   >
-                    <AppText weight="700">No exact match</AppText>
+                    <AppText weight="700">{uiLabel("No exact match")}</AppText>
                   </Pressable>
                   {products.map((row) => {
                     const checked = row.product_key === value.productKey && (row.rate_index ?? null) === value.rateIndex;
@@ -184,7 +179,7 @@ export function CurrentBankPicker({
                         onPress={() => chooseProduct(row)}
                         accessibilityRole="radio"
                         accessibilityState={{ checked }}
-                        accessibilityLabel={`${row.product_name}, ${formatRate(row.rate)} advertised rate`}
+                        accessibilityLabel={uiJoin(uiProductName(row), ', ', 'Advertised rate', ' ', formatRate(row.rate))}
                         style={({ pressed }) => ({
                           minHeight: 56,
                           justifyContent: 'center',
@@ -195,9 +190,9 @@ export function CurrentBankPicker({
                           opacity: pressed ? 0.65 : 1,
                         })}
                       >
-                        <AppText weight={checked ? '800' : '500'}>{row.product_name}</AppText>
+                        <AppText weight={checked ? '800' : '500'}>{uiProductName(row)}</AppText>
                         <AppText variant="tiny" color="textMuted">
-                          {formatRate(row.rate)} advertised{row.comparison_rate ? ` · ${formatRate(row.comparison_rate)} comparison` : ''}
+                            {uiJoin('Advertised', ' ', formatRate(row.rate), row.comparison_rate ? uiJoin(' · ', 'Comparison', ' ', formatRate(row.comparison_rate)) : null)}
                         </AppText>
                       </Pressable>
                     );

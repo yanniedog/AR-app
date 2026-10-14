@@ -6,6 +6,8 @@ import { loadProductTerms } from '../../data/productTermsTransport';
 import { canonicalTermsComparison } from '../../data/canonicalTermsComparison';
 import { useStore } from '../../data/store';
 import { AppText, Button, Disclosure } from '../ui';
+import { uiCount, uiDate, uiIdentifier, uiJoin, uiLabel, uiProductName, uiProviderName } from '../../lib/uiCopy';
+import { uiCanonicalTermValue } from './engineComparisonUi';
 import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
 import { useAuditExternalLinks } from '../../hooks/useAuditExternalLinks';
 
@@ -14,16 +16,16 @@ function RevisionCell({ terms, revisions }: { terms: ProductTerms; revisions: Te
   useAuditExternalLinks(revisions.flatMap((revision) => revision.clause_ids.flatMap((id) => {
     const clause = terms.clauses.find((item) => item.clause_id === id);
     const document = terms.documents.find((item) => item.document_version_id === clause?.document_version_id);
-    return document ? [{ url: document.source_url, label: revision.parameter_key, purpose: 'lender_source' as const }] : [];
+    return document ? [{ url: document.source_url, label: uiIdentifier(revision.parameter_key), purpose: 'lender_source' as const }] : [];
   })));
   return <View style={{ gap: 6 }}>
-    {revisions.length > 1 && <AppText variant="small">Multiple revisions in this scope; no single value selected.</AppText>}
+    {revisions.length > 1 && <AppText variant="small">{uiJoin('Revisions', ' · ', uiCount(revisions.length), ' · ', 'Source review required')}</AppText>}
     {revisions.map(revision => <View key={revision.term_revision_id} style={{ gap: 4 }}>
-      <AppText variant="small">{typeof revision.value === 'string' ? revision.value : JSON.stringify(revision.value)} {revision.unit ?? '(unit unknown)'}</AppText>
-      <AppText variant="tiny">Interpretation: {revision.status}. Observed {revision.observed_at}. This does not establish calculation approval.</AppText>
+      <AppText variant="small">{uiJoin(uiCanonicalTermValue(revision), ' · ', 'Unit', ' · ', uiIdentifier(revision.unit))}</AppText>
+      <AppText variant="tiny">{uiJoin('Status', ' · ', 'Verified', ' · ', 'Observed', ' · ', uiDate(revision.observed_at), ' · ', 'No approval')}</AppText>
       {revision.clause_ids.map(id => {
         const clause = terms.clauses.find(item => item.clause_id === id), document = terms.documents.find(item => item.document_version_id === clause?.document_version_id);
-        return clause ? <View key={id}><AppText variant="small">{clause.text}</AppText>{document && <Button title="Open source" variant="secondary" onPress={() => requestExternalUrl({ url: document.source_url, label: revision.parameter_key, purpose: 'lender_source' })} />}</View> : null;
+        return clause ? <View key={id}><AppText variant="small">{uiJoin('Source review required', ' · ', uiIdentifier(clause.clause_id))}</AppText>{document && <Button title="Open source" variant="secondary" onPress={() => requestExternalUrl({ url: document.source_url, label: uiIdentifier(revision.parameter_key), purpose: 'lender_source' })} />}</View> : null;
       })}
     </View>)}
   </View>;
@@ -42,21 +44,21 @@ export function CanonicalTermsComparison({ rows }: { rows: RateRow[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, identity, manifest, retry]);
   const groups = current ? canonicalTermsComparison(current.values) : [];
-  return <Disclosure title="Compare terms and conditions" summary="Matched only where documents use the same term" open={open} onToggle={() => setOpen(!open)}>
-    <AppText variant="small">Only exact parameter, unit and known scope identifiers align. Missing terms remain unknown; different scopes stay separate. Rates and eligibility are not recalculated here.</AppText>
-    {!current ? <AppText variant="small">{manifest ? 'Loading verified terms...' : 'Document terms unavailable.'}</AppText> : <>
-      {current.values.filter(item => !item.terms).map(item => <AppText key={item.productKey} variant="small">{products.find(row => row.product_key === item.productKey)?.product_name}: {item.failed ? 'Current terms could not be verified.' : 'Canonical terms not reported.'}</AppText>)}
-      {current.values.some(item => item.failed) && <Button title="Retry document terms" variant="secondary" onPress={() => setRetry(retry + 1)} />}
-      {!groups.length && <AppText variant="small">No canonical comparison rows available.</AppText>}
-      {groups.slice(0, limit).map(group => <Disclosure key={group.key} title={group.parameterKey} open={expanded === group.key} onToggle={() => setExpanded(expanded === group.key ? null : group.key)}>
-        <AppText variant="small">Unit: {group.unit ?? 'unknown'}. Tier: {group.scope.tier ?? 'unknown'}. Package: {group.scope.package ?? 'unknown'}. Group: {group.scope.cohort ?? 'unknown'}.</AppText>
-        <AppText variant="small">Effective {group.scope.effective_from ?? 'unknown'} to {group.scope.effective_to ?? 'unknown'}.</AppText>
+  return <Disclosure title="Compare terms and conditions" open={open} onToggle={() => setOpen(!open)}>
+    <AppText variant="small">{uiJoin('Basis', ' · ', 'Exact scope', ' · ', 'Eligibility unverified')}</AppText>
+    {!current ? <AppText variant="small">{uiLabel(manifest ? 'Loading' : 'Unavailable')}</AppText> : <>
+      {current.values.filter(item => !item.terms).map(item => <AppText key={item.productKey} variant="small">{uiJoin(uiProductName({ product_name: products.find(row => row.product_key === item.productKey)?.product_name ?? item.productKey }), ' · ', item.failed ? 'Unverified' : 'Unknown')}</AppText>)}
+      {current.values.some(item => item.failed) && <Button title="Retry" variant="secondary" onPress={() => setRetry(retry + 1)} />}
+      {!groups.length && <AppText variant="small">{uiLabel('No results')}</AppText>}
+      {groups.slice(0, limit).map(group => <Disclosure key={group.key} title={uiIdentifier(group.parameterKey)} open={expanded === group.key} onToggle={() => setExpanded(expanded === group.key ? null : group.key)}>
+        <AppText variant="small">{uiJoin('Unit', ' · ', uiIdentifier(group.unit), ' · ', 'Tier', ' · ', uiIdentifier(group.scope.tier), ' · ', 'Package', ' · ', uiIdentifier(group.scope.package), ' · ', 'Group', ' · ', uiIdentifier(group.scope.cohort))}</AppText>
+        <AppText variant="small">{uiJoin('Effective from', ' · ', uiDate(group.scope.effective_from), ' · ', 'Effective to', ' · ', uiDate(group.scope.effective_to))}</AppText>
         {products.map(row => { const terms = current.values.find(item => item.productKey === row.product_key)?.terms, revisions = group.cells[row.product_key]; return <View key={row.product_key} style={{ gap: 4 }}>
-          <AppText weight="700">{row.provider}: {row.product_name}</AppText>
-          {terms && revisions ? <RevisionCell terms={terms} revisions={revisions} /> : <AppText variant="small">Unknown in this exact scope.</AppText>}
+          <AppText weight="700">{uiJoin(uiProviderName(row), ' · ', uiProductName(row))}</AppText>
+          {terms && revisions ? <RevisionCell terms={terms} revisions={revisions} /> : <AppText variant="small">{uiLabel('Unknown')}</AppText>}
         </View>; })}
       </Disclosure>)}
-      {groups.length > limit && <Button title={`Show more terms (${groups.length - limit} remaining)`} variant="secondary" onPress={() => setLimit(limit + 30)} />}
+      {groups.length > limit && <Button title={uiJoin('More', ' · ', uiCount(groups.length - limit))} variant="secondary" onPress={() => setLimit(limit + 30)} />}
     </>}
   </Disclosure>;
 }

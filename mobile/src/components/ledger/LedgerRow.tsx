@@ -1,3 +1,4 @@
+import type { UiChild } from '../../lib/uiCopy';
 import React from 'react';
 import {
   StyleSheet,
@@ -12,12 +13,13 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { LedgerIcon } from '../icons/LedgerIcon';
 import { LedgerText } from './LedgerText';
 import { PressFeedback } from '../PressFeedback';
+import type { UiCopy, UiNativeProps } from '../../lib/uiCopy';
 
-export interface LedgerRowProps extends Omit<PressableProps, 'children' | 'style'> {
-  title: string;
-  detail?: string;
-  leading?: React.ReactNode;
-  trailing?: React.ReactNode;
+export interface LedgerRowProps extends Omit<UiNativeProps<PressableProps>, 'children' | 'style'> {
+  title: UiCopy;
+  detail?: UiCopy;
+  leading?: UiChild;
+  trailing?: UiChild;
   separator?: boolean;
   style?: StyleProp<ViewStyle>;
 }

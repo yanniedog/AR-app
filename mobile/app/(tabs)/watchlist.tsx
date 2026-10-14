@@ -1,3 +1,4 @@
+import { uiCount, uiDate, uiInputNumber, uiJoin, uiLabel, uiNumber, uiSectionName, type UiCopy, type UiText } from "../../src/lib/uiCopy";
 import { mandatoryEligibleRows, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
 import { fontStyle } from '../../src/theme/fonts';
 import Ionicons from '../../src/components/icons/AppIcon';
@@ -16,7 +17,7 @@ import { SECTION_ORDER, SECTIONS } from '../../src/constants';
 import { computeLvr } from '../../src/data/calc';
 import { toggleCompareSelection } from '../../src/data/compareSelection';
 import { percentageInputFraction } from '../../src/data/decisionInsights';
-import { formatRate, formatRateChangeDate, formatRunDate, toFraction } from '../../src/data/format';
+import { formatRate, toFraction } from '../../src/data/format';
 import { ensurePermissions } from '../../src/data/notifications';
 import {
   lvrTierForValue,
@@ -52,7 +53,7 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import type { RateRow, SectionKey } from '../../src/types';
-import { SAVED_EMPTY_COPY, savedEmptyState } from '../../src/lib/savedEmptyState';
+import { savedEmptyState } from '../../src/lib/savedEmptyState';
 
 function compareToken(productKey: string, rateIndex: number | null): string {
   return rateIndex == null ? productKey : `${rateIndex}#${productKey}`;
@@ -72,18 +73,18 @@ interface DateEditorState {
   value: string;
 }
 
-function positionHeadline(position: RatePosition): string {
-  if (!position.ready) return 'Matching today’s observed rates…';
+function positionHeadline(position: RatePosition): UiCopy {
+  if (!position.ready) return 'Matching';
   if (position.matchedRate == null || position.gapRate == null) {
-    return 'No matched comparison is available today';
+    return 'Matched rate unavailable';
   }
-  if (position.gapRate <= 0) return 'No better matched rate observed today';
-  return `${(position.gapRate * 100).toFixed(2)} percentage point gap`;
+  if (position.gapRate <= 0) return 'No better matched rate';
+  return uiJoin('Gap',': ',uiNumber(position.gapRate*100,2),' ','percentage points');
 }
 
-function dateLabel(tracked: TrackedRate | undefined): string | null {
+function dateLabel(tracked: TrackedRate | undefined): UiText | null {
   if (!tracked?.relevantDate || !tracked.relevantDateKind) return null;
-  return `${tracked.relevantDateKind === 'term-maturity' ? 'Matures' : 'Fixed rate ends'} ${formatRunDate(tracked.relevantDate)}`;
+  return uiJoin(tracked.relevantDateKind==='term-maturity'?'Matures':'Fixed rate ends',': ',uiDate(tracked.relevantDate));
 }
 
 let auditSavedFixtureSnapshot: {
@@ -226,15 +227,15 @@ export default function MyRates() {
     if (!core) return;
     const update = toggleCompareSelection(core, selected, token);
     if (update.rejection === 'limit_reached') {
-      Alert.alert('Compare up to four', 'Remove one product before adding another.');
+      Alert.alert('Maximum 4 rates');
       return;
     }
     if (update.rejection === 'category_mismatch') {
-      Alert.alert('Choose one rate category', 'Compare home loans, savings accounts, or term deposits separately.');
+      Alert.alert('Mixed rate categories');
       return;
     }
     if (update.rejection === 'unavailable') {
-      Alert.alert('Rate unavailable', 'Refresh Saved and choose a current rate.');
+      Alert.alert('Rate unavailable');
       return;
     }
     setSelected(update.tokens);
@@ -314,7 +315,7 @@ export default function MyRates() {
     }
     const permitted = await ensurePermissions();
     if (!permitted) {
-      Alert.alert('Notifications disabled', 'Enable notifications for Australian Rates in system settings.');
+      Alert.alert('Notifications disabled');
       return;
     }
     if (!notificationsEnabled) setPref('notificationsEnabled', true);
@@ -395,7 +396,7 @@ export default function MyRates() {
     removeSavedRate(id);
     setSelected((prev) => prev.filter((token) =>
       token !== compareToken(item.row.product_key, item.row.rate_index ?? null)));
-    showUndo(`Removed ${item.row.product_name}`, () => {
+    showUndo('Removed', () => {
       restoreSavedRate(item.ref, tracked);
     });
   }, [items, removeSavedRate, restoreSavedRate, showUndo, trackedById]);
@@ -411,10 +412,8 @@ export default function MyRates() {
       setDateEditor(null);
     } catch (error) {
       Alert.alert(
-        error instanceof RangeError ? 'Check the date' : 'Date not saved',
-        error instanceof RangeError
-          ? 'Enter a real date as YYYY-MM-DD.'
-          : 'Secure device storage was unavailable. Your previous date is unchanged.',
+        error instanceof RangeError ? 'Invalid date' : 'Date not saved',
+        error instanceof RangeError ? 'YYYY-MM-DD' : 'Storage unavailable · Previous date retained',
       );
     }
   }, [dateEditor, setTrackedRateRelevantDate]);
@@ -427,7 +426,8 @@ export default function MyRates() {
     return (
       <Screen onLayout={() => setLayoutReady(true)}>
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 12 }}>
-          <EmptyState icon="star-outline" {...SAVED_EMPTY_COPY[emptyState]} />
+          <EmptyState icon="star-outline" title={uiLabel(emptyState === 'unavailable'
+            ? 'Saved rate unavailable' : emptyState === 'hiddenByProfile' ? 'Hidden by profile' : 'No saved rates')} />
           {emptyState === 'unavailable' ? (
             <Button
               title="Remove unavailable save"
@@ -438,8 +438,8 @@ export default function MyRates() {
           {emptyState === 'hiddenByProfile' ? (
             <Button title="Edit profile" variant="secondary" onPress={() => router.push('/profile')} />
           ) : null}
-          <Button title="Check my rate" onPress={() => openRateEditor('Mortgage')} />
-          <Button title="Browse products" variant="secondary" onPress={() => router.push('/(tabs)/browse')} />
+          <Button title="Rate check" onPress={() => openRateEditor('Mortgage')} />
+          <Button title="Rates" variant="secondary" onPress={() => router.push('/(tabs)/browse')} />
         </View>
       </Screen>
     );
@@ -450,19 +450,11 @@ export default function MyRates() {
       <ScreenScrollView
         ref={scrollRef}
         showDataHealthBanner={false}
-        contentContainerStyle={{ paddingBottom: snack ? 96 : 48, gap: 24 }}
+        contentContainerStyle={{ paddingBottom: snack ? 96 : 48, gap: 16 }}
       >
-        <SectionHeading
-          title="Saved products"
-          subtitle="Follow rates, manage alerts and compare your shortlist."
-        />
-
         {profileDetailsPending && !detailsLoading ? (
           <Card variant="outlined" style={{ gap: theme.spacing(2) }}>
-            <AppText variant="small" weight="700">Matching details unavailable</AppText>
-            <AppText variant="tiny" color="textMuted">
-              Account-feature matching needs the product details file.
-            </AppText>
+            <AppText variant="small" weight="700">{uiLabel("Matching details unavailable")}</AppText>
             <Button
               title="Retry matching"
               variant="secondary"
@@ -473,12 +465,9 @@ export default function MyRates() {
 
         <SectionHeading
           title="Saved rates"
-          subtitle={items.length
-            ? `${items.length} saved ${items.length === 1 ? 'rate' : 'rates'}`
-            : 'Save a rate to follow its changes'}
           action={items.length >= 2 ? (
             <Button
-              title={selectMode ? 'Done' : 'Compare'}
+              title={uiLabel(selectMode ? 'Done' : 'Compare')}
               variant="secondary"
               onPress={toggleCompareMode}
             />
@@ -487,24 +476,22 @@ export default function MyRates() {
         {unavailableRefs.length ? (
           <View style={{ gap: 8 }}>
             <AppText variant="small" color="textMuted">
-              {unavailableRefs.length} watched {unavailableRefs.length === 1 ? 'tier is' : 'tiers are'} unavailable and hidden rather than replaced.
+              {uiJoin('Unavailable tiers',': ',uiCount(unavailableRefs.length))}
             </AppText>
             <Button
-              title={`Remove unavailable ${unavailableRefs.length === 1 ? 'tier' : 'tiers'}`}
+              title="Remove unavailable saves"
               variant="secondary"
               onPress={() => unavailableRefs.forEach((ref) => removeSavedRate(ref.id))}
             />
           </View>
         ) : null}
         {selectMode && selected.length >= 2 ? (
-          <Button title={`Compare ${selected.length}`} icon="git-compare" onPress={openSelectedCompare} />
+          <Button title={uiJoin('Compare',' ',uiCount(selected.length))} icon="git-compare" onPress={openSelectedCompare} />
         ) : null}
         {!items.length ? (
           <Card variant="outlined" style={{ gap: theme.spacing(3) }}>
-            <AppText variant="small" color="textMuted">
-              No watched tiers yet. Save an exact tier from a product or browse rates.
-            </AppText>
-            <Button title="Browse products" variant="secondary" onPress={() => router.push('/(tabs)/browse')} />
+            <AppText variant="small" color="textMuted">{uiLabel("No saved tiers")}</AppText>
+            <Button title="Rates" variant="secondary" onPress={() => router.push('/(tabs)/browse')} />
           </Card>
         ) : null}
         {SECTION_ORDER.map((groupSection) => {
@@ -513,7 +500,7 @@ export default function MyRates() {
           return (
             <View key={groupSection} style={{ gap: 8 }}>
               <AppText variant="small" weight="700" color="textMuted">
-                {SECTIONS[groupSection].title}
+                {uiSectionName(groupSection)}
               </AppText>
               {sectionItems.map(({ ref, row, section }) => {
                 const token = compareToken(row.product_key, row.rate_index ?? null);
@@ -564,11 +551,11 @@ export default function MyRates() {
                           <View style={{ flex: 1 }}>
                             <AppText variant="tiny" color="textMuted">
                               {ref.scope === 'product'
-                                ? 'All product variants · legacy save'
+                                ? uiLabel('All product variants · Legacy save')
                                 : changeBps
-                                ? `${changeBps > 0 ? 'Up' : 'Down'} ${(Math.abs(changeBps) / 100).toFixed(2)} percentage points since watched`
-                                : `Rate last updated ${formatRateChangeDate(row.last_updated ?? core.run_date)}`}
-                              {relevantDate ? ` · ${relevantDate}` : ''}
+                                ? uiJoin(changeBps>0?'Increase':'Decrease',': ',uiNumber(Math.abs(changeBps)/100,2),' ','percentage points',' · ','Since saved')
+                                : uiJoin('Last updated',': ',uiDate(row.last_updated??core.run_date))}
+                              {relevantDate ? uiJoin(' · ',relevantDate):null}
                             </AppText>
                           </View>
                           <Button
@@ -579,7 +566,7 @@ export default function MyRates() {
                           <Pressable
                             onPress={() => void toggleAlert(row)}
                             accessibilityRole="button"
-                            accessibilityLabel={subscribed ? 'Turn rate alerts off' : 'Alert me to rate changes'}
+                            accessibilityLabel={subscribed ? uiLabel("Disable alerts") : uiLabel("Enable alerts")}
                             hitSlop={10}
                             style={({ pressed }) => ({
                               flexDirection: 'row',
@@ -594,7 +581,7 @@ export default function MyRates() {
                               color={subscribed ? theme.colors.primary : theme.colors.textMuted}
                             />
                             <AppText variant="tiny" color={subscribed ? 'primary' : 'textMuted'} weight="700">
-                              {subscribed ? 'Alerts on' : 'Alert me'}
+                              {subscribed ? uiLabel("Alerts on") : uiLabel("Alert me")}
                             </AppText>
                           </Pressable>
                           </Row>
@@ -607,10 +594,10 @@ export default function MyRates() {
                             })}
                             accessibilityRole="button"
                             accessibilityLabel={relevantDate
-                              ? `Edit ${relevantDate}`
+                              ? uiJoin('Edit',' ',relevantDate)
                               : section === 'TD'
-                                ? 'Add term deposit maturity date'
-                                : 'Add fixed rate end date'}
+                                ? uiLabel("Add term deposit maturity date")
+                                : uiLabel("Add fixed rate end date")}
                             style={({ pressed }) => ({
                               minHeight: 48,
                               marginHorizontal: theme.spacing(2),
@@ -623,7 +610,7 @@ export default function MyRates() {
                           >
                             <Ionicons name="calendar-outline" size={17} color={theme.colors.textMuted} />
                             <AppText variant="small" color="textMuted" weight="700">
-                              {relevantDate ?? (section === 'TD' ? 'Add maturity date' : 'Add fixed-rate end date')}
+                              {relevantDate ?? (section === 'TD' ? uiLabel("Add maturity date") : uiLabel("Add fixed-rate end date"))}
                             </AppText>
                           </Pressable>
                           ) : null}
@@ -636,7 +623,7 @@ export default function MyRates() {
             </View>
           );
         })}
-        <Disclosure title="Your entered rates" summary="Review rates you entered in Tools" open={positionsOpen} onToggle={() => setPositionsOpen(open => !open)}>
+        <Disclosure title="Your entered rates" open={positionsOpen} onToggle={() => setPositionsOpen(open => !open)}>
         {positions.length ? positions.map((position) => {
           const meta = SECTIONS[position.section];
           return (
@@ -646,24 +633,24 @@ export default function MyRates() {
               style={{ gap: theme.spacing(3) }}
             >
               <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                <AppText variant="small" weight="700">Your {meta.title.toLowerCase()}</AppText>
+                <AppText variant="small" weight="700">{uiSectionName(position.section)}</AppText>
                 <Pressable
                   onPress={() => openRateEditor(position.section)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Edit my ${meta.title.toLowerCase()} rate`}
+                  accessibilityLabel={uiJoin('Edit',' ',uiSectionName(position.section),' ','Rate')}
                   style={{ minHeight: 48, minWidth: 48, justifyContent: 'center', alignItems: 'flex-end' }}
                 >
-                  <AppText variant="small" color="primary" weight="700">Edit</AppText>
+                  <AppText variant="small" color="primary" weight="700">{uiLabel("Edit")}</AppText>
                 </Pressable>
               </Row>
               <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: theme.spacing(4) }}>
                 <View>
-                  <AppText variant="tiny" color="textMuted">Current entered rate</AppText>
+                  <AppText variant="tiny" color="textMuted">{uiLabel("Current entered rate")}</AppText>
                   <AppText variant="h3">{formatRate(position.currentRate)}</AppText>
                 </View>
                 {position.matchedRate != null ? (
                   <View style={{ alignItems: 'flex-end' }}>
-                    <AppText variant="tiny" color="textMuted">Matched observed rate</AppText>
+                    <AppText variant="tiny" color="textMuted">{uiLabel("Matched observed rate")}</AppText>
                     <AppText variant="h3" style={{ color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit }}>
                       {formatRate(position.matchedRate)}
                     </AppText>
@@ -672,31 +659,26 @@ export default function MyRates() {
               </Row>
               <AppText variant="body" weight="700">{positionHeadline(position)}</AppText>
               {position.ready ? (
-                <AppText variant="tiny" color="textMuted">
-                  Observed {formatRunDate(core.run_date)} · matched to your filters.
+                <AppText variant="tiny" color="textMuted">{uiJoin('Observed',': ',uiDate(core.run_date))}
                 </AppText>
               ) : null}
               {position.section === 'Mortgage' && mortgageRateMetric === 'comparison' ? (
-                <AppText variant="tiny" color="textMuted">
-                  Product matched by comparison rate; the gap uses its advertised rate.
-                </AppText>
+                <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <AppText variant="tiny" color="textMuted">{uiLabel("Match / gap basis")}</AppText>
+                  <AppText variant="tiny">{uiLabel("Comparison / advertised")}</AppText>
+                </Row>
               ) : null}
             </Card>
           );
         }) : (
           <Card variant="outlined" style={{ gap: theme.spacing(3) }}>
-            <View>
-              <AppText variant="h3">Check my rate</AppText>
-              <AppText variant="small" color="textMuted" style={{ marginTop: 2 }}>
-                See your observed gap without linking a bank account.
-              </AppText>
-            </View>
             <Button title="Add my rate" onPress={() => openRateEditor('Mortgage')} />
           </Card>
         )}
-        <AppText variant="tiny" color="textMuted">
-          Entered rates stay on this device. Observed gaps are shown in percentage points.
-        </AppText>
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <AppText variant="tiny" color="textMuted">{uiLabel("Entered rates")}</AppText>
+          <AppText variant="tiny">{uiLabel("This device")}</AppText>
+        </Row>
 
         </Disclosure>
       </ScreenScrollView>
@@ -711,23 +693,24 @@ export default function MyRates() {
           <Card accessibilityViewIsModal style={{ gap: 14 }}>
             <View>
               <AppText variant="h3">
-                {dateEditor?.kind === 'term-maturity' ? 'Term deposit maturity' : 'Fixed-rate end'}
+                {dateEditor?.kind === 'term-maturity' ? uiLabel("Term deposit maturity") : uiLabel("Fixed-rate end")}
               </AppText>
-              <AppText variant="small" color="textMuted" style={{ marginTop: 3 }}>
-                Stored privately on this device. Enter YYYY-MM-DD.
-              </AppText>
+              <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <AppText variant="tiny" color="textMuted">{uiLabel("Storage")}</AppText>
+                <AppText variant="tiny">{uiJoin('This device',' · ','Private')}</AppText>
+              </Row>
             </View>
             <TextInput
-              value={dateEditor?.value ?? ''}
+              value={uiInputNumber(dateEditor?.value??'')}
               onChangeText={(value) => setDateEditor((current) => current ? { ...current, value } : current)}
-              placeholder="2027-06-30"
+              placeholder={uiLabel('YYYY-MM-DD')}
               placeholderTextColor={theme.colors.textFaint}
               autoFocus
               autoCapitalize="none"
               autoCorrect={false}
               inputMode="numeric"
               maxLength={10}
-              accessibilityLabel="Date in year month day format"
+              accessibilityLabel="Date"
               style={{
                 ...fontStyle(),
                 minHeight: 48,

@@ -1,4 +1,6 @@
-import { formatRate, humanizeEnum } from './format';
+import { humanizeEnum } from './format';
+import { uiNormalizedProductFact } from '../lib/productUiFacts';
+import { uiCount, uiJoin, uiLabel, type UiLabel, type UiText } from '../lib/uiCopy';
 import type {
   NormalizedProductFact,
   NormalizedProductFactKind,
@@ -24,7 +26,7 @@ export type FactCriterion = FactCriterionIdentity & {
 
 export interface PublishedFactFilterOption {
   id: string;
-  label: string;
+  label: UiText;
   criterion: FactCriterion;
 }
 
@@ -202,71 +204,12 @@ export function productFactsSearchText(detail: ProductDetail | null | undefined)
   return chunks;
 }
 
-function formatNumber(value: string | number): string {
-  const number = Number(value);
-  return Number.isFinite(number)
-    ? number.toLocaleString('en-AU', { maximumFractionDigits: 2 })
-    : String(value);
+export function productFactValue(fact: NormalizedProductFact): UiText | null {
+  if (fact.value === undefined && fact.minValue === undefined && fact.maxValue === undefined && !fact.cadence) return null;
+  return uiNormalizedProductFact(fact).value;
 }
-
-function formatUnitValue(value: string | number | boolean, unit?: NormalizedProductFactUnit): string {
-  if (unit === 'boolean' || typeof value === 'boolean') return value === true || value === 'true' ? 'Yes' : 'No';
-  if (unit === 'AUD') return `$${formatNumber(value as string | number)}`;
-  if (unit && /^[A-Z]{3}$/.test(unit)) return `${unit} ${formatNumber(value as string | number)}`;
-  if (unit === 'fraction') return formatRate(value as string | number);
-  if (unit === 'duration' && typeof value === 'string') return durationValueLabel(value);
-  if (unit === 'enum') return humanizeEnum(value as string | number);
-  if (unit === 'day' || unit === 'month' || unit === 'year' || unit === 'count') {
-    const amount = formatNumber(value as string | number);
-    if (unit === 'count') return amount;
-    return `${amount} ${unit}${Number(value) === 1 ? '' : 's'}`;
-  }
-  return String(value).trim();
-}
-
-function durationParts(duration: string): string[] | null {
-  const match = /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?$/i.exec(duration.trim());
-  if (!match || !match.slice(1).some(Boolean)) return null;
-  const units = ['year', 'month', 'week', 'day'];
-  return match.slice(1).flatMap((raw, index) => {
-    if (!raw) return [];
-    const amount = Number(raw);
-    return `${amount} ${units[index]}${amount === 1 ? '' : 's'}`;
-  });
-}
-
-function durationValueLabel(duration: string): string {
-  return durationParts(duration)?.join(', ') ?? duration;
-}
-
-function cadenceLabel(cadence?: string): string {
-  if (!cadence) return '';
-  const parts = durationParts(cadence);
-  if (!parts) return cadence;
-  const singleUnit = /^1 ([a-z]+)$/.exec(parts.join(''));
-  if (singleUnit) return `per ${singleUnit[1]}`;
-  return `every ${parts.join(', ')}`;
-}
-
-export function productFactValue(fact: NormalizedProductFact): string | null {
-  let value = '';
-  if (fact.minValue !== undefined && fact.maxValue !== undefined) {
-    value = `${formatUnitValue(fact.minValue, fact.unit)}–${formatUnitValue(fact.maxValue, fact.unit)}`;
-  } else if (fact.minValue !== undefined) {
-    value = `From ${formatUnitValue(fact.minValue, fact.unit)}`;
-  } else if (fact.maxValue !== undefined) {
-    value = `Up to ${formatUnitValue(fact.maxValue, fact.unit)}`;
-  } else if (fact.value !== undefined) {
-    value = formatUnitValue(fact.value, fact.unit);
-  }
-  const cadence = cadenceLabel(fact.cadence);
-  return [value, cadence].filter(Boolean).join(' · ') || null;
-}
-
-export function productFactLabel(fact: NormalizedProductFact): string {
-  if (fact.label?.trim()) return fact.label.trim();
-  const parts = fact.canonicalKey.split(/[.:/]/).filter(Boolean);
-  return humanizeEnum(parts[parts.length - 1] ?? fact.canonicalKey);
+export function productFactLabel(fact: NormalizedProductFact): UiText {
+  return uiJoin(uiNormalizedProductFact(fact).label);
 }
 
 function factIdentityMatches(fact: NormalizedProductFact, criterion: FactCriterion): boolean {
@@ -395,13 +338,13 @@ function optionCriterion(fact: NormalizedProductFact): FactCriterion | null {
   return { ...identity, operator: 'exists' };
 }
 
-function criterionOptionLabel(fact: NormalizedProductFact, criterion: FactCriterion): string {
+function criterionOptionLabel(fact: NormalizedProductFact, criterion: FactCriterion): UiText {
   const label = productFactLabel(fact);
   if (criterion.operator === 'exists' || criterion.value === true) return label;
-  if (criterion.value === false) return `No ${label.toLowerCase()}`;
+  if (criterion.value === false) return uiJoin('No', ' ', label);
   const value = productFactValue(fact);
   if (!value) return label;
-  return `${label}: ${value}`;
+  return uiJoin(label, ': ', value);
 }
 
 /** Curated, bounded model for the collapsed FilterSheet disclosure. */
@@ -435,10 +378,10 @@ function selectedCriterionOption(criterion: FactCriterion): PublishedFactFilterO
   const id = factCriterionId(criterion);
   const rawLabel = criterion.sourceType
     ?? criterion.canonicalKey?.split('.').filter(Boolean).at(-1)
-    ?? 'Published detail';
-  const label = humanizeEnum(rawLabel) || 'Published detail';
+    ?? 'Product';
+  const label = humanizeEnum(rawLabel) || uiLabel('Product');
   if (criterion.operator === 'exists' || criterion.value === true) return { id, label, criterion };
-  if (criterion.value === false) return { id, label: `No ${label.toLowerCase()}`, criterion };
+  if (criterion.value === false) return { id, label: uiJoin('No', ' ', label), criterion };
   const displayValue = productFactValue({
     id,
     kind: 'attribute',
@@ -449,7 +392,7 @@ function selectedCriterionOption(criterion: FactCriterion): PublishedFactFilterO
   });
   return {
     id,
-    label: displayValue ? `${label}: ${displayValue}` : label,
+    label: displayValue ? uiJoin(label, ': ', displayValue) : label,
     criterion,
   };
 }
@@ -473,14 +416,14 @@ export function boundedPublishedFactFilterOptions(
 
 export interface ProductFactGroup {
   key: 'product' | 'features' | 'eligibility' | 'fees';
-  title: string;
+  title: UiLabel;
   facts: NormalizedProductFact[];
 }
 
 export interface ProductFactCluster {
   id: string;
-  label: string;
-  summary: string;
+  label: UiText;
+  summary: UiText;
   facts: NormalizedProductFact[];
 }
 
@@ -492,7 +435,7 @@ export interface ProductFactDisplayModel {
 const GROUPS: (Omit<ProductFactGroup, 'facts'> & { kinds: Set<NormalizedProductFactKind> })[] = [
   { key: 'product', title: 'Product facts', kinds: new Set(['rate', 'tier', 'bundle', 'attribute']) },
   { key: 'features', title: 'Features', kinds: new Set(['feature']) },
-  { key: 'eligibility', title: 'Eligibility & limits', kinds: new Set(['eligibility', 'constraint', 'condition']) },
+  { key: 'eligibility', title: 'Eligibility', kinds: new Set(['eligibility', 'constraint', 'condition']) },
   { key: 'fees', title: 'Fees', kinds: new Set(['fee']) },
 ];
 
@@ -518,20 +461,11 @@ function factAssociationId(
   return parent?.groupId ? `group:${parent.groupId}` : `parent:${fact.parentId}`;
 }
 
-function clusterLabel(facts: NormalizedProductFact[], index: number): string {
-  const namedTier = facts.find((fact) => fact.kind === 'tier' && fact.label?.trim());
-  return namedTier?.label?.trim() ?? `Rate option ${index + 1}`;
-}
-
-function clusterSummary(facts: NormalizedProductFact[]): string {
-  const values = facts
-    .filter((fact) => fact.kind === 'tier')
-    .map(productFactValue)
-    .filter((value): value is string => Boolean(value));
-  const conditions = facts.filter((fact) => fact.kind === 'condition' && fact.condition?.trim()).length;
-  const parts = [...new Set(values)].slice(0, 2);
-  if (conditions) parts.push(`${conditions} condition${conditions === 1 ? '' : 's'}`);
-  return parts.join(' · ') || 'Published tier details';
+function clusterLabel(_facts: NormalizedProductFact[], index: number): UiText { return uiJoin('Tier', ' ', uiCount(index + 1)); }
+function clusterSummary(facts: NormalizedProductFact[]): UiText {
+  const values = facts.filter(fact => fact.kind === 'tier').map(productFactValue).filter((value): value is UiText => Boolean(value));
+  const conditions = facts.filter(fact => fact.kind === 'condition' && fact.condition?.trim()).length;
+  return uiJoin(...values.flatMap((value, i) => i ? [uiLabel(' · '), value] : [value]), conditions ? uiJoin(' · ', uiCount(conditions), ' ', 'Conditions') : null);
 }
 
 /**

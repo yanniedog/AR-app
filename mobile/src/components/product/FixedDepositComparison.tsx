@@ -15,6 +15,8 @@ import { canonical, hashText } from '../../lib/productTermsEngine/validation';
 import { loadExecutableSelections, type ApprovedSelection, type ContractContext } from '../../data/executableContracts/transport';
 import { compareDeposits, type DepositComparisonResult } from '../../data/executableContracts/depositComparison';
 import type { DepositInputs } from '../../data/executableContracts/instantiate';
+import { uiCount, uiDecimal, uiIdentifier, uiInputIdentifier, uiInputNumber, uiJoin, uiLabel, uiProductName, uiProviderName, type UiLabel } from '../../lib/uiCopy';
+import { EngineReceiptFacts } from './EngineReceiptFacts';
 
 const rowId = (row: RateRow) => `${row.rate_index}#${row.product_key}`;
 function ComparisonForm({ rows, candidates, context }: { rows: RateRow[]; candidates: ApprovedSelection[][]; context: ContractContext }) {
@@ -24,10 +26,10 @@ function ComparisonForm({ rows, candidates, context }: { rows: RateRow[]; candid
   const [inputs, setInputs] = useState<DepositInputs[]>(() => rows.map(emptyDepositInputs));
   const [referenceId, setReferenceId] = useState(rowId(rows[0]));
   const [result, setResult] = useState<{ identity: string; data: DepositComparisonResult } | null>(null);
-  const [error, setError] = useState(''), [details, setDetails] = useState(false), [copyStatus, setCopyStatus] = useState('');
+  const [error, setError] = useState(''), [details, setDetails] = useState(false), [copyStatus, setCopyStatus] = useState<UiLabel>('');
   const identity = canonical([inputs, referenceId, customer.profile?.revision ?? null, selectedIds]);
   const current = result?.identity === identity ? result.data : null;
-  if (!customer.profile) return <AppText variant="small">{customer.error ?? 'Opening encrypted local inputs...'}</AppText>;
+  if (!customer.profile) return <AppText variant="small">{uiLabel(customer.error ? 'Unavailable' : 'Loading')}</AppText>;
   const shared = (field: 'principal' | 'fundedDate', value: string) => setInputs(old => old.map(input => ({ ...input, [field]: value, confirmed: false, confirmedAt: null })));
   function calculate() {
     setError(''); setCopyStatus('');
@@ -35,40 +37,38 @@ function ComparisonForm({ rows, candidates, context }: { rows: RateRow[]; candid
     catch (e) { setResult(null); setError(e instanceof Error ? e.message : 'Comparison unavailable.'); }
   }
   return <View style={{ gap: 12 }}>
-    <AppText variant="small">Return before tax. Enter bank-confirmed offers for the same amount and funding date. Inputs stay on this device.</AppText>
-    <LedgerField label="Comparison amount (AUD)" value={inputs[0].principal} keyboardType="decimal-pad" onChangeText={value => shared('principal', value)} />
-    <LedgerField label="Comparison funding date" hint="YYYY-MM-DD" value={inputs[0].fundedDate} onChangeText={value => shared('fundedDate', value)} />
+    <AppText variant="small">{uiJoin('Basis', ' · ', 'Confirmed', ' · ', 'Common amount', ' · ', 'Common funding date', ' · ', 'Tax', ' · ', 'Excluded', ' · ', 'Local storage')}</AppText>
+    <LedgerField label="Comparison amount (AUD)" value={uiInputNumber(inputs[0].principal)} keyboardType="decimal-pad" onChangeText={value => shared('principal', value)} />
+    <LedgerField label={uiJoin('Comparison funding date', ' · ', 'YYYY-MM-DD')} value={uiInputIdentifier(inputs[0].fundedDate)} onChangeText={value => shared('fundedDate', value)} />
     {rows.map((row, i) => <View key={rowId(row)} style={{ gap: 8 }}>
-      <AppText weight="700">{row.provider}: {row.product_name}</AppText>
-      <Chip label={`Reference: ${row.product_name} (rate ${row.rate_index})`} selected={referenceId === rowId(row)} onPress={() => setReferenceId(rowId(row))} />
-      {candidates[i].length ? <DepositCohorts candidates={candidates[i]} selectedId={selectedIds[i]} onSelect={id => setSelectedIds(old => old.map((value, j) => j === i ? id : value))} row={row} inputs={inputs[i]} onChange={value => setInputs(old => old.map((item, j) => j === i ? value : item))} customer={customer} shared /> : <AppText variant="small">An approved calculation template is unavailable for this exact rate. It cannot be ranked.</AppText>}
+      <AppText weight="700">{uiJoin(uiProviderName(row), ': ', uiProductName(row))}</AppText>
+      <Chip label={uiJoin('Reference', ': ', uiProductName(row), ' · ', 'Rate index', ': ', uiCount(row.rate_index))} selected={referenceId === rowId(row)} onPress={() => setReferenceId(rowId(row))} />
+      {candidates[i].length ? <DepositCohorts candidates={candidates[i]} selectedId={selectedIds[i]} onSelect={id => setSelectedIds(old => old.map((value, j) => j === i ? id : value))} row={row} inputs={inputs[i]} onChange={value => setInputs(old => old.map((item, j) => j === i ? value : item))} customer={customer} shared /> : <AppText variant="small">{uiJoin('Calculation', ' · ', 'Unavailable', ' · ', 'No ranks')}</AppText>}
     </View>)}
-    <Button title="Compare maturity returns" disabled={customer.busy} onPress={calculate} />
-    {error ? <AppText variant="small">{error}</AppText> : null}
+    <Button title={uiJoin('Compare', ' ', 'Maturity payout')} disabled={customer.busy} onPress={calculate} />
+    {error ? <AppText variant="small">{uiLabel('Unavailable')}</AppText> : null}
     {current ? <View style={{ gap: 10 }}>
-      <AppText variant="small">{current.basis}</AppText><AppText variant="small">{current.reason}</AppText>
+      <AppText variant="small">{uiJoin('Ranking', ': ', current.rankAvailable ? 'Available' : 'Unavailable', ' · ', 'Tax', ' · ', 'Excluded')}</AppText>
       {current.results.map((r, i) => <View key={r.id} style={{ gap: 4 }}>
-        <AppText weight="700">{rows[i].provider}: {rows[i].product_name}</AppText>
-        {r.data?.receipt.claimAvailable ? <AppText variant="small">Interest before tax: ${r.data.receipt.totals!.interestPosted}. Maturity payout: ${r.data.receipt.totals!.externalOutflows}.</AppText> : <AppText variant="small">{r.error ?? 'Result unavailable: eligibility or material inputs remain unresolved.'}</AppText>}
-        {current.rankAvailable ? <AppText variant="small">Rank {r.rank}. Difference from reference: ${r.advantage}.</AppText> : null}
+        <AppText weight="700">{uiJoin(uiProviderName(rows[i]), ': ', uiProductName(rows[i]))}</AppText>
+        {r.data?.receipt.claimAvailable ? <AppText variant="small">{uiJoin('Interest at maturity', ': ', uiDecimal(r.data.receipt.totals!.interestPosted), ' · ', 'Maturity payout', ': ', uiDecimal(r.data.receipt.totals!.externalOutflows))}</AppText> : <AppText variant="small">{uiJoin('Calculation', ' · ', 'Unavailable')}</AppText>}
+        {current.rankAvailable ? <AppText variant="small">{uiJoin('Rank', ': ', uiCount(r.rank), ' · ', 'Advantage', ': ', uiDecimal(r.advantage))}</AppText> : null}
       </View>)}
-      <Disclosure title="Comparison details" open={details} onToggle={() => setDetails(!details)}>
-        <AppText variant="tiny">Receipt {current.inputSha256}</AppText>
+      <Disclosure title={uiJoin('Comparison', ' · ', 'Details')} open={details} onToggle={() => setDetails(!details)}>
+        <AppText variant="tiny">{uiJoin('Receipt', ' · ', uiIdentifier(current.inputSha256))}</AppText>
         {current.results.map((r, i) => <View key={r.id} style={{ gap: 4 }}>
-          <AppText weight="700">{rows[i].product_name}</AppText>
-          <AppText variant="small">Eligibility: {r.data?.receipt.eligibility?.status.replace(/_/g, ' ') ?? 'Not assessed'}</AppText>
-          {r.data?.receipt.eligibility?.reasons.map((reason, j) => <AppText key={`reason-${j}`} variant="small">{reason}</AppText>)}
-          {r.data?.receipt.issues.map((issue, j) => <AppText key={`issue-${j}`} variant="small">{issue}</AppText>)}
-          {r.data?.receipt.totals ? <AppText variant="small">Fees: ${r.data.receipt.totals.feesCharged}. Remaining deposit balance: ${r.data.receipt.totals.closingBalance}.</AppText> : null}
+          <AppText weight="700">{uiProductName(rows[i])}</AppText>
+          {r.data ? <EngineReceiptFacts receipt={r.data.receipt}/> : <AppText variant="small">{uiLabel('Unavailable')}</AppText>}
           {selections[i]?.template.evidence.map(source => <DepositSource key={source.id} source={source} />)}
         </View>)}
-        <AppText variant="small">The receipt includes entered amounts, rates, dates and relevant eligibility answers.</AppText>
-        <Button title="Copy comparison receipt" variant="secondary" onPress={() => { try { const items=rows.map((row,i)=>{const selection=selections[i];if(!selection)throw Error();return tdReopenItem(selection,context,row,inputs[i],customer.profile!,rowId(row));});void Clipboard.setStringAsync(JSON.stringify(privateTdExport(current,items,true),null,2)).then(()=>setCopyStatus('Receipt copied.'),()=>setCopyStatus('Receipt could not be copied.')); }catch {setCopyStatus('Source changed or an input is unavailable. Calculate again.');} }} />
-        {copyStatus ? <AppText variant="small">{copyStatus}</AppText> : null}
+        <AppText variant="small">{uiJoin('Receipt', ' · ', 'Private', ' · ', 'Entered facts', ' · ', 'Criteria')}</AppText>
+        <Button title={uiJoin('Copy', ' ', 'Receipt')} variant="secondary" onPress={() => { try { const items=rows.map((row,i)=>{const selection=selections[i];if(!selection)throw Error();return tdReopenItem(selection,context,row,inputs[i],customer.profile!,rowId(row));});void Clipboard.setStringAsync(JSON.stringify(privateTdExport(current,items,true),null,2)).then(()=>setCopyStatus('Copied'),()=>setCopyStatus('Copy failed')); }catch {setCopyStatus('Source changed');} }} />
+        {copyStatus ? <AppText variant="small">{uiLabel(copyStatus)}</AppText> : null}
       </Disclosure>
     </View> : null}
   </View>;
 }
+
 export function FixedDepositComparison({ rows }: { rows: RateRow[] }) {
   const manifest = useStore(s => s.manifest), core = useStore(s => s.core), coreIntegrity = useStore(s => s.coreIntegrity);
   const [open, setOpen] = useState(false);
@@ -82,8 +82,8 @@ export function FixedDepositComparison({ rows }: { rows: RateRow[] }) {
     });
     return () => { active = false; };
   }, [open, identity, manifest, core, coreIntegrity, rows]);
-  return <Disclosure title="Personal cost comparison" summary="Check maturity returns" open={open} onToggle={() => setOpen(!open)}>
-    <AppText variant="small">Published-rate rankings do not compare your full costs or assess eligibility. This calculation supports approved fixed-deposit maturity returns only.</AppText>
-    {selected ? <ComparisonForm key={identity} rows={rows} candidates={selected.selections} context={{ manifest, core, coreIntegrity }} /> : <AppText variant="small">Checking reviewed calculation terms...</AppText>}
+  return <Disclosure title={uiJoin('Compare', ' · ', 'Term deposits')} open={open} onToggle={() => setOpen(!open)}>
+    <AppText variant="small">{uiJoin('Basis', ' · ', 'Maturity payout', ' · ', 'No approval')}</AppText>
+    {selected ? <ComparisonForm key={identity} rows={rows} candidates={selected.selections} context={{ manifest, core, coreIntegrity }} /> : <AppText variant="small">{uiLabel('Loading')}</AppText>}
   </Disclosure>;
 }

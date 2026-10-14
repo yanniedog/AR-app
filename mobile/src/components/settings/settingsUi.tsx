@@ -1,12 +1,14 @@
+import type { UiChild } from '../../lib/uiCopy';
 import Ionicons from '../icons/AppIcon';
 import React, { useState } from 'react';
-import { Switch, useWindowDimensions, View } from 'react-native';
+import { Switch, View } from 'react-native';
 
 import { TOUCH_TARGET_MIN, TouchTarget } from '../TouchTarget';
 import { AppText, Card, IconButton, Row } from '../ui';
 import { useTheme } from '../../theme/ThemeProvider';
+import { uiJoin, type UiCopy } from '../../lib/uiCopy';
 
-export function Section({ title, children }: { title: string; children: React.ReactNode }) {
+export function Section({ title, children }: { title: UiCopy; children: UiChild }) {
   return (
     <View style={{ marginBottom: 22 }}>
       {/* Sentence case, per the design system's voice rules. */}
@@ -31,21 +33,18 @@ export function SettingsGap({ size = 10 }: { size?: number }) {
 
 export function DisclosureGroup({
   title,
-  summary,
   defaultOpen = false,
   open: controlledOpen,
   onOpenChange,
   children,
 }: {
-  title: string;
-  summary?: string;
+  title: UiCopy;
   defaultOpen?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  children: React.ReactNode;
+  children: UiChild;
 }) {
   const theme = useTheme();
-  const { fontScale } = useWindowDimensions();
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const open = controlledOpen ?? internalOpen;
   const toggleOpen = () => {
@@ -61,7 +60,7 @@ export function DisclosureGroup({
         onPress={toggleOpen}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityHint={open ? `Hide ${title}` : `Show ${title}`}
+        accessibilityLabel={uiJoin(open ? 'Hide' : 'Show', ' ', title)}
         style={({ pressed }) => ({
           flexDirection: 'row',
           alignItems: 'center',
@@ -74,11 +73,6 @@ export function DisclosureGroup({
           <AppText variant="body" weight="600">
             {title}
           </AppText>
-          {summary && !open ? (
-            <AppText variant="tiny" color="textFaint" numberOfLines={fontScale >= 1.3 ? undefined : 1}>
-              {summary}
-            </AppText>
-          ) : null}
         </View>
         <Ionicons
           name={open ? 'chevron-up' : 'chevron-down'}
@@ -94,22 +88,19 @@ export function DisclosureGroup({
 export function NavRow({
   icon,
   label,
-  sub,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  sub?: string;
+  label: UiCopy;
   onPress: () => void;
 }) {
   const theme = useTheme();
-  const { fontScale } = useWindowDimensions();
   return (
     <TouchTarget
       fill
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={sub ? `${label}. ${sub}` : label}
+      accessibilityLabel={label}
       style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
@@ -123,11 +114,6 @@ export function NavRow({
         <AppText variant="body" weight="600">
           {label}
         </AppText>
-        {sub ? (
-          <AppText variant="tiny" color="textFaint" numberOfLines={fontScale >= 1.3 ? undefined : 2}>
-            {sub}
-          </AppText>
-        ) : null}
       </View>
       <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
     </TouchTarget>
@@ -143,7 +129,7 @@ export function InterestOrderRow({
   onMoveDown,
   onRemove,
 }: {
-  title: string;
+  title: UiCopy;
   canMoveUp: boolean;
   canMoveDown: boolean;
   canRemove: boolean;
@@ -161,26 +147,26 @@ export function InterestOrderRow({
           icon="chevron-up"
           onPress={onMoveUp}
           disabled={!canMoveUp}
-          accessibilityLabel={`Move ${title} up`}
+          accessibilityLabel={uiJoin('↑', ' ', title)}
         />
         <IconButton
           icon="chevron-down"
           onPress={onMoveDown}
           disabled={!canMoveDown}
-          accessibilityLabel={`Move ${title} down`}
+          accessibilityLabel={uiJoin('↓', ' ', title)}
         />
         <IconButton
           icon="close"
           onPress={onRemove}
           disabled={!canRemove}
-          accessibilityLabel={`Remove ${title}`}
+          accessibilityLabel={uiJoin('Remove', ' ', title)}
         />
       </Row>
     </Row>
   );
 }
 
-export function Label({ text }: { text: string }) {
+export function Label({ text }: { text: UiCopy }) {
   return (
     <AppText variant="tiny" weight="600" color="textMuted" style={{ marginBottom: 8 }}>
       {text}
@@ -191,18 +177,15 @@ export function Label({ text }: { text: string }) {
 export function ToggleRow({
   icon,
   label,
-  sub,
   value,
   onChange,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  sub?: string;
+  label: UiCopy;
   value: boolean;
   onChange: (v: boolean) => void;
 }) {
   const theme = useTheme();
-  const { fontScale } = useWindowDimensions();
   return (
     <Row gap={12} style={{ minHeight: TOUCH_TARGET_MIN, paddingVertical: 2 }}>
       <Ionicons name={icon} size={20} color={theme.colors.primary} />
@@ -210,24 +193,18 @@ export function ToggleRow({
         <AppText variant="body" weight="600">
           {label}
         </AppText>
-        {sub ? (
-          <AppText variant="tiny" color="textFaint" numberOfLines={fontScale >= 1.3 ? undefined : 2}>
-            {sub}
-          </AppText>
-        ) : null}
       </View>
       <Switch
         value={value}
         onValueChange={onChange}
         trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
         accessibilityLabel={label}
-        accessibilityHint={sub}
       />
     </Row>
   );
 }
 
-export function InfoRow({ label, value }: { label: string; value: string }) {
+export function InfoRow({ label, value }: { label: UiCopy; value: UiCopy }) {
   return (
     <Row style={{ justifyContent: 'space-between', paddingVertical: 6, minHeight: 36 }}>
       <AppText variant="small" color="textMuted" style={{ flexShrink: 0 }}>
