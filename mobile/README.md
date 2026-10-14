@@ -22,7 +22,7 @@ then upgrades to the live payload at `expo.extra.manifestUrl` (set in `app.json`
 
 ```
 app/                expo-router routes
-  (tabs)/           Home · Rates · Saved · Market · Tools
+  (tabs)/           Home · Rates · Saved · Market · Tools (migration baseline)
   product/[key]     product detail        bank/[provider]  lender detail
   banks · compare · onboarding
 src/
@@ -36,16 +36,23 @@ assets/             icon/splash (scripts/make-icons.mjs) + sample/ payload
 __tests__/          selectors · format · notifications (jest-expo)
 ```
 
-Navigation ownership and compatibility: [../docs/NAVIGATION.md](../docs/NAVIGATION.md).
+The [Android redesign contract](../docs/ANDROID_REDESIGN_CONTRACT.md) governs the
+migration to Rates · Saved · Market and contextual tools. The five-tab map above
+and [NAVIGATION.md](../docs/NAVIGATION.md) describe the historical baseline;
+the [redesign inventory](../docs/ANDROID_REDESIGN_INVENTORY.md) tracks compatibility.
 
 ## Typography
 
-Use the bundled Commissioner faces for app text, inputs, charts, and navigation.
+The Android redesign replaces bundled Commissioner with system sans-serif/Roboto
+and numeric font weights for app text, inputs, charts and navigation. Phase 2
+implements this migration under the [redesign contract](../docs/ANDROID_REDESIGN_CONTRACT.md).
+Keep bundled Commissioner faces for iOS and web.
 `src/theme/typography.ts` owns sizes, line heights, and default weights for both
 `AppText` and `LedgerText`: body 16, supporting text 14/12, headings 18/22/28,
 and rates 24/32. Use the shared variants instead of adding screen-specific scales.
 Headers use `HEADER_TYPOGRAPHY`, including Android's stack overrides. Static
-font faces carry their own weight; navigation must not apply synthetic bolding.
+font faces on iOS and web carry their own weight; do not apply synthetic bolding
+to those faces. Android system text uses its real numeric weights.
 Keep accessibility scaling enabled and use tabular numerals for rate figures.
 Diagnostic logs may use monospace for aligned technical output.
 

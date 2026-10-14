@@ -110,10 +110,10 @@ The current screen set mixes Material dynamic colour, Ionicons/Material Symbols,
 
 ## 5. Information architecture (superseded)
 
-The September 2026 navigation overhaul replaces this original four-tab plan.
-The current implementation contract is [NAVIGATION.md](NAVIGATION.md); its route
-ownership, five destinations, visible tools and persistent detail navigation take
-precedence over the historical composition and acceptance notes below.
+The September 2026 five-destination navigation in [NAVIGATION.md](NAVIGATION.md)
+is historical. The [Android redesign contract](ANDROID_REDESIGN_CONTRACT.md)
+now governs the migration to Rates, Saved and Market, with contextual tools and
+legacy route compatibility. Neither historical map below is the target contract.
 
 ### Primary destinations
 

@@ -201,8 +201,12 @@ Focused contract tests currently include `tabRouting`, `tabIcons`,
 `nativeIntent`, `notifications`, `browseRoute`, `performanceAuditNavigation`,
 `performanceAudit`, `performanceAuditPlan`, research-audit and Search/Saved/
 product eligibility/readiness suites. Resolve their actual filenames before
-execution. Canonical verification remains `cd mobile && npm run ci`; it has not
-been run for this document-only inventory.
+execution. Canonical verification `cd mobile && npm run ci` passed on the phase-1
+content on 14 October 2026: 322 Jest suites / 3,712 tests, 250 Node script tests,
+typecheck, lint, Expo doctor (18/18), export and size checks for Android, iOS and web.
+The Windows run used Git Bash on PATH for portable shell tests. GitHub `mobile-ci`
+also passed. These checks establish repository verification; native redesign
+acceptance and the final public APK remain later-phase requirements.
 
 ## Copy producer inventory and source boundaries
 
