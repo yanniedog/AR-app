@@ -43,6 +43,21 @@ Qwen configuration or producer/Pi services to implement this checklist.
    runtime acceptance. Keep physical haptics/device acceptance separately
    labelled if not run. Do not infer public delivery from merge or local build.
 
+### Source identity before and after publication
+
+Pre-merge captures retain their actual commit and APK hash, plus the Metro
+JavaScript commit when using a development client. A recorded `mobile/` Git
+tree comparison may document source equivalence after squash; it does not
+establish identical binaries or public acceptance. Retain the resolved build
+version/configuration too: release automation updates version metadata before
+prebuild.
+
+After publication, keep each APK's acceptance record externally alongside its
+captures, using the immutable public manifest's `source_sha` and independently
+verified artifact identity. Never relabel earlier captures with the merged
+commit or replace their APK hashes. Repeat native acceptance on the downloaded
+bytes as required above; an untested ARM runtime remains outstanding.
+
 ## Portable evidence check
 
 No new dependencies, Android commands, network requests, uploads or file writes
