@@ -10,17 +10,18 @@ import { evaluateAppHealthDisplayQuality } from '../src/lib/appHealth/displayQua
 import { PerformanceAuditReadinessProvider, usePerformanceAuditProbe } from '../src/hooks/usePerformanceAuditReadiness';
 import { makeHealthyCore } from '../__fixtures__/appHealth';
 import type { CorePayload } from '../src/types';
+import { normalizeAppPath } from '../src/lib/tabRouting';
 
 type TestNode = { type: unknown; props: Record<string, any>; findAll: (predicate: (node: TestNode) => boolean) => TestNode[] };
 type InspectableRenderer = ReturnType<typeof TestRenderer.create> & { root: TestNode };
 
-const mockNavigate = jest.fn();
+const mockDismissTo = jest.fn();
 const mockSurfaces = new Map<string, PerformanceAuditSurfaceDefinition>();
 const mockEconomyControl = jest.fn();
 let mockUseLiveReadiness = false;
 let mockCore: CorePayload | null = null;
 jest.mock('expo-router', () => ({
-  router: { navigate: (...args: unknown[]) => mockNavigate(...args) },
+  router: { dismissTo: (...args: unknown[]) => mockDismissTo(...args) },
   useLocalSearchParams: () => ({}),
 }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => false, useScrollToTop: () => undefined }));
@@ -63,7 +64,7 @@ jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button',
 jest.mock('../src/components/viz/HistoryExplorer', () => ({ HistoryExplorer: 'HistoryExplorer' }));
 
 beforeEach(() => {
-  mockCore = null; mockUseLiveReadiness = false; mockNavigate.mockClear(); mockSurfaces.clear();
+  mockCore = null; mockUseLiveReadiness = false; mockDismissTo.mockClear(); mockSurfaces.clear();
   mockEconomyControl.mockClear(); jest.mocked(usePerformanceAuditProbe).mockClear();
 });
 
@@ -142,7 +143,11 @@ test('unmounting before an economic control commits rejects its pending action i
   expect(registry.actionCompletion('outlook.economy')).toBeNull();
 });
 
-test.each(['Mortgage', 'Savings', 'TD'])('the research audit route override matches the real %s category navigation', async (section) => {
+test.each([
+  ['Mortgage', 'home-loans'],
+  ['Savings', 'savings'],
+  ['TD', 'term-deposits'],
+])('the research audit route override matches the real %s Rates intent', async (section, slug) => {
   let tree!: ReturnType<typeof TestRenderer.create>;
   act(() => { tree = TestRenderer.create(<Research />); });
   try {
@@ -150,13 +155,20 @@ test.each(['Mortgage', 'Savings', 'TD'])('the research audit route override matc
     const action = mockSurfaces.get('outlook.dashboard')!.actions![actionId];
     const result = await action({ section }) as { expectedPath: string };
     const step = buildDeepPerformanceAuditPlan(null).passes[0].steps.find(item => item.semanticActionId === actionId)!;
-    const href = mockNavigate.mock.calls.at(-1)![0];
+    const href = mockDismissTo.mock.calls.at(-1)![0];
     // The runner trusts the mounted action's override before the plan. Check
     // both against the actual shared navigation helper, not another mock URL.
-    expect(result.expectedPath).toBe(href.pathname);
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(href).toEqual({
+      pathname: '/(tabs)/browse',
+      params: { section: slug, request: expect.any(String), path: '', query: '',
+        scope: 'hierarchy', availability: 'listed', compare: '0' },
+    });
+    expect(href.params.request).not.toBe('');
+    expect(result).toEqual({ expectedPath: '/browse' });
+    expect(result.expectedPath).toBe(normalizeAppPath(href.pathname));
     expect(result.expectedPath).toBe(step.expectedPath);
-    expect(result.expectedPath).toBe('/categories');
-    expect(step.expectedSurface).toBe('browse.hierarchy');
+    expect(step.expectedSurface).toBe('rates.results');
   } finally { act(() => tree.unmount()); }
 });
 
@@ -259,8 +271,12 @@ test('uncached economics cannot block the mounted market browse action', async (
     expect(dashboard.surfaces[0].probes.some(probe => probe.id.startsWith('economic-'))).toBe(false);
     expect(dashboard.blockers.some(blocker => blocker.code === 'probe-error')).toBe(false);
     const result = await registry.invokeAction('outlook.dashboard', 'outlook.snapshot.browse.first', { section: 'Mortgage' });
-    expect(result).toEqual({ expectedPath: '/categories' });
-    expect(mockNavigate).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/categories' }));
+    expect(result).toEqual({ expectedPath: '/browse' });
+    expect(mockDismissTo).toHaveBeenCalledWith({
+      pathname: '/(tabs)/browse',
+      params: { section: 'home-loans', request: expect.any(String), path: '', query: '',
+        scope: 'hierarchy', availability: 'listed', compare: '0' },
+    });
   } finally { act(() => tree.unmount()); }
 });
 
