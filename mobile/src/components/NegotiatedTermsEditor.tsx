@@ -1,12 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
-import { type CustomerProfile, type NegotiatedTerm, userProvenance, validProvenance } from '../data/customerProfile';
-import { uiLabel, uiDate, uiIdentifier, uiJoin, uiNegotiatedTermField, useNegotiatedTermDraft } from '../lib/uiCopy';
+import { type CustomerProfile, type NegotiatedTerm, safeId, userProvenance, validProvenance } from '../data/customerProfile';
+import { useStore } from '../data/store';
+import { uiLabel, uiDate, uiDetailsProductReference, uiJoin, uiNegotiatedTermField, useNegotiatedTermDraft } from '../lib/uiCopy';
+import type { DetailsPayload } from '../types';
 import { LedgerField } from './ledger/LedgerField';
 import { AppText, Button, Disclosure } from './ui';
+function termProductReference(term: NegotiatedTerm, details: DetailsPayload | null) {
+  if (!safeId(term.id) || !validProvenance(term.provenance) || term.provenance.source !== 'user_input') return uiLabel('Unknown');
+  const reference = uiDetailsProductReference(details, term.provenance.productKey);
+  return reference === 'Source review required' ? uiLabel('Unknown') : reference;
+}
 export function NegotiatedTermsEditor({ profile, productKey, disabled, update }: {
   profile: CustomerProfile; productKey?: string; disabled: boolean; update: (change: (p: CustomerProfile) => CustomerProfile) => Promise<boolean>;
 }) {
+  const details = useStore(state => state.details);
   const [open, setOpen] = useState(false); const termDraft = useNegotiatedTermDraft(), draft = termDraft.values; const [error, setError] = useState<'invalid' | 'unavailable' | null>(null); const pendingId = useRef<string | null>(null);
   const [editing, setEditing] = useState<NegotiatedTerm | null>(null);
   const pending = useRef(false), mounted = useRef(true), generation = useRef(0);
@@ -42,7 +50,7 @@ export function NegotiatedTermsEditor({ profile, productKey, disabled, update }:
       <AppText variant="small" weight="600">{uiNegotiatedTermField(t, 'label')}</AppText>
       <AppText variant="small">{uiJoin(uiNegotiatedTermField(t, 'value'), ' ', uiNegotiatedTermField(t, 'unit'))}</AppText>
       <AppText variant="tiny">{uiJoin('Recorded', ' ', uiDate(t.provenance.recordedAt), ' · ', 'Effective from', ' ', uiDate(t.provenance.effectiveFrom), ' · ', 'Effective to', ' ', uiDate(t.provenance.effectiveToExclusive))}</AppText>
-      {!productKey ? <AppText variant="tiny">{uiIdentifier(t.provenance.productKey)}</AppText> : null}
+      {!productKey ? <AppText variant="tiny">{termProductReference(t, details)}</AppText> : null}
       <Button title="Edit" variant="secondary" disabled={busy} onPress={() => edit(t)} />
       <Button title="Remove" variant="ghost" disabled={busy} onPress={() => void update(p => ({ ...p, negotiatedTerms: p.negotiatedTerms.filter(v => v.id !== t.id) }))} />
     </View>)}

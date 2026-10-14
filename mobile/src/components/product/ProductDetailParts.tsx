@@ -16,7 +16,7 @@ import { scopedRateConditions } from '../../data/rateConditions';
 import { scopedFinancialConditionFacts } from '../../data/scopedFinancialConditionFacts';
 import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, type ProductPresentationFact } from '../../lib/productUiFacts';
 import { normalizedProductFacts } from '../../data/productFacts';
-import { uiCount, uiJoin, uiLabel, type UiCopy, type UiLabel } from '../../lib/uiCopy';
+import { uiCount, uiIdentifier, uiJoin, uiLabel, uiProductName, type UiCopy, type UiLabel } from '../../lib/uiCopy';
 import type { DetailItem, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
 import { openProduct } from '../../lib/nav';
 import { FinancialFactRows } from './FinancialFactRows';
@@ -62,7 +62,10 @@ export function DetailGroup({ title, items, loading }: { title: 'Fees' | 'Eligib
 }
 export function ProductFacts({ productDetails: detail }: { productDetails: ProductDetailData | null }) {
   const [open, setOpen] = useState(false);
-  const facts = normalizedProductFacts(detail).map(uiNormalizedProductFact); if (!facts.length) return null;
+  // Rich legacy fee occurrences have their own Fees surface, including caps,
+  // discounts and condition references. Transitional normalized copies must
+  // not present the same charge a second time.
+  const facts = normalizedProductFacts(detail).filter(fact => !detail?.fees?.length || fact.kind !== 'fee').map(uiNormalizedProductFact); if (!facts.length) return null;
   return <Disclosure title="Product facts" open={open} onToggle={() => setOpen(v => !v)}><PublishedFacts facts={facts} /></Disclosure>;
 }
 export function AccessNotice({ name, productDetails: detail, loading, provider }: { name: string; productDetails: ProductDetailData | null; loading: boolean; provider?: string | null }) {
@@ -90,12 +93,20 @@ export function OfficialLinks({ links, sourceDocuments }: { links?: ProductDetai
 }
 export function SectionTitle({ text }: { text: UiCopy; icon?: keyof typeof Ionicons.glyphMap }) { return <AppText variant="small" weight="700">{text}</AppText>; }
 export function ProductRatesList({ rows, section, accent, defaultOpen = false }: { rows: RateRow[]; section: SectionKey; accent: string; defaultOpen?: boolean }) {
+  const metric = useStore(s => s.prefs.mortgageRateMetric);
   const [open, setOpen] = useState(defaultOpen); if (!rows.length) return null;
   return <Disclosure title={uiJoin('Rates', ' (', uiCount(rows.length), ')')} open={open} onToggle={() => setOpen(v => !v)}>
-    <View style={{ gap: 12 }}>{rows.map((row, i) => <View key={`${row.rate_index}:${i}`} style={{ gap: 6 }}>
+    <View style={{ gap: 12 }}>{rows.map((row, i) => {
+      const presentation = ratePresentation(row, section, metric), term = formatTerm(row);
+      const balance = section === 'Mortgage' ? null : formatBalanceRange(row.balance_min, row.balance_max);
+      const actionLabel = uiJoin('Open', ', ', uiProductName(row), ', ', presentation.primaryLabel, ' ', formatRate(presentation.primary),
+        section === 'Mortgage' ? uiJoin(', ', 'Listed LVR', ' ', uiListedLvrRange(row), ', ', uiRepayment(row)) : balance ? uiJoin(', ', balance) : null,
+        term ? uiJoin(', ', term) : null, ', ', 'Rate index', ' ', row.rate_index == null ? uiLabel('Unknown') : uiIdentifier(String(row.rate_index)));
+      return <View key={`${row.rate_index}:${i}`} style={{ gap: 6 }}>
       <RateRowLine row={row} section={section} accent={accent} />
-      <Button title="Open" variant="ghost" onPress={() => openProduct(row.product_key, row.rate_index)} />
-    </View>)}</View>
+      <Button title="Open" variant="ghost" accessibilityLabel={actionLabel}
+        onPress={() => openProduct(row.product_key, row.rate_index)} />
+    </View>; })}</View>
   </Disclosure>;
 }
 export function ProductSpecs({ row, section, productDetails }: { row: RateRow; section: SectionKey; productDetails: ProductDetailData | null }) {

@@ -109,7 +109,14 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
   const scalar = descriptiveValue(item.value);
   const numeric = number(scalar);
   const residency = group === 'Eligibility' ? residencyValue(item) : null;
-  const value = group === 'Fees' ? uiFeeValue(item) : numeric !== null ? uiJoin(group === 'Constraints' && /^(?:MIN|MAX)_(?:LIMIT|BALANCE|AMOUNT)$/.test(item.label ?? '') ? uiMoney(numeric, Math.min(2, precision(numeric))) : uiNumber(numeric, precision(numeric)),
+  // These published CDR constraint codes establish the unit. Older payloads
+  // contain both ratios (0.8) and percentage numbers (98), like the rate DTO.
+  const lvr = group === 'Constraints' && /^(?:MIN|MAX)_LVR$/.test(item.label ?? '');
+  const lvrDecimals = (scalar?.split('.')[1] ?? '').replace(/0+$/, '').length;
+  const lvrValue = lvr && scalar !== null && /^\s*\d+(?:\.\d+)?\s*$/.test(scalar)
+    && numeric !== null && numeric >= 0 && numeric <= 100
+    ? uiRate(toFraction(numeric), Math.max(2, Math.min(6, lvrDecimals - (numeric <= 1 ? 2 : 0)))) : uiLabel('Unknown');
+  const value = group === 'Fees' ? uiFeeValue(item) : lvr ? lvrValue : numeric !== null ? uiJoin(group === 'Constraints' && /^(?:MIN|MAX)_(?:LIMIT|BALANCE|AMOUNT)$/.test(item.label ?? '') ? uiMoney(numeric, Math.min(2, precision(numeric))) : uiNumber(numeric, precision(numeric)),
     ['Minimum age', 'Maximum age'].includes(controlled ?? '') ? uiJoin(' ', 'years') : null)
     : residency ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null && !item.info ? uiLabel('Included') : scalar ? humanizeEnum(scalar) : uiLabel('Unknown'));
   return { label: label || uiJoin(group, ' ', uiCount(index + 1)), value: uiJoin(value || uiLabel('Unknown'), knownInfo ? uiJoin(' · ', knownInfo) : null),
