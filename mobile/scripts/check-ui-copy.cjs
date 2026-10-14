@@ -349,16 +349,148 @@ function inspectUiCopy({ root, policyFile = 'src/lib/uiCopy.ts', program: provid
     if (variable?.initializer && ts.isCallExpression(variable.initializer) && ts.isPropertyAccessExpression(variable.initializer.expression) && variable.initializer.expression.name.text === 'bind') return policyFunction(variable.initializer.expression.expression, name, next);
     return actual?.getDeclarations()?.some(declaration => path.resolve(declaration.getSourceFile().fileName).toLowerCase() === policyPath && declaration.name?.getText() === name);
   }
+  // This scanner reviews source-literal copy. It never emits sanitised HTML.
+  // Entity replacement is simultaneous: &amp;quot; remains &quot;, not a quote.
+  function decodeMarkupEntities(value) {
+    const named = { nbsp: ' ', amp: '&', apos: "'", quot: '"', lt: '<', gt: '>' };
+    return value.replace(/&(?:nbsp|amp|apos|quot|lt|gt|#\d+|#x[\da-f]+);/gi, entity => {
+      const name = entity.slice(1, -1).toLowerCase();
+      if (Object.hasOwn(named, name)) return named[name];
+      const code = name.startsWith('#x') ? Number.parseInt(name.slice(2), 16) : Number.parseInt(name.slice(1), 10);
+      return code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : entity;
+    });
+  }
   function markupLiteral(node) {
     const pieces = ts.isTemplateExpression(node) ? [node.head.text, ...node.templateSpans.map(span => span.literal.text)] : [node.text];
-    for (const piece of pieces) {
-      if (/<script\b/i.test(piece)) report(node, 'script-markup-prohibited');
-      for (const match of piece.matchAll(/\b(title|alt|aria-label|aria-description|accessibilityHint|placeholder)\s*=\s*(["'])([\s\S]*?)\2/gi)) {
-        if (['aria-description', 'accessibilityhint'].includes(match[1].toLowerCase())) report(node, 'removed-copy-api-markup');
-        else if (!approvedLabels.has(match[3])) report(node, 'unregistered-markup-attribute');
+    if (pieces.reduce((length, piece) => length + piece.length, 0) > 1024 * 1024) {
+      report(node, 'markup-literal-too-large');
+      return;
+    }
+    const malformed = () => report(node, 'malformed-markup-literal');
+    const removedAttributes = new Set([...REMOVED_APIS].map(name => name.toLowerCase()));
+    const textAttributes = new Set(['title', 'alt', 'aria-label', 'aria-valuetext', 'placeholder', 'value']);
+    const whitespace = character => character !== undefined && /\s/.test(character);
+    function reviewCss(css) {
+      let cursor = 0;
+      while (cursor < css.length) {
+        if (css.startsWith('/*', cursor)) {
+          const end = css.indexOf('*/', cursor + 2);
+          if (end < 0 || css.slice(cursor + 2, end).includes('/*')) { malformed(); return; }
+          cursor = end + 2;
+        } else if (css[cursor] === '\\' || css[cursor] === '<') {
+          malformed(); return;
+        } else if (css[cursor] === '"' || css[cursor] === "'") {
+          const end = css.indexOf(css[cursor], cursor + 1);
+          if (end < 0 || /[\\\r\n]/.test(css.slice(cursor + 1, end))) { malformed(); return; }
+          cursor = end + 1;
+        } else if (/[A-Za-z_-]/.test(css[cursor])) {
+          const start = cursor++;
+          while (cursor < css.length && /[A-Za-z\d_-]/.test(css[cursor])) cursor++;
+          const property = css.slice(start, cursor).toLowerCase();
+          while (whitespace(css[cursor])) cursor++;
+          if (property !== 'content' || css[cursor] !== ':') continue;
+          cursor++;
+          while (whitespace(css[cursor])) cursor++;
+          let value;
+          if (css[cursor] === '"' || css[cursor] === "'") {
+            const end = css.indexOf(css[cursor], cursor + 1);
+            if (end < 0 || /[\\\r\n]/.test(css.slice(cursor + 1, end))) { malformed(); return; }
+            // Raw style text does not interpret HTML entities a second time.
+            value = css.slice(cursor + 1, end);
+            cursor = end + 1;
+            if (!approvedLabels.has(value)) report(node, 'unregistered-markup-content');
+          } else {
+            const startValue = cursor;
+            while (cursor < css.length && ![';', '}'].includes(css[cursor])) cursor++;
+            value = css.slice(startValue, cursor).trim();
+            if (!['none', 'normal'].includes(value)) report(node, 'unregistered-markup-content');
+          }
+          while (whitespace(css[cursor])) cursor++;
+          if (cursor < css.length && ![';', '}'].includes(css[cursor])) { malformed(); return; }
+        } else cursor++;
       }
-      for (const match of piece.matchAll(/\bcontent\s*:\s*(["'])([\s\S]*?)\1/gi)) if (!approvedLabels.has(match[2])) report(node, 'unregistered-markup-content');
-      const text = piece.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&#39;|&apos;/gi, "'").replace(/&quot;/gi, '"').replace(/\s+/g, ' ').trim();
+    }
+    function tagAt(piece, start) {
+      let cursor = start + 1;
+      const closing = piece[cursor] === '/';
+      if (closing) cursor++;
+      if (!/[A-Za-z]/.test(piece[cursor] ?? '')) return null;
+      const nameStart = cursor++;
+      while (cursor < piece.length && /[A-Za-z\d:-]/.test(piece[cursor])) cursor++;
+      const name = piece.slice(nameStart, cursor).toLowerCase();
+      const attributes = new Set();
+      while (cursor < piece.length) {
+        const gapStart = cursor;
+        while (whitespace(piece[cursor])) cursor++;
+        if (piece[cursor] === '>') return { name, closing, selfClosing: false, end: cursor + 1 };
+        if (piece.startsWith('/>', cursor) && !closing) return { name, closing, selfClosing: true, end: cursor + 2 };
+        if (closing || cursor === gapStart || !/[A-Za-z_:]/.test(piece[cursor] ?? '')) return null;
+        const attributeStart = cursor++;
+        while (cursor < piece.length && /[A-Za-z\d_.:-]/.test(piece[cursor])) cursor++;
+        const attribute = piece.slice(attributeStart, cursor).toLowerCase();
+        if (attributes.has(attribute)) return null;
+        attributes.add(attribute);
+        if (removedAttributes.has(attribute)) report(node, 'removed-copy-api-markup');
+        const nameEnd = cursor;
+        while (whitespace(piece[cursor])) cursor++;
+        if (piece[cursor] !== '=') {
+          if (textAttributes.has(attribute)) return null;
+          cursor = nameEnd;
+          continue;
+        }
+        cursor++;
+        while (whitespace(piece[cursor])) cursor++;
+        let value;
+        if (piece[cursor] === '"' || piece[cursor] === "'") {
+          const end = piece.indexOf(piece[cursor], cursor + 1);
+          if (end < 0 || piece.slice(cursor + 1, end).includes('<')) return null;
+          value = piece.slice(cursor + 1, end);
+          cursor = end + 1;
+        } else {
+          const valueStart = cursor;
+          while (cursor < piece.length && !whitespace(piece[cursor]) && piece[cursor] !== '>') {
+            if (/["'<=`]/.test(piece[cursor])) return null;
+            cursor++;
+          }
+          if (valueStart === cursor) return null;
+          value = piece.slice(valueStart, cursor);
+        }
+        const decoded = decodeMarkupEntities(value);
+        if (textAttributes.has(attribute) && !approvedLabels.has(decoded)) report(node, 'unregistered-markup-attribute');
+        if (attribute === 'style') reviewCss(decoded);
+      }
+      return null;
+    }
+    for (const piece of pieces) {
+      const textParts = [];
+      let cursor = 0;
+      while (cursor < piece.length) {
+        if (piece[cursor] !== '<') {
+          const next = piece.indexOf('<', cursor);
+          const end = next < 0 ? piece.length : next;
+          textParts.push(decodeMarkupEntities(piece.slice(cursor, end)));
+          cursor = end;
+        } else if (piece.startsWith('<!--', cursor)) {
+          const end = piece.indexOf('-->', cursor + 4);
+          if (end < 0 || piece.slice(cursor + 4, end).includes('--')) { malformed(); break; }
+          cursor = end + 3;
+        } else if (/^<!doctype\s+html\s*>/i.test(piece.slice(cursor))) {
+          cursor = piece.indexOf('>', cursor) + 1;
+        } else {
+          const token = tagAt(piece, cursor);
+          if (!token) { malformed(); break; }
+          if (token.name === 'script') { report(node, 'script-markup-prohibited'); break; }
+          if (token.name === 'style') {
+            if (token.closing || token.selfClosing) { malformed(); break; }
+            const closingStart = piece.indexOf('<', token.end);
+            const closing = closingStart < 0 ? null : tagAt(piece, closingStart);
+            if (!closing || closing.name !== 'style' || !closing.closing) { malformed(); break; }
+            reviewCss(piece.slice(token.end, closingStart));
+            cursor = closing.end;
+          } else cursor = token.end;
+        }
+      }
+      const text = textParts.join('').replace(/\s+/g, ' ').trim();
       if (text && !approvedLabels.has(text)) report(node, 'unregistered-markup-text');
     }
   }

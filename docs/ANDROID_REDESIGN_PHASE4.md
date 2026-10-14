@@ -4,7 +4,7 @@ All remaining consumer surfaces use the new shared design and concise actions, f
 
 The [copy contract](UI_COPY_CONTRACT.md) closes text APIs across screens, sheets, accessibility, native prompts, notifications and exported reports. Explanatory description, subtitle, helper and hint APIs are removed. Canonical CI checks the actual TypeScript program, including aliases, spreads, casts, native calls and generated HTML. Fixed legal documents and explicitly opened source-bound evidence have individual boundaries; no production route is exempt.
 
-The standalone history compiler imports pure numeric, classification and normalization helpers. Frontend copy adapters remain separate. Regenerated artifacts must preserve the prepared catalogue's semantic hash, and the compiler must execute after being copied alone to a temporary directory without installed application dependencies.
+The standalone history compiler imports pure numeric, classification and normalization helpers. Frontend copy adapters remain separate. The regenerated catalogue preserves semantic SHA-256 `924ef053fbc2a4f1b4ee44b251b8804b9d4794b003fa7466108687cd7bb87366` excluding only the compiler pin, and retains the original source catalogue receipt. Standalone execution after copying the compiler alone to a temporary directory, reproducibility and both history benchmarks pass. The generator remains unchanged.
 
 ## Native evidence
 

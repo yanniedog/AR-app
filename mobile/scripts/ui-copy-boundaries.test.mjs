@@ -21,7 +21,7 @@ declare const JSON: { stringify(value:unknown,replacer:null,space:number):string
 declare namespace JSX { interface Element {} interface IntrinsicElements { [tag:string]:any; } }
 `;
 const policy = `
-export const UI_LABELS = ['Save', 'Debug log', 'Rates', 'Rate', 'Unknown'] as const;
+export const UI_LABELS = ['Save', 'Debug log', 'Rates', 'Rate', 'Unknown', '&', '"Rate"', '<Rate>', '<'] as const;
 export type UiLabel = typeof UI_LABELS[number];
 export type UiText = string & {readonly __uiText:unique symbol};
 export type UiInputText = string & {readonly __uiInputText:unique symbol};
@@ -246,3 +246,37 @@ htmlRejected('html-ordinary-bound-construction','const bound=uiMarkup.bind(undef
 htmlRejected('html-native-raw-identifier-chain','const original=Print.printToFileAsync; const invoke=original; declare const raw:string; export async function print(){await invoke({html:raw});}');
 rejected('html-native-raw-import-alias',{'src/lib/htmlConsumer.ts':'import {printToFileAsync as print} from "expo-print"; declare const raw:string; export async function exportFile(){await print({html:raw});}'},'src/lib/htmlConsumer.ts');
 htmlRejected('html-native-raw-bound-alias','const bound=Print.printToFileAsync.bind(undefined); const invoke=bound; declare const raw:string; export async function print(){await invoke({html:raw});}');
+
+permitted('html-complete-comment-token',htmlSource('export const html=uiMarkup`<td><!-- non-rendered evidence note -->Rate</td>`;'));
+permitted('html-boolean-attribute-token',htmlSource('export const html=uiMarkup`<input disabled title="Rate"/>`;'));
+permitted('html-one-pass-amp-entity',htmlSource('export const html=uiMarkup`<td>&amp;</td>`;'));
+permitted('html-one-pass-quote-entity',htmlSource('export const html=uiMarkup`<td>&quot;Rate&quot;</td>`;'));
+permitted('html-one-pass-angle-entities',htmlSource('export const html=uiMarkup`<td>&lt;Rate&gt;</td>`;'));
+permitted('html-one-pass-numeric-entities',htmlSource('export const html=uiMarkup`<td>&#82;&#97;&#116;&#101;</td>`;'));
+permitted('html-one-pass-attribute-entity',htmlSource('export const html=uiMarkup`<td title="&quot;Rate&quot;"></td>`;'));
+permitted('html-reviewed-css-content',htmlSource('export const html=uiMarkup`<style>td::before{content:"Rate"}</style><table></table>`;'));
+permitted('html-one-pass-inline-css-attribute',htmlSource('export const html=uiMarkup`<div style=\'content:&quot;Rate&quot;\'></div>`;'));
+htmlRejected('html-nested-style-tokens','export const html=uiMarkup`<style><style>td{color:red}</style></style>`;');
+htmlRejected('html-nested-tag-looking-style','export const html=uiMarkup`<<style>td{color:red}</style>`;');
+htmlRejected('html-nested-tag-looking-comment','export const html=uiMarkup`<<!-- non-rendered evidence note -->`;');
+htmlRejected('html-nested-comment-token','export const html=uiMarkup`<!-- outer <!-- inner --> -->`;');
+htmlRejected('html-unterminated-comment-token','export const html=uiMarkup`<!-- missing terminator`;');
+htmlRejected('html-unterminated-style-token','export const html=uiMarkup`<style>td{color:red}`;');
+htmlRejected('html-interrupted-style-token','export const html=uiMarkup`<style>${uiMarkupEscape(uiLabel("Rate"))}</style>`;');
+htmlRejected('html-interrupted-comment-token','export const html=uiMarkup`<!-- ${uiMarkupEscape(uiLabel("Rate"))} -->`;');
+htmlRejected('html-interrupted-tag-token','export const html=uiMarkup`<td title="${uiMarkupEscape(uiLabel("Rate"))}"></td>`;');
+htmlRejected('html-malformed-tag-attribute','export const html=uiMarkup`<td class="<style>td{color:red}</style>"></td>`;');
+htmlRejected('html-malformed-closing-tag','export const html=uiMarkup`<td>Rate</td class="row">`;');
+htmlRejected('html-malformed-doctype','export const html=uiMarkup`<!DOCTYPE html <style>td{color:red}</style>>`;');
+htmlRejected('html-unquoted-explanatory-attribute','export const html=uiMarkup`<td title=Explanation></td>`;');
+htmlRejected('html-incomplete-css-string','export const html=uiMarkup`<style>td{content:"Rate}</style>`;');
+htmlRejected('html-css-concatenated-content','export const html=uiMarkup`<style>td{content:"Rate" "Unknown"}</style>`;');
+htmlRejected('html-css-dynamic-content','export const html=uiMarkup`<style>td{content:attr(data-label)}</style><td data-label="Explanatory sentence."></td>`;');
+htmlRejected('html-css-escaped-property','export const html=uiMarkup`<style>td{co\\\\6e tent:"Explanatory sentence."}</style>`;');
+htmlRejected('html-script-token','export const html=uiMarkup`<script></script>`;');
+htmlRejected('html-case-insensitive-script-token','export const html=uiMarkup`<ScRiPt></ScRiPt>`;');
+htmlRejected('html-nested-quote-entities','export const html=uiMarkup`<td>&amp;quot;Rate&amp;quot;</td>`;');
+htmlRejected('html-nested-attribute-entities','export const html=uiMarkup`<td title="&amp;quot;Rate&amp;quot;"></td>`;');
+htmlRejected('html-nested-inline-css-entities','export const html=uiMarkup`<div style=\'content:&amp;quot;Rate&amp;quot;\'></div>`;');
+htmlRejected('html-entity-cannot-cross-tag-token','export const html=uiMarkup`<td>&l<span></span>t;</td>`;');
+htmlRejected('html-static-literal-budget','export const html=uiMarkup`'+ ' '.repeat(1024*1024+1)+'`;');
