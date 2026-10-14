@@ -12,6 +12,14 @@ export interface HistoryGraphicEvidence {
   emptyStateRendered: boolean;
 }
 
+/** A measured empty window is available display evidence, not a chart failure.
+ * Missing finite values that the model expected must still fail the audit. */
+export function isMeasuredEmptyHistoryGraphic(evidence: HistoryGraphicEvidence | null): boolean {
+  return evidence?.availability === 'unavailable' &&
+    evidence.expectedCount === 0 && evidence.pointCount === 0 &&
+    evidence.layoutMeasured && evidence.emptyStateRendered && !evidence.accessibleSummary;
+}
+
 export function buildHistoryGraphicRevision(
   contentRevision: string,
   section: SectionKey,
