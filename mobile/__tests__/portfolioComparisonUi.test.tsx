@@ -6,7 +6,8 @@ import * as Clipboard from 'expo-clipboard';
 import { HoldingsResultDetails, HoldingsForm, PortfolioComparison } from '../src/components/product/PortfolioComparison';
 import { downloadInflate } from '../src/data/payload';
 import { normalizeCoreWithIntegrity } from '../src/data/sectionIntegrity';
-import { savingsHarness } from '../test-support/savingsMonetaryHarness';
+import { savingsHarness, savingsInputs } from '../test-support/savingsMonetaryHarness';
+import { compareSavingsHoldings, type HoldingsDraft } from '../src/data/portfolioContracts/adapter';
 import { profile as mockProfile } from '../test-support/executableDepositHarness';
 jest.mock('../src/data/payload', () => ({ downloadInflate: jest.fn() }));
 let mockState: any;
@@ -75,7 +76,35 @@ test.each([
  let tree:any;act(()=>{tree=TestRenderer.create(<HoldingsResultDetails result={result} referenceId="set-1"/>);});
  expect(JSON.stringify(tree.toJSON())).not.toContain('Interest accrued');
  act(()=>tree.root.findByProps({title:'set-2 · Results'}).props.onToggle());
- const rendered=JSON.stringify(tree.toJSON());expect(rendered).toContain(expected);expect(rendered).toContain('Unknown');expect(rendered).toContain('Known components');expect(rendered).toContain('1000.00');expect(rendered).toContain('1.000000000000');
+ const rendered=JSON.stringify(tree.toJSON());expect(rendered).toContain(expected);expect(rendered).toContain('Unknown');expect(rendered).toContain('Known components');expect(rendered).toContain('Claim available: No');expect(rendered).toContain('Status: Partial');expect(rendered).toContain('Unavailable');expect(rendered).toContain('a'.repeat(64));expect(rendered).not.toContain('Opening balance');expect(rendered).not.toContain('Interest accrued');expect(rendered).not.toContain('1000.00');expect(rendered).not.toContain('1.000000000000');
  if((breakEven as any)?.tiedDates.length)expect(rendered).toContain('First equality: 1 Jan 2026');
  act(()=>tree.unmount());
+});
+
+test('an actual complete evaluated receipt shows exact totals and its calculation hash', async () => {
+  const h = await savingsHarness(), [selection] = await h.load();
+  const account = (accountId: string) => ({ selection, target: h.target, inputs: { ...savingsInputs, accountId } });
+  const draft: HoldingsDraft = {
+    startDate: savingsInputs.startDate, endDateExclusive: savingsInputs.endDateExclusive,
+    timezone: selection.subject.authorityGraph.completedPeriod.timezone, metric: 'terminal_net_worth',
+    referenceId: 'set-1', independentHoldingsConfirmed: true,
+    alternatives: [{ id: 'set-1', accounts: [account('reference-account')] }, { id: 'set-2', accounts: [account('savings')] }],
+  };
+  const result = compareSavingsHoldings(h.context, mockProfile, draft).receipt.results[1];
+  const receipt = result.receipt.accounts.savings;
+  expect(receipt.claimAvailable).toBe(true);
+  expect(receipt.totals?.openingBalance).toBe('1000.00');
+  expect(receipt.totals?.interestAccrued).toBe('1.000000000000');
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<HoldingsResultDetails result={result} referenceId="set-1" />); });
+  try {
+    expect(JSON.stringify(tree.toJSON())).not.toContain('Opening balance');
+    act(() => tree.root.findByProps({ title: 'set-2 · Results' }).props.onToggle());
+    const rendered = JSON.stringify(tree.toJSON());
+    expect(rendered).toContain('Claim available: Yes');
+    expect(rendered).toContain('Opening balance'); expect(rendered).toContain('$1000.00');
+    expect(rendered).toContain('Interest accrued'); expect(rendered).toContain('$1.000000000000');
+    expect(rendered).toContain(receipt.inputSha256);
+    expect(rendered).not.toContain('Known components');
+  } finally { act(() => tree.unmount()); }
 });
