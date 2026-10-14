@@ -6,7 +6,7 @@ import { DetailsOnlyProduct } from '../../src/components/product/DetailsOnlyProd
 import { FixedDepositCalculation } from '../../src/components/product/FixedDepositCalculation';
 import { ProductTermsDisclosure } from '../../src/components/product/ProductTermsDisclosure';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HeaderTitle } from '@react-navigation/elements';
 import {
   InteractionManager,
@@ -66,6 +66,7 @@ import { StaySwitchChart } from '../../src/components/scenario/StaySwitchChart';
 import { buildStaySwitchProjection } from '../../src/data/staySwitchProjection';
 import { NOT_LISTED_PROVIDER } from '../../src/data/userRateScenario';
 import { openBank, openRateReceipt } from '../../src/lib/nav';
+import { buildCalculationRoute } from '../../src/lib/calculationTarget';
 import { rateQualifier } from '../../src/lib/rateQualifier';
 import {
   PRODUCT_HISTORY_TITLE,
@@ -348,9 +349,16 @@ export default function ProductDetail() {
     historyModel?.dates.at(-1) ?? 'none',
     historyModel?.dates.length ?? 0,
   ].join(':');
+  const openCalculate = useCallback(() => {
+    const selectedSection = found?.section;
+    if (!row || !selectedSection) return { unavailableReason: 'Selected product has no eligible rate' };
+    router.push(buildCalculationRoute(row, selectedSection));
+    return { expectedPath: '/calculator' };
+  }, [row, found?.section]);
   const auditActions = useMemo(() => {
     const actions: Record<string, (...args: unknown[]) => unknown> = {
       'product.open': () => undefined,
+      'product.calculate.open': openCalculate,
       'product.receipt.open': () => {
         if (row) openRateReceipt(productKey, row.rate_index);
       },
@@ -375,7 +383,7 @@ export default function ProductDetail() {
         : { unavailableReason: 'The mounted product has no multi-date history chart' },
     };
     return actions;
-  }, [historyGraphicEvidence?.window, productKey, row]);
+  }, [historyGraphicEvidence?.window, productKey, row, openCalculate]);
   const productLogoIds = useMemo(
     () => row ? [`product:${row.rate_index ?? 'default'}#${row.product_key}`] : [],
     [row],
@@ -665,15 +673,12 @@ export default function ProductDetail() {
             accessibilityState={{ selected: favorite }}
             onPress={() => toggleSavedRate(row, saveScope)}
           />
-          {section === 'Mortgage' ? <Button
+          <Button
             title="Calculate"
             variant="secondary"
             style={{ flex: 1 }}
-            onPress={() => router.push({ pathname: '/projections', params: {
-              section, target: row.product_key,
-              ri: row.rate_index != null ? String(row.rate_index) : undefined,
-            } })}
-          /> : null}
+            onPress={openCalculate}
+          />
         </Row>
 
         {staySwitchProjection?.ready ? (
@@ -682,14 +687,7 @@ export default function ProductDetail() {
               projection={staySwitchProjection}
               currentBank={currentBankLabel}
               compact
-              onOpenFull={() => router.push({
-                pathname: '/projections',
-                params: {
-                  section: 'Mortgage',
-                  target: row.product_key,
-                  ri: row.rate_index != null ? String(row.rate_index) : undefined,
-                },
-              } as never)}
+              onOpenFull={() => router.push(buildCalculationRoute(row, section, 'project'))}
             />
           </View>
         ) : null}

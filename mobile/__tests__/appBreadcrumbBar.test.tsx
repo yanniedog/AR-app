@@ -17,7 +17,7 @@ let mockRow = { product_key: 'private-key', product_name: 'Protected name', taxo
 let mockState = {
   ...rateConditionFixture(),
   activeSection: 'Mortgage' as SectionKey,
-  prefs: { onboarded: true, interests: ['Mortgage', 'Savings', 'TD'] },
+  hydrated: true, prefs: { interests: ['Mortgage', 'Savings', 'TD'] },
 };
 jest.mock('expo-router', () => ({
   router: {
@@ -52,7 +52,7 @@ beforeEach(() => {
   mockFound = true;
   mockRow = { product_key: 'private-key', product_name: 'Protected name', taxonomy_path: 'HOME_LOAN.OO', rate_index: 1 };
   mockDimensions = { width: 390, height: 844, scale: 1, fontScale: 1 };
-  mockState = { ...rateConditionFixture(), activeSection: 'Mortgage', prefs: { onboarded: true, interests: ['Mortgage', 'Savings', 'TD'] } };
+  mockState = { ...rateConditionFixture(), activeSection: 'Mortgage', hydrated: true, prefs: { interests: ['Mortgage', 'Savings', 'TD'] } };
   jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(() => 1);
 });
 afterEach(() => {
@@ -67,17 +67,17 @@ const jump = (label: string) => {
   act(() => button(label).props.onPress!());
 };
 
-it('jumps to a middle category, clears the drill at the root, and goes Home', () => {
+it('jumps to a middle category, clears the drill at the root, and returns to Rates', () => {
   mount();
   expect(button('Go to Owner-occupied')).toBeUndefined();
   jump('Go to Owner-occupied');
-  expect(mockNavigate).toHaveBeenLastCalledWith({ pathname: '/categories', params: expect.objectContaining({ section: 'home-loans', path: 'OO', request: expect.any(String) }) });
+  expect(mockNavigate).toHaveBeenLastCalledWith({ pathname: '/(tabs)/browse', params: expect.objectContaining({ section: 'home-loans', path: 'OO', request: expect.any(String) }) });
   expect(button('Go to Owner-occupied')).toBeUndefined();
   jump('Go to Home loans');
-  expect(mockNavigate).toHaveBeenLastCalledWith({ pathname: '/categories', params: expect.objectContaining({ section: 'home-loans', path: '' }) });
+  expect(mockNavigate).toHaveBeenLastCalledWith({ pathname: '/(tabs)/browse', params: expect.objectContaining({ section: 'home-loans', path: '' }) });
   expect(button('Variable rate, current location').props.disabled).toBe(true);
-  act(() => button('Home').props.onPress!());
-  expect(mockNavigate).toHaveBeenLastCalledWith('/(tabs)');
+  act(() => button('Rates').props.onPress!());
+  expect(mockNavigate).toHaveBeenLastCalledWith('/(tabs)/browse');
 });
 
 it('keeps large-text paths short with no horizontal scroller and opens full parent names on demand', () => {
@@ -135,6 +135,7 @@ it('does not reopen a dismissed overflow menu after rotating back to a narrow sc
 });
 
 it.each(['product', 'rate'])('dismisses the menu when the %s changes but breadcrumb labels stay the same', (change) => {
+  mockDimensions = { ...mockDimensions, width: 120, fontScale: 2.5 };
   mockPathname = '/product/private-key';
   mockParams = { key: 'private-key', ri: '1' };
   mount();
@@ -205,8 +206,8 @@ it('adds the verified details catalogue parent and removes identity on stale or 
   mockState.details.products['details-only'] = { displayIdentity: { name: 'Verified no-rate product' } };
   mount();
   expect(button('Verified no-rate product, current location')).toBeDefined();
-  jump('Go to Products without listed rates');
-  expect(mockNavigate).toHaveBeenLastCalledWith('/catalogue');
+  jump('Go to Rates');
+  expect(mockNavigate).toHaveBeenLastCalledWith('/(tabs)/browse');
   const verified = mockState.details;
   mockState.details = { ...verified };
   act(() => tree.update(<AppBreadcrumbBar />));
@@ -215,7 +216,7 @@ it('adds the verified details catalogue parent and removes identity on stale or 
   mockAllowed = false;
   act(() => tree.update(<AppBreadcrumbBar />));
   expect(button('Verified no-rate product, current location')).toBeUndefined();
-  expect(button('Go to Products without listed rates')).toBeUndefined();
+  expect(button('Go to Rates')).toBeDefined();
 });
 
 it('does not replace an unavailable exact rate with details-only product identity', () => {
@@ -241,10 +242,10 @@ it.each(['/calculator', '/projections'])('keeps %s category changes and ancestor
   expect(current!).toBe('Mortgage');
   act(() => { select!('Savings'); tree.update(<Scenario />); });
   expect(current!).toBe('Savings');
-  jump('Go to Tools');
-  expect(mockNavigate).toHaveBeenLastCalledWith('/(tabs)/tools');
+  jump('Go to Rates');
+  expect(mockNavigate).toHaveBeenLastCalledWith('/(tabs)/browse');
   if (pathname === '/projections') {
-    jump('Go to Check my rate');
+    jump('Go to Calculate');
     expect(mockNavigate).toHaveBeenLastCalledWith({ pathname: '/calculator', params: { section: 'Savings' } });
   }
   mockParams = { section: 'TD' };

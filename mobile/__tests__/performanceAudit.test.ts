@@ -211,78 +211,30 @@ function check(
 }
 
 describe('performance audit journeys', () => {
-  it('covers every steady-state destination and all three browse sections', () => {
+  it('covers canonical tasks and all three available Rates sections without retired directories', () => {
     const journeys = buildPerformanceAuditJourneys(core);
-    expect(journeys).toHaveLength(26);
-    expect(journeys.map((journey) => journey.id)).toEqual(
-      expect.arrayContaining([
-        'home',
-        'rates',
-        'market',
-        'tools',
-        'matches',
-        'bank-rates',
-        'changes',
-        'browse-mortgage',
-        'browse-savings',
-        'browse-td',
-        'response',
-        'outlook',
-        'rba',
-        'watchlist',
-        'settings',
-        'search',
-        'calculator',
-        'projections',
-        'lenders',
-        'profile',
-        'product',
-        'rate-receipt',
-        'lender',
-        'compare',
-        'terms',
-        'debug-log',
-      ]),
-    );
-    expect(journeys.find((journey) => journey.id === 'product')?.href).toBeDefined();
-    expect(journeys.find((journey) => journey.id === 'rate-receipt')?.href).toBeDefined();
-    expect(journeys.find((journey) => journey.id === 'compare')?.href).toBeDefined();
-    expect(journeys.every((journey) => journey.expectedSurface.length > 0)).toBe(true);
-    expect(journeys.find((journey) => journey.id === 'product')?.expectedSurface)
-      .toBe('product.details');
-    expect(journeys.find((journey) => journey.id === 'compare')?.expectedSurface)
-      .toBe('compare.table');
-    expect(journeys.find((journey) => journey.id === 'response')).toMatchObject({
-      expectedPath: '/rba-response',
-      expectedSurface: 'moves.response-chart',
-      navigationKind: 'stack',
-    });
-    expect(journeys.find((journey) => journey.id === 'rba')).toMatchObject({
-      label: 'RBA rates',
-      href: '/rba',
-      expectedPath: '/rba',
-      expectedSurface: 'rba.dashboard',
-      navigationKind: 'stack',
-    });
+    expect(journeys.map(item => item.id)).toEqual([
+      'rates', 'market', 'bank-rates', 'rates-mortgage', 'rates-savings', 'rates-td',
+      'response', 'outlook', 'rba', 'watchlist', 'settings', 'calculator',
+      'projections', 'profile', 'product', 'rate-receipt', 'lender', 'compare', 'terms', 'debug-log',
+    ]);
+    expect(new Set(journeys.map(item => item.id)).size).toBe(journeys.length);
+    expect(journeys.every(item => item.expectedSurface.length > 0)).toBe(true);
+    expect(journeys.find(item => item.id === 'product')).toMatchObject({ expectedSurface: 'product.details', href: expect.any(Object) });
+    expect(journeys.find(item => item.id === 'rate-receipt')?.href).toBeDefined();
+    expect(journeys.find(item => item.id === 'compare')).toMatchObject({ expectedSurface: 'compare.table', href: expect.any(Object) });
+    expect(journeys.find(item => item.id === 'response')).toMatchObject({ expectedPath: '/rba-response', expectedSurface: 'moves.response-chart', navigationKind: 'stack' });
   });
 
-  it('audits the five hubs and moved screens against their actual stack destinations', () => {
+  it('requires real Rates/Market surfaces and embedded projection mode', () => {
     const journeys = buildPerformanceAuditJourneys(core);
-    expect(journeys.filter(journey => journey.navigationKind === 'tab').map(journey => journey.id))
-      .toEqual(['home', 'rates', 'market', 'tools', 'watchlist']);
-    expect(journeys.find(journey => journey.id === 'home')).toMatchObject({
-      expectedPath: '/', expectedSurface: 'home.hub',
-    });
-    expect(journeys.find(journey => journey.id === 'matches')).toMatchObject({
-      expectedPath: '/matches', expectedSurface: 'today.hero', navigationKind: 'stack',
-    });
-    expect(journeys.find(journey => journey.id === 'browse-mortgage')).toMatchObject({
-      href: { pathname: '/categories' }, expectedPath: '/categories',
-      expectedSurface: 'browse.hierarchy', navigationKind: 'stack',
-    });
-    for (const id of ['outlook', 'settings', 'bank-rates', 'changes']) {
-      expect(journeys.find(journey => journey.id === id)?.navigationKind).toBe('stack');
-    }
+    expect(journeys.filter(item => item.navigationKind === 'tab' && !item.expectedSection).map(item => item.id))
+      .toEqual(['rates', 'market', 'watchlist']);
+    expect(journeys.find(item => item.id === 'rates')).toMatchObject({ expectedPath: '/browse', expectedSurface: 'rates.results' });
+    expect(journeys.find(item => item.id === 'market')).toMatchObject({ expectedPath: '/market', expectedSurface: 'market.overview' });
+    expect(journeys.find(item => item.id === 'rates-mortgage')).toMatchObject({ href: { pathname: '/browse' }, expectedSection: 'Mortgage', expectedSurface: 'rates.results' });
+    expect(journeys.find(item => item.id === 'projections')).toMatchObject({ href: { pathname: '/calculator', params: { mode: 'project' } }, expectedPath: '/calculator', expectedSurface: 'projections.lifecycle-chart' });
+    expect(journeys.some(item => ['home.hub', 'rates.hub', 'market.hub', 'tools.hub', 'browse.hierarchy', 'lenders.list', 'today.hero'].includes(item.expectedSurface))).toBe(false);
   });
 
   it('builds comparison journeys only from two products in the same section', () => {
@@ -324,17 +276,12 @@ describe('performance audit journeys', () => {
     );
   });
 
-  it('marks Browse sections outside the user interests as skipped', () => {
+  it('keeps all product types available even when saved interests contain only one', () => {
     const journeys = buildPerformanceAuditJourneys(core, ['Mortgage']);
-    expect(journeys.find((journey) => journey.id === 'browse-mortgage')?.href).toBeDefined();
-    expect(journeys.find((journey) => journey.id === 'browse-savings')).toMatchObject({
-      href: undefined,
-      skipReason: 'Savings accounts is disabled in interests',
-    });
-    expect(journeys.find((journey) => journey.id === 'browse-td')).toMatchObject({
-      href: undefined,
-      skipReason: 'Term deposits is disabled in interests',
-    });
+    for (const section of ['mortgage', 'savings', 'td']) {
+      expect(journeys.find(item => item.id === `rates-${section}`)).toMatchObject({ href: expect.any(Object), expectedSurface: 'rates.results' });
+      expect(journeys.find(item => item.id === `rates-${section}`)?.skipReason).toBeUndefined();
+    }
   });
 
   it('matches normalized and decoded Expo Router paths', () => {
@@ -389,7 +336,7 @@ describe('performance audit optional data', () => {
 
   it('waits for free-beta insights without the deprecated Pro entitlement', () => {
     expect(resolveAuditJourneyOptionalData('response', freeBetaPrefs, true).bankInsights).toBe(true);
-    expect(resolveAuditJourneyOptionalData('search', freeBetaPrefs, true).deepSearch).toBe(true);
+    expect(resolveAuditJourneyOptionalData('rates', freeBetaPrefs, true).deepSearch).toBe(true);
     expect(resolveAuditJourneyOptionalData('product', freeBetaPrefs, true)).toEqual(
       expect.objectContaining({ bankInsights: true, bankHistory: false, productHistory: false }),
     );

@@ -367,12 +367,12 @@ test('a later request cancels queued startup work and uses the latest filters', 
   jest.mocked(yieldToPaintFrames).mockReturnValueOnce(paint.promise);
   const { get, set } = store();
   const first = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
-  set({ prefs: { ...get().prefs, includeNonStandard: true, onboarded: true, interests: ['Savings'] } });
+  set({ prefs: { ...get().prefs, includeNonStandard: true, interests: ['Savings'] } });
   await prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
   paint.resolve();
   await first;
   expect(prepareReadyBankRateHistory).toHaveBeenCalledTimes(1);
-  expect(warmHistoricalBankRateCatalogue).toHaveBeenCalledWith(sampleCore, expect.objectContaining({ includeNonStandard: true, interests: ['Savings'] }));
+  expect(warmHistoricalBankRateCatalogue).toHaveBeenCalledWith(sampleCore, expect.objectContaining({ includeNonStandard: true, interests: ['Mortgage', 'Savings', 'TD'] }));
   expect(get().bankRateHistoryRevision).toBe(1);
 });
 

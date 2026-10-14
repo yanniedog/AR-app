@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const calculatorSource = fs.readFileSync(path.join(__dirname, '..', 'app', 'calculator.tsx'), 'utf8');
+const calculatorSource = fs.readFileSync(path.join(__dirname, '..', 'src/components/calculation/RateCheckWorkspace.tsx'), 'utf8');
 
 describe('quick calculator claim truth', () => {
   it('requires an explicit mortgage term and never reports a multiplied remaining-term saving', () => {

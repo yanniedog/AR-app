@@ -127,6 +127,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
     colors: { success: '#0a0', primary: '#00a', warning: '#fa0', rateLoan: '#00a', rateDeposit: '#0a0' },
     ledger: { info: '#36c' },
+    radius: { sm: 8 },
   }),
 }));
 
@@ -176,17 +177,18 @@ describe('Product detail save eligibility', () => {
     expect(visible).not.toContain('For balances of 1 million dollars and under');
     act(() => tree.unmount());
   });
-  it('calculates the selected mortgage tier without replacing it with another sibling', async () => {
-    const selected = { ...row, rate_index: 7, exact_alert_eligible: true };
+  it.each(['Mortgage', 'Savings', 'TD'] as const)('calculates the selected %s tier without replacing it with another sibling', async (section) => {
+    const selected = { ...row, product_key: `${row.product_key}#${section}`, rate_index: 7, exact_alert_eligible: true,
+      category: section === 'Mortgage' ? 'RESIDENTIAL_MORTGAGES' : section === 'Savings' ? 'SAVINGS_ACCOUNTS' : 'TERM_DEPOSITS' };
     Object.assign(mockState, { core: { ...core, sections: { ...core.sections,
-      Mortgage: { ...core.sections.Mortgage, rates: [{ ...selected, rate_index: 2 }, selected] },
+      [section]: { ...core.sections[section], rates: [{ ...selected, rate_index: 2 }, selected] },
     } }, coreIntegrity: null, manifest: null, details: null });
     mockRoute.key = selected.product_key; mockRoute.ri = '7';
     let tree!: InspectableRenderer;
     await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
     act(() => tree.root.findByProps({ title: 'Calculate' }).props.onPress());
-    expect(router.push).toHaveBeenLastCalledWith({ pathname: '/projections', params: {
-      section: 'Mortgage', target: selected.product_key, ri: '7',
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: '/calculator', params: {
+      mode: 'check', section, target: selected.product_key, ri: '7',
     } });
     act(() => tree.unmount());
   });

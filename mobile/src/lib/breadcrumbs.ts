@@ -1,7 +1,7 @@
 import type { Href } from 'expo-router';
 
 import { SECTIONS } from '../constants';
-import { ROOT, segLabel } from '../data/taxonomy';
+import { segLabel } from '../data/taxonomy';
 import { LEDGER_LAYOUT } from '../theme/layout';
 import type { RateRow, SectionKey } from '../types';
 import { isPrimaryTabRootPath, normalizeAppPath, TAB_BAR_ORDER, tabHref } from './tabRouting';
@@ -17,36 +17,35 @@ export interface Breadcrumb {
 
 const rates: Breadcrumb = { label: 'Rates', target: { href: tabHref('browse') } };
 const market: Breadcrumb = { label: 'Market', target: { href: '/(tabs)/market' } };
-const tools: Breadcrumb = { label: 'Tools', target: { href: '/(tabs)/tools' } };
-const about: Breadcrumb = { label: 'About and help', target: { href: '/about' } };
-const scenario: Breadcrumb = { label: 'Check my rate', target: { href: '/calculator' } };
+const about: Breadcrumb = { label: 'About', target: { href: '/about' } };
+const scenario: Breadcrumb = { label: 'Calculate', target: { href: '/calculator' } };
 
 const ROUTES: Record<string, Breadcrumb[]> = {
-  '/': [{ label: 'Home' }],
+  '/': [rates],
   '/browse': [rates],
   '/watchlist': [{ label: 'Saved' }],
   '/market': [market],
-  '/tools': [tools],
+  '/tools': [rates, scenario],
   '/matches': [rates, { label: 'Matched rates' }],
   '/banks': [rates, { label: 'Banks' }],
   '/catalogue': [rates, { label: 'Products without listed rates' }],
   '/compare': [rates, { label: 'Compare' }],
-  '/calculator': [tools, scenario],
-  '/calculation-receipt': [tools, scenario, { label: 'Calculation receipt' }],
-  '/projections': [tools, scenario, { label: 'Project my balance' }],
+  '/calculator': [rates, scenario],
+  '/calculation-receipt': [rates, scenario, { label: 'Calculation receipt' }],
+  '/projections': [rates, scenario, { label: 'Project my balance' }],
   '/bank-rates': [market, { label: 'Bank rates over time' }],
   '/passthrough': [market, { label: 'Recent rate changes' }],
   '/research': [market, { label: 'Market research' }],
   '/trends': [market, { label: 'Market research' }],
   '/rba': [market, { label: 'RBA rates and outlook' }],
   '/rba-response': [market, { label: 'Bank response' }],
-  '/profile': [tools, { label: 'Your profile' }],
-  '/settings': [tools, { label: 'Settings' }],
-  '/about': [tools, about],
-  '/terms': [tools, about, { label: 'Terms' }],
-  '/third-party-notices': [tools, about, { label: 'Open-source notices' }],
-  '/debug-log': [tools, about, { label: 'Debug log' }],
-  '/performance-audit': [tools, about, { label: 'App health audit' }],
+  '/profile': [rates, { label: 'Your profile' }],
+  '/settings': [rates, { label: 'Settings' }],
+  '/about': [rates, about],
+  '/terms': [rates, about, { label: 'Terms' }],
+  '/third-party-notices': [rates, about, { label: 'Open-source notices' }],
+  '/debug-log': [rates, about, { label: 'Debug log' }],
+  '/performance-audit': [rates, about, { label: 'App health audit' }],
 };
 
 function categoryTrail(section: SectionKey, path: string[]): Breadcrumb[] {
@@ -86,19 +85,15 @@ export function buildBreadcrumbs({
     trail = categoryTrail(section, path);
     if (route === '/search') trail.push({ label: 'Search' });
   } else if (route.startsWith('/bank/')) {
-    trail = [rates, { label: 'Banks', target: { href: '/banks' } }, { label: provider || 'Bank' }];
+    trail = [rates, { label: provider || 'Bank' }];
   } else if (route.startsWith('/product/') || route === '/rate-receipt') {
     if (!product && catalogueProductName && route.startsWith('/product/')) {
       return [
         rates,
-        { label: 'Products without listed rates', target: { href: '/catalogue' } },
         { label: catalogueProductName },
       ];
     }
-    const segments = product?.row.taxonomy_path?.split('.').filter(Boolean) ?? [];
-    trail = product
-      ? categoryTrail(product.section, segments[0] === ROOT[product.section] ? segments.slice(1) : [])
-      : [rates];
+    trail = [rates];
     trail.push({
       label: product?.row.product_name || 'Product',
       ...(product ? { target: { href: {
@@ -118,9 +113,9 @@ export function buildBreadcrumbs({
   });
 }
 
-export function shouldShowBreadcrumbs(pathname: string, onboarded: boolean): boolean {
+export function shouldShowBreadcrumbs(pathname: string, hydrated: boolean): boolean {
   const path = normalizeAppPath(pathname);
-  return onboarded
+  return hydrated
     && path !== '/onboarding'
     && !path.startsWith('/onboarding/')
     && !TAB_BAR_ORDER.some((route) => isPrimaryTabRootPath(path, route));

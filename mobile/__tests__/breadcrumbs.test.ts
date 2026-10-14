@@ -25,20 +25,20 @@ it('keeps search scope and its ancestors on direct links', () => {
 });
 
 it.each([
-  ['/debug-log', ['Tools', 'About and help', 'Debug log'], '/(tabs)/tools'],
-  ['/third-party-notices', ['Tools', 'About and help', 'Open-source notices'], '/(tabs)/tools'],
+  ['/debug-log', ['Rates', 'About', 'Debug log'], '/(tabs)/browse'],
+  ['/third-party-notices', ['Rates', 'About', 'Open-source notices'], '/(tabs)/browse'],
   ['/rba-response', ['Market', 'Bank response'], '/(tabs)/market'],
   ['/bank-rates', ['Market', 'Bank rates over time'], '/(tabs)/market'],
-  ['/matches', ['Rates', 'Matched rates'], { pathname: '/(tabs)/browse', params: { section: undefined, path: undefined, request: undefined } }],
+  ['/matches', ['Rates', 'Matched rates'], '/(tabs)/browse'],
 ])('gives %s a working parent even without navigation history', (pathname, labels, href) => {
   const crumbs = build(pathname);
   expect(crumbs.map((crumb) => crumb.label)).toEqual(labels);
   expect(crumbs[0].target).toEqual({ href });
 });
 
-it('returns to Tools and preserves the scenario category when opening its parent', () => {
+it('returns to Rates and preserves the scenario category when opening its parent', () => {
   const crumbs = buildBreadcrumbs({ pathname: '/projections', section: 'Savings' });
-  expect(crumbs[0].target).toEqual({ href: '/(tabs)/tools' });
+  expect(crumbs[0].target).toEqual({ href: '/(tabs)/browse' });
   expect(crumbs[1].target).toEqual({ href: { pathname: '/calculator', params: { section: 'Savings' } } });
 });
 
@@ -49,7 +49,7 @@ it('preserves exact product keys and rate tiers when jumping back from a receipt
   } as RateRow;
   const crumbs = buildBreadcrumbs({ pathname: '/rate-receipt', section: 'Savings', product: { row, section: 'Mortgage' }, rateIndex: '7' });
   expect(crumbs.map((crumb) => crumb.label)).toEqual([
-    'Rates', 'Home loans', 'Owner-occupied', 'Principal & interest', 'Variable rate', 'Variable home loan', 'Bank-call brief',
+    'Rates', 'Variable home loan', 'Bank-call brief',
   ]);
   expect(crumbs.at(-2)?.target).toEqual({ href: { pathname: '/product/[key]', params: { key: 'bank/a%,b', ri: '7' } } });
 });
@@ -68,7 +68,7 @@ it('keeps the bar available on focused routes while respecting onboarding', () =
 
 
 it('keeps primary hubs free of duplicate breadcrumbs', () => {
-  for (const path of ['/', '/browse', '/watchlist', '/market', '/tools', '/(tabs)/market/']) {
+  for (const path of ['/', '/browse', '/watchlist', '/market', '/(tabs)/market/']) {
     expect(shouldShowBreadcrumbs(path, true)).toBe(false);
   }
   expect(shouldShowBreadcrumbs('/onboarding/step', true)).toBe(false);

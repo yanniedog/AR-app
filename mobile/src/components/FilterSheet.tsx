@@ -26,7 +26,14 @@ export function FilterSheet({
   filters,
   onApply,
   resultCount,
+  resultNoun = 'products',
+  children,
+  controlledDraft,
+  onDraftChange,
 }: {
+  children?: React.ReactNode;
+  controlledDraft?: Filters;
+  onDraftChange?: React.Dispatch<React.SetStateAction<Filters>>;
   visible: boolean;
   onClose: () => void;
   options: SearchFilterOptions;
@@ -37,8 +44,11 @@ export function FilterSheet({
   onApply: (f: Filters) => void;
   /** Products the list would show for a draft; labels the apply action. */
   resultCount?: (draft: Filters) => number;
+  resultNoun?: 'rates' | 'products';
 }) {
-  const [draft, setDraft] = useState<Filters>(filters);
+  const [internalDraft, setInternalDraft] = useState<Filters>(filters);
+  const draft = controlledDraft ?? internalDraft;
+  const setDraft = controlledDraft && onDraftChange ? onDraftChange : setInternalDraft;
   const [publishedOpen, setPublishedOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [lenderQuery, setLenderQuery] = useState('');
@@ -50,7 +60,7 @@ export function FilterSheet({
       setExpandedGroups(new Set());
       setLenderQuery('');
     }
-  }, [visible, filters]);
+  }, [visible, filters, setDraft]);
 
   const { groups: groupOptions, providers, accountFeatures, eligibilityCriteria } = options;
   const publishedDetails = useMemo(
@@ -70,7 +80,7 @@ export function FilterSheet({
   );
   const applyTitle = draftCount === null
     ? 'Apply'
-    : `Show ${draftCount} ${draftCount === 1 ? 'product' : 'products'}`;
+    : `Show ${draftCount} ${draftCount === 1 ? resultNoun.slice(0, -1) : resultNoun}`;
 
   const toggle = (key: keyof Filters, value: string) => {
     setDraft((d) => {
@@ -164,6 +174,7 @@ export function FilterSheet({
               <AppText variant="small" color="textMuted">Filters unavailable</AppText>
               <Button title="Retry filters" variant="secondary" onPress={onRetryOptions} />
             </View> : null}
+            {children}
             {groupOptions.map(({ g, options }) => {
               return (
                 <View key={g.key}>
