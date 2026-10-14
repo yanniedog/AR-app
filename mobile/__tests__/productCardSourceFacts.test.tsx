@@ -3,6 +3,7 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { ProductCard } from '../src/components/ProductCard';
 import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 import { rateConditionFixture } from '../testUtils/rateConditions';
+import bundledCore from '../assets/sample/core.json';
 import type { RateRow } from '../src/types';
 let mockState: Record<string, any>;
 const mockSave = jest.fn();
@@ -96,5 +97,26 @@ test('a mortgage card preserves unspecified purpose in visible and accessible fa
     const nav = tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith('Budget Home Loan,'));
     expect(nav?.props.accessibilityLabel).toContain('Unspecified purpose');
     expect(row.loan_purpose).toBe('UNCONSTRAINED');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('bundled Liberty and Unity OTHER purposes stay explicit in visible and accessible card facts', () => {
+  const rows: RateRow[] = bundledCore.sections.Mortgage.rates.filter(row => row.loan_purpose === 'OTHER');
+  expect(rows.map(row => row.provider)).toEqual(['Liberty Financial', 'Unity Bank']);
+  expect(rows.every(row => row.security_purpose === 'owner_occupied')).toBe(true);
+  const original = JSON.stringify(rows);
+  mockState = { isRateSaved: () => false, toggleSavedRate: mockSave, prefs: { mortgageRateMetric: 'comparison' } };
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<>{rows.map(row => <ProductCard key={row.product_key} row={row} section="Mortgage" />)}</>) as Tree; });
+  try {
+    const text = tree.root.findAllByType('AppText').map(node => String(node.props.children));
+    expect(text.filter(value => value.includes('Other purpose'))).toHaveLength(2);
+    for (const row of rows) {
+      const action = tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith(`${row.product_name},`));
+      expect(action).toBeDefined();
+      expect(action!.props.accessibilityLabel).toContain('Other purpose');
+      expect(action!.props.accessibilityLabel).not.toMatch(/Owner occupied|Eligibility confirmed/);
+    }
+    expect(JSON.stringify(rows)).toBe(original);
   } finally { act(() => tree.unmount()); }
 });

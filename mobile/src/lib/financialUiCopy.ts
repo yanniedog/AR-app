@@ -115,7 +115,7 @@ export function uiRepayment(row: RateRow): UiText {
 }
 export function uiLoanPurpose(row: Pick<RateRow, 'loan_purpose' | 'security_purpose'>): UiText {
   const value = (row.loan_purpose ?? row.security_purpose ?? '').trim().toUpperCase();
-  return uiLabel(['OO', 'OWNER_OCCUPIED', 'OWNER_OCCUPIER'].includes(value) ? 'Owner occupied' : ['INV', 'INVESTOR', 'INVESTMENT'].includes(value) ? 'Investor' : value === 'UNCONSTRAINED' ? 'Unspecified purpose' : 'Unknown');
+  return uiLabel(['OO', 'OWNER_OCCUPIED', 'OWNER_OCCUPIER'].includes(value) ? 'Owner occupied' : ['INV', 'INVESTOR', 'INVESTMENT'].includes(value) ? 'Investor' : value === 'UNCONSTRAINED' ? 'Unspecified purpose' : value === 'OTHER' ? 'Other purpose' : 'Unknown');
 }
 export function uiBalanceTier(row: RateRow): UiText {
   const parse = (value: RateRow['balance_min']): NumericConditionBoundary => value !== undefined && String(value).trim() !== '' && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(String(value).trim()) && Number.isFinite(Number(value))

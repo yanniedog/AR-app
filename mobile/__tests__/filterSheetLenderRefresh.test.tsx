@@ -5,6 +5,7 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { FilterSheet } from '../src/components/FilterSheet';
 import { EMPTY_FILTERS } from '../src/data/selectors';
 import { prepareSearchFilterOptions } from '../src/data/searchFilterOptions';
+import bundledCore from '../assets/sample/core.json';
 import type { RateRow } from '../src/types';
 
 jest.mock('../src/components/controls', () => ({ SearchBar: 'SearchBar' }));
@@ -90,5 +91,26 @@ test('readable purpose, feature and eligibility chips apply the exact published 
     expect(onApply).toHaveBeenCalledTimes(1);
     expect(onApply.mock.calls[0][0]).toMatchObject({ loanPurposes: ['UNCONSTRAINED'], accountFeatures: ['OVERDRAFT'], eligibilityCriteria: ['NATURAL_PERSON', 'EMPLOYMENT_STATUS'] });
     expect(onClose).toHaveBeenCalledTimes(1);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('the real bundled OTHER purpose chip applies the publisher code without rewriting rows', async () => {
+  const rows: RateRow[] = bundledCore.sections.Mortgage.rates.filter(row => row.loan_purpose === 'OTHER');
+  expect(rows.map(row => row.provider)).toEqual(['Liberty Financial', 'Unity Bank']);
+  const original = JSON.stringify(rows);
+  const options = (await prepareSearchFilterOptions(rows, null, 'Mortgage', { yieldControl: async () => {} }))!;
+  const onApply = jest.fn();
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<FilterSheet visible onClose={jest.fn()} onApply={onApply} filters={{ ...EMPTY_FILTERS }} options={options} />) as InspectableRenderer; });
+  try {
+    const chip = () => tree.root.findAll(node => node.type === 'Chip' && node.props.label === 'Other purpose')[0];
+    expect(chip()).toBeDefined();
+    expect(chip().props.selected).toBe(false);
+    act(() => chip().props.onPress!());
+    expect(chip().props.selected).toBe(true);
+    act(() => tree.root.findAll(node => node.type === 'Button' && node.props.title === 'Apply')[0].props.onPress!());
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply.mock.calls[0][0].loanPurposes).toEqual(['OTHER']);
+    expect(JSON.stringify(rows)).toBe(original);
   } finally { act(() => tree.unmount()); }
 });

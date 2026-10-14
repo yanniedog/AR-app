@@ -35,7 +35,9 @@ test('an unconstrained source purpose is unspecified even when normalized securi
   expect(uiLoanPurpose({ loan_purpose: 'OWNER_OCCUPIED' })).toBe('Owner occupied');
   expect(uiLoanPurpose({ loan_purpose: 'INVESTMENT' })).toBe('Investor');
   expect(uiLoanPurpose({})).toBe('Unknown');
-  expect(uiLoanPurpose({ loan_purpose: 'OTHER' })).toBe('Unknown');
+  expect(uiLoanPurpose({ loan_purpose: 'OTHER' })).toBe('Other purpose');
+  expect(uiLoanPurpose({ loan_purpose: 'OTHER', security_purpose: 'owner_occupied' })).toBe('Other purpose');
+  expect(uiLoanPurpose({ loan_purpose: 'OTHER. Conditions apply.' })).toBe('Unknown');
   expect(uiLoanPurpose({ loan_purpose: 'All applicants are approved.' })).toBe('Unknown');
 });
 

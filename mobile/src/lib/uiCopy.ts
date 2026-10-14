@@ -150,7 +150,7 @@ export const UI_LABELS = [
   'Account class', 'Product ID', 'Rate index', 'Features', 'Constraints', 'Product facts',
   'Overdraft', 'Business applicants', 'Employment status', 'Minimum income',
   'Individual applicants', 'Pension recipients', 'Residency status',
-  'Unspecified', 'Unspecified purpose',
+  'Unspecified', 'Unspecified purpose', 'Other purpose',
   'Availability', 'Package', 'Customer group', 'Documents', 'Revisions', 'Source excerpts',
   'Coverage gaps', 'Discovery', 'Acquisition', 'Extraction', 'Interpretation', 'Calculation',
   'Page', 'Disposition', 'Interpreted', 'Uninterpreted', 'Added', 'Changed',
