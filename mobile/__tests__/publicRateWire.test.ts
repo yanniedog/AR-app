@@ -42,6 +42,24 @@ it('retains optional bounded raw material notes without changing legacy programm
   }
 });
 
+it('preserves public alias observation dates independently of lender effective periods', () => {
+  const { manifest, index } = catalogueFixture();
+  const product = index.products[0];
+  product.aliases = [{ name: 'Earlier public name' }];
+  expect(validatePublicRateIndex(index, manifest).products[0].aliases[0]).toEqual({ name: 'Earlier public name' });
+  const alias = { name: 'Earlier public name', effectiveFrom: '2020-01-01', effectiveTo: '2023-12-31',
+    firstObservedAt: '2024-01-02T00:00:00Z', lastObservedAt: '2026-10-14T00:00:00Z' };
+  product.aliases = [alias];
+  expect(validatePublicRateIndex(index, manifest).products[0].aliases[0]).toEqual(alias);
+  for (const field of ['firstObservedAt', 'lastObservedAt'] as const) {
+    for (const invalidDate of ['2026-02-30T00:00:00Z', '2026-10-14T00:00:00', 42]) {
+      expect(() => validatePublicRateIndex({ ...index, products: [{ ...product, aliases: [{ ...alias, [field]: invalidDate }] }] }, manifest)).toThrow();
+    }
+  }
+  expect(() => validatePublicRateIndex({ ...index, products: [{ ...product, aliases: [{ ...alias,
+    firstObservedAt: '2026-10-15T00:00:00Z', lastObservedAt: '2026-10-14T00:00:00Z' }] }] }, manifest)).toThrow();
+});
+
 it('binds capability hashes while publication URL retagging leaves the bundle identity stable', () => {
   const { manifest } = catalogueFixture();
   const before = payloadBundleIdentity(manifest);

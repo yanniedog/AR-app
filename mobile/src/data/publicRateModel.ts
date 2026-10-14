@@ -113,7 +113,14 @@ export interface PublicProduct {
   providerName: string;
   name: string;
   section: SectionKey;
-  aliases: { name: string; effectiveFrom?: string; effectiveTo?: string }[];
+  aliases: {
+    name: string;
+    /** Lender-published effective dates, independent of observation history. */
+    effectiveFrom?: string;
+    effectiveTo?: string;
+    firstObservedAt?: string;
+    lastObservedAt?: string;
+  }[];
   status: 'current' | 'legacy' | 'unknown';
   programmeIds: string[];
   referenceIds: string[];

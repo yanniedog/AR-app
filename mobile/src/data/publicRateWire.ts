@@ -151,7 +151,10 @@ function product(value: unknown): value is PublicProduct {
     ['current', 'legacy', 'unknown'].includes(String(value.status)) && strings(value.programmeIds) && !duplicates(value.programmeIds) && strings(value.referenceIds) && strings(value.reasonCodes) &&
     (value.suppressedProgrammeCount === undefined || Number.isSafeInteger(value.suppressedProgrammeCount) && Number(value.suppressedProgrammeCount) >= 0 && Number(value.suppressedProgrammeCount) <= 100000) &&
     (value.freshness === undefined || freshness(value.freshness)) && (value.sourceEvidence === undefined || publicEvidence(value.sourceEvidence)) &&
-    Array.isArray(value.aliases) && value.aliases.length <= 64 && value.aliases.every(alias => object(alias) && keys(alias, ['name'], ['effectiveFrom', 'effectiveTo']) && text(alias.name) && time(alias.effectiveFrom) && time(alias.effectiveTo));
+    Array.isArray(value.aliases) && value.aliases.length <= 64 && value.aliases.every(alias => object(alias)
+      && keys(alias, ['name'], ['effectiveFrom', 'effectiveTo', 'firstObservedAt', 'lastObservedAt']) && text(alias.name)
+      && time(alias.effectiveFrom) && time(alias.effectiveTo) && time(alias.firstObservedAt) && time(alias.lastObservedAt)
+      && (alias.firstObservedAt === undefined || alias.lastObservedAt === undefined || Date.parse(String(alias.firstObservedAt)) <= Date.parse(String(alias.lastObservedAt))));
 }
 
 /** Called only after all discovery shards are verified; routes cannot silently omit identities. */
