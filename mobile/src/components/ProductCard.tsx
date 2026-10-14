@@ -28,7 +28,7 @@ import { androidRipple, AppText, Row } from './ui';
 import { PressFeedback } from './PressFeedback';
 import { scopedRateConditions } from '../data/rateConditions';
 import { scopedFinancialConditionFacts, type ScopedFinancialConditionPresentation } from '../data/scopedFinancialConditionFacts';
-import { uiAccessBadge, uiConditionTag, uiListedLvr } from '../lib/financialUiCopy';
+import { uiAccessBadge, uiConditionTag, uiListedLvr, uiLoanPurpose } from '../lib/financialUiCopy';
 import { uiCount, uiJoin, uiLabel, uiProductName, uiProviderName, type UiCopy, type UiText } from '../lib/uiCopy';
 
 function chips(row: RateRow, section: SectionKey, conditional: boolean, conditions: ScopedFinancialConditionPresentation): UiText[] {
@@ -42,7 +42,7 @@ function chips(row: RateRow, section: SectionKey, conditional: boolean, conditio
     if (term) out.push(term);
     if (row.ribbon_repayment_type ?? row.repayment_type)
       out.push(humanizeEnum(row.ribbon_repayment_type ?? row.repayment_type));
-    if (row.loan_purpose) out.push(humanizeEnum(row.loan_purpose));
+    if (row.loan_purpose) out.push(uiLoanPurpose(row));
     out.push(...(sourceLvr.length ? sourceLvr.map(uiConditionTag) : [uiListedLvr(row)]));
   } else if (section === 'TD') {
     const term = formatTerm(row);

@@ -148,6 +148,9 @@ export const UI_LABELS = [
   'Retrying', 'Update ready to install', 'Local only · Encrypted', 'Undo', 'Removed',
   'Rate', 'Rate type', 'Rate structure', 'Loan purpose', 'Interest paid', 'Account type',
   'Account class', 'Product ID', 'Rate index', 'Features', 'Constraints', 'Product facts',
+  'Overdraft', 'Business applicants', 'Employment status', 'Minimum income',
+  'Individual applicants', 'Pension recipients', 'Residency status',
+  'Unspecified', 'Unspecified purpose',
   'Availability', 'Package', 'Customer group', 'Documents', 'Revisions', 'Source excerpts',
   'Coverage gaps', 'Discovery', 'Acquisition', 'Extraction', 'Interpretation', 'Calculation',
   'Page', 'Disposition', 'Interpreted', 'Uninterpreted', 'Added', 'Changed',
@@ -439,7 +442,8 @@ export function uiNumber(value: number | null | undefined, digits = 0): UiText {
   return known(formatter.format(value));
 }
 export function uiDuration(value: number | null | undefined, unit: 'months' | 'years' | 'days'): UiText {
-  return finite(value) ? uiJoin(uiCount(value), ' ', unit) : uiLabel('Unknown');
+  const label = value === 1 ? unit === 'months' ? 'month' : unit === 'years' ? 'year' : 'day' : unit;
+  return finite(value) ? uiJoin(uiCount(value), ' ', label) : uiLabel('Unknown');
 }
 /** Invalid dates stay unknown, never a raw source message. */
 export function uiDate(value: string | null | undefined): UiText {

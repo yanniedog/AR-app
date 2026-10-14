@@ -113,9 +113,9 @@ export function uiRepayment(row: RateRow): UiText {
   return uiLabel(['PI', 'P&I', 'PRINCIPAL_AND_INTEREST', 'PRINCIPAL_INTEREST'].includes(value) ? 'Principal & interest'
     : ['IO', 'INTEREST_ONLY'].includes(value) ? 'Interest only' : 'Unknown');
 }
-export function uiLoanPurpose(row: RateRow): UiText {
-  const value = (row.loan_purpose ?? row.security_purpose ?? '').toUpperCase();
-  return uiLabel(['OO', 'OWNER_OCCUPIED', 'OWNER_OCCUPIER'].includes(value) ? 'Owner occupied' : ['INV', 'INVESTOR', 'INVESTMENT'].includes(value) ? 'Investor' : 'Unknown');
+export function uiLoanPurpose(row: Pick<RateRow, 'loan_purpose' | 'security_purpose'>): UiText {
+  const value = (row.loan_purpose ?? row.security_purpose ?? '').trim().toUpperCase();
+  return uiLabel(['OO', 'OWNER_OCCUPIED', 'OWNER_OCCUPIER'].includes(value) ? 'Owner occupied' : ['INV', 'INVESTOR', 'INVESTMENT'].includes(value) ? 'Investor' : value === 'UNCONSTRAINED' ? 'Unspecified purpose' : 'Unknown');
 }
 export function uiBalanceTier(row: RateRow): UiText {
   const parse = (value: RateRow['balance_min']): NumericConditionBoundary => value !== undefined && String(value).trim() !== '' && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(String(value).trim()) && Number.isFinite(Number(value))

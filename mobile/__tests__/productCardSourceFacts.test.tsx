@@ -82,3 +82,19 @@ test.each([false, true])('a product-scoped favorite names all rates rather than 
     expect(mockSave).toHaveBeenCalledWith(product, 'product');
   } finally { act(() => tree.unmount()); }
 });
+
+test('a mortgage card preserves unspecified purpose in visible and accessible facts', () => {
+  const row = { ...loan, loan_purpose: 'UNCONSTRAINED', security_purpose: 'owner_occupied', ribbon_repayment_type: 'UNCONSTRAINED' };
+  mockState = { isRateSaved: () => false, toggleSavedRate: mockSave, prefs: { mortgageRateMetric: 'comparison' } };
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<ProductCard row={row} section="Mortgage" />) as Tree; });
+  try {
+    const text = tree.root.findAllByType('AppText').map(node => String(node.props.children)).join(' | ');
+    expect(text).toContain('Unspecified purpose');
+    expect(text).toContain('Unspecified');
+    expect(text).not.toMatch(/UNCONSTRAINED|Owner occupied|Eligibility confirmed/);
+    const nav = tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith('Budget Home Loan,'));
+    expect(nav?.props.accessibilityLabel).toContain('Unspecified purpose');
+    expect(row.loan_purpose).toBe('UNCONSTRAINED');
+  } finally { act(() => tree.unmount()); }
+});

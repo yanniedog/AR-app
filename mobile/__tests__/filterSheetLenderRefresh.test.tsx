@@ -24,7 +24,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 type TestNode = {
   type: unknown;
-  props: { label?: string; value?: string; onChangeText?: (value: string) => void };
+  props: { label?: string; value?: string; title?: string; selected?: boolean; onPress?: () => void; onChangeText?: (value: string) => void };
   findAll: (predicate: (node: TestNode) => boolean) => TestNode[];
 };
 type InspectableRenderer = ReactTestRenderer & { root: TestNode };
@@ -64,5 +64,31 @@ test('an active lender query stays clearable when live rows shrink below the sea
     expect(lenderLabels()).toHaveLength(12);
     expect(new Set(lenderLabels())).toEqual(new Set(refreshedRows.map(row => row.provider)));
     expect(nodes('SearchBar')).toHaveLength(0);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('readable purpose, feature and eligibility chips apply the exact published keys', async () => {
+  const rows: RateRow[] = [{ provider: 'Bank', product_name: 'Loan', product_key: 'loan', rate: '0.05', loan_purpose: 'UNCONSTRAINED' }];
+  const options = (await prepareSearchFilterOptions(rows, {
+    loan: { facts: [
+      { id: 'overdraft', kind: 'feature', canonicalKey: 'OVERDRAFT', value: true, unit: 'boolean' },
+      { id: 'individual', kind: 'eligibility', canonicalKey: 'NATURAL_PERSON', value: true, unit: 'boolean' },
+      { id: 'employment', kind: 'eligibility', canonicalKey: 'EMPLOYMENT_STATUS', value: 'PAYG', unit: 'enum' },
+    ] },
+  }, 'Mortgage', { yieldControl: async () => {} }))!;
+  const onApply = jest.fn(), onClose = jest.fn();
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<FilterSheet visible onClose={onClose} onApply={onApply} filters={{ ...EMPTY_FILTERS }} options={options} />) as InspectableRenderer; });
+  try {
+    const chip = (label: string) => tree.root.findAll(node => node.type === 'Chip' && node.props.label === label)[0];
+    for (const label of ['Unspecified purpose', 'Overdraft', 'Individual applicants', 'Employment status']) {
+      expect(chip(label)).toBeDefined();
+      act(() => chip(label).props.onPress!());
+      expect(chip(label).props.selected).toBe(true);
+    }
+    act(() => tree.root.findAll(node => node.type === 'Button' && Boolean(node.props.title?.startsWith('Apply')))[0].props.onPress!());
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply.mock.calls[0][0]).toMatchObject({ loanPurposes: ['UNCONSTRAINED'], accountFeatures: ['OVERDRAFT'], eligibilityCriteria: ['NATURAL_PERSON', 'EMPLOYMENT_STATUS'] });
+    expect(onClose).toHaveBeenCalledTimes(1);
   } finally { act(() => tree.unmount()); }
 });
