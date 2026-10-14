@@ -45,6 +45,9 @@ export function selectedTargetConstraint(
     // intersect them or infer a new combined range; a contradiction requires
     // the entered value to be outside every independently published range.
     const outside = sourceBounds.every(fact => !within(actual, fact.lower, fact.upper));
+    // A qualified alternative that cannot be parsed prevents a conclusive
+    // contradiction, even when another source clause supplies numeric bounds.
+    if (outside && source.unresolved.length) return result('unverified', 'source-condition');
     return result(outside ? section === 'Mortgage' ? 'outside-lvr' : 'outside-balance' : 'not-contradicted', 'source-condition');
   }
   // An admitted but unparsed condition may qualify or contradict the normalized

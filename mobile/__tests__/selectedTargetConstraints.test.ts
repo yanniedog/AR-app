@@ -64,6 +64,18 @@ test('admitted unparsed qualifications stay unverified instead of trusting a con
   });
 });
 
+test('unparsed qualified alternatives prevent a conclusive outside-published verdict', () => {
+  const f = selectedConstraintFixture('Mortgage', [loan], [
+    { rateIndex: 4, text: 'LVR up to 60%.' },
+    { rateIndex: 4, text: 'LVR up to 90% for eligible staff.',
+      sourcePointer: '/data/lendingRates/3/applicabilityConditions/0/additionalInfo' },
+  ]);
+  expect(scopedRateConditions(f.rows[0], 'Mortgage', f).entries).toHaveLength(2);
+  expect(selectedTargetConstraint(f.rows[0], 'Mortgage', mortgageScenario('425000'), f)).toEqual({
+    status: 'unverified', basis: 'source-condition', eligibility: 'unverified',
+  });
+});
+
 test.each(['500', '50000'])('outside selected deposit amount %s has rate only and null dollars', balance => {
   const before = JSON.stringify(deposit);
   const result = selectedDepositCalculation(deposit, 'Savings', depositScenario(balance));
