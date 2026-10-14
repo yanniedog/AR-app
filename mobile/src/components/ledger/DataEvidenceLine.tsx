@@ -58,7 +58,7 @@ export function DataEvidenceLine({
         accessibilityRole="button"
         accessibilityLabel={uiJoin('Data', ' · ', status, ' · ', 'Observed', ': ', observed)}
         onPress={openDetails}
-        contentStyle={{ flexGrow: 1 }}
+        contentStyle={{ width: '100%' }}
         style={{
           minHeight: 48,
           flexDirection: 'row',

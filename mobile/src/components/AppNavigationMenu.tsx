@@ -42,7 +42,7 @@ export function AppNavigationMenu() {
     <ScrollView contentContainerStyle={{ padding: 16, gap: 4 }}>
       {APP_DESTINATION_GROUPS.flatMap(group => group.destinations).map(destination => {
         const selected = destinationIsActive(destination.id, pathname);
-        return <TouchTarget key={destination.id} onPress={() => openDestination(destination)}
+        return <TouchTarget fill key={destination.id} onPress={() => openDestination(destination)}
           accessibilityRole="button" accessibilityLabel={destination.label} accessibilityState={{ selected }}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 16, padding: 12,
             borderRadius: theme.radius.md, backgroundColor: selected ? theme.colors.primaryMuted : 'transparent' }}>

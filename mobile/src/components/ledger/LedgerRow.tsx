@@ -65,7 +65,7 @@ export function LedgerRow({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
       onPress={onPress}
-      contentStyle={{ flexGrow: 1 }}
+      contentStyle={{ width: '100%' }}
       style={rowStyle}
       {...rest}
     >

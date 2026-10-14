@@ -277,6 +277,7 @@ export function Disclosure({
         accessibilityLabel={uiJoin(open ? 'Hide' : 'Show', ' ', title)}
         accessibilityState={{ expanded: open }}
         android_ripple={androidRipple(theme.colors.primaryMuted)}
+        contentStyle={{ width: '100%' }}
         style={{
           minHeight: 64,
           flexDirection: 'row',

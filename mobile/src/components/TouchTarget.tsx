@@ -21,6 +21,7 @@ export type TouchTargetProps = PressFeedbackProps & {
 export function TouchTarget({
   children,
   style,
+  contentStyle,
   hitSlop = DEFAULT_HIT_SLOP,
   square = false,
   fill = false,
@@ -47,7 +48,14 @@ export function TouchTarget({
   };
 
   return (
-    <PressFeedback hitSlop={hitSlop} style={resolveStyle} {...rest}>
+    <PressFeedback
+      hitSlop={hitSlop}
+      style={resolveStyle}
+      // A horizontal full-row target needs a definite content width before
+      // its flexing title can share space with the leading/trailing icons.
+      contentStyle={[fill ? { width: '100%' } : null, contentStyle]}
+      {...rest}
+    >
       {children}
     </PressFeedback>
   );
