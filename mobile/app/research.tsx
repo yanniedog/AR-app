@@ -287,7 +287,7 @@ export default function Market() {
           ? planned as typeof activeSection
           : activeSection;
         openBrowse(target);
-        return { expectedPath: '/categories' };
+        return { expectedPath: '/browse' };
       },
     },
   });

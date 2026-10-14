@@ -34,6 +34,6 @@ describe('consent banner placement', () => {
 
     const layout = read('../app/_layout.tsx');
     expect(layout).toContain('aboveTabBar={tabBarVisible}');
-    expect(layout).toContain('const tabBarVisible = shouldShowAppTabBar(pathname, onboarded);');
+    expect(layout).toContain('const tabBarVisible = shouldShowAppTabBar(pathname, hydrated);');
   });
 });

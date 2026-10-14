@@ -5,18 +5,19 @@ const read = (relativePath: string) => fs.readFileSync(path.join(__dirname, '..'
 
 describe('financial claim truth contracts', () => {
   it('keeps compact rate-position cards to observed percentage-point gaps', () => {
-    const today = read('app/matches.tsx');
+    const today = read('src/components/rates/RatesWorkspace.tsx');
     const myRates = read('app/(tabs)/watchlist.tsx');
 
     for (const source of [today, myRates]) {
-      expect(source).toContain('percentage point gap');
       expect(source).not.toContain('loyaltyGapInsight');
       expect(source).not.toContain('monthlyDollars');
       expect(source).not.toContain('annualDollars');
       expect(source).not.toContain('About $');
     }
-    expect(today).toContain('Matched to your filters');
-    expect(today).toContain('observed {formatRunDate(core.run_date)}');
+    expect(read('app/matches.tsx')).toContain('<LegacyRatesRoute');
+    expect(today).toContain('usePreparedSearchRows');
+    expect(today).toContain('effectiveFilters');
+    expect(myRates).toContain('percentage point gap');
     expect(myRates).toContain('matched to your filters');
   });
 

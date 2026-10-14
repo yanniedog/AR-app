@@ -2,7 +2,6 @@ import type { CorePayload, ProductDetail, RateRow, SectionKey } from '../types';
 import { SECTION_KEYS } from '../types';
 import { bankRateScope, type BankRateScope } from './bankRateOverview';
 import { visibleAccountRows } from './format';
-import { normalizeInterests } from './interests';
 import { profileFilterRows, type ProfileFilters } from './profile';
 import { getMandatoryEligibilityRevision } from './eligibilityGate';
 import { getSuitabilityRevision } from './suitabilityGate';
@@ -12,7 +11,6 @@ export interface BankRateHistoryScopeInput {
   details: Record<string, ProductDetail> | null | undefined;
   includeNonStandard: boolean;
   interests: SectionKey[];
-  onboarded: boolean;
   profileFilters: ProfileFilters;
   suitabilityRevision: number;
   mandatoryRevision: number;
@@ -28,7 +26,7 @@ let pending: { input: BankRateHistoryScopeInput; work: Promise<BankRateScope | n
 function sameInput(left: BankRateHistoryScopeInput | null | undefined, right: BankRateHistoryScopeInput): boolean {
   return !!left && left.core === right.core && left.details === right.details &&
     left.includeNonStandard === right.includeNonStandard && left.interests === right.interests &&
-    left.onboarded === right.onboarded && left.profileFilters === right.profileFilters &&
+    left.profileFilters === right.profileFilters &&
     left.suitabilityRevision === right.suitabilityRevision && left.mandatoryRevision === right.mandatoryRevision;
 }
 
@@ -45,9 +43,8 @@ function scopedRows(input: BankRateHistoryScopeInput, section: SectionKey, rows:
 /** Synchronous only for small catalogues and deterministic tooling. */
 export function sharedBankRateHistoryScope(input: BankRateHistoryScopeInput): BankRateScope {
   if (sameInput(latest?.input, input) && latest!.gateRevision === getSuitabilityRevision()) return latest!.scope;
-  const interests = normalizeInterests(input.interests);
   const rows = Object.fromEntries(SECTION_KEYS.map(section => [section,
-    !input.onboarded || interests.includes(section) ? scopedRows(input, section, input.core.sections[section].rates) : [],
+    scopedRows(input, section, input.core.sections[section].rates),
   ])) as Record<SectionKey, RateRow[]>;
   const scope = bankRateScope(rows);
   latest = { input, scope, gateRevision: getSuitabilityRevision() };
@@ -80,11 +77,9 @@ export function prepareBankRateHistoryScope(
   const work = (async () => {
     // Start after the mounting render/paint, then bound each synchronous slice.
     await yieldControl();
-    const interests = normalizeInterests(input.interests);
     const rows: Record<SectionKey, RateRow[]> = { Mortgage: [], Savings: [], TD: [] };
     let sliceStarted = performance.now();
     for (const section of SECTION_KEYS) {
-      if (input.onboarded && !interests.includes(section)) continue;
       const source = input.core.sections[section].rates;
       for (let offset = 0; offset < source.length; offset += 32) {
         if (!isCurrent()) return null;

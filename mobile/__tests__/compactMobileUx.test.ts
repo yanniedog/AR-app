@@ -15,25 +15,12 @@ describe('compact mobile UX contracts', () => {
     expect(source).toContain('showsHorizontalScrollIndicator');
   });
 
-  it('uses one scrollable onboarding step without requesting notification permission', () => {
+  it('retains an onboarding link only as an adapter without permission or preference mutation', () => {
     const source = read('../app/onboarding.tsx');
-
-    expect(source).toContain('<ScrollView');
-    expect(source).toContain('flexGrow: 1');
-    expect(source).toContain("completeOnboarding(interests, false)");
-    expect(source).toContain("source === 'remote'");
-    expect(source).toContain("source === 'cache'");
-    expect(source).toContain('Sample rate');
-    expect(source).toContain('Choose what you want to do');
-    expect(source).toContain('Check a rate I have');
-    expect(source).toContain('Find or plan');
-    expect(source).toContain('Follow rate changes');
-    expect(source).toContain("'onboarding.job.find': () => setJob('find')");
-    expect(source).toContain("'onboarding.job.follow': () => setJob('follow')");
-    expect(source).toContain("'onboarding.job.check': () => setJob('check')");
+    expect(source).toContain('<LegacyRatesRoute');
+    expect(source).not.toContain('completeOnboarding');
     expect(source).not.toContain('ensurePermissions');
-    expect(source).not.toContain('onboarding.step.next');
-    expect(source).not.toContain('Best rate today');
+    expect(source).not.toContain('setPref');
   });
 
   it('exposes toolbar icons as 48dp buttons with selected state', () => {
@@ -109,8 +96,8 @@ describe('compact mobile UX contracts', () => {
 
     expect(tabBar).toContain('useWindowDimensions');
     expect(tabBar).toContain('getTabBarLayout(fontScale)');
-    expect(tabBar).toContain('numberOfLines={tabBarLayout.labelLines}');
-    expect(tabBar).toContain('height: tabBarLayout.contentHeight + insets.bottom');
+    expect(tabBar).toContain('numberOfLines={labelLines}');
+    expect(tabBar).toContain('height: layout.contentHeight + insets.bottom');
     expect(tabBar).not.toContain('numberOfLines={1}');
     expect(diagnostics).toContain('getTabBarContentHeight(fontScale)');
     expect(ui).toContain('fontScale > 1 && { lineHeight: undefined }');

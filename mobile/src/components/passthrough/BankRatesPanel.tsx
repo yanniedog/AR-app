@@ -45,7 +45,7 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
   const [methodOpen, setMethodOpen] = useState(false);
   const [graphic, setGraphic] = useState<ChartRenderEvidence | null>(null);
   const [renderedEmptyRevision, setRenderedEmptyRevision] = useState<string | null>(null);
-  const options = sectionSegmentOptions(prefs.onboarded ? prefs.interests : SECTION_KEYS);
+  const options = sectionSegmentOptions(SECTION_KEYS);
   const section = options.some(option => option.value === chosenSection) ? chosenSection : options[0].value;
   const gapAllowed = options.some(o => o.value === 'Mortgage') && options.some(o => o.value === 'Savings');
   const gap = tab === 'gap' && gapAllowed;

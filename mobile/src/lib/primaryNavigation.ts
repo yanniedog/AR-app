@@ -1,4 +1,5 @@
 import { router, type Href } from 'expo-router';
+import { Keyboard } from 'react-native';
 
 import {
   isPrimaryTabRootPath,
@@ -13,6 +14,7 @@ import {
  * React Navigation 7, losing the first navigator's mounted state.
  */
 export function navigateToPrimaryTab(route: PrimaryTabRouteName, currentPathname: string): void {
+  Keyboard.dismiss();
   const href = tabHref(route);
   if (TAB_BAR_ORDER.some((root) => isPrimaryTabRootPath(currentPathname, root))) {
     router.navigate(href);
@@ -27,6 +29,9 @@ export function navigateToPrimaryTab(route: PrimaryTabRouteName, currentPathname
 export function navigateToAppDestination(href: Href, currentPathname: string): void {
   const path = typeof href === 'string' ? href : href.pathname;
   const root = TAB_BAR_ORDER.find((route) => isPrimaryTabRootPath(path, route));
-  if (root) navigateToPrimaryTab(root, currentPathname);
+  if (root && typeof href !== 'string' && href.params) {
+    if (TAB_BAR_ORDER.some(route => isPrimaryTabRootPath(currentPathname, route))) router.navigate(href);
+    else router.dismissTo(href);
+  } else if (root) navigateToPrimaryTab(root, currentPathname);
   else router.navigate(href);
 }

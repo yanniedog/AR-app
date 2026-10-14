@@ -14,17 +14,17 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 import { HEADER_TYPOGRAPHY } from '../../src/theme/typography';
 import { LedgerIcon } from '../../src/components/icons/LedgerIcon';
 
-// Direct links retain a real Home destination behind the requested section.
+// Cold links retain the canonical Rates destination for native Back.
 export const unstable_settings = {
-  initialRouteName: 'index',
+  initialRouteName: 'browse',
 };
 
 export default function TabsLayout() {
   const theme = useTheme();
   const showUpdateBanner = useAppUpdateBannerVisible();
-  const onboarded = useStore((state) => state.prefs.onboarded);
+  const hydrated = useStore((state) => state.hydrated);
   const { width } = useWindowDimensions();
-  const breadcrumbVisible = shouldShowBreadcrumbs(usePathname(), onboarded) && breadcrumbsFitWidth(width);
+  const breadcrumbVisible = shouldShowBreadcrumbs(usePathname(), hydrated) && breadcrumbsFitWidth(width);
 
   return (
     <>
@@ -41,6 +41,9 @@ export default function TabsLayout() {
           headerRight: () => <NavigationMenuButton />,
         }}
       >
+        <Tabs.Screen name="index" options={{ href: null, headerShown: false }} />
+        <Tabs.Screen name="tools" options={{ href: null, headerShown: false }} />
+        <Tabs.Screen name="trends" options={{ href: null, headerShown: false }} />
         {TAB_BAR_ORDER.map((name) => (
           <Tabs.Screen
             key={name}

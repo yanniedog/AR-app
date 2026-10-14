@@ -29,7 +29,7 @@ export function AppBreadcrumbBar() {
     section?: string | string[]; path?: string | string[];
     provider?: string | string[]; key?: string | string[]; ri?: string | string[];
   }>();
-  const onboarded = useStore((state) => state.prefs.onboarded);
+  const hydrated = useStore((state) => state.hydrated);
   const interests = useStore((state) => state.prefs.interests);
   const activeSection = useStore((state) => state.activeSection);
   const core = useStore((state) => state.core);
@@ -77,13 +77,13 @@ export function AppBreadcrumbBar() {
   const menuOpen = openTrail === trailKey && hidden.length > 0;
   const closeMenu = () => setOpenTrail(null);
 
-  if (!shouldShowBreadcrumbs(pathname, onboarded)) return null;
+  if (!shouldShowBreadcrumbs(pathname, hydrated)) return null;
 
   const navigate = (target: BreadcrumbTarget) => {
     closeMenu();
     if ('href' in target) navigateToAppDestination(target.href, pathname);
     else router.navigate({
-      pathname: '/categories',
+      pathname: '/(tabs)/browse',
       params: { ...buildBrowseRouteParams(target.section, target.path), path: target.path.join('.') },
     });
   };
@@ -101,11 +101,11 @@ export function AppBreadcrumbBar() {
       <View style={{ flexDirection: 'row', height }}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Home"
-          onPress={() => navigateToPrimaryTab('index', pathname)}
+          accessibilityLabel="Rates"
+          onPress={() => navigateToPrimaryTab('browse', pathname)}
           style={({ pressed }) => ({ width: 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}
         >
-          <LedgerIcon name="home" size={18} color={theme.ledger.mutedInk} />
+          <LedgerIcon name="explore" size={18} color={theme.ledger.mutedInk} />
         </Pressable>
         {hidden.length > 0 ? (
           <Pressable

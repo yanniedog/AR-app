@@ -10,7 +10,7 @@ function input(): BankRateHistoryScopeInput {
     product_name: `Loan ${index}`, rate: '0.05', rate_type: index % 2 ? 'FIXED' : 'VARIABLE' }));
   const core = { run_date: '2026-10-13', sections: { Mortgage: { rates }, Savings: { rates: [] }, TD: { rates: [] } } } as unknown as CorePayload;
   installMandatoryEligibility(selectMandatoryEligibility(core, EMPTY_PROFILE, null));
-  return { core, details: null, includeNonStandard: true, interests: ['Mortgage', 'Savings', 'TD'], onboarded: true,
+  return { core, details: null, includeNonStandard: true, interests: ['Mortgage', 'Savings', 'TD'],
     profileFilters: { ...EMPTY_PROFILE, rateTypes: ['VARIABLE'] }, suitabilityRevision: 1,
     mandatoryRevision: getMandatoryEligibilityRevision() };
 }
