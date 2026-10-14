@@ -1,6 +1,6 @@
 # Australian Rates — Rate Ledger atomic redesign and app-health plan
 
-Status: implemented downstream in AR-app
+Status: historical implementation plan; consumer design and navigation are superseded by the [14 October Android redesign contract](ANDROID_REDESIGN_CONTRACT.md). Retain the financial and audit invariants; do not reuse the old consumer layout as the current target.
 Repository: `yanniedog/AR-app` (`mobile/` remains the app root)
 Producer dependency: `yanniedog/AR-local`
 Language: Australian English
