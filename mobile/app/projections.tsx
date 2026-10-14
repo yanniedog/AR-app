@@ -1,4 +1,4 @@
-import { commissionerFamily } from '../src/theme/fonts';
+import { fontStyle } from '../src/theme/fonts';
 import { prepareProjectionAuditScenario } from '../src/lib/performanceAuditScenario';
 import { mandatoryProductAllowed } from '../src/data/eligibilityGate';
 import Ionicons from '../src/components/icons/AppIcon';
@@ -154,7 +154,7 @@ function NumericField({
           editable={editable}
           maxLength={20}
           style={{
-            fontFamily: commissionerFamily(),
+            ...fontStyle(),
             flex: 1,
             minWidth: 0,
             color: theme.colors.text,

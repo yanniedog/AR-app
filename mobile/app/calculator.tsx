@@ -1,4 +1,4 @@
-import { commissionerFamily } from '../src/theme/fonts';
+import { fontStyle } from '../src/theme/fonts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { mandatoryProductAllowed } from '../src/data/eligibilityGate';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -567,7 +567,7 @@ export default function Calculator() {
         keyboardType="numeric"
         editable={scenarioStorageStatus === 'ready'}
         maxLength={20}
-        style={[{ fontFamily: commissionerFamily() }, inputStyle]}
+        style={[fontStyle(), inputStyle]}
         accessibilityLabel={a11y}
         onBlur={() => setLeftFields((prev) => (prev.has(a11y) ? prev : new Set(prev).add(a11y)))}
       />
