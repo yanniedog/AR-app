@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
+import { useCallback } from 'react';
+import { useReadyNavigationEffect } from '../hooks/useReadyNavigationEffect';
 
 /** Replace a retired entry while retaining the existing tab navigator and task state. */
 export function LegacyRatesRoute({ defaults = {} }: { defaults?: Record<string, string> }) {
   const params = useLocalSearchParams<Record<string, string | string[]>>();
   const intent = JSON.stringify({ ...defaults, ...params });
-  useEffect(() => {
+  useReadyNavigationEffect(useCallback(() => {
     router.dismissTo({ pathname: '/(tabs)/browse', params: JSON.parse(intent) });
-  }, [intent]);
+  }, [intent]));
   return null;
 }

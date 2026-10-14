@@ -20,12 +20,21 @@ const mockRecomputeViewableItems = jest.fn();
 const mockScrollToOffset = jest.fn();
 let mockVisibleCount: number | null = null;
 let mockSuppressViewability = false;
+let mockNavigationReady = true;
+const mockNavigationListeners = { ready: new Set<() => void>(), state: new Set<() => void>() };
+const mockNavigation = {
+  isReady: () => mockNavigationReady,
+  addListener: (event: 'ready' | 'state', listener: () => void) => {
+    mockNavigationListeners[event].add(listener); return () => mockNavigationListeners[event].delete(listener);
+  },
+};
 jest.mock('../src/data/store', () => ({
   useStore: Object.assign((selector: any) => selector(mockState), { getState: () => mockState }),
 }));
 jest.mock('expo-router', () => ({
-  router: { push: jest.fn(), setParams: jest.fn((values: Record<string, undefined>) => { mockParams = { ...mockParams, ...values } as any; }) }, Stack: { Screen: 'StackScreen' },
+  router: { push: jest.fn(), setParams: jest.fn((values: Record<string, undefined>) => { if (!mockNavigationReady) throw new Error('Attempted to navigate before mounting the Root Layout'); mockParams = { ...mockParams, ...values } as any; }) }, Stack: { Screen: 'StackScreen' },
   useLocalSearchParams: () => mockParams,
+  useNavigationContainerRef: () => mockNavigation,
 }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
@@ -80,6 +89,8 @@ jest.mock('../src/components/SheetSurface', () => ({ SheetSurface: 'SheetSurface
 jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }));
 
 beforeEach(() => {
+  mockNavigationReady = true; mockNavigationListeners.ready.clear(); mockNavigationListeners.state.clear();
+  (router.setParams as jest.Mock).mockClear();
   restoreRatesSession(originalRatesSession); mockParams = { section: 'TD' };
   mockEnsureDetails.mockClear(); mockSurfaces.clear();
   mockListMount.mockClear(); mockListUnmount.mockClear();
@@ -341,4 +352,21 @@ test('a queued scroll restoration cannot affect a replacement product-type list'
     expect(useRatesSession.getState().section).toBe('Mortgage');
     expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(420);
   } finally { act(() => tree.unmount()); raf.mockRestore(); }
+});
+
+
+test('cold parameterized Rates waits for container-ready before consuming and clearing its intent', () => {
+  mockState.prefs.includeNonStandard = true; mockNavigationReady = false;
+  mockParams = { section: 'TD', query: 'Macquarie', path: '' };
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    expect(router.setParams).not.toHaveBeenCalled();
+    expect(useRatesSession.getState().initialized).toBe(false);
+    act(() => { mockNavigationReady = true; [...mockNavigationListeners.ready].forEach(listener => listener()); });
+    expect(router.setParams).toHaveBeenCalledTimes(1);
+    expect(useRatesSession.getState().sections.TD.query).toBe('Macquarie');
+    expect(tree.root.findByType('FlashList' as any).props.data.length).toBeGreaterThan(0);
+    act(() => [...mockNavigationListeners.state].forEach(listener => listener()));
+    expect(router.setParams).toHaveBeenCalledTimes(1);
+  } finally { act(() => tree.unmount()); }
 });

@@ -1,3 +1,4 @@
+import { useReadyNavigationEffect } from '../../hooks/useReadyNavigationEffect';
 import { SheetSurface } from '../SheetSurface';
 import { TouchTarget } from '../TouchTarget';
 import { SegmentedControl } from '../controls';
@@ -123,7 +124,7 @@ export default function RatesWorkspace() {
   const ensureSearchIndex = useStore((s) => s.ensureSearchIndex);
   const coreIntegrity = useStore(state => state.coreIntegrity);
   const manifest = useStore(state => state.manifest);
-  useEffect(() => {
+  useReadyNavigationEffect(useCallback(() => {
     if (!hydrated || !isFocused) return;
     initializeRatesSession(prefs, activeSection);
     if (!intentKey) { consumedIntent.current = null; return; }
@@ -135,7 +136,7 @@ export default function RatesWorkspace() {
     useStore.getState().setActiveSection(intent.section);
     updateRatesSection(intent.section, intent.patch, true);
     router.setParams(Object.fromEntries(RATES_INTENT_KEYS.map(key => [key, undefined])));
-  }, [activeSection, hydrated, intentKey, isFocused, params, prefs, subscriptions]);
+  }, [activeSection, hydrated, intentKey, isFocused, params, prefs, subscriptions]));
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
