@@ -234,8 +234,12 @@ export default function RatesWorkspace() {
 
   const resultFilters = useMemo(() => ({ ...effectiveFilters, query: debouncedQuery }),
     [effectiveFilters, debouncedQuery]);
+  // The matcher accepts an empty trimmed query without consulting the optional index.
+  // Background index warming must not invalidate that result preparation or its viewport.
+  const queryNeedsSearchIndex = deepSearchActive && debouncedQuery.trim().length > 0;
+  const resultSearchIndex = queryNeedsSearchIndex ? searchIndex : null;
   const preparedResults = usePreparedSearchRows(baseRows, resultFilters, sortKey, section,
-    details?.products, deepSearchActive ? searchIndex : null, depositRankMetric, mortgageRateMetric,
+    details?.products, resultSearchIndex, depositRankMetric, mortgageRateMetric,
     suitabilityRevision, isFocused);
   const rows = preparedResults.rows;
   const catalogueDetails = verifiedCatalogueDetails(core, coreIntegrity, manifest, details);
@@ -263,11 +267,11 @@ export default function RatesWorkspace() {
         baseRows,
         { ...draft, query: debouncedQuery },
         details?.products ?? null,
-        deepSearchActive ? searchIndex : null,
+        resultSearchIndex,
         section,
       ).length
     ),
-    [baseRows, debouncedQuery, details?.products, deepSearchActive, searchIndex, section, suitabilityRevision],
+    [baseRows, debouncedQuery, details?.products, resultSearchIndex, section, suitabilityRevision],
   );
 
   const searchSnapshot = useMemo(
@@ -296,11 +300,11 @@ export default function RatesWorkspace() {
 
   const searchSub = useStore((s) => findSearchSubscription(s.subscriptions, searchSnapshot));
   const searchIndexLoading =
-    deepSearchActive &&
+    queryNeedsSearchIndex &&
     !searchIndex &&
     (searchIndexStatus === 'idle' || searchIndexStatus === 'loading');
   const searchIndexUnavailable =
-    deepSearchActive &&
+    queryNeedsSearchIndex &&
     !searchIndex &&
     (searchIndexStatus === 'unavailable' || searchIndexStatus === 'error');
   const detailFiltersPending = !isSuitabilityFilterReady(effectiveFilters.includeNonStandard) ||
@@ -397,7 +401,7 @@ export default function RatesWorkspace() {
   const uiTracker = useRef(new OpaquePerformanceAuditRenderRevision());
   const listDataRevision = dataTracker.current.update([coreSha ?? core?.run_date ?? 'none', manifest?.files.details.sha256,
     section, path, hierarchyScoped, debouncedQuery, sortKey, effectiveFilters, availability, task.intentError,
-    deepSearchActive, searchIndex != null, suitabilityRevision, resultRows.length]);
+    queryNeedsSearchIndex, resultSearchIndex != null, suitabilityRevision, resultRows.length]);
   // Selection and disclosure changes need a fresh committed render, but keep
   // the same list and decoded logos while its result identities are unchanged.
   const listRevision = uiTracker.current.update([listDataRevision, filterOpen, draftFilters, draftAvailability, sortOpen, toolsOpen, selectMode, selected]);

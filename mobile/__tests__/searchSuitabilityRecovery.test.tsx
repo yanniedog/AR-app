@@ -23,6 +23,7 @@ const mockSearchUnmount = jest.fn();
 let mockVisibleCount: number | null = null;
 let mockSuppressViewability = false;
 let mockNavigationReady = true;
+let mockCommittedQuery: string | null = null;
 let mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
 const mockNavigationListeners = { ready: new Set<() => void>(), state: new Set<() => void>(), blur: new Set<() => void>() };
 const mockNavigation = {
@@ -51,7 +52,7 @@ jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({
   usePerformanceAuditSurface: (surface: any) => mockSurfaces.set(surface.id, surface),
 }));
 jest.mock('../src/hooks/useLogoReadiness', () => ({ useLogoReadiness: () => ({ ready: true }) }));
-jest.mock('../src/hooks/useDebouncedValue', () => ({ useDebouncedValue: (value: string) => value }));
+jest.mock('../src/hooks/useDebouncedValue', () => ({ useDebouncedValue: (value: string) => mockCommittedQuery ?? value }));
 jest.mock('../src/hooks/useSearchFilterOptions', () => ({
   useSearchFilterOptions: () => ({ ready: true, options: {} }),
 }));
@@ -106,6 +107,7 @@ jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }
 beforeEach(() => {
   mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
   mockNavigationReady = true; mockNavigationListeners.ready.clear(); mockNavigationListeners.state.clear(); mockNavigationListeners.blur.clear();
+  mockCommittedQuery = null;
   (router.setParams as jest.Mock).mockClear();
   restoreRatesSession(originalRatesSession); mockParams = { section: 'TD' };
   mockEnsureDetails.mockClear(); mockSurfaces.clear();
@@ -181,6 +183,100 @@ test('full catalogue opt-in still waits for mandatory profile verification', () 
     expect(tree.root.findByType('FlashList' as any).props.data).toHaveLength(0);
     expect(tree.root.findByType('EmptyState' as any).props.title).toBe('Rates unavailable');
     expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each(['', '   '])('an empty committed query %j renders real prepared rates while the optional index is pending', (query) => {
+  setSuitabilityAllowed(new Set([mockState.productKey]));
+  mockState = { ...mockState, prefs: { ...mockState.prefs, enableDeepSearch: true },
+    searchIndex: null, searchIndexStatus: 'loading' };
+  initializeRatesSession(mockState.prefs, 'TD');
+  updateRatesSection('TD', { query });
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const list = tree.root.findByType('FlashList' as any);
+    const actualRows = mockState.core.sections.TD.rates;
+    expect(list.props.data).toHaveLength(actualRows.length);
+    for (const row of list.props.data) expect(actualRows).toContain(row);
+    expect(tree.root.findAllByType('ProductCard' as any)).toHaveLength(actualRows.length);
+    expect(tree.root.findAllByType('LoadingRows' as any)).toHaveLength(0);
+    expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(false);
+    const surface = () => mockSurfaces.get('rates.results');
+    expect(surface().probes.find((probe: any) => probe.id === 'search.data').status).toBe('ready');
+    expect(surface().probes.find((probe: any) => probe.id === 'search.list')).toMatchObject({
+      status: 'ready', actualCount: actualRows.length, visibleCount: Math.min(3, actualRows.length),
+    });
+    const revision = surface().renderRevision;
+    const preparedRows = list.props.data;
+    act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 312 } } }));
+    const restored = mockScrollToOffset.mock.calls.length;
+    mockState = { ...mockState, searchIndexStatus: 'ready', searchIndex: {
+      schema_version: 1, run_date: mockState.core.run_date, products: { [mockState.productKey]: 'indexed details' },
+    } };
+    act(() => tree.update(<Search />));
+    expect(list.props.data).toBe(preparedRows);
+    expect(surface().renderRevision).toBe(revision);
+    expect(mockScrollToOffset).toHaveBeenCalledTimes(restored);
+    expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(312);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('only the committed nonempty query waits for and consumes the actual deep-search index', () => {
+  setSuitabilityAllowed(new Set([mockState.productKey]));
+  mockState = { ...mockState, prefs: { ...mockState.prefs, enableDeepSearch: true },
+    searchIndex: null, searchIndexStatus: 'loading' };
+  mockCommittedQuery = '';
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const dataProbe = () => mockSurfaces.get('rates.results').probes.find((probe: any) => probe.id === 'search.data');
+    const list = tree.root.findByType('FlashList' as any);
+    act(() => tree.root.findByType('SearchBar' as any).props.onChangeText('indexed details'));
+    expect(tree.root.findByType('SearchBar' as any).props.value).toBe('indexed details');
+    expect(list.props.data.length).toBeGreaterThan(0);
+    expect(dataProbe().status).toBe('ready');
+    // The live input has changed, but exporting cannot use the previous committed query.
+    expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(true);
+    mockCommittedQuery = null;
+    act(() => tree.update(<Search />));
+    expect(list.props.data).toHaveLength(0);
+    expect(dataProbe().status).toBe('pending');
+    expect(tree.root.findAllByType('LoadingRows' as any)).toHaveLength(1);
+    expect(tree.root.findAllByType('EmptyState' as any)).toHaveLength(0);
+    mockState = { ...mockState, searchIndexStatus: 'ready', searchIndex: {
+      schema_version: 1, run_date: mockState.core.run_date, products: { [mockState.productKey]: 'indexed details' },
+    } };
+    act(() => tree.update(<Search />));
+    expect(list.props.data).toHaveLength(mockState.core.sections.TD.rates.length);
+    expect(dataProbe().status).toBe('ready');
+    expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(false);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('an empty query with a pending index still blocks invalidated source suitability and mandatory eligibility', () => {
+  setSuitabilityAllowed(new Set([mockState.productKey]));
+  mockState = { ...mockState, prefs: { ...mockState.prefs, enableDeepSearch: true },
+    searchIndex: null, searchIndexStatus: 'loading' };
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const probe = () => mockSurfaces.get('rates.results').probes.find((entry: any) => entry.id === 'search.data');
+    expect(probe().status).toBe('ready');
+    act(() => setSuitabilityAllowed(new Set(), { rebuildClosed: true }));
+    expect(probe().status).toBe('pending');
+    expect(tree.root.findByType('FlashList' as any).props.data).toHaveLength(0);
+    expect(tree.root.findByType('EmptyState' as any).props.title).toBe('Rates unavailable');
+    expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(true);
+    act(() => setSuitabilityAllowed(new Set([mockState.productKey])));
+    expect(probe().status).toBe('ready');
+    act(() => installMandatoryEligibility({ active: true, loading: true, rows: new WeakSet(), productKeys: new Set() }));
+    expect(probe().status).toBe('pending');
+    expect(tree.root.findByType('FlashList' as any).props.data).toHaveLength(0);
+    expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(true);
+    // No core/source is never a prepared-ready Rates screen.
+    mockState = { ...mockState, core: null };
+    act(() => tree.update(<Search />));
+    expect(probe().status).toBe('pending');
+    expect(tree.root.findAllByType('FlashList' as any)).toHaveLength(0);
+    expect(tree.root.findAllByType('ScreenSkeleton' as any)).toHaveLength(1);
   } finally { act(() => tree.unmount()); }
 });
 
