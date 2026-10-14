@@ -552,6 +552,8 @@ export default function RatesWorkspace() {
           scrollEventThrottle={64}
           contentContainerStyle={{
             ...screenScrollContentStyle(theme, insets.bottom, width),
+            // Rows and the scrolling toolbar own their spacing.
+            gap: 0,
             paddingTop: 0,
             paddingBottom: theme.spacing(6) + insets.bottom + theme.spacing(8),
           }}
