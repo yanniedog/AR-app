@@ -16,6 +16,10 @@ Screenshot review found that intrinsic animated contents hid full-row destinatio
 
 Focused financial regressions also preserve matching, earlier and different publication identities on cached references and the conditional/restricted scope of all-tier history. Normal result views withhold modeled totals when the actual receipt has no available claim. Private receipt totals, canonical hashes, export and replay remain intact.
 
+Review repairs retain route-specific Share actions and current provider/unavailable titles in the header used below update chrome. Mortgage comparable cards and copied briefs retain their published comparison rates. Publication calendar dates retain their day in every device time zone. Published fee identities and concise residency alternatives retain amounts, conditions and unverified exceptions.
+
+Custom customer criteria render their actual reviewed field labels only through an ephemeral binding to the current transport-admitted contract, exact input definition and customer-fact role. The binding covers deposits, eligibility, savings, activity, mortgages, portfolio inputs and current-source receipt replay. Forged or stale handles and local-only definitions remain unknown; descriptions and clause text cannot supply a question. Financial schemas, arithmetic, saved profile fields and receipt hashes do not change.
+
 ## Verification
 
 The initial canonical run passed Expo Doctor, typecheck, lint and zero production copy violations, then correctly rejected a stale history compiler. Its source graph had acquired frontend dependencies; the pure helper separation addresses that cause. The PR records the final exact-head canonical result and review dispositions after the compiler and scanner fixes.

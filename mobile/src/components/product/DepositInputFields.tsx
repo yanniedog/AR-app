@@ -6,7 +6,7 @@ import { CustomerAnswerEditor } from '../CustomerProfilePanel';
 import type { useCustomerProfile } from '../../hooks/useCustomerProfile';
 import { Decimal } from '../../lib/productTermsEngine/decimal';
 import type { RateRow } from '../../types';
-import type { ApprovedSelection } from '../../data/executableContracts/transport';
+import type { ApprovedSelection, ContractContext } from '../../data/executableContracts/transport';
 import { depositInputRequirements, type DepositInputs } from '../../data/executableContracts/instantiate';
 import { uiCount, uiJoin, uiInputIdentifier, uiInputNumber, uiLabel } from '../../lib/uiCopy';
 
@@ -23,8 +23,8 @@ function ConfirmedRateField({ inputs, onChange }: { inputs: DepositInputs; onCha
     onChange({ ...inputs, confirmedAnnualRate, confirmed: false, confirmedAt: null });
   }} />;
 }
-export function DepositInputFields({ selection, row, inputs, onChange, customer, shared = false }: {
-  selection: ApprovedSelection; row: RateRow; inputs: DepositInputs; onChange: (inputs: DepositInputs) => void;
+export function DepositInputFields({ selection, context, row, inputs, onChange, customer, shared = false }: {
+  selection: ApprovedSelection; context: ContractContext; row: RateRow; inputs: DepositInputs; onChange: (inputs: DepositInputs) => void;
   customer: ReturnType<typeof useCustomerProfile>; shared?: boolean;
 }) {
   const { profile, busy, error, update } = customer;
@@ -38,10 +38,10 @@ export function DepositInputFields({ selection, row, inputs, onChange, customer,
     <ConfirmedRateField inputs={inputs} onChange={onChange} />
     <Chip label="Bank-confirmed amount / rate / dates" selected={inputs.confirmed} onPress={() => onChange({ ...inputs, confirmed: !inputs.confirmed, confirmedAt: !inputs.confirmed ? new Date().toISOString() : null })} />
     <Chip label="Withholding excluded" selected={inputs.noWithholdingConfirmed} onPress={() => onChange({ ...inputs, noWithholdingConfirmed: !inputs.noWithholdingConfirmed })} />
-    {requirements.needed.map(d => <CustomerAnswerEditor key={d.id} definition={d} productKey={row.product_key} answer={profile.answers[d.id]} disabled={busy} onSave={answer => void update(p => ({ ...p, definitions: { ...p.definitions, [d.id]: d }, answers: { ...p.answers, [d.id]: answer } }))} />)}
+    {requirements.needed.map(d => <CustomerAnswerEditor key={d.id} definition={d} questionSource={{ kind: 'td', selection, context, row }} productKey={row.product_key} answer={profile.answers[d.id]} disabled={busy} onSave={answer => void update(p => ({ ...p, definitions: { ...p.definitions, [d.id]: d }, answers: { ...p.answers, [d.id]: answer } }))} />)}
     {!!requirements.deferred.length && <AppText variant="small">{uiJoin('Unresolved inputs', ': ', uiCount(requirements.deferred.length))}</AppText>}
     <Disclosure title="Saved answers" open={savedOpen} onToggle={() => setSavedOpen(!savedOpen)}>
-      {requirements.saved.map(d => <CustomerAnswerEditor key={d.id} definition={d} productKey={row.product_key} answer={profile.answers[d.id]} disabled={busy} onSave={answer => void update(p => ({ ...p, answers: { ...p.answers, [d.id]: answer } }))} />)}
+      {requirements.saved.map(d => <CustomerAnswerEditor key={d.id} definition={d} questionSource={{ kind: 'td', selection, context, row }} productKey={row.product_key} answer={profile.answers[d.id]} disabled={busy} onSave={answer => void update(p => ({ ...p, answers: { ...p.answers, [d.id]: answer } }))} />)}
     </Disclosure>
     {error ? <AppText variant="small">{uiLabel("Unavailable")}</AppText> : null}
   </View>;

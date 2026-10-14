@@ -8,6 +8,7 @@ import { useCustomerProfile } from '../../hooks/useCustomerProfile';
 import { savingsRequirements, savingsFacts } from '../../data/monetaryContracts/facts';
 import { evaluateEligibility } from '../../lib/productTermsEngine/eligibility';
 import type { SavingsHolding } from '../../data/portfolioContracts/adapter';
+import type { SavingsContext } from '../../data/monetaryContracts/transport';
 import { Decimal } from '../../lib/productTermsEngine/decimal';
 import { uiInputNumber, uiInputIdentifier, uiIdentifier, uiJoin, uiCount, uiDate, type UiCopy } from '../../lib/uiCopy';
 export interface HoldingOption extends Omit<SavingsHolding, 'inputs'> { id: string; label: UiCopy }
@@ -22,7 +23,7 @@ export function holdingInput(value: HoldingEditorValue, option: HoldingOption, s
   return { selection: option.selection, target: option.target, inputs: { accountId: value.accountId, openingBalance: value.openingBalance, startDate, endDateExclusive,
     confirmedAnnualRates, confirmedAt: value.confirmedAt, openingAccrualZero: !!value.confirmedAt, openingFundsCleared: value.confirmedAt ? true : null, noMovements: !!value.confirmedAt, noWithholding: !!value.confirmedAt } };
 }
-export function PortfolioAccountEditor({ value, options, start, end, onChange }: { value: HoldingEditorValue; options: HoldingOption[]; start: string; end: string; onChange: (v: HoldingEditorValue) => void }) {
+export function PortfolioAccountEditor({ value, options, context, start, end, onChange }: { value: HoldingEditorValue; options: HoldingOption[]; context: SavingsContext; start: string; end: string; onChange: (v: HoldingEditorValue) => void }) {
   const customer = useCustomerProfile(), option = options.find(o => o.id === value.optionId);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const change = (v: Partial<HoldingEditorValue>) => onChange({ ...value, ...v, confirmedAt: null });
@@ -35,7 +36,7 @@ export function PortfolioAccountEditor({ value, options, start, end, onChange }:
     <LedgerField label="Local account reference" value={uiInputIdentifier(value.accountId)} onChangeText={accountId => change({ accountId })} />
     <LedgerField label="Opening balance (AUD)" value={uiInputNumber(value.openingBalance)} keyboardType="decimal-pad" onChangeText={openingBalance => change({ openingBalance })} />
     {holding?.inputs.confirmedAnnualRates.map(r => { const key = `${r.intervalId}:${r.tierId}`; return <LedgerField key={key} label={uiJoin('Confirmed annual rate (%)', ' · ', uiIdentifier(key))} value={uiInputNumber(value.rates[key] ?? '')} keyboardType="decimal-pad" onChangeText={text => change({ rates: { ...value.rates, [key]: text } })} />; })}
-    {definitions.map(d => <CustomerAnswerEditor key={d.id} definition={d} answer={customer.profile!.answers[d.id]} productKey={option!.target.productKey} disabled={customer.busy} onSave={answer => void customer.update(p => ({ ...p, definitions: { ...p.definitions, [d.id]: d }, answers: { ...p.answers, [d.id]: answer } }))} />)}
+    {definitions.map(d => <CustomerAnswerEditor key={d.id} definition={d} questionSource={{ kind: 'savings', selection: option!.selection, context, target: option!.target }} answer={customer.profile!.answers[d.id]} productKey={option!.target.productKey} disabled={customer.busy} onSave={answer => void customer.update(p => ({ ...p, definitions: { ...p.definitions, [d.id]: d }, answers: { ...p.answers, [d.id]: answer } }))} />)}
     {option && trace && <Disclosure title="Criteria" open={evidenceOpen} onToggle={() => setEvidenceOpen(!evidenceOpen)}><ReviewedCriteria contract={{ eligibility: option.selection.subject.policy.eligibility, evidence: option.selection.subject.evidence, inputDefinitions: option.selection.subject.policy.inputDefinitions }} trace={trace} /><AppText variant="small">{uiJoin('Coverage', ': ', uiDate(option.selection.subject.scope.from), ' – ', uiDate(option.selection.subject.scope.toExclusive), ' · ', 'End excluded', ' · ', 'User input')}</AppText></Disclosure>}
     {!!requirements?.deferred.length && <AppText variant="small">{uiJoin('Unresolved inputs', ': ', uiCount(requirements.deferred.length))}</AppText>}
     <AppText variant="small">{uiJoin('Opening accrual zero', ' · ', 'Opening funds cleared', ' · ', 'No movements', ' · ', 'No withholding')}</AppText>

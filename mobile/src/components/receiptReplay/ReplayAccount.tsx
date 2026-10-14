@@ -16,6 +16,7 @@ import type { RateRow } from '../../types';
 import { EligibilityScenarioFields } from '../product/EligibilityScenarioFields';
 import { eligibilityRequirements } from '../../data/eligibilityContracts/facts';
 import type { EligibilitySelection } from '../../data/eligibilityContracts/transport';
+import { replayQuestionSource } from '../../lib/customerQuestionBinding';
 const INPUT_LABELS:Readonly<Record<string,UiCopy>>={
   openingBalance:'Opening balance',principal:'Principal',fundedDate:'Funded date',maturityDate:'Maturity date',
   confirmedAnnualRate:'Confirmed annual rate',confirmedAt:'Confirmation date',accountId:'Account ID',
@@ -66,9 +67,9 @@ export function ReplayAccount({item,context,onChange}:{item:ReplayItem;context:E
   {option&&item.kind==='savings_activity_calculation'&&<ActivityEvents assessment={(option.selection as ActivitySelection).subject.policy.bonus.assessment} accountId={inputs.accountId} events={inputs.activity?.events??[]} complete={inputs.activity?.coverage?.[0]?.status==='complete'} onChange={events=>{setInputs((v:any)=>({...v,activity:{...v.activity,events}}));setConfirmed(false);}} onCoverage={complete=>{const a=(option.selection as ActivitySelection).subject.policy.bonus.assessment;setInputs((v:any)=>({...v,activity:{...v.activity,coverage:[{accountId:v.accountId,from:a.from,toExclusive:a.toExclusive,status:complete?'complete':'unknown'}]}}));setConfirmed(false);}}/>}
   {eligibilitySubject&&<EligibilityScenarioFields definitions={eligibilitySubject.inputDefinitions} needed={scenarioNeeded} values={inputs.values??{}} onChange={values=>{setInputs((v:any)=>({...v,values}));setConfirmed(false);}}/>}
   {option&&<>{option.changed&&<><InfoRow label="Source" value="Changed"/><InfoRow label="Transferred answers" value="None"/><Chip label="Use current source" selected={changed} onPress={()=>{setChanged(!changed);setConfirmed(false);}}/></>}
-   {requirements?.needed.filter(d=>Object.hasOwn(profile!.definitions,d.id)).map(d=><CustomerAnswerEditor key={d.id} definition={d} answer={profile!.answers[d.id]} productKey={item.target.productKey} disabled={false} onSave={a=>{setAnswers(v=>({...v,[d.id]:a}));setConfirmed(false);}}/>)}
+   {requirements?.needed.filter(d=>Object.hasOwn(profile!.definitions,d.id)).map(d=><CustomerAnswerEditor key={d.id} definition={d} questionSource={replayQuestionSource(option,context)} answer={profile!.answers[d.id]} productKey={item.target.productKey} disabled={false} onSave={a=>{setAnswers(v=>({...v,[d.id]:a}));setConfirmed(false);}}/>)}
    {!!requirements?.deferred.length&&<AppText variant="small">{uiJoin('Unresolved inputs',': ',uiCount(requirements.deferred.length))}</AppText>}
-   {(requirements?.saved??[]).map(d=><CustomerAnswerEditor key={d.id} definition={d} answer={profile!.answers[d.id]} productKey={item.target.productKey} disabled={false} onSave={a=>{setAnswers(v=>({...v,[d.id]:a}));setConfirmed(false);}}/>)}
+   {(requirements?.saved??[]).map(d=><CustomerAnswerEditor key={d.id} definition={d} questionSource={replayQuestionSource(option,context)} answer={profile!.answers[d.id]} productKey={item.target.productKey} disabled={false} onSave={a=>{setAnswers(v=>({...v,[d.id]:a}));setConfirmed(false);}}/>)}
    <Chip label="Inputs reviewed" selected={confirmed} onPress={()=>setConfirmed(!confirmed)}/>
   </>}
  </View>;

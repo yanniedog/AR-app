@@ -132,7 +132,9 @@ export default function RateReceiptScreen() {
     if(brief.illustration) lines.push(uiJoin('Simple interest-rate difference',': ',money(brief.illustration.periodDifference),' · ',brief.illustration.periodLabel),
       uiJoin('Entered / observed',': ',brief.illustration.currentRate,' / ',brief.illustration.selectedRate),
       ...brief.illustration.exclusions.map(code=>uiJoin('Excluded',': ',EXCLUSIONS[code])));
-    for(const item of brief.comparables) lines.push(uiJoin(uiProviderName({provider:item.provider}),': ',item.advertisedRate,' · ',uiProductName({product_name:item.productName})),...item.conditionalFacts.map(uiConditionalRateFact));
+    for(const item of brief.comparables) lines.push(uiJoin(uiProviderName({provider:item.provider}),': ',item.advertisedRate,
+      item.comparisonRate ? uiJoin(' · ','Comparison rate',': ',item.comparisonRate) : null,
+      ' · ',uiProductName({product_name:item.productName})),...item.conditionalFacts.map(uiConditionalRateFact));
     lines.push(uiJoin('Topics',': ',...brief.topics.flatMap<UiCopy>((topic,index)=>index?[' / ',TOPICS[topic]]:[TOPICS[topic]])));
     return uiJoin(...lines.flatMap<UiCopy>((line,index)=>index?[' · ',line]:[line]));
   }, [brief, receipt]);
@@ -254,6 +256,7 @@ export default function RateReceiptScreen() {
           style={{minHeight:TOUCH_TARGET_MIN,justifyContent:'center',gap:4}}>
           {index ? <Divider/>:null}
           <Row style={{justifyContent:'space-between',gap:12}}><View style={{flex:1}}><AppText weight="700">{uiProviderName({provider:comparable.provider})}</AppText><AppText variant="tiny" color="textMuted">{uiProductName({product_name:comparable.productName})}</AppText></View><AppText weight="800">{comparable.advertisedRate}</AppText></Row>
+          {comparable.comparisonRate ? <AppText variant="tiny" color="textMuted">{uiJoin('Comparison rate',': ',comparable.comparisonRate)}</AppText>:null}
           {comparable.conditionalFacts.map((fact,i)=><AppText key={i} variant="tiny" color="textMuted">{uiConditionalRateFact(fact)}</AppText>)}
         </Pressable>):<AppText>{uiLabel('No comparable rates observed')}</AppText>}
       </Card>

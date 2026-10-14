@@ -7,9 +7,10 @@ import { uiLabel, uiCount, uiDate, uiIdentifier, uiInputIdentifier, uiJoin, uiCu
 import { LedgerField } from './ledger/LedgerField';
 import { AppText, Button, Chip, Disclosure, Row } from './ui';
 import { NegotiatedTermsEditor } from './NegotiatedTermsEditor';
+import { bindCustomerQuestion, type CustomerQuestionSource } from '../lib/customerQuestionBinding';
 const STATES: readonly (readonly [AnswerState, UiLabel])[] = [['known', 'Entered'], ['unknown', 'Unknown'], ['unavailable', 'Unavailable'], ['not_applicable', 'Not applicable']];
-export function CustomerAnswerEditor({ definition: d, answer, productKey, disabled, onSave }: {
-  definition: InputDefinition; answer?: CustomerAnswer; productKey?: string; disabled: boolean; onSave: (answer: CustomerAnswer) => void;
+export function CustomerAnswerEditor({ definition: d, answer, productKey, disabled, onSave, questionSource }: {
+  definition: InputDefinition; answer?: CustomerAnswer; productKey?: string; disabled: boolean; onSave: (answer: CustomerAnswer) => void; questionSource?: CustomerQuestionSource;
 }) {
   const [state, setState] = useState<AnswerState>(answer?.state ?? 'unknown');
   const input = useCustomerAnswerInput(answer, d), value = input.value, setValue = input.onChangeText;
@@ -22,7 +23,8 @@ export function CustomerAnswerEditor({ definition: d, answer, productKey, disabl
     if ((d.type === 'boolean' && !['true', 'false'].includes(value)) || !validFact(fact) || (d.type === 'text' && !value.trim())) { setError(true); return; }
     setError(false); onSave({ state: 'known', fact, provenance });
   }
-  const reviewedLabel = uiInputDefinitionLabel(d);
+  const question = useMemo(() => questionSource ? bindCustomerQuestion(d, questionSource) : undefined, [d, questionSource]);
+  const reviewedLabel = uiInputDefinitionLabel(d, question);
   const label = reviewedLabel === 'Source review required' ? uiJoin(reviewedLabel, ' · ', uiIdentifier(d.id)) : reviewedLabel;
   return <View style={{ gap: 8 }}>
     <AppText variant="small" weight="700">{label}</AppText>

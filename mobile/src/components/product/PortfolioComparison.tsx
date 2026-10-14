@@ -55,7 +55,7 @@ export function HoldingsForm({ context, options }: { context: SavingsContext; op
     <LedgerField label={uiJoin('Common end', ' · ', 'Excluded')} value={uiInputIdentifier(end)} onChangeText={s => dates(s, setEnd)} />
     {sets.map((accounts, n) => <View key={n} style={{ gap: 8 }}><AppText>{uiJoin('Holding set', ' ', uiCount(n + 1))}</AppText>
       <Chip label={uiJoin('Reference', ' ', uiCount(n + 1))} selected={referenceId === 'set-'+(n + 1)} onPress={() => setReference('set-'+(n + 1))} />
-      {accounts.map((a, j) => <View key={j}><PortfolioAccountEditor value={a} options={options} start={start} end={end} onChange={v => { setConfirmed(false); setSets(old => old.map((list, i) => i === n ? list.map((item, k) => k === j ? v : item) : list)); }} />
+      {accounts.map((a, j) => <View key={j}><PortfolioAccountEditor value={a} options={options} context={context} start={start} end={end} onChange={v => { setConfirmed(false); setSets(old => old.map((list, i) => i === n ? list.map((item, k) => k === j ? v : item) : list)); }} />
         {accounts.length > 1 && <Button title={uiJoin('Remove', ' ', 'Account', ' ', uiCount(j + 1), ' · ', 'Holding set', ' ', uiCount(n + 1))} onPress={() => { setConfirmed(false); setSets(old => old.map((list, i) => i === n ? list.filter((_, k) => k !== j) : list)); }} />}</View>)}
       {accounts.length < 4 && <Button title={uiJoin('Add', ' ', 'Account', ' · ', 'Holding set', ' ', uiCount(n + 1))} onPress={() => { setConfirmed(false); setSets(old => old.map((list, i) => i === n ? [...list, emptyHolding()] : list)); }} />}
     </View>)}

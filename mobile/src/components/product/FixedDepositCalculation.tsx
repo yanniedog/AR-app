@@ -36,7 +36,7 @@ function DepositForm({ candidates, context, row }: { candidates: ApprovedSelecti
   return <View style={{ gap: 12 }}>
     <AppText variant="small">{uiJoin('Tax', ': ', 'Excluded', ' · ', 'Bank offer', ': ', 'Unverified')}</AppText>
     <AppText variant="small">{uiJoin('Inputs', ': ', 'Local only', ' · ', 'Encrypted')}</AppText>
-    <DepositCohorts candidates={candidates} selectedId={selectedId} onSelect={setSelectedId} row={row} inputs={inputs} onChange={setInputs} customer={customer} />
+    <DepositCohorts candidates={candidates} context={context} selectedId={selectedId} onSelect={setSelectedId} row={row} inputs={inputs} onChange={setInputs} customer={customer} />
     <Button title="Calculate" disabled={busy} onPress={calculate} />
     {current?.error ? <AppText variant="small">{uiLabel("Unavailable")}</AppText> : null}
     {current?.data ? <View style={{ gap: 8 }}>

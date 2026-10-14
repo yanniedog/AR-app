@@ -3,15 +3,15 @@ import { View } from 'react-native';
 import { AppText, Chip, Disclosure } from '../ui';
 import type { RateRow } from '../../types';
 import type { useCustomerProfile } from '../../hooks/useCustomerProfile';
-import type { ApprovedSelection } from '../../data/executableContracts/transport';
+import type { ApprovedSelection, ContractContext } from '../../data/executableContracts/transport';
 import { depositEligibility, type DepositInputs } from '../../data/executableContracts/instantiate';
 import { DepositCriteria, criteriaStatus } from './DepositCriteria';
 import { uiLabel, uiDate, uiIdentifier, uiJoin } from '../../lib/uiCopy';
 import { DepositInputFields } from './DepositInputFields';
 
-export function DepositCohorts({ candidates, selectedId, onSelect, row, inputs, onChange, customer, shared = false }: {
+export function DepositCohorts({ candidates, context, selectedId, onSelect, row, inputs, onChange, customer, shared = false }: {
   candidates: ApprovedSelection[]; selectedId: string | null; onSelect: (id: string) => void;
-  row: RateRow; inputs: DepositInputs; onChange: (inputs: DepositInputs) => void;
+  context: ContractContext; row: RateRow; inputs: DepositInputs; onChange: (inputs: DepositInputs) => void;
   customer: ReturnType<typeof useCustomerProfile>; shared?: boolean;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -29,7 +29,7 @@ export function DepositCohorts({ candidates, selectedId, onSelect, row, inputs, 
         <Disclosure title="Criteria" open={openId === t.id || candidates.length === 1} onToggle={() => setOpenId(openId === t.id ? null : t.id)}>
           <AppText variant="small">{uiJoin('Effective from', ' ', uiDate(t.effectiveFrom), ' · ', 'Effective to', ' ', uiDate(t.effectiveToExclusive), ' · ', 'End excluded')}</AppText>
           <DepositCriteria selection={selection} trace={eligibility.trace} />
-          <DepositInputFields selection={selection} row={row} inputs={inputs} onChange={onChange} customer={customer} shared={shared} />
+          <DepositInputFields selection={selection} context={context} row={row} inputs={inputs} onChange={onChange} customer={customer} shared={shared} />
         </Disclosure>
       </View>;
     })}

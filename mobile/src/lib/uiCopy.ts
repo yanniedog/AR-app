@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import type { Subscription } from '../data/subscriptions';
-import type { CorePayload } from '../types';
+import type { CorePayload, DetailItem } from '../types';
 import type { EligibilityScenario, ScenarioRole } from '../data/eligibilityContracts/facts';
 import { resolveBrandShort } from '../data/bankBrand';
 import type { RatesSectionState } from '../data/ratesSession';
@@ -10,6 +10,7 @@ import { validFact, validDefinition, validProvenance, safeId, type CustomerAnswe
 import { THIRD_PARTY_NOTICES } from '../content/thirdPartyNotices';
 import { LENDER_ARTWORK_TERMS, OPTIONAL_DIAGNOSTICS_TERMS } from './privacyPolicy';
 import { Decimal } from './productTermsEngine/decimal';
+import { readBoundCustomerQuestion, type CustomerQuestionBinding } from './customerQuestionBinding';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
@@ -256,7 +257,8 @@ export const UI_LABELS = [
   'Exact product matches', 'Available lender sections', 'percentage points', 'Trend',
   'Research views', 'Current / ongoing', '/month', '/week', '/fortnight', 'Regular withdrawal',
   'Reinvest modelled interest', 'Actual future rate changes',
-  'Minimum age', 'Maximum age', 'Australian resident', 'Permanent resident', 'Minimum limit',
+  'Minimum age', 'Maximum age', 'Australian resident', 'Permanent resident', 'Australian citizen',
+  'Australian permanent resident', 'or', 'Minimum limit',
   'Maximum limit', 'Minimum balance', 'Maximum balance', 'Annual fee', 'Monthly fee',
   'Saved scenario reset', 'Minimum LVR', 'Maximum LVR', 'Minimum term', 'Maximum term',
   'day', 'week', 'Savings balance', 'Savings rate', 'Term deposit balance', 'Term deposit rate',
@@ -426,7 +428,11 @@ export function uiDate(value: string | null | undefined): UiText {
   const [year, month, day] = value.slice(0, 10).split('-').map(Number);
   const calendarDay = new Date(Date.UTC(year, month - 1, day));
   if (calendarDay.getUTCFullYear() !== year || calendarDay.getUTCMonth() !== month - 1 || calendarDay.getUTCDate() !== day) return uiLabel('Unknown');
-  return known(Number.isFinite(date.getTime()) ? date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Unknown');
+  return known(Number.isFinite(date.getTime()) ? date.toLocaleDateString('en-AU', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    // A publication date is a calendar day, not midnight in the user's zone.
+    ...(value.length === 10 ? { timeZone: 'UTC' } : {}),
+  }) : 'Unknown');
 }
 /** Opaque technical references are identifiers, never descriptions or error messages. */
 export function uiIdentifier(value: string | null | undefined): UiText {
@@ -435,12 +441,29 @@ export function uiIdentifier(value: string | null | undefined): UiText {
 function identity(value: string | null | undefined): UiText {
   return known(value?.replace(/[\r\n\t]/g, ' ').trim() || 'Unknown');
 }
+/** Published charge identity only; fee descriptions and conditions are never labels. */
+export function uiPublishedFeeName(item: DetailItem): UiText {
+  const name = item.name;
+  return typeof name === 'string' && name.trim() && name.length <= 160
+    && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(name)
+    ? known(name.trim()) : uiLabel('Unknown');
+}
 export function uiProductName(row: Pick<RateRow, 'product_name'>): UiText { return identity(row.product_name); }
 export function uiProductReference(row: RateRow): UiText {
   const expected = [row.provider, row.product_id ?? '', row.category ?? '', row.product_name].join('|');
   return row.product_key === expected ? identity(row.product_key) : uiIdentifier(row.product_key);
 }
 export function uiProviderName(row: Pick<RateRow, 'provider'>): UiText { return identity(row.provider); }
+/** Rebind navigator titles to reviewed labels or current catalogue identities. */
+export function uiNavigationTitle(value: string | undefined, core: CorePayload | null | undefined, fallback: UiCopy): UiCopy {
+  const label = UI_LABELS.find(approved => approved === value);
+  if (label !== undefined) return uiLabel(label);
+  for (const section of Object.values(core?.sections ?? {})) {
+    const row = section.rates.find(candidate => candidate.provider === value || candidate.product_name === value);
+    if (row) return row.provider === value ? uiProviderName(row) : uiProductName(row);
+  }
+  return fallback;
+}
 export function uiBankInitials(row: Pick<RateRow, 'provider'>, brand?: { short?: string }): UiText {
   return identity(resolveBrandShort(row.provider, brand?.short).toUpperCase().slice(0, 5));
 }
@@ -515,8 +538,12 @@ export function useNegotiatedTermDraft() {
   const [values, setValues] = useState(empty);
   return { values, change: (field: PrivateTermField, text: string) => setValues(current => ({ ...current, [field]: inputText(text) })), reset: () => setValues(empty()) };
 }
-export function uiInputDefinitionLabel(definition: InputDefinition): UiText {
+export function uiInputDefinitionLabel(definition: InputDefinition, question?: CustomerQuestionBinding | null): UiText {
   if (!validDefinition(definition)) return uiLabel('Source review required');
+  if (question !== undefined) {
+    const label = readBoundCustomerQuestion(definition, question);
+    return label === null ? uiLabel('Source review required') : known(label);
+  }
   const label = UI_LABELS.find(approved => approved === definition.label);
   return label ? uiLabel(label) : uiLabel('Source review required');
 }

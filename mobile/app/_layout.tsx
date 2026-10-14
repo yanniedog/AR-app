@@ -1,5 +1,4 @@
 import * as Application from 'expo-application';
-import { Header } from '@react-navigation/elements';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, router, usePathname, type Href } from 'expo-router';
@@ -16,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppLockGate } from '../src/components/AppLockGate';
+import { ConsumedInsetHeader } from '../src/components/ConsumedInsetHeader';
 import {
   AppNavigationMenu,
   NavigationMenuButton,
@@ -100,6 +100,7 @@ function navigateFromNotification(href: Href): void {
 function RootNavigator() {
   const theme = useTheme();
   const status = useStore((s) => s.status);
+  const core = useStore((s) => s.core);
   const hydrated = useStore((s) => s.hydrated);
   const dataUnavailable = hydrated && status === 'error';
   const crashReportsEnabled = useStore((s) => s.prefs.crashReportsEnabled);
@@ -274,19 +275,8 @@ function RootNavigator() {
                   // edge-to-edge mode. A JS header respects the consumed inset.
                   header: showUpdateBanner || breadcrumbVisible
                     ? ({ options, route, back }) => (
-                      <Header
-                        title={routeTitle(route.name,pathname)}
-                        headerStyle={options.headerStyle}
-                        headerTitleStyle={options.headerTitleStyle}
-                        headerTitleAlign={options.headerTitleAlign}
-                        headerTintColor={options.headerTintColor}
-                        headerShadowVisible={options.headerShadowVisible}
-                        headerRight={() => <NavigationMenuButton />}
-                        back={options.headerBackVisible === false ? undefined : back && {
-                          title: uiLabel('Back'), href: back.href,
-                        }}
-                        headerStatusBarHeight={0}
-                      />
+                      <ConsumedInsetHeader navigationOptions={options} back={back} core={core}
+                        fallbackTitle={routeTitle(route.name,pathname)} />
                     )
                     : undefined,
                   headerRight: () => <NavigationMenuButton />,

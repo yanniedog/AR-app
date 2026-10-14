@@ -43,7 +43,7 @@ function ComparisonForm({ rows, candidates, context }: { rows: RateRow[]; candid
     {rows.map((row, i) => <View key={rowId(row)} style={{ gap: 8 }}>
       <AppText weight="700">{uiJoin(uiProviderName(row), ': ', uiProductName(row))}</AppText>
       <Chip label={uiJoin('Reference', ': ', uiProductName(row), ' · ', 'Rate index', ': ', uiCount(row.rate_index))} selected={referenceId === rowId(row)} onPress={() => setReferenceId(rowId(row))} />
-      {candidates[i].length ? <DepositCohorts candidates={candidates[i]} selectedId={selectedIds[i]} onSelect={id => setSelectedIds(old => old.map((value, j) => j === i ? id : value))} row={row} inputs={inputs[i]} onChange={value => setInputs(old => old.map((item, j) => j === i ? value : item))} customer={customer} shared /> : <AppText variant="small">{uiJoin('Calculation', ' · ', 'Unavailable', ' · ', 'No ranks')}</AppText>}
+      {candidates[i].length ? <DepositCohorts candidates={candidates[i]} context={context} selectedId={selectedIds[i]} onSelect={id => setSelectedIds(old => old.map((value, j) => j === i ? id : value))} row={row} inputs={inputs[i]} onChange={value => setInputs(old => old.map((item, j) => j === i ? value : item))} customer={customer} shared /> : <AppText variant="small">{uiJoin('Calculation', ' · ', 'Unavailable', ' · ', 'No ranks')}</AppText>}
     </View>)}
     <Button title={uiJoin('Compare', ' ', 'Maturity payout')} disabled={customer.busy} onPress={calculate} />
     {error ? <AppText variant="small">{uiLabel('Unavailable')}</AppText> : null}
