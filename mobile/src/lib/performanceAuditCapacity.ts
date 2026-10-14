@@ -73,11 +73,16 @@ export async function benchmarkPayloadCapacity(core: CorePayload, control: {
     await checkpoint();
     return result;
   };
-  const { sections, brands, ...metadata } = core;
+  const { sections, brands } = core;
+  const metadata: Record<string, unknown> = Object.create(null);
+  for (const [key, field] of Object.entries(core)) {
+    if (key !== 'sections' && key !== 'brands') metadata[key] = field;
+  }
   // Embedded history/catalogue metadata includes arbitrarily long nested
   // arrays. Walk their structure rather than serializing either whole graph.
-  const parsed = { ...await cloneMetadata(metadata) as Omit<CorePayload, 'sections' | 'brands'>,
-    brands: Object.create(null), sections: Object.create(null) } as CorePayload;
+  const parsed = Object.assign(Object.create(null), await cloneMetadata(metadata), {
+    brands: Object.create(null), sections: Object.create(null),
+  }) as CorePayload;
   await checkpoint(true);
   // Logos can dominate payload bytes. Never serialize the entire embedded
   // brand catalogue as part of the otherwise small root metadata segment.
