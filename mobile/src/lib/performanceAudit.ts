@@ -174,6 +174,8 @@ export interface PerformanceAuditState {
   startedAt: string | null;
   hangTimeoutMs: number;
   auditMode: AppHealthAuditMode;
+  /** Per-session publication choice; never a persisted privacy preference. */
+  uploadLog: boolean;
   storedCheckCount: number;
   lastStoredCheckAt: string | null;
   progress: PerformanceAuditProgress;
@@ -263,6 +265,7 @@ const IDLE_STATE: PerformanceAuditState = {
   startedAt: null,
   hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   auditMode: 'local',
+  uploadLog: true,
   storedCheckCount: 0,
   lastStoredCheckAt: null,
   progress: { completed: 0, total: 0, label: 'Ready' },
@@ -311,6 +314,8 @@ export function isPerformanceAuditActive(): boolean {
 export interface RequestPerformanceAuditOptions {
   hangTimeoutMs?: number;
   mode?: AppHealthAuditMode;
+  /** Defaults to the historical audit-and-upload API behavior. */
+  uploadLog?: boolean;
 }
 
 export function parsePerformanceAuditHangTimeoutSeconds(
@@ -516,6 +521,7 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     startedAt: new Date().toISOString(),
     hangTimeoutMs,
     auditMode: options.mode ?? 'local',
+    uploadLog: options.uploadLog ?? true,
     storedCheckCount: 0,
     lastStoredCheckAt: null,
     progress: { completed: 0, total: 0, label: 'Preparing audit' },

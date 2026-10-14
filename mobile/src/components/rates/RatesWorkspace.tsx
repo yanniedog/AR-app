@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FilterSheet } from '../../components/FilterSheet';
 import { EmptyState, IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../../components/feedback';
 import { ProductCard } from '../../components/ProductCard';
-import { Screen, screenEdgeStyle, screenScrollContentStyle } from '../../components/Screen';
+import { Screen, screenScrollContentStyle } from '../../components/Screen';
 import { ToolbarIconButton } from '../../components/ToolbarIconButton';
 import { SearchBar } from '../../components/controls';
 import { AppText, Button, Row } from '../../components/ui';
@@ -398,11 +398,53 @@ export default function RatesWorkspace() {
   // the same list and decoded logos while its result identities are unchanged.
   const listRevision = uiTracker.current.update([listDataRevision, filterOpen, draftFilters, draftAvailability, sortOpen, toolsOpen, selectMode, selected]);
   const listReadiness = useVirtualizedListReadiness(listRevision, resultRows.length);
+  const { onCommitLayoutEffect: markListCommit, onLoad: markListLoad, onViewableItemsChanged: markListViewability } = listReadiness;
   const listRef = useRef<FlashListRef<ResultRow>>(null);
+  const listLoaded = useRef(false);
+  const currentRows = useRef(resultRows);
+  currentRows.current = resultRows;
   // Initial native zero-offset events must not erase this list's requested restore.
-  const restoration = useRef({ revision: listDataRevision, offset: task.scrollOffset });
-  if (restoration.current.revision !== listDataRevision) restoration.current = { revision: listDataRevision, offset: task.scrollOffset };
-  const restoreOffset = restoration.current.offset;
+  const restoration = useRef({ revision: listDataRevision, section, offset: task.scrollOffset, scheduled: false, applied: false });
+  if (restoration.current.revision !== listDataRevision) {
+    restoration.current = { revision: listDataRevision, section, offset: task.scrollOffset, scheduled: false, applied: false };
+  }
+  const attachList = useCallback((list: FlashListRef<ResultRow> | null) => {
+    if (listRef.current !== list) {
+      listLoaded.current = false;
+      restoration.current.scheduled = false;
+      restoration.current.applied = false;
+    }
+    listRef.current = list;
+  }, []);
+  const restoreCommittedScroll = useCallback(() => {
+    const list = listRef.current, pending = restoration.current;
+    if (!listLoaded.current || !list || pending.scheduled || pending.applied) return;
+    pending.scheduled = true;
+    requestAnimationFrame(() => {
+      if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) return;
+      list.scrollToOffset({ offset: pending.offset, animated: false });
+      // Wait for the native scroll to reach a frame before asking for current
+      // viewport evidence. A measurement from before that move is insufficient.
+      requestAnimationFrame(() => {
+        if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) return;
+        pending.applied = true;
+        list.recomputeViewableItems();
+      });
+    });
+  }, []);
+  const onListCommit = useCallback(() => {
+    markListCommit();
+    restoreCommittedScroll();
+  }, [markListCommit, restoreCommittedScroll]);
+  const onListLoad = useCallback(() => {
+    listLoaded.current = true;
+    markListLoad();
+    restoreCommittedScroll();
+  }, [markListLoad, restoreCommittedScroll]);
+  const onViewableItemsChanged = useCallback((info: { viewableItems: { isViewable?: boolean | null; item: ResultRow }[] }) => {
+    if (!restoration.current.applied || info.viewableItems.some(token => token.isViewable === true && !currentRows.current.includes(token.item))) return;
+    markListViewability(info);
+  }, [markListViewability]);
   useEffect(() => {
     // In-place selection/disclosure changes do not change visible indices, so
     // FlashList may omit its usual viewability callback. Request a fresh native
@@ -476,53 +518,33 @@ export default function RatesWorkspace() {
   // Keep whole 16sp action labels; narrower or enlarged text adds a row.
   const actionMinWidth = Math.min(Math.max(48, width - theme.spacing(8)), Math.ceil(80 * Math.max(1, fontScale) + 36));
   const actionStyle = { flexGrow: 1, flexShrink: 0, flexBasis: actionMinWidth, minWidth: actionMinWidth };
+  const quickSortKey = sortKey === 'bank' ? 'rate' : 'bank';
+  const quickSortLabel = sortOptions.find(option => option.key === quickSortKey)?.label ?? uiLabel('Rate');
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Rates' }} />
-      <View style={[screenEdgeStyle(theme), { gap: 8, paddingTop: 8, paddingBottom: 8 }]}>
-        <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
-        <SearchBar value={uiRatesQuery(task)} onChangeText={setQuery} placeholder="Search rates or banks" />
-        <Row gap={8} style={{ flexWrap: 'wrap' }}>
-          <Button title={filterCount ? uiJoin('Filter',' (',uiCount(filterCount),')'):uiLabel("Filter")} variant="secondary" onPress={openFilters} style={actionStyle} />
-          <Button title="Sort" variant="secondary" onPress={() => setSortOpen(true)} disabled={availability === 'unlisted'} style={actionStyle} />
-          <Button title={uiLabel(selectMode ? 'Done' : 'Compare')} variant="secondary" onPress={toggleCompareMode} disabled={availability === 'unlisted'} style={actionStyle} />
-        </Row>
-        <Row gap={8}>
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <AppText variant="tiny" color="textMuted">{uiJoin(searchPending ? 'Loading':uiJoin(uiCount(resultRows.length),' ','results'),searchSub?uiJoin(' · ','Alert on'):null)}</AppText>
-            <AppText variant="tiny" color="textMuted">{sortLabel}</AppText>
-          </View>
-          <ToolbarIconButton icon="share-outline" onPress={() => setToolsOpen(true)} accessibilityLabel="Search actions" />
-        </Row>
-        {path.length ? <Button title="Clear scope" variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
-        {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">{uiLabel("Name search")}</AppText>
-          {searchIndexStatus === 'error' ? <Button title="Retry search" variant="ghost" onPress={() => void ensureSearchIndex()} /> : null}</Row> : null}
-      </View>
-
       <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
         <FlashList
-          ref={listRef}
+          ref={attachList}
           drawDistance={120}
-          // Only changed result identities require a new list. Selection and
-          // filter-sheet visibility commit in place through extraData below.
-          key={`search:${listDataRevision}`}
+          // Keep the input/header mounted while query, filters and sort change.
+          // Session state owns offsets; automatic item anchoring would compete.
+          maintainVisibleContentPosition={{ disabled: true }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           data={resultRows}
-          onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
-          onLoad={() => {
-            listReadiness.onLoad();
-            const offset = restoreOffset;
-            const list = listRef.current;
-            if (offset > 0 && list) requestAnimationFrame(() => {
-              if (listRef.current === list && useRatesSession.getState().section === section) list.scrollToOffset({ offset, animated: false });
-            });
-          }}
+          onCommitLayoutEffect={onListCommit}
+          onLoad={onListLoad}
           onContentSizeChange={listReadiness.onContentSizeChange}
-          onViewableItemsChanged={listReadiness.onViewableItemsChanged}
+          onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
           extraData={listRevision}
           keyExtractor={(item, i) => 'product_key' in item ? `${item.product_key}-${item.rate_index ?? i}` : item.key}
           getItemType={item => 'product_key' in item ? 'rate' : 'unlisted'}
-          onScroll={event => recordRatesScroll(section, event.nativeEvent.contentOffset.y)}
+          onScroll={event => {
+            if (restoration.current.applied && restoration.current.revision === listDataRevision
+              && useRatesSession.getState().section === section) recordRatesScroll(section, event.nativeEvent.contentOffset.y);
+          }}
           scrollEventThrottle={64}
           contentContainerStyle={{
             ...screenScrollContentStyle(theme, insets.bottom, width),
@@ -530,6 +552,27 @@ export default function RatesWorkspace() {
             paddingBottom: theme.spacing(6) + insets.bottom + theme.spacing(8),
           }}
           renderItem={renderProduct}
+          ListHeaderComponent={<View style={{ gap: 8, paddingTop: 8, paddingBottom: 8 }}>
+            <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
+            <SearchBar value={uiRatesQuery(task)} onChangeText={setQuery} placeholder="Search rates or banks" />
+            <Row gap={8} style={{ flexWrap: 'wrap' }}>
+              <Button title={filterCount ? uiJoin('Filter',' (',uiCount(filterCount),')'):uiLabel("Filter")} variant="secondary" onPress={openFilters} style={actionStyle} />
+              <Button title="Sort" variant="secondary" onPress={() => setSortOpen(true)} disabled={availability === 'unlisted'} style={actionStyle} />
+              <Button title={uiLabel(selectMode ? 'Done' : 'Compare')} variant="secondary" onPress={toggleCompareMode} disabled={availability === 'unlisted'} style={actionStyle} />
+            </Row>
+            <Row gap={8} style={{ flexWrap: 'wrap' }}>
+              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <AppText variant="tiny" color="textMuted">{uiJoin(searchPending ? 'Loading':uiJoin(uiCount(resultRows.length),' ','results'),searchSub?uiJoin(' · ','Alert on'):null)}</AppText>
+                <AppText variant="tiny" color="textMuted">{sortLabel}</AppText>
+              </View>
+              <Button title={quickSortLabel} variant="secondary" disabled={availability === 'unlisted'}
+                onPress={() => setSortKey(quickSortKey)} />
+              <ToolbarIconButton icon="share-outline" onPress={() => setToolsOpen(true)} accessibilityLabel="Search actions" />
+            </Row>
+            {path.length ? <Button title="Clear scope" variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
+            {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">{uiLabel("Name search")}</AppText>
+              {searchIndexStatus === 'error' ? <Button title="Retry search" variant="ghost" onPress={() => void ensureSearchIndex()} /> : null}</Row> : null}
+          </View>}
           ListEmptyComponent={
             task.intentError ? <EmptyState title="Scope unavailable" /> : availability === 'unlisted' && !catalogueDetails ? (
               <View style={{ paddingTop: 16, gap: 12 }}><EmptyState title={uiLabel(detailsLoading ? 'Loading' : 'Catalogue unavailable')} />
@@ -619,6 +662,7 @@ export default function RatesWorkspace() {
               setSortKey('rate'); setSortOpen(false);
             }} />)}
           <Button title="Bank A–Z" variant="ghost" onPress={() => { setSortKey('bank'); setSortOpen(false); }} />
+          <Button title="Cancel" variant="ghost" onPress={() => setSortOpen(false)} />
         </ScrollView>
       </SheetSurface>
       <SheetSurface visible={toolsOpen} title="Search" onClose={() => setToolsOpen(false)}>

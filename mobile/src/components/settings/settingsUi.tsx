@@ -179,28 +179,47 @@ export function ToggleRow({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: UiCopy;
   value: boolean;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
 }) {
   const theme = useTheme();
   return (
-    <Row gap={12} style={{ minHeight: TOUCH_TARGET_MIN, paddingVertical: 2 }}>
-      <Ionicons name={icon} size={20} color={theme.colors.primary} />
-      <View style={{ flex: 1 }}>
-        <AppText variant="body" weight="600">
-          {label}
-        </AppText>
+    <TouchTarget
+      fill
+      accessible
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: value, disabled }}
+      disabled={disabled}
+      onPress={() => { if (!disabled) onChange(!value); }}
+      style={{ minHeight: TOUCH_TARGET_MIN, paddingVertical: 2, opacity: disabled ? 0.5 : 1 }}
+    >
+      <View
+        pointerEvents="none"
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+        style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12 }}
+      >
+        <Ionicons name={icon} size={20} color={theme.colors.primary} />
+        <View style={{ flex: 1 }}>
+          <AppText variant="body" weight="600">
+            {label}
+          </AppText>
+        </View>
+        <Switch
+          value={value}
+          disabled={disabled}
+          accessible={false}
+          focusable={false}
+          trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
+        />
       </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
-        accessibilityLabel={label}
-      />
-    </Row>
+    </TouchTarget>
   );
 }
 

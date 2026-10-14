@@ -2,7 +2,7 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 
 import Search from '../src/components/rates/RatesWorkspace';
-import { captureRatesSession, restoreRatesSession, initializeRatesSession, recordRatesScroll, useRatesSession } from '../src/data/ratesSession';
+import { captureRatesSession, restoreRatesSession, initializeRatesSession, updateRatesSection, recordRatesScroll, useRatesSession } from '../src/data/ratesSession';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
@@ -18,6 +18,8 @@ const mockListMount = jest.fn();
 const mockListUnmount = jest.fn();
 const mockRecomputeViewableItems = jest.fn();
 const mockScrollToOffset = jest.fn();
+const mockSearchMount = jest.fn();
+const mockSearchUnmount = jest.fn();
 let mockVisibleCount: number | null = null;
 let mockSuppressViewability = false;
 let mockNavigationReady = true;
@@ -57,10 +59,12 @@ jest.mock('@shopify/flash-list', () => {
   return { FlashList: React.forwardRef(function MockFlashList(props: any, ref: any) {
     const measure = () => {
       if (!mockSuppressViewability) props.onViewableItemsChanged({ viewableItems:
-        props.data.slice(0, mockVisibleCount ?? 3).map(() => ({ isViewable: true })) });
+        props.data.slice(0, mockVisibleCount ?? 3).map((item: unknown) => ({ isViewable: true, item })) });
     };
     const measureRef = React.useRef(measure);
     measureRef.current = measure;
+    const loadRef = React.useRef(props.onLoad);
+    loadRef.current = props.onLoad;
     const { extraData, onCommitLayoutEffect } = props;
     React.useImperativeHandle(ref, () => ({ scrollToOffset: (...args: unknown[]) => mockScrollToOffset(...args), recomputeViewableItems: () => {
       mockRecomputeViewableItems(); measureRef.current();
@@ -68,10 +72,11 @@ jest.mock('@shopify/flash-list', () => {
     React.useEffect(() => {
       mockListMount();
       measureRef.current();
+      loadRef.current();
       return () => mockListUnmount();
     }, []);
     React.useEffect(() => { onCommitLayoutEffect(); }, [extraData, onCommitLayoutEffect]);
-    return React.createElement('FlashList', props,
+    return React.createElement('FlashList', props, props.ListHeaderComponent,
       props.data.length ? props.data.map((item: any, index: number) =>
         React.createElement('Rate', { key: index }, props.renderItem({ item })))
         : props.ListEmptyComponent);
@@ -82,7 +87,14 @@ jest.mock('../src/components/FilterSheet', () => ({ FilterSheet: 'FilterSheet' }
 jest.mock('../src/components/ProductCard', () => ({ ProductCard: 'ProductCard' }));
 jest.mock('../src/components/Screen', () => ({ Screen: 'Screen', screenEdgeStyle: () => ({}), screenScrollContentStyle: () => ({}) }));
 jest.mock('../src/components/ToolbarIconButton', () => ({ ToolbarIconButton: 'ToolbarIconButton' }));
-jest.mock('../src/components/controls', () => ({ SearchBar: 'SearchBar', SegmentedControl: 'SegmentedControl' }));
+jest.mock('../src/components/controls', () => {
+  const React = jest.requireActual('react');
+  return { SegmentedControl: 'SegmentedControl', SearchBar: (props: any) => {
+    const [focused, setFocused] = React.useState(false);
+    React.useEffect(() => { mockSearchMount(); return () => mockSearchUnmount(); }, []);
+    return React.createElement('SearchBar', { ...props, focused, onFocus: () => setFocused(true), onBlur: () => setFocused(false) });
+  } };
+});
 jest.mock('../src/components/feedback', () => ({
   EmptyState: 'EmptyState', IndeterminateProgressBar: 'IndeterminateProgressBar', LoadingRows: 'LoadingRows', ScreenSkeleton: 'ScreenSkeleton',
 }));
@@ -98,6 +110,8 @@ beforeEach(() => {
   mockEnsureDetails.mockClear(); mockSurfaces.clear();
   mockListMount.mockClear(); mockListUnmount.mockClear();
   mockRecomputeViewableItems.mockClear(); mockScrollToOffset.mockClear(); mockVisibleCount = null; mockSuppressViewability = false;
+  mockSearchMount.mockClear(); mockSearchUnmount.mockClear();
+  jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => { callback(0); return 0; });
   const fixture = rateConditionFixture();
   mockState = { ...fixture, prefs: { ...DEFAULT_PREFS, enableDeepSearch: false }, subscriptions: [], hydrated: true, activeSection: 'TD', setActiveSection: jest.fn(),
     detailsLoading: false, ensureDetails: mockEnsureDetails, searchIndexStatus: 'idle' };
@@ -105,6 +119,7 @@ beforeEach(() => {
   installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() });
 });
 afterEach(() => {
+  jest.restoreAllMocks();
   setSuitabilityAllowed(null);
   installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() });
 });
@@ -251,12 +266,12 @@ test('comparison and filter disclosure commit without remounting unchanged searc
       previousRevision = revision;
     }
     expect(tree.root.findAllByType('ProductCard' as any)[0].props.selected).toBe(true);
-    // A real applied result change remounts, rejecting stale layout/viewability.
+    // Applied filters keep the input mounted, with a new commit/measurement.
     act(() => mockSurfaces.get('rates.results').actions['search.filters.open']());
     act(() => mockSurfaces.get('rates.results').actions['search.filter.provider.first']({ provider: 'Missing Bank' }));
     act(() => mockSurfaces.get('rates.results').actions['search.filters.apply']());
-    expect(mockListMount).toHaveBeenCalledTimes(2);
-    expect(mockListUnmount).toHaveBeenCalledTimes(1);
+    expect(mockListMount).toHaveBeenCalledTimes(1);
+    expect(mockListUnmount).not.toHaveBeenCalled();
     expect(tree.root.findByType('FlashList' as any).props.data).toHaveLength(0);
     expect(listProbe().visibleCount).toBe(0);
   } finally { act(() => tree.unmount()); }
@@ -290,7 +305,7 @@ test('a missing fresh native callback leaves the current viewport unverified', (
     expect(listProbe().visibleCount).toBeNull();
     expect(listProbe().status).toBe('pending');
     act(() => tree.root.findByType('FlashList' as any).props.onViewableItemsChanged({
-      viewableItems: [{ isViewable: true }],
+      viewableItems: [{ isViewable: true, item: tree.root.findByType('FlashList' as any).props.data[0] }],
     }));
     expect(listProbe().visibleCount).toBe(1);
     expect(listProbe().status).toBe('ready');
@@ -302,13 +317,19 @@ test('filter Cancel discards the real draft and preserves query/type/sort/offset
   mockState.prefs.includeNonStandard = true;
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
-    const initialRows = tree.root.findByType('FlashList' as any).props.data;
+    const list = tree.root.findByType('FlashList' as any);
+    act(() => tree.root.findByType('SearchBar' as any).props.onChangeText('Macquarie'));
+    act(() => list.findByProps({ title: 'Bank A–Z' }).props.onPress());
+    act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 312 } } }));
+    const initialRows = list.props.data, before = captureRatesSession();
     act(() => mockSurfaces.get('rates.results').actions['search.filters.open']());
     act(() => mockSurfaces.get('rates.results').actions['search.filter.provider.first']({ provider: 'Missing Bank' }));
     expect(tree.root.findByType('FlashList' as any).props.data).toBe(initialRows);
-    act(() => mockSurfaces.get('rates.results').actions['search.filters.cancel']());
+    act(() => tree.root.findByType('FilterSheet' as any).props.onClose());
     expect(tree.root.findByType('FlashList' as any).props.data).toBe(initialRows);
     expect(tree.root.findByType('FilterSheet' as any).props.visible).toBe(false);
+    expect(captureRatesSession()).toEqual(before);
+    expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 0, animated: false });
   } finally { act(() => tree.unmount()); }
 });
 test('the canonical list has no five-row preview gate and product taps preserve the exact rate', () => {
@@ -351,7 +372,8 @@ test('a queued scroll restoration cannot affect a replacement product-type list'
     act(() => tree.root.findByType('FlashList' as any).props.onLoad());
     act(() => mockSurfaces.get('rates.results').actions['search.section.next']());
     act(() => frames.forEach(callback => callback(0)));
-    expect(mockScrollToOffset).not.toHaveBeenCalled();
+    expect(mockScrollToOffset).toHaveBeenCalledTimes(1);
+    expect(mockScrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: false });
     expect(useRatesSession.getState().section).toBe('Mortgage');
     expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(420);
   } finally { act(() => tree.unmount()); raf.mockRestore(); }
@@ -409,5 +431,189 @@ test.each([
     expect(tree.root.findAllByProps({ title: 'Done' })).toHaveLength(1);
     act(() => actions.props.onPress());
     expect(tree.root.findAllByType('SheetSurface' as any).some((node: any) => node.props.visible && node.props.title === 'Search')).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each([[411, 1], [360, 2]])('the toolbar scrolls inside the list at %s dp / %s font scale with direct search and one filter sheet', (width, fontScale) => {
+  mockDimensions = { ...mockDimensions, width, fontScale };
+  mockState.prefs.includeNonStandard = true;
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const list = tree.root.findByType('FlashList' as any);
+    expect(React.isValidElement(list.props.ListHeaderComponent)).toBe(true);
+    expect(list.props.stickyHeaderIndices).toBeUndefined();
+    expect(list.findAllByType('SearchBar' as any)).toHaveLength(1);
+    expect(list.props.keyboardShouldPersistTaps).toBe('handled');
+    expect(list.props.keyboardDismissMode).toBe('on-drag');
+    expect(list.props.maintainVisibleContentPosition).toEqual({ disabled: true });
+    const input = list.findByType('SearchBar' as any);
+    expect(input.props.value).toBe('');
+    expect(input.props.onSubmitEditing).toBeUndefined();
+    expect(list.findAllByType('Button' as any).filter((node: any) => node.props.title === 'Search')).toHaveLength(0);
+    act(() => list.findByProps({ title: 'Filter' }).props.onPress());
+    expect(tree.root.findAllByType('FilterSheet' as any)).toHaveLength(1);
+    expect(tree.root.findByType('FilterSheet' as any).props.visible).toBe(true);
+    expect(mockSearchMount).toHaveBeenCalledTimes(1);
+    expect(mockSearchUnmount).not.toHaveBeenCalled();
+  } finally { act(() => tree.unmount()); }
+});
+
+test('changing result scopes keeps the focused input and exact rate rows mounted', () => {
+  mockState.prefs.includeNonStandard = true;
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const input = tree.root.findByType('SearchBar' as any);
+    const list = tree.root.findByType('FlashList' as any);
+    const viewability = list.props.onViewableItemsChanged;
+    const exactRows = mockState.core.sections.TD.rates;
+    act(() => input.props.onFocus());
+    for (const value of ['Macquarie', 'No matching bank', 'Macquarie']) {
+      act(() => input.props.onChangeText(value));
+      expect(tree.root.findByType('SearchBar' as any)).toBe(input);
+      expect(input.props.focused).toBe(true);
+      expect(input.props.value).toBe(value);
+      expect(tree.root.findByType('FlashList' as any)).toBe(list);
+      expect(list.props.onViewableItemsChanged).toBe(viewability);
+    }
+    expect(list.props.data).toHaveLength(exactRows.length);
+    for (const row of list.props.data) expect(exactRows).toContain(row);
+    act(() => list.findByProps({ title: 'Bank A–Z' }).props.onPress());
+    expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
+    expect(tree.root.findByType('SearchBar' as any)).toBe(input);
+    expect(input.props.focused).toBe(true);
+    act(() => list.findByProps({ title: 'Filter' }).props.onPress());
+    const sheet = () => tree.root.findByType('FilterSheet' as any);
+    act(() => sheet().props.onDraftChange({ ...sheet().props.controlledDraft, providers: ['Macquarie'] }));
+    act(() => sheet().props.onApply(sheet().props.controlledDraft));
+    expect(useRatesSession.getState().sections.TD.filters.providers).toEqual(['Macquarie']);
+    expect(tree.root.findByType('SearchBar' as any)).toBe(input);
+    expect(input.props.focused).toBe(true);
+    expect(mockListMount).toHaveBeenCalledTimes(1);
+    expect(mockListUnmount).not.toHaveBeenCalled();
+    expect(mockSearchMount).toHaveBeenCalledTimes(1);
+    expect(mockSearchUnmount).not.toHaveBeenCalled();
+  } finally { act(() => tree.unmount()); }
+});
+
+test('one visible tap commits the common sort preset, while advanced Cancel/Back preserves the committed scope', () => {
+  mockState.prefs.includeNonStandard = true;
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const list = tree.root.findByType('FlashList' as any);
+    act(() => list.findByProps({ title: 'Bank A–Z' }).props.onPress());
+    expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
+    expect(tree.root.findAllByType('SheetSurface' as any).filter((node: any) => node.props.visible)).toHaveLength(0);
+    act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 312 } } }));
+    const before = captureRatesSession();
+    const sortSheet = () => tree.root.findAllByType('SheetSurface' as any).find((node: any) => node.props.title === 'Sort');
+    for (const close of ['button', 'back']) {
+      act(() => list.findByProps({ title: 'Sort' }).props.onPress());
+      expect(sortSheet().props.visible).toBe(true);
+      act(() => close === 'button' ? sortSheet().findByProps({ title: 'Cancel' }).props.onPress() : sortSheet().props.onClose());
+      expect(sortSheet().props.visible).toBe(false);
+      expect(captureRatesSession()).toEqual(before);
+    }
+    act(() => list.findByProps({ title: 'Sort' }).props.onPress());
+    const commits = jest.fn(), stop = useRatesSession.subscribe(commits);
+    act(() => sortSheet().findByProps({ title: 'Advertised rate' }).props.onPress());
+    stop();
+    expect(commits).toHaveBeenCalledTimes(1);
+    expect(sortSheet().props.visible).toBe(false);
+    expect(useRatesSession.getState().sections.TD.sort).toBe('rate');
+    expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(0);
+    expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 0, animated: false });
+    act(() => list.findByProps({ title: 'Bank A–Z' }).props.onPress());
+    act(() => list.findByProps({ title: 'Advertised rate' }).props.onPress());
+    expect(useRatesSession.getState().sections.TD.sort).toBe('rate');
+    expect(sortSheet().props.visible).toBe(false);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('family changes and a detail/back remount restore that family offset without remounting the live header', () => {
+  mockState.prefs.includeNonStandard = true; mockParams = {};
+  initializeRatesSession(mockState.prefs, 'TD');
+  updateRatesSection('TD', { query: 'Macquarie', sort: 'bank' }); recordRatesScroll('TD', 420);
+  updateRatesSection('Mortgage', { query: 'Loan', scrollOffset: 80 });
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const input = tree.root.findByType('SearchBar' as any);
+    const list = tree.root.findByType('FlashList' as any);
+    expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 420, animated: false });
+    const familyControl = () => list.findAllByType('SegmentedControl' as any).find((node: any) => node.props.options.some((option: any) => option.value === 'Mortgage'));
+    act(() => familyControl().props.onChange('Mortgage'));
+    expect(input.props.value).toBe('Loan');
+    expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 80, animated: false });
+    act(() => familyControl().props.onChange('TD'));
+    expect(input.props.value).toBe('Macquarie');
+    expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
+    expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 420, animated: false });
+    expect(mockSearchMount).toHaveBeenCalledTimes(1);
+    act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 460 } } }));
+    act(() => tree.unmount());
+    act(() => { tree = TestRenderer.create(<Search />); });
+    expect(tree.root.findByType('SearchBar' as any).props.value).toBe('Macquarie');
+    expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 460, animated: false });
+  } finally { act(() => tree.unmount()); }
+});
+
+test('early zero scroll and a queued old restore cannot erase or replace the current query offset', () => {
+  mockState.prefs.includeNonStandard = true; mockParams = {};
+  initializeRatesSession(mockState.prefs, 'TD'); recordRatesScroll('TD', 420);
+  const frames: FrameRequestCallback[] = [];
+  jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => { frames.push(callback); return frames.length; });
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const list = tree.root.findByType('FlashList' as any);
+    act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 0 } } }));
+    expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(420);
+    act(() => tree.root.findByType('SearchBar' as any).props.onChangeText('No matching bank'));
+    act(() => frames.forEach(callback => callback(0)));
+    expect(mockScrollToOffset).toHaveBeenCalledTimes(1);
+    expect(mockScrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: false });
+    expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(0);
+    expect(mockListMount).toHaveBeenCalledTimes(1);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('a data swap rejects prior-row visibility and a header-only viewport stays unverified', () => {
+  mockState.prefs.includeNonStandard = true;
+  const savings = { provider: 'Controlled Bank', product_key: 'controlled-savings', product_name: 'Controlled savings', rate_index: 1, rate: '0.03', rate_type: 'VARIABLE', account_class: 'standard' };
+  mockState.core.sections.Savings.rates = [savings];
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const list = tree.root.findByType('FlashList' as any), previous = list.props.data[0];
+    const probe = () => mockSurfaces.get('rates.results').probes.find((item: any) => item.id === 'search.list');
+    mockSuppressViewability = true;
+    const family = list.findAllByType('SegmentedControl' as any).find((node: any) => node.props.options.some((option: any) => option.value === 'Savings'));
+    act(() => family.props.onChange('Savings'));
+    expect(probe().status).toBe('pending');
+    act(() => list.props.onViewableItemsChanged({ viewableItems: [{ isViewable: true, item: previous }] }));
+    expect(probe().visibleCount).toBeNull();
+    expect(probe().status).toBe('pending');
+    act(() => list.props.onViewableItemsChanged({ viewableItems: [] }));
+    expect(probe().visibleCount).toBe(0);
+    expect(probe().status).toBe('pending');
+    act(() => list.props.onViewableItemsChanged({ viewableItems: [{ isViewable: true, item: savings }] }));
+    expect(probe().visibleCount).toBe(1);
+    expect(probe().status).toBe('ready');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('a measurement before the restore reaches a frame cannot establish list readiness', () => {
+  mockState.prefs.includeNonStandard = true;
+  const frames: FrameRequestCallback[] = [];
+  jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => { frames.push(callback); return frames.length; });
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const list = tree.root.findByType('FlashList' as any);
+    const probe = () => mockSurfaces.get('rates.results').probes.find((item: any) => item.id === 'search.list');
+    act(() => frames[0](0));
+    expect(mockScrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: false });
+    act(() => list.props.onViewableItemsChanged({ viewableItems: [{ isViewable: true, item: list.props.data[0] }] }));
+    expect(probe().visibleCount).toBeNull();
+    expect(probe().status).toBe('pending');
+    act(() => frames[1](16));
+    expect(probe().visibleCount).toBeGreaterThan(0);
+    expect(probe().status).toBe('ready');
   } finally { act(() => tree.unmount()); }
 });

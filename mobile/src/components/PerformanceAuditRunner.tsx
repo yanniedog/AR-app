@@ -54,7 +54,8 @@ import type { TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
 import { captureAuditPayloadWork } from '../lib/performanceAuditPayloadWork';
 import { benchmarkPayloadCapacity } from '../lib/performanceAuditCapacity';
 import { waitForAuditBackgroundWork, describeAuditBackgroundWork, type AuditBackgroundWorkWait } from '../lib/performanceAuditBackgroundWork';
-import { isDebugLogUploadBusy, startDebugLogUpload, subscribeDebugLogUpload } from '../lib/debugLogSharing';
+import { isDebugLogUploadBusy, subscribeDebugLogUpload } from '../lib/debugLogSharing';
+import { startPerformanceAuditLogUpload } from '../lib/performanceAuditSharing';
 import {
   ScenarioReentryGate,
   type DeepAuditStep,
@@ -2567,6 +2568,7 @@ export function PerformanceAuditRunner() {
       const wakeLockSubscription: { current: ReturnType<typeof AppState.addEventListener> | null } = { current: null };
       const startedAt = state.startedAt!;
       const auditMode = state.auditMode;
+      const uploadLog = state.uploadLog;
       const startedMs = Date.now();
       // The report's duration is time the audit actually measured. A five-minute
       // pause is the user's, not the app's, and counting it would attribute the
@@ -3520,8 +3522,11 @@ export function PerformanceAuditRunner() {
               : 'Live-source mode permits public payload files and exact approved external destinations for credential-free HEAD checks. Link checks have a 90-second transport/handler budget; remaining destinations are validated but stay unverified. No browser or installer is launched.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
             auditMode === 'local'
-              ? 'Local audit measurements perform no network or clipboard action. After completion, the compact diagnostic log is uploaded to paste and the verified link is copied.'
-              : 'The live-source audit may read allowlisted public payload files during measurement. After completion, the compact diagnostic log is uploaded to paste and the verified link is copied.',
+              ? 'Local audit measurements perform no network or clipboard action.'
+              : 'The live-source audit may read allowlisted public payload files during measurement.',
+            uploadLog
+              ? 'Public log upload requested after local finalization.'
+              : 'Public log upload disabled.',
             'Full retained logs and the complete saved report remain on this device through Debug log → Share full evidence.',
           ],
         };
@@ -3628,7 +3633,7 @@ export function PerformanceAuditRunner() {
         // complete even if upload or clipboard access fails.
         // Reserve sharing's busy state before finally releases the run gate,
         // but let finally release audit resources without awaiting the network.
-        void startDebugLogUpload({
+        startPerformanceAuditLogUpload(uploadLog, {
           sessionId,
           appVersion: app.appVersion,
           buildVersion: app.buildVersion,
@@ -3854,6 +3859,7 @@ export function PerformanceAuditRunner() {
             routeAggregates: aggregateRepeatedJourneys(checks),
             appHealth: partialHealth,
             limitations: [
+              uploadLog ? 'Public log upload requested after local finalization.' : 'Public log upload disabled.',
               `This is a structured partial schema-v${PERFORMANCE_AUDIT_SCHEMA_VERSION} report for an unrecoverable stop (cancel, hang watchdog, dataset revision change, or setup/teardown failure). Per-step journey failures no longer abort the plan; those produce a complete report with aggregated fail/warn checks.`,
               `Unrecoverable failure occurred after ${completed} of ${total} planned durable checks.`,
               `The report applies to app version ${app.appVersion}, build ${app.buildVersion}.`,
@@ -3900,7 +3906,7 @@ export function PerformanceAuditRunner() {
             error,
             ...(partialStoreError ? [`Partial report storage failed: ${partialStoreError}`] : []),
           ].join('\n'), mutationRecoveryRequired);
-          void startDebugLogUpload({
+          startPerformanceAuditLogUpload(uploadLog, {
             sessionId,
             appVersion: app.appVersion,
             buildVersion: app.buildVersion,
@@ -3949,6 +3955,7 @@ export function PerformanceAuditRunner() {
     state.sessionId,
     state.startedAt,
     state.auditMode,
+    state.uploadLog,
     state.status,
     uploadBusy,
   ]);
