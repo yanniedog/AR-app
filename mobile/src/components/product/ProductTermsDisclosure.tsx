@@ -41,8 +41,13 @@ function EvidenceRows({ terms }: { terms: ProductTerms }) {
     </View></Disclosure>
     <Disclosure title="Changes" open={changesOpen} onToggle={() => setChangesOpen(!changesOpen)}><View style={{ gap: 8 }}>
       {terms.changes.map(change => { const before = terms.revisions.find(r => r.term_revision_id === change.before_revision_id), after = terms.revisions.find(r => r.term_revision_id === change.after_revision_id);
+        const parameters = [...new Set([before?.parameter_key, after?.parameter_key].filter((key): key is string => key !== undefined))];
+        const clauseIds = [...new Set([...(before?.clause_ids ?? []), ...(after?.clause_ids ?? [])])];
         return <View key={change.term_change_id} style={{ gap: 4 }}><AppText variant="small" weight="600">{uiJoin(change.kind === 'added' ? 'Added' : change.kind === 'removed' ? 'Removed' : change.kind === 'extraction_corrected' ? 'Extraction corrected' : 'Changed', ' · ', uiDate(change.observed_at))}</AppText>
-          <FinancialFactRows rows={[{ label: 'Prior revision', value: before ? uiTermRevisionValue(before) : uiLabel(change.before_revision_id ? 'Unavailable' : 'Not applicable') }, { label: 'Next revision', value: after ? uiTermRevisionValue(after) : uiLabel(change.after_revision_id ? 'Unavailable' : 'Not applicable') }]} />
+          <FinancialFactRows rows={[{ label: 'Field', value: parameters.length ? uiJoin(...parameters.flatMap((parameter, index) => [index ? uiLabel(' → ') : null, uiIdentifier(parameter)])) : uiLabel('Unavailable') },
+            { label: 'Prior revision', value: before ? uiTermRevisionValue(before) : uiLabel(change.before_revision_id ? 'Unavailable' : 'Not applicable') }, { label: 'Next revision', value: after ? uiTermRevisionValue(after) : uiLabel(change.after_revision_id ? 'Unavailable' : 'Not applicable') }]} />
+          <AppText variant="tiny" color="textMuted">{uiJoin('Reference', ': ', uiIdentifier(change.term_change_id))}</AppText>
+          {clauseIds.map(id => <AppText key={id} variant="tiny" color="textMuted">{uiJoin('Source', ' ', uiIdentifier(id))}</AppText>)}
         </View>; })}
     </View></Disclosure>
   </View>;

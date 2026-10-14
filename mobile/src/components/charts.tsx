@@ -17,7 +17,7 @@ import {
 } from '../data/bankHistoryTransform';
 import { useFirstMountDrawIn } from '../hooks/useFirstMountDrawIn';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { uiLabel,  uiCount, uiDate, uiJoin, uiNumber, uiRate } from '../lib/uiCopy';
+import { uiLabel,  uiCount, uiDate, uiJoin, uiNumber } from '../lib/uiCopy';
 import { hasFiniteChartDate, hasFiniteChartPath, hasPositiveChartLayout, type ChartRenderEvidence } from '../lib/chartRenderEvidence';
 import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
@@ -27,6 +27,11 @@ import { AppText } from './ui';
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 const DRAW_MS = 800;
+
+// RbaEntry.rate is published in percent; product-rate series use fractions.
+function rbaPercent(rate: RbaEntry['rate'] | null) {
+  return rate !== null && Number.isFinite(rate) ? uiJoin(uiNumber(rate, 2), '%') : uiLabel('Unknown');
+}
 
 function estimateStepPathLength(data: RbaEntry[], x: (i: number) => number, y: (rate: number) => number): number {
   if (data.length <= 1) return 1;
@@ -183,7 +188,7 @@ export const RbaChart = React.memo(function RbaChart({
       <View
         accessible
         accessibilityRole="adjustable"
-        accessibilityLabel={uiJoin(a11ySummary, ' · ', 'Selected', ' · ', uiDate(activeDate), ' · ', uiRate(activeRate), isHold ? uiJoin(' · ', 'Held') : null)}
+        accessibilityLabel={uiJoin(a11ySummary, ' · ', 'Selected', ' · ', uiDate(activeDate), ' · ', rbaPercent(activeRate), isHold ? uiJoin(' · ', 'Held') : null)}
         accessibilityActions={[{ name: 'increment', label: 'Next date' }, { name: 'decrement', label: 'Previous date' }]}
         onAccessibilityAction={(event) => {
           if (event.nativeEvent.actionName === 'increment') setSelectedDate(timeline[Math.min(timeline.length - 1, activeIndex + 1)]);
@@ -202,10 +207,10 @@ export const RbaChart = React.memo(function RbaChart({
           <Line x1={padL} y1={y(maxR)} x2={width - padR} y2={y(maxR)} stroke={theme.colors.border} strokeWidth={1} />
           <Line x1={padL} y1={y(minR)} x2={width - padR} y2={y(minR)} stroke={theme.colors.border} strokeWidth={1} />
           <SvgText x={width - padR + 4} y={y(maxR) + 4} fontSize={10} fill={theme.colors.textFaint}>
-            {uiNumber(maxR * 100, 2)}
+            {rbaPercent(maxR)}
           </SvgText>
           <SvgText x={width - padR + 4} y={y(minR) + 4} fontSize={10} fill={theme.colors.textFaint}>
-            {uiNumber(minR * 100, 2)}
+            {rbaPercent(minR)}
           </SvgText>
           <AnimatedPath
             animatedProps={pathAnimatedProps}
@@ -243,7 +248,7 @@ export const RbaChart = React.memo(function RbaChart({
                 fill={theme.colors.text}
                 textAnchor="end"
               >
-                {uiRate(activeRate)}
+                {rbaPercent(activeRate)}
               </SvgText>
             </>
           ) : null}
@@ -254,8 +259,8 @@ export const RbaChart = React.memo(function RbaChart({
         dates={timeline}
         activeIndex={activeIndex}
         onChangeIndex={(index) => setSelectedDate(timeline[index] ?? null)}
-        valueLabel={uiRate(activeRate)}
-        facts={isHold ? [{ label: 'Held', value: 'No change' }] : priorRate != null && activeRate != null ? [{ label: 'Prior', value: uiJoin(uiRate(priorRate), ' → ', uiRate(activeRate)) }] : undefined}
+        valueLabel={rbaPercent(activeRate)}
+        facts={isHold ? [{ label: 'Held', value: 'No change' }] : priorRate != null && activeRate != null ? [{ label: 'Prior', value: uiJoin(rbaPercent(priorRate), ' → ', rbaPercent(activeRate)) }] : undefined}
       />
     </View>
   );

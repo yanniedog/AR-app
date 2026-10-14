@@ -31,7 +31,8 @@ export function RateRowLine({ row, section, accent }: { row: RateRow; section: S
       <AppText variant="small">{uiJoin(presentation.primaryLabel, ' ', formatRate(presentation.primary))}</AppText>
       {presentation.secondary !== null && presentation.secondaryLabel ? <AppText variant="small" color="textMuted">{uiJoin(presentation.secondaryLabel, ' ', formatRate(presentation.secondary))}</AppText> : null}
     </Row>
-    <AppText variant="small" color="textMuted">{uiJoin(section === 'Mortgage' ? uiRepayment(row) : formatBalanceRange(row.balance_min, row.balance_max), ' · ', formatTerm(row))}</AppText>
+    <AppText variant="small" color="textMuted">{uiJoin(section === 'Mortgage' ? uiRepayment(row) : formatBalanceRange(row.balance_min, row.balance_max), ' · ', formatTerm(row),
+      section === 'Mortgage' ? uiJoin(' · ', 'Listed LVR', ' ', uiListedLvrRange(row)) : null)}</AppText>
     {qualifier.conditional ? <AppText variant="small" color="warning">{qualifier.label}</AppText> : null}
     <SelectedRateConditions row={row} section={section} />
   </View>;

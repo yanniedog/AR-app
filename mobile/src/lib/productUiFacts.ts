@@ -40,9 +40,14 @@ export function uiFeeValue(item: DetailItem): UiText {
     item.rateBased?.accrualFrequency || item.accrualFrequency ? uiJoin(' · ', uiCadence(item.rateBased?.accrualFrequency ?? item.accrualFrequency)) : null,
     item.rateBased?.amountRange ? uiJoin(' · ', amountRange(item.rateBased.amountRange.feeMinimum, item.rateBased.amountRange.feeMaximum, item.currency)) : null);
   if (item.amountStatus && item.amountStatus !== 'fixed') return uiLabel('Unknown');
+  const legacyCadence = typeof item.value === 'string' ? uiCadence(item.value) : null;
   const amount = number(item.amount ?? item.fixedAmount?.amount ?? item.value);
-  return amount === null ? uiLabel('Unknown') : uiJoin(money(amount, item.currency),
-    item.additionalValue !== undefined || item.accrualFrequency ? uiJoin(' · ', uiCadence(String(item.additionalValue ?? item.accrualFrequency))) : null);
+  if (amount === null) {
+    return legacyCadence && legacyCadence !== 'Unverified' ? uiJoin('Unknown', ' · ', legacyCadence) : uiLabel('Unknown');
+  }
+  return uiJoin(money(amount, item.currency),
+    item.additionalValue !== undefined || item.accrualFrequency ? uiJoin(' · ', uiCadence(String(item.additionalValue ?? item.accrualFrequency)))
+      : legacyCadence && legacyCadence !== 'Unverified' ? uiJoin(' · ', legacyCadence) : null);
 }
 export function uiFeeCap(item: DetailItem): UiText | null {
   return number(item.feeCap) === null ? null : uiJoin('Fee cap', ': ', money(item.feeCap, item.currency), item.feeCapPeriod ? uiJoin(' · ', uiCadence(item.feeCapPeriod)) : null);
