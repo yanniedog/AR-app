@@ -5,7 +5,7 @@ import type { CorePayload, DetailsPayload, RateRow, SectionKey } from '../src/ty
 import { revisionManifest } from './payloadRevision';
 
 /** Test publication proof; the clauses do not establish a bank eligibility rule. */
-export function selectedConstraintFixture(section: SectionKey, inputRows: RateRow[], clauses: { rateIndex: number; text: string }[]) {
+export function selectedConstraintFixture(section: SectionKey, inputRows: RateRow[], clauses: { rateIndex: number; text: string; sourcePointer?: string }[]) {
   const ribbon = { counts: { rates: 0, products: 0, providers: 0 }, range: { min: null, max: null, mean: null, median: null }, providers: [] };
   const coreInput: CorePayload = { schema_version: 1, run_date: '2026-10-14', brands: {}, rba: [],
     sections: { Mortgage: { rates: section === 'Mortgage' ? inputRows : [], ribbon },
@@ -17,7 +17,7 @@ export function selectedConstraintFixture(section: SectionKey, inputRows: RateRo
   const details: DetailsPayload = { schema_version: 1, run_date: core.run_date, products: Object.fromEntries(inputRows.map(row => [row.product_key, {
     rateConditions: { schemaVersion: 1, sourceSha256, entries: clauses.filter(clause => inputRows.some(candidate => candidate.product_key === row.product_key && candidate.rate_index === clause.rateIndex)).map(clause => {
       const rateSourcePointer = `/data/${family}Rates/${clause.rateIndex - 1}`;
-      const sourcePointer = `${rateSourcePointer}/additionalInfo`;
+      const sourcePointer = clause.sourcePointer ?? `${rateSourcePointer}/additionalInfo`;
       return { id: rateConditionId(sourceSha256, sourcePointer), rateFamily: family, rateIndex: clause.rateIndex,
         rateSourcePointer, sourcePointer, text: clause.text };
     }) },
