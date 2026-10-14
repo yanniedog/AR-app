@@ -1,6 +1,6 @@
 import Ionicons from './icons/AppIcon';
 import React from 'react';
-import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import {
   formatBalanceRange,
@@ -26,6 +26,7 @@ import {
 } from './product/ProductRateChangeLine';
 import { androidRipple, AppText, Row } from './ui';
 import { lvrTierDisplay } from '../data/lvrTier';
+import { PressFeedback } from './PressFeedback';
 
 function chips(row: RateRow, section: SectionKey, qualifier: RateQualifier): string[] {
   const out: string[] = [];
@@ -35,12 +36,14 @@ function chips(row: RateRow, section: SectionKey, qualifier: RateQualifier): str
     if (term) out.push(term);
     if (row.ribbon_repayment_type ?? row.repayment_type)
       out.push(humanizeEnum(row.ribbon_repayment_type ?? row.repayment_type));
+    if (row.loan_purpose) out.push(humanizeEnum(row.loan_purpose));
     if (row.lvr_tier) out.push(lvrTierDisplay(row.lvr_tier));
   } else if (section === 'TD') {
     const term = formatTerm(row);
     if (term) out.push(term);
     const bal = formatBalanceRange(row.balance_min, row.balance_max);
     if (bal) out.push(bal);
+    if (row.interest_payment) out.push(humanizeEnum(row.interest_payment));
   } else {
     // Conditional rates have their own caution label below. Reuse the central
     // classifier so the caption and caution label can never disagree.
@@ -49,9 +52,17 @@ function chips(row: RateRow, section: SectionKey, qualifier: RateQualifier): str
     }
     const bal = formatBalanceRange(row.balance_min, row.balance_max);
     if (bal) out.push(bal);
+    const term = formatTerm(row);
+    if (term) out.push(term);
   }
-  return out.slice(0, 2);
+  return [...new Set(out)];
 }
+
+const COMPACT_METRIC_LABELS: Readonly<Record<string, string>> = {
+  'Comparison rate': 'Comparison',
+  'Advertised rate': 'Advertised',
+  'Ongoing rate': 'Ongoing',
+};
 
 function ProductCardView({
   row,
@@ -89,7 +100,7 @@ function ProductCardView({
 }) {
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
-  const compact = width < 480 || fontScale >= 1.3;
+  const compact = width < 340 || fontScale >= 1.3;
   const textLines = fontScale >= 1.3 ? undefined : 2;
   const favorite = useStore((s) => s.isRateSaved(row.product_key, row.rate_index ?? null));
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
@@ -122,6 +133,13 @@ function ProductCardView({
         ? 'Comparison rate'
         : null
     : presentation.secondaryLabel;
+  const visibleRateLabel = COMPACT_METRIC_LABELS[rateLabel] ?? rateLabel;
+  const metadata = [
+    ...(secondaryRate !== null && secondaryLabel
+      ? [`${COMPACT_METRIC_LABELS[secondaryLabel] ?? secondaryLabel} ${formatRate(secondaryRate)}`]
+      : []),
+    ...tags,
+  ];
   const rateChange = useProductRateChangeSummary(row.product_key);
   const rateChangeText = productRateChangeText(rateChange, true);
   const openLender = onLongPress ?? (() => openBank(row.provider, { section }));
@@ -129,7 +147,7 @@ function ProductCardView({
     secondaryRate !== null && secondaryLabel
       ? `, ${secondaryLabel.toLowerCase()} ${formatRate(secondaryRate)}`
       : ''
-  }${qualifier.conditional ? `, ${qualifier.label}, conditions apply` : ''}${
+  }${tags.length ? `, ${tags.join(', ')}` : ''}${access.badge ? `, ${access.badge}${access.verify ? ' unverified' : ''}` : ''}${nonStandard ? ', Special eligibility' : ''}${qualifier.conditional ? `, ${qualifier.label}, conditions apply` : ''}${
     rateChangeText ? `, ${rateChangeText.replace('↑', 'up').replace('↓', 'down')}` : ''
   }`;
 
@@ -141,34 +159,33 @@ function ProductCardView({
         flexDirection: 'row',
         alignItems: 'flex-start',
         gap: 8,
-        paddingVertical: embedded ? 0 : 20,
-        paddingHorizontal: selected ? 12 : 0,
+        paddingVertical: embedded ? 0 : 12,
+        paddingHorizontal: 0,
         backgroundColor: selected ? theme.colors.primaryMuted : 'transparent',
         borderBottomWidth: embedded ? 0 : StyleSheet.hairlineWidth,
         borderBottomColor: theme.ledger.rule,
       }}
     >
-      <Pressable
+      <PressFeedback
         onPress={onPress}
         onLongPress={onLongPress}
         delayLongPress={onLongPress ? 450 : undefined}
         accessibilityRole="button"
         accessibilityLabel={cardA11yLabel}
         accessibilityState={selectMode ? { selected: !!selected } : undefined}
-        accessibilityHint={onLongPress ? 'Long press also opens this bank' : undefined}
         android_ripple={androidRipple(theme.colors.primaryMuted)}
-        style={({ pressed }) => ({
+        contentStyle={{ flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', gap: 4 }}
+        style={{
           flex: 1,
           minHeight: 48,
-          flexDirection: compact ? 'column' : 'row',
-          alignItems: compact ? 'stretch' : 'center',
-          gap: 12,
+          alignItems: 'stretch',
           borderRadius: theme.radius.sm,
           overflow: 'hidden',
-          opacity: pressed ? 0.85 : 1,
-        })}
+        }}
       >
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
+        <View style={{ flexDirection: compact ? 'column' : 'row', alignItems: compact ? 'stretch' : 'flex-start', gap: 12 }}>
+        <View style={{ flex: compact ? undefined : 1, minWidth: 0, flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <View style={{ width: 32, minHeight: 32, alignItems: 'center', justifyContent: 'center' }}>
           {selectMode ? (
             <Ionicons
               name={selected ? 'checkbox' : 'square-outline'}
@@ -177,11 +194,13 @@ function ProductCardView({
             />
           ) : (
             <BankAvatar
+              size={32}
               provider={row.provider}
               renderStateId={logoRenderStateId}
               onRenderStateChange={onLogoRenderStateChange}
             />
           )}
+          </View>
 
           <View style={{ flex: 1, minWidth: 0 }}>
             <AppText variant="body" weight="600" numberOfLines={textLines}>
@@ -190,29 +209,6 @@ function ProductCardView({
             <AppText variant="small" color="textMuted" numberOfLines={fontScale >= 1.3 ? undefined : 1}>
               {row.provider}
             </AppText>
-            <ProductRateChangeSummaryLine summary={rateChange} section={section} compact />
-            {tags.length || qualifier.conditional || nonStandard || access.badge ? (
-              <Row gap={8} style={{ flexWrap: 'wrap', marginTop: 8 }}>
-                {access.badge ? (
-                  <AppText variant="tiny" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="600">
-                    {access.verify ? `${access.badge}?` : access.badge}
-                  </AppText>
-                ) : null}
-                {tags.length ? (
-                  <AppText variant="tiny" color="textMuted" style={{ flexShrink: 1 }}>{tags.join(' · ')}</AppText>
-                ) : null}
-                {qualifier.conditional ? (
-                  <AppText variant="tiny" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="600">
-                    {qualifier.shortLabel}
-                  </AppText>
-                ) : null}
-                {nonStandard ? (
-                  <AppText variant="tiny" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="600">
-                    Special eligibility
-                  </AppText>
-                ) : null}
-              </Row>
-            ) : null}
           </View>
         </View>
 
@@ -221,13 +217,13 @@ function ProductCardView({
             alignItems: compact ? 'flex-start' : 'flex-end',
             justifyContent: 'center',
             gap: 4,
-            minWidth: compact ? 0 : 76,
-            marginTop: compact ? 4 : 0,
+            width: compact ? undefined : heroRate ? 120 : 96,
+            maxWidth: compact ? undefined : '45%',
             paddingLeft: 0,
           }}
         >
-          <AppText variant="tiny" color="textFaint" numberOfLines={fontScale >= 1.3 ? undefined : 1}>
-            {rateLabel}
+          <AppText variant="tiny" color="textMuted" style={{ textAlign: compact ? 'left' : 'right' }}>
+            {visibleRateLabel}
           </AppText>
           <AppText
             variant={heroRate ? 'rateHero' : 'rate'}
@@ -235,19 +231,24 @@ function ProductCardView({
           >
             {rateText}
           </AppText>
-          {secondaryRate !== null && secondaryLabel ? (
-            <AppText variant="tiny" color="textFaint" numberOfLines={fontScale >= 1.3 ? undefined : 1}>
-              {formatRate(secondaryRate)} {secondaryLabel.toLowerCase()}
-            </AppText>
-          ) : null}
         </View>
-      </Pressable>
+        </View>
+        {metadata.length || qualifier.conditional || nonStandard || access.badge ? (
+          <Row gap={8} style={{ flexWrap: 'wrap' }}>
+            {metadata.length ? <AppText variant="small" color="textMuted" style={{ flexShrink: 1 }}>{metadata.join(' · ')}</AppText> : null}
+            {access.badge ? <AppText variant="small" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="500">{access.verify ? `${access.badge}?` : access.badge}</AppText> : null}
+            {qualifier.conditional ? <AppText variant="small" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="500">{qualifier.shortLabel}</AppText> : null}
+            {nonStandard ? <AppText variant="small" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="500">Special eligibility</AppText> : null}
+          </Row>
+        ) : null}
+        <ProductRateChangeSummaryLine summary={rateChange} section={section} compact />
+      </PressFeedback>
 
-      {!selectMode ? (
-        <View style={{ width: 48, alignItems: 'center' }}>
+        <View style={{ width: 48, alignItems: 'center', opacity: selectMode ? 0 : 1 }} pointerEvents={selectMode ? 'none' : 'auto'} accessibilityElementsHidden={!!selectMode} importantForAccessibility={selectMode ? 'no-hide-descendants' : 'auto'}>
           {showLenderAction ? (
-            <Pressable
+            <PressFeedback
               onPress={openLender}
+              disabled={!!selectMode}
               accessibilityRole="button"
               accessibilityLabel={`View ${row.provider} bank history`}
               android_ripple={androidRipple(theme.colors.primaryMuted, true)}
@@ -261,10 +262,11 @@ function ProductCardView({
               }}
             >
               <Ionicons name="business-outline" size={19} color={theme.colors.textFaint} />
-            </Pressable>
+            </PressFeedback>
           ) : null}
-          <Pressable
+          <PressFeedback
             onPress={() => toggleSavedRate(row, Number.isInteger(row.rate_index) ? 'rate' : 'product')}
+            disabled={!!selectMode}
             accessibilityRole="button"
             accessibilityLabel={favorite
               ? 'Remove this rate from saved'
@@ -285,11 +287,10 @@ function ProductCardView({
             <Ionicons
               name={favorite ? 'star' : 'star-outline'}
               size={20}
-              color={favorite ? theme.colors.warning : theme.colors.textFaint}
+              color={favorite ? theme.colors.primary : theme.colors.textFaint}
             />
-          </Pressable>
+          </PressFeedback>
         </View>
-      ) : null}
     </View>
   );
 }

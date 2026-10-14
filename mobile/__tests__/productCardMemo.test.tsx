@@ -30,6 +30,7 @@ const mockTheme = {
 const mockThemeContext = React.createContext(mockTheme);
 jest.mock('../src/data/store', () => ({ useStore: (select: any) => mockStore(select) }));
 jest.mock('../src/components/BankAvatar', () => ({ BankAvatar: 'BankAvatar' }));
+jest.mock('../src/components/PressFeedback', () => ({ PressFeedback: 'PressFeedback' }));
 jest.mock('../src/components/icons/AppIcon', () => ({ __esModule: true, default: 'Icon' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Row: 'Row', androidRipple: () => undefined }));
 jest.mock('../src/components/product/ProductRateChangeLine', () => ({
@@ -46,7 +47,7 @@ jest.mock('../src/lib/nav', () => ({ openBank: jest.fn() }));
 const row: RateRow = { product_key: 'loan', provider: 'Bank', product_name: 'Loan',
   rate: '0.04', comparison_rate: '0.06', rate_index: 7 };
 type Node = { props: Record<string, any>; findAllByProps: (props: Record<string, unknown>) => Node[] };
-type Renderer = ReactTestRenderer & { root: Node };
+type Renderer = ReactTestRenderer & { root: Node; toJSON: () => unknown };
 
 test('unchanged list commits skip card work while saved/ranking/theme subscriptions remain live', () => {
   const onPress = jest.fn();
@@ -71,5 +72,28 @@ test('unchanged list commits skip card work while saved/ranking/theme subscripti
       String(node.props.accessibilityLabel).startsWith('Loan,'))!;
     act(() => button.props.onPress());
     expect(onPress).toHaveBeenCalledTimes(1);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('shows the whole financial variant and saves the exact tier without opening the product', () => {
+  mockToggleSavedRate.mockClear();
+  const onPress = jest.fn();
+  const variant: RateRow = { ...row, ribbon_rate_structure: 'FIXED', term_months: 36,
+    ribbon_repayment_type: 'PRINCIPAL_AND_INTEREST', lvr_tier: 'lvr_60-70%' };
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<ProductCard row={variant} section="Mortgage" onPress={onPress} />) as Renderer; });
+  try {
+    const serialized = JSON.stringify(tree.toJSON());
+    expect(serialized).toContain('Fixed');
+    expect(serialized).toContain('3 yrs');
+    expect(serialized).toContain('Principal & interest');
+    expect(serialized).toContain('LVR 60–70%');
+    const metadata = tree.root.findAllByProps({ variant: 'small', color: 'textMuted' }).map(node => node.props.children);
+    expect(metadata.some(text => typeof text === 'string' && text.startsWith('Advertised 4.00% · Fixed'))).toBe(true);
+    const save = tree.root.findAllByProps({ accessibilityRole: 'button' }).find(node =>
+      String(node.props.accessibilityLabel).includes('saved') || String(node.props.accessibilityLabel).includes('Save this exact rate'))!;
+    act(() => save.props.onPress());
+    expect(mockToggleSavedRate).toHaveBeenCalledWith(variant, 'rate');
+    expect(onPress).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });

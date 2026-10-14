@@ -377,7 +377,7 @@ export default function RootLayout() {
   // launches a headless background worker, and React does not remount it when
   // the existing Activity is only backgrounded and reopened.
   coldStartLogReset ??= debugLog.beginColdStartSession();
-  const [fontsLoaded, fontError] = useFonts({
+  const [fontsLoaded, fontError] = useFonts(Platform.OS === 'android' ? {} : {
     Commissioner_400Regular: require('../assets/fonts/Commissioner-Regular.ttf'),
     Commissioner_500Medium: require('../assets/fonts/Commissioner-Medium.ttf'),
     Commissioner_600SemiBold: require('../assets/fonts/Commissioner-SemiBold.ttf'),

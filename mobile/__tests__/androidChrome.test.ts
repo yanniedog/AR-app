@@ -21,12 +21,12 @@ describe('getTabBarContentHeight', () => {
     expect(getTabBarContentHeight()).toBe(M3_NAV_BAR_HEIGHT);
   });
 
-  it('keeps the bundled semibold face when Android replaces stack header options', () => {
+  it('uses weighted Android system text when replacing stack header options', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     const options = androidStackScreenOptions(lightTheme);
     expect(options.headerTitleStyle).toMatchObject({
-      fontFamily: 'Commissioner_600SemiBold',
-      fontWeight: 'normal',
+      fontFamily: 'sans-serif',
+      fontWeight: '600',
       fontSize: lightTheme.font.h2,
       letterSpacing: 0,
     });

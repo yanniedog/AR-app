@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "version": "1.0.237",
+  "build_number": "295",
+  "download_url": "https://github.com/yanniedog/AR-app/releases/download/app-v1.0.237/app-preview.apk",
+  "sha256": "ba581ce9e45ffcc5f617b4471e49fd47396389c55488718883b9896cecb4dd25",
+  "bytes": 88557801,
+  "package_name": "com.eyex.australianrates",
+  "supported_abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+  ],
+  "signing_certificate_sha256": "5f9ab77ef2b0c68307d652abe28dfa96690851af1a28353bb84d277ef83682c1",
+  "published_at": "2026-10-12T23:12:37.287Z",
+  "repo": "yanniedog/AR-app",
+  "tag": "app-apk-latest",
+  "version_tag": "app-v1.0.237",
+  "profile": "preview",
+  "build_source": "gha",
+  "source_sha": "947884a4daf0323c30401453de38d579e75b193d"
+}

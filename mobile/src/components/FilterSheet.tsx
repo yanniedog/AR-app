@@ -1,7 +1,5 @@
-import Ionicons from './icons/AppIcon';
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScrollView, View } from 'react-native';
 
 import type { Filters } from '../data/selectors';
 import type { SearchFilterOptions } from '../data/searchFilterOptions';
@@ -11,11 +9,9 @@ import {
   boundedPublishedFactFilterOptions,
   factCriterionId,
 } from '../data/productFacts';
-import { useReducedMotion } from '../hooks/useReducedMotion';
 import { matchingLenders, visibleFilterOptions } from '../lib/filterOptions';
-import { useTheme } from '../theme/ThemeProvider';
 import { SearchBar } from './controls';
-import { TouchTarget } from './TouchTarget';
+import { SheetSurface } from './SheetSurface';
 import { AppText, Button, Chip, Disclosure, Divider, Row } from './ui';
 
 // Plain RN Modal sheet: @gorhom/bottom-sheet modals silently failed to present
@@ -50,9 +46,6 @@ export function FilterSheet({
   resultCount?: (draft: Filters) => number;
   resultNoun?: 'rates' | 'products';
 }) {
-  const theme = useTheme();
-  const reducedMotion = useReducedMotion();
-  const insets = useSafeAreaInsets();
   const [internalDraft, setInternalDraft] = useState<Filters>(filters);
   const draft = controlledDraft ?? internalDraft;
   const setDraft = controlledDraft && onDraftChange ? onDraftChange : setInternalDraft;
@@ -160,48 +153,25 @@ export function FilterSheet({
   const lenderMatches = matchingLenders(providers, lenderQuery, draft.providers);
 
   return (
-    <Modal
+    <SheetSurface
       visible={visible}
-      transparent
-      animationType={reducedMotion === false ? 'slide' : 'none'}
-      onRequestClose={onClose}
-    >
-      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        <Pressable
-          onPress={onClose}
-          accessibilityLabel="Dismiss filters"
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)' }}
-        />
-        <View
-          style={{
-            maxHeight: '85%',
-            backgroundColor: theme.colors.surface,
-            borderTopLeftRadius: 22,
-            borderTopRightRadius: 22,
-            paddingTop: 8,
-          }}
-        >
-          <View
-            style={{
-              alignSelf: 'center',
-              width: 40,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: theme.colors.textFaint,
-              marginBottom: 8,
-            }}
-          />
-          <Row style={{ justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 }}>
-            <AppText variant="h3">Filters</AppText>
-            <TouchTarget square onPress={onClose} accessibilityRole="button" accessibilityLabel="Close filters" style={{ marginRight: -12 }}>
-              <Ionicons name="close" size={24} color={theme.colors.text} />
-            </TouchTarget>
-          </Row>
+      title="Filters"
+      onClose={onClose}
+      footer={(
+        <>
           <Divider />
-          <ScrollView contentContainerStyle={{ padding: 16, gap: 18, paddingBottom: 12 }} keyboardShouldPersistTaps="handled">
-            {optionsPending ? <AppText variant="small" color="textMuted">Preparing filters…</AppText> : null}
+          <Row gap={12} style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+            <Button title="Reset" variant="ghost" style={{ flex: 1 }} onPress={() => setDraft({ ...filters, ...resetFilters() })} />
+            <Button title={applyTitle} style={{ flex: 2 }} onPress={() => { onApply(draft); onClose(); }} />
+          </Row>
+        </>
+      )}
+    >
+          <Divider />
+          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 16, gap: 24, paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
+            {optionsPending ? <AppText variant="small" color="textMuted">Loading filters</AppText> : null}
             {optionsError ? <View style={{ gap: 8 }}>
-              <AppText variant="small" color="textMuted">Could not prepare filters. Try again.</AppText>
+              <AppText variant="small" color="textMuted">Filters unavailable</AppText>
               <Button title="Retry filters" variant="secondary" onPress={onRetryOptions} />
             </View> : null}
             {children}
@@ -259,7 +229,7 @@ export function FilterSheet({
                 title="Published details"
                 summary={draft.factCriteria.length
                   ? `${draft.factCriteria.length} selected`
-                  : 'Age, limits and account features'}
+                  : undefined}
                 open={publishedOpen}
                 onToggle={() => setPublishedOpen((open) => !open)}
               >
@@ -299,30 +269,11 @@ export function FilterSheet({
                   showAll: lenderQuery.trim() !== '',
                 })
               ) : lenderQuery.trim() ? (
-                <AppText variant="small" color="textMuted">No lenders match “{lenderQuery.trim()}”.</AppText>
+                <AppText variant="small" color="textMuted">No lenders</AppText>
               ) : null}
             </View>
           </ScrollView>
-          <Divider />
-          <Row gap={12} style={{ padding: 16, paddingBottom: Math.max(insets.bottom, 12) + 12 }}>
-            <Button
-              title="Reset"
-              variant="ghost"
-              style={{ flex: 1 }}
-              onPress={() => setDraft({ ...filters, ...resetFilters() })}
-            />
-            <Button
-              title={applyTitle}
-              style={{ flex: 2 }}
-              onPress={() => {
-                onApply(draft);
-                onClose();
-              }}
-            />
-          </Row>
-        </View>
-      </View>
-    </Modal>
+    </SheetSurface>
   );
 }
 

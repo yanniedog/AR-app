@@ -3,7 +3,6 @@ import React from 'react';
 import {
   ActivityIndicator,
   Platform,
-  Pressable,
   type PressableProps,
   StyleSheet,
   Text,
@@ -16,19 +15,16 @@ import {
 
 import { hapticLightImpact, hapticSelection } from '../lib/haptics';
 import type { Palette } from '../theme/colors';
-import { commissionerFamily } from '../theme/fonts';
+import { fontStyle } from '../theme/fonts';
 import type { FontVariant } from '../theme/theme';
 import { TYPOGRAPHY } from '../theme/typography';
 import { useTheme } from '../theme/ThemeProvider';
 import { LedgerText } from './ledger/LedgerText';
 import { TouchTarget } from './TouchTarget';
+import { PressFeedback } from './PressFeedback';
 
 export function androidRipple(color: string, borderless = false) {
   return Platform.OS === 'android' ? { color, borderless } : undefined;
-}
-
-function pressedOpacity(pressed: boolean, amount = 0.7): { opacity: number } | Record<string, never> {
-  return Platform.OS !== 'android' && pressed ? { opacity: amount } : {};
 }
 
 export function AppText({
@@ -45,7 +41,6 @@ export function AppText({
   const theme = useTheme();
   const { fontScale } = useWindowDimensions();
   const requestedWeight = weight === '800' ? '700' : (weight ?? TYPOGRAPHY[variant].weight);
-  const fontFamily = commissionerFamily(requestedWeight);
   return (
     <Text
       allowFontScaling
@@ -55,8 +50,7 @@ export function AppText({
           fontSize: theme.font[variant],
           // Fixed line heights clip glyphs at large accessibility text sizes.
           lineHeight: fontScale > 1 ? undefined : theme.lineHeight[variant],
-          fontFamily,
-          fontWeight: 'normal',
+          ...fontStyle(requestedWeight),
           letterSpacing: 0,
         },
         (variant === 'rate' || variant === 'rateHero') && { fontVariant: ['tabular-nums'] },
@@ -133,7 +127,7 @@ export function Chip({
       accessibilityState={{ selected: !!selected }}
       hitSlop={0}
       android_ripple={androidRipple(theme.colors.primaryMuted)}
-      style={({ pressed }) => ({
+      style={{
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
@@ -144,10 +138,9 @@ export function Chip({
         // Unselected chips still need a visible control boundary to read as tappable.
         borderWidth: 1,
         borderColor: selected ? theme.ledger.eucalyptus : theme.ledger.controlRule,
-        backgroundColor: selected ? theme.colors.primaryMuted : 'transparent',
+        backgroundColor: selected ? theme.colors.primaryMuted : theme.colors.surfaceAlt,
         overflow: 'hidden',
-        ...pressedOpacity(pressed, 0.7),
-      })}
+      }}
     >
       {icon ? (
         <Ionicons
@@ -159,7 +152,7 @@ export function Chip({
       <Text
         style={{
           color: selected ? theme.colors.primary : theme.colors.chipText,
-          fontFamily: commissionerFamily(selected ? '700' : '500'),
+          ...fontStyle(selected ? '600' : '500'),
           fontSize: theme.font.small,
           flexShrink: 1,
         }}
@@ -193,12 +186,12 @@ export function Button({
   accessibilityState?: PressableProps['accessibilityState'];
 }) {
   const theme = useTheme();
-  const bg = variant === 'primary' ? theme.ledger.wattle : 'transparent';
-  const fg = variant === 'primary' ? theme.ledger.onWattle : theme.ledger.ink;
+  const bg = variant === 'primary' ? theme.ledger.primary : variant === 'secondary' ? theme.colors.surfaceAlt : 'transparent';
+  const fg = variant === 'primary' ? theme.ledger.onPrimary : theme.ledger.ink;
   const rippleColor =
     variant === 'primary' ? theme.colors.onPrimary : theme.colors.primaryMuted;
   return (
-    <Pressable
+    <PressFeedback
       accessibilityRole="button"
       accessibilityLabel={title}
       accessibilityState={{
@@ -212,7 +205,7 @@ export function Button({
       }}
       disabled={disabled || loading}
       android_ripple={androidRipple(rippleColor, variant === 'ghost')}
-      style={({ pressed }) => [
+      style={[
         {
           flexDirection: 'row',
           alignItems: 'center',
@@ -227,20 +220,17 @@ export function Button({
           borderWidth: variant === 'secondary' ? 1 : 0,
           borderColor: theme.ledger.controlRule,
           overflow: 'hidden',
-          ...(disabled ? { opacity: 0.6 } : pressedOpacity(pressed, 0.85)),
+          ...(disabled ? { opacity: 0.6 } : null),
         },
         style,
       ]}
     >
-      {loading ? (
-        <ActivityIndicator color={fg} />
-      ) : (
-        <>
+      <View style={{ opacity: loading ? 0 : 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           {icon ? <Ionicons name={icon} size={18} color={fg} /> : null}
-          <Text style={{ color: fg, fontFamily: commissionerFamily('600'), fontSize: theme.font.body, flexShrink: 1, textAlign: 'center' }}>{title}</Text>
-        </>
-      )}
-    </Pressable>
+          <Text style={{ color: fg, ...fontStyle('600'), fontSize: theme.font.body, flexShrink: 1, textAlign: 'center' }}>{title}</Text>
+      </View>
+      {loading ? <ActivityIndicator color={fg} style={{ position: 'absolute', alignSelf: 'center' }} /> : null}
+    </PressFeedback>
   );
 }
 
@@ -286,7 +276,7 @@ export function Disclosure({
   const theme = useTheme();
   return (
     <Card variant="outlined" style={{ padding: 0, overflow: 'hidden' }}>
-      <Pressable
+      <PressFeedback
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityLabel={`${open ? 'Hide' : 'Show'} ${title}`}
@@ -310,7 +300,7 @@ export function Disclosure({
           size={20}
           color={theme.colors.textMuted}
         />
-      </Pressable>
+      </PressFeedback>
       {open ? <View style={{ paddingTop: theme.spacing(2), paddingBottom: theme.spacing(4) }}>{children}</View> : null}
     </Card>
   );
@@ -335,18 +325,18 @@ export function IconButton({
 }) {
   const theme = useTheme();
   return (
-    <Pressable
+    <PressFeedback
       onPress={() => {
         if (disabled) return;
         hapticSelection();
         onPress?.();
       }}
       disabled={disabled}
-      hitSlop={10}
+      hitSlop={0}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       android_ripple={androidRipple(theme.colors.primaryMuted, true)}
-      style={({ pressed }) => [
+      style={[
         {
           minWidth: 48,
           minHeight: 48,
@@ -354,14 +344,14 @@ export function IconButton({
           justifyContent: 'center',
           borderRadius: theme.radius.sm,
           overflow: 'hidden',
-          ...(disabled ? { opacity: 0.45 } : pressedOpacity(pressed, 0.6)),
+          ...(disabled ? { opacity: 0.45 } : null),
         },
         style,
       ]}
       {...rest}
     >
       <Ionicons name={icon} size={size} color={theme.colors[color ?? 'text']} />
-    </Pressable>
+    </PressFeedback>
   );
 }
 
@@ -380,7 +370,7 @@ export function Badge({ label, tone = 'muted' }: { label: string; tone?: 'muted'
         paddingVertical: 4,
       }}
     >
-      <Text style={{ color: map[tone], fontSize: theme.font.tiny, fontFamily: commissionerFamily('700') }}>{label}</Text>
+      <Text style={{ color: map[tone], fontSize: theme.font.tiny, ...fontStyle('600') }}>{label}</Text>
     </View>
   );
 }

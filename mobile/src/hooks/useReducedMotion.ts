@@ -1,25 +1,46 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { AccessibilityInfo } from 'react-native';
 
-/** Mirrors the OS preference; `null` means native state is still resolving. */
-export function useReducedMotion(): boolean | null {
-  const [enabled, setEnabled] = useState<boolean | null>(null);
+let enabled: boolean | null = null;
+let generation = 0;
+let subscription: ReturnType<typeof AccessibilityInfo.addEventListener> | null = null;
+const listeners = new Set<() => void>();
 
-  useEffect(() => {
-    let active = true;
+function publish(value: boolean) {
+  if (enabled === value) return;
+  enabled = value;
+  listeners.forEach((listener) => listener());
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  if (!subscription) {
+    const currentGeneration = ++generation;
+    subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', (value) => {
+      // A newer OS event must win over an in-flight initial preference read.
+      ++generation;
+      publish(value);
+    });
     void AccessibilityInfo.isReduceMotionEnabled()
       .then((value) => {
-        if (active) setEnabled(value);
+        if (currentGeneration === generation) publish(value);
       })
       .catch(() => {
-        if (active) setEnabled(true);
+        if (currentGeneration === generation) publish(true);
       });
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setEnabled);
-    return () => {
-      active = false;
-      subscription.remove();
-    };
-  }, []);
+  }
+  return () => {
+    listeners.delete(listener);
+    if (!listeners.size) {
+      ++generation;
+      subscription?.remove();
+      subscription = null;
+      enabled = null;
+    }
+  };
+}
 
-  return enabled;
+/** All controls share one OS subscription; unknown state suppresses animation. */
+export function useReducedMotion(): boolean | null {
+  return useSyncExternalStore(subscribe, () => enabled, () => null);
 }
