@@ -259,7 +259,7 @@ export const UI_LABELS = [
   'Exact product matches', 'Available lender sections', 'percentage points', 'Trend',
   'Research views', 'Current / ongoing', '/month', '/week', '/fortnight', 'Regular withdrawal',
   'Reinvest modelled interest', 'Actual future rate changes',
-  'Minimum age', 'Maximum age', 'Australian resident', 'Permanent resident', 'Australian citizen',
+  'Minimum age', 'Maximum age', 'Australian resident', 'Permanent resident', 'Australian citizen', 'Citizen', 'Resident',
   'Australian permanent resident', 'or', 'Minimum limit',
   'Maximum limit', 'Minimum balance', 'Maximum balance', 'Annual fee', 'Monthly fee',
   'Saved scenario reset', 'Minimum LVR', 'Maximum LVR', 'Minimum term', 'Maximum term',
@@ -535,6 +535,10 @@ const REVIEWED_PUBLISHED_FEE_NAMES = new Set([
   'RTGS To Another Bank', 'Referral Fee', 'Dishonour Fee', 'Auto Transfer Dishonour Fee',
   'Overdrawn Account Management Fee', 'Application fee', 'Valuation fee',
   'Discharge administration fee', 'Account service fee', 'Package fee',
+  // All additional concise identities in the bundled AFG family.
+  'Online Redraw Fee', 'Manual Redraw Fee', 'Break Cost Fee', 'Default Fee',
+  'Duplicate Fee', 'Establishment Fee', 'Monthly Admin Fee',
+  'Security Processing Fee', 'Variation Fee',
 ].map(name => name.toLowerCase()));
 /** Reviewed published charge identity only; descriptions and conditions are never labels. */
 export function uiPublishedFeeName(item: DetailItem): UiText {

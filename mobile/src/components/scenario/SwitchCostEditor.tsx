@@ -8,7 +8,8 @@ import type { ProductDetail } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { SegmentedControl } from '../controls';
 import { AppText, Disclosure, Row } from '../ui';
-import { uiLabel, uiCount, uiInputNumber, uiJoin, uiMoney, uiNumber, type UiCopy, type UiText } from '../../lib/uiCopy';
+import { uiLabel, uiCount, uiInputNumber, uiJoin, uiNumber, type UiCopy, type UiText } from '../../lib/uiCopy';
+import { uiStaySwitchMoney } from '../../lib/staySwitchUiFacts';
 
 const labels: { key: SwitchFeeKey; label: UiCopy; accessibilityLabel: UiCopy }[] = [
   { key: 'currentBankExitFees', accessibilityLabel: 'Current bank exit fees', label: 'Current bank exit fees' },
@@ -37,7 +38,7 @@ function AmountField({
   const theme = useTheme();
   return (
     <View style={{ flex: 1, minWidth: 150, gap: 4 }}>
-      <AppText variant="tiny" color="textMuted" weight="700">{label}</AppText>
+      <AppText variant="tiny" color="textMuted" weight="700">{uiJoin(label, ' (', 'AUD', ')')}</AppText>
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -46,7 +47,7 @@ function AmountField({
         keyboardType="decimal-pad"
         editable={editable}
         maxLength={20}
-        accessibilityLabel={accessibilityLabel}
+        accessibilityLabel={uiJoin(accessibilityLabel, ' (', 'AUD', ')')}
         accessibilityState={{ disabled: !editable }}
         style={{
           ...fontStyle(),
@@ -95,7 +96,7 @@ export function SwitchCostEditor({
       open={open}
       onToggle={() => setOpen((value) => !value)}
     >
-      <AppText variant="small" color="textMuted">{uiJoin('Known costs', ': ', uiMoney(costs.netSwitchCost), ' · ', 'Fees unverified')}</AppText>
+      <AppText variant="small" color="textMuted">{uiJoin('Known costs', ': ', uiStaySwitchMoney(costs.netSwitchCost), ' · ', 'Fees unverified')}</AppText>
       {labels.map((item, index) => index % 2 === 0 ? (
         <Row
           key={item.key}

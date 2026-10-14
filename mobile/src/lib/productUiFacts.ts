@@ -84,15 +84,36 @@ export function uiNormalizedProductFact(fact: NormalizedProductFact): ProductPre
     conditions: fact.condition?.trim() ? 'source-review-required' : 'none', scope: fact.appliesTo?.map(humanizeEnum) ?? [] };
 }
 function residencyValue(item: DetailItem): UiText | null {
-  if (item.label !== 'RESIDENCY_STATUS' || typeof item.value !== 'string') return null;
-  switch (item.value.trim().toLowerCase()) {
-    case 'australian citizen': return uiLabel('Australian citizen');
-    case 'australian resident': return uiLabel('Australian resident');
+  if (item.label !== 'RESIDENCY_STATUS') return null;
+  // Missing additionalValue may carry a compact requirement in additionalInfo.
+  // An unsupported value never falls back to a different info requirement.
+  const source = item.value == null || item.value === '' ? item.info : item.value;
+  if (typeof source !== 'string' || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(source)) return null;
+  switch (source.trim().toLowerCase()) {
+    case 'australian citizen':
+    case 'australian citizens': return uiLabel('Australian citizen');
+    case 'australian resident':
+    case 'australian residents':
+    case 'australian resident only':
+    case 'australian residents only':
+    case 'australian residents only.': return uiLabel('Australian resident');
     case 'permanent resident': return uiLabel('Permanent resident');
     case 'permanent australian resident':
     case 'australian permanent resident': return uiLabel('Australian permanent resident');
     case 'australian citizen or australian permanent resident':
       return uiJoin('Australian citizen', ' ', 'or', ' ', 'Australian permanent resident');
+    case 'an australian citizen or permanent resident':
+    case 'australian citizen or permanent resident':
+    case 'australian citizens or permanent residents':
+    case 'australian citizen or permanent residency only':
+    case 'australian citizen or premanent residency only':
+      return uiJoin('Australian citizen', ' ', 'or', ' ', 'Permanent resident');
+    case 'citizen or permanent resident':
+      return uiJoin('Citizen', ' ', 'or', ' ', 'Permanent resident');
+    case 'resident or citizen': return uiJoin('Resident', ' ', 'or', ' ', 'Citizen');
+    case 'australian resident or citizen': return uiJoin('Australian resident', ' ', 'or', ' ', 'Citizen');
+    case 'permanent australian residents or australian citizens':
+      return uiJoin('Australian permanent resident', ' ', 'or', ' ', 'Australian citizen');
     default: return null;
   }
 }
@@ -108,7 +129,8 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
   const knownInfo = info ? uiLabel(/^Australian/i.test(info[0]) ? 'Australian resident' : 'Permanent resident') : null;
   const scalar = descriptiveValue(item.value);
   const numeric = number(scalar);
-  const residency = group === 'Eligibility' ? residencyValue(item) : null;
+  const residencyField = group === 'Eligibility' && item.label === 'RESIDENCY_STATUS';
+  const residency = residencyField ? residencyValue(item) : null;
   // These published CDR constraint codes establish the unit. Older payloads
   // contain both ratios (0.8) and percentage numbers (98), like the rate DTO.
   const lvr = group === 'Constraints' && /^(?:MIN|MAX)_LVR$/.test(item.label ?? '');
@@ -116,10 +138,10 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
   const lvrValue = lvr && scalar !== null && /^\s*\d+(?:\.\d+)?\s*$/.test(scalar)
     && numeric !== null && numeric >= 0 && numeric <= 100
     ? uiRate(toFraction(numeric), Math.max(2, Math.min(6, lvrDecimals - (numeric <= 1 ? 2 : 0)))) : uiLabel('Unknown');
-  const value = group === 'Fees' ? uiFeeValue(item) : lvr ? lvrValue : numeric !== null ? uiJoin(group === 'Constraints' && /^(?:MIN|MAX)_(?:LIMIT|BALANCE|AMOUNT)$/.test(item.label ?? '') ? uiMoney(numeric, Math.min(2, precision(numeric))) : uiNumber(numeric, precision(numeric)),
+  const value = group === 'Fees' ? uiFeeValue(item) : residencyField ? residency ?? uiLabel('Unknown') : lvr ? lvrValue : numeric !== null ? uiJoin(group === 'Constraints' && /^(?:MIN|MAX)_(?:LIMIT|BALANCE|AMOUNT)$/.test(item.label ?? '') ? uiMoney(numeric, Math.min(2, precision(numeric))) : uiNumber(numeric, precision(numeric)),
     ['Minimum age', 'Maximum age'].includes(controlled ?? '') ? uiJoin(' ', 'years') : null)
     : residency ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null && !item.info ? uiLabel('Included') : scalar ? humanizeEnum(scalar) : uiLabel('Unknown'));
-  return { label: label || uiJoin(group, ' ', uiCount(index + 1)), value: uiJoin(value || uiLabel('Unknown'), knownInfo ? uiJoin(' · ', knownInfo) : null),
+  return { label: label || uiJoin(group, ' ', uiCount(index + 1)), value: uiJoin(value || uiLabel('Unknown'), knownInfo && knownInfo !== residency ? uiJoin(' · ', knownInfo) : null),
     reference: uiCount(index + 1), conditions: item.info?.trim() && !knownInfo || feeName === 'Unknown' && !!item.name?.trim()
       || group === 'Eligibility' && item.label === 'RESIDENCY_STATUS' && !!scalar && !residency
       || numeric === null && group !== 'Fees' && !item.label ? 'source-review-required' : 'none', scope: [] };

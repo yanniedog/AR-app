@@ -110,3 +110,100 @@ test('LVR unit recognition is restricted to numeric, in-domain MIN/MAX LVR const
   expect(uiDetailItem({ label: 'OTHER', value: '0.8', info: 'Maximum LVR is 80%' }, 0, 'Constraints')).toMatchObject({ value: '0.8', conditions: 'source-review-required' });
   expect(uiDetailItem({ label: 'MAX_BALANCE', value: '98' }, 0, 'Constraints').value).toBe('$98');
 });
+
+test('all bundled AFG family fee identities retain amounts, cadence, unknowns and occurrence references', () => {
+  const family = Object.entries(sample.products as Record<string, ProductDetail>).filter(([key]) => key.startsWith('AFG '));
+  const original = JSON.stringify(family);
+  const names = new Set(family.flatMap(([, product]) => product.fees ?? []).map(item => item.name));
+  expect([...names].sort()).toEqual(['Bank Cheque Fee', 'Break Cost Fee', 'Default Fee', 'Discharge Administration Fee',
+    'Duplicate Fee', 'Establishment Fee', 'Manual Redraw Fee', 'Monthly Admin Fee', 'Online Redraw Fee', 'Security Processing Fee', 'Variation Fee']);
+  for (const [, product] of family) {
+    for (const [index, item] of (product.fees ?? []).entries()) {
+      expect(uiPublishedFeeName(item)).toBe(item.name);
+      expect(uiDetailItem(item, index, 'Fees').reference).toBe(String(index + 1));
+    }
+  }
+  const basic = family.find(([key]) => key.startsWith('AFG Home Loans Alpha|') && key.endsWith('|AFG Alpha Basic Home Loan'))![1];
+  const facts = basic.fees!.map((item, index) => uiDetailItem(item, index, 'Fees'));
+  expect(facts.map(fact => [fact.label, fact.value, fact.reference])).toEqual([
+    ['Online Redraw Fee · EVENT', '$0', '1'], ['Manual Redraw Fee · EVENT', '$0', '2'],
+    ['Break Cost Fee · Variable', 'Unknown', '3'], ['Discharge Administration Fee · EXIT', '$350', '4'],
+    ['Security Processing Fee · UPFRONT', '$199', '5'], ['Variation Fee · EVENT', '$250', '6'],
+    ['Default Fee · EVENT', '$35', '7'], ['Duplicate Fee · EVENT', '$16.5', '8'],
+    ['Bank Cheque Fee · EVENT', '$10', '9'], ['Monthly Admin Fee · PERIODIC', 'Unknown · per month', '10'],
+  ]);
+  expect(facts[0].conditions).toBe('source-review-required');
+  expect(facts[1].conditions).toBe('source-review-required');
+  expect(facts[2].conditions).toBe('source-review-required');
+  expect(facts[9].conditions).toBe('source-review-required');
+  expect(facts[5].conditions).toBe('none');
+  expect(JSON.stringify(facts)).not.toContain('Charged when');
+  expect(JSON.stringify(facts)).not.toContain('Break Events');
+  expect(JSON.stringify(family)).toBe(original);
+});
+
+test('reviewed AFG names cannot admit source condition prose or malformed publisher names', () => {
+  for (const name of ['Online Redraw Fee. Conditions apply.', 'Manual Redraw Fee | Great benefits',
+    'Break Cost Fee is payable when breaking a fixed loan.', 'Monthly Admin Fee\n', 'Variation Fee\u0000']) {
+    expect(uiPublishedFeeName({ name })).toBe('Unknown');
+    expect(uiDetailItem({ name, label: 'EVENT', value: '0' }, 2, 'Fees')).toMatchObject({
+      label: 'EVENT', value: '$0', reference: '3', conditions: 'source-review-required',
+    });
+  }
+});
+
+const REVIEWED_RESIDENCY_SPELLINGS = new Map([
+  ['australian citizen', 'Australian citizen'], ['australian citizens', 'Australian citizen'],
+  ['australian resident', 'Australian resident'], ['australian residents', 'Australian resident'],
+  ['australian resident only', 'Australian resident'], ['australian residents only', 'Australian resident'],
+  ['australian residents only.', 'Australian resident'], ['permanent resident', 'Permanent resident'],
+  ['permanent australian resident', 'Australian permanent resident'], ['australian permanent resident', 'Australian permanent resident'],
+  ['australian citizen or australian permanent resident', 'Australian citizen or Australian permanent resident'],
+  ['an australian citizen or permanent resident', 'Australian citizen or Permanent resident'],
+  ['australian citizen or permanent resident', 'Australian citizen or Permanent resident'],
+  ['australian citizens or permanent residents', 'Australian citizen or Permanent resident'],
+  ['australian citizen or permanent residency only', 'Australian citizen or Permanent resident'],
+  ['australian citizen or premanent residency only', 'Australian citizen or Permanent resident'],
+  ['citizen or permanent resident', 'Citizen or Permanent resident'], ['resident or citizen', 'Resident or Citizen'],
+  ['australian resident or citizen', 'Australian resident or Citizen'],
+  ['permanent australian residents or australian citizens', 'Australian permanent resident or Australian citizen'],
+]);
+
+test('all bundled residency spellings resolve only reviewed compact aliases; additional qualifications stay unknown and referenced', () => {
+  const products = Object.values(sample.products as Record<string, ProductDetail>);
+  const items = products.flatMap(product => (product.eligibility ?? []).map((item, index) => ({ item, index })))
+    .filter(({ item }) => item.label === 'RESIDENCY_STATUS');
+  const values = new Set(items.filter(({ item }) => item.value != null).map(({ item }) => String(item.value).toLowerCase()));
+  expect(values.size).toBe(88);
+  const original = JSON.stringify(items);
+  for (const { item, index } of items) {
+    const source = item.value == null || item.value === '' ? item.info : item.value;
+    const expected = typeof source === 'string' ? REVIEWED_RESIDENCY_SPELLINGS.get(source.trim().toLowerCase()) : undefined;
+    const fact = uiDetailItem(item, index, 'Eligibility');
+    expect(fact.reference).toBe(String(index + 1));
+    if (expected) expect(fact.value).toBe(expected);
+    else {
+      expect(fact.value.startsWith('Unknown')).toBe(true);
+      if (item.value != null || item.info) expect(fact.conditions).toBe('source-review-required');
+    }
+  }
+  expect(JSON.stringify(items)).toBe(original);
+});
+
+test('actual AMP country-unspecified alternatives preserve OR without inventing nationality or dropping qualification review', () => {
+  const products = Object.entries(sample.products as Record<string, ProductDetail>).filter(([key, product]) => key.startsWith('AMP - My AMP|')
+    && product.eligibility?.some(item => item.label === 'RESIDENCY_STATUS'));
+  expect(products).toHaveLength(2);
+  for (const [, product] of products) {
+    const item = product.eligibility!.find(item => item.label === 'RESIDENCY_STATUS')!;
+    expect(item.value).toBe('Citizen or Permanent Resident');
+    expect(uiDetailItem(item, 0, 'Eligibility')).toMatchObject({ value: 'Citizen or Permanent resident',
+      reference: '1', conditions: 'source-review-required' });
+    expect(JSON.stringify(uiDetailItem(item, 0, 'Eligibility'))).not.toMatch(/living and working|Australian citizen|Verified/);
+  }
+  for (const value of ['Citizen or Permanent Resident. Conditions apply.', 'Citizen\nor Permanent Resident',
+    'AU', 'Australia', 'NZ', 'Y', 'CITIZEN, PERMANENT_RESIDENT', 'Australian citizen or permanent resident, or as otherwise approved']) {
+    expect(uiDetailItem({ label: 'RESIDENCY_STATUS', value }, 0, 'Eligibility')).toMatchObject({ value: 'Unknown', conditions: 'source-review-required' });
+  }
+  expect(uiDetailItem({ label: 'OTHER', value: 'Citizen or Permanent Resident' }, 0, 'Eligibility').value).toBe('Unknown');
+});

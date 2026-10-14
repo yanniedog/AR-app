@@ -6,6 +6,9 @@ import { calculateLedger } from '../src/lib/productTermsEngine/ledger';
 import { example } from '../src/lib/productTermsEngine/testSupport';
 import { canonical } from '../src/lib/productTermsEngine/validation';
 import type { CalculationReceipt } from '../src/lib/productTermsEngine/types';
+import { calculatePortfolio } from '../src/lib/productTermsEngine/portfolio';
+import type { PortfolioInput } from '../src/lib/productTermsEngine/portfolioTypes';
+import { EvaluationBudget } from '../src/lib/productTermsEngine/evaluationBudget';
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Row: 'Row' }));
 function missingReceipt(): CalculationReceipt {
   const { contract, scenario } = example();
@@ -16,6 +19,16 @@ function render(receipt: CalculationReceipt) {
   let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<EngineReceiptFacts receipt={receipt} />); });
   const text = (tree as any).root.findAllByType('AppText').map((node: any) => String(node.props.children)).join('\n');
   act(() => tree.unmount()); return text;
+}
+function portfolioInput(): PortfolioInput {
+  const { contract, scenario } = example();
+  contract.direction = 'asset'; contract.interest.offset = 'none';
+  scenario.accountId = 'cash'; scenario.openingBalance = '1000'; scenario.initialOffset = '0';
+  return { schemaVersion: 1, frame: { id: 'frame', currency: 'AUD', startDate: scenario.startDate,
+    endDateExclusive: scenario.endDateExclusive, timezone: 'Australia/Hobart', settlement: 'same_civil_day',
+    valuation: 'holding_with_accrued_interest', openingNetWorth: '1000', scopeCoverage: 'reviewed_complete',
+    externalFlows: [], externalFeeFunding: 'outside_frame_cost_adjustment', allowConditional: false, metric: 'terminal_net_worth' },
+    accounts: [{ id: 'cash', timezone: 'Australia/Hobart', contract, scenario }], transfers: [], dependencyGraph: [], dependencyIds: contract.dependencyIds };
 }
 test('actual incomplete engine receipt identifies missing input and unverified coverage without granting or printing a monetary claim', () => {
   const receipt = missingReceipt(), original = canonical(receipt), text = render(receipt);
@@ -67,4 +80,38 @@ test('unpaid obligation facts retain exact due, paid, date and perspective while
   expect(text).toContain('payment.one: Unpaid'); expect(text).toContain('Repayment due: $25.10 · Paid: $0.00');
   expect(text).toContain('Basis: product_account_with_external_fees_separate · Known components: Partial');
   expect(text).not.toContain('Closing balance:'); expect(text).not.toContain('100.00'); expect(canonical(receipt)).toBe(original);
+});
+
+test('actual failed portfolio execution retains its closed blocker, unavailable claim and canonical account receipt', () => {
+  const input = portfolioInput();
+  // An invalid numerical contract fails after the producer creates the account
+  // receipt; the source-clause example remains unapproved for a product claim.
+  input.accounts[0].contract.initialAnnualRate = 'invalid';
+  const inputBytes = canonical(input), result = calculatePortfolio(input), receipt = result.accounts.cash;
+  expect(result.completeness).toBe('unsupported');
+  expect(receipt).toBeDefined(); expect(receipt.status).toBe('unsupported'); expect(receipt.claimAvailable).toBe(false);
+  expect(receipt.issues).toContain('portfolio_execution_incomplete');
+  expect(receiptIssueFacts(receipt).find(fact => fact.code === 'portfolio_execution_incomplete'))
+    .toMatchObject({ topic: 'portfolio', state: 'unavailable', references: [] });
+  const original = canonical(receipt), digest = receipt.inputSha256, text = render(receipt);
+  expect(text).toContain('Holdings: Unavailable'); expect(text).toContain('Issue code: portfolio_execution_incomplete');
+  expect(text).toContain('Claim available: No'); expect(text).not.toContain('$');
+  expect(canonical(receipt)).toBe(original); expect(receipt.inputSha256).toBe(digest); expect(digest).toMatch(/^[a-f0-9]{64}$/);
+  expect(canonical(input)).toBe(inputBytes);
+});
+
+test('the producer non-Error fallback is admitted exactly while unknown portfolio errors stay opaque', () => {
+  const budget = new EvaluationBudget();
+  const check = jest.spyOn(budget, 'check').mockImplementationOnce(() => { throw null; });
+  const result = calculatePortfolio(portfolioInput(), budget);
+  check.mockRestore();
+  expect(result.issues).toEqual(['portfolio_input_invalid']); expect(result.completeness).toBe('unsupported');
+  const receipt = { ...missingReceipt(), issues: result.issues }, original = canonical(receipt);
+  expect(receiptIssueFacts(receipt)).toEqual([{ index: 0, topic: 'portfolio', state: 'unavailable', code: 'portfolio_input_invalid', references: [] }]);
+  const text = render(receipt);
+  expect(text).toContain('Holdings: Unavailable'); expect(text).toContain('Issue code: portfolio_input_invalid');
+  expect(text).toContain('Claim available: No'); expect(text).not.toContain('$'); expect(canonical(receipt)).toBe(original);
+  const unknown = { ...receipt, issues: ['portfolio_future_unreviewed_error', 'portfolio_execution_incomplete:source prose', 'portfolio_input_invalid.', 'Explanatory private error text.'] };
+  expect(receiptIssueFacts(unknown).every(fact => fact.code === null && fact.state === 'source-review-required')).toBe(true);
+  expect(render(unknown)).not.toMatch(/portfolio_future|source prose|portfolio_input_invalid\.|Explanatory private/);
 });

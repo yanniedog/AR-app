@@ -29,7 +29,7 @@ import { PressFeedback } from './PressFeedback';
 import { scopedRateConditions } from '../data/rateConditions';
 import { scopedFinancialConditionFacts, type ScopedFinancialConditionPresentation } from '../data/scopedFinancialConditionFacts';
 import { uiAccessBadge, uiConditionTag, uiListedLvr } from '../lib/financialUiCopy';
-import { uiJoin, uiLabel, uiProductName, uiProviderName, type UiCopy, type UiText } from '../lib/uiCopy';
+import { uiCount, uiJoin, uiLabel, uiProductName, uiProviderName, type UiCopy, type UiText } from '../lib/uiCopy';
 
 function chips(row: RateRow, section: SectionKey, conditional: boolean, conditions: ScopedFinancialConditionPresentation): UiText[] {
   const out: UiText[] = [];
@@ -161,6 +161,11 @@ function ProductCardView({
     nonStandard ? uiJoin(', ', 'Non-standard') : null,
     qualifier.conditional ? uiJoin(', ', qualifier.label) : null,
     rateChangeText ? uiJoin(', ', rateChangeText) : null);
+  const saveA11yLabel = uiJoin(Number.isInteger(row.rate_index)
+    ? favorite ? 'Remove' : 'Save'
+    : favorite ? 'Remove all rates' : 'Save all rates',
+    Number.isInteger(row.rate_index) ? uiJoin(', ', 'Rate index', ' ', uiCount(row.rate_index)) : null,
+    ', ', cardA11yLabel);
 
   return (
     // Card container is a plain View; the nav target and the favorite star are
@@ -279,11 +284,7 @@ function ProductCardView({
             onPress={() => toggleSavedRate(row, Number.isInteger(row.rate_index) ? 'rate' : 'product')}
             disabled={!!selectMode}
             accessibilityRole="button"
-            accessibilityLabel={favorite
-              ? 'Remove'
-              : Number.isInteger(row.rate_index)
-                ? 'Save'
-                : 'Save'}
+            accessibilityLabel={saveA11yLabel}
             accessibilityState={{ selected: favorite }}
             android_ripple={androidRipple(theme.colors.primaryMuted, true)}
             style={{

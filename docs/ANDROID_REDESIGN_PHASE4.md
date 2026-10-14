@@ -28,6 +28,10 @@ Incomplete receipts identify reviewed issue codes, missing criterion fields, fee
 
 Background diagnostics distinguish each actual worker and its current/earlier stages with reviewed concise identities, retaining dates, durations, overlap, checkpoint age and transfer filenames. Unknown labels remain source-review-required; registry and watchdog behavior do not change.
 
+The final fact review covers all eleven fee identities in the bundled AFG family and all 88 residency value spellings. Only reviewed compact identities and residency alternatives render; additional nationality, visa, address and tax qualifications remain unknown with a source-review reference. Portfolio failure receipts retain both actual incomplete-execution and invalid-input codes. Save controls announce the bound product, metric and tier plus exact-rate or all-rates scope.
+
+Savings period dates expose the ISO format in the empty field and accessible label while retaining included start and excluded end boundaries. All six switching-fee inputs and cashback identify AUD. Switching facts, known-cost summaries and chart totals retain cents, including zero and negative amounts; withheld differences remain unavailable. These are presentation repairs, with the original source data, engine calculations, receipt admission and canonical hashes retained.
+
 ## Verification
 
 The initial canonical run passed Expo Doctor, typecheck, lint and zero production copy violations, then correctly rejected a stale history compiler. Its source graph had acquired frontend dependencies; the pure helper separation addresses that cause. The PR records the final exact-head canonical result and review dispositions after the compiler and scanner fixes.

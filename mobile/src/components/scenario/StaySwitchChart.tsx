@@ -3,8 +3,8 @@ import { View, useWindowDimensions } from 'react-native';
 import Svg, { Line, Path } from 'react-native-svg';
 import type { StaySwitchProjection } from '../../data/staySwitchProjection';
 import { formatRate } from '../../data/format';
-import { uiDate, uiJoin, uiLabel, uiMoney, uiProviderName } from '../../lib/uiCopy';
-import { uiStaySwitchFact } from '../../lib/staySwitchUiFacts';
+import { uiDate, uiJoin, uiLabel, uiProviderName } from '../../lib/uiCopy';
+import { uiStaySwitchFact, uiStaySwitchMoney } from '../../lib/staySwitchUiFacts';
 import { useTheme } from '../../theme/ThemeProvider';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText, Button, Card, Row } from '../ui';
@@ -25,8 +25,8 @@ export function StaySwitchChart({ projection, currentBank, compact = false, onOp
   const date = (value: string | null | undefined) => value ? uiDate(value) : uiLabel('Not reached');
   const horizon = projection.facts.filter(fact => fact.kind === 'switch-horizon').flatMap(uiStaySwitchFact);
   const horizonSummary = uiJoin(...horizon.flatMap((fact, index) => [index ? uiLabel(' · ') : null, fact.label, uiLabel(': '), fact.value]));
-  const summary = uiJoin(current, ' · ', 'Total interest', ' ', uiMoney(projection.stay?.totalInterest), ' / ', target, ' · ', 'Total interest', ' ', uiMoney(projection.switching?.totalInterest),
-    ' · ', 'Total-cost difference', ' ', projection.totalCostSaving == null ? uiLabel('Unavailable') : uiMoney(projection.totalCostSaving), horizon.length ? uiJoin(' · ', horizonSummary) : null);
+  const summary = uiJoin(current, ' · ', 'Total interest', ' ', uiStaySwitchMoney(projection.stay?.totalInterest), ' / ', target, ' · ', 'Total interest', ' ', uiStaySwitchMoney(projection.switching?.totalInterest),
+    ' · ', 'Total-cost difference', ' ', projection.totalCostSaving == null ? uiLabel('Unavailable') : uiStaySwitchMoney(projection.totalCostSaving), horizon.length ? uiJoin(' · ', horizonSummary) : null);
   return <Card variant="outlined" style={{ gap: 12 }}>
     <AppText variant={compact ? 'h3' : 'h2'}>{uiLabel("Stay or switch")}</AppText>
     <AppText variant="small" color="textMuted">{uiJoin('Monthly illustration', ' · ', 'Net loan after offset')}</AppText>
@@ -40,11 +40,11 @@ export function StaySwitchChart({ projection, currentBank, compact = false, onOp
       <AppText variant="tiny">{uiJoin(current, ' · ', formatRate(projection.stay?.advertisedRate), ' · ', 'Solid')}</AppText>
       <AppText variant="tiny">{uiJoin(target, ' · ', formatRate(projection.switching?.advertisedRate), ' · ', 'Long-dashed')}</AppText>
     </Row>
-    <FinancialFactRows rows={[{ label: 'Total-cost difference', value: projection.totalCostSaving == null ? uiLabel('Unavailable') : uiJoin(projection.totalCostSaving >= 0 ? 'Lower' : 'Higher', ' ', uiMoney(Math.abs(projection.totalCostSaving))) },
+    <FinancialFactRows rows={[{ label: 'Total-cost difference', value: projection.totalCostSaving == null ? uiLabel('Unavailable') : uiJoin(projection.totalCostSaving >= 0 ? 'Lower' : 'Higher', ' ', uiStaySwitchMoney(Math.abs(projection.totalCostSaving))) },
       { label: 'Break-even', value: projection.fees.costClaimsAvailable ? date(projection.breakEvenDate) : uiLabel('Unavailable') }]} />
     {!compact ? <View style={{ gap: 10 }}>
-      <FinancialFactRows rows={[{ label: 'Total interest', value: uiJoin('Stay', ' ', uiMoney(projection.stay?.totalInterest), ' / ', 'Switch', ' ', uiMoney(projection.switching?.totalInterest)) },
-        { label: 'Known costs', value: uiJoin('Stay', ' ', uiMoney(projection.stay?.knownCostSubtotal), ' / ', 'Switch', ' ', uiMoney(projection.switching?.knownCostSubtotal)) },
+      <FinancialFactRows rows={[{ label: 'Total interest', value: uiJoin('Stay', ' ', uiStaySwitchMoney(projection.stay?.totalInterest), ' / ', 'Switch', ' ', uiStaySwitchMoney(projection.switching?.totalInterest)) },
+        { label: 'Known costs', value: uiJoin('Stay', ' ', uiStaySwitchMoney(projection.stay?.knownCostSubtotal), ' / ', 'Switch', ' ', uiStaySwitchMoney(projection.switching?.knownCostSubtotal)) },
         { label: 'Effective debt-free', value: uiJoin('Stay', ' ', date(projection.stay?.effectiveDebtFreeDate), ' / ', 'Switch', ' ', date(projection.switching?.effectiveDebtFreeDate)) },
         { label: 'Contractual payoff', value: uiJoin('Stay', ' ', date(projection.stay?.contractualPayoffDate), ' / ', 'Switch', ' ', date(projection.switching?.contractualPayoffDate)) }]} />
       <AppText variant="small" weight="600">{uiLabel("Model facts")}</AppText><FinancialFactRows rows={projection.facts.flatMap(uiStaySwitchFact)} />
