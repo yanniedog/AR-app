@@ -45,6 +45,7 @@ import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useUndoSnackbar } from '../../src/hooks/useUndoSnackbar';
 import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
 import { openCompare, openProduct } from '../../src/lib/nav';
+import { buildCalculationRoute } from '../../src/lib/calculationTarget';
 import {
   auditActionString,
   auditActionStrings,
@@ -558,6 +559,11 @@ export default function MyRates() {
                               {relevantDate ? ` · ${relevantDate}` : ''}
                             </AppText>
                           </View>
+                          <Button
+                            title="Calculate"
+                            variant="ghost"
+                            onPress={() => router.push(buildCalculationRoute(row, section))}
+                          />
                           <Pressable
                             onPress={() => void toggleAlert(row)}
                             accessibilityRole="button"
