@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Pressable,
   StyleSheet,
   View,
   type PressableProps,
@@ -12,6 +11,7 @@ import { LEDGER_LAYOUT } from '../../theme/layout';
 import { useTheme } from '../../theme/ThemeProvider';
 import { LedgerIcon } from '../icons/LedgerIcon';
 import { LedgerText } from './LedgerText';
+import { PressFeedback } from '../PressFeedback';
 
 export interface LedgerRowProps extends Omit<PressableProps, 'children' | 'style'> {
   title: string;
@@ -59,14 +59,15 @@ export function LedgerRow({
 
   if (!onPress) return <View style={rowStyle}>{contents}</View>;
   return (
-    <Pressable
+    <PressFeedback
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
       onPress={onPress}
-      style={({ pressed }) => [rowStyle, pressed && { opacity: 0.62 }]}
+      contentStyle={{ flexGrow: 1 }}
+      style={rowStyle}
       {...rest}
     >
       {contents}
-    </Pressable>
+    </PressFeedback>
   );
 }

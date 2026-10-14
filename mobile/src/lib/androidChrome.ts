@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 
 import type { Theme } from '../theme/theme';
 import { HEADER_TYPOGRAPHY } from '../theme/typography';
+import { fontStyle } from '../theme/fonts';
 
 /** M3 top app bar defaults for stack screens on Android. */
 export function androidStackScreenOptions(theme: Theme) {
@@ -12,8 +13,9 @@ export function androidStackScreenOptions(theme: Theme) {
     headerTitleStyle: {
       color: theme.colors.text,
       ...HEADER_TYPOGRAPHY,
+      ...fontStyle('600'),
     },
-    headerTitleAlign: 'center' as const,
+    headerTitleAlign: 'left' as const,
     headerBackTitleVisible: false,
     headerShadowVisible: false,
   };

@@ -16,7 +16,7 @@ import {
   type PrimaryTabRouteName,
 } from '../lib/tabRouting';
 import { useTheme } from '../theme/ThemeProvider';
-import { commissionerFamily } from '../theme/fonts';
+import { fontStyle } from '../theme/fonts';
 import { TAB_LEDGER_ICONS } from '../lib/tabIcons';
 import { LedgerIcon } from './icons/LedgerIcon';
 
@@ -96,7 +96,7 @@ export function AppTabBar() {
                   marginTop: 2,
                   fontSize: 11,
                   lineHeight: TAB_BAR_LABEL_LINE_HEIGHT,
-                  fontFamily: commissionerFamily(focused ? '600' : '500'),
+                  ...fontStyle(focused ? '600' : '500'),
                   color: tint,
                   textAlign: 'center',
                   width: '100%',

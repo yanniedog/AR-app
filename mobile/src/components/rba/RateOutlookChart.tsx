@@ -4,7 +4,7 @@ import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import type { EconomicPoint } from '../../data/economicOutlook';
 import { hasFiniteChartPath, hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
-import { commissionerFamily } from '../../theme/fonts';
+import { fontStyle } from '../../theme/fonts';
 import { useTheme } from '../../theme/ThemeProvider';
 import { LedgerText } from '../ledger';
 
@@ -106,7 +106,7 @@ export function RateOutlookChart({
             {[min, (min + max) / 2, max].map((tick) => (
               <React.Fragment key={tick}>
                 <Line x1={left} x2={width - right} y1={y(tick)} y2={y(tick)} stroke={theme.ledger.rule} />
-                <SvgText x={left - 8} y={y(tick) + 4} textAnchor="end" fill={theme.ledger.mutedInk} fontSize={12} fontFamily={commissionerFamily('500')}>
+                <SvgText x={left - 8} y={y(tick) + 4} textAnchor="end" fill={theme.ledger.mutedInk} fontSize={12} {...fontStyle('500')}>
                   {tick.toFixed(2)}%
                 </SvgText>
               </React.Fragment>
@@ -119,7 +119,7 @@ export function RateOutlookChart({
               <Circle key={point.date} cx={x(point.date)} cy={y(point.value)} r={i === index ? 6 : 3} fill={i === index ? theme.ledger.wattle : color} stroke={color} strokeWidth={2} />
             ))}
             {valid.filter((_, i) => (valid.length <= 5 && innerW / Math.max(1, valid.length - 1) >= 64) || i === 0 || i === Math.floor((valid.length - 1) / 2) || i === valid.length - 1).map((point) => (
-              <SvgText key={point.date} x={x(point.date)} y={height - 10} textAnchor="middle" fill={theme.ledger.mutedInk} fontSize={12} fontFamily={commissionerFamily('500')}>
+              <SvgText key={point.date} x={x(point.date)} y={height - 10} textAnchor="middle" fill={theme.ledger.mutedInk} fontSize={12} {...fontStyle('500')}>
                 {outlookMonth(point.date)}
               </SvgText>
             ))}

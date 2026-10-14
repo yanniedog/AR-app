@@ -1,3 +1,5 @@
+import { Platform, type TextStyle } from 'react-native';
+
 /**
  * Font-family keys used by the Rate Ledger design system.
  *
@@ -22,10 +24,19 @@ export const LEDGER_FONT_FAMILIES = {
 export type LedgerUiWeight = '400' | '500' | '600' | '700';
 
 export function commissionerFamily(weight: LedgerUiWeight = '400'): string {
+  if (Platform.OS === 'android') return 'sans-serif';
   if (weight === '700') return LEDGER_FONT_FAMILIES.commissioner.bold;
   if (weight === '600') return LEDGER_FONT_FAMILIES.commissioner.semibold;
   if (weight === '500') return LEDGER_FONT_FAMILIES.commissioner.medium;
   return LEDGER_FONT_FAMILIES.commissioner.regular;
+}
+
+/** Android's system family needs the numeric weight; bundled faces do not. */
+export function fontStyle(weight: LedgerUiWeight = '400'): Pick<TextStyle, 'fontFamily' | 'fontWeight'> {
+  return {
+    fontFamily: commissionerFamily(weight),
+    fontWeight: Platform.OS === 'android' ? weight : 'normal',
+  };
 }
 
 /**

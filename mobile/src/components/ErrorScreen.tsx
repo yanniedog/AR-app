@@ -1,4 +1,4 @@
-import { commissionerFamily } from '../theme/fonts';
+import { fontStyle } from '../theme/fonts';
 import Ionicons from './icons/AppIcon';
 import React from 'react';
 import { Pressable, Text, useColorScheme, View } from 'react-native';
@@ -36,14 +36,14 @@ export function ErrorScreen({ error, retry }: { error: Error; retry: () => void 
         }}
       >
         <Ionicons name="warning-outline" size={40} color={colors.primary} />
-        <Text style={{ color: colors.text, fontSize: 18, fontFamily: commissionerFamily('700'), marginTop: 12 }}>
+        <Text style={{ color: colors.text, fontSize: 18, ...fontStyle('700'), marginTop: 12 }}>
           Something went wrong
         </Text>
         <Text
           style={{
             color: colors.textMuted,
             fontSize: 14,
-            fontFamily: commissionerFamily(),
+            ...fontStyle(),
             textAlign: 'center',
             marginTop: 8,
             lineHeight: 20,
@@ -51,7 +51,7 @@ export function ErrorScreen({ error, retry }: { error: Error; retry: () => void 
         >
           The app hit an unexpected error. Your downloaded rates are safe — try again.
         </Text>
-        <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: commissionerFamily(), textAlign: 'center', marginTop: 10 }}>
+        <Text style={{ color: colors.textMuted, fontSize: 12, ...fontStyle(), textAlign: 'center', marginTop: 10 }}>
           Technical details are saved on this device for support.
         </Text>
         <Pressable
@@ -69,7 +69,7 @@ export function ErrorScreen({ error, retry }: { error: Error; retry: () => void 
             opacity: pressed ? 0.85 : 1,
           })}
         >
-          <Text style={{ color: colors.onPrimary, fontFamily: commissionerFamily('700'), fontSize: 15 }}>Try again</Text>
+          <Text style={{ color: colors.onPrimary, ...fontStyle('700'), fontSize: 15 }}>Try again</Text>
         </Pressable>
       </View>
     </View>

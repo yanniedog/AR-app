@@ -1,289 +1,90 @@
-# Rate Ledger design system
-
-Status: historical baseline; consumer direction superseded by [Android redesign contract](ANDROID_REDESIGN_CONTRACT.md). Phase 2 updates the implementation tokens and this document together.
-Product: Australian Rates mobile app
-Language: Australian English
-
-## 1. Design intent
-
-Rate Ledger is a calm, evidence-first interface for understanding Australian bank rates. It should feel like a carefully edited public-interest financial publication: warm paper, clear ink, ruled comparisons, date stamps and restrained signals. It must not resemble a generic component gallery, trading terminal or AI-generated dashboard.
-
-Every visual choice serves one of three jobs:
-
-1. make the rate and its meaning legible;
-2. show where the figure came from and what may be missing;
-3. help a person take the next sensible action without manufactured urgency.
-
-The system intentionally avoids gradients, glass effects, glowing accents, decorative blobs, excessive shadows, interchangeable rounded cards and colour-only meaning.
-
-## 2. Visual grammar
-
-- Paper is the page. Raised paper is reserved for controls, sheets and bounded working areas.
-- A thin rule separates related ledger entries. A rule is not a card border.
-- One datum, underline or change stroke may carry emphasis; several competing accents may not.
-- Rates align as tabular figures. Advertised, comparison and ongoing rates retain their exact labels.
-- Editorial headings use a serif face. Interface labels and numeric content use a humanist sans.
-- Asymmetry is welcome when it clarifies hierarchy: a large figure may sit beside a compact evidence column.
-- A screen gets one dominant action. Secondary actions are outlined or quiet text actions.
-
-### Calm screen composition
-
-- Ordinary content sits directly on the page. The compatibility `Card` primitive
-  is an open section; `outlined` adds one quiet separator. Use `elevated` for a
-  floating panel, or explicitly mark a modal card with `accessibilityViewIsModal`,
-  so its raised background remains opaque.
-- Use 24 dp between sections and restrained sentence-case labels. Separate list
-  entries with one thin rule instead of outlining every row or qualifier.
-- Home is a short task launcher. Rates, Saved, Market and Tools are the other
-  four persistent destinations. See [NAVIGATION.md](NAVIGATION.md) for ownership.
-- Rates starts with product types leading directly to searchable products. Banks,
-  matched rates, taxonomy categories and the details-only catalogue are named links.
-- Market separates bank history, changes, bank response, RBA outlook and research.
-  Bank history shows Rates by default, with Gap secondary.
-- Tools groups the rate calculator, projections and profile. Settings and About
-  are visible here and in the full app menu; diagnostics remain under About.
-- Every ordinary detail screen retains the primary bar and a parent breadcrumb.
-  Root screens omit redundant breadcrumbs. Modal comparisons retain a close action.
-- Product rows stack their rate below the description on phones under 480 dp.
-  Advertised, comparison, ongoing and conditional labels remain explicit.
-- Category aggregates use neutral “Rates from”/“Rates up to” labels because the
-  ranking can include advertised-rate fallbacks when comparison rates are absent.
-- Text tabs use a quiet underline. Reserve filled controls for the main action,
-  selection feedback and fields; retain 48 dp touch targets and wrapping text.
-
-## 3. Colour
-
-The checked-in semantic tokens live in `mobile/src/theme/colors.ts`. Components use roles, never raw colour values.
-
-### Light appearance
-
-| Role | Token | Value | Use |
-|---|---|---:|---|
-| Paper | `paper` | `#F4F0E6` | Main page background |
-| Raised paper | `raised` | `#FCFAF5` | Sheets, inputs, focused working areas |
-| Ink | `ink` | `#15231F` | Primary text and marks |
-| Muted ink | `mutedInk` | `#4D5D56` | Secondary text; accessible control boundary |
-| Faint ink | `faintInk` | `#5C6B65` | Tertiary text, placeholders |
-| Rule | `rule` | `#C9C1B2` | Decorative separators only |
-| Eucalyptus | `eucalyptus` | `#2E6A56` | Links, focus, live/complete evidence |
-| Deep eucalyptus | `eucalyptusDeep` | `#1E5141` | Strong positive text |
-| Wattle | `wattle` | `#D5A62E` | Primary action fill, selected datum |
-| Clay | `clay` | `#9B5133` | Caution, rate-up movement |
-| Danger | `danger` | `#A43D37` | Unavailable/error states |
-| Information | `info` | `#315F7D` | Neutral informational state |
-
-### Dark appearance
-
-| Role | Token | Value | Use |
-|---|---|---:|---|
-| Paper | `paper` | `#0E1714` | Main page background |
-| Raised paper | `raised` | `#16211D` | Sheets and controls |
-| Ink | `ink` | `#F3EFE4` | Primary text and marks |
-| Muted ink | `mutedInk` | `#BAC3BD` | Secondary text |
-| Faint ink | `faintInk` | `#A6B0AA` | Tertiary text |
-| Rule | `rule` | `#34453E` | Decorative separators only |
-| Eucalyptus | `eucalyptus` | `#72B89D` | Links, focus, live/complete evidence |
-| Wattle | `wattle` | `#E2BC54` | Primary action fill, selected datum |
-| Clay | `clay` | `#E18A67` | Caution, rate-up movement |
-| Danger | `danger` | `#F09A93` | Unavailable/error states |
-| Information | `info` | `#84B5D2` | Neutral informational state |
+# Android rate browser design system
 
-### Contrast rules
+Approved direction: 14 October 2026. This supersedes the warm-paper Rate Ledger visual system. The [Android redesign contract](ANDROID_REDESIGN_CONTRACT.md) owns the product, navigation and content acceptance bar.
 
-- Light ink/paper is approximately 14.3:1; muted ink/paper 6.1:1; eucalyptus/paper 5.6:1.
-- Dark ink/paper is approximately 15.9:1; muted ink/paper 10.1:1; eucalyptus/paper 7.9:1.
-- Wattle is a fill, not body text. Dark ink on light wattle is approximately 7.2:1.
-- `rule` is deliberately quiet and does **not** meet text contrast. It may separate content but may not define a field, button, focus ring, chart series or other interactive state.
-- Interactive boundaries use `controlRule`; focused controls use `eucalyptus`; errors use `danger` plus written explanation.
-- Change direction always has a symbol and word. Colour is supporting information only.
+## Purpose and composition
 
-The legacy `theme.colors` contract remains available while screens migrate. New work uses `theme.ledger`.
+Make a rate easy to find, distinguish, save and compare. Use Airtasker's Android interaction feel and Play Store browsing patterns as references: clear actions, immediate content, compact scanning and restrained tactile feedback. The timings below are our prototype targets, not measured competitor timings.
 
-## 4. Typography
+- White page, navy text and blue actions; a corresponding navy dark appearance.
+- Content sits directly on the page with quiet separators. Bounded backgrounds belong to fields, sheets and controls.
+- No gradients, decorative dashboards, hero paragraphs or galleries of cards.
+- One dominant action per working region. Quiet actions remain named and reachable.
+- Rates, Saved and Market are the primary destinations. Root results appear immediately; calculations, comparisons and history are contextual.
+- Every transition preserves the user's query, filters, sort, inputs and position.
 
-### Families
+## Palette and typography
 
-- **Commissioner** 400/500/600/700: body copy, interface labels, controls and all rate figures.
-- **Newsreader** 500/600 and 500 italic: display, title and section heading roles.
-- **System monospace**: raw debug-log payloads only. It must not leak into normal diagnostics, identifiers or rate tables.
+Semantic roles live in `mobile/src/theme/colors.ts`; components never invent colour meanings. Legacy `eucalyptus` and `wattle` roles temporarily alias blue primary, and `clay` aliases caution. New components use `primary`, `onPrimary`, `success`, `warning`, `danger`, `ink` and `mutedInk` directly.
 
-Font keys are centralised in `mobile/src/theme/fonts.ts`. The app root loads only checked-in, hash-verified static font files. There is no runtime font download.
+| Role | Light | Dark |
+| --- | --- | --- |
+| Page | `#FFFFFF` | `#101A2B` |
+| Raised surface | `#FFFFFF` | `#17243A` |
+| Alternate surface | `#F3F5FA` | `#1D2C44` |
+| Text | `#172B4D` | `#F6F8FC` |
+| Secondary text | `#4F5F78` | `#C2CBDA` |
+| Faint text | `#5A687D` | `#ABB8CC` |
+| Primary | `#2563EB` | `#8BB5FF` |
+| On primary | `#FFFFFF` | `#102241` |
+| Success | `#147D57` | `#70D7B0` |
+| Caution | `#936000` | `#E9BF72` |
+| Danger | `#BD3043` | `#FFA7AB` |
 
-### Type roles
+Primary, success, caution and danger remain distinct. Use a written status or direction alongside colour. Decorative separators do not define interactive boundaries. Normal text and action labels meet 4.5:1 contrast; interactive boundaries meet 3:1. Wallpaper-derived colours never change financial meaning.
 
-| Role | Size / line | Family | Default weight |
-|---|---:|---|---:|
-| Display | 40 / 44 | Newsreader | 600 |
-| Title | 30 / 36 | Newsreader | 600 |
-| Heading | 22 / 28 | Newsreader | 600 |
-| Body | 16 / 24 | Commissioner | 400 |
-| Label | 14 / 19 | Commissioner | 600 |
-| Caption | 12 / 17 | Commissioner | 500 |
-| Rate | 24 / 29 | Commissioner, tabular | 600 |
-| Large rate | 38 / 42 | Commissioner, tabular | 600 |
-| Debug mono | 12 / 18 | System monospace | 400 |
+Android uses the system `sans-serif` family (Roboto) with real numeric weights. `fontStyle(weight)` returns both family and weight; setting only a family loses Android's weight distinctions. iOS/web retain the checked-in Commissioner static faces, with `fontWeight: normal`. Monospace belongs to raw diagnostics only.
 
-`LedgerText` removes fixed line-height constraints whenever the operating-system font scale is above 1. Screens must still be checked at 200% text size: no clipped rate, hidden evidence or unreachable action is acceptable.
+| Role | Size / line | Weight |
+| --- | --- | --- |
+| Screen title / heading | 22 / 28 | 600 |
+| Subheading | 18 / 24 | 600 |
+| Control / product name | 16 / 24 | 500–600 |
+| Body / field | 16 / 24 | 400 |
+| Metadata / qualifier | 14 / 20 | 400–500 |
+| Rate | 24 / 32 | 600 |
+| Prominent rate | 32 / 40 | 600 |
 
-## 5. Space, measure and shape
+Rates use tabular numerals. Text retains accessibility scaling; fixed line heights are removed above normal font scale. Important financial facts wrap, including secondary rate labels. Missing, zero and unpublished are different states.
 
-Named spacing tokens are 4, 8, 12, 16, 24, 32 and 48 dp. Avoid one-off values unless optical alignment genuinely requires them.
+## Space, controls and rows
 
-- Compact phone gutter: 16 dp.
-- Wide phone/tablet gutter: 24 dp.
-- Reading measure: 680 dp maximum.
-- Dense data measure: 920 dp maximum.
-- Minimum touch target: 48 by 48 dp.
-- Small radius: 4 dp for buttons and small bounded controls.
-- Control radius: 10 dp for inputs and compact panels.
-- Sheet radius: 18 dp on exposed top corners only.
-- Pill radius: filters, toggles and compact status chips only—not sections, cards or navigation destinations.
+Use 16 dp phone gutters and 24 dp wide gutters. Spacing is 4/8/12/16/24/32/48 dp. Reading content is at most 680 dp wide; dense data may use 920 dp. Controls use 12 dp radii, fields 14 dp, sheets 24 dp top corners, and chips pill radii. Minimum touch bounds are 48 × 48 dp and do not overlap adjacent controls.
 
-Large screens centre the measure and may use a two-column figure/evidence composition. They do not merely stretch phone cards across the window.
+- Product rows align identity beside an explicitly labelled rate on ordinary phones; widths below 340 dp or font scale at least 1.3 reflow vertically.
+- Term, LVR, repayment, balance and conditional distinctions occupy a full-width factual row. Never truncate the fact set to two tags.
+- Advertised, comparison, ongoing and conditional values retain exact labels. The ranking preference controls the primary mortgage figure without discarding its counterpart.
+- The compact visible metric is “Comparison” or “Advertised”; its spoken label remains “Comparison rate” or “Advertised rate”. The secondary labelled figure joins the full-width factual metadata rather than occupying two extra lines in the narrow rate column.
+- Save has a separate 48 dp target. Exact-tier save identity, logo readiness and memoised row subscriptions remain intact.
+- Selected rows retain padding and trailing-column width. Checkboxes reserve the same leading width as logos. Saving changes the icon/state, not the row geometry.
+- Loading buttons keep their label's measured geometry; a centred spinner overlays it.
+- Fields use a persistent name and visible focus colour. Focus does not change border width or cause a layout jump. Placeholder values are never calculation inputs.
+- Selected chips and tabs change state immediately. Labels, selected state and an indicator carry meaning.
 
-## 6. Brand and icons
+Existing typed local `LedgerIcon`/`AppIcon` artwork remains the icon vocabulary. Extend that registry instead of introducing a second runtime icon family. Bundled font and icon licences remain available in About.
 
-The Rate Mark is original artwork in `mobile/src/components/RateMark.tsx`: three ledger rules, one movement stroke and a datum point. It does not depict a bank roof, dollar sign, house, coin or stock-market arrow.
+## Motion and sheets
 
-The Rate Ledger line icons are implemented as a local code-native registry in `mobile/src/components/icons/LedgerIcon.tsx`:
+`PressFeedback` owns tactile feedback. The outer `Pressable` and Android ripple stay stationary; only an inner content layer scales. A new press cancels the old animation before starting the next target.
 
-- 24 dp view box;
-- 1.8 dp optical stroke;
-- round line caps and joins;
-- no filled containers;
-- labels come from the control, not duplicated by a decorative SVG;
-- a standalone meaningful SVG must receive an accessibility label.
+| Interaction | Duration / target |
+| --- | --- |
+| Press | Native ripple immediately; 80 ms to scale 0.97 |
+| Release / cancelled press | 160 ms to scale 1 |
+| Selection state | Immediate; 160 ms optional feedback |
+| Sheet open / close | Interruptible 240 ms |
+| Reduced motion enabled or unresolved | No scale or travel; immediate state feedback |
 
-Selected utility icon geometry is adapted from pinned MIT-licensed Iconoir source into the local semantic registry, then normalised to the Rate Ledger optical grammar. The Rate Mark is wholly original. New icons must extend one of those documented sources rather than mixing Ionicons, Material Symbols and arbitrary illustrations on migrated surfaces.
+All press controls share one OS reduced-motion subscription. Native animations use the native driver; no animation changes hit bounds or surrounding geometry. No bounce, parallax or looping decoration. Haptics require separate physical-device proof.
 
-Every app-owned icon, including compatibility controls on older routes, resolves
-through `LedgerIcon`. `AppIcon.tsx` is the typed vocabulary bridge for those
-controls; it contains no font or third-party runtime component. CI rejects any
-new `@expo/vector-icons` import or direct dependency.
+Animated content does not grow horizontally by default: chips and quiet buttons retain intrinsic widths. Full-width rows explicitly opt into content growth. This distinction prevents the shared press wrapper from changing a horizontal toolbar into several full-width rows.
 
-## 7. Core primitives
+`SheetSurface` is the shared single-layer native modal for filters and compact tasks. It retains a named close action, safe bottom inset, scrolling body and a persistent action footer. Keyboard avoidance keeps actions reachable. Android Back first dismisses an open keyboard, then closes the sheet; cancellation never applies the filter draft. Opening or closing during an animation cancels the prior transition. Filters prepare options and counts without blocking immediate chip selection.
 
-New Rate Ledger primitives live under `mobile/src/components/ledger/`.
+## Content and verification
 
-### `LedgerText`
+UI text may identify an action, field, identity, result, status or necessary fact. Explanatory prose is prohibited in screens, sheets, dialogs, accessibility hints and dynamic provider paths. Remove its containers and spacing. The Phase 4 text guard enforces that contract across all surfaces; this pilot adds no explanatory UI copy.
 
-The only default text primitive on migrated screens. Choose a semantic variant and colour role. Do not manually reconstruct heading sizes.
+Retain structured rate qualifications, eligibility, fees, dates, observations, model assumptions and explicit unknown/stale/partial/unavailable states. Required legal/licence material remains explicitly opened document content. Do not flatten financial data into a misleading attractive number.
 
-### `LedgerAction`
-
-- `primary`: wattle fill and dark ink; at most one visible per screen region.
-- `secondary`: ruled outline for a meaningful alternate action.
-- `quiet`: low-chrome navigation or disclosure action.
-- `destructive`: danger outline and explicit verb.
-
-Labels describe the outcome: “Compare 3 rates”, “Save this rate”, “Try update again”. Avoid “Continue”, “Submit”, “OK” and conversational filler.
-
-### `LedgerSection`
-
-A ruled content chapter with optional title, deck, action and evidence. It replaces most card containers. Nested ruled sections are not allowed.
-
-### `LedgerRow`
-
-An aligned ledger entry with optional leading/trailing content. Interactive rows expose a button role, 48 dp target and chevron.
-
-### `LedgerTabs`
-
-Text tabs with a wattle datum/underline. Do not place primary navigation inside pills.
-
-### `LedgerField`
-
-Persistent external label, raised-paper field, accessible boundary, written hint/error and visible focus state. Placeholder text never replaces the label.
-
-### `LedgerSheet`
-
-A modal detail surface for filters, evidence and compact tasks. It respects reduced motion and provides a named close action. It is not a substitute for a full route when the task has multiple decisions.
-
-### `RateFigure`
-
-Pairs an exact semantic label with a tabular rate. Missing values say “Not published”; they never render as `0`, an empty area or a fabricated figure. Secondary rate types remain labelled.
-
-### `ChangeIndicator`
-
-Shows symbol, written direction, magnitude, context and date as available. “Up” is not automatically good and “down” is not automatically bad; the product context determines the explanation.
-
-### `DataEvidenceLine`
-
-A tappable evidence statement under every substantive data surface. It opens observed date, source, coverage counts, known failures, limitations and schedule details. The mapper in `mobile/src/data/displayEvidence.ts` owns the wording and precedence.
-
-## 8. Data-state language
-
-Use these canonical visible states:
-
-| State | Short label | Required meaning |
-|---|---|---|
-| Current | `Updated today` | A verified remote observation is dated today |
-| Complete | `Updated today · full coverage` | Attempted and succeeded counts are explicit, equal and non-zero; no partial/failed evidence exists |
-| Partial | `Partial coverage` | A provider, asset or reconciliation is incomplete |
-| Saved | `Saved copy` | Last-known-good on-device data is shown |
-| Overdue | `Update overdue` | An explicit producer/scheduler deadline has passed |
-| Sample | `Sample data` | Bundled illustrative data, never current rates |
-| Offline | `Offline` | Network is unavailable and saved data is shown |
-| Unavailable | `Data unavailable` | No verified usable value exists |
-
-Never infer complete coverage from a quiet UI, a `200` response or an empty failure list without explicit attempted/succeeded evidence. Never infer overdue from age alone when no schedule threshold is available.
-
-The UI may shorten the line but the detail sheet must preserve the underlying facts. Error, empty and partial states occupy the same intentional layout as success—not a blank card, spinner that never resolves or debug string.
-
-## 9. Rate and data presentation
-
-- Comparison rate is the default loan comparison metric when published, with the advertised rate still shown and labelled.
-- Deposit bonus, introductory, base and ongoing rates stay distinct.
-- Tier boundaries, balances, fixed terms, LVR, repayment type, fees and eligibility must not be flattened into one attractive number.
-- `0%`, unavailable and not published are three different states.
-- A ranking states its cohort, filters, observation date and inclusion rules.
-- A chart has a written title, unit, date range, accessible summary and data fallback.
-- When a series has gaps, retain the gaps. Do not interpolate unless the method and visual treatment are explicit.
-- A saved or sample data set may be explored but cannot trigger current-rate language.
-
-## 10. Motion
-
-- State transition: 160 ms.
-- Navigation transition: 240 ms.
-- Easing: `[0.2, 0, 0, 1]`.
-- No spring bounce, parallax, looping decoration or celebratory motion.
-- Unknown reduced-motion state is treated as reduced motion.
-- Refresh indicators may rotate only while work is active and must be accompanied by a written status for assistive technology.
-
-## 11. Voice and content
-
-- Australian English and sentence case.
-- Lead with the fact: “3 lenders changed rates” rather than “Here’s what’s happening today”.
-- Use ordinary financial language, then define necessary terms in context.
-- Avoid synthetic enthusiasm, rhetorical questions, emoji, marketing claims and fake personalisation.
-- State uncertainty directly: “Two providers could not be checked”, not “Some data may be unavailable”.
-- State privacy at the decision point. Do not hide it in Terms.
-- Legal and comparison-rate disclosures remain concise but visible near the affected decision.
-
-## 12. Accessibility acceptance
-
-Every migrated screen must pass all of the following:
-
-- logical heading order and screen-reader order;
-- 48 dp targets with non-overlapping hit areas;
-- meaningful controls have names, roles, state and disabled/busy status;
-- decorative SVGs are excluded from the accessibility tree;
-- no information conveyed by colour, position or animation alone;
-- text and controls remain usable at 200% font scale;
-- portrait, landscape, 320 dp width and tablet layouts have no clipping or horizontal body scroll;
-- keyboard focus is visible on web and external keyboards;
-- sheets trap reading context, have a named close action and restore focus where supported;
-- charts expose a concise data summary and a non-visual route to important values;
-- reduced-motion mode removes non-essential transitions;
-- light and dark appearances meet WCAG 2.2 AA for normal text and interactive boundaries.
-
-## 13. Review test
-
-Before accepting a new visual element, ask:
-
-1. Does it clarify a rate, its evidence or the next action?
-2. Does a shared Rate Ledger primitive already solve it?
-3. Is its label exact and human-edited?
-4. Does it still work without colour, motion, network or fresh data?
-5. Does it introduce a generic rounded card, icon style or decorative effect that weakens the bespoke grammar?
-
-If the first answer is no, remove it.
+Verify the pilot in Android with find → filter → product → save → Back. Record the layout and interaction instead of claiming screenshots prove motion. Check 360/411 dp, large fonts, light/dark, reduced motion, keyboard, native Back, loading/offline/error states and interrupted presses/sheets. Compare total taps, choices, inputs, task time and recovery against the baseline. Canonical CI is `cd mobile && npm run ci`; rendered emulator, human-user and physical-device evidence are distinct.

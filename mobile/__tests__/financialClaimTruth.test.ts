@@ -26,7 +26,10 @@ describe('financial claim truth contracts', () => {
     expect(product).not.toContain('personalBrief?.illustration');
     expect(product).not.toContain('periodDifference');
     expect(product).not.toContain('monthlyDifference');
-    expect(product).toContain('Full projections keep assumptions, unknown fees and unavailable results visible.');
+    // Financial arithmetic stays in the scoped projection model; explanatory
+    // paragraphs are not a correctness contract for the product surface.
+    expect(product).toContain('projection={staySwitchProjection}');
+    expect(product).toContain('staySwitchProjection?.ready');
   });
 
   it('labels only evidence-complete costs as illustrative and never as Save or Costs', () => {
