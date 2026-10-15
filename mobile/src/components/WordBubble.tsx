@@ -20,14 +20,16 @@ export function useWordBubble(word: IconWord) {
   const { width, height, fontScale } = useWindowDimensions();
   const anchorRef = useRef<View>(null);
   const alive = useRef(true);
+  const request = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
-  const [anchor, setAnchor] = useState<{ x: number; y: number; height: number } | null>(null);
+  const [anchor, setAnchor] = useState<{ x: number; y: number; height: number; word: IconWord } | null>(null);
   const clearTimer = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
   }, []);
   const dismiss = useCallback(() => {
+    request.current++;
     clearTimer();
     opacity.stopAnimation();
     if (alive.current) setAnchor(null);
@@ -45,15 +47,17 @@ export function useWordBubble(word: IconWord) {
     return () => subscription.remove();
   }, [dismiss]);
 
-  const show = useCallback(() => {
+  const show = useCallback((override?: IconWord) => {
     // Runtime callers cannot expand the reviewed text boundary with arbitrary prose.
-    if (!(ICON_WORDS as readonly string[]).includes(word)) return;
+    const shownWord = override ?? word;
+    if (!(ICON_WORDS as readonly string[]).includes(word) || !(ICON_WORDS as readonly string[]).includes(shownWord)) return;
+    const currentRequest = ++request.current;
     anchorRef.current?.measureInWindow((x, y, anchorWidth, anchorHeight) => {
-      if (!alive.current || anchorWidth <= 0 || anchorHeight <= 0) return;
+      if (!alive.current || currentRequest !== request.current || anchorWidth <= 0 || anchorHeight <= 0) return;
       clearTimer();
       opacity.stopAnimation();
       opacity.setValue(reducedMotion === false ? 0 : 1);
-      setAnchor({ x: x + anchorWidth / 2, y, height: anchorHeight });
+      setAnchor({ x: x + anchorWidth / 2, y, height: anchorHeight, word: shownWord });
       if (reducedMotion === false) {
         Animated.timing(opacity, { toValue: 1, duration: 100, useNativeDriver: true }).start();
       }
@@ -66,21 +70,22 @@ export function useWordBubble(word: IconWord) {
     });
   }, [clearTimer, dismiss, opacity, reducedMotion, word]);
 
-  const bubbleWidth = Math.min(width - 32, Math.max(64, word.length * 14 * fontScale * 0.8 + 28));
+  const shownWord = anchor?.word ?? word;
+  const bubbleWidth = Math.min(width - 32, Math.max(64, shownWord.length * 14 * fontScale * 0.8 + 28));
   const bubbleHeight = Math.max(36, 21 * fontScale + 16);
   const left = anchor ? Math.max(16, Math.min(width - bubbleWidth - 16, anchor.x - bubbleWidth / 2)) : 16;
   const preferredTop = anchor && anchor.y > bubbleHeight + 12 ? anchor.y - bubbleHeight - 8
     : (anchor?.y ?? 0) + (anchor?.height ?? 0) + 8;
   const top = Math.max(8, Math.min(height - bubbleHeight - 8, preferredTop));
   const overlay = anchor ? (
-    <Modal transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={dismiss}>
+    <Modal transparent animationType="none" statusBarTranslucent={false} navigationBarTranslucent={false} onRequestClose={dismiss}>
       <Pressable onPress={dismiss} accessible={false} accessibilityLabel={uiLabel('Close')} style={{ flex: 1 }}>
         <Animated.View pointerEvents="none" style={{ position: 'absolute', left, top, width: bubbleWidth,
           minHeight: bubbleHeight, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
           justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.text,
           elevation: 5, opacity }}>
           <AppText accessible accessibilityLiveRegion="polite" numberOfLines={1}
-            style={{ fontSize: 14, color: theme.colors.bg }}>{uiLabel(word)}</AppText>
+            style={{ fontSize: 14, color: theme.colors.bg }}>{uiLabel(shownWord)}</AppText>
         </Animated.View>
       </Pressable>
     </Modal>

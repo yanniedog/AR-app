@@ -19,7 +19,7 @@ jest.mock('../src/components/IconAction', () => ({ IconAction: (props: any) => j
   ...props, accessibilityRole: 'button', style: { ...props.style, minWidth: 48, minHeight: 48 },
 }) }));
 jest.mock('../src/components/WordBubble', () => ({ useWordBubble: (word: string) => ({ anchorRef: { current: null },
-  show: () => mockShow(word), dismiss: mockDismiss, overlay: null }) }));
+  show: (override?: string) => mockShow(override ?? word), dismiss: mockDismiss, overlay: null }) }));
 jest.mock('../src/components/icons/AppIcon', () => ({ __esModule: true, default: 'Icon' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', androidRipple: () => undefined }));
 jest.mock('../src/components/product/ProductRateChangeLine', () => ({ useProductRateChangeSummary: () => null, productRateChangeText: () => null }));
@@ -42,6 +42,46 @@ function render(exact: RateRow = row, props: Partial<React.ComponentProps<typeof
   act(() => { tree = TestRenderer.create(<ProductCard row={exact} section="Mortgage" {...props} />) as Tree; });
   return tree;
 }
+function mainTarget(tree: Tree) {
+  return tree.root.findAllByType('PressFeedback').find(node => !node.props.testID && !String(node.props.accessibilityLabel).startsWith('View '))!;
+}
+/** Synthetic native layout events exercise hit mapping, not Android geometry acceptance. */
+function measureRegions(tree: Tree) {
+  const main = mainTarget(tree), name = tree.root.findByProps({ testID: 'compact-product-name' });
+  const primary = tree.root.findByProps({ testID: 'compact-primary-cell' });
+  const secondary = tree.root.findAllByType('AppText').some(node => node.props.testID === 'compact-secondary-rate')
+    ? tree.root.findByProps({ testID: 'compact-secondary-cell' }) : null;
+  const facts = tree.root.findByProps({ testID: 'compact-product-facts' });
+  const nameWidth = name.props.style.width, primaryWidth = primary.props.style.width;
+  const metricsWidth = primaryWidth + (secondary ? secondary.props.style.width + 4 : 0);
+  const factsX = nameWidth + metricsWidth + 8, width = factsX + facts.props.style.width;
+  const positions: Record<string, number> = {};
+  const measure = (node: { props: Record<string, any> }, id: string, x: number, measuredWidth: number, parentX = 0) => {
+    node.props.onLayout({ nativeEvent: { layout: { x, y: 0, width: measuredWidth, height: 20 } } });
+    positions[id] = parentX + x + measuredWidth / 2;
+  };
+  act(() => {
+    main.props.onLayout({ nativeEvent: { layout: { width, height: 48 } } });
+    measure(name, 'name', 0, nameWidth);
+    measure(tree.root.findByProps({ testID: 'compact-product-metrics' }), 'metrics', nameWidth + 4, metricsWidth);
+    measure(primary, 'primary', 0, primaryWidth, nameWidth + 4);
+    if (secondary) measure(secondary, 'secondary', primaryWidth + 4, secondary.props.style.width, nameWidth + 4);
+    measure(facts, 'facts', factsX, facts.props.style.width);
+    const fields = [...tree.root.findAllByType('AppText'), ...tree.root.findAllByType('Icon')].filter(node =>
+      ['compact-facet-value', 'compact-facet-symbol', 'compact-tier-index'].includes(node.props.testID)
+      || String(node.props.testID).startsWith('compact-status-'));
+    const eachWidth = facts.props.style.width / fields.length;
+    fields.forEach((field, index) => measure(field, field.props.testID, index * eachWidth, eachWidth, factsX));
+  });
+  return { main, positions, width };
+}
+function hold(main: { props: Record<string, any> }, x: number, y = 24) {
+  act(() => {
+    main.props.onPressIn();
+    main.props.onLongPress({ nativeEvent: { locationX: x, locationY: y } });
+    main.props.onPress();
+  });
+}
 beforeEach(() => { mockDimensions = { width: 360, height: 800, scale: 3, fontScale: 1 }; jest.clearAllMocks(); });
 
 test.each([[360, 1], [411, 1], [360, 2], [411, 2]])('fits one product rail at %sdp/font%s without truncating numbers', (width, fontScale) => {
@@ -55,7 +95,7 @@ test.each([[360, 1], [411, 1], [360, 2], [411, 2]])('fits one product rail at %s
   mockDimensions = { ...mockDimensions, width, fontScale };
   const tree = render();
   try {
-    expect(tree.root.findByProps({ testID: 'compact-product-row' }).props.style).toMatchObject({ flexDirection: 'row', minHeight: 64 });
+    expect(tree.root.findByProps({ testID: 'compact-product-row' }).props.style).toMatchObject({ flexDirection: 'row', minHeight: 56 });
     expect(tree.root.findByProps({ testID: 'compact-product-metrics' }).props.style.flexDirection).toBe('row');
     expect(tree.root.findByProps({ testID: 'compact-product-name' }).props.numberOfLines).toBe(1);
     const primary = tree.root.findByProps({ testID: 'compact-primary-rate' });
@@ -111,6 +151,112 @@ test('has independent exact Save/History actions and holding the row only names 
     expect(mockShow).toHaveBeenCalledWith('History'); expect(history).not.toHaveBeenCalled();
     act(() => { lender.props.onPressIn(); lender.props.onPress(); }); expect(history).toHaveBeenCalledTimes(1);
     act(() => save.props.onPress()); expect(mockSave).toHaveBeenCalledWith(row, 'rate'); expect(open).toHaveBeenCalledTimes(1);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('centres one main48dp target and names only measured visible symbols without opening or selecting', () => {
+  const open = jest.fn(), tree = render(row, { onPress: open, selectMode: true });
+  try {
+    const { main, positions } = measureRegions(tree);
+    expect(main.props.style).toMatchObject({ minHeight: 48, justifyContent: 'center' });
+    expect(tree.root.findAllByType('PressFeedback')).toHaveLength(3);
+    for (const [id, expected] of [['name', 'Details'], ['primary', 'Comparison'], ['secondary', 'Advertised'],
+      ['compact-facet-symbol', 'LVR'], ['compact-tier-index', 'Tier']]) {
+      expect(positions[id]).toBeDefined();
+      hold(main, positions[id]);
+      expect(mockShow).toHaveBeenLastCalledWith(expected);
+    }
+    expect(open).not.toHaveBeenCalled(); expect(mockHistory).not.toHaveBeenCalled(); expect(mockSave).not.toHaveBeenCalled();
+    act(() => { main.props.onPressIn(); main.props.onPress(); });
+    expect(open).toHaveBeenCalledTimes(1);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('negative, non-finite, unmeasured and outside points fall back to Details', () => {
+  const tree = render();
+  try {
+    const target = mainTarget(tree);
+    hold(target, 100); expect(mockShow).toHaveBeenLastCalledWith('Details');
+    const { main, width } = measureRegions(tree);
+    for (const [x, y] of [[-1, 24], [width, 24], [width + 10, 24], [20, -1], [20, 48], [NaN, 24], [Infinity, 24]]) {
+      hold(main, x, y); expect(mockShow).toHaveBeenLastCalledWith('Details');
+    }
+  } finally { act(() => tree.unmount()); }
+});
+
+test('a hidden secondary and stale region events cannot claim a word after font/layout changes', () => {
+  const tree = render();
+  try {
+    const { positions } = measureRegions(tree);
+    const old = tree.root.findByProps({ testID: 'compact-secondary-cell' }).props.onLayout;
+    mockDimensions = { ...mockDimensions, fontScale: 2 };
+    act(() => tree.update(<ProductCard row={{ ...row }} section="Mortgage" />));
+    expect(tree.root.findAllByType('AppText').some(node => node.props.testID === 'compact-secondary-rate')).toBe(false);
+    act(() => old({ nativeEvent: { layout: { x: 0, width: 224 } } }));
+    hold(mainTarget(tree), positions.secondary);
+    expect(mockShow).toHaveBeenLastCalledWith('Details');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('hidden facet and presentation-warning cells never claim the prior LVR or a rate metric', () => {
+  const tree = render();
+  try {
+    const { positions } = measureRegions(tree);
+    const old = tree.root.findByProps({ testID: 'compact-facet-symbol' }).props.onLayout;
+    act(() => tree.root.findByProps({ testID: 'compact-primary-rate' }).props.onTextLayout({ nativeEvent: { lines: [{ width: 250 }] } }));
+    const visibleFields = [...tree.root.findAllByType('AppText'), ...tree.root.findAllByType('Icon')];
+    expect(visibleFields.some(node => ['compact-facet-value', 'compact-facet-symbol', 'compact-primary-rate'].includes(node.props.testID))).toBe(false);
+    act(() => old({ nativeEvent: { layout: { x: 0, width: 224 } } }));
+    hold(mainTarget(tree), positions['compact-facet-symbol']);
+    expect(mockShow).toHaveBeenLastCalledWith('Details');
+    const current = measureRegions(tree);
+    hold(current.main, current.positions.primary);
+    expect(mockShow).toHaveBeenLastCalledWith('Details');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('visible conditional and unknown symbols and the Savings balance facet name their own meanings', () => {
+  const tree = render({ ...row, ribbon_deposit_kind: 'BONUS', ongoing_rate: undefined }, { section: 'Savings' });
+  try {
+    const { main, positions } = measureRegions(tree);
+    hold(main, positions['compact-facet-symbol']); expect(mockShow).toHaveBeenLastCalledWith('Balance');
+    const statuses = tree.root.findAllByType('Icon').filter(node => String(node.props.testID).startsWith('compact-status-'));
+    expect(statuses.map(node => node.props.name)).toEqual(['flash-outline', 'help-circle-outline']);
+    hold(main, positions['compact-status-0']); expect(mockShow).toHaveBeenLastCalledWith('Conditional');
+    hold(main, positions['compact-status-1']); expect(mockShow).toHaveBeenLastCalledWith('Unknown');
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each([
+  [{}, {}, 'Details'],
+  [{ ribbon_deposit_kind: 'BASE' }, {}, 'Ongoing'],
+  [{ ribbon_deposit_kind: 'BONUS' }, {}, 'Details'],
+  [{}, { displayedRate: 0, displayedRateLabel: 'Ongoing rate' }, 'Ongoing'],
+  [{}, { displayedRate: 0.01, displayedRateLabel: 'Bonus' }, 'Bonus'],
+] as const)('generic Savings metrics keep their actual semantics %j / %j', (fields, props, expected) => {
+  const tree = render({ ...row, ...fields }, { section: 'Savings', ...props });
+  try {
+    const { main, positions } = measureRegions(tree);
+    hold(main, positions.primary);
+    expect(mockShow).toHaveBeenLastCalledWith(expected);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('old font numeric callbacks cannot replace current measured widths or remount-loop the body', () => {
+  const tree = render();
+  try {
+    const old = tree.root.findByProps({ testID: 'compact-primary-rate' }).props.onTextLayout;
+    mockDimensions = { ...mockDimensions, fontScale: 2 };
+    act(() => tree.update(<ProductCard row={{ ...row }} section="Mortgage" />));
+    act(() => tree.root.findByProps({ testID: 'compact-primary-rate' }).props.onTextLayout({ nativeEvent: { lines: [{ width: 110 }] } }));
+    const main = mainTarget(tree);
+    const width = tree.root.findByProps({ testID: 'compact-primary-cell' }).props.style.width;
+    const name = tree.root.findByProps({ testID: 'compact-product-name' });
+    act(() => old({ nativeEvent: { lines: [{ width: 250 }] } }));
+    expect(tree.root.findByProps({ testID: 'compact-primary-cell' }).props.style.width).toBe(width);
+    expect(tree.root.findByProps({ testID: 'compact-product-name' })).toBe(name);
+    expect(mainTarget(tree)).toBe(main);
+    expect(tree.root.findByProps({ testID: 'compact-primary-rate' }).props.children).toBe('5.80%');
   } finally { act(() => tree.unmount()); }
 });
 

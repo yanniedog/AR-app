@@ -1,6 +1,6 @@
 import Ionicons from './icons/AppIcon';
 import React from 'react';
-import { StyleSheet, useWindowDimensions, View, type LayoutChangeEvent, type TextLayoutEventData, type NativeSyntheticEvent } from 'react-native';
+import { StyleSheet, useWindowDimensions, View, type GestureResponderEvent, type LayoutChangeEvent, type TextLayoutEventData, type NativeSyntheticEvent } from 'react-native';
 
 import {
   formatBalanceRange,
@@ -26,7 +26,7 @@ import {
 import { androidRipple, AppText } from './ui';
 import { PressFeedback } from './PressFeedback';
 import { IconAction } from './IconAction';
-import { useWordBubble } from './WordBubble';
+import { useWordBubble, type IconWord } from './WordBubble';
 import { COMPACT_ROW, compactFactWidth, compactMetricHasPeers, compactProductFacet, compactProductRowLayout, compactTierIndex } from './product/compactProductRow';
 import { scopedRateConditions } from '../data/rateConditions';
 import { scopedFinancialConditionFacts, type ScopedFinancialConditionPresentation } from '../data/scopedFinancialConditionFacts';
@@ -178,6 +178,8 @@ function ProductCardView({
       : access.restricted || access.verify || nonStandard ? ['people-outline' as const] : []),
   ];
   const measurementKey = `${fontScale}:${rateText}:${secondaryText ?? ''}`;
+  const activeMeasurementKey = React.useRef(measurementKey);
+  activeMeasurementKey.current = measurementKey;
   const measurements = textMeasurements?.key === measurementKey ? textMeasurements : null;
   const tierIndex = compactTierIndex(row);
   const hasMetricPeers = compactMetricHasPeers(row, core?.sections[section]?.rates, rateLabel);
@@ -188,16 +190,67 @@ function ProductCardView({
     if (next > 0) setMeasuredWidth(previous => previous === next ? previous : next);
   };
   const measureMetric = (key: 'primary' | 'secondary') => (event: NativeSyntheticEvent<TextLayoutEventData>) => {
+    if (activeMeasurementKey.current !== measurementKey) return;
     const actual = event.nativeEvent.lines[0]?.width ?? 0;
     const estimated = compactFactWidth(key === 'primary' ? rateText : secondaryText ?? uiLabel(''), fontScale);
     if (actual <= estimated) return;
     setTextMeasurements(previous => {
+      if (activeMeasurementKey.current !== measurementKey) return previous;
       const current = previous?.key === measurementKey ? previous : { key: measurementKey, primary: 0, secondary: 0 };
       return current[key] >= actual ? previous : { ...current, [key]: Math.ceil(actual) };
     });
   };
   const metricIcon = (label: UiCopy): keyof typeof Ionicons.glyphMap => label === 'Comparison rate' ? 'git-compare-outline'
     : label === 'Ongoing rate' ? 'time' : 'cash-outline';
+  const metricWord = (label: UiCopy | null): IconWord => label === 'Comparison rate' ? 'Comparison'
+    : label === 'Advertised rate' ? 'Advertised' : label === 'Ongoing rate' ? 'Ongoing'
+      : label === 'Bonus rate' || label === 'Bonus' ? 'Bonus'
+        : label === 'Rate' && section === 'Savings' && qualifier.kind === 'base' ? 'Ongoing' : 'Details';
+  const visibleStatuses = layout.warningOnly ? [] : layout.combinedStatus && statusIcons.length
+    ? [unknown ? 'help-circle-outline' as const : 'warning-outline' as const] : statusIcons;
+  const statusWord = (icon: keyof typeof Ionicons.glyphMap): IconWord => icon === 'help-circle-outline' ? 'Unknown'
+    : icon === 'flash-outline' ? 'Conditional' : icon === 'people-outline' ? 'Eligibility'
+      : conditions.unresolved.length ? 'Sources' : access.restricted || access.verify || nonStandard ? 'Eligibility'
+        : qualifier.conditional ? 'Conditional' : 'Details';
+  const geometryKey = JSON.stringify([row.product_key, row.rate_index, fontScale, layout, facet.kind, facet.value,
+    rateLabel, secondaryLabel, visibleStatuses]);
+  const bubbleRegions = React.useRef<{ key: string; regions: Record<string, { x: number; width: number }> }>({ key: geometryKey, regions: {} });
+  const mainBounds = React.useRef<{ width: number; height: number } | null>(null);
+  if (bubbleRegions.current.key !== geometryKey) bubbleRegions.current = { key: geometryKey, regions: {} };
+  const recordRegion = (id: string) => (event: LayoutChangeEvent) => {
+    if (bubbleRegions.current.key !== geometryKey) return;
+    const { x, width: regionWidth } = event.nativeEvent.layout;
+    if (Number.isFinite(x) && x >= 0 && Number.isFinite(regionWidth) && regionWidth > 0)
+      bubbleRegions.current.regions[id] = { x, width: regionWidth };
+    else delete bubbleRegions.current.regions[id];
+  };
+  const showRowWord = (event?: GestureResponderEvent) => {
+    held.current = true;
+    const { locationX: x, locationY: y } = event?.nativeEvent ?? {};
+    const bounds = mainBounds.current;
+    let word: IconWord = 'Details';
+    if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)
+      && bounds && x >= 0 && x < bounds.width && y >= 0 && y < bounds.height
+      && Math.abs(bounds.width - layout.main) <= 1 && bubbleRegions.current.key === geometryKey) {
+      const regions = bubbleRegions.current.regions;
+      const candidates: { id: string; parent?: string; word: IconWord }[] = [
+        { id: 'name', word: 'Details' },
+        ...(!layout.warningOnly ? [{ id: 'primary', parent: 'metrics', word: metricWord(rateLabel) }] : []),
+        ...(layout.showSecondary && secondaryText ? [{ id: 'secondary', parent: 'metrics', word: metricWord(secondaryLabel) }] : []),
+        ...(layout.showFacetValue || layout.showFacetSymbol ? [{ id: 'facet', parent: 'facts', word: facet.kind }] : []),
+        ...visibleStatuses.map((icon, index) => ({ id: `status:${index}`, parent: 'facts', word: statusWord(icon) })),
+        ...(layout.showTier ? [{ id: 'tier', parent: 'facts', word: 'Tier' as const }] : []),
+      ];
+      for (const candidate of candidates) {
+        const region = regions[candidate.id], parent = candidate.parent ? regions[candidate.parent] : null;
+        if (!region || candidate.parent && !parent) continue;
+        const left = (parent?.x ?? 0) + region.x, right = left + region.width;
+        if (region.x + region.width > (parent?.width ?? bounds.width) || right > bounds.width) continue;
+        if (x >= left && x < right) { word = candidate.word; break; }
+      }
+    }
+    detailsBubble.show(word);
+  };
 
   return (
     <View testID="compact-product-row" onLayout={onRowLayout}
@@ -239,7 +292,7 @@ function ProductCardView({
       <PressFeedback
         onPressIn={() => { held.current = false; }}
         onPress={() => { if (!held.current) { detailsBubble.dismiss(); onPress?.(); } held.current = false; }}
-        onLongPress={() => { held.current = true; detailsBubble.show(); }}
+        onLongPress={showRowWord}
         delayLongPress={350}
         accessibilityRole="button"
         accessibilityLabel={cardA11yLabel}
@@ -250,35 +303,46 @@ function ProductCardView({
           minHeight: 48,
           minWidth: 48,
           alignItems: 'center',
+          justifyContent: 'center',
           borderRadius: theme.radius.sm,
           overflow: 'hidden',
         }}
+        onLayout={event => {
+          const { width: targetWidth, height: targetHeight } = event.nativeEvent.layout;
+          mainBounds.current = Number.isFinite(targetWidth) && targetWidth > 0 && Number.isFinite(targetHeight) && targetHeight > 0
+            ? { width: targetWidth, height: targetHeight } : null;
+        }}
       >
+        <View key={geometryKey} pointerEvents="none" accessible={false}
+          style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap }}>
         <AppText testID="compact-product-name" variant="small" weight="600" numberOfLines={1} ellipsizeMode="tail"
+          onLayout={recordRegion('name')}
           style={{ width: layout.identity, minWidth: 0, flexShrink: 1 }}>{uiProductName(row)}</AppText>
         <View testID="compact-product-metrics" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+          onLayout={recordRegion('metrics')}
           style={{ flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap, flexShrink: 0 }}>
-          <View style={{ width: layout.primary, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+          <View testID="compact-primary-cell" onLayout={recordRegion('primary')} style={{ width: layout.primary, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
             {layout.warningOnly ? <Ionicons name="warning-outline" size={16} color={theme.colors.warning} /> : <>
             {layout.showPrimaryIcon ? <Ionicons name={metricIcon(rateLabel)} size={COMPACT_ROW.icon} color={theme.colors.textMuted} /> : null}
             <AppText testID="compact-primary-rate" variant="small" weight="600" onTextLayout={measureMetric('primary')}
               style={{ fontVariant: ['tabular-nums'], flexShrink: 0 }}>{rateText}</AppText>
             </>}
           </View>
-          {layout.showSecondary && secondaryText ? <View style={{ width: layout.secondary, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+          {layout.showSecondary && secondaryText ? <View testID="compact-secondary-cell" onLayout={recordRegion('secondary')} style={{ width: layout.secondary, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
             <Ionicons name={metricIcon(secondaryLabel!)} size={COMPACT_ROW.icon} color={theme.colors.textMuted} />
             <AppText testID="compact-secondary-rate" variant="small" color="textMuted" onTextLayout={measureMetric('secondary')}
               style={{ fontVariant: ['tabular-nums'], flexShrink: 0 }}>{secondaryText}</AppText>
           </View> : null}
         </View>
         <View testID="compact-product-facts" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+          onLayout={recordRegion('facts')}
           style={{ width: layout.facet, flexDirection: 'row', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          {layout.showFacetValue ? <AppText variant="small" color="textMuted" style={{ flexShrink: 0 }}>{facet.value}</AppText>
-            : layout.showFacetSymbol ? facet.kind === 'LVR' ? <AppText variant="small" color="textMuted">{uiLabel('%')}</AppText>
-              : <Ionicons name={facet.kind === 'Term' ? 'time' : 'cash-outline'} size={COMPACT_ROW.icon} color={theme.colors.textMuted} /> : null}
-          {!layout.warningOnly ? (layout.combinedStatus && statusIcons.length ? [unknown ? 'help-circle-outline' as const : 'warning-outline' as const] : statusIcons)
-            .map((icon, index) => <Ionicons key={`${icon}:${index}`} name={icon} size={COMPACT_ROW.icon} color={theme.colors.warning} />) : null}
-          {layout.showTier ? <AppText testID="compact-tier-index" variant="small" color="textMuted" style={{ flexShrink: 0 }}>{tierIndex}</AppText> : null}
+          {layout.showFacetValue ? <AppText testID="compact-facet-value" onLayout={recordRegion('facet')} variant="small" color="textMuted" style={{ flexShrink: 0 }}>{facet.value}</AppText>
+            : layout.showFacetSymbol ? facet.kind === 'LVR' ? <AppText testID="compact-facet-symbol" onLayout={recordRegion('facet')} variant="small" color="textMuted">{uiLabel('%')}</AppText>
+              : <Ionicons testID="compact-facet-symbol" onLayout={recordRegion('facet')} name={facet.kind === 'Term' ? 'time' : 'cash-outline'} size={COMPACT_ROW.icon} color={theme.colors.textMuted} /> : null}
+          {visibleStatuses.map((icon, index) => <Ionicons key={`${icon}:${index}`} testID={`compact-status-${index}`} onLayout={recordRegion(`status:${index}`)} name={icon} size={COMPACT_ROW.icon} color={theme.colors.warning} />)}
+          {layout.showTier ? <AppText testID="compact-tier-index" onLayout={recordRegion('tier')} variant="small" color="textMuted" style={{ flexShrink: 0 }}>{tierIndex}</AppText> : null}
+        </View>
         </View>
       </PressFeedback>
       </View>

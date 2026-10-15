@@ -2,6 +2,7 @@ import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { Animated, AppState, Modal, View } from 'react-native';
 import { ICON_WORDS, useWordBubble, type IconWord } from '../src/components/WordBubble';
+import { AppText } from '../src/components/ui';
 
 let mockReducedMotion: boolean | null = false;
 jest.mock('../src/hooks/useReducedMotion', () => ({ useReducedMotion: () => mockReducedMotion }));
@@ -38,6 +39,44 @@ test('a measured bubble gently fades, auto-dismisses, and Back dismisses without
     act(() => controller.show());
     act(() => tree.root.findByType(Modal).props.onRequestClose());
     expect(tree.root.findAllByType(Modal)).toHaveLength(0);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('per-hold words stay inside the finite vocabulary and share the measured visible-window origin', () => {
+  mockReducedMotion = true;
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<Host />) as Tree; });
+  try {
+    attachAnchor();
+    act(() => controller.show('Comparison'));
+    expect(tree.root.findByType(AppText).props.children).toBe('Comparison');
+    expect(tree.root.findByType(Modal).props).toMatchObject({
+      transparent: true, statusBarTranslucent: false, navigationBarTranslucent: false,
+    });
+    act(() => controller.dismiss());
+    act(() => controller.show('Explain the comparison calculation' as IconWord));
+    expect(tree.root.findAllByType(Modal)).toHaveLength(0);
+    act(() => controller.show());
+    expect(tree.root.findByType(AppText).props.children).toBe('History');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('dismissal or a later hold invalidates delayed native measurement callbacks', () => {
+  mockReducedMotion = true;
+  const pending: ((x: number, y: number, width: number, height: number) => void)[] = [];
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<Host />) as Tree; });
+  try {
+    controller.anchorRef.current = { measureInWindow: (done: typeof pending[number]) => pending.push(done) } as unknown as View;
+    act(() => controller.show('Comparison'));
+    act(() => controller.dismiss());
+    act(() => pending[0](320, 100, 48, 48));
+    expect(tree.root.findAllByType(Modal)).toHaveLength(0);
+    act(() => { controller.show('Advertised'); controller.show('LVR'); });
+    act(() => pending[1](320, 100, 48, 48));
+    expect(tree.root.findAllByType(Modal)).toHaveLength(0);
+    act(() => pending[2](320, 100, 48, 48));
+    expect(tree.root.findByType(AppText).props.children).toBe('LVR');
   } finally { act(() => tree.unmount()); }
 });
 
