@@ -696,7 +696,7 @@ export function RateCheckWorkspace() {
                   {lvrBand ? (
                     <Badge label={uiListedLvr({lvr_tier:lvrBand})} tone="success" />
                   ) : (
-                    <AppText variant="tiny" color="textFaint">{uiLabel('Above tracked LVR bands')}</AppText>
+                    <AppText variant="tiny" color="textFaint">{uiLabel('Outside tracked LVR bands')}</AppText>
                   )}
                 </Row>
                 {nextBandHint ? (

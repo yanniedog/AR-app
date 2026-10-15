@@ -97,14 +97,19 @@ test('actual rate-check compares broad and conventional lenders at the same calc
   act(() => tree.unmount());
 });
 
-test.each([EMPTY_PROFILE, { ...EMPTY_PROFILE, lvrTiers: ['lvr_90-95%'] }])(
-  'actual calculated 98 percent LVR yields no candidate or saved-rate gap', profile => {
-    prepare('Mortgage', [publicNabLoan], [], mortgageScenario('490000'), String(publicNabLoan.rate_index));
+test.each([
+  ['490000', EMPTY_PROFILE],
+  ['490000', { ...EMPTY_PROFILE, lvrTiers: ['lvr_90-95%'] }],
+  ['400025', EMPTY_PROFILE],
+] as const)(
+  'actual out-of-range loan balance %s yields no candidate or saved-rate gap', (balance, profile) => {
+    prepare('Mortgage', [publicNabLoan], [], mortgageScenario(balance), String(publicNabLoan.rate_index));
     delete mockParams.target; delete mockParams.ri;
     mockState.prefs.profileFilters = profile;
     let calculator!: InspectableRenderer;
     act(() => { calculator = TestRenderer.create(<RateCheckWorkspace />) as InspectableRenderer; });
     expect(calculator.root.findAllByType('BankAvatar')).toHaveLength(0);
+    expect(texts(calculator)).toContain('Outside tracked LVR bands');
     expect(surface('calculator.results').probes?.find(probe => probe.id === 'calculator.candidates')?.actualCount).toBe(0);
     act(() => calculator.unmount());
     let saved!: InspectableRenderer;

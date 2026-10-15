@@ -211,7 +211,7 @@ export const UI_LABELS = [
   'Fees paid externally', 'Outstanding debt', 'Known component debt', 'Principal remaining',
   'Capitalised charges remaining', 'Charges paid', 'Unsupported',
   'Automatic', 'YYYY-MM-DD', 'Amount', 'Whole months', 'Whole numbers', 'Past date',
-  'Conditional rate', 'Rate scenarios', 'Offset scenarios', 'Above tracked LVR bands',
+  'Conditional rate', 'Rate scenarios', 'Offset scenarios', 'Outside tracked LVR bands',
   'Deposit to LVR', 'Initial repayment', 'Initial monthly repayment', 'Simple annual interest',
   'Maturity unpublished', 'Eligibility / rate conditions unverified', 'Verify access',
   'Staff', 'Occupation', 'Membership', 'Business / SMSF', 'Students', 'First-home buyers',
