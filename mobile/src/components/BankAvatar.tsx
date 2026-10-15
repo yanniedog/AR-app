@@ -105,6 +105,8 @@ export function BankAvatar({
         style={{
           width: size,
           height: size,
+          borderRadius: size / 4,
+          backgroundColor: '#ffffff',
           alignItems: 'center',
           justifyContent: 'center',
         }}

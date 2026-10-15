@@ -61,7 +61,7 @@ describe('compact mobile UX contracts', () => {
     expect(receipt).toContain('required: evidenceOpen');
     expect(receipt).toContain("status: !evidenceOpen || (receipt && brief) ? 'ready' : 'pending'");
     expect(productCard).toContain('showLenderAction = true');
-    expect(productCard).toContain('{showLenderAction ? (');
+    expect(productCard).toContain('{showLenderAction || selectMode ? (');
     expect(lender).toContain('showLenderAction={false}');
   });
 

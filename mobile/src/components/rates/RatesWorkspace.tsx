@@ -18,14 +18,13 @@ import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Platform, ScrollView, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import { FilterSheet } from '../../components/FilterSheet';
 import { EmptyState, IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../../components/feedback';
 import { ProductCard } from '../../components/ProductCard';
+import { IconAction } from '../../components/IconAction';
 import { Screen, screenScrollContentStyle } from '../../components/Screen';
-import { ToolbarIconButton } from '../../components/ToolbarIconButton';
 import { SearchBar } from '../../components/controls';
 import { AppText, Button, Row } from '../../components/ui';
 import { SECTION_ORDER } from '../../constants';
@@ -100,8 +99,7 @@ export default function RatesWorkspace() {
   const theme = useTheme();
   const isFocused = useIsFocused();
   const sheetNavigation = useNavigation();
-  const insets = useSafeAreaInsets();
-  const { width, fontScale } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const params = useLocalSearchParams() as RatesRouteParams;
   const intentKey = ratesIntentKey(params);
   const session = useRatesSession();
@@ -523,13 +521,12 @@ export default function RatesWorkspace() {
   if (!core || intentPending) return <ScreenSkeleton />;
   const filterCount = availability === 'unlisted' ? filters.providers.length : activeFilterCount(effectiveFilters);
   const sortLabel = availability === 'unlisted' ? 'All product types · No listed rate' : sortOptions.find(option => option.key === sortKey)?.label ?? 'Rate';
-  // Keep whole 16sp action labels; narrower or enlarged text adds a row.
-  const actionMinWidth = Math.min(Math.max(48, width - theme.spacing(8)), Math.ceil(80 * Math.max(1, fontScale) + 36));
-  const actionStyle = { flexGrow: 1, flexShrink: 0, flexBasis: actionMinWidth, minWidth: actionMinWidth };
-  // Reserve the entire line before quick actions can squeeze scaled metadata.
-  const summaryOwnLine = width < 360 * Math.max(1, fontScale);
+  const compactSortLabel = sortLabel === 'Comparison rate' ? uiLabel('Comparison')
+    : sortLabel === 'Advertised rate' ? uiLabel('Advertised')
+      : sortLabel === 'Ongoing rate' ? uiLabel('Ongoing')
+        : sortLabel === 'Headline rate' ? uiLabel('Headline')
+          : sortLabel === 'Bank A–Z' ? uiLabel('Bank') : sortLabel;
   const quickSortKey = sortKey === 'bank' ? 'rate' : 'bank';
-  const quickSortLabel = sortOptions.find(option => option.key === quickSortKey)?.label ?? uiLabel('Rate');
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Rates' }} />
@@ -557,30 +554,35 @@ export default function RatesWorkspace() {
           }}
           scrollEventThrottle={64}
           contentContainerStyle={{
-            ...screenScrollContentStyle(theme, insets.bottom, width),
+            ...screenScrollContentStyle(theme, 0, width),
             // Rows and the scrolling toolbar own their spacing.
             gap: 0,
             paddingTop: 0,
-            paddingBottom: theme.spacing(6) + insets.bottom + theme.spacing(8),
+            paddingBottom: theme.spacing(6),
           }}
           renderItem={renderProduct}
           ListHeaderComponent={<View style={{ gap: 8, paddingTop: 8, paddingBottom: 8 }}>
             <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
-            <SearchBar value={uiRatesQuery(task)} onChangeText={setQuery} placeholder="Search rates or banks" />
+            <SearchBar value={uiRatesQuery(task)} onChangeText={setQuery} placeholder="Search" accessibilityLabel="Search rates or banks" />
             <Row gap={8} style={{ flexWrap: 'wrap' }}>
-              <Button title={filterCount ? uiJoin('Filter',' (',uiCount(filterCount),')'):uiLabel("Filter")} variant="secondary" onPress={openFilters} style={actionStyle} />
-              <Button title="Sort" variant="secondary" onPress={() => setSortOpen(true)} disabled={availability === 'unlisted'} style={actionStyle} />
-              <Button title={uiLabel(selectMode ? 'Done' : 'Compare')} variant="secondary" onPress={toggleCompareMode} disabled={availability === 'unlisted'} style={actionStyle} />
+              <IconAction icon="options" word="Filter" badge={filterCount || undefined}
+                accessibilityLabel={filterCount ? uiJoin('Filter', ' (', uiCount(filterCount), ')') : uiLabel('Filter')}
+                accessibilityState={{ expanded: filterOpen }} active={filterCount > 0} onPress={openFilters} />
+              <IconAction icon="swap-vertical" word="Sort" onPress={() => setSortOpen(true)}
+                accessibilityState={{ expanded: sortOpen }} disabled={availability === 'unlisted'} />
+              <IconAction icon={selectMode ? 'checkmark-circle' : 'git-compare'} word={selectMode ? 'Done' : 'Compare'}
+                active={selectMode} accessibilityState={{ selected: selectMode }}
+                onPress={toggleCompareMode} disabled={availability === 'unlisted'} />
+              <IconAction icon="business-outline" word="Bank" accessibilityLabel="Bank A–Z"
+                active={sortKey === 'bank'} accessibilityState={{ selected: sortKey === 'bank' }}
+                disabled={availability === 'unlisted'} onPress={() => setSortKey(quickSortKey)} />
+              <IconAction icon="ellipsis-horizontal" word="More" onPress={() => setToolsOpen(true)}
+                accessibilityLabel="Search actions" accessibilityState={{ expanded: toolsOpen }} />
             </Row>
-            <Row gap={8} style={{ flexWrap: 'wrap' }}>
-              <View style={{ flexGrow: 1, flexShrink: summaryOwnLine ? 0 : 1, flexBasis: summaryOwnLine ? '100%' : 0, minWidth: 0, gap: 2 }}>
-                <AppText variant="tiny" color="textMuted">{uiJoin(searchPending ? 'Loading':uiJoin(uiCount(resultRows.length),' ','results'),searchSub?uiJoin(' · ','Alert on'):null)}</AppText>
-                <AppText variant="tiny" color="textMuted">{sortLabel}</AppText>
-              </View>
-              <Button title={quickSortLabel} variant="secondary" disabled={availability === 'unlisted'}
-                onPress={() => setSortKey(quickSortKey)} />
-              <ToolbarIconButton icon="share-outline" onPress={() => setToolsOpen(true)} accessibilityLabel="Search actions" />
-            </Row>
+            <View style={{ width: '100%', flexShrink: 0, gap: 2 }}>
+              <AppText variant="tiny" color="textMuted">{uiJoin(searchPending ? 'Loading':uiJoin(uiCount(resultRows.length),' ','results'),searchSub?uiJoin(' · ','Alert on'):null)}</AppText>
+              <AppText variant="tiny" color="textMuted" accessibilityLabel={sortLabel}>{compactSortLabel}</AppText>
+            </View>
             {path.length ? <Button title="Clear scope" variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
             {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">{uiLabel("Name search")}</AppText>
               {searchIndexStatus === 'error' ? <Button title="Retry search" variant="ghost" onPress={() => void ensureSearchIndex()} /> : null}</Row> : null}
@@ -637,9 +639,8 @@ export default function RatesWorkspace() {
       </View>
 
       {selectMode && selected.length >= 2 ? (
-        <CompareFab
+        <CompareDock
           count={selected.length}
-          bottomInset={insets.bottom}
           onPress={() => openCompare(selected)}
         />
       ) : null}
@@ -693,48 +694,48 @@ export default function RatesWorkspace() {
   );
 }
 
-function CompareFab({
+function CompareDock({
   count,
-  bottomInset,
   onPress,
 }: {
   count: number;
-  bottomInset: number;
   onPress: () => void;
 }) {
   const theme = useTheme();
   const label=uiJoin('Compare',' ',uiCount(count));
-  const isAndroid = Platform.OS === 'android';
-  const edge = theme.spacing(4);
-  const bottom = theme.spacing(6) + bottomInset;
 
   return (
-    <TouchTarget
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={({ pressed }) => ({
-        position: 'absolute',
-        ...(isAndroid
-          ? { right: edge, bottom }
-          : { left: edge, right: edge, bottom: theme.spacing(6) }),
-        backgroundColor: theme.colors.primary,
-        borderRadius: theme.radius.pill,
-        minHeight: isAndroid ? 56 : undefined,
-        paddingVertical: isAndroid ? 0 : theme.spacing(4),
-        paddingHorizontal: isAndroid ? theme.spacing(5) : 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: theme.spacing(2),
-        opacity: pressed ? 0.85 : 1,
-        elevation: isAndroid ? 6 : 4,
-      })}
-    >
-      <Ionicons name="git-compare" size={isAndroid ? 24 : 18} color={theme.colors.onPrimary} />
-      <AppText variant="body" weight="800" style={{ color: theme.colors.onPrimary }}>
-        {label}
-      </AppText>
-    </TouchTarget>
+    <View testID="rates-compare-dock" style={{
+      flexShrink: 0,
+      paddingHorizontal: theme.spacing(4),
+      paddingVertical: theme.spacing(2),
+      backgroundColor: theme.colors.surface,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    }}>
+      <TouchTarget
+        fill
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={({ pressed }) => ({
+          backgroundColor: theme.colors.primary,
+          borderRadius: theme.radius.pill,
+          minHeight: 56,
+          paddingVertical: theme.spacing(2),
+          paddingHorizontal: theme.spacing(5),
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: theme.spacing(2),
+          opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        <Ionicons name="git-compare" size={24} color={theme.colors.onPrimary} />
+        <AppText variant="body" weight="800" style={{ color: theme.colors.onPrimary }}>
+          {label}
+        </AppText>
+      </TouchTarget>
+    </View>
   );
 }

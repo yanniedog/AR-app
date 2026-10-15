@@ -11,6 +11,10 @@ const mockSave = jest.fn();
 jest.mock('../src/data/store', () => ({ useStore: (select: (state: typeof mockState) => unknown) => select(mockState) }));
 jest.mock('../src/components/BankAvatar', () => ({ BankAvatar: 'BankAvatar' }));
 jest.mock('../src/components/PressFeedback', () => ({ PressFeedback: 'PressFeedback' }));
+jest.mock('../src/components/IconAction', () => ({ IconAction: (props: any) => jest.requireActual('react').createElement('PressFeedback', {
+  ...props, accessibilityRole: 'button', style: { ...props.style, width: 48, minHeight: 48 },
+}) }));
+jest.mock('../src/components/WordBubble', () => ({ useWordBubble: () => ({ anchorRef: { current: null }, show: jest.fn(), dismiss: jest.fn(), overlay: null }) }));
 jest.mock('../src/components/icons/AppIcon', () => ({ __esModule: true, default: 'Icon' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Row: 'Row', androidRipple: () => undefined }));
 jest.mock('../src/components/product/ProductRateChangeLine', () => ({ ProductRateChangeSummaryLine: 'ProductRateChangeSummaryLine', useProductRateChangeSummary: () => null, productRateChangeText: () => null }));
@@ -24,7 +28,8 @@ test('production result cards show each exact admitted LVR and preserve each sav
   let tree!: Tree; act(() => { tree = TestRenderer.create(<>{f.rows.map(row => <ProductCard key={row.rate_index} row={row} section="Mortgage" />)}</>) as Tree; });
   try {
     const texts = tree.root.findAllByType('AppText').map(n => String(n.props.children));
-    expect(texts.some(text => text.includes('LVR ≤59.99%'))).toBe(true); expect(texts.some(text => text.includes('LVR 60%–79.99%'))).toBe(true);
+    const rowLabels = tree.root.findAllByType('PressFeedback').map(n => String(n.props.accessibilityLabel));
+    expect(rowLabels.some(text => text.includes('LVR ≤59.99%'))).toBe(true); expect(rowLabels.some(text => text.includes('LVR 60%–79.99%'))).toBe(true);
     expect(texts.some(text => text.includes('For LVR') || text.includes('LVR up to'))).toBe(false);
     const saves = tree.root.findAllByType('PressFeedback').filter(n => String(n.props.testID).startsWith('rate-save:'));
     expect(saves[0].props.accessibilityLabel).toContain('Save, Budget Home Loan, Maitland Mutual Limited, Advertised rate 5.79%');
@@ -90,23 +95,22 @@ test.each([false, true])('a product-scoped favorite names all rates rather than 
   } finally { act(() => tree.unmount()); }
 });
 
-test('a mortgage card preserves unspecified purpose in visible and accessible facts', () => {
+test('a compact mortgage row preserves unspecified purpose in full accessible facts', () => {
   const row = { ...loan, loan_purpose: 'UNCONSTRAINED', security_purpose: 'owner_occupied', ribbon_repayment_type: 'UNCONSTRAINED' };
   mockState = { isRateSaved: () => false, toggleSavedRate: mockSave, prefs: { mortgageRateMetric: 'comparison' } };
   let tree!: Tree;
   act(() => { tree = TestRenderer.create(<ProductCard row={row} section="Mortgage" />) as Tree; });
   try {
     const text = tree.root.findAllByType('AppText').map(node => String(node.props.children)).join(' | ');
-    expect(text).toContain('Unspecified purpose');
-    expect(text).toContain('Unspecified');
     expect(text).not.toMatch(/UNCONSTRAINED|Owner occupied|Eligibility confirmed/);
     const nav = tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith('Budget Home Loan,'));
     expect(nav?.props.accessibilityLabel).toContain('Unspecified purpose');
+    expect(nav?.props.accessibilityLabel).toContain('Unspecified');
     expect(row.loan_purpose).toBe('UNCONSTRAINED');
   } finally { act(() => tree.unmount()); }
 });
 
-test('bundled Liberty and Unity OTHER purposes stay explicit in visible and accessible card facts', () => {
+test('bundled Liberty and Unity OTHER purposes stay explicit in compact row accessible facts', () => {
   const rows: RateRow[] = bundledCore.sections.Mortgage.rates.filter(row => row.loan_purpose === 'OTHER');
   expect(rows.map(row => row.provider)).toEqual(['Liberty Financial', 'Unity Bank']);
   expect(rows.every(row => row.security_purpose === 'owner_occupied')).toBe(true);
@@ -115,8 +119,6 @@ test('bundled Liberty and Unity OTHER purposes stay explicit in visible and acce
   let tree!: Tree;
   act(() => { tree = TestRenderer.create(<>{rows.map(row => <ProductCard key={row.product_key} row={row} section="Mortgage" />)}</>) as Tree; });
   try {
-    const text = tree.root.findAllByType('AppText').map(node => String(node.props.children));
-    expect(text.filter(value => value.includes('Other purpose'))).toHaveLength(2);
     for (const row of rows) {
       const action = tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith(`${row.product_name},`));
       expect(action).toBeDefined();
@@ -224,7 +226,7 @@ test('metric collisions use displayed precision and keep the full row facts out 
     expect(action.props.accessibilityLabel).toBe('Save, Unloan Home Loan, Unloan, Comparison rate 5.80%');
     expect(action.props.accessibilityLabel).not.toMatch(/Rate index|Advertised|LVR|Source review|Principal|Variable/);
     const full = tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith('Unloan Home Loan,'))!;
-    expect(full.props.accessibilityLabel).toMatch(/Advertised 5.89%.*Variable.*Principal & interest.*Listed LVR >70%–80%.*Source review required/);
+    expect(full.props.accessibilityLabel).toMatch(/Advertised rate 5.89%.*Variable.*Principal & interest.*Listed LVR >70%–80%.*Source review required/);
     expect(action.props.testID).toBe(`rate-save:${encodeURIComponent(unloan.product_key)}:2`);
   } finally { act(() => tree.unmount()); }
   const rounded = selectedConstraintFixture('Mortgage', [
@@ -305,8 +307,8 @@ test('real bundled same-name deposit products keep distinct Save identities acro
     act(() => { targets[0].props.onPress(); targets[1].props.onPress(); });
     expect(mockSave).toHaveBeenNthCalledWith(1, f.rows[0], 'rate');
     expect(mockSave).toHaveBeenNthCalledWith(2, f.rows[1], 'rate');
-    const facts = tree.root.findAllByType('AppText').map(node => node.props.children);
-    expect(facts).toContain('7 mo · $1k+ · at maturity');
+    const facts = tree.root.findAllByType('PressFeedback').map(node => node.props.accessibilityLabel);
+    expect(facts.some(value => String(value).includes('7 mo · $1k+ · at maturity'))).toBe(true);
     expect(f.rows[0].balance_min).toBeUndefined();
     expect(f.rows[1].balance_min).toBe('1000');
   } finally { act(() => tree.unmount()); }

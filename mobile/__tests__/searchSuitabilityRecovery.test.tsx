@@ -25,6 +25,7 @@ let mockSuppressViewability = false;
 let mockNavigationReady = true;
 let mockCommittedQuery: string | null = null;
 let mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
+let mockBottomInset = 0;
 const mockNavigationListeners = { ready: new Set<() => void>(), state: new Set<() => void>(), blur: new Set<() => void>() };
 const mockNavigation = {
   isReady: () => mockNavigationReady,
@@ -43,7 +44,7 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true, useNavigation: () => mockNavigation }));
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ default: () => mockDimensions }));
-jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: mockBottomInset }) }));
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => jest.requireActual('../src/theme/theme').lightTheme,
 }));
@@ -88,7 +89,7 @@ jest.mock('../src/components/SearchReportExport', () => ({ SearchReportExport: '
 jest.mock('../src/components/FilterSheet', () => ({ FilterSheet: 'FilterSheet' }));
 jest.mock('../src/components/ProductCard', () => ({ ProductCard: 'ProductCard' }));
 jest.mock('../src/components/Screen', () => ({ Screen: 'Screen', screenEdgeStyle: () => ({}), screenScrollContentStyle: () => ({}) }));
-jest.mock('../src/components/ToolbarIconButton', () => ({ ToolbarIconButton: 'ToolbarIconButton' }));
+jest.mock('../src/components/IconAction', () => ({ IconAction: 'IconAction' }));
 jest.mock('../src/components/controls', () => {
   const React = jest.requireActual('react');
   return { SegmentedControl: 'SegmentedControl', SearchBar: (props: any) => {
@@ -106,6 +107,7 @@ jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }
 
 beforeEach(() => {
   mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
+  mockBottomInset = 0;
   mockNavigationReady = true; mockNavigationListeners.ready.clear(); mockNavigationListeners.state.clear(); mockNavigationListeners.blur.clear();
   mockCommittedQuery = null;
   (router.setParams as jest.Mock).mockClear();
@@ -416,7 +418,7 @@ test('filter Cancel discards the real draft and preserves query/type/sort/offset
   try {
     const list = tree.root.findByType('FlashList' as any);
     act(() => tree.root.findByType('SearchBar' as any).props.onChangeText('Macquarie'));
-    act(() => list.findByProps({ title: 'Bank A–Z' }).props.onPress());
+    act(() => list.findByProps({ word: 'Bank' }).props.onPress());
     act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 312 } } }));
     const initialRows = list.props.data, before = captureRatesSession();
     act(() => mockSurfaces.get('rates.results').actions['search.filters.open']());
@@ -495,37 +497,52 @@ test('cold parameterized Rates waits for container-ready before consuming and cl
 
 
 test.each([
-  [411, 1, 3],
-  [360, 1.3, 2],
-  [320, 2, 1],
-])('Rates actions retain usable columns at %s dp and font scale %s', (width, fontScale, columns) => {
+  [411, 1],
+  [360, 1.3],
+  [320, 2],
+])('five Rates icon actions fit at %s dp and font scale %s without a second quick-action row', (width, fontScale) => {
   mockDimensions = { ...mockDimensions, width, fontScale };
   mockState.prefs.includeNonStandard = true;
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
-    const controls = ['Filter', 'Sort', 'Compare'].map(title =>
-      tree.root.findAllByType('Button' as any).find((node: any) => node.props.title === title));
+    const controls = ['Filter', 'Sort', 'Compare', 'Bank', 'More'].map(word =>
+      tree.root.findByProps({ word }));
     const toolbar = controls[0].parent;
     expect(controls.every(control => control.parent === toolbar)).toBe(true);
     expect(toolbar.props.style.flexWrap).toBe('wrap');
     const contentWidth = width - 32;
-    for (const control of controls) {
-      expect(control.props.style.minWidth).toBeGreaterThanOrEqual(48);
-      expect(control.props.style.minWidth).toBeLessThanOrEqual(contentWidth);
-      expect(control.props.style.flexShrink).toBe(0);
-      expect(Math.floor((contentWidth + 8) / (control.props.style.flexBasis + 8))).toBe(columns);
-    }
+    expect(controls.every(control => control.type === 'IconAction')).toBe(true);
+    expect(controls.length * 48 + (controls.length - 1) * toolbar.props.gap).toBeLessThanOrEqual(contentWidth);
+    expect(tree.root.findByType('FlashList' as any).findAllByType('Button' as any).filter((node: any) =>
+      ['Filter', 'Sort', 'Compare', 'Bank A–Z'].includes(node.props.title))).toHaveLength(0);
     const actions = tree.root.findByProps({ accessibilityLabel: 'Search actions' });
-    expect(actions.parent).not.toBe(toolbar);
-    expect(actions.parent.findAllByType('AppText' as any).map((node: any) =>
+    expect(actions.parent).toBe(toolbar);
+    expect(actions.props.word).toBe('More');
+    expect(actions.props.icon).toBe('ellipsis-horizontal');
+    expect(tree.root.findByType('FlashList' as any).findAllByType('AppText' as any).map((node: any) =>
       React.Children.toArray(node.props.children).join(''))).toEqual([
-        tree.root.findByType('FlashList' as any).props.data.length + ' results', 'Advertised rate',
+        tree.root.findByType('FlashList' as any).props.data.length + ' results', 'Advertised',
       ]);
     expect(tree.root.findByType('FlashList' as any).props.contentContainerStyle.paddingTop).toBe(0);
+    act(() => controls[0].props.onPress());
+    const filter = tree.root.findByType('FilterSheet' as any);
+    expect(filter.props.visible).toBe(true);
+    act(() => filter.props.onApply({ ...filter.props.filters, providers: ['Macquarie'] }));
+    expect(controls[0].props.badge).toBe(1);
+    expect(controls[0].props.accessibilityLabel).toBe('Filter (1)');
     act(() => controls[1].props.onPress());
     expect(tree.root.findAllByType('SheetSurface' as any).some((node: any) => node.props.visible && node.props.title === 'Sort')).toBe(true);
     act(() => controls[2].props.onPress());
-    expect(tree.root.findAllByProps({ title: 'Done' })).toHaveLength(1);
+    const done = tree.root.findByProps({ word: 'Done' });
+    expect(done.props.icon).toBe('checkmark-circle');
+    expect(done.props.accessibilityState).toEqual({ selected: true });
+    expect(done.props.active).toBe(true);
+    act(() => controls[3].props.onPress());
+    expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
+    expect(controls[3].props.accessibilityLabel).toBe('Bank A–Z');
+    expect(controls[3].props.accessibilityState).toEqual({ selected: true });
+    act(() => controls[3].props.onPress());
+    expect(useRatesSession.getState().sections.TD.sort).toBe('rate');
     act(() => actions.props.onPress());
     expect(tree.root.findAllByType('SheetSurface' as any).some((node: any) => node.props.visible && node.props.title === 'Search')).toBe(true);
   } finally { act(() => tree.unmount()); }
@@ -545,9 +562,11 @@ test.each([[411, 1], [360, 2]])('the toolbar scrolls inside the list at %s dp / 
     expect(list.props.maintainVisibleContentPosition).toEqual({ disabled: true });
     const input = list.findByType('SearchBar' as any);
     expect(input.props.value).toBe('');
+    expect(input.props.placeholder).toBe('Search');
+    expect(input.props.accessibilityLabel).toBe('Search rates or banks');
     expect(input.props.onSubmitEditing).toBeUndefined();
     expect(list.findAllByType('Button' as any).filter((node: any) => node.props.title === 'Search')).toHaveLength(0);
-    act(() => list.findByProps({ title: 'Filter' }).props.onPress());
+    act(() => list.findByProps({ word: 'Filter' }).props.onPress());
     expect(tree.root.findAllByType('FilterSheet' as any)).toHaveLength(1);
     expect(tree.root.findByType('FilterSheet' as any).props.visible).toBe(true);
     expect(mockSearchMount).toHaveBeenCalledTimes(1);
@@ -563,19 +582,82 @@ test.each([[360, 2], [320, 2], [360, 1.3]])('summary metadata reserves a whole l
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
     const actions = tree.root.findByProps({ accessibilityLabel: 'Search actions' });
-    const summary = actions.parent.findAllByType('AppText' as any)
-      .find((node: any) => node.props.children === 'Comparison rate');
+    const summary = tree.root.findByType('FlashList' as any).findAllByType('AppText' as any)
+      .find((node: any) => node.props.children === 'Comparison');
     expect(summary).toBeDefined();
-    expect(summary.parent.props.style).toMatchObject({ flexBasis: '100%', flexShrink: 0 });
+    expect(summary.props.accessibilityLabel).toBe('Comparison rate');
+    expect(summary.parent.props.style).toMatchObject({ width: '100%', flexShrink: 0 });
+    expect(summary.parent).not.toBe(actions.parent);
     expect(actions.parent.props.style.flexWrap).toBe('wrap');
     expect(summary.parent.findAllByType('Button' as any)).toHaveLength(0);
     expect(summary.props.numberOfLines).toBeUndefined();
     expect(summary.props.adjustsFontSizeToFit).toBeUndefined();
     expect(summary.props.allowFontScaling).not.toBe(false);
-    act(() => actions.parent.findByProps({ title: 'Bank A–Z' }).props.onPress());
+    act(() => actions.parent.findByProps({ word: 'Bank' }).props.onPress());
     expect(useRatesSession.getState().sections.Mortgage.sort).toBe('bank');
     act(() => actions.props.onPress());
     expect(tree.root.findAllByType('SheetSurface' as any).some((node: any) => node.props.visible && node.props.title === 'Search')).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each([[411, 1, 0], [360, 2, 48]])('Compare reserves its own bottom space at %s dp / %s font scale / %s inset without replacing exact selections', (width, fontScale, bottomInset) => {
+  mockDimensions = { ...mockDimensions, width, fontScale };
+  mockBottomInset = bottomInset;
+  mockState.prefs.includeNonStandard = true;
+  (router.push as jest.Mock).mockClear();
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const list = tree.root.findByType('FlashList' as any);
+    const input = tree.root.findByType('SearchBar' as any);
+    const rows = list.props.data.slice(0, 2);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].product_key).toBe(rows[1].product_key);
+    expect(rows[0].rate_index).not.toBe(rows[1].rate_index);
+    const tokens = rows.map((row: any) => `${row.rate_index}#${row.product_key}`);
+    act(() => input.props.onFocus());
+    act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 420 } } }));
+    act(() => tree.root.findByProps({ word: 'Compare' }).props.onPress());
+    const cards = tree.root.findAllByType('ProductCard' as any).slice(0, 2);
+    act(() => cards[0].props.onPress());
+    expect(tree.root.findAllByProps({ testID: 'rates-compare-dock' })).toHaveLength(0);
+    act(() => cards[1].props.onPress());
+
+    const dock = tree.root.findByProps({ testID: 'rates-compare-dock' });
+    const button = dock.findByType('TouchTarget' as any);
+    const screen = tree.root.findByType('Screen' as any);
+    const children = React.Children.toArray(screen.props.children) as React.ReactElement<any>[];
+    const listBodyIndex = children.findIndex(child => child.props.style?.flex === 1);
+    expect(listBodyIndex).toBeGreaterThanOrEqual(0);
+    expect(children[listBodyIndex + 1].type).toBe(dock.parent.type);
+    expect(dock.props.style).toMatchObject({ flexShrink: 0, paddingVertical: 8 });
+    expect(dock.props.style.position).toBeUndefined();
+    expect(dock.props.style.bottom).toBeUndefined();
+    expect(dock.props.style.paddingBottom).toBeUndefined();
+    const buttonStyle = button.props.style({ pressed: false });
+    expect(buttonStyle.minHeight).toBeGreaterThanOrEqual(56);
+    expect(buttonStyle.position).toBeUndefined();
+    expect(buttonStyle.height).toBeUndefined();
+    expect(button.props.fill).toBe(true);
+    expect(button.props.accessibilityLabel).toBe('Compare 2');
+    expect(list.props.contentContainerStyle.paddingBottom).toBe(24);
+    expect(list.props.keyboardShouldPersistTaps).toBe('handled');
+    expect(list.props.keyboardDismissMode).toBe('on-drag');
+
+    act(() => button.props.onPress());
+    expect(router.push).toHaveBeenCalledTimes(1);
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/compare', params: { keys: JSON.stringify(tokens) } });
+    expect(cards.map((card: any) => card.props.selected)).toEqual([true, true]);
+    expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(420);
+    expect(tree.root.findByType('FlashList' as any)).toBe(list);
+    expect(tree.root.findByType('SearchBar' as any)).toBe(input);
+    expect(input.props.focused).toBe(true);
+    expect(mockListMount).toHaveBeenCalledTimes(1);
+    expect(mockSearchMount).toHaveBeenCalledTimes(1);
+    act(() => cards[0].props.onPress());
+    expect(tree.root.findAllByProps({ testID: 'rates-compare-dock' })).toHaveLength(0);
+    expect(cards[1].props.selected).toBe(true);
+    expect(mockListUnmount).not.toHaveBeenCalled();
+    expect(mockSearchUnmount).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });
 
@@ -598,11 +680,11 @@ test('changing result scopes keeps the focused input and exact rate rows mounted
     }
     expect(list.props.data).toHaveLength(exactRows.length);
     for (const row of list.props.data) expect(exactRows).toContain(row);
-    act(() => list.findByProps({ title: 'Bank A–Z' }).props.onPress());
+    act(() => list.findByProps({ word: 'Bank' }).props.onPress());
     expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
     expect(tree.root.findByType('SearchBar' as any)).toBe(input);
     expect(input.props.focused).toBe(true);
-    act(() => list.findByProps({ title: 'Filter' }).props.onPress());
+    act(() => list.findByProps({ word: 'Filter' }).props.onPress());
     const sheet = () => tree.root.findByType('FilterSheet' as any);
     act(() => sheet().props.onDraftChange({ ...sheet().props.controlledDraft, providers: ['Macquarie'] }));
     act(() => sheet().props.onApply(sheet().props.controlledDraft));
@@ -621,20 +703,20 @@ test('one visible tap commits the common sort preset, while advanced Cancel/Back
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
     const list = tree.root.findByType('FlashList' as any);
-    act(() => list.findByProps({ title: 'Bank A–Z' }).props.onPress());
+    act(() => list.findByProps({ word: 'Bank' }).props.onPress());
     expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
     expect(tree.root.findAllByType('SheetSurface' as any).filter((node: any) => node.props.visible)).toHaveLength(0);
     act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 312 } } }));
     const before = captureRatesSession();
     const sortSheet = () => tree.root.findAllByType('SheetSurface' as any).find((node: any) => node.props.title === 'Sort');
     for (const close of ['button', 'back']) {
-      act(() => list.findByProps({ title: 'Sort' }).props.onPress());
+      act(() => list.findByProps({ word: 'Sort' }).props.onPress());
       expect(sortSheet().props.visible).toBe(true);
       act(() => close === 'button' ? sortSheet().findByProps({ title: 'Cancel' }).props.onPress() : sortSheet().props.onClose());
       expect(sortSheet().props.visible).toBe(false);
       expect(captureRatesSession()).toEqual(before);
     }
-    act(() => list.findByProps({ title: 'Sort' }).props.onPress());
+    act(() => list.findByProps({ word: 'Sort' }).props.onPress());
     const commits = jest.fn(), stop = useRatesSession.subscribe(commits);
     act(() => sortSheet().findByProps({ title: 'Advertised rate' }).props.onPress());
     stop();
@@ -643,8 +725,8 @@ test('one visible tap commits the common sort preset, while advanced Cancel/Back
     expect(useRatesSession.getState().sections.TD.sort).toBe('rate');
     expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(0);
     expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 0, animated: false });
-    act(() => list.findByProps({ title: 'Bank A–Z' }).props.onPress());
-    act(() => list.findByProps({ title: 'Advertised rate' }).props.onPress());
+    act(() => list.findByProps({ word: 'Bank' }).props.onPress());
+    act(() => list.findByProps({ word: 'Bank' }).props.onPress());
     expect(useRatesSession.getState().sections.TD.sort).toBe('rate');
     expect(sortSheet().props.visible).toBe(false);
   } finally { act(() => tree.unmount()); }

@@ -34,7 +34,9 @@ Remove description/helper/subtitle APIs from shared components. Ordinary text si
 
 White and near-white surfaces, navy text, blue actions; a corresponding dark palette. Distinct success/caution/danger roles preserve meaning. Android uses system sans-serif/Roboto with real numeric weights. Initial sizes are 22 sp titles, 16 sp controls, 14 sp metadata and 32 sp prominent figures. Use 16 dp gutters and 8/12/16/24 dp spacing; avoid placing every section in a card.
 
-Use compact aligned rate rows with visible tier distinctions. Large text reflows without clipping. Save, selection and loading retain geometry. Touchable bounds remain at least 48 by 48 dp and do not scale with animated content.
+Use dense single-line product rows across one screen width, without horizontal scrolling. Prefer recognisable symbols and icon actions to verbose list labels. Keep the selected metric explicitly identified, distinguish comparison/advertised/ongoing/conditional values, and represent tier distinctions truthfully. Full product identities, conditions, fees and unknowns remain available in the product and accessible row facts. Never invent a symbol meaning or squeeze text by disabling accessibility scaling. Save, selection and loading retain geometry; touchable bounds remain at least 48 by 48 dp and do not scale with animated content.
+
+Icon bubbles contain one reviewed word only. A short press performs the action; holding an icon shows its label without performing that action. Use a gentle opacity transition, dismiss on Back/outside touch, and respect reduced motion. These labels do not permit explanatory prose in bubbles or elsewhere. This product-list direction was updated by the user on 15 October 2026; earlier multi-line screenshots remain historical evidence.
 
 | Interaction | Initial target |
 | --- | --- |

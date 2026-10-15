@@ -16,10 +16,10 @@ import type { BackgroundWorkSnapshot } from './backgroundPayloadWork';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
-  '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
+  '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '#', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
   'Rates', 'Saved', 'Market', 'Account', 'Profile', 'Settings', 'About',
   'Home loans', 'Savings', 'Savings accounts', 'Term deposits', 'Mortgage', 'TD',
-  'Calculate', 'Rate check', 'Projection', 'Compare', 'Filter', 'Sort', 'Search',
+  'Calculate', 'Rate check', 'Projection', 'Compare', 'Filter', 'Sort', 'Search', 'More', 'Bonus', 'Conditional',
   'Search rates or banks', 'Search actions', 'Clear search', 'Clear', 'Reset', 'Apply',
   'Cancel', 'Close', 'Back', 'Navigate up', 'Done', 'Save', 'Saved rate', 'Remove',
   'Share', 'Copy', 'Copied', 'Export', 'Import', 'Retry', 'Refresh', 'Open', 'View',
