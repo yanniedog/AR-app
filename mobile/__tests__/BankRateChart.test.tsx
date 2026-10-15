@@ -48,7 +48,7 @@ test('a full 73-bank, 137-day history uses three data paths and retains every ob
     expect(String(path(tree, 'bank-rate-background').props.d).match(/[ML]/g)).toHaveLength(73 * 137);
     expect(String(path(tree, 'bank-rate-selected-line').props.d).match(/[ML]/g)).toHaveLength(137);
     expect(String(path(tree, 'bank-rate-selected-observations').props.d).match(/Z/g)).toHaveLength(137);
-    expect(JSON.stringify(tree.toJSON())).toContain('137 observed days');
+    expect(JSON.stringify(tree.toJSON())).toContain('Observed · 137 days');
   } finally { act(() => tree.unmount()); }
 });
 
@@ -64,7 +64,7 @@ test('bank switching reuses the model and prepared context without recalculating
     const firstMarkers = path(tree, 'bank-rate-selected-observations').props.d;
     const reads = historicalReads;
     expect(reads).toBeGreaterThan(0);
-    const next = tree.root.findAll(node => node.props.accessibilityLabel === 'Next bank alphabetically' && typeof node.props.onPress === 'function')[0];
+    const next = tree.root.findAll(node => node.props.accessibilityLabel === 'Next bank' && typeof node.props.onPress === 'function')[0];
     act(() => { (next.props.onPress as () => void)(); });
     expect(tree.root.findByType(BankRateChart).props.model).toBe(model);
     expect(path(tree, 'bank-rate-background').props).toBe(background);
@@ -72,8 +72,8 @@ test('bank switching reuses the model and prepared context without recalculating
     expect(path(tree, 'bank-rate-selected-observations').props.d).not.toBe(firstMarkers);
     expect(historicalReads).toBe(reads);
     expect(tree.root.findAllByType(Path)).toHaveLength(3);
-    expect(JSON.stringify(tree.toJSON())).toContain('Bank 1. Mean');
-    const previous = tree.root.findAll(node => node.props.accessibilityLabel === 'Previous bank alphabetically' && typeof node.props.onPress === 'function')[0];
+    expect(JSON.stringify(tree.toJSON())).toContain('Bank 1 · Mean');
+    const previous = tree.root.findAll(node => node.props.accessibilityLabel === 'Previous bank' && typeof node.props.onPress === 'function')[0];
     act(() => { (previous.props.onPress as () => void)(); });
     expect(path(tree, 'bank-rate-selected-line').props.d).toBe(firstLine);
     expect(path(tree, 'bank-rate-selected-observations').props.d).toBe(firstMarkers);
@@ -106,7 +106,7 @@ test.each(['bank', 'whole catalogue'])('missing %s observations break the line w
   try {
     expect(String(path(tree, 'bank-rate-selected-line').props.d).match(/[ML]/g)).toEqual(['M', 'L', 'M']);
     expect(String(path(tree, 'bank-rate-selected-observations').props.d).match(/Z/g)).toHaveLength(3);
-    expect(JSON.stringify(tree.toJSON())).toContain('3 observed days');
+    expect(JSON.stringify(tree.toJSON())).toContain('Observed · 3 days');
     expect(JSON.stringify(tree.toJSON())).not.toMatch(/NaN|Infinity/);
   } finally { act(() => tree.unmount()); }
 });
@@ -116,8 +116,8 @@ test('a single-date fallback explicitly reports that earlier matching observatio
   try {
     expect(String(path(tree, 'bank-rate-selected-line').props.d).match(/[ML]/g)).toEqual(['M']);
     expect(String(path(tree, 'bank-rate-selected-observations').props.d).match(/Z/g)).toHaveLength(1);
-    expect(JSON.stringify(tree.toJSON())).toContain('1 observed day');
-    expect(JSON.stringify(tree.toJSON())).toContain('Earlier matching observations unavailable.');
+    expect(JSON.stringify(tree.toJSON())).toContain('Observed · 1 days');
+    expect(JSON.stringify(tree.toJSON())).toContain('Partial');
     expect(JSON.stringify(tree.toJSON())).not.toMatch(/NaN|Infinity/);
   } finally { act(() => tree.unmount()); }
 });

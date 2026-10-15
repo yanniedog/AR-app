@@ -1,6 +1,6 @@
 # Australian Rates — Rate Ledger atomic redesign and app-health plan
 
-Status: implemented downstream in AR-app
+Status: historical implementation plan; consumer design and navigation are superseded by the [14 October Android redesign contract](ANDROID_REDESIGN_CONTRACT.md). Retain the financial and audit invariants; do not reuse the old consumer layout as the current target.
 Repository: `yanniedog/AR-app` (`mobile/` remains the app root)
 Producer dependency: `yanniedog/AR-local`
 Language: Australian English
@@ -110,10 +110,10 @@ The current screen set mixes Material dynamic colour, Ionicons/Material Symbols,
 
 ## 5. Information architecture (superseded)
 
-The September 2026 navigation overhaul replaces this original four-tab plan.
-The current implementation contract is [NAVIGATION.md](NAVIGATION.md); its route
-ownership, five destinations, visible tools and persistent detail navigation take
-precedence over the historical composition and acceptance notes below.
+The September 2026 five-destination navigation in [NAVIGATION.md](NAVIGATION.md)
+is historical. The [Android redesign contract](ANDROID_REDESIGN_CONTRACT.md)
+now governs the migration to Rates, Saved and Market, with contextual tools and
+legacy route compatibility. Neither historical map below is the target contract.
 
 ### Primary destinations
 

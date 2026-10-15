@@ -1,87 +1,31 @@
 import React from 'react';
-import { Modal, StyleSheet, type ViewStyle } from 'react-native';
-import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
-
-import {
-  AppNavigationMenu,
-  NavigationMenuButton,
-  NavigationMenuProvider,
-} from '../src/components/AppNavigationMenu';
-import { AppText } from '../src/components/ui';
-
-type TestNode = {
-  props: Record<string, unknown>;
-  findAll: (predicate: (node: TestNode) => boolean) => TestNode[];
-  findByType: (type: React.ElementType) => TestNode;
-  findAllByType: (type: React.ElementType) => TestNode[];
-};
-type InspectableRenderer = ReactTestRenderer & { root: TestNode };
-type NavigationButton = TestNode & {
-  props: {
-    onPress: () => void;
-    accessibilityState: { selected?: boolean };
-    style: (state: { pressed: boolean }) => ViewStyle;
-  };
-};
-
+import TestRenderer, { act } from 'react-test-renderer';
+import { Keyboard, Modal } from 'react-native';
+import { SheetSurface } from '../src/components/SheetSurface';
+import { AppNavigationMenu, NavigationMenuButton, NavigationMenuProvider } from '../src/components/AppNavigationMenu';
 const mockNavigate = jest.fn();
-let mockPathname = '/rba';
-jest.mock('expo-router', () => ({
-  router: { navigate: (...args: unknown[]) => mockNavigate(...args) },
-  usePathname: () => mockPathname,
-  useGlobalSearchParams: () => ({}),
-}));
-jest.mock('../src/data/store', () => ({
-  useStore: (selector: (state: unknown) => unknown) => selector({
-    activeSection: 'Savings',
-    prefs: { onboarded: true, interests: ['Savings'] },
-  }),
-}));
+jest.mock('expo-router', () => ({ router: { navigate: (...args: unknown[]) => mockNavigate(...args) }, usePathname: () => '/settings' }));
+jest.mock('../src/data/store', () => ({ useStore: (selector: any) => selector({ hydrated: true }) }));
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 24, left: 0 }) }));
 jest.mock('../src/hooks/useReducedMotion', () => ({ useReducedMotion: () => true }));
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
-}));
-
-it('opens the app menu and closes it before navigating to RBA rates and outlook', () => {
-  let nextFrame: Parameters<typeof requestAnimationFrame>[0] | undefined;
-  const frame = jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
-    nextFrame = callback;
-    return 1;
-  });
-  let tree!: InspectableRenderer;
-  mockNavigate.mockClear();
-  mockPathname = '/rba';
-  act(() => {
-    tree = TestRenderer.create(
-      <NavigationMenuProvider>
-        <NavigationMenuButton />
-        <AppNavigationMenu />
-      </NavigationMenuProvider>,
-    ) as InspectableRenderer;
-  });
-  const button = (label: string) => tree.root.findAll((node) =>
-    node.props.accessibilityLabel === label && typeof node.props.onPress === 'function',
-  )[0] as NavigationButton;
+it('opens one Account sheet with three destinations, closes before navigation and handles Cancel', () => {
+  let nextFrame: FrameRequestCallback | undefined;
+  const frame = jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => { nextFrame = callback; return 1; });
+  const keyboard = jest.spyOn(Keyboard, 'isVisible').mockReturnValue(false);
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<NavigationMenuProvider><NavigationMenuButton /><AppNavigationMenu /></NavigationMenuProvider>); });
+  const control = (label: string) => tree.root.findAll((node: any) => node.props.accessibilityLabel === label && typeof node.props.onPress === 'function')[0];
   try {
-    act(() => { button('Open app menu').props.onPress(); });
-    expect(tree.root.findByType(Modal).props.visible).toBe(true);
-    expect(tree.root.findAllByType(AppText).some((node) => node.props.children === 'Menu')).toBe(true);
-    for (const group of ['Start', 'Rates', 'Saved', 'Market', 'Tools', 'App']) {
-      expect(tree.root.findAllByType(AppText).some((node) => node.props.children === group && node.props.accessibilityRole === 'header')).toBe(true);
-    }
-    const rba = button('RBA rates and outlook');
-    expect(rba.props.accessibilityState.selected).toBe(true);
-    expect(StyleSheet.flatten(rba.props.style({ pressed: false })).minHeight).toBeGreaterThanOrEqual(48);
-    for (const label of ['Your profile', 'Settings', 'About and help', 'Market overview', 'Home', 'Find rates', 'Tools overview']) {
-      expect(button(label).props.accessibilityState.selected).toBe(false);
-    }
-    act(() => { rba.props.onPress(); });
+    act(() => control('Account').props.onPress());
+    const sheet = tree.root.findByType(SheetSurface); expect(sheet.props.visible).toBe(true);
+    expect(tree.root.findByType(Modal).props).toMatchObject({ visible: true, animationType: 'none' });
+    expect(['Profile', 'Settings', 'About'].map(label => Boolean(control(label)))).toEqual([true, true, true]);
+    expect(control('Settings').props.accessibilityState.selected).toBe(true);
+    act(() => control('Profile').props.onPress());
+    expect(tree.root.findByType(SheetSurface).props.visible).toBe(false); expect(mockNavigate).not.toHaveBeenCalled();
+    act(() => nextFrame!(0)); expect(mockNavigate).toHaveBeenCalledWith('/profile');
+    act(() => control('Account').props.onPress()); act(() => tree.root.findByType(Modal).props.onRequestClose());
+    expect(tree.root.findByType(SheetSurface).props.visible).toBe(false);
     expect(tree.root.findByType(Modal).props.visible).toBe(false);
-    expect(mockNavigate).not.toHaveBeenCalled();
-    act(() => { nextFrame!(0); });
-    expect(mockNavigate).toHaveBeenCalledWith('/rba');
-  } finally {
-    act(() => { tree.unmount(); });
-    frame.mockRestore();
-  }
+  } finally { act(() => tree.unmount()); frame.mockRestore(); keyboard.mockRestore(); }
 });

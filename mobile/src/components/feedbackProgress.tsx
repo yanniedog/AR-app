@@ -6,10 +6,15 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import type { PayloadProgressSnapshot } from '../data/downloadProgress';
-import { buildPayloadProgressViewModel } from '../data/downloadProgress';
+import { buildPayloadProgressViewModel, computeTransferRate, computeEtaSeconds } from '../data/downloadProgress';
 import { useTheme } from '../theme/ThemeProvider';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { AppText, Row } from './ui';
+import { uiJoin, uiNumber, uiIdentifier, type UiCopy, type UiLabel } from '../lib/uiCopy';
+const PHASE_LABELS: Record<PayloadProgressSnapshot['phase'], UiLabel> = {
+  manifest: 'Checking', finalize: 'Pending', download: 'Downloading', verify: 'Verifying',
+  inflate: 'Preparing', parse: 'Preparing', install: 'Install',
+};
 
 /** Always-visible determinate sync bar with phase label and ETA. */
 export function PayloadProgressBar({
@@ -17,7 +22,7 @@ export function PayloadProgressBar({
   caption,
 }: {
   progress: PayloadProgressSnapshot;
-  caption?: string;
+  caption?: UiCopy;
 }) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
@@ -86,10 +91,10 @@ export function PayloadProgressBar({
       ) : null}
       <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
         <AppText variant="tiny" weight="700" color="textMuted" style={{ flex: 1, paddingRight: 8 }}>
-          {vm.phaseText}
+          {PHASE_LABELS[progress.phase]}
         </AppText>
         <AppText variant="tiny" weight="700" color="primary">
-          {vm.softMotion ? `${vm.overallPercent}%…` : `${vm.overallPercent}%`}
+          {uiJoin(uiNumber(vm.overallPercent), '%', vm.softMotion ? '…' : '')}
         </AppText>
       </Row>
       <View
@@ -134,7 +139,7 @@ export function PayloadProgressBar({
         )}
       </View>
       <AppText variant="tiny" color="textFaint" numberOfLines={1}>
-        {vm.detailLine}
+        {uiJoin(uiIdentifier(progress.fileName), ' · ', uiNumber(computeTransferRate(progress.bytesReceived, progress.startedAt, nowTick)), ' ', 'bytes', '/', 'seconds', ' · ', 'ETA', ': ', uiNumber(computeEtaSeconds(progress.bytesReceived, progress.totalBytes, computeTransferRate(progress.bytesReceived, progress.startedAt, nowTick))), ' ', 'seconds')}
       </AppText>
     </View>
   );
@@ -149,8 +154,8 @@ export function IndeterminateProgressBar({
   caption,
   accessibilityLabel = 'Preparing rates',
 }: {
-  caption?: string;
-  accessibilityLabel?: string;
+  caption?: UiCopy;
+  accessibilityLabel?: UiCopy;
 }) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();

@@ -8,13 +8,13 @@ import {
 
 const read = (relative: string) => readFileSync(require.resolve(relative), 'utf8');
 
-it('provides five distinct, plainly named destinations', () => {
-  expect([...TAB_BAR_ORDER]).toEqual(['index', 'browse', 'watchlist', 'market', 'tools']);
-  expect(TAB_BAR_ORDER.map(primaryTabLabel)).toEqual(['Home', 'Rates', 'Saved', 'Market', 'Tools']);
+it('provides three distinct, plainly named destinations', () => {
+  expect([...TAB_BAR_ORDER]).toEqual(['browse', 'watchlist', 'market']);
+  expect(TAB_BAR_ORDER.map(primaryTabLabel)).toEqual(['Rates', 'Saved', 'Market']);
 });
 
 it.each(['/', '/onboarding', '/onboarding/step', '/product/a'])(
-  'withholds section navigation before onboarding on %s',
+  'withholds section navigation before preference hydration on %s',
   (path) => expect(shouldShowAppTabBar(path, false)).toBe(false),
 );
 
@@ -34,15 +34,15 @@ it.each([
 });
 
 it.each([
-  ['/', 'index'], ['/product/x', 'browse'], ['/search', 'browse'],
+  ['/', 'browse'], ['/product/x', 'browse'], ['/search', 'browse'],
   ['/categories', 'browse'], ['/matches', 'browse'], ['/catalogue', 'browse'],
   ['/banks', 'browse'], ['/bank/a', 'browse'], ['/rate-receipt', 'browse'],
   ['/watchlist', 'watchlist'], ['/market', 'market'], ['/passthrough', 'market'],
   ['/rba-response', 'market'], ['/trends', 'market'], ['/rba', 'market'],
-  ['/bank-rates', 'market'], ['/research', 'market'], ['/tools', 'tools'],
-  ['/calculator', 'tools'], ['/projections', 'tools'], ['/calculation-receipt', 'tools'],
-  ['/profile', 'tools'], ['/settings', 'tools'], ['/debug-log', 'tools'],
-  ['/third-party-notices', 'tools'], ['/about', 'tools'],
+  ['/bank-rates', 'market'], ['/research', 'market'], ['/tools', 'browse'],
+  ['/calculator', 'browse'], ['/projections', 'browse'], ['/calculation-receipt', 'browse'],
+  ['/profile', 'browse'], ['/settings', 'browse'], ['/debug-log', 'browse'],
+  ['/third-party-notices', 'browse'], ['/about', 'browse'],
 ])('assigns %s to its stable section %s', (path, owner) => {
   expect(resolveActiveTab(path)).toBe(owner);
   expect(resolveActiveTab(`${path}?source=menu`)).toBe(owner);
@@ -54,29 +54,27 @@ it.each(['/unknown', '/constructor', '/__proto__', '/banking', '/rba-other'])(
 );
 
 it('makes only exact section roots tab reselect no-ops', () => {
-  expect(isPrimaryTabRootPath('/(tabs)', 'index')).toBe(true);
+  expect(isPrimaryTabRootPath('/(tabs)', 'browse')).toBe(true);
   expect(isPrimaryTabRootPath('/browse/', 'browse')).toBe(true);
   expect(isPrimaryTabRootPath('/(tabs)/market', 'market')).toBe(true);
-  expect(isPrimaryTabRootPath('/tools?from=menu', 'tools')).toBe(true);
+  expect(isPrimaryTabRootPath('/tools?from=menu', 'browse')).toBe(false);
   expect(isPrimaryTabRootPath('/passthrough', 'market')).toBe(false);
   expect(isPrimaryTabRootPath('/product/x', 'browse')).toBe(false);
 });
 
-it('clears compatibility category parameters when returning to the Rates hub', () => {
-  expect(tabHref('browse')).toEqual({
-    pathname: '/(tabs)/browse', params: { section: undefined, path: undefined, request: undefined },
-  });
-  expect(tabHref('index')).toBe('/(tabs)');
+it('tab navigation retains the existing results task instead of clearing scope', () => {
+  expect(tabHref('browse')).toBe('/(tabs)/browse');
   expect(tabHref('market')).toBe('/(tabs)/market');
-  expect(tabHref('tools')).toBe('/(tabs)/tools');
+  expect(tabHref('watchlist')).toBe('/(tabs)/watchlist');
 });
 
 it('retains native Back history on cold-start links and explicitly registers moved pages', () => {
   const root = read('../app/_layout.tsx');
   const tabs = read('../app/(tabs)/_layout.tsx');
-  for (const source of [root, tabs]) {
-    expect(source).toMatch(/unstable_settings\s*=\s*{[\s\S]*initialRouteName:\s*'index'/);
-  }
+  expect(root).toMatch(/initialRouteName:\s*'\(tabs\)'/);
+  expect(tabs).toMatch(/initialRouteName:\s*'browse'/);
+  expect(tabs).toContain('name="index" options={{ href: null');
+  expect(tabs).toContain('name="tools" options={{ href: null');
   for (const route of [
     'node', 'categories', 'matches', 'catalogue', 'bank-rates', 'passthrough',
     'search', 'product/[key]', 'bank/[provider]', 'rba-response', 'rba', 'research',

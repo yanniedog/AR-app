@@ -28,7 +28,6 @@ describe('maximum performance audit profile', () => {
       enableDeepSearch: true,
       showHistoryRibbon: true,
       rateIntelligencePro: true,
-      onboarded: true,
       dismissedUpdateBuild: null,
     });
     expect(profile.interests).toEqual(SECTION_ORDER);

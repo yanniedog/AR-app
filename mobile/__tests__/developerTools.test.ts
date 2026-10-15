@@ -26,14 +26,21 @@ describe('quiet diagnostics access', () => {
   });
 });
 
-describe('consent banner placement', () => {
-  it('only reserves tab-bar space on routes that actually show the bar', () => {
+describe('optional consent access', () => {
+  it('keeps browsing ungated and exposes privacy choices only through Settings', () => {
     expect(shouldShowAppTabBar('/onboarding', false)).toBe(false);
     expect(shouldShowAppTabBar('/', false)).toBe(false);
     expect(shouldShowAppTabBar('/', true)).toBe(true);
 
     const layout = read('../app/_layout.tsx');
-    expect(layout).toContain('aboveTabBar={tabBarVisible}');
-    expect(layout).toContain('const tabBarVisible = shouldShowAppTabBar(pathname, onboarded);');
+    expect(layout).not.toContain('OptionalReportingConsentBanner');
+    expect(layout).toContain('<AppTabBar />');
+    expect(read('../src/components/AppTabBar.tsx')).toContain('if (!shouldShowAppTabBar(pathname, hydrated)) return null;');
+    const settings = read('../app/settings.tsx');
+    expect(settings).toContain('title="Optional reporting"');
+    expect(settings).toContain('<InfoRow label="Consent" value="Undecided" />');
+    expect(settings).toContain('<Button title="Allow" onPress={() => confirmCrashChoice(true)}');
+    expect(settings).toContain('<Button title="Decline" variant="secondary" onPress={() => confirmCrashChoice(false)}');
+    expect(settings).toContain('<InfoRow label="Session replay" value="Not collected" />');
   });
 });

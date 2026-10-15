@@ -32,6 +32,7 @@ import { Ribbon } from './Ribbon';
 import { screenScrollContentStyle } from './Screen';
 import { AppText, Card, Row } from './ui';
 import { EmptyState } from './feedback';
+import { uiCount, uiJoin, uiLabel } from '../lib/uiCopy';
 
 type Item = { kind: 'node'; node: TaxoNode } | { kind: 'product'; row: RateRow };
 
@@ -139,7 +140,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
     const detailsKey = (detailsProducts as object | null) ?? NO_DETAILS;
     let byKey = byDetails.get(detailsKey);
     if (!byKey) {
-      byKey = new Map();
+      byKey = new Map<string, ReturnType<typeof computeHierarchyView>>();
       byDetails.set(detailsKey, byKey);
     }
     const cacheKey = `${section}|${pathKey}|${includeNonStandard ? 1 : 0}|${depositRankMetric}|${mortgageRateMetric}|${suitabilityRevision}`;
@@ -177,14 +178,15 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
     },
     'browse.category.first': (...args: unknown[]) => {
       const requested = auditActionString(args, 'section');
+      const requestedSection = SECTION_KEYS.find(section => section === requested);
       const exactPath = auditActionStrings(args, 'taxonomyPath');
       if (
         requested &&
-        SECTION_KEYS.includes(requested as SectionKey) &&
-        availableSections.includes(requested as SectionKey) &&
+        requestedSection &&
+        availableSections.includes(requestedSection) &&
         exactPath.length
       ) {
-        openBrowseDrill(requested as SectionKey, [exactPath[0]]);
+        openBrowseDrill(requestedSection, [exactPath[0]]);
         return;
       }
       const first = children[0];
@@ -197,6 +199,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
     },
     'browse.category.deepest': (...args: unknown[]) => {
       const requested = auditActionString(args, 'section');
+      const requestedSection = SECTION_KEYS.find(section => section === requested);
       const exactPath = auditActionStrings(args, 'taxonomyPath');
       if (!exactPath.length) {
         return {
@@ -205,12 +208,12 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
       }
       if (
         requested &&
-        (!SECTION_KEYS.includes(requested as SectionKey) ||
-          !availableSections.includes(requested as SectionKey))
+        (!requestedSection ||
+          !availableSections.includes(requestedSection))
       ) {
         return { unavailableReason: 'The requested audit section is not available' };
       }
-      const targetSection = requested ? requested as SectionKey : section;
+      const targetSection = requestedSection ?? section;
       openBrowseDrill(targetSection, exactPath);
     },
     'browse.category.back': () => openBrowseDrill(section, path.slice(0, -1)),
@@ -283,13 +286,13 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
           onPress={() => openBrowseDrill(section, path.slice(0, -1))}
           hitSlop={theme.spacing(2)}
           accessibilityRole="button"
-          accessibilityLabel="Back to parent category"
+          accessibilityLabel="Back"
           style={{ minHeight: 48, justifyContent: 'center' }}
         >
           <Row gap={4} style={{ alignItems: 'center' }}>
             <Ionicons name="chevron-back" size={16} color={theme.colors.primary} />
             <AppText variant="small" weight="700" style={{ color: theme.colors.primary }}>
-              Back
+              {uiLabel('Back')}
             </AppText>
           </Row>
         </Pressable>
@@ -303,12 +306,12 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
           ) : null}
           <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap', paddingVertical: theme.spacing(2) }}>
             <AppText variant="small" weight="500" color="textMuted">
-              {isLeaf ? `${stats.products} ${stats.products === 1 ? 'product' : 'products'}` : 'Browse by category'}
+              {isLeaf ? uiJoin(uiCount(stats.products), ' ', 'products') : uiLabel('Categories')}
             </AppText>
             {!isLeaf ? (
               <Pressable onPress={() => openProductsList(section, path)} accessibilityRole="button" style={{ minHeight: 48, justifyContent: 'center' }}>
                 <AppText variant="small" weight="700" style={{ color: theme.colors.primary }}>
-                  All {stats.products} products →
+                  {uiJoin('All', ' ', uiCount(stats.products), ' ', 'products', ' ', '→')}
                 </AppText>
               </Pressable>
             ) : null}
@@ -337,7 +340,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
       }
       contentContainerStyle={screenScrollContentStyle(theme, insets.bottom, width)}
       ListHeaderComponent={header}
-      ListEmptyComponent={<EmptyState title="No products here" />}
+      ListEmptyComponent={<EmptyState title="No results" />}
       renderItem={({ item }) =>
         item.kind === 'node' ? (
           <CategoryRow

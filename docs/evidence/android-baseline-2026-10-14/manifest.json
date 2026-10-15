@@ -1,0 +1,332 @@
+{
+  "schema_version": 1,
+  "capture_date": "2026-10-14",
+  "source_inventory_revision": "7e4caee4e4fbd1957449c372761aece5cf6a7e5b",
+  "capture_environment": {
+    "android": "16",
+    "api": "36.1",
+    "emulator_abi": "x86_64",
+    "pixels": "1080x2400",
+    "density_dpi": 420,
+    "font_scale": 1
+  },
+  "artifacts": [
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/05-fresh-ready.png",
+      "sha256": "866446f10ab9478bba3322d29ad549076d428270bde37d37213e12fa20164ef8",
+      "bytes": 214568,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/05-fresh-ready.xml",
+      "sha256": "3fcaacc9fa21d781c719c09f6f1cc184a11d3192fd7a79157491cd4bd0ebed36",
+      "bytes": 12874,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "uiautomator-hierarchy"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/12-rates.png",
+      "sha256": "961afeebe46bd4ffa33b3c5f9b1208fcf19538a0a325d82a7c2313ae36adb754",
+      "bytes": 198288,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/12-rates.xml",
+      "sha256": "d55d23914438d40129f858e117cde8fdc0aa521fbdeea42e0128a2cfc66dfe3f",
+      "bytes": 20973,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "uiautomator-hierarchy"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/13-product-top.png",
+      "sha256": "3ab5b2a4d2686135fd04bff10e4eb862a7b165bf8a5519a96c039661367dface",
+      "bytes": 183763,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/13-product-top.xml",
+      "sha256": "a58f5c98695b0bbe92639a92b8657a4b835b1ab6aad22b00e6400e01aea3fd39",
+      "bytes": 14591,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "uiautomator-hierarchy"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/14-product-middle.png",
+      "sha256": "4005ea5bc3f53871af715f4b4a45596f2ac2592bde788e7d3a193c8a866746e7",
+      "bytes": 170271,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/14-product-middle.xml",
+      "sha256": "01388dd96680ced7bdcab30bed4ab5c7e0e620535e409a7699b807439e74ca20",
+      "bytes": 16551,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "uiautomator-hierarchy"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/15-product-saved.png",
+      "sha256": "bef5ee81480462949338941705f98de872e105822ef9bdec9ee48fe9e9f0e83e",
+      "bytes": 196393,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/15-product-saved.xml",
+      "sha256": "76e10a8e55549246e43d9e5e028d5b3ee13f74c2d71f4a9350c7649ea8e45bcf",
+      "bytes": 15041,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "uiautomator-hierarchy"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/16-saved.png",
+      "sha256": "f4894f12c6483ee0124866284cf74f70085e49314239aa2aa6588955d757068a",
+      "bytes": 180915,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/16-saved.xml",
+      "sha256": "aeef5f44b03f0bb2d19a140d6c1ead602762c39b16ce2bb9831a1823735f9680",
+      "bytes": 15413,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "uiautomator-hierarchy"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/17-market.png",
+      "sha256": "491ce89434fe88659e46bbfe69776b1d2b062617b54bb1c4ea201e4e14d0f881",
+      "bytes": 170071,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/17-market.xml",
+      "sha256": "4b29ec861f889c8e72b98e835e77701152572e474bb3be2d706ece380f332b54",
+      "bytes": 13462,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "uiautomator-hierarchy"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/19-tools-hub.png",
+      "sha256": "3cb039aa647ccdd6b68ca86a7ef2ec749e87e2f80d52942e8d81291750b25e9e",
+      "bytes": 162375,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/19-tools-hub.xml",
+      "sha256": "5bbf97d75bc298ab42d762838e73f0bf9d38658c276dd9cdb1e65ec86f536dc2",
+      "bytes": 13414,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "uiautomator-hierarchy"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/24-rates-bottom.png",
+      "sha256": "28548e9e0d56fdb6299ae249e8ae63973f46f0530911abd748637f342eff2905",
+      "bytes": 180069,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/24-rates-bottom.xml",
+      "sha256": "78a7131e4ad527175e4284217fe40f97f7e5621be477dbfc8ab05caa15d0a35f",
+      "bytes": 15423,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "uiautomator-hierarchy"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/26-before-press.png",
+      "sha256": "d156f7d09f0083e85ab17267779f3a8ac90948a7686d910d2483e4f15415b496",
+      "bytes": 179717,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/26-before-press.xml",
+      "sha256": "78a7131e4ad527175e4284217fe40f97f7e5621be477dbfc8ab05caa15d0a35f",
+      "bytes": 15423,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "uiautomator-hierarchy"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/28-search-results.png",
+      "sha256": "b9301665e329dc0356d344c1b120d76b456817c6a183e2e93ce68ec6e475a5f6",
+      "bytes": 209447,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/28-search-results.xml",
+      "sha256": "16c75c932dc99c19e547422d8d12e01d6ae6e160e62585b6fd7ef263f7053eb5",
+      "bytes": 20049,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "uiautomator-hierarchy"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/27-held-button.png",
+      "sha256": "27231f93404d50b0d3fd7ab9bc9c1c6ebf11436fbee02e298d409f85e3005fd4",
+      "bytes": 179857,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/baseline-motion.mp4",
+      "sha256": "e37172a4532a9a3c43f2dcfddedf04c950bc52288614a3f8ba6ef37ce480e24d",
+      "bytes": 192304,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "capture_date": "2026-10-14",
+      "kind": "native-recording"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.239-b296/phase1-settled.png",
+      "sha256": "bcd2f271e0a4c5e6a8f1fd75320a7e6beff989a60596eee506ffe7bad1e6bb38",
+      "bytes": 212034,
+      "app_version": "1.0.239",
+      "app_build": "296",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "f756137cddcb9a0a360b13150424af6f2ccea9bc",
+      "capture_date": "2026-10-14",
+      "kind": "screenshot"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.237-b295/published-apk-manifest.json",
+      "sha256": "2dc507ee2287896477655575837db07ba8f0430bbd3091b37ee7fa6ace4219f9",
+      "bytes": 758,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "kind": "published-release-manifest",
+      "retained_on": "2026-10-14"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/v1.0.239-b296/published-apk-manifest.json",
+      "sha256": "9e65e7b2ee15d0cf93c4d304a10466391753ef03a840e3be9605c80a3c89086f",
+      "bytes": 758,
+      "app_version": "1.0.239",
+      "app_build": "296",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "f756137cddcb9a0a360b13150424af6f2ccea9bc",
+      "kind": "published-release-manifest",
+      "retained_on": "2026-10-14"
+    },
+    {
+      "path": "docs/evidence/android-baseline-2026-10-14/operator-report.md",
+      "sha256": "699185e2c48bff27d585c14f68488fdd45c637f42f623efd9df6f07738acd63f",
+      "bytes": 3053,
+      "app_version": "1.0.237",
+      "app_build": "295",
+      "package_name": "com.eyex.australianrates",
+      "apk_source_sha": "947884a4daf0323c30401453de38d579e75b193d",
+      "kind": "operator-report",
+      "recorded_on": "2026-10-14",
+      "independently_verified": false
+    }
+  ],
+  "limitations": [
+    "Version association comes from the capture operator installed-APK verification and retained release manifests, not from a version field embedded in each screenshot.",
+    "Historical v1.0.237 captures are not native acceptance of the newer source inventory.",
+    "The v1.0.239 capture shows onboarding; its filename does not establish a completed user journey.",
+    "No paired hierarchy exists for phase1-settled.png or the held-button screenshot.",
+    "Motion recording is retained evidence, not measured frame timing or physical haptic proof.",
+    "The operator report preserves scoped observations, not a retained original input/timestamp log or independently verified complete totals."
+  ]
+}

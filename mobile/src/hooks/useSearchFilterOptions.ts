@@ -7,6 +7,8 @@ import {
 } from '../data/searchFilterOptions';
 import { scheduleAfterNavigation } from '../lib/yieldToUi';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
+import { uiJoin, type UiCopy } from '../lib/uiCopy';
+import { debugLog } from '../lib/debugLog';
 
 /** Warm search facets after navigation, never on the synchronous route render.
  * Replaced payloads/profile gates immediately invalidate the visible model. */
@@ -25,7 +27,7 @@ export function useSearchFilterOptions(
     revision: number;
     attempt: number;
     options: SearchFilterOptions | null;
-    error: string | null;
+    error: UiCopy | null;
   } | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -33,8 +35,10 @@ export function useSearchFilterOptions(
       void prepareSearchFilterOptions(rows, details, section, { cancelled: () => cancelled }).then(options => {
         if (!cancelled && options) setSnapshot({ rows, details, section, revision, attempt, options, error: null });
       }).catch(error => {
-        if (!cancelled) setSnapshot({ rows, details, section, revision, attempt, options: null,
-          error: error instanceof Error && error.message.trim() ? error.message : 'Could not prepare search filters' });
+        if (!cancelled) {
+          debugLog.error('searchFilterOptions', error instanceof Error ? error.message : String(error));
+          setSnapshot({ rows, details, section, revision, attempt, options: null, error: uiJoin('Filter', ' · ', 'Unavailable') });
+        }
       });
     });
     return () => { cancelled = true; cancelNavigation(); };

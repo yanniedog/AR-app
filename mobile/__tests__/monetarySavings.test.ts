@@ -9,8 +9,8 @@ test('rate confirmation labels preserve zero and source-declared balance portion
   const period = savingsSubject().policy.intervals[0];
   period.tiers = [{ ...period.tiers[0], upperInclusive: '1000' }, { ...period.tiers[0], id: 'next', upperInclusive: null }];
   expect(savingsRatePercent('0')).toBe('0'); expect(savingsRatePercent('0.0365')).toBe('3.65');
-  expect(savingsRateLabel(period, 0)).toBe('Marginal tier: AUD 0 to AUD 1000');
-  period.allocation = 'whole_balance'; expect(savingsRateLabel(period, 1)).toBe('Whole balance: over AUD 1000');
+  expect(savingsRateLabel(period, 0)).toBe('Marginal tier · ≥$0 · ≤$1000');
+  period.allocation = 'whole_balance'; expect(savingsRateLabel(period, 1)).toBe('Whole balance · >$1000');
 });
 test('validates structured authority and actual source-bound savings adapter independently expected1.00', async () => {
   expect(validateSavingsSubject(savingsSubject()).capability).toBe('savings_calculation');

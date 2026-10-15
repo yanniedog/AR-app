@@ -15,7 +15,8 @@ import {
   policyPathModel,
   type EconomicWindow,
 } from '../../data/economicModels';
-import { formatRunDate } from '../../data/format';
+import { uiCount, uiDate, uiJoin, uiLabel, type UiCopy, type UiChild } from '../../lib/uiCopy';
+import { uiChartPercent, uiChartWindow, uiEconomicIndicator, uiEconomicPressure } from '../../lib/chartUiCopy';
 import { hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import type { RbaEntry } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -111,7 +112,7 @@ function MiniSparkline({
 
 function MiniTile({
   title,
-  subtitle,
+  signal,
   valueLabel,
   selected,
   onPress,
@@ -120,15 +121,15 @@ function MiniTile({
   targetBand,
   accessibilityLabel,
 }: {
-  title: string;
-  subtitle: string;
-  valueLabel: string;
+  title: UiCopy;
+  signal: UiCopy;
+  valueLabel: UiCopy;
   selected: boolean;
   onPress: () => void;
   color: string;
   points: EconomicPoint[];
   targetBand?: [number, number];
-  accessibilityLabel: string;
+  accessibilityLabel: UiCopy;
 }) {
   const theme = useTheme();
   return (
@@ -160,7 +161,7 @@ function MiniTile({
       </Row>
       <MiniSparkline points={points} color={color} targetBand={targetBand} />
       <AppText variant="tiny" color="textFaint">
-        {subtitle}
+        {signal}
       </AppText>
     </Pressable>
   );
@@ -174,32 +175,27 @@ function EmptyLens({ auditRevision = '', onGraphicReady }: {
       onGraphicReady?.({ revision: auditRevision, expectedCount: 0, pointCount: 0,
         accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
     }}>
-      This view needs more official observations.
-    </AppText>
+      {uiLabel("No observations")}</AppText>
   );
 }
 
 function ExpandedDetail({
   title,
-  detail,
+  facts,
   children,
 }: {
-  title: string;
-  detail?: string | null;
-  children: React.ReactNode;
+  title: UiCopy;
+  facts?: readonly { label: UiCopy; value: UiCopy }[];
+  children: UiChild;
 }) {
   return (
     <View style={{ marginTop: 12 }}>
       <AppText variant="small" weight="700">
         {title}
       </AppText>
-      {detail ? (
-        <AppText variant="tiny" color="textMuted" style={{ marginTop: 2, marginBottom: 8 }}>
-          {detail}
-        </AppText>
-      ) : (
-        <View style={{ height: 8 }} />
-      )}
+      <View style={{ gap: 4, marginTop: 2, marginBottom: 8 }}>
+        {facts?.map((fact, i) => <AppText key={i} variant="tiny" color="textMuted">{uiJoin(fact.label, ' · ', fact.value)}</AppText>)}
+      </View>
       {children}
     </View>
   );
@@ -249,15 +245,15 @@ export function EconomicExplorer({
     return (
       <MiniTile
         key={indicator.id}
-        title={indicator.label}
-        subtitle={indicator.signal.label}
-        valueLabel={`${latest.value.toFixed(1)}%`}
+        title={uiEconomicIndicator(indicator.id)}
+        signal={uiEconomicPressure(indicator.signal.direction)}
+        valueLabel={uiChartPercent(latest.value, 1)}
         selected={selected}
         onPress={() => toggle(indicator.id)}
         color={color}
         points={indicator.points.slice(-18)}
         targetBand={indicator.targetBand}
-        accessibilityLabel={`${indicator.label}, ${latest.value.toFixed(2)} percent, ${indicator.signal.label}. ${selected ? 'Showing full chart' : 'Double tap to reveal chart'}`}
+        accessibilityLabel={uiJoin(uiEconomicIndicator(indicator.id), ' · ', uiChartPercent(latest.value), ' · ', uiEconomicPressure(indicator.signal.direction))}
       />
     );
   });
@@ -269,32 +265,28 @@ export function EconomicExplorer({
 
   return (
     <View>
-      <AppText variant="tiny" color="textMuted" style={{ marginBottom: 10 }}>
-        Choose a chart.
-      </AppText>
-
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {indicatorTiles}
 
         {comparison ? (
           <MiniTile
-            title="Inflation vs expectations"
-            subtitle="Underlying · market 1Y"
-            valueLabel={`${comparison.inflation.at(-1)!.value.toFixed(1)}%`}
+            title="Inflation expectations"
+            signal={uiLabel('Comparison')}
+            valueLabel={uiChartPercent(comparison.inflation.at(-1)!.value, 1)}
             selected={expanded === 'compare'}
             onPress={() => toggle('compare')}
             color={theme.colors.warning}
             points={comparison.inflation.slice(-18)}
             targetBand={comparison.targetBand}
-            accessibilityLabel={`Inflation versus expectations. ${expanded === 'compare' ? 'Showing full chart' : 'Double tap to reveal chart'}`}
+            accessibilityLabel="Inflation expectations"
           />
         ) : null}
 
         {momentum ? (
           <MiniTile
             title="Momentum"
-            subtitle={`${momentum.rows.length} series · recent change`}
-            valueLabel="Trend"
+            signal={uiJoin(uiCount(momentum.rows.length), ' ', 'Signals')}
+            valueLabel="Changes"
             selected={expanded === 'momentum'}
             onPress={() => toggle('momentum')}
             color={theme.colors.rba}
@@ -302,24 +294,20 @@ export function EconomicExplorer({
               date: `p${index}`,
               value: row.change,
             }))}
-            accessibilityLabel={`Momentum across ${momentum.rows.length} series. ${expanded === 'momentum' ? 'Showing full chart' : 'Double tap to reveal chart'}`}
+            accessibilityLabel={uiJoin('Momentum', ' · ', uiCount(momentum.rows.length), ' ', 'Signals')}
           />
         ) : null}
 
         {policy && policyLatest ? (
           <MiniTile
             title="Policy path"
-            subtitle={
-              policy.surveyDate
-                ? `Survey ${formatRunDate(policy.surveyDate)}`
-                : 'Cash rate · forecast'
-            }
-            valueLabel={`${policyLatest.value.toFixed(2)}%`}
+            signal={uiJoin('Survey', ' · ', uiDate(policy.surveyDate))}
+            valueLabel={uiChartPercent(policyLatest.value)}
             selected={expanded === 'policy'}
             onPress={() => toggle('policy')}
             color={theme.colors.rba}
             points={policyPoints}
-            accessibilityLabel={`Policy path, ${policyLatest.value.toFixed(2)} percent. ${expanded === 'policy' ? 'Showing full chart' : 'Double tap to reveal chart'}`}
+            accessibilityLabel={uiJoin('Policy path', ' · ', uiChartPercent(policyLatest.value))}
           />
         ) : null}
       </View>
@@ -327,7 +315,7 @@ export function EconomicExplorer({
       {expanded && expanded !== 'momentum' ? (
         <Row gap={6} style={{ flexWrap: 'wrap', marginTop: 12 }}>
           {WINDOWS.map((item) => (
-            <Chip key={item} label={item} selected={window === item} onPress={() => changeWindow(item)} />
+            <Chip key={item} label={uiChartWindow(item)} selected={window === item} onPress={() => changeWindow(item)} />
           ))}
         </Row>
       ) : null}
@@ -339,7 +327,7 @@ export function EconomicExplorer({
 
       {expanded === 'compare' ? (
         comparison ? (
-          <ExpandedDetail title="Inflation vs expectations" detail="Same percentage scale">
+          <ExpandedDetail title="Inflation expectations">
             <EconomicChartFrame
               series={[
                 {
@@ -357,7 +345,6 @@ export function EconomicExplorer({
                 },
               ]}
               targetBand={comparison.targetBand}
-              accessibilitySummary={comparison.summary}
               selectionStep={selectionStep}
               auditRevision={graphicRevision} onGraphicReady={onGraphicReady}
             />
@@ -369,7 +356,7 @@ export function EconomicExplorer({
 
       {expanded === 'momentum' ? (
         momentum ? (
-          <ExpandedDetail title="Momentum" detail="Recent percentage-point change">
+          <ExpandedDetail title="Momentum">
             <MomentumChart model={momentum} auditRevision={graphicRevision} onGraphicReady={onGraphicReady} />
           </ExpandedDetail>
         ) : (
@@ -381,11 +368,7 @@ export function EconomicExplorer({
         policy ? (
           <ExpandedDetail
             title="Policy path"
-            detail={
-              policy.surveyDate
-                ? `Cash rate and economists' median forecast · survey ${formatRunDate(policy.surveyDate)}`
-                : 'Cash rate and economists\' median forecast'
-            }
+            facts={[{ label: 'Survey', value: uiDate(policy.surveyDate) }]}
           >
             <EconomicChartFrame
               series={[
@@ -406,12 +389,11 @@ export function EconomicExplorer({
               ]}
               holdDates={rbaHolds}
               holdSeriesId="actual"
-              accessibilitySummary={policy.summary}
               selectionStep={selectionStep}
               auditRevision={graphicRevision} onGraphicReady={onGraphicReady}
             />
             <AppText variant="tiny" color="textFaint" style={{ marginTop: 5 }}>
-              Solid = official cash-rate history · dashed = survey median, not a probability · hollow diamonds = held
+              {uiJoin('Basis', ' · ', 'Survey', ' · ', 'Probability', ' · ', 'Excluded')}
             </AppText>
           </ExpandedDetail>
         ) : (
@@ -444,27 +426,23 @@ function IndicatorExpanded({
   const color = signalColor(live.signal.direction, theme);
   return (
     <ExpandedDetail
-      title={indicator.label}
-      detail={`${indicator.shortLabel} · ${live.signal.label} · updated ${formatRunDate(indicator.latest.date)}`}
+      title={uiEconomicIndicator(indicator.id)}
+      facts={[{ label: 'Signal', value: uiEconomicPressure(live.signal.direction) }, { label: 'Observed', value: uiDate(indicator.latest.date) }]}
     >
       <EconomicChartFrame
         series={[{
           id: indicator.id,
-          label: indicator.label,
+          label: uiEconomicIndicator(indicator.id),
           points: indicator.points,
           color,
         }]}
         targetBand={indicator.targetBand}
-        accessibilitySummary={indicator.summary}
         selectionStep={selectionStep}
         auditRevision={auditRevision} onGraphicReady={onGraphicReady}
       />
-      <AppText variant="tiny" color="textMuted" style={{ marginTop: 6 }}>
-        {live.signal.explanation}
-      </AppText>
       {live.status === 'stale' ? (
         <AppText variant="tiny" color="warning" weight="700" style={{ marginTop: 4 }}>
-          Release overdue — showing the latest verified observation
+          {uiJoin('Release overdue', ' · ', 'Observed', ' · ', uiDate(indicator.latest.date))}
         </AppText>
       ) : null}
     </ExpandedDetail>

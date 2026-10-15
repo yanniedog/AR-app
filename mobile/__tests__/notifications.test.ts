@@ -78,7 +78,7 @@ describe('computeChanges', () => {
     const msgs = computeChanges(before, after, [], 5);
     expect(msgs).toContainEqual(expect.objectContaining({
       title: 'RBA cash rate held',
-      body: 'Cash rate remains 4.35%.',
+      body: 'Held: 4.35%',
       href: 'arrates://rba',
     }));
   });
@@ -94,7 +94,7 @@ describe('computeChanges', () => {
     after.rba_holds = ['2026-08-11'];
     const hold = computeChanges(before, after, [], 5)
       .find((message) => message.title === 'RBA cash rate held');
-    expect(hold?.body).toBe('Cash rate remains 4.35%.');
+    expect(hold?.body).toBe('Held: 4.35%');
   });
 
   test('watchlisted product change notifies', () => {
@@ -170,7 +170,7 @@ describe('computeChanges', () => {
 
   test('watchlist message includes productKey for tap routing', () => {
     const msgs = computeChanges(core('0.0579'), core('0.0574'), ['A|1'], 5);
-    const hit = msgs.find((m) => m.body.includes('→'));
+    const hit = msgs.find((m) => m.productKey === 'A|1');
     expect(hit?.productKey).toBe('A|1');
   });
 
@@ -217,8 +217,8 @@ describe('notification deep links', () => {
 
   test('notificationDataFromMessage includes productKey', () => {
     const data = notificationDataFromMessage({
-      title: 't',
-      body: 'b',
+      title: 'Rate changed',
+      body: 'No change',
       productKey: 'W|9',
       rateIndex: 1,
     });

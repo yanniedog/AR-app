@@ -10,21 +10,21 @@ import {
   type SearchIndexPayload,
 } from './detailSearch';
 import { productHasAllEligibilityCriteria } from './eligibility';
-import { productHasAllFeatures } from './features';
+import { productHasAllFeatures } from './featuresCore';
 import {
   effectiveFraction,
   sortByDisplayLabel,
   toFraction,
   visibleAccountRows,
 } from './format';
-import { rateConditionality } from '../lib/rateQualifier';
+import { rateConditionality } from './rateConditionalFacts';
 import {
   featureEvidenceScope,
   productMatchesAllFactCriteria,
   type FactCriterion,
-} from './productFacts';
+} from './productFactsCore';
 
-export type { FactCriterion, FactCriterionOperator, FactCriterionScalar } from './productFacts';
+export type { FactCriterion, FactCriterionOperator, FactCriterionScalar } from './productFactsCore';
 
 export type SortKey = 'rate' | 'comparison' | 'bank';
 

@@ -13,13 +13,13 @@ describe('appLock', () => {
   });
 
   it('maps the OS prompt result and fails closed on errors', async () => {
-    expect(await authenticateBiometric('test')).toBe(true);
+    expect(await authenticateBiometric('Unlock')).toBe(true);
     (LocalAuthentication.authenticateAsync as jest.Mock).mockResolvedValueOnce({
       success: false,
       error: 'user_cancel',
     });
-    expect(await authenticateBiometric('test')).toBe(false);
+    expect(await authenticateBiometric('Unlock')).toBe(false);
     (LocalAuthentication.authenticateAsync as jest.Mock).mockRejectedValueOnce(new Error('boom'));
-    expect(await authenticateBiometric('test')).toBe(false);
+    expect(await authenticateBiometric('Unlock')).toBe(false);
   });
 });

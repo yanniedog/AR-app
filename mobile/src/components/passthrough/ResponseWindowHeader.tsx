@@ -3,9 +3,9 @@ import React, { useMemo } from 'react';
 import { PanResponder, Pressable, View } from 'react-native';
 
 import type { MultiSectionPassThroughModel, RbaDecisionRef } from '../../data/bankInsights';
-import { formatRunDate } from '../../data/format';
+import { uiCount, uiDate, uiJoin, uiLabel } from '../../lib/uiCopy';
+import { uiChartBps } from '../../lib/chartUiCopy';
 import {
-  passThroughEvidenceLabel,
   RESPONSE_WINDOW_SWIPE_THRESHOLD_PX,
   responseWindowSwipeDirection,
 } from '../../data/passThroughModels';
@@ -26,7 +26,7 @@ function ArrowButton({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${direction === 'older' ? 'Previous' : 'Next'} RBA response window`}
+      accessibilityLabel={uiJoin(direction === 'older' ? 'Previous date' : 'Next date', ' · ', 'Response window')}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
@@ -86,9 +86,9 @@ export function ResponseWindowHeader({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [newer?.date, older?.date],
   );
-  const direction = model.decision.bps > 0 ? 'increase' : 'cut';
-  const position = decisions.length ? `${decisionIndex + 1} of ${decisions.length}` : '';
-  const statusLabel = model.windowOpen ? 'Current window · live' : 'Complete window';
+  const direction = uiLabel(model.decision.bps > 0 ? 'Hike' : 'Cut');
+  const position = decisions.length ? uiJoin(uiCount(decisionIndex + 1), '/', uiCount(decisions.length)) : uiLabel('Unknown');
+  const statusLabel = uiLabel(model.windowOpen ? 'Open window' : 'Closed window');
   const statusTone = model.windowOpen ? 'primary' : 'success';
 
   return (
@@ -99,7 +99,7 @@ export function ResponseWindowHeader({
       <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <Badge label={statusLabel} tone={statusTone} />
         <AppText variant="tiny" color="textFaint" weight="700">
-          {position.toUpperCase()}
+          {position}
         </AppText>
       </Row>
 
@@ -109,11 +109,10 @@ export function ResponseWindowHeader({
           style={{ flex: 1, alignItems: 'center' }}
           accessible
           accessibilityRole="adjustable"
-          accessibilityLabel={`${statusLabel}. RBA ${direction} of ${Math.abs(model.decision.bps)} basis points on ${formatRunDate(model.decision.date)}. Window ${position}.`}
-          accessibilityHint="Swipe left or right, or use the arrow buttons, to change response window."
+          accessibilityLabel={uiJoin(statusLabel, ' · ', 'RBA', ' ', direction, ' ', uiChartBps(model.decision.bps), ' · ', uiDate(model.decision.date), ' · ', 'Window', ' ', position)}
           accessibilityActions={[
-            { name: 'decrement', label: 'Previous response window' },
-            { name: 'increment', label: 'Next response window' },
+            { name: 'decrement', label: 'Previous date' },
+            { name: 'increment', label: 'Next date' },
           ]}
           onAccessibilityAction={(event) => {
             if (event.nativeEvent.actionName === 'decrement') move(older);
@@ -122,13 +121,13 @@ export function ResponseWindowHeader({
           {...panResponder.panHandlers}
         >
           <AppText variant="tiny" color="textMuted" weight="700">
-            {formatRunDate(model.decision.date).toUpperCase()}
+            {uiDate(model.decision.date)}
           </AppText>
           <AppText variant="h1" style={{ marginTop: 2 }}>
-            {model.decision.bps > 0 ? '+' : '−'}{Math.abs(model.decision.bps)} bp
+            {uiChartBps(model.decision.bps)}
           </AppText>
           <AppText variant="small" color="textMuted">
-            cash-rate {direction}
+            {uiJoin('Cash rate', ' · ', direction)}
           </AppText>
         </View>
         <ArrowButton direction="newer" disabled={!newer} onPress={() => move(newer)} />
@@ -152,16 +151,14 @@ export function ResponseWindowHeader({
         />
       </View>
       <Row style={{ marginTop: 7, justifyContent: 'space-between' }}>
-        <AppText variant="tiny" color="textFaint">Decision</AppText>
+        <AppText variant="tiny" color="textFaint">{uiLabel("Decision")}</AppText>
         <AppText variant="tiny" color="textFaint">
-          {model.windowOpen
-            ? `Tracked to ${formatRunDate(model.observedThrough)}`
-            : `Tracked to ${formatRunDate(model.windowEnd)}`}
+          {uiJoin('Tracked to', ' · ', uiDate(model.windowOpen ? model.observedThrough : model.windowEnd))}
         </AppText>
       </Row>
       {model.decision.partialObservation ? (
         <AppText variant="tiny" color="warning" style={{ marginTop: 10 }}>
-          {passThroughEvidenceLabel(model)} — tracking began after this decision.
+          {uiJoin('Partial', ' · ', 'Response', ' · ', '≤', ' ', 'days')}
         </AppText>
       ) : null}
     </Card>

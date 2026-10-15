@@ -2,6 +2,7 @@ import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import Svg, { Path } from 'react-native-svg';
 
+import { uiProductName } from '../src/lib/uiCopy';
 import { BankHistoryChart } from '../src/components/BankHistoryChart';
 import type { BankHistoryPoint } from '../src/types';
 
@@ -32,7 +33,7 @@ const emptyMarket: BankHistoryPoint[] = dates.map(date => ({
   date, min: null, max: null, mean: null, median: null, count: 0,
 }));
 const highlightSeries = {
-  label: 'Selected product',
+  label: uiProductName({ product_name: 'Selected product' }),
   values: { '2026-09-25': 0.045, '2026-09-26': 0.046, '2026-09-27': null, '2026-09-28': 0.05 },
 };
 
@@ -83,11 +84,11 @@ test('product-only observations render after layout and retain gaps without inve
     expect(String(paths[0].props.d)).not.toMatch(/NaN|Infinity/);
     let controls = tree.root.findAllByType('ChartSliceControls')[0];
     expect(controls.props.valueLabel).toBe('5.00%');
-    expect(controls.props.detail).toBeNull();
+    expect(controls.props.facts).toBeUndefined();
     act(() => controls.props.onChangeIndex(2));
     controls = tree.root.findAllByType('ChartSliceControls')[0];
-    expect(controls.props.valueLabel).toBe('—');
-    expect(controls.props.detail).toBeNull();
+    expect(controls.props.valueLabel).toBe('Unknown');
+    expect(controls.props.facts).toBeUndefined();
     expect(tree.root.findByProps({ accessibilityRole: 'image' }).props.accessibilityLabel)
       .not.toMatch(/Selected product|range|mean|median/);
     act(() => controls.props.onChangeIndex(0));
@@ -101,7 +102,7 @@ test('nonfinite product values cannot turn an empty market into an available cha
   act(() => {
     tree = TestRenderer.create(<BankHistoryChart
       section="Savings" dates={dates} points={emptyMarket}
-      highlightSeries={{ label: 'Invalid product', values: { '2026-09-25': NaN, '2026-09-28': Infinity } }}
+      highlightSeries={{ label: uiProductName({ product_name: 'Invalid product' }), values: { '2026-09-25': NaN, '2026-09-28': Infinity } }}
       onGraphicReady={onGraphicReady}
     />) as Renderer;
   });

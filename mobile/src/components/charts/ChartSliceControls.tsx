@@ -2,7 +2,7 @@ import Ionicons from '../icons/AppIcon';
 import React, { useCallback, useRef } from 'react';
 import { Pressable, View, type GestureResponderEvent } from 'react-native';
 
-import { formatRunDate } from '../../data/format';
+import { uiDate, uiJoin, type UiCopy } from '../../lib/uiCopy';
 import { plotLocalX } from '../../data/bankHistoryTransform';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText, Row } from '../ui';
@@ -83,13 +83,13 @@ export function ChartSliceControls({
   activeIndex,
   onChangeIndex,
   valueLabel,
-  detail,
+  facts,
 }: {
   dates: string[];
   activeIndex: number;
   onChangeIndex: (index: number) => void;
-  valueLabel: string;
-  detail?: string | null;
+  valueLabel: UiCopy;
+  facts?: readonly { label: UiCopy; value: UiCopy }[];
 }) {
   const theme = useTheme();
   if (!dates.length) return null;
@@ -118,9 +118,9 @@ export function ChartSliceControls({
         <Ionicons name="chevron-back" size={20} color={theme.colors.text} />
       </Pressable>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <AppText variant="tiny" weight="700">{formatRunDate(dates[index])}</AppText>
+        <AppText variant="tiny" weight="700">{uiDate(dates[index])}</AppText>
         <AppText variant="small" weight="800">{valueLabel}</AppText>
-        {detail ? <AppText variant="tiny" color="textFaint">{detail}</AppText> : null}
+        {facts?.map((fact, i) => <AppText key={i} variant="tiny" color="textFaint">{uiJoin(fact.label, ' · ', fact.value)}</AppText>)}
       </View>
       <Pressable
         onPress={() => canNext && onChangeIndex(index + 1)}

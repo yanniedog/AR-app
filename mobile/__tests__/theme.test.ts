@@ -150,19 +150,21 @@ describe('theme palettes', () => {
     }
   });
 
-  it('keeps the Rate Ledger palettes with stable financial meaning', () => {
-    expect(darkTheme.colors.bg).toBe('#0E1714');
-    expect(lightTheme.colors.bg).toBe('#F4F0E6');
-    expect(darkTheme.colors.rba).toBe('#E2BC54');
-    expect(lightTheme.colors.rba).toBe('#D5A62E');
-    expect(darkTheme.colors.rateLoan).toBe('#E18A67');
-    expect(lightTheme.colors.rateLoan).toBe('#9B5133');
-    expect(darkTheme.colors.rateDeposit).toBe('#72B89D');
-    expect(lightTheme.colors.rateDeposit).toBe('#2E6A56');
-    expect(darkTheme.colors.favorite).toBe('#E2BC54');
-    expect(lightTheme.colors.favorite).toBe('#D5A62E');
-    expect(darkTheme.colors.onRba).toBe('#15231F');
-    expect(lightTheme.colors.onRba).toBe('#15231F');
+  it('keeps blue actions distinct from all financial status roles', () => {
+    expect(darkTheme.colors.bg).toBe('#101A2B');
+    expect(lightTheme.colors.bg).toBe('#FFFFFF');
+    for (const theme of [lightTheme, darkTheme]) {
+      expect(new Set([theme.colors.primary, theme.colors.success, theme.colors.warning, theme.colors.danger]).size).toBe(4);
+      expect(theme.colors.rba).toBe(theme.colors.primary);
+      expect(theme.colors.favorite).toBe(theme.colors.primary);
+      expect(theme.colors.rateLoan).toBe(theme.colors.warning);
+      expect(theme.colors.rateDeposit).toBe(theme.colors.success);
+      expect(theme.colors.onRba).toBe(theme.colors.onPrimary);
+      expect(contrastRatio(theme.colors.onPrimary, theme.colors.primary)).toBeGreaterThanOrEqual(4.5);
+      for (const role of ['primary', 'success', 'warning', 'danger'] as const) {
+        expect(contrastRatio(theme.colors[role], theme.colors.bg)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
   });
 
   it('includes rate typography tokens and line heights', () => {

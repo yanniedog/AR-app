@@ -1,5 +1,5 @@
 import type { ProductDetail, RateRow, SectionKey } from '../types';
-import { productHasAllFeatures } from './features';
+import { productHasAllFeatures } from './featuresCore';
 import type { Filters } from './selectors';
 import { lvrRangeContains, matchesLvrTier, parseLvrRange } from './lvrRange';
 

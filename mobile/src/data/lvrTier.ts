@@ -1,5 +1,6 @@
 import { humanizeEnum } from './format';
 import { parseLvrTier } from './profile';
+import { uiDecimal, uiJoin, type UiText } from '../lib/uiCopy';
 
 // Kept outside format.ts/profile.ts: those files are pinned inside the
 // history-ready compiler bundle, and display copy must not change its digest.
@@ -9,19 +10,20 @@ import { parseLvrTier } from './profile';
  * The published "=60" band is the ≤60% tier (taxonomy `LVR_LE60`). Returns null
  * for values that are not recognisable LVR tiers so callers can fall back.
  */
-export function lvrTierLabel(value: string): string | null {
+export function lvrTierLabel(value: string): UiText | null {
   const tier = /^lvr_(.*)$/i.exec(value.trim());
   if (!tier) return null;
   const v = tier[1].replace(/%/g, '').trim().toLowerCase();
-  if (!v || v.includes('unspec') || v === 'na' || v === 'n/a') return 'LVR unspecified';
+  if (!v || v.includes('unspec') || v === 'na' || v === 'n/a') return uiJoin('LVR', ' · ', 'Unknown');
   let m = /^(?:=|<=|≤)?(\d+(?:\.\d+)?)$/.exec(v);
-  if (m) return `LVR ≤${m[1]}%`;
+  if (m) return uiJoin('LVR', ' ', '≤', uiDecimal(m[1], 'percent'));
   m = /^(>=|>)?(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/.exec(v);
-  if (m) return `LVR ${m[1] === '>=' ? '≥' : m[1] === '>' ? '>' : ''}${m[2]}–${m[3]}%`;
+  if (m) return uiJoin('LVR', ' ', m[1] === '>=' ? '≥' : m[1] === '>' ? '>' : '',
+    uiDecimal(m[2], 'count'), '–', uiDecimal(m[3], 'percent'));
   m = /^>=(\d+(?:\.\d+)?)$/.exec(v);
-  if (m) return `LVR ≥${m[1]}%`;
+  if (m) return uiJoin('LVR', ' ', '≥', uiDecimal(m[1], 'percent'));
   m = /^(?:>|gt)(\d+(?:\.\d+)?)$|^(\d+(?:\.\d+)?)\+$/.exec(v);
-  if (m) return `LVR over ${m[1] ?? m[2]}%`;
+  if (m) return uiJoin('LVR', ' ', '>', uiDecimal(m[1] ?? m[2], 'percent'));
   return null;
 }
 
@@ -39,7 +41,7 @@ export function refreshLvrLabelText(label: string): string {
 }
 
 /** `humanizeEnum` for an `lvr_tier` value, with recognised bands labelled exactly. */
-export function lvrTierDisplay(value: string | null | undefined): string {
+export function lvrTierDisplay(value: string | null | undefined): UiText {
   return (value ? lvrTierLabel(value) : null) ?? humanizeEnum(value);
 }
 

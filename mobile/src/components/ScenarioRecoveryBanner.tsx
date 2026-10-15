@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 import { useUserRateScenario } from '../hooks/useUserRateScenario';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, androidRipple } from './ui';
+import { uiLabel } from '../lib/uiCopy';
 
 /**
  * Root-level notice for the rare case where an interrupted encrypted write had
@@ -35,15 +36,15 @@ export function ScenarioRecoveryBanner() {
     >
       <View style={{ flex: 1, gap: 2 }}>
         <AppText variant="tiny" weight="700" color="warning">
-          SAVED SCENARIO RESET
+          {uiLabel('Saved scenario reset')}
         </AppText>
         <AppText variant="small" color="text">
-          {warning}
+          {uiLabel('Current values')}
         </AppText>
       </View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Dismiss saved scenario reset notice"
+        accessibilityLabel="Dismiss"
         onPress={dismissWarning}
         hitSlop={4}
         android_ripple={androidRipple(theme.colors.primaryMuted, true)}
@@ -58,7 +59,7 @@ export function ScenarioRecoveryBanner() {
         })}
       >
         <AppText variant="small" weight="700" color="primary">
-          Got it
+          {uiLabel('Done')}
         </AppText>
       </Pressable>
     </View>

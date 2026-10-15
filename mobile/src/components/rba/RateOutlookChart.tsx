@@ -1,19 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { ChartText as SvgText } from '../charts/ChartText';
 
 import type { EconomicPoint } from '../../data/economicOutlook';
 import { hasFiniteChartPath, hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
-import { commissionerFamily } from '../../theme/fonts';
+import { fontStyle } from '../../theme/fonts';
 import { useTheme } from '../../theme/ThemeProvider';
 import { LedgerText } from '../ledger';
+import { uiLabel,  uiJoin, type UiCopy, type UiText } from '../../lib/uiCopy';
+import { uiChartBps, uiChartDate, uiChartPercent } from '../../lib/chartUiCopy';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-export function outlookMonth(date: string): string {
-  const month = Number(date.slice(5, 7));
-  return `${MONTHS[month - 1] ?? date} ${date.slice(2, 4)}`;
-}
+export function outlookMonth(date: string): UiText { return uiChartDate(date, true); }
 
 /** A visible rate axis shared by both outlooks; never exaggerate a tiny spread. */
 export function outlookRateDomain(points: readonly EconomicPoint[], cashRate: number | null): [number, number] {
@@ -36,7 +34,7 @@ export function RateOutlookChart({
   onReady,
   onGraphicReady,
 }: {
-  label: string;
+  label: UiCopy;
   points: readonly EconomicPoint[];
   cashRate: number | null;
   tone?: 'eucalyptus' | 'info';
@@ -65,23 +63,23 @@ export function RateOutlookChart({
   const y = (value: number) => top + (max - value) / (max - min) * innerH;
   const color = theme.ledger[tone];
   const path = valid.map((point, i) => `${i ? 'L' : 'M'} ${x(point.date)} ${y(point.value)}`).join(' ');
-  const summary = `${label}. ${valid.map((point) => `${outlookMonth(point.date)}: ${point.value.toFixed(2)} percent`).join('; ')}.`;
+  const summary = uiJoin(label, ' · ', ...valid.map(point => uiJoin(outlookMonth(point.date), ' · ', uiChartPercent(point.value), ' · ')));
 
   if (!selected) return <LedgerText key={revision} tone="mutedInk" onLayout={(event) => {
     onGraphicReady?.({ revision, expectedCount: points.length, pointCount: 0,
       accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
-  }}>No forecast observations published.</LedgerText>;
+  }}>{uiLabel("No observations")}</LedgerText>;
   const delta = cashRate == null || !Number.isFinite(cashRate) ? null : Math.round((selected.value - cashRate) * 100);
 
   return (
     <View style={{ gap: 12 }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
-        <LedgerText variant="rateLarge" tone={tone}>{selected.value.toFixed(2)}%</LedgerText>
+        <LedgerText variant="rateLarge" tone={tone}>{uiChartPercent(selected.value)}</LedgerText>
         <View style={{ paddingBottom: 4, flexShrink: 1 }}>
           <LedgerText variant="label">{outlookMonth(selected.date)}</LedgerText>
           {delta != null ? (
             <LedgerText variant="caption" tone="mutedInk">
-              {delta === 0 ? 'Same as the cash rate' : `${delta > 0 ? '+' : '−'}${(Math.abs(delta) / 100).toFixed(2)} percentage points vs cash`}
+              {uiJoin('Cash rate', ' · ', uiChartBps(delta))}
             </LedgerText>
           ) : null}
         </View>
@@ -106,8 +104,8 @@ export function RateOutlookChart({
             {[min, (min + max) / 2, max].map((tick) => (
               <React.Fragment key={tick}>
                 <Line x1={left} x2={width - right} y1={y(tick)} y2={y(tick)} stroke={theme.ledger.rule} />
-                <SvgText x={left - 8} y={y(tick) + 4} textAnchor="end" fill={theme.ledger.mutedInk} fontSize={12} fontFamily={commissionerFamily('500')}>
-                  {tick.toFixed(2)}%
+                <SvgText x={left - 8} y={y(tick) + 4} textAnchor="end" fill={theme.ledger.mutedInk} fontSize={12} {...fontStyle('500')}>
+                  {uiChartPercent(tick)}
                 </SvgText>
               </React.Fragment>
             ))}
@@ -119,21 +117,21 @@ export function RateOutlookChart({
               <Circle key={point.date} cx={x(point.date)} cy={y(point.value)} r={i === index ? 6 : 3} fill={i === index ? theme.ledger.wattle : color} stroke={color} strokeWidth={2} />
             ))}
             {valid.filter((_, i) => (valid.length <= 5 && innerW / Math.max(1, valid.length - 1) >= 64) || i === 0 || i === Math.floor((valid.length - 1) / 2) || i === valid.length - 1).map((point) => (
-              <SvgText key={point.date} x={x(point.date)} y={height - 10} textAnchor="middle" fill={theme.ledger.mutedInk} fontSize={12} fontFamily={commissionerFamily('500')}>
+              <SvgText key={point.date} x={x(point.date)} y={height - 10} textAnchor="middle" fill={theme.ledger.mutedInk} fontSize={12} {...fontStyle('500')}>
                 {outlookMonth(point.date)}
               </SvgText>
             ))}
           </Svg>
         ) : null}
       </View>
-      {cashRate != null && Number.isFinite(cashRate) ? <LedgerText variant="caption" tone="mutedInk">Dashed line · cash rate {cashRate.toFixed(2)}%</LedgerText> : null}
+      {cashRate != null && Number.isFinite(cashRate) ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('Cash rate', ' · ', uiChartPercent(cashRate))}</LedgerText> : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {valid.map((point, i) => (
           <Pressable
             key={point.date}
             onPress={() => onSelect(i)}
             accessibilityRole="button"
-            accessibilityLabel={`${label}, ${outlookMonth(point.date)}, ${point.value.toFixed(2)} percent`}
+            accessibilityLabel={uiJoin(label, ' · ', outlookMonth(point.date), ' · ', uiChartPercent(point.value))}
             accessibilityState={{ selected: i === index }}
             style={{ minHeight: 48, minWidth: 64, padding: 8, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 3, borderBottomColor: i === index ? theme.ledger.wattle : theme.ledger.controlRule }}
           >

@@ -1,5 +1,6 @@
 import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter';
 import type { SectionKey } from '../types';
+import { SECTION_ORDER } from '../constants';
 import { cache } from './cache';
 import { resetRbaMarketOutlookRuntimeCache } from './rbaMarketOutlook';
 import { resetDetailSearchIndexCache } from './detailSearch';
@@ -74,12 +75,9 @@ function setPreferences(
     ...current,
     ...values,
     interests,
-    defaultSection: interests.includes(requestedDefault) ? requestedDefault : interests[0],
+    defaultSection: SECTION_ORDER.includes(requestedDefault) ? requestedDefault : interests[0],
   };
   const partial: Partial<AppState> = { prefs };
-  if (changed.has('interests')) {
-    partial.activeSection = resolveInterestSection(interests, get().activeSection);
-  }
   if (changed.has('enableDeepSearch') && !prefs.enableDeepSearch) {
     partial.searchIndex = null;
     partial.searchIndexStatus = 'idle';
@@ -247,21 +245,6 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       setPreferences(set, get, values);
     },
 
-    completeOnboarding(interests: SectionKey[], notifications: boolean) {
-      const normalized = normalizeInterests(interests);
-      const defaultSection = normalized[0];
-      set({
-        activeSection: defaultSection,
-        prefs: {
-          ...get().prefs,
-          onboarded: true,
-          interests: normalized,
-          defaultSection,
-          notificationsEnabled: notifications,
-        },
-      });
-    },
-
     async clearCache() {
       debugLog.info('store', 'clearCache');
       await resetRbaMarketOutlookRuntimeCache(() => cache.clear());
@@ -317,7 +300,6 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
     | 'setPref'
     | 'setPrefs'
     | 'setActiveSection'
-    | 'completeOnboarding'
     | 'clearCache'
     | 'clearRefreshOutcome'
   >;

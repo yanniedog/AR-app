@@ -4,20 +4,19 @@ import { Pressable, View } from 'react-native';
 
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText } from './ui';
+import { uiCount, uiJoin, type UiCopy } from '../lib/uiCopy';
 
 /** Accessible toolbar icon control for Browse and Search chrome. */
 export function ToolbarIconButton({
   icon,
   onPress,
   accessibilityLabel,
-  accessibilityHint,
   active,
   badge,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
-  accessibilityLabel?: string;
-  accessibilityHint?: string;
+  accessibilityLabel?: UiCopy;
   active?: boolean;
   badge?: number;
 }) {
@@ -28,9 +27,8 @@ export function ToolbarIconButton({
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
-        accessibilityHint={accessibilityHint}
         accessibilityState={active === undefined ? undefined : { selected: active }}
-        accessibilityValue={badge ? { text: `${badge} active filter${badge === 1 ? '' : 's'}` } : undefined}
+        accessibilityValue={badge ? { text: uiJoin('Filter', ': ', uiCount(badge)) } : undefined}
         hitSlop={4}
         style={{
           backgroundColor: active ? theme.colors.primaryMuted : theme.colors.surfaceAlt,

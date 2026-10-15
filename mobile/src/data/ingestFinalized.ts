@@ -305,7 +305,7 @@ export function pendingIngestBannerMessage(
   const pending = String(pendingRunDate || '').slice(0, 10);
   const showing = String(showingRunDate || '').slice(0, 10);
   if (showing && showing !== pending) {
-    const label = formatRunDate(showing) || showing;
+    const label = String(formatRunDate(showing)) || showing;
     return `Today\u2019s rates are still uploading \u2014 showing ${label}`;
   }
   return 'Today\u2019s rates are still uploading';

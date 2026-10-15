@@ -1,6 +1,6 @@
 import { SECTION_KEYS, type ProductDetail, type RateRow, type SectionKey } from '../types';
 import { isValidCalendarDate } from '../lib/calendarDate';
-import { normalizedProductFacts } from './productFacts';
+import { normalizedProductFacts } from './productFactsCore';
 import { MAX_BANK_RATE_PERCENT, RATE_OBSERVATION_FIELDS } from './bankRateOverview';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
@@ -75,7 +75,7 @@ export function validateHistoricalCatalogueEvidence(value: unknown): value is Hi
   if (Object.keys(value).some(key => !['status', 'identity', 'detail'].includes(key)) ||
       Object.keys(identity).some(key => !['provider', 'product_id', 'product_key', 'category', 'dataset'].includes(key))) return false;
   if (!['provider', 'product_id', 'product_key', 'category'].every(key => text(identity[key])) ||
-      !SECTION_KEYS.includes(identity.dataset as SectionKey)) return false;
+      !SECTION_KEYS.find(section => section === identity.dataset)) return false;
   if (Object.keys(detail).some(key => !['description', 'eligibility', 'constraints', 'facts'].includes(key))) return false;
   if (!Object.values(detail).some(item => typeof item === 'string' ? item.trim().length > 0 : Array.isArray(item) && item.length > 0)) return false;
   if (detail.description !== undefined && (typeof detail.description !== 'string' || detail.description.length > 65_536)) return false;

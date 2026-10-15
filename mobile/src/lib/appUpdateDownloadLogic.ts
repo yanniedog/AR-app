@@ -1,4 +1,5 @@
 /** Pure helpers for background APK update downloads (unit-testable). */
+import { uiJoin, uiIdentifier, uiNumber, type UiCopy } from './uiCopy';
 
 export type ApkDownloadPhase =
   | 'idle'
@@ -229,59 +230,58 @@ export function updateBannerCopy(
   phase: ApkDownloadPhase,
   version: string,
   downloadPct: number | null,
-): { title: string; actionLabel: string; actionEnabled: boolean } {
+): { title: UiCopy; actionLabel: UiCopy; actionEnabled: boolean } {
   if (phase === 'ready') {
     return {
-      title: `Update verified and ready — v${version}`,
+      title: uiJoin('Verified', ' · ', uiIdentifier(version)),
       actionLabel: 'Install',
       actionEnabled: true,
     };
   }
   if (phase === 'downloading') {
-    const pct = downloadPct != null ? ` ${downloadPct}%` : '';
     return {
-      title: `Downloading update — v${version}${pct}`,
+      title: uiJoin('Downloading', ' · ', uiIdentifier(version), downloadPct != null ? uiJoin(' · ', uiNumber(downloadPct), '%') : ''),
       actionLabel: 'Upgrade',
       actionEnabled: false,
     };
   }
   if (phase === 'waiting') {
     return {
-      title: `Update paused — waiting for Wi-Fi`,
+      title: 'Waiting for Wi-Fi',
       actionLabel: 'Retry',
       actionEnabled: true,
     };
   }
   if (phase === 'retrying') {
     return {
-      title: `Recovering update download — v${version}`,
+      title: uiJoin('Retrying', ' · ', uiIdentifier(version)),
       actionLabel: 'Retrying',
       actionEnabled: false,
     };
   }
   if (phase === 'verifying') {
     return {
-      title: `Checking update integrity — v${version}`,
+      title: uiJoin('Verifying', ' · ', uiIdentifier(version)),
       actionLabel: 'Checking',
       actionEnabled: false,
     };
   }
   if (phase === 'error') {
     return {
-      title: `Update available — v${version}`,
+      title: uiJoin('Update available', ' · ', uiIdentifier(version)),
       actionLabel: 'Retry',
       actionEnabled: true,
     };
   }
   if (phase === 'cancelled') {
     return {
-      title: `Update download cancelled — v${version}`,
+      title: uiJoin('Cancelled', ' · ', uiIdentifier(version)),
       actionLabel: 'Retry',
       actionEnabled: true,
     };
   }
   return {
-    title: `Update available — v${version}`,
+    title: uiJoin('Update available', ' · ', uiIdentifier(version)),
     actionLabel: 'Download & install',
     actionEnabled: true,
   };

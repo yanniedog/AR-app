@@ -113,7 +113,7 @@ export async function benchmarkPayloadCapacity(core: CorePayload, control: {
       traversalMs += clock() - at;
       await checkpoint();
     }
-    parsed.sections[key as keyof CorePayload['sections']] = reconstructed;
+    Object.assign(parsed.sections, { [key]: reconstructed });
     lowestRates[key] = lowest;
   }
   await checkpoint(true);

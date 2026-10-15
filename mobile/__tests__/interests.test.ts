@@ -19,10 +19,11 @@ describe('interests helpers', () => {
     expect(normalizeInterests([])).toEqual(DEFAULT_INTERESTS);
   });
 
-  it('builds segment options in interest order', () => {
+  it('always offers every family, preserving optional interest values', () => {
     expect(sectionSegmentOptions(['TD', 'Mortgage'])).toEqual([
-      { value: 'TD', label: 'Term Deposits' },
-      { value: 'Mortgage', label: 'Mortgage' },
+      { value: 'Mortgage', label: 'Home loans' },
+      { value: 'Savings', label: 'Savings' },
+      { value: 'TD', label: 'Term deposits' },
     ]);
   });
 
@@ -36,9 +37,9 @@ describe('interests helpers', () => {
     ]);
   });
 
-  it('resolves preferred section when still selected', () => {
+  it('resolves any valid preferred section', () => {
     expect(resolveInterestSection(['Savings', 'Mortgage'], 'Mortgage')).toBe('Mortgage');
-    expect(resolveInterestSection(['Savings', 'Mortgage'], 'TD')).toBe('Savings');
+    expect(resolveInterestSection(['Savings', 'Mortgage'], 'TD')).toBe('TD');
   });
 
   it('orders sections for trends snapshot', () => {
@@ -51,19 +52,19 @@ describe('store interests prefs', () => {
     useStore.setState({ prefs: { ...DEFAULT_PREFS }, hydrated: true });
   });
 
-  it('keeps defaultSection within interests when interests change', () => {
+  it('preserves an available default and active family when optional interests change', () => {
     useStore.setState({ activeSection: 'TD' });
     useStore.getState().setPref('defaultSection', 'TD');
     useStore.getState().setPref('interests', ['Mortgage', 'Savings']);
-    expect(useStore.getState().prefs.defaultSection).toBe('Mortgage');
+    expect(useStore.getState().prefs.defaultSection).toBe('TD');
     expect(useStore.getState().prefs.interests).toEqual(['Mortgage', 'Savings']);
-    expect(useStore.getState().activeSection).toBe('Mortgage');
+    expect(useStore.getState().activeSection).toBe('TD');
   });
 
-  it('rejects defaultSection outside interests', () => {
+  it('allows a default outside optional interests', () => {
     useStore.getState().setPref('interests', ['Savings']);
     useStore.getState().setPref('defaultSection', 'Mortgage');
-    expect(useStore.getState().prefs.defaultSection).toBe('Savings');
+    expect(useStore.getState().prefs.defaultSection).toBe('Mortgage');
   });
 
   it('preserves the interests reference for unrelated preference updates', () => {
@@ -91,18 +92,18 @@ describe('store interests prefs', () => {
 
     expect(updates).toBe(1);
     expect(useStore.getState()).toMatchObject({
-      activeSection: 'Savings',
+      activeSection: 'TD',
       prefs: {
         interests: ['Savings'],
-        defaultSection: 'Savings',
+        defaultSection: 'Mortgage',
         themeMode: 'dark',
         includeNonStandard: true,
       },
     });
   });
 
-  it('normalizes interests on onboarding complete', () => {
-    useStore.getState().completeOnboarding(['TD', 'TD', 'Savings'], false);
+  it('normalizes optional interests without granting notification or diagnostics consent', () => {
+    useStore.getState().setPrefs({ interests: ['TD', 'TD', 'Savings'], defaultSection: 'TD' });
     expect(useStore.getState().prefs.interests).toEqual(['TD', 'Savings']);
     expect(useStore.getState().prefs.defaultSection).toBe('TD');
   });

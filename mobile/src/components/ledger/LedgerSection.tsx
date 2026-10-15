@@ -1,23 +1,23 @@
+import type { UiChild } from '../../lib/uiCopy';
 import React from 'react';
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
 import { useTheme } from '../../theme/ThemeProvider';
 import { LedgerText } from './LedgerText';
+import type { UiCopy, UiNativeProps } from '../../lib/uiCopy';
 
 export function LedgerSection({
   title,
-  deck,
   action,
   evidence,
   ruled = true,
   children,
   style,
   ...rest
-}: ViewProps & {
-  title?: string;
-  deck?: string;
-  action?: React.ReactNode;
-  evidence?: React.ReactNode;
+}: UiNativeProps<ViewProps> & {
+  title?: UiCopy;
+  action?: UiChild;
+  evidence?: UiChild;
   ruled?: boolean;
 }) {
   const theme = useTheme();
@@ -38,12 +38,9 @@ export function LedgerSection({
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
           <View style={{ flex: 1, gap: 4 }}>
             {title ? <LedgerText variant="heading">{title}</LedgerText> : null}
-            {deck ? <LedgerText tone="mutedInk">{deck}</LedgerText> : null}
           </View>
           {action}
         </View>
-      ) : deck ? (
-        <LedgerText tone="mutedInk">{deck}</LedgerText>
       ) : null}
       {children}
       {evidence}

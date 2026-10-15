@@ -1,14 +1,15 @@
 import type { SegOption } from '../components/controls';
 import { SECTION_ORDER } from '../constants';
 import type { SectionKey } from '../types';
+import { uiSectionName, type UiCopy } from '../lib/uiCopy';
 
 export const DEFAULT_INTERESTS: SectionKey[] = ['Mortgage', 'Savings', 'TD'];
 
 /** Short labels for section segmented controls (Home, Browse). */
-export const SECTION_SEG_LABELS: Record<SectionKey, string> = {
-  Mortgage: 'Mortgage',
+export const SECTION_SEG_LABELS: Record<SectionKey, UiCopy> = {
+  Mortgage: 'Home loans',
   Savings: 'Savings',
-  TD: 'Term Deposits',
+  TD: 'Term deposits',
 };
 
 const VALID = new Set<SectionKey>(SECTION_ORDER);
@@ -29,10 +30,10 @@ export function orderedInterestSections(interests: SectionKey[]): SectionKey[] {
   return normalizeInterests(interests);
 }
 
-export function sectionSegmentOptions(interests: SectionKey[]): SegOption<SectionKey>[] {
-  return orderedInterestSections(interests).map((key) => ({
+export function sectionSegmentOptions(_interests: SectionKey[] = DEFAULT_INTERESTS): SegOption<SectionKey>[] {
+  return SECTION_ORDER.map((key) => ({
     value: key,
-    label: SECTION_SEG_LABELS[key],
+    label: uiSectionName(key, true),
   }));
 }
 
@@ -64,6 +65,6 @@ export function resolveInterestSection(
   preferred?: SectionKey,
 ): SectionKey {
   const ordered = orderedInterestSections(interests);
-  if (preferred && ordered.includes(preferred)) return preferred;
+  if (preferred && VALID.has(preferred)) return preferred;
   return ordered[0];
 }

@@ -17,6 +17,7 @@ import {
 } from '../theme/layout';
 import { useTheme } from '../theme/ThemeProvider';
 import { DataHealthBanner } from './feedback';
+import type { UiNativeProps } from '../lib/uiCopy';
 
 type ScreenMeasure = 'reading' | 'data' | 'full';
 
@@ -88,7 +89,7 @@ export function ScreenContent({
   children,
   measure = 'reading',
   ...rest
-}: ViewProps & { measure?: ScreenMeasure }) {
+}: UiNativeProps<ViewProps> & { measure?: ScreenMeasure }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -105,7 +106,7 @@ export function Screen({
   children,
   showDataHealthBanner = true,
   ...rest
-}: ViewProps & { showDataHealthBanner?: boolean }) {
+}: UiNativeProps<ViewProps> & { showDataHealthBanner?: boolean }) {
   const theme = useTheme();
   return (
     <View style={[{ flex: 1, backgroundColor: theme.colors.bg }, style]} {...rest}>
@@ -118,7 +119,7 @@ export function Screen({
 /** Scrollable screen body; sets both scroll surface and overscroll background. */
 export const ScreenScrollView = forwardRef<
   ScrollView,
-  ScrollViewProps & { showDataHealthBanner?: boolean; measure?: ScreenMeasure }
+  UiNativeProps<ScrollViewProps> & { showDataHealthBanner?: boolean; measure?: ScreenMeasure }
 >(function ScreenScrollView(
   {
     style,

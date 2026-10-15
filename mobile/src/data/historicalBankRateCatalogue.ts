@@ -1,10 +1,10 @@
 import { SECTION_KEYS, type CorePayload, type RateRow, type SectionKey } from '../types';
-import { isBroadlyAvailable, isConditionalDepositRate, isNonStandard } from './format';
+import { isBroadlyAvailable, isConditionalDepositRate, isNonStandard } from './rateClassification';
 import { getMandatoryEligibilityRevision, mandatoryEligibleRows } from './eligibilityGate';
 import { getSuitabilityRevision } from './suitabilityGate';
 import { isExplicitTermDepositProduct } from './sectionIntegrity';
 import { normalizeProfileFilters, profileFeaturesForSection, profileFilterRows, type ProfileFilters } from './profile';
-import { featureEvidenceMatches, featureEvidenceScope } from './productFacts';
+import { featureEvidenceMatches, featureEvidenceScope } from './productFactsCore';
 import { bankRateScope, snapshotBankRates, type BankRateScope, type BankRateSnapshot, type RateSummary } from './bankRateOverview';
 import { HISTORICAL_CATALOGUE_LIMITS, validateHistoricalBankRateCatalogue, validateHistoricalBankRateCatalogueAsync, type HistoricalBankRateCatalogue, type HistoricalCatalogueTier } from './historicalBankRateCatalogueWire';
 import { isValidCalendarDate } from '../lib/calendarDate';

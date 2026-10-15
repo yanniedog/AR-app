@@ -1,3 +1,4 @@
+import type { UiChild } from '../lib/uiCopy';
 import React, {
   createContext,
   useContext,
@@ -27,7 +28,7 @@ export function PerformanceAuditReadinessProvider({
   children,
 }: {
   registry?: PerformanceAuditReadinessRegistry;
-  children: React.ReactNode;
+  children: UiChild;
 }) {
   return (
     <PerformanceAuditReadinessContext.Provider value={registry}>

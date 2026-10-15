@@ -1,7 +1,7 @@
 import { SECTION_KEYS, type RateRow } from '../types';
 import { validateHistoricalBankRateCatalogue, type HistoricalBankRateCatalogue } from './historicalBankRateCatalogueWire';
-import { isBroadlyAvailable, isConditionalDepositRate, isNonStandard } from './format';
-import { featureEvidenceMatches, featureEvidenceScope } from './productFacts';
+import { isBroadlyAvailable, isConditionalDepositRate, isNonStandard } from './rateClassification';
+import { featureEvidenceMatches, featureEvidenceScope } from './productFactsCore';
 import { PROFILE_FEATURE_OPTIONS } from './profile';
 import { isExplicitTermDepositProduct } from './sectionIntegrity';
 import { READY_SEMANTIC_REVISION, validateHistoricalBankRateReady, type HistoricalBankRateReady, type ReadyHistoryCohort } from './historicalBankRateReadyWire';

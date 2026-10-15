@@ -3,6 +3,7 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import { useSearchFilterOptions } from '../src/hooks/useSearchFilterOptions';
 import { EMPTY_SEARCH_FILTER_OPTIONS, type SearchFilterOptions } from '../src/data/searchFilterOptions';
+import { debugLog } from '../src/lib/debugLog';
 import type { ProductDetail, RateRow } from '../src/types';
 
 const mockPrepare = jest.fn();
@@ -77,13 +78,15 @@ test('replaced details cancel a prior preparation and cannot install stale optio
 });
 
 test('a failed preparation becomes a terminal error and can retry without a route change', async () => {
+  const log = jest.spyOn(debugLog, 'error').mockImplementation(() => undefined);
   mockPrepare.mockRejectedValueOnce(new Error('Facet preparation failed'));
   let tree!: ReactTestRenderer;
   act(() => { tree = TestRenderer.create(<Probe />); });
   try {
     await act(async () => { mockNavigationJobs[0].run(); });
     expect(latest.ready).toBe(false);
-    expect(latest.error).toBe('Facet preparation failed');
+    expect(latest.error).toBe('Filter · Unavailable');
+    expect(log).toHaveBeenCalledWith('searchFilterOptions', 'Facet preparation failed');
     expect(latest.options).toBe(EMPTY_SEARCH_FILTER_OPTIONS);
     const options = { ...EMPTY_SEARCH_FILTER_OPTIONS, providers: ['Macquarie'] };
     mockPrepare.mockResolvedValueOnce(options);
@@ -91,5 +94,5 @@ test('a failed preparation becomes a terminal error and can retry without a rout
     expect(latest.error).toBeNull();
     await act(async () => { mockNavigationJobs[1].run(); });
     expect(latest).toEqual({ ready: true, options, error: null, retry: expect.any(Function) });
-  } finally { act(() => tree.unmount()); }
+  } finally { act(() => tree.unmount()); log.mockRestore(); }
 });

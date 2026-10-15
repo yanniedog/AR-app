@@ -10,12 +10,14 @@ import { compareMortgagePeriods, type MortgageComparisonDraft } from '../../data
 import { MortgagePeriodForm, MortgageResultDetails, type MortgageFormInput } from './MortgagePeriodForm';
 import { HoldingsResultDetails } from './PortfolioComparison';
 import { AppText, Button, Chip, Disclosure } from '../ui';
+import { uiCount, uiDecimal, uiIdentifier, uiJoin, uiLabel, uiProductName, type UiCopy, type UiLabel } from '../../lib/uiCopy';
+import { uiEngineStatus } from './EngineReceiptFacts';
 
-export interface MortgageComparisonOption { target: MortgageTarget; selections: MortgageSelection[]; label: string }
+export interface MortgageComparisonOption { target: MortgageTarget; selections: MortgageSelection[]; label: UiCopy }
 export function MortgageComparisonForm({ context, options }: { context: MortgageContext; options: MortgageComparisonOption[] }) {
   const customer = useCustomerProfile(), [inputs, setInputs] = useState<(MortgageFormInput | null)[]>([null, null]);
   const [confirmed, setConfirmed] = useState(false), [referenceId, setReference] = useState('loan-1');
-  const [metric, setMetric] = useState<MortgageComparisonDraft['metric']>('net_interest_fee_cost'), [copy, setCopy] = useState('');
+  const [metric, setMetric] = useState<MortgageComparisonDraft['metric']>('net_interest_fee_cost'), [copy, setCopy] = useState<UiLabel>('');
   const change = useCallback((n: number, value: MortgageFormInput | null) => { setInputs(old => old.map((v, i) => i === n ? value : v)); setConfirmed(false); setCopy(''); }, []);
   const first = useCallback((v: MortgageFormInput | null) => change(0, v), [change]), second = useCallback((v: MortgageFormInput | null) => change(1, v), [change]);
   const identity = canonical([inputs, confirmed, referenceId, metric, customer.profile?.revision, context.manifest]);
@@ -28,21 +30,22 @@ export function MortgageComparisonForm({ context, options }: { context: Mortgage
       metric, referenceId, independentLoansConfirmed: confirmed, alternatives: selected.map((v, n) => ({ id: `loan-${n + 1}`, ...v, target: options[n].target })) });
   }
   return <View style={{ gap: 12 }}>
-    <AppText>Compare two confirmed historical loan periods</AppText>
-    <AppText variant="small">Use the same period, opening total debt and cleared payment dates, amounts and timing. Do not change statement facts to make loans comparable. Interest and external fees may differ. This excludes household wealth, switching costs, future borrowing and tax effects.</AppText>
-    {options.map((o, n) => <View key={n} style={{ gap: 8 }}><AppText weight="700">Loan {n + 1}: {o.label}</AppText><MortgagePeriodForm selections={o.selections} target={o.target} context={context} onComparisonInput={n === 0 ? first : second} /></View>)}
-    <Chip label="These loan-only periods have no omitted linked-account effects" selected={confirmed} onPress={() => { setConfirmed(!confirmed); setCopy(''); }} />
-    {(['net_interest_fee_cost', 'terminal_net_worth'] as const).map(m => <Chip key={m} label={m === 'net_interest_fee_cost' ? 'Compare interest and fee cost' : 'Compare closing loan-frame wealth'} selected={metric === m} onPress={() => { setMetric(m); setCopy(''); }} />)}
-    {['loan-1', 'loan-2'].map(id => <Chip key={id} label={`Reference: ${id}`} selected={referenceId === id} onPress={() => { setReference(id); setCopy(''); }} />)}
-    <Button title="Compare confirmed mortgage periods" disabled={customer.busy} onPress={() => { try { setResult({ identity, value: calculate() }); } catch (e) { setResult({ identity, error: e instanceof Error ? e.message : 'Comparison unavailable.' }); } setCopy(''); }} />
-    {current?.error && <AppText>{current.error}</AppText>}
-    {current?.value && <><AppText>{current.value.receipt.available ? 'Complete for these confirmed loan-only periods.' : 'Comparison incomplete or unavailable; no ranking.'}</AppText>
-      {current.value.receipt.issues.map(issue => <AppText key={issue}>{issue}</AppText>)}
-      {current.value.receipt.results.map(r => <View key={r.id} style={{ gap: 8 }}><AppText>{r.id}: rank {r.rank ?? 'unavailable'}; interest and fee cost {r.receipt.netInterestFeeCost ?? 'unknown'} AUD; closing loan-frame wealth {r.receipt.closingNetWorth ?? 'unknown'} AUD.</AppText>
+    <AppText>{uiJoin('Compare', ' · ', 'Mortgage', ' · ', 'History')}</AppText>
+    <AppText variant="small">{uiJoin('Basis', ' · ', 'Common period', ' · ', 'Equal opening totals', ' · ', 'Payments complete')}</AppText>
+    <AppText variant="small">{uiJoin('Excluded', ' · ', 'Household wealth', ' / ', 'Switching costs', ' / ', 'Future return', ' / ', 'Tax')}</AppText>
+    {options.map((o, n) => <View key={n} style={{ gap: 8 }}><AppText weight="700">{uiJoin('Loan', ' ', uiCount(n + 1), ': ', o.label)}</AppText><MortgagePeriodForm selections={o.selections} target={o.target} context={context} onComparisonInput={n === 0 ? first : second} /></View>)}
+    <Chip label="No linked effects" selected={confirmed} onPress={() => { setConfirmed(!confirmed); setCopy(''); }} />
+    {(['net_interest_fee_cost', 'terminal_net_worth'] as const).map(m => <Chip key={m} label={uiLabel(m === 'net_interest_fee_cost' ? 'Interest and fee cost' : 'Closing wealth')} selected={metric === m} onPress={() => { setMetric(m); setCopy(''); }} />)}
+    {['loan-1', 'loan-2'].map(id => <Chip key={id} label={uiJoin('Reference', ': ', uiIdentifier(id))} selected={referenceId === id} onPress={() => { setReference(id); setCopy(''); }} />)}
+    <Button title={uiJoin('Compare', ' ', 'Mortgage')} disabled={customer.busy} onPress={() => { try { setResult({ identity, value: calculate() }); } catch (e) { setResult({ identity, error: e instanceof Error ? e.message : 'Comparison unavailable.' }); } setCopy(''); }} />
+    {current?.error && <AppText>{uiLabel('Unavailable')}</AppText>}
+    {current?.value && <><AppText>{uiJoin('Status', ': ', uiLabel(current.value.receipt.available ? 'Complete' : 'Unavailable'), ' · ', 'Issues', ': ', uiCount(current.value.receipt.issues.length))}</AppText>
+      {current.value.receipt.results.map(r => <View key={r.id} style={{ gap: 8 }}><AppText>{uiJoin(uiIdentifier(r.id), ' · ', 'Rank', ': ', uiCount(r.rank), ' · ', 'Interest and fee cost', ': ', uiDecimal(r.receipt.netInterestFeeCost), ' · ', 'Closing wealth', ': ', uiDecimal(r.receipt.closingNetWorth))}</AppText>
+        <AppText variant="small">{uiJoin('Completeness', ': ', uiEngineStatus(r.receipt.completeness))}</AppText>
         {Object.entries(r.receipt.accounts).map(([id, receipt]) => <MortgageResultDetails key={id} receipt={receipt} />)}<HoldingsResultDetails result={r} referenceId={referenceId} /></View>)}
-      <Button title="Copy mortgage comparison receipt" onPress={() => { try { inputs.forEach((i, n) => assertMortgageSelection(i!.selection, context, options[n].target)); void Clipboard.setStringAsync(JSON.stringify(current.value, null, 2)).then(() => setCopy('Receipt copied.'), () => setCopy('Copy failed.')); } catch { setCopy('Source changed. Calculate again.'); } }} />
-      <AppText variant="small">The receipt contains private offer, account, statement and payment details. Saved output is not current approval.</AppText></>}
-    {!!copy && current && <AppText variant="small">{copy}</AppText>}
+      <Button title={uiJoin('Copy', ' ', 'Receipt')} onPress={() => { try { inputs.forEach((i, n) => assertMortgageSelection(i!.selection, context, options[n].target)); void Clipboard.setStringAsync(JSON.stringify(current.value, null, 2)).then(() => setCopy('Copied'), () => setCopy('Copy failed')); } catch { setCopy('Source changed'); } }} />
+      <AppText variant="small">{uiJoin('Receipt', ' · ', 'Private', ' · ', 'Entered facts', ' · ', 'No approval')}</AppText></>}
+    {!!copy && current && <AppText variant="small">{uiLabel(copy)}</AppText>}
   </View>;
 }
 
@@ -63,13 +66,13 @@ export function MortgageComparison({ rows }: { rows: { row: RateRow; section: Se
         const target: MortgageTarget = { kind: 'rate_variant', section: 'Mortgage', row, productKey: row.product_key, detail };
         const selections = await loadMortgageSelections(context, target);
         if (!selections.length) throw Error('A reviewed mortgage comparison is unavailable for one selected row.');
-        options.push({ target, selections, label: row.product_name || row.product_key });
+        options.push({ target, selections, label: row.product_name ? uiProductName(row) : uiIdentifier(row.product_key) });
       }
       save(options);
     })().catch(e => save([], e instanceof Error ? e.message : 'Mortgage policies could not be verified.'));
     return () => { active = false; };
   }, [open, retry, identity, manifest, core, coreIntegrity, details, rows]);
-  return <Disclosure title="Compare historical mortgage periods" open={open} onToggle={() => setOpen(!open)}>
-    {current?.options.length === 2 ? <MortgageComparisonForm key={identity} context={current.context} options={current.options} /> : <><AppText>{current?.error ?? 'Checking reviewed mortgage policies...'}</AppText><Button title="Retry mortgage comparison policies" onPress={() => void ensureDetails({ forProductView: true }).catch(() => undefined).finally(() => setRetry(n => n + 1))} /></>}
+  return <Disclosure title={uiJoin('Compare', ' · ', 'Mortgage', ' · ', 'History')} open={open} onToggle={() => setOpen(!open)}>
+    {current?.options.length === 2 ? <MortgageComparisonForm key={identity} context={current.context} options={current.options} /> : <><AppText>{uiLabel(current?.error ? 'Unavailable' : 'Loading')}</AppText><Button title="Retry" onPress={() => void ensureDetails({ forProductView: true }).catch(() => undefined).finally(() => setRetry(n => n + 1))} /></>}
   </Disclosure>;
 }

@@ -25,7 +25,7 @@ describe('tracked rate store migration', () => {
     await AsyncStorage.clear();
     await SecureStore.deleteItemAsync(TRACKED_RATE_SECURE_STORAGE_KEY);
     useStore.setState({
-      prefs: { ...DEFAULT_PREFS, onboarded: true },
+      prefs: { ...DEFAULT_PREFS },
       savedRates: [],
       trackedRates: [],
       favorites: [],
@@ -40,7 +40,7 @@ describe('tracked rate store migration', () => {
     useStore.setState({ hydrated: false });
     await AsyncStorage.setItem('ar-rates', JSON.stringify({
       state: {
-        prefs: { ...DEFAULT_PREFS, onboarded: true },
+        prefs: { ...DEFAULT_PREFS },
         savedRates: [saved],
         favorites: [row.product_key],
         subscriptions: [],
@@ -131,7 +131,7 @@ describe('tracked rate store migration', () => {
     const saved = makeSavedRateRef(row, 'rate', '2026-08-13T00:00:00.000Z');
     await AsyncStorage.setItem('ar-rates', JSON.stringify({
       state: {
-        prefs: { ...DEFAULT_PREFS, onboarded: true },
+        prefs: { ...DEFAULT_PREFS },
         savedRates: [saved],
         favorites: [saved.productKey],
         subscriptions: [],

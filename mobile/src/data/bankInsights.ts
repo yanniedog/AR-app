@@ -17,7 +17,6 @@ import {
   DEFAULT_PASS_THROUGH_WINDOW_DAYS,
   MOVE_DIRS,
   type BankInsightsPayload,
-  type BankMoveDir,
   type BankRateEvent,
   type BankSectionSeries,
   type BehaviourDirectionSummary,
@@ -144,9 +143,10 @@ function filterBankInsightsForSectionIntegrity(
   const banks: BankInsightsPayload['banks'] = {};
   for (const [provider, sections] of Object.entries(payload.banks)) {
     const retained = Object.fromEntries(
-      Object.entries(sections).filter(([section]) =>
-        !quarantinedPairs.has(bankHistoryPairKey(provider, section as SectionKey)),
-      ),
+      Object.entries(sections).filter(([key]) => {
+        const section = SECTION_KEYS.find(section => section === key);
+        return !section || !quarantinedPairs.has(bankHistoryPairKey(provider, section));
+      }),
     ) as Partial<Record<SectionKey, BankSectionSeries>>;
     if (Object.keys(retained).length) banks[provider] = retained;
   }
@@ -352,8 +352,9 @@ function normalizeBehaviour(
 ): Partial<Record<SectionKey, BehaviourSectionSummary>> | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const out: Partial<Record<SectionKey, BehaviourSectionSummary>> = {};
-  for (const [section, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (!(SECTION_KEYS as readonly string[]).includes(section) || !value || typeof value !== 'object') {
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const section = SECTION_KEYS.find(section => section === key);
+    if (!section || !value || typeof value !== 'object') {
       continue;
     }
     const obj = value as Record<string, unknown>;
@@ -369,8 +370,8 @@ function normalizeBehaviour(
         };
       }
     }
-    out[section as SectionKey] = {
-      section: section as SectionKey,
+    out[section] = {
+      section,
       window_days: Math.max(1, Math.round(numberOrNull(obj.window_days) ?? DEFAULT_PASS_THROUGH_WINDOW_DAYS)),
       providers,
     };
@@ -399,13 +400,14 @@ export function normalizeBankInsightsPayload(raw: unknown): BankInsightsPayload 
     if (!provider || !sectionsRaw || typeof sectionsRaw !== 'object') continue;
     const sections: Partial<Record<SectionKey, BankSectionSeries>> = {};
     for (const [key, value] of Object.entries(sectionsRaw as Record<string, unknown>)) {
-      if (!(SECTION_KEYS as readonly string[]).includes(key) || !value || typeof value !== 'object') continue;
+      const section = SECTION_KEYS.find(section => section === key);
+      if (!section || !value || typeof value !== 'object') continue;
       const series = value as Record<string, unknown>;
       const median = alignedSeries(series.median, run_dates.length);
       const best = alignedSeries(series.best, run_dates.length);
       const count = alignedSeries(series.count, run_dates.length);
       if (!median || !best || !median.some((v) => v != null)) continue;
-      sections[key as SectionKey] = {
+      sections[section] = {
         median,
         best,
         count: count ?? median.map(() => null),
@@ -422,14 +424,14 @@ export function normalizeBankInsightsPayload(raw: unknown): BankInsightsPayload 
       const e = item as Record<string, unknown>;
       const date = typeof e.date === 'string' ? e.date.slice(0, 10) : '';
       const provider = typeof e.provider === 'string' ? e.provider : '';
-      const section = typeof e.section === 'string' ? e.section : '';
-      const dir = typeof e.dir === 'string' ? e.dir : '';
+      const section = SECTION_KEYS.find(section => section === e.section);
+      const dir = MOVE_DIRS.find(dir => dir === e.dir);
       const avg_bps = numberOrNull(e.avg_bps);
       if (
         !parseYmd(date) ||
         !provider ||
-        !(SECTION_KEYS as readonly string[]).includes(section) ||
-        !(MOVE_DIRS as readonly string[]).includes(dir) ||
+        !section ||
+        !dir ||
         avg_bps == null
       ) {
         continue;
@@ -437,8 +439,8 @@ export function normalizeBankInsightsPayload(raw: unknown): BankInsightsPayload 
       events.push({
         date,
         provider,
-        section: section as SectionKey,
-        dir: dir as BankMoveDir,
+        section,
+        dir,
         moved: Math.max(0, Math.round(numberOrNull(e.moved) ?? 0)),
         total: Math.max(0, Math.round(numberOrNull(e.total) ?? 0)),
         avg_bps,

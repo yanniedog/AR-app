@@ -49,7 +49,7 @@ describe('lifecycle projections', () => {
     expect(impact.interestDifference).toBeGreaterThan(0);
     expect(impact.payoffMonthsEarlier).toBeGreaterThan(0);
     expect(impact.netDifference).toBeNull();
-    expect(impact.netDifferenceUnavailableReason).toMatch(/fees are not available/i);
+    expect(impact.feeCoverage).toBe('unverified');
   });
 
   it('preserves the constant-balance offset calculation from AR-local PR #427', () => {
@@ -87,8 +87,8 @@ describe('lifecycle projections', () => {
     expect(result.history[0].date).toBe('2021-08-04');
     expect(result.history.at(-1)?.date).toBe('2026-08-04');
     expect(result.rateSeries[1].points[0].balance).toBe(460000);
-    expect(result.assumptions.join(' ')).toMatch(/re-anchored/i);
-    expect(result.warnings.join(' ')).toMatch(/approximate history/i);
+    expect(result.facts).toContainEqual(expect.objectContaining({ kind: 'history-model', reanchor: 'current-entered-balance', anchorBalance: 600000 }));
+    expect(result.facts).toContainEqual(expect.objectContaining({ kind: 'history-balance-mismatch', currentEnteredAmount: 460000 }));
   });
 
   it('models savings contributions, withdrawals and rate outcomes', () => {
@@ -138,8 +138,8 @@ describe('lifecycle projections', () => {
     expect(result.projectionScope).toBe('fixed-period');
     expect(result.rateSeries[1].points).toHaveLength(25);
     expect(result.rateSeries[1].endBalance).toBeGreaterThan(0);
-    expect(result.warnings.join(' ')).not.toMatch(/end of term/i);
-    expect(result.assumptions.join(' ')).toMatch(/no unknown reversion rate/i);
+    expect(result.facts.some(f => f.kind === 'residual-loan-balance')).toBe(false);
+    expect(result.facts).toContainEqual({ kind: 'future-reversion-rate', state: 'unknown' });
   });
 
   it('models term-deposit maturity interest without savings-style monthly compounding', () => {
@@ -305,7 +305,7 @@ describe('lifecycle projections', () => {
     const impact = mortgageOffsetImpact(buildLifecycleProjection('Mortgage', scenario, NOW))!;
     expect(impact.interestDifference).toBeGreaterThan(0);
     expect(impact.payoffMonthsEarlier).toBeNull();
-    expect(impact.comparisonWindow).toBe('over the 24-month fixed-rate projection');
+    expect(impact.comparisonScope).toBe('fixed-period'); expect(impact.comparisonMonths).toBe(24);
   });
 
   it('carries historical offset into forward scenarios and warns on mismatch', () => {
@@ -329,7 +329,7 @@ describe('lifecycle projections', () => {
     const historicalLastOffset = result.history.at(-1)!.offsetBalance;
     expect(historicalLastOffset).toBeGreaterThan(10000);
     expect(result.rateSeries[1].points[0].offsetBalance).toBe(historicalLastOffset);
-    expect(result.warnings.join(' ')).toMatch(/simulated offset/i);
+    expect(result.facts).toContainEqual(expect.objectContaining({ kind: 'history-offset-mismatch', simulatedEndAmount: historicalLastOffset, forwardSource: 'simulated-history' }));
   });
 
   it('labels conditional savings ongoing rate distinctly during the bonus period', () => {
@@ -347,8 +347,8 @@ describe('lifecycle projections', () => {
     });
     const result = buildLifecycleProjection('Savings', scenario, NOW);
     expect(result.rateSeries[1].label).toBe('Ongoing rate');
-    expect(result.rateSeries[1].detail).toMatch(/5\.00% conditional for 3 months, then 2\.00% ongoing/);
-    expect(result.rateSeries[0].detail).toMatch(/5\.00% conditional for 3 months, then 1\.00% ongoing/);
+    expect(result.facts).toContainEqual({ kind: 'savings-bonus-model', conditions: 'entered-met', periodMonths: 3, conditionalRateFraction: 0.05, ongoingRateFraction: 0.02, startingRate: 'conditional' });
+    expect(result.facts).toContainEqual({ kind: 'rate-scenarios', lowerFraction: 0.01, baseFraction: 0.02, higherFraction: 0.03, holding: 'constant' });
   });
 
   it('parses fraction-form rate strings consistently with toFraction', () => {

@@ -5,6 +5,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText } from './ui';
+import type { UiCopy, UiChild } from '../lib/uiCopy';
 
 function marginBottomFromStyle(style?: StyleProp<ViewStyle>): number {
   const flat = StyleSheet.flatten(style);
@@ -18,11 +19,11 @@ export function SwipeableRow({
   style,
   deleteLabel = 'Remove',
 }: {
-  children: React.ReactNode;
+  children: UiChild;
   onDelete: () => void;
   enabled?: boolean;
   style?: StyleProp<ViewStyle>;
-  deleteLabel?: string;
+  deleteLabel?: UiCopy;
 }) {
   const theme = useTheme();
   const ref = useRef<Swipeable>(null);
@@ -37,7 +38,6 @@ export function SwipeableRow({
       onPress={handleDelete}
       accessibilityRole="button"
       accessibilityLabel={deleteLabel}
-      accessibilityHint="Removes this item"
       style={{
         backgroundColor: theme.colors.danger,
         justifyContent: 'center',

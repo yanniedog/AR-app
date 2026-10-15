@@ -34,7 +34,7 @@ jest.mock('../src/components/charts', () => ({ RbaChart: 'RbaChart' }));
 jest.mock('../src/components/rba/RateOutlookChart', () => ({ RateOutlookChart: 'RateOutlookChart' }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
 jest.mock('../src/components/ledger', () => ({ LedgerAction: 'LedgerAction', LedgerText: 'LedgerText', LedgerSection: 'LedgerSection' }));
-jest.mock('../src/components/ui', () => ({ Disclosure: 'Disclosure' }));
+jest.mock('../src/components/ui', () => ({ Disclosure: 'Disclosure', AppText: 'AppText', Row: 'Row' }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({
   usePerformanceAuditSurface: (definition: PerformanceAuditSurfaceDefinition) => { mockSurface = definition; return {}; },
   usePerformanceAuditProbe: jest.fn(),
@@ -79,8 +79,9 @@ test('shows dated distinct sources, upcoming survey quarters and explicitly open
   expect(graphs[1].props.points).toEqual(outlook.bondForwards!.points);
   expect(graphs.every((graph) => graph.props.cashRate === 4.35)).toBe(true);
   expect(text()).toContain('29 Sep');
-  expect(text()).toContain('Bond forwards include risk premiums');
-  expect(text()).toContain('separate from market pricing');
+  expect(tree!.root.findByProps({ label: 'Risk premiums' }).props.value).toBe('Included');
+  expect(tree!.root.findByProps({ label: 'Cash-futures probabilities' }).props.value).toBe('Excluded');
+  expect(tree!.root.findByProps({ label: 'Survey' }).props.value).toBe('Independent · Quarterly');
   expect(text()).toContain(formatRunDate(outlook.bondForwards!.publicationDate));
   await press('View ASX market expectations');
   expect(mockExternal).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'official_market_source', url: expect.stringContaining('/rba-rate-tracker') }));
@@ -117,7 +118,7 @@ test('executes chart audit controls and preserves good graphs after a failed man
   await press('Refresh outlook');
   expect(mockLoad).toHaveBeenLastCalledWith(true);
   expect(tree!.root.findAllByType('RateOutlookChart')).toHaveLength(2);
-  expect(text()).toContain('could not be refreshed');
+  expect(text()).toContain('Refresh failed');
 });
 
 test('explicit cache clearing removes page state and ignores a pending refresh response', async () => {
@@ -125,14 +126,14 @@ test('explicit cache clearing removes page state and ignores a pending refresh r
   act(() => { mockSurface.actions!['rba.forecast.next'](); });
   mockLoad.mockRejectedValueOnce(new Error('offline'));
   await press('Refresh outlook');
-  expect(text()).toContain('could not be refreshed');
+  expect(text()).toContain('Refresh failed');
   let resolve!: (value: RbaMarketOutlook) => void;
   mockLoad.mockReturnValueOnce(new Promise<RbaMarketOutlook>((accept) => { resolve = accept; }));
   await press('Refresh outlook');
   act(() => mockCacheReset());
   await act(async () => { resolve(outlook); });
   expect(tree!.root.findAllByType('RateOutlookChart')).toHaveLength(0);
-  expect(text()).not.toContain('could not be refreshed');
+  expect(text()).not.toContain('Refresh failed');
   expect(text()).not.toContain('Refreshing outlook');
   expect(mockSurface.actions!['rba.forecast.next']()).toEqual({ unavailableReason: expect.any(String) });
   expect(jest.mocked(usePerformanceAuditProbe).mock.calls.at(-1)?.[1]).toMatchObject({
@@ -147,7 +148,7 @@ test('uses explicit unavailable audit results when public data has never been ca
   expect(mockSurface.actions!['rba.forecast.next']()).toEqual({ unavailableReason: expect.stringContaining('cached economist') });
   expect(mockSurface.actions!['rba.bonds.next']()).toEqual({ unavailableReason: expect.stringContaining('cached bond') });
   expect(text()).toContain('4.35%');
-  expect(text()).toContain('No upcoming economist forecasts');
+  expect(text()).toContain('Forecast unavailable');
 });
 
 test('discloses an elapsed unrecorded decision rather than presenting the next meeting as current', async () => {
@@ -162,7 +163,7 @@ test('keeps original source dates visible for saved older data and never rolls i
   jest.setSystemTime(Date.parse('2027-01-22T00:00:00Z'));
   mockLoad.mockResolvedValue({ ...outlook, refreshStatus: 'offline' });
   await mount();
-  expect(text()).toContain('Saved data shown');
+  expect(text()).toContain('Cached · Offline');
   expect(text()).toContain('Older survey');
   expect(text()).toContain('Older observation');
   const bonds = tree!.root.findAllByType('RateOutlookChart')[1];

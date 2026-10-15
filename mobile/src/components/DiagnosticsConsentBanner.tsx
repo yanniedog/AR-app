@@ -1,3 +1,4 @@
+import { uiLabel } from '../lib/uiCopy';
 import React from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -5,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getTabBarContentHeight } from '../lib/androidChrome';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, androidRipple } from './ui';
+import type { UiCopy } from '../lib/uiCopy';
 
 export function DiagnosticsConsentBanner({
   visible,
@@ -28,10 +30,10 @@ export function DiagnosticsConsentBanner({
     ? getTabBarContentHeight(fontScale) + insets.bottom + 8
     : Math.max(8, insets.bottom + 4);
 
-  const action = (label: string, accessibilityLabel: string, onPress: () => void) => (
+  const action = (label: UiCopy, onPress: () => void) => (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={label}
       onPress={onPress}
       hitSlop={4}
       android_ripple={androidRipple(theme.colors.primaryMuted, true)}
@@ -79,17 +81,11 @@ export function DiagnosticsConsentBanner({
         accessibilityLiveRegion="polite"
         variant="small"
         color="text"
-      >
-        Send anonymous crash reports to help fix bugs?
-      </AppText>
-      <AppText variant="tiny" color="textFaint">
-        Sends crash traces and device details to Google Firebase Crashlytics. An
-        automatically redacted sample may be privately triaged by maintainers. Change this
-        any time in Settings; full details are in Terms and privacy.
-      </AppText>
+      >{uiLabel("Optional diagnostics")}</AppText>
+      <AppText variant="tiny" color="textFaint">{uiLabel("Crash traces · Device details · Firebase Crashlytics")}</AppText>
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 4 }}>
-        {action('Not now', 'Decline diagnostics', onDecline)}
-        {action('Allow', 'Allow diagnostics', onAccept)}
+        {action('Decline', onDecline)}
+        {action('Allow', onAccept)}
       </View>
     </View>
   );

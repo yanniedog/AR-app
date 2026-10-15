@@ -1,13 +1,16 @@
 import { strToU8, zipSync } from 'fflate';
 import type { ReportSheet } from './searchReportTables';
+import { uiMarkupEscape, type UiCopy, type UiMarkup } from './uiCopy';
 
-export function escapeReportMarkup(value: string): string {
+function escapeMarkup(value: string): string {
   return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]!);
 }
+/** Public report-markup entry admits only closed labels and facts. */
+export function escapeReportMarkup(value: UiCopy): UiMarkup { return uiMarkupEscape(value); }
 function xmlText(value: string): string {
   // Excel decodes these escape sequences even in inline strings. Escape literal tokens first.
   // XML normalizes raw CR/CRLF, so encode carriage returns to preserve source text exactly.
-  return escapeReportMarkup(value.replace(/_x[\da-f]{4}_/gi, match => `_x005F_${match.slice(1)}`)
+  return escapeMarkup(value.replace(/_x[\da-f]{4}_/gi, match => `_x005F_${match.slice(1)}`)
     .replace(/[\x00-\x08\x0B-\x1F]/g, char => `_x${char.charCodeAt(0).toString(16).padStart(4, '0')}_`));
 }
 const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';

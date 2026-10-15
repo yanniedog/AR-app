@@ -4,12 +4,13 @@ import { View } from 'react-native';
 import type { SectionResponseSummary } from '../../data/passThroughModels';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText, Row } from '../ui';
+import { uiCount, uiJoin, type UiCopy } from '../../lib/uiCopy';
 
-function Legend({ color, label, value }: { color: string; label: string; value: number }) {
+function Legend({ color, label, value }: { color: string; label: UiCopy; value: number }) {
   return (
     <Row gap={5} style={{ alignItems: 'center' }}>
       <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }} />
-      <AppText variant="tiny" color="textMuted">{label} {value}</AppText>
+      <AppText variant="tiny" color="textMuted">{uiJoin(label, ' ', uiCount(value))}</AppText>
     </Row>
   );
 }
@@ -26,7 +27,7 @@ export function ResponseComposition({ summary }: { summary: SectionResponseSumma
     <View
       accessible
       accessibilityRole="image"
-      accessibilityLabel={`${summary.movedWithRba} lenders moved with the RBA, ${summary.movedOpposite} moved in the opposite direction, and ${summary.unchanged} were unchanged out of ${summary.eligible} observed lenders.`}
+      accessibilityLabel={uiJoin('With RBA', ' ', uiCount(summary.movedWithRba), ' · ', 'Opposite', ' ', uiCount(summary.movedOpposite), ' · ', 'Unchanged', ' ', uiCount(summary.unchanged), ' · ', 'Observed', ' ', uiCount(summary.eligible), ' ', 'Lenders')}
     >
       <View
         style={{

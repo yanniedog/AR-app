@@ -13,11 +13,13 @@ import { hasFiniteChartDate, hasPositiveChartLayout, type ChartRenderEvidence } 
 import { ChartSliceControls } from '../charts/ChartSliceControls';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText, Row } from '../ui';
+import { uiDate, uiJoin, uiLabel, type UiCopy } from '../../lib/uiCopy';
+import { uiCalendarMonth, uiChartBps, uiChartSection } from '../../lib/chartUiCopy';
 
 const CELL_GAP = 3;
 const LABEL_W = 26;
 const LABEL_H = 14;
-const DAY_LABELS = ['M', '', 'W', '', 'F', '', 'S'];
+const DAY_LABELS = ['M', '', 'W', '', 'F', '', 'S'] as const;
 
 /**
  * Market calendar: one square per day, coloured by which way the section's
@@ -49,8 +51,7 @@ export function RateHeatCalendar({
         if (auditRevision) onGraphicReadiness?.({ revision: auditRevision, expectedCount: 0, pointCount: 0,
           accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
       }}>
-        The calendar needs at least two days of history — check back after the next refresh.
-      </AppText>
+        {uiLabel("No observations")}</AppText>
     );
   }
 
@@ -68,27 +69,23 @@ export function RateHeatCalendar({
     return withAlpha(tone === 'danger' ? badInk : goodInk, 0.25 + 0.75 * Math.min(1, intensity));
   };
 
-  const better = SECTIONS[section].lowerIsBetter ? 'Rates fell' : 'Rates rose';
-  const worse = SECTIONS[section].lowerIsBetter ? 'Rates rose' : 'Rates fell';
+  const better = uiLabel(SECTIONS[section].lowerIsBetter ? 'Lower rates' : 'Higher rates');
+  const worse = uiLabel(SECTIONS[section].lowerIsBetter ? 'Higher rates' : 'Lower rates');
   const observations = model.weeks.flatMap((week) => week.filter((cell) => cell?.hasData));
   const activeDate = selectedDate && observations.some((cell) => cell?.date === selectedDate)
     ? selectedDate
     : observations.at(-1)?.date ?? '';
   const activeIndex = Math.max(0, observations.findIndex((cell) => cell?.date === activeDate));
   const activeCell = observations[activeIndex];
-  const activeValue = activeCell?.deltaBps == null
-    ? 'First observation'
-    : activeCell.deltaBps === 0
-      ? 'No change'
-      : `${activeCell.deltaBps > 0 ? '+' : ''}${Math.round(activeCell.deltaBps * 10) / 10} basis points`;
+  const activeValue = activeCell?.deltaBps == null ? uiLabel('First observation')
+    : activeCell.deltaBps === 0 ? uiLabel('No change') : uiChartBps(activeCell.deltaBps);
 
   return (
     <View>
       <View
         accessible
         accessibilityRole="adjustable"
-        accessibilityLabel={`${SECTIONS[section].title} rate-move calendar. Selected ${activeDate}: ${activeValue}.`}
-        accessibilityHint="Swipe up or down to move between observation dates."
+        accessibilityLabel={uiJoin(uiChartSection(section), ' · ', 'Calendar', ' · ', uiDate(activeDate), ' · ', activeValue)}
         accessibilityActions={[
           { name: 'increment', label: 'Next date' },
           { name: 'decrement', label: 'Previous date' },
@@ -122,7 +119,7 @@ export function RateHeatCalendar({
               fontSize={9}
               fill={theme.colors.textFaint}
             >
-              {m.label}
+              {uiCalendarMonth(m.label)}
             </SvgText>
           ))}
           {DAY_LABELS.map((label, d) =>
@@ -167,7 +164,7 @@ export function RateHeatCalendar({
         activeIndex={activeIndex}
         onChangeIndex={(index) => onDateSelect?.(observations[index]?.date ?? null)}
         valueLabel={activeValue}
-        detail="median advertised rate move"
+        facts={[{ label: 'Basis', value: 'Median advertised' }]}
       />
       <Row gap={12} style={{ marginTop: 8, flexWrap: 'wrap' }}>
         <LegendSwatch color={withAlpha(goodInk, 0.8)} label={better} />
@@ -175,13 +172,13 @@ export function RateHeatCalendar({
         <LegendSwatch color={theme.colors.skeleton} label="No change" />
       </Row>
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
-        Daily move of the median advertised rate · deeper colour = bigger move · tap a day to rewind
+        {uiJoin('Basis', ' · ', 'Median advertised')}
       </AppText>
     </View>
   );
 }
 
-function LegendSwatch({ color, label }: { color: string; label: string }) {
+function LegendSwatch({ color, label }: { color: string; label: UiCopy }) {
   return (
     <Row gap={5}>
       <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: color }} />
