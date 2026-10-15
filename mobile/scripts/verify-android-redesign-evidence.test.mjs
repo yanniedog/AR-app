@@ -37,6 +37,12 @@ const kinds = { apk: 'apk', installed: 'apk', screenshot: 'screenshot', recordin
 const nativeFixture = buildNativeInputFixture(expected);
 Object.assign(files, nativeFixture.files);
 Object.assign(kinds, nativeFixture.kinds);
+for (const id of REQUIRED_CASES) {
+  for (const kind of ['screenshot', 'log']) {
+    files[`case-${id}-${kind}`] = `Synthetic ${id} ${kind} capture`;
+    kinds[`case-${id}-${kind}`] = kind;
+  }
+}
 
 function fixture() {
   const pass = { result: 'pass', captureRefs: ['screenshot', 'recording', 'log', 'report'] };
@@ -55,7 +61,7 @@ function fixture() {
     journeys: REQUIRED_JOURNEYS.map((id) => {
       const pilot = { ...counts, taps: id === 'launch-rates' ? 0 : id === 'compare-two' ? 4 : 1 };
       const journey = { id, ...structuredClone(pass), trigger: 'Synthetic trigger', endState: 'Synthetic end state',
-        ...pilot, durationMs: 60_000, baseline: { ...pilot, alreadyMinimal: true, ref: 'report' },
+        ...pilot, durationMs: 60_000, baseline: { ...pilot, trigger: 'Synthetic trigger', endState: 'Synthetic end state', alreadyMinimal: true, ref: 'report' },
         selectedRates: 2, launchTaps: 0, submitTaps: 0, openTaps: 1, sheetDepth: 1,
         applyCommits: 1, cancelRestoredState: true, statePreserved: true, directoryTaps: 0 };
       if (id === 'sort') Object.assign(journey, {
@@ -67,7 +73,7 @@ function fixture() {
       return journey;
     }),
     invariants: REQUIRED_INVARIANTS.map((id) => ({ id, ...structuredClone(pass) })),
-    cases: REQUIRED_CASES.map((id) => ({ id, ...structuredClone(pass), environment: {
+    cases: REQUIRED_CASES.map((id) => ({ id, ...structuredClone(pass), captureRefs: [`case-${id}-screenshot`, `case-${id}-log`], environment: {
       widthDp: id.startsWith('small-') ? 360 : 411,
       fontScale: id.endsWith('-large') ? 2 : 1,
       theme: id === 'dark' ? 'dark' : 'light', reducedMotion: id === 'reduced-motion',
@@ -163,6 +169,44 @@ test('one retained capture cannot be relabelled as both baseline and final', () 
   }, /baseline\/final capture.*distinct/);
 });
 
+test('native timing requires different trusted baseline and final builds but permits repeated QA versions', () => {
+  for (const field of ['sourceSha', 'apkSha256']) {
+    reject(() => {}, /distinct trusted source SHAs and APK hashes/, {
+      ...expected, baseline: { ...expected.baseline, [field]: expected[field] },
+    });
+  }
+  const record = fixture();
+  const options = structuredClone(expected);
+  Object.assign(options.baseline, { versionName: expected.versionName, versionCode: expected.versionCode });
+  for (const cohort of record.frontendTiming.nativeInput.cohorts) {
+    Object.assign(cohort.baseline.identity, { versionName: expected.versionName, versionCode: expected.versionCode });
+  }
+  const result = validateAndroidRedesignEvidence(record, options);
+  assert.equal(result.ok, true, result.errors.join('\n'));
+});
+
+test('native environment, idle workload and analysis cannot alias the same retained artifact', () => {
+  for (const stageName of ['baseline', 'final']) {
+    for (const role of ['environmentRef', 'workloadRef']) {
+      reject(record => {
+        const stage = record.frontendTiming.nativeInput.cohorts[0][stageName];
+        stage[role] = stage.analysisRef;
+      }, /require independent artifact IDs, paths and bytes/);
+      for (const field of ['path', 'sha256']) {
+        reject(record => {
+          const stage = record.frontendTiming.nativeInput.cohorts[0][stageName];
+          record.artifacts.find(item => item.id === stage[role])[field]
+            = record.artifacts.find(item => item.id === stage.analysisRef)[field];
+        }, /require independent artifact IDs, paths and bytes/);
+      }
+    }
+    reject(record => {
+      const stage = record.frontendTiming.nativeInput.cohorts[0][stageName];
+      stage.environmentRef = stage.workloadRef;
+    }, /require independent artifact IDs, paths and bytes/);
+  }
+});
+
 test('capture configs require actual app atrace fields in their matching data source', async () => {
   const original = files['native-config'];
   const variants = [
@@ -187,6 +231,34 @@ test('accepts complete synthetic records without calling them native or human pr
   const result = validateAndroidRedesignEvidence(fixture(), expected);
   assert.equal(result.ok, true, result.errors.join('\n'));
   assert.equal(result.scope, 'recorded-evidence-completeness');
+});
+
+test('compares effort only for matching baseline and pilot task boundaries', () => {
+  for (const field of ['trigger', 'endState']) {
+    reject(record => { delete record.journeys[0].baseline[field]; }, /baseline trigger\/end state must match/);
+    reject(record => { record.journeys[0].baseline[field] = 'Different task'; }, /baseline trigger\/end state must match/);
+  }
+});
+
+test('incompatible Android states require dedicated screenshots and readbacks', () => {
+  for (const kind of ['screenshot', 'log']) {
+    reject(record => {
+      const source = record.cases.find(item => item.id === 'normal-normal');
+      const target = record.cases.find(item => item.id === 'small-normal');
+      target.captureRefs = target.captureRefs.filter(id => !id.endsWith(kind)).concat(source.captureRefs.filter(id => id.endsWith(kind)));
+    }, new RegExp(`dedicated ${kind} capture`));
+    reject(record => {
+      record.artifacts.find(item => item.id === `case-small-normal-${kind}`).path = `./case-normal-normal-${kind}.fixture`;
+    }, new RegExp(`dedicated ${kind} capture`));
+  }
+  const record = fixture();
+  const normal = record.cases.find(item => item.id === 'normal-normal');
+  record.cases.find(item => item.id === 'online').captureRefs = [...normal.captureRefs];
+  const motion = record.artifacts.find(item => item.id === 'case-reduced-motion-screenshot');
+  const normalImage = record.artifacts.find(item => item.id === 'case-normal-normal-screenshot');
+  Object.assign(motion, { bytes: normalImage.bytes, sha256: normalImage.sha256 });
+  const result = validateAndroidRedesignEvidence(record, expected);
+  assert.equal(result.ok, true, result.errors.join('\n'));
 });
 
 test('rejects missing evidence and independently mismatched source, APK, version and ABI', () => {

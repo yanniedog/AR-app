@@ -135,6 +135,9 @@ export function validateAndroidRedesignEvidence(record, expected) {
     check(nonempty(journey?.trigger) && nonempty(journey?.endState), `Journey ${journey?.id}: trigger/end state missing`);
     check(Number.isFinite(journey?.durationMs) && journey.durationMs >= 0, `Journey ${journey?.id}: duration missing or invalid`);
     ref(journey?.baseline?.ref, ['report'], `Journey ${journey?.id} baseline`);
+    check(nonempty(journey?.baseline?.trigger) && nonempty(journey?.baseline?.endState)
+      && journey.baseline.trigger === journey.trigger && journey.baseline.endState === journey.endState,
+    `Journey ${journey?.id}: baseline trigger/end state must match the pilot journey`);
     for (const metric of COUNT_METRICS) {
       check(whole(journey?.[metric]) && whole(journey?.baseline?.[metric]), `Journey ${journey?.id}: ${metric} baseline/pilot count missing`);
       check(journey?.[metric] <= journey?.baseline?.[metric], `Journey ${journey?.id}: ${metric} regressed`);
@@ -167,6 +170,9 @@ export function validateAndroidRedesignEvidence(record, expected) {
   }
   required(record?.invariants, REQUIRED_INVARIANTS, 'Invariant', ['report', 'screenshot']);
   const cases = required(record?.cases, REQUIRED_CASES, 'Android case', ['screenshot', 'log']);
+  const stateKey = item => JSON.stringify([item?.environment?.widthDp, item?.environment?.fontScale,
+    item?.environment?.theme, item?.environment?.reducedMotion]);
+  const capturePath = id => path.posix.normalize(String(artifacts.get(id)?.path ?? '').replaceAll('\\', '/')).toLowerCase();
   for (const item of cases) {
     const env = item?.environment;
     check(Number.isFinite(env?.widthDp) && env.widthDp > 0 && Number.isFinite(env?.fontScale) && env.fontScale >= 1,
@@ -178,6 +184,12 @@ export function validateAndroidRedesignEvidence(record, expected) {
     if (item?.id?.endsWith('-normal')) check(env?.fontScale === 1, 'Normal-font cases require font scale 1');
     if (item?.id === 'dark') check(env?.theme === 'dark', 'Dark-theme case was not recorded in dark mode');
     if (item?.id === 'reduced-motion') check(env?.reducedMotion === true, 'Reduced-motion case was not recorded with reduced motion');
+    for (const kind of ['screenshot', 'log']) {
+      const dedicated = entries(item?.captureRefs).filter(id => artifacts.get(id)?.kind === kind).some(id =>
+        !cases.some(other => stateKey(other) !== stateKey(item)
+          && entries(other?.captureRefs).some(otherId => otherId === id || capturePath(otherId) === capturePath(id))));
+      check(dedicated, `Android case ${item?.id}: dedicated ${kind} capture required across incompatible environments`);
+    }
   }
 
   const audit = record?.audit;

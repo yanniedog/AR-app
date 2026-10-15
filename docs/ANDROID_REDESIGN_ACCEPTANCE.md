@@ -120,7 +120,11 @@ Every outcome entry uses `result: "pass"` and `captureRefs: [artifact IDs]`
 only after genuine verification. `copyGuard` requires its command log;
 `nativeReview` and journeys require screenshot, recording and log references;
 invariants require report and screenshot references; cases require screenshot
-and Android log references. Usability requires a recorded emulator-operator
+and Android log references. Incompatible width, font, theme or motion settings
+require dedicated screenshot and readback artifact IDs and paths. A common run
+log may supplement these captures. Identical static pixels remain possible
+with different motion settings; file hashes alone do not establish those settings.
+Usability requires a recorded emulator-operator
 assessment report, not an emulator-script success flag. Its financial
 interpretation and effort findings describe what that operator observed; they
 do not establish how representative users understand the app.
@@ -145,7 +149,7 @@ Required IDs are `launch-rates`, `change-product-type`, `open-product`,
 Each records `id`, `trigger`, `endState`, `result`, `captureRefs`, `durationMs`
 and integer counts for `taps`, `routeChanges`, `mandatoryChoices`, `typedFields`,
 `repeatedFields`, `scrollDetours`, `mistakes` and `recoverySteps`. `baseline`
-contains those same counts, a baseline-report `ref`, and `alreadyMinimal`.
+contains those same counts, the matching `trigger` and `endState`, a baseline-report `ref`, and `alreadyMinimal`.
 Count **every meaningful selection**, including both compare selections,
 selection-mode activation, Apply and Compare; distinguish route changes from
 interactions. Baseline/pilot triggers and successful end states must match.

@@ -107,6 +107,8 @@ export function validateNativeInputEvidence(timing, expected, artifacts) {
     && entries(baseline?.apkAbis).length > 0 && baseline.apkAbis.every(abi => ABIS.includes(abi)),
   `${label}: independently trusted baseline source/APK/package/version/ABIs required`);
   check(baseline?.packageName === expected?.packageName, `${label}: paired captures require the same app package`);
+  check(baseline?.sourceSha !== expected?.sourceSha && baseline?.apkSha256 !== expected?.apkSha256,
+    `${label}: baseline and final require distinct trusted source SHAs and APK hashes`);
   const cohorts = entries(input?.cohorts);
   check(cohorts.length >= 3 && cohorts.every(cohort => nonempty(cohort?.id))
     && new Set(cohorts.map(cohort => cohort?.id)).size === cohorts.length, `${label}: unique paired cohorts required`);
@@ -140,6 +142,13 @@ export function validateNativeInputEvidence(timing, expected, artifacts) {
         ['configRef', ['query']], ['analysisRef', ['log']], ['stderrRef', ['log']], ['environmentRef', ['log']], ['workloadRef', ['log']], ['datasetRef', ['report']]]) {
         ref(stage?.[key], kinds, `${stageLabel}.${key}`);
       }
+      const provenanceIds = ['analysisRef', 'environmentRef', 'workloadRef'].map(key => stage?.[key]);
+      const provenancePaths = provenanceIds.map(id => artifactPath(artifacts.get(id)));
+      const provenanceHashes = provenanceIds.map(id => artifacts.get(id)?.sha256);
+      check(provenanceIds.every(nonempty) && provenancePaths.every(nonempty)
+        && provenanceHashes.every(hash => HASH.test(hash ?? ''))
+        && [provenanceIds, provenancePaths, provenanceHashes].every(values => new Set(values).size === values.length),
+      `${stageLabel}: analysis, environment and idle-workload require independent artifact IDs, paths and bytes`);
       check(nonempty(stage?.analyzerVersion), `${stageLabel}: exact analyzer version missing`);
       const env = stage?.environment;
       check(nonempty(env?.deviceFingerprint) && UUID.test(env?.bootId ?? '') && env?.apiLevel === 36

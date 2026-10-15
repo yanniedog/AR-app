@@ -557,6 +557,9 @@ export default function RatesWorkspace() {
             {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">{uiLabel("Name search")}</AppText>
               {searchIndexStatus === 'error' ? <Button title="Retry search" variant="ghost" onPress={() => void ensureSearchIndex()} /> : null}</Row> : null}
         </View>
+        {/* Keep the recycler's native measurement origin at zero beneath the
+            fixed controls; a sibling offset otherwise corrupts its visible range. */}
+        <View style={{ flex: 1 }}>
         <FlashList
           ref={attachList}
           drawDistance={120}
@@ -636,6 +639,7 @@ export default function RatesWorkspace() {
             )
           }
         />
+        </View>
       </View>
 
       {selectMode && selected.length >= 2 ? (
