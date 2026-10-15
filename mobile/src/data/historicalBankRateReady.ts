@@ -1,6 +1,7 @@
 import * as compiler from '../../contracts/history-ready/compiler-manifest.json';
 import { SECTION_KEYS, type SectionKey } from '../types';
 import { normalizeProfileFilters, profileFeaturesForSection, PROFILE_FEATURE_OPTIONS } from './profile';
+import { matchesLvrTier } from './lvrRange';
 import type { HistoricalCatalogueFilters } from './historicalBankRateCatalogue';
 import type { BankRateSnapshot, RateSummary } from './bankRateOverview';
 import { validateHistoricalBankRateReady, type HistoricalBankRateReady } from './historicalBankRateReadyWire';
@@ -42,7 +43,8 @@ export function* historicalReadySnapshots(ready: HistoricalBankRateReady,
     const events = ready.run_dates.map(() => new Map<string, Map<number, number>>());
     for (const [provider, dims, known, broad, features, timeline] of ready.sections[section]) {
       yield;
-      if (lists.some((list, i) => list.length && (dims[i] === null || !list.includes(dims[i]!))) ||
+      if (lists.some((list, i) => section === 'Mortgage' && i === 3 ? !matchesLvrTier(dims[i], list) :
+          list.length && (dims[i] === null || !list.includes(dims[i]!))) ||
           (!known ? !filters.includeNonStandard || mask !== 0 : (!filters.includeNonStandard && !broad) || (features & mask) !== mask)) continue;
       for (const [date, changes] of timeline) {
         if (date >= events.length) continue;

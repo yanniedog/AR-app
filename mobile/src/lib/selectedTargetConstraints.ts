@@ -1,5 +1,5 @@
 import { calculatorAmount, computeLvr, MAX_CALCULATOR_DEPOSIT_AMOUNT } from '../data/calc';
-import { parseLvrTier } from '../data/profile';
+import { lvrRangeContains, parseLvrRange } from '../data/lvrRange';
 import { scopedRateConditions, type RateConditionContext } from '../data/rateConditions';
 import { scopedFinancialConditionFacts, type NumericConditionBoundary } from '../data/scopedFinancialConditionFacts';
 import type { UserRateScenario } from '../data/userRateScenario';
@@ -55,10 +55,9 @@ export function selectedTargetConstraint(
   // display tier. Its absence of recognized bounds is not permission to guess.
   if (source.state === 'admitted') return result('unverified', 'source-condition');
   if (section === 'Mortgage') {
-    const tier = row.lvr_tier ? parseLvrTier(row.lvr_tier) : null;
-    if (!tier || !Number.isFinite(tier.lo) || tier.lo < 0 || tier.hi < tier.lo || tier.lo > 100
-      || (Number.isFinite(tier.hi) ? tier.hi > 100 : !/[>+]\s*\d|\d\s*\+/.test(row.lvr_tier ?? ''))) return result('unverified', 'unknown');
-    return result(actual <= tier.lo || actual > tier.hi ? 'outside-lvr' : 'not-contradicted', 'listed-tier');
+    const tier = parseLvrRange(row.lvr_tier);
+    if (!tier) return result('unverified', 'unknown');
+    return result(lvrRangeContains(tier, actual) ? 'not-contradicted' : 'outside-lvr', 'listed-tier');
   }
   const minimum = listedAmount(row.balance_min), maximum = listedAmount(row.balance_max);
   const specified = (value: RateRow['balance_min']) => value !== undefined && String(value).trim() !== '';

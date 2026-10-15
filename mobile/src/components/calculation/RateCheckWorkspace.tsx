@@ -43,7 +43,7 @@ import {
   lvrTierForValue,
   parseLvrTier,
   profileFeaturesForSection,
-  profileFilterRows,
+  scenarioProfileFilterRows,
 } from '../../data/profile';
 import { distinctValues, rankFraction } from '../../data/selectors';
 import { isSuitabilityFilterReady } from '../../data/suitabilityGate';
@@ -240,21 +240,18 @@ export function RateCheckWorkspace() {
   const rows = useMemo(() => {
     void suitabilityRevision;
     const all = core?.sections?.[section]?.rates ?? [];
-    const scenarioProfile =
-      section === 'Mortgage' && lvrBand
-        ? { ...profileFilters, lvrTiers: [lvrBand] }
-        : profileFilters;
     return visibleAccountRows(
-      profileFilterRows(
+      scenarioProfileFilterRows(
         rowsUnder(all, section, []),
-        scenarioProfile,
+        profileFilters,
         section,
+        lvr,
         details?.products,
       ),
       includeNonStandard,
       details?.products,
     );
-  }, [core, section, profileFilters, includeNonStandard, details, lvrBand, suitabilityRevision]);
+  }, [core, section, profileFilters, includeNonStandard, details, lvr, suitabilityRevision]);
 
   const median = useMemo(() => statsFor(rows, true, section).median, [rows, section]);
 
@@ -699,7 +696,7 @@ export function RateCheckWorkspace() {
                   {lvrBand ? (
                     <Badge label={uiListedLvr({lvr_tier:lvrBand})} tone="success" />
                   ) : (
-                    <AppText variant="tiny" color="textFaint">{uiLabel('Above tracked LVR bands')}</AppText>
+                    <AppText variant="tiny" color="textFaint">{uiLabel('Outside tracked LVR bands')}</AppText>
                   )}
                 </Row>
                 {nextBandHint ? (

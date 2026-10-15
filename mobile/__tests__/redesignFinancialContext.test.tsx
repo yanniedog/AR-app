@@ -1,6 +1,7 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import sampleDetails from '../assets/sample/details.json';
+import nabCapture from './fixtures/nab_lvr_app_contract_2026-10-14.json';
 import { AuditCatalogueCoverage } from '../src/components/AuditCatalogueCoverage';
 import { StaySwitchChart } from '../src/components/scenario/StaySwitchChart';
 import { buildStaySwitchProjection } from '../src/data/staySwitchProjection';
@@ -21,6 +22,21 @@ test('listed LVR preserves known catalogue spellings and rejects invalid or expl
   for (const value of ['lvr_=60%', 'LVR_LE60', '≤60%']) expect(uiListedLvrRange({ lvr_tier: value })).toBe('≤60%');
   expect(uiListedLvrRange({ lvr_tier: 'lvr_>95%' })).toBe('>95%');
   for (const value of ['LVR_80_70', 'LVR_70_101', 'LVR_70_80. Please read our conditions.', 'lvr_70%%%–80%', 'lvr_unspecified', '']) expect(uiListedLvrRange({ lvr_tier: value })).toBe('Unverified');
+});
+
+test('listed public NAB bounds remain structured inclusive facts', () => {
+  const row = nabCapture.rates.find(rate => rate.lvr_tier === 'lvr_>=80.01-95%')!;
+  expect(uiListedLvrRange(row)).toBe('80.01%–95%');
+});
+
+test.each([
+  ['lvr_>=80.01%', '≥80.01%'],
+  ['LVR_GE80p01_95', '80.01%–95%'],
+  ['LVR_GT80p01_95', '>80.01%–95%'],
+  ['LVR_LT95', '<95%'],
+  ['lvr_<95%', '<95%'],
+] as const)('listed %s preserves its endpoint flags', (lvr_tier, expected) => {
+  expect(uiListedLvrRange({ lvr_tier })).toBe(expected);
 });
 test('a compact fixed target retains the exact comparison period and unknown reversion in visual and accessible facts', () => {
   const target: RateRow = { provider: 'Target Bank', product_key: 'target-fixed', product_name: 'Fixed loan', rate: '0.05', rate_type: 'FIXED', term: 'P2Y' };
