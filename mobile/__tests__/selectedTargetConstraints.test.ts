@@ -7,6 +7,7 @@ import { resolveCalculationTarget, selectedDepositCalculation } from '../src/lib
 import { scopedRateConditions } from '../src/data/rateConditions';
 import type { RateRow } from '../src/types';
 import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
+import nabCapture from './fixtures/nab_lvr_app_contract_2026-10-14.json';
 
 const loan: RateRow = { provider: 'Bank', product_key: 'loan', product_name: 'Selected loan', rate_index: 4,
   rate: '0.0579', lvr_tier: 'lvr_=60%', account_class: 'standard' };
@@ -36,6 +37,23 @@ test('listed upper mortgage boundary is inclusive but no eligibility is approved
     status: 'not-contradicted', basis: 'listed-tier', eligibility: 'unverified',
   });
   expect(targetConstraintContradicted(selectedTargetConstraint(loan, 'Mortgage', mortgageScenario()))).toBe(true);
+});
+
+test.each([
+  ['400050', 'not-contradicted'],
+  ['475000', 'not-contradicted'],
+  ['475005', 'outside-lvr'],
+] as const)('selected public NAB interval retains its listed boundaries at balance %s', (balance, status) => {
+  const row = nabCapture.rates.find(rate => rate.lvr_tier === 'lvr_>=80.01-95%') as RateRow;
+  expect(selectedTargetConstraint(row, 'Mortgage', mortgageScenario(balance))).toEqual({
+    status, basis: 'listed-tier', eligibility: 'unverified',
+  });
+});
+
+test('selected listed strict upper boundaries remain exclusive', () => {
+  expect(selectedTargetConstraint({ ...loan, lvr_tier: 'LVR_LT95' }, 'Mortgage', mortgageScenario('475000'))).toEqual({
+    status: 'outside-lvr', basis: 'listed-tier', eligibility: 'unverified',
+  });
 });
 
 test('Maitland-like source ranges win normalized core disagreement and preserve the 60% boundary', () => {

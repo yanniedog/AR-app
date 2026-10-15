@@ -30,8 +30,14 @@ describe('lvrTierForValue', () => {
     expect(lvrTierForValue(93, TIERS)).toBe('lvr_90-95%');
   });
 
-  it('clamps an LVR above every band to the highest band', () => {
-    expect(lvrTierForValue(98, TIERS)).toBe('lvr_90-95%');
+  it('rejects an LVR above every published band', () => {
+    expect(lvrTierForValue(98, TIERS)).toBeNull();
+  });
+
+  it('prefers the narrower matching tier when upper bounds tie in either input order', () => {
+    const tiers = ['lvr_>=80.01-95%', 'lvr_90-95%'];
+    expect(lvrTierForValue(93, tiers)).toBe('lvr_90-95%');
+    expect(lvrTierForValue(93, [...tiers].reverse())).toBe('lvr_90-95%');
   });
 
   it('returns null for non-positive / non-finite LVR or when no usable tiers exist', () => {

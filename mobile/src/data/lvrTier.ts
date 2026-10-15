@@ -17,8 +17,11 @@ export function lvrTierLabel(value: string): UiText | null {
   if (!v || v.includes('unspec') || v === 'na' || v === 'n/a') return uiJoin('LVR', ' · ', 'Unknown');
   let m = /^(?:=|<=|≤)?(\d+(?:\.\d+)?)$/.exec(v);
   if (m) return uiJoin('LVR', ' ', '≤', uiDecimal(m[1], 'percent'));
-  m = /^(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/.exec(v);
-  if (m) return uiJoin('LVR', ' ', uiDecimal(m[1], 'count'), '–', uiDecimal(m[2], 'percent'));
+  m = /^(>=|>)?(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/.exec(v);
+  if (m) return uiJoin('LVR', ' ', m[1] === '>=' ? '≥' : m[1] === '>' ? '>' : '',
+    uiDecimal(m[2], 'count'), '–', uiDecimal(m[3], 'percent'));
+  m = /^>=(\d+(?:\.\d+)?)$/.exec(v);
+  if (m) return uiJoin('LVR', ' ', '≥', uiDecimal(m[1], 'percent'));
   m = /^(?:>|gt)(\d+(?:\.\d+)?)$|^(\d+(?:\.\d+)?)\+$/.exec(v);
   if (m) return uiJoin('LVR', ' ', '>', uiDecimal(m[1] ?? m[2], 'percent'));
   return null;
