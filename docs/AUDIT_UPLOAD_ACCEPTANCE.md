@@ -22,14 +22,14 @@ the actual upload state machine with mocked POST, read-back and clipboard APIs.
 | Unsaved deletion receipt | Upload retry is blocked; recovery action opens Debug log without discarding the diagnosis | Passed |
 | Cancel/Back during preflight | Deferred hydration cannot start an audit after the screen closes | Passed |
 | Cancel/fail a later run | Prior completed diagnosis remains labelled Saved and dated; current upload status stays visible | Passed |
-| Interrupted report-file write and Clear race | Complete canonical sidecar recovers an interrupted copy; Clear waits for pending writes | Passed |
+| Interrupted report-file write and Clear race | Complete canonical sidecar repairs the dedicated copy before a later partial run; stale reads cannot overwrite a newer diagnosis; Clear waits for pending writes and invalidates in-flight reads | Passed |
 | Privacy and failed preparation | Only the allowlisted body is submitted; oversize preparation cannot replay an earlier raw-log request | Passed |
 
 These checks run in one low-priority Jest worker with no-cache. The focused
-five-suite acceptance run passes 55 tests, including 19 rendered-screen
+five-suite acceptance run passes 59 tests, including 19 rendered-screen
 cases. Canonical mobile CI previously passed 378 suites / 4,303 tests,
-438 script tests, all platform exports and size guards for the runtime patch.
-The five additional cold-screen/back/recovery cases extend that coverage.
+438 script tests, all platform exports and size guards for the initial runtime patch.
+The additional cold-screen/back/recovery and repair/race cases extend that coverage.
 
 ## Native and live-host boundaries
 

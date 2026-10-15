@@ -29,19 +29,36 @@ export async function clearCompletedPerformanceAudit(): Promise<void> {
 
 export async function loadCompletedPerformanceAudit(): Promise<PerformanceAuditReport | null> {
   if (!FileSystem.documentDirectory) return null;
-  await writes.catch(() => {});
+  const startedEpoch = epoch;
+  const startedWrites = writes;
+  const stillCurrent = () => startedEpoch === epoch && startedWrites === writes;
+  await startedWrites.catch(() => {});
+  if (!stillCurrent()) return null;
   let primaryError: unknown;
   if ((await FileSystem.getInfoAsync(FILE)).exists) {
-    try { return validateCompletedReport(JSON.parse(await FileSystem.readAsStringAsync(FILE))); }
+    try {
+      const stored = JSON.parse(await FileSystem.readAsStringAsync(FILE));
+      return stillCurrent() ? validateCompletedReport(stored) : null;
+    }
     catch (error) { primaryError = error; }
   }
+  if (!stillCurrent()) return null;
   // Recover pre-upgrade reports and interrupted writes from the canonical sidecar.
   const previous = `${FileSystem.documentDirectory}logs/ar-performance-audit-latest.json`;
   if ((await FileSystem.getInfoAsync(previous)).exists) {
     const stored = JSON.parse(await FileSystem.readAsStringAsync(previous));
+    if (!stillCurrent()) return null;
     if (typeof stored.summaryMarker === 'string' && !stored.summaryMarker.includes('partial=true') &&
-        typeof stored.reportJson === 'string') return validateCompletedReport(JSON.parse(stored.reportJson));
+        typeof stored.reportJson === 'string') {
+      const report = validateCompletedReport(JSON.parse(stored.reportJson));
+      // Repair the dedicated copy before a later partial run replaces the
+      // canonical sidecar. A write failure must not hide the recoverable report.
+      const repair = saveCompletedPerformanceAudit(report);
+      await repair.catch(() => {});
+      return startedEpoch === epoch && writes === repair ? report : null;
+    }
   }
+  if (!stillCurrent()) return null;
   if (primaryError) throw primaryError;
   return null;
 }
