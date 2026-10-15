@@ -35,6 +35,7 @@ import {
   type ApkDownloadSnapshot,
 } from '../lib/appUpdate';
 import { blocksPerformanceAudit } from '../lib/appUpdateDownloadLogic';
+import { APP_UPDATE_AUDIT_SURFACE, runLiveUpdateReadiness } from '../lib/performanceAuditUpdate';
 import {
   CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
   type AppHealthAuditMode,
@@ -2008,7 +2009,33 @@ async function runUpdateReadinessCheck(
   _monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
   download: ApkDownloadSnapshot,
+  mode: AppHealthAuditMode,
+  transport: AppHealthTransportGuard,
+  currentPath: () => string,
 ): Promise<AuditCheck> {
+  if (mode === 'live-source') {
+    const started = now();
+    try {
+      return await runLiveUpdateReadiness({
+        app, download, watchdog, transport,
+        assertActive: () => assertSessionActive(watchdog),
+        openSettings: async () => {
+          router.push('/settings');
+          await waitForPath(currentPath, '/settings', 'Android update readiness', { watchdog });
+        },
+      });
+    } catch (caught) {
+      rethrowAuditControl(caught);
+      assertAuditActive();
+      return {
+        id: 'update-readiness', label: 'Android update manifest and rendered readiness', kind: 'update',
+        status: 'fail', durationMs: roundMetric(now() - started),
+        metrics: { executionAttempted: true, durationMayUseTtlCache: false,
+          ...readinessMetrics(performanceAuditReadinessRegistry.snapshot([APP_UPDATE_AUDIT_SURFACE])) },
+        error: formatAuditError(caught), trace: captureAuditTrace('Live update readiness failed'),
+      };
+    }
+  }
   const installed = { version: app.appVersion, buildNumber: app.buildVersion };
   assertSessionActive(watchdog);
   return {
@@ -3278,6 +3305,9 @@ export function PerformanceAuditRunner() {
               monitor,
               watchdog,
               auditApkDownloadSnapshot,
+              auditMode,
+              transportGuard,
+              () => pathnameRef.current,
             ),
           );
           assertSessionActive(watchdog);

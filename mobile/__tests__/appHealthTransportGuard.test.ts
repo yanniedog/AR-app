@@ -1,6 +1,7 @@
 import { getLocalAppHealthAuditGeneration, installAppHealthTransportGuard, isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceContract';
 import { automaticDataUrl } from '../src/lib/automaticDataAccess';
+import { APK_MANIFEST_URL } from '../src/config';
 
 function targetWithSpies() {
   const fetchSpy = jest.fn(async (input: RequestInfo | URL) => ({
@@ -36,6 +37,53 @@ describe('installAppHealthTransportGuard', () => {
   const contract = createV1AppHealthSourceContract({
     manifestUrl: 'https://example.test/manifest.json',
     datesIndexUrl: 'https://example.test/dates-index.json',
+  });
+
+  it('temporarily permits only exact credential-free configured APK manifest GETs', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    const safe = { method: 'GET', credentials: 'omit' } as const;
+    await expect(target.fetch(APK_MANIFEST_URL, safe)).rejects.toThrow('blocked');
+    const end = guard.beginAppUpdateMetadata();
+    try {
+      await expect(target.fetch(`${APK_MANIFEST_URL}?_=1234`, safe)).resolves.toMatchObject({ ok: true });
+      for (const init of [{ method: 'POST', credentials: 'omit' }, { method: 'GET', credentials: 'include' },
+        { ...safe, headers: { Authorization: 'private' } }, { ...safe, body: 'private' }]) {
+        await expect(target.fetch(APK_MANIFEST_URL, init as RequestInit)).rejects.toThrow('blocked');
+      }
+      for (const url of [APK_MANIFEST_URL.replace('.json', '.apk'), `${APK_MANIFEST_URL}?extra=1`,
+        APK_MANIFEST_URL.replace('AR-app/', 'another-repo/')]) {
+        await expect(target.fetch(url, safe)).rejects.toThrow('blocked');
+      }
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally { end(); }
+    await expect(target.fetch(APK_MANIFEST_URL, safe)).rejects.toThrow('blocked');
+    guard.restore();
+  });
+
+  it('never grants update manifest transport in local mode', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    const guard = installAppHealthTransportGuard({ target, mode: 'local', contract });
+    const end = guard.beginAppUpdateMetadata();
+    try {
+      await expect(target.fetch(APK_MANIFEST_URL, { method: 'GET', credentials: 'omit' })).rejects.toThrow('blocked');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally { end(); guard.restore(); }
+  });
+
+  it('accepts approved APK delivery but rejects untrusted or missing final locations', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    jest.mocked(fetchSpy).mockResolvedValueOnce({ ok: true, url: 'https://release-assets.githubusercontent.com/release/file?public=1' } as Response)
+      .mockResolvedValueOnce({ ok: true, url: 'https://untrusted.test/metadata.json' } as Response)
+      .mockResolvedValueOnce({ ok: true, url: '' } as Response);
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    const end = guard.beginAppUpdateMetadata();
+    try {
+      await expect(target.fetch(APK_MANIFEST_URL, { method: 'GET', credentials: 'omit' })).resolves.toMatchObject({ ok: true });
+      await expect(target.fetch(APK_MANIFEST_URL, { method: 'GET', credentials: 'omit' })).rejects.toThrow('blocked');
+      await expect(target.fetch(APK_MANIFEST_URL, { method: 'GET', credentials: 'omit' })).rejects.toThrow('blocked');
+      expect(guard.snapshot().policyViolations).toBe(2);
+    } finally { end(); guard.restore(); }
   });
 
   it('checks exact approved external destinations with credential-free HEAD only', async () => {
