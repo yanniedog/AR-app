@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import { AppUpdateSection } from '../src/components/settings/AppUpdateSection';
 import { getPerformanceAuditState, markPerformanceAuditRunning, requestPerformanceAudit, resetPerformanceAuditForTests,
   cancelPerformanceAudit, PerformanceAuditStepWatchdog } from '../src/lib/performanceAudit';
-import { performanceAuditReadinessRegistry as registry } from '../src/lib/performanceAuditReadiness';
+import { compactPerformanceAuditReadinessEvidence, performanceAuditReadinessRegistry as registry } from '../src/lib/performanceAuditReadiness';
 import { installAppHealthTransportGuard } from '../src/lib/appHealthTransportGuard';
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceContract';
 import { readAppUpdateMetadata } from '../src/lib/appUpdateMetadata';
@@ -13,6 +13,11 @@ import { runLiveUpdateReadiness } from '../src/lib/performanceAuditUpdate';
 import { ANDROID_UPDATE_READINESS_AUDIT, dedicatedPerformanceAuditChecks } from '../src/lib/performanceAuditCheckInventory';
 import { checkForAppUpdate, ensureApkBackgroundDownload, upgradeFromBackgroundDownload } from '../src/lib/appUpdate';
 import { APK_MANIFEST_URL, APK_ARM_MANIFEST_URL } from '../src/config';
+import { appHealthDisplayObservations, appHealthSurfaceContracts } from '../src/lib/performanceAuditHealth';
+import { evaluateAppHealthDisplayQuality } from '../src/lib/appHealth/displayQuality';
+import { APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth/types';
+import type { AuditCheck } from '../src/lib/performanceAudit';
+import type { DeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
 
 jest.mock('expo-device', () => ({ supportedCpuArchitectures: ['x86_64'] }));
 jest.mock('../src/data/store', () => ({ useStore: (select: (state: unknown) => unknown) => select({
@@ -31,7 +36,7 @@ jest.mock('../src/components/settings/settingsUi', () => ({
 
 type Node = { props: Record<string, any>; findByProps: (props: Record<string, unknown>) => Node;
   findAll: (predicate: (node: Node) => boolean) => Node[] };
-type Tree = ReactTestRenderer & { root: Node };
+type Tree = ReactTestRenderer & { root: Node; toJSON: () => unknown };
 const remote: ApkManifest = {
   schema_version: 1, version: '1.0.1', build_number: '42', bytes: 12345, sha256: 'a'.repeat(64),
   package_name: 'com.eyex.australianrates', supported_abis: ['x86_64', 'arm64-v8a'],
@@ -74,6 +79,35 @@ afterEach(() => {
   global.fetch = originalFetch;
   if (descriptor) Object.defineProperty(Platform, 'OS', descriptor);
   jest.useRealTimers();
+});
+
+test('Local Android Settings supplies layout without inventing metadata or an unexpected surface', async () => {
+  start('local'); const { spy } = guardedFetch(); await mount();
+  const owner = ANDROID_UPDATE_READINESS_AUDIT;
+  const snapshot = registry.snapshot([owner.expectedSurface]);
+  expect(snapshot.surfaces).toHaveLength(1);
+  const evidence = compactPerformanceAuditReadinessEvidence(snapshot);
+  expect(evidence).toContain(`${owner.expectedSurface}:app-update.result:data:pending:0/1:required=0`);
+  const checks: AuditCheck[] = [{ id: owner.checkId, label: 'Update', kind: owner.kind, status: 'skipped',
+    durationMs: null, metrics: { executionAttempted: false, readinessEvidence: evidence,
+      skipClassification: 'terminal-availability' } }];
+  const contracts = appHealthSurfaceContracts([], { passes: [] } as unknown as DeepPerformanceAuditPlan,
+    { mode: 'local', performanceChecks: checks });
+  const health = evaluateAppHealthDisplayQuality(contracts, appHealthDisplayObservations(checks));
+  expect(health.find(c => c.code === APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT)?.status).toBe('pass');
+  expect(health.find(c => c.code === APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT)?.status).toBe('pass');
+  expect(health.find(c => c.code === APP_HEALTH_CHECK_CODES.DISPLAY_MODEL)?.status).toBe('not-run');
+  expect(spy).not.toHaveBeenCalled();
+  expect(checkForAppUpdate).not.toHaveBeenCalled();
+});
+
+test('web renders no update UI and never registers a phantom native update surface', async () => {
+  start(); Object.defineProperty(Platform, 'OS', { configurable: true, value: 'web' });
+  const { spy } = guardedFetch(); await mount(false);
+  expect(tree!.toJSON()).toBeNull();
+  expect(registry.snapshot([ANDROID_UPDATE_READINESS_AUDIT.expectedSurface]).surfaces).toEqual([]);
+  expect(spy).not.toHaveBeenCalled();
+  expect(checkForAppUpdate).not.toHaveBeenCalled();
 });
 
 test('the real mounted Settings action reads fresh metadata, renders it and never downloads with standing consent', async () => {

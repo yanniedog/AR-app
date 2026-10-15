@@ -57,6 +57,7 @@ export interface PerformanceAuditSurfaceController {
  */
 export function usePerformanceAuditSurface(
   definition: PerformanceAuditSurfaceDefinition,
+  enabled = true,
 ): PerformanceAuditSurfaceController {
   const registry = usePerformanceAuditReadinessRegistry();
   const definitionRef = useRef(definition);
@@ -69,7 +70,7 @@ export function usePerformanceAuditSurface(
   const [handle, setHandle] = useState<PerformanceAuditSurfaceHandle | null>(null);
 
   useEffect(() => {
-    if (!registry.isCapturing()) {
+    if (!enabled || !registry.isCapturing()) {
       setHandle(null);
       return;
     }
@@ -78,10 +79,10 @@ export function usePerformanceAuditSurface(
     return () => {
       if (next) registry.unregisterSurface(next);
     };
-  }, [captureGeneration, definition.id, registry]);
+  }, [captureGeneration, definition.id, enabled, registry]);
 
   useEffect(() => {
-    if (!handle) return;
+    if (!enabled || !handle) return;
     registry.updateSurface(handle, {
       routeKey: definition.routeKey,
       datasetRevision: definition.datasetRevision,
@@ -89,17 +90,17 @@ export function usePerformanceAuditSurface(
       actions: definition.actions,
     });
     for (const probe of definition.probes ?? []) registry.upsertProbe(handle, probe);
-  }, [definition.actions, definition.datasetRevision, definition.probes, definition.renderRevision, definition.routeKey, handle, registry]);
+  }, [definition.actions, definition.datasetRevision, definition.probes, definition.renderRevision, definition.routeKey, enabled, handle, registry]);
 
   return useMemo<PerformanceAuditSurfaceController>(() => ({
-    active: handle != null,
+    active: enabled && handle != null,
     surfaceId: definition.id,
-    upsertProbe: (probe) => handle != null && registry.upsertProbe(handle, probe),
-    updateProbe: (probeId, patch) => handle != null && registry.updateProbe(handle, probeId, patch),
-    removeProbe: (probeId) => handle != null && registry.removeProbe(handle, probeId),
-    setActions: (actions) => handle != null && registry.updateSurface(handle, { actions }),
-    getHandle: () => handle,
-  }), [definition.id, handle, registry]);
+    upsertProbe: (probe) => enabled && handle != null && registry.upsertProbe(handle, probe),
+    updateProbe: (probeId, patch) => enabled && handle != null && registry.updateProbe(handle, probeId, patch),
+    removeProbe: (probeId) => enabled && handle != null && registry.removeProbe(handle, probeId),
+    setActions: (actions) => enabled && handle != null && registry.updateSurface(handle, { actions }),
+    getHandle: () => enabled ? handle : null,
+  }), [definition.id, enabled, handle, registry]);
 }
 
 export interface PerformanceAuditProbeController {

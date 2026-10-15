@@ -195,7 +195,7 @@ export function AppUpdateSection({
       { id: 'app-update.layout', kind: 'layout', status: updateLayoutMeasured ? 'ready' : 'pending',
         layoutMeasured: updateLayoutMeasured, renderRevision: measuredUpdateRevision },
     ],
-  });
+  }, Platform.OS === 'android');
 
   useEffect(() => {
     if (auditOwnsNetwork) {

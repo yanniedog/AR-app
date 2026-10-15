@@ -27,7 +27,7 @@ import { captureRatesSession, restoreRatesSession } from '../data/ratesSession';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
-import { PerformanceAuditNavigationAnchor } from '../lib/performanceAuditNavigation';
+import { measureAuditBackNavigation, PerformanceAuditNavigationAnchor } from '../lib/performanceAuditNavigation';
 import { createPerformanceAuditWakeLock } from '../lib/performanceAuditWakeLock';
 import {
   getApkDownloadSnapshot,
@@ -2304,6 +2304,8 @@ export async function runJourney(
   let destinationReadinessMs: number | null = null;
   let backgroundTasks: string[] = [];
   let backMs: number | null = null;
+  let firstBackMs: number | null = null;
+  let firstBackDestination: string | null = null;
   let returnFallbackMs: number | null = null;
   let backDestination: string | null = null;
   let backReturnedToAudit = false;
@@ -2387,37 +2389,37 @@ export async function runJourney(
     assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
 
-    const pathBeforeBack = currentPath();
-    at = now();
     const backResponsivenessAt = monitor.snapshot();
-    router.back();
-    // Tabs own their own history and commonly back to Home rather than the
-    // root-stack audit screen. Measure the real back transition first, then
-    // restore the runner explicitly instead of charging an 8s path timeout.
-    await settleUi();
-    assertSessionActive(watchdog);
-    assertDatasetRevision(datasetRevision);
-    backMs = now() - at;
+    // Tab history returns through Rates before the root-stack audit origin.
+    // Keep both real dispatches measured; an anchor reset is recovery, not Back.
+    const measuredBack = await measureAuditBackNavigation({
+      currentPath, back: () => router.back(), now, matchesPath: pathMatches,
+      tabJourney: journey.navigationKind === 'tab',
+      settle: async () => {
+        await settleUi();
+        assertSessionActive(watchdog);
+        assertDatasetRevision(datasetRevision);
+      },
+      recordFirst: first => {
+        firstBackMs = first.durationMs;
+        firstBackDestination = first.destination;
+        backMs = first.durationMs;
+        backDestination = first.destination;
+        backReturnedToAudit = first.returnedToAudit;
+        backChangedPath = first.changedPath;
+        backResponsiveness = monitor.metricsSince(backResponsivenessAt);
+      },
+      recordSecondStart: () => { returnNavigationKind = 'second-back'; },
+    });
+    backMs = measuredBack.durationMs;
+    backDestination = measuredBack.destination;
+    backReturnedToAudit = measuredBack.returnedToAudit;
+    backChangedPath = measuredBack.changedPath;
+    secondBackMs = measuredBack.secondBackMs;
     backResponsiveness = monitor.metricsSince(backResponsivenessAt);
-    backDestination = currentPath();
-    backReturnedToAudit = pathMatches(backDestination, AUDIT_HOME_PATH);
-    backChangedPath = !pathMatches(backDestination, pathBeforeBack, 'pathname');
-
-    if (
-      !backReturnedToAudit &&
-      journey.navigationKind === 'tab' &&
-      pathMatches(backDestination, '/')
-    ) {
+    if (secondBackMs != null) {
       returnNavigationKind = 'second-back';
-      const secondBackStarted = now();
-      router.back();
-      await settleUi();
-      backReturnedToAudit = pathMatches(currentPath(), AUDIT_HOME_PATH);
-      secondBackMs = now() - secondBackStarted;
-      backMs += secondBackMs;
-      backDestination = currentPath();
       returnFallbackMs = secondBackMs;
-      backResponsiveness = monitor.metricsSince(backResponsivenessAt);
     }
 
     if (!backReturnedToAudit) {
@@ -2517,6 +2519,8 @@ export async function runJourney(
         destinationReadinessMs == null ? null : roundMetric(destinationReadinessMs),
       backgroundTasks: backgroundTasks.join(', ') || null,
       backMs: backMs == null ? null : roundMetric(backMs),
+      firstBackMs: firstBackMs == null ? null : roundMetric(firstBackMs),
+      firstBackDestination,
       originReadinessMs: originReadinessMs == null ? null : roundMetric(originReadinessMs),
       backDestination,
       backChangedPath,

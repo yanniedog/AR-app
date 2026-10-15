@@ -5,6 +5,48 @@ interface AuditRootNavigation {
   resetRoot(state: NavigationState): void;
 }
 
+export interface AuditBackTransition {
+  destination: string;
+  durationMs: number;
+  changedPath: boolean;
+  returnedToAudit: boolean;
+}
+
+/** Measures genuine Back dispatches only; restoration remains separate recovery. */
+export async function measureAuditBackNavigation(options: {
+  currentPath(): string;
+  back(): void;
+  settle(): Promise<void>;
+  now(): number;
+  matchesPath(actual: string, expected: string, format?: 'href' | 'pathname'): boolean;
+  tabJourney: boolean;
+  recordFirst(transition: AuditBackTransition): void;
+  recordSecondStart?(): void;
+}): Promise<AuditBackTransition & { first: AuditBackTransition; secondBackMs: number | null }> {
+  const pathBeforeBack = options.currentPath();
+  const measure = async (): Promise<AuditBackTransition> => {
+    const before = options.currentPath();
+    const started = options.now();
+    options.back();
+    await options.settle();
+    const destination = options.currentPath();
+    return { destination, durationMs: options.now() - started,
+      changedPath: !options.matchesPath(destination, before, 'pathname'),
+      returnedToAudit: options.matchesPath(destination, '/performance-audit') };
+  };
+  const first = await measure();
+  options.recordFirst(first);
+  const atTabOrigin = options.matchesPath(first.destination, '/browse') || options.matchesPath(first.destination, '/');
+  if (!first.returnedToAudit && options.tabJourney && atTabOrigin) {
+    options.recordSecondStart?.();
+    const second = await measure();
+    return { ...second, first, durationMs: first.durationMs + second.durationMs,
+      changedPath: !options.matchesPath(first.destination, pathBeforeBack, 'pathname'),
+      secondBackMs: second.durationMs };
+  }
+  return { ...first, first, secondBackMs: null };
+}
+
 function activeNavigationPath(
   state: NavigationState | PartialState<NavigationState> | undefined,
   maxDepth = Infinity,

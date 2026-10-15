@@ -518,7 +518,7 @@ export default function RatesWorkspace() {
         fallbackCount: logoReadiness.fallbackCount,
       },
     ],
-  });
+  }, isFocused);
 
   if (!core || intentPending) return <ScreenSkeleton />;
   const filterCount = availability === 'unlisted' ? filters.providers.length : activeFilterCount(effectiveFilters);

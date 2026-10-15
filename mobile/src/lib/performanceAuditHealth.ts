@@ -21,6 +21,7 @@ import { appHealthDataSnapshot } from './performanceAuditDataSnapshot';
 import { passiveAuditDataChecks } from './passiveAudit';
 import { preparedAppHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
 import { APP_HEALTH_DATA_CHECKS } from './appHealth/dataQuality';
+import { PERFORMANCE_AUDIT_DEDICATED_CHECKS } from './performanceAuditCheckInventory';
 export { appHealthDataSnapshot } from './performanceAuditDataSnapshot';
 
 interface ParsedProbe {
@@ -172,6 +173,9 @@ export function appHealthDisplayObservations(
     for (const line of `${raw} | ${graphEvidence}`.split(' | ')) {
       const probe = parseProbe(line);
       if (!probe) continue;
+      // Preparing optional work is not completed model evidence. A contract
+      // requiring that model still fails when its evidence is absent.
+      if (probe.kind === 'data' && !probe.required && probe.pending) continue;
       if (probe.kind === 'graphic') {
         // Ordinary navigation may finish while an optional chart is preparing.
         // Its transient state is not a completed chart check. Explicit chart
@@ -265,6 +269,7 @@ export function appHealthDisplayObservations(
 export function appHealthSurfaceContracts(
   journeys: readonly AuditJourney[],
   plan: DeepPerformanceAuditPlan,
+  dedicatedContext?: Pick<AppHealthRunInput, 'mode' | 'performanceChecks'>,
 ): AppHealthSurfaceContract[] {
   const roles = new Map<string, Set<AppHealthDisplayRole>>();
   const independentListEvidenceSurfaces = new Set([
@@ -272,9 +277,9 @@ export function appHealthSurfaceContracts(
     'lenders.list',
     'search.results',
   ]);
-  const include = (surface: string, requested: readonly string[] = []) => {
+  const include = (surface: string, requested: readonly string[] = [], modelRequired = true) => {
     const next = roles.get(surface) ?? new Set<AppHealthDisplayRole>();
-    next.add('model');
+    if (modelRequired) next.add('model');
     next.add('critical-layout');
     if (requested.includes('list')) {
       next.add('list');
@@ -290,6 +295,16 @@ export function appHealthSurfaceContracts(
   for (const journey of journeys) include(journey.expectedSurface);
   for (const pass of plan.passes) {
     for (const step of pass.steps) include(step.expectedSurface, step.readiness);
+  }
+  if (dedicatedContext) {
+    const recordedIds = new Set(dedicatedContext.performanceChecks.map(check => check.id));
+    for (const owner of PERFORMANCE_AUDIT_DEDICATED_CHECKS) {
+      if (recordedIds.has(owner.checkId)) {
+        // Android Settings mounts this layout even when Local mode suppresses
+        // metadata. Live requires the owner's actual result model as well.
+        include(owner.expectedSurface, [], dedicatedContext.mode === owner.executionMode);
+      }
+    }
   }
   return [...roles].map(([id, requiredRoles]) => ({
     id,
@@ -351,7 +366,7 @@ interface AppHealthRunInput {
 export function buildIntegratedAppHealthReport(input: AppHealthRunInput & AppHealthDataInput): AppHealthReport {
   const prepared = passiveAuditDataChecks(scopedHealthDataSnapshot(input));
   const dataChecks = prepared.checks;
-  const contracts = appHealthSurfaceContracts(input.journeys, input.plan);
+  const contracts = appHealthSurfaceContracts(input.journeys, input.plan, input);
   const displayChecks = evaluateAppHealthDisplayQuality(
     contracts,
     appHealthDisplayObservations(input.performanceChecks),
@@ -386,7 +401,7 @@ export function buildPartialAppHealthReport(input: AppHealthRunInput & {
 }): AppHealthReport {
   const observations = appHealthDisplayObservations(input.performanceChecks);
   const observedIds = new Set(observations.map(observation => observation.surfaceId));
-  const contracts = appHealthSurfaceContracts(input.journeys, input.plan);
+  const contracts = appHealthSurfaceContracts(input.journeys, input.plan, input);
   const observedContracts = contracts.filter(contract => observedIds.has(contract.id));
   const displayChecks = evaluateAppHealthDisplayQuality(observedContracts, observations).map(check => ({
     ...check,
