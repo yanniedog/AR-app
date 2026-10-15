@@ -29,7 +29,8 @@ import { PressFeedback } from './PressFeedback';
 import { scopedRateConditions } from '../data/rateConditions';
 import { scopedFinancialConditionFacts, type ScopedFinancialConditionPresentation } from '../data/scopedFinancialConditionFacts';
 import { uiAccessBadge, uiConditionTag, uiListedLvr, uiLoanPurpose } from '../lib/financialUiCopy';
-import { uiCount, uiJoin, uiLabel, uiProductName, uiProviderName, type UiCopy, type UiText } from '../lib/uiCopy';
+import { uiJoin, uiLabel, uiProductName, uiProviderName, type UiCopy, type UiText } from '../lib/uiCopy';
+import { productSaveIdentity } from '../lib/productSaveIdentity';
 
 function chips(row: RateRow, section: SectionKey, conditional: boolean, conditions: ScopedFinancialConditionPresentation): UiText[] {
   const out: UiText[] = [];
@@ -115,8 +116,9 @@ function ProductCardView({
   const detail = useStore((s) => s.details?.products[row.product_key] ?? null);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const core = useStore(s => s.core), details = useStore(s => s.details), manifest = useStore(s => s.manifest), coreIntegrity = useStore(s => s.coreIntegrity);
-  const conditions = React.useMemo(() => scopedFinancialConditionFacts(scopedRateConditions(row, section, { core, details, manifest, coreIntegrity })),
+  const admittedConditions = React.useMemo(() => scopedRateConditions(row, section, { core, details, manifest, coreIntegrity }),
     [row, section, core, details, manifest, coreIntegrity]);
+  const conditions = React.useMemo(() => scopedFinancialConditionFacts(admittedConditions), [admittedConditions]);
   const nonStandard = isNonStandard(row);
   const qualifier = rateQualifier(row, section);
   const access = React.useMemo(
@@ -161,11 +163,14 @@ function ProductCardView({
     nonStandard ? uiJoin(', ', 'Non-standard') : null,
     qualifier.conditional ? uiJoin(', ', qualifier.label) : null,
     rateChangeText ? uiJoin(', ', rateChangeText) : null);
+  const saveIdentity = React.useMemo(() => productSaveIdentity(row, section, mortgageRateMetric,
+    { core, details, manifest, coreIntegrity },
+    hasDisplayedRateOverride ? { label: rateLabel, value: displayedRate ?? null } : undefined),
+  [row, section, mortgageRateMetric, core, details, manifest, coreIntegrity, hasDisplayedRateOverride, rateLabel, displayedRate]);
   const saveA11yLabel = uiJoin(Number.isInteger(row.rate_index)
     ? favorite ? 'Remove' : 'Save'
     : favorite ? 'Remove all rates' : 'Save all rates',
-    Number.isInteger(row.rate_index) ? uiJoin(', ', 'Rate index', ' ', uiCount(row.rate_index)) : null,
-    ', ', cardA11yLabel);
+    ', ', saveIdentity.name);
 
   return (
     // Card container is a plain View; the nav target and the favorite star are
@@ -201,7 +206,8 @@ function ProductCardView({
       >
         <View style={{ flexDirection: compact ? 'column' : 'row', alignItems: compact ? 'stretch' : 'flex-start', gap: 12 }}>
         <View style={{ flex: compact ? undefined : 1, minWidth: 0, flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-          <View style={{ width: 32, minHeight: 32, alignItems: 'center', justifyContent: 'center' }}>
+          <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+            style={{ width: 32, minHeight: 32, alignItems: 'center', justifyContent: 'center' }}>
           {selectMode ? (
             <Ionicons
               name={selected ? 'checkbox' : 'square-outline'}
@@ -285,6 +291,7 @@ function ProductCardView({
             disabled={!!selectMode}
             accessibilityRole="button"
             accessibilityLabel={saveA11yLabel}
+            testID={saveIdentity.testID}
             accessibilityState={{ selected: favorite }}
             android_ripple={androidRipple(theme.colors.primaryMuted, true)}
             style={{

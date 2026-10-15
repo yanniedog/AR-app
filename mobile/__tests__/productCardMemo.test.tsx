@@ -62,12 +62,12 @@ test('unchanged list commits skip card work while saved/ranking/theme subscripti
     act(() => mockStore.setState({ favorite: true }));
     expect(mockCardRender).toHaveBeenCalledTimes(initial + 1);
     expect(tree.root.findAllByProps({ accessibilityRole: 'button' }).some(node =>
-      String(node.props.accessibilityLabel).startsWith('Remove, Rate index 7, Loan, Bank, Advertised rate 4.00%'))).toBe(true);
+      node.props.accessibilityLabel === 'Remove, Loan, Bank, Advertised rate 4.00%, Rate index 7')).toBe(true);
     act(() => mockStore.setState({ prefs: { mortgageRateMetric: 'comparison' } }));
     expect(tree.root.findAllByProps({ accessibilityRole: 'button' }).some(node =>
       String(node.props.accessibilityLabel).includes('Comparison rate 6.00%'))).toBe(true);
     expect(tree.root.findAllByProps({ accessibilityRole: 'button' }).some(node =>
-      String(node.props.accessibilityLabel).startsWith('Remove, Rate index 7, Loan, Bank, Comparison rate 6.00%'))).toBe(true);
+      node.props.accessibilityLabel === 'Remove, Loan, Bank, Comparison rate 6.00%, Rate index 7')).toBe(true);
     const beforeTheme = mockCardRender.mock.calls.length;
     act(() => tree.update(screen({ ...mockTheme, colors: { ...mockTheme.colors, text: '#fff' } })));
     expect(mockCardRender.mock.calls.length).toBeGreaterThan(beforeTheme);
@@ -93,8 +93,7 @@ test('shows the whole financial variant and saves the exact tier without opening
     expect(serialized).toContain('LVR >60%–70%');
     const metadata = tree.root.findAllByProps({ variant: 'small', color: 'textMuted' }).map(node => node.props.children);
     expect(metadata.some(text => typeof text === 'string' && text.startsWith('Advertised 4.00% · Fixed'))).toBe(true);
-    const save = tree.root.findAllByProps({ accessibilityRole: 'button' }).find(node =>
-      /^(?:Remove|Save), Rate index 7,/.test(String(node.props.accessibilityLabel)))!;
+    const save = tree.root.findAllByProps({ testID: 'rate-save:loan:7' })[0];
     act(() => save.props.onPress());
     expect(mockToggleSavedRate).toHaveBeenCalledWith(variant, 'rate');
     expect(onPress).not.toHaveBeenCalled();
