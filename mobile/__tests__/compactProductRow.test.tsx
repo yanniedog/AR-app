@@ -465,6 +465,20 @@ test.each([uiRate(0.115), uiLabel('—')])('renders actual font2 primary %s and 
   } finally { act(() => tree.unmount()); }
 });
 
+test('a fitting caution remains beside a wide full rate before the clipped name', () => {
+  mockDimensions = { ...mockDimensions, fontScale: 2 };
+  const tree = render({ ...row, rate: '0.115', ribbon_deposit_kind: 'BONUS', ongoing_rate: undefined }, { section: 'Savings' });
+  try {
+    act(() => tree.root.findByProps({ testID: 'compact-primary-rate' }).props.onTextLayout({ nativeEvent: { lines: [{ width: 200 }] } }));
+    expect(tree.root.findByProps({ testID: 'compact-primary-rate' }).props.children).toBe('11.50%');
+    expect(tree.root.findAllByType('AppText').some(node => node.props.testID === 'compact-product-name')).toBe(false);
+    expect(tree.root.findByProps({ testID: 'compact-status-0' }).props.name).toBe('help-circle-outline');
+    const measured = measureRegions(tree);
+    hold(measured.main, measured.positions['compact-status-0']);
+    expect(mockShow).toHaveBeenLastCalledWith('Unknown');
+  } finally { act(() => tree.unmount()); }
+});
+
 test('only a primary glyph wider than the entire numeric rail uses the unsupported presentation warning', () => {
   const primary = uiRate(0.115);
   const layout = compactProductRowLayout(328, 2, primary, null,

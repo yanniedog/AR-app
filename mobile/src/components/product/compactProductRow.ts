@@ -128,6 +128,13 @@ export function compactProductRowLayout(width: number, fontScale: number, primar
   if (sizes().identity < minimumIdentity) showFacetSymbol = false;
   if (sizes().identity < minimumIdentity) showPrimaryIcon = false;
   if (sizes().identity < minimumIdentity) showTier = false;
+  // A caution that fits beside the full rate takes priority over a clipped name.
+  if (sizes().identity < minimumIdentity && statusIcons > 0
+    && primaryTextWidth + COMPACT_ROW.icon + COMPACT_ROW.gap <= main) {
+    return { main, identity: 0, primary: main - COMPACT_ROW.icon - COMPACT_ROW.gap, secondary: secondaryWidth,
+      showSecondary: false, facet: COMPACT_ROW.icon, showFacetValue: false, showTier: false, showFacetSymbol: false,
+      combinedStatus: true, showStatuses: true, showPrimaryIcon: false, warningOnly: false };
+  }
   if (sizes().identity < minimumIdentity) showStatuses = false;
   const final = sizes();
   // If a full rate needs the last name-cell pixels, give it the rail rather
