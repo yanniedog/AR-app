@@ -36,3 +36,6 @@ Regression coverage includes default automatic publication, explicit local runs,
 post-completion upload, failure/retry, concurrent duplicate requests, interrupted
 POST/restart, verification/copy retry, deletion, manual-log/report switching,
 Back/remount, cancellation, completed-report recovery and Clear/write races.
+
+See [acceptance status](AUDIT_UPLOAD_ACCEPTANCE.md) for the rendered-screen/mock
+matrix and the native, physical-device and live-host boundaries.

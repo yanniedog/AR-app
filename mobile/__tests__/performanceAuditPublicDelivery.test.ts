@@ -83,6 +83,8 @@ test('restart restores a verified URL and copies it without another POST', async
   reload();
   await delivery.restorePerformanceAuditUpload(report);
   expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ url: result.url, verified: true });
+  expect(log.verifyDebugLogUpload).not.toHaveBeenCalled();
+  expect(jest.requireMock('expo-clipboard').setStringAsync).not.toHaveBeenCalled();
   await sharing.retryDebugLogUpload();
   expect(log.uploadDebugLog).not.toHaveBeenCalled();
 });

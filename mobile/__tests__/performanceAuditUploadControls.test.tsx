@@ -1,11 +1,13 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { Alert } from 'react-native';
+import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PerformanceAuditScreen from '../app/performance-audit';
 import { getPerformanceAuditState, completePerformanceAudit, failPerformanceAudit, markPerformanceAuditCancelled, resetPerformanceAuditForTests, PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY } from '../src/lib/performanceAudit';
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
-import { uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
+import { restorePerformanceAuditUpload, uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
+import { loadCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
 import type { DebugLogUploadSnapshot } from '../src/lib/debugLogSharing';
 
 type Node = { props: Record<string, any>; findByProps: (props: Record<string, unknown>) => Node };
@@ -196,4 +198,79 @@ test('rendered failure and success controls retain the diagnosis while retrying 
   expect(tree!.root.findByProps({ children: 'https://paste.c-net.org/fixture' })).toBeDefined();
   await press('Copy link');
   expect(getPerformanceAuditState().report).toBe(report);
+});
+
+test('a cold screen restores the completed report and offers upload without publishing it on mount', async () => {
+  const report = makePerformanceAuditReport('completed-before-restart');
+  jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(report);
+  expect(getPerformanceAuditState().status).toBe('idle');
+  await mount();
+  expect(getPerformanceAuditState()).toMatchObject({ status: 'complete', report });
+  expect(tree!.root.findByProps({ title: 'Upload report' }).props.disabled).toBe(false);
+  expect(restorePerformanceAuditUpload).toHaveBeenCalledWith(report);
+  expect(uploadCompletedPerformanceAudit).not.toHaveBeenCalled();
+  await press('Upload report');
+  expect(uploadCompletedPerformanceAudit).toHaveBeenCalledTimes(1);
+  expect(uploadCompletedPerformanceAudit).toHaveBeenCalledWith(report);
+});
+
+test('a cold screen shows a restored verified URL and only copies it on explicit action', async () => {
+  const report = makePerformanceAuditReport('verified-before-restart');
+  jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(report);
+  mockUpload = { sessionId: report.sessionId, phase: 'failed', verified: true,
+    error: null, url: 'https://paste.c-net.org/retained-fixture' };
+  await mount();
+  expect(tree!.root.findByProps({ children: 'Uploaded' })).toBeDefined();
+  expect(tree!.root.findByProps({ children: 'https://paste.c-net.org/retained-fixture' })).toBeDefined();
+  expect(mockRetry).not.toHaveBeenCalled();
+  expect(uploadCompletedPerformanceAudit).not.toHaveBeenCalled();
+  await press('Copy link');
+  expect(mockRetry).toHaveBeenCalledTimes(1);
+  expect(getPerformanceAuditState().report).toBe(report);
+});
+
+test('an uncertain upload restored after restart requires the explicit duplicate-risk action', async () => {
+  const report = makePerformanceAuditReport('uncertain-before-restart');
+  jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(report);
+  mockUpload = { sessionId: report.sessionId, phase: 'failed', verified: false, mayHaveUploaded: true };
+  await mount();
+  expect(mockRetry).not.toHaveBeenCalled();
+  expect(uploadCompletedPerformanceAudit).not.toHaveBeenCalled();
+  await press('Upload another copy');
+  expect(mockRetry).toHaveBeenCalledWith({ acceptDuplicateRisk: true });
+  expect(getPerformanceAuditState()).toMatchObject({ status: 'complete', report });
+});
+
+test('Back and remount retain an in-flight report upload and block duplicate controls', async () => {
+  await mount(); await press('Run audit');
+  const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
+  mockUpload = { sessionId: report.sessionId, phase: 'uploading' }; mockUploadBusy = true;
+  act(() => completePerformanceAudit(report));
+  act(() => tree!.unmount()); tree = undefined;
+  await mount();
+  expect(getPerformanceAuditState()).toMatchObject({ status: 'complete', report });
+  expect(tree!.root.findByProps({ children: 'Uploading' })).toBeDefined();
+  expect(tree!.root.findByProps({ title: 'Upload report' }).props.disabled).toBe(true);
+  expect(tree!.root.findByProps({ title: 'Run audit' }).props.disabled).toBe(true);
+  expect(uploadCompletedPerformanceAudit).not.toHaveBeenCalled();
+  expect(mockRetry).not.toHaveBeenCalled();
+});
+
+test('an unsaved deletion receipt exposes its recovery route and blocks another upload retry', async () => {
+  const report = makePerformanceAuditReport('deletion-recovery');
+  jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(report);
+  mockUpload = { sessionId: report.sessionId, phase: 'failed', verified: false,
+    recoveryReceipt: { schemaVersion: 1, provider: 'paste.c-net.org',
+      url: 'https://paste.c-net.org/recovery-fixture', deleteKey: 'fixture-only', createdAt: '2026-10-15T19:00:00Z' } };
+  await mount();
+  expect(tree!.root.findByProps({ title: 'Retry upload' }).props.disabled).toBe(true);
+  expect(tree!.root.findByProps({ title: 'Debug log' }).props.disabled).not.toBe(true);
+  expect(mockRetry).not.toHaveBeenCalled();
+  expect(getPerformanceAuditState().report).toBe(report);
+  const open = jest.spyOn(router, 'push').mockImplementation(() => {});
+  try {
+    await press('Debug log');
+    expect(open).toHaveBeenCalledWith('/debug-log');
+    expect(getPerformanceAuditState().report).toBe(report);
+  } finally { open.mockRestore(); }
 });
