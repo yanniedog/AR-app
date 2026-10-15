@@ -33,9 +33,11 @@ The additional cold-screen/back/recovery and repair/race cases extend that cover
 
 ## Native and live-host boundaries
 
-Both connected AVDs are reserved by the active redesign acceptance owner. No
-physical device is connected, and host disk/CPU capacity does not safely support
-another isolated native target. No existing device was installed, launched,
+At the initial 2026-10-15 19:15 UTC target inspection, both connected AVDs belonged
+to the active redesign acceptance owner and no physical device was connected.
+That owner subsequently completed its work. A 19:52 UTC recheck could not connect
+to ADB; approximately 64 MB of free host disk space still prevents provisioning
+an isolated target or downloading a test APK. No existing device was installed, launched,
 stopped, reconfigured or controlled for this audit task. Android layout, touch,
 process-death persistence, background transport and physical Pixel latency remain
 **not run**. The timing findings still need a new physical audit of this patch;
