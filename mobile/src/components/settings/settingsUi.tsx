@@ -1,7 +1,7 @@
 import type { UiChild } from '../../lib/uiCopy';
 import Ionicons from '../icons/AppIcon';
 import React, { useState } from 'react';
-import { Switch, View } from 'react-native';
+import { Switch, useWindowDimensions, View } from 'react-native';
 
 import { TOUCH_TARGET_MIN, TouchTarget } from '../TouchTarget';
 import { AppText, Card, IconButton, Row } from '../ui';
@@ -224,12 +224,16 @@ export function ToggleRow({
 }
 
 export function InfoRow({ label, value }: { label: UiCopy; value: UiCopy }) {
+  const { width, fontScale } = useWindowDimensions();
+  const stacked = width < 400 || fontScale >= 1.3;
   return (
-    <Row style={{ justifyContent: 'space-between', paddingVertical: 6, minHeight: 36 }}>
-      <AppText variant="small" color="textMuted" style={{ flexShrink: 0 }}>
+    <Row gap={stacked ? 4 : 12} style={{ flexDirection: stacked ? 'column' : 'row',
+      alignItems: stacked ? 'stretch' : 'flex-start', paddingVertical: 6, minHeight: 36 }}>
+      <AppText variant="small" color="textMuted" style={{ flex: stacked ? undefined : 1, flexShrink: 1, minWidth: 0 }}>
         {label}
       </AppText>
-      <AppText variant="small" weight="600" style={{ flexShrink: 1, textAlign: 'right', marginLeft: 12 }}>
+      <AppText variant="small" weight="600" style={{ flex: stacked ? undefined : 1, flexShrink: 1, minWidth: 0,
+        textAlign: stacked ? 'left' : 'right' }}>
         {value}
       </AppText>
     </Row>

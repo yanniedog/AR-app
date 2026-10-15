@@ -398,7 +398,6 @@ export default function Settings() {
           value={prefs.depositRankMetric}
           onChange={changeDepositRank}
         />
-        <InfoRow label="Base / headline" value="Ongoing / bonus + intro" />
         <SettingsGap size={14} />
         <Label text="Mortgage ranking" />
         <SegmentedControl<MortgageRateMetric>
@@ -409,7 +408,6 @@ export default function Settings() {
           value={prefs.mortgageRateMetric}
           onChange={(v) => setPref('mortgageRateMetric', v)}
         />
-        <InfoRow label="Headline / comparison" value="Advertised / published costs" />
       </Section>
 
       <Section title="Personalise">
