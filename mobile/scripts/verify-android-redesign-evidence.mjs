@@ -31,17 +31,42 @@ const ARTIFACT_KINDS = ['apk', 'screenshot', 'recording', 'log', 'report', 'trac
 const ABIS = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'];
 const HASH = /^[a-f0-9]{64}$/;
 const SHA = /^[a-f0-9]{40}$/;
+const EMPTY_SHA256 = createHash('sha256').update('').digest('hex');
 const nonempty = (value) => typeof value === 'string' && value.trim().length > 0;
 const whole = (value) => Number.isSafeInteger(value) && value >= 0;
 const sameSet = (a, b) => Array.isArray(a) && Array.isArray(b)
   && new Set(a).size === a.length && new Set(b).size === b.length
   && JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 
+// A successful analyzer may emit no diagnostics. Only its stderr-only log
+// role may be empty; aliasing it as another evidence role cannot waive that
+// role's positive-byte contract. Actual existence/bytes/hash are checked below.
+function nativeStderrOnlyRefs(record) {
+  const cohorts = record?.frontendTiming?.nativeInput?.cohorts;
+  const stages = new Set((Array.isArray(cohorts) ? cohorts : []).flatMap(item => [item?.baseline, item?.final])
+    .filter(item => item && typeof item === 'object'));
+  const candidates = new Set([...stages].map(item => item.stderrRef).filter(nonempty));
+  const otherRefs = new Set(), seen = new WeakSet();
+  const visit = value => {
+    if (!value || typeof value !== 'object' || seen.has(value)) return;
+    seen.add(value);
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'artifacts' || stages.has(value) && key === 'stderrRef') continue;
+      if ((key === 'ref' || key.endsWith('Ref')) && nonempty(child)) otherRefs.add(child);
+      if (key.endsWith('Refs') && Array.isArray(child)) child.filter(nonempty).forEach(id => otherRefs.add(id));
+      visit(child);
+    }
+  };
+  visit(record);
+  return new Set([...candidates].filter(id => !otherRefs.has(id)));
+}
+
 /** Checks recorded claims and their schema, not whether an assessor told the truth. */
 export function validateAndroidRedesignEvidence(record, expected) {
   const errors = [];
   const check = (condition, message) => { if (!condition) errors.push(message); };
   const artifacts = new Map();
+  const stderrOnlyRefs = nativeStderrOnlyRefs(record);
   const entries = (value) => Array.isArray(value) ? value : [];
   for (const item of entries(record?.artifacts)) {
     check(nonempty(item?.id) && !artifacts.has(item.id), 'Artifact IDs must be unique and nonempty');
@@ -49,7 +74,8 @@ export function validateAndroidRedesignEvidence(record, expected) {
     check(ARTIFACT_KINDS.includes(item?.kind), `Artifact ${item?.id}: unsupported kind`);
     check(nonempty(item?.path), `Artifact ${item?.id}: path missing`);
     check(HASH.test(item?.sha256 ?? ''), `Artifact ${item?.id}: SHA-256 missing or invalid`);
-    check(whole(item?.bytes) && item.bytes > 0, `Artifact ${item?.id}: byte size missing or empty`);
+    const emptyNativeStderr = item?.kind === 'log' && stderrOnlyRefs.has(item.id) && item.sha256 === EMPTY_SHA256;
+    check(whole(item?.bytes) && (item.bytes > 0 || emptyNativeStderr), `Artifact ${item?.id}: byte size missing or empty`);
   }
   const ref = (value, kinds, label) => {
     check(nonempty(value) && kinds.includes(artifacts.get(value)?.kind), `${label}: missing ${kinds.join('/')} artifact`);

@@ -291,6 +291,74 @@ test('recomputes CSV counts and exact ns, verifies query/command bindings, and c
   });
 });
 
+test('accepts a real hash-verified empty native stderr file without adding diagnostic text', async () => {
+  await onDisk(async ({ directory, filename, record }) => {
+    await replaceArtifact(directory, record, 'native-stderr', '');
+    await writeFile(filename, JSON.stringify(record));
+    const result = await verifyAndroidRedesignEvidence(filename, expected);
+    assert.equal(result.ok, true, result.errors.join('\n'));
+    assert.equal((await readFile(path.join(directory, 'native-stderr.fixture'))).length, 0);
+  });
+});
+
+test('retains positive-byte requirements for all non-stderr evidence roles', async () => {
+  for (const id of ['apk', 'screenshot', 'recording', 'log', 'report', 'native-query',
+    'final-tap-trace', 'final-tap-csv', 'final-tap-analysis', 'native-environment', 'native-workload']) {
+    await onDisk(async ({ directory, filename, record }) => {
+      await replaceArtifact(directory, record, id, '');
+      await writeFile(filename, JSON.stringify(record));
+      const result = await verifyAndroidRedesignEvidence(filename, expected);
+      assert.equal(result.ok, false, id);
+      assert.ok(result.errors.includes(`Artifact ${id}: byte size missing or empty`), result.errors.join('\n'));
+    });
+  }
+});
+
+test('an empty stderr log cannot also satisfy another evidence role or be forged through an unrelated field', async () => {
+  for (const alias of [
+    record => { record.frontendTiming.nativeInput.cohorts[0].final.environmentRef = 'native-stderr'; },
+    record => { record.frontendTiming.captureRefs.push('native-stderr'); },
+    record => { record.environment.readbackRef = 'native-stderr'; },
+    record => { record.audit.steps[0].ref = 'native-stderr'; },
+  ]) {
+    await onDisk(async ({ directory, filename, record }) => {
+      await replaceArtifact(directory, record, 'native-stderr', ''); alias(record);
+      await writeFile(filename, JSON.stringify(record));
+      const result = await verifyAndroidRedesignEvidence(filename, expected);
+      assert.ok(result.errors.includes('Artifact native-stderr: byte size missing or empty'), result.errors.join('\n'));
+    });
+  }
+  reject(record => {
+    const log = record.artifacts.find(item => item.id === 'log');
+    Object.assign(log, { bytes: 0, sha256: createHash('sha256').update('').digest('hex') });
+    record.unrelated = { stderrRef: 'log' };
+  }, /Artifact log: byte size missing or empty/);
+});
+
+test('empty native stderr still requires declared zero bytes, actual existence and the exact empty-file hash', async () => {
+  for (const change of [
+    artifact => { delete artifact.bytes; },
+    artifact => { artifact.bytes = null; },
+    artifact => { artifact.bytes = '0'; },
+    artifact => { artifact.sha256 = 'c'.repeat(64); },
+  ]) {
+    await onDisk(async ({ directory, filename, record }) => {
+      await replaceArtifact(directory, record, 'native-stderr', '');
+      change(record.artifacts.find(item => item.id === 'native-stderr'));
+      await writeFile(filename, JSON.stringify(record));
+      assert.equal((await verifyAndroidRedesignEvidence(filename, expected)).ok, false);
+    });
+  }
+  await onDisk(async ({ directory, filename, record }) => {
+    await replaceArtifact(directory, record, 'native-stderr', '');
+    await rm(path.join(directory, 'native-stderr.fixture'));
+    await writeFile(filename, JSON.stringify(record));
+    const result = await verifyAndroidRedesignEvidence(filename, expected);
+    assert.equal(result.ok, false);
+    assert.match(result.errors.join('\n'), /Artifact native-stderr:/);
+  });
+});
+
 test('even consistently recalculated UP rows must retain the actual linked tap gestures', async () => {
   await onDisk(async ({ directory, filename, record }) => {
     const cohorts = record.frontendTiming.nativeInput.cohorts;

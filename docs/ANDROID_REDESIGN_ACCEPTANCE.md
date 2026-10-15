@@ -90,8 +90,12 @@ release evidence. Retain original captures and raw measurements for review.
 Keep the record and referenced files together. `artifacts` is an array of
 `{id, kind, path, bytes, sha256}`; kinds are `apk`, `screenshot`, `recording`,
 `log`, `report`, `trace` and `query`. Paths are relative to the record directory; traversal,
-absolute paths and symlinks escaping it fail. Files must exist, be nonempty and
-match their SHA-256/size. A capture may document multiple journeys, but each
+absolute paths and symlinks escaping it fail. Files must exist and match their
+SHA-256/size. They must be nonempty except a native `stderrRef`-only `log`:
+a successful analyzer's original empty diagnostics file uses `bytes: 0` and
+the exact SHA-256 of empty bytes. It cannot also satisfy any other evidence
+role; never add text to raw diagnostics to satisfy the checker. A capture may
+document multiple journeys, but each
 referencing entry must identify the relevant segment in its report/log.
 
 The record contains:
