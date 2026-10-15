@@ -2,12 +2,12 @@
 
 **Snapshot: 16 October 2026 (Australia/Hobart). Final acceptance is pending.** Phases 1–4 have
 merged. Phase 5 has passed exact-source canonical checks and produced a
-premerge emulator release artifact; its latest native observations expose
-remaining bubble-position and footer font-shrink defects. Phase 6 is a separate
+premerge emulator release artifact. Latest reviewed source
+`bb1fb4300dbdc8cd58704d1eaee9b202b36bc0d6` passes the bounded bubble-position,
+dismissal and actual Settings font-roundtrip repairs described below. Phase 6 is a separate
 draft, awaiting source integration, final native evidence and public-release
-verification. The later host/footer repair batch is committed at
-`5ccd8b839bd22e2159b7769aa788b437f4ee688f`; its full checks and native review
-are pending, so it is not accepted.
+verification. These repair observations do not establish the full matrix,
+strict audit, native P95 or complete acceptance.
 
 This report accompanies [the contract](ANDROID_REDESIGN_CONTRACT.md) and
 [acceptance requirements](ANDROID_REDESIGN_ACCEPTANCE.md). The contract file
@@ -24,7 +24,7 @@ report is not a completed acceptance JSON or checker PASS.
 | Phase 2 — native design pilot, PR [401](https://github.com/yanniedog/AR-app/pull/401) | Merged | Earlier native proof retains its own source; it is not final acceptance. |
 | Phase 3 — app map, PR [403](https://github.com/yanniedog/AR-app/pull/403) | Merged; recorded merge prefix `33e35c2` | Preserve exact-row navigation and state ownership. |
 | Phase 4 — copy/factual presentation, PR [404](https://github.com/yanniedog/AR-app/pull/404) | Merged | Final inventory/copy check still belongs to the integrated head. |
-| Phase 5 — validation and dense rows, PR [405](https://github.com/yanniedog/AR-app/pull/405) | Draft/premerge; latest reviewed canonical/native source `753f0f500be43cacac3e4d1b39450707779ca24d`; native hold | Six centered rows, matching loading geometry and actual Settings font growth/shrink without a blank are observed. Bubble gap and clipped footer labels remain native failures. Later repairs are not yet accepted. |
+| Phase 5 — validation and dense rows, PR [405](https://github.com/yanniedog/AR-app/pull/405) | Draft/premerge; latest reviewed canonical/native source `bb1fb4300dbdc8cd58704d1eaee9b202b36bc0d6` | Full local CI and bounded bubble/font repair checks pass. Earlier 753 bubble/footer failures remain historical evidence. Full matrix, final strict audit, required current-head remote gates and review clearance remain separate. |
 | Phase 6 — acceptance harness/launch assets/installer, PR [397](https://github.com/yanniedog/AR-app/pull/397) | Draft; local follow-up work includes installer commit `13d0d4a`; no final-source acceptance | Integrate actual protected main after Phase 5. Nine installer tests and four reviewed Chrome images establish bounded template checks, not public or Android acceptance. |
 | Representative-person study | Not run | Emulator-operator findings do not establish human usability validation. |
 | Physical-device audio, haptics and ARM runtime | Not run for final redesign | x86_64 emulator observations do not cover these. |
@@ -55,7 +55,7 @@ mobile tree is `9d74fc7a42c9c838190f83152cff55b25bc31147`; the retained
 This is historical source-check evidence. Its later native font-transition
 failure remains retained; the separate 753 observations below do not retag it.
 
-The latest reviewed exact-`753f0f5` canonical receipt [C6] records completion on
+The historical exact-`753f0f5` canonical receipt [C6] records completion on
 16 October at 00:11:14 Australia/Hobart (15 October 13:11:14 UTC), exit 0,
 mobile tree `11f409b27b89034e40655935a6d266aa251f0a87`: 372 Jest suites /
 4,236 tests and 384 script tests passed. Doctor 18/18, types, lint (0 errors /
@@ -64,6 +64,15 @@ benchmarks, all three exports, compiled-link/audit-awake and size checks passed.
 The receipt binds the original complete result/stdout/stderr hashes. It does
 not cover the subsequent host/footer repair batch, integrated Phase 6 or public
 delivery. Host verification elapsed time is not application latency.
+
+The latest reviewed exact-BB1 canonical receipt [C9] records completion on
+16 October at 01:02:34 Australia/Hobart (15 October 14:02:34 UTC), exit 0,
+mobile tree `adb01ca5ebd7b8abb33addf44d021a7b105e3cc0`: 373 Jest suites /
+4,242 tests and 384 script tests passed. Doctor 18/18, types, lint (0 errors /
+9 existing warnings), copy guard (0 violations), prepared pins, both history
+benchmarks, all three exports, compiled-link/audit-awake and size checks passed.
+Its complete result/stdout/stderr hashes remain in the receipt. This is local
+exact-BB1 source verification, not integrated Phase 6 or public acceptance.
 
 ## APK and runtime identities
 
@@ -88,7 +97,7 @@ in [C2]; they do not turn the artifact into a public release or prove a fresh
 final acceptance installation. Final resolved version/configuration, signing,
 universal/ARM public APKs and their actual installed readbacks remain Pending.
 
-The later 753 release-validation artifact [C7–C8] is independently identified:
+The historical 753 release-validation artifact [C7–C8] is independently identified:
 
 | Identity | 753 premerge validation artifact |
 | --- | --- |
@@ -97,6 +106,17 @@ The later 753 release-validation artifact [C7–C8] is independently identified:
 | Package / version / build / ABI | `com.eyex.australianrates` / 1.0.238 / 192 / x86_64 |
 | Build / signing scope | Release variant, workflow run `38739602437`; certificate `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`; production signing identity not verified |
 | Installed-stage binding | Matching installed APK bytes/hash on task AOSP `emulator-5582`, 15 October 13:21:38 UTC; not final public-byte acceptance |
+
+The final Phase 5 repair-validation candidate below has its own identity
+[C10–C11]; earlier artifacts are not retagged as this build:
+
+| Identity | BB1 premerge validation artifact |
+| --- | --- |
+| Source / mobile tree | `bb1fb4300dbdc8cd58704d1eaee9b202b36bc0d6` / `adb01ca5ebd7b8abb33addf44d021a7b105e3cc0` |
+| APK bytes / SHA-256 | 32,846,770 / `150d51ba0669c8f93e7be1af59fc6a8b77d3e35dd984db1414302f90c3d115be` |
+| Package / version / build / ABI | `com.eyex.australianrates` / 1.0.238 / 192 / x86_64 |
+| Build / signing scope | Release variant, workflow run `38748017079`; certificate `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`; production signing identity not verified |
+| Installed-stage binding | Pulled installed bytes/hash match on task AOSP `emulator-5582`, 15 October 14:21:12 UTC; retained cache/state, not fresh final public-byte acceptance |
 
 Source-tree equivalence after squash cannot prove binary equivalence. Phase 6
 also changes native launch artwork/configuration; earlier APKs cannot validate
@@ -127,13 +147,43 @@ initial readback preceded asynchronous font application; the later 2.0 readback
 and visibly enlarged glyphs establish growth. This is a bounded successful
 roundtrip, not a complete matrix or timing result.
 
-Two actual 753 native defects remain: the bubble bright region at y779–894
-against row-main top984 leaves approximately 30dp gap, and footer labels remain
+Two actual 753 native defects were retained: the bubble bright region at y779–894
+against row-main top984 left approximately 30dp gap, and footer labels remained
 font2-sized/clipped after returning to confirmed font1 while row text shrinks.
-The subsequent host/bubble and footer repairs are in progress; focused source
-checks do not establish their native result. The curated journal is finalized
+The intermediate host/footer repair source
+`5ccd8b839bd22e2159b7769aa788b437f4ee688f` was followed by BB1's shared-text
+repair. The separate BB1 result below supersedes the repair-pending status;
+it does not alter the 753 observations. The 753 curated journal is finalized
 as `partial-failed-native-layout`, with no complete friction census, whole-matrix
 pass or native timing percentile.
+
+### Bounded BB1 repair verification
+
+The BB1 journal [N10–N11] is finalized with 63 sequential events, 13 retained
+endpoints and an explicit root operator visual review. Its bounded result is
+PASS for bubble placement/dismissal and real Settings font/state restoration,
+not a whole-matrix or performance pass. The initial cold frame is explicitly
+not an endpoint; the subsequent settled endpoint shows 6,187 results.
+
+Actual Comparison and Advertised holds each show exactly one word. Both
+bubble bottoms are y960 against row-main target top984 at density3, an 8dp gap.
+Back dismisses without navigation; an outside tap over another row's Save
+dismisses without saving that row. Long-press release does not open Product.
+
+The operator used actual Android Settings slider steps 1→2→1.5→1, with recorded
+2.0/1.5/1.0 readbacks and no force-stop. `Unloa`, four results and the exact
+saved tier survive; the tier starts unsaved in synthetic setup and is saved
+once at font2 before the shrink checks. Root reviewed actual PNG glyph growth
+and shrink, including the intermediate 1.5 step; all three footer labels fit
+after shrinking. No blank occurred on these resumes. Derived ink observations
+[N12] corroborate relative glyph size only, not point sizes or input latency.
+
+Focused Search reopens the native keyboard on resume; the recorded Back closes
+it before the footer assessment. This behavior and the full original sequence
+remain visible. Journal elapsed time includes operator/capture overhead, and
+its setup/Settings interactions are not a replacement friction census or a P95
+sample. Final 411dp/other matrix cases, TalkBack, strict-audit and integrated
+Phase 6/public-byte proof remain separate outstanding requirements.
 
 The preserved b945 matched ledger [J1–J2] covers the twelve agreed journeys
 and 96 comparison cells against the original baseline: arrival, family,
@@ -142,7 +192,7 @@ Market, product Back and tab/state restoration. It retains separate Filter
 Cancel and advanced Sort selection/Cancel/Back observations. Calculate is exact
 selected-tier entry with blank fields, not a completed financial outcome.
 Those records keep their original source; they do not automatically cover
-the 1f dense rows, subsequent `9420975` refinements or 753/host/footer work.
+the 1f dense rows, subsequent `9420975` refinements or 753/BB1 repair work.
 
 Reconcile affected-flow rechecks against the twelve matched journeys and the
 declared 360/411dp, normal/large-font and state matrix. A twelve-by-four full
@@ -252,10 +302,10 @@ readbacks must precede prospective registration and either timed stage.
 
 | Required closeout | Current state / evidence to retain |
 | --- | --- |
-| Final source and inventory | Pending: finish the host/bubble and footer repair batch following actual 753 failures, obtain its native clearance, finish Phase 5 review, then integrate actual protected main into the existing Phase 6 branch without rewriting pushed history. Reconcile capability/route/copy/friction inventories. |
-| Exact-head verification | Pending for integrated final head: complete canonical output, required remote gates and all substantive feedback dispositions/resolutions. 753 canonical 372 suites / 4,236 Jest tests and 384 script tests remain exact-753 proof. |
+| Final source and inventory | BB1 host/bubble/shared-text/footer bounded native repairs pass. Pending: finish broader Phase 5 verification/review clearance, then integrate actual protected main into the existing Phase 6 branch without rewriting pushed history. Reconcile capability/route/copy/friction inventories. |
+| Exact-head verification | BB1 full local canonical passes: 373 suites / 4,242 Jest tests and 384 script tests. Pending for integrated final head: complete canonical output, required remote gates and all substantive feedback dispositions/resolutions. Earlier receipts remain bound to their original sources. |
 | Native matrix and invariants | Pending final-source rechecks: 360/411dp and normal/large fonts; light/dark, reduced motion, keyboard, gesture/button Back, rapid/interrupted interactions, loading/empty/cached/offline/error and permission states. Preserve exact tier/metrics/unknowns/fees/source dates, 48dp visible targets, no horizontal scroll, state restoration, privacy and no explanatory prose. |
-| Dense-row/word-bubble/font rechecks | 753 establishes six centered rows, matching one-line loading and a native Settings font roundtrip without blank/query/Saved loss. Bubble position and footer-label shrink failed. Pending: actual repaired APK at required corners, final metric/tier semantics, hold suppression/dismissal/Back/focus, direct checkbox and Save/History. Earlier blank failures remain retained, not reclassified. |
+| Dense-row/word-bubble/font rechecks | Historical 753 establishes six centered rows and matching one-line loading. BB1 at 360dp/dark establishes 8dp Comparison/Advertised bubble gaps, hold-release/Back/outside dismissal, and actual Settings 1→2→1.5→1 without blank/query/exact-Saved loss; glyphs/footer labels shrink correctly. Remaining corners, other metric/tier/status semantics, direct checkbox and Save/History coverage remain required. Earlier failures remain retained, not reclassified. |
 | TalkBack | Pending final-row generated announcements/traversal/actions, with actual service/TTS identity. Earlier focused Save/Remove/History observations are scoped to their source. XML is supporting semantics, not a generated utterance or physical audio proof. Ordinary UIAutomator capture is not used during continuous TalkBack traversal. |
 | Finalized real-readiness audit | Pending: final APK/source/dataset/session, full planned inventory once, durable END/stored evidence, all required useful rendered endpoints within 10,000ms. Retain failures/skips/unavailable, including unresolved external-source conditions; no budget or coverage exemptions. |
 | Paired native P95 | Not run; no accepted pair or prospective registration. After both known public APKs/common actual dataset, freeze 40 linked Save/Unsave taps (separate DOWN-feedback and UP-activation) and 40 alternating swipes (deterministic first original MOVE after settled DOWN). Preserve all attempts, missing/ambiguous/drop observations, exact native ns joins and separate semantic endpoints. At least 30 unique qualifying gestures per cohort, no pooling, later-MOVE substitution, cherry picking or retries; unavailable required evidence remains a gap. |
@@ -282,6 +332,9 @@ its complete underlying artifacts. It is not a fabricated acceptance inventory.
 | C6 | `phase5-753f0f5-canonical-verification-receipt.json` | 1,760 | `60a7746510d77940709b67e7497c44709ec1ff71b0133d39632b8ebb9ac1df5d` |
 | C7 | `phase5-753f0f5-validation/metadata.json` | 580 | `bada9fbc70f3ca04a278e1d6b7cc6b28ad32c34ef459da12e3015d6fa9821d9a` |
 | C8 | `phase5-753f0f5-validation/secondary-installed-receipt.json` | 346 | `0064072ce7c23bd28626c65aa2bf44488edee1f1db1c0a3b18204a179913c6b1` |
+| C9 | `phase5-bb1fb43-canonical-verification-receipt.json` | 1,760 | `ca7da0f8fa9312670204da92e1fad5a5de233bf1c579a79331b4da2fe5bc0b02` |
+| C10 | `phase5-bb1fb43-validation/metadata.json` | 580 | `1b562236e4b8a522f0e6d4e7a8bd019b0728af3a69d0174614069ce08ab1570b` |
+| C11 | `phase5-bb1fb43-validation/secondary-installed-receipt.json` | 418 | `24276726d65f1621f4fe2eb250ba4bae3b1ff9c24adf144d083ba6a90256621d` |
 | N1 | `journeys/phase5-1f88577-release-360-font1-dark-dense-arrival/dense-arrival.png` | 191,902 | `32c21f38ec0d37a160bd7afbfdf52fcdb8532154a03a1131360a53773a4efd9e` |
 | N2 | `journeys/phase5-1f88577-release-360-font2-reduced-dense-arrival/dense-font2-settled.png` | 209,265 | `5a97b5cf2a27176d98176ae7290865e88f5bd49a2efa13ae56b707576e5207e3` |
 | N3 | `journeys/phase5-1f88577-release-360-font2-reduced-dense-arrival/events.jsonl` | 1,545 | `5bad4dfb7800115b40717415ccd1a106a160e48aa9bcaf7317772992a0d21d30` |
@@ -291,6 +344,9 @@ its complete underlying artifacts. It is not a fabricated acceptance inventory.
 | N7 | `journeys/phase5-1f88577-release-360-font1-dark-compare-checkbox-dock/events.jsonl` | 4,601 | `4a0b1bcd3340cb28918704558635012d2405247ddeb132b517568dbcac4a30ef` |
 | N8 | `journeys/phase5-1f88577-release-360-font1-dark-cold-recovery-query/summary.json` | 690 | `862306f8bc054844ff82b4d8c95d525c82edc71abbb8700a795ddce7a4cb2e1e` |
 | N9 | `phase5-preparation/phase5-753f0f5-native-repair-observation.json` | 7,557 | `30783a3c9b015f71c7e02a998bc4867c120e95789fe9726867bea1623e798823` |
+| N10 | `journeys/phase5-bb1fb43-release-360-font1-dark-bubble-and-font-repairs/events.jsonl` | 14,602 | `dce7da31b1c43732b029f9286a86175dd1f1f99afa0ed6bc22b3a313236e8bf4` |
+| N11 | `journeys/phase5-bb1fb43-release-360-font1-dark-bubble-and-font-repairs/summary.json` | 579 | `af57ab8913382b83e1517bf9ce0ef86432582d790f8c8ae6540a4a20ca7534a6` |
+| N12 | `journeys/phase5-bb1fb43-release-360-font1-dark-bubble-and-font-repairs/font-glyph-observation.json` | 1,270 | `8449c5ff1434ba7f88491f88de0be375521ee44942e70f7d08f86301435e6d79` |
 | J1 | `phase5-preparation/phase5-matched-friction-ledger-draft.md` | 8,043 | `eb391b916715b2aee572193903f46872c3ed099f1ee353e9062327d19e50d146` |
 | J2 | `baseline-supplemental-canonical-map-final.json` | 86,085 | `222f1b7e4a43e9499eaaf80884167305cf82ee9c14aea0b63f92b1764f462dcc` |
 | A1 | `phase5-5496c48-final-audit-comparison.json` | 275,851 | `e28d4f09b033fe5ece6fc663a727102e519f5695d53c41abc35fcc501e616a61` |
