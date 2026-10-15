@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { link, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -116,6 +116,72 @@ async function replaceNativeCsv(directory, record, stage, value) {
   analysis.csvSha256 = record.artifacts.find(item => item.id === stage.csvRef).sha256;
   await replaceArtifact(directory, record, stage.analysisRef, JSON.stringify(analysis));
 }
+
+async function replaceNativeConfig(directory, record, value) {
+  await replaceArtifact(directory, record, 'native-config', value);
+  const refs = new Set(record.frontendTiming.nativeInput.cohorts.flatMap(cohort => [cohort.baseline.analysisRef, cohort.final.analysisRef]));
+  for (const id of refs) {
+    const artifact = record.artifacts.find(item => item.id === id);
+    const analysis = JSON.parse(await readFile(path.join(directory, artifact.path), 'utf8'));
+    analysis.configSha256 = createHash('sha256').update(value).digest('hex');
+    await replaceArtifact(directory, record, id, JSON.stringify(analysis));
+  }
+}
+
+test('requires separate original and pulled APK IDs and paths for acceptance and every timing stage', () => {
+  reject(record => { record.identity.installedApkRef = record.identity.apkRef; }, /distinct artifact IDs and paths/);
+  reject(record => { record.artifacts.find(item => item.id === 'installed').path = './apk.fixture'; }, /distinct artifact IDs and paths/);
+  for (const stage of ['baseline', 'final']) {
+    reject(record => {
+      const identity = record.frontendTiming.nativeInput.cohorts[0][stage].identity;
+      identity.installedApkRef = identity.apkRef;
+    }, /distinct artifact IDs and paths/);
+  }
+});
+
+test('rejects an installed APK alias that has a distinct path but is the same filesystem file', async () => {
+  await onDisk(async ({ directory, filename }) => {
+    await rm(path.join(directory, 'installed.fixture'));
+    await link(path.join(directory, 'apk.fixture'), path.join(directory, 'installed.fixture'));
+    const result = await verifyAndroidRedesignEvidence(filename, expected);
+    assert.equal(result.ok, false);
+    assert.match(result.errors.join('\n'), /same filesystem file/);
+  });
+});
+
+test('one retained capture cannot be relabelled as both baseline and final', () => {
+  reject(record => {
+    for (const cohort of record.frontendTiming.nativeInput.cohorts) {
+      for (const role of ['traceRef', 'csvRef', 'analysisRef', 'summary']) cohort.final[role] = structuredClone(cohort.baseline[role]);
+    }
+    record.frontendTiming.inputLatencyP95Ms = 100;
+  }, /baseline\/final capture.*distinct/);
+  reject(record => {
+    const cohort = record.frontendTiming.nativeInput.cohorts[0];
+    const baseline = record.artifacts.find(item => item.id === cohort.baseline.traceRef);
+    Object.assign(record.artifacts.find(item => item.id === cohort.final.traceRef), { bytes: baseline.bytes, sha256: baseline.sha256 });
+  }, /baseline\/final capture.*distinct/);
+});
+
+test('capture configs require actual app atrace fields in their matching data source', async () => {
+  const original = files['native-config'];
+  const variants = [
+    ...['gfx', 'view', 'input'].map(category => original.replace(`atrace_categories: "${category}"`, `# atrace_categories: "${category}"`)),
+    original.replace(/atrace_apps:\s*"[^"]+"/, 'atrace_apps: "different.test.app"'),
+    original.replace('name: "linux.ftrace"', 'name: "linux.process_stats"') + '\n# linux.ftrace\n',
+    original.replace('trace_dispatcher_window_dispatch: true', 'trace_dispatcher_window_dispatch: false') + '\n# trace_dispatcher_window_dispatch: true\n',
+  ];
+  for (const value of variants) {
+    assert.notEqual(value, original);
+    await onDisk(async ({ directory, filename, record }) => {
+      await replaceNativeConfig(directory, record, value);
+      await writeFile(filename, JSON.stringify(record));
+      const result = await verifyAndroidRedesignEvidence(filename, expected);
+      assert.equal(result.ok, false);
+      assert.match(result.errors.join('\n'), /capture configuration incomplete/);
+    });
+  }
+});
 
 test('accepts complete synthetic records without calling them native or human proof', () => {
   const result = validateAndroidRedesignEvidence(fixture(), expected);

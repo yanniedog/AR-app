@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import path from 'node:path';
 import { parseAaptBadging } from './apk-identity.mjs';
 import { INPUT_ACTIONS, MIN_NATIVE_GESTURES, renderNativeInputQuery, summarizeNativeInputCsv } from './android-native-input-latency.mjs';
 
@@ -18,6 +19,65 @@ const entries = value => Array.isArray(value) ? value : [];
 const sameSet = (a, b) => Array.isArray(a) && Array.isArray(b) && new Set(a).size === a.length
   && new Set(b).size === b.length && JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 const date = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
+
+const artifactPath = artifact => nonempty(artifact?.path)
+  ? path.posix.normalize(artifact.path.replaceAll('\\', '/')) : null;
+export function distinctApkArtifacts(identity, artifacts) {
+  const original = artifacts.get(identity?.apkRef), installed = artifacts.get(identity?.installedApkRef);
+  return nonempty(identity?.apkRef) && identity.apkRef !== identity?.installedApkRef
+    && artifactPath(original) !== null && artifactPath(installed) !== null
+    && artifactPath(original) !== artifactPath(installed);
+}
+
+// Read the small textproto grammar emitted by the capture runner. Values in
+// comments or in unrelated data-source blocks cannot satisfy capture requirements.
+function captureConfigFields(source) {
+  const lexer = /\s+|#[^\r\n]*|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|[A-Za-z_][A-Za-z_0-9.]*|[-+]?\d+(?:\.\d+)?|[{}<>:,;]/gy;
+  const tokens = [];
+  for (let offset = 0; offset < source.length;) {
+    lexer.lastIndex = offset;
+    const match = lexer.exec(source);
+    if (!match) throw new Error('unsupported capture configuration syntax');
+    offset = lexer.lastIndex;
+    if (!/^(?:\s|#|\/\/|\/\*)/.test(match[0])) tokens.push(match[0]);
+  }
+  let index = 0;
+  const fields = closing => {
+    const node = new Map();
+    while (index < tokens.length && tokens[index] !== closing) {
+      const key = tokens[index++];
+      if (!/^[A-Za-z_][A-Za-z_0-9.]*$/.test(key)) throw new Error('invalid capture configuration field');
+      if (tokens[index] === ':') index++;
+      const token = tokens[index++];
+      let value;
+      if (token === '{' || token === '<') value = fields(token === '{' ? '}' : '>');
+      else if (token?.startsWith('"')) value = { kind: 'string', value: JSON.parse(token) };
+      else if (token && /^[A-Za-z_+\-0-9][A-Za-z_0-9.+\-]*$/.test(token)) value = { kind: 'atom', value: token };
+      else throw new Error('missing capture configuration value');
+      node.set(key, [...(node.get(key) ?? []), value]);
+      if (tokens[index] === ',' || tokens[index] === ';') index++;
+    }
+    if (closing && tokens[index++] !== closing) throw new Error('unclosed capture configuration block');
+    return node;
+  };
+  return fields(undefined);
+}
+
+function completeCaptureConfig(source, packageName) {
+  const root = captureConfigFields(source);
+  const blocks = (node, key) => (node.get(key) ?? []).filter(value => value instanceof Map);
+  const has = (node, key, value, kind = 'string') => (node.get(key) ?? [])
+    .some(item => item?.kind === kind && item.value === value);
+  const sources = blocks(root, 'data_sources').flatMap(source => blocks(source, 'config'));
+  return sources.some(source => has(source, 'name', 'android.surfaceflinger.frametimeline'))
+    && sources.some(source => has(source, 'name', 'android.input.inputevent')
+      && blocks(source, 'android_input_event_config').some(config => has(config, 'mode', 'TRACE_MODE_TRACE_ALL', 'atom')
+        && has(config, 'trace_dispatcher_input_events', 'true', 'atom')
+        && has(config, 'trace_dispatcher_window_dispatch', 'true', 'atom')))
+    && sources.some(source => has(source, 'name', 'linux.ftrace')
+      && blocks(source, 'ftrace_config').some(config => ['gfx', 'view', 'input'].every(category => has(config, 'atrace_categories', category))
+        && has(config, 'atrace_apps', packageName)));
+}
 
 export function nativeSampleListSha256(summary) {
   const samples = summary.gestures.filter(item => item.available)
@@ -74,6 +134,7 @@ export function validateNativeInputEvidence(timing, expected, artifacts) {
         ref(identity?.[key], ['apk'], `${stageLabel}.${key}`);
         check(artifacts.get(identity?.[key])?.sha256 === trusted?.apkSha256, `${stageLabel}: APK bytes must match trusted identity`);
       }
+      check(distinctApkArtifacts(identity, artifacts), `${stageLabel}: original and pulled APK require distinct artifact IDs and paths`);
       for (const key of ['badgingRef', 'installedReadbackRef']) ref(identity?.[key], ['log'], `${stageLabel}.${key}`);
       for (const [key, kinds] of [['traceRef', ['trace']], ['queryRef', ['query']], ['csvRef', ['report']],
         ['configRef', ['query']], ['analysisRef', ['log']], ['stderrRef', ['log']], ['environmentRef', ['log']], ['workloadRef', ['log']], ['datasetRef', ['report']]]) {
@@ -116,6 +177,16 @@ export function validateNativeInputEvidence(timing, expected, artifacts) {
       && artifacts.get(cohort?.baseline?.configRef)?.sha256 === artifacts.get(cohort?.final?.configRef)?.sha256,
     `${prefix}: paired analyzer and capture configuration must match`);
   }
+  const captureRoles = ['traceRef', 'csvRef', 'analysisRef'];
+  const baselineCaptures = new Set(cohorts.flatMap(cohort => captureRoles.flatMap(role => {
+    const id = cohort?.baseline?.[role], artifact = artifacts.get(id);
+    return [`${role}/id/${id}`, `${role}/path/${artifactPath(artifact)}`, `${role}/hash/${artifact?.sha256}`];
+  })));
+  check(cohorts.every(cohort => captureRoles.every(role => {
+    const id = cohort?.final?.[role], artifact = artifacts.get(id);
+    return ![`${role}/id/${id}`, `${role}/path/${artifactPath(artifact)}`, `${role}/hash/${artifact?.sha256}`]
+      .some(key => baselineCaptures.has(key));
+  })), `${label}: baseline/final capture trace, CSV and analysis must be distinct, including bytes`);
   for (const group of groups.values()) {
     if (group.some(cohort => cohort?.actionKind !== 'move-scroll')) {
       check(group.length === 2 && sameSet(group.map(cohort => cohort?.actionKind), ['down-feedback', 'up-activation']),
@@ -165,8 +236,7 @@ export function verifyNativeInputArtifacts(timing, expected, contents, artifacts
         || Number(/\bversionCode=(\d+)/.exec(readback)?.[1]) !== trusted?.versionCode) throw new Error('actual APK/install readback differs from trusted identity');
       if (text(stage?.queryRef)?.replace(/\r\n/g, '\n') !== renderNativeInputQuery(trusted?.packageName)) throw new Error('retained query differs from the checked-in native bridge query');
       const config = text(stage?.configRef) ?? '';
-      if (!['android.input.inputevent', 'android.surfaceflinger.frametimeline', 'linux.ftrace', 'TRACE_MODE_TRACE_ALL',
-        'trace_dispatcher_input_events: true', 'trace_dispatcher_window_dispatch: true'].every(token => config.includes(token))) throw new Error('native input/frame capture configuration incomplete');
+      if (!completeCaptureConfig(config, trusted?.packageName)) throw new Error('native input/frame capture configuration incomplete: gfx/view/input and target app required');
       const analysis = JSON.parse(text(stage?.analysisRef) ?? 'null');
       if (analysis?.schemaVersion !== 1 || analysis?.exitCode !== 0 || analysis?.analyzerVersion !== stage?.analyzerVersion
         || ['traceRef', 'queryRef', 'csvRef', 'configRef', 'stderrRef'].some(key => analysis?.[key] !== stage?.[key])

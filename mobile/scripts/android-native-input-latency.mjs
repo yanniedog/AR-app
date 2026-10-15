@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 export const MIN_NATIVE_GESTURES = 30;
 export const INPUT_ACTIONS = Object.freeze({ 'down-feedback': 0, 'up-activation': 1, 'move-scroll': 2 });
+const MEASURED_ACTIONS = new Set(Object.values(INPUT_ACTIONS).map(String));
 const PRESENTED = ['Early Present', 'On-time Present', 'Late Present'];
 const DECIMAL = /^(0|[1-9]\d*)$/;
 const INTEGER = /^-?(0|[1-9]\d*)$/;
@@ -68,6 +69,9 @@ const integer = value => typeof value === 'string' && INTEGER.test(value) ? BigI
 const positive = value => typeof value === 'string' && DECIMAL.test(value) && BigInt(value) > 0n;
 const nonnegative = value => typeof value === 'string' && DECIMAL.test(value);
 const equals = (left, right) => integer(left) !== null && integer(left) === integer(right);
+const inputIdentity = ({ row }) => JSON.stringify([
+  row.upid, row.input_event_id, row.original_event_time_monotonic, row.down_time_monotonic, row.device_id, row.source,
+]);
 
 /** Rechecks recorded source columns, preserving flags and every unavailable row. */
 export function admitNativeInputRow(row, packageName) {
@@ -132,7 +136,10 @@ export function summarizeNativeInputCsv(text, { packageName, actionKind, exclude
   if (observations.some(({ row }) => integer(row.trace_error_count) !== 0n || integer(row.trace_data_loss_count) !== 0n)) {
     throw new Error('Native trace errors/data loss are not zero or verified');
   }
-  const selected = observations.filter(({ row }) => row.action === String(INPUT_ACTIONS[actionKind]));
+  // CANCEL, encoded pointer actions and unknown codes are original evidence,
+  // not another cohort or permission to omit an interrupted attempt.
+  const unsupported = ({ row }) => !MEASURED_ACTIONS.has(row.action);
+  const selected = observations.filter(item => item.row.action === String(INPUT_ACTIONS[actionKind]) || unsupported(item));
   const identities = new Map();
   for (const item of selected) {
     const key = `${item.row.upid}/${item.row.input_event_id}`;
@@ -152,17 +159,19 @@ export function summarizeNativeInputCsv(text, { packageName, actionKind, exclude
   if (new Set(excludedGestureKeys).size !== excludedGestureKeys.length
     || excludedGestureKeys.some(key => !groups.has(key))) throw new Error('Operator exclusion must identify a unique received gesture');
   const gestures = [...groups].map(([key, group]) => {
-    const uniqueInputs = new Set(group.map(item => `${item.row.upid}/${item.row.input_event_id}`));
+    const cohortInputs = group.filter(item => !unsupported(item));
+    const uniqueInputs = new Set(cohortInputs.map(item => `${item.row.upid}/${item.row.input_event_id}`));
     // The representative is predeclared FIRST MOVE, by original event time.
     // An unassigned first MOVE is unavailable, never replaced by a later one.
-    const times = group.map(item => integer(item.row.original_event_time_monotonic));
-    const firstTime = times.some(time => time === null) ? null
+    const times = cohortInputs.map(item => integer(item.row.original_event_time_monotonic));
+    const firstTime = !times.length || times.some(time => time === null) ? null
       : times.reduce((minimum, time) => time < minimum ? time : minimum);
     const representative = actionKind === 'move-scroll'
-      ? group.filter(item => integer(item.row.original_event_time_monotonic) === firstTime) : group;
+      ? cohortInputs.filter(item => integer(item.row.original_event_time_monotonic) === firstTime) : cohortInputs;
     const distinctRepresentatives = new Set(representative.map(item => `${item.row.upid}/${item.row.input_event_id}`));
     const excluded = excludedGestureKeys.includes(key);
-    const available = !excluded && representative.length > 0 && distinctRepresentatives.size === 1
+    const available = !excluded && cohortInputs.length === group.length
+      && representative.length > 0 && distinctRepresentatives.size === 1
       && representative.every(item => item.status === 'direct_native_frame_info')
       && (actionKind === 'move-scroll' || uniqueInputs.size === 1);
     const latency = available ? representative[0].latencyNs : null;
@@ -171,20 +180,17 @@ export function summarizeNativeInputCsv(text, { packageName, actionKind, exclude
   });
   const values = gestures.filter(item => item.available).map(item => BigInt(item.latencyNs))
     .sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
-  const unclassifiedInputCount = new Set(observations.filter(item => item.row.action === null)
-    .map(item => `${item.row.upid}/${item.row.input_event_id}`)).size;
+  const unclassifiedInputCount = new Set(observations.filter(unsupported).map(inputIdentity)).size;
   const complete = values.length >= MIN_NATIVE_GESTURES && unclassifiedInputCount === 0
     && gestures.every(item => item.available || item.excluded);
   const p95 = complete ? values[Math.ceil(values.length * 0.95) - 1] : null;
   if (p95 !== null && p95 > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Native percentile exceeds exact numeric-ms range');
-  return { observations, gestures, receivedInputCount: new Set(selected.map(({ row }) => JSON.stringify([
-    row.upid, row.input_event_id, row.original_event_time_monotonic, row.down_time_monotonic, row.device_id, row.source,
-  ]))).size,
+  return { observations, gestures, receivedInputCount: new Set(selected.map(inputIdentity)).size,
     receivedGestureCount: gestures.length, admittedGestureCount: values.length,
     operatorExcludedGestureCount: gestures.filter(item => item.excluded).length,
     unavailableGestureCount: gestures.filter(item => !item.available && !item.excluded).length,
     unclassifiedInputCount,
-    unavailableObservationCount: selected.filter(item => item.status !== 'direct_native_frame_info').length,
+    unavailableObservationCount: selected.filter(item => unsupported(item) || item.status !== 'direct_native_frame_info').length,
     percentileStatus: complete ? 'measured' : 'unavailable', p95Ns: p95?.toString() ?? null,
     p95Ms: p95 === null ? null : Number(p95) / 1_000_000 };
 }

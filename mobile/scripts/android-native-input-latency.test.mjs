@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { admitNativeInputRow, parseNativeInputCsv, renderNativeInputQuery, summarizeNativeInputCsv } from './android-native-input-latency.mjs';
-import { nativeRow, nativeCsv } from './fixtures/android-native-input.fixture.mjs';
+import { nativeRow, nativeCsv, nativeInterruptedGesture } from './fixtures/android-native-input.fixture.mjs';
 
 const options = { packageName: 'example.test.rates', actionKind: 'down-feedback' };
 const rows = count => Array.from({ length: count }, (_, index) => nativeRow(index));
@@ -145,5 +145,72 @@ test('unidentified input actions cannot disappear from an otherwise complete tou
   const summary = summarizeNativeInputCsv(nativeCsv([...rows(30), unknown]), options);
   assert.equal(summary.observations.length, 31);
   assert.equal(summary.unclassifiedInputCount, 1);
+  assert.equal(summary.receivedGestureCount, 31);
+  assert.equal(summary.unavailableGestureCount, 1);
   assert.equal(summary.p95Ms, null);
+});
+
+test('CANCEL and encoded/unknown motion actions remain unavailable attempts in every declared cohort', () => {
+  for (const action of [3, 4, 5, 6, 257, 261, 65535]) {
+    const terminal = nativeInterruptedGesture(40, action)[1];
+    for (const [actionKind, measuredAction] of Object.entries({ 'down-feedback': 0, 'up-activation': 1, 'move-scroll': 2 })) {
+      const samples = rows(30).map((_, index) => nativeRow(index, { action: measuredAction }));
+      const summary = summarizeNativeInputCsv(nativeCsv([...samples, terminal]), { ...options, actionKind });
+      assert.equal(summary.observations.length, 31);
+      assert.equal(summary.observations.at(-1).row.action, String(action));
+      assert.equal(summary.observations.at(-1).status, 'native_frame_mapping_missing');
+      assert.deepEqual(summary.observations.at(-1).rawLegacyFlags, ['1']);
+      assert.equal(summary.receivedGestureCount, 31);
+      assert.equal(summary.receivedInputCount, 31);
+      assert.equal(summary.admittedGestureCount, 30);
+      assert.equal(summary.unclassifiedInputCount, 1);
+      assert.equal(summary.unavailableGestureCount, 1);
+      assert.equal(summary.unavailableObservationCount, 1);
+      assert.equal(summary.percentileStatus, 'unavailable');
+      assert.equal(summary.p95Ns, null);
+      assert.equal(summary.p95Ms, null);
+    }
+  }
+});
+
+test('a cancelled tap invalidates its linked DOWN and UP even when 30 other gestures qualify', () => {
+  const [down, cancel] = nativeInterruptedGesture(40);
+  const up = nativeRow(40, { action: 1 });
+  const samples = [...rows(30).flatMap((_, index) => [nativeRow(index), nativeRow(index, { action: 1 })]), down, up, cancel];
+  for (const actionKind of ['down-feedback', 'up-activation']) {
+    const summary = summarizeNativeInputCsv(nativeCsv(samples), { ...options, actionKind });
+    const interrupted = summary.gestures.find(item => item.key === admitNativeInputRow(down, options.packageName).gestureKey);
+    assert.equal(summary.receivedGestureCount, 31);
+    assert.equal(summary.admittedGestureCount, 30);
+    assert.equal(summary.unavailableGestureCount, 1);
+    assert.equal(interrupted.available, false);
+    assert.equal(interrupted.latencyNs, null);
+    assert.equal(summary.p95Ms, null);
+    const excluded = summarizeNativeInputCsv(nativeCsv(samples), { ...options, actionKind, excludedGestureKeys: [interrupted.key] });
+    assert.equal(excluded.operatorExcludedGestureCount, 1);
+    assert.equal(excluded.unclassifiedInputCount, 1);
+    assert.equal(excluded.percentileStatus, 'unavailable');
+  }
+});
+
+test('unsupported swipe events cannot replace FIRST MOVE or be hidden by a later assigned event', () => {
+  const first = unavailable(nativeRow(40, { action: 2 }), 'native_frame_mapping_missing', { native_frame_candidate_count: null });
+  const next = nativeRow(40, { action: 2, offsetNs: 50_000_000n, input_event_id: '0x2710', input_event_id_u32: '10000' });
+  const cancel = nativeInterruptedGesture(40)[1];
+  const samples = [...rows(30).map((_, index) => nativeRow(index, { action: 2 })), first, cancel, next];
+  const summary = summarizeNativeInputCsv(nativeCsv(samples), { ...options, actionKind: 'move-scroll' });
+  const interrupted = summary.gestures.find(item => item.key === admitNativeInputRow(first, options.packageName).gestureKey);
+  assert.equal(interrupted.representativeInputId, first.input_event_id);
+  assert.equal(interrupted.available, false);
+  assert.equal(summary.unavailableObservationCount, 2);
+  assert.equal(summary.unavailableGestureCount, 1);
+  assert.equal(summary.unclassifiedInputCount, 1);
+  assert.equal(summary.p95Ms, null);
+  // Even a native-presented unsupported action is not a supported gesture.
+  const mapped = nativeRow(41, { action: 3 });
+  const mappedSummary = summarizeNativeInputCsv(nativeCsv([...samples.slice(0, 30), mapped]), { ...options, actionKind: 'move-scroll' });
+  assert.equal(mappedSummary.observations.at(-1).status, 'direct_native_frame_info');
+  assert.equal(mappedSummary.unavailableObservationCount, 1);
+  assert.equal(mappedSummary.unavailableGestureCount, 1);
+  assert.equal(mappedSummary.p95Ms, null);
 });

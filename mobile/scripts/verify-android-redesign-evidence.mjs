@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { readFile, realpath } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parseAaptBadging } from './apk-identity.mjs';
-import { validateNativeInputEvidence, verifyNativeInputArtifacts } from './android-native-input-evidence.mjs';
+import { distinctApkArtifacts, validateNativeInputEvidence, verifyNativeInputArtifacts } from './android-native-input-evidence.mjs';
 
 export const REQUIRED_JOURNEYS = Object.freeze([
   'launch-rates', 'change-product-type', 'open-product', 'save-rate', 'search',
@@ -110,6 +110,7 @@ export function validateAndroidRedesignEvidence(record, expected) {
   check(identity?.installMode === 'fresh', 'Acceptance requires a fresh installation of the exact APK');
   ref(identity?.apkRef, ['apk'], 'APK');
   ref(identity?.installedApkRef, ['apk'], 'Pulled installed APK');
+  check(distinctApkArtifacts(identity, artifacts), 'Original and pulled APK require distinct artifact IDs and paths');
   for (const id of [identity?.apkRef, identity?.installedApkRef]) {
     check(artifacts.get(id)?.sha256 === expected?.apkSha256, 'Original and pulled installed APK must match trusted APK SHA-256');
   }
@@ -228,6 +229,7 @@ export async function verifyAndroidRedesignEvidence(recordPath, expected) {
   const record = JSON.parse(await readFile(filename, 'utf8'));
   const result = validateAndroidRedesignEvidence(record, expected);
   const contents = new Map();
+  const apkFiles = new Map();
   for (const artifact of Array.isArray(record?.artifacts) ? record.artifacts : []) {
     try {
       if (!nonempty(artifact?.path) || path.isAbsolute(artifact.path) || /^[A-Za-z]:|^[\\/]/.test(artifact.path)
@@ -238,7 +240,22 @@ export async function verifyAndroidRedesignEvidence(recordPath, expected) {
       const bytes = await readFile(actual);
       if (bytes.length !== artifact.bytes || createHash('sha256').update(bytes).digest('hex') !== artifact.sha256) throw new Error('file size/SHA-256 mismatch');
       contents.set(artifact.id, bytes);
+      if (artifact.kind === 'apk') {
+        const info = await stat(actual, { bigint: true });
+        apkFiles.set(artifact.id, { path: process.platform === 'win32' ? actual.toLowerCase() : actual,
+          fileId: info.ino === 0n ? null : `${info.dev}:${info.ino}` });
+      }
     } catch (error) { result.errors.push(`Artifact ${artifact?.id}: ${error.message}`); }
+  }
+  const cohorts = record?.frontendTiming?.nativeInput?.cohorts;
+  const identities = [record?.identity, ...(Array.isArray(cohorts) ? cohorts : [])
+    .flatMap(cohort => [cohort?.baseline?.identity, cohort?.final?.identity])];
+  for (const identity of identities) {
+    const original = apkFiles.get(identity?.apkRef), installed = apkFiles.get(identity?.installedApkRef);
+    if (original && installed && (original.path === installed.path
+      || original.fileId !== null && original.fileId === installed.fileId)) {
+      result.errors.push('Original and pulled APK resolve to the same filesystem file; distinct retained files required');
+    }
   }
   const badging = parseAaptBadging(contents.get(record?.identity?.badgingRef)?.toString('utf8'));
   if (badging.packageName !== expected?.packageName || badging.versionName !== expected?.versionName

@@ -35,6 +35,11 @@ export function nativeCsv(rows) {
   const cell = value => value === null ? '[NULL]' : `"${String(value).replaceAll('"', '""')}"`;
   return `${NATIVE_INPUT_COLUMNS.map(cell).join(',')}\n${rows.map(row => NATIVE_INPUT_COLUMNS.map(key => cell(row[key])).join(',')).join('\n')}\n`;
 }
+/** Synthetic interrupted hardware stream; the terminal event has no native frame. */
+export function nativeInterruptedGesture(index, action = 3) {
+  return [nativeRow(index), nativeRow(index, { action, native_frame_candidate_count: null,
+    association_status: 'native_frame_mapping_missing', original_input_to_present_ns: null })];
+}
 export function buildNativeInputFixture(expected) {
   const files = {}, kinds = {};
   const add = (id, kind, value) => { files[id] = value; kinds[id] = kind; return id; };
@@ -43,7 +48,25 @@ export function buildNativeInputFixture(expected) {
   add('baseline-badging', 'log', `package: name='${expected.baseline.packageName}' versionCode='${expected.baseline.versionCode}' versionName='${expected.baseline.versionName}'\nnative-code: ${expected.baseline.apkAbis.map(abi => `'${abi}'`).join(' ')}\n`);
   add('baseline-readback', 'log', `Package [${expected.baseline.packageName}]\n versionCode=${expected.baseline.versionCode}\n versionName=${expected.baseline.versionName}\n`);
   add('native-query', 'query', renderNativeInputQuery(expected.packageName));
-  add('native-config', 'query', 'SYNTHETIC config fixture\nandroid.input.inputevent android.surfaceflinger.frametimeline linux.ftrace TRACE_MODE_TRACE_ALL trace_dispatcher_input_events: true trace_dispatcher_window_dispatch: true');
+  add('native-config', 'query', `# SYNTHETIC validator fixture only; never captured Android evidence.
+buffers { size_kb: 4096 fill_policy: RING_BUFFER }
+duration_ms: 1000
+data_sources { config { name: "linux.ftrace" ftrace_config {
+  ftrace_events: "sched/sched_switch"
+  ftrace_events: "sched/sched_waking"
+  atrace_categories: "gfx"
+  atrace_categories: "view"
+  atrace_categories: "input"
+  atrace_apps: "${expected.packageName}"
+} } }
+data_sources { config { name: "linux.process_stats" process_stats_config { scan_all_processes_on_start: true } } }
+data_sources { config { name: "android.surfaceflinger.frametimeline" } }
+data_sources { config { name: "android.input.inputevent" android_input_event_config {
+  mode: TRACE_MODE_TRACE_ALL
+  trace_dispatcher_input_events: true
+  trace_dispatcher_window_dispatch: true
+} } }
+`);
   add('native-environment', 'log', 'synthetic measured environment readback');
   add('native-workload', 'log', 'synthetic idle workload readback');
   add('native-stderr', 'log', 'synthetic trace processor progress only');
