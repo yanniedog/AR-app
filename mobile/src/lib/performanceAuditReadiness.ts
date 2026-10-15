@@ -155,7 +155,7 @@ export function compactPerformanceAuditReadinessEvidence(
       probe.kind,
       probe.status,
       probe.actualCount == null ? '' : `${probe.actualCount}/${probe.expectedCount ?? probe.actualCount}`,
-      ...(probe.kind === 'graphic' ? [`required=${probe.required ? 1 : 0}`] : []),
+      ...(probe.kind === 'graphic' || probe.kind === 'data' ? [`required=${probe.required ? 1 : 0}`] : []),
       ...(probe.fallbackCount == null ? [] : [`fallback=${probe.fallbackCount}`]),
       ...(probe.visibleCount == null ? [] : [`visible=${probe.visibleCount}`]),
       ...(probe.emptyStateRendered == null ? [] : [`empty=${probe.emptyStateRendered ? 1 : 0}`]),
@@ -888,8 +888,10 @@ export class PerformanceAuditReadinessRegistry {
           fail(new PerformanceAuditReadinessProbeError(snapshot));
           return;
         }
-        // Structural gaps never recover by waiting — fail immediately with evidence.
-        if (snapshot.blockers.some((blocker) => blocker.code === 'required-kind-missing')) {
+        // A pathname can commit before the selected route registers its probes.
+        // Only a mounted selected surface can prove a structural kind is absent.
+        if (snapshot.surfaces.length > 0 &&
+            snapshot.blockers.some((blocker) => blocker.code === 'required-kind-missing')) {
           const missing = snapshot.blockers
             .filter((blocker) => blocker.code === 'required-kind-missing')
             .map((blocker) => blocker.message)

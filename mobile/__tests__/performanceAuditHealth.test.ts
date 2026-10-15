@@ -16,6 +16,7 @@ import { APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth/types';
 import { makeHealthyDataFixture } from '../__fixtures__/appHealth';
 import { normalizeCoreWithIntegrity } from '../src/data/sectionIntegrity';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
+import { ANDROID_UPDATE_READINESS_AUDIT } from '../src/lib/performanceAuditCheckInventory';
 
 function check(readinessEvidence: string): AuditCheck {
   return {
@@ -29,6 +30,89 @@ function check(readinessEvidence: string): AuditCheck {
 }
 
 describe('integrated app-health display evidence', () => {
+  function updateDisplayReport(readinessEvidence: string, mode: 'local' | 'live-source' = 'live-source') {
+    const { snapshot } = makeHealthyDataFixture();
+    const owner = ANDROID_UPDATE_READINESS_AUDIT;
+    return buildIntegratedAppHealthReport({
+      sessionId: 'dedicated-update-display', mode, startedAt: '2026-10-15T10:00:00Z',
+      finishedAt: '2026-10-15T10:00:01Z', appVersion: '1.0.0',
+      state: {} as AppState, dataSnapshot: snapshot, journeys: [],
+      plan: { passes: [] } as unknown as DeepPerformanceAuditPlan,
+      performanceChecks: [{ ...check(readinessEvidence), id: owner.checkId, kind: owner.kind,
+        status: mode === owner.executionMode ? 'fail' : 'skipped',
+        metrics: { readinessEvidence, executionAttempted: mode === owner.executionMode } }],
+      network: { mode, authorizationAttempts: 0, authorizedAttempts: 0, blockedAttempts: 0,
+        transportCalls: 0, policyViolations: 0 },
+    }).checks;
+  }
+
+  it('declares the dedicated Settings update owner without inventing display evidence', () => {
+    const surface = ANDROID_UPDATE_READINESS_AUDIT.expectedSurface;
+    const checks = updateDisplayReport([
+      `${surface}:app-update.layout:layout:ready::measured=1`,
+      `${surface}:app-update.result:data:ready:1/1`,
+    ].join(' | '));
+    expect(checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT))
+      .toMatchObject({ status: 'pass', metrics: { plannedSurfaces: 1, unexpectedSurfaces: 0 } });
+    for (const code of [APP_HEALTH_CHECK_CODES.DISPLAY_MODEL, APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT]) {
+      expect(checks.find(entry => entry.code === code)).toMatchObject({ status: 'pass', metrics: { checked: 1 } });
+    }
+  });
+
+  it('keeps a timed-out dedicated update result pending rather than promoting its measured layout', () => {
+    const surface = ANDROID_UPDATE_READINESS_AUDIT.expectedSurface;
+    const checks = updateDisplayReport([
+      `${surface}:app-update.layout:layout:ready::measured=1`,
+      `${surface}:app-update.result:data:pending:0/1:required=0`,
+    ].join(' | '));
+    expect(checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT)?.status).toBe('pass');
+    expect(checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_MODEL))
+      .toMatchObject({ status: 'fail', metrics: { missing: 1 } });
+  });
+
+  it('requires the declared dedicated owner to supply actual layout and data probes', () => {
+    const checks = updateDisplayReport('');
+    expect(checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT))
+      .toMatchObject({ status: 'fail', metrics: { missingSurfaces: 1 } });
+    for (const code of [APP_HEALTH_CHECK_CODES.DISPLAY_MODEL, APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT]) {
+      expect(checks.find(entry => entry.code === code)).toMatchObject({ status: 'fail', metrics: { missing: 1 } });
+    }
+  });
+
+  it('does not admit arbitrary Settings surfaces beside the exact dedicated descriptor', () => {
+    const checks = updateDisplayReport('settings.app-update.other:layout:layout:ready::measured=1');
+    expect(checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT))
+      .toMatchObject({ status: 'fail', metrics: { missingSurfaces: 1, unexpectedSurfaces: 1 },
+        localEvidence: { unexpectedSurfaceIds: ['settings.app-update.other'] } });
+  });
+
+  it('requires Local Android layout without claiming its suppressed metadata was measured', () => {
+    const surface = ANDROID_UPDATE_READINESS_AUDIT.expectedSurface;
+    const checks = updateDisplayReport([
+      `${surface}:app-update.layout:layout:ready::measured=1`,
+      `${surface}:app-update.result:data:pending:0/1:required=0`,
+    ].join(' | '), 'local');
+    expect(checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT))
+      .toMatchObject({ status: 'pass', metrics: { plannedSurfaces: 1, observedSurfaces: 1 } });
+    expect(checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT)?.status).toBe('pass');
+    expect(checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_MODEL)?.status).toBe('not-run');
+  });
+
+  it('retains a terminal failed result even when its data probe is optional', () => {
+    const surface = ANDROID_UPDATE_READINESS_AUDIT.expectedSurface;
+    const checks = updateDisplayReport([
+      `${surface}:app-update.layout:layout:ready::measured=1`,
+      `${surface}:app-update.result:data:error:0/1:required=0`,
+    ].join(' | '));
+    expect(checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_MODEL))
+      .toMatchObject({ status: 'fail', metrics: { failed: 1 } });
+  });
+
+  it('never discards a pending required model as optional work', () => {
+    expect(appHealthDisplayObservations([check('screen:data:data:pending:0/1:required=1')]))
+      .toEqual([{ surfaceId: 'screen', evidence: [{ role: 'model', sourceCount: 1, modelCount: 0 }] }]);
+  });
+
   it('includes app catalogue evidence in live-source reports only for the same verified publication', () => {
     const { snapshot } = makeHealthyDataFixture();
     const normalized = normalizeCoreWithIntegrity(snapshot.core!, { coreSha256: snapshot.manifest!.files.core.sha256 });

@@ -129,10 +129,12 @@ export function SearchBar({
   value,
   onChangeText,
   placeholder = 'Search rates or banks',
+  accessibilityLabel,
 }: {
   value: UiCopy | UiInputText;
   onChangeText: (t: string) => void;
   placeholder?: UiCopy;
+  accessibilityLabel?: UiCopy;
 }) {
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
@@ -153,7 +155,7 @@ export function SearchBar({
     >
       <Ionicons name="search" size={18} color={theme.colors.textFaint} />
       <TextInput
-        accessibilityLabel={placeholder}
+        accessibilityLabel={accessibilityLabel ?? placeholder}
         value={value}
         onChangeText={onChangeText}
         onFocus={() => setFocused(true)}

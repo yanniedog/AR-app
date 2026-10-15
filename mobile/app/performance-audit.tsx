@@ -3,11 +3,11 @@ import { fontStyle } from '../src/theme/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
-import { InfoRow } from '../src/components/settings/settingsUi';
+import { InfoRow, ToggleRow } from '../src/components/settings/settingsUi';
 import { AuditEvidenceText } from '../src/components/AuditEvidenceText';
 import type { AppHealthDomain } from '../src/lib/appHealth/types';
 import { DebugLogUploadStatus } from '../src/components/DebugLogUploadStatus';
@@ -99,8 +99,10 @@ function PerformanceAuditScreenInner() {
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
   const [sharingReport, setSharingReport] = useState(false);
+  const [publicUpload, setPublicUpload] = useState(false);
   const [rawReportOpen, setRawReportOpen] = useState(false);
   const [backgroundOpen, setBackgroundOpen] = useState(false);
+  const auditPreflightLocked = useRef(false);
   const [auditPreflightMode, setAuditPreflightMode] = useState<'local' | 'live-source' | null>(null);
   const [visibleCheckLimit, setVisibleCheckLimit] = useState(MAX_REPORTED_AUDIT_CHECKS);
   const report = state.report;
@@ -176,7 +178,9 @@ function PerformanceAuditScreenInner() {
   }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
   const runAudit = async (mode: 'local' | 'live-source') => {
-    if (!hangTimeoutLoaded || hangTimeoutSeconds == null || auditPreflightMode || isDebugLogUploadBusy()) return;
+    if (!hangTimeoutLoaded || hangTimeoutSeconds == null || auditPreflightLocked.current || running || state.recoveryRequired || isDebugLogUploadBusy()) return;
+    auditPreflightLocked.current = true;
+    const requestedUpload = publicUpload;
     setAuditPreflightMode(mode);
     try {
       let currentDownload: Awaited<ReturnType<typeof getHydratedApkDownloadSnapshot>>;
@@ -196,8 +200,10 @@ function PerformanceAuditScreenInner() {
         );
         return;
       }
-      requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000, mode });
+      requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000, mode, uploadLog: requestedUpload });
+      setPublicUpload(false);
     } finally {
+      auditPreflightLocked.current = false;
       setAuditPreflightMode(null);
     }
   };
@@ -268,9 +274,10 @@ function PerformanceAuditScreenInner() {
     <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }} onLayout={() => setLayoutReady(true)}>
       <Card style={{ gap: 10 }}>
         <AppText variant="h2">{uiLabel('App health audit')}</AppText>
-        <InfoRow label="Audit upload" value="Public" />
+        <InfoRow label={uiLabel(running ? 'Audit upload' : 'Next audit upload')} value={uiLabel(running ? state.uploadLog ? 'Public' : 'Local' : publicUpload ? 'Public' : 'Local')} />
         <InfoRow label="Included" value="Product identities / profile coverage / failures" />
-        <InfoRow label="Destination" value="Public hosting" />
+        <InfoRow label={uiLabel(running ? 'Destination' : 'Next destination')} value={uiLabel((running ? state.uploadLog : publicUpload) ? 'Public hosting' : 'Debug log')} />
+        <ToggleRow icon="cloud-upload-outline" label="Public upload" value={running ? state.uploadLog : publicUpload} onChange={setPublicUpload} disabled={auditDisabled} />
         <InfoRow label="Step limit" value={measuredMs(10_000)} />
         <View style={{ gap: 6 }}>
           <AppText variant="small" weight="700">{uiLabel('Stall timeout')}</AppText>
@@ -286,8 +293,8 @@ function PerformanceAuditScreenInner() {
             {uiJoin(hangTimeoutSeconds == null ? 'Invalid timeout' : 'Range', ': ', uiCount(MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS),'–',uiCount(MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS),' ','seconds')}
           </AppText>
         </View>
-        <Button title="Audit and upload" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
-        <Button title="Live audit and upload" icon="cloud-download-outline" variant="secondary" loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'} disabled={auditDisabled} onPress={() => void runAudit('live-source')} />
+        <Button title="Run audit" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
+        <Button title="Live audit" icon="cloud-download-outline" variant="secondary" loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'} disabled={auditDisabled} onPress={() => void runAudit('live-source')} />
         <InfoRow label="Local checks" value="Addresses / browser handlers / loaded data" />
         <InfoRow label="Live checks" value="Approved websites" />
         <InfoRow label="Off screen" value="Paused" />

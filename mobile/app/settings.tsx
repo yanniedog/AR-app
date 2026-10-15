@@ -76,6 +76,15 @@ export default function Settings() {
   const [dataDetailsOpen, setDataDetailsOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
+  const [notificationsPending, setNotificationsPending] = useState(false);
+  const notificationsPendingRef = useRef(false);
+  const [crashChoicePending, setCrashChoicePending] = useState(false);
+  const crashChoicePendingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const [updateStatus, setUpdateStatus] = useState<AppUpdateSurfaceStatus>({
     terminal: false,
     status: 'checking',
@@ -175,23 +184,40 @@ export default function Settings() {
   );
 
   const onToggleNotifications = async (value: boolean) => {
-    if (value) {
-      const ok = await ensurePermissions();
-      if (!ok) {
-        Alert.alert('Notifications disabled');
-        return;
+    if (notificationsPendingRef.current) return;
+    notificationsPendingRef.current = true;
+    setNotificationsPending(true);
+    try {
+      if (value) {
+        const ok = await ensurePermissions();
+        if (!ok) {
+          Alert.alert('Notifications disabled');
+          return;
+        }
       }
-      setPref('notificationsEnabled', true);
-    } else {
-      setPref('notificationsEnabled', false);
+      await setPref('notificationsEnabled', value);
+    } catch {
+      Alert.alert('Rate-change alerts', 'Failed');
+    } finally {
+      notificationsPendingRef.current = false;
+      if (mountedRef.current) setNotificationsPending(false);
     }
   };
 
-  const confirmCrashChoice = useCallback((value: boolean) => {
-    void setCrashReportsEnabled(value).then(() => {
+  const confirmCrashChoice = useCallback(async (value: boolean) => {
+    if (crashChoicePendingRef.current) return;
+    crashChoicePendingRef.current = true;
+    setCrashChoicePending(true);
+    try {
+      await setCrashReportsEnabled(value);
       setPrefs({ crashReportsEnabled: value, sessionReplayEnabled: false,
         privacyChoiceVersion: CURRENT_PRIVACY_CHOICE_VERSION });
-    }).catch(() => Alert.alert('Crash reports unchanged', 'Native state unconfirmed'));
+    } catch {
+      Alert.alert('Crash reports unchanged', 'Native state unconfirmed');
+    } finally {
+      crashChoicePendingRef.current = false;
+      if (mountedRef.current) setCrashChoicePending(false);
+    }
   }, [setPrefs]);
   const privacyChoiceCurrent = prefs.privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
   const sourceLabel = source === 'remote' ? 'Published' : source === 'cache' ? 'Cached' : 'Sample';
@@ -208,6 +234,8 @@ export default function Settings() {
   const settingsRenderRevision = JSON.stringify([
     hydrated ? 'hydrated' : 'loading',
     prefs,
+    notificationsPending,
+    crashChoicePending,
     homeSectionsOpen ? 'home-open' : 'home-closed',
     dataDetailsOpen ? 'data-open' : 'data-closed',
     diagnosticsOpen ? 'diagnostics-open' : 'diagnostics-closed',
@@ -461,6 +489,7 @@ export default function Settings() {
           icon="notifications-outline"
           label="Rate-change alerts"
           value={prefs.notificationsEnabled}
+          disabled={notificationsPending}
           onChange={onToggleNotifications}
         />
         {prefs.notificationsEnabled ? (
@@ -586,6 +615,7 @@ export default function Settings() {
             icon="pulse-outline"
             label="Crash reports"
             value={privacyChoiceCurrent && prefs.crashReportsEnabled}
+            disabled={crashChoicePending}
             onChange={confirmCrashChoice}
           />
           <SettingsGap size={8} />
@@ -597,12 +627,12 @@ export default function Settings() {
           {!privacyChoiceCurrent ? <>
             <InfoRow label="Consent" value="Undecided" />
             <Row gap={8}>
-              <Button title="Allow" onPress={() => confirmCrashChoice(true)} style={{ flex: 1 }} />
-              <Button title="Decline" variant="secondary" onPress={() => confirmCrashChoice(false)} style={{ flex: 1 }} />
+              <Button title="Allow" onPress={() => confirmCrashChoice(true)} disabled={crashChoicePending} style={{ flex: 1 }} />
+              <Button title="Decline" variant="secondary" onPress={() => confirmCrashChoice(false)} disabled={crashChoicePending} style={{ flex: 1 }} />
             </Row>
           </> : null}
           <AppText variant="small" weight="700">{uiLabel("Audit sharing")}</AppText>
-          <InfoRow label="Audit log upload" value="After audit" />
+          <InfoRow label="Audit log upload" value="Optional" />
           <InfoRow label="Paste visibility" value="Public" />
           <InfoRow label="Full evidence" value="This device" />
         </DisclosureGroup>

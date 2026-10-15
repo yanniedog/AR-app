@@ -1,10 +1,11 @@
 import Ionicons from './icons/AppIcon';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated as RNAnimated, Easing as RNEasing, View, type DimensionValue, type ViewStyle } from 'react-native';
+import { Animated as RNAnimated, Easing as RNEasing, StyleSheet, View, type DimensionValue, type ViewStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { AppText } from './ui';
 import type { UiCopy } from '../lib/uiCopy';
+import { COMPACT_ROW } from './product/compactProductRow';
 
 export function EmptyState({
   icon = 'search',
@@ -115,25 +116,36 @@ function ProductCardSkeleton() {
   const theme = useTheme();
   return (
     <View
+      testID="loading-product-row"
+      accessible={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      pointerEvents="none"
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
-        paddingVertical: 12,
-        paddingHorizontal: 14,
+        gap: COMPACT_ROW.gap,
+        paddingVertical: 4,
+        paddingHorizontal: 0,
         backgroundColor: 'transparent',
         borderRadius: 0,
-        borderBottomWidth: 1,
-        borderColor: theme.colors.border,
-        minHeight: 96,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: theme.ledger.rule,
+        minHeight: COMPACT_ROW.minHeight,
       }}
     >
-      <ShimmerBox height={44} width={44} borderRadius={22} />
-      <View style={{ flex: 1, gap: 8 }}>
-        <ShimmerBox height={14} width="72%" borderRadius={theme.radius.sm} />
-        <ShimmerBox height={12} width="48%" borderRadius={theme.radius.sm} />
+      <View testID="loading-bank-slot" style={{ width: COMPACT_ROW.action, minHeight: COMPACT_ROW.action, alignItems: 'center', justifyContent: 'center' }}>
+        <ShimmerBox height={24} width={24} borderRadius={6} />
       </View>
-      <ShimmerBox height={20} width={56} borderRadius={theme.radius.sm} />
+      <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <ShimmerBox height={14} borderRadius={theme.radius.sm} />
+        </View>
+        <ShimmerBox height={14} width={56} borderRadius={theme.radius.sm} />
+      </View>
+      <View testID="loading-save-slot" style={{ width: COMPACT_ROW.action, minHeight: COMPACT_ROW.action, alignItems: 'center', justifyContent: 'center' }}>
+        <ShimmerBox height={24} width={24} borderRadius={theme.radius.sm} />
+      </View>
     </View>
   );
 }

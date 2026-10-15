@@ -1,6 +1,7 @@
 import { uiLabel } from '../../lib/uiCopy';
-import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, Platform, Pressable, ScrollView, View } from 'react-native';
+import * as Device from 'expo-device';
 
 import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
 import { useAuditExternalLinks } from '../../hooks/useAuditExternalLinks';
@@ -21,6 +22,10 @@ import {
 } from '../../lib/appUpdate';
 import { IDLE_APK_DOWNLOAD } from '../../lib/appUpdateDownloadLogic';
 import { getPerformanceAuditState, subscribePerformanceAudit } from '../../lib/performanceAudit';
+import { readAppUpdateMetadata, type AppUpdateAuditRequest } from '../../lib/appUpdateMetadata';
+import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
+import { usePerformanceAuditSurface } from '../../hooks/usePerformanceAuditReadiness';
+import { ANDROID_UPDATE_READINESS_AUDIT } from '../../lib/performanceAuditCheckInventory';
 import { DisclosureGroup, InfoRow, Section, SettingsGap, ToggleRow } from './settingsUi';
 import { uiJoin, uiIdentifier, uiNumber, type UiCopy } from '../../lib/uiCopy';
 
@@ -51,13 +56,90 @@ export function AppUpdateSection({
   const [checking, setChecking] = useState(SELF_UPDATE_ENABLED);
   const [upgrading, setUpgrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [auditResultSession, setAuditResultSession] = useState<string | null>(null);
+  const [auditRequestRevision, setAuditRequestRevision] = useState(0);
+  const [measuredUpdateRevision, setMeasuredUpdateRevision] = useState<string | null>(null);
+  const committedUpdateRevision = useRef<string | null>(null);
+  const mounted = useRef(true);
+  const auditPending = useRef<{ sessionId: string; promise: Promise<UpdateCheckResult>; abort: () => void } | null>(null);
+  const updateRevision = useRef(new OpaquePerformanceAuditRenderRevision());
   const [download, setDownload] = useState<ApkDownloadSnapshot>(() => ({
     ...IDLE_APK_DOWNLOAD,
   }));
 
   useEffect(() => subscribeApkDownload(setDownload), []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; auditPending.current?.abort(); };
+  }, []);
 
-  const runCheck = useCallback(async (force = false) => {
+  const runAuditCheck = useCallback((raw: unknown): Promise<UpdateCheckResult> => {
+    const request = raw as Partial<AppUpdateAuditRequest> | null;
+    const current = getPerformanceAuditState();
+    if (!SELF_UPDATE_ENABLED || Platform.OS !== 'android' || !request ||
+        current.status !== 'running' || current.auditMode !== ANDROID_UPDATE_READINESS_AUDIT.executionMode ||
+        request.sessionId !== current.sessionId || !request.signal ||
+        typeof request.signal.addEventListener !== 'function' || request.signal.aborted ||
+        typeof request.remainingMs !== 'function' || request.remainingMs() <= 0) {
+      return Promise.reject(new Error('Live update check is unavailable for this audit session'));
+    }
+    const valid = request as AppUpdateAuditRequest;
+    if (auditPending.current) {
+      return auditPending.current.sessionId === valid.sessionId
+        ? auditPending.current.promise
+        : Promise.reject(new Error('Another update check is still pending'));
+    }
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    valid.signal.addEventListener('abort', abort, { once: true });
+    const stillCurrent = () => mounted.current && !controller.signal.aborted &&
+      getPerformanceAuditState().status === 'running' &&
+      getPerformanceAuditState().sessionId === valid.sessionId && !getPerformanceAuditState().cancelRequested;
+    setAuditResultSession(valid.sessionId);
+    setAuditRequestRevision(revision => revision + 1);
+    setChecking(true);
+    setCheckResult(null);
+    setRemote(null);
+    setChangelogs([]);
+    setError(null);
+    const promise = (async () => {
+      try {
+        const result = await readAppUpdateMetadata(getInstalledAppInfo(), Device.supportedCpuArchitectures,
+          { ...valid, signal: controller.signal });
+        if (!stillCurrent()) throw new Error('Live update check was cancelled');
+        setCheckResult(result);
+        if (result.status === 'error') {
+          setError(result.message);
+          throw new Error(result.message);
+        }
+        setRemote(result.remote);
+        return result;
+      } catch (caught) {
+        if (stillCurrent()) setError(caught instanceof Error ? caught.message : 'Update check failed');
+        throw caught;
+      } finally {
+        valid.signal.removeEventListener('abort', abort);
+        if (mounted.current && getPerformanceAuditState().sessionId === valid.sessionId) setChecking(false);
+        if (auditPending.current?.sessionId === valid.sessionId) auditPending.current = null;
+      }
+    })();
+    auditPending.current = { sessionId: valid.sessionId, promise, abort };
+    return promise;
+  }, []);
+
+  const ownAuditResult = auditResultSession === auditState.sessionId && auditResultSession != null;
+  const renderRevision = updateRevision.current.update([
+    auditResultSession, auditRequestRevision, checking, checkResult?.status, remote?.version, remote?.build_number, error,
+  ]);
+  const updateLayoutMeasured = measuredUpdateRevision === renderRevision;
+  useLayoutEffect(() => {
+    committedUpdateRevision.current = renderRevision;
+    return () => {
+      if (committedUpdateRevision.current === renderRevision) committedUpdateRevision.current = null;
+    };
+  }, [renderRevision]);
+  const runCheck = useCallback(async (force = false, auditRequest?: unknown) => {
+    if (auditRequest !== undefined) return runAuditCheck(auditRequest);
     if (!SELF_UPDATE_ENABLED || auditOwnsNetwork) return;
     setChecking(true);
     setError(null);
@@ -89,11 +171,31 @@ export function AppUpdateSection({
         setError(result.message);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const currentAudit = getPerformanceAuditState();
+      if (currentAudit.status !== 'queued' && currentAudit.status !== 'running' && mounted.current) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
-      setChecking(false);
+      if (mounted.current && !auditPending.current) setChecking(false);
     }
-  }, [auditOwnsNetwork, autoDownload, wifiOnly]);
+  }, [auditOwnsNetwork, autoDownload, runAuditCheck, wifiOnly]);
+
+  const updateActions = useMemo<Record<typeof ANDROID_UPDATE_READINESS_AUDIT.semanticActionId,
+    (request: unknown) => ReturnType<typeof runCheck>>>(() => ({
+    'settings.update.check': (request: unknown) => runCheck(true, request),
+  }), [runCheck]);
+  usePerformanceAuditSurface({
+    id: ANDROID_UPDATE_READINESS_AUDIT.expectedSurface, routeKey: ANDROID_UPDATE_READINESS_AUDIT.expectedPath,
+    renderRevision, actions: updateActions,
+    probes: [
+      { id: 'app-update.result', kind: 'data', required: false,
+        status: ownAuditResult && error ? 'error' : ownAuditResult && !checking && checkResult ? 'ready' : 'pending',
+        expectedCount: 1, actualCount: ownAuditResult && !checking && checkResult ? 1 : 0,
+        error: ownAuditResult ? error : null, renderRevision },
+      { id: 'app-update.layout', kind: 'layout', status: updateLayoutMeasured ? 'ready' : 'pending',
+        layoutMeasured: updateLayoutMeasured, renderRevision: measuredUpdateRevision },
+    ],
+  }, Platform.OS === 'android');
 
   useEffect(() => {
     if (auditOwnsNetwork) {
@@ -108,6 +210,8 @@ export function AppUpdateSection({
   }, [auditOwnsNetwork, runCheck]);
 
   const performUpgrade = useCallback(async () => {
+    const audit = getPerformanceAuditState();
+    if (audit.status === 'queued' || audit.status === 'running') return;
     if (!remote) return;
     setUpgrading(true);
     setError(null);
@@ -136,7 +240,7 @@ export function AppUpdateSection({
     : isCurrent
       ? uiJoin(uiIdentifier(installed.version), ' (', uiIdentifier(String(installed.buildNumber)), ')')
       : '—';
-  const statusValue: UiCopy = auditOwnsNetwork
+  const statusValue: UiCopy = auditOwnsNetwork && !ownAuditResult
     ? 'Audit'
     : updateAvailable
       ? phase === 'ready'
@@ -172,6 +276,8 @@ export function AppUpdateSection({
           : 'Download & install';
 
   const requestUpgrade = useCallback(() => {
+    const audit = getPerformanceAuditState();
+    if (audit.status === 'queued' || audit.status === 'running') return;
     if (!remote) return;
     if (phase === 'ready' || autoDownload) {
       void performUpgrade();
@@ -189,8 +295,8 @@ export function AppUpdateSection({
 
   useEffect(() => {
     onStatusChange?.({
-      terminal: auditOwnsNetwork || Platform.OS !== 'android' || !SELF_UPDATE_ENABLED || (!checking && (checkResult != null || error != null)),
-      status: auditOwnsNetwork
+      terminal: (auditOwnsNetwork && !ownAuditResult) || Platform.OS !== 'android' || !SELF_UPDATE_ENABLED || (!checking && (checkResult != null || error != null)),
+      status: auditOwnsNetwork && !ownAuditResult
         ? 'audit-network-suppressed'
         : Platform.OS !== 'android'
         ? 'not-android'
@@ -199,7 +305,7 @@ export function AppUpdateSection({
           : 'managed-by-google-play',
       error,
     });
-  }, [auditOwnsNetwork, checkResult, checking, error, onStatusChange, statusValue]);
+  }, [auditOwnsNetwork, checkResult, checking, error, onStatusChange, ownAuditResult, statusValue]);
 
   if (Platform.OS !== 'android') {
     return null;
@@ -229,6 +335,11 @@ export function AppUpdateSection({
         onChange={(value) => setPref('apkUpdatesWifiOnly', value)}
       />
       <SettingsGap size={8} />
+      <View key={renderRevision} collapsable={false} onLayout={event => {
+        if (!mounted.current || committedUpdateRevision.current !== renderRevision) return;
+        setMeasuredUpdateRevision(event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0
+          ? renderRevision : null);
+      }}>
       <InfoRow label="Status" value={statusValue} />
       <InfoRow label="Version" value={latestLabel} />
       <InfoRow label="Source" value="GitHub" />
@@ -244,6 +355,7 @@ export function AppUpdateSection({
       {isIncompatible ? (
         <AppText variant="tiny" color="warning" style={{ marginTop: 4, lineHeight: 16 }}>{uiLabel("Incompatible device")}</AppText>
       ) : null}
+      </View>
 
       {updateAvailable ? (
         <DisclosureGroup
@@ -275,7 +387,7 @@ export function AppUpdateSection({
             icon={phase === 'ready' ? 'arrow-up-circle-outline' : 'download-outline'}
             style={{ flex: 1 }}
             loading={upgrading}
-            disabled={checking || upgrading}
+            disabled={auditOwnsNetwork || checking || upgrading}
             onPress={requestUpgrade}
           />
         ) : null}

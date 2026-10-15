@@ -4,6 +4,7 @@ import { ScrollView, View } from 'react-native';
 import type { Filters } from '../data/selectors';
 import type { SearchFilterOptions } from '../data/searchFilterOptions';
 import { humanizeEnum } from '../data/format';
+import { uiLoanPurpose } from '../lib/financialUiCopy';
 import { lvrTierDisplay } from '../data/lvrTier';
 import {
   boundedPublishedFactFilterOptions,
@@ -198,7 +199,7 @@ export function FilterSheet({
                     groupKey: g.key,
                     options,
                     selected: draft[g.key] as string[],
-                    label: (o) => (g.field === 'lvr_tier' ? lvrTierDisplay(o) : humanizeEnum(o)),
+                    label: (o) => (g.field === 'lvr_tier' ? lvrTierDisplay(o) : g.field === 'loan_purpose' ? uiLoanPurpose({ loan_purpose: o }) : humanizeEnum(o)),
                     onToggle: (o) => toggle(g.key, o),
                   })}
                 </View>

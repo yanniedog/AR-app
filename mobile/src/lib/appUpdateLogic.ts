@@ -248,11 +248,18 @@ export function remoteIsNewer(installed: InstalledAppInfo, remote: ApkManifest):
 export async function fetchApkManifest(
   url: string,
   timeoutMs = 10_000,
+  signal?: AbortSignal,
 ): Promise<ApkManifest> {
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(manifestFetchUrl(url), { signal: controller.signal });
+    if (controller.signal.aborted) throw new Error('APK manifest request cancelled');
+    const res = await fetch(manifestFetchUrl(url), {
+      method: 'GET', credentials: 'omit', cache: 'no-store', signal: controller.signal,
+    });
     if (!res.ok) {
       throw new Error(`APK manifest HTTP ${res.status}`);
     }
@@ -272,7 +279,14 @@ export async function fetchApkManifest(
     throw error;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
   }
+}
+
+export interface UpdateMetadataReadOptions {
+  signal?: AbortSignal;
+  remainingMs?: () => number;
+  includeChangelogs?: boolean;
 }
 
 export async function checkForAppUpdateAt(
@@ -280,9 +294,10 @@ export async function checkForAppUpdateAt(
   installed: InstalledAppInfo,
   deviceAbis?: readonly string[] | null,
   manifestTimeoutMs?: number,
+  options: UpdateMetadataReadOptions = {},
 ): Promise<UpdateCheckResult> {
   try {
-    const remote = await fetchApkManifest(manifestUrl, manifestTimeoutMs);
+    const remote = await fetchApkManifest(manifestUrl, manifestTimeoutMs, options.signal);
     if (remoteIsNewer(installed, remote)) {
       if (!isApkCompatibleWithDevice(remote, deviceAbis)) {
         return {
@@ -293,7 +308,7 @@ export async function checkForAppUpdateAt(
         };
       }
       let changelogs: VersionChangelogSummary[] = [];
-      if (versionGt(remote.version, installed.version)) {
+      if (options.includeChangelogs !== false && versionGt(remote.version, installed.version)) {
         try {
           changelogs = await fetchCumulativeChangelogs(
             manifestUrl,
@@ -318,6 +333,7 @@ export async function checkForAppUpdateAcrossChannels(
   installed: InstalledAppInfo,
   deviceAbis?: readonly string[] | null,
   perChannelTimeoutMs = 5_000,
+  options: UpdateMetadataReadOptions = {},
 ): Promise<UpdateCheckResult> {
   let lastError: UpdateCheckResult = {
     status: 'error',
@@ -327,12 +343,18 @@ export async function checkForAppUpdateAcrossChannels(
   let current: Extract<UpdateCheckResult, { status: 'current' }> | null = null;
   let incompatible: Extract<UpdateCheckResult, { status: 'incompatible' }> | null = null;
   for (const manifestUrl of manifestUrls) {
+    if (options.signal?.aborted) throw new Error('APK manifest request cancelled');
+    const remaining = options.remainingMs?.() ?? perChannelTimeoutMs;
+    if (remaining <= 0) throw new Error('APK manifest deadline exceeded');
     const result = await checkForAppUpdateAt(
       manifestUrl,
       installed,
       deviceAbis,
-      perChannelTimeoutMs,
+      Math.min(perChannelTimeoutMs, remaining),
+      options,
     );
+    if (options.signal?.aborted) throw new Error('APK manifest request cancelled');
+    if ((options.remainingMs?.() ?? 1) <= 0) throw new Error('APK manifest deadline exceeded');
     if (result.status === 'available') {
       if (
         !bestAvailable ||

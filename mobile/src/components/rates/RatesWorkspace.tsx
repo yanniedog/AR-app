@@ -1,6 +1,7 @@
 import { uiCount,uiJoin,uiLabel,uiRatesQuery,uiProductName,uiProviderName,type UiCopy } from '../../lib/uiCopy';
 import { humanizeEnum } from '../../data/format';
 import { useReadyNavigationEffect } from '../../hooks/useReadyNavigationEffect';
+import { useBackOwnedSheetState } from '../../hooks/useBackOwnedSheetState';
 import { SheetSurface } from '../SheetSurface';
 import { TouchTarget } from '../TouchTarget';
 import { SegmentedControl } from '../controls';
@@ -14,17 +15,16 @@ import { SearchReportExport } from '../../components/SearchReportExport';
 import { isSuitabilityFilterReady } from '../../data/suitabilityGate';
 import Ionicons from '../../components/icons/AppIcon';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Platform, ScrollView, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import { FilterSheet } from '../../components/FilterSheet';
 import { EmptyState, IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../../components/feedback';
 import { ProductCard } from '../../components/ProductCard';
-import { Screen, screenEdgeStyle, screenScrollContentStyle } from '../../components/Screen';
-import { ToolbarIconButton } from '../../components/ToolbarIconButton';
+import { IconAction } from '../../components/IconAction';
+import { Screen, screenScrollContentStyle } from '../../components/Screen';
 import { SearchBar } from '../../components/controls';
 import { AppText, Button, Row } from '../../components/ui';
 import { SECTION_ORDER } from '../../constants';
@@ -98,8 +98,8 @@ const SearchProductRow = React.memo(function SearchProductRow({ row, section, se
 export default function RatesWorkspace() {
   const theme = useTheme();
   const isFocused = useIsFocused();
-  const insets = useSafeAreaInsets();
-  const { width, fontScale } = useWindowDimensions();
+  const sheetNavigation = useNavigation();
+  const { width } = useWindowDimensions();
   const params = useLocalSearchParams() as RatesRouteParams;
   const intentKey = ratesIntentKey(params);
   const session = useRatesSession();
@@ -186,13 +186,15 @@ export default function RatesWorkspace() {
   const debouncedQuery = useDebouncedValue(query, 120);
   const sortOptions = useMemo(() => availableSortOptions(section, mortgageRateMetric, depositRankMetric),
     [depositRankMetric, mortgageRateMetric, section]);
-  const [filterOpen, setFilterOpen] = useState(false), [sortOpen, setSortOpen] = useState(false), [toolsOpen, setToolsOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useBackOwnedSheetState(sheetNavigation);
+  const [sortOpen, setSortOpen] = useBackOwnedSheetState(sheetNavigation);
+  const [toolsOpen, setToolsOpen] = useBackOwnedSheetState(sheetNavigation);
   const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const [draftAvailability, setDraftAvailability] = useState<RateAvailability>(availability);
   const openFilters = useCallback(() => {
     setDraftAvailability(availability); setDraftFilters({ ...filters, includeNonStandard: task.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard }); setFilterOpen(true);
-  }, [availability, filters, task.includeNonStandardOverride]);
-  const cancelFilters = useCallback(() => setFilterOpen(false), []);
+  }, [availability, filters, setFilterOpen, task.includeNonStandardOverride]);
+  const cancelFilters = useCallback(() => setFilterOpen(false), [setFilterOpen]);
   const applyFilters = useCallback((draft: Filters) => {
     const current = useRatesSession.getState().sections[section];
     const nextFilters = draftAvailability === 'unlisted' ? { ...EMPTY_FILTERS, providers: draft.providers }
@@ -204,11 +206,11 @@ export default function RatesWorkspace() {
         ...(draftAvailability === 'unlisted' ? { path: [], hierarchyScoped: false, selectMode: false, selected: [] } : {}) }, true);
     }
     setFilterOpen(false);
-  }, [draftAvailability, section]);
+  }, [draftAvailability, section, setFilterOpen]);
   const changeSection = useCallback((next: SectionKey) => {
     changeRatesSection(next); useStore.getState().setActiveSection(next);
     setFilterOpen(false); setSortOpen(false); setToolsOpen(false);
-  }, []);
+  }, [setFilterOpen, setSortOpen, setToolsOpen]);
   useEffect(() => {
     if (sortKey === 'comparison' && (section !== 'Mortgage' || mortgageRateMetric === 'comparison')) setSortKey('rate');
   }, [mortgageRateMetric, section, setSortKey, sortKey]);
@@ -230,8 +232,12 @@ export default function RatesWorkspace() {
 
   const resultFilters = useMemo(() => ({ ...effectiveFilters, query: debouncedQuery }),
     [effectiveFilters, debouncedQuery]);
+  // The matcher accepts an empty trimmed query without consulting the optional index.
+  // Background index warming must not invalidate that result preparation or its viewport.
+  const queryNeedsSearchIndex = deepSearchActive && debouncedQuery.trim().length > 0;
+  const resultSearchIndex = queryNeedsSearchIndex ? searchIndex : null;
   const preparedResults = usePreparedSearchRows(baseRows, resultFilters, sortKey, section,
-    details?.products, deepSearchActive ? searchIndex : null, depositRankMetric, mortgageRateMetric,
+    details?.products, resultSearchIndex, depositRankMetric, mortgageRateMetric,
     suitabilityRevision, isFocused);
   const rows = preparedResults.rows;
   const catalogueDetails = verifiedCatalogueDetails(core, coreIntegrity, manifest, details);
@@ -259,11 +265,11 @@ export default function RatesWorkspace() {
         baseRows,
         { ...draft, query: debouncedQuery },
         details?.products ?? null,
-        deepSearchActive ? searchIndex : null,
+        resultSearchIndex,
         section,
       ).length
     ),
-    [baseRows, debouncedQuery, details?.products, deepSearchActive, searchIndex, section, suitabilityRevision],
+    [baseRows, debouncedQuery, details?.products, resultSearchIndex, section, suitabilityRevision],
   );
 
   const searchSnapshot = useMemo(
@@ -292,11 +298,11 @@ export default function RatesWorkspace() {
 
   const searchSub = useStore((s) => findSearchSubscription(s.subscriptions, searchSnapshot));
   const searchIndexLoading =
-    deepSearchActive &&
+    queryNeedsSearchIndex &&
     !searchIndex &&
     (searchIndexStatus === 'idle' || searchIndexStatus === 'loading');
   const searchIndexUnavailable =
-    deepSearchActive &&
+    queryNeedsSearchIndex &&
     !searchIndex &&
     (searchIndexStatus === 'unavailable' || searchIndexStatus === 'error');
   const detailFiltersPending = !isSuitabilityFilterReady(effectiveFilters.includeNonStandard) ||
@@ -386,23 +392,65 @@ export default function RatesWorkspace() {
       const tokens = exactTokens.length >= 2 ? exactTokens : selected;
       if (tokens.length >= 2) openCompare(tokens);
     },
-  }), [applyFilters, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, section, selected, selectAuditToken, setQuery, setSortKey, sortOptions, toggleCompareMode]);
+  }), [applyFilters, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
   const intentPending = Boolean(intentKey && consumedIntent.current !== intentKey) || !session.initialized;
   const searchPending = intentPending || (availability === 'unlisted' ? !catalogueDetails : detailFiltersPending || searchIndexLoading || !preparedResults.ready);
   const dataTracker = useRef(new OpaquePerformanceAuditRenderRevision());
   const uiTracker = useRef(new OpaquePerformanceAuditRenderRevision());
   const listDataRevision = dataTracker.current.update([coreSha ?? core?.run_date ?? 'none', manifest?.files.details.sha256,
     section, path, hierarchyScoped, debouncedQuery, sortKey, effectiveFilters, availability, task.intentError,
-    deepSearchActive, searchIndex != null, suitabilityRevision, resultRows.length]);
+    queryNeedsSearchIndex, resultSearchIndex != null, suitabilityRevision, resultRows.length]);
   // Selection and disclosure changes need a fresh committed render, but keep
   // the same list and decoded logos while its result identities are unchanged.
   const listRevision = uiTracker.current.update([listDataRevision, filterOpen, draftFilters, draftAvailability, sortOpen, toolsOpen, selectMode, selected]);
   const listReadiness = useVirtualizedListReadiness(listRevision, resultRows.length);
+  const { onCommitLayoutEffect: markListCommit, onLoad: markListLoad, onViewableItemsChanged: markListViewability } = listReadiness;
   const listRef = useRef<FlashListRef<ResultRow>>(null);
+  const listLoaded = useRef(false);
+  const currentRows = useRef(resultRows);
+  currentRows.current = resultRows;
   // Initial native zero-offset events must not erase this list's requested restore.
-  const restoration = useRef({ revision: listDataRevision, offset: task.scrollOffset });
-  if (restoration.current.revision !== listDataRevision) restoration.current = { revision: listDataRevision, offset: task.scrollOffset };
-  const restoreOffset = restoration.current.offset;
+  const restoration = useRef({ revision: listDataRevision, section, offset: task.scrollOffset, scheduled: false, applied: false });
+  if (restoration.current.revision !== listDataRevision) {
+    restoration.current = { revision: listDataRevision, section, offset: task.scrollOffset, scheduled: false, applied: false };
+  }
+  const attachList = useCallback((list: FlashListRef<ResultRow> | null) => {
+    if (listRef.current !== list) {
+      listLoaded.current = false;
+      restoration.current.scheduled = false;
+      restoration.current.applied = false;
+    }
+    listRef.current = list;
+  }, []);
+  const restoreCommittedScroll = useCallback(() => {
+    const list = listRef.current, pending = restoration.current;
+    if (!listLoaded.current || !list || pending.scheduled || pending.applied) return;
+    pending.scheduled = true;
+    requestAnimationFrame(() => {
+      if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) return;
+      list.scrollToOffset({ offset: pending.offset, animated: false });
+      // Wait for the native scroll to reach a frame before asking for current
+      // viewport evidence. A measurement from before that move is insufficient.
+      requestAnimationFrame(() => {
+        if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) return;
+        pending.applied = true;
+        list.recomputeViewableItems();
+      });
+    });
+  }, []);
+  const onListCommit = useCallback(() => {
+    markListCommit();
+    restoreCommittedScroll();
+  }, [markListCommit, restoreCommittedScroll]);
+  const onListLoad = useCallback(() => {
+    listLoaded.current = true;
+    markListLoad();
+    restoreCommittedScroll();
+  }, [markListLoad, restoreCommittedScroll]);
+  const onViewableItemsChanged = useCallback((info: { viewableItems: { isViewable?: boolean | null; item: ResultRow }[] }) => {
+    if (!restoration.current.applied || info.viewableItems.some(token => token.isViewable === true && !currentRows.current.includes(token.item))) return;
+    markListViewability(info);
+  }, [markListViewability]);
   useEffect(() => {
     // In-place selection/disclosure changes do not change visible indices, so
     // FlashList may omit its usual viewability callback. Request a fresh native
@@ -468,68 +516,77 @@ export default function RatesWorkspace() {
         fallbackCount: logoReadiness.fallbackCount,
       },
     ],
-  });
+  }, isFocused);
 
   if (!core || intentPending) return <ScreenSkeleton />;
   const filterCount = availability === 'unlisted' ? filters.providers.length : activeFilterCount(effectiveFilters);
   const sortLabel = availability === 'unlisted' ? 'All product types · No listed rate' : sortOptions.find(option => option.key === sortKey)?.label ?? 'Rate';
-  // Keep whole 16sp action labels; narrower or enlarged text adds a row.
-  const actionMinWidth = Math.min(Math.max(48, width - theme.spacing(8)), Math.ceil(80 * Math.max(1, fontScale) + 36));
-  const actionStyle = { flexGrow: 1, flexShrink: 0, flexBasis: actionMinWidth, minWidth: actionMinWidth };
+  const compactSortLabel = sortLabel === 'Comparison rate' ? uiLabel('Comparison')
+    : sortLabel === 'Advertised rate' ? uiLabel('Advertised')
+      : sortLabel === 'Ongoing rate' ? uiLabel('Ongoing')
+        : sortLabel === 'Headline rate' ? uiLabel('Headline')
+          : sortLabel === 'Bank A–Z' ? uiLabel('Bank') : sortLabel;
+  const quickSortKey = sortKey === 'bank' ? 'rate' : 'bank';
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Rates' }} />
-      <View style={[screenEdgeStyle(theme), { gap: 8, paddingTop: 8, paddingBottom: 8 }]}>
-        <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
-        <SearchBar value={uiRatesQuery(task)} onChangeText={setQuery} placeholder="Search rates or banks" />
-        <Row gap={8} style={{ flexWrap: 'wrap' }}>
-          <Button title={filterCount ? uiJoin('Filter',' (',uiCount(filterCount),')'):uiLabel("Filter")} variant="secondary" onPress={openFilters} style={actionStyle} />
-          <Button title="Sort" variant="secondary" onPress={() => setSortOpen(true)} disabled={availability === 'unlisted'} style={actionStyle} />
-          <Button title={uiLabel(selectMode ? 'Done' : 'Compare')} variant="secondary" onPress={toggleCompareMode} disabled={availability === 'unlisted'} style={actionStyle} />
-        </Row>
-        <Row gap={8}>
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <AppText variant="tiny" color="textMuted">{uiJoin(searchPending ? 'Loading':uiJoin(uiCount(resultRows.length),' ','results'),searchSub?uiJoin(' · ','Alert on'):null)}</AppText>
-            <AppText variant="tiny" color="textMuted">{sortLabel}</AppText>
-          </View>
-          <ToolbarIconButton icon="share-outline" onPress={() => setToolsOpen(true)} accessibilityLabel="Search actions" />
-        </Row>
-        {path.length ? <Button title="Clear scope" variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
-        {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">{uiLabel("Name search")}</AppText>
-          {searchIndexStatus === 'error' ? <Button title="Retry search" variant="ghost" onPress={() => void ensureSearchIndex()} /> : null}</Row> : null}
-      </View>
-
       <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
         <FlashList
-          ref={listRef}
+          ref={attachList}
           drawDistance={120}
-          // Only changed result identities require a new list. Selection and
-          // filter-sheet visibility commit in place through extraData below.
-          key={`search:${listDataRevision}`}
+          // Keep the input/header mounted while query, filters and sort change.
+          // Session state owns offsets; automatic item anchoring would compete.
+          maintainVisibleContentPosition={{ disabled: true }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           data={resultRows}
-          onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
-          onLoad={() => {
-            listReadiness.onLoad();
-            const offset = restoreOffset;
-            const list = listRef.current;
-            if (offset > 0 && list) requestAnimationFrame(() => {
-              if (listRef.current === list && useRatesSession.getState().section === section) list.scrollToOffset({ offset, animated: false });
-            });
-          }}
+          onCommitLayoutEffect={onListCommit}
+          onLoad={onListLoad}
           onContentSizeChange={listReadiness.onContentSizeChange}
-          onViewableItemsChanged={listReadiness.onViewableItemsChanged}
+          onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
           extraData={listRevision}
           keyExtractor={(item, i) => 'product_key' in item ? `${item.product_key}-${item.rate_index ?? i}` : item.key}
           getItemType={item => 'product_key' in item ? 'rate' : 'unlisted'}
-          onScroll={event => recordRatesScroll(section, event.nativeEvent.contentOffset.y)}
+          onScroll={event => {
+            if (restoration.current.applied && restoration.current.revision === listDataRevision
+              && useRatesSession.getState().section === section) recordRatesScroll(section, event.nativeEvent.contentOffset.y);
+          }}
           scrollEventThrottle={64}
           contentContainerStyle={{
-            ...screenScrollContentStyle(theme, insets.bottom, width),
+            ...screenScrollContentStyle(theme, 0, width),
+            // Rows and the scrolling toolbar own their spacing.
+            gap: 0,
             paddingTop: 0,
-            paddingBottom: theme.spacing(6) + insets.bottom + theme.spacing(8),
+            paddingBottom: theme.spacing(6),
           }}
           renderItem={renderProduct}
+          ListHeaderComponent={<View style={{ gap: 8, paddingTop: 8, paddingBottom: 8 }}>
+            <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
+            <SearchBar value={uiRatesQuery(task)} onChangeText={setQuery} placeholder="Search" accessibilityLabel="Search rates or banks" />
+            <Row gap={8} style={{ flexWrap: 'wrap' }}>
+              <IconAction icon="options" word="Filter" badge={filterCount || undefined}
+                accessibilityLabel={filterCount ? uiJoin('Filter', ' (', uiCount(filterCount), ')') : uiLabel('Filter')}
+                accessibilityState={{ expanded: filterOpen }} active={filterCount > 0} onPress={openFilters} />
+              <IconAction icon="swap-vertical" word="Sort" onPress={() => setSortOpen(true)}
+                accessibilityState={{ expanded: sortOpen }} disabled={availability === 'unlisted'} />
+              <IconAction icon={selectMode ? 'checkmark-circle' : 'git-compare'} word={selectMode ? 'Done' : 'Compare'}
+                active={selectMode} accessibilityState={{ selected: selectMode }}
+                onPress={toggleCompareMode} disabled={availability === 'unlisted'} />
+              <IconAction icon="business-outline" word="Bank" accessibilityLabel="Bank A–Z"
+                active={sortKey === 'bank'} accessibilityState={{ selected: sortKey === 'bank' }}
+                disabled={availability === 'unlisted'} onPress={() => setSortKey(quickSortKey)} />
+              <IconAction icon="ellipsis-horizontal" word="More" onPress={() => setToolsOpen(true)}
+                accessibilityLabel="Search actions" accessibilityState={{ expanded: toolsOpen }} />
+            </Row>
+            <View style={{ width: '100%', flexShrink: 0, gap: 2 }}>
+              <AppText variant="tiny" color="textMuted">{uiJoin(searchPending ? 'Loading':uiJoin(uiCount(resultRows.length),' ','results'),searchSub?uiJoin(' · ','Alert on'):null)}</AppText>
+              <AppText variant="tiny" color="textMuted" accessibilityLabel={sortLabel}>{compactSortLabel}</AppText>
+            </View>
+            {path.length ? <Button title="Clear scope" variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
+            {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">{uiLabel("Name search")}</AppText>
+              {searchIndexStatus === 'error' ? <Button title="Retry search" variant="ghost" onPress={() => void ensureSearchIndex()} /> : null}</Row> : null}
+          </View>}
           ListEmptyComponent={
             task.intentError ? <EmptyState title="Scope unavailable" /> : availability === 'unlisted' && !catalogueDetails ? (
               <View style={{ paddingTop: 16, gap: 12 }}><EmptyState title={uiLabel(detailsLoading ? 'Loading' : 'Catalogue unavailable')} />
@@ -582,9 +639,8 @@ export default function RatesWorkspace() {
       </View>
 
       {selectMode && selected.length >= 2 ? (
-        <CompareFab
+        <CompareDock
           count={selected.length}
-          bottomInset={insets.bottom}
           onPress={() => openCompare(selected)}
         />
       ) : null}
@@ -619,6 +675,7 @@ export default function RatesWorkspace() {
               setSortKey('rate'); setSortOpen(false);
             }} />)}
           <Button title="Bank A–Z" variant="ghost" onPress={() => { setSortKey('bank'); setSortOpen(false); }} />
+          <Button title="Cancel" variant="ghost" onPress={() => setSortOpen(false)} />
         </ScrollView>
       </SheetSurface>
       <SheetSurface visible={toolsOpen} title="Search" onClose={() => setToolsOpen(false)}>
@@ -637,48 +694,48 @@ export default function RatesWorkspace() {
   );
 }
 
-function CompareFab({
+function CompareDock({
   count,
-  bottomInset,
   onPress,
 }: {
   count: number;
-  bottomInset: number;
   onPress: () => void;
 }) {
   const theme = useTheme();
   const label=uiJoin('Compare',' ',uiCount(count));
-  const isAndroid = Platform.OS === 'android';
-  const edge = theme.spacing(4);
-  const bottom = theme.spacing(6) + bottomInset;
 
   return (
-    <TouchTarget
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={({ pressed }) => ({
-        position: 'absolute',
-        ...(isAndroid
-          ? { right: edge, bottom }
-          : { left: edge, right: edge, bottom: theme.spacing(6) }),
-        backgroundColor: theme.colors.primary,
-        borderRadius: theme.radius.pill,
-        minHeight: isAndroid ? 56 : undefined,
-        paddingVertical: isAndroid ? 0 : theme.spacing(4),
-        paddingHorizontal: isAndroid ? theme.spacing(5) : 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: theme.spacing(2),
-        opacity: pressed ? 0.85 : 1,
-        elevation: isAndroid ? 6 : 4,
-      })}
-    >
-      <Ionicons name="git-compare" size={isAndroid ? 24 : 18} color={theme.colors.onPrimary} />
-      <AppText variant="body" weight="800" style={{ color: theme.colors.onPrimary }}>
-        {label}
-      </AppText>
-    </TouchTarget>
+    <View testID="rates-compare-dock" style={{
+      flexShrink: 0,
+      paddingHorizontal: theme.spacing(4),
+      paddingVertical: theme.spacing(2),
+      backgroundColor: theme.colors.surface,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    }}>
+      <TouchTarget
+        fill
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={({ pressed }) => ({
+          backgroundColor: theme.colors.primary,
+          borderRadius: theme.radius.pill,
+          minHeight: 56,
+          paddingVertical: theme.spacing(2),
+          paddingHorizontal: theme.spacing(5),
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: theme.spacing(2),
+          opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        <Ionicons name="git-compare" size={24} color={theme.colors.onPrimary} />
+        <AppText variant="body" weight="800" style={{ color: theme.colors.onPrimary }}>
+          {label}
+        </AppText>
+      </TouchTarget>
+    </View>
   );
 }

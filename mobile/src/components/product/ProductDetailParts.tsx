@@ -96,7 +96,7 @@ export function ProductRatesList({ rows, section, accent, defaultOpen = false }:
   const metric = useStore(s => s.prefs.mortgageRateMetric);
   const [open, setOpen] = useState(defaultOpen); if (!rows.length) return null;
   return <Disclosure title={uiJoin('Rates', ' (', uiCount(rows.length), ')')} open={open} onToggle={() => setOpen(v => !v)}>
-    <View style={{ gap: 12 }}>{rows.map((row, i) => {
+    {open ? <View style={{ gap: 12 }}>{rows.map((row, i) => {
       const presentation = ratePresentation(row, section, metric), term = formatTerm(row);
       const balance = section === 'Mortgage' ? null : formatBalanceRange(row.balance_min, row.balance_max);
       const actionLabel = uiJoin('Open', ', ', uiProductName(row), ', ', presentation.primaryLabel, ' ', formatRate(presentation.primary),
@@ -106,7 +106,7 @@ export function ProductRatesList({ rows, section, accent, defaultOpen = false }:
       <RateRowLine row={row} section={section} accent={accent} />
       <Button title="Open" variant="ghost" accessibilityLabel={actionLabel}
         onPress={() => openProduct(row.product_key, row.rate_index)} />
-    </View>; })}</View>
+    </View>; })}</View> : null}
   </Disclosure>;
 }
 export function ProductSpecs({ row, section, productDetails }: { row: RateRow; section: SectionKey; productDetails: ProductDetailData | null }) {

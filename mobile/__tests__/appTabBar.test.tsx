@@ -37,6 +37,9 @@ type TestNode = {
     onPress?: () => void;
     style?: StyleProp<ViewStyle> | ((state: { pressed: boolean }) => ViewStyle);
     numberOfLines?: number;
+    allowFontScaling?: boolean;
+    maxFontSizeMultiplier?: number;
+    adjustsFontSizeToFit?: boolean;
   };
   findAll: (predicate: (node: TestNode) => boolean) => TestNode[];
   findAllByType: (type: React.ElementType) => TestNode[];
@@ -96,4 +99,37 @@ it('reserves large-text label height and all bottom/side safe-area insets', () =
   expect(controls()).toHaveLength(3);
   for (const label of tree.root.findAllByType(Text)) expect(label.props.numberOfLines).toBe(2);
   for (const tab of controls()) expect(styleOf(tab)?.minHeight).toBeGreaterThanOrEqual(48);
+});
+
+it('refreshes native label metrics through font growth and shrink without replacing tab targets', () => {
+  mount();
+  const targets = controls();
+  let previousLabels = tree.root.findAllByType(Text);
+  for (const scale of [2, 1.8, 1]) {
+    mockFontScale = scale;
+    act(() => tree.update(<AppTabBar />));
+    const labels = tree.root.findAllByType(Text);
+    expect(labels).toHaveLength(3);
+    labels.forEach((label, index) => {
+      expect(label).not.toBe(previousLabels[index]);
+      expect(label.props.numberOfLines).toBe(getTabBarLayout(scale).labelLines);
+      expect(label.props.allowFontScaling).not.toBe(false);
+      expect(label.props.maxFontSizeMultiplier).toBeUndefined();
+      expect(label.props.adjustsFontSizeToFit).not.toBe(true);
+      expect(styleOf(label)).toMatchObject({ fontSize: 12, lineHeight: 13 });
+    });
+    controls().forEach((target, index) => expect(target).toBe(targets[index]));
+    expect(controls().map((target) => target.props.accessibilityState?.selected)).toEqual([true, false, false]);
+    const bar = tree.root.findAllByType(View).find((view) => view.props.accessibilityRole === 'tablist')!;
+    expect(styleOf(bar)?.height).toBe(getTabBarLayout(scale).contentHeight + 16);
+    previousLabels = labels;
+  }
+  act(() => tree.update(<AppTabBar />));
+  tree.root.findAllByType(Text).forEach((label, index) => expect(label).toBe(previousLabels[index]));
+  expect(mockNavigate).not.toHaveBeenCalled();
+  expect(mockDismissTo).not.toHaveBeenCalled();
+  expect(mockHaptic).not.toHaveBeenCalled();
+  act(() => controls()[1].props.onPress!());
+  expect(mockDismissTo).toHaveBeenCalledTimes(1);
+  expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/watchlist');
 });

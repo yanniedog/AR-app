@@ -194,7 +194,9 @@ export default function MarketOverview() {
       { id: 'market.calendar', kind: 'data', required: false,
         status: calendar ? 'ready' : calendarAttempted || calendarError ? 'error' : 'pending',
         error: !calendar && (calendarAttempted || calendarError) ? 'Calendar unavailable' : null,
-        datasetRevision: calendarSha },
+        // Dataset identity is the publication, not this asset's distinct SHA.
+        // calendarSha still invalidates factsRevision and its measured layout.
+        datasetRevision: coreSha ?? core?.run_date ?? null },
       { id: 'market.facts.layout', kind: 'layout', status: factsLayout === factsRevision ? 'ready' : 'pending',
         layoutMeasured: factsLayout === factsRevision, renderRevision },
       {
@@ -221,7 +223,7 @@ export default function MarketOverview() {
         renderRevision,
       },
     ],
-  });
+  }, focused);
 
   if (!core) return <ScreenSkeleton />;
 

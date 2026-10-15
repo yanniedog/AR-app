@@ -27,7 +27,7 @@ import { captureRatesSession, restoreRatesSession } from '../data/ratesSession';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
-import { PerformanceAuditNavigationAnchor } from '../lib/performanceAuditNavigation';
+import { measureAuditBackNavigation, PerformanceAuditNavigationAnchor } from '../lib/performanceAuditNavigation';
 import { createPerformanceAuditWakeLock } from '../lib/performanceAuditWakeLock';
 import {
   getApkDownloadSnapshot,
@@ -35,6 +35,9 @@ import {
   type ApkDownloadSnapshot,
 } from '../lib/appUpdate';
 import { blocksPerformanceAudit } from '../lib/appUpdateDownloadLogic';
+import { APP_UPDATE_AUDIT_SURFACE, runLiveUpdateReadiness } from '../lib/performanceAuditUpdate';
+import { ANDROID_UPDATE_READINESS_AUDIT, dedicatedPerformanceAuditChecks,
+  type DedicatedPerformanceAuditCheck } from '../lib/performanceAuditCheckInventory';
 import {
   CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
   type AppHealthAuditMode,
@@ -54,7 +57,8 @@ import type { TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
 import { captureAuditPayloadWork } from '../lib/performanceAuditPayloadWork';
 import { benchmarkPayloadCapacity } from '../lib/performanceAuditCapacity';
 import { waitForAuditBackgroundWork, describeAuditBackgroundWork, type AuditBackgroundWorkWait } from '../lib/performanceAuditBackgroundWork';
-import { isDebugLogUploadBusy, startDebugLogUpload, subscribeDebugLogUpload } from '../lib/debugLogSharing';
+import { isDebugLogUploadBusy, subscribeDebugLogUpload } from '../lib/debugLogSharing';
+import { startPerformanceAuditLogUpload } from '../lib/performanceAuditSharing';
 import {
   ScenarioReentryGate,
   type DeepAuditStep,
@@ -150,8 +154,8 @@ const ROUTE_DWELL_MS = 350;
 const READINESS_QUIET_WINDOW_MS = 650;
 const RUNTIME_SAMPLE_MS = 1_250;
 // Maximum-profile preparation, runtime, storage, filesystem, log I/O, payload,
-// network, update readiness, and durable audit-state restoration.
-const FIXED_BENCHMARK_CHECKS = 10;
+// network, and durable audit-state restoration. Dedicated owners add their own checks.
+const FIXED_BENCHMARK_CHECKS = 9;
 const STORAGE_KEY_PREFIX = '@ar/performance-audit/';
 const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
@@ -2007,11 +2011,37 @@ async function runUpdateReadinessCheck(
   _monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
   download: ApkDownloadSnapshot,
+  mode: AppHealthAuditMode,
+  transport: AppHealthTransportGuard,
+  currentPath: () => string,
 ): Promise<AuditCheck> {
+  if (mode === ANDROID_UPDATE_READINESS_AUDIT.executionMode) {
+    const started = now();
+    try {
+      return await runLiveUpdateReadiness({
+        app, download, watchdog, transport,
+        assertActive: () => assertSessionActive(watchdog),
+        openSettings: async () => {
+          router.push(ANDROID_UPDATE_READINESS_AUDIT.expectedPath);
+          await waitForPath(currentPath, ANDROID_UPDATE_READINESS_AUDIT.expectedPath, 'Android update readiness', { watchdog });
+        },
+      });
+    } catch (caught) {
+      rethrowAuditControl(caught);
+      assertAuditActive();
+      return {
+        id: ANDROID_UPDATE_READINESS_AUDIT.checkId, label: 'Android update manifest and rendered readiness', kind: ANDROID_UPDATE_READINESS_AUDIT.kind,
+        status: 'fail', durationMs: roundMetric(now() - started),
+        metrics: { executionAttempted: true, durationMayUseTtlCache: false,
+          ...readinessMetrics(performanceAuditReadinessRegistry.snapshot([APP_UPDATE_AUDIT_SURFACE])) },
+        error: formatAuditError(caught), trace: captureAuditTrace('Live update readiness failed'),
+      };
+    }
+  }
   const installed = { version: app.appVersion, buildNumber: app.buildVersion };
   assertSessionActive(watchdog);
   return {
-    id: 'update-readiness',
+    id: ANDROID_UPDATE_READINESS_AUDIT.checkId,
     label: 'Android update state (local snapshot)',
     kind: 'update',
     status: 'skipped',
@@ -2274,6 +2304,8 @@ export async function runJourney(
   let destinationReadinessMs: number | null = null;
   let backgroundTasks: string[] = [];
   let backMs: number | null = null;
+  let firstBackMs: number | null = null;
+  let firstBackDestination: string | null = null;
   let returnFallbackMs: number | null = null;
   let backDestination: string | null = null;
   let backReturnedToAudit = false;
@@ -2357,37 +2389,37 @@ export async function runJourney(
     assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
 
-    const pathBeforeBack = currentPath();
-    at = now();
     const backResponsivenessAt = monitor.snapshot();
-    router.back();
-    // Tabs own their own history and commonly back to Home rather than the
-    // root-stack audit screen. Measure the real back transition first, then
-    // restore the runner explicitly instead of charging an 8s path timeout.
-    await settleUi();
-    assertSessionActive(watchdog);
-    assertDatasetRevision(datasetRevision);
-    backMs = now() - at;
+    // Tab history returns through Rates before the root-stack audit origin.
+    // Keep both real dispatches measured; an anchor reset is recovery, not Back.
+    const measuredBack = await measureAuditBackNavigation({
+      currentPath, back: () => router.back(), now, matchesPath: pathMatches,
+      tabJourney: journey.navigationKind === 'tab',
+      settle: async () => {
+        await settleUi();
+        assertSessionActive(watchdog);
+        assertDatasetRevision(datasetRevision);
+      },
+      recordFirst: first => {
+        firstBackMs = first.durationMs;
+        firstBackDestination = first.destination;
+        backMs = first.durationMs;
+        backDestination = first.destination;
+        backReturnedToAudit = first.returnedToAudit;
+        backChangedPath = first.changedPath;
+        backResponsiveness = monitor.metricsSince(backResponsivenessAt);
+      },
+      recordSecondStart: () => { returnNavigationKind = 'second-back'; },
+    });
+    backMs = measuredBack.durationMs;
+    backDestination = measuredBack.destination;
+    backReturnedToAudit = measuredBack.returnedToAudit;
+    backChangedPath = measuredBack.changedPath;
+    secondBackMs = measuredBack.secondBackMs;
     backResponsiveness = monitor.metricsSince(backResponsivenessAt);
-    backDestination = currentPath();
-    backReturnedToAudit = pathMatches(backDestination, AUDIT_HOME_PATH);
-    backChangedPath = !pathMatches(backDestination, pathBeforeBack, 'pathname');
-
-    if (
-      !backReturnedToAudit &&
-      journey.navigationKind === 'tab' &&
-      pathMatches(backDestination, '/')
-    ) {
+    if (secondBackMs != null) {
       returnNavigationKind = 'second-back';
-      const secondBackStarted = now();
-      router.back();
-      await settleUi();
-      backReturnedToAudit = pathMatches(currentPath(), AUDIT_HOME_PATH);
-      secondBackMs = now() - secondBackStarted;
-      backMs += secondBackMs;
-      backDestination = currentPath();
       returnFallbackMs = secondBackMs;
-      backResponsiveness = monitor.metricsSince(backResponsivenessAt);
     }
 
     if (!backReturnedToAudit) {
@@ -2487,6 +2519,8 @@ export async function runJourney(
         destinationReadinessMs == null ? null : roundMetric(destinationReadinessMs),
       backgroundTasks: backgroundTasks.join(', ') || null,
       backMs: backMs == null ? null : roundMetric(backMs),
+      firstBackMs: firstBackMs == null ? null : roundMetric(firstBackMs),
+      firstBackDestination,
       originReadinessMs: originReadinessMs == null ? null : roundMetric(originReadinessMs),
       backDestination,
       backChangedPath,
@@ -2567,6 +2601,7 @@ export function PerformanceAuditRunner() {
       const wakeLockSubscription: { current: ReturnType<typeof AppState.addEventListener> | null } = { current: null };
       const startedAt = state.startedAt!;
       const auditMode = state.auditMode;
+      const uploadLog = state.uploadLog;
       const startedMs = Date.now();
       // The report's duration is time the audit actually measured. A five-minute
       // pause is the user's, not the app's, and counting it would attribute the
@@ -2603,7 +2638,8 @@ export function PerformanceAuditRunner() {
       const templates = buildPerformanceAuditSetupPlans(null, { seed: sessionId }, SECTION_ORDER);
       let plan = templates.plan;
       let navigationJourneys = templates.journeys;
-      const platformBenchmarkChecks = FIXED_BENCHMARK_CHECKS + PERFORMANCE_AUDIT_SETUP_CHECK_IDS.length - (Platform.OS === 'android' ? 0 : 1);
+      const dedicatedChecks = dedicatedPerformanceAuditChecks(Platform.OS);
+      const platformBenchmarkChecks = FIXED_BENCHMARK_CHECKS + PERFORMANCE_AUDIT_SETUP_CHECK_IDS.length + dedicatedChecks.length;
       const collectExternalLinks = createExternalAuditLinkCollector();
       let externalLinks: TrustedExternalUrlRequest[] = [];
       // The full inventory is prepared after payload work settles, inside the
@@ -3267,16 +3303,17 @@ export function PerformanceAuditRunner() {
 
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
-        if (Platform.OS === 'android') {
+        const dedicatedHandlers: Record<DedicatedPerformanceAuditCheck['checkId'],
+          (stepWatchdog: PerformanceAuditInactivityWatchdog) => Promise<AuditCheck>> = {
+          [ANDROID_UPDATE_READINESS_AUDIT.checkId]: stepWatchdog => runUpdateReadinessCheck(
+            app, monitor, stepWatchdog, auditApkDownloadSnapshot, auditMode, transportGuard, () => pathnameRef.current,
+          ),
+        };
+        for (const owner of dedicatedChecks) {
           updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
           await recordContinuable(
             'Inspecting Android update readiness',
-            (watchdog) => runUpdateReadinessCheck(
-              app,
-              monitor,
-              watchdog,
-              auditApkDownloadSnapshot,
-            ),
+            dedicatedHandlers[owner.checkId],
           );
           assertSessionActive(watchdog);
           assertDatasetRevision(datasetRevision);
@@ -3407,7 +3444,7 @@ export function PerformanceAuditRunner() {
           'debug-log-io',
           'active-data',
           'manifest-network',
-          ...(Platform.OS === 'android' ? ['update-readiness'] : []),
+          ...dedicatedChecks.map(owner => owner.checkId),
           'audit-state-restoration',
         ];
         const plannedIdSet = new Set(plannedCheckIds);
@@ -3520,8 +3557,11 @@ export function PerformanceAuditRunner() {
               : 'Live-source mode permits public payload files and exact approved external destinations for credential-free HEAD checks. Link checks have a 90-second transport/handler budget; remaining destinations are validated but stay unverified. No browser or installer is launched.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
             auditMode === 'local'
-              ? 'Local audit measurements perform no network or clipboard action. After completion, the compact diagnostic log is uploaded to paste and the verified link is copied.'
-              : 'The live-source audit may read allowlisted public payload files during measurement. After completion, the compact diagnostic log is uploaded to paste and the verified link is copied.',
+              ? 'Local audit measurements perform no network or clipboard action.'
+              : 'The live-source audit may read allowlisted public payload files during measurement.',
+            uploadLog
+              ? 'Public log upload requested after local finalization.'
+              : 'Public log upload disabled.',
             'Full retained logs and the complete saved report remain on this device through Debug log → Share full evidence.',
           ],
         };
@@ -3628,7 +3668,7 @@ export function PerformanceAuditRunner() {
         // complete even if upload or clipboard access fails.
         // Reserve sharing's busy state before finally releases the run gate,
         // but let finally release audit resources without awaiting the network.
-        void startDebugLogUpload({
+        startPerformanceAuditLogUpload(uploadLog, {
           sessionId,
           appVersion: app.appVersion,
           buildVersion: app.buildVersion,
@@ -3854,6 +3894,7 @@ export function PerformanceAuditRunner() {
             routeAggregates: aggregateRepeatedJourneys(checks),
             appHealth: partialHealth,
             limitations: [
+              uploadLog ? 'Public log upload requested after local finalization.' : 'Public log upload disabled.',
               `This is a structured partial schema-v${PERFORMANCE_AUDIT_SCHEMA_VERSION} report for an unrecoverable stop (cancel, hang watchdog, dataset revision change, or setup/teardown failure). Per-step journey failures no longer abort the plan; those produce a complete report with aggregated fail/warn checks.`,
               `Unrecoverable failure occurred after ${completed} of ${total} planned durable checks.`,
               `The report applies to app version ${app.appVersion}, build ${app.buildVersion}.`,
@@ -3900,7 +3941,7 @@ export function PerformanceAuditRunner() {
             error,
             ...(partialStoreError ? [`Partial report storage failed: ${partialStoreError}`] : []),
           ].join('\n'), mutationRecoveryRequired);
-          void startDebugLogUpload({
+          startPerformanceAuditLogUpload(uploadLog, {
             sessionId,
             appVersion: app.appVersion,
             buildVersion: app.buildVersion,
@@ -3949,6 +3990,7 @@ export function PerformanceAuditRunner() {
     state.sessionId,
     state.startedAt,
     state.auditMode,
+    state.uploadLog,
     state.status,
     uploadBusy,
   ]);

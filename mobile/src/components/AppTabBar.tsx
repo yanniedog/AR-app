@@ -15,8 +15,8 @@ import { fontStyle } from '../theme/fonts';
 import { TouchTarget } from './TouchTarget';
 import { LedgerIcon } from './icons/LedgerIcon';
 
-function TabItem({ route, focused, onPress, labelLines }: {
-  route: PrimaryTabRouteName; focused: boolean; onPress: () => void; labelLines: number;
+function TabItem({ route, focused, onPress, labelLines, fontScale }: {
+  route: PrimaryTabRouteName; focused: boolean; onPress: () => void; labelLines: number; fontScale: number;
 }) {
   const theme = useTheme(), reducedMotion = useReducedMotion();
   const opacity = useRef(new Animated.Value(focused ? 1 : 0)).current;
@@ -35,7 +35,8 @@ function TabItem({ route, focused, onPress, labelLines }: {
           borderRadius: theme.radius.pill, backgroundColor: theme.colors.primaryMuted }} />
         <LedgerIcon name={TAB_LEDGER_ICONS[route]} size={23} color={tint} />
       </View>
-      <Text numberOfLines={labelLines} style={{ fontSize: 12, lineHeight: TAB_BAR_LABEL_LINE_HEIGHT,
+      {/* Recreate native SP metrics after configuration changes; retain the tab target and selection. */}
+      <Text key={fontScale} numberOfLines={labelLines} style={{ fontSize: 12, lineHeight: TAB_BAR_LABEL_LINE_HEIGHT,
         ...fontStyle(focused ? '600' : '500'), color: tint, textAlign: 'center', width: '100%', paddingHorizontal: 4 }}>
         {primaryTabLabel(route)}
       </Text>
@@ -58,6 +59,6 @@ export function AppTabBar() {
     paddingLeft: insets.left, paddingRight: insets.right,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border }}>
     {TAB_BAR_ORDER.map(route => <TabItem key={route} route={route} focused={active === route}
-      onPress={() => onPress(route)} labelLines={layout.labelLines} />)}
+      onPress={() => onPress(route)} labelLines={layout.labelLines} fontScale={fontScale} />)}
   </View>;
 }

@@ -16,10 +16,10 @@ import type { BackgroundWorkSnapshot } from './backgroundPayloadWork';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
-  '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
+  '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '#', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
   'Rates', 'Saved', 'Market', 'Account', 'Profile', 'Settings', 'About',
   'Home loans', 'Savings', 'Savings accounts', 'Term deposits', 'Mortgage', 'TD',
-  'Calculate', 'Rate check', 'Projection', 'Compare', 'Filter', 'Sort', 'Search',
+  'Calculate', 'Rate check', 'Projection', 'Compare', 'Filter', 'Sort', 'Search', 'More', 'Bonus', 'Conditional',
   'Search rates or banks', 'Search actions', 'Clear search', 'Clear', 'Reset', 'Apply',
   'Cancel', 'Close', 'Back', 'Navigate up', 'Done', 'Save', 'Saved rate', 'Remove',
   'Share', 'Copy', 'Copied', 'Export', 'Import', 'Retry', 'Refresh', 'Open', 'View',
@@ -35,7 +35,7 @@ export const UI_LABELS = [
   'results', 'rates', 'banks', 'products', 'Selected', 'All', 'Matches', 'Bank', 'Product',
   'Banks', 'Products', 'Rate details', 'Terms', 'Conditions', 'Source', 'Source review required',
   'Source unverified', 'Published', 'Observed', 'Checked', 'As at', 'Cached', 'Offline',
-  'Online', 'Live', 'Partial', 'Complete', 'Coverage', 'Core', 'Details', 'History', 'Data',
+  'Online', 'Live', 'Local', 'Partial', 'Complete', 'Coverage', 'Core', 'Details', 'History', 'Data',
   'LVR', 'Balance', 'Minimum', 'Maximum', 'Term', 'Months', 'Years', 'months', 'years',
   'month', 'year', 'mo', 'yr', 'days', 'bps', 'AUD', 'per month', 'per year', 'at maturity',
   'Variable', 'Fixed', 'Principal & interest', 'Interest only', 'Owner occupied', 'Investor',
@@ -57,7 +57,7 @@ export const UI_LABELS = [
   'Show', 'Hide', 'Expand', 'Collapse', 'More', 'Less', 'Ascending', 'Descending',
   'Newest', 'Oldest', 'Name', 'Date', 'Version', 'Build', 'Update', 'Install',
   'Download', 'Downloaded', 'Download failed', 'Update available', 'Up to date',
-  'Pause', 'Resume', 'Stop', 'Start', 'Run audit', 'Audit', 'Performance audit',
+  'Pause', 'Resume', 'Stop', 'Start', 'Run audit', 'Live audit', 'Public upload', 'Next audit upload', 'Next destination', 'Audit', 'Performance audit',
   'Debug log', 'Upload', 'Uploaded', 'Upload failed', 'Upload status', 'Clear cache',
   'Reset app', 'Delete local data', 'Data deleted', 'Authentication required', 'Unlock',
   'Authenticate', 'Export data key', 'Import data key', 'Share data key', 'External link',
@@ -148,6 +148,9 @@ export const UI_LABELS = [
   'Retrying', 'Update ready to install', 'Local only · Encrypted', 'Undo', 'Removed',
   'Rate', 'Rate type', 'Rate structure', 'Loan purpose', 'Interest paid', 'Account type',
   'Account class', 'Product ID', 'Rate index', 'Features', 'Constraints', 'Product facts',
+  'Overdraft', 'Business applicants', 'Employment status', 'Minimum income',
+  'Individual applicants', 'Pension recipients', 'Residency status',
+  'Unspecified', 'Unspecified purpose', 'Other purpose',
   'Availability', 'Package', 'Customer group', 'Documents', 'Revisions', 'Source excerpts',
   'Coverage gaps', 'Discovery', 'Acquisition', 'Extraction', 'Interpretation', 'Calculation',
   'Page', 'Disposition', 'Interpreted', 'Uninterpreted', 'Added', 'Changed',
@@ -439,7 +442,8 @@ export function uiNumber(value: number | null | undefined, digits = 0): UiText {
   return known(formatter.format(value));
 }
 export function uiDuration(value: number | null | undefined, unit: 'months' | 'years' | 'days'): UiText {
-  return finite(value) ? uiJoin(uiCount(value), ' ', unit) : uiLabel('Unknown');
+  const label = value === 1 ? unit === 'months' ? 'month' : unit === 'years' ? 'year' : 'day' : unit;
+  return finite(value) ? uiJoin(uiCount(value), ' ', label) : uiLabel('Unknown');
 }
 /** Invalid dates stay unknown, never a raw source message. */
 export function uiDate(value: string | null | undefined): UiText {

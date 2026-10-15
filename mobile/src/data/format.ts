@@ -41,6 +41,17 @@ const ENUM_LABEL_OVERRIDES: Readonly<Record<string, UiLabel>> = {
   BILL_PAYMENT: 'Bill payment',
   CARD_ACCESS: 'Card access',
   DIGITAL_BANKING: 'Digital banking',
+  OVERDRAFT: 'Overdraft',
+  BUSINESS: 'Business applicants',
+  EMPLOYMENT_STATUS: 'Employment status',
+  MIN_INCOME: 'Minimum income',
+  NATURAL_PERSON: 'Individual applicants',
+  PENSION_RECIPIENT: 'Pension recipients',
+  RESIDENCY_STATUS: 'Residency status',
+  STUDENT: 'Students',
+  // This code occurs in both loan-purpose and repayment fields. It does not
+  // establish customer eligibility or a particular purpose/repayment method.
+  UNCONSTRAINED: 'Unspecified',
   PRINCIPAL_AND_INTEREST: 'Principal & interest', PRINCIPAL_INTEREST: 'Principal & interest', PI: 'Principal & interest', 'P&I': 'Principal & interest',
   INTEREST_ONLY: 'Interest only', IO: 'Interest only',
   OWNER_OCCUPIED: 'Owner occupied', OWNER_OCCUPIER: 'Owner occupied', OO: 'Owner occupied',
