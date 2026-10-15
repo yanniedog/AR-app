@@ -24,6 +24,7 @@ import {
 import { AppTabBar } from '../src/components/AppTabBar';
 import { AppBreadcrumbBar } from '../src/components/AppBreadcrumbBar';
 import { NavigatorSafeArea } from '../src/components/NavigatorSafeArea';
+import { WordBubbleProvider } from '../src/components/WordBubble';
 import {
   AppUpdateBanner,
   AppUpdateBannerLayoutProvider,
@@ -235,7 +236,8 @@ function RootNavigator() {
   }
 
   return (
-    <AppUpdateBannerLayoutProvider visible={showUpdateBanner}>
+      <WordBubbleProvider scopeKey={`${pathname}:${performanceAuditActive}`}>
+      <AppUpdateBannerLayoutProvider visible={showUpdateBanner}>
         <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
           {showUpdateBanner ? (
             <AppUpdateBanner
@@ -333,6 +335,7 @@ function RootNavigator() {
           <PerformanceAuditRunner />
         </View>
       </AppUpdateBannerLayoutProvider>
+      </WordBubbleProvider>
   );
 }
 
