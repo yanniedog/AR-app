@@ -53,8 +53,8 @@ jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button',
 jest.mock('../src/components/SheetSurface', () => ({ SheetSurface: 'SheetSurface' }));
 jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }));
 
-// Match FlashList's own unit-test geometry boundary. Its header renderer,
-// scroll container and React reconciliation are the installed implementation.
+// Match FlashList's own unit-test geometry boundary. Its scroll container and
+// React reconciliation are the installed implementation; task controls are siblings.
 jest.mock('@shopify/flash-list/dist/recyclerview/utils/measureLayout', () => ({
   ...jest.requireActual('@shopify/flash-list/dist/recyclerview/utils/measureLayout'),
   measureParentSize: jest.fn(() => ({ x: 0, y: 0, width: 411, height: 914 })),
@@ -178,7 +178,7 @@ test('ordinary filter, sort and scroll changes preserve the live input; Clear re
     act(() => sheet.props.onApply(sheet.props.controlledDraft));
     expect(useRatesSession.getState().sections.TD.filters.providers).toEqual(['Macquarie']);
     expectInput(tree, input, native, 'Unloa');
-    act(() => list.findByProps({ word: 'Bank' }).props.onPress());
+    act(() => tree.root.findByProps({ testID: 'rates-task-controls' }).findByProps({ word: 'Bank' }).props.onPress());
     expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
     act(() => recordRatesScroll('TD', 240));
     act(() => updateRatesSection('TD', current => ({ filters: { ...current.filters, providers: [] } })));

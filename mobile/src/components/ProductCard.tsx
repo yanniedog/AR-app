@@ -206,7 +206,7 @@ function ProductCardView({
     : label === 'Advertised rate' ? 'Advertised' : label === 'Ongoing rate' ? 'Ongoing'
       : label === 'Bonus rate' || label === 'Bonus' ? 'Bonus'
         : label === 'Rate' && section === 'Savings' && qualifier.kind === 'base' ? 'Ongoing' : 'Details';
-  const visibleStatuses = layout.warningOnly ? [] : layout.combinedStatus && statusIcons.length
+  const visibleStatuses = !layout.showStatuses ? [] : layout.combinedStatus && statusIcons.length
     ? [unknown ? 'help-circle-outline' as const : 'warning-outline' as const] : statusIcons;
   const statusWord = (icon: keyof typeof Ionicons.glyphMap): IconWord => icon === 'help-circle-outline' ? 'Unknown'
     : icon === 'flash-outline' ? 'Conditional' : icon === 'people-outline' ? 'Eligibility'
@@ -315,9 +315,9 @@ function ProductCardView({
       >
         <View key={geometryKey} pointerEvents="none" accessible={false}
           style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap }}>
-        <AppText testID="compact-product-name" variant="small" weight="600" numberOfLines={1} ellipsizeMode="tail"
+        {layout.identity > 0 ? <AppText testID="compact-product-name" variant="small" weight="600" numberOfLines={1} ellipsizeMode="tail"
           onLayout={recordRegion('name')}
-          style={{ width: layout.identity, minWidth: 0, flexShrink: 1 }}>{uiProductName(row)}</AppText>
+          style={{ width: layout.identity, minWidth: 0, flexShrink: 1 }}>{uiProductName(row)}</AppText> : null}
         <View testID="compact-product-metrics" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           onLayout={recordRegion('metrics')}
           style={{ flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap, flexShrink: 0 }}>
@@ -334,7 +334,7 @@ function ProductCardView({
               style={{ fontVariant: ['tabular-nums'], flexShrink: 0 }}>{secondaryText}</AppText>
           </View> : null}
         </View>
-        <View testID="compact-product-facts" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+        {layout.facet > 0 ? <View testID="compact-product-facts" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           onLayout={recordRegion('facts')}
           style={{ width: layout.facet, flexDirection: 'row', alignItems: 'center', gap: 2, flexShrink: 0 }}>
           {layout.showFacetValue ? <AppText testID="compact-facet-value" onLayout={recordRegion('facet')} variant="small" color="textMuted" style={{ flexShrink: 0 }}>{facet.value}</AppText>
@@ -342,7 +342,7 @@ function ProductCardView({
               : <Ionicons testID="compact-facet-symbol" onLayout={recordRegion('facet')} name={facet.kind === 'Term' ? 'time' : 'cash-outline'} size={COMPACT_ROW.icon} color={theme.colors.textMuted} /> : null}
           {visibleStatuses.map((icon, index) => <Ionicons key={`${icon}:${index}`} testID={`compact-status-${index}`} onLayout={recordRegion(`status:${index}`)} name={icon} size={COMPACT_ROW.icon} color={theme.colors.warning} />)}
           {layout.showTier ? <AppText testID="compact-tier-index" onLayout={recordRegion('tier')} variant="small" color="textMuted" style={{ flexShrink: 0 }}>{tierIndex}</AppText> : null}
-        </View>
+        </View> : null}
         </View>
       </PressFeedback>
       </View>

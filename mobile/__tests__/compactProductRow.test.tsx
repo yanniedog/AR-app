@@ -3,7 +3,7 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { Animated, StyleSheet, View } from 'react-native';
 import { ProductCard } from '../src/components/ProductCard';
 import { LoadingRows, ScreenSkeleton } from '../src/components/feedbackPlaceholders';
-import { COMPACT_ROW, compactMetricHasPeers, compactProductFacet, compactProductRowLayout, compactTierIndex } from '../src/components/product/compactProductRow';
+import { COMPACT_ROW, compactFactWidth, compactMetricHasPeers, compactProductFacet, compactProductRowLayout, compactTierIndex, type CompactProductRowLayout } from '../src/components/product/compactProductRow';
 import { scopedFinancialConditionFacts } from '../src/data/scopedFinancialConditionFacts';
 import { scopedRateConditions } from '../src/data/rateConditions';
 import { uiLabel, uiRate } from '../src/lib/uiCopy';
@@ -49,16 +49,22 @@ function render(exact: RateRow = row, props: Partial<React.ComponentProps<typeof
 function mainTarget(tree: Tree) {
   return tree.root.findAllByType('PressFeedback').find(node => !node.props.testID && !String(node.props.accessibilityLabel).startsWith('View '))!;
 }
+function railWidth(layout: CompactProductRowLayout) {
+  const cells = [layout.identity, layout.primary, layout.facet].filter(width => width > 0);
+  return cells.reduce((total, width) => total + width, 0) + (cells.length - 1) * COMPACT_ROW.gap
+    + (layout.showSecondary ? layout.secondary + COMPACT_ROW.gap : 0);
+}
 /** Synthetic native layout events exercise hit mapping, not Android geometry acceptance. */
 function measureRegions(tree: Tree) {
-  const main = mainTarget(tree), name = tree.root.findByProps({ testID: 'compact-product-name' });
+  const main = mainTarget(tree), name = tree.root.findAllByType('AppText').find(node => node.props.testID === 'compact-product-name');
   const primary = tree.root.findByProps({ testID: 'compact-primary-cell' });
   const secondary = tree.root.findAllByType('AppText').some(node => node.props.testID === 'compact-secondary-rate')
     ? tree.root.findByProps({ testID: 'compact-secondary-cell' }) : null;
-  const facts = tree.root.findByProps({ testID: 'compact-product-facts' });
-  const nameWidth = name.props.style.width, primaryWidth = primary.props.style.width;
+  const facts = tree.root.findAllByType(View).find(node => node.props.testID === 'compact-product-facts');
+  const nameWidth = name?.props.style.width ?? 0, primaryWidth = primary.props.style.width;
   const metricsWidth = primaryWidth + (secondary ? secondary.props.style.width + 4 : 0);
-  const factsX = nameWidth + metricsWidth + 8, width = factsX + facts.props.style.width;
+  const metricsX = name ? nameWidth + 4 : 0;
+  const factsX = metricsX + metricsWidth + (facts ? 4 : 0), width = factsX + (facts?.props.style.width ?? 0);
   const positions: Record<string, number> = {};
   const measure = (node: { props: Record<string, any> }, id: string, x: number, measuredWidth: number, parentX = 0) => {
     node.props.onLayout({ nativeEvent: { layout: { x, y: 0, width: measuredWidth, height: 20 } } });
@@ -66,15 +72,15 @@ function measureRegions(tree: Tree) {
   };
   act(() => {
     main.props.onLayout({ nativeEvent: { layout: { width, height: 48 } } });
-    measure(name, 'name', 0, nameWidth);
-    measure(tree.root.findByProps({ testID: 'compact-product-metrics' }), 'metrics', nameWidth + 4, metricsWidth);
-    measure(primary, 'primary', 0, primaryWidth, nameWidth + 4);
-    if (secondary) measure(secondary, 'secondary', primaryWidth + 4, secondary.props.style.width, nameWidth + 4);
-    measure(facts, 'facts', factsX, facts.props.style.width);
+    if (name) measure(name, 'name', 0, nameWidth);
+    measure(tree.root.findByProps({ testID: 'compact-product-metrics' }), 'metrics', metricsX, metricsWidth);
+    measure(primary, 'primary', 0, primaryWidth, metricsX);
+    if (secondary) measure(secondary, 'secondary', primaryWidth + 4, secondary.props.style.width, metricsX);
+    if (facts) measure(facts, 'facts', factsX, facts.props.style.width);
     const fields = [...tree.root.findAllByType('AppText'), ...tree.root.findAllByType('Icon')].filter(node =>
       ['compact-facet-value', 'compact-facet-symbol', 'compact-tier-index'].includes(node.props.testID)
       || String(node.props.testID).startsWith('compact-status-'));
-    const eachWidth = facts.props.style.width / fields.length;
+    const eachWidth = (facts?.props.style.width ?? 0) / fields.length;
     fields.forEach((field, index) => measure(field, field.props.testID, index * eachWidth, eachWidth, factsX));
   });
   return { main, positions, width };
@@ -145,9 +151,8 @@ test('the compact skeleton retains native shimmer timing and stops each animatio
 test.each([[360, 1], [411, 1], [360, 2], [411, 2]])('fits one product rail at %sdp/font%s without truncating numbers', (width, fontScale) => {
   const f = fixture(), facet = compactProductFacet(f.rows[0], 'Mortgage', scopedFinancialConditionFacts(scopedRateConditions(f.rows[0], 'Mortgage', f)));
   const layout = compactProductRowLayout(width - 32, fontScale, uiRate(0.058), uiRate(0.0579), facet, 0);
-  const metrics = layout.primary + (layout.showSecondary ? layout.secondary + COMPACT_ROW.gap : 0);
   expect(layout.main + 2 * COMPACT_ROW.action + 2 * COMPACT_ROW.gap).toBe(width - 32);
-  expect(layout.identity + metrics + layout.facet + 2 * COMPACT_ROW.gap).toBe(layout.main);
+  expect(railWidth(layout)).toBe(layout.main);
   expect(layout.identity).toBeGreaterThan(0);
   expect(layout.showSecondary).toBe(fontScale === 1);
   mockDimensions = { ...mockDimensions, width, fontScale };
@@ -397,17 +402,96 @@ test('equal-metric actual tiers remain visibly distinct even when their long LVR
   expect(compactMetricHasPeers(changed[0], changed, 'Comparison rate')).toBe(false);
 });
 
-test.each([0, 110, 250])('keeps font2/#172/max-warning geometry within actual width with native primary measurement %s', measuredPrimary => {
+test.each([0, 110])('keeps font2/#172/max-warning geometry and the full rate with native primary measurement %s', measuredPrimary => {
   const layout = compactProductRowLayout(328, 2, uiRate(0.058), null,
     { kind: 'LVR', known: true, value: uiLabel('LVR') }, 3, measuredPrimary, 0, compactTierIndex({ ...row, rate_index: 172 }), true);
   expect(layout.identity).toBeGreaterThanOrEqual(28);
-  expect(layout.identity + layout.primary + layout.facet + 2 * COMPACT_ROW.gap).toBe(layout.main);
+  expect(railWidth(layout)).toBe(layout.main);
   expect(layout.main + 2 * COMPACT_ROW.action + 2 * COMPACT_ROW.gap).toBe(328);
   expect(layout.showSecondary).toBe(false);
-  expect(layout.showTier).toBe(true);
+  expect(layout.warningOnly).toBe(false);
+  expect(layout.primary).toBeGreaterThanOrEqual(measuredPrimary);
+  expect(layout.showTier).toBe(measuredPrimary === 0);
   if (measuredPrimary === 0) {
     expect(layout.warningOnly).toBe(false);
     expect(layout.combinedStatus).toBe(true);
     expect(layout.showFacetSymbol).toBe(false);
-  } else if (measuredPrimary >= 250) expect(layout.warningOnly).toBe(true);
+  }
+});
+
+test.each([
+  [uiRate(0.115), 0], [uiRate(0.115), 145], [uiLabel('Unknown'), 0],
+  [uiLabel('Unknown'), 200], [uiRate(0.115), 220], [uiLabel('Unknown'), 224],
+] as const)('font2 preserves fitting primary %s before #172, three statuses or name at measured width%s', (primary, measured) => {
+  const layout = compactProductRowLayout(328, 2, primary, uiRate(0.118),
+    { kind: 'LVR', known: true, value: uiLabel('LVR') }, 3, measured, 0, compactTierIndex({ ...row, rate_index: 172 }), true);
+  expect(layout.warningOnly).toBe(false);
+  expect(layout.primary).toBeGreaterThanOrEqual(Math.max(compactFactWidth(primary, 2), measured));
+  expect(railWidth(layout)).toBe(layout.main);
+  expect(layout.main).toBe(224);
+  expect(layout.showSecondary).toBe(false);
+  expect(layout.showTier).toBe(false);
+  if (measured >= 220) {
+    expect(layout.identity).toBe(0);
+    expect(layout.facet).toBe(0);
+    expect(layout.showStatuses).toBe(false);
+  }
+});
+
+test.each([uiRate(0.115), uiLabel('—')])('renders actual font2 primary %s and preserves its metric bubble when optional cells disappear', primary => {
+  mockDimensions = { ...mockDimensions, fontScale: 2 };
+  const exact = { ...row, rate: primary === '—' ? '' : row.rate,
+    comparison_rate: primary === '—' ? undefined : '0.115', rate_index: 172 };
+  const metricWord = primary === '—' ? 'Advertised' : 'Comparison';
+  const tree = render(exact);
+  try {
+    expect(tree.root.findByProps({ testID: 'compact-primary-rate' }).props.children).toBe(primary);
+    act(() => tree.root.findByProps({ testID: 'compact-primary-rate' }).props.onTextLayout({ nativeEvent: { lines: [{ width: 220 }] } }));
+    expect(tree.root.findAllByType('AppText').some(node => node.props.testID === 'compact-product-name')).toBe(false);
+    expect(tree.root.findAllByType(View).some(node => node.props.testID === 'compact-product-facts')).toBe(false);
+    expect(tree.root.findByProps({ testID: 'compact-primary-cell' }).props.style.width).toBe(224);
+    const rate = tree.root.findByProps({ testID: 'compact-primary-rate' });
+    expect(rate.props.children).toBe(primary);
+    expect(rate.props.numberOfLines).toBeUndefined();
+    expect(rate.props.maxFontSizeMultiplier).toBeUndefined();
+    expect(rate.props.adjustsFontSizeToFit).toBeUndefined();
+    const measured = measureRegions(tree);
+    expect(measured.width).toBe(224);
+    expect(measured.main.props.accessibilityLabel).toContain(`${metricWord} rate ${primary}`);
+    expect(measured.main.props.accessibilityLabel).toContain(exact.product_name);
+    hold(measured.main, measured.positions.primary);
+    expect(mockShow).toHaveBeenLastCalledWith(metricWord);
+    expect(tree.root.findAllByType('PressFeedback').every(node => node.props.style.minHeight >= 48)).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('a fitting caution remains beside a wide full rate before the clipped name', () => {
+  mockDimensions = { ...mockDimensions, fontScale: 2 };
+  const tree = render({ ...row, rate: '0.115', ribbon_deposit_kind: 'BONUS', ongoing_rate: undefined }, { section: 'Savings' });
+  try {
+    act(() => tree.root.findByProps({ testID: 'compact-primary-rate' }).props.onTextLayout({ nativeEvent: { lines: [{ width: 200 }] } }));
+    expect(tree.root.findByProps({ testID: 'compact-primary-rate' }).props.children).toBe('11.50%');
+    expect(tree.root.findAllByType('AppText').some(node => node.props.testID === 'compact-product-name')).toBe(false);
+    expect(tree.root.findByProps({ testID: 'compact-status-0' }).props.name).toBe('help-circle-outline');
+    const measured = measureRegions(tree);
+    hold(measured.main, measured.positions['compact-status-0']);
+    expect(mockShow).toHaveBeenLastCalledWith('Unknown');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('only a primary glyph wider than the entire numeric rail uses the unsupported presentation warning', () => {
+  const primary = uiRate(0.115);
+  const layout = compactProductRowLayout(328, 2, primary, null,
+    { kind: 'LVR', known: true, value: uiLabel('LVR') }, 3, 225, 0, compactTierIndex({ ...row, rate_index: 172 }), true);
+  expect(layout.warningOnly).toBe(true);
+  expect(layout).toMatchObject({ primary: 224, identity: 0, facet: 0, showTier: false, showStatuses: false });
+  expect(railWidth(layout)).toBe(224);
+  mockDimensions = { ...mockDimensions, fontScale: 2 };
+  const tree = render({ ...row, comparison_rate: '0.115', rate_index: 172 });
+  try {
+    act(() => tree.root.findByProps({ testID: 'compact-primary-rate' }).props.onTextLayout({ nativeEvent: { lines: [{ width: 225 }] } }));
+    expect(tree.root.findAllByType('AppText').some(node => node.props.testID === 'compact-primary-rate')).toBe(false);
+    expect(mainTarget(tree).props.accessibilityLabel).toContain('Comparison rate 11.50%');
+    expect(tree.root.findAllByType('Icon').some(node => node.props.name === 'warning-outline')).toBe(true);
+  } finally { act(() => tree.unmount()); }
 });
