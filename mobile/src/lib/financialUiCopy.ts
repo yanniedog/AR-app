@@ -2,7 +2,7 @@ import type { ConditionalRateFact, ConditionalRatePresentation } from '../data/r
 import type { EvidenceFact, EvidencePresentation } from '../data/displayEvidenceFacts';
 import type { NumericConditionBoundary, PublishedNumericConditionFact } from '../data/scopedFinancialConditionFacts';
 import { advertisedTermMonths } from '../data/calc';
-import { parseLvrTier } from '../data/profile';
+import { parseLvrRange } from '../data/lvrRange';
 import type { RateRow } from '../types';
 import type { SelectedTargetConstraint } from './selectedTargetConstraints';
 import type { AccessAssessment, AccessCategory } from '../data/access';
@@ -90,17 +90,12 @@ export function uiConditionTag(fact: PublishedNumericConditionFact): UiText {
 }
 export function uiListedLvrRange(row: Pick<RateRow, 'lvr_tier'>): UiText {
   const value = row.lvr_tier?.trim() ?? '';
-  const catalogueBand = /^LVR_(\d+(?:\.\d+)?)_(\d+(?:\.\d+)?)$/i.exec(value);
-  const upper = /^(?:LVR_)?(?:LE|<=|≤)(\d+(?:\.\d+)?)(?:%)?$/i.exec(value);
-  const ordinary = /^(?:LVR_)?(?:=?\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?|>\d+(?:\.\d+)?|\d+(?:\.\d+)?\+)%?$/i.test(value);
-  // The catalogue's underscore spelling represents the same (lo, hi] band
-  // as the existing hyphen spelling; this affects presentation only.
-  const range = catalogueBand ? { lo: Number(catalogueBand[1]), hi: Number(catalogueBand[2]) }
-    : upper ? { lo: 0, hi: Number(upper[1]) } : ordinary ? parseLvrTier(value) : null;
-  if (!range || !Number.isFinite(range.lo) || range.lo < 0 || range.lo > 100 || range.hi < range.lo
-    || (Number.isFinite(range.hi) && range.hi > 100)) return uiLabel('Unverified');
-  return numericRange(range.lo > 0 ? { state: 'known', value: range.lo, inclusive: false } : { state: 'unspecified' },
-    Number.isFinite(range.hi) ? { state: 'known', value: range.hi, inclusive: true } : { state: 'unspecified' }, 'percent');
+  // Keep malformed percent placement out of structured display facts.
+  if (/%(?!\s*(?:[-–_]|$))/.test(value)) return uiLabel('Unverified');
+  const range = parseLvrRange(value);
+  if (!range) return uiLabel('Unverified');
+  return numericRange(range.lo > 0 ? { state: 'known', value: range.lo, inclusive: range.inclusive } : { state: 'unspecified' },
+    Number.isFinite(range.hi) ? { state: 'known', value: range.hi, inclusive: range.hiInclusive !== false } : { state: 'unspecified' }, 'percent');
 }
 export function uiListedLvr(row: Pick<RateRow, 'lvr_tier'>): UiText { return uiJoin('Listed LVR', ' ', uiListedLvrRange(row)); }
 export function uiPublishedTerm(row: RateRow): UiText { const months = advertisedTermMonths(row); return months === null ? uiJoin('Term', ' ', 'Unknown') : uiDuration(months, 'months'); }
