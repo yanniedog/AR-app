@@ -167,6 +167,7 @@ test('a later failed audit shows its own upload status while keeping the earlier
   mockUploadBusy = true; mockUpload = { sessionId, phase: 'uploading' };
   act(() => failPerformanceAudit('later failure'));
   expect(getPerformanceAuditState().report).toBe(prior);
+  expect(tree!.root.findByProps({ label: 'Report', value: 'Saved' })).toBeDefined();
   expect(tree!.root.findByProps({ children: 'Uploading' })).toBeDefined();
   expect(tree!.root.findByProps({ title: 'Upload report' }).props.disabled).toBe(true);
 });

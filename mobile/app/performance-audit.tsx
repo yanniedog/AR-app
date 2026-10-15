@@ -346,6 +346,8 @@ function PerformanceAuditScreenInner() {
         </Card>
         <Card style={{ gap: 8,borderWidth:1,borderColor:summaryColor }}>
           <Row style={{justifyContent:'space-between'}}><AppText variant="h3">{uiLabel('Diagnosis')}</AppText><AppText style={{color:summaryColor}}>{outcome(report.summary.overall)}</AppText></Row>
+          <InfoRow label="Report" value={report.sessionId === state.sessionId ? 'Complete' : 'Saved'} />
+          <InfoRow label="As at" value={uiDate(report.finishedAt)} />
           <InfoRow label="Good" value={uiCount(report.summary.pass)} />
           <InfoRow label="Needs review" value={uiCount(report.summary.warn)} />
           <InfoRow label="Failed" value={uiCount(report.summary.fail)} />
