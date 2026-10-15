@@ -30,18 +30,25 @@ export async function clearCompletedPerformanceAudit(): Promise<void> {
 export async function loadCompletedPerformanceAudit(): Promise<PerformanceAuditReport | null> {
   if (!FileSystem.documentDirectory) return null;
   await writes.catch(() => {});
-  let report: PerformanceAuditReport;
+  let primaryError: unknown;
   if ((await FileSystem.getInfoAsync(FILE)).exists) {
-    report = JSON.parse(await FileSystem.readAsStringAsync(FILE));
-  } else {
-    // Recover audits completed before the dedicated recovery file was added.
-    const previous = `${FileSystem.documentDirectory}logs/ar-performance-audit-latest.json`;
-    if (!(await FileSystem.getInfoAsync(previous)).exists) return null;
-    const stored = JSON.parse(await FileSystem.readAsStringAsync(previous));
-    if (typeof stored.summaryMarker !== 'string' || stored.summaryMarker.includes('partial=true') ||
-        typeof stored.reportJson !== 'string') return null;
-    report = JSON.parse(stored.reportJson);
+    try { return validateCompletedReport(JSON.parse(await FileSystem.readAsStringAsync(FILE))); }
+    catch (error) { primaryError = error; }
   }
+  // Recover pre-upgrade reports and interrupted writes from the canonical sidecar.
+  const previous = `${FileSystem.documentDirectory}logs/ar-performance-audit-latest.json`;
+  if ((await FileSystem.getInfoAsync(previous)).exists) {
+    const stored = JSON.parse(await FileSystem.readAsStringAsync(previous));
+    if (typeof stored.summaryMarker === 'string' && !stored.summaryMarker.includes('partial=true') &&
+        typeof stored.reportJson === 'string') return validateCompletedReport(JSON.parse(stored.reportJson));
+  }
+  if (primaryError) throw primaryError;
+  return null;
+}
+
+function validateCompletedReport(value: unknown): PerformanceAuditReport {
+  if (!value || typeof value !== 'object') throw new Error('The saved completed audit is invalid.');
+  const report = value as PerformanceAuditReport;
   if (report.schemaVersion !== PERFORMANCE_AUDIT_SCHEMA_VERSION || typeof report.sessionId !== 'string' ||
       !report.app || !report.environment || !report.summary || !report.watchdog ||
       !Array.isArray(report.checks) || !report.checks.every(check => check && typeof check.id === 'string' && check.metrics)) {

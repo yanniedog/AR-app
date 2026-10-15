@@ -6,12 +6,14 @@ import PerformanceAuditScreen from '../app/performance-audit';
 import { getPerformanceAuditState, completePerformanceAudit, failPerformanceAudit, markPerformanceAuditCancelled, resetPerformanceAuditForTests, PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY } from '../src/lib/performanceAudit';
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
+import type { DebugLogUploadSnapshot } from '../src/lib/debugLogSharing';
 
 type Node = { props: Record<string, any>; findByProps: (props: Record<string, unknown>) => Node };
 type Renderer = ReactTestRenderer & { root: Node };
 const mockHydratedDownload = jest.fn();
 const mockDownload = { phase: 'idle' };
-let mockUpload: { sessionId: string | null; phase: 'idle' | 'uploading' } = { sessionId: null, phase: 'idle' };
+let mockUpload: Partial<DebugLogUploadSnapshot> & Pick<DebugLogUploadSnapshot, 'sessionId' | 'phase'> = { sessionId: null, phase: 'idle' };
+const mockRetry = jest.fn(async (_options: unknown) => {});
 const mockPassive = { completed: 0, total: 0, linksCompleted: 0, linksTotal: 0, nativeStatus: 'unavailable' };
 let mockUploadBusy = false;
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined) }));
@@ -20,6 +22,7 @@ jest.mock('../src/lib/appUpdate', () => ({
 }));
 jest.mock('../src/lib/debugLogSharing', () => ({
   getDebugLogUploadSnapshot: () => mockUpload, isDebugLogUploadBusy: () => mockUploadBusy, subscribeDebugLogUpload: () => () => undefined,
+  retryDebugLogUpload: (options: unknown) => mockRetry(options),
 }));
 jest.mock('../src/lib/performanceAuditSharing', () => ({
   restorePerformanceAuditUpload: jest.fn(async () => {}), uploadCompletedPerformanceAudit: jest.fn(async () => {}),
@@ -177,4 +180,19 @@ test('Back during deferred preflight does not queue an audit or upload after the
   await act(async () => { finish(mockDownload); });
   expect(getPerformanceAuditState().status).toBe('idle');
   expect(uploadCompletedPerformanceAudit).not.toHaveBeenCalled();
+});
+
+test('rendered failure and success controls retain the diagnosis while retrying or copying a known link', async () => {
+  await mount(); await press('Run audit');
+  const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
+  mockUpload = { sessionId: report.sessionId, phase: 'failed', verified: false, mayHaveUploaded: false };
+  act(() => completePerformanceAudit(report));
+  await press('Retry upload');
+  expect(mockRetry).toHaveBeenCalledWith({ acceptDuplicateRisk: false });
+  expect(getPerformanceAuditState()).toMatchObject({ status: 'complete', report });
+  mockUpload = { ...mockUpload, phase: 'copied', verified: true, url: 'https://paste.c-net.org/fixture' };
+  act(() => completePerformanceAudit(report));
+  expect(tree!.root.findByProps({ children: 'https://paste.c-net.org/fixture' })).toBeDefined();
+  await press('Copy link');
+  expect(getPerformanceAuditState().report).toBe(report);
 });

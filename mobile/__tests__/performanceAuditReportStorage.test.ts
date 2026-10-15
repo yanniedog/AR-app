@@ -33,6 +33,13 @@ test('a previous partial audit is never promoted to a completed report', async (
   expect(await loadCompletedPerformanceAudit()).toBeNull();
 });
 
+test('an interrupted recovery-file write falls back to the complete canonical report', async () => {
+  const report = makePerformanceAuditReport();
+  files.set(path, '{truncated');
+  files.set('file:///docs/logs/ar-performance-audit-latest.json', JSON.stringify({ summaryMarker: 'PERFORMANCE_AUDIT_SUMMARY', reportJson: JSON.stringify(report) }));
+  expect(await loadCompletedPerformanceAudit()).toEqual(report);
+});
+
 test('Clear waits for a pending write and deletes the finished report without resurrection', async () => {
   let finish!: () => void;
   jest.mocked(FileSystem.writeAsStringAsync).mockImplementationOnce(async (file, body) => {
