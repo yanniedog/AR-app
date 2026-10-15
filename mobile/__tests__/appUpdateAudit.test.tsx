@@ -10,6 +10,7 @@ import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceCont
 import { readAppUpdateMetadata } from '../src/lib/appUpdateMetadata';
 import { TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256, type ApkManifest } from '../src/lib/appUpdateLogic';
 import { runLiveUpdateReadiness } from '../src/lib/performanceAuditUpdate';
+import { ANDROID_UPDATE_READINESS_AUDIT, dedicatedPerformanceAuditChecks } from '../src/lib/performanceAuditCheckInventory';
 import { checkForAppUpdate, ensureApkBackgroundDownload, upgradeFromBackgroundDownload } from '../src/lib/appUpdate';
 import { APK_MANIFEST_URL, APK_ARM_MANIFEST_URL } from '../src/config';
 
@@ -241,7 +242,12 @@ test('the driver waits for native layout of the committed result, rejecting init
   expect(measured.surfaces[0].probes.find(probe => probe.id === 'app-update.layout')?.renderRevision)
     .toBe(measured.surfaces[0].renderRevision);
   await act(async () => { await jest.advanceTimersByTimeAsync(700); await outcome; });
-  expect(result).toMatchObject({ id: 'update-readiness', status: 'pass', metrics: {
+  const [owner] = dedicatedPerformanceAuditChecks('android');
+  expect(owner).toBe(ANDROID_UPDATE_READINESS_AUDIT);
+  expect(result).toMatchObject({ id: owner.checkId, status: 'pass', metrics: {
+    ownerCheckId: owner.checkId, semanticActionId: owner.semanticActionId,
+    expectedSurface: owner.expectedSurface, expectedPath: owner.expectedPath,
+    executionPhase: owner.phase, transportScope: owner.transportScope,
     executionAttempted: true, actionInvoked: true, actionCompleted: true, durationMayUseTtlCache: false,
     updateMetadataTransportCalls: 1, readinessPendingRequiredProbeCount: 0,
   } });

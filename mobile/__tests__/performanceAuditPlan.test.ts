@@ -11,6 +11,8 @@ import {
   type DeepAuditStep,
 } from '../src/lib/performanceAuditPlan';
 import type { CorePayload, RateRow, Ribbon } from '../src/types';
+import { ANDROID_UPDATE_READINESS_AUDIT, PERFORMANCE_AUDIT_DEDICATED_CHECKS,
+  dedicatedPerformanceAuditChecks } from '../src/lib/performanceAuditCheckInventory';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
@@ -201,10 +203,29 @@ describe('deep performance audit plan', () => {
     visitRoutes(path.join(mobileRoot, 'app'));
     registered.delete('calculator.section.next');
     registered.delete('changes.open'); // Alias of the canonical Market entry.
-    const planned = new Set(allSteps().filter(item => item.passId === 'first-pass'
+    const generic = new Set(allSteps().filter(item => item.passId === 'first-pass'
       && !item.semanticActionId.startsWith('redirect.')).map(item => item.semanticActionId));
+    const ownedActions = PERFORMANCE_AUDIT_DEDICATED_CHECKS.map(owner => owner.semanticActionId);
+    expect(new Set(ownedActions).size).toBe(ownedActions.length);
+    expect(ownedActions.filter(action => generic.has(action))).toEqual([]);
+    const planned = new Set([...generic, ...ownedActions]);
     expect([...registered].filter(action => !planned.has(action))).toEqual([]);
     expect([...planned].filter(action => !registered.has(action))).toEqual([]);
+  });
+
+  test('assigns the session-bound update action to one separately measured platform check', () => {
+    const owners = dedicatedPerformanceAuditChecks('android');
+    expect(owners).toEqual([ANDROID_UPDATE_READINESS_AUDIT]);
+    expect(new Set(owners.map(owner => owner.checkId)).size).toBe(owners.length);
+    expect(owners[0]).toEqual({
+      checkId: 'update-readiness', semanticActionId: 'settings.update.check',
+      expectedPath: '/settings', expectedSurface: 'settings.app-update', kind: 'update',
+      platform: 'android', executionMode: 'live-source', phase: 'after-journeys', transportScope: 'app-update-metadata',
+    });
+    for (const platform of ['ios', 'web']) expect(dedicatedPerformanceAuditChecks(platform)).toEqual([]);
+    // Generic passes have no session/AbortSignal or temporary metadata capability.
+    // The separately scheduled owner is their exclusive executor.
+    expect(allSteps().filter(step => step.semanticActionId === owners[0].semanticActionId)).toEqual([]);
   });
 
   test('waits on real canonical destinations for controls and compatibility entries', () => {

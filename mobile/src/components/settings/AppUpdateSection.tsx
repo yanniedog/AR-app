@@ -25,6 +25,7 @@ import { getPerformanceAuditState, subscribePerformanceAudit } from '../../lib/p
 import { readAppUpdateMetadata, type AppUpdateAuditRequest } from '../../lib/appUpdateMetadata';
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
 import { usePerformanceAuditSurface } from '../../hooks/usePerformanceAuditReadiness';
+import { ANDROID_UPDATE_READINESS_AUDIT } from '../../lib/performanceAuditCheckInventory';
 import { DisclosureGroup, InfoRow, Section, SettingsGap, ToggleRow } from './settingsUi';
 import { uiJoin, uiIdentifier, uiNumber, type UiCopy } from '../../lib/uiCopy';
 
@@ -76,7 +77,7 @@ export function AppUpdateSection({
     const request = raw as Partial<AppUpdateAuditRequest> | null;
     const current = getPerformanceAuditState();
     if (!SELF_UPDATE_ENABLED || Platform.OS !== 'android' || !request ||
-        current.status !== 'running' || current.auditMode !== 'live-source' ||
+        current.status !== 'running' || current.auditMode !== ANDROID_UPDATE_READINESS_AUDIT.executionMode ||
         request.sessionId !== current.sessionId || !request.signal ||
         typeof request.signal.addEventListener !== 'function' || request.signal.aborted ||
         typeof request.remainingMs !== 'function' || request.remainingMs() <= 0) {
@@ -179,9 +180,13 @@ export function AppUpdateSection({
     }
   }, [auditOwnsNetwork, autoDownload, runAuditCheck, wifiOnly]);
 
-  const updateActions = useMemo(() => ({ 'settings.update.check': (request: unknown) => runCheck(true, request) }), [runCheck]);
+  const updateActions = useMemo<Record<typeof ANDROID_UPDATE_READINESS_AUDIT.semanticActionId,
+    (request: unknown) => ReturnType<typeof runCheck>>>(() => ({
+    'settings.update.check': (request: unknown) => runCheck(true, request),
+  }), [runCheck]);
   usePerformanceAuditSurface({
-    id: 'settings.app-update', routeKey: '/settings', renderRevision, actions: updateActions,
+    id: ANDROID_UPDATE_READINESS_AUDIT.expectedSurface, routeKey: ANDROID_UPDATE_READINESS_AUDIT.expectedPath,
+    renderRevision, actions: updateActions,
     probes: [
       { id: 'app-update.result', kind: 'data', required: false,
         status: ownAuditResult && error ? 'error' : ownAuditResult && !checking && checkResult ? 'ready' : 'pending',

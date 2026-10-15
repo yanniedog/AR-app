@@ -36,6 +36,8 @@ import {
 } from '../lib/appUpdate';
 import { blocksPerformanceAudit } from '../lib/appUpdateDownloadLogic';
 import { APP_UPDATE_AUDIT_SURFACE, runLiveUpdateReadiness } from '../lib/performanceAuditUpdate';
+import { ANDROID_UPDATE_READINESS_AUDIT, dedicatedPerformanceAuditChecks,
+  type DedicatedPerformanceAuditCheck } from '../lib/performanceAuditCheckInventory';
 import {
   CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
   type AppHealthAuditMode,
@@ -152,8 +154,8 @@ const ROUTE_DWELL_MS = 350;
 const READINESS_QUIET_WINDOW_MS = 650;
 const RUNTIME_SAMPLE_MS = 1_250;
 // Maximum-profile preparation, runtime, storage, filesystem, log I/O, payload,
-// network, update readiness, and durable audit-state restoration.
-const FIXED_BENCHMARK_CHECKS = 10;
+// network, and durable audit-state restoration. Dedicated owners add their own checks.
+const FIXED_BENCHMARK_CHECKS = 9;
 const STORAGE_KEY_PREFIX = '@ar/performance-audit/';
 const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
@@ -2013,22 +2015,22 @@ async function runUpdateReadinessCheck(
   transport: AppHealthTransportGuard,
   currentPath: () => string,
 ): Promise<AuditCheck> {
-  if (mode === 'live-source') {
+  if (mode === ANDROID_UPDATE_READINESS_AUDIT.executionMode) {
     const started = now();
     try {
       return await runLiveUpdateReadiness({
         app, download, watchdog, transport,
         assertActive: () => assertSessionActive(watchdog),
         openSettings: async () => {
-          router.push('/settings');
-          await waitForPath(currentPath, '/settings', 'Android update readiness', { watchdog });
+          router.push(ANDROID_UPDATE_READINESS_AUDIT.expectedPath);
+          await waitForPath(currentPath, ANDROID_UPDATE_READINESS_AUDIT.expectedPath, 'Android update readiness', { watchdog });
         },
       });
     } catch (caught) {
       rethrowAuditControl(caught);
       assertAuditActive();
       return {
-        id: 'update-readiness', label: 'Android update manifest and rendered readiness', kind: 'update',
+        id: ANDROID_UPDATE_READINESS_AUDIT.checkId, label: 'Android update manifest and rendered readiness', kind: ANDROID_UPDATE_READINESS_AUDIT.kind,
         status: 'fail', durationMs: roundMetric(now() - started),
         metrics: { executionAttempted: true, durationMayUseTtlCache: false,
           ...readinessMetrics(performanceAuditReadinessRegistry.snapshot([APP_UPDATE_AUDIT_SURFACE])) },
@@ -2039,7 +2041,7 @@ async function runUpdateReadinessCheck(
   const installed = { version: app.appVersion, buildNumber: app.buildVersion };
   assertSessionActive(watchdog);
   return {
-    id: 'update-readiness',
+    id: ANDROID_UPDATE_READINESS_AUDIT.checkId,
     label: 'Android update state (local snapshot)',
     kind: 'update',
     status: 'skipped',
@@ -2632,7 +2634,8 @@ export function PerformanceAuditRunner() {
       const templates = buildPerformanceAuditSetupPlans(null, { seed: sessionId }, SECTION_ORDER);
       let plan = templates.plan;
       let navigationJourneys = templates.journeys;
-      const platformBenchmarkChecks = FIXED_BENCHMARK_CHECKS + PERFORMANCE_AUDIT_SETUP_CHECK_IDS.length - (Platform.OS === 'android' ? 0 : 1);
+      const dedicatedChecks = dedicatedPerformanceAuditChecks(Platform.OS);
+      const platformBenchmarkChecks = FIXED_BENCHMARK_CHECKS + PERFORMANCE_AUDIT_SETUP_CHECK_IDS.length + dedicatedChecks.length;
       const collectExternalLinks = createExternalAuditLinkCollector();
       let externalLinks: TrustedExternalUrlRequest[] = [];
       // The full inventory is prepared after payload work settles, inside the
@@ -3296,19 +3299,17 @@ export function PerformanceAuditRunner() {
 
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
-        if (Platform.OS === 'android') {
+        const dedicatedHandlers: Record<DedicatedPerformanceAuditCheck['checkId'],
+          (stepWatchdog: PerformanceAuditInactivityWatchdog) => Promise<AuditCheck>> = {
+          [ANDROID_UPDATE_READINESS_AUDIT.checkId]: stepWatchdog => runUpdateReadinessCheck(
+            app, monitor, stepWatchdog, auditApkDownloadSnapshot, auditMode, transportGuard, () => pathnameRef.current,
+          ),
+        };
+        for (const owner of dedicatedChecks) {
           updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
           await recordContinuable(
             'Inspecting Android update readiness',
-            (watchdog) => runUpdateReadinessCheck(
-              app,
-              monitor,
-              watchdog,
-              auditApkDownloadSnapshot,
-              auditMode,
-              transportGuard,
-              () => pathnameRef.current,
-            ),
+            dedicatedHandlers[owner.checkId],
           );
           assertSessionActive(watchdog);
           assertDatasetRevision(datasetRevision);
@@ -3439,7 +3440,7 @@ export function PerformanceAuditRunner() {
           'debug-log-io',
           'active-data',
           'manifest-network',
-          ...(Platform.OS === 'android' ? ['update-readiness'] : []),
+          ...dedicatedChecks.map(owner => owner.checkId),
           'audit-state-restoration',
         ];
         const plannedIdSet = new Set(plannedCheckIds);

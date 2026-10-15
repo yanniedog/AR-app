@@ -7,9 +7,10 @@ import {
 } from './performanceAudit';
 import type { ApkDownloadSnapshot } from './appUpdateDownloadLogic';
 import type { AppHealthTransportGuard } from './appHealthTransportGuard';
+import { ANDROID_UPDATE_READINESS_AUDIT } from './performanceAuditCheckInventory';
 
-export const APP_UPDATE_AUDIT_SURFACE = 'settings.app-update';
-export const APP_UPDATE_AUDIT_ACTION = 'settings.update.check';
+export const APP_UPDATE_AUDIT_SURFACE = ANDROID_UPDATE_READINESS_AUDIT.expectedSurface;
+export const APP_UPDATE_AUDIT_ACTION = ANDROID_UPDATE_READINESS_AUDIT.semanticActionId;
 
 /** Measure the real Settings controller and its committed, natively laid-out result. */
 export async function runLiveUpdateReadiness(options: {
@@ -64,12 +65,14 @@ export async function runLiveUpdateReadiness(options: {
       }
       assertActive();
       return {
-        id: 'update-readiness', label: 'Android update manifest and rendered readiness', kind: 'update',
+        id: ANDROID_UPDATE_READINESS_AUDIT.checkId, label: 'Android update manifest and rendered readiness', kind: ANDROID_UPDATE_READINESS_AUDIT.kind,
         status: result.status === 'incompatible' ? 'warn' : 'pass',
         durationMs: roundMetric(globalThis.performance.now() - started),
         metrics: {
           executionAttempted: true, actionInvoked: true, actionCompleted: true,
-          measurementMode: 'semantic-action', expectedPath: '/settings', expectedSurface: APP_UPDATE_AUDIT_SURFACE,
+          ownerCheckId: ANDROID_UPDATE_READINESS_AUDIT.checkId, semanticActionId: APP_UPDATE_AUDIT_ACTION,
+          executionPhase: ANDROID_UPDATE_READINESS_AUDIT.phase, transportScope: ANDROID_UPDATE_READINESS_AUDIT.transportScope,
+          measurementMode: 'semantic-action', expectedPath: ANDROID_UPDATE_READINESS_AUDIT.expectedPath, expectedSurface: APP_UPDATE_AUDIT_SURFACE,
           actionSource: APP_UPDATE_AUDIT_SURFACE,
           actionRevisionBefore: previous.actionRevision, actionRevisionAfter: completion.actionRevision,
           renderRevisionBefore: previous.renderRevision,
