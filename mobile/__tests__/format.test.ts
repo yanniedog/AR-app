@@ -88,6 +88,13 @@ describe('format', () => {
     expect(humanizeEnum('')).toBe('');
   });
 
+  test('known bundle-rate enums have concise labels without admitting arbitrary source copy', () => {
+    expect(humanizeEnum('BUNDLE_DISCOUNT_FIXED')).toBe('Fixed · bundle');
+    expect(humanizeEnum('BUNDLE_DISCOUNT_VARIABLE')).toBe('Variable · bundle');
+    expect(humanizeEnum('BUNDLE_DISCOUNT_OTHER')).toBe('BUNDLE_DISCOUNT_OTHER');
+    expect(humanizeEnum('Bundle discount offers special pricing')).toBe('Unknown');
+  });
+
   test('formatBalanceRange', () => {
     expect(formatBalanceRange('0', '50000')).toBe('$0–$50k');
     expect(formatBalanceRange('250000', '')).toBe('$250k+');

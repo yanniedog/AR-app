@@ -8,6 +8,7 @@ import { DEFAULT_PREFS, CURRENT_PRIVACY_CHOICE_VERSION, type Prefs } from '../sr
 import { ensurePermissions } from '../src/data/notifications';
 import { authenticateBiometric, biometricsAvailable } from '../src/lib/appLock';
 import { setCrashReportsEnabled } from '../src/lib/observability';
+import { UI_LABELS } from '../src/lib/uiCopy';
 
 const mockSetPref = jest.fn();
 const mockSetPrefs = jest.fn();
@@ -82,6 +83,24 @@ beforeEach(() => {
   jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 });
 afterEach(() => { if (tree) act(() => tree!.unmount()); tree = undefined; jest.restoreAllMocks(); });
+
+test('ranking controls retain their actual preferences without explanatory definition rows', () => {
+  mountSettings();
+  for (const copy of ['Base / headline', 'Ongoing / bonus + intro', 'Headline / comparison', 'Advertised / published costs']) {
+    expect(JSON.stringify(tree!.toJSON())).not.toContain(copy);
+    expect(UI_LABELS).not.toContain(copy);
+  }
+  const deposit = tree!.root.findByProps({ value: mockStore.prefs.depositRankMetric });
+  expect(deposit.props.options).toEqual([{ value: 'base', label: 'Base rate' }, { value: 'max', label: 'Headline rate' }]);
+  act(() => deposit.props.onChange('max'));
+  expect(mockSetPref).toHaveBeenLastCalledWith('depositRankMetric', 'max');
+  expect(mockStore.prefs.depositRankMetric).toBe('max');
+  const mortgage = tree!.root.findByProps({ value: mockStore.prefs.mortgageRateMetric });
+  expect(mortgage.props.options).toEqual([{ value: 'headline', label: 'Headline rate' }, { value: 'comparison', label: 'Comparison rate' }]);
+  act(() => mortgage.props.onChange('headline'));
+  expect(mockSetPref).toHaveBeenLastCalledWith('mortgageRateMetric', 'headline');
+  expect(mockStore.prefs.mortgageRateMetric).toBe('headline');
+});
 
 test('two immediate app-lock changes start one availability check and one authenticated write', async () => {
   const availability = deferred<boolean>();

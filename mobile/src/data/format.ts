@@ -57,6 +57,7 @@ const ENUM_LABEL_OVERRIDES: Readonly<Record<string, UiLabel>> = {
   OWNER_OCCUPIED: 'Owner occupied', OWNER_OCCUPIER: 'Owner occupied', OO: 'Owner occupied',
   INVESTOR: 'Investor', INVESTMENT: 'Investor', INV: 'Investor',
   VARIABLE: 'Variable', FIXED: 'Fixed', BASE: 'Ongoing', BONUS: 'Bonus rate', INTRO: 'Introductory', INTRODUCTORY: 'Introductory',
+  BUNDLE_DISCOUNT_FIXED: 'Fixed · bundle', BUNDLE_DISCOUNT_VARIABLE: 'Variable · bundle',
   MONTHLY: 'Monthly', AT_MATURITY: 'at maturity', LVR: 'LVR', TD: 'TD',
   SAVINGS: 'Savings', STANDARD: 'Standard', ANNUALLY: 'Annually', BASIC: 'Basic',
   MIN_AGE: 'Minimum age', MAX_AGE: 'Maximum age', MIN_BALANCE: 'Minimum balance', MAX_BALANCE: 'Maximum balance',

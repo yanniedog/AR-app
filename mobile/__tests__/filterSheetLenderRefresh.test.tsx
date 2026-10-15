@@ -3,7 +3,7 @@ import mockReact from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import { FilterSheet } from '../src/components/FilterSheet';
-import { EMPTY_FILTERS } from '../src/data/selectors';
+import { EMPTY_FILTERS, filterRows } from '../src/data/selectors';
 import { prepareSearchFilterOptions } from '../src/data/searchFilterOptions';
 import bundledCore from '../assets/sample/core.json';
 import type { RateRow } from '../src/types';
@@ -111,6 +111,33 @@ test('the real bundled OTHER purpose chip applies the publisher code without rew
     act(() => tree.root.findAll(node => node.type === 'Button' && node.props.title === 'Apply')[0].props.onPress!());
     expect(onApply).toHaveBeenCalledTimes(1);
     expect(onApply.mock.calls[0][0].loanPurposes).toEqual(['OTHER']);
+    expect(JSON.stringify(rows)).toBe(original);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('bundle-rate chip labels preserve the exact raw selections and filter membership', async () => {
+  const codes = ['BUNDLE_DISCOUNT_FIXED', 'BUNDLE_DISCOUNT_VARIABLE', 'FIXED'];
+  const rows: RateRow[] = codes.map((rate_type, index) => ({ provider: 'Bank', product_name: `Loan ${index}`,
+    product_key: `loan-${index}`, rate: '0.05', rate_type }));
+  const original = JSON.stringify(rows);
+  const options = (await prepareSearchFilterOptions(rows, null, 'Mortgage', { yieldControl: async () => {} }))!;
+  const onApply = jest.fn();
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<FilterSheet visible onClose={jest.fn()} onApply={onApply}
+    filters={{ ...EMPTY_FILTERS, includeNonStandard: true }} options={options} />) as InspectableRenderer; });
+  try {
+    const chip = (label: string) => tree.root.findAll(node => node.type === 'Chip' && node.props.label === label)[0];
+    for (const label of ['Fixed · bundle', 'Variable · bundle']) {
+      expect(chip(label)).toBeDefined();
+      expect(chip(label).props.selected).toBe(false);
+      act(() => chip(label).props.onPress!());
+      expect(chip(label).props.selected).toBe(true);
+    }
+    expect(chip('Fixed').props.selected).toBe(false);
+    act(() => tree.root.findAll(node => node.type === 'Button' && node.props.title === 'Apply')[0].props.onPress!());
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply.mock.calls[0][0].rateTypes).toEqual(codes.slice(0, 2));
+    expect(filterRows(rows, onApply.mock.calls[0][0]).map(row => row.rate_type)).toEqual(codes.slice(0, 2));
     expect(JSON.stringify(rows)).toBe(original);
   } finally { act(() => tree.unmount()); }
 });
