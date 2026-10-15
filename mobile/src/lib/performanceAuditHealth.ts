@@ -299,9 +299,12 @@ export function appHealthSurfaceContracts(
   if (dedicatedContext) {
     const recordedIds = new Set(dedicatedContext.performanceChecks.map(check => check.id));
     for (const owner of PERFORMANCE_AUDIT_DEDICATED_CHECKS) {
-      if (recordedIds.has(owner.checkId)) {
-        // Android Settings mounts this layout even when Local mode suppresses
-        // metadata. Live requires the owner's actual result model as well.
+      const observed = dedicatedContext.performanceChecks.some(check =>
+        typeof check.metrics.readinessEvidence === 'string' &&
+        check.metrics.readinessEvidence.includes(`${owner.expectedSurface}:`));
+      if (recordedIds.has(owner.checkId) && (dedicatedContext.mode === owner.executionMode || observed)) {
+        // A local snapshot never navigates to this dedicated live surface.
+        // Require layout when actually observed; live must always supply it.
         include(owner.expectedSurface, [], dedicatedContext.mode === owner.executionMode);
       }
     }

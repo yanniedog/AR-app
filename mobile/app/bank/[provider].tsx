@@ -35,6 +35,7 @@ import {
 } from '../../src/data/productHistory';
 import { excludeTokenDepositRates, sortRows } from '../../src/data/selectors';
 import { rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
+import { rowsForProductKey, rowsForProvider } from '../../src/data/rateRowIndex';
 import { useStore } from '../../src/data/store';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
@@ -181,6 +182,7 @@ export default function BankDetail() {
   // so opening a bank from Outlook never stalls on a multi‑MB store update.
   const [productHistoryReady, setProductHistoryReady] = useState(false);
   const productHistory = useStore((s) => (productHistoryReady ? s.productHistory : null));
+  const hasProductHistory = productHistory != null;
   const insightsRequestKey = useRef<string | null>(null);
   const historyRequestKey = useRef<string | null>(null);
   const scrollRef = useRef<FlashListRef<LenderProductItem>>(null);
@@ -190,6 +192,9 @@ export default function BankDetail() {
   const [layoutReady, setLayoutReady] = useState(false);
   const [historyGraphicEvidence, setHistoryGraphicEvidence] =
     useState<HistoryGraphicEvidence | null>(null);
+  const lenderRow = useMemo(() => core ? SECTION_ORDER.map(section =>
+    rowsForProvider(core.sections[section].rates, provider)[0]).find(row => row != null) : undefined,
+  [core, provider]);
 
   const rawBankEvents = useMemo(
     () => recentBankEvents(bankInsights, { provider }),
@@ -254,7 +259,7 @@ export default function BankDetail() {
     for (const section of SECTION_ORDER) {
       const rows = excludeTokenDepositRates(
         visibleAccountRows(
-          core.sections[section]?.rates?.filter((r) => r.provider === provider) ?? [],
+          rowsForProvider(core.sections[section]?.rates ?? [], provider),
           includeNonStandard,
           detailsProducts,
         ),
@@ -276,6 +281,7 @@ export default function BankDetail() {
     // rate represented by the product-key history ledger. Withhold ambiguous
     // base/bonus or comparison-selected rows rather than misattribute a move.
     const out: Partial<Record<SectionKey, ProductMoveCatalogEntry[]>> = {};
+    if (!showBankInsights || !hasProductHistory) return out;
     for (const { section, rows } of bySection) {
       out[section] = rows.flatMap((row) => {
         if (!productHistoryRepresentsRateRow(core, row)) return [];
@@ -287,7 +293,7 @@ export default function BankDetail() {
       });
     }
     return out;
-  }, [bySection, core]);
+  }, [bySection, core, hasProductHistory, showBankInsights]);
 
   const visibleBankInsights = useMemo(
     () =>
@@ -453,7 +459,7 @@ export default function BankDetail() {
       const productKey = auditActionString(args, 'productKey');
       const rateIndex = auditActionInteger(args, 'rateIndex');
       const exact = SECTION_ORDER
-        .flatMap((section) => core?.sections[section].rates ?? [])
+        .flatMap((section) => rowsForProductKey(core?.sections[section].rates ?? [], productKey ?? ''))
         .find((candidate) => candidate.product_key === productKey &&
           candidate.provider === provider &&
           (rateIndex == null || candidate.rate_index === rateIndex));
@@ -596,7 +602,6 @@ export default function BankDetail() {
   });
 
   if (!core) return <ScreenSkeleton />;
-  const lenderRow=SECTION_ORDER.map(section=>core.sections[section].rates.find(row=>row.provider===provider)).find(row=>row!=null);
   const lenderName=lenderRow?uiProviderName(lenderRow):uiLabel('Bank');
   const direction=(value:BankRateEvent['dir']):UiCopy=>value==='hike'?'Increase':value==='cut'?'Decrease':'Mixed';
 

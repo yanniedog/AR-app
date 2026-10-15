@@ -1,6 +1,7 @@
 import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter';
 import type { CorePayload, RateRow, SectionKey } from '../types';
 import { toFraction } from './format';
+import { rowsForProductKey } from './rateRowIndex';
 
 export interface SavedRateRef {
   schemaVersion: 1;
@@ -173,8 +174,7 @@ export function resolveSavedRates(core: CorePayload, refs: readonly SavedRateRef
   for (const ref of refs) {
     let fallback: ResolvedSavedRate | null = null;
     for (const [section, data] of Object.entries(core.sections) as [SectionKey, CorePayload['sections'][SectionKey]][]) {
-      for (const row of data?.rates ?? []) {
-        if (row.product_key !== ref.productKey) continue;
+      for (const row of rowsForProductKey(data?.rates ?? [], ref.productKey)) {
         const candidate = { ref, row, section };
         if (
           ref.scope === 'rate' &&
