@@ -1,19 +1,81 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
-import { Animated, Keyboard, Modal, Text } from 'react-native';
+import * as ReactNative from 'react-native';
+import { Animated, Dimensions, Keyboard, Modal, Platform, StyleSheet, Text } from 'react-native';
 
-import { SheetSurface } from '../src/components/SheetSurface';
+import { SheetSurface, sheetBottomPadding } from '../src/components/SheetSurface';
 
 let mockReducedMotion: boolean | null = false;
+let mockBottomInset = 0;
 jest.mock('../src/hooks/useReducedMotion', () => ({ useReducedMotion: () => mockReducedMotion }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ ledger: { scrim: '#00000066', raised: '#fff' }, radius: { lg: 24 } }) }));
-jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: mockBottomInset, left: 0, right: 0 }) }));
 jest.mock('../src/components/ledger/LedgerText', () => ({ LedgerText: 'LedgerText' }));
 jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }));
 jest.mock('../src/components/icons/LedgerIcon', () => ({ LedgerIcon: 'LedgerIcon' }));
-type Renderer = ReactTestRenderer & { root: { findByType: (type: unknown) => { props: Record<string, any> } } };
+type Renderer = ReactTestRenderer & { root: {
+  findByType: (type: unknown) => { props: Record<string, any> };
+  findAllByProps: (props: Record<string, unknown>) => { props: Record<string, any> }[];
+} };
 
-afterEach(() => { jest.restoreAllMocks(); mockReducedMotion = false; });
+const originalOS = Platform.OS;
+afterEach(() => {
+  jest.restoreAllMocks();
+  mockReducedMotion = false;
+  mockBottomInset = 0;
+  Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOS });
+});
+
+test('Android footer retains physical-pixel clearance above the captured navigation boundary', () => {
+  mockReducedMotion = true;
+  mockBottomInset = 48;
+  const scale = 420 / 160;
+  Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+  jest.spyOn(ReactNative, 'useWindowDimensions').mockReturnValue({
+    ...Dimensions.get('window'), scale,
+  });
+  let tree!: Renderer;
+  act(() => {
+    tree = TestRenderer.create(<SheetSurface visible title="Filters" onClose={() => undefined}
+      footer={<Text>Show 9 rates</Text>}><Text>Lenders</Text></SheetSurface>) as Renderer;
+  });
+  try {
+    const surface = tree.root.findAllByProps({ accessibilityViewIsModal: true })[0];
+    const padding = StyleSheet.flatten(surface.props.style).paddingBottom as number;
+    // The retained 411 dp capture has a 2275 px action bottom and a 2274 px
+    // navigation boundary. Keep the entire 126 px target above that boundary.
+    const observedBottom = 2275;
+    const navigationTop = 2274;
+    const extraPaddingPx = Math.round((padding - mockBottomInset) * scale);
+    expect(navigationTop - (observedBottom - extraPaddingPx)).toBeGreaterThanOrEqual(1);
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each([1, 1.25, 1.5, 1.75, 2, 2.625, 2.75, 3, 3.5, 4])(
+  'Android footer clears native inset rounding at density %s within three extra pixels',
+  (scale) => {
+    for (const insetPx of [0, 1, 24, 63, 126]) {
+      // Safe-area-context converts native pixels to a float dp value before
+      // crossing the bridge; exercise both exact and float-rounded variants.
+      for (const inset of [insetPx / scale, Math.fround(insetPx / scale)]) {
+        const padding = sheetBottomPadding(inset, scale, 'android');
+        const paddingPx = padding * scale;
+        expect(paddingPx).toBeCloseTo(Math.round(paddingPx), 8);
+        expect(paddingPx).toBeLessThanOrEqual(Math.max(insetPx, 12 * scale) + 3.00001);
+        for (const pixelPhase of [-0.99, -0.5, 0, 0.49, 0.5, 0.99]) {
+          const nativeNavigationTop = 2400 - insetPx;
+          const roundedFooterBottom = Math.round(2400 + pixelPhase - paddingPx);
+          expect(nativeNavigationTop - roundedFooterBottom).toBeGreaterThanOrEqual(1);
+        }
+      }
+    }
+  },
+);
+
+test.each(['ios', 'web'] as const)('preserves existing %s sheet spacing', (platform) => {
+  expect(sheetBottomPadding(0, 2.625, platform)).toBe(12);
+  expect(sheetBottomPadding(34.5, 2.625, platform)).toBe(34.5);
+});
 
 test('interrupting a close with reopening cannot hide the reopened sheet', () => {
   const callbacks: ((result: { finished: boolean }) => void)[] = [];

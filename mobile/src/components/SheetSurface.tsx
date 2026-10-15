@@ -12,6 +12,14 @@ import { LedgerText } from './ledger/LedgerText';
 import { TouchTarget } from './TouchTarget';
 import { uiJoin, type UiCopy } from '../lib/uiCopy';
 
+export function sheetBottomPadding(bottomInset: number, scale: number, platform = Platform.OS): number {
+  const padding = Math.max(bottomInset, 12);
+  if (platform !== 'android') return padding;
+  // The inset bridge and native Modal can round opposite sides of a pixel.
+  // Round outwards, cover that one-pixel seam, then retain one pixel of clearance.
+  return (Math.ceil(padding * scale) + 2) / scale;
+}
+
 /** One interruptible native sheet layer, shared by filters and compact tasks. */
 export function SheetSurface({ visible, title, onClose, children, footer, style }: {
   visible: boolean;
@@ -24,7 +32,7 @@ export function SheetSurface({ visible, title, onClose, children, footer, style 
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
+  const { height, scale } = useWindowDimensions();
   const [mounted, setMounted] = useState(visible);
   const mountedRef = useRef(visible);
   const progress = useRef(new Animated.Value(0)).current;
@@ -89,7 +97,7 @@ export function SheetSurface({ visible, title, onClose, children, footer, style 
             backgroundColor: theme.ledger.raised,
             borderTopLeftRadius: theme.radius.lg,
             borderTopRightRadius: theme.radius.lg,
-            paddingBottom: Math.max(insets.bottom, 12),
+            paddingBottom: sheetBottomPadding(insets.bottom, scale),
             overflow: 'hidden',
             transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }) }],
           }, style]}
