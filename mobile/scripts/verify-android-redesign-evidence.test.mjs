@@ -214,6 +214,12 @@ test('capture configs require actual app atrace fields in their matching data so
     original.replace(/atrace_apps:\s*"[^"]+"/, 'atrace_apps: "different.test.app"'),
     original.replace('name: "linux.ftrace"', 'name: "linux.process_stats"') + '\n# linux.ftrace\n',
     original.replace('trace_dispatcher_window_dispatch: true', 'trace_dispatcher_window_dispatch: false') + '\n# trace_dispatcher_window_dispatch: true\n',
+    ...['trace_dispatcher_input_events', 'trace_dispatcher_window_dispatch'].flatMap(field => [
+      original.replace(`${field}: true`, `${field}: true ${field}: false`),
+      original.replace(`${field}: true`, `${field}: true ${field}: true`),
+    ]),
+    original.replace('mode: TRACE_MODE_TRACE_ALL', 'mode: TRACE_MODE_TRACE_ALL mode: TRACE_MODE_USE_RULES'),
+    original.replace('name: "android.input.inputevent"', 'name: "android.input.inputevent" name: "different.source"'),
   ];
   for (const value of variants) {
     assert.notEqual(value, original);

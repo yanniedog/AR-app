@@ -1,11 +1,67 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
 import { admitNativeInputRow, parseNativeInputCsv, renderNativeInputQuery, summarizeNativeInputCsv } from './android-native-input-latency.mjs';
 import { nativeRow, nativeCsv, nativeInterruptedGesture } from './fixtures/android-native-input.fixture.mjs';
 
 const options = { packageName: 'example.test.rates', actionKind: 'down-feedback' };
 const rows = count => Array.from({ length: count }, (_, index) => nativeRow(index));
 const unavailable = (row, status, changes) => ({ ...row, ...changes, association_status: status, original_input_to_present_ns: null });
+
+// SYNTHETIC trace tables, not native measurements. Execute the checked-in query
+// with only Perfetto module/DDL syntax and scalar functions adapted for SQLite.
+function querySyntheticTrace(sourceRows, { unreceivedIds = [], missingOriginalIds = [] } = {}) {
+  const database = new DatabaseSync(':memory:');
+  const args = new Map();
+  const absentReceipts = new Set(unreceivedIds), absentOriginals = new Set(missingOriginalIds);
+  const number = value => value === null ? null : BigInt(value);
+  try {
+    database.exec(`
+      CREATE TABLE android_motion_events (event_id INTEGER, action INTEGER, device_id INTEGER, source INTEGER, arg_set_id INTEGER);
+      CREATE TABLE android_input_events (input_event_id TEXT, upid INTEGER, pid INTEGER, process_name TEXT,
+        normalized_event_channel TEXT, read_time INTEGER, is_speculative_frame INTEGER);
+      CREATE TABLE thread_slice (id INTEGER, ts INTEGER, upid INTEGER, process_name TEXT, thread_name TEXT, name TEXT);
+      CREATE TABLE actual_frame_timeline_slice (id INTEGER, upid INTEGER, surface_frame_token INTEGER,
+        display_frame_token INTEGER, layer_name TEXT, present_type TEXT, dur INTEGER, ts INTEGER);
+      CREATE TABLE process (upid INTEGER, name TEXT);
+      INSERT INTO process VALUES (7, '/system/bin/surfaceflinger');
+      CREATE TABLE stats (severity TEXT, value INTEGER);
+    `);
+    database.function('extract_arg', { useBigIntArguments: true }, (id, name) => args.get(String(id))?.[name] ?? null);
+    database.function('to_monotonic', { useBigIntArguments: true }, value => value);
+    database.function('unhex', value => value === null ? null : BigInt(value.startsWith('0x') ? value : `0x${value}`));
+    database.function('str_split', (value, separator, index) => value?.split(separator)[index] ?? null);
+    const original = database.prepare('INSERT INTO android_motion_events VALUES (?, ?, ?, ?, ?)');
+    const received = database.prepare('INSERT INTO android_input_events VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const bridge = database.prepare('INSERT INTO thread_slice VALUES (?, ?, ?, ?, ?, ?)');
+    const frame = database.prepare('INSERT INTO actual_frame_timeline_slice VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    sourceRows.forEach((row, index) => {
+      args.set(String(index), { event_time_nanos: number(row.original_event_time_monotonic), down_time_nanos: number(row.down_time_monotonic) });
+      if (!absentOriginals.has(row.input_event_id)) original.run(number(row.input_event_id_u32), number(row.action),
+        number(row.device_id), number(row.source), index);
+      if (absentReceipts.has(row.input_event_id)) return;
+      received.run(row.input_event_id, number(row.upid), number(row.pid), row.process_name,
+        row.normalized_event_channel, number(row.read_time), number(row.legacy_is_speculative_frame));
+      if (row.native_frame_candidate_count === null) return;
+      bridge.run(index * 3, number(row.native_trace_monotonic), number(row.upid), row.process_name, 'RenderThread',
+        `frameTimelineInfo(frameNumber=${row.native_buffer_frame_number}, vsyncId=${row.native_vsync_id}, inputEventId=${row.input_event_id})`);
+      const displayToken = 200000 + index;
+      frame.run(index * 3 + 1, number(row.upid), number(row.native_vsync_id), displayToken,
+        row.layer_name, row.app_present_type, number(row.app_frame_duration), number(row.native_trace_monotonic));
+      frame.run(index * 3 + 2, 7, null, displayToken, null, row.display_present_type,
+        number(row.display_frame_duration), number(row.actual_present_monotonic) - number(row.display_frame_duration));
+    });
+    const sql = renderNativeInputQuery(options.packageName)
+      .replace(/^INCLUDE PERFETTO MODULE [^\n]+;\n/gm, '').replace('CREATE PERFETTO TABLE', 'CREATE TABLE');
+    const boundary = sql.indexOf('\nSELECT *,');
+    assert.notEqual(boundary, -1);
+    database.exec(sql.slice(0, boundary));
+    const statement = database.prepare(sql.slice(boundary));
+    statement.setReadBigInts(true);
+    return statement.all().map(row => Object.fromEntries(Object.entries(row).map(([key, value]) =>
+      [key, typeof value === 'bigint' ? String(value) : value])));
+  } finally { database.close(); }
+}
 
 test('renders only a validated APK package into the exact native bridge query', () => {
   const query = renderNativeInputQuery(options.packageName);
@@ -29,6 +85,89 @@ test('preserves legacy flag 1 while admitting independent native IDs and exact n
   const mixed = admitNativeInputRow({ ...row, legacy_is_speculative_frame: null, raw_legacy_speculative_flags: '0,1,null' }, options.packageName);
   assert.deepEqual(mixed.rawLegacyFlags, ['0', '1', 'null']);
   assert.equal(mixed.latencyNs, 39_623_957n);
+});
+
+test('admits only the exact preregistered touchscreen event source, never mouse, stylus or combined sources', () => {
+  assert.equal(admitNativeInputRow(nativeRow(0, { source: '4098' }), options.packageName).status, 'direct_native_frame_info');
+  for (const source of ['8194', '16386', '20482', '4099', '0', null]) {
+    const sample = unavailable(nativeRow(40, { source }), 'touchscreen_source_mismatch');
+    assert.equal(admitNativeInputRow(sample, options.packageName).status, 'touchscreen_source_mismatch');
+    const summary = summarizeNativeInputCsv(nativeCsv([...rows(30), sample]), options);
+    assert.equal(summary.admittedGestureCount, 30);
+    assert.equal(summary.unavailableGestureCount, 1);
+    assert.equal(summary.p95Ms, null);
+    assert.throws(() => admitNativeInputRow({ ...sample, association_status: 'direct_native_frame_info' }, options.packageName), /touchscreen_source_mismatch/);
+  }
+  const sqlRows = querySyntheticTrace([nativeRow(0), nativeRow(1, { source: '20482' })]);
+  assert.deepEqual(sqlRows.map(row => row.association_status), ['direct_native_frame_info', 'touchscreen_source_mismatch']);
+  assert.equal(summarizeNativeInputCsv(nativeCsv(sqlRows), options).unavailableGestureCount, 1);
+});
+
+test('real SQL preserves an unreceived FIRST MOVE instead of substituting a later presented MOVE', () => {
+  const first = nativeRow(40, { action: 2 });
+  const later = nativeRow(40, { action: 2, offsetNs: 50_000_000n, input_event_id: '0x2710', input_event_id_u32: '10000' });
+  const sqlRows = querySyntheticTrace([...rows(30).map((_, index) => nativeRow(index, { action: 2 })), nativeRow(40), first, later],
+    { unreceivedIds: [first.input_event_id] });
+  assert.equal(sqlRows.length, 33);
+  const lost = sqlRows.find(row => row.input_event_id === first.input_event_id);
+  assert.equal(lost.association_status, 'app_receipt_missing');
+  assert.equal(lost.upid, null);
+  assert.equal(lost.normalized_event_channel, null);
+  assert.equal(lost.app_frame_candidate_count, '0');
+  assert.equal(lost.display_frame_candidate_count, '0');
+  assert.equal(lost.raw_legacy_speculative_flags, null);
+  assert.equal(lost.original_event_time_monotonic, first.original_event_time_monotonic);
+  const admitted = admitNativeInputRow(lost, options.packageName);
+  assert.deepEqual(admitted.rawLegacyFlags, []);
+  assert.equal(admitted.gestureKey, admitNativeInputRow(later, options.packageName).gestureKey);
+  const summary = summarizeNativeInputCsv(nativeCsv(sqlRows), { ...options, actionKind: 'move-scroll' });
+  assert.equal(summary.receivedInputCount, 32);
+  assert.equal(summary.receivedGestureCount, 31);
+  assert.equal(summary.admittedGestureCount, 30);
+  assert.equal(summary.unavailableGestureCount, 1);
+  assert.equal(summary.gestures.find(item => item.key === admitted.gestureKey).representativeInputId, first.input_event_id);
+  assert.equal(summary.p95Ms, null);
+});
+
+test('real SQL keeps an unreceived CANCEL and every missing tap/swipe phase unavailable', () => {
+  const cancel = nativeRow(40, { action: 3 });
+  const samples = [...rows(30).flatMap((_, index) => [nativeRow(index), nativeRow(index, { action: 1 })]),
+    nativeRow(40), nativeRow(40, { action: 1 }), cancel];
+  const sqlRows = querySyntheticTrace(samples, { unreceivedIds: [cancel.input_event_id] });
+  assert.equal(sqlRows.length, samples.length);
+  const lostCancel = sqlRows.find(row => row.input_event_id === cancel.input_event_id);
+  assert.equal(lostCancel.action, '3');
+  assert.equal(lostCancel.association_status, 'app_receipt_missing');
+  assert.equal(lostCancel.raw_receive_record_count, null);
+  for (const actionKind of ['down-feedback', 'up-activation']) {
+    const summary = summarizeNativeInputCsv(nativeCsv(sqlRows), { ...options, actionKind });
+    assert.equal(summary.admittedGestureCount, 30);
+    assert.equal(summary.unavailableGestureCount, 1);
+    assert.equal(summary.unclassifiedInputCount, 1);
+    assert.equal(summary.p95Ms, null);
+  }
+  for (const [actionKind, action] of Object.entries({ 'down-feedback': 0, 'up-activation': 1, 'move-scroll': 2 })) {
+    const missing = nativeRow(40, { action });
+    const phases = querySyntheticTrace([...rows(30).map((_, index) => nativeRow(index, { action })), missing],
+      { unreceivedIds: [missing.input_event_id] });
+    const summary = summarizeNativeInputCsv(nativeCsv(phases), { ...options, actionKind });
+    assert.equal(summary.receivedGestureCount, 31);
+    assert.equal(summary.unavailableGestureCount, 1);
+    assert.equal(summary.gestures.at(-1).representativeInputId, missing.input_event_id);
+    assert.equal(summary.p95Ms, null);
+  }
+});
+
+test('real SQL also retains app receipts whose original motion record is missing', () => {
+  const sample = nativeRow(0);
+  const sqlRows = querySyntheticTrace([sample], { missingOriginalIds: [sample.input_event_id] });
+  assert.equal(sqlRows.length, 1);
+  assert.equal(sqlRows[0].association_status, 'original_input_missing');
+  assert.equal(sqlRows[0].input_event_id, sample.input_event_id);
+  const summary = summarizeNativeInputCsv(nativeCsv(sqlRows), options);
+  assert.equal(summary.unclassifiedInputCount, 1);
+  assert.equal(summary.unavailableGestureCount, 1);
+  assert.equal(summary.p95Ms, null);
 });
 
 test('requires 30 independent gestures, computes nearest-rank P95 and never treats unsupported rows as zero', () => {

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 export const MIN_NATIVE_GESTURES = 30;
 export const INPUT_ACTIONS = Object.freeze({ 'down-feedback': 0, 'up-activation': 1, 'move-scroll': 2 });
+const TOUCHSCREEN_SOURCE = '4098'; // Exact AINPUT_SOURCE_TOUCHSCREEN event source (0x1002).
 const MEASURED_ACTIONS = new Set(Object.values(INPUT_ACTIONS).map(String));
 const PRESENTED = ['Early Present', 'On-time Present', 'Late Present'];
 const DECIMAL = /^(0|[1-9]\d*)$/;
@@ -82,8 +83,10 @@ export function admitNativeInputRow(row, packageName) {
     'raw_receive_record_count', 'raw_equivalent_bridge_count']) {
     if (row[key] !== null && !nonnegative(row[key])) throw new Error(`Invalid native count: ${key}`);
   }
-  const flags = row.raw_legacy_speculative_flags?.split(',');
-  if (!flags?.length || flags.some(value => !['0', '1', 'null'].includes(value))) throw new Error('Raw legacy flags missing or invalid');
+  const receiptMissing = ['upid', 'pid', 'process_name', 'normalized_event_channel', 'read_time',
+    'reader_time_candidate_count', 'received_window_candidate_count', 'raw_receive_record_count'].every(key => row[key] === null);
+  const flags = row.raw_legacy_speculative_flags === null && receiptMissing ? [] : row.raw_legacy_speculative_flags?.split(',');
+  if (!flags || (!flags.length && !receiptMissing) || flags.some(value => !['0', '1', 'null'].includes(value))) throw new Error('Raw legacy flags missing or invalid');
   const distinctFlags = [...new Set(flags)];
   const scalar = distinctFlags.length === 1 && distinctFlags[0] !== 'null' ? distinctFlags[0] : null;
   if (row.legacy_is_speculative_frame !== scalar) throw new Error('Raw legacy flags were changed or collapsed');
@@ -94,9 +97,11 @@ export function admitNativeInputRow(row, packageName) {
   const native = integer(row.native_trace_monotonic);
   const present = integer(row.actual_present_monotonic);
   const eventId = integer(row.input_event_id_u32);
-  if (row.process_name !== packageName || !positive(row.upid) || !positive(row.pid)) status = 'app_identity_mismatch';
+  if (receiptMissing) status = 'app_receipt_missing';
+  else if (row.process_name !== packageName || !positive(row.upid) || !positive(row.pid)) status = 'app_identity_mismatch';
   else if (eventId === null || eventId <= 0n || eventId > 0xffffffffn
     || !/^0x[0-9a-f]+$/.test(row.input_event_id ?? '') || BigInt(row.input_event_id) !== eventId) status = 'original_input_missing';
+  else if (row.source !== TOUCHSCREEN_SOURCE) status = 'touchscreen_source_mismatch';
   else if (row.distinct_input_identity_count !== '1') status = 'input_id_reused_or_ambiguous';
   else if (row.received_window_candidate_count !== '1') status = 'receiving_window_ambiguous';
   else if (integer(row.reader_time_candidate_count) > 1n) status = 'reader_time_ambiguous';
@@ -120,7 +125,7 @@ export function admitNativeInputRow(row, packageName) {
       || !equals(row.surface_frame_token, row.native_vsync_id)
       || ['native_buffer_frame_number', 'native_vsync_id', 'display_frame_token'].some(key => !positive(row[key]))
       || ['native_trace_slice_id', 'app_frame_slice_id', 'display_frame_slice_id'].some(key => !nonnegative(row[key]))
-      || !positive(row.source) || row.reader_time_candidate_count !== '1') status = 'native_window_binding_unverified';
+      || row.reader_time_candidate_count !== '1') status = 'native_window_binding_unverified';
     else status = 'direct_native_frame_info';
   }
   if (status !== row.association_status) throw new Error(`Recorded native association disagrees with source columns: ${status}`);

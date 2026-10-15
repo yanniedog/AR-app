@@ -68,13 +68,20 @@ function completeCaptureConfig(source, packageName) {
   const blocks = (node, key) => (node.get(key) ?? []).filter(value => value instanceof Map);
   const has = (node, key, value, kind = 'string') => (node.get(key) ?? [])
     .some(item => item?.kind === kind && item.value === value);
-  const sources = blocks(root, 'data_sources').flatMap(source => blocks(source, 'config'));
-  return sources.some(source => has(source, 'name', 'android.surfaceflinger.frametimeline'))
-    && sources.some(source => has(source, 'name', 'android.input.inputevent')
-      && blocks(source, 'android_input_event_config').some(config => has(config, 'mode', 'TRACE_MODE_TRACE_ALL', 'atom')
-        && has(config, 'trace_dispatcher_input_events', 'true', 'atom')
-        && has(config, 'trace_dispatcher_window_dispatch', 'true', 'atom')))
-    && sources.some(source => has(source, 'name', 'linux.ftrace')
+  const only = (node, key, value, kind = 'string') => (node.get(key) ?? []).length === 1
+    && has(node, key, value, kind);
+  const sourceBlocks = blocks(root, 'data_sources');
+  if (!sourceBlocks.every(source => (source.get('config') ?? []).length === 1)) return false;
+  const sources = sourceBlocks.flatMap(source => blocks(source, 'config'));
+  if (!sources.every(source => (source.get('name') ?? []).length === 1)) return false;
+  const inputSources = sources.filter(source => only(source, 'name', 'android.input.inputevent'));
+  return sources.some(source => only(source, 'name', 'android.surfaceflinger.frametimeline'))
+    && inputSources.length > 0 && inputSources.every(source => (source.get('android_input_event_config') ?? []).length === 1
+      && blocks(source, 'android_input_event_config').some(config => only(config, 'mode', 'TRACE_MODE_TRACE_ALL', 'atom')
+        && only(config, 'trace_dispatcher_input_events', 'true', 'atom')
+        && only(config, 'trace_dispatcher_window_dispatch', 'true', 'atom')))
+    && sources.some(source => only(source, 'name', 'linux.ftrace')
+      && (source.get('ftrace_config') ?? []).length === 1
       && blocks(source, 'ftrace_config').some(config => ['gfx', 'view', 'input'].every(category => has(config, 'atrace_categories', category))
         && has(config, 'atrace_apps', packageName)));
 }

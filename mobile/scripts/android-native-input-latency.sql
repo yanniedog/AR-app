@@ -36,6 +36,16 @@ received_windows AS (
   SELECT input_event_id,upid,count(DISTINCT normalized_event_channel) AS received_window_candidate_count
   FROM received GROUP BY input_event_id,upid
 ),
+original_receipts AS (
+  SELECT o.*,r.*
+  FROM original_distinct o
+  LEFT JOIN received r ON o.event_id=unhex(r.input_event_id)
+  UNION ALL
+  SELECT o.*,r.*
+  FROM received r
+  LEFT JOIN original_distinct o ON o.event_id=unhex(r.input_event_id)
+  WHERE o.event_id IS NULL
+),
 bridge_parsed AS (
   SELECT id AS native_trace_slice_id,ts AS native_trace_ts,upid,
     CAST(str_split(str_split(name,'frameNumber=',1),',',0) AS INT) AS native_buffer_frame_number,
@@ -60,8 +70,11 @@ bridge_counts AS (
   FROM bridge_distinct GROUP BY upid,input_event_id_u32
 ),
 linked AS (
-  SELECT r.*,w.received_window_candidate_count,o.event_id AS input_event_id_u32, o.action,o.device_id,o.source,
-         o.original_event_time_monotonic,o.down_time_monotonic,o.raw_equivalent_record_count,
+  SELECT coalesce(r.input_event_id,CASE WHEN r.event_id IS NOT NULL THEN printf('0x%x',r.event_id) END) AS input_event_id,
+         r.upid,r.pid,r.process_name,r.normalized_event_channel,r.read_time,r.reader_time_candidate_count,
+         r.legacy_is_speculative_frame,r.raw_legacy_speculative_flags,r.raw_receive_record_count,
+         w.received_window_candidate_count,r.event_id AS input_event_id_u32,r.action,r.device_id,r.source,
+         r.original_event_time_monotonic,r.down_time_monotonic,r.raw_equivalent_record_count,
          c.distinct_input_identity_count,
          b.native_buffer_frame_number,b.native_vsync_id,b.native_trace_slice_id,
          b.native_trace_ts,b.raw_equivalent_bridge_count,
@@ -74,12 +87,11 @@ linked AS (
          sf.ts+sf.dur AS actual_present_trace_time,
          to_monotonic(sf.ts+sf.dur) AS actual_present_monotonic,
          to_monotonic(r.read_time) AS read_time_monotonic
-  FROM received r
-  JOIN received_windows w USING(input_event_id,upid)
-  LEFT JOIN original_distinct o ON o.event_id=unhex(r.input_event_id)
-  LEFT JOIN original_counts c ON c.event_id=o.event_id
-  LEFT JOIN bridge_distinct b ON b.input_event_id_u32=o.event_id AND b.upid=r.upid
-  LEFT JOIN bridge_counts bc ON bc.input_event_id_u32=o.event_id AND bc.upid=r.upid
+  FROM original_receipts r
+  LEFT JOIN received_windows w ON w.input_event_id=r.input_event_id AND w.upid=r.upid
+  LEFT JOIN original_counts c ON c.event_id=r.event_id
+  LEFT JOIN bridge_distinct b ON b.input_event_id_u32=r.event_id AND b.upid=r.upid
+  LEFT JOIN bridge_counts bc ON bc.input_event_id_u32=r.event_id AND bc.upid=r.upid
   LEFT JOIN actual_frame_timeline_slice app ON app.upid=r.upid
     AND app.surface_frame_token=b.native_vsync_id
     AND app.layer_name GLOB ('TX - '||r.normalized_event_channel||'#*')
@@ -97,7 +109,9 @@ counts AS (
 )
 SELECT l.*,n.app_frame_candidate_count,n.display_frame_candidate_count,
   CASE
+    WHEN l.raw_receive_record_count IS NULL THEN 'app_receipt_missing'
     WHEN l.input_event_id_u32 IS NULL THEN 'original_input_missing'
+    WHEN l.source IS NULL OR l.source!=4098 THEN 'touchscreen_source_mismatch'
     WHEN l.distinct_input_identity_count!=1 THEN 'input_id_reused_or_ambiguous'
     WHEN l.received_window_candidate_count!=1 THEN 'receiving_window_ambiguous'
     WHEN l.reader_time_candidate_count>1 THEN 'reader_time_ambiguous'
@@ -122,7 +136,8 @@ SELECT l.*,n.app_frame_candidate_count,n.display_frame_candidate_count,
       OR l.actual_present_monotonic<to_monotonic(l.native_trace_ts) THEN 'invalid_time_order'
     ELSE 'direct_native_frame_info'
   END AS association_status
-FROM linked l JOIN counts n USING(input_event_id,upid,normalized_event_channel);
+FROM linked l JOIN counts n ON n.input_event_id IS l.input_event_id
+  AND n.upid IS l.upid AND n.normalized_event_channel IS l.normalized_event_channel;
 
 SELECT *,
        (SELECT coalesce(sum(value),0) FROM stats WHERE severity='error') AS trace_error_count,

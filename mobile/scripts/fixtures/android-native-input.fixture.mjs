@@ -14,7 +14,7 @@ export function nativeRow(index, { packageName = 'example.test.rates', action = 
   return {
     ...Object.fromEntries(NATIVE_INPUT_COLUMNS.map(key => [key, null])),
     input_event_id: `0x${eventId.toString(16)}`, input_event_id_u32: eventId.toString(), action: String(action),
-    device_id: '12', source: '20482', upid: '2', pid: '2087', process_name: packageName,
+    device_id: '12', source: '4098', upid: '2', pid: '2087', process_name: packageName,
     normalized_event_channel: window, reader_time_candidate_count: '1', read_time: (original + 100_000n).toString(),
     original_event_time_monotonic: original.toString(), down_time_monotonic: down.toString(),
     read_time_monotonic: (original + 100_000n).toString(), distinct_input_identity_count: '1',

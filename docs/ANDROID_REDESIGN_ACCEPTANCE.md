@@ -269,6 +269,14 @@ and the operator's account are truthful; an ordinary JSON timestamp cannot.
 
 All three actions are required, as separate paired cohorts:
 
+This runner admits only the exact Android motion-event touchscreen source
+[`0x1002` (`4098`)](https://developer.android.com/reference/android/view/InputDevice#SOURCE_TOUCHSCREEN)
+for the preregistered emulator tap/swipe workload. Mouse,
+stylus and combined source masks remain unavailable. Both stages therefore
+use the same admitted source. This does not authenticate a physical finger or
+pointer tool type; Android exposes that separately through
+[`getToolType`](https://developer.android.com/reference/android/view/MotionEvent#getToolType(int)).
+
 | Action | Independent sample |
 | --- | --- |
 | `down-feedback` | One DOWN event per tap gesture |
@@ -341,6 +349,10 @@ captured MONOTONIC clock conversion. Subtract original `event_time_nanos` from
 `to_monotonic(display.ts + display.dur)`, **not** app/GPU completion or operator
 wall-clock time. Preserve raw duplicate counts and legacy flags 0/1/null;
 neither UI-thread overlap nor next-frame fallback enters the direct cohort.
+Original events without app receipt remain explicit `app_receipt_missing`
+observations with their original gesture identity. An unreceived first MOVE,
+CANCEL or tap phase cannot disappear through the join. No-receipt legacy flags
+stay absent; they are never invented as a received null-valued flag.
 See Android 16 [renderer ID publication](https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-16.0.0_r4/libs/hwui/renderthread/CanvasContext.cpp),
 [input assignment](https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-16.0.0_r4/core/java/android/view/InputEventAssigner.java),
 [presentation fence/clock source](https://android.googlesource.com/platform/frameworks/native/+/refs/tags/android-16.0.0_r1/services/surfaceflinger/FrameTimeline/FrameTimeline.cpp),
