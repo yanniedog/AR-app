@@ -35,30 +35,40 @@ export async function loadCompletedPerformanceAudit(): Promise<PerformanceAuditR
   await startedWrites.catch(() => {});
   if (!stillCurrent()) return null;
   let primaryError: unknown;
-  if ((await FileSystem.getInfoAsync(FILE)).exists) {
-    try {
-      const stored = JSON.parse(await FileSystem.readAsStringAsync(FILE));
-      return stillCurrent() ? validateCompletedReport(stored) : null;
+  let primary: PerformanceAuditReport | null = null;
+  try {
+    if ((await FileSystem.getInfoAsync(FILE)).exists) {
+      primary = validateCompletedReport(JSON.parse(await FileSystem.readAsStringAsync(FILE)));
     }
-    catch (error) { primaryError = error; }
-  }
+  } catch (error) { primaryError = error; }
   if (!stillCurrent()) return null;
   // Recover pre-upgrade reports and interrupted writes from the canonical sidecar.
   const previous = `${FileSystem.documentDirectory}logs/ar-performance-audit-latest.json`;
-  if ((await FileSystem.getInfoAsync(previous)).exists) {
-    const stored = JSON.parse(await FileSystem.readAsStringAsync(previous));
-    if (!stillCurrent()) return null;
-    if (typeof stored.summaryMarker === 'string' && !stored.summaryMarker.includes('partial=true') &&
-        typeof stored.reportJson === 'string') {
-      const report = validateCompletedReport(JSON.parse(stored.reportJson));
-      // Repair the dedicated copy before a later partial run replaces the
-      // canonical sidecar. A write failure must not hide the recoverable report.
-      const repair = saveCompletedPerformanceAudit(report);
-      await repair.catch(() => {});
-      return startedEpoch === epoch && writes === repair ? report : null;
+  let recovered: PerformanceAuditReport | null = null;
+  try {
+    if ((await FileSystem.getInfoAsync(previous)).exists) {
+      const stored = JSON.parse(await FileSystem.readAsStringAsync(previous));
+      if (typeof stored.summaryMarker === 'string' && !stored.summaryMarker.includes('partial=true') &&
+          typeof stored.reportJson === 'string') {
+        const candidate = validateCompletedReport(JSON.parse(stored.reportJson));
+        const candidateTime = Date.parse(candidate.finishedAt);
+        const primaryTime = primary ? Date.parse(primary.finishedAt) : NaN;
+        // A process can stop after canonical finalization but before the
+        // dedicated write begins, leaving an older, otherwise valid copy.
+        if (!primary || (Number.isFinite(candidateTime) &&
+            (!Number.isFinite(primaryTime) || candidateTime > primaryTime))) recovered = candidate;
+      }
     }
-  }
+  } catch (error) { if (!primary) primaryError = error; }
   if (!stillCurrent()) return null;
+  if (recovered) {
+    // Repair before a later partial run replaces the canonical sidecar. A write
+    // failure must not hide the diagnosis which can still be reviewed in memory.
+    const repair = saveCompletedPerformanceAudit(recovered);
+    await repair.catch(() => {});
+    return startedEpoch === epoch && writes === repair ? recovered : null;
+  }
+  if (primary) return primary;
   if (primaryError) throw primaryError;
   return null;
 }

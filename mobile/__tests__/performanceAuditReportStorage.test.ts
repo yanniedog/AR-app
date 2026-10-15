@@ -73,7 +73,7 @@ test.each(['completed', 'canonical'] as const)('Clear during a %s read cannot re
 
 test('a slow canonical recovery cannot overwrite a newer completed diagnosis', async () => {
   const oldReport = makePerformanceAuditReport('older');
-  const newReport = makePerformanceAuditReport('newer');
+  const newReport = { ...makePerformanceAuditReport('newer'), finishedAt: '2026-10-15T20:00:00Z' };
   const stored = JSON.stringify({ summaryMarker: 'PERFORMANCE_AUDIT_SUMMARY', reportJson: JSON.stringify(oldReport) });
   files.set('file:///docs/logs/ar-performance-audit-latest.json', stored);
   let finish!: () => void;
@@ -86,6 +86,23 @@ test('a slow canonical recovery cannot overwrite a newer completed diagnosis', a
   finish();
   expect(await recovering).toBeNull();
   expect(await loadCompletedPerformanceAudit()).toEqual(newReport);
+});
+
+test('restart after canonical finalization repairs an older valid completed copy and retains the newer diagnosis through a partial run', async () => {
+  const oldReport = makePerformanceAuditReport('older');
+  const newReport = { ...makePerformanceAuditReport('newer'), finishedAt: '2026-10-15T20:00:00Z' };
+  await saveCompletedPerformanceAudit(oldReport);
+  files.set('file:///docs/logs/ar-performance-audit-latest.json', JSON.stringify({ summaryMarker: 'PERFORMANCE_AUDIT_SUMMARY', reportJson: JSON.stringify(newReport) }));
+  expect(await loadCompletedPerformanceAudit()).toEqual(newReport);
+  files.set('file:///docs/logs/ar-performance-audit-latest.json', JSON.stringify({ summaryMarker: 'partial=true', reportJson: '{}' }));
+  expect(await loadCompletedPerformanceAudit()).toEqual(newReport);
+});
+
+test('a corrupt latest sidecar cannot hide the valid completed recovery copy', async () => {
+  const report = makePerformanceAuditReport();
+  await saveCompletedPerformanceAudit(report);
+  files.set('file:///docs/logs/ar-performance-audit-latest.json', '{truncated');
+  expect(await loadCompletedPerformanceAudit()).toEqual(report);
 });
 
 test('Clear waits for a pending write and deletes the finished report without resurrection', async () => {
