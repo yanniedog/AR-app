@@ -43,8 +43,10 @@ export function AppText({
   const theme = useTheme();
   const { fontScale } = useWindowDimensions();
   const requestedWeight = weight === '800' ? '700' : (weight ?? TYPOGRAPHY[variant].weight);
+  // Native SP metrics can remain cached when two enlarged scales have identical text props.
   return (
     <Text
+      key={fontScale}
       allowFontScaling
       style={[
         {

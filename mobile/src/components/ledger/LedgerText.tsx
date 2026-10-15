@@ -78,6 +78,7 @@ export function LedgerText({
 
   return (
     <Text
+      key={fontScale}
       allowFontScaling
       style={[
         base,

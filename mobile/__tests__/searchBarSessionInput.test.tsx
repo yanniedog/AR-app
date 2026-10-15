@@ -6,6 +6,7 @@ import { TextInput } from 'react-native';
 import RatesWorkspace from '../src/components/rates/RatesWorkspace';
 import { SearchBar } from '../src/components/controls';
 import { PressFeedback } from '../src/components/PressFeedback';
+import { WordBubbleProvider } from '../src/components/WordBubble';
 import { captureRatesSession, initializeRatesSession, recordRatesScroll, restoreRatesSession, updateRatesSection, useRatesSession } from '../src/data/ratesSession';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
@@ -94,7 +95,7 @@ afterEach(() => {
 
 function mount(): Renderer {
   let tree!: Renderer;
-  act(() => { tree = TestRenderer.create(<RatesWorkspace />) as Renderer; });
+  act(() => { tree = TestRenderer.create(<WordBubbleProvider><RatesWorkspace /></WordBubbleProvider>) as Renderer; });
   expect(jest.requireMock('@shopify/flash-list/dist/recyclerview/utils/measureLayout').measureParentSize).toHaveBeenCalled();
   return tree;
 }

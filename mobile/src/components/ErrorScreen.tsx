@@ -1,7 +1,7 @@
 import { fontStyle } from '../theme/fonts';
 import Ionicons from './icons/AppIcon';
 import React from 'react';
-import { Pressable, Text, useColorScheme, View } from 'react-native';
+import { Pressable, Text, useColorScheme, useWindowDimensions, View } from 'react-native';
 
 import { DARK, LIGHT } from '../theme/colors';
 
@@ -13,6 +13,7 @@ import { DARK, LIGHT } from '../theme/colors';
 export function ErrorScreen({ error, retry }: { error: Error; retry: () => void }) {
   void error;
   const dark = useColorScheme() !== 'light';
+  const { fontScale } = useWindowDimensions();
   const colors = dark ? DARK : LIGHT;
 
   return (
@@ -36,7 +37,7 @@ export function ErrorScreen({ error, retry }: { error: Error; retry: () => void 
         }}
       >
         <Ionicons name="warning-outline" size={40} color={colors.primary} />
-        <Text style={{ color: colors.text, fontSize: 18, ...fontStyle('700'), marginTop: 12 }}>
+        <Text key={`error:${fontScale}`} style={{ color: colors.text, fontSize: 18, ...fontStyle('700'), marginTop: 12 }}>
           Error
         </Text>
         <Pressable
@@ -54,7 +55,7 @@ export function ErrorScreen({ error, retry }: { error: Error; retry: () => void 
             opacity: pressed ? 0.85 : 1,
           })}
         >
-          <Text style={{ color: colors.onPrimary, ...fontStyle('700'), fontSize: 15 }}>Try again</Text>
+          <Text key={fontScale} style={{ color: colors.onPrimary, ...fontStyle('700'), fontSize: 15 }}>Try again</Text>
         </Pressable>
       </View>
     </View>
