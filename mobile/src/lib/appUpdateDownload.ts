@@ -1125,7 +1125,7 @@ async function maybePromptUpgrade(manifest: ApkManifest): Promise<void> {
 
   Alert.alert(
     'Update ready to install',
-    `Version ${manifest.version} has been downloaded and verified. Install it now?`,
+    'Verified APK',
     [
       { text: 'Later', style: 'cancel', onPress: () => { promptInFlight = false; } },
       {
@@ -1136,7 +1136,7 @@ async function maybePromptUpgrade(manifest: ApkManifest): Promise<void> {
             const message = err instanceof Error ? err.message : String(err);
             promptedBuildThisSession = null;
             debugLog.error('app-update', `upgrade prompt install failed: ${message}`);
-            Alert.alert('Update failed', message);
+            Alert.alert('Update failed');
           });
         },
       },

@@ -1,3 +1,4 @@
+import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiProductName, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../src/lib/uiCopy";
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,7 +17,7 @@ import { ProductCard } from '../../src/components/ProductCard';
 import { DataHealthBannerStrip, responsiveScreenContentStyle, Screen } from '../../src/components/Screen';
 import { SegmentedControl } from '../../src/components/controls';
 import { AppText, Card, Chip, Divider, Row } from '../../src/components/ui';
-import { SECTIONS, SECTION_ORDER } from '../../src/constants';
+import { SECTION_ORDER } from '../../src/constants';
 import {
   bankEventMedianContext,
   bankTrendChartModel,
@@ -25,7 +26,7 @@ import {
   type BankEventRateContext,
   type BankRateEvent,
 } from '../../src/data/bankInsights';
-import { formatRate, formatRunDate, visibleAccountRows } from '../../src/data/format';
+import { formatRate, visibleAccountRows } from '../../src/data/format';
 import {
   productHistoryRepresentsRateRow,
   productMoveBreakdownForCatalog,
@@ -45,12 +46,13 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useBankRateHistory } from '../../src/hooks/useBankRateHistory';
-import { moveTone, moveVerb } from '../../src/lib/moveSemantics';
+import { moveTone } from '../../src/lib/moveSemantics';
 import { effectiveBankInsights } from '../../src/lib/proAccess';
 import { yieldToUi } from '../../src/lib/yieldToUi';
 import { isPerformanceAuditActive } from '../../src/lib/performanceAudit';
 import {
   isCurrentHistoryGraphicEvidence,
+  isMeasuredEmptyHistoryGraphic,
   type HistoryGraphicEvidence,
 } from '../../src/lib/historyGraphicEvidence';
 import type { RateRow, SectionKey } from '../../src/types';
@@ -67,7 +69,7 @@ const LenderProductRow = React.memo(function LenderProductRow({ item, onLogoRend
   const onPress = useCallback(() => openProduct(item.row.product_key, item.row.rate_index), [item.row]);
   return <View>
     {item.firstInSection ? <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8, marginLeft: 4 }}>
-      {SECTIONS[item.section].title.toUpperCase()}
+      {uiSectionName(item.section)}
     </AppText> : null}
     <ProductCard
       row={item.row}
@@ -80,15 +82,15 @@ const LenderProductRow = React.memo(function LenderProductRow({ item, onLogoRend
   </View>;
 });
 
-function bpsLabel(bps: number): string {
+function bpsLabel(bps: number): UiText {
   const rounded = Math.round(bps * 10) / 10;
-  return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${Math.abs(rounded)} bps`;
+  return uiJoin(rounded>0?'+':rounded<0?'−':'',uiNumber(Math.abs(rounded),1),' ','bps');
 }
 
-function percentagePointLabel(bps: number): string {
+function percentagePointLabel(bps: number): UiText {
   const points = Math.abs(bps / 100);
   const sign = bps > 0 ? '+' : bps < 0 ? '−' : '';
-  return `${sign}${points.toFixed(2)} percentage points`;
+  return uiJoin(sign,uiNumber(points,2),' ','percentage points');
 }
 
 function isSectionKey(value: string | undefined): value is SectionKey {
@@ -128,15 +130,15 @@ const ProductMoveRow = React.memo(function ProductMoveRow({
     <Pressable
       onPress={() => openProduct(move.productKey, move.rateIndex ?? undefined)}
       accessibilityRole="button"
-      accessibilityLabel={`${move.productName} moved ${bpsLabel(move.bps)} from ${formatRate(move.fromRate)} to ${formatRate(move.toRate)} on ${formatRunDate(move.date)}`}
+      accessibilityLabel={uiJoin(uiProductName({product_name:move.productName}),' · ',bpsLabel(move.bps),' · ',formatRate(move.fromRate),' → ',formatRate(move.toRate),' · ',uiDate(move.date))}
     >
       <Row gap={10} style={{ paddingVertical: 8 }}>
         <View style={{ flex: 1, gap: 2 }}>
           <AppText variant="small" weight="700" numberOfLines={2}>
-            {move.productName}
+            {uiProductName({product_name:move.productName})}
           </AppText>
           <AppText variant="tiny" color="textFaint" numberOfLines={1}>
-            {formatRunDate(move.date)} · {formatRate(move.fromRate)} → {formatRate(move.toRate)}
+            {uiJoin(uiDate(move.date),' · ',formatRate(move.fromRate),' → ',formatRate(move.toRate))}
           </AppText>
         </View>
         <AppText variant="small" weight="800" style={{ color }}>
@@ -156,11 +158,8 @@ export default function BankDetail() {
   } = useLocalSearchParams<{ provider: string; date?: string; section?: string }>();
   const provider = raw ?? '';
   const focusDate = typeof focusDateRaw === 'string' ? focusDateRaw.slice(0, 10) : '';
-  const focusSection = isSectionKey(
-    Array.isArray(focusSectionRaw) ? focusSectionRaw[0] : focusSectionRaw,
-  )
-    ? ((Array.isArray(focusSectionRaw) ? focusSectionRaw[0] : focusSectionRaw) as SectionKey)
-    : null;
+  const focusSectionParam=Array.isArray(focusSectionRaw)?focusSectionRaw[0]:focusSectionRaw;
+  const focusSection=isSectionKey(focusSectionParam)?focusSectionParam:null;
 
   const router = useRouter();
   const core = useStore((s) => s.core);
@@ -327,7 +326,7 @@ export default function BankDetail() {
     rateHistory.revision,
     bankInsightsSha ?? 'no-bank-history-sha',
     provider,
-    activeChartSection ?? 'none',
+    activeChartSection,
     chartModel?.dates.at(-1) ?? 'none',
     chartModel?.dates.length ?? 0,
   ].join(':');
@@ -563,11 +562,13 @@ export default function BankDetail() {
           ? 'ready'
           : !currentHistoryGraphicEvidence
             ? 'pending'
-            : currentHistoryGraphicEvidence.availability === 'rendered'
+            : currentHistoryGraphicEvidence.availability === 'rendered' ||
+              isMeasuredEmptyHistoryGraphic(currentHistoryGraphicEvidence)
               ? 'ready'
               : 'error',
         error: rateHistory.failed ? 'Historical rates could not be prepared'
-          : currentHistoryGraphicEvidence?.availability === 'unavailable'
+          : currentHistoryGraphicEvidence?.availability === 'unavailable' &&
+            !isMeasuredEmptyHistoryGraphic(currentHistoryGraphicEvidence)
           ? 'Lender history has no finite values to plot'
           : null,
         expectedCount: currentHistoryGraphicEvidence?.expectedCount ?? 0,
@@ -595,10 +596,13 @@ export default function BankDetail() {
   });
 
   if (!core) return <ScreenSkeleton />;
+  const lenderRow=SECTION_ORDER.map(section=>core.sections[section].rates.find(row=>row.provider===provider)).find(row=>row!=null);
+  const lenderName=lenderRow?uiProviderName(lenderRow):uiLabel('Bank');
+  const direction=(value:BankRateEvent['dir']):UiCopy=>value==='hike'?'Increase':value==='cut'?'Decrease':'Mixed';
 
   return (
     <>
-      <Stack.Screen options={{ title: provider }} />
+      <Stack.Screen options={{ title: lenderName }} />
       <Screen showDataHealthBanner={false}>
         <View style={{ ...responsiveScreenContentStyle(width), paddingHorizontal: 0, flex: 1 }}>
         <FlashList
@@ -614,7 +618,7 @@ export default function BankDetail() {
           keyExtractor={item => `${item.section}:${item.row.product_key}`}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 + insets.bottom }}
           renderItem={renderProductItem}
-          ListEmptyComponent={<EmptyState title="No current products" subtitle="This lender has no rates in the current data set." />}
+          ListEmptyComponent={<EmptyState title="No current products" />}
           ListHeaderComponent={<View>
         <DataHealthBannerStrip />
         <Row gap={14} style={{ marginBottom: 20 }}>
@@ -625,25 +629,23 @@ export default function BankDetail() {
             onRenderStateChange={logoReadiness.onLogoRenderStateChange}
           />
           <View style={{ flex: 1 }}>
-            <AppText variant="h3">{provider}</AppText>
+            <AppText variant="h3">{lenderName}</AppText>
             <AppText variant="small" color="textMuted">
-              {productCount} {productCount === 1 ? 'product' : 'products'}
-              {!includeNonStandard ? ' · widely available' : ''}
+              {uiJoin(uiCount(productCount),' ','Products',!includeNonStandard?uiJoin(' · ','Widely available'):null)}
             </AppText>
           </View>
         </Row>
 
         {showBankInsights && displayBankEvents[0] ? (
           <Card variant="outlined" style={{ marginBottom: 16, gap: 4 }}>
-            <AppText variant="small" color="textMuted">Latest observed move</AppText>
+            <AppText variant="small" color="textMuted">{uiLabel("Latest observed move")}</AppText>
             <AppText variant="body" weight="700">
-              {SECTIONS[displayBankEvents[0].section].title} {moveVerb(displayBankEvents[0].section, displayBankEvents[0].dir)}{' '}
-              by an average {percentagePointLabel(displayBankEvents[0].avg_bps)} on {formatRunDate(displayBankEvents[0].date)}.
+              {uiJoin(uiSectionName(displayBankEvents[0].section),' · ',direction(displayBankEvents[0].dir),' · ','Average',': ',percentagePointLabel(displayBankEvents[0].avg_bps),' · ',uiDate(displayBankEvents[0].date))}
             </AppText>
           </Card>
         ) : null}
 
-        <AppText variant="h3" style={{ marginBottom: 10 }}>Current products</AppText>
+        <AppText variant="h3" style={{ marginBottom: 10 }}>{uiLabel("Current products")}</AppText>
 
           </View>}
           ListFooterComponent={<View>
@@ -653,36 +655,27 @@ export default function BankDetail() {
           <Card
             style={{ marginBottom: 16 }}
             accessibilityLiveRegion="polite"
-            accessibilityLabel={`${provider} move detail for ${formatRunDate(focusEvent.date)}`}
+            accessibilityLabel={uiJoin(lenderName,' · ','Move detail',' · ',uiDate(focusEvent.date))}
           >
             <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-              <AppText variant="h3">Move detail</AppText>
+              <AppText variant="h3">{uiLabel("Move detail")}</AppText>
             </Row>
             <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
-              {moveVerb(focusSection, focusEvent.dir)} {SECTIONS[focusSection].title.toLowerCase()} on{' '}
-              {formatRunDate(focusEvent.date)}
-              {focusRateCtx
-                ? ` · median ${formatRate(focusRateCtx.before)} → ${formatRate(focusRateCtx.after)}`
-                : ''}
+              {uiJoin(direction(focusEvent.dir),' · ',uiSectionName(focusSection),' · ',uiDate(focusEvent.date),focusRateCtx?uiJoin(' · ','Median',': ',formatRate(focusRateCtx.before),' → ',formatRate(focusRateCtx.after)):null)}
             </AppText>
             <Row gap={8} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
               <Chip
-                label={`${focusEvent.moved} of ${focusEvent.total} products`}
+                label={uiJoin(uiCount(focusEvent.moved),' / ',uiCount(focusEvent.total),' ','Products')}
                 selected={false}
               />
               <Chip
-                label={`avg ${bpsLabel(focusEvent.avg_bps)}`}
+                label={uiJoin('Average',': ',bpsLabel(focusEvent.avg_bps))}
                 selected
               />
             </Row>
             {focusedMoves.length ? (
               <>
-                <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>
-                  Products that moved
-                </AppText>
-                <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
-                  Tap a product to open its rate history
-                </AppText>
+                <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>{uiLabel("Products that moved")}</AppText>
                 {focusedMoves.map((move, i) => (
                   <React.Fragment key={move.productKey}>
                     {i > 0 ? <Divider /> : null}
@@ -690,18 +683,12 @@ export default function BankDetail() {
                   </React.Fragment>
                 ))}
                 <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-                  {focusedMoves.length === focusEvent.moved
-                    ? `All ${focusEvent.moved} moved products identified from available daily history.`
-                    : `${focusedMoves.length} of ${focusEvent.moved} moved products identified from available daily history.`}
+                  {uiJoin('Exact matches',': ',uiCount(focusedMoves.length),' / ',uiCount(focusEvent.moved),' · ','Available history')}
                 </AppText>
               </>
             ) : (
               <AppText variant="small" color="textMuted">
-                {productHistory
-                  ? 'Could not match individual products for this move yet — try again after daily history finishes syncing.'
-                  : productHistoryError
-                    ? 'Product-level history is unavailable right now — pull to refresh and try again.'
-                    : 'Loading product-level history to identify which accounts moved…'}
+                {uiLabel(productHistory ? 'No exact matches':productHistoryError?'History unavailable':'Loading')}
               </AppText>
             )}
           </Card>
@@ -709,33 +696,21 @@ export default function BankDetail() {
 
         {showBankInsights && focusSourceEvent && focusSection && !focusEvent ? (
           <Card style={{ marginBottom: 16 }} accessibilityLiveRegion="polite">
-            <AppText variant="h3" style={{ marginBottom: 6 }}>
-              Move detail
-            </AppText>
+            <AppText variant="h3" style={{ marginBottom: 6 }}>{uiLabel("Move detail")}</AppText>
             <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
-              {SECTIONS[focusSection].title} · {formatRunDate(focusSourceEvent.date)}
+              {uiJoin(uiSectionName(focusSection),' · ',uiDate(focusSourceEvent.date))}
             </AppText>
             <AppText variant="small" color="textMuted">
-              {productHistoryError && focusHistoryState === 'loading'
-                ? 'Product-level history is unavailable right now — try this move again shortly.'
-                : focusHistoryState === 'loading'
-                  ? 'Loading product-level history to identify which accounts moved…'
-                  : focusHistoryState === 'unsafe'
-                    ? 'Available history cannot safely identify this selected rate row, so no product is attributed.'
-                    : focusHistoryState === 'incomplete'
-                      ? 'Available history does not yet cover this move with a prior product observation.'
-                      : 'None of the exactly matched products in your current settings comprised this move.'}
+              {uiLabel(productHistoryError && focusHistoryState === 'loading' ? 'History unavailable':focusHistoryState === 'loading' ? 'Loading':focusHistoryState === 'unsafe' ? 'Exact rate attribution unsafe':focusHistoryState === 'incomplete' ? 'Prior observation missing':'No exact compatible matches')}
             </AppText>
           </Card>
         ) : null}
 
         {showBankInsights && recentMoveBreakdowns.length ? (
           <Card style={{ marginBottom: 16 }}>
-            <AppText variant="h3" style={{ marginBottom: 4 }}>
-              Products that changed
-            </AppText>
+            <AppText variant="h3" style={{ marginBottom: 4 }}>{uiLabel("Products that changed")}</AppText>
             <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-              Exact product matches from available history
+              {uiLabel('Exact matches · Available history')}
             </AppText>
             {recentMoveBreakdowns.map(({ event, moves }, bi) => (
               <View
@@ -743,8 +718,7 @@ export default function BankDetail() {
                 style={{ marginBottom: bi < recentMoveBreakdowns.length - 1 ? 12 : 0 }}
               >
                 <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>
-                  {formatRunDate(event.date)} · {SECTIONS[event.section].short} · {event.moved} of{' '}
-                  {event.total}
+                  {uiJoin(uiDate(event.date),' · ',uiSectionName(event.section,true),' · ',uiCount(event.moved),' / ',uiCount(event.total))}
                 </AppText>
                 {moves.slice(0, 5).map((move, i) => (
                   <React.Fragment key={move.productKey}>
@@ -753,8 +727,7 @@ export default function BankDetail() {
                   </React.Fragment>
                 ))}
                 {moves.length > 5 ? (
-                  <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
-                    +{moves.length - 5} more products
+                  <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>{uiJoin('+',uiCount(moves.length-5),' ','Products')}
                   </AppText>
                 ) : null}
               </View>
@@ -764,10 +737,9 @@ export default function BankDetail() {
 
         {showBankInsights && (rateHistory.updating || rateHistory.failed) ? (
           <Card style={{ marginBottom: 16 }}>
-            <AppText variant="h3">Rate history</AppText>
+            <AppText variant="h3">{uiLabel("Rate history")}</AppText>
             <AppText variant="small" color="textMuted" accessibilityRole="alert">
-              {rateHistory.failed ? 'Historical rates could not be prepared. Try refreshing the data.'
-                : 'Updating historical rates for your settings…'}
+              {uiLabel(rateHistory.failed ? 'History unavailable':'Loading')}
             </AppText>
           </Card>
         ) : null}
@@ -775,19 +747,18 @@ export default function BankDetail() {
           chartModel && activeChartSection ? (
             <Card style={{ marginBottom: 16 }}>
               <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-                <AppText variant="h3">Rate history</AppText>
+                <AppText variant="h3">{uiLabel("Rate history")}</AppText>
               </Row>
               {chartSections.length > 1 ? (
                 <SegmentedControl
-                  options={chartSections.map((s) => ({ value: s, label: SECTIONS[s].short }))}
+                  options={chartSections.map((s) => ({ value: s, label: uiSectionName(s,true) }))}
                   value={activeChartSection}
                   onChange={setChartSection}
                 />
               ) : null}
               <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, marginBottom: 4 }}>
-                {rateHistory.historyAvailable
-                  ? 'Range, mean and median of this lender’s advertised rates matching your settings'
-                  : 'Band spans this lender’s sharpest offer to its typical rate'}
+                {uiLabel(rateHistory.historyAvailable
+                  ? 'Advertised range / mean / median':'Leading / median advertised')}
               </AppText>
               <ChartErrorBoundary name="BankTrendChart">
                 <BankHistoryChart
@@ -803,17 +774,14 @@ export default function BankDetail() {
                   onGraphicReady={onHistoryGraphicReady}
                 />
               </ChartErrorBoundary>
-              {rateHistory.missingDates.length ? <AppText variant="tiny" color="textMuted">Missing historical observations remain blank.</AppText> : null}
+              {rateHistory.missingDates.length ? <AppText variant="tiny" color="textMuted">{uiJoin('Missing observations',': ',uiCount(rateHistory.missingDates.length),' · ','Unknown')}</AppText> : null}
               {rawBankEvents.length ? (
                 <>
                   <Divider style={{ marginVertical: 10 }} />
-                  <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>
-                    Recent moves
-                  </AppText>
+                  <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>{uiLabel("Recent moves")}</AppText>
                   <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
-                    {productHistory
-                      ? 'Counts reflect exact product matches under your settings.'
-                      : 'Moves shown match the lender sections available under your settings.'}
+                    {uiLabel(productHistory
+                      ? 'Exact product matches':'Available lender sections')}
                   </AppText>
                   {displayBankEvents.length ? (
                     displayBankEvents.map((event) => (
@@ -832,7 +800,7 @@ export default function BankDetail() {
                     ))
                   ) : (
                     <AppText variant="small" color="textMuted" style={{ paddingVertical: 8 }}>
-                      No recent changes could be exactly matched to products in your settings.
+                      {uiLabel('No exact compatible matches')}
                     </AppText>
                   )}
                 </>

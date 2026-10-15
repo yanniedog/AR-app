@@ -1,6 +1,7 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 
 import { debugLog } from './debugLog';
+import type { UiCopy } from './uiCopy';
 
 /**
  * Biometric app lock (fingerprint / Face ID) — Phase C of
@@ -16,7 +17,7 @@ export async function biometricsAvailable(): Promise<boolean> {
   }
 }
 
-export async function authenticateBiometric(promptMessage: string): Promise<boolean> {
+export async function authenticateBiometric(promptMessage: UiCopy): Promise<boolean> {
   try {
     const res = await LocalAuthentication.authenticateAsync({
       promptMessage,

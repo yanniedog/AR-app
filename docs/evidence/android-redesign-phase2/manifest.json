@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "ae2b22be1d42c1e968e01752fcb0dc51d6e700a4",
+  "capturedAt": "2026-10-14",
+  "runtime": {
+    "kind": "Android emulator development APK plus Metro",
+    "androidApi": "36.1",
+    "abi": "x86_64",
+    "package": "com.eyex.australianrates",
+    "apkVersionName": "1.0.238",
+    "apkVersionCode": 192,
+    "developmentApkSha256": "2260afac35f803ca87b5e32058acf3efa0716b01c7a330ce19bc0b9c9714ebca",
+    "normalWidthDp": 411,
+    "largeTextWidthDp": 360,
+    "largeTextFontScale": 1.5
+  },
+  "scope": "Phase 2 shared design pilot. Phase 3 navigation and Phase 4 text migration are incomplete. No human study, final APK, ARM, physical-device or measured animation-timing claim.",
+  "observations": [
+    "Sort controls occupy one row at 411 dp after intrinsic-width repair.",
+    "Four full or near-full rate rows appear at normal text size.",
+    "Filter facets retain intrinsic-width controls and a fixed apply/reset footer.",
+    "Save changes only the selected exact row; before/after node bounds are retained.",
+    "At 360 dp and 1.5 font scale the rate row reflows vertically; facts remain readable."
+  ],
+  "limitations": [
+    "Identical normalized Maitland rows have distinct source LVR conditions; preserve both until scoped financial fact migration.",
+    "Development Activity recreation required a process restart after changing density.",
+    "Press duration targets are verified by component tests; emulator frame timings have not been measured."
+  ],
+  "files": [
+    {
+      "path": "phase2-results-compact.png",
+      "sha256": "f1d08e0010b3cd8dd04610e0dea3b5506ef77cb0509fa444a1102bbcd2f2417b"
+    },
+    {
+      "path": "phase2-results-compact.xml",
+      "sha256": "36c71cf0a2b3f8c2852965857cb16220f0cb35657697946d7338cfc85e4d48b4"
+    },
+    {
+      "path": "phase2-filter-compact.png",
+      "sha256": "93c07a4a0ac4ac8262fd0c86acd15c1a0911a7a8d5f83ffbeaf3621e8138ab65"
+    },
+    {
+      "path": "phase2-filter-compact.xml",
+      "sha256": "332f605eb6d5358e0e7aee62d34d4cdbe8705fb03413ee1cea0f3a147dd02f52"
+    },
+    {
+      "path": "phase2-product-pilot.png",
+      "sha256": "4adb4f5614f6233024210f4a1adfbd6735c67bd34dbe52ff2bad69d9ea263c21"
+    },
+    {
+      "path": "phase2-product-pilot.xml",
+      "sha256": "17f05b2c11857f2070aa63b27dafe698fbb55e110449ba182fdd3d50457f575b"
+    },
+    {
+      "path": "phase2-results-360-large-ready.png",
+      "sha256": "ebff668ed599192f2bf21602795ab0b2fc6229d169d4429821c92d920cab9002"
+    },
+    {
+      "path": "phase2-results-360-large-ready.xml",
+      "sha256": "d36ae94d1477f95c9689919f80a544419e9db145990b0817c1df68e6944f07d8"
+    },
+    {
+      "path": "phase2-save-before.png",
+      "sha256": "0aef4f5662a7f548d0b81d324a26812009aee3ce8e6f7e67b069188f69e99128"
+    },
+    {
+      "path": "phase2-save-before.xml",
+      "sha256": "d8d9952cf652660b7036a262da983bddaed2da3d4caede932306a4a0f8a3ce03"
+    },
+    {
+      "path": "phase2-save-after.png",
+      "sha256": "ea03e21d0b9132fe636ee933ffde5c10b6cf13bbc46a3cbcff83230aa5acf25b"
+    },
+    {
+      "path": "phase2-save-after.xml",
+      "sha256": "36c71cf0a2b3f8c2852965857cb16220f0cb35657697946d7338cfc85e4d48b4"
+    }
+  ]
+}

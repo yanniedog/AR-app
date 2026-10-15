@@ -17,6 +17,7 @@ import {
   type AppState,
 } from './storeTypes';
 import type { SectionKey } from '../types';
+import { SECTION_ORDER } from '../constants';
 import { normalizeSavedRates } from './savedRates';
 import { refreshProductSubscriptionLabels } from './subscriptions';
 import { loadTrackedRatesSecureResult, normalizeTrackedRates } from './trackedRates';
@@ -60,7 +61,7 @@ export const useStore = create<AppState>()(
       partialize: (s) => ({
         prefs: Object.fromEntries(
           Object.entries(s.prefs).filter(([key]) =>
-            key !== 'calc' &&
+            key !== 'calc' && key !== 'onboarded' &&
             key !== 'diagnosticsEnabled' &&
             key !== 'developerToolsUnlocked' &&
             key !== 'rateIntelligencePro'),
@@ -73,7 +74,9 @@ export const useStore = create<AppState>()(
       }),
       merge: (persisted, current) => {
         const p = persisted as Partial<AppState> | undefined;
-        const persistedPrefs = p?.prefs as Partial<AppState['prefs']> | undefined;
+        const persistedPrefs = p?.prefs ? { ...p.prefs } as Partial<AppState['prefs']> : undefined;
+        // Retire completion without changing any explicit preference or privacy choice.
+        if (persistedPrefs) delete (persistedPrefs as Record<string, unknown>).onboarded;
         const hasCurrentPrivacyChoice =
           persistedPrefs?.privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
         const hasPreviousPrivacyChoice =
@@ -116,7 +119,7 @@ export const useStore = create<AppState>()(
         const persistedActiveSection = p?.activeSection;
         const isValidActiveSection =
           typeof persistedActiveSection === 'string' &&
-          prefs.interests.includes(persistedActiveSection as SectionKey);
+          SECTION_ORDER.includes(persistedActiveSection as SectionKey);
         const activeSection = isValidActiveSection
           ? (persistedActiveSection as SectionKey)
           : resolveInterestSection(prefs.interests, prefs.defaultSection);

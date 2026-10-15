@@ -6,9 +6,10 @@ import * as selectors from '../src/data/selectors';
 import * as receipt from '../src/data/rateReceipt';
 import { EMPTY_USER_RATE_SCENARIO as mockScenario } from '../src/data/userRateScenario';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
+import * as Clipboard from 'expo-clipboard';
 
 type TestNode = { props: Record<string, any>; findByProps: (props: Record<string, unknown>) => TestNode;
-  findByType: (type: string) => TestNode };
+  findByType: (type: string) => TestNode; findAllByType: (type: string) => TestNode[] };
 type InspectableRenderer = ReturnType<typeof TestRenderer.create> & { root: TestNode };
 let mockRevision = 0;
 let mockParams = { key: 'mortgage-1', ri: '0' };
@@ -33,6 +34,27 @@ jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: { pr
 afterEach(() => {
   jest.restoreAllMocks();
   installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() });
+});
+
+test('comparable mortgage comparison rates reach the rendered brief and its copied text', () => {
+  mockParams = { key: 'mortgage-1', ri: '0' };
+  const core = makeHealthyCore();
+  const selected = core.sections.Mortgage.rates[0];
+  core.sections.Mortgage.rates.push({ ...selected, product_key: 'mortgage-comparable', provider: 'Comparable bank', product_name: 'Comparable home loan', rate: '0.05', comparison_rate: '0.0657', account_class: 'standard', lvr_tier: 'LVR_70_80' });
+  mockState = { ...mockState, core };
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<RateReceiptScreen />) as InspectableRenderer; });
+  try {
+    expect(tree.root.findAllByType('AppText').some(node => node.props.children === 'Comparison rate: 6.57%')).toBe(true);
+    act(() => tree.root.findByProps({ title: 'Copy' }).props.onPress());
+    expect(Clipboard.setStringAsync).toHaveBeenLastCalledWith(expect.stringContaining('Comparable bank: 5.00% · Comparison rate: 6.57% · Comparable home loan'));
+    delete core.sections.Mortgage.rates[1].comparison_rate;
+    mockState = { ...mockState, core: { ...core } };
+    act(() => tree.update(<RateReceiptScreen />));
+    expect(tree.root.findAllByType('AppText').some(node => node.props.children === 'Comparison rate: 6.57%')).toBe(false);
+    act(() => tree.root.findByProps({ title: 'Copy' }).props.onPress());
+    expect(Clipboard.setStringAsync).toHaveBeenLastCalledWith(expect.not.stringContaining('Comparison rate:'));
+  } finally { act(() => tree.unmount()); }
 });
 
 test('layout and disclosure commits reuse receipt work, while core, product and eligibility changes invalidate it', () => {

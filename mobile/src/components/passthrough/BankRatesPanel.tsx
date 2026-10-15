@@ -10,8 +10,9 @@ import { hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/char
 import { BankRateChart } from './BankRateChart';
 import { SegmentedControl } from '../controls';
 import { AppText, Disclosure } from '../ui';
+import { uiCount, uiJoin, uiLabel, type UiCopy } from '../../lib/uiCopy';
 
-const STATISTICS: { value: RateStatistic; label: string }[] = [
+const STATISTICS: { value: RateStatistic; label: UiCopy }[] = [
   { value: 'min', label: 'Min' }, { value: 'mean', label: 'Mean' },
   { value: 'median', label: 'Median' }, { value: 'max', label: 'Max' },
 ];
@@ -45,7 +46,7 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
   const [methodOpen, setMethodOpen] = useState(false);
   const [graphic, setGraphic] = useState<ChartRenderEvidence | null>(null);
   const [renderedEmptyRevision, setRenderedEmptyRevision] = useState<string | null>(null);
-  const options = sectionSegmentOptions(prefs.onboarded ? prefs.interests : SECTION_KEYS);
+  const options = sectionSegmentOptions(SECTION_KEYS);
   const section = options.some(option => option.value === chosenSection) ? chosenSection : options[0].value;
   const gapAllowed = options.some(o => o.value === 'Mortgage') && options.some(o => o.value === 'Savings');
   const gap = tab === 'gap' && gapAllowed;
@@ -80,20 +81,19 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
   useEffect(() => { if (updating) onChartReady?.(false); }, [onChartReady, updating]);
   return <View style={{ gap: 20 }} testID="bank-rates-panel">
     <View style={{ gap: 4 }}>
-      <AppText variant="h2" accessibilityRole="header">Bank rates</AppText>
-      <AppText variant="small" color="textMuted">Compare the rates banks advertise over time.</AppText>
+      <AppText variant="h2" accessibilityRole="header">{uiLabel("Bank rates")}</AppText>
     </View>
     <SegmentedControl options={[{ value: 'rates' as const, label: 'Rates' }, { value: 'gap' as const, label: 'Gap' }]} value={tab} onChange={setTab} />
-    {gapUnavailable ? <View key={chartRevision} onLayout={(event) => { if (hasPositiveChartLayout(event)) setRenderedEmptyRevision(chartRevision); }}><AppText variant="small">The gap needs both Mortgage and Savings in your profile interests.</AppText></View> : <>
+    {gapUnavailable ? <View key={chartRevision} onLayout={(event) => { if (hasPositiveChartLayout(event)) setRenderedEmptyRevision(chartRevision); }}><AppText variant="small">{uiJoin('Gap', ' · ', 'Unavailable')}</AppText></View> : <>
       {showSections && !gap ? <SegmentedControl options={options} value={section} onChange={next => { setChosenSection(next); onSectionChange?.(next); }} /> : null}
       {!gap ? <SegmentedControl options={STATISTICS} value={statistic} onChange={setStatistic} /> : null}
-      <AppText variant="small" color="textMuted">{personalized ? 'Matching your profile' : 'Included products'} · {gap ? 'Mortgage mean − savings mean' : 'Advertised rate tiers'}</AppText>
-      {core && !historyAvailable && !historyLoading ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Historical rates are unavailable in this update. Showing current rates only.</AppText> : null}
-      {!historyLoading && missingDates.length > 0 ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Some historical observations are unavailable in this update and stay blank.</AppText> : null}
-      {updating ? <AppText variant="small" accessibilityRole="alert">{failed ? 'Historical rates could not be prepared. Please try again.' : 'Updating historical rates for your filters…'}</AppText> : model.lines.length ? <View key={chartSourceRevision} testID="bank-rates-chart-layout"><BankRateChart model={model} provider={selectedProvider ?? provider} onProviderChange={onProviderChange ?? setProvider} label={gap ? 'Gap' : STATISTICS.find(s => s.value === statistic)!.label} gap={gap} auditRevision={chartRevision} onGraphicReady={recordGraphic} /></View> : <View key={chartRevision} testID="bank-rates-empty-layout" onLayout={(event) => { if (hasPositiveChartLayout(event)) setRenderedEmptyRevision(chartRevision); }}><AppText variant="small">No matching rates. Required product details may still be loading.</AppText></View>}
-      {gap ? <AppText variant="small" color="textMuted">The gap does not measure bank margins.</AppText> : null}
-      <Disclosure title="How these rates are compared" summary="Rate tiers, filters and missing observations" open={methodOpen} onToggle={() => setMethodOpen(open => !open)}>
-        <AppText variant="small" color="textMuted">Each matching rate tier has equal weight. {cataloguePrepared ? 'History includes products matching your filters on each observed date, including products since withdrawn.' : 'History follows currently matching tiers.'} Missing observations stay blank.</AppText>
+      <AppText variant="small" color="textMuted">{uiJoin(personalized ? 'Profile' : 'Products', ' · ', gap ? uiJoin('Home loans', ' ', 'Mean', ' ', '−', ' ', 'Savings', ' ', 'Mean') : uiLabel('Advertised rate'))}</AppText>
+      {core && !historyAvailable && !historyLoading ? <AppText variant="small" color="textMuted" accessibilityRole="alert">{uiJoin('History', ' · ', 'Unavailable', ' · ', 'Current rate')}</AppText> : null}
+      {!historyLoading && missingDates.length > 0 ? <AppText variant="small" color="textMuted" accessibilityRole="alert">{uiJoin('Missing observations', ' · ', uiCount(missingDates.length))}</AppText> : null}
+      {updating ? <AppText variant="small" accessibilityRole="alert">{uiLabel(failed ? 'Unavailable' : 'Loading')}</AppText> : model.lines.length ? <View key={chartSourceRevision} testID="bank-rates-chart-layout"><BankRateChart model={model} provider={selectedProvider ?? provider} onProviderChange={onProviderChange ?? setProvider} label={gap ? 'Gap' : STATISTICS.find(s => s.value === statistic)!.label} gap={gap} auditRevision={chartRevision} onGraphicReady={recordGraphic} /></View> : <View key={chartRevision} testID="bank-rates-empty-layout" onLayout={(event) => { if (hasPositiveChartLayout(event)) setRenderedEmptyRevision(chartRevision); }}><AppText variant="small">{uiLabel("No results")}</AppText></View>}
+      {gap ? <AppText variant="small" color="textMuted">{uiJoin('Bank margin', ' · ', 'Excluded')}</AppText> : null}
+      <Disclosure title="Basis" open={methodOpen} onToggle={() => setMethodOpen(open => !open)}>
+        <AppText variant="small" color="textMuted">{uiJoin('Equal tier weights', ' · ', cataloguePrepared ? 'Historical matches' : 'Current matching tiers', ' · ', 'Withdrawn products', ' · ', cataloguePrepared ? 'Included' : 'Unknown', ' · ', 'Missing observations', ' · ', 'Unknown')}</AppText>
       </Disclosure>
     </>}
   </View>;

@@ -3,7 +3,8 @@ import { Pressable, View } from 'react-native';
 
 import { SECTIONS } from '../constants';
 import { bankSnapshotAt, type BankInsightsPayload } from '../data/bankInsights';
-import { formatRate, formatRunDate } from '../data/format';
+import { uiDate, uiJoin, uiProviderName, uiRate } from '../lib/uiCopy';
+import { uiChartBps, uiChartSection } from '../lib/chartUiCopy';
 import { moveTone } from '../lib/moveSemantics';
 import { openBank } from '../lib/nav';
 import type { SectionKey } from '../types';
@@ -11,9 +12,6 @@ import { useTheme } from '../theme/ThemeProvider';
 import { BankAvatar } from './BankAvatar';
 import { AppText, Divider, Row } from './ui';
 
-function deltaLabel(bps: number): string {
-  return `${bps > 0 ? '+' : '−'}${Math.abs(bps)} bps`;
-}
 
 /**
  * Rewind list for ribbon scrubbing: each lender's best rate as of `date`,
@@ -39,14 +37,14 @@ export function MarketSnapshotList({
   if (!payload) {
     return (
       <AppText variant="small" color="textMuted">
-        Bank-level rewind needs bank intelligence data — it loads with Outlook.
+        {uiJoin('History', ' · ', 'Unavailable')}
       </AppText>
     );
   }
   if (!rows.length) {
     return (
       <AppText variant="small" color="textMuted">
-        No {SECTIONS[section].short.toLowerCase()} data on or before {formatRunDate(date)}.
+        {uiJoin(uiChartSection(section), ' · ', 'No observations', ' · ', uiDate(date))}
       </AppText>
     );
   }
@@ -60,19 +58,17 @@ export function MarketSnapshotList({
             <Pressable
               onPress={() => openBank(row.provider)}
               accessibilityRole="button"
-              accessibilityLabel={`${row.provider}, leading ${SECTIONS[section].short} rate ${
-                row.best != null ? formatRate(row.best) : 'unknown'
-              } on ${formatRunDate(date)}`}
+              accessibilityLabel={uiJoin(uiProviderName(row), ' · ', uiChartSection(section), ' · ', 'Leading advertised', ' · ', uiRate(row.best), ' · ', uiDate(date))}
             >
               <Row gap={10} style={{ paddingVertical: 6 }}>
                 <BankAvatar provider={row.provider} size={28} />
                 <View style={{ flex: 1 }}>
                   <AppText variant="small" weight="600" numberOfLines={1}>
-                    {row.provider}
+                    {uiProviderName(row)}
                   </AppText>
                   {row.changeBps && row.changedOn ? (
                     <AppText variant="tiny" color="textFaint" numberOfLines={1}>
-                      moved {formatRunDate(row.changedOn)}
+                      {uiJoin('Changes', ' · ', uiDate(row.changedOn))}
                     </AppText>
                   ) : null}
                 </View>
@@ -84,11 +80,11 @@ export function MarketSnapshotList({
                       color: tone === 'danger' ? theme.colors.danger : theme.colors.success,
                     }}
                   >
-                    {deltaLabel(row.changeBps)}
+                    {uiChartBps(row.changeBps)}
                   </AppText>
                 ) : null}
                 <AppText variant="small" weight="800" style={{ minWidth: 56, textAlign: 'right' }}>
-                  {row.best != null ? formatRate(row.best) : '—'}
+                  {uiRate(row.best)}
                 </AppText>
               </Row>
             </Pressable>

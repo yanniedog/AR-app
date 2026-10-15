@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { TextInput, View, type TextInputProps } from 'react-native';
 
-import { commissionerFamily } from '../../theme/fonts';
+import { fontStyle } from '../../theme/fonts';
 import { LEDGER_LAYOUT } from '../../theme/layout';
 import { useTheme } from '../../theme/ThemeProvider';
 import { LedgerText } from './LedgerText';
+import type { UiCopy, UiNativeProps, UiInputText } from '../../lib/uiCopy';
 
 export function LedgerField({
   label,
-  hint,
   error,
   style,
   onFocus,
@@ -16,10 +16,12 @@ export function LedgerField({
   accessibilityLabel,
   multiline,
   ...rest
-}: TextInputProps & {
-  label: string;
-  hint?: string;
-  error?: string;
+}: Omit<UiNativeProps<TextInputProps>, 'value' | 'defaultValue' | 'placeholder'> & {
+  label: UiCopy;
+  value?: UiCopy | UiInputText;
+  defaultValue?: UiCopy | UiInputText;
+  placeholder?: UiCopy;
+  error?: UiCopy;
 }) {
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
@@ -50,12 +52,12 @@ export function LedgerField({
             minHeight: multiline ? 104 : LEDGER_LAYOUT.touchTarget,
             paddingHorizontal: 12,
             paddingVertical: multiline ? 12 : 8,
-            borderWidth: focused ? 2 : 1,
+            borderWidth: 1,
             borderColor: border,
-            borderRadius: 4,
-            backgroundColor: theme.ledger.raised,
+            borderRadius: theme.radius.md,
+            backgroundColor: theme.colors.surfaceAlt,
             color: theme.ledger.ink,
-            fontFamily: commissionerFamily('400'),
+            ...fontStyle('400'),
             fontSize: theme.font.body,
             textAlignVertical: multiline ? 'top' : 'center',
           },
@@ -65,8 +67,6 @@ export function LedgerField({
       />
       {error ? (
         <LedgerText variant="caption" tone="danger">{error}</LedgerText>
-      ) : hint ? (
-        <LedgerText variant="caption" tone="mutedInk">{hint}</LedgerText>
       ) : null}
     </View>
   );

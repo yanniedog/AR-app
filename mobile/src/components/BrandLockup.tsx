@@ -1,9 +1,11 @@
+import type { UiChild } from '../lib/uiCopy';
 import { usePathname } from 'expo-router';
 import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { ArMarkLogo } from './ArMarkLogo';
 import { AppText } from './ui';
+import { uiLabel } from '../lib/uiCopy';
 
 export type SplashMorphTarget = {
   x: number;
@@ -31,7 +33,7 @@ export function SplashMorphProvider({
   setMorphComplete,
   registerTarget,
 }: {
-  children: React.ReactNode;
+  children: UiChild;
   morphComplete: boolean;
   setMorphComplete: (done: boolean) => void;
   registerTarget: (target: SplashMorphTarget) => void;
@@ -95,7 +97,7 @@ export function BrandLockup({
         <ArMarkLogo size={markSize} />
       </View>
       <AppText variant="h3">
-        {compact ? 'Rates' : 'Australian Rates'}
+        {uiLabel(compact ? 'Rates' : 'Australian Rates')}
       </AppText>
     </View>
   );

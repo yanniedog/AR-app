@@ -39,8 +39,8 @@ test('startup history preparation hides the current-only fallback until complete
   let tree!: Renderer;
   await act(async () => { tree = TestRenderer.create(<BankRatesPanel onModelChange={onModelChange} onChartReady={onChartReady} />) as Renderer; });
   expect(tree.root.findAll(n => n.type === ('BankRateChart' as unknown))).toHaveLength(0);
-  expect(JSON.stringify(tree.toJSON())).toContain('Updating historical rates for your filters');
-  expect(JSON.stringify(tree.toJSON())).not.toContain('Historical rates are unavailable');
+  expect(JSON.stringify(tree.toJSON())).toContain('Loading');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('History · Unavailable · Current rate');
   expect(onModelChange).toHaveBeenLastCalledWith(null);
   expect(onChartReady).toHaveBeenLastCalledWith(false);
   mockState.bankRateHistoryLoading = false;
@@ -150,11 +150,11 @@ test('an update missing detailed history identifies the limitation and recovers 
   act(() => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
   const chart = () => tree.root.find(n => n.type === ('BankRateChart' as unknown));
   expect(chart().props.model.dates).toEqual([core.run_date]);
-  expect(JSON.stringify(tree.toJSON())).toContain('Historical rates are unavailable in this update. Showing current rates only.');
+  expect(JSON.stringify(tree.toJSON())).toContain('History · Unavailable · Current rate');
   mockState.core = core;
   act(() => tree.update(<BankRatesPanel />));
   expect(chart().props.model.dates).toEqual(core.bank_rate_history!.run_dates);
-  expect(JSON.stringify(tree.toJSON())).not.toContain('Historical rates are unavailable in this update.');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('History · Unavailable · Current rate');
   act(() => tree.unmount());
 });
 
@@ -167,7 +167,7 @@ test('invalid optional rich history falls back to valid legacy history after val
   act(() => { tree = TestRenderer.create(<BankRatesPanel onModelChange={onModelChange} />) as Renderer; });
   const charts = () => tree.root.findAll(n => n.type === ('BankRateChart' as unknown));
   expect(charts()).toHaveLength(0);
-  expect(JSON.stringify(tree.toJSON())).toContain('Updating historical rates for your filters');
+  expect(JSON.stringify(tree.toJSON())).toContain('Loading');
   mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, rateTypes: ['VARIABLE'] } };
   act(() => tree.update(<BankRatesPanel onModelChange={onModelChange} />));
   expect(charts()).toHaveLength(0);
@@ -175,8 +175,8 @@ test('invalid optional rich history falls back to valid legacy history after val
   await act(async () => release());
   expect(charts()[0].props.model.dates).toEqual(core.bank_rate_history!.run_dates);
   expect(charts()[0].props.model.lines.map(line => line.provider)).toEqual(['Alpha']);
-  expect(JSON.stringify(tree.toJSON())).not.toContain('Historical rates could not be prepared');
-  expect(JSON.stringify(tree.toJSON())).not.toContain('Updating historical rates for your filters');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Unavailable');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Loading');
   const calls = jest.mocked(yieldToUi).mock.calls.length;
   mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, rateTypes: ['FIXED'] } };
   act(() => tree.update(<BankRatesPanel onModelChange={onModelChange} />));
@@ -209,7 +209,7 @@ test('an unexpected rich preparation error does not treat valid history as a sch
   let tree!: Renderer;
   await act(async () => { tree = TestRenderer.create(<BankRatesPanel onAuditStateChange={onAuditStateChange} />) as Renderer; });
   expect(tree.root.findAll(n => n.type === ('BankRateChart' as unknown))).toHaveLength(0);
-  expect(JSON.stringify(tree.toJSON())).toContain('Historical rates could not be prepared');
+  expect(JSON.stringify(tree.toJSON())).toContain('Unavailable');
   expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
     status: 'error', error: 'Historical rates could not be prepared', renderedPointCount: 0,
   }));
@@ -233,7 +233,7 @@ test('prepacked history includes withdrawn products and filters their own dated 
   await act(async () => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
   const chart = () => tree.root.find(n => n.type === ('BankRateChart' as unknown));
   expect(chart().props.model.lines.find(line => line.provider === 'Withdrawn Bank')!.points.map(point => point.date)).toEqual(dates.slice(0, 2));
-  expect(JSON.stringify(tree.toJSON())).toContain('including products since withdrawn');
+  expect(JSON.stringify(tree.toJSON())).toContain('Withdrawn products · Included');
   mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] } };
   await act(async () => tree.update(<BankRatesPanel />));
   expect(chart().props.model.lines.map(line => line.provider)).toEqual(['Withdrawn Bank']);
@@ -256,7 +256,7 @@ test('embedded calendar gaps show the missing-history message without inventing 
   } };
   let tree!: Renderer;
   await act(async () => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
-  expect(JSON.stringify(tree.toJSON())).toContain('Some historical observations are unavailable in this update and stay blank.');
+  expect(JSON.stringify(tree.toJSON())).toContain('Missing observations · 1');
   const chart = tree.root.find(n => n.type === ('BankRateChart' as unknown));
   expect(chart.props.model.lines.find(line => line.provider === 'Alpha')!.points.map(point => point.date)).toEqual([dates[0], dates[2]]);
   act(() => tree.unmount());
@@ -289,7 +289,7 @@ test('uncached filters hide stale history immediately, ignore superseded complet
   mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, rateTypes: ['VARIABLE'] } };
   act(() => tree.update(panel()));
   expect(charts()).toHaveLength(0);
-  expect(JSON.stringify(tree.toJSON())).toContain('Updating historical rates for your filters');
+  expect(JSON.stringify(tree.toJSON())).toContain('Loading');
   expect(onModelChange).toHaveBeenLastCalledWith(null);
   expect(onChartReady).toHaveBeenLastCalledWith(false);
   mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, rateTypes: ['FIXED'] } };
@@ -300,6 +300,6 @@ test('uncached filters hide stale history immediately, ignore superseded complet
   expect(onModelChange).toHaveBeenLastCalledWith(null);
   await act(async () => releases[1]());
   expect(charts()[0].props.model.lines.map(line => line.provider)).toEqual(['Beta', 'Retired Fixed']);
-  expect(JSON.stringify(tree.toJSON())).not.toContain('Updating historical rates for your filters');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Loading');
   act(() => tree.unmount());
 });

@@ -1,3 +1,4 @@
+import { uiProductName } from '../src/lib/uiCopy';
 import { buildBreadcrumbs } from '../src/lib/breadcrumbs';
 import { compactBreadcrumbs, shortBreadcrumbLabel } from '../src/lib/compactBreadcrumbs';
 
@@ -19,7 +20,7 @@ it('gives large text the current page and preserves all parent destinations in o
 it('collapses a long product parent on narrow screens and keeps full names in the model', () => {
   const product = [
     ...trail.slice(0, -1),
-    { label: 'An exceptionally long variable home loan name' },
+    { label: uiProductName({ product_name: 'An exceptionally long variable home loan name' }) },
   ];
   const { visible, hidden } = compactBreadcrumbs(product, 280, 1);
   expect(visible).toEqual([product.at(-1)]);

@@ -1,179 +1,56 @@
-import { useGlobalSearchParams, usePathname } from 'expo-router';
+import { usePathname } from 'expo-router';
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import { resolveInterestSection } from '../data/interests';
+import { ScrollView, View } from 'react-native';
 import { useStore } from '../data/store';
-import { useReducedMotion } from '../hooks/useReducedMotion';
-import {
-  APP_DESTINATION_GROUPS,
-  destinationSectionFromParam,
-  destinationHref,
-  destinationIsActive,
-  type AppDestination,
-} from '../lib/appDestinations';
-import { useTheme } from '../theme/ThemeProvider';
+import { APP_DESTINATION_GROUPS, destinationHref, destinationIsActive, type AppDestination } from '../lib/appDestinations';
 import { navigateToAppDestination } from '../lib/primaryNavigation';
+import { useTheme } from '../theme/ThemeProvider';
+import { SheetSurface } from './SheetSurface';
 import { TouchTarget } from './TouchTarget';
-import { AppText, Divider, Row } from './ui';
+import { AppText } from './ui';
+import type { UiChild } from '../lib/uiCopy';
 import { LedgerIcon } from './icons/LedgerIcon';
 
-interface NavigationMenuContextValue {
-  open: boolean;
-  show: () => void;
-  hide: () => void;
-}
-
+interface NavigationMenuContextValue { open: boolean; show: () => void; hide: () => void }
 const NavigationMenuContext = createContext<NavigationMenuContextValue | null>(null);
-
-export function NavigationMenuProvider({ children }: { children: React.ReactNode }) {
+export function NavigationMenuProvider({ children }: { children: UiChild }) {
   const [open, setOpen] = useState(false);
-  const value = useMemo(() => ({
-    open,
-    show: () => setOpen(true),
-    hide: () => setOpen(false),
-  }), [open]);
+  const value = useMemo(() => ({ open, show: () => setOpen(true), hide: () => setOpen(false) }), [open]);
   return <NavigationMenuContext.Provider value={value}>{children}</NavigationMenuContext.Provider>;
 }
-
 function useNavigationMenu(): NavigationMenuContextValue {
   const value = useContext(NavigationMenuContext);
   if (!value) throw new Error('Navigation menu must be inside NavigationMenuProvider');
   return value;
 }
-
-/** `compact` drops the visible label where header space is tight; the accessible name stays. */
-export function NavigationMenuButton({ compact = false }: { compact?: boolean } = {}) {
-  const theme = useTheme();
-  const onboarded = useStore((state) => state.prefs.onboarded);
-  const menu = useNavigationMenu();
-  if (!onboarded) return null;
-  return (
-    <TouchTarget
-      onPress={menu.show}
-      accessibilityRole="button"
-      accessibilityLabel="Open app menu"
-      accessibilityState={{ expanded: menu.open }}
-      // Icon-only still keeps the 48 dp minimum width.
-      square={compact}
-      style={({ pressed }) => ({ flexDirection: 'row', gap: 5, paddingHorizontal: 10, opacity: pressed ? 0.6 : 1 })}
-    >
-      <LedgerIcon name="menu" size={21} color={theme.ledger.ink} />
-      {compact ? null : <AppText variant="small" weight="600">Menu</AppText>}
-    </TouchTarget>
-  );
+export function NavigationMenuButton({ compact: _compact = true }: { compact?: boolean } = {}) {
+  const theme = useTheme(), menu = useNavigationMenu();
+  const hydrated = useStore(state => state.hydrated);
+  if (!hydrated) return null;
+  return <TouchTarget square onPress={menu.show} accessibilityRole="button"
+    accessibilityLabel="Account" accessibilityState={{ expanded: menu.open }}>
+    <LedgerIcon name="profile" size={22} color={theme.colors.text} />
+  </TouchTarget>;
 }
-
 export function AppNavigationMenu() {
-  const theme = useTheme();
-  const menu = useNavigationMenu();
-  const pathname = usePathname();
-  const params = useGlobalSearchParams<{ section?: string | string[] }>();
-  const { width } = useWindowDimensions();
-  const reducedMotion = useReducedMotion();
-  const insets = useSafeAreaInsets();
-  const activeSection = useStore((state) => state.activeSection);
-  const interests = useStore((state) => state.prefs.interests);
-  const section = resolveInterestSection(
-    interests,
-    destinationSectionFromParam(params.section) ?? activeSection,
-  );
-  const drawerWidth = Math.min(360, Math.max(280, width * 0.88));
-
+  const theme = useTheme(), menu = useNavigationMenu(), pathname = usePathname();
   const openDestination = useCallback((destination: AppDestination) => {
-    const href = destinationHref(destination, section);
     menu.hide();
-    requestAnimationFrame(() => navigateToAppDestination(href, pathname));
-  }, [menu, section, pathname]);
-
-  return (
-    <Modal
-      visible={menu.open}
-      transparent
-      animationType={reducedMotion === false ? 'fade' : 'none'}
-      onRequestClose={menu.hide}
-      statusBarTranslucent
-    >
-      <View style={{ flex: 1, flexDirection: 'row-reverse' }}>
-        <View
-          accessibilityViewIsModal
-          style={{
-            width: drawerWidth,
-            maxWidth: '92%',
-            backgroundColor: theme.colors.surface,
-            paddingTop: Math.max(insets.top, 12),
-            paddingBottom: Math.max(insets.bottom, 12),
-            borderLeftWidth: 1,
-            borderLeftColor: theme.colors.border,
-          }}
-        >
-          <Row style={{ justifyContent: 'space-between', paddingHorizontal: 16 }}>
-            <AppText variant="h2">Menu</AppText>
-            <TouchTarget
-              square
-              onPress={menu.hide}
-              accessibilityRole="button"
-              accessibilityLabel="Close app menu"
-            >
-              <LedgerIcon name="close" size={24} color={theme.ledger.ink} />
-            </TouchTarget>
-          </Row>
-          <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 20 }}>
-            {APP_DESTINATION_GROUPS.map((group, groupIndex) => (
-              <View key={group.id}>
-                {groupIndex > 0 ? <Divider style={{ marginVertical: 10 }} /> : null}
-                <AppText variant="small" weight="700" accessibilityRole="header" style={{ paddingHorizontal: 12, paddingVertical: 8, color: theme.colors.textMuted }}>{group.label}</AppText>
-                {group.destinations.map((destination) => {
-                  const selected = destinationIsActive(destination.id, pathname);
-                  return (
-                    <Pressable
-                      key={destination.id}
-                      onPress={() => openDestination(destination)}
-                      accessibilityRole="button"
-                      accessibilityLabel={destination.label}
-                      accessibilityState={{ selected }}
-                      style={({ pressed }) => ({
-                        minHeight: 48,
-                        borderRadius: theme.radius.sm,
-                        paddingHorizontal: 12,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 12,
-                        backgroundColor: selected ? theme.colors.primaryMuted : 'transparent',
-                        borderLeftWidth: 3,
-                        borderLeftColor: selected ? theme.ledger.wattle : 'transparent',
-                        paddingVertical: 8,
-                        opacity: pressed ? 0.65 : 1,
-                      })}
-                    >
-                      <LedgerIcon
-                        name={destination.icon}
-                        size={21}
-                        color={selected ? theme.colors.primary : theme.colors.textMuted}
-                      />
-                      <AppText
-                        variant="body"
-                        weight={selected ? '700' : '500'}
-                        color={selected ? 'primary' : 'text'}
-                        style={{ flex: 1 }}
-                      >
-                        {destination.label}
-                      </AppText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-        <Pressable
-          onPress={menu.hide}
-          accessibilityRole="button"
-          accessibilityLabel="Close app menu"
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.48)' }}
-        />
-      </View>
-    </Modal>
-  );
+    requestAnimationFrame(() => navigateToAppDestination(destinationHref(destination), pathname));
+  }, [menu, pathname]);
+  return <SheetSurface visible={menu.open} title="Account" onClose={menu.hide}>
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 4 }}>
+      {APP_DESTINATION_GROUPS.flatMap(group => group.destinations).map(destination => {
+        const selected = destinationIsActive(destination.id, pathname);
+        return <TouchTarget fill key={destination.id} onPress={() => openDestination(destination)}
+          accessibilityRole="button" accessibilityLabel={destination.label} accessibilityState={{ selected }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 16, padding: 12,
+            borderRadius: theme.radius.md, backgroundColor: selected ? theme.colors.primaryMuted : 'transparent' }}>
+          <LedgerIcon name={destination.icon} size={22} color={selected ? theme.colors.primary : theme.colors.textMuted} />
+          <AppText variant="body" weight={selected ? '700' : '500'} style={{ flex: 1 }}>{destination.label}</AppText>
+          <View accessible={false}><LedgerIcon name="chevron-right" size={18} color={theme.colors.textMuted} /></View>
+        </TouchTarget>;
+      })}
+    </ScrollView>
+  </SheetSurface>;
 }

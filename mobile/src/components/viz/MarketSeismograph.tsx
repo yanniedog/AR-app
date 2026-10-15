@@ -3,23 +3,22 @@ import { View } from 'react-native';
 import Svg, { Line, Polygon, Rect } from 'react-native-svg';
 import { ChartText as SvgText } from '../charts/ChartText';
 
-import { SECTIONS } from '../../constants';
 import {
-  formatAxisDateLabel,
   rbaChangesInWindow,
   rbaHoldsInWindow,
   sliceIndexFromPlotX,
 } from '../../data/bankHistoryTransform';
-import { formatRunDate } from '../../data/format';
 import { marketActivityModel } from '../../data/vizModels';
 import type { BankInsightsPayload } from '../../data/bankInsights';
-import { isLoanSection, moveTone } from '../../lib/moveSemantics';
+import { moveTone } from '../../lib/moveSemantics';
 import type { HistoryWindow, RbaEntry, SectionKey } from '../../types';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import { hasFiniteChartDate, hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
 import { AppText, Row } from '../ui';
+import { uiCount, uiDate, uiJoin, uiLabel } from '../../lib/uiCopy';
+import { uiChartBps, uiChartDate, uiChartMove, uiChartSection } from '../../lib/chartUiCopy';
 
 /**
  * Market seismograph: every detected lender rate move as a mirrored daily bar —
@@ -82,8 +81,7 @@ export function MarketSeismograph({
         if (auditRevision) onGraphicReadiness?.({ revision: auditRevision, expectedCount: 0, pointCount: 0,
           accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
       }}>
-        Move activity appears here as the daily feed accumulates.
-      </AppText>
+        {uiLabel("No observations")}</AppText>
     );
   }
 
@@ -100,18 +98,11 @@ export function MarketSeismograph({
   const upInk = upTone === 'danger' ? theme.colors.danger : theme.colors.success;
   const downInk = downTone === 'danger' ? theme.colors.danger : theme.colors.success;
 
-  const quiet = model.totalMoves === 0;
   const selectedIdx = selectedDate ? model.days.findIndex((d) => d.date === selectedDate) : -1;
   const activeIndex = selectedIdx >= 0 ? selectedIdx : Math.max(0, n - 1);
   const activeDay = model.days[activeIndex];
-  const loan = isLoanSection(section);
-  const upWord = loan ? 'hikes' : 'increases';
-  const downWord = loan ? 'cuts' : 'decreases';
-  const activeValueLabel = activeDay ? [
-    activeDay.hikeBps > 0 ? `+${Math.round(activeDay.hikeBps)} bp ${upWord}` : null,
-    activeDay.cutBps > 0 ? `−${Math.round(activeDay.cutBps)} bp ${downWord}` : null,
-    activeDay.mixed > 0 ? `${activeDay.mixed} mixed` : null,
-  ].filter(Boolean).join(' · ') || 'No moves' : 'No observation';
+  const activeValueLabel = activeDay ? uiJoin(uiChartMove(section, 'hike'), ' ', uiChartBps(activeDay.hikeBps), ' · ',
+    uiChartMove(section, 'cut'), ' ', uiChartBps(-activeDay.cutBps), ' · ', 'Mixed', ' ', uiCount(activeDay.mixed)) : uiLabel('No observations');
   const selectAccessibleIndex = (index: number) => {
     const date = model.days[Math.max(0, Math.min(n - 1, index))]?.date;
     if (date) onDateSelect?.(date);
@@ -131,8 +122,7 @@ export function MarketSeismograph({
         onTouchCancel={scrub.onTouchCancel}
         accessible
         accessibilityRole="adjustable"
-        accessibilityLabel={`${SECTIONS[section].title} rate-move seismograph: ${model.totalMoves} lender moves in this window. Selected ${formatRunDate(activeDay.date)}: ${activeValueLabel}, ${activeDay.hikes + activeDay.cuts + activeDay.mixed} lender moves.`}
-        accessibilityHint="Swipe up or down to move between days."
+        accessibilityLabel={uiJoin(uiChartSection(section), ' · ', 'Moves', ' ', uiCount(model.totalMoves), ' · ', uiDate(activeDay.date), ' · ', activeValueLabel)}
         accessibilityActions={[
           { name: 'increment', label: 'Next day' },
           { name: 'decrement', label: 'Previous day' },
@@ -209,7 +199,7 @@ export function MarketSeismograph({
                     fill={theme.colors.rba}
                   />
                   <SvgText x={x + 8} y={padT - 2} fontSize={9} fill={theme.colors.rba} fontWeight="600">
-                    RBA {mark.bp > 0 ? `+${mark.bp}` : mark.bp}
+                    {uiJoin('RBA', ' ', uiChartBps(mark.bp))}
                   </SvgText>
                 </React.Fragment>
               );
@@ -227,16 +217,15 @@ export function MarketSeismograph({
                     strokeWidth={1.3}
                   />
                   <SvgText x={x + 8} y={padT - 2} fontSize={9} fill={theme.colors.rba} fontWeight="600">
-                    held
-                  </SvgText>
+                    {uiLabel("Held")}</SvgText>
                 </React.Fragment>
               );
             })}
             <SvgText x={padL} y={height - 4} fontSize={9} fill={theme.colors.textFaint}>
-              {formatAxisDateLabel(model.days[0].date)}
+              {uiChartDate(model.days[0].date)}
             </SvgText>
             <SvgText x={width - padR} y={height - 4} fontSize={9} fill={theme.colors.textFaint} textAnchor="end">
-              {formatAxisDateLabel(model.days[n - 1].date)}
+              {uiChartDate(model.days[n - 1].date)}
             </SvgText>
           </Svg>
         ) : null}
@@ -246,13 +235,11 @@ export function MarketSeismograph({
         activeIndex={activeIndex}
         onChangeIndex={(index) => onDateSelect?.(model.days[index]?.date ?? null)}
         valueLabel={activeValueLabel}
-        detail={activeDay ? `${activeDay.hikes + activeDay.cuts + activeDay.mixed} lender moves` : null}
+        facts={activeDay ? [{ label: 'Moves', value: uiCount(activeDay.hikes + activeDay.cuts + activeDay.mixed) }] : undefined}
       />
       <Row gap={12} style={{ marginTop: 6, flexWrap: 'wrap' }}>
         <AppText variant="tiny" color="textMuted">
-          {quiet
-            ? 'A quiet market — no lender moves detected in this window.'
-            : `${model.totalMoves} lender move${model.totalMoves === 1 ? '' : 's'} · bars above are ${upWord}, below are ${downWord}`}
+          {uiJoin('Moves', ' · ', uiCount(model.totalMoves))}
         </AppText>
       </Row>
     </View>

@@ -1,3 +1,4 @@
+import { uiDate, uiJoin, uiLabel, uiNumber, uiSectionName } from "../src/lib/uiCopy";
 import type { ChartRenderEvidence } from '../src/lib/chartRenderEvidence';
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
@@ -13,13 +14,13 @@ import { Ribbon } from '../src/components/Ribbon';
 import { ScreenScrollView } from '../src/components/Screen';
 import { AppText, Button, Disclosure, Divider, Row } from '../src/components/ui';
 import { HistoryExplorer, type HistoryViewMode } from '../src/components/viz/HistoryExplorer';
-import { SECTION_ORDER, SECTIONS } from '../src/constants';
+import { SECTION_ORDER } from '../src/constants';
 import { filterBankInsightsForSuitability } from '../src/data/bankInsights';
-import { formatRate, formatRunDate } from '../src/data/format';
+import { formatRate } from '../src/data/format';
 import { rbaSeriesThroughDate, rbaTimelineDates } from '../src/data/bankHistoryTransform';
 import { selectBankHistoryChartModel, shouldEnsurePrebuiltBankHistory } from '../src/data/historySelectors';
 import { orderedInterestSections, resolveInterestSection, sectionSegmentOptions } from '../src/data/interests';
-import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../src/data/rbaCalendar';
+import { recentDecisions } from '../src/data/rbaCalendar';
 import { resolveSectionRibbonStats } from '../src/data/ribbonStats';
 import { useStore } from '../src/data/store';
 import { getSuitabilityAllowed } from '../src/data/suitabilityGate';
@@ -207,7 +208,6 @@ export default function Market() {
   }, [core, depositRankMetric, detailsProducts, includeNonStandard, interestSections, mortgageRateMetric, suitabilityRevision]);
 
   const activeSnapshot = marketSnapshots.find((snapshot) => snapshot.key === activeSection) ?? null;
-  const trend = useMemo(() => rbaTrend(calendar), [calendar]);
   const decisions = useMemo(() => recentDecisions(calendar, 5), [calendar]);
   const currentRba = core?.rba.at(-1) ?? null;
   const datasetRevision = core?.run_date ?? null;
@@ -283,11 +283,9 @@ export default function Market() {
       'outlook.rba-response.decision.previous': () => { openRba(); previousRbaDate(); },
       'outlook.snapshot.browse.first': (...args: unknown[]) => {
         const planned = auditActionString(args, 'section');
-        const target = planned && SECTION_ORDER.includes(planned as typeof activeSection)
-          ? planned as typeof activeSection
-          : activeSection;
+        const target = SECTION_ORDER.find(section => section === planned) ?? activeSection;
         openBrowse(target);
-        return { expectedPath: '/categories' };
+        return { expectedPath: '/browse' };
       },
     },
   });
@@ -442,8 +440,7 @@ export default function Market() {
       }}
     >
       <View style={{ gap: 8 }}>
-        <AppText variant="h1" accessibilityRole="header">Market research</AppText>
-        <AppText variant="body" color="textMuted">A wider view of rates over time.</AppText>
+        <AppText variant="h1" accessibilityRole="header">{uiLabel("Market research")}</AppText>
       </View>
 
       {sectionOptions.length > 1 ? (
@@ -452,7 +449,7 @@ export default function Market() {
 
       <View style={{ gap: 16 }}>
         <AppText variant="small" color="textMuted">
-          {SECTIONS[activeSection].title} · observed {formatRunDate(core.run_date)}
+          {uiJoin(uiSectionName(activeSection),' · ','Observed',': ',uiDate(core.run_date))}
         </AppText>
         {activeSnapshot ? (
           <>
@@ -460,13 +457,13 @@ export default function Market() {
             <Button title="Browse these products" variant="ghost" onPress={() => openBrowse(activeSection)} />
           </>
         ) : (
-          <AppText variant="small" color="textMuted">Preparing the current standard-product market…</AppText>
+          <AppText variant="small" color="textMuted">{uiLabel("Loading")}</AppText>
         )}
       </View>
 
       <Disclosure
-        title={`How have ${SECTIONS[activeSection].title.toLowerCase()} rates moved?`}
-        summary="Leading advertised rate versus the median"
+        title="Rate history"
+
         open={historyOpen}
         onToggle={() => {
           setHistoryGraphicState(null);
@@ -499,7 +496,7 @@ export default function Market() {
               showModePicker={advancedViews}
             />
             <Button
-              title={advancedViews ? 'Show the simple trend' : 'Research views'}
+              title={uiLabel(advancedViews?'Trend':'Research views')}
               variant="ghost"
               onPress={() => {
                 setAdvancedViews((open) => !open);
@@ -508,15 +505,13 @@ export default function Market() {
             />
             {prebuiltHistoryEnabled && historyBanksError ? (
               <Row style={{ justifyContent: 'space-between' }}>
-                <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
-                  Showing available history · latest history check failed.
-                </AppText>
+                <AppText variant="small" color="textMuted" style={{ flex: 1 }}>{uiLabel("Cached history · Refresh failed")}</AppText>
                 <Button title="Retry" variant="ghost" loading={retryingHistory} onPress={handleRetryHistory} />
               </Row>
             ) : null}
           </View>
         ) : (
-          <AppText variant="small" color="textMuted">Preparing the trend after the first screen has settled…</AppText>
+          <AppText variant="small" color="textMuted">{uiLabel("Loading")}</AppText>
         )}
       </Disclosure>
 
@@ -529,7 +524,7 @@ export default function Market() {
       >
         <Disclosure
           title="RBA cash rate"
-          summary={currentRba ? `${formatRate(currentRba.rate)}${trend.summary ? ` · ${trend.summary}` : ''}` : 'Cash-rate history and decisions'}
+
           open={rbaOpen}
           onToggle={() => {
             setRbaGraphicState(null);
@@ -538,8 +533,8 @@ export default function Market() {
         >
           <View style={{ gap: 20 }}>
           <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-            <AppText variant="small" color="textMuted">Current cash rate</AppText>
-            <AppText variant="rateHero" style={{ color: theme.colors.rba }}>{currentRba ? formatRate(currentRba.rate) : '—'}</AppText>
+            <AppText variant="small" color="textMuted">{uiLabel("Current cash rate")}</AppText>
+            <AppText variant="rateHero" style={{ color: theme.colors.rba }}>{currentRba ? formatRate(currentRba.rate) : uiLabel("—")}</AppText>
           </Row>
           <RbaChart
             data={core.rba}
@@ -553,8 +548,8 @@ export default function Market() {
           {decisions.length ? <Divider /> : null}
           {decisions.map((decision) => (
             <Row key={decision.date} style={{ justifyContent: 'space-between', paddingVertical: 8, flexWrap: 'wrap' }}>
-              <AppText variant="small" color="textMuted">{formatRbaDate(decision.date)}</AppText>
-              <AppText variant="small" weight="700">{decisionLine(decision)}</AppText>
+              <AppText variant="small" color="textMuted">{uiDate(decision.date)}</AppText>
+              <AppText variant="small" weight="700">{uiJoin(decision.outcome==='hike'?'Increase':decision.outcome==='cut'?'Decrease':'Held',' · ',uiJoin(uiNumber(decision.rate,2),'%'))}</AppText>
             </Row>
           ))}
           </View>
@@ -562,8 +557,8 @@ export default function Market() {
       </View>
 
       <Disclosure
-        title="What is shaping rates"
-        summary="Inflation, labour, housing and market expectations"
+        title="Economy"
+
         open={economyOpen}
         onToggle={() => {
           setEconomicAuditState(null);
@@ -579,9 +574,7 @@ export default function Market() {
       </Disclosure>
 
       {bankInsightsError && explorerInsights ? (
-        <AppText variant="small" color="textMuted" style={{ textAlign: 'center' }}>
-          Showing saved market history · the latest update was unavailable.
-        </AppText>
+        <AppText variant="small" color="textMuted" style={{ textAlign: 'center' }}>{uiLabel("Cached history · Refresh failed")}</AppText>
       ) : null}
     </ScreenScrollView>
   );

@@ -28,9 +28,8 @@ const point: ProjectionPoint = {
 };
 
 const series: ProjectionSeries = {
-  id: 'current',
+  id: 'rate-base',
   label: 'Current rate',
-  detail: 'Illustrative test series',
   annualRate: 0.06,
   points: [point],
   payoffDate: null,
@@ -57,7 +56,7 @@ describe('LifecycleChart render evidence', () => {
       asAt={point.date} renderRevision="undefined-ratio" onRenderReady={onRenderReady} />) as InspectableRenderer; });
     try {
       expect(onRenderReady).not.toHaveBeenCalled();
-      const empty = tree.root.findByProps({ children: 'No observations are available for this metric.' });
+      const empty = tree.root.findByProps({ children: 'No observations' });
       act(() => (empty.props.onLayout as (event: unknown) => void)({ nativeEvent: { layout: { width: 320, height: 24 } } }));
       expect(onRenderReady).toHaveBeenLastCalledWith(expect.objectContaining({ expectedCount: 0, pointCount: 0,
         layoutMeasured: true, emptyStateRendered: true, accessibleSummary: false }));

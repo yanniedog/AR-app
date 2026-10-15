@@ -80,6 +80,58 @@ class FakeClock implements PerformanceAuditReadinessClock {
 }
 
 describe('PerformanceAuditReadinessRegistry', () => {
+  it('pauses timeout and requires fresh foreground stability after resuming', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('pause');
+    registry.registerSurface({ id: 'screen', probes: [{ id: 'data', kind: 'data', status: 'ready' }] });
+    let paused = false;
+    const listeners = new Set<() => void>();
+    const pauseState = { getPaused: () => paused, subscribe: (listener: () => void) => {
+      listeners.add(listener); return () => { listeners.delete(listener); };
+    } };
+    let done = false;
+    const wait = registry.waitForReady({ quietWindowMs: 100, timeoutMs: 200, pauseState })
+      .then(() => { done = true; });
+    clock.advanceBy(50);
+    paused = true;
+    listeners.forEach(listener => listener());
+    clock.advanceBy(1000);
+    await Promise.resolve();
+    expect(done).toBe(false);
+    expect(clock.pendingTimers()).toBe(0);
+    paused = false;
+    listeners.forEach(listener => listener());
+    clock.advanceBy(99);
+    await Promise.resolve();
+    expect(done).toBe(false);
+    clock.advanceBy(1);
+    await wait;
+    expect(done).toBe(true);
+    expect(listeners.size).toBe(0);
+  });
+
+  it('retains the foreground timeout budget across a background pause', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('pause-timeout');
+    registry.registerSurface({ id: 'screen', probes: [{ id: 'data', kind: 'data', status: 'pending' }] });
+    let paused = false;
+    let notify = () => {};
+    const wait = registry.waitForReady({ timeoutMs: 200, pauseState: {
+      getPaused: () => paused, subscribe: listener => { notify = listener; return () => {}; },
+    } });
+    const rejected = expect(wait).rejects.toBeInstanceOf(PerformanceAuditReadinessTimeoutError);
+    clock.advanceBy(75);
+    paused = true; notify();
+    clock.advanceBy(1000);
+    paused = false; notify();
+    clock.advanceBy(124);
+    expect(clock.pendingTimers()).toBe(1);
+    clock.advanceBy(1);
+    await rejected;
+  });
+
   function settledFixture() {
     const clock = new FakeClock();
     const registry = new PerformanceAuditReadinessRegistry(clock);
@@ -345,6 +397,20 @@ describe('PerformanceAuditReadinessRegistry', () => {
     expect(evidence).toContain('product.details:probe-7:layout:ready:8/8:measured=1');
     expect(evidence).not.toContain('private-state');
     expect(evidence).not.toContain('a'.repeat(32));
+  });
+
+  it('retains data-probe optionality and explicit required-kind overrides in compact evidence', () => {
+    const registry = new PerformanceAuditReadinessRegistry(new FakeClock());
+    registry.beginCapture('pa-optional-data');
+    registry.registerSurface({ id: 'settings.app-update', probes: [
+      { id: 'result', kind: 'data', status: 'pending', required: false, expectedCount: 1, actualCount: 0 },
+      { id: 'required-data', kind: 'data', status: 'pending', expectedCount: 1, actualCount: 0 },
+    ] });
+    const evidence = compactPerformanceAuditReadinessEvidence(registry.snapshot());
+    expect(evidence).toContain('settings.app-update:result:data:pending:0/1:required=0');
+    expect(evidence).toContain('settings.app-update:required-data:data:pending:0/1:required=1');
+    expect(compactPerformanceAuditReadinessEvidence(registry.snapshot(['settings.app-update'], ['data'])))
+      .toContain('settings.app-update:result:data:pending:0/1:required=1');
   });
 
   it('is inert outside capture and never treats zero surfaces as ready', () => {
@@ -634,6 +700,82 @@ describe('PerformanceAuditReadinessRegistry', () => {
       ready: true,
       surfaces: [expect.objectContaining({ id: 'search.results' })],
     });
+  });
+
+  it('waits for selected-route registration and real required list/layout evidence after the pathname changes', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('pa-route-registers-later');
+    registry.registerSurface({ id: 'unrelated', probes: [
+      { id: 'list', kind: 'list', status: 'ready', expectedCount: 4, actualCount: 4 },
+      { id: 'layout', kind: 'layout', status: 'ready', layoutMeasured: true },
+    ] });
+    let settled = false;
+    const wait = registry.waitForReady({ surfaceIds: ['rates.results'], requiredKinds: ['list'],
+      quietWindowMs: 10, timeoutMs: 1000 });
+    void wait.then(() => { settled = true; }, () => { settled = true; });
+    clock.advanceBy(50);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(registry.snapshot(['rates.results']).surfaces).toEqual([]);
+
+    const surface = registry.registerSurface({ id: 'rates.results', renderRevision: 'actual-query', probes: [
+      { id: 'results', kind: 'list', status: 'ready', expectedCount: 4, actualCount: 4 },
+      { id: 'layout', kind: 'layout', status: 'pending', layoutMeasured: false },
+    ] })!;
+    clock.advanceBy(20);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    registry.updateProbe(surface, 'layout', { status: 'ready', layoutMeasured: true });
+    clock.advanceBy(9);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    clock.advanceBy(1);
+    await expect(wait).resolves.toMatchObject({ ready: true,
+      surfaces: [expect.objectContaining({ id: 'rates.results', probes: [
+        expect.objectContaining({ id: 'layout', layoutMeasured: true }),
+        expect.objectContaining({ id: 'results', actualCount: 4 }),
+      ] })] });
+  });
+
+  it('still rejects a mounted selected route without its required list immediately', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('pa-mounted-without-list');
+    registry.registerSurface({ id: 'rates.results', probes: [
+      { id: 'layout', kind: 'layout', status: 'ready', layoutMeasured: true },
+    ] });
+    await expect(registry.waitForReady({ surfaceIds: ['rates.results'], requiredKinds: ['list'],
+      quietWindowMs: 10, timeoutMs: 1000 })).rejects.toMatchObject({
+      name: 'PerformanceAuditReadinessError',
+      snapshot: { blockers: [expect.objectContaining({ code: 'required-kind-missing' })] },
+    });
+    expect(clock.now()).toBe(0);
+    expect(clock.pendingTimers()).toBe(0);
+  });
+
+  it('keeps the original deadline when the selected surface never registers', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('pa-never-mounted');
+    registry.registerSurface({ id: 'unrelated', probes: [
+      { id: 'list', kind: 'list', status: 'ready', expectedCount: 4, actualCount: 4 },
+    ] });
+    let settled = false;
+    const wait = registry.waitForReady({ surfaceIds: ['rates.results'], requiredKinds: ['list'],
+      quietWindowMs: 10, timeoutMs: 100 });
+    void wait.then(() => { settled = true; }, () => { settled = true; });
+    clock.advanceBy(99);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    clock.advanceBy(1);
+    await expect(wait).rejects.toMatchObject({ name: PerformanceAuditReadinessTimeoutError.name,
+      snapshot: { surfaces: [], blockers: expect.arrayContaining([
+        expect.objectContaining({ code: 'no-surfaces' }),
+        expect.objectContaining({ code: 'required-kind-missing' }),
+      ]) } });
+    expect(clock.now()).toBe(100);
+    expect(clock.pendingTimers()).toBe(0);
   });
 
   it('promotes an optional asset family when the active step exercises it', () => {

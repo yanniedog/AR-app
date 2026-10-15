@@ -2,29 +2,30 @@ import React from 'react';
 import { View, type ViewProps } from 'react-native';
 
 import { LedgerText } from './LedgerText';
+import { uiJoin, type UiCopy, type UiNativeProps } from '../../lib/uiCopy';
 
 export function RateFigure({
   label,
   value,
   secondaryLabel,
   secondaryValue,
-  missingLabel = 'Not published',
+  missingLabel = 'Unavailable',
   large = false,
   style,
   ...rest
-}: ViewProps & {
-  label: string;
-  value: string | null | undefined;
-  secondaryLabel?: string;
-  secondaryValue?: string | null;
-  missingLabel?: string;
+}: UiNativeProps<ViewProps> & {
+  label: UiCopy;
+  value: UiCopy | null | undefined;
+  secondaryLabel?: UiCopy;
+  secondaryValue?: UiCopy | null;
+  missingLabel?: UiCopy;
   large?: boolean;
 }) {
   const shownValue = value || missingLabel;
   return (
     <View
       accessible
-      accessibilityLabel={`${label}: ${shownValue}${secondaryLabel ? `. ${secondaryLabel}: ${secondaryValue || missingLabel}` : ''}`}
+      accessibilityLabel={uiJoin(label, ': ', shownValue, secondaryLabel ? uiJoin(' · ', secondaryLabel, ': ', secondaryValue || missingLabel) : null)}
       style={[{ gap: 3 }, style]}
       {...rest}
     >
@@ -34,7 +35,7 @@ export function RateFigure({
       </LedgerText>
       {secondaryLabel ? (
         <LedgerText variant="caption" tone="mutedInk">
-          {secondaryLabel} · {secondaryValue || missingLabel}
+          {uiJoin(secondaryLabel, ' · ', secondaryValue || missingLabel)}
         </LedgerText>
       ) : null}
     </View>

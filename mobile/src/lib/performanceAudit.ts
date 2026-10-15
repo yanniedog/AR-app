@@ -174,6 +174,8 @@ export interface PerformanceAuditState {
   startedAt: string | null;
   hangTimeoutMs: number;
   auditMode: AppHealthAuditMode;
+  /** Per-session publication choice; never a persisted privacy preference. */
+  uploadLog: boolean;
   storedCheckCount: number;
   lastStoredCheckAt: string | null;
   progress: PerformanceAuditProgress;
@@ -238,10 +240,10 @@ export function resolveAuditJourneyOptionalData(
 ): AuditJourneyOptionalData {
   const historyEnabled = effectiveHistoryRibbon(prefs);
   return {
-    deepSearch: journeyId === 'search' && hasSearchIndex && effectiveDeepSearch(prefs),
+    deepSearch: (journeyId === 'rates' || journeyId.startsWith('rates-')) && hasSearchIndex && effectiveDeepSearch(prefs),
     bankInsights:
       effectiveBankInsights() &&
-      ['response', 'outlook', 'product', 'lender'].includes(journeyId),
+      ['market', 'response', 'outlook', 'product', 'lender'].includes(journeyId),
     // Product and lender screens intentionally suppress their deferred history
     // fan-out while an audit is active. Waiting for that suppressed work caused
     // deterministic 30-second false failures on a cold product-history cache.
@@ -263,6 +265,7 @@ const IDLE_STATE: PerformanceAuditState = {
   startedAt: null,
   hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   auditMode: 'local',
+  uploadLog: true,
   storedCheckCount: 0,
   lastStoredCheckAt: null,
   progress: { completed: 0, total: 0, label: 'Ready' },
@@ -311,6 +314,8 @@ export function isPerformanceAuditActive(): boolean {
 export interface RequestPerformanceAuditOptions {
   hangTimeoutMs?: number;
   mode?: AppHealthAuditMode;
+  /** Defaults to the historical audit-and-upload API behavior. */
+  uploadLog?: boolean;
 }
 
 export function parsePerformanceAuditHangTimeoutSeconds(
@@ -516,6 +521,7 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     startedAt: new Date().toISOString(),
     hangTimeoutMs,
     auditMode: options.mode ?? 'local',
+    uploadLog: options.uploadLog ?? true,
     storedCheckCount: 0,
     lastStoredCheckAt: null,
     progress: { completed: 0, total: 0, label: 'Preparing audit' },
@@ -693,22 +699,18 @@ export function formatAuditErrorForLog(error: unknown): string {
   return flattenAuditLogText(formatAuditError(error));
 }
 
-function browseJourney(section: SectionKey, interests: SectionKey[]): AuditJourney {
-  const enabled = interests.includes(section);
+function ratesJourney(section: SectionKey): AuditJourney {
   return {
-    id: `browse-${section.toLowerCase()}`,
-    label: `Categories: ${SECTIONS[section].title}`,
-    href: enabled
-      ? ({
-          pathname: '/categories',
-          params: buildBrowseRouteParams(section),
-        } as unknown as Href)
-      : undefined,
-    expectedPath: '/categories',
-    expectedSurface: 'browse.hierarchy',
+    id: `rates-${section.toLowerCase()}`,
+    label: `Rates: ${SECTIONS[section].title}`,
+    href: {
+      pathname: '/browse',
+      params: buildBrowseRouteParams(section),
+    } as unknown as Href,
+    expectedPath: '/browse',
+    expectedSurface: 'rates.results',
     expectedSection: section,
-    navigationKind: 'stack',
-    skipReason: enabled ? undefined : `${SECTIONS[section].title} is disabled in interests`,
+    navigationKind: 'tab',
   };
 }
 
@@ -719,15 +721,15 @@ function browseJourney(section: SectionKey, interests: SectionKey[]): AuditJourn
  */
 export function buildPerformanceAuditJourneys(
   core: CorePayload | null,
-  interests: SectionKey[] = SECTION_ORDER,
+  _interests: SectionKey[] = SECTION_ORDER,
   options: DeepAuditSelectionOptions = {},
 ): AuditJourney[] {
-  return buildPerformanceAuditJourneysFromInputs(deriveDeepAuditInputs(core, options), interests);
+  return buildPerformanceAuditJourneysFromInputs(deriveDeepAuditInputs(core, options));
 }
 
 export function buildPerformanceAuditJourneysFromInputs(
   inputs: DeepAuditDerivedInputs,
-  interests: SectionKey[] = SECTION_ORDER,
+  _interests: SectionKey[] = SECTION_ORDER,
 ): AuditJourney[] {
   const first = inputs.primaryProduct;
   const second = inputs.secondaryProduct;
@@ -735,19 +737,11 @@ export function buildPerformanceAuditJourneysFromInputs(
 
   return [
     {
-      id: 'home',
-      label: 'Home',
-      href: '/(tabs)' as Href,
-      expectedPath: '/',
-      expectedSurface: 'home.hub',
-      navigationKind: 'tab',
-    },
-    {
       id: 'rates',
       label: 'Rates',
       href: '/browse' as Href,
       expectedPath: '/browse',
-      expectedSurface: 'rates.hub',
+      expectedSurface: 'rates.results',
       navigationKind: 'tab',
     },
     {
@@ -755,24 +749,8 @@ export function buildPerformanceAuditJourneysFromInputs(
       label: 'Market',
       href: '/market' as Href,
       expectedPath: '/market',
-      expectedSurface: 'market.hub',
+      expectedSurface: 'market.overview',
       navigationKind: 'tab',
-    },
-    {
-      id: 'tools',
-      label: 'Tools',
-      href: '/tools' as Href,
-      expectedPath: '/tools',
-      expectedSurface: 'tools.hub',
-      navigationKind: 'tab',
-    },
-    {
-      id: 'matches',
-      label: 'My matches',
-      href: '/matches' as Href,
-      expectedPath: '/matches',
-      expectedSurface: 'today.hero',
-      navigationKind: 'stack',
     },
     {
       id: 'bank-rates',
@@ -782,15 +760,7 @@ export function buildPerformanceAuditJourneysFromInputs(
       expectedSurface: 'bank-rates.dashboard',
       navigationKind: 'stack',
     },
-    {
-      id: 'changes',
-      label: 'Rate moves',
-      href: '/passthrough' as Href,
-      expectedPath: '/passthrough',
-      expectedSurface: 'changes.feed',
-      navigationKind: 'stack',
-    },
-    ...SECTION_ORDER.map((section) => browseJourney(section, interests)),
+    ...SECTION_ORDER.map(ratesJourney),
     {
       id: 'response',
       label: 'Bank response',
@@ -817,7 +787,7 @@ export function buildPerformanceAuditJourneysFromInputs(
     },
     {
       id: 'watchlist',
-      label: 'Watchlist',
+      label: 'Saved',
       href: '/watchlist' as Href,
       expectedPath: '/watchlist',
       expectedSurface: 'saved.list',
@@ -832,17 +802,6 @@ export function buildPerformanceAuditJourneysFromInputs(
       navigationKind: 'stack',
     },
     {
-      id: 'search',
-      label: 'Product search',
-      href: {
-        pathname: '/search',
-        params: { section: 'Mortgage' },
-      } as unknown as Href,
-      expectedPath: '/search',
-      expectedSurface: 'search.results',
-      navigationKind: 'stack',
-    },
-    {
       id: 'calculator',
       label: 'Switch and save calculator',
       href: '/calculator' as Href,
@@ -854,19 +813,11 @@ export function buildPerformanceAuditJourneysFromInputs(
       id: 'projections',
       label: 'Lifecycle projections',
       href: {
-        pathname: '/projections',
-        params: { section: 'Mortgage' },
+        pathname: '/calculator',
+        params: { section: 'Mortgage', mode: 'project' },
       } as unknown as Href,
-      expectedPath: '/projections',
+      expectedPath: '/calculator',
       expectedSurface: 'projections.lifecycle-chart',
-      navigationKind: 'stack',
-    },
-    {
-      id: 'lenders',
-      label: 'Lenders',
-      href: '/banks' as Href,
-      expectedPath: '/banks',
-      expectedSurface: 'lenders.list',
       navigationKind: 'stack',
     },
     {

@@ -27,14 +27,16 @@ describe('taxonomy', () => {
   });
 
   test('segLabel handles LVR edge cases and generic fallback', () => {
-    expect(segLabel('LVR_UNSP')).toBe('LVR n/a');
-    expect(segLabel('LVR_UNSPECIFIED')).toBe('LVR n/a');
-    expect(segLabel('LVR_NA')).toBe('LVR n/a');
+    expect(segLabel('LVR_UNSP')).toBe('LVR · Unknown');
+    expect(segLabel('LVR_UNSPECIFIED')).toBe('LVR · Unknown');
+    expect(segLabel('LVR_NA')).toBe('LVR · Unknown');
     expect(segLabel('LVR_GT95')).toBe('95%+ LVR');
     expect(segLabel('LVR_GT80')).toBe('80%+ LVR');
     expect(segLabel('LVR_90')).toBe('≤90% LVR');
     expect(segLabel('')).toBe('Other');
-    expect(segLabel('OTHER_TERM_TYPE')).toBe('Other term type');
+    expect(segLabel('OTHER_TERM_TYPE')).toBe('Source category · OTHER_TERM_TYPE');
+    expect(segLabel('Tap here to discover products.')).toBe('Source category · Unknown');
+    expect(segLabel('LVR_READ_MORE')).toBe('LVR · Unknown');
   });
 
   test('childrenOf sorts LVR tiers numerically even with GT/LE prefixes', () => {

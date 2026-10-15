@@ -7,20 +7,17 @@ import { openBank } from '../../lib/nav';
 import { useTheme } from '../../theme/ThemeProvider';
 import { BankAvatar } from '../BankAvatar';
 import { AppText, Badge, Row } from '../ui';
+import { uiCount, uiJoin, uiLabel, uiProviderName, type UiText } from '../../lib/uiCopy';
+import { uiChartBps, uiChartPercent, uiResponseDays } from '../../lib/chartUiCopy';
 
-function patternEvidence(profile: BankResponseProfile): string {
-  if (profile.confidence === 'established') return 'Established pattern';
-  if (profile.confidence === 'developing') return 'Developing pattern';
-  if (profile.confidence === 'early') return 'Limited evidence';
-  return 'Building history';
+function patternEvidence(profile: BankResponseProfile): UiText {
+  return uiLabel(profile.confidence === 'established' ? 'Established' : profile.confidence === 'developing' ? 'Developing' : profile.confidence === 'early' ? 'Limited' : 'Pending');
 }
 
-function currentLabel(profile: BankResponseProfile): string | null {
+function currentLabel(profile: BankResponseProfile): UiText | null {
   if (!profile.currentWindowIncluded || !profile.currentStatus) return null;
-  if (profile.currentStatus === 'waiting') return 'Current · no matching move yet';
-  const bps = profile.currentBps ?? 0;
-  const timing = profile.currentDays == null ? '' : ` after ${profile.currentDays}d`;
-  return `Current · ${bps > 0 ? '+' : bps < 0 ? '−' : ''}${Math.abs(bps)} bp${timing}`;
+  if (profile.currentStatus === 'waiting') return uiJoin('Response window', ' · ', 'No observed move');
+  return uiJoin('Response window', ' · ', uiChartBps(profile.currentBps), ' · ', uiResponseDays(profile.currentDays));
 }
 
 export const BankPatternRow = memo(function BankPatternRow({
@@ -35,18 +32,7 @@ export const BankPatternRow = memo(function BankPatternRow({
     <Pressable
       onPress={() => openBank(profile.provider)}
       accessibilityRole="button"
-      accessibilityLabel={[
-        `${profile.provider}.`,
-        profile.direction === 'hike' ? 'After cash-rate increases.' : 'After cash-rate cuts.',
-        profile.windowsObserved
-          ? `Moved with the RBA in ${profile.movedWithRba} of ${profile.windowsObserved} complete tracked rate-change windows.`
-          : 'General pattern is still building.',
-        profile.medianDays == null
-          ? 'No typical response time available.'
-          : `Typical response ${profile.medianDays} days.`,
-        current,
-      ].filter(Boolean).join(' ')}
-      accessibilityHint="Open this lender's profile."
+      accessibilityLabel={uiJoin(uiProviderName(profile), ' · ', profile.direction === 'hike' ? 'Hike' : 'Cut', ' · ', 'Complete windows', ' ', uiCount(profile.movedWithRba), '/', uiCount(profile.windowsObserved), ' · ', 'Median response', ' ', uiResponseDays(profile.medianDays), current ? uiJoin(' · ', current) : null)}
       style={{
         marginBottom: 10,
         padding: 14,
@@ -59,15 +45,13 @@ export const BankPatternRow = memo(function BankPatternRow({
       <Row gap={10} style={{ alignItems: 'center' }}>
         <BankAvatar provider={profile.provider} size={38} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <AppText variant="small" weight="700" numberOfLines={1}>{profile.provider}</AppText>
+          <AppText variant="small" weight="700" numberOfLines={1}>{uiProviderName(profile)}</AppText>
           <AppText variant="tiny" color="textMuted" style={{ marginTop: 2 }}>
-            {profile.windowsObserved
-              ? `${profile.movedWithRba} of ${profile.windowsObserved} complete windows followed`
-              : 'Not enough complete windows yet'}
+            {uiJoin('Complete windows', ' · ', uiCount(profile.movedWithRba), '/', uiCount(profile.windowsObserved))}
           </AppText>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <AppText variant="rate">{profile.responseRatePct == null ? '—' : `${profile.responseRatePct}%`}</AppText>
+          <AppText variant="rate">{uiChartPercent(profile.responseRatePct, 0)}</AppText>
           <Ionicons name="chevron-forward" size={15} color={theme.colors.textFaint} />
         </View>
       </Row>
@@ -88,8 +72,8 @@ export const BankPatternRow = memo(function BankPatternRow({
 
       <Row gap={6} style={{ marginTop: 10, flexWrap: 'wrap' }}>
         <Badge label={patternEvidence(profile)} tone={profile.confidence === 'one-window' ? 'muted' : 'primary'} />
-        {profile.medianDays != null ? <Badge label={`Typical ${profile.medianDays}d`} tone="muted" /> : null}
-        {profile.medianPassPct != null ? <Badge label={`Median ${Math.round(profile.medianPassPct)}% pass`} tone="muted" /> : null}
+        {profile.medianDays != null ? <Badge label={uiJoin('Median response', ' · ', uiResponseDays(profile.medianDays))} tone="muted" /> : null}
+        {profile.medianPassPct != null ? <Badge label={uiJoin('Median', ' · ', uiChartPercent(Math.round(profile.medianPassPct), 0))} tone="muted" /> : null}
         {current ? <Badge label={current} tone="primary" /> : null}
       </Row>
     </Pressable>

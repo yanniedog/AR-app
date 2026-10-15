@@ -7,16 +7,18 @@ import { searchReportTables } from './searchReportTables';
 import { searchReportHtml } from './searchReportPdf';
 import { writeReportWorkbook } from './searchReportWorkbook';
 import { getMandatoryEligibilityRevision } from '../data/eligibilityGate';
+import { uiDate, uiJoin } from './uiCopy';
 
 export class ReportCancelled extends Error { constructor() { super('Export cancelled.'); } }
-export async function exportSearchReport(snapshot: FilteredSearchSnapshot, format: 'pdf' | 'xlsx', signal: AbortSignal, progress: (value: string) => void): Promise<void> {
+export type SearchReportProgress = 'Generating report' | 'Opening share sheet';
+export async function exportSearchReport(snapshot: FilteredSearchSnapshot, format: 'pdf' | 'xlsx', signal: AbortSignal, progress: (value: SearchReportProgress) => void): Promise<void> {
   const revision = snapshot.eligibilityRevision;
   const checkpoint = () => { if (signal.aborted || revision !== getMandatoryEligibilityRevision()) throw new ReportCancelled(); };
   let file: File | null = null;
   try {
     checkpoint();
     if (Platform.OS === 'web' || !await isAvailableAsync()) throw Error('Local report sharing is unavailable on this device.');
-    progress('Generating report…'); checkpoint();
+    progress('Generating report'); checkpoint();
     if (format === 'pdf') {
       const html = await searchReportHtml(snapshot, checkpoint); checkpoint();
       const result = await printToFileAsync({ html, width: 595, height: 842, margins: { top: 40, bottom: 40, left: 40, right: 40 } });
@@ -28,8 +30,8 @@ export async function exportSearchReport(snapshot: FilteredSearchSnapshot, forma
       file.write(bytes);
       if (file.size !== bytes.length) throw Error('Workbook write was incomplete.');
     }
-    checkpoint(); progress('Opening share sheet…');
-    await shareAsync(file.uri, { mimeType: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', UTI: format === 'pdf' ? 'com.adobe.pdf' : 'org.openxmlformats.spreadsheetml.sheet', dialogTitle: `Search results · ${snapshot.publicationDate}` });
+    checkpoint(); progress('Opening share sheet');
+    await shareAsync(file.uri, { mimeType: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', UTI: format === 'pdf' ? 'com.adobe.pdf' : 'org.openxmlformats.spreadsheetml.sheet', dialogTitle: uiJoin('Search results', ' · ', uiDate(snapshot.publicationDate)) });
   } finally {
     // Local reports never enter release publication paths. Do not retain private exports in cache.
     if (file?.exists) file.delete();

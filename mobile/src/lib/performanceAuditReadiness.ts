@@ -155,7 +155,7 @@ export function compactPerformanceAuditReadinessEvidence(
       probe.kind,
       probe.status,
       probe.actualCount == null ? '' : `${probe.actualCount}/${probe.expectedCount ?? probe.actualCount}`,
-      ...(probe.kind === 'graphic' ? [`required=${probe.required ? 1 : 0}`] : []),
+      ...(probe.kind === 'graphic' || probe.kind === 'data' ? [`required=${probe.required ? 1 : 0}`] : []),
       ...(probe.fallbackCount == null ? [] : [`fallback=${probe.fallbackCount}`]),
       ...(probe.visibleCount == null ? [] : [`visible=${probe.visibleCount}`]),
       ...(probe.emptyStateRendered == null ? [] : [`empty=${probe.emptyStateRendered ? 1 : 0}`]),
@@ -176,6 +176,9 @@ export interface WaitForPerformanceAuditReadinessOptions {
   /** Reuse completed stability evidence only for unchanged mounted surfaces. */
   reuseSettledEvidence?: boolean;
   timeoutMs?: number;
+  /** Suspend the wait budget while backgrounded; resume needs fresh UI stability.
+   * The caller's step watchdog and cancellation still bound the overall action. */
+  pauseState?: { getPaused(): boolean; subscribe(listener: () => void): () => void };
   signal?: AbortSignal;
   /** Only these mounted surfaces may satisfy this step. This prevents an
    * already-ready persistent/root surface from certifying a new destination. */
@@ -796,9 +799,15 @@ export class PerformanceAuditReadinessRegistry {
       let stableSinceMs = 0;
       let quietTimer: unknown = null;
       let timeoutTimer: unknown = null;
+      let paused = options.pauseState?.getPaused() ?? false;
+      let lastElapsedAt = this.clock.now();
+      let foregroundElapsedMs = 0;
+      let resumed = paused;
+      let unsubscribePause = () => {};
 
       const cleanup = () => {
         unsubscribe();
+        unsubscribePause();
         if (quietTimer != null) this.clock.clearTimeout(quietTimer);
         if (timeoutTimer != null) this.clock.clearTimeout(timeoutTimer);
         options.signal?.removeEventListener('abort', abort);
@@ -834,10 +843,34 @@ export class PerformanceAuditReadinessRegistry {
       };
       const evaluate = () => {
         if (settled) return;
+        const at = this.clock.now();
+        if (!paused) foregroundElapsedMs += at - lastElapsedAt;
+        lastElapsedAt = at;
+        const nextPaused = options.pauseState?.getPaused() ?? false;
+        if (nextPaused || paused !== nextPaused) {
+          stableFingerprint = null;
+          resumed = true;
+        }
+        paused = nextPaused;
+        if (timeoutTimer != null) this.clock.clearTimeout(timeoutTimer);
+        timeoutTimer = null;
         // Notifications can arrive before the existing timer fires. Keep just
         // one quiet timer instead of dropping its handle and leaking callbacks.
         if (quietTimer != null) this.clock.clearTimeout(quietTimer);
         quietTimer = null;
+        if (paused) {
+          const snapshot = this.snapshot(options.surfaceIds, options.requiredKinds, options.onlyKinds);
+          if (expectedGeneration == null || !snapshot.capturing || snapshot.generation !== expectedGeneration) {
+            fail(new PerformanceAuditReadinessCaptureEndedError(snapshot));
+          }
+          return;
+        }
+        if (foregroundElapsedMs >= timeoutMs) {
+          fail(new PerformanceAuditReadinessTimeoutError(timeoutMs,
+            this.snapshot(options.surfaceIds, options.requiredKinds, options.onlyKinds)));
+          return;
+        }
+        timeoutTimer = this.clock.setTimeout(evaluate, timeoutMs - foregroundElapsedMs);
         if (stableEpoch !== this.stabilityEpoch) {
           stableEpoch = this.stabilityEpoch;
           stableFingerprint = null;
@@ -855,8 +888,10 @@ export class PerformanceAuditReadinessRegistry {
           fail(new PerformanceAuditReadinessProbeError(snapshot));
           return;
         }
-        // Structural gaps never recover by waiting — fail immediately with evidence.
-        if (snapshot.blockers.some((blocker) => blocker.code === 'required-kind-missing')) {
+        // A pathname can commit before the selected route registers its probes.
+        // Only a mounted selected surface can prove a structural kind is absent.
+        if (snapshot.surfaces.length > 0 &&
+            snapshot.blockers.some((blocker) => blocker.code === 'required-kind-missing')) {
           const missing = snapshot.blockers
             .filter((blocker) => blocker.code === 'required-kind-missing')
             .map((blocker) => blocker.message)
@@ -876,7 +911,7 @@ export class PerformanceAuditReadinessRegistry {
           stableFingerprint = null;
           return;
         }
-        if (options.reuseSettledEvidence && snapshot.surfaces.every((surface) => {
+        if (!resumed && options.reuseSettledEvidence && snapshot.surfaces.every((surface) => {
           const evidence = this.settledEvidence.get(surface.id);
           return evidence != null && !this.activeActions.has(surface.id) &&
             evidence.instance === this.surfaces.get(surface.id)?.instance &&
@@ -904,12 +939,7 @@ export class PerformanceAuditReadinessRegistry {
         ));
       };
       const unsubscribe = this.subscribe(evaluate);
-      timeoutTimer = this.clock.setTimeout(() => {
-        fail(new PerformanceAuditReadinessTimeoutError(
-          timeoutMs,
-          this.snapshot(options.surfaceIds, options.requiredKinds, options.onlyKinds),
-        ));
-      }, timeoutMs);
+      unsubscribePause = options.pauseState?.subscribe(evaluate) ?? (() => {});
       options.signal?.addEventListener('abort', abort, { once: true });
       if (options.signal?.aborted) abort();
       else evaluate();

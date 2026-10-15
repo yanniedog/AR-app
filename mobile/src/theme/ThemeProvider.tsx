@@ -4,10 +4,11 @@ import { useColorScheme } from 'react-native';
 
 import { useStore } from '../data/store';
 import { resolveTheme, type Theme } from './theme';
+import type { UiChild } from '../lib/uiCopy';
 
 const ThemeContext = createContext<Theme>(resolveTheme('system', 'dark'));
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({ children }: { children: UiChild }) {
   const system = useColorScheme();
   const mode = useStore((s) => s.prefs.themeMode);
   // Financial meaning should not change colour with an Android wallpaper.

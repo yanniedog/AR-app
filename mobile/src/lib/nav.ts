@@ -50,23 +50,23 @@ export const parseBrowsePath = (pathRaw?: string | string[]): string[] => {
 export const openBrowseDrill = (section: SectionKey, path: string[] = []) => {
   markDrillAttempt(section, path);
   logNavDrillAttempt({ fn: 'openBrowseDrill', section, path });
-  router.navigate({
-    pathname: '/categories',
-    params: buildBrowseRouteParams(section, path),
+  router.dismissTo({
+    pathname: '/(tabs)/browse',
+    params: { ...buildBrowseRouteParams(section, path), query: '', scope: 'hierarchy', availability: 'listed', compare: '0' },
   } as unknown as Href);
 };
 
 export const openBrowse = (section: SectionKey) => openBrowseDrill(section, []);
 
 export const openSearch = (section: SectionKey, sort?: SortKey) =>
-  router.push({ pathname: '/search', params: { section, ...(sort ? { sort } : {}) } });
+  router.dismissTo({ pathname: '/(tabs)/browse', params: { section, query: '', path: '', scope: '', availability: 'listed', compare: '0', ...(sort ? { sort } : {}) } });
 
 // Flat, searchable/sortable product list — optionally scoped to a taxonomy node.
 export const openProductsList = (section: SectionKey, path: string[] = [], sort?: SortKey) =>
-  router.push({ pathname: '/search', params: { section, path: path.join('.'), ...(sort ? { sort } : {}) } });
+  router.dismissTo({ pathname: '/(tabs)/browse', params: { section, path: path.join('.'), query: '', scope: '', availability: 'listed', compare: '0', ...(sort ? { sort } : {}) } });
 
 export const openRibbonProducts = (section: SectionKey, sort: SortKey) =>
-  router.push({ pathname: '/search', params: { section, sort, scope: 'hierarchy' } });
+  router.dismissTo({ pathname: '/(tabs)/browse', params: { section, sort, path: '', query: '', scope: 'hierarchy', availability: 'listed', compare: '0' } });
 
 // Product keys can contain commas, so serialize the array unambiguously (JSON)
 // rather than comma-joining.

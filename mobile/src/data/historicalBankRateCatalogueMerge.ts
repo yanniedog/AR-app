@@ -1,6 +1,6 @@
 import { SECTION_KEYS, type CorePayload, type DetailsPayload, type ProductDetail, type RateRow, type SectionKey } from '../types';
 import { isValidCalendarDate } from '../lib/calendarDate';
-import { toFraction } from './format';
+import { toFraction } from './rateNumbers';
 import { RATE_OBSERVATION_FIELDS, rateTierSignature } from './bankRateOverview';
 import { prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync } from './historicalBankRateCatalogue';
 import { HISTORICAL_CATALOGUE_LIMITS, validateHistoricalCatalogueEvidence, validateHistoricalCatalogueSource,

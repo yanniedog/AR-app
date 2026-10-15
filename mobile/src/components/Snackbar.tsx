@@ -1,3 +1,4 @@
+import { uiLabel } from '../lib/uiCopy';
 import React from 'react';
 import { Pressable, View } from 'react-native';
 
@@ -54,9 +55,7 @@ export function UndoSnackbar({
           accessibilityLabel="Undo"
           style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
         >
-          <AppText variant="small" weight="700" style={{ color: theme.colors.primary }}>
-            Undo
-          </AppText>
+          <AppText variant="small" weight="700" style={{ color: theme.colors.primary }}>{uiLabel("Undo")}</AppText>
         </Pressable>
       </View>
     </View>

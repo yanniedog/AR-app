@@ -19,11 +19,16 @@ test('all8 real Macquarie rows select their original wording, never the same-ter
     expect(result.status).toBe('available'); expect(result.entries).toHaveLength(1);
     expect(result.entries[0].text).toBe(i < 4 ? 'For balances of 1 million dollars and under' : 'For balances of over 1 million dollars');
     expect(result.entries[0].sourcePointer).toContain(`/depositRates/${i}/`);
+    const receipt = buildRateReceipt({ row, section: 'TD', evidenceDate: f.core.run_date, detail: f.details.products[f.productKey], rateConditionContext: f });
+    expect(receipt.rateConditions.entries).toEqual(result.entries);
+    expect(rateConditionReceiptLines(receipt)).toContain(`Source review required · ${result.entries[0].sourcePointer}`);
+    expect(rateConditionReceiptLines(receipt).join('\n')).not.toContain(result.entries[0].text);
   });
   const receipt = buildRateReceipt({ row: f.rows[4], section: 'TD', evidenceDate: f.core.run_date, detail: f.details.products[f.productKey], rateConditionContext: f });
   expect(receipt.rateConditions.entries[0].rateIndex).toBe(5);
   expect(receipt.rateConditions.detailsSha256).toBe(f.manifest.files.details.sha256);
-  expect(rateConditionReceiptLines(receipt).join('\n')).toContain('For balances of over 1 million dollars');
+  expect(receipt.rateConditions.entries[0].text).toBe('For balances of over 1 million dollars');
+  expect(rateConditionReceiptLines(receipt)).toContain('Eligibility unverified');
 });
 test.each(['root', 'mixed_root', 'nested_tier', 'ordinal', 'pointer_ordinal', 'leading_zero'] as const)('rejects adversarial %s provenance', kind => {
   const f = rateConditionFixture(), e = f.details.products[f.productKey].rateConditions!, row = e.entries[0];

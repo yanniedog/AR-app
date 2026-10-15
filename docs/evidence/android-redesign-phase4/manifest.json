@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "phase": 4,
+  "capturedOn": "2026-10-15",
+  "platform": "Android emulator API36.1 x86_64",
+  "buildKind": "existing compatible development APK with Metro JavaScript",
+  "nativeVersion": "1.0.238 (192)",
+  "widthDp": 411,
+  "fontScale": 1,
+  "theme": "light",
+  "humanUserStudy": false,
+  "physicalDevice": false,
+  "timingMeasured": false,
+  "finalReleaseAcceptance": false,
+  "captures": [
+    {
+      "name": "rates",
+      "sourceRevision": "02d2dc929be3b2b20dd3c3d4dfb16c98bedee3ae",
+      "observation": "Full searchable catalogue, three tabs, structured tier facts; optional versioned update banner.",
+      "files": [
+        {
+          "path": "rates.png",
+          "bytes": 275218,
+          "sha256": "4fa7994bca055ee2458c35f9805de5a182c3dd3cc90809b768ea7cf8b8c8d94e"
+        },
+        {
+          "path": "rates.xml",
+          "bytes": 23779,
+          "sha256": "0ac23aff58be33c4370ffad7e2d6263213c1de95274927aaf788501378330a2c"
+        }
+      ]
+    },
+    {
+      "name": "account",
+      "sourceRevision": "02d2dc929be3b2b20dd3c3d4dfb16c98bedee3ae",
+      "observation": "Three Account destinations.",
+      "files": [
+        {
+          "path": "account.png",
+          "bytes": 209486,
+          "sha256": "844f2b5ef9634de6dcf29ffbbc2134281b734ec659e9c69a61c8bfaec91f9b55"
+        },
+        {
+          "path": "account.xml",
+          "bytes": 2983,
+          "sha256": "4217609b087cedbdea08d06c40a40e0afd4b5916f1d3ad89de8d97725ce95d0f"
+        }
+      ]
+    },
+    {
+      "name": "privacy-facts",
+      "sourceRevision": "02d2dc929be3b2b20dd3c3d4dfb16c98bedee3ae",
+      "observation": "Explicit undecided Allow/Decline choices beside factual privacy rows.",
+      "files": [
+        {
+          "path": "privacy-facts.png",
+          "bytes": 182739,
+          "sha256": "f61900734ba2989195a3b9a1288ef6c27f1bd59109a2eee36ad84ee10ea425e7"
+        },
+        {
+          "path": "privacy-facts.xml",
+          "bytes": 15939,
+          "sha256": "757de87b7cd0471b87677e47b6fdcba91ea02ddf54183c7d5d79c65ab969ced7"
+        }
+      ]
+    },
+    {
+      "name": "privacy-choice-closed",
+      "sourceRevision": "02d2dc929be3b2b20dd3c3d4dfb16c98bedee3ae",
+      "observation": "Explicit Decline removes undecided controls; native Crash reports switch off.",
+      "files": [
+        {
+          "path": "privacy-choice-closed.png",
+          "bytes": 174087,
+          "sha256": "dcf050162775852681246f0e6822f88129efdd7142505eb38f2c6fe8356dd211"
+        },
+        {
+          "path": "privacy-choice-closed.xml",
+          "bytes": 14127,
+          "sha256": "5a0ce25c6e51dabd468975e2b839ff83eda5c27b787ef4cd1e8f6c3ea370ae28"
+        }
+      ]
+    },
+    {
+      "name": "product",
+      "sourceRevision": "02d2dc929be3b2b20dd3c3d4dfb16c98bedee3ae",
+      "observation": "Exact selected Unloan row, source date/status, direct Calculate.",
+      "files": [
+        {
+          "path": "product.png",
+          "bytes": 151342,
+          "sha256": "b07bc8725d2807e2b9530cbdf5bf4194b0aab1a65e2b8371102907f0ee608a33"
+        },
+        {
+          "path": "product.xml",
+          "bytes": 12638,
+          "sha256": "11cf01604f3729ab910037474ecf1440dc4453f3e04150015079af69cd911c0f"
+        }
+      ]
+    },
+    {
+      "name": "calculation-inputs",
+      "sourceRevision": "02d2dc929be3b2b20dd3c3d4dfb16c98bedee3ae",
+      "observation": "Exact selected rate and input-first calculation.",
+      "files": [
+        {
+          "path": "calculation-inputs.png",
+          "bytes": 151034,
+          "sha256": "1ac9fae76fb9f321c78f0f8bf64ddec3a1b8fc1ee2928f3db50ab041bebc6e9f"
+        },
+        {
+          "path": "calculation-inputs.xml",
+          "bytes": 15960,
+          "sha256": "ab7ee5a53c2ce073bb1d6089b9ca335ec2690e1421d1d22f000f0ae3f0580d41"
+        }
+      ]
+    },
+    {
+      "name": "projection-same-rate",
+      "sourceRevision": "02d2dc929be3b2b20dd3c3d4dfb16c98bedee3ae",
+      "observation": "Same product and advertised rate retained in Projection mode.",
+      "files": [
+        {
+          "path": "projection-same-rate.png",
+          "bytes": 168069,
+          "sha256": "65d8165726ec89ca9b9baf1253113a91b643cc162942d4125af939672179768d"
+        },
+        {
+          "path": "projection-same-rate.xml",
+          "bytes": 19935,
+          "sha256": "767a470b24dcb806d86ada6ca2aa281aea1385ae9c6e5f7bd246814b937ea7d2"
+        }
+      ]
+    },
+    {
+      "name": "rates-restored",
+      "sourceRevision": "02d2dc929be3b2b20dd3c3d4dfb16c98bedee3ae",
+      "observation": "Native Back returns to Rates.",
+      "files": [
+        {
+          "path": "rates-restored.png",
+          "bytes": 289456,
+          "sha256": "39c5a8b10265e7a9f83522dbac4a7f0c417d256663883607fa5dfea0726cf516"
+        },
+        {
+          "path": "rates-restored.xml",
+          "bytes": 22764,
+          "sha256": "705771adcb096e1246c513fa9ed60643ca32e57e120f582fa6fcc92d79e5ec50"
+        }
+      ]
+    }
+  ]
+}

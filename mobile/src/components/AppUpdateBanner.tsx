@@ -1,6 +1,7 @@
+import type { UiChild } from '../lib/uiCopy';
 import Ionicons from './icons/AppIcon';
-import { createContext, type ReactNode, useContext, useEffect, useState, useSyncExternalStore } from 'react';
-import { Alert, AppState, Platform, Pressable, useWindowDimensions } from 'react-native';
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
+import { Alert, AppState, Platform, Pressable, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../data/store';
@@ -19,6 +20,7 @@ import { getPerformanceAuditState, isPerformanceAuditActive, subscribePerformanc
 import { shouldShowUpdateBanner } from '../lib/updateBanner';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Row } from './ui';
+import { uiIdentifier, uiJoin } from '../lib/uiCopy';
 
 export interface AppUpdateBannerState {
   visible: boolean;
@@ -34,7 +36,7 @@ export function AppUpdateBannerLayoutProvider({
   children,
 }: {
   visible: boolean;
-  children: ReactNode;
+  children: UiChild;
 }) {
   return (
     <AppUpdateBannerVisibleContext.Provider value={visible}>
@@ -132,7 +134,8 @@ export function AppUpdateBanner({
   onDismiss: () => void;
 }) {
   const theme = useTheme();
-  const { fontScale } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
+  const messageOwnLine = width - 28 < 360 * Math.max(1, fontScale);
   const insets = useSafeAreaInsets();
   const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
   const autoDownload = useStore((s) => s.prefs.apkUpdatesAutoDownload);
@@ -148,9 +151,8 @@ export function AppUpdateBanner({
     setBusy(true);
     try {
       await upgradeFromBackgroundDownload(remote, { wifiOnly });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      Alert.alert('Update failed', message);
+    } catch {
+      Alert.alert('Update failed');
     } finally {
       setBusy(false);
     }
@@ -162,8 +164,8 @@ export function AppUpdateBanner({
       return;
     }
     Alert.alert(
-      'Download app update?',
-      `Version ${remote.version} will download a verified APK from GitHub${wifiOnly ? ' when Wi-Fi is available' : ' using the current network'}. Android will ask again before installation.`,
+      'Download update',
+      uiJoin('Version', ': ', uiIdentifier(remote.version), ' · ', 'Verified APK', ' · ', 'GitHub', ' · ', wifiOnly ? 'Wi-Fi only' : 'Current network', ' · ', 'Android installation permission'),
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Download', onPress: () => void onUpgrade() },
@@ -181,22 +183,25 @@ export function AppUpdateBanner({
         paddingHorizontal: 14,
         paddingTop: insets.top + 6,
         paddingBottom: 8,
-        flexWrap: fontScale >= 1.3 ? 'wrap' : 'nowrap',
+        flexWrap: messageOwnLine ? 'wrap' : 'nowrap',
       }}
     >
-      <Ionicons
-        name={phase === 'ready' ? 'checkmark-circle-outline' : 'cloud-download-outline'}
-        size={16}
-        color={theme.colors.primary}
-      />
-      <AppText
-        variant="small"
-        weight="600"
-        accessibilityLiveRegion="polite"
-        style={{ flex: 1 }}
-      >
-        {copy.title}
-      </AppText>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0,
+        flexGrow: 1, flexShrink: messageOwnLine ? 0 : 1, flexBasis: messageOwnLine ? '100%' : 0 }}>
+        <Ionicons
+          name={phase === 'ready' ? 'checkmark-circle-outline' : 'cloud-download-outline'}
+          size={16}
+          color={theme.colors.primary}
+        />
+        <AppText
+          variant="small"
+          weight="600"
+          accessibilityLiveRegion="polite"
+          style={{ flex: 1 }}
+        >
+          {copy.title}
+        </AppText>
+      </View>
       <Pressable
         onPress={requestUpgrade}
         disabled={!copy.actionEnabled || busy}
@@ -206,7 +211,8 @@ export function AppUpdateBanner({
         }
         accessibilityState={{ disabled: !copy.actionEnabled || busy }}
         hitSlop={8}
-        style={{ minHeight: 48, justifyContent: 'center', paddingHorizontal: 4 }}
+        style={{ minHeight: 48, justifyContent: 'center', paddingHorizontal: 4,
+          flexGrow: messageOwnLine ? 1 : 0, flexShrink: messageOwnLine ? 1 : 0, flexBasis: messageOwnLine ? 0 : 'auto' }}
       >
         <AppText
           variant="small"
@@ -223,7 +229,7 @@ export function AppUpdateBanner({
         accessibilityRole="button"
         accessibilityLabel="Dismiss update banner"
         hitSlop={8}
-        style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}
+        style={{ minWidth: 48, minHeight: 48, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}
       >
         <Ionicons name="close" size={18} color={theme.colors.textMuted} />
       </Pressable>

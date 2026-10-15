@@ -107,6 +107,18 @@ function longestCachedPrefix(scope: string, query: string): Set<string> | null {
   return best;
 }
 
+function activateMemoScope(index: SearchIndexPayload, contentSha?: string | null): string {
+  const scope = indexMemoScope(index, contentSha);
+  // A corrected asset can legitimately retain its schema version and run date.
+  // Object identity also protects callers that do not have a manifest SHA.
+  if (lastMemoScope !== scope || lastMemoIndex !== index) {
+    queryMemo.clear();
+    lastMemoScope = scope;
+    lastMemoIndex = index;
+  }
+  return scope;
+}
+
 export function productKeysMatchingIndex(
   index: SearchIndexPayload | null | undefined,
   query: string,
@@ -114,15 +126,7 @@ export function productKeysMatchingIndex(
 ): Set<string> | null {
   const q = query.trim().toLowerCase();
   if (!q || !index?.products) return null;
-  const scope = indexMemoScope(index, contentSha);
-  // A corrected asset can legitimately retain its schema version and run date.
-  // Store refresh replaces the parsed object, so identity is the safe fallback
-  // revision key when a caller has no manifest content SHA available.
-  if (lastMemoScope !== scope || lastMemoIndex !== index) {
-    queryMemo.clear();
-    lastMemoScope = scope;
-    lastMemoIndex = index;
-  }
+  const scope = activateMemoScope(index, contentSha);
   const memo = `${scope}:${q}`;
   const cached = memoGet(memo);
   if (cached) return new Set(cached);
@@ -147,6 +151,12 @@ export function productKeysMatchingIndex(
 
 type SearchRow = { provider: string; product_name: string; product_key: string };
 
+function* ownProductKeys(products: Record<string, string>): Generator<string> {
+  for (const key in products) {
+    if (Object.prototype.hasOwnProperty.call(products, key)) yield key;
+  }
+}
+
 /** Bound a new deep query's full index scan as well as its result-row processing. */
 export async function prepareRowSearchQueryCooperatively(
   query: string, index: SearchIndexPayload | null | undefined,
@@ -155,15 +165,20 @@ export async function prepareRowSearchQueryCooperatively(
   if (control.cancelled?.()) return null;
   const q = query.trim().toLowerCase();
   if (!q || !index?.products) return prepareRowSearchQuery(query, null);
+  const scope = activateMemoScope(index);
+  const memo = `${scope}:${q}`;
+  const cached = memoGet(memo);
+  if (cached) return row => cached.has(row.product_key);
   const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
   const now = control.now ?? (() => performance.now());
   const tokens = q.split(/\s+/).filter(Boolean);
   const hits = new Set<string>();
   let sliceStarted = now();
   let processed = 0;
-  for (const key in index.products) {
-    if (!Object.prototype.hasOwnProperty.call(index.products, key)) continue;
-    if (tokens.every(token => index.products[key].includes(token))) hits.add(key);
+  const prefixHits = longestCachedPrefix(scope, q);
+  for (const key of prefixHits ?? ownProductKeys(index.products)) {
+    const blob = index.products[key];
+    if (blob && tokens.every(token => blob.includes(token))) hits.add(key);
     processed += 1;
     if (processed % 32 === 0 && now() - sliceStarted >= 6) {
       await yieldControl();
@@ -171,7 +186,11 @@ export async function prepareRowSearchQueryCooperatively(
       if (control.cancelled?.()) return null;
     }
   }
-  return control.cancelled?.() ? null : row => hits.has(row.product_key);
+  if (control.cancelled?.()) return null;
+  // An older scan may finish after another publication activated its cache.
+  // Its complete matcher belongs to its caller, never to that newer scope.
+  if (lastMemoScope === scope && lastMemoIndex === index) memoSet(memo, hits);
+  return row => hits.has(row.product_key);
 }
 
 /** Prepare once per filtering pass so indexed hits are not copied for every row. */

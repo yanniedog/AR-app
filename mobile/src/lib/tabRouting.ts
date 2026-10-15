@@ -1,4 +1,5 @@
 import type { Href } from 'expo-router';
+import type { UiCopy } from './uiCopy';
 
 import { TAB_LABELS, TAB_ROUTES, type TabRouteName } from './tabIcons';
 
@@ -8,18 +9,16 @@ export type PrimaryTabRouteName = TabRouteName;
 export const TAB_BAR_ORDER: readonly PrimaryTabRouteName[] = TAB_ROUTES;
 
 const TAB_HREFS: Record<TabRouteName, Href> = {
-  index: '/(tabs)',
-  browse: { pathname: '/(tabs)/browse', params: { section: undefined, path: undefined, request: undefined } },
+  browse: '/(tabs)/browse',
   watchlist: '/(tabs)/watchlist',
   market: '/(tabs)/market',
-  tools: '/(tabs)/tools',
 };
 
 export function tabHref(route: TabRouteName): Href {
   return TAB_HREFS[route];
 }
 
-export function primaryTabLabel(route: PrimaryTabRouteName): string {
+export function primaryTabLabel(route: PrimaryTabRouteName): UiCopy {
   return TAB_LABELS[route];
 }
 
@@ -29,8 +28,8 @@ export function normalizeAppPath(pathname: string): string {
   return path.length > 1 ? path.replace(/\/+$/, '') : path;
 }
 
-export function shouldShowAppTabBar(pathname: string, onboarded: boolean): boolean {
-  if (!onboarded) return false;
+export function shouldShowAppTabBar(pathname: string, hydrated: boolean): boolean {
+  if (!hydrated) return false;
   const path = normalizeAppPath(pathname);
   return path !== '/compare' && path !== '/onboarding' && !path.startsWith('/onboarding/');
 }
@@ -42,20 +41,21 @@ const ROUTE_OWNERS: Record<string, PrimaryTabRouteName> = {
   watchlist: 'watchlist', saved: 'watchlist',
   market: 'market', 'bank-rates': 'market', passthrough: 'market',
   research: 'market', trends: 'market', 'rba-response': 'market', rba: 'market',
-  tools: 'tools', calculator: 'tools', projections: 'tools',
-  'calculation-receipt': 'tools', profile: 'tools', settings: 'tools',
-  about: 'tools', terms: 'tools', 'third-party-notices': 'tools',
-  'debug-log': 'tools', 'performance-audit': 'tools',
+  tools: 'browse', calculator: 'browse', projections: 'browse',
+  'calculation-receipt': 'browse', profile: 'browse', settings: 'browse',
+  about: 'browse', terms: 'browse', 'third-party-notices': 'browse',
+  'debug-log': 'browse', 'performance-audit': 'browse', onboarding: 'browse',
 };
 
 /** Ownership is independent of the journey; stack Back still returns to the caller. */
 export function resolveActiveTab(pathname: string): PrimaryTabRouteName | null {
   const path = normalizeAppPath(pathname);
-  if (path === '/') return 'index';
+  if (path === '/') return 'browse';
   const root = path.split('/')[1];
   return Object.hasOwn(ROUTE_OWNERS, root) ? ROUTE_OWNERS[root] : null;
 }
 
 export function isPrimaryTabRootPath(pathname: string, route: PrimaryTabRouteName): boolean {
-  return normalizeAppPath(pathname) === (route === 'index' ? '/' : `/${route}`);
+  const path = normalizeAppPath(pathname);
+  return path === `/${route}` || (route === 'browse' && path === '/');
 }

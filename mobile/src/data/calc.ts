@@ -1,4 +1,4 @@
-import { rateConditionality } from '../lib/rateQualifier';
+import { rateConditionality } from './rateConditionalFacts';
 import type { RateRow, SectionKey } from '../types';
 
 /**

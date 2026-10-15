@@ -1,19 +1,18 @@
 import React from 'react';
 import {
-  Pressable,
-  type PressableProps,
   type PressableStateCallbackType,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { PressFeedback, type PressFeedbackProps } from './PressFeedback';
 
 /** Material / WCAG 2.5.5 minimum touch target (dp). */
 export const TOUCH_TARGET_MIN = 48;
 
-export const DEFAULT_HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+export const DEFAULT_HIT_SLOP = { top: 0, bottom: 0, left: 0, right: 0 };
 
-export type TouchTargetProps = PressableProps & {
-  /** Also enforce minWidth (icon buttons, square controls). */
+export type TouchTargetProps = PressFeedbackProps & {
+  /** Centre square icon buttons. All targets retain a 48 dp minimum width. */
   square?: boolean;
   /** Stretch to fill parent width (settings rows, list actions). */
   fill?: boolean;
@@ -22,6 +21,7 @@ export type TouchTargetProps = PressableProps & {
 export function TouchTarget({
   children,
   style,
+  contentStyle,
   hitSlop = DEFAULT_HIT_SLOP,
   square = false,
   fill = false,
@@ -29,10 +29,10 @@ export function TouchTarget({
 }: TouchTargetProps) {
   const base: ViewStyle = {
     minHeight: TOUCH_TARGET_MIN,
+    minWidth: TOUCH_TARGET_MIN,
     alignItems: 'center',
   };
   if (square) {
-    base.minWidth = TOUCH_TARGET_MIN;
     base.justifyContent = 'center';
   }
   if (fill) {
@@ -48,8 +48,15 @@ export function TouchTarget({
   };
 
   return (
-    <Pressable hitSlop={hitSlop} style={resolveStyle} {...rest}>
+    <PressFeedback
+      hitSlop={hitSlop}
+      style={resolveStyle}
+      // A horizontal full-row target needs a definite content width before
+      // its flexing title can share space with the leading/trailing icons.
+      contentStyle={[fill ? { width: '100%' } : null, contentStyle]}
+      {...rest}
+    >
       {children}
-    </Pressable>
+    </PressFeedback>
   );
 }

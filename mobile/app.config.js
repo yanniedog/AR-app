@@ -48,9 +48,14 @@ module.exports = ({ config }) => {
   const permissions = new Set(config.android?.permissions ?? []);
   if (playManaged) permissions.delete('REQUEST_INSTALL_PACKAGES');
   else permissions.add('REQUEST_INSTALL_PACKAGES');
+  const fontScalePlugin = './plugins/with-main-activity-font-scale';
+  const plugins = [...(config.plugins ?? []), './plugins/with-external-link-queries'];
+  if (!plugins.some(plugin => (Array.isArray(plugin) ? plugin[0] : plugin) === fontScalePlugin)) {
+    plugins.push(fontScalePlugin);
+  }
   return {
     ...config,
-    plugins: [...(config.plugins ?? []), './plugins/with-external-link-queries'],
+    plugins,
     ...(releaseVersion ? { version: releaseVersion } : {}),
     android: {
       ...config.android,

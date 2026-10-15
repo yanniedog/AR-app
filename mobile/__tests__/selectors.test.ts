@@ -23,6 +23,7 @@ import {
 } from '../src/data/selectors';
 import { toFraction } from '../src/data/format';
 import * as rateQualifierModule from '../src/lib/rateQualifier';
+import * as rateConditionalFacts from '../src/data/rateConditionalFacts';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import type { RateRow, SectionKey } from '../src/types';
 
@@ -315,7 +316,7 @@ describe('selectors', () => {
   });
 
   test('extracts a deposit rank once per row and never constructs display qualifiers', () => {
-    const conditionality = jest.spyOn(rateQualifierModule, 'rateConditionality');
+    const conditionality = jest.spyOn(rateConditionalFacts, 'rateConditionality');
     const displayQualifier = jest.spyOn(rateQualifierModule, 'rateQualifier');
     const rows = Array.from({ length: 600 }, (_, index) => mk({
       provider: `Bank ${index % 20}`,

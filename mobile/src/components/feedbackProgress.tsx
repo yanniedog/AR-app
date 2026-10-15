@@ -10,19 +10,24 @@ import { buildPayloadProgressViewModel } from '../data/downloadProgress';
 import { useTheme } from '../theme/ThemeProvider';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { AppText, Row } from './ui';
+import { uiJoin, uiNumber, type UiCopy, type UiLabel } from '../lib/uiCopy';
+const PHASE_LABELS: Record<PayloadProgressSnapshot['phase'], UiLabel> = {
+  manifest: 'Checking', finalize: 'Pending', download: 'Downloading', verify: 'Verifying',
+  inflate: 'Preparing', parse: 'Preparing', install: 'Install',
+};
 
-/** Always-visible determinate sync bar with phase label and ETA. */
+/** Consumer sync summary; transfer diagnostics stay in the snapshot/work registry. */
 export function PayloadProgressBar({
   progress,
   caption,
 }: {
   progress: PayloadProgressSnapshot;
-  caption?: string;
+  caption?: UiCopy;
 }) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
   const motionAllowed = reducedMotion === false;
-  // Refresh wall clock on every progress snapshot so download rate/ETA stay honest.
+  // Processing-phase progress uses elapsed time from the actual snapshot.
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     setNowTick(Date.now());
@@ -86,10 +91,10 @@ export function PayloadProgressBar({
       ) : null}
       <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
         <AppText variant="tiny" weight="700" color="textMuted" style={{ flex: 1, paddingRight: 8 }}>
-          {vm.phaseText}
+          {PHASE_LABELS[progress.phase]}
         </AppText>
         <AppText variant="tiny" weight="700" color="primary">
-          {vm.softMotion ? `${vm.overallPercent}%…` : `${vm.overallPercent}%`}
+          {uiJoin(uiNumber(vm.overallPercent), '%', vm.softMotion ? '…' : '')}
         </AppText>
       </Row>
       <View
@@ -133,9 +138,6 @@ export function PayloadProgressBar({
           />
         )}
       </View>
-      <AppText variant="tiny" color="textFaint" numberOfLines={1}>
-        {vm.detailLine}
-      </AppText>
     </View>
   );
 }
@@ -149,8 +151,8 @@ export function IndeterminateProgressBar({
   caption,
   accessibilityLabel = 'Preparing rates',
 }: {
-  caption?: string;
-  accessibilityLabel?: string;
+  caption?: UiCopy;
+  accessibilityLabel?: UiCopy;
 }) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();

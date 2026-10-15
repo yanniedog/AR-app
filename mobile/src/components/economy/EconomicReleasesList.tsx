@@ -8,7 +8,8 @@ import {
   type MeetingLean,
 } from '../../data/economicModels';
 import type { EconomicOutlookPayload } from '../../data/economicOutlook';
-import { formatRunDate } from '../../data/format';
+import { uiDate, uiJoin, uiLabel, type UiText } from '../../lib/uiCopy';
+import { uiChartPercent, uiChartPp, uiEconomicIndicator } from '../../lib/chartUiCopy';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
 import { useAuditExternalLinks } from '../../hooks/useAuditExternalLinks';
@@ -24,13 +25,13 @@ function leanColor(
   return theme.colors.textMuted;
 }
 
-function vsPriorLabel(row: EconomicReleaseRow): string {
-  if (row.vsPrior == null || row.delta == null) return 'no prior';
-  if (row.vsPrior === 'same') return 'same as prior';
-  const signed = `${row.delta > 0 ? '+' : ''}${row.delta.toFixed(1)}`;
-  return row.vsPrior === 'above'
-    ? `above prior (${signed} pp)`
-    : `below prior (${signed} pp)`;
+function vsPriorLabel(row: EconomicReleaseRow): UiText {
+  if (row.vsPrior == null || row.delta == null) return uiLabel('No prior');
+  if (row.vsPrior === 'same') return uiLabel('Same as prior');
+  return uiJoin('Prior', ' · ', uiChartPp(row.delta));
+}
+function leanLabel(lean: MeetingLean): UiText {
+  return uiLabel(lean === 'raise' ? 'Hike' : lean === 'cut' ? 'Cut' : 'Held');
 }
 
 function ReleaseRow({
@@ -53,11 +54,7 @@ function ReleaseRow({
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
-        accessibilityHint={expanded ? `Hide ${row.label} detail` : `Show ${row.label} detail`}
-        accessibilityLabel={
-          `${row.label}, ${row.latest.toFixed(1)} percent for ${row.coverageLabel}, `
-          + `updated ${formatRunDate(row.updateDate)}, ${vsPriorLabel(row)}, ${row.leanLabel}`
-        }
+        accessibilityLabel={uiJoin(uiEconomicIndicator(row.id), ' · ', uiChartPercent(row.latest, 1), ' · ', 'Observed', ' · ', uiDate(row.observationDate), ' · ', 'Source date', ' · ', uiDate(row.updateDate), ' · ', vsPriorLabel(row))}
         style={({ pressed }) => ({
           minHeight: TOUCH_TARGET_MIN,
           opacity: pressed ? 0.7 : 1,
@@ -67,23 +64,21 @@ function ReleaseRow({
         <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <View style={{ flex: 1, paddingRight: 8 }}>
             <AppText variant="small" weight="600">
-              {row.label}
+              {uiEconomicIndicator(row.id)}
             </AppText>
             <AppText variant="tiny" color="textFaint" style={{ marginTop: 2 }}>
-              Covers {row.coverageLabel}
-              {' · '}
-              updated {formatRunDate(row.updateDate)}
+              {uiJoin('Observed', ' · ', uiDate(row.observationDate), ' · ', 'Source date', ' · ', uiDate(row.updateDate))}
             </AppText>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <AppText variant="small" weight="700">
-              {row.latest.toFixed(1)}%
+              {uiChartPercent(row.latest, 1)}
             </AppText>
             <AppText variant="tiny" color="textMuted" style={{ marginTop: 2 }}>
               {vsPriorLabel(row)}
             </AppText>
             <AppText variant="tiny" weight="700" style={{ marginTop: 2, color: leanTone }}>
-              {row.leanLabel}
+              {uiJoin('Signal', ' · ', leanLabel(row.meetingLean))}
             </AppText>
           </View>
           <Ionicons
@@ -97,22 +92,22 @@ function ReleaseRow({
       {expanded ? (
         <View style={{ paddingBottom: 10, paddingRight: 4 }}>
           <AppText variant="tiny" color="textMuted">
-            {row.deepExplanation}
+            {uiJoin('Prior', ' · ', uiChartPercent(row.prior, 1), ' · ', 'Forecast', ' · ', 'Excluded')}
           </AppText>
           {row.sourceUrl ? (
             <Pressable
               onPress={() => requestExternalUrl({
                 url: row.sourceUrl!,
                 purpose: 'official_economic_source',
-                label: `${row.sourceAgency === 'abs' ? 'ABS' : 'RBA'} source for ${row.label}`,
+                label: uiJoin(row.sourceAgency === 'abs' ? 'ABS source' : 'RBA source', ' · ', uiEconomicIndicator(row.id)),
               })}
               accessibilityRole="link"
-              accessibilityLabel={`Open source for ${row.label}`}
+              accessibilityLabel={uiJoin('Open', ' · ', 'Source', ' · ', uiEconomicIndicator(row.id))}
               hitSlop={6}
               style={{ marginTop: 6, alignSelf: 'flex-start' }}
             >
               <AppText variant="tiny" color="primary" weight="600">
-                {row.sourceAgency === 'abs' ? 'ABS source' : 'RBA source'}
+                {uiLabel(row.sourceAgency === 'abs' ? 'ABS source' : 'RBA source')}
               </AppText>
             </Pressable>
           ) : null}
@@ -127,13 +122,11 @@ export function EconomicReleasesList({ data }: { data: EconomicOutlookPayload })
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const bias = useMemo(() => meetingBiasModel(data), [data]);
-  useAuditExternalLinks((bias?.rows ?? []).flatMap((row) => row.sourceUrl ? [{ url: row.sourceUrl, label: `${row.label} source`, purpose: 'official_economic_source' as const }] : []));
+  useAuditExternalLinks((bias?.rows ?? []).flatMap((row) => row.sourceUrl ? [{ url: row.sourceUrl, label: uiJoin('Source', ' · ', uiEconomicIndicator(row.id)), purpose: 'official_economic_source' as const }] : []));
   if (!bias?.rows.length) return null;
 
   const headline = bias.rows.find((row) => row.id === 'headline_inflation') ?? bias.rows[0];
-  const collapsedSummary =
-    `${headline.label} ${headline.latest.toFixed(1)}% · ${headline.coverageLabel}`
-    + ` · ${bias.leanLabel}`;
+  const collapsedSummary = uiJoin(uiEconomicIndicator(headline.id), ' · ', uiChartPercent(headline.latest, 1), ' · ', uiDate(headline.observationDate), ' · ', leanLabel(bias.lean));
 
   return (
     <View style={{ marginBottom: 12 }}>
@@ -142,7 +135,7 @@ export function EconomicReleasesList({ data }: { data: EconomicOutlookPayload })
         onPress={() => setOpen((value) => !value)}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityHint={open ? 'Hide latest releases' : 'Show latest releases'}
+        accessibilityLabel="Latest releases"
         style={({ pressed }) => ({
           flexDirection: 'row',
           alignItems: 'center',
@@ -153,17 +146,14 @@ export function EconomicReleasesList({ data }: { data: EconomicOutlookPayload })
       >
         <View style={{ flex: 1 }}>
           <AppText variant="body" weight="600">
-            Latest releases
-          </AppText>
+            {uiLabel("Latest releases")}</AppText>
           {!open ? (
             <AppText variant="tiny" color="textFaint" numberOfLines={2} style={{ marginTop: 2 }}>
               {collapsedSummary}
             </AppText>
           ) : (
             <AppText variant="tiny" color="textMuted" style={{ marginTop: 2 }}>
-              {bias.leanLabel}
-              {' · '}
-              {bias.signalBalance} signals · official releases
+              {uiJoin('Signals', ' · ', leanLabel(bias.lean), ' · ', uiLabel(bias.signalBalance === 'mixed' ? 'Mixed' : bias.signalBalance === 'moderate' ? 'Moderate' : 'Strong'), ' · ', 'Official releases')}
             </AppText>
           )}
         </View>
@@ -177,7 +167,7 @@ export function EconomicReleasesList({ data }: { data: EconomicOutlookPayload })
       {open ? (
         <View style={{ paddingTop: 4 }}>
           <AppText variant="tiny" color="textMuted" style={{ marginBottom: 8 }}>
-            {bias.rationale}
+            {uiJoin('Forecast', ' · ', 'Excluded')}
           </AppText>
           <Divider />
           {bias.rows.map((row, index) => (

@@ -6,7 +6,8 @@ import { ChartText as SvgText } from '../charts/ChartText';
 import type { EconomicPoint } from '../../data/economicOutlook';
 import { economicPointAtOrBefore } from '../../data/economicModels';
 import { parseYmd } from '../../data/bankHistoryTransform';
-import { formatRunDate } from '../../data/format';
+import { uiDate, uiJoin, uiLabel, type UiCopy } from '../../lib/uiCopy';
+import { uiChartPercent } from '../../lib/chartUiCopy';
 import { buildLinePath } from '../../lib/chartSvgPaths';
 import { hasFiniteChartDate, hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { withAlpha } from '../../theme/colors';
@@ -17,7 +18,7 @@ import { AppText, Row } from '../ui';
 
 export interface EconomicChartSeries {
   id: string;
-  label: string;
+  label: UiCopy;
   points: EconomicPoint[];
   color: string;
   dashed?: boolean;
@@ -26,9 +27,8 @@ export interface EconomicChartSeries {
 
 export interface EconomicChartFrameProps {
   series: EconomicChartSeries[];
-  accessibilitySummary: string;
   targetBand?: [number, number];
-  targetBandLabel?: string;
+  targetBandLabel?: UiCopy;
   height?: number;
   holdDates?: string[];
   holdSeriesId?: string;
@@ -90,9 +90,8 @@ function buildStepPath(
 
 export function EconomicChartFrame({
   series,
-  accessibilitySummary,
   targetBand,
-  targetBandLabel = 'RBA 2–3% reference band',
+  targetBandLabel = 'Reference band',
   height = 208,
   holdDates,
   holdSeriesId,
@@ -153,7 +152,7 @@ export function EconomicChartFrame({
     return <AppText key={auditRevision ?? revision} variant="small" color="textMuted" onLayout={(event) => {
       onGraphicReady?.({ revision: auditRevision ?? revision, expectedCount: 0, pointCount: 0,
         accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
-    }}>No observations available for this view.</AppText>;
+    }}>{uiLabel("No observations")}</AppText>;
   }
   const values = allPoints.map((point) => point.value);
   if (targetBand) values.push(...targetBand);
@@ -171,10 +170,8 @@ export function EconomicChartFrame({
     ...item,
     point: economicPointAtOrBefore(item.points, activeDate),
   }));
-  const selectedText = selectedValues
-    .filter((item) => item.point)
-    .map((item) => `${item.label} ${item.point!.value.toFixed(2)} percent on ${item.point!.date}`)
-    .join('; ');
+  const selectedText = uiJoin(...selectedValues.filter(item => item.point).map(item =>
+    uiJoin(item.label, ' · ', uiChartPercent(item.point!.value), ' · ', uiDate(item.point!.date), ' · ')));
 
   const onAccessibilityAction = (event: { nativeEvent: { actionName: string } }) => {
     if (event.nativeEvent.actionName === 'increment') {
@@ -217,7 +214,7 @@ export function EconomicChartFrame({
               revision: auditRevision ?? revision, expectedCount: allPoints.length,
               pointCount: Number.isFinite(min) && Number.isFinite(max)
                 ? allPoints.filter((point) => hasFiniteChartDate(point.date) && Number.isFinite(point.value)).length : 0,
-              accessibleSummary: accessibilitySummary.trim().length > 0,
+              accessibleSummary: selectedText.trim().length > 0,
               layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: false,
             })}>
             {targetBand ? (
@@ -237,7 +234,7 @@ export function EconomicChartFrame({
                 <React.Fragment key={fraction}>
                   <Line x1={padL} y1={y} x2={width - padR} y2={y} stroke={theme.colors.border} strokeWidth={1} />
                   <SvgText x={padL - 4} y={y + 3} fontSize={9} textAnchor="end" fill={theme.colors.textFaint}>
-                    {value.toFixed(1)}%
+                    {uiChartPercent(value, 1)}
                   </SvgText>
                 </React.Fragment>
               );
@@ -298,18 +295,17 @@ export function EconomicChartFrame({
               strokeDasharray="3 3"
             />
             <SvgText x={padL} y={height - 6} fontSize={9} fill={theme.colors.textFaint}>
-              {formatRunDate(dates[0])}
+              {uiDate(dates[0])}
             </SvgText>
             <SvgText x={width - padR} y={height - 6} textAnchor="end" fontSize={9} fill={theme.colors.textFaint}>
-              {formatRunDate(dates.at(-1)!)}
+              {uiDate(dates.at(-1)!)}
             </SvgText>
           </Svg>
         ) : null}
         <View
           accessible
           accessibilityRole="adjustable"
-          accessibilityLabel={`${accessibilitySummary} Selected ${formatRunDate(activeDate)}. ${selectedText}.`}
-          accessibilityHint="Tap the chart to select a date. Swipe up or down to move between observations."
+          accessibilityLabel={uiJoin('Selected', ' · ', uiDate(activeDate), ' · ', selectedText)}
           accessibilityActions={[
             { name: 'increment', label: 'Next observation' },
             { name: 'decrement', label: 'Previous observation' },
@@ -326,8 +322,8 @@ export function EconomicChartFrame({
         dates={dates}
         activeIndex={activeIndex}
         onChangeIndex={(index) => setSelectedDate(dates[index] ?? null)}
-        valueLabel={selectedValues.filter((item) => item.point).map((item) => `${item.label} ${item.point!.value.toFixed(2)}%`).join(' · ') || '—'}
-        detail={selectedValues.some((item) => item.point?.date !== activeDate) ? 'Latest observations at or before this date' : null}
+        valueLabel={selectedValues.length ? uiJoin(...selectedValues.filter(item => item.point).map(item => uiJoin(item.label, ' ', uiChartPercent(item.point!.value), ' · '))) : uiLabel('Unknown')}
+        facts={selectedValues.filter(item => item.point).map(item => ({ label: item.label, value: uiJoin('Observed', ' · ', uiDate(item.point!.date)) }))}
       />
     </View>
   );

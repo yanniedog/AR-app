@@ -20,9 +20,12 @@ const snapshot = () => ({ publicationDate: '2026-09-16', eligibilityRevision: ge
 beforeEach(() => { jest.clearAllMocks(); mockFiles.length = 0; mockAvailable.mockResolvedValue(true); mockPrint.mockResolvedValue({ uri: 'cache/report.pdf', numberOfPages: 2 }); mockShare.mockResolvedValue(undefined); });
 
 test.each(['pdf', 'xlsx'] as const)('%s shares a local file and cleans it after the share sheet returns', async format => {
-  await exportSearchReport(snapshot(), format, new AbortController().signal, jest.fn());
+  const progress = jest.fn();
+  await exportSearchReport(snapshot(), format, new AbortController().signal, progress);
   expect(mockShare).toHaveBeenCalledTimes(1); expect(mockFiles[0].delete).toHaveBeenCalledTimes(1);
   expect(mockFiles[0].exists).toBe(false);
+  expect(progress.mock.calls.map(([value]) => value)).toEqual(['Generating report', 'Opening share sheet']);
+  expect(mockShare.mock.calls[0][1].dialogTitle).toBe('Search results · 16 Sept 2026');
 });
 test('cancellation during native PDF generation discards the file without sharing', async () => {
   const abort = new AbortController();

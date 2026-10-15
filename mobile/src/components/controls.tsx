@@ -1,7 +1,7 @@
+import type { UiChild } from '../lib/uiCopy';
 import Ionicons from './icons/AppIcon';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Pressable,
   Switch,
   TextInput,
   type StyleProp,
@@ -17,14 +17,16 @@ import Animated, {
 
 import { hapticSelection } from '../lib/haptics';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { commissionerFamily } from '../theme/fonts';
+import { fontStyle } from '../theme/fonts';
 import { useTheme } from '../theme/ThemeProvider';
 import { TouchTarget } from './TouchTarget';
+import { PressFeedback } from './PressFeedback';
 import { androidRipple, AppText } from './ui';
+import type { UiCopy, UiInputText } from '../lib/uiCopy';
 
 export interface SegOption<T extends string> {
   value: T;
-  label: string;
+  label: UiCopy;
 }
 
 /** Brief opacity dip when `section` changes — keeps content mounted (no hard remount). */
@@ -34,7 +36,7 @@ export function SectionCrossfade({
   style,
 }: {
   section: string;
-  children: React.ReactNode;
+  children: UiChild;
   style?: StyleProp<ViewStyle>;
 }) {
   const opacity = useSharedValue(1);
@@ -53,8 +55,8 @@ export function SectionCrossfade({
       return;
     }
     opacity.value = withSequence(
-      withTiming(0.22, { duration: 90 }),
-      withTiming(1, { duration: 200 }),
+      withTiming(0.65, { duration: 80 }),
+      withTiming(1, { duration: 160 }),
     );
   }, [section, opacity, reducedMotion]);
 
@@ -126,11 +128,13 @@ export function SegmentedControl<T extends string>({
 export function SearchBar({
   value,
   onChangeText,
-  placeholder = 'Search products or banks',
+  placeholder = 'Search rates or banks',
+  accessibilityLabel,
 }: {
-  value: string;
+  value: UiCopy | UiInputText;
   onChangeText: (t: string) => void;
-  placeholder?: string;
+  placeholder?: UiCopy;
+  accessibilityLabel?: UiCopy;
 }) {
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
@@ -140,10 +144,10 @@ export function SearchBar({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        backgroundColor: theme.ledger.raised,
+        backgroundColor: theme.colors.surfaceAlt,
         borderRadius: theme.radius.md,
         borderWidth: 1,
-        borderColor: focused ? theme.ledger.eucalyptus : theme.ledger.controlRule,
+        borderColor: focused ? theme.ledger.primary : theme.ledger.controlRule,
         paddingHorizontal: 12,
         minHeight: 48,
         paddingVertical: 4,
@@ -151,7 +155,7 @@ export function SearchBar({
     >
       <Ionicons name="search" size={18} color={theme.colors.textFaint} />
       <TextInput
-        accessibilityLabel={placeholder}
+        accessibilityLabel={accessibilityLabel ?? placeholder}
         value={value}
         onChangeText={onChangeText}
         onFocus={() => setFocused(true)}
@@ -162,7 +166,7 @@ export function SearchBar({
           flex: 1,
           minHeight: 48,
           color: theme.colors.text,
-          fontFamily: commissionerFamily(),
+          ...fontStyle(),
           fontSize: theme.font.body,
         }}
         autoCorrect={false}
@@ -171,7 +175,7 @@ export function SearchBar({
         returnKeyType="search"
       />
       {value.length > 0 ? (
-        <Pressable
+        <PressFeedback
           onPress={() => onChangeText('')}
           accessibilityRole="button"
           accessibilityLabel="Clear search"
@@ -186,7 +190,7 @@ export function SearchBar({
           }}
         >
           <Ionicons name="close-circle" size={18} color={theme.colors.textFaint} />
-        </Pressable>
+        </PressFeedback>
       ) : null}
     </View>
   );
@@ -197,7 +201,7 @@ export function CompactToggle({
   value,
   onChange,
 }: {
-  label: string;
+  label: UiCopy;
   value: boolean;
   onChange: (value: boolean) => void;
 }) {

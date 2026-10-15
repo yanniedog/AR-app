@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { UiCopy } from '../lib/uiCopy';
 
 export type UndoSnack = {
-  message: string;
+  message: UiCopy;
   onUndo: () => void;
 };
 
@@ -21,7 +22,7 @@ export function useUndoSnackbar(durationMs = UNDO_SNACKBAR_MS) {
   }, []);
 
   const showUndo = useCallback(
-    (message: string, onUndo: () => void) => {
+    (message: UiCopy, onUndo: () => void) => {
       dismiss();
       setSnack({ message, onUndo });
       timerRef.current = setTimeout(() => dismiss(), durationMs);
