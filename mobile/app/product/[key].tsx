@@ -5,6 +5,7 @@ import { EligibilityAssessment } from '../../src/components/product/EligibilityA
 import { DetailsOnlyProduct } from '../../src/components/product/DetailsOnlyProduct';
 import { FixedDepositCalculation } from '../../src/components/product/FixedDepositCalculation';
 import { ProductTermsDisclosure } from '../../src/components/product/ProductTermsDisclosure';
+import { SavedRateActions } from '../../src/components/product/SavedRateActions';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HeaderTitle } from '@react-navigation/elements';
@@ -672,6 +673,8 @@ export default function ProductDetail() {
             onPress={openCalculate}
           />
         </Row>
+
+        <SavedRateActions key={`${productKey}:${row.rate_index ?? 'product'}`} row={row} section={section} />
 
         {staySwitchProjection?.ready ? (
           <View style={{ marginBottom: 16 }}>

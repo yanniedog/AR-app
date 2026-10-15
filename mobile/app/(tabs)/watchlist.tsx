@@ -1,11 +1,9 @@
-import { uiCount, uiDate, uiInputNumber, uiJoin, uiLabel, uiNumber, uiSectionName, type UiCopy, type UiText } from "../../src/lib/uiCopy";
+import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiSectionName, type UiCopy } from "../../src/lib/uiCopy";
 import { mandatoryEligibleRows, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
-import { fontStyle } from '../../src/theme/fonts';
-import Ionicons from '../../src/components/icons/AppIcon';
 import { useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
 
 import { EmptyState, ScreenSkeleton } from '../../src/components/feedback';
 import { ProductCard } from '../../src/components/ProductCard';
@@ -18,7 +16,6 @@ import { computeLvr } from '../../src/data/calc';
 import { toggleCompareSelection } from '../../src/data/compareSelection';
 import { percentageInputFraction } from '../../src/data/decisionInsights';
 import { formatRate, toFraction } from '../../src/data/format';
-import { ensurePermissions } from '../../src/data/notifications';
 import {
   profileFeaturesForSection,
   scenarioProfileFilterRows,
@@ -36,16 +33,13 @@ import {
   normalizeTrackedRates,
   queueTrackedRatesSecureSave,
   type TrackedRate,
-  type TrackedRateDateKind,
 } from '../../src/data/trackedRates';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
-import { useReducedMotion } from '../../src/hooks/useReducedMotion';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useUndoSnackbar } from '../../src/hooks/useUndoSnackbar';
 import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
 import { openCompare, openProduct } from '../../src/lib/nav';
-import { buildCalculationRoute } from '../../src/lib/calculationTarget';
 import {
   auditActionString,
   auditActionStrings,
@@ -66,12 +60,6 @@ interface RatePosition {
   ready: boolean;
 }
 
-interface DateEditorState {
-  id: string;
-  kind: TrackedRateDateKind;
-  value: string;
-}
-
 function positionHeadline(position: RatePosition): UiCopy {
   if (!position.ready) return 'Matching';
   if (position.matchedRate == null || position.gapRate == null) {
@@ -79,11 +67,6 @@ function positionHeadline(position: RatePosition): UiCopy {
   }
   if (position.gapRate <= 0) return 'No better matched rate';
   return uiJoin('Gap',': ',uiNumber(position.gapRate*100,2),' ','percentage points');
-}
-
-function dateLabel(tracked: TrackedRate | undefined): UiText | null {
-  if (!tracked?.relevantDate || !tracked.relevantDateKind) return null;
-  return uiJoin(tracked.relevantDateKind==='term-maturity'?'Matures':'Fixed rate ends',': ',uiDate(tracked.relevantDate));
 }
 
 let auditSavedFixtureSnapshot: {
@@ -95,7 +78,6 @@ let auditSavedFixtureSnapshot: {
 export default function MyRates() {
   const theme = useTheme();
   const [positionsOpen, setPositionsOpen] = useState(false);
-  const reducedMotion = useReducedMotion();
   const core = useStore((s) => s.core);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const storeStatus = useStore((s) => s.status);
@@ -105,12 +87,6 @@ export default function MyRates() {
   const removeSavedRate = useStore((s) => s.removeSavedRate);
   const restoreSavedRate = useStore((s) => s.restoreSavedRate);
   const subscriptions = useStore((s) => s.subscriptions);
-  const notificationsEnabled = useStore((s) => s.prefs.notificationsEnabled);
-  const subscribeProduct = useStore((s) => s.subscribeProduct);
-  const unsubscribeProduct = useStore((s) => s.unsubscribeProduct);
-  const isProductSubscribed = useStore((s) => s.isProductSubscribed);
-  const setPref = useStore((s) => s.setPref);
-  const setTrackedRateRelevantDate = useStore((s) => s.setTrackedRateRelevantDate);
   const setActiveSection = useStore((s) => s.setActiveSection);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const detailsLoading = useStore((s) => s.detailsLoading);
@@ -125,11 +101,13 @@ export default function MyRates() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [layoutReady, setLayoutReady] = useState(false);
-  const [dateEditor, setDateEditor] = useState<DateEditorState | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
 
-  const items = useMemo(() => (core ? resolveSavedRates(core, savedRates).filter(item => mandatoryEligibleRows([item.row]).length > 0) : []), [core, savedRates, suitabilityRevision]);
+  const items = useMemo(() => {
+    void suitabilityRevision;
+    return core ? resolveSavedRates(core, savedRates).filter(item => mandatoryEligibleRows([item.row]).length > 0) : [];
+  }, [core, savedRates, suitabilityRevision]);
   const unavailableRefs = useMemo(
     () => unresolvedSavedRateRefs(savedRates.filter(ref => mandatoryProductAllowed(ref.productKey)), items),
     [items, savedRates],
@@ -298,22 +276,6 @@ export default function MyRates() {
     openCompare(selected);
     return { expectedPath: '/compare' };
   }, [selected]);
-  const toggleAlert = useCallback(async (row: RateRow) => {
-    const rateIndex = row.rate_index ?? null;
-    const storedSubscription = isProductSubscribed(row.product_key, rateIndex);
-    if (storedSubscription && notificationsEnabled) {
-      unsubscribeProduct(row.product_key, rateIndex);
-      return;
-    }
-    const permitted = await ensurePermissions();
-    if (!permitted) {
-      Alert.alert('Notifications disabled');
-      return;
-    }
-    if (!notificationsEnabled) setPref('notificationsEnabled', true);
-    if (!storedSubscription) subscribeProduct(row.product_key, rateIndex, row);
-  }, [isProductSubscribed, notificationsEnabled, setPref, subscribeProduct, unsubscribeProduct]);
-
   const coreRevision = core ? `${core.run_date}:${coreSha}` : null;
   const savedRenderRevision = `${coreRevision ?? 'none'}:${positions.length}:${items.length}:${unavailableRefs.length}:${subscriptions.length}:${selectMode ? 'select' : 'view'}:${selected.join(',')}`;
   const savedLogoIds = useMemo(
@@ -321,27 +283,27 @@ export default function MyRates() {
     [items, selectMode],
   );
   const savedLogos = useLogoReadiness(savedRenderRevision, savedLogoIds);
-  const calculateSavedRate = useCallback((row: RateRow, section: SectionKey) => {
-    router.push(buildCalculationRoute(row, section));
-    return { expectedPath: '/calculator' };
+  const openSavedProduct = useCallback((row: RateRow) => {
+    openProduct(row.product_key, row.rate_index);
+    return { expectedPath: `/product/${encodeURIComponent(row.product_key)}` };
   }, []);
-  const calculateSavedRateForAudit = useCallback((...args: unknown[]) => {
-    if (selectMode) return { unavailableReason: 'Saved rate calculation is unavailable during comparison selection' };
+  const openSavedProductForAudit = useCallback((...args: unknown[]) => {
+    if (selectMode) return { unavailableReason: 'Saved product is unavailable during comparison selection' };
     const id = auditActionString(args, 'savedId');
     const item = id ? items.find(value => value.ref.id === id) : items[0];
     if (!item) return { unavailableReason: 'Selected saved rate is unavailable' };
-    return calculateSavedRate(item.row, item.section);
-  }, [calculateSavedRate, items, selectMode]);
+    return openSavedProduct(item.row);
+  }, [items, openSavedProduct, selectMode]);
   const auditActions = useMemo(() => ({
     'saved.open': () => undefined,
-    'saved.calculate.open': calculateSavedRateForAudit,
+    'saved.product.open': openSavedProductForAudit,
     'saved.fixture.ensure-exact-pair': ensureExactPair,
     'saved.compare.mode': toggleCompareMode,
     'saved.compare.select.0': selectAuditToken,
     'saved.compare.select.1': selectAuditToken,
     'saved.compare.open': openSelectedCompare,
     'saved.fixture.restore': restoreSavedFixture,
-  }), [calculateSavedRateForAudit, ensureExactPair, openSelectedCompare, restoreSavedFixture, selectAuditToken, toggleCompareMode]);
+  }), [openSavedProductForAudit, ensureExactPair, openSelectedCompare, restoreSavedFixture, selectAuditToken, toggleCompareMode]);
   usePerformanceAuditSurface({
     id: 'saved.list',
     routeKey: '/watchlist',
@@ -392,23 +354,6 @@ export default function MyRates() {
       restoreSavedRate(item.ref, tracked);
     });
   }, [items, removeSavedRate, restoreSavedRate, showUndo, trackedById]);
-
-  const saveRelevantDate = useCallback(async () => {
-    if (!dateEditor) return;
-    try {
-      await setTrackedRateRelevantDate(
-        dateEditor.id,
-        dateEditor.value.trim() || null,
-        dateEditor.value.trim() ? dateEditor.kind : null,
-      );
-      setDateEditor(null);
-    } catch (error) {
-      Alert.alert(
-        error instanceof RangeError ? 'Invalid date' : 'Date not saved',
-        error instanceof RangeError ? 'YYYY-MM-DD' : 'Storage unavailable · Previous date retained',
-      );
-    }
-  }, [dateEditor, setTrackedRateRelevantDate]);
 
   if (!core) return <ScreenSkeleton />;
 
@@ -494,124 +439,16 @@ export default function MyRates() {
               <AppText variant="small" weight="700" color="textMuted">
                 {uiSectionName(groupSection)}
               </AppText>
+              <View testID="saved-product-rows">
               {sectionItems.map(({ ref, row, section }) => {
                 const token = compareToken(row.product_key, row.rate_index ?? null);
-                const selectedNow = selected.includes(token);
-                const tracked = trackedById.get(ref.id);
-                const subscribed = notificationsEnabled
-                  && isProductSubscribed(row.product_key, row.rate_index ?? null);
-                const currentRate = toFraction(row.rate);
-                const changeBps = tracked?.observedRate != null && currentRate != null
-                  ? Math.round((currentRate - tracked.observedRate) * 10_000)
-                  : 0;
-                const relevantDate = dateLabel(tracked);
-                const supportsRelevantDate = section === 'TD'
-                  || tracked?.relevantDateKind === 'fixed-rate-end'
-                  || row.rate_type?.toUpperCase().includes('FIXED')
-                  || row.ribbon_rate_structure?.toLowerCase() === 'fixed';
-                return (
-                  <SwipeableRow
-                    key={ref.id}
-                    onDelete={() => remove(ref.id)}
-                    deleteLabel="Stop watching"
-                  >
-                    <View style={{ gap: 6 }}>
-                      <ProductCard
-                        row={row}
-                        section={section}
-                        selectMode={selectMode}
-                        selected={selectedNow}
-                        logoRenderStateId={`saved:${ref.id}`}
-                        onLogoRenderStateChange={savedLogos.onLogoRenderStateChange}
-                        onPress={() => {
-                          if (!selectMode) {
-                            openProduct(row.product_key, row.rate_index);
-                            return;
-                          }
-                          toggleSelection(token);
-                        }}
-                      />
-                      {!selectMode ? (
-                        <>
-                          <Row
-                            style={{
-                              justifyContent: 'space-between',
-                              paddingHorizontal: theme.spacing(2),
-                              paddingBottom: theme.spacing(1),
-                            }}
-                          >
-                          <View style={{ flex: 1 }}>
-                            <AppText variant="tiny" color="textMuted">
-                              {ref.scope === 'product'
-                                ? uiLabel('All product variants · Legacy save')
-                                : changeBps
-                                ? uiJoin(changeBps>0?'Increase':'Decrease',': ',uiNumber(Math.abs(changeBps)/100,2),' ','percentage points',' · ','Since saved')
-                                : uiJoin('Last updated',': ',uiDate(row.last_updated??core.run_date))}
-                              {relevantDate ? uiJoin(' · ',relevantDate):null}
-                            </AppText>
-                          </View>
-                          <Button
-                            title="Calculate"
-                            variant="ghost"
-                            onPress={() => calculateSavedRate(row, section)}
-                          />
-                          <Pressable
-                            onPress={() => void toggleAlert(row)}
-                            accessibilityRole="button"
-                            accessibilityLabel={subscribed ? uiLabel("Disable alerts") : uiLabel("Enable alerts")}
-                            hitSlop={10}
-                            style={({ pressed }) => ({
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              gap: 4,
-                              opacity: pressed ? 0.6 : 1,
-                            })}
-                          >
-                            <Ionicons
-                              name={subscribed ? 'notifications' : 'notifications-outline'}
-                              size={16}
-                              color={subscribed ? theme.colors.primary : theme.colors.textMuted}
-                            />
-                            <AppText variant="tiny" color={subscribed ? 'primary' : 'textMuted'} weight="700">
-                              {subscribed ? uiLabel("Alerts on") : uiLabel("Alert me")}
-                            </AppText>
-                          </Pressable>
-                          </Row>
-                          {supportsRelevantDate ? (
-                          <Pressable
-                            onPress={() => setDateEditor({
-                              id: ref.id,
-                              kind: section === 'TD' ? 'term-maturity' : 'fixed-rate-end',
-                              value: tracked?.relevantDate ?? '',
-                            })}
-                            accessibilityRole="button"
-                            accessibilityLabel={relevantDate
-                              ? uiJoin('Edit',' ',relevantDate)
-                              : section === 'TD'
-                                ? uiLabel("Add term deposit maturity date")
-                                : uiLabel("Add fixed rate end date")}
-                            style={({ pressed }) => ({
-                              minHeight: 48,
-                              marginHorizontal: theme.spacing(2),
-                              paddingHorizontal: theme.spacing(2),
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              gap: 6,
-                              opacity: pressed ? 0.6 : 1,
-                            })}
-                          >
-                            <Ionicons name="calendar-outline" size={17} color={theme.colors.textMuted} />
-                            <AppText variant="small" color="textMuted" weight="700">
-                              {relevantDate ?? (section === 'TD' ? uiLabel("Add maturity date") : uiLabel("Add fixed-rate end date"))}
-                            </AppText>
-                          </Pressable>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </View>
-                  </SwipeableRow>
-                );
+                return <SwipeableRow key={ref.id} onDelete={() => remove(ref.id)} deleteLabel="Stop watching">
+                  <ProductCard row={row} section={section} selectMode={selectMode} selected={selected.includes(token)}
+                    logoRenderStateId={`saved:${ref.id}`} onLogoRenderStateChange={savedLogos.onLogoRenderStateChange}
+                    onPress={() => { if (selectMode) toggleSelection(token); else openSavedProduct(row); }} />
+                </SwipeableRow>;
               })}
+              </View>
             </View>
           );
         })}
@@ -675,61 +512,7 @@ export default function MyRates() {
         </Disclosure>
       </ScreenScrollView>
       <UndoSnackbar snack={snack} onUndo={undo} />
-      <Modal
-        visible={dateEditor != null}
-        transparent
-        animationType={reducedMotion === false ? 'fade' : 'none'}
-        onRequestClose={() => setDateEditor(null)}
-      >
-        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.45)' }}>
-          <Card accessibilityViewIsModal style={{ gap: 14 }}>
-            <View>
-              <AppText variant="h3">
-                {dateEditor?.kind === 'term-maturity' ? uiLabel("Term deposit maturity") : uiLabel("Fixed-rate end")}
-              </AppText>
-              <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                <AppText variant="tiny" color="textMuted">{uiLabel("Storage")}</AppText>
-                <AppText variant="tiny">{uiJoin('This device',' · ','Private')}</AppText>
-              </Row>
-            </View>
-            <TextInput
-              value={uiInputNumber(dateEditor?.value??'')}
-              onChangeText={(value) => setDateEditor((current) => current ? { ...current, value } : current)}
-              placeholder={uiLabel('YYYY-MM-DD')}
-              placeholderTextColor={theme.colors.textFaint}
-              autoFocus
-              autoCapitalize="none"
-              autoCorrect={false}
-              inputMode="numeric"
-              maxLength={10}
-              accessibilityLabel="Date"
-              style={{
-                ...fontStyle(),
-                minHeight: 48,
-                borderWidth: 1,
-                borderColor: theme.colors.border,
-                borderRadius: theme.radius.md,
-                paddingHorizontal: 12,
-                color: theme.colors.text,
-                backgroundColor: theme.colors.surfaceAlt,
-                fontSize: theme.font.body,
-              }}
-            />
-            <Row gap={8} style={{ flexWrap: 'wrap' }}>
-              {dateEditor?.value ? (
-                <Button
-                  title="Remove date"
-                  variant="ghost"
-                  onPress={() => setDateEditor((current) => current ? { ...current, value: '' } : current)}
-                />
-              ) : null}
-              <View style={{ flex: 1 }} />
-              <Button title="Cancel" variant="secondary" onPress={() => setDateEditor(null)} />
-              <Button title="Save date" onPress={saveRelevantDate} />
-            </Row>
-          </Card>
-        </View>
-      </Modal>
+
     </Screen>
   );
 }

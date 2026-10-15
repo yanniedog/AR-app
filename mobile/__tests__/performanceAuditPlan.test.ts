@@ -300,11 +300,16 @@ describe('deep performance audit plan', () => {
       expect(product[1]).toMatchObject({ expectedPath: '/calculator', expectedSurface: 'calculator.results',
         parameters: { productKey: primary.productKey, rateIndex: primary.rateIndex } });
       const saved = pass.steps.filter(item => item.scenarioId === 'route.saved');
-      const calculate = saved.findIndex(item => item.semanticActionId === 'saved.calculate.open');
+      const openSaved = saved.findIndex(item => item.semanticActionId === 'saved.product.open');
+      const calculate = saved.findIndex(item => item.semanticActionId === 'product.calculate.open');
+      expect(openSaved).toBeGreaterThan(saved.findIndex(item => item.semanticActionId === 'saved.fixture.ensure-exact-pair'));
+      expect(calculate).toBe(openSaved + 1);
+      expect(saved[openSaved]).toMatchObject({ expectedPath: `/product/${encodeURIComponent(primary.productKey)}`, expectedSurface: 'product.details',
+        parameters: { savedId: primary.rateIndex == null ? `product:${primary.productKey}` : `rate:${primary.productKey}:${primary.rateIndex}` } });
       expect(calculate).toBeGreaterThan(saved.findIndex(item => item.semanticActionId === 'saved.fixture.ensure-exact-pair'));
       expect(calculate).toBeLessThan(saved.findIndex(item => item.semanticActionId === 'saved.compare.mode'));
       expect(saved[calculate]).toMatchObject({ expectedPath: '/calculator', expectedSurface: 'calculator.results',
-        parameters: { savedId: primary.rateIndex == null ? `product:${primary.productKey}` : `rate:${primary.productKey}:${primary.rateIndex}` } });
+        parameters: { productKey: primary.productKey, rateIndex: primary.rateIndex } });
     }
   });
 
