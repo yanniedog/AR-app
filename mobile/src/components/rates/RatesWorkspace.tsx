@@ -531,37 +531,7 @@ export default function RatesWorkspace() {
     <Screen>
       <Stack.Screen options={{ title: 'Rates' }} />
       <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
-        <FlashList
-          ref={attachList}
-          drawDistance={120}
-          // Keep the input/header mounted while query, filters and sort change.
-          // Session state owns offsets; automatic item anchoring would compete.
-          maintainVisibleContentPosition={{ disabled: true }}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          data={resultRows}
-          onCommitLayoutEffect={onListCommit}
-          onLoad={onListLoad}
-          onContentSizeChange={listReadiness.onContentSizeChange}
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
-          extraData={listRevision}
-          keyExtractor={(item, i) => 'product_key' in item ? `${item.product_key}-${item.rate_index ?? i}` : item.key}
-          getItemType={item => 'product_key' in item ? 'rate' : 'unlisted'}
-          onScroll={event => {
-            if (restoration.current.applied && restoration.current.revision === listDataRevision
-              && useRatesSession.getState().section === section) recordRatesScroll(section, event.nativeEvent.contentOffset.y);
-          }}
-          scrollEventThrottle={64}
-          contentContainerStyle={{
-            ...screenScrollContentStyle(theme, 0, width),
-            // Rows and the scrolling toolbar own their spacing.
-            gap: 0,
-            paddingTop: 0,
-            paddingBottom: theme.spacing(6),
-          }}
-          renderItem={renderProduct}
-          ListHeaderComponent={<View style={{ gap: 8, paddingTop: 8, paddingBottom: 8 }}>
+        <View testID="rates-task-controls" style={{ ...screenScrollContentStyle(theme, 0, width), gap: 8, paddingTop: 8, paddingBottom: 8 }}>
             <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
             <SearchBar value={uiRatesQuery(task)} onChangeText={setQuery} placeholder="Search" accessibilityLabel="Search rates or banks" />
             <Row gap={8} style={{ flexWrap: 'wrap' }}>
@@ -586,7 +556,37 @@ export default function RatesWorkspace() {
             {path.length ? <Button title="Clear scope" variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
             {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">{uiLabel("Name search")}</AppText>
               {searchIndexStatus === 'error' ? <Button title="Retry search" variant="ghost" onPress={() => void ensureSearchIndex()} /> : null}</Row> : null}
-          </View>}
+        </View>
+        <FlashList
+          ref={attachList}
+          drawDistance={120}
+          // Keep the list mounted while the fixed task controls change results.
+          // Session state owns offsets; automatic item anchoring would compete.
+          maintainVisibleContentPosition={{ disabled: true }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          data={resultRows}
+          onCommitLayoutEffect={onListCommit}
+          onLoad={onListLoad}
+          onContentSizeChange={listReadiness.onContentSizeChange}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
+          extraData={listRevision}
+          keyExtractor={(item, i) => 'product_key' in item ? `${item.product_key}-${item.rate_index ?? i}` : item.key}
+          getItemType={item => 'product_key' in item ? 'rate' : 'unlisted'}
+          onScroll={event => {
+            if (restoration.current.applied && restoration.current.revision === listDataRevision
+              && useRatesSession.getState().section === section) recordRatesScroll(section, event.nativeEvent.contentOffset.y);
+          }}
+          scrollEventThrottle={64}
+          contentContainerStyle={{
+            ...screenScrollContentStyle(theme, 0, width),
+            // Fixed task controls own their spacing; rows stay adjacent.
+            gap: 0,
+            paddingTop: 0,
+            paddingBottom: theme.spacing(6),
+          }}
+          renderItem={renderProduct}
           ListEmptyComponent={
             task.intentError ? <EmptyState title="Scope unavailable" /> : availability === 'unlisted' && !catalogueDetails ? (
               <View style={{ paddingTop: 16, gap: 12 }}><EmptyState title={uiLabel(detailsLoading ? 'Loading' : 'Catalogue unavailable')} />

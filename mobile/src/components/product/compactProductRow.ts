@@ -81,6 +81,7 @@ export interface CompactProductRowLayout {
   readonly showTier: boolean;
   readonly showFacetSymbol: boolean;
   readonly combinedStatus: boolean;
+  readonly showStatuses: boolean;
   readonly showPrimaryIcon: boolean;
   readonly warningOnly: boolean;
 }
@@ -93,6 +94,11 @@ export function compactProductRowLayout(width: number, fontScale: number, primar
   const primaryTextWidth = Math.max(compactFactWidth(primary, fontScale), measuredPrimary);
   const secondaryWidth = secondary === null ? 0
     : Math.max(compactFactWidth(secondary, fontScale), measuredSecondary) + COMPACT_ROW.icon + 2;
+  // Only an actual glyph wider than the entire rail is unsupported. Optional
+  // identity/tier/status content must never turn a fitting rate into a warning.
+  if (primaryTextWidth > main) return { main, identity: 0, primary: main, secondary: secondaryWidth,
+    showSecondary: false, facet: 0, showFacetValue: false, showTier: false, showFacetSymbol: false,
+    combinedStatus: true, showStatuses: false, showPrimaryIcon: false, warningOnly: true };
   const categoryWidth = facet.kind === 'LVR' ? compactFactWidth(uiLabel('%'), fontScale) : COMPACT_ROW.icon;
   const symbolWidth = categoryWidth + statusIcons * (COMPACT_ROW.icon + 2);
   const indexWidth = tier === null ? 0 : compactFactWidth(tier, fontScale);
@@ -104,31 +110,32 @@ export function compactProductRowLayout(width: number, fontScale: number, primar
   const exactFacetWidth = compactFactWidth(facet.value, fontScale) + statusIcons * (COMPACT_ROW.icon + 2);
   let showFacetValue = facet.known && exactFacetWidth + (hasPeers ? indexWidth + 2 : 0) <= availableFacet;
   let showTier = tier !== null && (hasPeers || !showFacetValue);
-  let showFacetSymbol = true, combinedStatus = false, showPrimaryIcon = true, warningOnly = false;
+  let showFacetSymbol = true, combinedStatus = false, showPrimaryIcon = true, showStatuses = true;
   const minimumIdentity = Math.max(24, COMPACT_ROW.fontSize * fontScale);
   const sizes = () => {
     const parts = [showFacetValue ? compactFactWidth(facet.value, fontScale) : showFacetSymbol ? categoryWidth : 0,
-      warningOnly ? 0 : combinedStatus ? statusIcons ? COMPACT_ROW.icon : 0 : statusIcons * (COMPACT_ROW.icon + 2) - (statusIcons ? 2 : 0),
+      !showStatuses ? 0 : combinedStatus ? statusIcons ? COMPACT_ROW.icon : 0 : statusIcons * (COMPACT_ROW.icon + 2) - (statusIcons ? 2 : 0),
       showTier ? indexWidth : 0].filter(value => value > 0);
     const facetWidth = parts.reduce((sum, value) => sum + value, 0) + Math.max(0, parts.length - 1) * 2;
-    const primaryWidth = warningOnly ? 16 : primaryTextWidth + (showPrimaryIcon ? 14 : 0);
+    const primaryWidth = primaryTextWidth + (showPrimaryIcon ? 14 : 0);
     return { primaryWidth, facetWidth, identity: main - primaryWidth
-      - (showSecondary ? secondaryWidth + COMPACT_ROW.gap : 0) - facetWidth - 2 * COMPACT_ROW.gap };
+      - (showSecondary ? secondaryWidth + COMPACT_ROW.gap : 0) - facetWidth
+      - (facetWidth ? 2 : 1) * COMPACT_ROW.gap };
   };
   if (sizes().identity < minimumIdentity && showFacetValue) { showFacetValue = false; showTier = tier !== null; }
   if (sizes().identity < minimumIdentity) showSecondary = false;
   if (sizes().identity < minimumIdentity) combinedStatus = true;
   if (sizes().identity < minimumIdentity) showFacetSymbol = false;
   if (sizes().identity < minimumIdentity) showPrimaryIcon = false;
-  if (sizes().identity < minimumIdentity) {
-    // The native glyphs themselves cannot fit. A warning represents this compact
-    // presentation limit; it never changes a known rate into an unknown value.
-    warningOnly = true; showSecondary = false; showFacetValue = false; showFacetSymbol = false;
-    showPrimaryIcon = false; combinedStatus = true;
-    if (sizes().identity < minimumIdentity) showTier = false;
-  }
+  if (sizes().identity < minimumIdentity) showTier = false;
+  if (sizes().identity < minimumIdentity) showStatuses = false;
   const final = sizes();
+  // If a full rate needs the last name-cell pixels, give it the rail rather
+  // than clipping its text or leaving an empty cell's gap in the budget.
+  if (final.identity < minimumIdentity) return { main, identity: 0, primary: main, secondary: secondaryWidth,
+    showSecondary: false, facet: 0, showFacetValue: false, showTier: false, showFacetSymbol: false,
+    combinedStatus: true, showStatuses: false, showPrimaryIcon: false, warningOnly: false };
   return { main, primary: final.primaryWidth, secondary: secondaryWidth, showSecondary,
-    identity: Math.max(0, final.identity), facet: final.facetWidth, showFacetValue, showTier,
-    showFacetSymbol, combinedStatus, showPrimaryIcon, warningOnly };
+    identity: final.identity, facet: final.facetWidth, showFacetValue, showTier,
+    showFacetSymbol, combinedStatus, showStatuses, showPrimaryIcon, warningOnly: false };
 }

@@ -418,7 +418,7 @@ test('filter Cancel discards the real draft and preserves query/type/sort/offset
   try {
     const list = tree.root.findByType('FlashList' as any);
     act(() => tree.root.findByType('SearchBar' as any).props.onChangeText('Macquarie'));
-    act(() => list.findByProps({ word: 'Bank' }).props.onPress());
+    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
     act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 312 } } }));
     const initialRows = list.props.data, before = captureRatesSession();
     act(() => mockSurfaces.get('rates.results').actions['search.filters.open']());
@@ -519,7 +519,7 @@ test.each([
     expect(actions.parent).toBe(toolbar);
     expect(actions.props.word).toBe('More');
     expect(actions.props.icon).toBe('ellipsis-horizontal');
-    expect(tree.root.findByType('FlashList' as any).findAllByType('AppText' as any).map((node: any) =>
+    expect(tree.root.findByProps({ testID: 'rates-task-controls' }).findAllByType('AppText' as any).map((node: any) =>
       React.Children.toArray(node.props.children).join(''))).toEqual([
         tree.root.findByType('FlashList' as any).props.data.length + ' results', 'Advertised',
       ]);
@@ -548,27 +548,32 @@ test.each([
   } finally { act(() => tree.unmount()); }
 });
 
-test.each([[411, 1], [360, 2]])('the toolbar scrolls inside the list at %s dp / %s font scale with direct search and one filter sheet', (width, fontScale) => {
+test.each([[411, 1], [360, 2]])('task controls remain outside a scrolled list at %s dp / %s font scale with direct search and one filter sheet', (width, fontScale) => {
   mockDimensions = { ...mockDimensions, width, fontScale };
   mockState.prefs.includeNonStandard = true;
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
     const list = tree.root.findByType('FlashList' as any);
-    expect(React.isValidElement(list.props.ListHeaderComponent)).toBe(true);
-    expect(list.props.stickyHeaderIndices).toBeUndefined();
-    expect(list.findAllByType('SearchBar' as any)).toHaveLength(1);
+    const controls = tree.root.findByProps({ testID: 'rates-task-controls' });
+    expect(list.props.ListHeaderComponent).toBeUndefined();
+    expect(list.findAllByType('SearchBar' as any)).toHaveLength(0);
+    expect(controls.findAllByType('SearchBar' as any)).toHaveLength(1);
+    act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 2400 } } }));
+    expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(2400);
     expect(list.props.keyboardShouldPersistTaps).toBe('handled');
     expect(list.props.keyboardDismissMode).toBe('on-drag');
     expect(list.props.maintainVisibleContentPosition).toEqual({ disabled: true });
-    const input = list.findByType('SearchBar' as any);
+    const input = controls.findByType('SearchBar' as any);
     expect(input.props.value).toBe('');
     expect(input.props.placeholder).toBe('Search');
     expect(input.props.accessibilityLabel).toBe('Search rates or banks');
     expect(input.props.onSubmitEditing).toBeUndefined();
     expect(list.findAllByType('Button' as any).filter((node: any) => node.props.title === 'Search')).toHaveLength(0);
-    act(() => list.findByProps({ word: 'Filter' }).props.onPress());
+    act(() => tree.root.findByProps({ word: 'Filter' }).props.onPress());
     expect(tree.root.findAllByType('FilterSheet' as any)).toHaveLength(1);
     expect(tree.root.findByType('FilterSheet' as any).props.visible).toBe(true);
+    expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(2400);
+    expect(tree.root.findByProps({ testID: 'rates-task-controls' })).toBe(controls);
     expect(mockSearchMount).toHaveBeenCalledTimes(1);
     expect(mockSearchUnmount).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
@@ -582,7 +587,7 @@ test.each([[360, 2], [320, 2], [360, 1.3]])('summary metadata reserves a whole l
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
     const actions = tree.root.findByProps({ accessibilityLabel: 'Search actions' });
-    const summary = tree.root.findByType('FlashList' as any).findAllByType('AppText' as any)
+    const summary = tree.root.findByProps({ testID: 'rates-task-controls' }).findAllByType('AppText' as any)
       .find((node: any) => node.props.children === 'Comparison');
     expect(summary).toBeDefined();
     expect(summary.props.accessibilityLabel).toBe('Comparison rate');
@@ -680,11 +685,11 @@ test('changing result scopes keeps the focused input and exact rate rows mounted
     }
     expect(list.props.data).toHaveLength(exactRows.length);
     for (const row of list.props.data) expect(exactRows).toContain(row);
-    act(() => list.findByProps({ word: 'Bank' }).props.onPress());
+    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
     expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
     expect(tree.root.findByType('SearchBar' as any)).toBe(input);
     expect(input.props.focused).toBe(true);
-    act(() => list.findByProps({ word: 'Filter' }).props.onPress());
+    act(() => tree.root.findByProps({ word: 'Filter' }).props.onPress());
     const sheet = () => tree.root.findByType('FilterSheet' as any);
     act(() => sheet().props.onDraftChange({ ...sheet().props.controlledDraft, providers: ['Macquarie'] }));
     act(() => sheet().props.onApply(sheet().props.controlledDraft));
@@ -703,20 +708,20 @@ test('one visible tap commits the common sort preset, while advanced Cancel/Back
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
     const list = tree.root.findByType('FlashList' as any);
-    act(() => list.findByProps({ word: 'Bank' }).props.onPress());
+    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
     expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
     expect(tree.root.findAllByType('SheetSurface' as any).filter((node: any) => node.props.visible)).toHaveLength(0);
     act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 312 } } }));
     const before = captureRatesSession();
     const sortSheet = () => tree.root.findAllByType('SheetSurface' as any).find((node: any) => node.props.title === 'Sort');
     for (const close of ['button', 'back']) {
-      act(() => list.findByProps({ word: 'Sort' }).props.onPress());
+      act(() => tree.root.findByProps({ word: 'Sort' }).props.onPress());
       expect(sortSheet().props.visible).toBe(true);
       act(() => close === 'button' ? sortSheet().findByProps({ title: 'Cancel' }).props.onPress() : sortSheet().props.onClose());
       expect(sortSheet().props.visible).toBe(false);
       expect(captureRatesSession()).toEqual(before);
     }
-    act(() => list.findByProps({ word: 'Sort' }).props.onPress());
+    act(() => tree.root.findByProps({ word: 'Sort' }).props.onPress());
     const commits = jest.fn(), stop = useRatesSession.subscribe(commits);
     act(() => sortSheet().findByProps({ title: 'Advertised rate' }).props.onPress());
     stop();
@@ -725,8 +730,8 @@ test('one visible tap commits the common sort preset, while advanced Cancel/Back
     expect(useRatesSession.getState().sections.TD.sort).toBe('rate');
     expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(0);
     expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 0, animated: false });
-    act(() => list.findByProps({ word: 'Bank' }).props.onPress());
-    act(() => list.findByProps({ word: 'Bank' }).props.onPress());
+    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
+    act(() => tree.root.findByProps({ word: 'Bank' }).props.onPress());
     expect(useRatesSession.getState().sections.TD.sort).toBe('rate');
     expect(sortSheet().props.visible).toBe(false);
   } finally { act(() => tree.unmount()); }
@@ -742,7 +747,7 @@ test('family changes and a detail/back remount restore that family offset withou
     const input = tree.root.findByType('SearchBar' as any);
     const list = tree.root.findByType('FlashList' as any);
     expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 420, animated: false });
-    const familyControl = () => list.findAllByType('SegmentedControl' as any).find((node: any) => node.props.options.some((option: any) => option.value === 'Mortgage'));
+    const familyControl = () => tree.root.findByProps({ testID: 'rates-task-controls' }).findAllByType('SegmentedControl' as any).find((node: any) => node.props.options.some((option: any) => option.value === 'Mortgage'));
     act(() => familyControl().props.onChange('Mortgage'));
     expect(input.props.value).toBe('Loan');
     expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 80, animated: false });
@@ -787,7 +792,7 @@ test('a data swap rejects prior-row visibility and a header-only viewport stays 
     const list = tree.root.findByType('FlashList' as any), previous = list.props.data[0];
     const probe = () => mockSurfaces.get('rates.results').probes.find((item: any) => item.id === 'search.list');
     mockSuppressViewability = true;
-    const family = list.findAllByType('SegmentedControl' as any).find((node: any) => node.props.options.some((option: any) => option.value === 'Savings'));
+    const family = tree.root.findByProps({ testID: 'rates-task-controls' }).findAllByType('SegmentedControl' as any).find((node: any) => node.props.options.some((option: any) => option.value === 'Savings'));
     act(() => family.props.onChange('Savings'));
     expect(probe().status).toBe('pending');
     act(() => list.props.onViewableItemsChanged({ viewableItems: [{ isViewable: true, item: previous }] }));

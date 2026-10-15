@@ -37,7 +37,7 @@ Qwen configuration or producer/Pi services to implement this checklist.
    interaction quality, human usability or the truth of an assessor's claims.
 6. Once publication is authorised, verify the public universal/ARM APK pair,
    rolling manifests, SHA-256, bytes, signing identity, version/build, ABI and
-   release source with the existing public-delivery tooling. Fresh-install the
+   release source with the APK identity tools and public readback. Fresh-install the
    downloaded exact bytes and repeat native acceptance. Record each APK's own
    acceptance file; an x86_64 universal-APK emulator run cannot establish ARM
    runtime acceptance. Keep physical haptics/device acceptance separately
@@ -53,8 +53,9 @@ version/configuration too: release automation updates version metadata before
 prebuild.
 
 After publication, keep each APK's acceptance record externally alongside its
-captures, using the immutable public manifest's `source_sha` and independently
-verified artifact identity. Never relabel earlier captures with the merged
+captures, using a retained copy of the rolling public manifest's `source_sha`,
+its immutable APK URL and independently verified artifact identity. The release
+does not publish an immutable versioned manifest. Never relabel earlier captures with the merged
 commit or replace their APK hashes. Repeat native acceptance on the downloaded
 bytes as required above; an untested ARM runtime remains outstanding.
 
