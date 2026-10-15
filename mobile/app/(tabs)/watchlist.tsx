@@ -20,9 +20,8 @@ import { percentageInputFraction } from '../../src/data/decisionInsights';
 import { formatRate, toFraction } from '../../src/data/format';
 import { ensurePermissions } from '../../src/data/notifications';
 import {
-  lvrTierForValue,
   profileFeaturesForSection,
-  profileFilterRows,
+  scenarioProfileFilterRows,
 } from '../../src/data/profile';
 import {
   makeSavedRateRef,
@@ -158,15 +157,8 @@ export default function MyRates() {
         : percentageInputFraction(deposit.currentRate);
       if (currentRate == null) return [];
       const rows = core.sections[section]?.rates ?? [];
-      const lvrTier = section === 'Mortgage' && mortgage.lvr != null
-        ? lvrTierForValue(
-            mortgage.lvr,
-            [...new Set(rows.map((row) => row.lvr_tier).filter((tier): tier is string => !!tier))],
-          )
-        : null;
-      const decisionProfile = lvrTier ? { ...profileFilters, lvrTiers: [lvrTier] } : profileFilters;
       const ready = isSuitabilityFilterReady(includeNonStandard)
-        && !(profileFeaturesForSection(decisionProfile, section).length > 0 && !detailsProducts);
+        && !(profileFeaturesForSection(profileFilters, section).length > 0 && !detailsProducts);
       if (!ready) {
         return [{
           section,
@@ -177,7 +169,7 @@ export default function MyRates() {
         }];
       }
       const match = bestRow(
-        profileFilterRows(rows, decisionProfile, section, detailsProducts),
+        scenarioProfileFilterRows(rows, profileFilters, section, mortgage.lvr, detailsProducts),
         section,
         includeNonStandard,
         depositRankMetric,

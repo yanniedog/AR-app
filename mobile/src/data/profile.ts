@@ -125,7 +125,8 @@ export function lvrTierForValue(lvr: number, tiers: string[]): string | null {
   const ranges = tiers
     .map((tier) => ({ tier, range: parseLvrRange(tier) }))
     .filter((x): x is { tier: string; range: NonNullable<ReturnType<typeof parseLvrRange>> } => x.range !== null)
-    .sort((a, b) => a.range.hi - b.range.hi || a.range.lo - b.range.lo);
+    .sort((a, b) => (a.range.hi - a.range.lo) - (b.range.hi - b.range.lo)
+      || a.range.hi - b.range.hi || b.range.lo - a.range.lo);
   if (!ranges.length) return null;
   for (const { tier, range } of ranges) {
     if (lvrRangeContains(range, lvr)) return tier;
@@ -189,6 +190,23 @@ export function profileFilterRows(
     out = out.filter((r) => productHasAllFeatures(r.product_key, features, detailsProducts, r, section));
   }
   return out;
+}
+
+/** A known scenario LVR overrides the saved band and must fit each row's bounds. */
+export function scenarioProfileFilterRows(
+  rows: RateRow[],
+  p: ProfileFilters,
+  section: SectionKey,
+  lvr: number | null,
+  detailsProducts?: Record<string, ProductDetail> | null,
+): RateRow[] {
+  if (section !== 'Mortgage' || lvr === null) {
+    return profileFilterRows(rows, p, section, detailsProducts);
+  }
+  return profileFilterRows(rows, { ...p, lvrTiers: [] }, section, detailsProducts).filter(row => {
+    const range = parseLvrRange(row.lvr_tier);
+    return range !== null && lvrRangeContains(range, lvr);
+  });
 }
 
 /** Selections that affect a given section (badge counts, "profile applied" hints). */

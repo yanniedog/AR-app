@@ -1,7 +1,7 @@
 import capture from './fixtures/nab_lvr_app_contract_2026-10-14.json';
 import { hasUnspecifiedMortgageLvr } from '../src/data/accountClass';
 import { lvrRangeContains, matchesLvrTier, parseLvrRange } from '../src/data/lvrRange';
-import { EMPTY_PROFILE, lvrTierForValue, profileFilterRows } from '../src/data/profile';
+import { EMPTY_PROFILE, lvrTierForValue, profileFilterRows, scenarioProfileFilterRows } from '../src/data/profile';
 import { EMPTY_FILTERS, filterRows } from '../src/data/selectors';
 import { lvrTierLabel } from '../src/data/lvrTier';
 import { segLabel } from '../src/data/taxonomy';
@@ -49,6 +49,39 @@ test('partial coverage, unknown LVR and explicit caps never become full higher b
   expect(hasUnspecifiedMortgageLvr(high[0])).toBe(false);
   expect(hasUnspecifiedMortgageLvr({ ...high[0], lvr_tier: 'lvr_unspecified' })).toBe(true);
 });
+
+test('computed scenarios compare every interval containing the exact LVR', () => {
+  const conventional = { ...high[0], lvr_tier: 'lvr_90-95%' };
+  const capped = { ...high[0], lvr_tier: 'lvr_>=80.01-92%' };
+  const unknown = { ...high[0], lvr_tier: 'lvr_unspecified' };
+  const input = [high[0], conventional, capped, unknown];
+  const profile = { ...EMPTY_PROFILE, lvrTiers: ['lvr_70-80%'] };
+  expect(scenarioProfileFilterRows(input, profile, 'Mortgage', 93)).toEqual([high[0], conventional]);
+  expect(profile.lvrTiers).toEqual(['lvr_70-80%']);
+  expect(scenarioProfileFilterRows(input, profile, 'Mortgage', null)).toEqual([]);
+  expect(scenarioProfileFilterRows(input, { ...EMPTY_PROFILE, lvrTiers: ['lvr_90-95%'] }, 'Mortgage', null))
+    .toEqual([high[0], conventional]);
+  expect(scenarioProfileFilterRows(input, EMPTY_PROFILE, 'Mortgage', null)).toEqual(input);
+});
+
+test('numeric labels choose the smallest matching span even when upper caps differ', () => {
+  const bounded = high[0].lvr_tier!;
+  for (const tiers of [[bounded, 'lvr_90-95%'], ['lvr_90-95%', bounded]]) {
+    expect(lvrTierForValue(93, tiers)).toBe('lvr_90-95%');
+  }
+  for (const tiers of [['lvr_>=80.01-92%', 'lvr_90-95%'], ['lvr_90-95%', 'lvr_>=80.01-92%']]) {
+    expect(lvrTierForValue(91, tiers)).toBe('lvr_90-95%');
+  }
+});
+
+test.each([EMPTY_PROFILE, { ...EMPTY_PROFILE, lvrTiers: ['lvr_90-95%'] }])(
+  'out-of-range computed LVR cannot fall back to the saved profile', profile => {
+    expect(scenarioProfileFilterRows(rows, profile, 'Mortgage', 98)).toEqual([]);
+    expect(scenarioProfileFilterRows(rows, profile, 'Mortgage', 95.001)).toEqual([]);
+    expect(scenarioProfileFilterRows(rows, profile, 'Mortgage', 95)).toEqual(high);
+    expect(scenarioProfileFilterRows(rows, profile, 'Savings', 98)).toEqual(rows);
+  },
+);
 
 test.each(['lvr_>=95-90%', 'lvr_>=NaN%', 'lvr_=0%', 'lvr_200-300%', 'lvr_unspecified'])('invalid interval %s remains unavailable', tier => {
   expect(parseLvrRange(tier)).toBeNull();
