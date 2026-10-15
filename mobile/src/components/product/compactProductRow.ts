@@ -5,7 +5,7 @@ import { uiCount, uiJoin, uiLabel, uiMoney, type UiCopy, type UiText } from '../
 import type { RateRow, SectionKey } from '../../types';
 
 export const COMPACT_ROW = { action: 48, gap: 4, fontSize: 14, icon: 12, minHeight: 64 } as const;
-const peerCache = new WeakMap<readonly RateRow[], Map<UiCopy, Set<RateRow>>>();
+const peerCache = new WeakMap<readonly RateRow[], Map<string, Set<RateRow>>>();
 
 /** One index per immutable source section/metric, never a section scan per row. */
 export function compactMetricHasPeers(row: RateRow, rows: readonly RateRow[] | undefined, label: UiCopy): boolean {
