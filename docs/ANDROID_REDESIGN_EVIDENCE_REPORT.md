@@ -1,17 +1,26 @@
 # Android redesign evidence status report
 
-**Snapshot: 16 October 2026 (Australia/Hobart). Final acceptance is pending.** Phases 1–4 have
-merged. Phase 5 has passed exact-source canonical checks and produced a
-premerge emulator release artifact. Latest reviewed source
-`bb1fb4300dbdc8cd58704d1eaee9b202b36bc0d6` passes the bounded bubble-position,
-dismissal and actual Settings font-roundtrip repairs described below. Phase 6 is a separate
-draft, awaiting source integration, final native evidence and public-release
-verification. These repair observations do not establish the full matrix,
-strict audit, native P95 or complete acceptance.
+**Snapshot: 16 October 2026 (Australia/Hobart), after the finalized e23 Live audit.
+Final acceptance is pending.** Phases 1–5 have merged. Latest reviewed Phase 5
+source `e23a389a05e56a058878b7372c0bf990e21c2ab2` passed full local canonical
+checks and the bounded Saved/sheet repairs below. Its actual squash merge is
+`3d8e417`; captures retain their original e23 identity. Protected main/P5 was
+ordinary-merged into Phase 6 at `1f6499c86db01169f005e73e3aff7fa03ad5baf7`,
+preserving all seven local follow-up commits. Integrated Phase 6 checks, final
+native evidence and public-release verification remain pending. The e23 audit
+has zero 10-second overruns but retains failures and incomplete journey coverage;
+it does not establish complete acceptance. New P6 review repairs for constrained
+primary metrics and fixed Rates controls still need native validation. Neither
+source/harness integration nor bounded observations establish the full matrix
+or native P95. The later P6 repair source is
+`ea50f04672c6293d0ecee119a82dae497198b1f5`; its full canonical run failed
+because one fixed-header test selector was stale. The corrected real-input
+focused suite passes; the test-only follow-up/full rerun and actual P6 native
+validation remain pending at this cut-off.
 
 This report accompanies [the contract](ANDROID_REDESIGN_CONTRACT.md) and
 [acceptance requirements](ANDROID_REDESIGN_ACCEPTANCE.md). The contract file
-arrives with protected-main integration. Evidence IDs below are logical paths
+is included by protected-main integration. Evidence IDs below are logical paths
 relative to the retained external review bundle, not files bundled with the
 app. Original captures, failed attempts and hashes remain unchanged. This
 report is not a completed acceptance JSON or checker PASS.
@@ -24,8 +33,8 @@ report is not a completed acceptance JSON or checker PASS.
 | Phase 2 — native design pilot, PR [401](https://github.com/yanniedog/AR-app/pull/401) | Merged | Earlier native proof retains its own source; it is not final acceptance. |
 | Phase 3 — app map, PR [403](https://github.com/yanniedog/AR-app/pull/403) | Merged; recorded merge prefix `33e35c2` | Preserve exact-row navigation and state ownership. |
 | Phase 4 — copy/factual presentation, PR [404](https://github.com/yanniedog/AR-app/pull/404) | Merged | Final inventory/copy check still belongs to the integrated head. |
-| Phase 5 — validation and dense rows, PR [405](https://github.com/yanniedog/AR-app/pull/405) | Draft/premerge; latest reviewed canonical/native source `bb1fb4300dbdc8cd58704d1eaee9b202b36bc0d6` | Full local CI and bounded bubble/font repair checks pass. Earlier 753 bubble/footer failures remain historical evidence. Full matrix, final strict audit, required current-head remote gates and review clearance remain separate. |
-| Phase 6 — acceptance harness/launch assets/installer, PR [397](https://github.com/yanniedog/AR-app/pull/397) | Draft; local follow-up work includes installer commit `13d0d4a`; no final-source acceptance | Integrate actual protected main after Phase 5. Nine installer tests and four reviewed Chrome images establish bounded template checks, not public or Android acceptance. |
+| Phase 5 — validation and dense rows, PR [405](https://github.com/yanniedog/AR-app/pull/405) | Merged as `3d8e417`; reviewed canonical/native source `e23a389a05e56a058878b7372c0bf990e21c2ab2` | Full local CI and bounded native Saved/sheet repairs pass. Finalized e23 audit: no hard overruns, but bottleneck status, 164 raw failures and journey completion false. Earlier BB1, 753 and 549 evidence retains its own identity. |
+| Phase 6 — acceptance harness/launch assets/installer, PR [397](https://github.com/yanniedog/AR-app/pull/397) | Draft; protected-main/P5 integration at `1f6499c86db01169f005e73e3aff7fa03ad5baf7` preserves seven local follow-ups; later repair source `ea50f04672c6293d0ecee119a82dae497198b1f5` | Focused checks pass: 38 compact-row, 36 Search and 42 native-evidence/installer tests. Canonical ea50 failed one stale fixed-header fixture; exports/size did not run. Corrected real-input suite passes 3 tests; follow-up/full rerun and actual P6 native/public acceptance remain pending. |
 | Representative-person study | Not run | Emulator-operator findings do not establish human usability validation. |
 | Physical-device audio, haptics and ARM runtime | Not run for final redesign | x86_64 emulator observations do not cover these. |
 
@@ -65,7 +74,7 @@ The receipt binds the original complete result/stdout/stderr hashes. It does
 not cover the subsequent host/footer repair batch, integrated Phase 6 or public
 delivery. Host verification elapsed time is not application latency.
 
-The latest reviewed exact-BB1 canonical receipt [C9] records completion on
+The historical exact-BB1 canonical receipt [C9] records completion on
 16 October at 01:02:34 Australia/Hobart (15 October 14:02:34 UTC), exit 0,
 mobile tree `adb01ca5ebd7b8abb33addf44d021a7b105e3cc0`: 373 Jest suites /
 4,242 tests and 384 script tests passed. Doctor 18/18, types, lint (0 errors /
@@ -73,6 +82,15 @@ mobile tree `adb01ca5ebd7b8abb33addf44d021a7b105e3cc0`: 373 Jest suites /
 benchmarks, all three exports, compiled-link/audit-awake and size checks passed.
 Its complete result/stdout/stderr hashes remain in the receipt. This is local
 exact-BB1 source verification, not integrated Phase 6 or public acceptance.
+
+The latest reviewed exact-e23 receipt [C12] records completion on 15 October
+at 14:57:29 UTC (16 October 01:57:29 Australia/Hobart), exit 0, mobile tree
+`a05c7b56776d29f3ca323f11ffe8dd8e5d12576e`: 374 Jest suites / 4,259 tests
+and 384 script tests passed. Doctor 18/18, types, lint (0 errors / 8 existing
+warnings), copy guard (0 violations), prepared pins, both benchmarks, all three
+exports, compiled-link/audit-awake and size checks passed. The retained receipt
+binds complete result/stdout/stderr. These checks belong to e23, not the later
+integrated Phase 6 head or public APKs; source squash/merge is not a new check.
 
 ## APK and runtime identities
 
@@ -107,7 +125,7 @@ The historical 753 release-validation artifact [C7–C8] is independently identi
 | Build / signing scope | Release variant, workflow run `38739602437`; certificate `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`; production signing identity not verified |
 | Installed-stage binding | Matching installed APK bytes/hash on task AOSP `emulator-5582`, 15 October 13:21:38 UTC; not final public-byte acceptance |
 
-The final Phase 5 repair-validation candidate below has its own identity
+The historical BB1 repair-validation candidate below has its own identity
 [C10–C11]; earlier artifacts are not retagged as this build:
 
 | Identity | BB1 premerge validation artifact |
@@ -117,6 +135,16 @@ The final Phase 5 repair-validation candidate below has its own identity
 | Package / version / build / ABI | `com.eyex.australianrates` / 1.0.238 / 192 / x86_64 |
 | Build / signing scope | Release variant, workflow run `38748017079`; certificate `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`; production signing identity not verified |
 | Installed-stage binding | Pulled installed bytes/hash match on task AOSP `emulator-5582`, 15 October 14:21:12 UTC; retained cache/state, not fresh final public-byte acceptance |
+
+The later e23 validation artifact [C13–C14] is independently bound:
+
+| Identity | e23 Phase 5 validation artifact |
+| --- | --- |
+| Source / mobile tree | `e23a389a05e56a058878b7372c0bf990e21c2ab2` / `a05c7b56776d29f3ca323f11ffe8dd8e5d12576e` |
+| APK bytes / SHA-256 | 32,847,074 / `dce9751e58ccf4c193cd15e3500ddd1f147412e4929f1ead90f248a719cd6153` |
+| Package / version / build / ABI | `com.eyex.australianrates` / 1.0.238 / 192 / x86_64 |
+| Build / signing scope | Release artifact, workflow `38756433801`, artifact `11984147401`; Android Debug certificate `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`; not public release signing |
+| Installed-stage binding | Matching pulled installed APK on task AOSP `emulator-5582`, 15 October 15:20:21 UTC; retained data, not fresh final public-byte acceptance |
 
 Source-tree equivalence after squash cannot prove binary equivalence. Phase 6
 also changes native launch artwork/configuration; earlier APKs cannot validate
@@ -157,7 +185,7 @@ it does not alter the 753 observations. The 753 curated journal is finalized
 as `partial-failed-native-layout`, with no complete friction census, whole-matrix
 pass or native timing percentile.
 
-### Bounded BB1 repair verification
+### Historical bounded BB1 repair verification
 
 The BB1 journal [N10–N11] is finalized with 63 sequential events, 13 retained
 endpoints and an explicit root operator visual review. Its bounded result is
@@ -185,6 +213,32 @@ its setup/Settings interactions are not a replacement friction census or a P95
 sample. Final 411dp/other matrix cases, TalkBack, strict-audit and integrated
 Phase 6/public-byte proof remain separate outstanding requirements.
 
+### Bounded e23 Saved and sheet verification
+
+The curated e23 observation [N13] retains the actual 411dp/font1/light Saved,
+Filter Apply and separate Cancel trials. Root reviewed three adjacent one-line
+Saved rows showing comparison/advertised pairs 5.80/5.89, 5.95/6.04 and
+6.10/6.19. Their main targets are 126px (48dp at 420dpi), at y552/700/848;
+the 148px row stride includes the separator. This is source-bound native
+geometry, not an inference from offscreen XML alone.
+
+An exact Saved row opens Product. Holding the Alerts icon shows the single
+word “Alerts”; release and Back retain Product without firing the action or
+requesting permission. Saved→Product→Calculate preserves the exact selected
+5.89% advertised rate. It now takes two taps rather than the previous direct
+Saved calculation's one: a **+1 tap tradeoff**, not an effort improvement.
+No calculation input or financial outcome is inferred. Genuine Back returns
+Calculate→Product→Saved with all three rows and the Saved tab selected.
+
+The separate Filter trial retains the fully visible Show 9 target
+`[437,2147][1038,2273]`: 126px/48dp, above the native navbar starting y2274.
+The original clipping is not waived by a tolerance or retry. Filter→Ongoing→Show
+uses three taps; Apply yields AMP/nine results/Filter1. Separate Close/Cancel
+retains that committed query/filter/result state. Excluded setup is recorded
+separately. The Saved journal's earlier “sheet pending” summary is historical;
+the later Filter trials supply the bounded sheet evidence. These observations
+are not a replacement matched 12-journey census or a whole-matrix/P95 pass.
+
 The preserved b945 matched ledger [J1–J2] covers the twelve agreed journeys
 and 96 comparison cells against the original baseline: arrival, family,
 product, save, search, filter, quick sort, Compare, contextual Calculate entry,
@@ -192,7 +246,7 @@ Market, product Back and tab/state restoration. It retains separate Filter
 Cancel and advanced Sort selection/Cancel/Back observations. Calculate is exact
 selected-tier entry with blank fields, not a completed financial outcome.
 Those records keep their original source; they do not automatically cover
-the 1f dense rows, subsequent `9420975` refinements or 753/BB1 repair work.
+the 1f dense rows, subsequent `9420975` refinements or 753/BB1/e23 repair work.
 
 Reconcile affected-flow rechecks against the twelve matched journeys and the
 declared 360/411dp, normal/large-font and state matrix. A twelve-by-four full
@@ -245,6 +299,75 @@ separately passed in 4,627.9ms with one fresh metadata call and actual result/
 native-layout evidence, no APK download. That success does not erase the
 whole-session policy failure.
 
+## Finalized e23 Live audit
+
+Root started session `pa-mv9oxrqq-74092b217d1a844f` at 15 October
+15:25:44.498 UTC (16 October 02:25:44.498 Australia/Hobart), against the
+Oct16 dataset and exact e23 validation artifact. The initial planned count of
+351 was provisional: the finalized report contains 352 journey checks. The
+retained start/control journal is
+`journeys/phase5-e23a389-release-411-font1-light-full-live-audit/events.jsonl`.
+
+The schema-7 original sidecar/log [A7–A8] retain the same e23 source/APK binding;
+the independent analysis and targeted extraction are [A5–A6]. There is exactly
+one matching END at 15:40:31.799 UTC and one complete-report-stored record at
+15:40:32.000 UTC, with `completeReportStored: true`. The report itself finished
+at 15:40:29.169 UTC. The original completed journey event used END time in its
+`finishedAt` field; clarification [A9] preserves that original and distinguishes
+the actual sidecar finish, END and stored timestamps. No outcome changes.
+Durable completion is not healthy execution or acceptance.
+
+| Measure | Original e23 result |
+| --- | --- |
+| Stored rows | 2,749 = 2,723 performance + 26 health |
+| Performance raw statuses | 210 pass / 2,339 warn / 162 fail / 12 skipped |
+| Health raw statuses | 21 pass / 2 warn / 2 fail / 1 unavailable |
+| Mutually exclusive combined raw statuses | 231 pass / 2,341 warn / 164 fail / 12 skipped / 1 unavailable |
+| Summary unavailable | 13 overlaps 12 classified performance rows plus 1 raw health unavailable; never add it again to raw totals |
+| Inventory integrity | All 2,723 performance and 26 health expected IDs stored once; missing, duplicate and unexpected-ID arrays empty for both inventories |
+| Journey coverage | 340 of 352 executed/completed; 12 justified skipped/unavailable, 0 unexpected skips; 96.6%; `complete: false` |
+| Strict 10,000ms overruns | 0; slowest `manifest-network` 9,820.7ms |
+| Overall | Bottleneck; complete acceptance remains unfulfilled |
+
+Manifest/publication/hash validation passed, but `manifest-network` retains
+`performanceStatus: fail`: event-loop P95 118.5ms/max lag 1,538.5ms and frame-gap
+P95 127.7ms/max gap 1,563.5ms. Across measured journeys the largest event-loop
+lag is 1,701ms and frame gap 1,725.1ms. These are JavaScript audit responsiveness
+samples, not native input-to-present P95. Staying below 10 seconds does not
+erase smoothness classifications, unavailable coverage or functional failures.
+
+Two health failures remain: `display-chart` reports one missing/unavailable
+chart at `rba.dashboard`, and `network-policy` reports one policy violation
+(237 authorization attempts, 211 authorized/transport calls, 26 blocked).
+The rejected destination is not identified by these aggregate counters; it is
+not assumed safe. Asset availability is unavailable because three optional
+assets were not observed; both required assets were available. Producer coverage
+warns on seven partial providers (116 attempted/succeeded), and institution
+artwork warns on four fallback observations. None is silently promoted to pass.
+The chart/policy failures also occur in the retained 549 audit; their presence
+here does not establish an introduced regression. The datasets differ, so this
+report makes no broad performance-regression comparison or offending-URL cause
+claim from aggregate counters.
+
+Saved→Product and Product→Calculate genuinely complete in both audit passes.
+Saved Product opening retains raw `fail` due to responsiveness, with
+`nonTimingFailure: false`; calculation retains raw `warn`. Target/model/layout
+readiness is recorded, but action completion does not overwrite the overall
+status. Dedicated update-readiness passes in 4,496.5ms with one fresh metadata
+call, actual post-result layout, and no APK download. Display-contract inventory
+passes with 23 planned/observed surfaces and no missing/unexpected surface.
+
+The earlier NAB 172-tier scenario is not exercised in this Oct16 run: its
+`sample.catalogue.2` slot now opens a two-tier Horizon product. Therefore zero
+overruns here is not native verification of the lazy NAB-tier repair. The
+prior 549 and AEA failures remain unchanged and source-bound.
+
+Root reviewed the final native PNG as an idle Audit page with controls enabled;
+below-fold results were not visually reviewed in that PNG. Root restored the
+animator scale to 1 afterward. This report records the actual scope, not a
+whole-page visual pass. The new P6 primary-metric/fixed-toolbar repairs are
+outside e23 and require new source-bound native validation.
+
 ## Phase 6 installer preview
 
 Installer template work is committed locally at `13d0d4a`. The retained preview
@@ -267,6 +390,47 @@ final redesign release. The local preview changes only the QR image source to
 the generated sibling image. Browser review and synthetic template tests do not
 verify production publication, final downloaded APKs, Android runtime, P95 or
 the final launch artwork. No final public acceptance is assigned here.
+
+## Current Phase 6 review repairs
+
+Two valid late findings on merged Phase 5 are repaired in source
+`ea50f04672c6293d0ecee119a82dae497198b1f5`, mobile tree
+`75d8b19e0a2e8d8c1fc918fc89bcc27307232eb6`. The compact fallback prioritizes
+the primary metric before tier/name at constrained 360dp/font2 geometry;
+genuinely wider-than-rail glyphs remain an explicit bounded limitation, not an
+unconditional fit claim. Rates controls are fixed above FlashList so query and
+Filter do not require returning through a long result list. No e23 capture is
+retagged as native proof of these source changes.
+
+Retained focused results [C15–C18] pass: compact-row 38 tests, Search/state 36
+tests, native-evidence/installer 42 script tests, and scoped lint. The lint
+output is genuinely empty; its success is recorded by root, not inferred from
+empty bytes. These checks validate source/test contracts, not native behavior.
+The exact ea50 full canonical run
+`isolated-phase6-ea50f04/20261016-024357-77075c7f` finished at 15 October
+15:49:13.066 UTC, exit 1 after 316.032 seconds [C19–C22]. Jest recorded 374 suites:
+373 passed, 1 failed; 4,267 tests: 4,266 passed, 1 failed. All 423 script tests,
+Doctor 18/18, types, lint (0 errors/8 existing warnings), copy guard 0, prepared pins and
+both benchmarks passed. Exports and size checks were **not run** after Jest
+failed; this remains a failed canonical result.
+
+The sole failure is `searchBarSessionInput.test.tsx:181`: it still searches
+inside the result list for Bank after controls moved to a fixed sibling. Root
+corrected the fixture to query the actual `rates-task-controls` owner. The real
+SearchBar/session-input suite [C23] passes all 3 tests, preserving batched/paced
+query, Clear mounting, and filter/sort/scroll assertions. Its 22.426-second host
+test runtime is not native input latency. The test-only follow-up commit and
+complete new canonical run remain pending at this cut-off. No application-source
+change is assigned to that fixture repair. The retained first full run remains
+FAIL. A new compatible P6 artifact and actual native checks of the changed
+controls, primary metric and launch artwork remain pending. Later external
+current-head canonical/native closeout receipts must supplement this frozen
+cut-off; they cannot overwrite these failed originals.
+
+Source/harness PR closure still requires current-head repository checks and
+review clearance. Closing it is a repository milestone. It does not complete
+native or public-byte acceptance, the full strict audit, paired P95, human
+validation or physical-device proof. Each remains independently recorded.
 
 ## Common-publication preparation
 
@@ -298,17 +462,26 @@ target hash or filename does not establish equal complete runtime data. Frozen
 baseline/final public identities and actual common-publication/model/target
 readbacks must precede prospective registration and either timed stage.
 
+Current equivalence research does not provide an actual full-live-Core digest
+readback for both installed stages. Cache-only bytes, a whole-model digest
+computed offline, unchanged normalization source and an exact target-row match
+cannot certify equality of the complete live models. That prerequisite remains
+missing; no paired P95 workload is preregistered or accepted from these
+inferences. The new audit's Oct16 data must not be silently equated with the
+retained Oct15 publication above.
+
 ## Remaining acceptance checklist
 
 | Required closeout | Current state / evidence to retain |
 | --- | --- |
-| Final source and inventory | BB1 host/bubble/shared-text/footer bounded native repairs pass. Pending: finish broader Phase 5 verification/review clearance, then integrate actual protected main into the existing Phase 6 branch without rewriting pushed history. Reconcile capability/route/copy/friction inventories. |
-| Exact-head verification | BB1 full local canonical passes: 373 suites / 4,242 Jest tests and 384 script tests. Pending for integrated final head: complete canonical output, required remote gates and all substantive feedback dispositions/resolutions. Earlier receipts remain bound to their original sources. |
+| Final source and inventory | P5 merged as `3d8e417`; ordinary protected-main integration into P6 completed at `1f6499c86db01169f005e73e3aff7fa03ad5baf7`, preserving seven local follow-ups. P6 primary-metric/fixed-toolbar repairs are committed at ea50; actual new native validation remains pending. Reconcile final inventories, including the +1 tap Saved calculation tradeoff. |
+| Exact-head verification | e23 canonical passes on its own source. P6 ea50 full canonical failed: 373/374 suites and 4,266/4,267 Jest tests pass; 423 scripts and preceding local checks pass; exports/size not run. Corrected real-input suite passes 3 tests. Test-only follow-up, complete canonical rerun, required remote gates and review clearance remain pending. Earlier failed receipts are preserved. |
 | Native matrix and invariants | Pending final-source rechecks: 360/411dp and normal/large fonts; light/dark, reduced motion, keyboard, gesture/button Back, rapid/interrupted interactions, loading/empty/cached/offline/error and permission states. Preserve exact tier/metrics/unknowns/fees/source dates, 48dp visible targets, no horizontal scroll, state restoration, privacy and no explanatory prose. |
 | Dense-row/word-bubble/font rechecks | Historical 753 establishes six centered rows and matching one-line loading. BB1 at 360dp/dark establishes 8dp Comparison/Advertised bubble gaps, hold-release/Back/outside dismissal, and actual Settings 1→2→1.5→1 without blank/query/exact-Saved loss; glyphs/footer labels shrink correctly. Remaining corners, other metric/tier/status semantics, direct checkbox and Save/History coverage remain required. Earlier failures remain retained, not reclassified. |
+| Saved/sheet rechecks | e23 at 411dp/font1/light establishes three one-line Saved rows, exact Saved→Product→Calculate/Back, one-word Alerts hold/Back, and a fully visible 48dp Show 9 footer above the native navbar. The Saved calculation path is +1 tap. These bounded trials do not close the full matrix or effort gate. |
 | TalkBack | Pending final-row generated announcements/traversal/actions, with actual service/TTS identity. Earlier focused Save/Remove/History observations are scoped to their source. XML is supporting semantics, not a generated utterance or physical audio proof. Ordinary UIAutomator capture is not used during continuous TalkBack traversal. |
-| Finalized real-readiness audit | Pending: final APK/source/dataset/session, full planned inventory once, durable END/stored evidence, all required useful rendered endpoints within 10,000ms. Retain failures/skips/unavailable, including unresolved external-source conditions; no budget or coverage exemptions. |
-| Paired native P95 | Not run; no accepted pair or prospective registration. After both known public APKs/common actual dataset, freeze 40 linked Save/Unsave taps (separate DOWN-feedback and UP-activation) and 40 alternating swipes (deterministic first original MOVE after settled DOWN). Preserve all attempts, missing/ambiguous/drop observations, exact native ns joins and separate semantic endpoints. At least 30 unique qualifying gestures per cohort, no pooling, later-MOVE substitution, cherry picking or retries; unavailable required evidence remains a gap. |
+| Finalized real-readiness audit | e23 / Oct16 data / `pa-mv9oxrqq-74092b217d1a844f` finalized with all IDs stored, 0 hard overruns and journey340/352/completefalse; 164 raw failures, 12 skips and 1 raw health unavailable remain. Full healthy rendered acceptance is not established. Final P6 source still needs its own audit; no budget or coverage exemptions. |
+| Paired native P95 | Not run; no accepted pair or prospective registration. Actual full-live-Core equivalence readback remains missing; cache/source/target inference is insufficient. After both known public APKs/common actual dataset, freeze 40 linked Save/Unsave taps (separate DOWN-feedback and UP-activation) and 40 alternating swipes (deterministic first original MOVE after settled DOWN). Preserve all attempts, missing/ambiguous/drop observations, exact native ns joins and separate semantic endpoints. At least 30 unique qualifying gestures per cohort, no pooling, later-MOVE substitution, cherry picking or retries; unavailable required evidence remains a gap. |
 | Public artifact delivery | Pending: freeze both rolling manifests, verify their source/version/ABIs/signing/hash/size against actual immutable universal/ARM APK bytes, and read back the published install/QR links. No final public source/APK identity is assigned here. |
 | Public-byte native acceptance | Pending: fresh installation/readback/pulled-byte proof and acceptance for each compatible final public APK/runtime. x86_64 does not establish ARM runtime. |
 | Installer template | Local commit `13d0d4a`, 9 focused tests passed and 4 actual Chrome images reviewed. Final published universal/ARM page/QR/download/manifest verification remains pending. |
@@ -335,6 +508,18 @@ its complete underlying artifacts. It is not a fabricated acceptance inventory.
 | C9 | `phase5-bb1fb43-canonical-verification-receipt.json` | 1,760 | `ca7da0f8fa9312670204da92e1fad5a5de233bf1c579a79331b4da2fe5bc0b02` |
 | C10 | `phase5-bb1fb43-validation/metadata.json` | 580 | `1b562236e4b8a522f0e6d4e7a8bd019b0728af3a69d0174614069ce08ab1570b` |
 | C11 | `phase5-bb1fb43-validation/secondary-installed-receipt.json` | 418 | `24276726d65f1621f4fe2eb250ba4bae3b1ff9c24adf144d083ba6a90256621d` |
+| C12 | `phase5-e23a389-canonical-verification-receipt.json` | 1,901 | `6946c780489dc368bf4af2cf5cc357d663a3bae29745433f77f0be3755eade13` |
+| C13 | `phase5-e23a389-validation/local-identity-receipt.json` | 570 | `e25b47bafb7c61e3944bbda4fbb5faf758e906db9df966e6ce70d6a64c42ca7a` (recorded by N13) |
+| C14 | `phase5-e23a389-validation/secondary-installed-receipt.json` | 276 | `af7088d356e77b1cc848c2fa1ca557bde6965d1f3b1d5150ac9ae230c6c2f5ef` (recorded by N13) |
+| C15 | `phase6-preparation/compact-primary-priority-focused-20261015-3.log` | 4,118 | `613d709086c9dd843b7d752d08bbf6d429051a7d33d7b3ecf9f63c3cd7860927` |
+| C16 | `phase6-preparation/p6-fixed-controls-focused.txt` | 4,096 | `fdee039fc7cffdbd61b0e00506854caca5b5b0d0d81990bc16232ff486513ff0` |
+| C17 | `phase6-preparation/p6-native-evidence-installer-focused.txt` | 4,569 | `e70adceb32d32301bee8c8d533a7503a0cd2dc8e4805087bfeca2e9884e392a5` |
+| C18 | `phase6-preparation/p6-review-repairs-scoped-lint.txt` | 0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| C19 | `isolated-phase6-ea50f04/20261016-024357-77075c7f/result.json` | 881 | `3246d357c2f0dd815c4877c6a0335e3e0ee6f817d6198971a3c3a93756271dec` |
+| C20 | `isolated-phase6-ea50f04/20261016-024357-77075c7f/stdout.log` | 42,237 | `a85d04c56d40dfc72515896168bc8aa066aa68697e97c1181cd531bc9c2b099a` |
+| C21 | `isolated-phase6-ea50f04/20261016-024357-77075c7f/stderr.log` | 18,932 | `02ddcf4e9496a9004acc6b6f0cfe308dd13fedfca4f2dc274429c3afb9e829ae` |
+| C22 | `phase6-ea50f04-canonical-verification-receipt.json` | 1,938 | `40055b4c8cfa0d01c6661bfc4d632bac4b9d0cc5ab18ef7ff5f2d12112f8eca5` |
+| C23 | `phase6-preparation/p6-real-input-fixed-controls-focused.txt` | 683 | `aa013dd069bda32cdb44e4bf36621184c913c5595864f82601ebfe35b69aad46` |
 | N1 | `journeys/phase5-1f88577-release-360-font1-dark-dense-arrival/dense-arrival.png` | 191,902 | `32c21f38ec0d37a160bd7afbfdf52fcdb8532154a03a1131360a53773a4efd9e` |
 | N2 | `journeys/phase5-1f88577-release-360-font2-reduced-dense-arrival/dense-font2-settled.png` | 209,265 | `5a97b5cf2a27176d98176ae7290865e88f5bd49a2efa13ae56b707576e5207e3` |
 | N3 | `journeys/phase5-1f88577-release-360-font2-reduced-dense-arrival/events.jsonl` | 1,545 | `5bad4dfb7800115b40717415ccd1a106a160e48aa9bcaf7317772992a0d21d30` |
@@ -347,12 +532,18 @@ its complete underlying artifacts. It is not a fabricated acceptance inventory.
 | N10 | `journeys/phase5-bb1fb43-release-360-font1-dark-bubble-and-font-repairs/events.jsonl` | 14,602 | `dce7da31b1c43732b029f9286a86175dd1f1f99afa0ed6bc22b3a313236e8bf4` |
 | N11 | `journeys/phase5-bb1fb43-release-360-font1-dark-bubble-and-font-repairs/summary.json` | 579 | `af57ab8913382b83e1517bf9ce0ef86432582d790f8c8ae6540a4a20ca7534a6` |
 | N12 | `journeys/phase5-bb1fb43-release-360-font1-dark-bubble-and-font-repairs/font-glyph-observation.json` | 1,270 | `8449c5ff1434ba7f88491f88de0be375521ee44942e70f7d08f86301435e6d79` |
+| N13 | `phase5-preparation/phase5-e23a389-native-saved-sheet-observation.json` | 38,690 | `48963c78deaae66d05356c9bff4e2fb7cb13b02e682f87d81a59d95371c9cf20` |
 | J1 | `phase5-preparation/phase5-matched-friction-ledger-draft.md` | 8,043 | `eb391b916715b2aee572193903f46872c3ed099f1ee353e9062327d19e50d146` |
 | J2 | `baseline-supplemental-canonical-map-final.json` | 86,085 | `222f1b7e4a43e9499eaaf80884167305cf82ee9c14aea0b63f92b1764f462dcc` |
 | A1 | `phase5-5496c48-final-audit-comparison.json` | 275,851 | `e28d4f09b033fe5ece6fc663a727102e519f5695d53c41abc35fcc501e616a61` |
 | A2 | `phase5-5496c48-live-audit-snapshots/20261015T111237919Z/logs/ar-performance-audit-latest.json` | 2,907,122 | `6e890ef9c74cdd67c58d953cb0bcea255ec9d7641434834c2486350de9c09cf6` |
 | A3 | `phase5-5496c48-live-audit-snapshots/20261015T111237919Z/logs/ar-local.log` | 2,085,440 | `f12e9caf247a0607e13bcbd71ca879d502d542f9f7fbc05659403d28ddaeaf91` |
 | A4 | `phase5-5496c48-network-policy-and-helper-offline-review.json` | 5,414 | `6df66b09c22c511382035e9be1924f572cc3d5a8e27c2f19f04381f981eb629d` |
+| A5 | `phase5-e23a389-live-audit-snapshots/20261015T154046271Z/finalized-audit-analysis.json` | 128,030 | `c8c486659200e315ca4caca8da2df7107815b97c6ebabc5f34eed6adc634f8ab` |
+| A6 | `phase5-e23a389-live-audit-snapshots/20261015T154046271Z/targeted-findings.json` | 8,666 | `4887a97df22c85e69ce2d69a02aaecb5bf8567922f7e22a9bd590cfba9761b0d` |
+| A7 | `phase5-e23a389-live-audit-snapshots/20261015T154046271Z/logs/ar-performance-audit-latest.json` | 3,126,800 | `27159cc203ba216769efbf50486eed34831dc324279bb4f518d74fb591616216` |
+| A8 | `phase5-e23a389-live-audit-snapshots/20261015T154046271Z/logs/ar-local.log` | 1,676,429 | `15615e2fd8ea48949d48b1808f3b0dca537c98945b484040e6eb7813051d3b04` |
+| A9 | `phase5-e23a389-live-audit-snapshots/20261015T154046271Z/native-journey-terminal-time-clarification.json` | 523 | `7431ea7cb55d54aaa0cb11cb866406b6473b621b3b50ef56df2fd5f82496b987` |
 | D1 | `phase6-preparation/common-publication-2026-10-15-r000001-derived/recovery-receipt.json` | 5,191 | `b7c476c35d83f32126cc834cf8da1e50873817511f464019b6d0f1368f615594` |
 | I1 | `phase6-preparation/installer-preview-20261016/preview-receipt.json` | 2,178 | `57d886bdee396d33f1f19aaea69cd7f8a1836d6f7a47b73edd19ce4d938ef677` |
 | I2 | `phase6-preparation/installer-preview-20261016/chrome-visual-review.json` | 1,425 | `f1c42d7b8945139ae0635439801bf3ecdeb886b5252a24912bb4f50ff2609b99` |
