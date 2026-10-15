@@ -116,7 +116,7 @@ function NumericField({
   label: UiCopy;
   value: string;
   onChangeText: (value: string) => void;
-  placeholder: UiCopy;
+  placeholder?: 'YYYY-MM-DD' | 'Automatic';
   prefix?: UiCopy;
   suffix?: UiCopy;
   date?: boolean;
@@ -190,7 +190,7 @@ function FrequencyField({
 }) {
   return (
     <View style={{ gap: 8 }}>
-      <NumericField label={label} value={amount} onChangeText={onAmount} placeholder={uiInputNumber('0')} prefix="$" editable={editable} error={error} />
+      <NumericField label={label} value={amount} onChangeText={onAmount} prefix="$" editable={editable} error={error} />
       <SegmentedControl options={FREQUENCY_OPTIONS} value={value} onChange={(next) => { if (editable) onFrequency(next); }} />
     </View>
   );
@@ -705,13 +705,12 @@ export function ProjectionWorkspace() {
               label={uiLabel(scenario.mortgage.mode === 'buy' ? 'Calculated loan amount' : 'Current loan balance')}
               value={currentMortgageBalance}
               onChangeText={(loanBalance) => updateMortgage({ loanBalance })}
-              placeholder={uiInputNumber('600,000')}
               prefix="$"
               editable={inputsEditable && scenario.mortgage.mode !== 'buy'}
               error={errors.mortgageBalance}
             />
-            <NumericField label="Current interest rate" value={scenario.mortgage.currentRate} onChangeText={(currentRate) => updateMortgage({ currentRate })} placeholder={uiInputNumber('6.00')} suffix="%" editable={inputsEditable} error={errors.currentRate} />
-            <NumericField label="Years remaining" value={scenario.mortgage.years} onChangeText={(years) => updateMortgage({ years })} placeholder={uiInputNumber('25')} suffix="years" editable={inputsEditable} error={errors.years} />
+            <NumericField label="Current interest rate" value={scenario.mortgage.currentRate} onChangeText={(currentRate) => updateMortgage({ currentRate })} suffix="%" editable={inputsEditable} error={errors.currentRate} />
+            <NumericField label="Years remaining" value={scenario.mortgage.years} onChangeText={(years) => updateMortgage({ years })} suffix="years" editable={inputsEditable} error={errors.years} />
           </Row>
           {scenario.mortgage.mode === 'buy' ? (
             <Button title="Purchase details" variant="secondary" onPress={() => {
@@ -731,7 +730,6 @@ export function ProjectionWorkspace() {
               label="Fixed period remaining"
               value={projectionInputs.fixedPeriodMonths}
               onChangeText={(fixedPeriodMonths) => updateProjection({ fixedPeriodMonths })}
-              placeholder={uiInputNumber('12')}
               suffix="months"
               editable={inputsEditable}
               error={errors.fixedPeriod}
@@ -747,8 +745,8 @@ export function ProjectionWorkspace() {
             error={errors.periodicAmount}
           />
           <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <NumericField label="Current offset balance" value={projectionInputs.offsetBalance} onChangeText={(offsetBalance) => updateProjection({ offsetBalance })} placeholder={uiInputNumber('0')} prefix="$" editable={inputsEditable} error={errors.offsetBalance} />
-            <NumericField label="Amount added to offset" value={projectionInputs.offsetContributionAmount} onChangeText={(offsetContributionAmount) => updateProjection({ offsetContributionAmount })} placeholder={uiInputNumber('0')} prefix="$" editable={inputsEditable} error={errors.offsetContributionAmount} />
+            <NumericField label="Current offset balance" value={projectionInputs.offsetBalance} onChangeText={(offsetBalance) => updateProjection({ offsetBalance })} prefix="$" editable={inputsEditable} error={errors.offsetBalance} />
+            <NumericField label="Amount added to offset" value={projectionInputs.offsetContributionAmount} onChangeText={(offsetContributionAmount) => updateProjection({ offsetContributionAmount })} prefix="$" editable={inputsEditable} error={errors.offsetContributionAmount} />
           </Row>
           <SegmentedControl
             options={FREQUENCY_OPTIONS}
@@ -759,9 +757,9 @@ export function ProjectionWorkspace() {
       ) : section === 'Savings' ? (
         <>
           <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <NumericField label="Current balance" value={scenario.savings.balance} onChangeText={(balance) => updateDeposit({ balance })} placeholder={uiInputNumber('25,000')} prefix="$" editable={inputsEditable} error={errors.savingsBalance} />
-            <NumericField label={uiLabel(projectionInputs.savingsRateStructure === 'conditional-bonus' ? 'Current conditional rate' : 'Current interest rate')} value={scenario.savings.currentRate} onChangeText={(currentRate) => updateDeposit({ currentRate })} placeholder={uiInputNumber('4.50')} suffix="%" editable={inputsEditable} error={errors.currentRate} />
-            <NumericField label="Projection horizon" value={projectionInputs.horizonYears} onChangeText={(horizonYears) => updateProjection({ horizonYears })} placeholder={uiInputNumber('10')} suffix="years" editable={inputsEditable} error={errors.horizon} />
+            <NumericField label="Current balance" value={scenario.savings.balance} onChangeText={(balance) => updateDeposit({ balance })} prefix="$" editable={inputsEditable} error={errors.savingsBalance} />
+            <NumericField label={uiLabel(projectionInputs.savingsRateStructure === 'conditional-bonus' ? 'Current conditional rate' : 'Current interest rate')} value={scenario.savings.currentRate} onChangeText={(currentRate) => updateDeposit({ currentRate })} suffix="%" editable={inputsEditable} error={errors.currentRate} />
+            <NumericField label="Projection horizon" value={projectionInputs.horizonYears} onChangeText={(horizonYears) => updateProjection({ horizonYears })} suffix="years" editable={inputsEditable} error={errors.horizon} />
           </Row>
           <SegmentedControl
             options={[
@@ -774,8 +772,8 @@ export function ProjectionWorkspace() {
           {projectionInputs.savingsRateStructure === 'conditional-bonus' ? (
             <>
               <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                <NumericField label="Ongoing rate" value={projectionInputs.ongoingRate} onChangeText={(ongoingRate) => updateProjection({ ongoingRate })} placeholder={uiInputNumber('1.50')} suffix="%" editable={inputsEditable} error={errors.ongoingRate} />
-                <NumericField label="Bonus period remaining" value={projectionInputs.bonusMonthsRemaining} onChangeText={(bonusMonthsRemaining) => updateProjection({ bonusMonthsRemaining })} placeholder={uiInputNumber('4')} suffix="months" editable={inputsEditable} error={errors.bonusMonths} />
+                <NumericField label="Ongoing rate" value={projectionInputs.ongoingRate} onChangeText={(ongoingRate) => updateProjection({ ongoingRate })} suffix="%" editable={inputsEditable} error={errors.ongoingRate} />
+                <NumericField label="Bonus period remaining" value={projectionInputs.bonusMonthsRemaining} onChangeText={(bonusMonthsRemaining) => updateProjection({ bonusMonthsRemaining })} suffix="months" editable={inputsEditable} error={errors.bonusMonths} />
               </Row>
               <CompactToggle
                 label="Bonus conditions met"
@@ -797,9 +795,9 @@ export function ProjectionWorkspace() {
       ) : (
         <>
           <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-            <NumericField label="Deposit amount" value={scenario.termDeposit.balance} onChangeText={(balance) => updateDeposit({ balance })} placeholder={uiInputNumber('50,000')} prefix="$" editable={inputsEditable} error={errors.tdBalance} />
-            <NumericField label="Fixed interest rate" value={scenario.termDeposit.currentRate} onChangeText={(currentRate) => updateDeposit({ currentRate })} placeholder={uiInputNumber('4.50')} suffix="%" editable={inputsEditable} error={errors.currentRate} />
-            <NumericField label="Term" value={projectionInputs.termMonths} onChangeText={(termMonths) => updateProjection({ termMonths })} placeholder={uiInputNumber('12')} suffix="months" editable={inputsEditable} error={errors.termMonths} />
+            <NumericField label="Deposit amount" value={scenario.termDeposit.balance} onChangeText={(balance) => updateDeposit({ balance })} prefix="$" editable={inputsEditable} error={errors.tdBalance} />
+            <NumericField label="Fixed interest rate" value={scenario.termDeposit.currentRate} onChangeText={(currentRate) => updateDeposit({ currentRate })} suffix="%" editable={inputsEditable} error={errors.currentRate} />
+            <NumericField label="Term" value={projectionInputs.termMonths} onChangeText={(termMonths) => updateProjection({ termMonths })} suffix="months" editable={inputsEditable} error={errors.termMonths} />
           </Row>
         </>
       )}
@@ -824,13 +822,13 @@ export function ProjectionWorkspace() {
         </Row>
       </View>
       <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <NumericField label="Starting date" value={projectionInputs.startDate} onChangeText={(startDate) => updateProjection({ startDate })} placeholder={uiLabel('YYYY-MM-DD')} date editable={inputsEditable} error={errors.startDate} />
-        <NumericField label="Starting balance" value={projectionInputs.startBalance} onChangeText={(startBalance) => updateProjection({ startBalance })} placeholder={uiInputNumber('700,000')} prefix="$" editable={inputsEditable} error={errors.startBalance} />
-        <NumericField label="Starting rate" value={projectionInputs.startRate} onChangeText={(startRate) => updateProjection({ startRate })} placeholder={uiInputNumber('3.50')} suffix="%" editable={inputsEditable} error={errors.startRate} />
+        <NumericField label="Starting date" value={projectionInputs.startDate} onChangeText={(startDate) => updateProjection({ startDate })} placeholder="YYYY-MM-DD" date editable={inputsEditable} error={errors.startDate} />
+        <NumericField label="Starting balance" value={projectionInputs.startBalance} onChangeText={(startBalance) => updateProjection({ startBalance })} prefix="$" editable={inputsEditable} error={errors.startBalance} />
+        <NumericField label="Starting rate" value={projectionInputs.startRate} onChangeText={(startRate) => updateProjection({ startRate })} suffix="%" editable={inputsEditable} error={errors.startRate} />
       </Row>
       {section === 'Mortgage' ? (
         <>
-          <NumericField label="Starting offset balance" value={projectionInputs.startOffsetBalance} onChangeText={(startOffsetBalance) => updateProjection({ startOffsetBalance })} placeholder={uiInputNumber('0')} prefix="$" editable={inputsEditable} error={errors.startOffsetBalance} />
+          <NumericField label="Starting offset balance" value={projectionInputs.startOffsetBalance} onChangeText={(startOffsetBalance) => updateProjection({ startOffsetBalance })} prefix="$" editable={inputsEditable} error={errors.startOffsetBalance} />
           <FrequencyField
             label="Extra repayment"
             amount={projectionInputs.extraRepaymentAmount}
@@ -844,7 +842,6 @@ export function ProjectionWorkspace() {
             label="Offset boost"
             value={projectionInputs.offsetBoostAmount}
             onChangeText={(offsetBoostAmount) => updateProjection({ offsetBoostAmount })}
-            placeholder={uiInputNumber('100')}
             prefix="$"
             suffix={`/${projectionInputs.offsetContributionFrequency === 'monthly' ? 'month' : projectionInputs.offsetContributionFrequency === 'weekly' ? 'week' : 'fortnight'}`}
             editable={inputsEditable}
@@ -863,7 +860,7 @@ export function ProjectionWorkspace() {
         />
       ) : (
         <>
-          <NumericField label="Rollovers after first maturity" value={projectionInputs.rollovers} onChangeText={(rollovers) => updateProjection({ rollovers })} placeholder={uiInputNumber('0')} editable={inputsEditable} error={errors.rollovers} />
+          <NumericField label="Rollovers after first maturity" value={projectionInputs.rollovers} onChangeText={(rollovers) => updateProjection({ rollovers })} editable={inputsEditable} error={errors.rollovers} />
           <CompactToggle label="Reinvest modelled interest" value={projectionInputs.reinvestInterest} onChange={(reinvestInterest) => { if (inputsEditable) updateProjection({ reinvestInterest }); }} />
         </>
       )}
@@ -873,8 +870,8 @@ export function ProjectionWorkspace() {
         <AppText variant="tiny" color="textMuted">{uiLabel("Default ±1 pp")}</AppText>
       </Row>
       <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <NumericField label="Lower scenario" value={projectionInputs.lowerRate} onChangeText={(lowerRate) => updateProjection({ lowerRate })} placeholder={uiLabel('Automatic')} suffix="%" editable={inputsEditable} error={errors.lowerRate} />
-        <NumericField label="Higher scenario" value={projectionInputs.higherRate} onChangeText={(higherRate) => updateProjection({ higherRate })} placeholder={uiLabel('Automatic')} suffix="%" editable={inputsEditable} error={errors.higherRate} />
+        <NumericField label="Lower scenario" value={projectionInputs.lowerRate} onChangeText={(lowerRate) => updateProjection({ lowerRate })} placeholder="Automatic" suffix="%" editable={inputsEditable} error={errors.lowerRate} />
+        <NumericField label="Higher scenario" value={projectionInputs.higherRate} onChangeText={(higherRate) => updateProjection({ higherRate })} placeholder="Automatic" suffix="%" editable={inputsEditable} error={errors.higherRate} />
       </Row>
     </Card>
   ) : null;

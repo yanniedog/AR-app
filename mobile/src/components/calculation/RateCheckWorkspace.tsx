@@ -51,7 +51,7 @@ import { useStore } from '../../data/store';
 import { useUserRateScenario } from '../../hooks/useUserRateScenario';
 import { usePerformanceAuditSurface } from '../../hooks/usePerformanceAuditReadiness';
 import { useSuitabilityRevision } from '../../hooks/useSuitabilityRevision';
-import { rowsUnder, statsFor } from '../../data/taxonomy';
+import { rowsUnder } from '../../data/taxonomy';
 import { CALCULATOR_FIELDS } from '../../lib/calculatorIssues';
 import { openProduct } from '../../lib/nav';
 import { auditActionString } from '../../lib/performanceAuditActionParams';
@@ -255,8 +255,6 @@ export function RateCheckWorkspace() {
       details?.products,
     );
   }, [core, section, profileFilters, includeNonStandard, details, lvrBand, suitabilityRevision]);
-
-  const median = useMemo(() => statsFor(rows, true, section).median, [rows, section]);
 
   // ---- LVR (mortgage): a real calculation from several inputs ----
   // Deposit needed to drop into the next lower LVR band (better rates).
@@ -620,7 +618,6 @@ export function RateCheckWorkspace() {
     label: UiCopy,
     value: string,
     onChangeText: (t: string) => void,
-    placeholder: string,
     a11y: UiCopy,
     explicitWidth?: number,
   ) => (
@@ -631,8 +628,6 @@ export function RateCheckWorkspace() {
       <TextInput
         value={uiInputNumber(value)}
         onChangeText={onChangeText}
-        placeholder={uiInputNumber(placeholder)}
-        placeholderTextColor={theme.colors.textFaint}
         keyboardType="numeric"
         editable={scenarioStorageStatus === 'ready'}
         maxLength={20}
@@ -672,11 +667,11 @@ export function RateCheckWorkspace() {
             {inputs.mode === 'buy' ? (
               <>
                 <Row gap={10} style={compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}>
-                  {field('Property price ($)', inputs.propertyValue, (t) => upd({ propertyValue: t }), '650,000', CALCULATOR_FIELDS.propertyPrice)}
-                  {field('Your savings ($)', inputs.deposit, (t) => upd({ deposit: t }), '130,000', 'Savings available as deposit')}
+                  {field('Property price ($)', inputs.propertyValue, (t) => upd({ propertyValue: t }), CALCULATOR_FIELDS.propertyPrice)}
+                  {field('Your savings ($)', inputs.deposit, (t) => upd({ deposit: t }), 'Savings available as deposit')}
                 </Row>
                 <Row gap={10} style={{ marginTop: 10, ...(compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : null) }}>
-                  {field('Upfront costs ($)', inputs.costs, (t) => upd({ costs: t }), '0', 'Upfront costs paid from savings')}
+                  {field('Upfront costs ($)', inputs.costs, (t) => upd({ costs: t }), 'Upfront costs paid from savings')}
                   <View style={{ flex: 1, justifyContent: 'flex-end' }}>
                     <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>{uiLabel("Loan needed")}</AppText>
                     <AppText variant="body" weight="800" style={{ paddingVertical: 10 }}>
@@ -687,8 +682,8 @@ export function RateCheckWorkspace() {
               </>
             ) : (
               <Row gap={10} style={compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}>
-                {field('Property value ($)', inputs.propertyValue, (t) => upd({ propertyValue: t }), '800,000', CALCULATOR_FIELDS.propertyValue)}
-                {field('Current loan ($)', inputs.loanBalance, (t) => upd({ loanBalance: t }), '600,000', CALCULATOR_FIELDS.loanBalance)}
+                {field('Property value ($)', inputs.propertyValue, (t) => upd({ propertyValue: t }), CALCULATOR_FIELDS.propertyValue)}
+                {field('Current loan ($)', inputs.loanBalance, (t) => upd({ loanBalance: t }), CALCULATOR_FIELDS.loanBalance)}
               </Row>
             )}
 
@@ -712,8 +707,8 @@ export function RateCheckWorkspace() {
             ) : null}
 
             <Row gap={10} style={{ marginTop: 12, ...(compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : null) }}>
-              {field('Current rate (%)', inputs.currentRate, (t) => upd({ currentRate: t }), median !== null ? (median * 100).toFixed(2) : '6.00', CALCULATOR_FIELDS.currentRate)}
-              {field('Years left', inputs.years, (t) => upd({ years: t }), '25', CALCULATOR_FIELDS.years, 86)}
+              {field('Current rate (%)', inputs.currentRate, (t) => upd({ currentRate: t }), CALCULATOR_FIELDS.currentRate)}
+              {field('Years left', inputs.years, (t) => upd({ years: t }), CALCULATOR_FIELDS.years, 86)}
             </Row>
             <View style={{ marginTop: 14 }}>
               <SwitchCostEditor
@@ -740,7 +735,6 @@ export function RateCheckWorkspace() {
                     balance,
                   },
                 })),
-                '50,000',
                 CALCULATOR_FIELDS.depositBalance,
               )}
               {field(
@@ -753,7 +747,6 @@ export function RateCheckWorkspace() {
                     currentRate,
                   },
                 })),
-                median !== null ? (median * 100).toFixed(2) : '4.50',
                 CALCULATOR_FIELDS.currentRate,
               )}
             </Row>

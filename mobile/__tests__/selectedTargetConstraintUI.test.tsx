@@ -1,6 +1,9 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
+import { TextInput } from 'react-native';
 import { normalizeUserRateScenario, type UserRateScenario } from '../src/data/userRateScenario';
+import { computeLvr } from '../src/data/calc';
+import { buildLifecycleProjection } from '../src/data/projections';
 import { EMPTY_PROFILE } from '../src/data/profile';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
@@ -9,17 +12,24 @@ import { RateCheckWorkspace } from '../src/components/calculation/RateCheckWorks
 import { ProjectionWorkspace } from '../src/components/calculation/ProjectionWorkspace';
 import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 import type { RateRow, SectionKey } from '../src/types';
-type InspectableRenderer = ReactTestRenderer & { root: { findAllByType(type: string): { props: Record<string, unknown> }[] } };
+type InspectableRenderer = ReactTestRenderer & { root: {
+  findAllByType(type: unknown): { props: Record<string, unknown> }[];
+  findByProps(props: Record<string, unknown>): { props: Record<string, unknown> };
+} };
 
 let mockScenario: UserRateScenario;
 let mockState: Record<string, any>;
 let mockSection: SectionKey = 'Mortgage';
 const mockParams: Record<string, string> = {};
 const mockSave = jest.fn(async () => true);
+const mockUpdate = jest.fn((update: (current: UserRateScenario) => UserRateScenario) => {
+  mockScenario = normalizeUserRateScenario(update(mockScenario));
+  return true;
+});
 jest.mock('expo-router', () => ({ router: { setParams: jest.fn(), push: jest.fn() }, useLocalSearchParams: () => mockParams }));
 jest.mock('../src/data/store', () => ({ useStore: Object.assign((select: (state: typeof mockState) => unknown) => select(mockState), { getState: () => mockState }) }));
 jest.mock('../src/hooks/useUserRateScenario', () => ({ useUserRateScenario: () => ({ scenario: mockScenario,
-  storageStatus: 'ready', saveStatus: 'idle', error: null, update: jest.fn(), flush: mockSave, retryLoad: jest.fn() }) }));
+  storageStatus: 'ready', saveStatus: 'idle', error: null, update: mockUpdate, flush: mockSave, retryLoad: jest.fn() }) }));
 jest.mock('../src/hooks/useScenarioSection', () => ({ useScenarioSection: () => [mockSection] }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 0 }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
@@ -165,4 +175,95 @@ test('failed same-publication details admission stays rate-only without a siblin
   expect(probes?.find(probe=>probe.id==='calculator.details')?.actualCount).toBe(0);
   expect(probes?.find(probe=>probe.id==='calculator.candidates')?.status).toBe('error');
   act(()=>tree.unmount());
+});
+
+function numericField(tree: InspectableRenderer, label: string) {
+  const field = tree.root.findAllByType(TextInput).find(node => node.props.accessibilityLabel === label);
+  if (!field) throw new Error(`Missing input: ${label}`);
+  return field.props;
+}
+
+test.each([
+  ['Mortgage', 'buy'], ['Mortgage', 'refi'], ['Savings', 'buy'], ['TD', 'buy'],
+] as const)('empty %s %s rate-check inputs have no financial example or median hint', (section, mode) => {
+  prepare(section, [loan], [], normalizeUserRateScenario({ mortgage: { mode } }), '4');
+  let tree!: InspectableRenderer; act(() => { tree = TestRenderer.create(<RateCheckWorkspace />) as InspectableRenderer; });
+  try {
+    const fields = tree.root.findAllByType(TextInput);
+    expect(fields).toHaveLength(section === 'Mortgage' ? mode === 'buy' ? 5 : 4 : 2);
+    for (const field of fields) {
+      expect(field.props.value).toBe('');
+      expect(field.props.placeholder).toBeUndefined();
+      expect(field.props.keyboardType).toBe('numeric');
+      expect(field.props.accessibilityLabel).toEqual(expect.any(String));
+    }
+    expect(texts(tree)).toContain('Inputs incomplete');
+    expect(texts(tree)).not.toContain('$520,000');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('actual entered buying amounts including zero still derive the identical loan and LVR', () => {
+  prepare('Mortgage', [loan], [], normalizeUserRateScenario(undefined), '4');
+  let tree!: InspectableRenderer; act(() => { tree = TestRenderer.create(<RateCheckWorkspace />) as InspectableRenderer; });
+  try {
+    for (const [label, value] of [
+      ['Property price in dollars', '650000'], ['Savings available as deposit', '130000'],
+      ['Upfront costs paid from savings', '0'], ['Current interest rate percent', '6.00'], ['Years remaining on loan', '25'],
+    ]) {
+      act(() => { (numericField(tree, label).onChangeText as (value: string) => void)(value); tree.update(<RateCheckWorkspace />); });
+      expect(numericField(tree, label).value).toBe(value);
+      expect(numericField(tree, label).placeholder).toBeUndefined();
+    }
+    expect(mockScenario.mortgage).toMatchObject({ propertyValue: '650000', deposit: '130000', costs: '0', currentRate: '6.00', years: '25' });
+    expect(computeLvr(mockScenario.mortgage)).toEqual({ loan: 520000, lvr: 80, depositApplied: 130000 });
+    expect(texts(tree)).toContain('$520,000');
+    expect(texts(tree)).toContain('Scenario LVR: 80.0%');
+    act(() => { (numericField(tree, 'Property price in dollars').onChangeText as (value: string) => void)(''); tree.update(<RateCheckWorkspace />); });
+    expect(numericField(tree, 'Property price in dollars').value).toBe('');
+    expect(texts(tree)).not.toContain('$520,000');
+    expect(computeLvr(mockScenario.mortgage).loan).toBeNull();
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each(['Mortgage', 'Savings', 'TD'] as const)('empty %s projection inputs retain date/automatic contracts without numeric examples', section => {
+  prepare(section, [loan], [], normalizeUserRateScenario(undefined), '4');
+  let tree!: InspectableRenderer; act(() => { tree = TestRenderer.create(<ProjectionWorkspace />) as InspectableRenderer; });
+  try {
+    const toggle = tree.root.findByProps({ accessibilityLabel: 'Show Assumptions' });
+    act(() => (toggle.props.onPress as () => void)());
+    const fields = tree.root.findAllByType(TextInput);
+    expect(fields.length).toBeGreaterThan(6);
+    for (const field of fields) {
+      if (field.props.accessibilityLabel === 'Starting date') {
+        expect(field.props.placeholder).toBe('YYYY-MM-DD');
+        expect(field.props.keyboardType).toBe('numbers-and-punctuation');
+      } else {
+        expect(field.props.placeholder).toBe(['Lower scenario', 'Higher scenario'].includes(String(field.props.accessibilityLabel)) ? 'Automatic' : undefined);
+        expect(field.props.keyboardType).toBe('decimal-pad');
+      }
+      expect(field.props.value).toBe(field.props.accessibilityLabel === 'Rollovers after first maturity' ? '0' : '');
+    }
+    if (section === 'TD') expect(mockScenario.projections.termDeposit.rollovers).toBe('0');
+    expect(tree.root.findAllByType('LifecycleChart')).toHaveLength(0);
+    expect(texts(tree)).toContain('Inputs incomplete');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('entered projection zero and positive amounts still reach the unchanged lifecycle model', () => {
+  prepare('Mortgage', [loan], [], mortgageScenario('450000'), '4');
+  let tree!: InspectableRenderer; act(() => { tree = TestRenderer.create(<ProjectionWorkspace />) as InspectableRenderer; });
+  try {
+    for (const [label, value] of [['Current offset balance', '0'], ['Amount added to offset', '99.50']]) {
+      act(() => { (numericField(tree, label).onChangeText as (value: string) => void)(value); tree.update(<ProjectionWorkspace />); });
+      expect(numericField(tree, label).value).toBe(value);
+      expect(numericField(tree, label).placeholder).toBeUndefined();
+    }
+    const actual = buildLifecycleProjection('Mortgage', mockScenario);
+    expect(actual.ready).toBe(true);
+    expect(mockScenario.projections.mortgage).toMatchObject({ offsetBalance: '0', offsetContributionAmount: '99.50' });
+    expect(tree.root.findAllByType('LifecycleChart')[0].props.series).toEqual(actual.rateSeries);
+    expect(numericField(tree, 'Current loan balance').value).toBe('450000');
+    expect(numericField(tree, 'Current interest rate').value).toBe('8');
+    expect(numericField(tree, 'Years remaining').value).toBe('25');
+  } finally { act(() => tree.unmount()); }
 });
