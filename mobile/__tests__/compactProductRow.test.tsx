@@ -1,6 +1,8 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
+import { Animated, StyleSheet, View } from 'react-native';
 import { ProductCard } from '../src/components/ProductCard';
+import { LoadingRows, ScreenSkeleton } from '../src/components/feedbackPlaceholders';
 import { COMPACT_ROW, compactMetricHasPeers, compactProductFacet, compactProductRowLayout, compactTierIndex } from '../src/components/product/compactProductRow';
 import { scopedFinancialConditionFacts } from '../src/data/scopedFinancialConditionFacts';
 import { scopedRateConditions } from '../src/data/rateConditions';
@@ -10,8 +12,10 @@ import type { RateRow } from '../src/types';
 
 let mockDimensions = { width: 360, height: 800, scale: 3, fontScale: 1 };
 let mockState: Record<string, any>;
+let mockReducedMotion: boolean | null = true;
 const mockSave = jest.fn(), mockHistory = jest.fn(), mockShow = jest.fn(), mockDismiss = jest.fn();
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ default: () => mockDimensions }));
+jest.mock('../src/hooks/useReducedMotion', () => ({ useReducedMotion: () => mockReducedMotion }));
 jest.mock('../src/data/store', () => ({ useStore: (select: (state: typeof mockState) => unknown) => select(mockState) }));
 jest.mock('../src/components/BankAvatar', () => ({ BankAvatar: 'BankAvatar' }));
 jest.mock('../src/components/PressFeedback', () => ({ PressFeedback: 'PressFeedback' }));
@@ -32,7 +36,7 @@ const fixture = () => selectedConstraintFixture('Mortgage', [row, { ...row, rate
   { rateIndex: 4, text: 'LVR up to 59.99%.' }, { rateIndex: 5, text: 'For LVR 60% to 79.99%.' },
 ]);
 type Tree = ReactTestRenderer & { root: {
-  findAllByType(type: string): { props: Record<string, any> }[];
+  findAllByType(type: unknown): { props: Record<string, any> }[];
   findByProps(props: Record<string, unknown>): { props: Record<string, any> };
 } };
 function render(exact: RateRow = row, props: Partial<React.ComponentProps<typeof ProductCard>> = {}) {
@@ -83,6 +87,60 @@ function hold(main: { props: Record<string, any> }, x: number, y = 24) {
   });
 }
 beforeEach(() => { mockDimensions = { width: 360, height: 800, scale: 3, fontScale: 1 }; jest.clearAllMocks(); });
+afterEach(() => { jest.restoreAllMocks(); mockReducedMotion = true; });
+
+test.each([false, true])('loading rows keep the same56dp single baseline and noninteractive action slots with screen wrapper=%s', wholeScreen => {
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(wholeScreen ? <ScreenSkeleton rows={3} /> : <LoadingRows count={3} />) as Tree; });
+  try {
+    const views = tree.root.findAllByType(View);
+    const rows = views.filter(node => node.props.testID === 'loading-product-row');
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row.props.style).toMatchObject({ flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap,
+        paddingVertical: 4, paddingHorizontal: 0, minHeight: COMPACT_ROW.minHeight });
+      expect(row.props.style.minHeight).toBe(56);
+      expect(row.props.style.borderBottomWidth).toBe(StyleSheet.hairlineWidth);
+      expect(row.props).toMatchObject({ accessible: false, accessibilityElementsHidden: true,
+        importantForAccessibility: 'no-hide-descendants', pointerEvents: 'none' });
+    }
+    for (const id of ['loading-bank-slot', 'loading-save-slot']) {
+      const slots = views.filter(node => node.props.testID === id);
+      expect(slots).toHaveLength(3);
+      expect(slots.every(node => node.props.style.width === 48 && node.props.style.minHeight === 48)).toBe(true);
+    }
+    expect(views.filter(node => {
+      const style = StyleSheet.flatten(node.props.style);
+      return style?.width === 24 && style?.height === 24;
+    })).toHaveLength(6);
+    expect(views.some(node => node.props.accessibilityRole === 'button' || node.props.onPress)).toBe(false);
+    expect(views.some(node => node.props.accessibilityRole === 'progressbar' && node.props.accessibilityLabel === 'Loading content')).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each([true, null])('loading rows leave shimmer static while reduced motion is %s', preference => {
+  mockReducedMotion = preference;
+  const loop = jest.spyOn(Animated, 'loop');
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<LoadingRows count={1} />) as Tree; });
+  try { expect(loop).not.toHaveBeenCalled(); }
+  finally { act(() => tree.unmount()); }
+});
+
+test('the compact skeleton retains native shimmer timing and stops each animation on unmount', () => {
+  mockReducedMotion = false;
+  const start = jest.fn(), stop = jest.fn();
+  const timing = jest.spyOn(Animated, 'timing').mockImplementation(() => ({ start: jest.fn(), stop: jest.fn(), reset: jest.fn() }));
+  const loop = jest.spyOn(Animated, 'loop').mockImplementation(() => ({ start, stop, reset: jest.fn() }));
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<LoadingRows count={1} />) as Tree; });
+  try {
+    expect(loop).toHaveBeenCalledTimes(4);
+    expect(start).toHaveBeenCalledTimes(4);
+    expect(timing.mock.calls.every(call => call[1].duration === 1500 && call[1].useNativeDriver)).toBe(true);
+  } finally { act(() => tree.unmount()); }
+  expect(stop).toHaveBeenCalledTimes(4);
+});
 
 test.each([[360, 1], [411, 1], [360, 2], [411, 2]])('fits one product rail at %sdp/font%s without truncating numbers', (width, fontScale) => {
   const f = fixture(), facet = compactProductFacet(f.rows[0], 'Mortgage', scopedFinancialConditionFacts(scopedRateConditions(f.rows[0], 'Mortgage', f)));
