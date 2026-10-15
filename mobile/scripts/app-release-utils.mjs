@@ -9,7 +9,6 @@ import QRCode from 'qrcode';
 import {
   ARM_ROLLING_TAG,
   INSTALL_HTML,
-  MANIFEST_ASSET,
   QR_ASSET,
   ROLLING_TAG,
   installReleaseUrl,
@@ -18,6 +17,12 @@ import {
 } from './app-release-meta.mjs';
 
 export * from './app-release-meta.mjs';
+
+function htmlAttribute(value) {
+  return String(value).replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character]);
+}
 
 /**
  * @param {string} outDir
@@ -42,7 +47,7 @@ export async function generateInstallAssets(outDir, downloadUrl, repo, tag, mani
       ? manifestReleaseUrl(repo, manifestTag)
       : null;
   const manifestLine = manifestUrl
-    ? `  <p><small>Manifest: <a href="${manifestUrl}">${MANIFEST_ASSET}</a></small></p>\n`
+    ? `  <a class="manifest" href="${htmlAttribute(manifestUrl)}">Manifest</a>\n`
     : '';
 
   const html = `<!DOCTYPE html>
@@ -52,18 +57,30 @@ export async function generateInstallAssets(outDir, downloadUrl, repo, tag, mani
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install Australian Rates APK</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.4; }
-    img { display: block; width: 16rem; height: 16rem; margin: 1rem auto; }
-    a { word-break: break-all; }
-    p { margin: 0.75rem 0; }
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #ffffff; color: #172b4d; font-family: Roboto, system-ui, sans-serif; line-height: 1.5; }
+    main { max-width: 28rem; margin: 0 auto; padding: 24px 16px; }
+    h1 { margin: 0 0 24px; font-size: 1.5rem; }
+    a { color: #2563eb; overflow-wrap: anywhere; }
+    a:focus-visible { outline: 3px solid #172b4d; outline-offset: 4px; }
+    .download { display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 12px 16px; border-radius: 12px; background: #2563eb; color: #ffffff; font-weight: 600; text-decoration: none; }
+    figure { margin: 24px 0 0; }
+    figcaption { margin-bottom: 12px; font-weight: 600; }
+    img { display: block; width: min(16rem, 100%); height: auto; }
+    .manifest { display: inline-flex; align-items: center; min-height: 48px; max-width: 100%; margin-top: 12px; }
   </style>
 </head>
 <body>
-  <h1>Install Australian Rates</h1>
-  <p>Scan with <strong>Android Chrome</strong> (camera or QR scanner). Chrome downloads the APK directly from GitHub Releases.</p>
-  <img src="${qrUrl}" width="512" height="512" alt="QR code for APK download">
-  <p><a href="${downloadUrl}">Direct APK download</a></p>
-${manifestLine}</body>
+  <main>
+  <h1>Australian Rates</h1>
+  <a class="download" href="${htmlAttribute(downloadUrl)}">Download</a>
+  <figure>
+    <figcaption>Scan</figcaption>
+    <img src="${htmlAttribute(qrUrl)}" width="512" height="512" alt="Australian Rates download QR">
+  </figure>
+${manifestLine}  </main>
+</body>
 </html>
 `;
   const installPath = join(outDir, INSTALL_HTML);
