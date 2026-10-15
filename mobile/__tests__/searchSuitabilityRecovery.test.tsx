@@ -555,6 +555,30 @@ test.each([[411, 1], [360, 2]])('the toolbar scrolls inside the list at %s dp / 
   } finally { act(() => tree.unmount()); }
 });
 
+test.each([[360, 2], [320, 2], [360, 1.3]])('summary metadata reserves a whole line at %s dp / %s font scale without shrinking its label', (width, fontScale) => {
+  mockDimensions = { ...mockDimensions, width, fontScale };
+  mockParams = { section: 'Mortgage' };
+  mockState.prefs.mortgageRateMetric = 'comparison';
+  mockState.prefs.includeNonStandard = true;
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const actions = tree.root.findByProps({ accessibilityLabel: 'Search actions' });
+    const summary = actions.parent.findAllByType('AppText' as any)
+      .find((node: any) => node.props.children === 'Comparison rate');
+    expect(summary).toBeDefined();
+    expect(summary.parent.props.style).toMatchObject({ flexBasis: '100%', flexShrink: 0 });
+    expect(actions.parent.props.style.flexWrap).toBe('wrap');
+    expect(summary.parent.findAllByType('Button' as any)).toHaveLength(0);
+    expect(summary.props.numberOfLines).toBeUndefined();
+    expect(summary.props.adjustsFontSizeToFit).toBeUndefined();
+    expect(summary.props.allowFontScaling).not.toBe(false);
+    act(() => actions.parent.findByProps({ title: 'Bank A–Z' }).props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.sort).toBe('bank');
+    act(() => actions.props.onPress());
+    expect(tree.root.findAllByType('SheetSurface' as any).some((node: any) => node.props.visible && node.props.title === 'Search')).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
+
 test('changing result scopes keeps the focused input and exact rate rows mounted', () => {
   mockState.prefs.includeNonStandard = true;
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });

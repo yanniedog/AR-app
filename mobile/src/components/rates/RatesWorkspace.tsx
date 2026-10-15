@@ -526,6 +526,8 @@ export default function RatesWorkspace() {
   // Keep whole 16sp action labels; narrower or enlarged text adds a row.
   const actionMinWidth = Math.min(Math.max(48, width - theme.spacing(8)), Math.ceil(80 * Math.max(1, fontScale) + 36));
   const actionStyle = { flexGrow: 1, flexShrink: 0, flexBasis: actionMinWidth, minWidth: actionMinWidth };
+  // Reserve the entire line before quick actions can squeeze scaled metadata.
+  const summaryOwnLine = width < 360 * Math.max(1, fontScale);
   const quickSortKey = sortKey === 'bank' ? 'rate' : 'bank';
   const quickSortLabel = sortOptions.find(option => option.key === quickSortKey)?.label ?? uiLabel('Rate');
   return (
@@ -571,7 +573,7 @@ export default function RatesWorkspace() {
               <Button title={uiLabel(selectMode ? 'Done' : 'Compare')} variant="secondary" onPress={toggleCompareMode} disabled={availability === 'unlisted'} style={actionStyle} />
             </Row>
             <Row gap={8} style={{ flexWrap: 'wrap' }}>
-              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <View style={{ flexGrow: 1, flexShrink: summaryOwnLine ? 0 : 1, flexBasis: summaryOwnLine ? '100%' : 0, minWidth: 0, gap: 2 }}>
                 <AppText variant="tiny" color="textMuted">{uiJoin(searchPending ? 'Loading':uiJoin(uiCount(resultRows.length),' ','results'),searchSub?uiJoin(' · ','Alert on'):null)}</AppText>
                 <AppText variant="tiny" color="textMuted">{sortLabel}</AppText>
               </View>
