@@ -136,6 +136,7 @@ export function Chip({
         alignItems: 'center',
         gap: 8,
         minWidth: 48,
+        maxWidth: '100%',
         paddingHorizontal: 12,
         paddingVertical: 7,
         borderRadius: theme.radius.pill,
@@ -159,6 +160,7 @@ export function Chip({
           ...fontStyle(selected ? '600' : '500'),
           fontSize: theme.font.small,
           flexShrink: 1,
+          ...(Platform.OS === 'web' ? { overflowWrap: 'anywhere' } : {}),
         }}
       >
         {label}
@@ -231,9 +233,9 @@ export function Button({
         style,
       ]}
     >
-      <View style={{ opacity: loading ? 0 : 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+      <View style={{ opacity: loading ? 0 : 1, minWidth: 0, maxWidth: '100%', flexShrink: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           {icon ? <Ionicons name={icon} size={18} color={fg} /> : null}
-          <Text style={{ color: fg, ...fontStyle('600'), fontSize: theme.font.body, flexShrink: 1, textAlign: 'center' }}>{title}</Text>
+          <Text style={{ color: fg, ...fontStyle('600'), fontSize: theme.font.body, flexShrink: 1, textAlign: 'center', ...(Platform.OS === 'web' ? { overflowWrap: 'anywhere' } : {}) }}>{title}</Text>
       </View>
       {loading ? <ActivityIndicator color={fg} style={{ position: 'absolute', alignSelf: 'center' }} /> : null}
     </PressFeedback>

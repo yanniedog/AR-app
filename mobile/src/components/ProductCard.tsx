@@ -19,6 +19,8 @@ import type { LogoRenderState } from '../lib/logoReadiness';
 import type { RateRow, SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { BankAvatar } from './BankAvatar';
+import { RateFreshnessSymbol } from './RateFreshnessSymbol';
+import { rateFreshness, rowVerificationReceipt } from '../data/rateFreshness';
 import {
   productRateChangeText,
   useProductRateChangeSummary,
@@ -27,7 +29,7 @@ import { androidRipple, AppText } from './ui';
 import { PressFeedback } from './PressFeedback';
 import { IconAction } from './IconAction';
 import { useWordBubble, type IconWord } from './WordBubble';
-import { COMPACT_ROW, compactFactWidth, compactMetricHasPeers, compactProductFacet, compactProductRowLayout, compactTierIndex } from './product/compactProductRow';
+import { COMPACT_ROW, compactBankLogoFrame, compactFactWidth, compactMetricHasPeers, compactProductFacet, compactProductRowLayout, compactTierIndex } from './product/compactProductRow';
 import { scopedRateConditions } from '../data/rateConditions';
 import { scopedFinancialConditionFacts, type ScopedFinancialConditionPresentation } from '../data/scopedFinancialConditionFacts';
 import { uiAccessBadge, uiConditionTag, uiListedLvr, uiLoanPurpose } from '../lib/financialUiCopy';
@@ -82,6 +84,7 @@ function ProductCardView({
   showLenderAction = true,
   logoRenderStateId,
   onLogoRenderStateChange,
+  comparisonUnverified = false,
 }: {
   row: RateRow;
   section: SectionKey;
@@ -101,10 +104,12 @@ function ProductCardView({
   showLenderAction?: boolean;
   logoRenderStateId?: string;
   onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
+  comparisonUnverified?: boolean;
 }) {
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
   const [measuredWidth, setMeasuredWidth] = React.useState<number | null>(null);
+  const [rowHeight, setRowHeight] = React.useState<number>(COMPACT_ROW.minHeight);
   const [textMeasurements, setTextMeasurements] = React.useState<{ key: string; primary: number; secondary: number } | null>(null);
   const detailsBubble = useWordBubble('Details');
   const historyBubble = useWordBubble('History');
@@ -152,6 +157,8 @@ function ProductCardView({
   ];
   const rateChange = useProductRateChangeSummary(row.product_key);
   const rateChangeText = productRateChangeText(rateChange, true);
+  const freshnessLabel = ({ current: 'Current', overdue: 'Overdue', stale: 'Stale', unknown: 'Unknown' } as const)
+    [rateFreshness(row, rowVerificationReceipt(row), Date.now())];
   const openLender = onLongPress ?? (() => openBank(row.provider, { section }));
   const joinFacts = (facts: readonly UiText[]) => uiJoin(...facts.flatMap((fact, index) => index ? [uiLabel(' · '), fact] : [fact]));
   const cardA11yLabel = uiJoin(uiProductName(row), ', ', uiProviderName(row), ', ', rateLabel, ' ', rateText,
@@ -159,7 +166,9 @@ function ProductCardView({
     access.badge ? uiJoin(', ', uiAccessBadge(access)) : null,
     nonStandard ? uiJoin(', ', 'Non-standard') : null,
     qualifier.conditional ? uiJoin(', ', qualifier.label) : null,
-    rateChangeText ? uiJoin(', ', rateChangeText) : null);
+    rateChangeText ? uiJoin(', ', rateChangeText) : null,
+    comparisonUnverified ? uiJoin(', ', 'Eligibility unverified') : null,
+    uiJoin(', ', 'Freshness', ' · ', freshnessLabel));
   const saveIdentity = React.useMemo(() => productSaveIdentity(row, section, mortgageRateMetric,
     { core, details, manifest, coreIntegrity },
     hasDisplayedRateOverride ? { label: rateLabel, value: displayedRate ?? null } : undefined),
@@ -170,7 +179,7 @@ function ProductCardView({
     ', ', saveIdentity.name);
 
   const facet = compactProductFacet(row, section, conditions);
-  const unknown = !facet.known || qualifier.facts.some(fact => 'state' in fact && fact.state === 'unknown');
+  const unknown = comparisonUnverified || !facet.known || qualifier.facts.some(fact => 'state' in fact && fact.state === 'unknown');
   const statusIcons: (keyof typeof Ionicons.glyphMap)[] = [
     ...(qualifier.conditional ? ['flash-outline' as const] : []),
     ...(unknown ? ['help-circle-outline' as const] : []),
@@ -183,8 +192,10 @@ function ProductCardView({
   const measurements = textMeasurements?.key === measurementKey ? textMeasurements : null;
   const tierIndex = compactTierIndex(row);
   const hasMetricPeers = compactMetricHasPeers(row, core?.sections[section]?.rates, rateLabel);
+  const logoFrame = compactBankLogoFrame(measuredWidth ?? width - 32, rowHeight, fontScale, embedded ? 0 : StyleSheet.hairlineWidth);
+  const logoWidth = selectMode ? COMPACT_ROW.action : logoFrame.width;
   const layout = compactProductRowLayout(measuredWidth ?? width - 32, fontScale, rateText, secondaryText,
-    facet, statusIcons.length, measurements?.primary, measurements?.secondary, tierIndex, hasMetricPeers);
+    facet, statusIcons.length, measurements?.primary, measurements?.secondary, tierIndex, hasMetricPeers, logoWidth);
   const onRowLayout = (event: LayoutChangeEvent) => {
     const next = event.nativeEvent.layout.width;
     if (next > 0) setMeasuredWidth(previous => previous === next ? previous : next);
@@ -259,14 +270,14 @@ function ProductCardView({
         alignItems: 'center',
         minHeight: COMPACT_ROW.minHeight,
         gap: COMPACT_ROW.gap,
-        paddingVertical: 4,
+        paddingVertical: logoFrame.inset,
         paddingHorizontal: 0,
         backgroundColor: selected ? theme.colors.primaryMuted : 'transparent',
         borderBottomWidth: embedded ? 0 : StyleSheet.hairlineWidth,
         borderBottomColor: theme.ledger.rule,
       }}
     >
-      <View ref={historyBubble.anchorRef} collapsable={false} style={{ width: 48 }}>
+      <View ref={historyBubble.anchorRef} collapsable={false} style={{ width: logoWidth, alignSelf: 'stretch' }}>
         {showLenderAction || selectMode ? (
           <PressFeedback onPressIn={() => { historyHeld.current = false; }}
             onLongPress={selectMode ? undefined : () => { historyHeld.current = true; historyBubble.show(); }} delayLongPress={350}
@@ -275,17 +286,17 @@ function ProductCardView({
               if (!historyHeld.current) { historyBubble.dismiss(); openLender(); } historyHeld.current = false;
             }}
             disabled={false} accessibilityRole="button"
-            accessibilityLabel={uiJoin('View', ' ', uiProviderName(row), ' · ', 'History')}
+            accessibilityLabel={uiJoin('View', ' ', uiProviderName(row), ' · ', 'History', ' · ', 'Freshness', ' · ', freshnessLabel)}
             accessibilityElementsHidden={!!selectMode} importantForAccessibility={selectMode ? 'no-hide-descendants' : 'auto'}
-            style={{ width: 48, minHeight: 48, justifyContent: 'center', alignItems: 'center', borderRadius: theme.radius.sm }}>
-            <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            style={{ width: logoWidth, flex: 1, minHeight: 48, justifyContent: 'center', alignItems: 'center', borderRadius: theme.radius.sm }}>
+            <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ flexDirection: 'row', alignItems: 'center' }}>
               {selectMode ? <Ionicons name={selected ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
-                : <BankAvatar size={24} provider={row.provider} renderStateId={logoRenderStateId} onRenderStateChange={onLogoRenderStateChange} />}
+                : <><BankAvatar width={Math.max(0, logoFrame.width - 16)} height={logoFrame.height} inset={0} provider={row.provider} renderStateId={logoRenderStateId} onRenderStateChange={onLogoRenderStateChange} /><RateFreshnessSymbol row={row} palette={theme.colors} /></>}
             </View>
           </PressFeedback>
-        ) : <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
+        ) : <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: logoWidth, flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
           {selectMode ? <Ionicons name={selected ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
-            : <BankAvatar size={24} provider={row.provider} renderStateId={logoRenderStateId} onRenderStateChange={onLogoRenderStateChange} />}
+            : <><BankAvatar width={Math.max(0, logoFrame.width - 16)} height={logoFrame.height} inset={0} provider={row.provider} renderStateId={logoRenderStateId} onRenderStateChange={onLogoRenderStateChange} /><RateFreshnessSymbol row={row} palette={theme.colors} /></>}
         </View>}
       </View>
       <View ref={detailsBubble.anchorRef} collapsable={false} style={{ flex: 1, minWidth: 0 }}>
@@ -311,6 +322,13 @@ function ProductCardView({
           const { width: targetWidth, height: targetHeight } = event.nativeEvent.layout;
           mainBounds.current = Number.isFinite(targetWidth) && targetWidth > 0 && Number.isFinite(targetHeight) && targetHeight > 0
             ? { width: targetWidth, height: targetHeight } : null;
+          // Measure content independently: a logo measured from the whole row
+          // would preserve its previous height after large text shrinks again.
+          if (Number.isFinite(targetHeight) && targetHeight > 0) {
+            const height = Math.max(COMPACT_ROW.minHeight,
+              targetHeight + 2 * logoFrame.inset + (embedded ? 0 : StyleSheet.hairlineWidth));
+            setRowHeight(previous => previous === height ? previous : height);
+          }
         }}
       >
         <View key={geometryKey} pointerEvents="none" accessible={false}

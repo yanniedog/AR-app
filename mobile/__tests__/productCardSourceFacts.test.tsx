@@ -277,7 +277,7 @@ test('the duplicate provider logo is decorative while full row, History and exac
     expect(avatar.parent.props).toMatchObject({ accessible: false, accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' });
     expect(avatar.props.renderStateId).toBe('actual-logo-probe');
     expect(avatar.props.onRenderStateChange).toBe(logoState);
-    const historyButton = tree.root.findAllByType('PressFeedback').find(node => node.props.accessibilityLabel === 'View Macquarie · History')!;
+    const historyButton = tree.root.findAllByType('PressFeedback').find(node => node.props.accessibilityLabel === 'View Macquarie · History · Freshness · Unknown')!;
     expect(historyButton.props.accessibilityRole).toBe('button');
     expect(historyButton.props.disabled).toBe(false);
     act(() => historyButton.props.onPress());

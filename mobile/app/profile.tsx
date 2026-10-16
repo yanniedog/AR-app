@@ -1,11 +1,11 @@
-import { uiCount,uiJoin,uiSectionName } from "../src/lib/uiCopy";
+import { uiCount,uiJoin,uiLabel,uiSectionName } from "../src/lib/uiCopy";
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 
 import { ProfileEditor } from '../src/components/ProfileEditor';
 import { CustomerProfilePanel } from '../src/components/CustomerProfilePanel';
 import { ScreenScrollView } from '../src/components/Screen';
-import { Button, Card } from '../src/components/ui';
+import { AppText, Button, Card } from '../src/components/ui';
 import { LedgerRow, LedgerSection } from '../src/components/ledger';
 import { LedgerIcon } from '../src/components/icons/LedgerIcon';
 import { SECTION_ORDER } from '../src/constants';
@@ -103,8 +103,10 @@ export default function Profile() {
         })}
       </LedgerSection>
       <Card>
+        <AppText variant="h2">{uiLabel('Saved requirements')}</AppText>
+        <AppText variant="small" color="textMuted">{uiJoin('Scope', ' · ', 'All screens')}</AppText>
         <ProfileEditor
-          sections={interests}
+          sections={SECTION_ORDER}
           value={profileFilters}
           onChange={updateProfile}
         />
@@ -112,7 +114,7 @@ export default function Profile() {
       {count > 0 ? (
         <View style={{ marginTop: theme.spacing(4) }}>
           <Button
-            title={uiJoin('Clear profile',' (',uiCount(count),')')}
+            title={uiJoin('Clear all saved requirements',' (',uiCount(count),')')}
             variant="ghost"
             onPress={() => setPref('profileFilters', { ...EMPTY_PROFILE })}
           />
