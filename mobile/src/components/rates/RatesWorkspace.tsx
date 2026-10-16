@@ -12,6 +12,7 @@ import { initializeRatesSession, syncRatesPreferences, changeRatesSection, updat
 import { normalizeRatesPageSize, ratesPageWindow } from '../../data/ratesPagination';
 import { ratesIntentKey, resolveRatesIntent, RATES_INTENT_KEYS, type RatesRouteParams } from '../../lib/ratesIntent';
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
+import type { RatesAuditPagePreparation } from '../../lib/ratesAuditPage';
 import { SearchReportExport } from '../../components/SearchReportExport';
 import { isSuitabilityFilterReady } from '../../data/suitabilityGate';
 import Ionicons from '../../components/icons/AppIcon';
@@ -374,8 +375,23 @@ export default function RatesWorkspace() {
     if (!token || !pageRows.some(row => 'product_key' in row && rowToken(row) === token)) {
       return { unavailableReason: 'The selected exact rate is not on the rendered results page' };
     }
+    if (!selectMode) return { unavailableReason: 'Comparison selection is not active' };
     toggleSelect(token);
-  }, [pageRows, toggleSelect]);
+  }, [pageRows, selectMode, toggleSelect]);
+  const prepareAuditComparePage = useCallback((...args: unknown[]) => {
+    const token = auditActionString(args, 'selectionToken');
+    const resultIndex = token ? resultRows.findIndex(row => 'product_key' in row && rowToken(row) === token) : -1;
+    if (!token || resultIndex < 0) return { unavailableReason: 'The selected exact rate is not in the filtered results' };
+    const requestedPage = Math.floor(resultIndex / pageSize) + 1;
+    const evidence: RatesAuditPagePreparation = { selectionToken: token, resultIndex, pageSize,
+      pageBefore: pagination.page, selectionModeBefore: selectMode, requestedPage,
+      renderedSelectionToken: pageRows.some(row => 'product_key' in row && rowToken(row) === token) ? token : null };
+    // Prepare visible controls only; selection still requires the fresh rendered page.
+    if (requestedPage !== pagination.page || !selectMode) {
+      updateRatesSection(section, { page: requestedPage, selectMode: true }, requestedPage !== pagination.page);
+    }
+    return evidence;
+  }, [pageRows, pageSize, pagination.page, resultRows, section, selectMode]);
   const auditActions = useMemo(() => ({
     'search.open': () => undefined,
     'search.section.next': () => changeSection(SECTION_ORDER[(SECTION_ORDER.indexOf(section) + 1) % SECTION_ORDER.length]),
@@ -400,14 +416,16 @@ export default function RatesWorkspace() {
     'search.sort.cancel': () => setSortOpen(false),
     'search.filters.clear': clearSearchFilters,
     'search.compare.mode': toggleCompareMode,
+    'search.compare.page.0': prepareAuditComparePage,
     'search.compare.select.0': selectAuditToken,
+    'search.compare.page.1': prepareAuditComparePage,
     'search.compare.select.1': selectAuditToken,
     'search.compare.open': (...args: unknown[]) => {
       const exactTokens = auditActionStrings(args, 'selectionTokens');
       const tokens = exactTokens.length >= 2 ? exactTokens : selected;
       if (tokens.length >= 2) openCompare(tokens);
     },
-  }), [applyFilters, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
+  }), [applyFilters, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
   const intentPending = Boolean(intentKey && consumedIntent.current !== intentKey) || !session.initialized;
   const searchPending = intentPending || (availability === 'unlisted' ? !catalogueDetails : detailFiltersPending || searchIndexLoading || !preparedResults.ready);
   useEffect(() => {

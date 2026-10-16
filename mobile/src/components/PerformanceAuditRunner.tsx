@@ -1,5 +1,6 @@
 import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
 import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSelection';
+import { isVerifiedRatesPagePreparation } from '../lib/ratesAuditPage';
 import { assertObservableAuditActionEffect } from '../lib/performanceAuditActionEvidence';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { toPublicAppHealthReport } from '../lib/appHealth';
@@ -912,6 +913,9 @@ async function runDeepAuditStepBody(
     }
     verifiedIdempotentFixture ||= isVerifiedCalculatorSectionSelection(
       step.semanticActionId, step.parameters?.section, actionResult,
+    );
+    verifiedIdempotentFixture ||= isVerifiedRatesPagePreparation(
+      step.semanticActionId, step.parameters?.selectionToken, actionResult,
     );
     if (
       actionResult != null &&
