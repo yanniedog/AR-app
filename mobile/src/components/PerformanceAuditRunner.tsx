@@ -1,3 +1,8 @@
+import { captureUserRateScenarioForAudit } from '../hooks/useUserRateScenario';
+import { AuditDatasetChangedError, prepareAuditPublicCore, assertAuditPublicCataloguePinned } from '../lib/performanceAuditDataset';
+import type { PublicCatalogueView } from '../data/publicRateIntegration';
+import { getPublicRateCatalogueSnapshot } from '../data/publicRateCatalogue';
+import { normalizeUserRateScenario } from '../data/userRateScenario';
 import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
 import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSelection';
 import { isVerifiedRatesPagePreparation } from '../lib/ratesAuditPage';
@@ -185,18 +190,12 @@ class AuditInactivityError extends Error {
   }
 }
 
-class AuditDatasetChangedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'AuditDatasetChangedError';
-  }
-}
-
 interface AuditDatasetRevision {
   runDate: string | null;
   manifestRunDate: string | null;
   coreSha: string | null;
   detailsSha: string | null;
+  publicCatalogue: PublicCatalogueView | null;
 }
 
 function now(): number {
@@ -371,10 +370,11 @@ function captureDatasetRevision(): AuditDatasetRevision {
     manifestRunDate: state.manifest?.run_date ?? null,
     coreSha: state.manifest?.files.core.sha256 ?? null,
     detailsSha: state.manifest?.files.details.sha256 ?? null,
+    publicCatalogue: state.manifest ? getPublicRateCatalogueSnapshot(state.manifest) : null,
   };
 }
 
-function datasetRevisionLabel(revision: AuditDatasetRevision): string {
+function datasetRevisionLabel(revision: Pick<AuditDatasetRevision, 'runDate' | 'manifestRunDate' | 'coreSha' | 'detailsSha'>): string {
   return [
     revision.runDate ?? 'no-core',
     revision.manifestRunDate ?? 'no-manifest',
@@ -389,6 +389,7 @@ function assertDatasetRevision(expected: AuditDatasetRevision): void {
     throw new AuditDatasetChangedError('Dataset refresh started during the performance audit');
   }
   const actual = captureDatasetRevision();
+  assertAuditPublicCataloguePinned(expected.publicCatalogue, actual.publicCatalogue);
   if (datasetRevisionLabel(actual) !== datasetRevisionLabel(expected)) {
     throw new AuditDatasetChangedError(
       `Dataset revision changed during the performance audit: expected ${datasetRevisionLabel(expected)}, received ${datasetRevisionLabel(actual)}`,
@@ -471,6 +472,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
   const section = stringParameter(step, 'section');
   const productKey = stringParameter(step, 'productKey');
   const rateIndex = numberParameter(step, 'rateIndex');
+  const programmeId = stringParameter(step, 'programmeId');
   const selectionTokens = stringArrayParameter(step, 'selectionTokens');
   switch (step.semanticActionId) {
     case 'rates.open': return '/browse' as Href;
@@ -493,7 +495,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
             pathname: '/product/[key]',
             params: {
               key: productKey,
-              ...(rateIndex == null ? {} : { ri: String(rateIndex) }),
+              ...(programmeId ? { programme: programmeId } : rateIndex == null ? {} : { ri: String(rateIndex) }),
             },
           } as unknown as Href)
         : null;
@@ -503,7 +505,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
             pathname: '/rate-receipt',
             params: {
               key: productKey,
-              ...(rateIndex == null ? {} : { ri: String(rateIndex) }),
+              ...(programmeId ? { programme: programmeId } : rateIndex == null ? {} : { ri: String(rateIndex) }),
             },
           } as unknown as Href)
         : null;
@@ -2935,7 +2937,10 @@ export function PerformanceAuditRunner() {
           const datasetRevision = captureDatasetRevision();
           activeDatasetRevision = datasetRevision;
           assertDatasetRevision(datasetRevision);
-          const prepared = buildPerformanceAuditSetupPlans(initialStore.core,
+          const publicCatalogue = datasetRevision.publicCatalogue;
+          const publicScenario = captureUserRateScenarioForAudit() ?? normalizeUserRateScenario(undefined);
+          const auditCore = prepareAuditPublicCore(initialStore.core, publicCatalogue, publicScenario, initialStore.prefs.profileFilters);
+          const prepared = buildPerformanceAuditSetupPlans(auditCore,
             { seed: sessionId, includeNonStandard: true, detailsProducts: initialStore.details?.products }, SECTION_ORDER);
           plan = prepared.plan;
           navigationJourneys = prepared.journeys;
@@ -2967,7 +2972,7 @@ export function PerformanceAuditRunner() {
             watchdogMode: 'stored-check-inactivity',
             storedCheckCount: watchdog.storedCheckCount,
             lastStoredCheckAt,
-            datasetRevision,
+            datasetRevision: datasetRevisionLabel(datasetRevision),
             payloadWork: captureAuditPayloadWork(useStore.getState()),
           });
           // Include the setup marker write in this bounded environment stage.

@@ -40,7 +40,7 @@ test.each([
 });
 test('a compact fixed target retains the exact comparison period and unknown reversion in visual and accessible facts', () => {
   const target: RateRow = { provider: 'Target Bank', product_key: 'target-fixed', product_name: 'Fixed loan', rate: '0.05', rate_type: 'FIXED', term: 'P2Y' };
-  const scenario = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' } });
+  const scenario = normalizeUserRateScenario({ projections: { mortgage: { holdVariableRate: true } }, mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' } });
   const projection = buildStaySwitchProjection({ target, scenario, now: new Date('2026-10-15T01:00:00Z') });
   expect(projection.ready).toBe(true); expect(projection.points).toHaveLength(25);
   const original = JSON.stringify(projection);

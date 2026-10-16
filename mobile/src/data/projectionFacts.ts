@@ -32,6 +32,7 @@ export type ProjectionFactSnapshot =
   | (ProjectionSnapshotBase & {
     section: 'Mortgage';
     fixed: boolean;
+    comparisonPeriod?: boolean;
     remainingYears: number;
     repayment: ProjectionCashflowSnapshot & { source: 'entered' | 'illustrative' };
     extraRepayment: ProjectionCashflowSnapshot;
@@ -52,7 +53,7 @@ export type ProjectionFactSnapshot =
 
 export type ProjectionFact =
   | { readonly kind: 'projection-basis'; readonly value: 'illustrative'; readonly forecast: 'none' }
-  | { readonly kind: 'projection-horizon'; readonly scope: 'full-term' | 'fixed-period' | 'savings-horizon' | 'deposit-maturity'; readonly months: number }
+  | { readonly kind: 'projection-horizon'; readonly scope: 'full-term' | 'fixed-period' | 'comparison-period' | 'savings-horizon' | 'deposit-maturity'; readonly months: number }
   | { readonly kind: 'remaining-term'; readonly years: number }
   | { readonly kind: 'savings-horizon-years'; readonly years: number }
   | { readonly kind: 'rate-scenarios'; readonly lowerFraction: number; readonly baseFraction: number; readonly higherFraction: number; readonly holding: 'constant' }
@@ -108,7 +109,7 @@ function day(value: string): void {
 /** New facts are emitted beside existing simulations; never parse warning prose. */
 export function projectionFacts(snapshot: ProjectionFactSnapshot): readonly ProjectionFact[] {
   months(snapshot.months, true); snapshot.rateRange.forEach(rate);
-  const scope = snapshot.section === 'Mortgage' ? snapshot.fixed ? 'fixed-period' : 'full-term'
+  const scope = snapshot.section === 'Mortgage' ? snapshot.comparisonPeriod ? 'comparison-period' : snapshot.fixed ? 'fixed-period' : 'full-term'
     : snapshot.section === 'TD' ? 'deposit-maturity' : 'savings-horizon';
   const facts: ProjectionFact[] = [
     { kind: 'projection-basis', value: 'illustrative', forecast: 'none' },
@@ -167,7 +168,7 @@ export function projectionFacts(snapshot: ProjectionFactSnapshot): readonly Proj
     if (growing.length) facts.push({ kind: 'negative-amortisation', scenarios: growing });
     const residual = snapshot.outcomes.filter(outcome => outcome.closingBalance > 0.01)
       .map(outcome => ({ id: outcome.id, amount: outcome.closingBalance }));
-    if (!snapshot.fixed && residual.length) facts.push({ kind: 'residual-loan-balance', scenarios: residual });
+    if (!snapshot.fixed && !snapshot.comparisonPeriod && residual.length) facts.push({ kind: 'residual-loan-balance', scenarios: residual });
   } else if (snapshot.section === 'Savings') {
     if (!Number.isFinite(snapshot.horizonYears) || snapshot.horizonYears <= 0)
       throw new TypeError('Invalid savings horizon snapshot');
@@ -204,7 +205,7 @@ export interface StaySwitchFactSnapshot {
   openingBalance: number; remainingYears: number; openingOffset: number;
   householdMonthlyAllocation: number; targetMonthlyShortfall: number;
   targetHasOffset: boolean; offsetEvidence: 'entered' | 'published' | 'not-published' | 'unavailable';
-  funding: 'cash' | 'new-loan'; fixed: boolean; months: number;
+  funding: 'cash' | 'new-loan'; fixed: boolean; comparisonPeriod?: boolean; months: number;
   fees: {
     entries: readonly { key: SwitchFeeKind; amount: number; source: 'entered' | 'published' | 'missing' }[];
     costClaimsAvailable: boolean; feeInputsComplete: boolean;
@@ -224,7 +225,7 @@ export type StaySwitchFact =
   | { readonly kind: 'switch-fee'; readonly fee: SwitchFeeKind; readonly state: 'unknown' }
   | { readonly kind: 'unpriced-switch-fees'; readonly upfrontCount: number; readonly periodicCount: number }
   | { readonly kind: 'cashback-exceeds-fees'; readonly cashbackAmount: number; readonly modelledFeesAmount: number; readonly eligibility: 'unverified'; readonly paymentTiming: 'unverified' }
-  | { readonly kind: 'switch-horizon'; readonly scope: 'published-fixed-period' | 'remaining-term'; readonly months: number; readonly futureReversionRate: 'unknown' | 'not-modelled' }
+  | { readonly kind: 'switch-horizon'; readonly scope: 'published-fixed-period' | 'comparison-period' | 'remaining-term'; readonly months: number; readonly futureReversionRate: 'unknown' | 'not-modelled' }
   | { readonly kind: 'switch-exclusions'; readonly tax: 'excluded'; readonly refinancingTiming: 'unverified'; readonly futureRateChanges: 'unknown' };
 
 export function staySwitchFacts(snapshot: StaySwitchFactSnapshot): readonly StaySwitchFact[] {
@@ -246,7 +247,7 @@ export function staySwitchFacts(snapshot: StaySwitchFactSnapshot): readonly Stay
     { kind: 'switch-cost-claims', state: snapshot.fees.costClaimsAvailable ? 'available' : 'unavailable',
       feeInputs: snapshot.fees.feeInputsComplete ? 'complete' : 'incomplete', materialTerms: 'verification-required',
       customerApplicability: 'verification-required', calculation: 'supported-evaluator-required' },
-    { kind: 'switch-horizon', scope: snapshot.fixed ? 'published-fixed-period' : 'remaining-term', months: snapshot.months,
+    { kind: 'switch-horizon', scope: snapshot.comparisonPeriod ? 'comparison-period' : snapshot.fixed ? 'published-fixed-period' : 'remaining-term', months: snapshot.months,
       futureReversionRate: snapshot.fixed ? 'unknown' : 'not-modelled' },
     { kind: 'switch-exclusions', tax: 'excluded', refinancingTiming: 'unverified', futureRateChanges: 'unknown' },
   ];

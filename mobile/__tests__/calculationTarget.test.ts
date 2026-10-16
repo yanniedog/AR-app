@@ -85,3 +85,14 @@ test('zero index remains the exact sibling when a different sibling is preferred
   expect(resolveCalculationTarget(publication, 'Savings', { target: key, ri: ['0','0'] })).toEqual({ status: 'available', section: 'Savings', row: zero });
   expect(resolveCalculationTarget(publication, 'Savings', { target: key, ri: '' })).toMatchObject({ status: 'available', row: first });
 });
+
+
+test('semantic programme routes retain the exact offer across reordered source indices', () => {
+  const one = { ...first, public_programme_id: 'programme-a', public_offer_id: 'offer-a' };
+  const two = { ...second, public_programme_id: 'programme-b', public_offer_id: 'offer-b' };
+  const publication = { ...core, sections: { ...core.sections, Savings: { rates: [one, two] } } } as CorePayload;
+  expect(buildCalculationRoute(two, 'Savings').params.programme).toBe('programme-b');
+  expect(resolveCalculationTarget(publication, 'Savings', { target: key, ri: '1', programme: 'programme-b' })).toMatchObject({ status: 'available', row: two });
+  expect(resolveCalculationTarget(publication, 'Savings', { target: key, ri: '1', programme: 'missing' })).toEqual({ status: 'unavailable' });
+  expect(resolveCalculationTarget(publication, 'Savings', { target: key, programme: ['programme-a', 'programme-b'] })).toEqual({ status: 'unavailable' });
+});

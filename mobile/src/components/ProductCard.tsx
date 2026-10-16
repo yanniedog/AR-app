@@ -1,3 +1,6 @@
+import { usePublicRateCatalogue } from '../data/publicRateCatalogue';
+import { bindCurrentPublicRow, publicRateScenario, resolveRowPublicRate } from '../data/publicRateIntegration';
+import { publicRateOriginLabel, publicRateText } from '../data/publicRatePresentation';
 import Ionicons from './icons/AppIcon';
 import React from 'react';
 import { StyleSheet, useWindowDimensions, View, type GestureResponderEvent, type LayoutChangeEvent, type TextLayoutEventData, type NativeSyntheticEvent } from 'react-native';
@@ -115,11 +118,15 @@ function ProductCardView({
   const historyBubble = useWordBubble('History');
   const held = React.useRef(false);
   const historyHeld = React.useRef(false);
-  const favorite = useStore((s) => s.isRateSaved(row.product_key, row.rate_index ?? null));
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const detail = useStore((s) => s.details?.products[row.product_key] ?? null);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const core = useStore(s => s.core), details = useStore(s => s.details), manifest = useStore(s => s.manifest), coreIntegrity = useStore(s => s.coreIntegrity);
+  const profile = useStore(state => state.prefs.profileFilters);
+  const catalogue = usePublicRateCatalogue(manifest);
+  const boundRow = React.useMemo(() => bindCurrentPublicRow(row, catalogue), [row, catalogue]);
+  const resolution = React.useMemo(() => resolveRowPublicRate(boundRow, catalogue, publicRateScenario(section, undefined, profile, boundRow, 'published')), [boundRow, catalogue, section, profile]);
+  const favorite = useStore(state => state.isRateSaved(row.product_key, row.rate_index ?? null, boundRow.public_offer_id));
   const admittedConditions = React.useMemo(() => scopedRateConditions(row, section, { core, details, manifest, coreIntegrity }),
     [row, section, core, details, manifest, coreIntegrity]);
   const conditions = React.useMemo(() => scopedFinancialConditionFacts(admittedConditions), [admittedConditions]);
@@ -134,9 +141,9 @@ function ProductCardView({
   const hasDisplayedRateOverride = displayedRate !== undefined;
   const rateLabel = hasDisplayedRateOverride
     ? displayedRateLabel ?? presentation.primaryLabel
-    : presentation.primaryLabel;
+    : resolution ? publicRateOriginLabel(resolution) : presentation.primaryLabel;
   const rateValue = hasDisplayedRateOverride ? displayedRate : presentation.primary;
-  const rateText = formatRate(rateValue);
+  const rateText = !hasDisplayedRateOverride && resolution ? publicRateText(resolution) : formatRate(rateValue);
   const showingComparisonRate = rateLabel === 'Comparison rate';
   const secondaryRate = section === 'Mortgage'
     ? showingComparisonRate
@@ -367,7 +374,7 @@ function ProductCardView({
       <View style={{ width: 48, opacity: selectMode ? 0 : 1 }} pointerEvents={selectMode ? 'none' : 'auto'}
         accessibilityElementsHidden={!!selectMode} importantForAccessibility={selectMode ? 'no-hide-descendants' : 'auto'}>
         <IconAction icon={favorite ? 'star' : 'star-outline'} word={favorite ? 'Remove' : 'Save'}
-          onPress={() => toggleSavedRate(row, Number.isInteger(row.rate_index) ? 'rate' : 'product')}
+          onPress={() => toggleSavedRate(boundRow, boundRow.public_offer_id || Number.isInteger(row.rate_index) ? 'rate' : 'product')}
           disabled={!!selectMode} active={favorite} accessibilityLabel={saveA11yLabel}
           testID={saveIdentity.testID} accessibilityState={{ selected: favorite }} style={{ width: 48 }} />
       </View>

@@ -845,7 +845,7 @@ export function buildPerformanceAuditJourneysFromInputs(
             pathname: '/product/[key]',
             params: {
               key: first.productKey,
-              ...(first.rateIndex != null ? { ri: String(first.rateIndex) } : {}),
+              ...(first.programmeId ? { programme: first.programmeId } : first.rateIndex != null ? { ri: String(first.rateIndex) } : {}),
             },
           } as unknown as Href)
         : undefined,
@@ -862,7 +862,7 @@ export function buildPerformanceAuditJourneysFromInputs(
             pathname: '/rate-receipt',
             params: {
               key: first.productKey,
-              ...(first.rateIndex != null ? { ri: String(first.rateIndex) } : {}),
+              ...(first.programmeId ? { programme: first.programmeId } : first.rateIndex != null ? { ri: String(first.rateIndex) } : {}),
             },
           } as unknown as Href)
         : undefined,

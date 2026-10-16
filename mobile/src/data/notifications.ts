@@ -415,6 +415,7 @@ export function computeChanges(
   // Watchlisted products — compare row-for-row by rate_index and report the largest
   // qualifying move (order-independent; catches changes to any rate row, not just the first).
   for (const saved of hasMandatoryRequirements() ? [] : favorites) {
+    if (typeof saved !== 'string' && saved.offerId) continue;
     const key = typeof saved === 'string' ? saved : saved.productKey;
     const exactIndex = typeof saved === 'string' || saved.scope === 'product' ? null : saved.rateIndex;
     const before = exactIndex == null

@@ -2,15 +2,19 @@ import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter
 import type { CorePayload, RateRow, SectionKey } from '../types';
 import { toFraction } from './format';
 import { rowsForProductKey } from './rateRowIndex';
+import { bindCurrentPublicRow, publicRecommendationRows, type PublicCatalogueView } from './publicRateIntegration';
+import type { RateScenario } from './publicRateModel';
 
 export interface SavedRateRef {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   id: string;
   scope: 'rate' | 'product';
   productKey: string;
   rateIndex: number | null;
   savedAt: string;
   savedRate: number | null;
+  offerId?: string;
+  programmeId?: string;
 }
 
 export interface ResolvedSavedRate {
@@ -27,7 +31,8 @@ export function unresolvedSavedRateRefs(
   return refs.filter((ref) => !resolvedIds.has(ref.id));
 }
 
-export function savedRateId(productKey: string, rateIndex: number | null, scope: SavedRateRef['scope']): string {
+export function savedRateId(productKey: string, rateIndex: number | null, scope: SavedRateRef['scope'], offerId?: string): string {
+  if (scope === 'rate' && offerId) return `rate:${productKey}:offer:${offerId}`;
   return scope === 'rate' && rateIndex != null
     ? `rate:${productKey}:${rateIndex}`
     : `product:${productKey}`;
@@ -38,19 +43,21 @@ export function makeSavedRateRef(
   scope: SavedRateRef['scope'] = 'rate',
   savedAt = new Date().toISOString(),
 ): SavedRateRef {
-  if (scope === 'rate' && (row.exact_alert_eligible === false || !Number.isInteger(row.rate_index))) {
+  if (scope === 'rate' && (row.exact_alert_eligible === false || !Number.isInteger(row.rate_index) && !row.public_offer_id)) {
     throw new RangeError('An exact saved rate requires an integer rate_index');
   }
   const exact = scope === 'rate';
-  const rateIndex = exact ? row.rate_index! : null;
+  const rateIndex = exact && Number.isInteger(row.rate_index) ? row.rate_index! : null;
   return {
-    schemaVersion: 1,
-    id: savedRateId(row.product_key, rateIndex, exact ? 'rate' : 'product'),
+    schemaVersion: exact && row.public_offer_id ? 2 : 1,
+    id: savedRateId(row.product_key, rateIndex, exact ? 'rate' : 'product', row.public_offer_id),
     scope: exact ? 'rate' : 'product',
     productKey: row.product_key,
     rateIndex,
     savedAt,
     savedRate: exact ? toFraction(row.rate) : null,
+    ...(exact && row.public_offer_id ? { offerId: row.public_offer_id } : {}),
+    ...(exact && row.public_programme_id ? { programmeId: row.public_programme_id } : {}),
   };
 }
 
@@ -73,12 +80,12 @@ export function normalizeSavedRates(raw: unknown, legacyFavorites: unknown = [])
       if (!value || typeof value !== 'object') continue;
       const item = value as Partial<SavedRateRef>;
       if (typeof item.productKey !== 'string' || !item.productKey) continue;
-      if (item.scope === 'rate' && !Number.isInteger(item.rateIndex)) continue;
+      if (item.scope === 'rate' && !Number.isInteger(item.rateIndex) && !item.offerId) continue;
       const scope = item.scope === 'rate' ? 'rate' : 'product';
-      const rateIndex = scope === 'rate' ? Number(item.rateIndex) : null;
+      const rateIndex = scope === 'rate' && Number.isInteger(item.rateIndex) ? Number(item.rateIndex) : null;
       const ref: SavedRateRef = {
-        schemaVersion: 1,
-        id: savedRateId(item.productKey, rateIndex, scope),
+        schemaVersion: scope === 'rate' && typeof item.offerId === 'string' && item.offerId ? 2 : 1,
+        id: savedRateId(item.productKey, rateIndex, scope, typeof item.offerId === 'string' ? item.offerId : undefined),
         scope,
         productKey: item.productKey,
         rateIndex,
@@ -87,6 +94,8 @@ export function normalizeSavedRates(raw: unknown, legacyFavorites: unknown = [])
           scope === 'rate' && typeof item.savedRate === 'number' && Number.isFinite(item.savedRate)
             ? item.savedRate
             : null,
+        ...(scope === 'rate' && typeof item.offerId === 'string' && item.offerId ? { offerId: item.offerId } : {}),
+        ...(scope === 'rate' && typeof item.programmeId === 'string' && item.programmeId ? { programmeId: item.programmeId } : {}),
       };
       out.set(ref.id, ref);
     }
@@ -140,11 +149,13 @@ export function isSavedRate(
   refs: readonly SavedRateRef[],
   productKey: string,
   rateIndex: number | null,
+  offerId?: string,
 ): boolean {
   return refs.some(
     (ref) =>
       ref.productKey === productKey &&
-      (ref.scope === 'product' || (ref.scope === 'rate' && rateIndex != null && ref.rateIndex === rateIndex)),
+      (ref.scope === 'product' || (ref.scope === 'rate' && (offerId ? ref.offerId === offerId
+        : !ref.offerId && rateIndex != null && ref.rateIndex === rateIndex))),
   );
 }
 
@@ -169,17 +180,22 @@ export function toggleSavedRateRefs(
   return [...refs, next];
 }
 
-export function resolveSavedRates(core: CorePayload, refs: readonly SavedRateRef[]): ResolvedSavedRate[] {
+export function resolveSavedRates(core: CorePayload, refs: readonly SavedRateRef[], catalogue?: PublicCatalogueView,
+  scenarioFor: (section: SectionKey) => RateScenario = () => ({})): ResolvedSavedRate[] {
   const resolved: ResolvedSavedRate[] = [];
+  const candidates = new Map((Object.entries(core.sections) as [SectionKey, CorePayload['sections'][SectionKey]][])
+    .map(([section, data]) => [section, catalogue && catalogue.status !== 'unavailable' ? publicRecommendationRows(data?.rates ?? [], catalogue, section, scenarioFor(section), true) : data?.rates ?? []]));
   for (const ref of refs) {
     let fallback: ResolvedSavedRate | null = null;
-    for (const [section, data] of Object.entries(core.sections) as [SectionKey, CorePayload['sections'][SectionKey]][]) {
-      for (const row of rowsForProductKey(data?.rates ?? [], ref.productKey)) {
+    for (const [section, rows] of candidates) {
+      for (const original of rowsForProductKey(rows, ref.productKey)) {
+        const row = catalogue ? bindCurrentPublicRow(original, catalogue) : original;
         const candidate = { ref, row, section };
         if (
           ref.scope === 'rate' &&
           row.exact_alert_eligible !== false &&
-          row.rate_index === ref.rateIndex
+          (ref.offerId ? row.public_offer_id === ref.offerId && (!ref.programmeId || row.public_programme_id === ref.programmeId)
+            : (!catalogue || catalogue.status === 'unavailable') && row.rate_index === ref.rateIndex)
         ) {
           resolved.push(candidate);
           fallback = null;
