@@ -1,8 +1,11 @@
 import {
   completePerformanceAudit, failPerformanceAudit, getPerformanceAuditState, markPerformanceAuditRunning,
-  requestPerformanceAudit, resetPerformanceAuditForTests, type PerformanceAuditReport,
+  requestPerformanceAudit, resetPerformanceAuditForTests,
 } from '../src/lib/performanceAudit';
 import { publishPerformanceAuditAfterFinalization } from '../src/lib/performanceAuditFinalization';
+import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
+import { performanceAuditUploadRequest } from '../src/lib/performanceAuditSharing';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
 jest.mock('../src/lib/debugLog', () => ({
@@ -12,9 +15,9 @@ jest.mock('../src/lib/debugLog', () => ({
   saveDebugLogUploadReceipt: jest.fn(), uploadDebugLog: jest.fn(), verifyDebugLogUpload: jest.fn(),
 }));
 
-const fixtureReport = (sessionId: string) => ({ sessionId, summary: { overall: 'healthy' } }) as PerformanceAuditReport;
+const fixtureReport = makePerformanceAuditReport;
 const request = { sessionId: 'audit-fixture', appVersion: '1.0.0', buildVersion: '1',
-  audit: { summaryMarker: 'SUMMARY audit-fixture', report: { sessionId: 'audit-fixture' } } };
+  audit: { summaryMarker: 'SUMMARY audit-fixture', report: fixtureReport('audit-fixture') } };
 const result = { url: 'https://paste.c-net.org/fixture', provider: 'paste.c-net.org', deleteKey: 'fixture-key',
   truncated: false, clientTruncated: false, originalBytes: 16, uploadedBytes: 16 };
 const receipt = { ...result, schemaVersion: 1, createdAt: '2026-10-15T00:00:00Z' };
@@ -24,6 +27,7 @@ let clipboard: typeof import('expo-clipboard');
 let dispatch: typeof import('../src/lib/performanceAuditSharing').startPerformanceAuditLogUpload;
 
 beforeEach(() => {
+  void AsyncStorage.clear();
   resetPerformanceAuditForTests();
   jest.resetModules();
   log = jest.requireMock('../src/lib/debugLog');
@@ -99,7 +103,7 @@ test('fatal local finalization retains failure and partial persistence without u
   await expect(publishPerformanceAuditAfterFinalization(fixtureReport('failed'), async () => { throw failure; }, releaseTransport)).rejects.toBe(failure);
   await persistPartial();
   failPerformanceAudit(failure.message);
-  dispatch(uploadLog, { ...request, audit: { summaryMarker: 'PARTIAL fixture', report: { partial: true } } });
+  dispatch(uploadLog, { ...request, audit: { summaryMarker: 'PARTIAL fixture', report: fixtureReport('failed') } });
   expect(persistPartial).toHaveBeenCalledTimes(1);
   expect(releaseTransport).not.toHaveBeenCalled();
   expect(getPerformanceAuditState()).toMatchObject({ status: 'failed', report: null, uploadLog: false, error: failure.message });
@@ -108,10 +112,11 @@ test('fatal local finalization retains failure and partial persistence without u
 
 test('an explicitly requested upload preserves receipt verification, clipboard and deduplication', async () => {
   dispatch(true, request);
-  await sharing.startDebugLogUpload(request);
+  await sharing.startDebugLogUpload(performanceAuditUploadRequest(request.audit.report));
   dispatch(true, request);
   expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
-  expect(log.verifyDebugLogUpload).toHaveBeenCalledWith(receipt, 'fixture evidence');
+  expect(log.debugLog.readCompleteText).not.toHaveBeenCalled();
+  expect(log.verifyDebugLogUpload).toHaveBeenCalledWith(receipt, performanceAuditUploadRequest(request.audit.report).publicReport.body);
   expect(clipboard.setStringAsync).toHaveBeenCalledTimes(1);
   expect(clipboard.setStringAsync).toHaveBeenCalledWith(result.url);
   expect((log.saveDebugLogUploadReceipt as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan((log.verifyDebugLogUpload as jest.Mock).mock.invocationCallOrder[0]);
@@ -140,7 +145,7 @@ test('public upload failure cannot turn an already finalized audit into a failed
   await publishPerformanceAuditAfterFinalization(report, localFlush, releaseTransport);
   (log.uploadDebugLog as jest.Mock).mockRejectedValueOnce(new Error('fixture public service offline'));
   dispatch(getPerformanceAuditState().uploadLog, request);
-  await sharing.startDebugLogUpload(request);
+  await sharing.startDebugLogUpload(performanceAuditUploadRequest(request.audit.report));
   expect(sharing.getDebugLogUploadSnapshot().phase).toBe('failed');
   expect(getPerformanceAuditState()).toMatchObject({ status: 'complete', report, error: null });
   expect(localFlush).toHaveBeenCalledTimes(1); expect(releaseTransport).toHaveBeenCalledTimes(1);
