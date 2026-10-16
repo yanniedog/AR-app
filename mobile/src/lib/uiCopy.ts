@@ -67,7 +67,7 @@ export const UI_LABELS = [
   'Newest', 'Oldest', 'Name', 'Date', 'Version', 'Build', 'Update', 'Install',
   'Download', 'Downloaded', 'Download failed', 'Update available', 'Up to date',
   'Pause', 'Resume', 'Stop', 'Start', 'Run audit', 'Live audit', 'Public upload', 'Next audit upload', 'Next destination', 'Audit', 'Performance audit',
-  'Debug log', 'Upload', 'Uploaded', 'Upload failed', 'Upload status', 'Clear cache',
+  'Debug log', 'Report', 'Upload', 'Upload report', 'Uploaded', 'Upload failed', 'Upload status', 'Clear cache',
   'Reset app', 'Delete local data', 'Data deleted', 'Authentication required', 'Unlock',
   'Authenticate', 'Export data key', 'Import data key', 'Share data key', 'External link',
   'Open link', 'Domain', 'Address', 'Email', 'Website', 'Licence', 'Legal', 'Terms and privacy',
