@@ -24,6 +24,7 @@ import { resolveSectionRibbonStats } from '../data/ribbonStats';
 import { excludeTokenDepositRates, rankFraction, sortRows } from '../data/selectors';
 import { useStore } from '../data/store';
 import { captureRatesSession, restoreRatesSession } from '../data/ratesSession';
+import { useMortgageComparison } from '../data/mortgageComparison';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
@@ -2684,9 +2685,12 @@ export function PerformanceAuditRunner() {
       let lastStoredCheckAt: string | null = null;
       let rollbackSnapshot: Awaited<ReturnType<typeof beginPerformanceAuditRollback>> | null = null;
       let ratesSessionSnapshot: ReturnType<typeof captureRatesSession> | null = null;
+      // These exploratory amounts never enter the durable rollback journal or report.
+      const mortgageComparisonSnapshot = { ...useMortgageComparison.getState() };
       let ratesSessionRestored = false;
       const restoreRatesUi = () => {
         if (ratesSessionSnapshot && !ratesSessionRestored) {
+          useMortgageComparison.setState(mortgageComparisonSnapshot);
           restoreRatesSession(ratesSessionSnapshot);
           ratesSessionRestored = true;
         }

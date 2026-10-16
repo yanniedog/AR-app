@@ -165,7 +165,9 @@ test.each([[360, 1], [411, 1], [360, 2], [411, 2]])('fits one product rail at %s
     expect(primary.props.children).toBe('5.80%');
     expect(primary.props.numberOfLines).toBeUndefined();
     const secondary = tree.root.findAllByType('AppText').filter(node => node.props.testID === 'compact-secondary-rate');
-    expect(secondary).toHaveLength(fontScale === 1 ? 1 : 0);
+    // The larger bank mark takes precedence over the optional second metric;
+    // both exact metric values remain in the row's accessible name.
+    expect(secondary).toHaveLength(width === 411 && fontScale === 1 ? 1 : 0);
     const full = tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith('Budget Home Loan,'))!;
     expect(full.props.accessibilityLabel).toContain('Comparison rate 5.80%');
     expect(full.props.accessibilityLabel).toContain('Advertised rate 5.79%');
@@ -204,7 +206,7 @@ test('has independent exact Save/History actions and holding the row only names 
     const targets = tree.root.findAllByType('PressFeedback');
     expect(targets).toHaveLength(3);
     const full = targets.find(node => String(node.props.accessibilityLabel).startsWith('Budget Home Loan,'))!;
-    const lender = targets.find(node => node.props.accessibilityLabel === 'View Maitland Mutual Limited · History')!;
+    const lender = targets.find(node => node.props.accessibilityLabel === 'View Maitland Mutual Limited · History · Freshness · Unknown')!;
     const save = targets.find(node => node.props.testID === 'rate-save:maitland-budget:4')!;
     expect(targets.every(node => node.props.style.minHeight >= 48)).toBe(true);
     act(() => { full.props.onPressIn(); full.props.onLongPress(); full.props.onPress(); });
@@ -248,11 +250,12 @@ test('negative, non-finite, unmeasured and outside points fall back to Details',
 });
 
 test('a hidden secondary and stale region events cannot claim a word after font/layout changes', () => {
+  mockDimensions = { ...mockDimensions, width: 480 };
   const tree = render();
   try {
     const { positions } = measureRegions(tree);
     const old = tree.root.findByProps({ testID: 'compact-secondary-cell' }).props.onLayout;
-    mockDimensions = { ...mockDimensions, fontScale: 2 };
+    mockDimensions = { ...mockDimensions, width: 360, fontScale: 2 };
     act(() => tree.update(<ProductCard row={{ ...row }} section="Mortgage" />));
     expect(tree.root.findAllByType('AppText').some(node => node.props.testID === 'compact-secondary-rate')).toBe(false);
     act(() => old({ nativeEvent: { layout: { x: 0, width: 224 } } }));
@@ -333,7 +336,7 @@ test.each([true, false])('tapping the visible selection checkbox toggles its exa
   }
   let tree!: Tree; act(() => { tree = TestRenderer.create(<Selection />) as Tree; });
   try {
-    const checkbox = () => tree.root.findAllByType('PressFeedback').find(node => node.props.accessibilityLabel === 'View Maitland Mutual Limited · History')!;
+    const checkbox = () => tree.root.findAllByType('PressFeedback').find(node => node.props.accessibilityLabel === 'View Maitland Mutual Limited · History · Freshness · Unknown')!;
     const main = () => tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith('Budget Home Loan,'))!;
     expect(checkbox().props.disabled).toBe(false);
     expect(checkbox().props.style).toMatchObject({ width: 48, minHeight: 48 });

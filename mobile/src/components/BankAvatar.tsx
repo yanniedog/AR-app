@@ -26,6 +26,9 @@ function contrastText(hex: string): string {
 export function BankAvatar({
   provider,
   size = 42,
+  width = size,
+  height = size,
+  inset = size * 0.06,
   onAssetPending,
   onAssetTerminal,
   renderStateId,
@@ -33,6 +36,9 @@ export function BankAvatar({
 }: {
   provider: string;
   size?: number;
+  width?: number;
+  height?: number;
+  inset?: number;
   onAssetPending?: (provider: string) => void;
   onAssetTerminal?: (result: { provider: string; status: 'loaded' | 'fallback' }) => void;
   renderStateId?: string;
@@ -69,7 +75,9 @@ export function BankAvatar({
 
   const color = brand?.color ?? theme.colors.chipText;
   const short = uiBankInitials({ provider }, brand);
-  const fontSize = short.length <= 3 ? size * 0.34 : size * 0.26;
+  const markSize = Math.min(width, height);
+  const fontSize = short.length <= 3 ? markSize * 0.34 : markSize * 0.26;
+  const imageWidth = Math.max(0, width - 2 * inset), imageHeight = Math.max(0, height - 2 * inset);
   const activeSource = sources[sourceIdx];
   const terminalState = decoded
     ? 'decoded' as const
@@ -103,9 +111,9 @@ export function BankAvatar({
     return (
       <View
         style={{
-          width: size,
-          height: size,
-          borderRadius: size / 4,
+          width,
+          height,
+          borderRadius: markSize / 4,
           backgroundColor: '#ffffff',
           alignItems: 'center',
           justifyContent: 'center',
@@ -116,8 +124,9 @@ export function BankAvatar({
         {isSvgLogoSource(activeSource) ? (
           <SvgUri
             uri={activeSource as string}
-            width={size * 0.88}
-            height={size * 0.88}
+            width={imageWidth}
+            height={imageHeight}
+            preserveAspectRatio="xMidYMid meet"
             onLoad={() => {
               setDecoded(true);
               onAssetTerminal?.({ provider, status: 'loaded' });
@@ -129,7 +138,7 @@ export function BankAvatar({
             accessible={false}
             source={typeof activeSource === 'number' ? activeSource : { uri: activeSource }}
             resizeMode="contain"
-            style={{ width: size * 0.88, height: size * 0.88 }}
+            style={{ width: imageWidth, height: imageHeight }}
             onLoad={() => {
               setDecoded(true);
               onAssetTerminal?.({ provider, status: 'loaded' });
@@ -144,9 +153,9 @@ export function BankAvatar({
   return (
     <View
       style={{
-        width: size,
-        height: size,
-        borderRadius: size / 4,
+        width,
+        height,
+        borderRadius: markSize / 4,
         backgroundColor: color,
         alignItems: 'center',
         justifyContent: 'center',
@@ -154,7 +163,7 @@ export function BankAvatar({
       accessible
       accessibilityLabel={uiProviderName({ provider })}
     >
-      <Text accessible={false} style={{ color: contrastText(color), ...fontStyle('700'), fontSize }}>
+      <Text accessible={false} allowFontScaling={false} style={{ color: contrastText(color), ...fontStyle('700'), fontSize }}>
         {short}
       </Text>
     </View>

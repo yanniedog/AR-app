@@ -1,4 +1,5 @@
 import React from 'react';
+import type { RateRow } from '../src/types';
 import TestRenderer, { act } from 'react-test-renderer';
 
 import Search from '../src/components/rates/RatesWorkspace';
@@ -134,7 +135,7 @@ test('a closed suitability gate offers recovery instead of claiming no products 
   act(() => { tree = TestRenderer.create(<Search />); });
   try {
     expect(tree.root.findByType('EmptyState' as any).props.title).toBe('Rates unavailable');
-    expect(tree.root.findAllByProps({ title: 'Clear filters' })).toHaveLength(0);
+    expect(tree.root.findAllByProps({ title: 'Reset Rates view' })).toHaveLength(0);
     expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(true);
     expect(mockSurfaces.get('rates.results').probes.find((probe: any) => probe.id === 'search.list').status).toBe('pending');
     act(() => tree.root.findByProps({ title: 'Retry' }).props.onPress());
@@ -161,7 +162,7 @@ test('a verified empty result still offers the normal filter controls', () => {
   act(() => { tree = TestRenderer.create(<Search />); });
   try {
     expect(tree.root.findByType('EmptyState' as any).props.title).toBe('No matching products');
-    expect(tree.root.findAllByProps({ title: 'Clear filters' })).toHaveLength(1);
+    expect(tree.root.findAllByProps({ title: 'Reset Rates view' })).toHaveLength(1);
     expect(tree.root.findAllByProps({ title: 'Retry' })).toHaveLength(0);
   } finally { act(() => tree.unmount()); }
 });
@@ -292,7 +293,7 @@ test('audit comparison reports a missing filtered rate immediately and can clear
     act(() => mockSurfaces.get('rates.results').actions['search.filters.apply']());
     expect(tree.root.findByType('FlashList' as any).props.data).toHaveLength(0);
     expect(mockSurfaces.get('rates.results').actions['search.compare.select.0']({ selectionToken: 'missing' }))
-      .toEqual({ unavailableReason: 'The selected exact rate is not in the current filtered search results' });
+      .toEqual({ unavailableReason: 'The selected exact rate is not on the rendered results page' });
     act(() => mockSurfaces.get('rates.results').actions['search.filters.clear']());
     expect(tree.root.findByType('FlashList' as any).props.data.length).toBeGreaterThan(0);
   } finally { act(() => tree.unmount()); }
@@ -431,16 +432,19 @@ test('filter Cancel discards the real draft and preserves query/type/sort/offset
     expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 0, animated: false });
   } finally { act(() => tree.unmount()); }
 });
-test('the canonical list has no five-row preview gate and product taps preserve the exact rate', () => {
+test('the canonical list pages all 24 rows in groups of 20 and taps preserve the exact rate', () => {
   mockState.prefs.includeNonStandard = true;
   const sample = mockState.core.sections.TD.rates[0];
   mockState.core.sections.TD.rates = Array.from({ length: 24 }, (_, index) => ({ ...sample, product_key: 'p-' + index, rate_index: index, rate: '0.045' }));
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
-    const list = tree.root.findByType('FlashList' as any); expect(list.props.data).toHaveLength(24);
+    const list = tree.root.findByType('FlashList' as any); expect(list.props.data).toHaveLength(20);
+    expect(list.props.ListFooterComponent.props).toMatchObject({ total: 24, page: 1, size: 20 });
     const card = tree.root.findAllByType('ProductCard' as any)[0]; act(() => card.props.onPress());
     expect(router.push).toHaveBeenCalledWith({ pathname: '/product/[key]', params: { key: card.props.row.product_key, ri: String(card.props.row.rate_index) } });
     expect(mockSurfaces.get('rates.results').routeKey).toBe('/browse');
+    act(() => list.props.ListFooterComponent.props.onPage(2));
+    expect(list.props.data.map((row: RateRow) => row.rate_index)).toEqual([20, 21, 22, 23]);
   } finally { act(() => tree.unmount()); }
 });
 test('unlisted entries stay verified product identities without fabricated rates or description UI', () => {
@@ -521,7 +525,7 @@ test.each([
     expect(actions.props.icon).toBe('ellipsis-horizontal');
     expect(tree.root.findByProps({ testID: 'rates-task-controls' }).findAllByType('AppText' as any).map((node: any) =>
       React.Children.toArray(node.props.children).join(''))).toEqual([
-        tree.root.findByType('FlashList' as any).props.data.length + ' results', 'Advertised',
+        tree.root.findByType('FlashList' as any).props.data.length + ' rates', 'Advertised',
       ]);
     expect(tree.root.findByType('FlashList' as any).props.contentContainerStyle.paddingTop).toBe(0);
     act(() => controls[0].props.onPress());
@@ -529,7 +533,7 @@ test.each([
     expect(filter.props.visible).toBe(true);
     act(() => filter.props.onApply({ ...filter.props.filters, providers: ['Macquarie'] }));
     expect(controls[0].props.badge).toBe(1);
-    expect(controls[0].props.accessibilityLabel).toBe('Filter (1)');
+    expect(controls[0].props.accessibilityLabel).toBe('Temporary filters (1)');
     act(() => controls[1].props.onPress());
     expect(tree.root.findAllByType('SheetSurface' as any).some((node: any) => node.props.visible && node.props.title === 'Sort')).toBe(true);
     act(() => controls[2].props.onPress());
@@ -555,7 +559,7 @@ test.each([[411, 1], [360, 2]])('task controls remain outside a scrolled list at
   try {
     const list = tree.root.findByType('FlashList' as any);
     const controls = tree.root.findByProps({ testID: 'rates-task-controls' });
-    expect(list.props.ListHeaderComponent).toBeUndefined();
+    expect(list.props.ListHeaderComponent).toBeDefined();
     expect(list.findAllByType('SearchBar' as any)).toHaveLength(0);
     expect(controls.findAllByType('SearchBar' as any)).toHaveLength(1);
     act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 2400 } } }));

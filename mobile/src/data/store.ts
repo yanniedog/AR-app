@@ -4,6 +4,7 @@ import { create } from 'zustand';
 
 import { DEFAULT_INTERESTS, normalizeInterests, resolveInterestSection } from './interests';
 import { normalizeProfileFilters } from './profile';
+import { normalizeRatesPageSize } from './ratesPagination';
 import { normalizeCalcInputs } from './calc';
 import { migrateLegacyCalculatorInputs } from './userRateScenario';
 import { bootstrapInitialState, createBootstrapActions } from './storeBootstrap';
@@ -114,6 +115,7 @@ export const useStore = create<AppState>()(
           ...migratedMortgageRatePreference(persistedPrefs),
           interests: normalizeInterests(persistedPrefs?.interests ?? DEFAULT_INTERESTS),
           profileFilters: normalizeProfileFilters(persistedPrefs?.profileFilters),
+          ratesPageSize: normalizeRatesPageSize(persistedPrefs?.ratesPageSize),
           calc: normalizeCalcInputs(persistedPrefs?.calc),
         };
         const persistedActiveSection = p?.activeSection;

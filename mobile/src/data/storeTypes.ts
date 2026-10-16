@@ -45,6 +45,8 @@ export interface Prefs {
   /** Explicit standing consent to download verified APK updates after an automatic check. */
   apkUpdatesAutoDownload: boolean;
   includeNonStandard: boolean;
+  /** Rates pagination only; does not truncate filtering, sorting or comparisons. */
+  ratesPageSize: 10 | 20;
   /** How savings & term-deposit lists rank: 'base' ongoing rate (default, honest)
    *  vs 'max' headline/bonus rate. Mirrors RankMetric in data/selectors. */
   depositRankMetric: 'base' | 'max';
@@ -104,6 +106,7 @@ export const DEFAULT_PREFS: Prefs = {
   apkUpdatesWifiOnly: true,
   apkUpdatesAutoDownload: false,
   includeNonStandard: false,
+  ratesPageSize: 20,
   depositRankMetric: 'base',
   mortgageRateMetric: 'comparison',
   mortgageRatePreferenceVersion: CURRENT_MORTGAGE_RATE_PREFERENCE_VERSION,

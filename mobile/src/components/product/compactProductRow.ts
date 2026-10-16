@@ -5,6 +5,15 @@ import { uiCount, uiJoin, uiLabel, uiMoney, type UiCopy, type UiText } from '../
 import type { RateRow, SectionKey } from '../../types';
 
 export const COMPACT_ROW = { action: 48, gap: 4, fontSize: 14, icon: 12, minHeight: 56 } as const;
+/** The row's text determines its height. Artwork fits inside that height, never grows it. */
+export function compactBankLogoFrame(width: number, rowHeight: number, fontScale: number, border = 0) {
+  const inset = 3;
+  const height = Math.max(0, rowHeight - 2 * inset - border);
+  // Preserve a full metric rail on narrow/large-text screens. Wide marks remain
+  // contained (letterboxed when necessary), rather than cropped or distorted.
+  const maximum = Math.max(48, Math.min(112, width - 232 * Math.max(1, fontScale)));
+  return { width: Math.min(maximum, Math.max(48, height * 2)), height, inset };
+}
 const peerCache = new WeakMap<readonly RateRow[], Map<string, Set<RateRow>>>();
 
 /** One index per immutable source section/metric, never a section scan per row. */
@@ -89,8 +98,9 @@ export interface CompactProductRowLayout {
 /** A single rail, with no text scaling cap, numeric ellipsis or horizontal scroll. */
 export function compactProductRowLayout(width: number, fontScale: number, primary: UiText,
   secondary: UiText | null, facet: CompactProductFacet, statusIcons: number,
-  measuredPrimary = 0, measuredSecondary = 0, tier: UiText | null = null, hasPeers = false): CompactProductRowLayout {
-  const main = Math.max(0, width - 2 * COMPACT_ROW.action - 2 * COMPACT_ROW.gap);
+  measuredPrimary = 0, measuredSecondary = 0, tier: UiText | null = null, hasPeers = false,
+  logoWidth: number = COMPACT_ROW.action): CompactProductRowLayout {
+  const main = Math.max(0, width - logoWidth - COMPACT_ROW.action - 2 * COMPACT_ROW.gap);
   const primaryTextWidth = Math.max(compactFactWidth(primary, fontScale), measuredPrimary);
   const secondaryWidth = secondary === null ? 0
     : Math.max(compactFactWidth(secondary, fontScale), measuredSecondary) + COMPACT_ROW.icon + 2;
