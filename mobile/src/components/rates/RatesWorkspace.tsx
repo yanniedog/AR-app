@@ -375,20 +375,23 @@ export default function RatesWorkspace() {
     if (!token || !pageRows.some(row => 'product_key' in row && rowToken(row) === token)) {
       return { unavailableReason: 'The selected exact rate is not on the rendered results page' };
     }
+    if (!selectMode) return { unavailableReason: 'Comparison selection is not active' };
     toggleSelect(token);
-  }, [pageRows, toggleSelect]);
+  }, [pageRows, selectMode, toggleSelect]);
   const prepareAuditComparePage = useCallback((...args: unknown[]) => {
     const token = auditActionString(args, 'selectionToken');
     const resultIndex = token ? resultRows.findIndex(row => 'product_key' in row && rowToken(row) === token) : -1;
     if (!token || resultIndex < 0) return { unavailableReason: 'The selected exact rate is not in the filtered results' };
     const requestedPage = Math.floor(resultIndex / pageSize) + 1;
     const evidence: RatesAuditPagePreparation = { selectionToken: token, resultIndex, pageSize,
-      pageBefore: pagination.page, requestedPage,
+      pageBefore: pagination.page, selectionModeBefore: selectMode, requestedPage,
       renderedSelectionToken: pageRows.some(row => 'product_key' in row && rowToken(row) === token) ? token : null };
-    // Navigate only; the following selection still requires the fresh rendered page.
-    if (requestedPage !== pagination.page) updateRatesSection(section, { page: requestedPage }, true);
+    // Prepare visible controls only; selection still requires the fresh rendered page.
+    if (requestedPage !== pagination.page || !selectMode) {
+      updateRatesSection(section, { page: requestedPage, selectMode: true }, requestedPage !== pagination.page);
+    }
     return evidence;
-  }, [pageRows, pageSize, pagination.page, resultRows, section]);
+  }, [pageRows, pageSize, pagination.page, resultRows, section, selectMode]);
   const auditActions = useMemo(() => ({
     'search.open': () => undefined,
     'search.section.next': () => changeSection(SECTION_ORDER[(SECTION_ORDER.indexOf(section) + 1) % SECTION_ORDER.length]),

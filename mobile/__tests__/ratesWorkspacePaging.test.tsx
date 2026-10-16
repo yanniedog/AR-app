@@ -111,14 +111,14 @@ test('comparison uncertainty counts the complete filtered result set, not the pr
   } finally { act(() => tree.unmount()); }
 });
 
-test.each([10, 20] as const)('the seeded audit reaches exact later-page targets and restores the mounted %s-row session', pageSize => {
+test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seeded audit reaches exact later-page targets and restores the mounted %s-row session with initial comparison mode %s', (pageSize, initialMode) => {
   const catalogue = Array.from({ length: 45 }, (_, i) => ({ product_key: `p-${String(i).padStart(2, '0')}`,
     product_name: `Loan ${String(i).padStart(2, '0')}`, provider: 'Bank', rate_index: i,
     rate: String((500 + i) / 10000), comparison_rate: String((510 + i) / 10000), account_class: 'standard' }));
   mockStore.setState((state: any) => ({ prefs: { ...state.prefs, ratesPageSize: pageSize },
     core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: catalogue } } } }));
   install();
-  updateRatesSection('Mortgage', { query: 'Loan', selected: ['1#p-01'], selectMode: true });
+  updateRatesSection('Mortgage', { query: 'Loan', selected: ['1#p-01'], selectMode: initialMode });
   updateRatesSection('Mortgage', { page: 2 }); recordRatesScroll('Mortgage', 137);
   useMortgageComparison.setState({ loanAmount: '123456', lvr: '78' });
   const before = captureRatesSession(), preferences = JSON.parse(JSON.stringify(mockStore.getState().prefs));
@@ -133,6 +133,10 @@ test.each([10, 20] as const)('the seeded audit reaches exact later-page targets 
     for (const step of steps) {
       const action = surface().actions![step.semanticActionId];
       expect(action).toEqual(expect.any(Function));
+      if (step.semanticActionId.startsWith('search.compare.select.')) {
+        expect(useRatesSession.getState().sections.Mortgage.selectMode).toBe(true);
+        expect(tree.root.findAllByType('ProductCard').every((card: any) => card.props.selectMode === true)).toBe(true);
+      }
       let result: unknown;
       act(() => { result = action(step.parameters); });
       expect(result ?? {}).not.toHaveProperty('unavailableReason');
@@ -169,6 +173,42 @@ test.each([10, 20] as const)('the seeded audit reaches exact later-page targets 
     expect(list().data[0].rate_index).toBe(pageSize);
     act(() => tree.unmount());
   }
+});
+
+test('same-page preparation activates visible controls before selection without resetting scroll or selections', () => {
+  updateRatesSection('Mortgage', { selected: ['0#p-0'], selectMode: false });
+  recordRatesScroll('Mortgage', 137);
+  const tree = mount();
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  try {
+    expect(surface().actions!['search.compare.select.1']({ selectionToken: '1#p-1' })).toHaveProperty('unavailableReason');
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['0#p-0']);
+    let result: unknown;
+    act(() => { result = surface().actions!['search.compare.page.1']({ selectionToken: '1#p-1' }); });
+    expect(isVerifiedRatesPagePreparation('search.compare.page.1', '1#p-1', result)).toBe(false);
+    expect(useRatesSession.getState().sections.Mortgage).toMatchObject({ page: 1, selectMode: true, scrollOffset: 137, selected: ['0#p-0'] });
+    expect(tree.root.findAllByType('ProductCard').every((card: any) => card.props.selectMode === true)).toBe(true);
+    act(() => { surface().actions!['search.compare.select.1']({ selectionToken: '1#p-1' }); });
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['0#p-0', '1#p-1']);
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each([10, 20] as const)('target pages use the sorted filtered results with %s rows per page', pageSize => {
+  mockStore.setState((state: any) => ({ prefs: { ...state.prefs, ratesPageSize: pageSize } }));
+  updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS, includeNonStandard: true, providers: ['B'] } });
+  const tree = mount();
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  try {
+    let result: unknown;
+    act(() => { result = surface().actions!['search.compare.page.0']({ selectionToken: '35#p-35' }); });
+    expect(result).toMatchObject({ resultIndex: 17, requestedPage: pageSize === 10 ? 2 : 1 });
+    const rendered = tree.root.findByType('FlashList').props.data;
+    expect(rendered.every((row: any) => row.provider === 'B')).toBe(true);
+    expect(rendered.some((row: any) => row.rate_index === 35)).toBe(true);
+    expect(rendered[0].rate_index).toBe(pageSize === 10 ? 21 : 1);
+    act(() => { surface().actions!['search.compare.select.0']({ selectionToken: '35#p-35' }); });
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['35#p-35']);
+  } finally { act(() => tree.unmount()); }
 });
 
 test('cancelled page preparation restores page, selection and scroll; absent or filtered targets never mutate state', () => {
