@@ -2,6 +2,7 @@ import { ROOT } from '../data/taxonomy';
 import { EMPTY_FILTERS, filterRows } from '../data/selectors';
 import { isSuitabilityFilterReady } from '../data/suitabilityGate';
 import { savedRateId } from '../data/savedRates';
+import { publicOfferSelectionToken } from '../data/publicOfferIdentity';
 import { SECTION_KEYS, type CorePayload, type ProductDetail, type RateRow, type SectionKey } from '../types';
 import { MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID } from './performanceAuditProfile';
 
@@ -60,6 +61,8 @@ export interface DeepAuditExactProduct {
   productName: string;
   /** Exact tier identity. Null means the source row did not publish an index. */
   rateIndex: number | null;
+  offerId?: string;
+  programmeId?: string;
   selectionToken: string;
   taxonomyPath: string[];
 }
@@ -262,7 +265,9 @@ function stratifiedRows(rows: RateRow[], random: () => number): RateRow[] {
     const products = providers.get(provider)!;
     return shuffled([...products.keys()].sort(), random).map(key => {
       const tiers = products.get(key)!.slice().sort((a, b) =>
-        (exactRateIndex(a) ?? -1) - (exactRateIndex(b) ?? -1));
+        (exactRateIndex(a) ?? -1) - (exactRateIndex(b) ?? -1) ||
+        (a.public_offer_id ?? '').localeCompare(b.public_offer_id ?? '') ||
+        (a.public_programme_id ?? '').localeCompare(b.public_programme_id ?? ''));
       return tiers[Math.floor(random() * tiers.length)];
     });
   });
@@ -287,7 +292,9 @@ function exactProduct(row: RateRow, section: SectionKey): DeepAuditExactProduct 
     productKey: row.product_key,
     productName: row.product_name,
     rateIndex,
-    selectionToken: selectionToken(row.product_key, rateIndex),
+    selectionToken: row.public_offer_id ? publicOfferSelectionToken(row.product_key, row.public_offer_id) : selectionToken(row.product_key, rateIndex),
+    ...(row.public_offer_id ? { offerId: row.public_offer_id } : {}),
+    ...(row.public_programme_id ? { programmeId: row.public_programme_id } : {}),
     taxonomyPath: taxonomyPath(row, section),
   };
 }
@@ -403,6 +410,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
         provider: primary.provider,
         productKey: primary.productKey,
         rateIndex: primary.rateIndex,
+        ...(primary.programmeId ? { programmeId: primary.programmeId } : {}),
       }
     : {};
   const compareParameters: Record<string, DeepAuditParameter> = {
@@ -665,7 +673,8 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
       {
         depth: 0, semanticActionId: 'product.open',
         parameters: { section: product.section, provider: product.provider,
-          productKey: product.productKey, rateIndex: product.rateIndex },
+          productKey: product.productKey, rateIndex: product.rateIndex,
+          ...(product.programmeId ? { programmeId: product.programmeId } : {}) },
       },
       {
         depth: 1, semanticActionId: 'product.lender.open',
@@ -868,7 +877,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 1, semanticActionId: 'saved.fixture.ensure-exact-pair', parameters: compareParameters, stateImpact: 'restorable' },
     { depth: 1, semanticActionId: 'saved.product.open', expectedPath: productPath, expectedSurface: 'product.details',
       readiness: ['details', 'logos'], stateImpact: 'local-only',
-      parameters: primary ? { savedId: savedRateId(primary.productKey, primary.rateIndex, primary.rateIndex == null ? 'product' : 'rate') } : {} },
+      parameters: primary ? { savedId: savedRateId(primary.productKey, primary.rateIndex, primary.offerId || primary.rateIndex != null ? 'rate' : 'product', primary.offerId) } : {} },
     { depth: 2, semanticActionId: 'product.calculate.open', expectedPath: '/calculator', expectedSurface: 'calculator.results',
       readiness: ['details', 'scenario-storage', 'suitability', 'list'], stateImpact: 'local-only',
       parameters: exactProductParameters },

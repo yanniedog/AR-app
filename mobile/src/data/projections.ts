@@ -1,5 +1,5 @@
 import { computeLvr, num } from './calc';
-import { toFraction } from './format';
+import { estimateEnteredRate } from './publicRateLocal';
 import type { ProjectionFrequency, ProjectionInputs } from './projectionScenario';
 import type { UserRateScenario } from './userRateScenario';
 import type { SectionKey } from '../types';
@@ -54,7 +54,7 @@ export interface LifecycleProjection {
   facts: readonly ProjectionFact[];
   defaultMetric: ProjectionMetric;
   availableMetrics: ProjectionMetric[];
-  projectionScope: 'full-term' | 'fixed-period' | 'savings-horizon' | 'term-deposit-maturity';
+  projectionScope: 'full-term' | 'comparison-period' | 'fixed-period' | 'savings-horizon' | 'term-deposit-maturity';
 }
 
 export interface MortgageOffsetImpact {
@@ -67,7 +67,7 @@ export interface MortgageOffsetImpact {
   /** A net saving cannot be stated until applicable offset/package fees are known. */
   netDifference: null;
   feeCoverage: 'unverified';
-  comparisonScope: 'fixed-period' | 'remaining-term';
+  comparisonScope: 'fixed-period' | 'comparison-period' | 'remaining-term';
   comparisonMonths: number;
 }
 
@@ -88,13 +88,10 @@ function rawNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-/** Parse user-entered rates as percent or fraction, aligned with {@link toFraction}. Allows 0%. */
+/** Every local rate field is labelled in percentage points, including values below 1%. */
 function percentageFraction(value: string): number | null {
-  if (!value.trim()) return null;
-  const cleaned = value.replace(/[,%\s]/g, '');
-  if (cleaned === '0' || cleaned === '0.0' || cleaned === '0.00') return 0;
-  const fraction = toFraction(cleaned);
-  return fraction != null && fraction <= 1 ? fraction : null;
+  const result = estimateEnteredRate(value);
+  return result.status === 'exact' && result.payableRate != null ? Number(result.payableRate) : null;
 }
 
 function isoDate(value: Date): string {
@@ -477,7 +474,7 @@ export function mortgageOffsetImpact(result: LifecycleProjection): MortgageOffse
     payoffMonthsEarlier,
     netDifference: null,
     feeCoverage: 'unverified',
-    comparisonScope: result.projectionScope === 'fixed-period' ? 'fixed-period' : 'remaining-term',
+    comparisonScope: result.projectionScope === 'fixed-period' ? 'fixed-period' : result.projectionScope === 'comparison-period' ? 'comparison-period' : 'remaining-term',
     comparisonMonths: projectedMonths,
   };
 }
@@ -502,7 +499,8 @@ export function buildLifecycleProjection(
     const remainingMonths = Math.round(enteredYears * 12);
     const fixedRate = inputs.mortgageRateStructure === 'fixed';
     const fixedPeriodMonths = Math.round(cleanNumber(inputs.fixedPeriodMonths));
-    const months = fixedRate ? Math.min(remainingMonths, fixedPeriodMonths) : remainingMonths;
+    const comparisonMonths = Math.round(cleanNumber(inputs.horizonYears || '3') * 12);
+    const months = Math.min(remainingMonths, comparisonMonths, fixedRate ? fixedPeriodMonths : remainingMonths);
     const missing = [
       ...(balance > 0 && balance <= MAX_MORTGAGE_BALANCE ? [] : ['current loan balance up to $100 million']),
       ...(annualRate != null ? [] : ['current interest rate from 0% to 100%']),
@@ -512,6 +510,8 @@ export function buildLifecycleProjection(
       ...(fixedRate && (fixedPeriodMonths <= 0 || fixedPeriodMonths > remainingMonths)
         ? ['fixed period no longer than the remaining term']
         : []),
+      ...(comparisonMonths > 0 && comparisonMonths <= MAX_PROJECTION_YEARS * 12 ? [] : ['valid comparison period']),
+      ...(!fixedRate && !inputs.holdVariableRate ? ['explicit assumption to hold variable rates unchanged'] : []),
     ];
     if (annualRate != null) missing.push(...optionalInputErrors(inputs, annualRate, today, balance));
     if (missing.length) return emptyProjection(section, today, missing);
@@ -594,7 +594,7 @@ export function buildLifecycleProjection(
       history,
       rateSeries,
       offsetSeries,
-      facts: projectionFacts({ section: 'Mortgage', months, remainingYears: enteredYears, fixed: fixedRate,
+      facts: projectionFacts({ section: 'Mortgage', months, remainingYears: enteredYears, fixed: fixedRate, comparisonPeriod: months < remainingMonths && !(fixedRate && months === fixedPeriodMonths),
         rateRange: [lowerRate, baseRate, higherRate], history: historySnapshot,
         repayment: { ...cashflowInput(inputs.periodicAmount, inputs.periodicFrequency, repayment), source: enteredRepayment ? 'entered' : 'illustrative' },
         extraRepayment: cashflowInput(inputs.extraRepaymentAmount, inputs.extraRepaymentFrequency, extraRepayment),
@@ -611,7 +611,8 @@ export function buildLifecycleProjection(
         'periodRatio',
         'cumulativeRatio',
       ],
-      projectionScope: fixedRate ? 'fixed-period' : 'full-term',
+      projectionScope: fixedRate && months === fixedPeriodMonths ? 'fixed-period'
+        : months === remainingMonths ? 'full-term' : 'comparison-period',
     };
   }
 
@@ -624,15 +625,21 @@ export function buildLifecycleProjection(
   ];
   const enteredTermMonths = cleanNumber(inputs.termMonths);
   const enteredRollovers = cleanNumber(inputs.rollovers);
-  const enteredHorizonYears = cleanNumber(inputs.horizonYears);
+  const enteredHorizonYears = cleanNumber(inputs.horizonYears || '1');
   const bonusSavings = section === 'Savings' && inputs.savingsRateStructure === 'conditional-bonus';
-  const ongoingRate = bonusSavings ? percentageFraction(inputs.ongoingRate) : annualRate;
+  if (section === 'Savings' && !inputs.holdVariableRate) missing.push('explicit assumption to hold variable rates unchanged');
+  if (bonusSavings && inputs.bonusQualification === 'unknown') missing.push('whether the bonus conditions will be met');
+  const renewalRate = section === 'TD' && inputs.renewalRate.trim() ? percentageFraction(inputs.renewalRate) : null;
+  const ongoingRate = bonusSavings ? percentageFraction(inputs.ongoingRate) : section === 'TD' && enteredRollovers > 0 && renewalRate != null ? renewalRate : annualRate;
   const bonusMonths = cleanNumber(inputs.bonusMonthsRemaining);
   if (section === 'TD' && (!Number.isInteger(enteredTermMonths) || enteredTermMonths < 1 || enteredTermMonths > 120)) {
     missing.push('whole-number term from 1 to 120 months');
   }
   if (section === 'TD' && (!Number.isInteger(enteredRollovers) || enteredRollovers < 0 || enteredRollovers > 10)) {
     missing.push('whole-number rollovers from 0 to 10');
+  }
+  if (section === 'TD' && enteredRollovers > 0 && (inputs.renewalRate.trim() ? renewalRate == null : !inputs.holdVariableRate)) {
+    missing.push('an explicit local renewal rate or assumption to reuse the quoted rate');
   }
   if (section === 'Savings' && (!(enteredHorizonYears > 0) || enteredHorizonYears > MAX_PROJECTION_YEARS)) {
     missing.push(`projection horizon above 0 and up to ${MAX_PROJECTION_YEARS} years`);
@@ -676,7 +683,8 @@ export function buildLifecycleProjection(
   }
 
   const [lowerRate, baseRate, higherRate] = rateRange(ongoingRate!, inputs);
-  const ongoingBaseLabel = bonusSavings && inputs.bonusConditionsMet ? 'Ongoing rate' : 'Current rate';
+  const bonusConditionsMet = inputs.bonusQualification === 'met';
+  const ongoingBaseLabel = bonusSavings && inputs.bonusQualification === 'met' ? 'Ongoing rate' : section === 'TD' && enteredRollovers > 0 ? 'Local renewal rate' : 'Current rate';
   const rates: [ProjectionSeriesId, UiLabel, number][] = [
     ['rate-lower', 'Lower rate', lowerRate],
     ['rate-base', ongoingBaseLabel, baseRate],
@@ -715,9 +723,9 @@ export function buildLifecycleProjection(
       simulateSavings({
         date: today,
         balance,
-        annualRate: bonusSavings && inputs.bonusConditionsMet ? annualRate! : rate,
+        annualRate: bonusSavings && bonusConditionsMet ? annualRate! : rate,
         annualRateAfter: rate,
-        rateChangesAfterMonths: bonusSavings && inputs.bonusConditionsMet ? bonusMonths : 0,
+        rateChangesAfterMonths: bonusSavings && bonusConditionsMet ? bonusMonths : 0,
         months,
         contribution,
         withdrawal,
@@ -741,7 +749,7 @@ export function buildLifecycleProjection(
         rateRange: [lowerRate, baseRate, higherRate], history: historySnapshot,
         contribution: cashflowInput(inputs.periodicAmount, inputs.periodicFrequency, contribution),
         withdrawal: cashflowInput(inputs.withdrawalAmount, inputs.withdrawalFrequency, withdrawal),
-        bonus: bonusSavings ? { conditionsMet: inputs.bonusConditionsMet, months: bonusMonths,
+        bonus: bonusSavings ? { conditionsMet: inputs.bonusQualification === 'met', months: bonusMonths,
           conditionalRateFraction: annualRate!, ongoingRateFraction: ongoingRate! } : null }),
     defaultMetric: 'balance',
     availableMetrics: section === 'TD'

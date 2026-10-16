@@ -82,6 +82,11 @@ import {
   auditActionString,
 } from '../../src/lib/performanceAuditActionParams';
 import { ratePresentation } from '../../src/data/ratePresentation';
+import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
+import { bindCurrentPublicRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
+import { publicRateOriginLabel, publicRateText } from '../../src/data/publicRatePresentation';
+import { PublicRateEvidence } from '../../src/components/scenario/PublicRateEvidence';
+import { PublicCostComparison } from '../../src/components/scenario/PublicCostComparison';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { HEADER_TYPOGRAPHY } from '../../src/theme/typography';
 import {
@@ -107,18 +112,28 @@ const MemoMortgagePeriodCalculation = React.memo(MortgagePeriodCalculation);
 export default function ProductDetail() {
   const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
-  const { key, ri } = useLocalSearchParams<{ key: string; ri?: string }>();
+  const { key, ri, programme: requestedProgramme } = useLocalSearchParams<{ key: string; ri?: string; programme?: string }>();
   const productKey = key ?? '';
   const exactRateRequested = ri != null && ri !== '';
   const parsedRateIndex = exactRateRequested ? Number(ri) : null;
   const rateIndex = parsedRateIndex != null && Number.isInteger(parsedRateIndex) ? parsedRateIndex : null;
   const core = useStore((s) => s.core);
+  const manifest = useStore((s) => s.manifest);
+  const profile = useStore((s) => s.prefs?.profileFilters);
+  const publicCatalogue = usePublicRateCatalogue(manifest);
+  const publicProduct = publicCatalogue.getProduct(productKey);
+  const { scenario } = useUserRateScenario();
+  const pricingScenario = publicProduct ? scenario : undefined;
   const found = useMemo(
     () => {
       void suitabilityRevision;
-      return core ? findEligibleByKey(core.sections, productKey) : null;
+      if (!core) return null;
+      const sections = publicProduct ? { ...core.sections, [publicProduct.section]: { ...core.sections[publicProduct.section],
+        rates: publicRecommendationRows(core.sections[publicProduct.section].rates, publicCatalogue, publicProduct.section,
+          publicRateScenario(publicProduct.section, pricingScenario, profile)) } } : core.sections;
+      return findEligibleByKey(sections, productKey);
     },
-    [core, productKey, suitabilityRevision],
+    [core, productKey, suitabilityRevision, publicCatalogue, publicProduct, pricingScenario, profile],
   );
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const rateConditionManifest = useStore(s => s.manifest);
@@ -165,7 +180,6 @@ export default function ProductDetail() {
   const [headerActionsWidth, setHeaderActionsWidth] = useState(0);
   const [historyGraphicEvidence, setHistoryGraphicEvidence] =
     useState<HistoryGraphicEvidence | null>(null);
-  const { scenario } = useUserRateScenario();
 
   useEffect(() => {
     let current = true;
@@ -220,13 +234,22 @@ export default function ProductDetail() {
     productKey,
   ]);
 
-  const row = found
-    ? exactRateRequested
+  const unboundRow = found
+    ? requestedProgramme ? found.siblings.find(candidate => bindCurrentPublicRow(candidate, publicCatalogue).public_programme_id === requestedProgramme) ?? null
+    : exactRateRequested
       ? rateIndex == null
         ? null
         : found.siblings.find((candidate) => candidate.rate_index === rateIndex) ?? null
       : found.row
     : null;
+  const boundRow = useMemo(() => unboundRow ? bindCurrentPublicRow(unboundRow, publicCatalogue) : null, [unboundRow, publicCatalogue]);
+  const publicResolution = useMemo(() => boundRow && found ? resolveRowPublicRate(boundRow, publicCatalogue, publicRateScenario(found.section, scenario, profile, boundRow)) : undefined,
+    [boundRow, found, publicCatalogue, scenario, profile]);
+  const row = useMemo(() => boundRow && publicResolution ? { ...boundRow, rate: publicResolution.status === 'exact' && publicResolution.verifiedCurrent ? publicResolution.payableRate ?? '' : '' } : boundRow,
+    [boundRow, publicResolution]);
+  const calculationScenario = useMemo(() => found ? scenarioWithLocalCurrentRate(found.section, scenario,
+    resolveLocalCurrentRate(found.section, scenario, publicCatalogue.references, undefined, publicCatalogue, profile)) : scenario,
+  [found, scenario, publicCatalogue, profile]);
   const rateRows = useMemo(() => found
     ? sortRows(found.siblings, 'rate', found.section, depositRankMetric, mortgageRateMetric)
     : [], [found, depositRankMetric, mortgageRateMetric]);
@@ -252,12 +275,12 @@ export default function ProductDetail() {
       { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity }))) return null;
     const currentRef = scenario.currentProducts.mortgage;
     return buildStaySwitchProjection({
-      scenario,
+      scenario: calculationScenario,
       target: row,
-      currentDetail: currentRef.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts[currentRef.productKey] : null,
+      currentDetail: currentRef?.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts[currentRef.productKey] : null,
       targetDetail: detail,
     });
-  }, [detail, detailsProducts, found?.section, row, scenario, core, detailsPayload, rateConditionManifest, coreIntegrity]);
+  }, [detail, detailsProducts, found?.section, row, scenario, calculationScenario, core, detailsPayload, rateConditionManifest, coreIntegrity]);
   const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
     && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
     ? scenario.currentProducts.mortgage.provider
@@ -360,7 +383,7 @@ export default function ProductDetail() {
       'product.open': () => undefined,
       'product.calculate.open': openCalculate,
       'product.receipt.open': () => {
-        if (row) openRateReceipt(productKey, row.rate_index);
+        if (row) openRateReceipt(productKey, row.rate_index, row.public_programme_id);
       },
       'product.lender.open': (...args: unknown[]) => {
         const provider = auditActionString(args, 'provider') || row?.provider || null;
@@ -500,12 +523,14 @@ export default function ProductDetail() {
     return <><Stack.Screen options={{ title: 'Product unavailable' }} /><EmptyState icon="alert-circle-outline" title={!isMandatoryEligibilityReady() ? 'Loading' : 'Unavailable'} /></>;
   }
   if (!found) {
+    if (publicProduct) return <DetailsOnlyProduct productKey={productKey} programmeId={requestedProgramme} />;
     if (exactRateRequested) return <><Stack.Screen options={{ title: 'Product rate unavailable' }} /><EmptyState icon="alert-circle-outline" title="Exact rate no longer available" /></>;
     return <DetailsOnlyProduct productKey={productKey} />;
   }
 
   const { section } = found;
   if (!row) {
+    if (publicProduct) return <DetailsOnlyProduct productKey={productKey} programmeId={requestedProgramme} />;
     return (
       <>
         <Stack.Screen options={{ title: 'Product rate unavailable' }} />
@@ -517,9 +542,9 @@ export default function ProductDetail() {
       </>
     );
   }
-  const exactSaveEligible = row.exact_alert_eligible !== false && Number.isInteger(row.rate_index);
+  const exactSaveEligible = row.exact_alert_eligible !== false && (!!row.public_offer_id || Number.isInteger(row.rate_index));
   const saveScope = exactSaveEligible ? 'rate' : 'product';
-  const favorite = isSavedRate(savedRates, productKey, exactSaveEligible ? row.rate_index! : null);
+  const favorite = isSavedRate(savedRates, productKey, exactSaveEligible ? row.rate_index ?? null : null, row.public_offer_id);
   const productWideSaved = savedRates.some(
     (ref) => ref.scope === 'product' && ref.productKey === productKey,
   );
@@ -606,10 +631,10 @@ export default function ProductDetail() {
 
         <View style={{ marginBottom: 16, gap: 4 }}>
           <AppText variant="small" color="textMuted">
-            {presentation.primaryLabel}
+            {publicResolution ? publicRateOriginLabel(publicResolution) : presentation.primaryLabel}
           </AppText>
           <AppText variant="rateHero" weight="700" style={{ color: theme.colors.text }}>
-            {formatRate(presentation.primary)}
+            {publicResolution ? publicRateText(publicResolution) : formatRate(presentation.primary)}
           </AppText>
           {presentation.secondary !== null && presentation.secondaryLabel ? (
             <AppText variant="small" color="textFaint">
@@ -673,6 +698,8 @@ export default function ProductDetail() {
             onPress={openCalculate}
           />
         </Row>
+        <PublicRateEvidence productKey={productKey} row={row} programmeId={requestedProgramme} />
+        <PublicCostComparison section={section} target={row} scenario={calculationScenario} />
 
         <SavedRateActions key={`${productKey}:${row.rate_index ?? 'product'}`} row={row} section={section} />
 
@@ -698,7 +725,7 @@ export default function ProductDetail() {
           icon="receipt-outline"
           variant="secondary"
           style={{ marginBottom: 16 }}
-          onPress={() => openRateReceipt(productKey, row.rate_index)}
+          onPress={() => openRateReceipt(productKey, row.rate_index, row.public_programme_id)}
         />
 
         <SectionTitle text="Published product history" icon="trending-up-outline" />

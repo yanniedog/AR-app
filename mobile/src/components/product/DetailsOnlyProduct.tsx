@@ -1,3 +1,5 @@
+import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
+import { PublicRateEvidence } from '../scenario/PublicRateEvidence';
 import { ActivityPeriodCalculation } from './ActivityPeriodCalculation';
 import { MortgagePeriodCalculation } from './MortgagePeriodCalculation';
 import { SavingsPeriodCalculation } from './SavingsPeriodCalculation';
@@ -11,15 +13,18 @@ import { ScreenScrollView } from '../Screen';
 import { AppText, Button } from '../ui';
 import { DetailGroup, OfficialLinks, ProductFacts } from './ProductDetailParts';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
-import { uiLabel, uiDate, uiIdentifier, uiJoin, uiProductName, uiProviderName } from '../../lib/uiCopy';
-export function DetailsOnlyProduct({ productKey }: { productKey: string }) {
+import { uiLabel, uiDate, uiIdentifier, uiJoin, uiProductName, uiProviderName, uiPublicProductName } from '../../lib/uiCopy';
+export function DetailsOnlyProduct({ productKey, programmeId }: { productKey: string; programmeId?: string }) {
   const { details, manifest, loading, retry } = useDetailsCatalogue();
   const detail = details && Object.hasOwn(details.products, productKey) ? details.products[productKey] : null;
   const identity = detailsDisplayIdentity(detail);
+  const catalogue = usePublicRateCatalogue(manifest);
+  const product = catalogue.getProduct(productKey);
   return <ScreenScrollView><Stack.Screen options={{ title: 'Product details' }} /><View style={{ gap: 12 }}>
-    <AppText weight="700">{identity.name ? uiProductName({ product_name: identity.name }) : uiLabel('Product')}
+    <AppText weight="700">{product ? uiPublicProductName(product) : identity.name ? uiProductName({ product_name: identity.name }) : uiLabel('Product')}
     </AppText>
     {(identity.provider || identity.productCategory) && <AppText variant="small">{uiJoin(identity.provider ? uiProviderName({ provider: identity.provider }) : null, identity.productCategory ? uiJoin(' · ', uiIdentifier(identity.productCategory)) : null)}</AppText>}
+    <PublicRateEvidence productKey={productKey} programmeId={programmeId} />
     {detail ? <>
       <AppText variant="small">{uiJoin('Published', ' · ', uiDate(manifest?.run_date), ' · ', 'Rate', ' · ', 'Unavailable')}</AppText>
       <DetailGroup loading={false} icon="cash-outline" title="Fees" items={detail.fees} /><DetailGroup loading={false} icon="person-outline" title="Eligibility" items={detail.eligibility} />

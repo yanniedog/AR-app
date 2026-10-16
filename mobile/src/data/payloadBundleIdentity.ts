@@ -15,5 +15,13 @@ export function payloadBundleIdentity(manifest: Manifest): string {
     ...history,
     file: Object.fromEntries(Object.entries(history.file).filter(([field]) => field !== 'url')),
   };
+  const publicRates = manifest.public_rate_catalogue;
+  if (publicRates && typeof publicRates === 'object' && !Array.isArray(publicRates)) {
+    // Routing changes during immutable publication; byte identities remain frozen.
+    const withoutUrls = (file: unknown): unknown => file && typeof file === 'object' && !Array.isArray(file)
+      ? Object.fromEntries(Object.entries(file).filter(([field]) => field !== 'url')) : file;
+    value.public_rate_catalogue = { ...publicRates, index: withoutUrls(publicRates.index),
+      shards: Array.isArray(publicRates.shards) ? publicRates.shards.map(withoutUrls) : publicRates.shards };
+  }
   return hashText(canonical(value));
 }

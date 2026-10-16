@@ -1,5 +1,6 @@
 import type { Manifest } from '../types';
 import { isValidCalendarDate } from '../lib/calendarDate';
+import { validatePublicRateCapability } from './publicRateWire';
 
 export interface PayloadRevisionHead {
   revision: number;
@@ -46,6 +47,7 @@ export function assertRevisionManifest(manifest: Manifest, head: PayloadRevision
       throw new Error('Revision asset descriptor is invalid or belongs to another generation');
     }
   }
+  if (manifest.public_rate_catalogue !== undefined) validatePublicRateCapability(manifest, repo);
 }
 
 export function assertNoRevisionRollback(installed: Manifest | null | undefined, next: Manifest): void {

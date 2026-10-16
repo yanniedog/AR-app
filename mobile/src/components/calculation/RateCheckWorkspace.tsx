@@ -1,8 +1,13 @@
+import { LocalRateEditor } from '../scenario/LocalRateEditor';
+import { PublicPricingCoverage } from '../scenario/PublicPricingCoverage';
+import { PublicCostComparison } from '../scenario/PublicCostComparison';
+import { SavingsQualificationEditor } from '../scenario/SavingsQualificationEditor';
+import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
+import { publicComparisonCore, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate, resolveRowPublicRate, payableRateForRow } from '../../data/publicRateIntegration';
 import { uiCount, uiDuration, uiInputNumber, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../lib/uiCopy";
 import { uiAccessBadge, uiListedLvr, uiTargetConstraint } from "../../lib/financialUiCopy";
 import { fontStyle } from '../../theme/fonts';
 import { router, useLocalSearchParams } from 'expo-router';
-import { mandatoryProductAllowed } from '../../data/eligibilityGate';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, TextInput, useWindowDimensions, View } from 'react-native';
 
@@ -15,7 +20,7 @@ import { ProfileEditor } from '../../components/ProfileEditor';
 import { CurrentBankPicker } from '../../components/scenario/CurrentBankPicker';
 import { SwitchCostEditor } from '../../components/scenario/SwitchCostEditor';
 import { ScreenScrollView } from '../../components/Screen';
-import { SegmentedControl } from '../../components/controls';
+import { CompactToggle, SegmentedControl } from '../../components/controls';
 import { AppText, Badge, Button, Card, Disclosure, Row } from '../../components/ui';
 import { SECTIONS, SECTION_ORDER } from '../../constants';
 import { assessAccess } from '../../data/access';
@@ -24,7 +29,6 @@ import type { RateConditionContext } from '../../data/rateConditions';
 import {
   advertisedTermMonths,
   calculatorAmount,
-  calculatorRateFraction,
   calculatorYears,
   computeLvr,
   depositToReachLvr,
@@ -36,7 +40,7 @@ import {
   termDepositInterestDifference,
   type CalcInputs,
 } from '../../data/calc';
-import { formatRate, toFraction, visibleAccountRows } from '../../data/format';
+import { formatRate, visibleAccountRows } from '../../data/format';
 import type { CurrentProductReference, MortgageSwitchInputs } from '../../data/userRateScenario';
 import { bestRateForProduct, summarizeProductBestRate } from '../../data/productHistory';
 import {
@@ -99,10 +103,11 @@ export function RateCheckWorkspace() {
   const { width } = useWindowDimensions();
   const compactFields = width < 380;
   const core = useStore((s) => s.core);
+  const manifest = useStore((s) => s.manifest);
+  const publicCatalogue = usePublicRateCatalogue(manifest);
   const storeStatus = useStore((s) => s.status);
   const storeError = useStore((s) => s.error);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
-  const manifest = useStore((s) => s.manifest);
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
@@ -114,7 +119,7 @@ export function RateCheckWorkspace() {
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const setPref = useStore((s) => s.setPref);
   const activeSection = useStore((s) => s.activeSection);
-  const params = useLocalSearchParams<{ intent?: string; section?: string; target?: string | string[]; ri?: string | string[] }>();
+  const params = useLocalSearchParams<{ intent?: string; section?: string; target?: string | string[]; ri?: string | string[]; programme?: string | string[] }>();
   const [section] = useScenarioSection(activeSection);
   const changeSection = useCallback((next: SectionKey) => router.setParams({ section: next, target: undefined, ri: undefined }), []);
   const [layoutReady, setLayoutReady] = useState(false);
@@ -127,10 +132,20 @@ export function RateCheckWorkspace() {
   const renderRevisionTracker = useRef(new OpaquePerformanceAuditRenderRevision());
   const sectionOptions = useMemo(() => SECTION_ORDER.map(value => ({ value, label: uiSectionName(value) })), []);
   const suitabilityRevision = useSuitabilityRevision();
+  const {
+    scenario,
+    storageStatus: scenarioStorageStatus,
+    saveStatus: scenarioSaveStatus,
+    error: scenarioError,
+    update: updateScenario,
+    flush: flushScenario,
+    retryLoad: retryScenarioLoad,
+  } = useUserRateScenario();
   const target = useMemo(() => {
     void suitabilityRevision;
-    return resolveCalculationTarget(core, section, { target: params.target, ri: params.ri });
-  }, [core, section, params.target, params.ri, suitabilityRevision]);
+    const comparisonCore = core ? publicComparisonCore(core, publicCatalogue, s => publicRateScenario(s, scenario, profileFilters)) : null;
+    return resolveCalculationTarget(comparisonCore, section, { target: params.target, ri: params.ri, programme: params.programme });
+  }, [core, section, params.target, params.ri, params.programme, suitabilityRevision, publicCatalogue, profileFilters, scenario]);
   const suitabilityReady = useMemo(() => {
     void suitabilityRevision;
     return isSuitabilityFilterReady(includeNonStandard);
@@ -180,22 +195,18 @@ export function RateCheckWorkspace() {
   const isLoan = SECTIONS[section].lowerIsBetter;
   const isMortgage = section === 'Mortgage';
 
-  const {
-    scenario,
-    storageStatus: scenarioStorageStatus,
-    saveStatus: scenarioSaveStatus,
-    error: scenarioError,
-    update: updateScenario,
-    flush: flushScenario,
-    retryLoad: retryScenarioLoad,
-  } = useUserRateScenario();
   const inputs = scenario.mortgage;
+  const localRateResolution = resolveLocalCurrentRate(section, scenario, publicCatalogue.references, undefined, publicCatalogue, profileFilters);
+  const calculationScenario = scenarioWithLocalCurrentRate(section, scenario, localRateResolution);
+  const { status: publicCatalogueStatus, allLoaded: publicAllLoaded, loadAll: loadPublicCatalogue } = publicCatalogue;
+  useEffect(() => {
+    if (publicCatalogueStatus === 'ready' && !publicAllLoaded) void loadPublicCatalogue().catch(() => undefined);
+  }, [publicCatalogueStatus, publicAllLoaded, loadPublicCatalogue]);
   const upd = (patch: Partial<CalcInputs>) =>
     updateScenario((prev) => ({ ...prev, mortgage: { ...prev.mortgage, ...patch } }));
   const scenarioSectionKey = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
   const savedCurrentProduct = scenario.currentProducts[scenarioSectionKey];
-  const currentProduct = savedCurrentProduct.productKey && !mandatoryProductAllowed(savedCurrentProduct.productKey)
-    ? { provider: '', productKey: '', rateIndex: null } : savedCurrentProduct;
+  const currentProduct = savedCurrentProduct;
   const updateCurrentProduct = (value: CurrentProductReference) => updateScenario((prev) => ({
     ...prev,
     currentProducts: { ...prev.currentProducts, [scenarioSectionKey]: value },
@@ -237,9 +248,9 @@ export function RateCheckWorkspace() {
 
   // Profile-matched comparable rows. A calculated LVR applies only to this
   // scenario and never silently rewrites the saved browsing profile.
-  const rows = useMemo(() => {
+  const unpricedRows = useMemo(() => {
     void suitabilityRevision;
-    const all = core?.sections?.[section]?.rates ?? [];
+    const all = publicRecommendationRows(core?.sections?.[section]?.rates ?? [], publicCatalogue, section, publicRateScenario(section, scenario, profileFilters));
     return visibleAccountRows(
       scenarioProfileFilterRows(
         rowsUnder(all, section, []),
@@ -251,7 +262,10 @@ export function RateCheckWorkspace() {
       includeNonStandard,
       details?.products,
     );
-  }, [core, section, profileFilters, includeNonStandard, details, lvr, suitabilityRevision]);
+  }, [core, section, profileFilters, includeNonStandard, details, lvr, suitabilityRevision, publicCatalogue, scenario]);
+  const publicPricing = useMemo(() => resolvedPublicRankingRows(unpricedRows, publicCatalogue, row => publicRateScenario(section, scenario, profileFilters, row)), [unpricedRows, publicCatalogue, section, scenario, profileFilters]);
+  const comparisonsReady = publicCatalogue.status === 'unavailable' || publicPricing.complete;
+  const rows = publicPricing.rows;
 
   // ---- LVR (mortgage): a real calculation from several inputs ----
   // Deposit needed to drop into the next lower LVR band (better rates).
@@ -269,8 +283,8 @@ export function RateCheckWorkspace() {
   const depositInputs = section === 'TD' ? scenario.termDeposit : scenario.savings;
   const depositBalance = calculatorAmount(depositInputs.balance, MAX_CALCULATOR_DEPOSIT_AMOUNT);
   const balance = isMortgage ? lvrResult.loan ?? 0 : depositBalance ?? 0;
-  const currentRateInput = isMortgage ? inputs.currentRate : depositInputs.currentRate;
-  const currentRate = calculatorRateFraction(currentRateInput);
+  const currentRateInput = isMortgage ? calculationScenario.mortgage.currentRate : section === 'TD' ? calculationScenario.termDeposit.currentRate : calculationScenario.savings.currentRate;
+  const currentRate = localRateResolution.status === 'exact' && localRateResolution.payableRate != null ? Number(localRateResolution.payableRate) : null;
   const rateConditionContext = useMemo(() => ({ core, details, manifest, coreIntegrity }), [core, details, manifest, coreIntegrity]);
   const targetConstraint = useMemo(() => target.status === 'available'
     ? selectedTargetConstraint(target.row, section, scenario, rateConditionContext) : undefined,
@@ -308,29 +322,29 @@ export function RateCheckWorkspace() {
     invalid(uiJoin('Balance',': ','>',uiMoney(0),'–',uiMoney(MAX_CALCULATOR_DEPOSIT_AMOUNT)));
   }
   if (!currentRateInput.trim()) empty(CALCULATOR_FIELDS.currentRate, uiJoin('Current rate',': ','Required'));
-  else if (currentRate == null) invalid(uiJoin('Current rate',': ','>',0,'–',100,'%'));
+  else if (currentRate == null) invalid(uiJoin('Current rate',': ',0,'–',100,'%'));
   const inputIssues = issues.map((issue) => issue.message);
   // Empty fields are flagged once they have been left, not before any input.
   const shownInputIssues = issues.filter(issue => !issue.emptyField || leftFields.has(issue.emptyField)).map(issue => issue.message);
   const inputIssueKey = inputIssues.join('|');
 
   const candidates = useMemo<Candidate[]>(() => {
-    if (inputIssueKey || currentRate === null || balance <= 0 || (isLoan && months <= 0)) return [];
-    const bestByProvider = new Map<string, { row: RateRow; rate: number; projectionRate: number }>();
+    if (!comparisonsReady || inputIssueKey || currentRate === null || balance <= 0 || (isLoan && months <= 0)) return [];
+    const pricedOffers: { row: RateRow; rate: number; projectionRate: number }[] = [];
+    const seen = new Set<string>();
     const candidateRows = target.status === 'available' ? [target.row] : target.status === 'none' ? rows : [];
     for (const row of candidateRows) {
       const v = rankFraction(row, section, depositRankMetric, mortgageRateMetric);
       if (v === null) continue;
-      const prev = bestByProvider.get(row.provider);
-      if (!prev || (isLoan ? v < prev.rate : v > prev.rate)) {
-        // Comparison rate is a ranking aid, not the contractual interest rate
-        // used by an amortisation formula.
-        const projectionRate = section === 'Mortgage' ? toFraction(row.rate) : v;
-        if (projectionRate !== null) bestByProvider.set(row.provider, { row, rate: v, projectionRate });
-      }
+      const token = row.public_offer_id ?? `${row.product_key}:${row.rate_index ?? ''}`;
+      if (seen.has(token)) continue;
+      seen.add(token);
+      const resolution = resolveRowPublicRate(row, publicCatalogue, publicRateScenario(section, scenario, profileFilters, row));
+      const projectionRate = payableRateForRow(row, resolution);
+      if (projectionRate !== null) pricedOffers.push({ row, rate: v, projectionRate });
     }
     const out: Candidate[] = [];
-    for (const { row, rate, projectionRate } of bestByProvider.values()) {
+    for (const { row, rate, projectionRate } of pricedOffers) {
       if (target.status === 'none' && (isLoan ? projectionRate >= currentRate : projectionRate <= currentRate)) continue;
       if(target.status==='available' && !targetDetailsVerified) {
         out.push({row,rate,projectionRate,perMonth:null,total:null,totalLabel:'Rate only',unavailableReason:'Sources unverified'});
@@ -342,6 +356,10 @@ export function RateCheckWorkspace() {
         continue;
       }
       if (isLoan) {
+        if (!scenario.projections.mortgage.holdVariableRate && !isPublishedFixedRate(row)) {
+          out.push({ row, rate, projectionRate, perMonth: null, total: null, totalLabel: 'Rate only', unavailableReason: 'Rate assumption missing' });
+          continue;
+        }
         const perMonth = monthlyPayment(balance, currentRate, months) - monthlyPayment(balance, projectionRate, months);
         const fixedMonths = isPublishedFixedRate(row) ? advertisedTermMonths(row) : null;
         out.push({
@@ -356,12 +374,14 @@ export function RateCheckWorkspace() {
           unavailableReason: null,
         });
       } else {
-        const unavailableReason = quickEstimateUnavailableReason(row, section);
+        const unavailableReason = quickEstimateUnavailableReason(row, section)
+          ?? (section === 'Savings' && !scenario.projections.savings.holdVariableRate
+            ? 'Rate assumption missing' : null);
         if (unavailableReason) {
           out.push({ row, rate, projectionRate, perMonth: null, total: null, totalLabel: 'Rate only', unavailableReason });
           continue;
         }
-        const perYear = balance * (rate - currentRate);
+        const perYear = balance * (projectionRate - currentRate);
         const maturityMonths = section === 'TD' ? advertisedTermMonths(row) : null;
         const total = maturityMonths
           ? termDepositInterestDifference(balance, currentRate, projectionRate, maturityMonths)
@@ -387,7 +407,7 @@ export function RateCheckWorkspace() {
       if (bEstimate == null) return -1;
       return bEstimate - aEstimate;
     }).slice(0, 10);
-  }, [rows, target, targetConstraint,targetDetailsVerified, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric, inputIssueKey]);
+  }, [rows, target, targetConstraint,targetDetailsVerified, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric, inputIssueKey, comparisonsReady, scenario, publicCatalogue, profileFilters]);
   const currentProductDetail = currentProduct.productKey
     ? details?.products?.[currentProduct.productKey] ?? null
     : null;
@@ -414,7 +434,7 @@ export function RateCheckWorkspace() {
           'No better comparable calculator candidates are available for the current scenario inputs',
       };
     }
-    openProduct(candidate.row.product_key, candidate.row.rate_index);
+    openProduct(candidate.row.product_key, candidate.row.rate_index, candidate.row.public_programme_id);
     return { expectedPath: `/product/${encodeURIComponent(candidate.row.product_key)}` };
   }, [candidates]);
   const openProjections = useCallback(async () => {
@@ -464,6 +484,7 @@ export function RateCheckWorkspace() {
       }
       updateScenario((prev) => ({
         ...prev,
+        localRates: { ...prev.localRates, mortgage: { ...prev.localRates.mortgage, mode: 'entered' } },
         mortgage: {
           ...prev.mortgage,
           ...(mode ? { mode } : {}),
@@ -478,8 +499,6 @@ export function RateCheckWorkspace() {
       return {
         applied: 'mortgage',
         mode: mode ?? inputs.mode,
-        propertyValue: propertyValue ?? null,
-        currentRate: currentRate ?? null,
       };
     }
     if (!balance && !currentRate) {
@@ -496,7 +515,7 @@ export function RateCheckWorkspace() {
         },
       };
     });
-    return { applied: section === 'TD' ? 'termDeposit' : 'savings', balance: balance ?? null, currentRate: currentRate ?? null };
+    return { applied: section === 'TD' ? 'termDeposit' : 'savings' };
   }, [inputs.mode, scenarioStorageStatus, section, updateScenario]);
   const coreRevision = core ? `${core.run_date}:${coreSha}` : null;
   const calculatorRenderRevision = `${coreRevision ?? 'none'}:${renderRevisionTracker.current.update([
@@ -648,7 +667,13 @@ export function RateCheckWorkspace() {
         </View>
       ) : null}
 
+      <PublicPricingCoverage section={section} rows={unpricedRows} scenario={scenario} compact />
       <Card style={{ marginBottom: 16 }}>
+        <LocalRateEditor section={section} scenario={scenario} editable={scenarioStorageStatus === 'ready'} onChange={patch => updateScenario(previous => ({ ...previous, localRates: { ...previous.localRates, [scenarioSectionKey]: { ...previous.localRates[scenarioSectionKey], ...patch } } }))}>
+          {field('Current rate (%)', (section === 'Mortgage' ? inputs.currentRate : depositInputs.currentRate), currentRate => section === 'Mortgage' ? upd({ currentRate }) : updateScenario(previous => ({ ...previous, [scenarioSectionKey]: { ...previous[scenarioSectionKey], currentRate } })), CALCULATOR_FIELDS.currentRate)}
+        </LocalRateEditor>
+        <CompactToggle label="Variable rate held" value={scenario.projections[scenarioSectionKey].holdVariableRate} onChange={holdVariableRate => updateScenario(previous => ({ ...previous, projections: { ...previous.projections, [scenarioSectionKey]: { ...previous.projections[scenarioSectionKey], holdVariableRate } } }))} />
+        {section === 'Savings' ? <SavingsQualificationEditor inputs={scenario.projections.savings} editable={scenarioStorageStatus === 'ready'} onChange={patch => updateScenario(previous => ({ ...previous, projections: { ...previous.projections, savings: { ...previous.projections.savings, ...patch } } }))} /> : null}
         {isMortgage ? (
           <>
             <View style={{ marginBottom: 10 }}>
@@ -704,7 +729,6 @@ export function RateCheckWorkspace() {
             ) : null}
 
             <Row gap={10} style={{ marginTop: 12, ...(compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : null) }}>
-              {field('Current rate (%)', inputs.currentRate, (t) => upd({ currentRate: t }), CALCULATOR_FIELDS.currentRate)}
               {field('Years left', inputs.years, (t) => upd({ years: t }), CALCULATOR_FIELDS.years, 86)}
             </Row>
             <View style={{ marginTop: 14 }}>
@@ -734,24 +758,13 @@ export function RateCheckWorkspace() {
                 })),
                 CALCULATOR_FIELDS.depositBalance,
               )}
-              {field(
-                'Current rate (%)',
-                depositInputs.currentRate,
-                (currentRate) => updateScenario((prev) => ({
-                  ...prev,
-                  [section === 'TD' ? 'termDeposit' : 'savings']: {
-                    ...(section === 'TD' ? prev.termDeposit : prev.savings),
-                    currentRate,
-                  },
-                })),
-                CALCULATOR_FIELDS.currentRate,
-              )}
             </Row>
           </>
         )}
         <View style={{ marginTop: 14 }}>
           <CurrentBankPicker
             label={uiLabel(section === 'Mortgage' ? 'Current mortgage bank' : section === 'TD' ? 'Current term deposit bank' : 'Current savings bank')}
+            section={section}
             rows={core?.sections?.[section]?.rates ?? []}
             value={currentProduct}
             onChange={updateCurrentProduct}
@@ -825,10 +838,10 @@ export function RateCheckWorkspace() {
           : uiJoin(formatRate(c.projectionRate),' ',depositRankMetric === 'base' ? 'Ongoing':'Headline');
         return (
           <Pressable
-            key={c.row.provider}
+            key={`${c.row.product_key}:${c.row.public_offer_id ?? c.row.rate_index ?? ''}`}
             onPress={c === candidates[0]
               ? openFirstCandidate
-              : () => openProduct(c.row.product_key, c.row.rate_index)}
+              : () => openProduct(c.row.product_key, c.row.rate_index, c.row.public_programme_id)}
             accessibilityRole="button"
             accessibilityLabel={uiJoin('View',' ',uiProviderName(c.row),' · ',uiProductName(c.row),' · ',rateDescriptor)}
           >
@@ -918,6 +931,7 @@ export function RateCheckWorkspace() {
           <AppText variant="tiny">{uiLabel("Excluded")}</AppText>
         </Row>}
       </Card>
+      {target.status === 'available' ? <PublicCostComparison section={section} target={target.row} scenario={calculationScenario} /> : null}
       <Card style={{ marginBottom: 16, gap: 10 }}>
         <Button
           title="Projection"
