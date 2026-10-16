@@ -1,4 +1,5 @@
 import { catalogue as publicCatalogueFixture, programme as publicProgramme, product as publicProduct } from '../testUtils/publicRateJourney';
+import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
@@ -551,7 +552,7 @@ test.each([10, 20])('combined ready public catalogue uses exact virtualized offe
   mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes, products, []), generationId: 'synthetic-generation-1' };
   mockStore.setState((state: any) => ({ prefs: { ...state.prefs, ratesPageSize: pageSize } }));
   updateRatesSection('Mortgage', { page: Math.floor(35 / pageSize) + 1, selectMode: true });
-  const tree = mount(), token = 'offer:offer-35#p-35';
+  const tree = mount(), token = publicOfferSelectionToken('p-35', 'offer-35');
   const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
   try {
     await act(async () => { await Promise.resolve(); });
@@ -561,7 +562,7 @@ test.each([10, 20])('combined ready public catalogue uses exact virtualized offe
     await act(async () => { await pending; });
     const list = tree.root.findByType('FlashList').props;
     const localIndex = 35 % pageSize;
-    expect(list.keyExtractor(list.data[localIndex], localIndex)).toBe('p-35-offer-35');
+    expect(list.keyExtractor(list.data[localIndex], localIndex)).toBe(JSON.stringify(['rate', 'p-35', 'offer', 'offer-35']));
     expect(surface().probes!.find(probe => probe.id === 'search.audit-target')).toMatchObject({ status: 'ready', visibleCount: 1 });
     act(() => { surface().actions!['search.compare.select.1']({ selectionToken: token }); });
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([token]);
@@ -569,5 +570,34 @@ test.each([10, 20])('combined ready public catalogue uses exact virtualized offe
     const card = tree.root.findAllByType('ProductCard').find((node: any) => node.props.row.rate_index === 35);
     act(() => { card.props.onPress(); });
     expect(openProduct).toHaveBeenCalledWith('p-35', 35, 'programme-35');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('distinct opaque public pairs retain separate native keys and exact audit selection', async () => {
+  const collisionRows = [{ ...rows.at(-1)!, product_key: 'UNIT-A', product_name: 'Loan A', rate_index: 0 },
+    { ...rows.at(-2)!, product_key: 'UNIT', product_name: 'Loan B', rate_index: 1 }];
+  const products = collisionRows.map((row, index) => ({ ...publicProduct, productId: row.product_key, productKey: row.product_key,
+    name: row.product_name, programmeIds: [`collision-programme-${index}`] }));
+  const programmes = collisionRows.map((row, index) => publicProgramme({ productId: row.product_key,
+    programmeId: `collision-programme-${index}`, offerId: index === 0 ? 'B' : 'A-B',
+    sourceBindings: [{ rateIndex: index, pointer: `/lendingRates/${index}` }] }));
+  mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes, products, []), generationId: 'collision-generation' };
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: collisionRows } } } }));
+  install(); updateRatesSection('Mortgage', { selectMode: true });
+  const tree = mount(), token = publicOfferSelectionToken('UNIT', 'A-B');
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  try {
+    await act(async () => { await Promise.resolve(); });
+    const list = tree.root.findByType('FlashList').props;
+    expect(list.data).toHaveLength(2);
+    expect(new Set(list.data.map((row: any, index: number) => list.keyExtractor(row, index))).size).toBe(2);
+    let pending: unknown;
+    act(() => { pending = surface().actions!['search.compare.page.1']({ selectionToken: token }); });
+    let prepared: unknown;
+    await act(async () => { prepared = await pending; });
+    expect(isVerifiedRatesPagePreparation('search.compare.page.1', token, prepared)).toBe(true);
+    expect(surface().probes!.find(probe => probe.id === 'search.audit-target')).toMatchObject({ status: 'ready', visibleCount: 1 });
+    act(() => { surface().actions!['search.compare.select.1']({ selectionToken: token }); });
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([token]);
   } finally { act(() => tree.unmount()); }
 });
