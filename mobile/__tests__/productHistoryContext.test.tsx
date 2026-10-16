@@ -109,7 +109,8 @@ jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision
 jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: () => mockRateHistory }));
 jest.mock('../src/hooks/useUserRateScenario', () => ({
   useUserRateScenario: () => ({
-    scenario: { currentProducts: { mortgage: { provider: null, productKey: null } } },
+    scenario: jest.requireActual('../src/data/userRateScenario').normalizeUserRateScenario(undefined),
+    storageStatus: 'ready', saveStatus: 'idle', error: null,
   }),
 }));
 jest.mock('../src/lib/nav', () => ({ openBank: jest.fn(), openRateReceipt: jest.fn() }));
@@ -139,6 +140,12 @@ async function renderProduct() {
 
 function copy(tree: InspectableRenderer): string {
   return tree.root.findAllByType('AppText').map((node) => node.children.join('')).join('\n');
+}
+function historyCopy(tree: InspectableRenderer): string[] {
+  const card = tree.root.findAllByType('Card').find(node => node.findAllByType('AppText')
+    .some(text => text.children.join('') === 'Leading advertised · All tiers · Conditional rate / Restricted'));
+  expect(card).toBeDefined();
+  return card!.findAllByType('AppText').map(node => node.children.join(''));
 }
 
 describe('product-wide history context on an exact-tier page', () => {
@@ -181,33 +188,33 @@ describe('product-wide history context on an exact-tier page', () => {
     mockState.prefs.showHistoryRibbon = enabled;
     const tree = await renderProduct();
     const renderedCopy = copy(tree);
-    expect(renderedCopy).toContain('Selected tier 5.00% · product best 11.50%');
-    expect(renderedCopy).not.toMatch(/product best 11\.50% today/);
+    expect(renderedCopy).toContain('Selected rate 5.00% · Leading advertised 11.50% · All tiers');
+    expect(renderedCopy).not.toMatch(/Leading advertised 11\.50% today/);
     if (enabled) {
-      expect(renderedCopy).toContain('11.50% best across all tiers in this capture');
+      expect(renderedCopy).toContain('Leading advertised 11.50% · All tiers');
       expect(tree.root.findAllByType('BankHistoryChart')[0].props.highlightSeries.values['2026-09-12']).toBe(0.115);
     }
     act(() => tree.unmount());
   });
 
-  it('explains all-tier scope and a differing selected rate before history is enabled', async () => {
+  it('retains all-tier conditions and a differing selected rate before history is enabled', async () => {
     const tree = await renderProduct();
-    expect(tree.root.findByProps({ text: 'Product-wide history' })).toBeTruthy();
-    expect(copy(tree)).toContain('Includes conditional and restricted tiers. The best tier can change.');
-    expect(copy(tree)).toContain('Selected tier 5.00% · product best 11.50%');
-    expect(tree.root.findByProps({ title: 'Show product-wide history' })).toBeTruthy();
+    expect(tree.root.findByProps({ text: 'Published product history' })).toBeTruthy();
+    expect(copy(tree)).toContain('All tiers · Conditional rate / Restricted');
+    expect(copy(tree)).toContain('Selected rate 5.00% · Leading advertised 11.50% · All tiers');
+    expect(tree.root.findByProps({ title: 'Show market history' })).toBeTruthy();
     act(() => tree.unmount());
   });
 
-  it('labels the unchanged seeded maximum in the legend, accessible series and warming copy', async () => {
+  it('labels the unchanged seeded maximum in the legend, accessible series and observed facts', async () => {
     mockState.prefs.showHistoryRibbon = true;
     const tree = await renderProduct();
     const chart = tree.root.findAllByType('BankHistoryChart')[0];
-    expect(chart.props.highlightSeries.label).toBe('Bankwest Easy Saver · Best advertised rate · all tiers');
-    expect(chart.props.highlightSeries.valueScope).toBe('best · all tiers');
+    expect(chart.props.highlightSeries.label).toBe('Bankwest Easy Saver');
+    expect(chart.props.highlightSeries.valueScope).toBe('Leading advertised · All tiers');
     expect(chart.props.highlightSeries.values['2026-09-13']).toBe(0.115);
-    expect(copy(tree)).toContain('Best advertised rate · all tiers');
-    expect(copy(tree)).toContain('11.50% best across all tiers in this capture');
+    expect(copy(tree)).toContain('Leading advertised · All tiers');
+    expect(copy(tree)).toContain('Leading advertised 11.50% · All tiers');
     expect(tree.root.findAllByType('ProductSpecs')[0].props.row.rate).toBe('0.05');
     act(() => tree.unmount());
   });
@@ -220,9 +227,9 @@ describe('product-wide history context on an exact-tier page', () => {
     const tree = await renderProduct();
     const chart = tree.root.findAllByType('BankHistoryChart')[0];
     expect(chart.props.highlightSeries.values).toEqual({ '2026-09-12': 0.115, '2026-09-13': 0.115 });
-    expect(chart.props.highlightSeries.label).toContain('Best advertised rate · all tiers');
-    expect(copy(tree)).toContain('Includes conditional and restricted tiers. The best tier can change.');
-    expect(copy(tree)).not.toContain('Selected tier 11.50%');
+    expect(chart.props.highlightSeries.valueScope).toBe('Leading advertised · All tiers');
+    expect(copy(tree)).toContain('All tiers · Conditional rate / Restricted');
+    expect(copy(tree)).not.toContain('Selected rate 11.50%');
     expect(JSON.stringify(mockState.productHistory)).toBe(before);
     act(() => tree.unmount());
   });
@@ -240,7 +247,7 @@ describe('product-wide history context on an exact-tier page', () => {
     const chart = tree.root.findAllByType('BankHistoryChart')[0];
     expect(chart.props.dates).toEqual(['2026-08-01', '2026-09-13']);
     expect(chart.props.points[0]).toMatchObject({ mean: 0.05, median: 0.055, count: 4 });
-    expect(copy(tree)).toContain('rates matching your settings');
+    expect(copy(tree)).toContain('Matching rates');
     act(() => tree.unmount());
   });
 
@@ -297,9 +304,8 @@ describe('product-wide history context on an exact-tier page', () => {
       products: { [row.product_key]: [0.11, 0.115] },
     };
     const tree = await renderProduct();
-    expect(copy(tree)).toContain('could not be prepared');
-    expect(copy(tree)).not.toContain('Updating market history');
-    expect(copy(tree)).not.toContain('Loading market history');
+    expect(copy(tree)).toContain(hasLedger ? 'Unavailable' : 'History unavailable');
+    expect(historyCopy(tree)).not.toContain('Loading');
     act(() => tree.unmount());
   });
 
@@ -314,7 +320,7 @@ describe('product-wide history context on an exact-tier page', () => {
     const chart = tree.root.findAllByType('BankHistoryChart')[0];
     expect(chart.props.highlightSeries.values['2026-09-12']).toBe(0.11);
     expect(chart.props.points.every((point: { mean: number | null }) => point.mean === null)).toBe(true);
-    expect(copy(tree)).toContain('Updating market history for your settings');
+    expect(copy(tree).split('\n')).toContain('Loading');
     act(() => tree.unmount());
   });
 });

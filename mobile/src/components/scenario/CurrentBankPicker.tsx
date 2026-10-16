@@ -15,10 +15,11 @@ import { bindCurrentPublicRow } from '../../data/publicRateIntegration';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from '../ui';
+import { uiJoin, uiLabel, uiProviderName, uiPublicProductName, uiPublicAliasName, type UiCopy, type UiText } from '../../lib/uiCopy';
 
-function selectionLabel(value: CurrentProductReference): string {
-  if (value.provider === NOT_LISTED_PROVIDER) return 'Not listed';
-  return value.provider || 'Select bank';
+function selectionLabel(value: CurrentProductReference): UiText {
+  if (value.provider === NOT_LISTED_PROVIDER) return uiLabel('Not listed');
+  return value.provider ? uiProviderName({ provider: value.provider }) : uiLabel('Select bank');
 }
 
 export function CurrentBankPicker({
@@ -29,7 +30,7 @@ export function CurrentBankPicker({
   editable = true,
   section,
 }: {
-  label: string;
+  label: UiCopy;
   rows: RateRow[];
   value: CurrentProductReference;
   onChange: (value: CurrentProductReference) => void;
@@ -44,10 +45,7 @@ export function CurrentBankPicker({
   const catalogue = usePublicRateCatalogue(manifest);
   const publicRows = useMemo(() => rows.map(row => bindCurrentPublicRow(row, catalogue)), [rows, catalogue]);
   const discovery = useMemo(() => catalogue.products.filter(product => !section || product.section === section), [catalogue.products, section]);
-  const providers = useMemo(
-    () => { void revision; return open === 'bank' ? alphabeticalScenarioProviders(rows, discovery, catalogue.coverage.filter(item => !section || item.section === section).map(item => item.providerName)) : []; },
-    [open, rows, discovery, catalogue.coverage, section, revision],
-  );
+  const providers = useMemo(() => { void revision; return open === 'bank' ? alphabeticalScenarioProviders(rows, discovery, catalogue.coverage.filter(item => !section || item.section === section).map(item => item.providerName)) : []; }, [open, rows, discovery, catalogue.coverage, section, revision]);
   const products = useMemo(() => {
     void revision;
     if (open !== 'product' || !value.provider || value.provider === NOT_LISTED_PROVIDER) return [];
@@ -84,7 +82,7 @@ export function CurrentBankPicker({
       <Pressable
         onPress={() => editable && setOpen('bank')}
         accessibilityRole="button"
-        accessibilityLabel={`${label}, ${selectionLabel(value)}`}
+        accessibilityLabel={uiJoin(label, ', ', selectionLabel(value))}
         accessibilityState={{ disabled: !editable }}
         style={({ pressed }) => ({
           minHeight: 48,
@@ -105,23 +103,23 @@ export function CurrentBankPicker({
         <Pressable
           onPress={() => editable && setOpen('product')}
           accessibilityRole="button"
-          accessibilityLabel={`Current product, ${selectedProduct?.name ?? 'not matched'}`}
+          accessibilityLabel={uiJoin('Current product', ', ', selectedProduct ? uiPublicProductName(selectedProduct) : uiLabel('No exact match'))}
           accessibilityState={{ disabled: !editable }}
           style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1, paddingVertical: 3 })}
         >
           <AppText variant="small" color="primary" weight="700">
-            {selectedProduct ? selectedProduct.name : 'Find current product (optional)'}
+            {selectedProduct ? uiPublicProductName(selectedProduct) : uiLabel('Choose product')}
           </AppText>
           {selectedProduct ? (
             <AppText variant="tiny" color="textMuted">
-              {selectedProduct.row ? `${formatRate(selectedProduct.row.rate)} published rate` : 'Product: identified · Pricing: unresolved'}
+              {selectedProduct.row ? uiJoin('Advertised', ' ', formatRate(selectedProduct.row.rate), selectedProduct.row.comparison_rate ? uiJoin(' · ', 'Comparison', ' ', formatRate(selectedProduct.row.comparison_rate)) : null) : uiLabel('Pricing unresolved')}
             </AppText>
           ) : null}
         </Pressable>
       ) : null}
       {selectedProduct ? <PublicRateEvidence productKey={selectedProduct.productKey} programmeId={value.programmeId} row={selectedProduct.row} compact
         onSelectProgramme={(programmeId, offerId) => onChange({ ...value, programmeId, offerId })} /> : null}
-      {catalogue.status === 'error' ? <AppText variant="tiny" color="textMuted">Public product discovery: unavailable</AppText> : null}
+      {catalogue.status === 'error' ? <AppText variant="tiny" color="textMuted">{uiJoin('Public products', ': ', 'Unavailable')}</AppText> : null}
       <Modal
         visible={open != null}
         transparent
@@ -140,9 +138,6 @@ export function CurrentBankPicker({
             <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <View style={{ flex: 1 }}>
                 <AppText variant="h3">{modalTitle}</AppText>
-                <AppText variant="tiny" color="textMuted">
-                  {open === 'bank' ? 'Order: A–Z · Unpriced products: included' : 'Pricing programme: explicit selection · Entered rate: unchanged'}
-                </AppText>
               </View>
               <Button title="Close" variant="ghost" onPress={() => setOpen(null)} />
             </Row>
@@ -165,7 +160,7 @@ export function CurrentBankPicker({
                         opacity: pressed ? 0.65 : 1,
                       })}
                     >
-                      <AppText weight={value.provider === provider ? '800' : '500'}>{provider}</AppText>
+                      <AppText weight={value.provider === provider ? '800' : '500'}>{uiProviderName({ provider })}</AppText>
                     </Pressable>
                   ))}
                   <Pressable
@@ -179,7 +174,7 @@ export function CurrentBankPicker({
                       opacity: pressed ? 0.65 : 1,
                     })}
                   >
-                    <AppText weight="700">Not listed</AppText>
+                    <AppText weight="700">{uiLabel("Not listed")}</AppText>
                   </Pressable>
                 </>
               ) : open === 'product' ? (
@@ -190,7 +185,7 @@ export function CurrentBankPicker({
                     accessibilityState={{ checked: !value.productKey }}
                     style={{ minHeight: 48, justifyContent: 'center', paddingHorizontal: 10 }}
                   >
-                    <AppText weight="700">No exact match</AppText>
+                    <AppText weight="700">{uiLabel("No exact match")}</AppText>
                   </Pressable>
                   {products.map((option) => {
                     const row = option.row;
@@ -201,7 +196,7 @@ export function CurrentBankPicker({
                         onPress={() => void chooseProduct(option)}
                         accessibilityRole="radio"
                         accessibilityState={{ checked }}
-                        accessibilityLabel={`${option.name}, ${row ? `${formatRate(row.rate)} published rate` : 'pricing unresolved'}`}
+                        accessibilityLabel={uiJoin(uiPublicProductName(option), ', ', row ? uiJoin('Advertised rate', ' ', formatRate(row.rate)) : uiLabel('Pricing unresolved'))}
                         style={({ pressed }) => ({
                           minHeight: 56,
                           justifyContent: 'center',
@@ -212,12 +207,12 @@ export function CurrentBankPicker({
                           opacity: pressed ? 0.65 : 1,
                         })}
                       >
-                        <AppText weight={checked ? '800' : '500'}>{option.name}</AppText>
+                        <AppText weight={checked ? '800' : '500'}>{uiPublicProductName(option)}</AppText>
                         <AppText variant="tiny" color="textMuted">
-                          {row ? `${formatRate(row.rate)} published${row.comparison_rate ? ` · ${formatRate(row.comparison_rate)} comparison` : ''}` : 'Product: identified · Pricing: unresolved'}
+                            {row ? uiJoin('Advertised', ' ', formatRate(row.rate), row.comparison_rate ? uiJoin(' · ', 'Comparison', ' ', formatRate(row.comparison_rate)) : null) : uiLabel('Pricing unresolved')}
                         </AppText>
-                        {option.aliases.length ? <AppText variant="tiny" color="textMuted">Aliases: {option.aliases.join(', ')}</AppText> : null}
-                        {option.status === 'legacy' ? <AppText variant="tiny" color="textMuted">New applications: unavailable</AppText> : null}
+                        {option.product?.aliases.length ? <AppText variant="tiny" color="textMuted">{uiJoin('Aliases', ': ', ...option.product.aliases.flatMap<UiCopy>((alias, i) => i ? [', ', uiPublicAliasName(alias)] : [uiPublicAliasName(alias)]))}</AppText> : null}
+                        {option.status === 'legacy' ? <AppText variant="tiny" color="textMuted">{uiJoin('New applications', ': ', 'Unavailable')}</AppText> : null}
                       </Pressable>
                     );
                   })}

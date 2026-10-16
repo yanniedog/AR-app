@@ -33,24 +33,24 @@ async function render() {
   expect(tree.root.findByType(FixedDepositComparison).props.rows[0]).toBe(x.rows[0]);
   expect(tree.root.findByType(CanonicalTermsComparison).props.rows[0]).toBe(x.rows[0]);
   expect(tree.root.findByType(FixedDepositComparison).props.rows[1]).toBe(x.rows[1]);
-  await act(async () => { tree.root.findByProps({ title: 'Personal cost comparison' }).props.onToggle(); });
+  await act(async () => { tree.root.findByProps({ title: 'Compare · Term deposits' }).props.onToggle(); });
   return { x, tree };
 }
 function fill(tree: Renderer) {
   act(() => tree.root.findByProps({ label: 'Comparison amount (AUD)' }).props.onChangeText(inputs.principal));
-  act(() => tree.root.findByProps({ label: 'Comparison funding date' }).props.onChangeText(inputs.fundedDate));
+  act(() => tree.root.findByProps({ label: 'Comparison funding date · YYYY-MM-DD' }).props.onChangeText(inputs.fundedDate));
   for (let i = 0; i < 2; i++) {
     act(() => tree.root.findAllByProps({ label: 'Bank-confirmed maturity date' })[i].props.onChangeText(inputs.maturityDate));
     act(() => tree.root.findAllByProps({ label: 'Bank-confirmed annual rate (%)' })[i].props.onChangeText(i ? '7.3' : '3.65'));
-    for (const label of ['Bank agreed this amount, rate and these dates', 'No withholding applies to this payout']) act(() => tree.root.findAllByProps({ label })[i].props.onPress());
+    for (const label of ['Bank-confirmed amount / rate / dates', 'Withholding excluded']) act(() => tree.root.findAllByProps({ label })[i].props.onPress());
   }
 }
 test('actual compare route binds original rows, computes2.90 advantage and exports local confirmed rates', async () => {
   const { tree } = await render(); fill(tree);
-  act(() => tree.root.findByProps({ title: 'Compare maturity returns' }).props.onPress());
+  act(() => tree.root.findByProps({ title: 'Compare Maturity payout' }).props.onPress());
   expect(JSON.stringify(tree.toJSON())).toContain('1005.80'); expect(JSON.stringify(tree.toJSON())).toContain('2.90');
-  await act(async () => { tree.root.findByProps({ title: 'Comparison details' }).props.onToggle(); });
-  await act(async () => { tree.root.findByProps({ title: 'Copy comparison receipt' }).props.onPress(); });
+  await act(async () => { tree.root.findByProps({ title: 'Comparison · Details' }).props.onToggle(); });
+  await act(async () => { tree.root.findByProps({ title: 'Copy Receipt' }).props.onPress(); });
   const exported = JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls[0][0]);
   expect(exported.kind).toBe('private_calculation_export');
   expect(hashText(canonical(exported.result))).toBe(exported.resultSha256);
@@ -61,15 +61,15 @@ test('actual compare route binds original rows, computes2.90 advantage and expor
   expect(profile.answers).toEqual({});
   act(() => tree.root.findByProps({ label: 'Comparison amount (AUD)' }).props.onChangeText('2000'));
   expect(JSON.stringify(tree.toJSON())).not.toContain('1005.80');
-  expect(tree.root.findAllByProps({ label: 'Bank agreed this amount, rate and these dates' }).every((chip: any) => !chip.props.selected)).toBe(true);
+  expect(tree.root.findAllByProps({ label: 'Bank-confirmed amount / rate / dates' }).every((chip: any) => !chip.props.selected)).toBe(true);
   act(() => tree.unmount());
 });
 test('edition change synchronously removes result; missing templates never substitute engineering offers', async () => {
-  const { tree } = await render(); fill(tree); act(() => tree.root.findByProps({ title: 'Compare maturity returns' }).props.onPress());
+  const { tree } = await render(); fill(tree); act(() => tree.root.findByProps({ title: 'Compare Maturity payout' }).props.onPress());
   mockState = { ...mockState, manifest: { ...mockState.manifest, files: { core: mockState.manifest.files.core, details: mockState.manifest.files.details } } };
   await act(async () => tree.update(<Compare />));
   expect(JSON.stringify(tree.toJSON())).not.toContain('1005.80');
-  expect(JSON.stringify(tree.toJSON())).toContain('unavailable for this exact rate');
+  expect(JSON.stringify(tree.toJSON())).toContain('Calculation · Unavailable · No ranks');
   expect(tree.root.findAllByProps({ label: 'Bank-confirmed annual rate (%)' })).toHaveLength(0);
   act(() => tree.unmount());
 });

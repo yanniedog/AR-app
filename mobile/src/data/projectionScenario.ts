@@ -90,8 +90,8 @@ export const EMPTY_PROJECTION_INPUTS: ProjectionInputs = {
 };
 
 export const EMPTY_PROJECTION_INPUTS_BY_SECTION: ProjectionInputsBySection = {
-  mortgage: { ...EMPTY_PROJECTION_INPUTS, horizonYears: '3' },
-  savings: { ...EMPTY_PROJECTION_INPUTS, horizonYears: '1' },
+  mortgage: { ...EMPTY_PROJECTION_INPUTS },
+  savings: { ...EMPTY_PROJECTION_INPUTS },
   termDeposit: { ...EMPTY_PROJECTION_INPUTS },
 };
 
@@ -157,8 +157,8 @@ export function normalizeProjectionInputsBySection(value: unknown): ProjectionIn
     ? value as Partial<ProjectionInputsBySection>
     : {};
   return {
-    mortgage: normalizeProjectionInputs({ horizonYears: '3', ...input.mortgage }),
-    savings: normalizeProjectionInputs({ horizonYears: '1', ...input.savings }),
+    mortgage: normalizeProjectionInputs(input.mortgage),
+    savings: normalizeProjectionInputs(input.savings),
     termDeposit: normalizeProjectionInputs(input.termDeposit),
   };
 }

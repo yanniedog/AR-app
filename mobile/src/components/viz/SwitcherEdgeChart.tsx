@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { ChartText as SvgText } from '../charts/ChartText';
 
-import { formatAxisDateLabel, historyDatesInWindow, sliceIndexFromPlotX } from '../../data/bankHistoryTransform';
+import { historyDatesInWindow, sliceIndexFromPlotX } from '../../data/bankHistoryTransform';
 import { spreadGapModel } from '../../data/vizModels';
 import type { BankHistoryPoint, HistoryWindow, SectionKey } from '../../types';
 import { SECTIONS } from '../../constants';
@@ -13,6 +13,8 @@ import { hasFiniteChartDate, hasPositiveChartLayout, type ChartRenderEvidence } 
 import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText, Badge, Row } from '../ui';
+import { uiLabel,  uiDate, uiJoin, uiNumber } from '../../lib/uiCopy';
+import { uiChartBps, uiChartDate, uiChartSection } from '../../lib/chartUiCopy';
 
 /**
  * Advertised spread: how far the leading advertised rate sits from the median
@@ -85,8 +87,7 @@ export function SwitcherEdgeChart({
         if (auditRevision) onGraphicReadiness?.({ revision: auditRevision, expectedCount: 0, pointCount: 0,
           accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
       }}>
-        No spread history available for this window yet.
-      </AppText>
+        {uiLabel("No observations")}</AppText>
     );
   }
 
@@ -127,19 +128,18 @@ export function SwitcherEdgeChart({
       <View style={{ gap: 3, marginBottom: 8 }}>
         <Row gap={8} style={{ alignItems: 'center', flexWrap: 'wrap' }}>
           <AppText variant="rateHero" style={{ color: ink }}>
-            {activeGapBps != null ? `${Math.round(activeGapBps)} bps` : '—'}
+            {uiChartBps(activeGapBps)}
           </AppText>
-          {activeAtWidest ? <Badge label="widest in window" tone="primary" /> : null}
+          {activeAtWidest ? <Badge label="Widest" tone="primary" /> : null}
         </Row>
         <AppText variant="tiny" color="textMuted">
-          {isHistorical ? 'Selected-date gap' : 'Latest gap'} between the median and leading advertised rates
+          {uiJoin(isHistorical ? 'Selected' : 'Newest', ' · ', 'Advertised spread')}
         </AppText>
       </View>
       <View
         accessible
         accessibilityRole="adjustable"
-        accessibilityLabel={`${SECTIONS[section].title} advertised spread on ${formatAxisDateLabel(activeDate)}: ${activeGapBps != null ? `${Math.round(activeGapBps * 10) / 10} basis points` : 'no spread observation'}.`}
-        accessibilityHint="Swipe up or down to move between observation dates."
+        accessibilityLabel={uiJoin(uiChartSection(section), ' · ', 'Advertised spread', ' · ', uiDate(activeDate), ' · ', uiChartBps(activeGapBps))}
         accessibilityActions={[
           { name: 'increment', label: 'Next date' },
           { name: 'decrement', label: 'Previous date' },
@@ -182,7 +182,7 @@ export function SwitcherEdgeChart({
                 <React.Fragment key={frac}>
                   <Line x1={padL} y1={y} x2={width - padR} y2={y} stroke={theme.colors.border} strokeWidth={0.6} />
                   <SvgText x={padL - 4} y={y + 3} fontSize={9} fill={theme.colors.textFaint} textAnchor="end">
-                    {Math.round(bps)}
+                    {uiNumber(Math.round(bps))}
                   </SvgText>
                 </React.Fragment>
               );
@@ -196,10 +196,10 @@ export function SwitcherEdgeChart({
               <Circle cx={xAt(activeIndex)} cy={yAt(activePoint.gapBps)} r={4.5} fill={ink} />
             ) : null}
             <SvgText x={padL} y={height - 4} fontSize={9} fill={theme.colors.textFaint}>
-              {formatAxisDateLabel(model.points[0].date)}
+              {uiChartDate(model.points[0].date)}
             </SvgText>
             <SvgText x={width - padR} y={height - 4} fontSize={9} fill={theme.colors.textFaint} textAnchor="end">
-              {formatAxisDateLabel(model.points[n - 1].date)}
+              {uiChartDate(model.points[n - 1].date)}
             </SvgText>
           </Svg>
         ) : null}
@@ -211,11 +211,11 @@ export function SwitcherEdgeChart({
           const date = model.points[index]?.date;
           if (date) onDateSelect?.(date);
         }}
-        valueLabel={activePoint?.gapBps != null ? `${Math.round(activePoint.gapBps * 10) / 10} bp spread` : '—'}
-        detail="leading versus median advertised"
+        valueLabel={uiChartBps(activePoint?.gapBps)}
+        facts={[{ label: 'Basis', value: uiJoin('Leading advertised', ' / ', 'Median advertised') }]}
       />
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
-        This spread mixes advertised products and tiers. Compare eligibility, fees, conditions, LVRs and terms before acting.
+        {uiJoin('Basis', ' · ', 'All tiers', ' · ', 'Eligibility unverified')}
       </AppText>
     </View>
   );

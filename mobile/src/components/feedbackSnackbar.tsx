@@ -9,6 +9,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { resolveRefreshOutcomeSnackbar } from './bannerState';
 import { TouchTarget } from './TouchTarget';
 import { AppText, Row } from './ui';
+import { uiJoin, uiDate, uiLabel } from '../lib/uiCopy';
 
 const SNACKBAR_DISMISS_MS: Record<'success' | 'failure' | 'wifi-skip', number> = {
   success: 3500,
@@ -108,7 +109,7 @@ export function RefreshOutcomeSnackbar() {
       >
         <Ionicons name={iconName} size={18} color={iconColor} />
         <AppText variant="small" style={{ flex: 1 }}>
-          {model.message}
+          {uiJoin(model.kind === 'success' ? 'Updated' : model.kind === 'failure' ? 'Refresh failed' : 'Wi-Fi only', ' · ', 'Observed', ': ', uiDate(core?.run_date))}
         </AppText>
         {model.actionLabel ? (
           <TouchTarget
@@ -116,11 +117,11 @@ export function RefreshOutcomeSnackbar() {
             onPress={onAction}
             hitSlop={0}
             accessibilityRole="button"
-            accessibilityLabel={model.actionLabel}
+            accessibilityLabel={model.action === 'retry' ? 'Retry' : 'Settings'}
             style={SNACKBAR_ACTION}
           >
             <AppText variant="small" weight="700" style={{ color: theme.colors.primary }}>
-              {model.actionLabel}
+              {uiLabel(model.action === 'retry' ? 'Retry' : 'Settings')}
             </AppText>
           </TouchTarget>
         ) : (

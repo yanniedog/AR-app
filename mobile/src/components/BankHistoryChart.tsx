@@ -12,7 +12,6 @@ import type { BankHistoryPoint, HistoryWindow, RbaEntry, SectionKey } from '../t
 import {
   axisLabelInterval,
   chartYDomain,
-  formatAxisDateLabel,
   rbaChangesInWindow,
   rbaHoldsInWindow,
   rbaStepForDates,
@@ -20,7 +19,8 @@ import {
   sliceIndexFromPlotX,
 } from '../data/bankHistoryTransform';
 import { SECTIONS } from '../constants';
-import { bankHistoryChartA11ySummary } from '../lib/a11ySummaries';
+import { uiLabel,  uiCount, uiDate, uiJoin, uiRate, type UiCopy } from '../lib/uiCopy';
+import { uiChartBps, uiChartDate, uiChartSection, uiChartWindow } from '../lib/chartUiCopy';
 import { buildBandPath, buildLinePath } from '../lib/chartSvgPaths';
 import { debugLog } from '../lib/debugLog';
 import { hasFiniteChartDate, hasPositiveChartLayout } from '../lib/chartRenderEvidence';
@@ -58,9 +58,9 @@ function finiteCoord(value: number): number | null {
 export interface HighlightSeries {
   /** Value per timeline date (YMD). Missing/nullish dates render as gaps in the line. */
   values: Record<string, number | null>;
-  label: string;
+  label: UiCopy;
   /** Optional scope shown beside the selected highlight value. */
-  valueScope?: string;
+  valueScope?: UiCopy;
   color?: string;
 }
 
@@ -266,7 +266,7 @@ function BankHistoryChartView({
       onGraphicReady?.({ contentRevision: sourceRevision, graphicRevision, window,
         availability: 'unavailable', expectedCount: expectedPointCount, pointCount: 0,
         accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
-    }}>No matching history observations for this window.</AppText>;
+    }}>{uiLabel("No observations")}</AppText>;
   }
 
   const padL = 44;
@@ -280,7 +280,7 @@ function BankHistoryChartView({
   const xAt = (i: number) =>
     padL + (plotDates.length === 1 ? innerW / 2 : (i / (plotDates.length - 1)) * innerW);
   const yAt = (v: number) => padT + innerH - ((v - yDomain.min) / span) * innerH;
-  const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
+  const pct = (v: number) => uiRate(v);
 
   const mins = plotPoints.map((p) => p.min);
   const maxs = plotPoints.map((p) => p.max);
@@ -386,17 +386,10 @@ function BankHistoryChartView({
     }
   };
 
-  const chartSummary = bankHistoryChartA11ySummary({
-    section,
-    window,
-    activeDate,
-    activePoint,
-    showRba,
-    highlight:
-      highlightSeries && activeHighlight != null
-        ? { label: highlightSeries.label, value: activeHighlight }
-        : undefined,
-  });
+  const hasMarketStatistics = activePoint && [activePoint.min, activePoint.median, activePoint.mean, activePoint.max].some(value => value != null && Number.isFinite(value));
+  const chartSummary = uiJoin(uiChartSection(section), ' · ', uiChartWindow(window), ' · ', uiCount(plotPoints.length), ' ', 'Observed', ' · ', uiDate(activeDate), ' · ',
+    hasMarketStatistics ? uiJoin('Min', ' ', uiRate(activePoint?.min), ' · ', 'Median', ' ', uiRate(activePoint?.median), ' · ', 'Mean', ' ', uiRate(activePoint?.mean), ' · ', 'Max', ' ', uiRate(activePoint?.max)) : uiJoin('Rates', ' · ', 'Unavailable'),
+    highlightSeries && activeHighlight != null ? uiJoin(' · ', highlightSeries.label, ' ', uiRate(activeHighlight)) : null);
 
   return (
     <View>
@@ -404,7 +397,7 @@ function BankHistoryChartView({
         {WINDOW_OPTIONS.map((opt) => (
           <Chip
             key={opt.value}
-            label={opt.label}
+            label={uiChartWindow(opt.value)}
             selected={window === opt.value}
             onPress={() => setWindow(opt.value)}
           />
@@ -471,7 +464,7 @@ function BankHistoryChartView({
                     fill={rbaInk}
                     fontWeight="600"
                   >
-                    {mark.bp > 0 ? `+${mark.bp}` : mark.bp} bps
+                    {uiChartBps(mark.bp)}
                   </SvgText>
                 </React.Fragment>
               );
@@ -564,8 +557,7 @@ function BankHistoryChartView({
                     fontWeight="600"
                     textAnchor="middle"
                   >
-                    held
-                  </SvgText>
+                    {uiLabel("Held")}</SvgText>
                 </React.Fragment>
               );
             })}
@@ -596,7 +588,7 @@ function BankHistoryChartView({
                     fill={theme.colors.textFaint}
                     textAnchor="middle"
                   >
-                    {formatAxisDateLabel(date)}
+                    {uiChartDate(date)}
                   </SvgText>
                 );
               }
@@ -660,8 +652,7 @@ function BankHistoryChartView({
               : {})}
             accessible
             accessibilityRole="adjustable"
-            accessibilityLabel="Scrub history ribbon by date"
-            accessibilityHint="Drag horizontally to preview a date; tap to pin"
+            accessibilityLabel="History"
             accessibilityActions={[
               { name: 'increment', label: 'Next date' },
               { name: 'decrement', label: 'Previous date' },
@@ -681,7 +672,7 @@ function BankHistoryChartView({
       {activeRbaRate != null ? (
         <Row
           accessible
-          accessibilityLabel={`RBA cash rate ${pct(activeRbaRate)}`}
+          accessibilityLabel={uiJoin('Cash rate', ' · ', pct(activeRbaRate))}
           gap={7}
           style={{ marginTop: 6 }}
         >
@@ -691,7 +682,7 @@ function BankHistoryChartView({
             style={{ width: 18, height: 2, borderRadius: 1, backgroundColor: rbaInk }}
           />
           <AppText variant="tiny" color="textMuted">
-            RBA cash rate {pct(activeRbaRate)}
+            {uiJoin('Cash rate', ' · ', pct(activeRbaRate))}
           </AppText>
         </Row>
       ) : null}
@@ -705,14 +696,9 @@ function BankHistoryChartView({
             if (date) handleSlicePress(date);
           }}
           valueLabel={activeHighlight != null
-            ? [pct(activeHighlight), highlightSeries?.valueScope].filter(Boolean).join(' · ')
-            : activePoint?.min != null && activePoint?.max != null
-              ? `${pct(activePoint.min)} – ${pct(activePoint.max)}`
-              : '—'}
-          detail={activePoint ? [
-            activePoint.median != null ? `median ${pct(activePoint.median)}` : null,
-            activePoint.mean != null ? `mean ${pct(activePoint.mean)}` : null,
-          ].filter(Boolean).join(' · ') || null : null}
+            ? uiJoin(pct(activeHighlight), highlightSeries?.valueScope ? uiJoin(' · ', highlightSeries.valueScope) : null)
+            : activePoint?.min != null && activePoint?.max != null ? uiJoin(pct(activePoint.min), ' ', '–', ' ', pct(activePoint.max)) : 'Unknown'}
+          facts={hasMarketStatistics && activePoint ? [{ label: 'Median', value: uiRate(activePoint.median) }, { label: 'Mean', value: uiRate(activePoint.mean) }] : undefined}
         />
       ) : null}
     </View>

@@ -1,3 +1,5 @@
+import { uiCount, uiDate, uiJoin, uiLabel, uiProductName, uiProviderName, type UiCopy, type UiChild } from "../src/lib/uiCopy";
+import { SelectedRateConditions } from "../src/components/product/RateConditionsDisclosure";
 import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -42,8 +44,7 @@ import {
 } from '../src/lib/comparePresentation';
 import type { ProductDetail, RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
-import { formatEvidenceDate } from '../src/data/displayEvidence';
-import { lvrTierDisplay } from '../src/data/lvrTier';
+import { uiListedLvrRange } from '../src/lib/financialUiCopy';
 
 const LABEL_W = 108;
 const COL_W = 136;
@@ -59,26 +60,17 @@ interface Entry {
 }
 
 interface AttrRow {
-  label: string;
-  get: (e: Entry) => string;
+  label: UiCopy;
+  get: (e: Entry) => UiCopy;
   /** When true, values use tabular numerals (rates). */
   tabular?: boolean;
 }
 
-function comparisonIssueCopy(issue: CompareSelectionIssue): { title: string; subtitle: string } {
-  if (issue === 'limit_reached') {
-    return { title: 'Too many products', subtitle: 'Choose no more than four products.' };
-  }
-  if (issue === 'category_mismatch') {
-    return {
-      title: 'Choose one rate category',
-      subtitle: 'Compare home loans, savings accounts, or term deposits separately.',
-    };
-  }
-  if (issue === 'unavailable') {
-    return { title: 'A rate is unavailable', subtitle: 'Return and choose current products again.' };
-  }
-  return { title: 'Nothing to compare', subtitle: 'Select at least two products.' };
+function comparisonIssueCopy(issue: CompareSelectionIssue): { title: UiCopy } {
+  if (issue === 'limit_reached') return { title: 'Maximum 4 rates' };
+  if (issue === 'category_mismatch') return { title: 'Mixed rate categories' };
+  if (issue === 'unavailable') return { title: 'Rate unavailable' };
+  return { title: 'Minimum 2 rates' };
 }
 
 function valuesDiffer(row: AttrRow, entries: Entry[]): boolean {
@@ -172,7 +164,7 @@ export default function Compare() {
         kind: 'data',
         status: comparison?.issue ? 'error' : core && entries.length >= 2 ? 'ready' : 'pending',
         datasetRevision: core?.run_date ?? null,
-        error: comparison?.issue ? comparisonIssueCopy(comparison.issue).subtitle : null,
+        error: comparison?.issue ? comparisonIssueCopy(comparison.issue).title : null,
       },
       {
         id: 'compare.columns',
@@ -201,14 +193,14 @@ export default function Compare() {
   if (!core) return <ScreenSkeleton />;
   const comparisonLoading = catalogue.status !== 'unavailable' && !(catalogue.status === 'ready' && catalogue.allLoaded);
   if (comparisonLoading && comparison?.issue) return <Screen>
-    <AppText variant="small" color="textMuted">{catalogue.status === 'error' ? 'Public pricing unavailable' : 'Public comparisons loading'}</AppText>
+    <AppText variant="small" color="textMuted">{uiJoin('Public pricing', ': ', catalogue.status === 'error' ? 'Unavailable' : 'Loading')}</AppText>
   </Screen>;
   if (comparison?.issue) {
     const copy = comparisonIssueCopy(comparison.issue);
     return (
       <Screen>
         <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24 }}>
-          <EmptyState icon="git-compare-outline" title={copy.title} subtitle={copy.subtitle} />
+          <EmptyState icon="git-compare-outline" title={copy.title} />
           <Button title="Choose products" variant="secondary" onPress={() => router.back()} />
         </View>
       </Screen>
@@ -233,37 +225,34 @@ export default function Compare() {
   const detailFor = (entry: Entry): ProductDetail | undefined =>
     details?.products?.[entry.row.product_key];
   const commonRows: AttrRow[] = [
-    { label: 'Advertised rate', get: (e) => {
-      const resolution = resolveRowPublicRate(e.row, catalogue, publicRateScenario(e.section, scenario, profile, e.row));
-      return resolution ? publicRateText(resolution) : formatRate(e.row.rate);
-    }, tabular: true },
+    { label: uiLabel('Payable rate'), get: (e) => { const resolution = resolveRowPublicRate(e.row, catalogue, publicRateScenario(e.section, scenario, profile, e.row)); return resolution ? publicRateText(resolution) : formatRate(e.row.rate); }, tabular: true },
     {
-      label: 'Ongoing rate',
-      get: (e) => e.row.ongoing_rate ? formatRate(e.row.ongoing_rate) : 'Not separately published',
+      label: uiLabel("Ongoing rate"),
+      get: (e) => e.row.ongoing_rate ? formatRate(e.row.ongoing_rate) : 'Unknown',
       tabular: true,
     },
     {
-      label: 'Comparison rate',
+      label: uiLabel("Comparison rate"),
       get: (e) => (e.row.comparison_rate ? formatRate(e.row.comparison_rate) : '—'),
       tabular: true,
     },
-    { label: 'Type', get: (e) => humanizeEnum(e.row.rate_type) || '—' },
-    { label: 'Term', get: (e) => formatTerm(e.row) || '—' },
+    { label: uiLabel("Type"), get: (e) => humanizeEnum(e.row.rate_type) || '—' },
+    { label: uiLabel("Term"), get: (e) => formatTerm(e.row) || '—' },
     {
-      label: 'Repayment',
+      label: uiLabel("Repayment"),
       get: (e) => humanizeEnum(e.row.ribbon_repayment_type ?? e.row.repayment_type) || '—',
     },
-    { label: 'LVR', get: (e) => lvrTierDisplay(e.row.lvr_tier) || '—' },
-    { label: 'Balance', get: (e) => formatBalanceRange(e.row.balance_min, e.row.balance_max) || '—' },
-    { label: 'Fees', get: (e) => publishedItemCount(detailFor(e)?.fees) },
-    { label: 'Eligibility', get: (e) => publishedItemCount(detailFor(e)?.eligibility) },
-    { label: 'Features', get: (e) => publishedItemCount(detailFor(e)?.features) },
-    { label: 'Constraints', get: (e) => publishedItemCount(detailFor(e)?.constraints) },
+    { label: uiLabel("Listed LVR"), get: (e) => uiListedLvrRange(e.row) },
+    { label: uiLabel("Balance"), get: (e) => formatBalanceRange(e.row.balance_min, e.row.balance_max) || '—' },
+    { label: uiLabel("Fees"), get: (e) => publishedItemCount(detailFor(e)?.fees) },
+    { label: uiLabel("Eligibility"), get: (e) => publishedItemCount(detailFor(e)?.eligibility) },
+    { label: uiLabel("Features"), get: (e) => publishedItemCount(detailFor(e)?.features) },
+    { label: uiLabel("Constraints"), get: (e) => publishedItemCount(detailFor(e)?.constraints) },
     // Calendar-day formatting: UTC-midnight parsing shows the previous day west of UTC.
-    { label: 'Last updated', get: (e) => formatEvidenceDate(e.row.last_updated?.slice(0, 10) || core.run_date) },
+    { label: uiLabel("Last updated"), get: (e) => uiDate(e.row.last_updated?.slice(0,10)||core.run_date) },
   ];
   const attrRows = commonRows.filter((item) => {
-    if (item.label === 'Comparison rate' || item.label === 'Repayment' || item.label === 'LVR') {
+    if (item.label === 'Comparison rate' || item.label === 'Repayment' || item.label === 'Listed LVR') {
       return entries.some((entry) => entry.section === 'Mortgage');
     }
     if (item.label === 'Ongoing rate') return entries.some((entry) => entry.section === 'Savings');
@@ -286,7 +275,7 @@ export default function Compare() {
   const sharedRows = detailRows.filter((row) =>
     !isRateDetailLabel(row.label) && !valuesDiffer(row, entries));
 
-  const labelCell = (label: string, height: number, weight: '600' | '700' = '600') => (
+  const labelCell = (label: UiCopy, height: number, weight: '600' | '700' = '600') => (
     <View
       key={label}
       style={[
@@ -308,7 +297,7 @@ export default function Compare() {
   const valueCell = (
     key: string,
     height: number,
-    content: React.ReactNode,
+    content: UiChild,
     backgroundColor: string = theme.colors.card,
   ) => (
     <View
@@ -332,12 +321,7 @@ export default function Compare() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
       {compact ? (
         <>
-          <View style={styles.compactIntro}>
-            <AppText variant="h3">Key differences</AppText>
-            <AppText variant="small" color="textMuted">
-              Compare the details that differ first. Shared details follow.
-            </AppText>
-          </View>
+          <AppText variant="h3">{uiLabel("Differences")}</AppText>
           {entries.map((entry, idx) => {
             const fraction = fractions[idx];
             const isBest = bestVal !== null && fraction === bestVal;
@@ -353,7 +337,7 @@ export default function Compare() {
               <Card
                 key={`${entry.row.product_key}#${entry.row.rate_index ?? idx}`}
                 variant="outlined"
-                accessibilityLabel={`${entry.row.provider}, ${entry.row.product_name}, product ${idx + 1} of ${entries.length}`}
+                accessibilityLabel={uiJoin(uiProviderName(entry.row),' · ',uiProductName(entry.row),' · ',uiCount(idx+1),' / ',uiCount(entries.length))}
                 style={styles.compactCard}
               >
                 <Row gap={12} style={styles.compactProductHeader}>
@@ -364,10 +348,10 @@ export default function Compare() {
                     onRenderStateChange={logoReadiness.onLogoRenderStateChange}
                   />
                   <View style={styles.compactProductTitle}>
-                    <AppText variant="body" weight="700">{entry.row.product_name}</AppText>
-                    <AppText variant="small" color="textMuted">{entry.row.provider}</AppText>
+                    <AppText variant="body" weight="700">{uiProductName(entry.row)}</AppText>
+                    <AppText variant="small" color="textMuted">{uiProviderName(entry.row)}</AppText>
                   </View>
-                  {isBest ? <Badge label={lowerIsBetter ? "Lowest rate" : "Highest rate"} tone={bestTone} /> : null}
+                  {isBest ? <Badge label={uiLabel(lowerIsBetter ? "Lowest rate" : "Highest rate")} tone={bestTone} /> : null}
                 </Row>
 
                 <View style={styles.compactRateBlock}>
@@ -375,7 +359,7 @@ export default function Compare() {
                     {rankedRateLabel}
                   </AppText>
                   <AppText variant="rateHero" style={{ color: rateColorFor(entry.section) }}>
-                    {fraction === null ? '—' : formatRate(fraction)}
+                    {fraction === null ? uiLabel("—") : formatRate(fraction)}
                   </AppText>
                   {productHistoryAvailable ? (
                     <ProductRateChangeLine
@@ -403,7 +387,7 @@ export default function Compare() {
                     ))}
                   </View>
                 ) : (
-                  <AppText variant="small" color="textMuted">No other published differences.</AppText>
+                  <AppText variant="small" color="textMuted">{uiLabel("No other differences")}</AppText>
                 )}
               </Card>
             );
@@ -411,7 +395,7 @@ export default function Compare() {
 
           {sharedRows.length ? (
             <View style={styles.sharedSection}>
-              <AppText variant="h3">Shared details</AppText>
+              <AppText variant="h3">{uiLabel("Shared details")}</AppText>
               <Card variant="outlined" style={styles.sharedCard}>
                 {sharedRows.map((row, idx) => (
                   <View key={row.label}>
@@ -488,10 +472,10 @@ export default function Compare() {
                         onRenderStateChange={logoReadiness.onLogoRenderStateChange}
                       />
                       <AppText variant="tiny" weight="700" numberOfLines={2} style={{ marginTop: 4 }}>
-                        {e.row.product_name}
+                        {uiProductName(e.row)}
                       </AppText>
                       <AppText variant="tiny" color="textMuted" numberOfLines={1}>
-                        {e.row.provider}
+                        {uiProviderName(e.row)}
                       </AppText>
                     </View>
 
@@ -500,9 +484,9 @@ export default function Compare() {
                       'rate',
                       RATE_ROW_H,
                       <View style={styles.rateCell}>
-                        {isBest ? <Badge label={lowerIsBetter ? "Lowest rate" : "Highest rate"} tone={bestTone} /> : null}
+                        {isBest ? <Badge label={uiLabel(lowerIsBetter ? "Lowest rate" : "Highest rate")} tone={bestTone} /> : null}
                         <AppText variant="rate" style={{ color: entryRateColor }}>
-                          {f === null ? '—' : formatRate(f)}
+                          {f === null ? uiLabel("—") : formatRate(f)}
                         </AppText>
                       </View>,
                       entryHighlightBg,
@@ -544,6 +528,10 @@ export default function Compare() {
       </View>
       )}
 
+      {entries.map((entry,index)=><Card key={`conditions:${entry.row.product_key}#${entry.row.rate_index??index}`} style={{gap:8}}>
+        <AppText weight="700">{uiProductName(entry.row)}</AppText>
+        <SelectedRateConditions row={entry.row} section={entry.section}/>
+      </Card>)}
       {/* Differences first; calculations and document terms are follow-up detail. */}
       <CanonicalTermsComparison rows={calculationRows} />
       {entries.map(entry => <View key={`public:${entry.row.product_key}:${entry.row.public_offer_id ?? entry.row.rate_index}`}>
@@ -552,26 +540,29 @@ export default function Compare() {
       </View>)}
       {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : entries.every(entry => entry.section === 'Savings') ? <PortfolioComparison rows={entries} /> : entries.every(entry => entry.section === 'Mortgage') ? <MortgageComparison rows={entries} /> : <PersonalCostComparisonDisclosure />}
 
-      <AppText variant="h3">Published product details</AppText>
+      <AppText variant="h3">{uiLabel("Published product details")}</AppText>
       {entries.map((entry, index) => (
         <ComparisonDisclosures
           key={`${entry.row.product_key}#${entry.row.rate_index ?? index}`}
           name={entry.row.product_name}
           provider={entry.row.provider}
           productKey={entry.row.product_key}
-          detail={detailFor(entry)}
+          productDetails={detailFor(entry)}
           loading={!details}
         />
       ))}
       <Divider />
       <AppText variant="tiny" color="textFaint">
-        {`${entries.length} products · Compared by ${entries[0].section === 'Mortgage'
-          ? mortgageRateMetric === 'comparison' ? 'comparison rate' : 'advertised rate'
-          : depositRankMetric === 'base' ? 'ongoing rate' : 'headline rate'}${compact ? '' : ' · scroll for more columns'}`}
+        {uiJoin(uiCount(entries.length),' ','Products',' · ','Ranked rate',': ',commonRankedRateLabel)}
       </AppText>
-      <AppText variant="tiny" color="textFaint">
-        Missing details may reflect a collection gap. A rate ranking does not include all costs or establish eligibility.
-      </AppText>
+      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <AppText variant="tiny" color="textFaint">{uiLabel("Missing details")}</AppText>
+        <AppText variant="tiny">{uiLabel("Unknown")}</AppText>
+      </Row>
+      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <AppText variant="tiny" color="textFaint">{uiLabel("Eligibility / total costs")}</AppText>
+        <AppText variant="tiny">{uiLabel("Unverified")}</AppText>
+      </Row>
       </ScrollView>
     </Screen>
   );

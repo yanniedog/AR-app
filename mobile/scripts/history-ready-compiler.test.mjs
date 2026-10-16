@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -35,4 +36,26 @@ test('standalone CLI binds compilation and validation to its actual file receipt
   ready.compiler_sha256 = 'f'.repeat(64);
   const rejected = spawnSync(process.execPath, [filename, '--validate'], { input: JSON.stringify(ready), encoding: 'utf8' });
   assert.notEqual(rejected.status, 0);
+});
+
+test('standalone producer excludes UI modules and runs from an isolated directory without npm', () => {
+  for (const source of Object.keys(manifest.source_files)) {
+    assert.doesNotMatch(source, /^(?:\.\.(?:\/|$)|[A-Za-z]:|\/)|\\/, source);
+    assert.doesNotMatch(source, /^(?:src\/(?:components|content)\/|src\/lib\/(?:uiCopy|productUiFacts)\.ts$|node_modules\/(?:react|react-native)(?:\/|$))/, source);
+  }
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ar-history-ready-standalone-'));
+  try {
+    const isolatedCompiler = path.join(directory, 'compiler.cjs');
+    fs.copyFileSync(filename, isolatedCompiler);
+    assert.deepEqual(fs.readdirSync(directory), ['compiler.cjs']);
+    const options = { cwd: directory, encoding: 'utf8', env: { ...process.env, NODE_PATH: '' } };
+    const compiled = spawnSync(process.execPath, [isolatedCompiler], { ...options, input: JSON.stringify(fixture) });
+    assert.equal(compiled.status, 0, compiled.stderr);
+    assert.deepEqual(JSON.parse(compiled.stdout), compiler.compile(fixture, manifest.sha256));
+    const validated = spawnSync(process.execPath, [isolatedCompiler, '--validate'], { ...options, input: compiled.stdout });
+    assert.equal(validated.status, 0, validated.stderr);
+    assert.deepEqual(JSON.parse(validated.stdout), { valid: true });
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });

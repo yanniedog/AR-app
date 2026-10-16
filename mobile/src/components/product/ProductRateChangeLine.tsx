@@ -12,27 +12,25 @@ import { moveTone } from '../../lib/moveSemantics';
 import type { SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText } from '../ui';
+import { uiJoin, uiNumber, type UiText } from '../../lib/uiCopy';
 
-function bpsMagnitude(bps: number): string {
+function bpsMagnitude(bps: number): UiText {
   const rounded = Math.round(Math.abs(bps) * 10) / 10;
-  return `${rounded} bp${rounded === 1 ? '' : 's'}`;
+  return uiJoin(uiNumber(rounded, rounded % 1 ? 1 : 0), ' ', 'bps');
 }
 
 export function productRateChangeText(
   summary: ProductBestRateSummary | null,
   compact = false,
-): string | null {
+): UiText | null {
   if (!summary) return null;
   if (summary.kind === 'tracking' || summary.kind === 'unchanged') return null;
 
   const arrow = summary.bps > 0 ? '↑' : '↓';
-  const verb = summary.bps > 0 ? 'rose' : 'fell';
   const when = formatRateChangeDate(summary.observedOn);
   return compact
-    ? `Advertised ${arrow} ${bpsMagnitude(summary.bps)} · ${when}`
-    : `Published rate ${verb} ${bpsMagnitude(summary.bps)} · ${when} · ${formatRate(
-        summary.fromRate,
-      )} → ${formatRate(summary.toRate)}`;
+    ? uiJoin('Advertised', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when)
+    : uiJoin('Advertised', ' ', arrow, ' ', bpsMagnitude(summary.bps), ' · ', when, ' · ', formatRate(summary.fromRate), ' → ', formatRate(summary.toRate));
 }
 
 export function useProductRateChangeSummary(
@@ -59,17 +57,17 @@ export function useProductRateChangeSummary(
 export function ProductRateChangeSummaryLine({
   section,
   compact = false,
-  summary,
+  model,
 }: {
   section: SectionKey;
   compact?: boolean;
-  summary: ProductBestRateSummary | null;
+  model: ProductBestRateSummary | null;
 }) {
   const theme = useTheme();
-  const text = productRateChangeText(summary, compact);
+  const text = productRateChangeText(model, compact);
   if (!text) return null;
 
-  const tone = summary?.kind === 'changed' ? moveTone(section, summary.bps) : 'muted';
+  const tone = model?.kind === 'changed' ? moveTone(section, model.bps) : 'muted';
   const color =
     tone === 'success'
       ? theme.colors.success
@@ -80,9 +78,9 @@ export function ProductRateChangeSummaryLine({
   return (
     <AppText
       variant="tiny"
-      weight={summary?.kind === 'changed' ? '700' : '400'}
+      weight={model?.kind === 'changed' ? '700' : '400'}
       style={{ color, marginTop: compact ? 3 : 8, textAlign: compact ? 'left' : 'center' }}
-      accessibilityLabel={text.replace('↑', 'up').replace('↓', 'down')}
+      accessibilityLabel={text}
     >
       {text}
     </AppText>
@@ -102,6 +100,6 @@ export function ProductRateChangeLine({
 }) {
   const summary = useProductRateChangeSummary(productKey, current);
   return (
-    <ProductRateChangeSummaryLine summary={summary} section={section} compact={compact} />
+    <ProductRateChangeSummaryLine model={summary} section={section} compact={compact} />
   );
 }

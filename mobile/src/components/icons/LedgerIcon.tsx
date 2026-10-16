@@ -47,6 +47,7 @@ export type LedgerIconName =
   | 'message'
   | 'menu'
   | 'money'
+  | 'more'
   | 'my-rates'
   | 'offline'
   | 'profile'
@@ -60,6 +61,7 @@ export type LedgerIconName =
   | 'settings'
   | 'share'
   | 'shield'
+  | 'sort'
   | 'star'
   | 'star-filled'
   | 'success'
@@ -73,11 +75,11 @@ export type LedgerIconName =
   | 'warning'
   | 'wifi';
 
-export interface LedgerIconProps extends Omit<SvgProps, 'color'> {
+export interface LedgerIconProps extends Omit<import('../../lib/uiCopy').UiNativeProps<SvgProps>, 'color'> {
   name: LedgerIconName;
   size?: number;
   color?: string;
-  accessibilityLabel?: string;
+  accessibilityLabel?: import('../../lib/uiCopy').UiCopy;
 }
 
 function IconDrawing({ name, color }: { name: LedgerIconName; color: string }) {
@@ -94,6 +96,10 @@ function IconDrawing({ name, color }: { name: LedgerIconName; color: string }) {
       return <><Line x1="12" y1="20" x2="12" y2="4" {...line} /><Polyline points="5 11 12 4 19 11" {...line} /></>;
     case 'arrow-down':
       return <><Line x1="12" y1="4" x2="12" y2="20" {...line} /><Polyline points="5 13 12 20 19 13" {...line} /></>;
+    case 'sort':
+      return <><Line x1="8" y1="20" x2="8" y2="4" {...line} /><Polyline points="4 8 8 4 12 8" {...line} /><Line x1="16" y1="4" x2="16" y2="20" {...line} /><Polyline points="12 16 16 20 20 16" {...line} /></>;
+    case 'more':
+      return <><Circle cx="5" cy="12" r="1.6" fill={color} /><Circle cx="12" cy="12" r="1.6" fill={color} /><Circle cx="19" cy="12" r="1.6" fill={color} /></>;
     case 'bell':
       return <><Path d="M18 8.4c0-3.54-2.69-6.4-6-6.4S6 4.86 6 8.4C6 15.87 3 18 3 18h18s-3-2.13-3-9.6Z" {...line} /><Path d="M13.73 21a2 2 0 0 1-3.46 0" {...line} /></>;
     case 'checkbox':

@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   type PressableProps,
+  type PressableStateCallbackType,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -13,8 +14,10 @@ import {
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { LEDGER_MOTION, ledgerMotionDuration } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
+import type { UiNativeProps, UiChild } from '../lib/uiCopy';
 
-export interface PressFeedbackProps extends PressableProps {
+export interface PressFeedbackProps extends Omit<UiNativeProps<PressableProps>, 'children'> {
+  children?: UiChild | ((state: PressableStateCallbackType) => UiChild);
   /** Layout for the animated contents; the target and ripple remain stationary. */
   contentStyle?: StyleProp<ViewStyle>;
 }

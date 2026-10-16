@@ -1,6 +1,6 @@
 import { router, useGlobalSearchParams, usePathname } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../data/eligibilityGate';
@@ -12,13 +12,14 @@ import { useSuitabilityRevision } from '../hooks/useSuitabilityRevision';
 import { destinationSectionFromParam } from '../lib/appDestinations';
 import { buildBrowseRouteParams } from '../lib/browseRoute';
 import { buildBreadcrumbs, shouldShowBreadcrumbs, type BreadcrumbTarget } from '../lib/breadcrumbs';
-import { compactBreadcrumbs, shortBreadcrumbLabel } from '../lib/compactBreadcrumbs';
+import { compactBreadcrumbs } from '../lib/compactBreadcrumbs';
 import { parseBrowsePath, scalarRouteParam } from '../lib/nav';
 import { useTheme } from '../theme/ThemeProvider';
 import { navigateToAppDestination, navigateToPrimaryTab } from '../lib/primaryNavigation';
 import { useAppUpdateBannerVisible } from './AppUpdateBanner';
 import { LedgerIcon } from './icons/LedgerIcon';
 import { AppText } from './ui';
+import { uiLabel } from '../lib/uiCopy';
 
 export function AppBreadcrumbBar() {
   const theme = useTheme();
@@ -29,7 +30,7 @@ export function AppBreadcrumbBar() {
     section?: string | string[]; path?: string | string[];
     provider?: string | string[]; key?: string | string[]; ri?: string | string[];
   }>();
-  const onboarded = useStore((state) => state.prefs.onboarded);
+  const hydrated = useStore((state) => state.hydrated);
   const interests = useStore((state) => state.prefs.interests);
   const activeSection = useStore((state) => state.activeSection);
   const core = useStore((state) => state.core);
@@ -77,17 +78,17 @@ export function AppBreadcrumbBar() {
   const menuOpen = openTrail === trailKey && hidden.length > 0;
   const closeMenu = () => setOpenTrail(null);
 
-  if (!shouldShowBreadcrumbs(pathname, onboarded)) return null;
+  if (!shouldShowBreadcrumbs(pathname, hydrated)) return null;
 
   const navigate = (target: BreadcrumbTarget) => {
     closeMenu();
     if ('href' in target) navigateToAppDestination(target.href, pathname);
     else router.navigate({
-      pathname: '/categories',
+      pathname: '/(tabs)/browse',
       params: { ...buildBrowseRouteParams(target.section, target.path), path: target.path.join('.') },
     });
   };
-  const height = Math.max(Platform.OS === 'web' ? 36 : 44, Math.ceil(20 * fontScale + 12));
+  const height = Math.max(48, Math.ceil(20 * fontScale + 12));
   return (
     <View
       testID="app-breadcrumb-bar"
@@ -101,11 +102,11 @@ export function AppBreadcrumbBar() {
       <View style={{ flexDirection: 'row', height }}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Home"
-          onPress={() => navigateToPrimaryTab('index', pathname)}
-          style={({ pressed }) => ({ width: 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}
+          accessibilityLabel="Rates"
+          onPress={() => navigateToPrimaryTab('browse', pathname)}
+          style={({ pressed }) => ({ width: 48, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}
         >
-          <LedgerIcon name="home" size={18} color={theme.ledger.mutedInk} />
+          <LedgerIcon name="explore" size={18} color={theme.ledger.mutedInk} />
         </Pressable>
         {hidden.length > 0 ? (
           <Pressable
@@ -113,9 +114,9 @@ export function AppBreadcrumbBar() {
             accessibilityLabel="Show parent sections"
             accessibilityState={{ expanded: menuOpen }}
             onPress={() => setOpenTrail(trailKey)}
-            style={({ pressed }) => ({ width: 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}
+            style={({ pressed }) => ({ width: 48, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}
           >
-            <AppText variant="small" style={{ color: theme.ledger.mutedInk }}>…</AppText>
+            <AppText variant="small" style={{ color: theme.ledger.mutedInk }}>{uiLabel('…')}</AppText>
           </Pressable>
         ) : null}
         <View testID="breadcrumb-visible-path" style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, overflow: 'hidden', paddingRight: 8 }}>
@@ -126,14 +127,14 @@ export function AppBreadcrumbBar() {
               </View>
               <Pressable
                 accessibilityRole={crumb.target ? 'button' : 'text'}
-                accessibilityLabel={crumb.target ? `Go to ${crumb.label}` : `${crumb.label}, current location`}
+                accessibilityLabel={crumb.label}
                 accessibilityState={{ selected: !crumb.target }}
                 disabled={!crumb.target}
                 onPress={() => { if (crumb.target) navigate(crumb.target); }}
                 style={({ pressed }) => ({ height: '100%', minWidth: 0, flexShrink: 1, justifyContent: 'center', paddingHorizontal: 8, opacity: pressed ? 0.6 : 1 })}
               >
                 <AppText variant="small" numberOfLines={1} ellipsizeMode="tail" style={{ color: crumb.target ? theme.ledger.mutedInk : theme.ledger.ink }}>
-                  {shortBreadcrumbLabel(crumb.label, crumb.target ? 12 : 18)}
+                  {crumb.label}
                 </AppText>
               </Pressable>
             </View>
@@ -153,8 +154,8 @@ export function AppBreadcrumbBar() {
             style={{ maxHeight: screenHeight * 0.65, width: 360, maxWidth: '100%', borderRadius: theme.radius.sm, backgroundColor: theme.ledger.raised, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.ledger.rule }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 16 }}>
-              <AppText variant="small" style={{ flexShrink: 1 }}>Jump to</AppText>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close parent sections" onPress={closeMenu} style={{ minHeight: 44, width: 44, alignItems: 'center', justifyContent: 'center' }}>
+              <AppText variant="small" style={{ flexShrink: 1 }}>{uiLabel('Parent sections')}</AppText>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close parent sections" onPress={closeMenu} style={{ minHeight: 48, width: 48, alignItems: 'center', justifyContent: 'center' }}>
                 <LedgerIcon name="close" size={20} color={theme.ledger.ink} />
               </Pressable>
             </View>
@@ -163,7 +164,7 @@ export function AppBreadcrumbBar() {
                 <Pressable
                   key={index}
                   accessibilityRole={crumb.target ? 'button' : 'text'}
-                  accessibilityLabel={crumb.target ? `Go to ${crumb.label}` : crumb.label}
+                  accessibilityLabel={crumb.label}
                   disabled={!crumb.target}
                   onPress={() => { if (crumb.target) navigate(crumb.target); }}
                   style={({ pressed }) => ({ minHeight: 48, paddingHorizontal: 16, paddingVertical: 12, justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}

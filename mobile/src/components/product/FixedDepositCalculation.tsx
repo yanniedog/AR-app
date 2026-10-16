@@ -13,6 +13,8 @@ import { EVALUATOR_VERSION } from '../../lib/productTermsEngine/types';
 import { canonical, hashText } from '../../lib/productTermsEngine/validation';
 import { loadExecutableSelections, type ApprovedSelection, type ContractContext } from '../../data/executableContracts/transport';
 import { calculateDeposit, type DepositInputs } from '../../data/executableContracts/instantiate';
+import { uiJoin, uiLabel, type UiLabel } from '../../lib/uiCopy';
+import { EngineReceiptFacts } from './EngineReceiptFacts';
 
 function DepositForm({ candidates, context, row }: { candidates: ApprovedSelection[]; context: ContractContext; row: RateRow }) {
   const [selectedId, setSelectedId] = useState<string | null>(() => candidates.length === 1 ? candidates[0].template.id : null);
@@ -21,42 +23,30 @@ function DepositForm({ candidates, context, row }: { candidates: ApprovedSelecti
   const { profile, busy, error } = customer;
   const [inputs, setInputs] = useState<DepositInputs>(emptyDepositInputs);
   const [result, setResult] = useState<{ identity: string; data?: ReturnType<typeof calculateDeposit>; error?: string } | null>(null);
-  const [copyStatus, setCopyStatus] = useState('');
+  const [copyStatus, setCopyStatus] = useState<UiLabel>('');
   const [trace, setTrace] = useState(false);
   const identity = JSON.stringify([inputs, profile?.revision, selectedId]);
   const current = result?.identity === identity ? result : null;
-  if (!profile) return <AppText variant="small">{error ?? 'Opening encrypted local inputs...'}</AppText>;
+  if (!profile) return <AppText variant="small">{uiLabel(error ? 'Unavailable' : 'Loading')}</AppText>;
   function calculate() {
     if (!selection) { setResult({ identity, error: 'Choose the applicable reviewed customer group.' }); return; }
     try { setResult({ identity, data: calculateDeposit(selection, context, row, inputs, profile!) }); }
     catch (e) { setResult({ identity, error: e instanceof Error ? e.message : 'Calculation unavailable.' }); }
   }
   return <View style={{ gap: 12 }}>
-    <AppText variant="small">Reviewed source terms apply only within their stated dates. This is not confirmation of a current bank offer.</AppText>
-    <AppText variant="small">Return before tax. Amounts and dates stay on this device. Eligibility answers are stored encrypted locally.</AppText>
-    <DepositCohorts candidates={candidates} selectedId={selectedId} onSelect={setSelectedId} row={row} inputs={inputs} onChange={setInputs} customer={customer} />
-    <Button title="Calculate maturity return" disabled={busy} onPress={calculate} />
-    {current?.error ? <AppText variant="small">{current.error}</AppText> : null}
+    <AppText variant="small">{uiJoin('Tax', ': ', 'Excluded', ' · ', 'Bank offer', ': ', 'Unverified')}</AppText>
+    <AppText variant="small">{uiJoin('Inputs', ': ', 'Local only', ' · ', 'Encrypted')}</AppText>
+    <DepositCohorts candidates={candidates} context={context} selectedId={selectedId} onSelect={setSelectedId} row={row} inputs={inputs} onChange={setInputs} customer={customer} />
+    <Button title="Calculate" disabled={busy} onPress={calculate} />
+    {current?.error ? <AppText variant="small">{uiLabel("Unavailable")}</AppText> : null}
     {current?.data ? <View style={{ gap: 8 }}>
-      <AppText variant="small">{current.data.basis}</AppText>
-      <AppText variant="small">{current.data.receipt.claimAvailable ? `Interest before tax: $${current.data.receipt.totals?.interestPosted}. Maturity payout: $${current.data.receipt.totals?.externalOutflows}.` : 'Result unavailable: eligibility or material inputs remain unresolved.'}</AppText>
-      <AppText variant="small">This separate maturity result is not a full-horizon product ranking.</AppText>
-      <Disclosure title="Calculation details" open={trace} onToggle={() => setTrace(!trace)}>
-        <AppText variant="tiny">Receipt {current.data.receipt.inputSha256}</AppText>
-        <AppText variant="small">Eligibility: {current.data.receipt.eligibility?.status.replace(/_/g, ' ') ?? 'Not assessed'}</AppText>
-        {current.data.receipt.eligibility?.reasons.map((reason, i) => <AppText key={`reason-${i}`} variant="small">{reason}</AppText>)}
-        {current.data.receipt.issues.map((issue, i) => <AppText key={i} variant="small">{issue}</AppText>)}
-        {current.data.receipt.totals ? <View style={{ gap: 4 }}>
-          <AppText variant="small">Starting principal: ${current.data.receipt.totals.openingBalance}</AppText>
-          <AppText variant="small">Interest paid before tax: ${current.data.receipt.totals.interestPosted}</AppText>
-          <AppText variant="small">Fees: ${current.data.receipt.totals.feesCharged}</AppText>
-          <AppText variant="small">Remaining deposit balance: ${current.data.receipt.totals.closingBalance}</AppText>
-          <AppText variant="small">Interest rounding adjustment: ${current.data.receipt.totals.interestRoundingAdjustment}</AppText>
-        </View> : null}
+      <AppText variant="small">{uiJoin('Basis', ': ', 'Maturity return', ' · ', 'Ranking', ': ', 'Not assessed')}</AppText>
+      <EngineReceiptFacts receipt={current.data.receipt} />
+      <Disclosure title="Calculation" open={trace} onToggle={() => setTrace(!trace)}>
         {selection?.template.evidence.map(source => <DepositSource key={source.id} source={source} />)}
-        <AppText variant="small">The receipt includes your entered amounts, dates and relevant eligibility answers.</AppText>
-        <Button title="Copy calculation receipt" variant="secondary" onPress={() => { try { if (!selection) throw Error(); const exported=privateTdExport(current.data,[tdReopenItem(selection,context,row,inputs,profile)]); void Clipboard.setStringAsync(JSON.stringify(exported,null,2)).then(()=>setCopyStatus('Receipt copied.'),()=>setCopyStatus('Receipt could not be copied.')); } catch { setCopyStatus('Source changed. Calculate again.'); } }} />
-        {copyStatus ? <AppText variant="small">{copyStatus}</AppText> : null}
+        <AppText variant="small">{uiJoin('Receipt', ': ', 'Private', ' · ', 'Entered facts', ' · ', 'Source')}</AppText>
+        <Button title="Copy receipt" variant="secondary" onPress={() => { try { if (!selection) throw Error(); const exported=privateTdExport(current.data,[tdReopenItem(selection,context,row,inputs,profile)]); void Clipboard.setStringAsync(JSON.stringify(exported,null,2)).then(()=>setCopyStatus('Copied'),()=>setCopyStatus('Copy failed')); } catch { setCopyStatus('Source changed'); } }} />
+        {copyStatus ? <AppText variant="small">{uiLabel(copyStatus)}</AppText> : null}
       </Disclosure>
     </View> : null}
   </View>;
@@ -73,9 +63,9 @@ export function FixedDepositCalculation({ row }: { row: RateRow }) {
     void loadExecutableSelections({ manifest, core, coreIntegrity }, row).then(selections => { if (active) setLoaded({ identity, selections: selections.filter(item => item.template.evaluatorVersion === EVALUATOR_VERSION) }); }, () => { if (active) setLoaded({ identity, error: 'The calculation approval could not be verified for this publication.' }); });
     return () => { active = false; };
   }, [open, identity, manifest, core, coreIntegrity, row]);
-  return <Disclosure title="Maturity return before tax" summary="Check calculation availability" open={open} onToggle={() => setOpen(!open)}>
-    {!selected ? <AppText variant="small">Checking reviewed calculation terms...</AppText> : !!selected.selections?.length ?
+  return <Disclosure title="Maturity return" open={open} onToggle={() => setOpen(!open)}>
+    {!selected ? <AppText variant="small">{uiLabel("Checking")}</AppText> : !!selected.selections?.length ?
       <DepositForm key={identity} candidates={selected.selections} context={{ manifest, core, coreIntegrity }} row={row} /> :
-      <AppText variant="small">{selected.error ?? 'An approved calculation template is unavailable for this exact rate. Early exit, rollover and variable rates are not supported.'}</AppText>}
+      <AppText variant="small">{uiLabel(selected.error ? 'Source unverified' : 'Unavailable')}</AppText>}
   </Disclosure>;
 }

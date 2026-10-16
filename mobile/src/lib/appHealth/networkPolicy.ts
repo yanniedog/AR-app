@@ -21,6 +21,8 @@ export interface BeginAppHealthNetworkSessionOptions {
   declaredAssetUrls?: readonly string[];
   /** Exact dated manifests selected from the validated dates index. */
   declaredManifestUrls?: readonly string[];
+  /** Compiled APK channels, enabled only around an explicit live update check. */
+  appUpdateManifestUrls?: readonly string[];
 }
 
 interface ActiveSession {
@@ -30,6 +32,8 @@ interface ActiveSession {
   declaredAssetUrls: Set<string>;
   declaredManifestUrls: Set<string>;
   externalUrls: Set<string>;
+  appUpdateManifestUrls: Set<string>;
+  appUpdateEnabled: boolean;
   authorizationAttempts: number;
   authorizedAttempts: number;
   blockedAttempts: number;
@@ -148,6 +152,11 @@ export class AppHealthNetworkPolicy {
       declaredAssetUrls,
       declaredManifestUrls,
       externalUrls: new Set(),
+      appUpdateManifestUrls: new Set((options.appUpdateManifestUrls ?? []).flatMap(url => {
+        const value = canonicalAuditUrl(url);
+        return value ? [value] : [];
+      })),
+      appUpdateEnabled: false,
       authorizationAttempts: 0,
       authorizedAttempts: 0,
       blockedAttempts: 0,
@@ -204,6 +213,7 @@ export class AppHealthNetworkPolicy {
       return { allowed: false, reason: 'invalid-url' };
     }
     const allowed =
+      (purpose === 'app-update-manifest' && session.appUpdateEnabled && session.appUpdateManifestUrls.has(canonical)) ||
       (purpose === 'manifest' && session.declaredManifestUrls.has(canonical)) ||
       (purpose === 'dates-index' && exactContractUrl(canonical, session.contract.datesIndexUrl)) ||
       (purpose === 'asset' && session.declaredAssetUrls.has(canonical));
@@ -214,6 +224,12 @@ export class AppHealthNetworkPolicy {
     }
     session.blockedAttempts += 1;
     return { allowed: false, reason: 'not-allowlisted' };
+  }
+
+  /** Exact source destinations only; this never grants a host-wide permission. */
+  setAppUpdateManifestAccess(handle: AppHealthNetworkSessionHandle, enabled: boolean): void {
+    const session = this.sessionFor(handle);
+    if (session?.mode === 'live-source') session.appUpdateEnabled = enabled;
   }
 
   /** Exact source destinations only; this never grants a host-wide permission. */

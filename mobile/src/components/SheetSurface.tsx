@@ -1,3 +1,4 @@
+import type { UiChild } from '../lib/uiCopy';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,24 +10,35 @@ import { useTheme } from '../theme/ThemeProvider';
 import { LedgerIcon } from './icons/LedgerIcon';
 import { LedgerText } from './ledger/LedgerText';
 import { TouchTarget } from './TouchTarget';
+import { uiJoin, type UiCopy } from '../lib/uiCopy';
+
+export function sheetBottomPadding(bottomInset: number, scale: number, platform = Platform.OS): number {
+  const padding = Math.max(bottomInset, 12);
+  if (platform !== 'android') return padding;
+  // The inset bridge and native Modal can round opposite sides of a pixel.
+  // Round outwards, cover that one-pixel seam, then retain one pixel of clearance.
+  return (Math.ceil(padding * scale) + 2) / scale;
+}
 
 /** One interruptible native sheet layer, shared by filters and compact tasks. */
 export function SheetSurface({ visible, title, onClose, children, footer, style }: {
   visible: boolean;
-  title: string;
+  title: UiCopy;
   onClose: () => void;
-  children: React.ReactNode;
-  footer?: React.ReactNode;
+  children: UiChild;
+  footer?: UiChild;
   style?: StyleProp<ViewStyle>;
 }) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
+  const { height, scale } = useWindowDimensions();
   const [mounted, setMounted] = useState(visible);
   const mountedRef = useRef(visible);
   const progress = useRef(new Animated.Value(0)).current;
   const transition = useRef(0);
+  const closePending = useRef(!visible);
+  closePending.current = !visible;
 
   useEffect(() => {
     const currentTransition = ++transition.current;
@@ -59,16 +71,22 @@ export function SheetSurface({ visible, title, onClose, children, footer, style 
     };
   }, [visible, reducedMotion, progress]);
 
+  const dismiss = () => {
+    if (closePending.current) return;
+    closePending.current = true;
+    onClose();
+  };
   const close = () => {
+    if (closePending.current) return;
     if (Keyboard.isVisible()) Keyboard.dismiss();
-    else onClose();
+    else dismiss();
   };
 
   return (
-    <Modal transparent statusBarTranslucent visible={mounted} animationType="none" onRequestClose={close}>
+    <Modal transparent statusBarTranslucent visible={visible || mounted} animationType="none" onRequestClose={close}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Animated.View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: theme.ledger.scrim, opacity: progress }} />
-        <Pressable accessible={false} accessibilityElementsHidden onPress={onClose} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+        <Pressable accessible={false} accessibilityElementsHidden onPress={dismiss} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
         <Animated.View
           accessibilityViewIsModal
           style={[{
@@ -79,14 +97,14 @@ export function SheetSurface({ visible, title, onClose, children, footer, style 
             backgroundColor: theme.ledger.raised,
             borderTopLeftRadius: theme.radius.lg,
             borderTopRightRadius: theme.radius.lg,
-            paddingBottom: Math.max(insets.bottom, 12),
+            paddingBottom: sheetBottomPadding(insets.bottom, scale),
             overflow: 'hidden',
             transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }) }],
           }, style]}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
             <LedgerText variant="heading" style={{ flex: 1 }}>{title}</LedgerText>
-            <TouchTarget square hitSlop={0} onPress={onClose} accessibilityRole="button" accessibilityLabel={`Close ${title}`} style={{ borderRadius: theme.radius.sm, overflow: 'hidden' }}>
+            <TouchTarget square hitSlop={0} onPress={onClose} accessibilityRole="button" accessibilityLabel={uiJoin('Close', ' ', title)} style={{ borderRadius: theme.radius.sm, overflow: 'hidden' }}>
               <LedgerIcon name="close" color={theme.ledger.ink} />
             </TouchTarget>
           </View>

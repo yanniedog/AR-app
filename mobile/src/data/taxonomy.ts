@@ -1,5 +1,5 @@
 import { mandatoryEligibleRows } from './eligibilityGate';
-import { SECTIONS } from '../constants';
+import { uiDecimal, uiDuration, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiSectionName, type UiCopy, type UiText } from '../lib/uiCopy';
 import { isMeaningfulDepositRate } from '../config';
 import type { RateRow, SectionKey } from '../types';
 import { effectiveFraction, isBroadlyAvailable, visibleAccountRows } from './format';
@@ -25,7 +25,7 @@ export function rowsForSearchScope(
   return path.length || hierarchyScoped ? rowsUnder(rows, section, path) : mandatoryEligibleRows(rows);
 }
 
-const LABELS: Record<string, string> = {
+const LABELS: Readonly<Record<string, UiCopy>> = {
   HOME_LOAN: 'Home loans',
   OO: 'Owner-occupied',
   INV: 'Investor',
@@ -68,33 +68,40 @@ function months(seg: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
-function lvrLabel(seg: string): string {
+function lvrLabel(seg: string): UiText {
   const v = seg.replace(/^LVR_/, '');
-  if (v === 'LE60') return '≤60% LVR';
-  if (v === 'UNSP' || v === 'UNSPECIFIED' || v === 'NA') return 'LVR n/a';
-  let m = /^(\d+)_(\d+)$/.exec(v);
-  if (m) return `${m[1]}–${m[2]}% LVR`;
-  m = /^GT?(\d+)$/.exec(v);
-  if (m) return `${m[1]}%+ LVR`;
+  if (v === 'LE60') return uiJoin('≤', uiNumber(60), '%', ' ', 'LVR');
+  if (v === 'UNSP' || v === 'UNSPECIFIED' || v === 'NA') return uiJoin('LVR', ' · ', 'Unknown');
+  let m = /^GT?(\d+)$/.exec(v);
+  if (m) return uiJoin(uiNumber(Number(m[1])), '%', '+', ' ', 'LVR');
+  const exact = /^(GE|GT|LE)(\d+(?:p\d+)?)(?:_(\d+(?:p\d+)?))?$/.exec(v);
+  if (exact) {
+    const operator = exact[1] === 'GE' ? '≥' : exact[1] === 'GT' ? '>' : '≤';
+    return uiJoin(operator, uiDecimal(exact[2].replace('p', '.'), 'count'),
+      exact[3] ? uiJoin('–', uiDecimal(exact[3].replace('p', '.'), 'count')) : '', '%', ' ', 'LVR');
+  }
+  m = /^(\d+)_(\d+)$/.exec(v);
+  if (m) return uiJoin(uiNumber(Number(m[1])), '–', uiNumber(Number(m[2])), '%', ' ', 'LVR');
   m = /^(\d+)$/.exec(v);
-  if (m) return `≤${m[1]}% LVR`;
-  return `${v} LVR`;
+  if (m) return uiJoin('≤', uiNumber(Number(m[1])), '%', ' ', 'LVR');
+  return uiJoin('LVR', ' · ', 'Unknown');
 }
 
-/** Human label for a single taxonomy segment. */
-export function segLabel(seg: string): string {
-  if (!seg) return 'Other';
-  if (LABELS[seg]) return LABELS[seg];
+/** Closed headings and represented numeric scope facts; segment keys stay intact. */
+export function segLabel(seg: string): UiText {
+  if (!seg) return uiLabel('Other');
+  const label = Object.hasOwn(LABELS, seg) ? LABELS[seg] : null;
+  if (label) return uiJoin(label);
   if (seg.startsWith('LVR_')) return lvrLabel(seg);
   const mo = months(seg);
   if (mo !== null) {
     if (mo % 12 === 0) {
       const y = mo / 12;
-      return `${y} year${y > 1 ? 's' : ''}`;
+      return y === 1 ? uiJoin(uiNumber(y), ' ', 'year') : uiDuration(y, 'years');
     }
-    return `${mo} months`;
+    return mo === 1 ? uiJoin(uiNumber(mo), ' ', 'month') : uiDuration(mo, 'months');
   }
-  return seg.charAt(0) + seg.slice(1).toLowerCase().replace(/_/g, ' ');
+  return uiJoin('Source category', ' · ', uiOpaqueEnum(seg));
 }
 
 // A daily core contains thousands of rows but only a small taxonomy vocabulary.
@@ -182,7 +189,7 @@ export function rowsUnder(rows: RateRow[], section: SectionKey, path: string[]):
 
 export interface TaxoNode {
   seg: string;
-  label: string;
+  label: UiCopy;
   rows: RateRow[];
   stats: RateStats;
   hasChildren: boolean;
@@ -206,7 +213,9 @@ function compareSeg(a: string, b: string, section: SectionKey): number {
   if (oa !== undefined && ob !== undefined) return oa - ob;
   if (oa !== undefined) return -1;
   if (ob !== undefined) return 1;
-  return segLabel(a).localeCompare(segLabel(b));
+  // Display admission cannot change ordering of unrecognized source segments.
+  const sortLabel = (seg: string) => Object.hasOwn(LABELS, seg) ? LABELS[seg] : seg.charAt(0) + seg.slice(1).toLowerCase().replace(/_/g, ' ');
+  return sortLabel(a).localeCompare(sortLabel(b));
 }
 
 /** Child nodes one level below `path` (grouped by the next taxonomy segment). */
@@ -279,6 +288,6 @@ export function leafProducts(rows: RateRow[], section: SectionKey, path: string[
 }
 
 /** Breadcrumb labels for a path under a section. */
-export function breadcrumb(section: SectionKey, path: string[]): string[] {
-  return [SECTIONS[section].title, ...path.map(segLabel)];
+export function breadcrumb(section: SectionKey, path: string[]): UiCopy[] {
+  return [uiSectionName(section), ...path.map(segLabel)];
 }

@@ -1,4 +1,5 @@
 import { automaticDataUrl } from './automaticDataAccess';
+import { APK_ARM_MANIFEST_URL, APK_MANIFEST_URL } from '../config';
 import { StandardUrl as URL } from './standardUrl';
 import { trustedExternalUrl, type TrustedExternalUrlRequest } from './trustedExternalUrl';
 import {
@@ -46,6 +47,8 @@ export interface AuditTransportTarget {
 export interface AppHealthTransportGuard {
   allowManifestAssets(urls: readonly string[]): number;
   allowExternalUrls(requests: readonly TrustedExternalUrlRequest[]): number;
+  /** Grants only credential-free GETs of the compiled APK manifest channels. */
+  beginAppUpdateMetadata(): () => void;
   snapshot(): AppHealthNetworkSnapshot;
   restore(): AppHealthNetworkSnapshot;
 }
@@ -85,6 +88,7 @@ function acceptedFinalFetchUrl(
   requestedUrl: string,
   response: Response,
   contract: AppHealthSourceContract,
+  updateManifest = false,
 ): boolean {
   const finalValue = typeof response.url === 'string' ? response.url : '';
   const requested = canonical(requestedUrl);
@@ -100,7 +104,7 @@ function acceptedFinalFetchUrl(
     const finalParsed = new URL(finalValue);
     return (
       requestedParsed.hostname === 'github.com' &&
-      requestedParsed.pathname.startsWith(`/${contract.repo}/releases/download/`) &&
+      (updateManifest || requestedParsed.pathname.startsWith(`/${contract.repo}/releases/download/`)) &&
       finalParsed.protocol === 'https:' &&
       !finalParsed.username &&
       !finalParsed.password &&
@@ -126,17 +130,23 @@ export function installAppHealthTransportGuard(options: {
   declaredAssetUrls?: readonly string[];
 }): AppHealthTransportGuard {
   const { target, mode, contract, declaredAssetUrls } = options;
+  const updateManifestUrls = new Set([APK_MANIFEST_URL, APK_ARM_MANIFEST_URL]
+    .flatMap(url => { const value = canonical(url); return value ? [value] : []; }));
   const policy = new AppHealthNetworkPolicy();
   const handle: AppHealthNetworkSessionHandle = policy.begin({
     mode,
     contract,
     declaredAssetUrls,
+    appUpdateManifestUrls: [...updateManifestUrls],
   });
   const originalFetch = target.fetch;
   const externalRequests = new Map<string, TrustedExternalUrlRequest>();
   let approvedFetchDepth = 0;
   const guardedFetch: typeof fetch = async (input, init) => {
     const url = requestUrl(input);
+    const isUpdateManifest = updateManifestUrls.has(canonical(url) ?? '');
+    const permittedUpdateManifest = isUpdateManifest && typeof input === 'string' &&
+      init?.method === 'GET' && init.credentials === 'omit' && init.body == null && init.headers == null;
     const external = externalRequests.get(url);
     const permittedExternal = external && typeof input === 'string' &&
       init?.method === 'HEAD' && init.credentials === 'omit' &&
@@ -145,7 +155,7 @@ export function installAppHealthTransportGuard(options: {
       policy,
       handle,
       url,
-      permittedExternal ? 'external-link' : purposeFor(url, contract),
+      permittedUpdateManifest ? 'app-update-manifest' : permittedExternal ? 'external-link' : purposeFor(url, contract),
       () => {
         // React Native implements fetch on top of XMLHttpRequest. Mark only
         // the synchronous XHR created by this already-authorized fetch call;
@@ -168,7 +178,8 @@ export function installAppHealthTransportGuard(options: {
     const acceptedExternal = external &&
       ((response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) ||
         (finalExternal?.ok === true));
-    if (!(external ? acceptedExternal : acceptedFinalFetchUrl(url, response, contract))) {
+    if (!(permittedUpdateManifest ? acceptedFinalFetchUrl(url, response, contract, true)
+      : external ? acceptedExternal : acceptedFinalFetchUrl(url, response, contract))) {
       policy.recordPolicyViolation(handle);
       throw new AppHealthNetworkPolicyError({ allowed: false, reason: 'not-allowlisted' });
     }
@@ -208,6 +219,7 @@ export function installAppHealthTransportGuard(options: {
   }
 
   let restored: AppHealthNetworkSnapshot | null = null;
+  let updateMetadataActive = false;
   const snapshot = () => policy.snapshot(handle) ?? restored ?? {
     mode,
     authorizationAttempts: 0,
@@ -217,6 +229,15 @@ export function installAppHealthTransportGuard(options: {
     policyViolations: 0,
   };
   return {
+    beginAppUpdateMetadata() {
+      if (updateMetadataActive) throw new Error('An update metadata check is already active');
+      updateMetadataActive = true;
+      policy.setAppUpdateManifestAccess(handle, true);
+      return () => {
+        updateMetadataActive = false;
+        policy.setAppUpdateManifestAccess(handle, false);
+      };
+    },
     allowManifestAssets(urls) {
       return policy.declareAssetUrls(handle, urls);
     },

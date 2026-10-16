@@ -1,6 +1,6 @@
 import type { CorePayload, RateRow, SectionKey } from '../types';
 import { SECTION_KEYS } from '../types';
-import { toFraction } from './format';
+import { toFraction } from './rateNumbers';
 import type { RbaCalendar } from './rbaCalendar';
 
 export type RateStatistic = 'min' | 'mean' | 'median' | 'max';

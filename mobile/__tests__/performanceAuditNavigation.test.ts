@@ -1,8 +1,119 @@
-import { StackRouter } from '@react-navigation/routers';
+import { StackRouter, TabRouter } from '@react-navigation/routers';
 import type { NavigationState } from '@react-navigation/native';
 
-import { PerformanceAuditNavigationAnchor } from '../src/lib/performanceAuditNavigation';
+import { measureAuditBackNavigation, PerformanceAuditNavigationAnchor } from '../src/lib/performanceAuditNavigation';
 import { PerformanceAuditMutationBarrier } from '../src/lib/performanceAuditTiming';
+
+function tabBackFixture(destination: 'browse' | 'watchlist' | 'market', initial: 'browse' | 'index' = 'browse') {
+  const tabs = TabRouter({ initialRouteName: initial, backBehavior: 'initialRoute' });
+  const tabOptions = { routeNames: ['browse', 'watchlist', 'market', 'index'], routeParamList: {}, routeGetIdList: {} };
+  let tabState = tabs.getInitialState(tabOptions);
+  tabState = tabs.getRehydratedState(tabs.getStateForAction(tabState,
+    { type: 'JUMP_TO', payload: { name: destination } }, tabOptions)!, tabOptions);
+  const root = StackRouter({ initialRouteName: '(tabs)' });
+  const rootOptions = { routeNames: ['(tabs)', 'performance-audit'], routeParamList: {}, routeGetIdList: {} };
+  let rootState = root.getInitialState(rootOptions);
+  rootState = root.getRehydratedState(root.getStateForAction(rootState,
+    { type: 'PUSH', payload: { name: 'performance-audit' } }, rootOptions)!, rootOptions);
+  const origin = rootState;
+  rootState = root.getRehydratedState(root.getStateForAction(rootState,
+    { type: 'PUSH', payload: { name: '(tabs)' } }, rootOptions)!, rootOptions);
+  const currentPath = () => rootState.index === origin.index ? '/performance-audit'
+    : tabState.routes[tabState.index].name === 'index' ? '/' : `/${tabState.routes[tabState.index].name}`;
+  const back = jest.fn(() => {
+    const nextTab = tabs.getStateForAction(tabState, { type: 'GO_BACK' }, tabOptions);
+    if (nextTab) tabState = tabs.getRehydratedState(nextTab, tabOptions);
+    else {
+      const nextRoot = root.getStateForAction(rootState, { type: 'GO_BACK' }, rootOptions);
+      if (nextRoot) rootState = root.getRehydratedState(nextRoot, rootOptions);
+    }
+  });
+  let clock = 100;
+  const recordFirst = jest.fn();
+  return { back, recordFirst, currentPath, rootState: () => rootState, origin,
+    measure: () => measureAuditBackNavigation({ currentPath, back, recordFirst, tabJourney: true,
+      now: () => clock, settle: async () => { clock += 25; },
+      matchesPath: (actual, expected) => actual === expected }) };
+}
+
+test.each(['watchlist', 'market'] as const)('measures both genuine %s Back transitions through canonical Rates', async destination => {
+  const f = tabBackFixture(destination);
+  const result = await f.measure();
+  expect(f.back).toHaveBeenCalledTimes(2);
+  expect(f.recordFirst).toHaveBeenCalledWith({ destination: '/browse', durationMs: 25,
+    changedPath: true, returnedToAudit: false });
+  expect(result).toMatchObject({ destination: '/performance-audit', durationMs: 50,
+    secondBackMs: 25, changedPath: true, returnedToAudit: true,
+    first: { destination: '/browse', durationMs: 25, returnedToAudit: false } });
+  expect(f.rootState()).toEqual(f.origin);
+});
+
+test('retains the measured second Back for the legacy root tab alias', async () => {
+  const f = tabBackFixture('market', 'index');
+  const result = await f.measure();
+  expect(result.first.destination).toBe('/');
+  expect(result.secondBackMs).toBe(25);
+  expect(result.returnedToAudit).toBe(true);
+  expect(f.back).toHaveBeenCalledTimes(2);
+});
+
+test('Rates returns directly to the saved audit origin with one measured Back', async () => {
+  const f = tabBackFixture('browse');
+  const result = await f.measure();
+  expect(result).toMatchObject({ destination: '/performance-audit', durationMs: 25,
+    secondBackMs: null, returnedToAudit: true });
+  expect(f.back).toHaveBeenCalledTimes(1);
+});
+
+test('a failed second Back remains a failed native return and retains the first transition', async () => {
+  let current = '/market', clock = 0;
+  const back = jest.fn(() => { current = '/browse'; });
+  const result = await measureAuditBackNavigation({ currentPath: () => current, back,
+    recordFirst: jest.fn(), tabJourney: true, now: () => clock,
+    settle: async () => { clock += 20; }, matchesPath: (actual, expected) => actual === expected });
+  expect(result).toMatchObject({ destination: '/browse', returnedToAudit: false,
+    durationMs: 40, secondBackMs: 20, first: { destination: '/browse', changedPath: true } });
+  expect(back).toHaveBeenCalledTimes(2);
+});
+
+test('does not manufacture another Back from an unexpected destination or a stack journey', async () => {
+  for (const [destination, tabJourney] of [['/settings', true], ['/browse', false]] as const) {
+    let current = '/market', clock = 0;
+    const back = jest.fn(() => { current = destination; });
+    const result = await measureAuditBackNavigation({ currentPath: () => current, back,
+      recordFirst: jest.fn(), tabJourney, now: () => clock, settle: async () => { clock += 20; },
+      matchesPath: (actual, expected) => actual === expected });
+    expect(result.returnedToAudit).toBe(false);
+    expect(result.secondBackMs).toBeNull();
+    expect(back).toHaveBeenCalledTimes(1);
+  }
+});
+
+test('preserves first Back and the genuine second dispatch when later settlement fails', async () => {
+  let current = '/market', clock = 0, settles = 0;
+  const back = jest.fn(() => { current = '/browse'; });
+  const recordFirst = jest.fn(), recordSecondStart = jest.fn();
+  await expect(measureAuditBackNavigation({ currentPath: () => current, back, recordFirst, recordSecondStart,
+    tabJourney: true, now: () => clock, matchesPath: (actual, expected) => actual === expected,
+    settle: async () => { clock += 20; if (++settles === 2) throw new Error('Dataset changed'); },
+  })).rejects.toThrow('Dataset changed');
+  expect(recordFirst).toHaveBeenCalledWith({ destination: '/browse', durationMs: 20,
+    changedPath: true, returnedToAudit: false });
+  expect(recordSecondStart).toHaveBeenCalledTimes(1);
+  expect(back).toHaveBeenCalledTimes(2);
+});
+
+test('a no-op first Back cannot become a passing Back contract after a second dispatch', async () => {
+  let current = '/browse', clock = 0, calls = 0;
+  const result = await measureAuditBackNavigation({ currentPath: () => current,
+    back: () => { if (++calls === 2) current = '/performance-audit'; },
+    recordFirst: jest.fn(), tabJourney: true, now: () => clock,
+    settle: async () => { clock += 20; }, matchesPath: (actual, expected) => actual === expected });
+  expect(result.returnedToAudit).toBe(true);
+  expect(result.first).toMatchObject({ destination: '/browse', changedPath: false });
+  expect(result.changedPath).toBe(false);
+  expect(result.secondBackMs).toBe(20);
+});
 
 function navigationFixture(wrapped = false) {
   const navigator = StackRouter({ initialRouteName: '(tabs)' });

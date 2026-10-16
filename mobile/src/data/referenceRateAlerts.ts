@@ -1,3 +1,4 @@
+import { uiJoin, uiPublicReferenceName, uiRate } from '../lib/uiCopy';
 import { Platform } from 'react-native';
 import type { Manifest } from '../types';
 import { SECURE_STORE_KEYS } from '../lib/secureStoreKey';
@@ -35,8 +36,8 @@ export function referenceRateChanges(scenario: UserRateScenario, references: rea
       const threshold = Decimal.parse(String(Number.isFinite(thresholdBps) && thresholdBps >= 0 ? thresholdBps : 1)).div(Decimal.parse('10000'));
       const magnitude = change.compare(Decimal.parse('0')) < 0 ? Decimal.parse('0').sub(change) : change;
       if (magnitude.compare(threshold) < 0) continue;
-      messages.push({ title: 'Public reference rate changed',
-        body: `${reference.name} · ${publicReferenceScope(reference)} · Public reference: ${(Number(prior.fraction) * 100).toFixed(2)}% → ${(Number(fraction) * 100).toFixed(2)}% · Local estimate: calculated from reference · Charged rate: unverified`,
+      messages.push({ title: uiJoin('Public reference', ' · ', 'Rate changed'),
+        body: uiJoin(uiPublicReferenceName(reference), ' · ', publicReferenceScope(reference), ' · ', 'Public reference', ': ', uiRate(Number(prior.fraction)), ' → ', uiRate(Number(fraction)), ' · ', 'Local reference estimate', ' · ', 'Charged rate', ': ', 'Unverified'),
         href: 'arrates://calculator',
       });
     } catch { /* Invalid retained public metadata cannot produce an alert. */ }

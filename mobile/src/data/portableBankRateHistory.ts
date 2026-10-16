@@ -3,7 +3,7 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { SECTION_KEYS, type CorePayload, type RateRow, type SectionKey } from '../types';
 import { isValidCalendarDate } from '../lib/calendarDate';
-import { toFraction } from './format';
+import { toFraction } from './rateNumbers';
 import { rateTierSignature } from './bankRateOverview';
 import { parseDatesIndex, type DatesIndex } from './datesIndex';
 import type { BankRateSpan, PackedBankRateHistory } from './bankRateHistoryWire';

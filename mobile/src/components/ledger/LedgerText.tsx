@@ -15,6 +15,7 @@ import {
 } from '../../theme/fonts';
 import { useTheme } from '../../theme/ThemeProvider';
 import { TYPOGRAPHY } from '../../theme/typography';
+import type { UiTextProps, UiNativeProps } from '../../lib/uiCopy';
 
 export type LedgerTextVariant =
   | 'display'
@@ -46,7 +47,7 @@ export function LedgerText({
   italic = false,
   style,
   ...rest
-}: TextProps & {
+}: Omit<UiNativeProps<TextProps>, 'children'> & UiTextProps & {
   variant?: LedgerTextVariant;
   tone?: keyof LedgerPalette;
   weight?: LedgerUiWeight;
@@ -77,6 +78,7 @@ export function LedgerText({
 
   return (
     <Text
+      key={fontScale}
       allowFontScaling
       style={[
         base,

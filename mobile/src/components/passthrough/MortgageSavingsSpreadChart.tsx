@@ -5,9 +5,8 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { ChartText as SvgText } from '../charts/ChartText';
 
 import type { BankSpreadChartModel, BankSpreadPlotLine } from '../../data/bankSpreadHistory';
-import { resolveBrandShort } from '../../data/bankBrand';
-import { formatRunDate } from '../../data/format';
-import { useStore } from '../../data/store';
+import { uiLabel, uiCount, uiDate, uiJoin, uiNumber, uiProviderName } from '../../lib/uiCopy';
+import { uiChartPp, uiChartPercent } from '../../lib/chartUiCopy';
 import { useTheme } from '../../theme/ThemeProvider';
 import { BankAvatar } from '../BankAvatar';
 import { AppText, Card, Row } from '../ui';
@@ -37,8 +36,8 @@ function Arrow({ direction, onPress }: { direction: 'back' | 'forward'; onPress:
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={direction === 'back' ? 'Previous bank alphabetically' : 'Next bank alphabetically'}
-      style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
+      accessibilityLabel={direction === 'back' ? 'Previous bank' : 'Next bank'}
+      style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}
     >
       <Ionicons name={direction === 'back' ? 'chevron-back' : 'chevron-forward'} size={20} color={theme.colors.text} />
     </Pressable>
@@ -53,7 +52,6 @@ export const MortgageSavingsSpreadChart = memo(function MortgageSavingsSpreadCha
   onSelectedProviderChange: (provider: string) => void;
 }) {
   const theme = useTheme();
-  const brand = useStore((state) => state.core?.brands?.[selectedProvider]);
   const selectedIndex = Math.max(0, model.lines.findIndex((line) => line.provider === selectedProvider));
   const selected = model.lines[selectedIndex] ?? model.lines[0];
   const latest = selected?.points.at(-1);
@@ -63,8 +61,7 @@ export const MortgageSavingsSpreadChart = memo(function MortgageSavingsSpreadCha
     const next = (selectedIndex + offset + model.lines.length) % model.lines.length;
     onSelectedProviderChange(model.lines[next].provider);
   };
-  const short = resolveBrandShort(selected.provider, brand?.short).toUpperCase().slice(0, 5);
-  const summary = `${selected.provider}. On ${formatRunDate(latest.date)}, mortgage minus savings gap ${latest.gapPp.toFixed(2)} percentage points. Variable mortgage mean ${latest.mortgagePct.toFixed(2)} percent. Base savings mean ${latest.savingsPct.toFixed(2)} percent. ${model.lines.length} banks and ${model.decisions.length} RBA decision markers shown.`;
+  const summary = uiJoin(uiProviderName(selected), ' · ', uiDate(latest.date), ' · ', 'Gap', ' ', uiChartPp(latest.gapPp), ' · ', 'Home loans', ' ', 'Variable', ' ', 'Mean', ' ', uiChartPercent(latest.mortgagePct), ' · ', 'Savings', ' ', 'Ongoing', ' ', 'Mean', ' ', uiChartPercent(latest.savingsPct), ' · ', uiCount(model.lines.length), ' ', 'banks', ' · ', uiCount(model.decisions.length), ' ', 'Decisions');
   return (
     <Card style={{ gap: 10 }}>
       <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -72,8 +69,8 @@ export const MortgageSavingsSpreadChart = memo(function MortgageSavingsSpreadCha
         <Row gap={8} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <BankAvatar provider={selected.provider} size={22} />
           <View style={{ minWidth: 0 }}>
-            <AppText variant="small" weight="700" numberOfLines={1}>{short} · {selected.provider}</AppText>
-            <AppText variant="tiny" color="textMuted">{formatRunDate(latest.date)} · gap {latest.gapPp.toFixed(2)} pp</AppText>
+            <AppText variant="small" weight="700" numberOfLines={1}>{uiProviderName(selected)}</AppText>
+            <AppText variant="tiny" color="textMuted">{uiJoin(uiDate(latest.date), ' · ', 'Gap', ' ', uiChartPp(latest.gapPp))}</AppText>
           </View>
         </Row>
         <Arrow direction="forward" onPress={() => move(1)} />
@@ -84,14 +81,14 @@ export const MortgageSavingsSpreadChart = memo(function MortgageSavingsSpreadCha
             const y = TOP + ((model.maxGapPp - value) / (model.maxGapPp - model.minGapPp)) * (HEIGHT - TOP - BOTTOM);
             return <React.Fragment key={value}>
               <Line x1={LEFT} x2={WIDTH - RIGHT} y1={y} y2={y} stroke={theme.colors.border} strokeWidth={0.7} />
-              <SvgText x={LEFT - 5} y={y + 3} textAnchor="end" fontSize="9" fill={theme.colors.textFaint}>{value.toFixed(2)}</SvgText>
+              <SvgText x={LEFT - 5} y={y + 3} textAnchor="end" fontSize="9" fill={theme.colors.textFaint}>{uiNumber(value, 2)}</SvgText>
             </React.Fragment>;
           })}
           {model.decisions.map((decision) => {
             const index = model.dates.findIndex((date) => date >= decision.date);
             if (index < 0) return null;
             const x = LEFT + (index / Math.max(1, model.dates.length - 1)) * (WIDTH - LEFT - RIGHT);
-            const label = decision.outcome === 'hike' ? '▲' : decision.outcome === 'cut' ? '▼' : '●';
+            const label = uiLabel(decision.outcome === 'hike' ? '↑' : decision.outcome === 'cut' ? '↓' : '·');
             return <React.Fragment key={decision.date}>
               <Line x1={x} x2={x} y1={TOP} y2={HEIGHT - BOTTOM} stroke={theme.colors.textFaint} strokeDasharray="3 4" strokeWidth={0.8} />
               <SvgText x={x} y={HEIGHT - 12} textAnchor="middle" fontSize="10" fill={theme.colors.textMuted}>{label}</SvgText>
@@ -107,14 +104,14 @@ export const MortgageSavingsSpreadChart = memo(function MortgageSavingsSpreadCha
             const y = TOP + ((model.maxGapPp - point.gapPp) / (model.maxGapPp - model.minGapPp)) * (HEIGHT - TOP - BOTTOM);
             return <Circle key={point.date} cx={x} cy={y} r={point.membershipChanged ? 2.5 : 1.4} fill={theme.colors.primary} />;
           })}
-          <SvgText x={LEFT} y={HEIGHT - 2} fontSize="9" fill={theme.colors.textFaint}>Mortgage − savings gap (pp)</SvgText>
+          <SvgText x={LEFT} y={HEIGHT - 2} fontSize="9" fill={theme.colors.textFaint}>{uiJoin('Home loans', ' ', '−', ' ', 'Savings', ' · ', 'pp')}</SvgText>
         </Svg>
       </View>
       <Row gap={12} style={{ flexWrap: 'wrap' }}>
-        <AppText variant="tiny" color="textMuted">▲ hike</AppText>
-        <AppText variant="tiny" color="textMuted">● hold</AppText>
-        <AppText variant="tiny" color="textMuted">▼ cut</AppText>
-        <AppText variant="tiny" color="textMuted">All {model.lines.length} eligible banks shown</AppText>
+        <AppText variant="tiny" color="textMuted">{uiJoin('↑', ' ', 'Hike')}</AppText>
+        <AppText variant="tiny" color="textMuted">{uiJoin('·', ' ', 'Held')}</AppText>
+        <AppText variant="tiny" color="textMuted">{uiJoin('↓', ' ', 'Cut')}</AppText>
+        <AppText variant="tiny" color="textMuted">{uiJoin('All', ' · ', uiCount(model.lines.length), ' ', 'banks')}</AppText>
       </Row>
     </Card>
   );

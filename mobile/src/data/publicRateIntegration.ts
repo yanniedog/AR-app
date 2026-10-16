@@ -95,6 +95,10 @@ export function publicCatalogueOfferRows(catalogue: PublicCatalogueView, section
       const lvr = programme.conditions.filter(item => item.field === 'lvr' && item.operator === 'bounds');
       const lower = lvr.map(item => item.minimum).filter((value): value is string => value != null).sort((a, b) => Decimal.parse(b).compare(Decimal.parse(a)))[0];
       const upper = lvr.map(item => item.maximum).filter((value): value is string => value != null).sort((a, b) => Decimal.parse(a).compare(Decimal.parse(b)))[0];
+      const lowerInclusive = lvr.filter(item => item.minimum != null && lower != null && Decimal.parse(item.minimum).compare(Decimal.parse(lower)) === 0)
+        .every(item => item.minimumInclusive !== false);
+      const upperInclusive = lvr.filter(item => item.maximum != null && upper != null && Decimal.parse(item.maximum).compare(Decimal.parse(upper)) === 0)
+        .every(item => item.maximumInclusive !== false);
       const percent = (value: string) => decimalText(Decimal.parse(value).mul(Decimal.parse('100')));
       const purpose = String(condition('purpose') ?? scenario.purpose ?? '');
       const repayment = String(condition('repayment') ?? scenario.repayment ?? '');
@@ -108,8 +112,9 @@ export function publicCatalogueOfferRows(catalogue: PublicCatalogueView, section
         repayment_type: repayment,
         ribbon_repayment_type: canonicalRepayment(profileRepayment) === repayment ? profileRepayment : repayment,
         rate_type: programme.metadata?.rateStructure === 'fixed' ? 'FIXED' : 'VARIABLE',
-        ...(lower && upper ? { lvr_tier: 'lvr_' + percent(lower) + '-' + percent(upper) + '%' }
-          : lower ? { lvr_tier: 'lvr_' + percent(lower) + '+%' } : upper ? { lvr_tier: 'lvr_=' + percent(upper) + '%' } : {}),
+        ...(lower && upper ? { lvr_tier: 'lvr_' + (lowerInclusive ? '>=' : '>') + percent(lower) + '-' + (upperInclusive ? '' : '<') + percent(upper) + '%' }
+          : lower ? { lvr_tier: 'lvr_' + (lowerInclusive ? '>=' : '>') + percent(lower) + '%' }
+          : upper ? { lvr_tier: 'lvr_' + (upperInclusive ? '=' : '<') + percent(upper) + '%' } : {}),
         ...(resolution.comparisonRate ? { comparison_rate: resolution.comparisonRate } : {}),
         exact_alert_eligible: true,
       }, programme));

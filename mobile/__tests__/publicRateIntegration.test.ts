@@ -1,3 +1,4 @@
+import { matchesLvrTier, parseLvrRange, lvrRangeContains } from '../src/data/lvrRange';
 import { bindCurrentPublicRow, payableRateForRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate,
   resolveProductPublicRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
@@ -59,7 +60,7 @@ it('keeps missing, mismatched and ambiguous reference families unresolved with n
   expect(resolveLocalCurrentRate('Mortgage', mismatch, [scoped], AS_OF, catalogue(), profile).reasonCodes).toContain('reference_conditions_unmet');
   const matched = normalizeUserRateScenario({ ...scenario, localRates: { mortgage: { ...scenario.localRates.mortgage, referenceScenario: { customerCategory: 'OVERSEAS_BORROWER' } } } });
   expect(resolveLocalCurrentRate('Mortgage', matched, [scoped], AS_OF, catalogue(), profile).status).toBe('exact');
-  expect(publicReferenceScope(scoped)).toContain('Customer category: overseas borrower');
+  expect(publicReferenceScope(scoped)).toContain('Customer category: OVERSEAS_BORROWER');
   expect(resolveLocalCurrentRate('Mortgage', scenario, [reference(), reference({ value: '9.77' })], AS_OF).reasonCodes).toContain('source_conflict');
   expect(resolveLocalCurrentRate('Mortgage', scenario, [reference({ effectiveFrom: '2026-11-01' })], AS_OF).payableRate).toBeUndefined();
 });
@@ -149,4 +150,22 @@ it('resolves legacy repayment facet spellings while retaining the same mandatory
     mode: 'reference', referenceId: 'unit-reference', totalAdjustment: '-2' } } }), [reference({ conditions: [
     { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: 'PRINCIPAL_AND_INTEREST', evidenceIds: ['unit-evidence'] },
   ] })], AS_OF, scoped, savedProfile).status).toBe('exact');
+});
+
+
+it('preserves inclusive CDR minima and strict maxima in public offer facets', () => {
+  const condition = { conditionId: 'lvr', field: 'lvr', operator: 'bounds' as const, minimum: '0.8001', maximum: '0.95', minimumInclusive: true, maximumInclusive: false, evidenceIds: ['unit-evidence'] };
+  const pricing = catalogue([programme({ conditions: [condition] })]);
+  const offers = publicRecommendationRows([], pricing, 'Mortgage', { lvr: '0.85' });
+  expect(offers).toHaveLength(1);
+  expect(offers[0].lvr_tier).toBe('lvr_>=80.01-<95%');
+  const range = parseLvrRange(offers[0].lvr_tier)!;
+  expect(lvrRangeContains(range, 80.01)).toBe(true);
+  expect(lvrRangeContains(range, 95)).toBe(false);
+  expect(matchesLvrTier(offers[0].lvr_tier, ['lvr_>=80.01-95%'])).toBe(false);
+  expect(publicRecommendationRows([], pricing, 'Mortgage', { lvr: '0.95' })).toEqual([]);
+  const closed = catalogue([programme({ conditions: [{ ...condition, maximumInclusive: true }] })]);
+  expect(publicRecommendationRows([], closed, 'Mortgage', { lvr: '0.95' })[0].lvr_tier).toBe('lvr_>=80.01-95%');
+  const tied = catalogue([programme({ conditions: [condition, { ...condition, conditionId: 'strict-min', minimumInclusive: false }] })]);
+  expect(publicRecommendationRows([], tied, 'Mortgage', { lvr: '0.85' })[0].lvr_tier).toBe('lvr_>80.01-<95%');
 });

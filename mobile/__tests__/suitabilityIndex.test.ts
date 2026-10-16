@@ -11,7 +11,7 @@ import {
 import { cache } from '../src/data/cache';
 import { setSuitabilityAllowed, getSuitabilityAllowed } from '../src/data/suitabilityGate';
 import { visibleAccountRows, isBroadlyAvailable } from '../src/data/format';
-import * as format from '../src/data/format';
+import * as rateClassification from '../src/data/rateClassification';
 import { debugLog } from '../src/lib/debugLog';
 import { yieldToUi } from '../src/lib/yieldToUi';
 import type { CorePayload, DetailsPayload, ProductDetail, RateRow } from '../src/types';
@@ -80,8 +80,8 @@ describe('suitabilityIndex', () => {
     })), { ...staff, product_name: 'Everyday Home Loan' }, staff];
     const core = { run_date: '2026-07-15', sections: { Mortgage: { rates } } } as unknown as CorePayload;
     const expected = new Set(rates.filter(item => isBroadlyAvailable(item, null)).map(item => item.product_key));
-    const nonStandard = jest.spyOn(format, 'isNonStandard');
-    const classify = jest.spyOn(format, 'isBroadlyAvailable');
+    const nonStandard = jest.spyOn(rateClassification, 'isNonStandard');
+    const classify = jest.spyOn(rateClassification, 'isBroadlyAvailable');
     expect((await buildSuitabilityIndex(core, null)).allowed).toEqual(expected);
     expect(classify).toHaveBeenCalledTimes(3);
     // Only unresolved product identities need the expensive dedup invariants.

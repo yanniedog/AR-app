@@ -182,14 +182,14 @@ describe('stay versus switch projection', () => {
     expect(result.switching!.principalPayment).toBeCloseTo(result.householdAllocation, 8);
     expect(result.switching!.openingBalance).toBe(470000);
     expect(result.points[0].switchNetDebt).toBe(result.points[0].stayNetDebt);
-    expect(result.warnings.join(' ')).toMatch(/no target offset feature/i);
+    expect(result.facts).toContainEqual(expect.objectContaining({ kind: 'target-offset', available: false, evidence: 'not-published', spareDestination: 'principal' }));
   });
 
   it('distinguishes unavailable target details from published no-offset evidence', () => {
     const result = buildStaySwitchProjection({ scenario: scenario(), target: TARGET, targetDetail: undefined, now: NOW });
     expect(result.offsetEvidence).toBe('unavailable');
     expect(result.targetHasOffset).toBe(false);
-    expect(result.warnings.join(' ')).toMatch(/details are unavailable/i);
+    expect(result.facts).toContainEqual(expect.objectContaining({ kind: 'target-offset', evidence: 'unavailable' }));
   });
 
   it('reads target offset support from normalized facts', () => {
@@ -230,8 +230,8 @@ describe('stay versus switch projection', () => {
     const result = buildStaySwitchProjection({ scenario: scenario(), target: worseTarget, targetDetail: OFFSET_DETAIL, now: NOW });
     expect(result.targetAllocationShortfall).toBeGreaterThan(0);
     expect(result.switching!.totalMonthlyAllocation).toBe(result.switching!.requiredRepayment);
-    expect(result.warnings.join(' ')).toMatch(/above the current household allocation/i);
-    expect(result.assumptions.join(' ')).toMatch(/baseline allocation/i);
+    expect(result.facts).toContainEqual({ kind: 'target-allocation-shortfall', monthlyAmount: result.targetAllocationShortfall });
+    expect(result.facts).toContainEqual({ kind: 'household-allocation', monthlyAmount: result.householdAllocation, policy: 'additional-required' });
   });
 
   it('includes priced periodic fees in break-even and total cost', () => {
@@ -416,7 +416,7 @@ describe('stay versus switch projection', () => {
     expect(result.projectionScope).toBe('published-fixed-period');
     expect(result.points).toHaveLength(25);
     expect(result.switching!.contractualPayoffDate).toBeNull();
-    expect(result.warnings.join(' ')).toMatch(/no unknown reversion rate/i);
+    expect(result.facts).toContainEqual({ kind: 'switch-horizon', scope: 'published-fixed-period', months: 24, futureReversionRate: 'unknown' });
   });
 
   it.each([

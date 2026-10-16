@@ -23,10 +23,10 @@ export function mandatoryProductAllowed(productKey: string): boolean {
 }
 export function mandatoryEligibleRows(rows: RateRow[]): RateRow[] {
   if (!selection?.active) return rows;
-  if (selection.loading) return [];
   const required = selection;
   return rows.filter(row => {
     if (required.rows.has(row)) return true;
+    if (required.loading) return false;
     // Public resolver rows are copies or newly resolved offers. Reapply the
     // retained mandatory requirements, including feature evidence, to each.
     if (!row.public_programme_id || !row.public_offer_id || !required.profile) return false;

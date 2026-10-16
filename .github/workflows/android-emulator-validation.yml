@@ -1,0 +1,141 @@
+name: Android emulator validation artifact
+
+# Build-only evidence for an isolated emulator. Public APK publication remains
+# exclusively in the existing protected release workflows.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/android-emulator-validation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-emulator-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-release:
+    name: nativeRelease x86_64 (artifact only)
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mobile
+        shell: bash
+    env:
+      CI: 'true'
+      EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools
+      - name: Install APK identity tools
+        run: sdkmanager 'build-tools;35.0.0'
+      - name: Install without optional development client
+        env:
+          NODE_ENV: development
+        run: |
+          set -euo pipefail
+          npm ci --omit=optional --no-audit --no-fund
+          node <<'NODE'
+          for (const name of ['expo-dev-client', 'expo-dev-launcher']) {
+            try {
+              require.resolve(`${name}/package.json`);
+            } catch (error) {
+              if (error.code === 'MODULE_NOT_FOUND') continue;
+              throw error;
+            }
+            throw new Error(`Emulator validation must omit ${name}`);
+          }
+          NODE
+      - name: Materialize placeholder configuration and prebuild
+        run: |
+          set -euo pipefail
+          node scripts/ensure-firebase-config.mjs
+          npx expo prebuild --platform android --no-install
+          grep -qx 'android.enableMinifyInReleaseBuilds=true' android/gradle.properties
+          grep -qx 'android.enableShrinkResourcesInReleaseBuilds=true' android/gradle.properties
+      - name: Assemble native release-mode x86_64 APK
+        env:
+          NODE_ENV: production
+        run: |
+          set -euo pipefail
+          cd android
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --max-workers=2
+      - name: Verify APK and record immutable artifact facts
+        run: |
+          set -euo pipefail
+          source_sha=$(git rev-parse HEAD)
+          test "$source_sha" = "$EXPECTED_SOURCE_SHA"
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          test -s "$apk"
+          mkdir -p android-emulator-artifact
+          cp "$apk" android-emulator-artifact/validation.apk
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/aapt" dump badging "$apk" > android-emulator-artifact/badging.txt
+          "$tools/aapt" dump xmltree "$apk" AndroidManifest.xml > android-emulator-artifact/manifest.txt
+          "$tools/apksigner" verify --verbose --print-certs "$apk" > android-emulator-artifact/signature.txt
+          if grep -Eq 'expo\.modules\.(devlauncher|devmenu)' android-emulator-artifact/manifest.txt; then
+            echo '::error::Development launcher/menu manifest entries are not allowed in this validation APK'
+            exit 1
+          fi
+          node <<'NODE'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const { execFileSync } = require('node:child_process');
+          const dir = 'android-emulator-artifact';
+          const sourceSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+          if (!/^[0-9a-f]{40}$/.test(sourceSha) || sourceSha !== process.env.EXPECTED_SOURCE_SHA) {
+            throw new Error('Checked-out source must equal the requested immutable head');
+          }
+          const badging = fs.readFileSync(`${dir}/badging.txt`, 'utf8');
+          const signature = fs.readFileSync(`${dir}/signature.txt`, 'utf8');
+          const identity = /^package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'/m.exec(badging);
+          const nativeCode = /^native-code:\s*(.*)$/m.exec(badging);
+          const abis = nativeCode ? [...nativeCode[1].matchAll(/'([^']+)'/g)].map(match => match[1]) : [];
+          const certificate = /^Signer #1 certificate SHA-256 digest: ([0-9a-f]{64})$/mi.exec(signature);
+          const app = require('./app.json').expo;
+          if (!identity || identity[1] !== app.android.package || Number(identity[2]) !== app.android.versionCode || identity[3] !== app.version) {
+            throw new Error('Built package/version facts differ from the checked-out app');
+          }
+          if (abis.length !== 1 || abis[0] !== 'x86_64' || !certificate) {
+            throw new Error('Validation requires an exactly x86_64, signature-verified APK');
+          }
+          const bytes = fs.readFileSync(`${dir}/validation.apk`);
+          const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+          const facts = { schemaVersion: 1, purpose: 'android-emulator-validation',
+            sourceSha, packageName: identity[1], versionCode: Number(identity[2]), versionName: identity[3],
+            abis, apkSha256: sha256, apkBytes: bytes.length,
+            signingCertificateSha256: certificate[1].toLowerCase(),
+            buildVariant: 'release', productionSigningIdentityVerified: false,
+            runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT };
+          fs.writeFileSync(`${dir}/metadata.json`, JSON.stringify(facts, null, 2) + '\n');
+          fs.writeFileSync(`${dir}/source-sha.txt`, sourceSha + '\n');
+          fs.writeFileSync(`${dir}/apk.sha256`, sha256 + '  validation.apk\n');
+          NODE
+      - name: Upload emulator-only APK and identity receipts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-emulator-x86_64-${{ github.event.pull_request.head.sha || github.sha }}
+          path: mobile/android-emulator-artifact/
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error

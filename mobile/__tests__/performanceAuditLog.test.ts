@@ -269,6 +269,16 @@ it('keeps raw and quiet-window-adjusted navigation timings in passing exports', 
   expect(check.metrics).toMatchObject({ forwardMs: 1000, forwardWorkMs: 350, readinessQuietWindowMs: 650 });
 });
 
+it('retains each actual Back transition and recovery classification in compact passing evidence', () => {
+  const check = compactAuditCheckForLog({ id: 'market-back', label: 'Market', kind: 'journey', status: 'pass',
+    durationMs: 1500, metrics: { backMs: 140, firstBackMs: 80, firstBackDestination: '/browse',
+      secondBackMs: 60, backDestination: '/performance-audit', backReturnedToAudit: true,
+      returnNavigationKind: 'second-back' } });
+  expect(check.metrics).toMatchObject({ backMs: 140, firstBackMs: 80, firstBackDestination: '/browse',
+    secondBackMs: 60, backDestination: '/performance-audit', backReturnedToAudit: true,
+    returnNavigationKind: 'second-back' });
+});
+
 it('preserves the distinction between basic and deep search in a passing export', () => {
   const check = compactAuditCheckForLog({ id: 'search', label: 'Search', kind: 'journey', status: 'pass',
     durationMs: 10, metrics: { searchMode: 'basic', deepSearchAvailable: false } });

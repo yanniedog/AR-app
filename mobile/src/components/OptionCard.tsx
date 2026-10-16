@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
 import { TouchTarget } from './TouchTarget';
 import { AppText } from './ui';
+import type { UiCopy } from '../lib/uiCopy';
 
 /**
  * A single-select, outlined choice card: icon + label + optional one-line
@@ -13,13 +14,11 @@ import { AppText } from './ui';
  */
 export function OptionCard({
   label,
-  description,
   icon,
   selected,
   onPress,
 }: {
-  label: string;
-  description?: string;
+  label: UiCopy;
   icon?: keyof typeof Ionicons.glyphMap;
   selected: boolean;
   onPress: () => void;
@@ -53,11 +52,6 @@ export function OptionCard({
         <AppText variant="body" weight="700">
           {label}
         </AppText>
-        {description ? (
-          <AppText variant="tiny" color="textMuted" style={{ marginTop: 2 }}>
-            {description}
-          </AppText>
-        ) : null}
       </View>
       {selected ? (
         <Ionicons name="checkmark-circle" size={22} color={theme.colors.primary} />

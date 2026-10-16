@@ -4,14 +4,14 @@ import Svg, { Circle, Line } from 'react-native-svg';
 import { ChartText as SvgText } from '../charts/ChartText';
 
 import {
-  passThroughDaysLabel,
   rbaPassThrough,
   rbaPassThroughDecisionList,
   type BankInsightsPayload,
   type PassThroughRow,
 } from '../../data/bankInsights';
 import type { RbaCalendar } from '../../data/rbaCalendar';
-import { formatRunDate } from '../../data/format';
+import { uiLabel,  uiCount, uiDate, uiDuration, uiJoin, uiProviderName } from '../../lib/uiCopy';
+import { uiChartBps, uiResponseDays } from '../../lib/chartUiCopy';
 import { openBank } from '../../lib/nav';
 import type { RbaEntry } from '../../types';
 import { withAlpha } from '../../theme/colors';
@@ -54,19 +54,15 @@ export function RbaResponseScatter({
   if (!model) {
     return (
       <AppText variant="small" color="textMuted">
-        No RBA hike or cut has a response window overlapping the tracked history yet. When the next
-        one lands, every lender's speed and pass-through size will be mapped here.
-      </AppText>
+        {uiLabel("No observations")}</AppText>
     );
   }
 
   const { decision, rows, windowDays, windowEnd, windowOpen, observedThrough } = model;
   const moved = rows.filter((r) => r.daysToFirstMove != null);
   const holdouts = rows.filter((r) => r.daysToFirstMove == null);
-  const isCut = decision.bps < 0;
   const fullPasses = rows.filter((r) => r.passStatus === 'full' || r.passStatus === 'over');
   const partialPasses = rows.filter((r) => r.passStatus === 'partial');
-  const dayOpts = { partialObservation: decision.partialObservation, windowOpen };
 
   const padL = 40;
   const padR = 12;
@@ -109,7 +105,7 @@ export function RbaResponseScatter({
             {decisions.map((d) => (
               <Chip
                 key={d.date}
-                label={`${formatRunDate(d.date)} · ${d.bps > 0 ? '+' : '−'}${Math.abs(d.bps)}`}
+                label={uiJoin(uiDate(d.date), ' · ', uiChartBps(d.bps))}
                 selected={d.date === decision.date}
                 onPress={() => setSelectedDate(d.date)}
               />
@@ -118,33 +114,26 @@ export function RbaResponseScatter({
         </ScrollView>
       ) : null}
       <AppText variant="small" color="textMuted" style={{ marginBottom: 6 }}>
-        RBA {isCut ? 'cut' : 'raised'} by {Math.abs(decision.bps)} bps on {formatRunDate(decision.date)}.
-        Each dot is a lender: further left = faster first move, on the dashed line = full cumulative
-        pass-through
-        {windowOpen
-          ? ` (window open through ${formatRunDate(windowEnd)}; data through ${formatRunDate(observedThrough)})`
-          : ` (window closed ${formatRunDate(windowEnd)})`}
-        .
+        {uiJoin('RBA', ' · ', uiChartBps(decision.bps), ' · ', uiDate(decision.date), ' · ', windowOpen ? 'Open window' : 'Closed window', ' · ', uiDate(windowEnd), ' · ', 'Observed', ' · ', uiDate(observedThrough))}
       </AppText>
       {decision.partialObservation ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
-          Announcement predates tracked history — horizontal position uses ≤ days.
+          {uiJoin('Partial', ' · ', 'Response', ' · ', '≤', ' ', 'days')}
         </AppText>
       ) : null}
       {windowOpen ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
-          Window still open — holdouts may yet move.
-        </AppText>
+          {uiLabel("Open window")}</AppText>
       ) : null}
       <Row gap={6} style={{ flexWrap: 'wrap', marginBottom: 8 }}>
-        <Badge label={`${fullPasses.length} full pass${fullPasses.length === 1 ? '' : 'es'}`} tone="success" />
+        <Badge label={uiJoin('Full pass-through', ' ', uiCount(fullPasses.length))} tone="success" />
         {partialPasses.length ? (
-          <Badge label={`${partialPasses.length} partial`} tone="warning" />
+          <Badge label={uiJoin('Partial', ' ', uiCount(partialPasses.length))} tone="warning" />
         ) : null}
-        <Badge label={`${moved.length} moved`} tone="primary" />
+        <Badge label={uiJoin('Moves', ' ', uiCount(moved.length))} tone="primary" />
         {holdouts.length ? (
           <Badge
-            label={windowOpen ? `${holdouts.length} waiting` : `${holdouts.length} no move`}
+            label={uiJoin(windowOpen ? 'Pending' : 'No observed move', ' ', uiCount(holdouts.length))}
             tone="warning"
           />
         ) : null}
@@ -153,7 +142,7 @@ export function RbaResponseScatter({
         onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
         accessible
         accessibilityRole="image"
-        accessibilityLabel={`RBA response map for ${formatRunDate(decision.date)}: ${moved.length} lenders moved, ${fullPasses.length} full pass-through of ${Math.abs(decision.bps)} basis points, ${holdouts.length} ${windowOpen ? 'still waiting' : 'with no move'}; window ${windowOpen ? 'open' : 'closed'} through ${formatRunDate(windowEnd)}`}
+        accessibilityLabel={uiJoin('RBA', ' · ', uiDate(decision.date), ' · ', uiChartBps(decision.bps), ' · ', 'Moves', ' ', uiCount(moved.length), ' · ', 'Full pass-through', ' ', uiCount(fullPasses.length), ' · ', windowOpen ? 'Pending' : 'No observed move', ' ', uiCount(holdouts.length), ' · ', uiDate(windowEnd))}
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
@@ -169,12 +158,10 @@ export function RbaResponseScatter({
               strokeDasharray="5 4"
             />
             <SvgText x={padL + 2} y={yAt(decision.bps) - 4} fontSize={9} fill={theme.colors.rba} fontWeight="600">
-              full pass ({decision.bps > 0 ? '+' : ''}
-              {decision.bps} bps)
+              {uiJoin('Full pass-through', ' ', uiChartBps(decision.bps))}
             </SvgText>
             <SvgText x={padL - 6} y={yAt(0) + 3} fontSize={9} fill={theme.colors.textFaint} textAnchor="end">
-              0
-            </SvgText>
+              {0}</SvgText>
             {axisMarks.map((d) => (
               <React.Fragment key={d}>
                 <Line
@@ -186,7 +173,7 @@ export function RbaResponseScatter({
                   strokeWidth={0.8}
                 />
                 <SvgText x={xAt(d)} y={height - 12} fontSize={9} fill={theme.colors.textFaint} textAnchor="middle">
-                  {d}d
+                  {uiDuration(d, 'days')}
                 </SvgText>
               </React.Fragment>
             ))}
@@ -200,7 +187,7 @@ export function RbaResponseScatter({
               />
             ))}
             <SvgText x={padL + innerW / 2} y={height - 1} fontSize={9} fill={theme.colors.textFaint} textAnchor="middle">
-              days from decision to first move
+              {uiJoin('Response', ' · ', 'days')}
             </SvgText>
           </Svg>
         ) : null}
@@ -209,19 +196,12 @@ export function RbaResponseScatter({
         <Pressable
           onPress={() => openBank(fastest.provider)}
           accessibilityRole="button"
-          accessibilityLabel={`Fastest responder ${fastest.provider}, ${passThroughDaysLabel(
-            fastest.daysToFirstMove,
-            dayOpts,
-          )}`}
+          accessibilityLabel={uiJoin('Fastest response', ' · ', uiProviderName(fastest), ' · ', uiResponseDays(fastest.daysToFirstMove, decision.partialObservation))}
         >
           <Row gap={8} style={{ marginTop: 8 }}>
             <BankAvatar provider={fastest.provider} size={22} />
             <AppText variant="tiny" color="textMuted" style={{ flex: 1 }} numberOfLines={1}>
-              Fastest: <AppText variant="tiny" weight="700">{fastest.provider}</AppText>
-              {' · '}
-              {passThroughDaysLabel(fastest.daysToFirstMove, dayOpts)} (
-              {fastest.passedBps > 0 ? '+' : ''}
-              {fastest.passedBps} bps)
+              {uiJoin('Fastest response', ' · ', uiProviderName(fastest), ' · ', uiResponseDays(fastest.daysToFirstMove, decision.partialObservation), ' · ', uiChartBps(fastest.passedBps))}
             </AppText>
           </Row>
         </Pressable>

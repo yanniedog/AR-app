@@ -20,11 +20,13 @@ import {
 
 type TestNode = {
   props: Record<string, unknown>;
+  parent: TestNode | null;
   findByProps: (props: Record<string, unknown>) => TestNode;
 };
 type InspectableRenderer = ReactTestRenderer & { root: TestNode };
 
 const mockSetPref = jest.fn();
+let mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
 let mockPrefs = {
   dismissedUpdateBuild: null as string | null,
   apkUpdatesWifiOnly: true,
@@ -37,6 +39,7 @@ jest.mock('../src/data/store', () => ({
     setPref: mockSetPref,
   }),
 }));
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ default: () => mockDimensions }));
 
 jest.mock('../src/lib/appUpdate', () => ({
   checkForAppUpdate: jest.fn(),
@@ -91,6 +94,7 @@ describe('AppUpdateBanner download consent', () => {
   let appStateDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
+    mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
     appStateListener = null;
     mockPrefs = {
       dismissedUpdateBuild: null,
@@ -233,5 +237,48 @@ describe('AppUpdateBanner download consent', () => {
     expect(alert).toHaveBeenCalledTimes(1);
     expect(upgradeFromBackgroundDownload).toHaveBeenCalledTimes(2);
     act(() => tree.unmount());
+  });
+
+  it.each([[360, 2], [320, 1], [411, 1.3]])('keeps the full banner message on its own line at %s dp / %s font scale', (width, fontScale) => {
+    mockDimensions = { ...mockDimensions, width, fontScale };
+    const dismiss = jest.fn();
+    let tree!: InspectableRenderer;
+    act(() => { tree = TestRenderer.create(<AppUpdateBanner remote={remote} download={{ ...IDLE_APK_DOWNLOAD }} onDismiss={dismiss} />) as InspectableRenderer; });
+    try {
+      const title = tree.root.findByProps({ accessibilityLiveRegion: 'polite' });
+      expect(title.props.children).toBe('Update available · 1.0.200');
+      expect(title.parent?.props.style).toMatchObject({ flexBasis: '100%', flexShrink: 0 });
+      expect(title.props.numberOfLines).toBeUndefined();
+      expect(title.props.adjustsFontSizeToFit).toBeUndefined();
+      expect(title.props.allowFontScaling).not.toBe(false);
+      const action = tree.root.findByProps({ accessibilityLabel: 'Download & install' });
+      expect(action.parent).not.toBe(title.parent);
+      expect(action.props.style).toMatchObject({ flexGrow: 1, flexShrink: 1, minHeight: 48 });
+      expect(action.props.disabled).toBe(false);
+      expect(upgradeFromBackgroundDownload).not.toHaveBeenCalled();
+      const close = tree.root.findByProps({ accessibilityLabel: 'Dismiss update banner' });
+      expect(close.props.style).toMatchObject({ minWidth: 48, minHeight: 48, flexShrink: 0 });
+      act(() => (close.props.onPress as () => void)());
+      expect(dismiss).toHaveBeenCalledTimes(1);
+    } finally { act(() => tree.unmount()); }
+  });
+
+  it('retains normal-width inline layout and reflowed verified/downloading states', () => {
+    let tree!: InspectableRenderer;
+    act(() => { tree = TestRenderer.create(<AppUpdateBanner remote={remote} download={{ ...IDLE_APK_DOWNLOAD }} onDismiss={jest.fn()} />) as InspectableRenderer; });
+    try {
+      expect(tree.root.findByProps({ accessibilityLiveRegion: 'polite' }).parent?.props.style).toMatchObject({ flexBasis: 0 });
+      mockDimensions = { ...mockDimensions, width: 360, fontScale: 2 };
+      for (const phase of ['ready', 'downloading'] as const) {
+        act(() => tree.update(<AppUpdateBanner remote={remote} download={{ ...IDLE_APK_DOWNLOAD, phase, buildNumber: remote.build_number }} onDismiss={jest.fn()} />));
+        const title = tree.root.findByProps({ accessibilityLiveRegion: 'polite' });
+        expect(title.props.children).toBe(phase === 'ready' ? 'Verified · 1.0.200' : 'Downloading · 1.0.200');
+        expect(title.parent?.props.style).toMatchObject({ flexBasis: '100%', flexShrink: 0 });
+        const action = tree.root.findByProps({ accessibilityLabel: phase === 'ready' ? 'Install verified update' : 'Upgrade' });
+        expect(action.props.disabled).toBe(phase !== 'ready');
+        expect(action.props.accessibilityState).toEqual({ disabled: phase !== 'ready' });
+      }
+      expect(upgradeFromBackgroundDownload).not.toHaveBeenCalled();
+    } finally { act(() => tree.unmount()); }
   });
 });

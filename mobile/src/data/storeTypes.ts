@@ -59,7 +59,6 @@ export interface Prefs {
   showHistoryRibbon: boolean;
   /** Rate Intelligence Pro — local stub until store IAP is wired. */
   rateIntelligencePro: boolean;
-  onboarded: boolean;
   interests: SectionKey[];
   rateMoveThresholdBps: number;
   /** APK build_number whose update banner the user dismissed (null = none). */
@@ -113,7 +112,6 @@ export const DEFAULT_PREFS: Prefs = {
   enableDeepSearch: true,
   showHistoryRibbon: true,
   rateIntelligencePro: false,
-  onboarded: false,
   interests: [...DEFAULT_INTERESTS],
   rateMoveThresholdBps: RATE_MOVE_BPS_THRESHOLD,
   dismissedUpdateBuild: null,
@@ -252,7 +250,6 @@ export interface AppState {
   setPref: <K extends keyof Prefs>(key: K, value: Prefs[K]) => void;
   setPrefs: (values: Partial<Prefs>) => void;
   setActiveSection: (section: SectionKey) => void;
-  completeOnboarding: (interests: SectionKey[], notifications: boolean) => void;
   clearCache: () => Promise<void>;
   clearRefreshOutcome: () => void;
 }

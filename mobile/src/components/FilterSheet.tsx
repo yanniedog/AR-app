@@ -4,6 +4,7 @@ import { ScrollView, View } from 'react-native';
 import type { Filters } from '../data/selectors';
 import type { SearchFilterOptions } from '../data/searchFilterOptions';
 import { humanizeEnum } from '../data/format';
+import { uiLoanPurpose } from '../lib/financialUiCopy';
 import { lvrTierDisplay } from '../data/lvrTier';
 import {
   boundedPublishedFactFilterOptions,
@@ -13,6 +14,19 @@ import { matchingLenders, visibleFilterOptions } from '../lib/filterOptions';
 import { SearchBar } from './controls';
 import { SheetSurface } from './SheetSurface';
 import { AppText, Button, Chip, Disclosure, Divider, Row } from './ui';
+import { uiCount, uiJoin, uiLabel, uiProviderName, useProviderSearchInput, type UiCopy, type UiChild } from '../lib/uiCopy';
+
+function filterGroupTitle(field: string): UiCopy {
+  switch (field) {
+    case 'loan_purpose': return uiLabel('Loan purpose');
+    case 'rate_type': return uiLabel('Rate type');
+    case 'ribbon_repayment_type': return uiLabel('Repayment');
+    case 'lvr_tier': return uiJoin('LVR', ' · ', 'Tier');
+    case 'interest_payment': return uiLabel('Interest paid');
+    case 'ribbon_deposit_kind': return uiLabel('Account type');
+    default: return uiLabel('Filter');
+  }
+}
 
 // Plain RN Modal sheet: @gorhom/bottom-sheet modals silently failed to present
 // under Reanimated 4, leaving the filter button dead.
@@ -26,7 +40,14 @@ export function FilterSheet({
   filters,
   onApply,
   resultCount,
+  resultNoun = 'products',
+  children,
+  controlledDraft,
+  onDraftChange,
 }: {
+  children?: UiChild;
+  controlledDraft?: Filters;
+  onDraftChange?: React.Dispatch<React.SetStateAction<Filters>>;
   visible: boolean;
   onClose: () => void;
   options: SearchFilterOptions;
@@ -37,11 +58,14 @@ export function FilterSheet({
   onApply: (f: Filters) => void;
   /** Products the list would show for a draft; labels the apply action. */
   resultCount?: (draft: Filters) => number;
+  resultNoun?: 'rates' | 'products';
 }) {
-  const [draft, setDraft] = useState<Filters>(filters);
+  const [internalDraft, setInternalDraft] = useState<Filters>(filters);
+  const draft = controlledDraft ?? internalDraft;
+  const setDraft = controlledDraft && onDraftChange ? onDraftChange : setInternalDraft;
   const [publishedOpen, setPublishedOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
-  const [lenderQuery, setLenderQuery] = useState('');
+  const { value: lenderQuery, onChangeText: setLenderQuery } = useProviderSearchInput();
 
   useEffect(() => {
     if (visible) {
@@ -50,7 +74,7 @@ export function FilterSheet({
       setExpandedGroups(new Set());
       setLenderQuery('');
     }
-  }, [visible, filters]);
+  }, [visible, filters, setDraft, setLenderQuery]);
 
   const { groups: groupOptions, providers, accountFeatures, eligibilityCriteria } = options;
   const publishedDetails = useMemo(
@@ -69,8 +93,8 @@ export function FilterSheet({
     [visible, resultCount, deferredDraft],
   );
   const applyTitle = draftCount === null
-    ? 'Apply'
-    : `Show ${draftCount} ${draftCount === 1 ? 'product' : 'products'}`;
+    ? uiLabel('Apply')
+    : uiJoin('Show', ' ', uiCount(draftCount), ' ', resultNoun === 'rates' ? draftCount === 1 ? 'Rate' : 'rates' : draftCount === 1 ? 'Product' : 'products');
 
   const toggle = (key: keyof Filters, value: string) => {
     setDraft((d) => {
@@ -101,15 +125,15 @@ export function FilterSheet({
     selected,
     label,
     onToggle,
-    noun = 'options',
+    noun = 'Options',
     showAll = false,
   }: {
     groupKey: string;
     options: readonly string[];
     selected: readonly string[];
-    label: (option: string) => string;
+    label: (option: string) => UiCopy;
     onToggle: (option: string) => void;
-    noun?: string;
+    noun?: UiCopy;
     showAll?: boolean;
   }) => {
     const { visible: shown, hidden } = visibleFilterOptions(
@@ -131,7 +155,7 @@ export function FilterSheet({
         </Row>
         {hidden > 0 ? (
           <Button
-            title={`Show all ${options.length} ${noun}`}
+            title={uiJoin('Show', ' ', 'All', ' ', uiCount(options.length), ' ', noun)}
             variant="ghost"
             style={{ alignSelf: 'flex-start', paddingHorizontal: 0, marginTop: 4 }}
             onPress={() => setExpandedGroups((prev) => new Set(prev).add(groupKey))}
@@ -159,22 +183,23 @@ export function FilterSheet({
     >
           <Divider />
           <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 16, gap: 24, paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
-            {optionsPending ? <AppText variant="small" color="textMuted">Loading filters</AppText> : null}
+            {optionsPending ? <AppText variant="small" color="textMuted">{uiJoin('Filter', ' · ', 'Loading')}</AppText> : null}
             {optionsError ? <View style={{ gap: 8 }}>
-              <AppText variant="small" color="textMuted">Filters unavailable</AppText>
-              <Button title="Retry filters" variant="secondary" onPress={onRetryOptions} />
+              <AppText variant="small" color="textMuted">{uiJoin('Filter', ' · ', 'Unavailable')}</AppText>
+              <Button title="Retry" variant="secondary" onPress={onRetryOptions} />
             </View> : null}
+            {children}
             {groupOptions.map(({ g, options }) => {
               return (
                 <View key={g.key}>
                   <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
-                    {g.title}
+                    {filterGroupTitle(g.field)}
                   </AppText>
                   {optionChips({
                     groupKey: g.key,
                     options,
                     selected: draft[g.key] as string[],
-                    label: (o) => (g.field === 'lvr_tier' ? lvrTierDisplay(o) : humanizeEnum(o)),
+                    label: (o) => (g.field === 'lvr_tier' ? lvrTierDisplay(o) : g.field === 'loan_purpose' ? uiLoanPurpose({ loan_purpose: o }) : humanizeEnum(o)),
                     onToggle: (o) => toggle(g.key, o),
                   })}
                 </View>
@@ -184,7 +209,7 @@ export function FilterSheet({
             {accountFeatures.length ? (
               <View>
                 <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
-                  Account features
+                  {uiLabel('Account features')}
                 </AppText>
                 {optionChips({
                   groupKey: 'accountFeatures',
@@ -192,7 +217,7 @@ export function FilterSheet({
                   selected: draft.accountFeatures,
                   label: humanizeEnum,
                   onToggle: (f) => toggle('accountFeatures', f),
-                  noun: 'features',
+                  noun: 'Features',
                 })}
               </View>
             ) : null}
@@ -200,7 +225,7 @@ export function FilterSheet({
             {eligibilityCriteria.length ? (
               <View>
                 <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
-                  Eligibility
+                  {uiLabel('Eligibility')}
                 </AppText>
                 {optionChips({
                   groupKey: 'eligibilityCriteria',
@@ -208,7 +233,7 @@ export function FilterSheet({
                   selected: draft.eligibilityCriteria,
                   label: humanizeEnum,
                   onToggle: (c) => toggle('eligibilityCriteria', c),
-                  noun: 'criteria',
+                  noun: 'Criteria',
                 })}
               </View>
             ) : null}
@@ -216,12 +241,10 @@ export function FilterSheet({
             {publishedDetails.length ? (
               <Disclosure
                 title="Published details"
-                summary={draft.factCriteria.length
-                  ? `${draft.factCriteria.length} selected`
-                  : undefined}
                 open={publishedOpen}
                 onToggle={() => setPublishedOpen((open) => !open)}
               >
+                {!!draft.factCriteria.length && <AppText variant="small">{uiJoin('Selected', ' · ', uiCount(draft.factCriteria.length))}</AppText>}
                 <Row gap={8} style={{ flexWrap: 'wrap' }}>
                   {publishedDetails.map((option) => (
                     <Chip
@@ -239,7 +262,7 @@ export function FilterSheet({
 
             <View>
               <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
-                Lenders
+                {uiLabel('Lenders')}
               </AppText>
               {providers.length > 12 || lenderQuery.trim() !== '' ? (
                 <View style={{ marginBottom: 10 }}>
@@ -252,13 +275,13 @@ export function FilterSheet({
                   groupKey: 'providers',
                   options: lenderMatches,
                   selected: draft.providers,
-                  label: (p) => p,
+                  label: (provider) => uiProviderName({ provider }),
                   onToggle: (p) => toggle('providers', p),
-                  noun: 'lenders',
+                  noun: 'Lenders',
                   showAll: lenderQuery.trim() !== '',
                 })
               ) : lenderQuery.trim() ? (
-                <AppText variant="small" color="textMuted">No lenders</AppText>
+                <AppText variant="small" color="textMuted">{uiJoin('Lenders', ' · ', 'No results')}</AppText>
               ) : null}
             </View>
           </ScrollView>

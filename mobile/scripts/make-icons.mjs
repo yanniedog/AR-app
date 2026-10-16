@@ -5,11 +5,11 @@ import pngjs from 'pngjs';
 
 const { PNG } = pngjs;
 const assets = fileURLToPath(new URL('../assets/', import.meta.url));
-const PAPER = [244, 240, 230, 255];
-const INK = [21, 35, 31, 255];
-const RULE = [147, 139, 124, 255];
-const EUCALYPTUS = [46, 106, 86, 255];
-const WATTLE = [213, 166, 46, 255];
+const PAPER = [255, 255, 255, 255];
+const INK = [23, 43, 77, 255];
+const RULE = [101, 115, 138, 255];
+const EUCALYPTUS = [37, 99, 235, 255];
+const WATTLE = [37, 99, 235, 255];
 const CLEAR = [0, 0, 0, 0];
 
 function canvas(size, color) {
@@ -72,7 +72,7 @@ function line(png, from, to, width, color) {
   }
 }
 
-function rateMark(png, inset) {
+function rateMark(png, inset, curveColor = INK) {
   const x0 = inset;
   const y0 = inset;
   const x1 = png.width - inset;
@@ -91,22 +91,22 @@ function rateMark(png, inset) {
     [x0 + width * 0.96, y0 + height * 0.27],
   ];
   for (let index = 1; index < points.length; index += 1) {
-    line(png, points[index - 1], points[index], Math.max(3, width * 0.045), INK);
+    line(png, points[index - 1], points[index], Math.max(3, width * 0.045), curveColor);
   }
   const radius = Math.max(3, width * 0.068);
   circle(png, points[3][0], points[3][1], radius, WATTLE);
   circle(png, points[3][0], points[3][1], radius * 0.34, INK);
 }
 
-function write(name, size, background, insetFraction, sideRule = false) {
+function write(name, size, background, insetFraction, sideRule = false, curveColor = INK) {
   const png = canvas(size, background);
   if (sideRule) rect(png, 0, 0, size * 0.055, size, EUCALYPTUS);
-  rateMark(png, size * insetFraction);
+  rateMark(png, size * insetFraction, curveColor);
   writeFileSync(`${assets}${name}`, PNG.sync.write(png, { colorType: 6, inputColorType: 6 }));
 }
 
 write('icon.png', 1024, PAPER, 0.17, true);
 write('favicon.png', 64, PAPER, 0.17, true);
 write('adaptive-icon.png', 1024, CLEAR, 0.27);
-write('splash.png', 1024, CLEAR, 0.31);
+write('splash.png', 1024, CLEAR, 0.31, false, EUCALYPTUS);
 process.stdout.write(`Wrote Rate Ledger artwork to ${assets}\n`);

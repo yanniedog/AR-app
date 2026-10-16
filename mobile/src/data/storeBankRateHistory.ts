@@ -6,7 +6,6 @@ import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import type { DatesIndex } from './datesIndex';
 import { prepareReadyBankRateHistory } from './historicalBankRateReadySync';
 import { historicalCatalogueOwner, markPreparedHistoricalBankRateHistory, warmHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
-import { normalizeInterests } from './interests';
 import { samePayloadIdentity } from './payloadRevision';
 import type { StoreGet, StoreSet } from './storeTypes';
 
@@ -80,7 +79,7 @@ export async function prepareBankRateHistoryAfterPaint(
       work.stage('Warming bank/section/profile history views');
       await warmHistoricalBankRateCatalogue(get().core!, {
         profileFilters: prefs.profileFilters, includeNonStandard: prefs.includeNonStandard,
-        interests: prefs.onboarded ? normalizeInterests(prefs.interests) : SECTION_KEYS,
+        interests: SECTION_KEYS,
       });
     }
     if (isCurrent()) outcome = !ready ? 'unavailable' : detached ? 'completed' : 'fallback';

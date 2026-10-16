@@ -1,4 +1,3 @@
-import { descriptiveValue } from './descriptiveValue';
 import { StandardUrl } from '../lib/standardUrl';
 import { SECTIONS } from '../constants';
 import { rateQualifier } from '../lib/rateQualifier';
@@ -22,25 +21,29 @@ import {
 } from './format';
 import type { UserRateScenario } from './userRateScenario';
 import { scopedRateConditions, type RateConditionContext, type ScopedRateConditions } from './rateConditions';
-import { lvrTierDisplay } from './lvrTier';
+import { uiDetailItem } from '../lib/productUiFacts';
+import { scopedFinancialConditionFacts } from './scopedFinancialConditionFacts';
+import { uiConditionTag, uiConditionalRateFact, uiListedLvrRange } from '../lib/financialUiCopy';
+import { uiCount, uiDate, uiDuration, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from '../lib/uiCopy';
+import type { ConditionalRateFact } from './rateConditionalFacts';
 
 export interface ReceiptFact {
-  label: string;
-  value: string;
+  label: UiCopy;
+  value: UiText;
 }
 
-export function rateConditionReceiptLines(receipt: RateReceipt): string[] {
-  const model = receipt.rateConditions;
-  return model.status === 'available'
-    ? ['Selected rate conditions:', ...model.entries.map(entry => entry.text), 'Published wording; eligibility remains unassessed.']
-    : [model.reason];
+export function rateConditionReceiptLines(receipt: RateReceipt): UiText[] {
+  const conditions = scopedFinancialConditionFacts(receipt.rateConditions);
+  return [...conditions.facts.map(uiConditionTag),
+    ...conditions.unresolved.map(fact => uiJoin('Source review required', ' · ', uiIdentifier(fact.source.sourcePointer))),
+    ...(conditions.state === 'unverified' ? [uiLabel('Source unverified')] : []), uiLabel('Eligibility unverified')];
 }
 
 export interface OfficialReceiptSource {
   kind: keyof ProductLinks;
-  label: string;
+  label: UiLabel;
   url: string;
-  hostname: string;
+  hostname: UiText;
 }
 
 /** A point-in-time record of one exact CDR product-rate row. */
@@ -53,19 +56,34 @@ export interface RateReceipt {
   section: SectionKey;
   evidenceDate: string;
   sourceUpdatedAt: string | null;
-  advertisedRate: string;
+  advertisedRate: UiText;
   advertisedRateFraction: number | null;
   ratePeriodMonths: number | null;
-  ratePeriodLabel: string | null;
-  comparisonRate: string | null;
-  ongoingRate: string | null;
+  ratePeriodLabel: UiText | null;
+  comparisonRate: UiText | null;
+  ongoingRate: UiText | null;
   cohort: 'standard' | 'non-standard';
   tier: ReceiptFact[];
   conditions: ReceiptFact[];
   rateConditions: ScopedRateConditions;
   fees: ReceiptFact[];
   officialSources: OfficialReceiptSource[];
-  limitations: string[];
+  facts: readonly ReceiptStatusFact[];
+}
+
+/** Public selected-rate facts only; private scenario inputs are excluded. */
+export function rateReceiptShareText(receipt: RateReceipt): UiText {
+  const values = [...receipt.tier, ...receipt.conditions, ...receipt.fees].filter(fact => fact.label !== 'Rate index')
+    .map(fact => uiJoin(fact.label, ': ', fact.value));
+  const sourceFacts = rateConditionReceiptLines(receipt);
+  const links = receipt.officialSources.map(source => uiJoin(source.label, ': ', uiIdentifier(source.url)));
+  return uiJoin(uiProviderName({ provider: receipt.provider }), ' · ', uiProductName({ product_name: receipt.productName }),
+    ' · ', 'Rate index', ': ', uiCount(receipt.rateIndex), ' · ', 'Advertised', ': ', receipt.advertisedRate,
+    receipt.comparisonRate ? uiJoin(' · ', 'Comparison', ': ', receipt.comparisonRate) : null,
+    ' · ', 'Observed', ': ', uiDate(receipt.evidenceDate),
+    ...values.flatMap(fact => [uiLabel(' · '), fact]),
+    ...sourceFacts.flatMap(fact => [uiLabel(' · '), fact]),
+    ...links.flatMap(fact => [uiLabel(' · '), fact]), ' · ', 'Fees unverified');
 }
 
 export interface NegotiationComparable {
@@ -73,47 +91,46 @@ export interface NegotiationComparable {
   rateIndex: number | null;
   provider: string;
   productName: string;
-  advertisedRate: string;
-  comparisonRate: string | null;
-  ongoingRate: string | null;
-  condition: string | null;
+  advertisedRate: UiText;
+  comparisonRate: UiText | null;
+  ongoingRate: UiText | null;
+  conditionalFacts: readonly ConditionalRateFact[];
 }
 
 export interface NegotiationIllustration {
   balance: number;
-  currentRate: string;
-  selectedRate: string;
+  currentRate: UiText;
+  selectedRate: UiText;
   annualDifference: number;
   periodDifference: number;
-  periodLabel: string;
+  periodLabel: UiText;
   monthlyDifference: number | null;
   direction: 'lower-cost' | 'higher-return';
-  assumption: string;
+  exclusions: readonly ('repayments' | 'fees' | 'loan-structure' | 'switching-costs' | 'compounding' | 'maturity-instructions' | 'bonus-eligibility' | 'tax' | 'balance-changes')[];
 }
 
 /** Generated in memory only; callers must not persist it in general preferences. */
 export interface NegotiationBrief {
   version: 1;
-  title: string;
+  title: UiText;
   evidenceDate: string;
   scenario: ReceiptFact[];
   selectedProduct: ReceiptFact[];
   comparables: NegotiationComparable[];
-  cohortSummary: string;
-  typicalAdvertisedRate: string | null;
+  cohortSummary: UiText;
+  typicalAdvertisedRate: UiText | null;
   illustration: NegotiationIllustration | null;
-  prompts: string[];
-  limitations: string[];
+  topics: readonly ('current-rate' | 'selected-tier' | 'fees' | 'conditions')[];
+  facts: readonly ReceiptStatusFact[];
   officialSources: OfficialReceiptSource[];
-  disclaimer: string;
 }
 
-const SOURCE_LABELS: Record<keyof ProductLinks, string> = {
-  overview: 'Published product overview',
-  eligibility: 'Published eligibility criteria',
-  fees: 'Published fees and pricing',
-  terms: 'Published terms and conditions',
-  bundle: 'Published product bundle details',
+const SOURCE_LABELS: Record<keyof ProductLinks, UiLabel> = {
+  overview: 'Product',
+  eligibility: 'Eligibility',
+  fees: 'Fees',
+  terms: 'Terms',
+  bundle: 'Package',
 };
 
 function safeHttpsUrl(value: unknown): string | null {
@@ -137,27 +154,28 @@ export function officialReceiptSources(links?: ProductLinks): OfficialReceiptSou
     const url = safeHttpsUrl(links[kind]);
     if (!url || seen.has(url)) continue;
     seen.add(url);
-    sources.push({ kind, label: SOURCE_LABELS[kind], url, hostname: new StandardUrl(url).hostname });
+    sources.push({ kind, label: SOURCE_LABELS[kind], url, hostname: uiIdentifier(new StandardUrl(url).hostname) });
   }
   return sources;
 }
 
-function detailFacts(items: DetailItem[] | undefined): ReceiptFact[] {
-  if (!items?.length) return [];
-  return items.flatMap((item, index) => {
-    const label = String(item.name ?? item.label ?? `Item ${index + 1}`).trim();
-    const value = [descriptiveValue(item.value), item.info]
-      .filter((part) => part !== null && part !== undefined && String(part).trim())
-      .map(String)
-      .join(' — ')
-      .trim();
-    return label && (value || item.name || item.label) ? [{ label: humanizeEnum(label) || label, value }] : [];
+export type ReceiptStatusFact =
+  | { readonly kind: 'eligibility'; readonly state: 'unverified' }
+  | { readonly kind: 'quote'; readonly state: 'unavailable' }
+  | { readonly kind: 'advice'; readonly state: 'excluded' }
+  | { readonly kind: 'privacy'; readonly state: 'local-only' }
+  | { readonly kind: 'costs'; readonly state: 'unverified' }
+  | { readonly kind: 'comparables'; readonly state: 'unmatched' }
+  | { readonly kind: 'source'; readonly state: 'unavailable' }
+  | { readonly kind: 'detailed-eligibility'; readonly state: 'unavailable' };
+function detailFacts(items: DetailItem[] | undefined, group: 'Fees' | 'Eligibility' | 'Features' | 'Constraints'): ReceiptFact[] {
+  return (items ?? []).map((item, index) => {
+    const fact = uiDetailItem(item, index, group);
+    return { label: fact.label, value: uiJoin(fact.value, fact.conditions === 'source-review-required' ? uiJoin(' · ', 'Source review required') : null) };
   });
 }
-
-function addFact(facts: ReceiptFact[], label: string, value: unknown): void {
-  const text = value === null || value === undefined ? '' : String(value).trim();
-  if (text) facts.push({ label, value: text });
+function addFact(facts: ReceiptFact[], label: UiCopy, value: UiText | null): void {
+  if (value) facts.push({ label, value });
 }
 
 export function buildRateReceipt(input: {
@@ -170,28 +188,28 @@ export function buildRateReceipt(input: {
   const { row, section, evidenceDate, detail } = input;
   const qualifier = rateQualifier(row, section);
   const tier: ReceiptFact[] = [];
-  addFact(tier, 'Exact rate row', row.rate_index == null ? 'Product default row' : `Rate index ${row.rate_index}`);
+  addFact(tier, 'Rate index', row.rate_index == null ? uiLabel('Unknown') : uiCount(row.rate_index));
   addFact(tier, 'Rate type', humanizeEnum(row.rate_type));
   if (section === 'Mortgage') {
     addFact(tier, 'Rate structure', humanizeEnum(row.ribbon_rate_structure));
     addFact(tier, 'Repayment', humanizeEnum(row.ribbon_repayment_type ?? row.repayment_type));
     addFact(tier, 'Loan purpose', humanizeEnum(row.loan_purpose ?? row.security_purpose));
-    addFact(tier, 'LVR tier', lvrTierDisplay(row.lvr_tier));
+    addFact(tier, 'Listed LVR', uiListedLvrRange(row));
   } else {
-    addFact(tier, 'Deposit tier', humanizeEnum(row.ribbon_deposit_kind));
-    addFact(tier, 'Balance range', formatBalanceRange(row.balance_min, row.balance_max));
+    addFact(tier, 'Tier', humanizeEnum(row.ribbon_deposit_kind));
+    addFact(tier, 'Balance', formatBalanceRange(row.balance_min, row.balance_max));
     addFact(tier, 'Interest paid', humanizeEnum(row.interest_payment));
   }
   addFact(tier, 'Term', formatTerm(row));
   addFact(tier, 'Account type', humanizeEnum(row.account_type));
-  addFact(tier, 'Account class', isNonStandard(row) ? 'Non-standard' : 'Standard');
-  addFact(tier, 'Product ID', row.product_id);
+  addFact(tier, 'Account class', uiLabel(isNonStandard(row) ? 'Non-standard' : 'Standard'));
+  addFact(tier, 'Product ID', uiIdentifier(row.product_id));
 
-  const conditions = detailFacts(detail?.eligibility);
+  const conditions = detailFacts(detail?.eligibility, 'Eligibility');
   const rateConditions = scopedRateConditions(row, section, input.rateConditionContext);
-  conditions.push(...detailFacts(detail?.constraints));
+  conditions.push(...detailFacts(detail?.constraints, 'Constraints'));
   if (qualifier.conditional) {
-    conditions.unshift({ label: qualifier.label, value: qualifier.note });
+    conditions.unshift(...qualifier.facts.map(fact => ({ label: 'Conditions' as const, value: uiConditionalRateFact(fact) })));
   }
 
   const officialSources = officialReceiptSources(detail?.links);
@@ -206,16 +224,16 @@ export function buildRateReceipt(input: {
     : Number.isFinite(explicitTermMonths) && explicitTermMonths > 0
       ? explicitTermMonths
       : isoDurationMonths(row.term);
-  const ratePeriodLabel = ratePeriodMonths == null ? null : formatTerm(row) || `${ratePeriodMonths} months`;
-  const limitations = [
-    'This receipt records what the Australian Rates dataset observed; it is not a lender quote or approval.',
-    'Eligibility, balances, fees, packages and other conditions can change the rate available to an individual.',
-  ];
-  if (!officialSources.length) {
-    limitations.push('No valid HTTPS lender document link was published for this product in the current dataset.');
-  }
-  if (!detail?.eligibility?.length && !detail?.constraints?.length) {
-    limitations.push('The dataset did not publish detailed eligibility or constraint text for this exact product.');
+  const ratePeriodLabel = ratePeriodMonths == null ? null : formatTerm(row) || uiDuration(ratePeriodMonths, 'months');
+  const facts: ReceiptStatusFact[] = [{ kind: 'quote', state: 'unavailable' }, { kind: 'eligibility', state: 'unverified' }, { kind: 'costs', state: 'unverified' }];
+  if (!officialSources.length) facts.push({ kind: 'source', state: 'unavailable' });
+  if (!detail?.eligibility?.length && !detail?.constraints?.length) facts.push({ kind: 'detailed-eligibility', state: 'unavailable' });
+  const conditionFacts = scopedFinancialConditionFacts(rateConditions);
+  if (conditionFacts.state === 'admitted') {
+    const kinds = new Set(conditionFacts.facts.map(fact => fact.kind));
+    if (kinds.has('published-lvr-range')) for (let i = tier.length - 1; i >= 0; i--) if (tier[i].label === 'Listed LVR') tier.splice(i, 1);
+    if (kinds.has('published-balance-range')) for (let i = tier.length - 1; i >= 0; i--) if (tier[i].label === 'Balance') tier.splice(i, 1);
+    conditionFacts.facts.forEach(fact => tier.push({ label: 'Conditions', value: uiConditionTag(fact) }));
   }
 
   return {
@@ -237,9 +255,9 @@ export function buildRateReceipt(input: {
     tier,
     conditions,
     rateConditions,
-    fees: detailFacts(detail?.fees),
+    fees: detailFacts(detail?.fees, 'Fees'),
     officialSources,
-    limitations,
+    facts,
   };
 }
 
@@ -256,21 +274,21 @@ function scenarioForSection(
     if (!hasEnteredValue) return { facts, balance: 0, currentRateFraction: null };
     const lvr = computeLvr(mortgage);
     const balance = lvr.loan ?? num(mortgage.loanBalance);
-    addFact(facts, 'Scenario', mortgage.mode === 'refi' ? 'Refinancing' : 'Buying');
-    if (balance > 0) addFact(facts, 'Loan amount', balance.toLocaleString('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 }));
+    addFact(facts, 'Your rate scenario', uiLabel(mortgage.mode === 'refi' ? 'Refinancing' : 'Buying'));
+    if (balance > 0) addFact(facts, 'Loan amount', uiMoney(balance));
     const propertyValue = num(mortgage.propertyValue);
-    if (propertyValue > 0) addFact(facts, 'Property value', propertyValue.toLocaleString('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 }));
-    if (lvr.lvr != null) addFact(facts, 'Illustrative LVR', `${lvr.lvr.toFixed(1)}%`);
-    if (mortgage.currentRate.trim()) addFact(facts, 'Current rate entered', `${num(mortgage.currentRate).toFixed(2)}%`);
-    if (mortgage.years.trim()) addFact(facts, 'Remaining term entered', `${num(mortgage.years)} years`);
+    if (propertyValue > 0) addFact(facts, 'Property value ($)', uiMoney(propertyValue));
+    if (lvr.lvr != null) addFact(facts, 'Scenario LVR', uiJoin(uiNumber(Number(lvr.lvr.toFixed(1)), 1), '%'));
+    if (mortgage.currentRate.trim()) addFact(facts, 'Current entered rate', formatRate(num(mortgage.currentRate) / 100));
+    if (mortgage.years.trim()) addFact(facts, 'Years remaining', uiDuration(num(mortgage.years), 'years'));
     const current = num(mortgage.currentRate);
     return { facts, balance, currentRateFraction: current > 0 ? current / 100 : null };
   }
 
   const deposit = section === 'Savings' ? scenario.savings : scenario.termDeposit;
   const balance = num(deposit.balance);
-  if (balance > 0) addFact(facts, 'Balance entered', balance.toLocaleString('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 }));
-  if (deposit.currentRate.trim()) addFact(facts, 'Current rate entered', `${num(deposit.currentRate).toFixed(2)}%`);
+  if (balance > 0) addFact(facts, 'Current entered balance', uiMoney(balance));
+  if (deposit.currentRate.trim()) addFact(facts, 'Current entered rate', formatRate(num(deposit.currentRate) / 100));
   const current = num(deposit.currentRate);
   return { facts, balance, currentRateFraction: current > 0 ? current / 100 : null };
 }
@@ -311,7 +329,7 @@ function buildComparables(
       advertisedRate: formatRate(row.rate),
       comparisonRate: row.comparison_rate ? formatRate(row.comparison_rate) : null,
       ongoingRate: qualifier.ongoingRate,
-      condition: qualifier.conditional ? qualifier.note : null,
+      conditionalFacts: qualifier.facts,
     });
     if (result.length === 3) break;
   }
@@ -351,11 +369,9 @@ export function buildNegotiationBrief(input: {
       const periodDifference = receipt.ratePeriodMonths == null
         ? annualDifference
         : Math.round((annualDifference * receipt.ratePeriodMonths / 12) * 100) / 100;
-      const periodLabel = receipt.ratePeriodMonths == null
-        ? 'per year'
-        : receipt.section === 'TD'
-          ? `at ${receipt.ratePeriodLabel ?? `${receipt.ratePeriodMonths} month`} maturity`
-          : `over the published ${receipt.ratePeriodLabel ?? `${receipt.ratePeriodMonths} month`} period`;
+      const periodLabel = receipt.ratePeriodMonths == null ? uiLabel('per year')
+        : uiJoin(uiDuration(receipt.ratePeriodMonths, 'months'), ' · ', receipt.section === 'TD' ? 'at maturity' : 'Published period');
+
       illustration = {
         balance: scenarioData.balance,
         currentRate: formatRate(scenarioData.currentRateFraction),
@@ -367,50 +383,34 @@ export function buildNegotiationBrief(input: {
           ? null
           : Math.round((annualDifference / 12) * 100) / 100,
         direction,
-        assumption: receipt.section === 'Mortgage'
-          ? 'Simple interest-rate difference only; repayments, fees, loan structure and switching costs are excluded.'
-          : receipt.section === 'TD'
-            ? 'Simple-interest difference for the published deposit term; compounding and maturity instructions are excluded.'
-            : 'Simple annual interest-rate difference only; bonus qualification, compounding, tax and balance changes are excluded.',
+        exclusions: receipt.section === 'Mortgage' ? ['repayments', 'fees', 'loan-structure', 'switching-costs']
+          : receipt.section === 'TD' ? ['compounding', 'maturity-instructions'] : ['bonus-eligibility', 'compounding', 'tax', 'balance-changes'],
       };
     }
   }
 
   const selectedProduct: ReceiptFact[] = [
-    { label: 'Product', value: `${receipt.provider} — ${receipt.productName}` },
-    { label: 'Observed advertised rate', value: receipt.advertisedRate },
+    { label: 'Product', value: uiJoin(uiProviderName({ provider: receipt.provider }), ' — ', uiProductName({ product_name: receipt.productName })) },
+    { label: 'Advertised rate', value: receipt.advertisedRate },
   ];
   if (receipt.comparisonRate) selectedProduct.push({ label: 'Comparison rate', value: receipt.comparisonRate });
-  if (receipt.ongoingRate) selectedProduct.push({ label: 'Published ongoing rate', value: receipt.ongoingRate });
-  selectedProduct.push({ label: 'Evidence date', value: receipt.evidenceDate });
+  if (receipt.ongoingRate) selectedProduct.push({ label: 'Ongoing rate', value: receipt.ongoingRate });
+  selectedProduct.push({ label: 'Observed', value: uiDate(receipt.evidenceDate) });
 
-  const limitations = [
-    `Comparables are broadly available ${SECTIONS[receipt.section].title.toLowerCase()} rate tiers observed in the ${receipt.evidenceDate} dataset; they are not matched to your eligibility or circumstances.`,
-    'Advertised rates can depend on LVR, balance, repayment type, term, bonus actions, packages and other conditions.',
-    'Ask the lender to confirm the current rate, eligibility, fees and conditions in writing before making a decision.',
-    ...receipt.limitations,
-  ];
+  const facts: ReceiptStatusFact[] = [{ kind: 'comparables', state: 'unmatched' }, { kind: 'eligibility', state: 'unverified' }, { kind: 'costs', state: 'unverified' }, { kind: 'privacy', state: 'local-only' }, { kind: 'advice', state: 'excluded' }, ...receipt.facts];
 
   return {
     version: 1,
-    title: `Rate conversation brief — ${receipt.provider}`,
+    title: uiJoin('Bank-call brief', ' — ', uiProviderName({ provider: receipt.provider })),
     evidenceDate: receipt.evidenceDate,
     scenario: scenarioData.facts,
     selectedProduct,
     comparables,
-    cohortSummary: comparisonsReady
-      ? `${standardRates.length} comparable ${SECTIONS[receipt.section].title.toLowerCase()} offers resolved`
-      : 'Public comparisons incomplete',
+    cohortSummary: uiJoin(uiCount(standardRates.length), ' ', 'rates', ' · ', 'Observed', ' ', uiDate(receipt.evidenceDate)),
     typicalAdvertisedRate: typical == null ? null : formatRate(typical),
     illustration,
-    prompts: [
-      'Can you review the rate currently applied to my account?',
-      `Is this exact ${receipt.productName} tier available to me, and what conditions would I need to meet?`,
-      'Are there fees, package requirements, introductory periods or ongoing-rate changes that affect the comparison?',
-      'Can you provide the rate and all applicable conditions in writing?',
-    ],
-    limitations: [...new Set(limitations)],
+    topics: ['current-rate', 'selected-tier', 'fees', 'conditions'],
+    facts,
     officialSources: receipt.officialSources,
-    disclaimer: 'General information only — not personal financial advice or a recommendation to switch. This brief is generated locally from the scenario you entered and is not sent by Australian Rates.',
   };
 }

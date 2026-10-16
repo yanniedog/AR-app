@@ -1,3 +1,4 @@
+import { uiLabel } from "../src/lib/uiCopy";
 import { BankRatesPanel } from '../src/components/passthrough/BankRatesPanel';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -78,23 +79,14 @@ export default function RbaResponseScreen() {
         <Card variant="outlined" style={{ gap: 12 }}>
           <AppText variant="h3">
             {suitabilityWarming
-              ? 'Preparing compatible RBA response analysis'
+              ? uiLabel("Loading")
               : filteredEmpty
-                ? 'No compatible RBA response analysis'
-                : 'RBA response analysis unavailable'}
-          </AppText>
-          <AppText variant="small" color="textMuted">
-            {suitabilityWarming
-              ? 'Checking which products are broadly available before showing bank response windows.'
-              : filteredEmpty
-                ? 'No observed bank response windows match the products currently included in your settings.'
-              : error
-                ? 'The latest observed response data could not be prepared. Try again.'
-                : 'Preparing observed bank response windows…'}
+                ? uiLabel("No compatible observations")
+                : uiLabel("Observations unavailable")}
           </AppText>
           {suitabilityWarming ? (
             <Button
-              title="Retry preparation"
+              title="Retry"
               variant="secondary"
               onPress={() => void ensureDetails({ force: true, abandonInFlight: true })}
             />
@@ -121,14 +113,10 @@ export default function RbaResponseScreen() {
           testID="bank-response-cached-error"
         >
           <Card variant="outlined" style={{ gap: 8 }}>
-            <AppText accessibilityRole="alert" variant="small" weight="700">
-              Showing saved Bank response data
-            </AppText>
-            <AppText variant="tiny" color="textMuted">
-              The latest refresh failed. These observed results may be out of date.
-            </AppText>
+            <AppText accessibilityRole="alert" variant="small" weight="700">{uiLabel("Cached observations")}</AppText>
+            <AppText variant="tiny" color="textMuted">{uiLabel("Refresh failed · Older observations")}</AppText>
             <Button
-              title="Retry Bank response data"
+              title="Retry"
               icon="refresh"
               variant="secondary"
               loading={retrying}

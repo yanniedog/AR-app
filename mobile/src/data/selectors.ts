@@ -1,5 +1,6 @@
 import { SECTIONS } from '../constants';
 import { mandatoryEligibleRows } from './eligibilityGate';
+import { matchesLvrTier } from './lvrRange';
 import { yieldToUi } from '../lib/yieldToUi';
 import { isMeaningfulDepositRate, MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
@@ -9,21 +10,21 @@ import {
   type SearchIndexPayload,
 } from './detailSearch';
 import { productHasAllEligibilityCriteria } from './eligibility';
-import { productHasAllFeatures } from './features';
+import { productHasAllFeatures } from './featuresCore';
 import {
   effectiveFraction,
   sortByDisplayLabel,
   toFraction,
   visibleAccountRows,
 } from './format';
-import { rateConditionality } from '../lib/rateQualifier';
+import { rateConditionality } from './rateConditionalFacts';
 import {
   featureEvidenceScope,
   productMatchesAllFactCriteria,
   type FactCriterion,
-} from './productFacts';
+} from './productFactsCore';
 
-export type { FactCriterion, FactCriterionOperator, FactCriterionScalar } from './productFacts';
+export type { FactCriterion, FactCriterionOperator, FactCriterionScalar } from './productFactsCore';
 
 export type SortKey = 'rate' | 'comparison' | 'bank';
 
@@ -436,7 +437,7 @@ function prepareRowFilter(
     if (!matchesSearch(row)) return false;
     if (!inList(row.provider, filters.providers)) return false;
     if (!inList(row.rate_type, filters.rateTypes)) return false;
-    if (!inList(row.lvr_tier, filters.lvrTiers)) return false;
+    if (!matchesLvrTier(row.lvr_tier, filters.lvrTiers)) return false;
     if (!inList(row.ribbon_repayment_type ?? row.repayment_type, filters.repaymentTypes)) return false;
     if (!inList(row.loan_purpose ?? row.security_purpose, filters.loanPurposes)) return false;
     if (!inList(row.ribbon_deposit_kind, filters.depositKinds)) return false;

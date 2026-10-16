@@ -4,7 +4,7 @@ import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { useScrollToTop } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { Alert, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import { SegmentedControl } from '../src/components/controls';
 import { Screen, ScreenScrollView } from '../src/components/Screen';
@@ -26,7 +26,7 @@ import {
   ToggleRow,
 } from '../src/components/settings/settingsUi';
 import { SECTIONS, SECTION_ORDER } from '../src/constants';
-import { formatRunDate, relativeDate } from '../src/data/format';
+import { uiCount, uiDate, uiJoin, uiLabel, uiSectionName, uiSubscriptionLabel } from '../src/lib/uiCopy';
 import {
   coverageFailureProvenanceReported,
   coverageFailures,
@@ -41,7 +41,6 @@ import { CURRENT_PRIVACY_CHOICE_VERSION, type Prefs } from '../src/data/storeTyp
 import type { MortgageRateMetric, RankMetric } from '../src/data/selectors';
 import type { Subscription } from '../src/data/subscriptions';
 import type { ThemeMode } from '../src/theme/theme';
-import { dataSourceLabel } from '../src/lib/nextIngest';
 import { restorePerformanceAuditPreferences } from '../src/lib/performanceAudit';
 import { setCrashReportsEnabled } from '../src/lib/observability';
 import {
@@ -54,6 +53,8 @@ import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditRead
 const THRESHOLDS = [1, 5, 10, 25];
 
 export default function Settings() {
+  const { width, fontScale } = useWindowDimensions();
+  const stackDataActions = width < 400 || fontScale >= 1.3;
   const suitabilityRevision = useSuitabilityRevision();
   const router = useRouter();
   const prefs = useStore((s) => s.prefs);
@@ -77,6 +78,15 @@ export default function Settings() {
   const [dataDetailsOpen, setDataDetailsOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
+  const [notificationsPending, setNotificationsPending] = useState(false);
+  const notificationsPendingRef = useRef(false);
+  const [crashChoicePending, setCrashChoicePending] = useState(false);
+  const crashChoicePendingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const [updateStatus, setUpdateStatus] = useState<AppUpdateSurfaceStatus>({
     terminal: false,
     status: 'checking',
@@ -170,27 +180,52 @@ export default function Settings() {
   const removeSubscriptionWithUndo = useCallback(
     (sub: Subscription) => {
       removeSubscription(sub.id);
-      showUndo(`Removed ${sub.label}`, () => restoreSubscription(sub));
+      showUndo('Removed', () => restoreSubscription(sub));
     },
     [removeSubscription, restoreSubscription, showUndo],
   );
 
   const onToggleNotifications = async (value: boolean) => {
-    if (value) {
-      const ok = await ensurePermissions();
-      if (!ok) {
-        Alert.alert('Notifications disabled', 'Enable notifications for Australian Rates in system settings.');
-        return;
+    if (notificationsPendingRef.current) return;
+    notificationsPendingRef.current = true;
+    setNotificationsPending(true);
+    try {
+      if (value) {
+        const ok = await ensurePermissions();
+        if (!ok) {
+          Alert.alert('Notifications disabled');
+          return;
+        }
       }
-      setPref('notificationsEnabled', true);
-    } else {
-      setPref('notificationsEnabled', false);
+      await setPref('notificationsEnabled', value);
+    } catch {
+      Alert.alert('Rate-change alerts', 'Failed');
+    } finally {
+      notificationsPendingRef.current = false;
+      if (mountedRef.current) setNotificationsPending(false);
     }
   };
 
+  const confirmCrashChoice = useCallback(async (value: boolean) => {
+    if (crashChoicePendingRef.current) return;
+    crashChoicePendingRef.current = true;
+    setCrashChoicePending(true);
+    try {
+      await setCrashReportsEnabled(value);
+      setPrefs({ crashReportsEnabled: value, sessionReplayEnabled: false,
+        privacyChoiceVersion: CURRENT_PRIVACY_CHOICE_VERSION });
+    } catch {
+      Alert.alert('Crash reports unchanged', 'Native state unconfirmed');
+    } finally {
+      crashChoicePendingRef.current = false;
+      if (mountedRef.current) setCrashChoicePending(false);
+    }
+  }, [setPrefs]);
+  const privacyChoiceCurrent = prefs.privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
+  const sourceLabel = source === 'remote' ? 'Published' : source === 'cache' ? 'Cached' : 'Sample';
+
   const orderedInterests = orderedInterestSections(prefs.interests);
   const hiddenSections = SECTION_ORDER.filter((key) => !prefs.interests.includes(key));
-  const sectionsSummary = orderedInterests.map((key) => SECTIONS[key].title).join(' · ');
   const matchingCounts = useMemo(() => {
     if (!core || !dataDetailsOpen) return null;
     const rows = mandatoryEligibleRows(Object.values(core.sections).flatMap(item => item.rates));
@@ -201,6 +236,8 @@ export default function Settings() {
   const settingsRenderRevision = JSON.stringify([
     hydrated ? 'hydrated' : 'loading',
     prefs,
+    notificationsPending,
+    crashChoicePending,
     homeSectionsOpen ? 'home-open' : 'home-closed',
     dataDetailsOpen ? 'data-open' : 'data-closed',
     diagnosticsOpen ? 'diagnostics-open' : 'diagnostics-closed',
@@ -337,9 +374,9 @@ export default function Settings() {
         <Label text="Theme" />
         <SegmentedControl<ThemeMode>
           options={[
-            { value: 'system', label: 'System' },
-            { value: 'light', label: 'Light' },
-            { value: 'dark', label: 'Dark' },
+            { value: 'system', label: uiLabel("System") },
+            { value: 'light', label: uiLabel("Light") },
+            { value: 'dark', label: uiLabel("Dark") },
           ]}
           value={prefs.themeMode}
           onChange={changeTheme}
@@ -350,36 +387,29 @@ export default function Settings() {
         <ToggleRow
           icon="people-outline"
           label="Widely available products"
-          sub="Hide loans with unspecified LVR, plus bonus, intro, age, region, staff, and other restricted rates"
           value={!prefs.includeNonStandard}
           onChange={(v) => setPref('includeNonStandard', !v)}
         />
         <SettingsGap size={14} />
-        <Label text="Rank savings & term deposits by" />
+        <Label text="Deposit ranking" />
         <SegmentedControl<RankMetric>
           options={[
-            { value: 'base', label: 'Base rate' },
-            { value: 'max', label: 'Headline rate' },
+            { value: 'base', label: uiLabel("Base rate") },
+            { value: 'max', label: uiLabel("Headline rate") },
           ]}
           value={prefs.depositRankMetric}
           onChange={changeDepositRank}
         />
-        <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
-          Base uses the ongoing rate; Headline includes bonus and introductory rates.
-        </AppText>
         <SettingsGap size={14} />
-        <Label text="Sort home loans by" />
+        <Label text="Mortgage ranking" />
         <SegmentedControl<MortgageRateMetric>
           options={[
-            { value: 'headline', label: 'Headline rate' },
-            { value: 'comparison', label: 'Comparison rate' },
+            { value: 'headline', label: uiLabel("Headline rate") },
+            { value: 'comparison', label: uiLabel("Comparison rate") },
           ]}
           value={prefs.mortgageRateMetric}
           onChange={(v) => setPref('mortgageRateMetric', v)}
         />
-        <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
-          Headline is the advertised interest rate on cards; Comparison includes fees.
-        </AppText>
       </Section>
 
       <Section title="Personalise">
@@ -391,15 +421,14 @@ export default function Settings() {
         />
         <SettingsGap size={12} />
         <DisclosureGroup
-          title="Categories"
-          summary={sectionsSummary || 'None'}
+          title="Preferred types"
           open={homeSectionsOpen}
           onOpenChange={changeHomeSectionsOpen}
         >
           {orderedInterests.map((key, idx, ordered) => (
             <InterestOrderRow
               key={key}
-              title={SECTIONS[key].title}
+              title={uiSectionName(key)}
               canMoveUp={idx > 0}
               canMoveDown={idx < ordered.length - 1}
               canRemove={ordered.length > 1}
@@ -416,7 +445,7 @@ export default function Settings() {
                 {hiddenSections.map((key) => (
                   <Chip
                     key={key}
-                    label={SECTIONS[key].title}
+                    label={uiSectionName(key)}
                     icon={SECTIONS[key].icon as keyof typeof Ionicons.glyphMap}
                     onPress={() => setPref('interests', toggleInterest(prefs.interests, key))}
                   />
@@ -426,12 +455,12 @@ export default function Settings() {
           ) : null}
         </DisclosureGroup>
         <SettingsGap size={12} />
-        <Label text="Default category" />
+        <Label text="Default type" />
         <Row gap={8} style={{ flexWrap: 'wrap' }}>
           {orderedInterests.map((key) => (
             <Chip
               key={key}
-              label={SECTIONS[key].title}
+              label={uiSectionName(key)}
               selected={prefs.defaultSection === key}
               onPress={() => setPref('defaultSection', key)}
             />
@@ -443,7 +472,6 @@ export default function Settings() {
         <ToggleRow
           icon="search-outline"
           label="Deep product search"
-          sub="Search fees, features, and eligibility"
           value={effectiveDeepSearch(prefs)}
           onChange={onToggleDeepSearch}
         />
@@ -451,7 +479,6 @@ export default function Settings() {
         <ToggleRow
           icon="analytics-outline"
           label="History explorer"
-          sub="Charts, market history, and bank trends"
           value={effectiveHistoryRibbon(prefs)}
           onChange={onToggleHistoryRibbon}
         />
@@ -461,8 +488,8 @@ export default function Settings() {
         <ToggleRow
           icon="notifications-outline"
           label="Rate-change alerts"
-          sub="Rate, RBA, watchlist, and search alerts"
           value={prefs.notificationsEnabled}
+          disabled={notificationsPending}
           onChange={onToggleNotifications}
         />
         {prefs.notificationsEnabled ? (
@@ -473,28 +500,26 @@ export default function Settings() {
               {THRESHOLDS.map((bps) => (
                 <Chip
                   key={bps}
-                  label={`${bps} bps`}
+                  label={uiJoin(uiCount(bps), ' ', 'bps')}
                   selected={prefs.rateMoveThresholdBps === bps}
                   onPress={() => setPref('rateMoveThresholdBps', bps)}
                 />
               ))}
             </Row>
             <SettingsGap size={12} />
-            <Label text={`Subscriptions (${subscriptions.length})`} />
+            <Label text={uiJoin('Subscriptions', ' ', '(', uiCount(subscriptions.length), ')')} />
             {subscriptions.length ? (
               subscriptions.map((sub: Subscription) => (
                 <SubscriptionRow
                   key={sub.id}
                   kind={sub.kind === 'product' ? 'Product' : 'Search'}
-                  label={sub.label}
+                  label={uiSubscriptionLabel(sub, core)}
                   onSwipeRemove={() => removeSubscriptionWithUndo(sub)}
                   onConfirmRemove={() => removeSubscription(sub.id)}
                 />
               ))
             ) : (
-              <AppText variant="tiny" color="textFaint">
-                None — add from a product or search screen.
-              </AppText>
+              <AppText variant="tiny" color="textFaint">{uiLabel("None")}</AppText>
             )}
           </>
         ) : null}
@@ -504,26 +529,25 @@ export default function Settings() {
         <ToggleRow
           icon="wifi-outline"
           label="Refresh on Wi-Fi only"
-          sub="Skip background updates on cellular"
           value={prefs.wifiOnly}
           onChange={(v) => setPref('wifiOnly', v)}
         />
         <SettingsGap size={10} />
-        <Row gap={12}>
+        <Row gap={12} style={{ flexDirection: stackDataActions ? 'column' : 'row', alignItems: 'stretch' }}>
           <Button
             title="Refresh now"
             icon="refresh"
             variant="secondary"
-            style={{ flex: 1 }}
+            style={{ flex: stackDataActions ? undefined : 1 }}
             onPress={() => void refresh({ manual: true })}
           />
           <Button
             title="Clear cache"
             icon="trash-outline"
             variant="ghost"
-            style={{ flex: 1 }}
+            style={{ flex: stackDataActions ? undefined : 1 }}
             onPress={() =>
-              Alert.alert('Clear cached data?', 'The app will re-download on next refresh.', [
+              Alert.alert('Clear cached data?', 'Offline data removed', [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Clear', style: 'destructive', onPress: () => void clearCache() },
               ])
@@ -535,51 +559,43 @@ export default function Settings() {
           title="Data details"
           open={dataDetailsOpen}
           onOpenChange={changeDataDetailsOpen}
-          summary={
-            core
-              ? `${formatRunDate(core.run_date)} · ${dataSourceLabel(source)}`
-              : 'No data loaded'
-          }
+
         >
-          <InfoRow label="Data set" value={core ? formatRunDate(core.run_date) : '—'} />
-          <InfoRow label="Source" value={dataSourceLabel(source)} />
-          <InfoRow label="Last checked" value={lastCheckedAt ? relativeDate(lastCheckedAt) : 'never'} />
-          <InfoRow label="Matching banks" value={matchingCounts ? String(matchingCounts.providers) : '—'} />
+          <InfoRow label="Data set" value={uiDate(core?.run_date)} />
+          <InfoRow label="Source" value={sourceLabel} />
+          <InfoRow label="Last checked" value={uiDate(lastCheckedAt)} />
+          <InfoRow label="Matching banks" value={uiCount(matchingCounts?.providers)} />
           <InfoRow
             label="Matching products"
-            value={matchingCounts ? String(matchingCounts.products) : '—'}
+            value={uiCount(matchingCounts?.products)}
           />
           <InfoRow
             label="Matching rates"
-            value={matchingCounts ? String(matchingCounts.rates) : '—'}
+            value={uiCount(matchingCounts?.rates)}
           />
           <InfoRow
             label="Coverage observed"
-            value={coverageObservedAt(core?.coverage) ? formatRunDate(coverageObservedAt(core?.coverage)!) : 'Not reported by this data set'}
+            value={uiDate(coverageObservedAt(core?.coverage))}
           />
           <InfoRow
             label="Providers reached"
-            value={coverageProvidersAttempted(core?.coverage) != null ? String(coverageProvidersAttempted(core?.coverage)) : 'Not reported by this data set'}
+            value={uiCount(coverageProvidersAttempted(core?.coverage))}
           />
           <InfoRow
             label="Providers observed"
-            value={coverageProvidersSucceeded(core?.coverage) != null ? String(coverageProvidersSucceeded(core?.coverage)) : 'Not reported by this data set'}
+            value={uiCount(coverageProvidersSucceeded(core?.coverage))}
           />
           <InfoRow
             label="Provider failure groups"
             value={coverageFailureProvenanceReported(core?.coverage)
-              ? String(coverageFailures(core?.coverage).length)
-              : 'Not reported by this data set'}
+              ? uiCount(coverageFailures(core?.coverage).length)
+              : 'Unknown'}
           />
           {source === 'sample' ? (
-            <AppText variant="tiny" color="warning" style={{ marginTop: 6, lineHeight: 16 }}>
-              Bundled sample only — not today’s market. Connect and refresh before relying on a rate.
-            </AppText>
+            <InfoRow label="Market basis" value="Sample" />
           ) : null}
-          <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
-            Coverage reflects successfully observed CDR publications, not every product in the Australian market.
-            Banks may publish incomplete fees, eligibility, or conditional-rate details.
-          </AppText>
+          <InfoRow label="Coverage basis" value="Observed publications" />
+          <InfoRow label="Fees / eligibility / conditions" value="Partial / Unknown" />
         </DisclosureGroup>
       </Section>
 
@@ -593,37 +609,32 @@ export default function Settings() {
           title="Optional reporting"
           open={diagnosticsOpen}
           onOpenChange={changeDiagnosticsOpen}
-          summary={
-            prefs.crashReportsEnabled
-              ? 'Optional reporting on'
-              : 'Reporting off'
-          }
+
         >
           <ToggleRow
             icon="pulse-outline"
             label="Crash reports"
-            sub="Send crash traces and fixed error categories; never debug logs, audit reports, financial inputs, saved products, searches or notification content"
-            value={prefs.crashReportsEnabled}
-            onChange={(value) => {
-              void setCrashReportsEnabled(value)
-                .then(() => {
-                  setPref('crashReportsEnabled', value);
-                  setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
-                })
-                .catch(() => {
-                  Alert.alert(
-                    'Crash reports unchanged',
-                    'The native reporting state could not be confirmed. Try again.',
-                  );
-                });
-            }}
+            value={privacyChoiceCurrent && prefs.crashReportsEnabled}
+            disabled={crashChoicePending}
+            onChange={confirmCrashChoice}
           />
           <SettingsGap size={8} />
-          <AppText variant="tiny" color="textFaint">
-            Session replay is not collected. After an audit, a compact diagnostic log is uploaded
-            and its verified paste link is copied. Full evidence remains on this device through
-            Debug log → Share full evidence. Crash reporting is controlled separately.
-          </AppText>
+          <InfoRow label="Sent" value="Crash traces · Fixed error categories" />
+          <InfoRow label="Excluded" value="Financial inputs · Saved rates · Searches · Logs · Audit reports · Notification content" />
+          <InfoRow label="Destination" value="Firebase Crashlytics" />
+          <InfoRow label="Access" value="Maintainers" />
+          <InfoRow label="Session replay" value="Not collected" />
+          {!privacyChoiceCurrent ? <>
+            <InfoRow label="Consent" value="Undecided" />
+            <Row gap={8}>
+              <Button title="Allow" onPress={() => confirmCrashChoice(true)} disabled={crashChoicePending} style={{ flex: 1 }} />
+              <Button title="Decline" variant="secondary" onPress={() => confirmCrashChoice(false)} disabled={crashChoicePending} style={{ flex: 1 }} />
+            </Row>
+          </> : null}
+          <AppText variant="small" weight="700">{uiLabel("Audit sharing")}</AppText>
+          <InfoRow label="Audit log upload" value="Optional" />
+          <InfoRow label="Paste visibility" value="Public" />
+          <InfoRow label="Full evidence" value="This device" />
         </DisclosureGroup>
       </Section>
 

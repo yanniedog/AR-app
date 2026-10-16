@@ -46,7 +46,7 @@ it('preserves saved-search alerts through the shared resolver without source-ind
     profile: normalizeProfileFilters({}), thresholdBps: 1, asOf: AS_OF, mortgageRateMetric: 'headline' as const };
   const messages = resolvedRateNotificationChanges(options);
   expect(messages).toHaveLength(1);
-  expect(messages[0].title).toBe('Public search rate changed');
+  expect(messages[0].title).toBe('Search alert · Rate changed');
   expect(messages[0].body).toContain('6.00% → 6.25%');
   expect(messages[0].body).not.toContain('487321'); expect(messages[0].body).not.toContain('8.374');
   expect(messages[0].search?.subscriptionId).toBe(subscription.id);

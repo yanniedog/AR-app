@@ -30,8 +30,14 @@ describe('lvrTierForValue', () => {
     expect(lvrTierForValue(93, TIERS)).toBe('lvr_90-95%');
   });
 
-  it('clamps an LVR above every band to the highest band', () => {
-    expect(lvrTierForValue(98, TIERS)).toBe('lvr_90-95%');
+  it('rejects an LVR above every published band', () => {
+    expect(lvrTierForValue(98, TIERS)).toBeNull();
+  });
+
+  it('prefers the narrower matching tier when upper bounds tie in either input order', () => {
+    const tiers = ['lvr_>=80.01-95%', 'lvr_90-95%'];
+    expect(lvrTierForValue(93, tiers)).toBe('lvr_90-95%');
+    expect(lvrTierForValue(93, [...tiers].reverse())).toBe('lvr_90-95%');
   });
 
   it('returns null for non-positive / non-finite LVR or when no usable tiers exist', () => {
@@ -52,8 +58,8 @@ describe('lvrTierLabel', () => {
   it('labels payload tiers for display', () => {
     expect(lvrTierLabel('lvr_=60%')).toBe('LVR ≤60%');
     expect(lvrTierLabel('lvr_85-90%')).toBe('LVR 85–90%');
-    expect(lvrTierLabel('lvr_unspecified')).toBe('LVR unspecified');
-    expect(lvrTierLabel('lvr_>95%')).toBe('LVR over 95%');
+    expect(lvrTierLabel('lvr_unspecified')).toBe('LVR · Unknown');
+    expect(lvrTierLabel('lvr_>95%')).toBe('LVR >95%');
     expect(lvrTierLabel('VARIABLE')).toBeNull();
   });
 
@@ -67,7 +73,7 @@ describe('lvrTierLabel', () => {
 describe('refreshLvrLabelText', () => {
   it('rewrites only percentage LVR tokens in the trailing suffix and is idempotent', () => {
     expect(refreshLvrLabelText('Bank · Loan (Variable · LVR =60%)')).toBe('Bank · Loan (Variable · LVR ≤60%)');
-    expect(refreshLvrLabelText('Bank · Loan (Fixed · LVR >95%)')).toBe('Bank · Loan (Fixed · LVR over 95%)');
+    expect(refreshLvrLabelText('Bank · Loan (Fixed · LVR >95%)')).toBe('Bank · Loan (Fixed · LVR >95%)');
     expect(refreshLvrLabelText('Bank · Loan (Variable · LVR unspecified)')).toBe('Bank · Loan (Variable · LVR unspecified)');
     expect(refreshLvrLabelText('Bank · Loan (Variable · LVR ≤60%)')).toBe('Bank · Loan (Variable · LVR ≤60%)');
     expect(refreshLvrLabelText('Bank · LVR 60% Special')).toBe('Bank · LVR 60% Special');

@@ -22,7 +22,7 @@ test('explicit diagnostics action executes real primitives and preserves the act
   expect(debugLog.info).not.toHaveBeenCalled();
   act(() => tree.root.findByProps({ title: 'Evaluator runtime' }).props.onToggle());
   expect(debugLog.info).not.toHaveBeenCalled();
-  act(() => tree.root.findByProps({ title: 'Run runtime check' }).props.onPress());
+  act(() => tree.root.findByProps({ title: 'Run check' }).props.onPress());
   const [tag, message] = (debugLog.info as jest.Mock).mock.calls[0];
   const result = JSON.parse(message);
   expect(tag).toBe('productTermsRuntime');
@@ -32,8 +32,8 @@ test('explicit diagnostics action executes real primitives and preserves the act
   } });
   const rendered = JSON.stringify(tree.toJSON());
   expect(rendered).toContain(EVALUATOR_VERSION);
-  expect(rendered).toContain('runtime=other; passed=true');
-  expect(rendered).toContain('does not verify Hermes');
+  expect(rendered).toContain(`Version: ${EVALUATOR_VERSION} · Runtime: Other · Verified · Checks: 7 / 7`);
+  expect(rendered).not.toContain('Hermes');
   act(() => tree.unmount());
 });
 

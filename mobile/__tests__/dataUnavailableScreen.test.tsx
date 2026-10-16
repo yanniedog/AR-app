@@ -24,12 +24,16 @@ let resolveRead: (state: Network.NetworkState) => void;
 let rejectRead: (error: Error) => void;
 type Renderer = ReactTestRenderer & {
   toJSON: () => unknown;
-  root: { findByProps: (props: { title: string }) => { props: { disabled: boolean } } };
+  root: {
+    findByProps: (props: { title: string }) => { props: { disabled: boolean; onPress: () => void } };
+    findAllByType: (type: string) => { children: unknown[] }[];
+  };
 };
 let tree: Renderer;
 const createScreen = () => TestRenderer.create(<DataUnavailableScreen />) as Renderer;
 const remove = jest.fn();
-const rendered = () => JSON.stringify(tree.toJSON());
+const connectivityStatus = () => tree.root.findAllByType('AppText')
+  .map(node => node.children.join(''));
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -47,15 +51,15 @@ beforeEach(() => {
 
 afterEach(() => { act(() => tree.unmount()); });
 
-test('advice follows network events without requiring a retry', async () => {
+test('connectivity facts follow network events without requiring a retry', async () => {
   await act(async () => { tree = createScreen(); });
+  expect(connectivityStatus()).toEqual(['Data unavailable', 'Unknown']);
   await act(async () => resolveRead(offline));
-  expect(rendered()).toContain('You’re offline.');
+  expect(connectivityStatus()).toEqual(['Data unavailable', 'Offline']);
   act(() => listener(online));
-  expect(rendered()).toContain('We couldn’t load the rates. Try again in a moment.');
-  expect(rendered()).not.toContain('You’re offline.');
+  expect(connectivityStatus()).toEqual(['Data unavailable', 'Online']);
   act(() => listener(offline));
-  expect(rendered()).toContain('You’re offline.');
+  expect(connectivityStatus()).toEqual(['Data unavailable', 'Offline']);
   expect(mockState.retryDataLoad).not.toHaveBeenCalled();
 });
 
@@ -66,9 +70,7 @@ test.each(['resolve', 'reject'])('newer network events survive a slow initial re
     if (outcome === 'resolve') resolveRead(offline);
     else rejectRead(new Error('Connectivity unavailable'));
   });
-  expect(rendered()).toContain('We couldn’t load the rates. Try again in a moment.');
-  expect(rendered()).not.toContain('Check your connection');
-  expect(rendered()).not.toContain('You’re offline.');
+  expect(connectivityStatus()).toEqual(['Data unavailable', 'Online']);
 });
 
 test('listener remains active during retry and is removed on unmount', async () => {
@@ -76,7 +78,7 @@ test('listener remains active during retry and is removed on unmount', async () 
   mockState.refreshing = true;
   act(() => tree.update(<DataUnavailableScreen />));
   act(() => listener(offline));
-  expect(rendered()).toContain('You’re offline.');
+  expect(connectivityStatus()).toEqual(['Data unavailable', 'Offline']);
   expect(tree.root.findByProps({ title: 'Try again' }).props.disabled).toBe(true);
   expect(Network.addNetworkStateListener).toHaveBeenCalledTimes(1);
   expect(remove).not.toHaveBeenCalled();
@@ -87,8 +89,17 @@ test('listener remains active during retry and is removed on unmount', async () 
   expect(tree.toJSON()).toBeNull();
 });
 
-test('unreadable initial connectivity retains the unknown advice', async () => {
+test('unreadable initial connectivity retains Unknown rather than an offline assumption or raw error', async () => {
   await act(async () => { tree = createScreen(); });
   await act(async () => rejectRead(new Error('Connectivity unavailable')));
-  expect(rendered()).toContain('We couldn’t load the rates. Check your connection and try again.');
+  expect(connectivityStatus()).toEqual(['Data unavailable', 'Unknown']);
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Connectivity unavailable');
+});
+
+test('the explicit recovery action invokes the real store retry', async () => {
+  await act(async () => { tree = createScreen(); });
+  const retry = tree.root.findByProps({ title: 'Try again' });
+  expect(retry.props.disabled).toBe(false);
+  await act(async () => retry.props.onPress());
+  expect(mockState.retryDataLoad).toHaveBeenCalledTimes(1);
 });

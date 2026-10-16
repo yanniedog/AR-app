@@ -2,9 +2,10 @@ import React from 'react';
 
 import { debugLog } from '../lib/debugLog';
 import { AppText } from './ui';
+import { uiJoin, type UiChild } from '../lib/uiCopy';
 
 type Props = {
-  children: React.ReactNode;
+  children: UiChild;
   /** Short label for debugLog (e.g. BankHistoryChart). */
   name: string;
 };
@@ -28,7 +29,7 @@ export class ChartErrorBoundary extends React.Component<Props, State> {
     if (this.state.error) {
       return (
         <AppText variant="tiny" color="textFaint">
-          History chart unavailable.
+          {uiJoin('History', ' · ', 'Unavailable')}
         </AppText>
       );
     }

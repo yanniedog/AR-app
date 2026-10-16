@@ -1,68 +1,76 @@
 import type { PublicComponent, PublicCondition, PublicReferenceRate, RateResolution } from './publicRateModel';
 import { Decimal, decimalText, rateDecimal } from './publicRateDecimal';
+import { uiDecimal, uiJoin, uiLabel, uiOpaqueEnum, uiRate, type UiCopy, type UiText } from '../lib/uiCopy';
 
-export function publicComponentFact(component: PublicComponent): string {
-  const labels: Record<PublicComponent['role'], string> = { payable: 'Payable rate', reference: 'Reference rate', discount: 'Discount', margin: 'Margin', bonus: 'Bonus', comparison: 'Comparison rate', reversion: 'Reversion rate' };
+export function publicComponentFact(component: PublicComponent): UiText {
+  const labels = { payable: 'Payable rate', reference: 'Reference rate', discount: 'Discount', margin: 'Margin', bonus: 'Bonus', comparison: 'Comparison rate', reversion: 'Reversion rate' } as const;
   const adjustment = component.role === 'discount' || component.role === 'margin' || component.role === 'bonus';
-  let value = 'Unavailable';
+  let value = uiLabel('Unavailable');
   if (component.value != null) {
     try {
-      const percent = decimalText(rateDecimal(component.value, component.unit).mul(Decimal.parse('100')));
-      value = `${percent}${adjustment ? ' percentage points' : '% p.a.'}`;
-    } catch { /* Invalid numerical source values remain unavailable. */ }
+      const fraction = rateDecimal(component.value, component.unit);
+      value = adjustment ? uiJoin(uiDecimal(decimalText(fraction.mul(Decimal.parse('100'))), 'count'), ' ', 'pp') : uiRate(Number(decimalText(fraction)), 4);
+    } catch { /* Invalid source amounts remain unavailable. */ }
   }
-  return `${labels[component.role]}: ${value}${component.includedInPayable ? ' · Included in payable rate' : ''}`;
+  return uiJoin(labels[component.role], ': ', value, component.includedInPayable ? uiJoin(' · ', 'Payable rate', ': ', 'Included') : null);
 }
 
-export function publicConditionFact(condition: PublicCondition): string {
-  const label: Record<string, string> = { purpose: 'Purpose', repayment: 'Repayment', package: 'Package', customerCategory: 'Customer category', channel: 'Channel', termMonths: 'Term (months)', termDays: 'Term (days)', amount: 'Amount ($)', balance: 'Balance ($)', lvr: 'LVR', qualification: 'Qualification', monthlyDeposit: 'Monthly qualifying deposits ($)', withdrawals: 'Monthly withdrawals (count)', balanceGrowth: 'Qualifying balance growth ($)', cardTransactions: 'Qualifying card purchases (count)' };
-  const name = label[condition.field] ?? condition.field;
-  const text = (value: string | boolean) => String(value).toLowerCase().replace(/_/g, ' ');
-  if (condition.operator === 'eq' && condition.value != null) return `${name}: ${text(condition.value)}`;
-  if (condition.operator === 'in') return `${name}: ${(condition.values ?? []).map(text).join(' or ')}`;
-  if (condition.operator === 'bounds') return `${name}: ${condition.minimum != null ? `${condition.minimumInclusive === false ? '>' : '≥'}${condition.minimum}` : ''}${condition.minimum != null && condition.maximum != null ? ', ' : ''}${condition.maximum != null ? `${condition.maximumInclusive === false ? '<' : '≤'}${condition.maximum}` : ''}`;
-  return `${name}: required`;
+export function publicConditionFact(condition: PublicCondition): UiText {
+  const labels: Record<string, UiCopy> = { purpose: 'Purpose', repayment: 'Repayment', package: 'Package', customerCategory: 'Customer category', channel: 'Channel', termMonths: uiJoin('Term', ' (', 'months', ')'), termDays: uiJoin('Term', ' (', 'days', ')'), amount: 'Loan amount', balance: 'Balance', lvr: 'LVR', qualification: 'Qualification', monthlyDeposit: 'Monthly deposits ($)', withdrawals: 'Monthly withdrawals', balanceGrowth: 'Balance growth ($)', cardTransactions: 'Card purchases' };
+  const name = labels[condition.field] ?? uiOpaqueEnum(condition.field.toUpperCase());
+  const amount = (value: string): UiText => condition.field === 'lvr' ? uiRate(Number(value), 4)
+    : ['amount', 'balance', 'monthlyDeposit', 'balanceGrowth'].includes(condition.field) ? uiDecimal(value)
+    : uiDecimal(value, 'count');
+  const text = (value: string | boolean): UiText => typeof value === 'boolean' ? uiLabel(value ? 'Yes' : 'No')
+    : /^-?\d+(?:\.\d+)?$/.test(value) ? amount(value) : uiOpaqueEnum(value.toUpperCase());
+  if (condition.operator === 'eq' && condition.value != null) return uiJoin(name, ': ', text(condition.value));
+  if (condition.operator === 'in') return uiJoin(name, ': ', ...(condition.values ?? []).flatMap<UiCopy>((value, i) => i ? [' / ', text(value)] : [text(value)]));
+  if (condition.operator === 'bounds') return uiJoin(name, ': ',
+    condition.minimum != null ? uiJoin(condition.minimumInclusive === false ? '>' : '≥', amount(condition.minimum)) : null,
+    condition.minimum != null && condition.maximum != null ? ', ' : null,
+    condition.maximum != null ? uiJoin(condition.maximumInclusive === false ? '<' : '≤', amount(condition.maximum)) : null);
+  return uiJoin(name, ': ', 'Required');
 }
 
-export function publicReferenceScope(reference: PublicReferenceRate): string {
-  return (reference.conditions ?? []).map(publicConditionFact).join(' · ') || 'Scope: not stated';
+export function publicReferenceScope(reference: PublicReferenceRate): UiText {
+  return reference.conditions?.length ? uiJoin(...reference.conditions.flatMap<UiCopy>((condition, i) => i ? [' · ', publicConditionFact(condition)] : [publicConditionFact(condition)])) : uiJoin('Scope', ': ', 'Unknown');
 }
 
-export function publicRateReason(reason: string): string {
-  const messages: Record<string, string> = {
-    catalogue_not_ready: 'Public pricing: loading',
-    programme_not_loaded: 'Pricing evidence: not loaded',
-    public_pricing_unavailable: 'Public pricing: unavailable',
-    product_pricing_not_available: 'Product pricing: unavailable in this edition',
-    pricing_programme_selection_required: 'Pricing programme: explicit selection required',
-    semantic_offer_binding_missing: 'Legacy offer binding: unavailable',
-    selected_reference_unavailable: 'Selected reference: unavailable in this edition',
-    reference_conditions_unknown: 'Reference scope: assumptions missing',
-    reference_conditions_unmet: 'Reference scope: not met',
-    selected_reference_product_mismatch: 'Reference product/provider binding: mismatch',
-    unknown_condition: 'Eligibility condition: unknown',
-    source_conflict: 'Public sources: conflicting',
-    source_stale: 'Source: stale; successful check older than 48 hours',
-    source_failed: 'Latest source check: failed',
-    unsupported_rate_type: 'Rate type: unsupported by reviewed adapter',
-    future_effective: 'Rate: scheduled; not yet effective',
+export function publicRateReason(reason: string): UiText {
+  const messages: Record<string, UiCopy> = {
+    catalogue_not_ready: uiJoin('Public pricing', ': ', 'Loading'),
+    programme_not_loaded: uiJoin('Pricing evidence', ': ', 'Loading'),
+    public_pricing_unavailable: uiJoin('Public pricing', ': ', 'Unavailable'),
+    product_pricing_not_available: uiJoin('Public pricing', ': ', 'Unavailable'),
+    pricing_programme_selection_required: uiJoin('Pricing programme', ': ', 'Required'),
+    semantic_offer_binding_missing: uiJoin('Selected rate', ': ', 'Unavailable'),
+    selected_reference_unavailable: uiJoin('Reference', ': ', 'Unavailable'),
+    reference_conditions_unknown: uiJoin('Reference scope', ': ', 'Unknown'),
+    reference_conditions_unmet: uiJoin('Reference scope', ': ', 'Unmet'),
+    selected_reference_product_mismatch: uiJoin('Reference scope', ': ', 'Unmet'),
+    unknown_condition: uiJoin('Eligibility', ': ', 'Unknown'),
+    source_conflict: uiJoin('Source', ': ', 'Needs review'),
+    source_stale: uiJoin('Source', ': ', 'Stale'),
+    source_failed: uiJoin('Latest', ' ', 'Source', ': ', 'Failed'),
+    unsupported_rate_type: uiJoin('Rate type', ': ', 'Unavailable'),
+    future_effective: uiJoin('Rate', ': ', 'Pending'),
   };
-  return messages[reason] ?? reason.replace(/_/g, ' ').replace(/^./, initial => initial.toUpperCase());
+  return uiJoin(messages[reason] ?? uiOpaqueEnum(reason.toUpperCase()));
 }
 
-/** Formatting preserves units: resolver amounts are fractions, never guessed by magnitude. */
-export function publicRateText(resolution: RateResolution): string {
-  const percent = (value?: string) => value == null ? 'Unavailable' : `${(Number(value) * 100).toLocaleString('en-AU', { maximumFractionDigits: 4 })}% p.a.`;
+/** Resolver amounts carry explicit fractions; comparison rates remain separate. */
+export function publicRateText(resolution: RateResolution): UiText {
+  const percent = (value?: string) => value == null ? uiLabel('Unavailable') : uiRate(Number(value), 4);
   if (resolution.status === 'exact') return percent(resolution.payableRate);
-  if (resolution.status === 'from') return `From ${percent(resolution.minimumRate)}`;
-  if (resolution.status === 'range') return `${percent(resolution.minimumRate)}–${percent(resolution.maximumRate)}`;
-  return 'Pricing unresolved';
+  if (resolution.status === 'from') return uiJoin('From', ' ', percent(resolution.minimumRate));
+  if (resolution.status === 'range') return uiJoin(percent(resolution.minimumRate), '–', percent(resolution.maximumRate));
+  return uiLabel('Pricing unresolved');
 }
 
-export function publicRateOriginLabel(resolution: RateResolution): string {
-  if (resolution.origin === 'user_entered') return 'Your entered interest rate';
-  if (resolution.origin === 'locally_calculated') return 'Local reference estimate';
-  if (resolution.status === 'unresolved') return 'Public pricing unresolved';
-  if (!resolution.verifiedCurrent) return 'Last verified public pricing';
-  return resolution.origin === 'publicly_calculated' ? 'Calculated public payable rate' : 'Published payable rate';
+export function publicRateOriginLabel(resolution: RateResolution): UiText {
+  if (resolution.origin === 'user_entered') return uiLabel('Your entered rates');
+  if (resolution.origin === 'locally_calculated') return uiLabel('Local reference estimate');
+  if (resolution.status === 'unresolved') return uiLabel('Pricing unresolved');
+  if (!resolution.verifiedCurrent) return uiLabel('Last verified pricing');
+  return uiLabel(resolution.origin === 'publicly_calculated' ? 'Calculated payable rate' : 'Public payable rate');
 }

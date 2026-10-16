@@ -1,11 +1,15 @@
+import { uiCount, uiDate, uiIdentifier, uiInputNumber, uiJoin, uiLabel, uiNumber, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
 import { fontStyle } from '../src/theme/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
+import { InfoRow, ToggleRow } from '../src/components/settings/settingsUi';
+import { AuditEvidenceText } from '../src/components/AuditEvidenceText';
+import type { AppHealthDomain } from '../src/lib/appHealth/types';
 import { DebugLogUploadStatus } from '../src/components/DebugLogUploadStatus';
 import { BackgroundWorkDiagnosis } from '../src/components/BackgroundWorkDiagnosis';
 import { AuditCatalogueCoverage } from '../src/components/AuditCatalogueCoverage';
@@ -14,7 +18,7 @@ import {
   isDebugLogUploadBusy,
   subscribeDebugLogUpload,
 } from '../src/lib/debugLogSharing';
-import { AppText, Button, Card, Row } from '../src/components/ui';
+import { AppText, Button, Card, Disclosure, Row } from '../src/components/ui';
 import {
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   getPerformanceAuditState,
@@ -57,118 +61,29 @@ function useApkDownloadState() {
   );
 }
 
-function statusLabel(check: AuditCheck): string {
-  if (check.metrics.availabilityFailure === true || check.metrics.executionAttempted === false) {
-    return 'Unavailable';
-  }
-  if (check.status === 'pass') return 'Good';
-  if (check.status === 'warn') return 'Needs review';
-  if (check.status === 'fail') return 'Failed';
-  return 'Not run';
+const DOMAIN_LABELS: Record<AppHealthDomain, UiLabel> = {
+  performance: 'Performance', 'data-integrity': 'Data integrity', 'data-completeness': 'Data completeness',
+  'asset-availability': 'Asset availability', 'display-completeness': 'Display completeness',
+  storage: 'Storage', network: 'Network', update: 'App update',
+};
+function statusLabel(check: AuditCheck): UiText {
+  if (check.metrics.availabilityFailure === true || check.metrics.executionAttempted === false) return uiLabel('Unavailable');
+  return uiLabel(check.status === 'pass' ? 'Good' : check.status === 'warn' ? 'Needs review' : check.status === 'fail' ? 'Failed' : 'Not run');
 }
-
 function metricNumber(check: AuditCheck, key: string): number | null {
-  const value = check.metrics[key];
+  const value=check.metrics[key];
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
-  if (
-    value === 0 &&
-    check.metrics.executionAttempted !== true &&
-    check.metrics.measurementAvailable !== true
-  ) return null;
+  if (value === 0 && check.metrics.executionAttempted !== true && check.metrics.measurementAvailable !== true) return null;
   return value;
 }
-
 function checkDuration(check: AuditCheck): number | null {
   if (check.durationMs == null || !Number.isFinite(check.durationMs)) return null;
-  if (check.durationMs !== 0) return check.durationMs;
-  return check.metrics.executionAttempted === true || check.metrics.measurementAvailable === true
-    ? 0
-    : null;
+  return check.durationMs !== 0 || check.metrics.executionAttempted === true || check.metrics.measurementAvailable === true ? check.durationMs : null;
 }
-
-function metricDuration(check: AuditCheck, key: string, label: string): string {
-  const value = metricNumber(check, key);
-  if (value == null) return `${label} not measured`;
-  return value === 0 ? `${label} <0.1 ms (measured)` : `${label} ${value.toFixed(1)} ms`;
+function measuredMs(value: number | null | undefined, digits=0): UiText {
+  return value == null ? uiLabel('Not measured') : uiJoin(uiNumber(value,digits),' ','ms');
 }
-
-function measuredMs(label: string, value: number | null): string {
-  if (value == null) return `${label} not measured`;
-  return value === 0 ? `${label} <0.1 ms (measured)` : `${label} ${value.toFixed(0)} ms`;
-}
-
-function checkDetail(check: AuditCheck): string {
-  if (check.status === 'skipped') {
-    const reason = String(check.metrics.reason ?? 'No timing was recorded');
-    return `Timing unavailable · ${reason}`;
-  }
-  if (check.kind === 'journey') {
-    const measured = (key: string) => metricNumber(check, key);
-    const forward = measured('forwardMs');
-    const back = measured('backMs');
-    const action = measured('actionMs');
-    const background = measured('backgroundSettleMs');
-    const jsLag = measured('maxEventLoopLagMs');
-    const animationGap = measured('maxFrameGapMs');
-    const isRoundTrip = check.metrics.measurementMode === 'route-round-trip';
-    const parts: string[] = [];
-    if (isRoundTrip) {
-      parts.push(
-        measuredMs('Open', forward),
-        measuredMs('Back', back),
-      );
-    } else {
-      parts.push(measuredMs('Action', action));
-      if (forward != null) parts.push(measuredMs('Ready', forward));
-    }
-    if (background != null) parts.push(measuredMs('Background', background));
-    if (jsLag != null) parts.push(measuredMs('Max JS lag', jsLag));
-    if (animationGap != null) parts.push(measuredMs('JS animation gap', animationGap));
-    return parts.join(' · ');
-  }
-  if (check.id === 'active-data') {
-    const rows = metricNumber(check, 'rateRows');
-    return `${metricDuration(check, 'parseMs', 'Parse')} · ${rows == null ? 'Rows not measured' : `${rows.toLocaleString()} rate rows`}`;
-  }
-  if (check.id === 'manifest-network') {
-    return `${measuredMs('Request', checkDuration(check))} · HTTP ${check.metrics.statusCode ?? '—'}`;
-  }
-  if (check.id === 'external-link-inventory') {
-    return `${check.metrics.uniqueDestinations ?? 0} destinations · ${check.metrics.lenderDetailsLoaded ? 'Lender details included' : 'Lender details unavailable'}`;
-  }
-  if (check.id.startsWith('external-link-')) {
-    return [
-      `${check.metrics.host ?? 'Invalid destination'}${check.metrics.destinationPath ?? ''}`,
-      `Address: ${check.metrics.urlValidation ?? 'unverified'}`,
-      `Browser: ${check.metrics.browserHandler ?? 'unverified'}`,
-      `Website: ${check.metrics.httpReachability ?? 'unverified'}`,
-      check.metrics.reachabilityDetail,
-    ].filter(Boolean).join(' · ');
-  }
-  if (check.id.startsWith('section-model-')) {
-    const rows = metricNumber(check, 'rows');
-    return [
-      rows == null ? 'Rows not measured' : `Rows ${rows.toLocaleString()}`,
-      metricDuration(check, 'firstHierarchyMs', 'Hierarchy'),
-      metricDuration(check, 'firstStatsMs', 'Stats'),
-      metricDuration(check, 'firstRankMs', 'Rank'),
-    ].join(' · ');
-  }
-  if (check.id === 'debug-log-io') {
-    const bytes = metricNumber(check, 'bytes');
-    return `${metricDuration(check, 'flushMs', 'Flush')} · ${metricDuration(check, 'readMs', 'Read')} · ${bytes == null ? 'Bytes not measured' : `${bytes.toLocaleString()} bytes`}`;
-  }
-  if (check.id === 'update-readiness') {
-    return `${check.metrics.checkStatus ?? 'unknown'} · installed ${check.metrics.installedVersion ?? '?'} (${check.metrics.installedBuild ?? '?'}) · cache ${check.metrics.downloadPhase ?? 'unknown'}`;
-  }
-  if (check.id === 'runtime-responsiveness') {
-    return [
-      measuredMs('Max JS lag', metricNumber(check, 'maxEventLoopLagMs')),
-      measuredMs('JS animation callback gap', metricNumber(check, 'maxFrameGapMs')),
-    ].join(' · ');
-  }
-  return measuredMs('Duration', checkDuration(check));
-}
+function countPair(done: number,total: number): UiText { return uiJoin(uiCount(done),' / ',uiCount(total)); }
 
 function PerformanceAuditScreenInner() {
   const theme = useTheme();
@@ -184,6 +99,10 @@ function PerformanceAuditScreenInner() {
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
   const [sharingReport, setSharingReport] = useState(false);
+  const [publicUpload, setPublicUpload] = useState(false);
+  const [rawReportOpen, setRawReportOpen] = useState(false);
+  const [backgroundOpen, setBackgroundOpen] = useState(false);
+  const auditPreflightLocked = useRef(false);
   const [auditPreflightMode, setAuditPreflightMode] = useState<'local' | 'live-source' | null>(null);
   const [visibleCheckLimit, setVisibleCheckLimit] = useState(MAX_REPORTED_AUDIT_CHECKS);
   const report = state.report;
@@ -259,7 +178,9 @@ function PerformanceAuditScreenInner() {
   }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
   const runAudit = async (mode: 'local' | 'live-source') => {
-    if (!hangTimeoutLoaded || hangTimeoutSeconds == null || auditPreflightMode || isDebugLogUploadBusy()) return;
+    if (!hangTimeoutLoaded || hangTimeoutSeconds == null || auditPreflightLocked.current || running || state.recoveryRequired || isDebugLogUploadBusy()) return;
+    auditPreflightLocked.current = true;
+    const requestedUpload = publicUpload;
     setAuditPreflightMode(mode);
     try {
       let currentDownload: Awaited<ReturnType<typeof getHydratedApkDownloadSnapshot>>;
@@ -267,20 +188,22 @@ function PerformanceAuditScreenInner() {
         currentDownload = await getHydratedApkDownloadSnapshot();
       } catch {
         Alert.alert(
-          'Could not start the audit',
-          'Android could not confirm whether an app update is active, so no audit was started. Close and reopen Australian Rates, then try again. If it continues, review Diagnostics > Debug log.',
+          uiLabel('Report unavailable'),
+          uiLabel('Update state unconfirmed'),
         );
         return;
       }
       if (blocksPerformanceAudit(currentDownload)) {
         Alert.alert(
-          'Finish the app update first',
-          'The app-health audit is unavailable while an APK download or verification is active. This keeps its timing and network results trustworthy.',
+          uiLabel('Report unavailable'),
+          uiLabel('App update active'),
         );
         return;
       }
-      requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000, mode });
+      requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000, mode, uploadLog: requestedUpload });
+      setPublicUpload(false);
     } finally {
+      auditPreflightLocked.current = false;
       setAuditPreflightMode(null);
     }
   };
@@ -289,23 +212,20 @@ function PerformanceAuditScreenInner() {
     let prepared: ReturnType<typeof createDeidentifiedDiagnosticsShare>;
     try {
       prepared = createDeidentifiedDiagnosticsShare(report);
-    } catch (error) {
-      Alert.alert('Report unavailable', error instanceof Error ? error.message : String(error));
+    } catch {
+      Alert.alert(uiLabel('Report unavailable'));
       return;
     }
     Alert.alert(
-      'Share deidentified report?',
-      [
-        `Destination: ${prepared.destination}.`,
-        `Size: ${prepared.byteLength.toLocaleString()} bytes (complete JSON).`,
-        'Included fields:',
-        ...prepared.fields.map((field) => `• ${field}`),
-        'Raw logs, tracebacks, routes, product keys, device identifiers and timestamps are excluded.',
-      ].join('\n'),
+      uiLabel('Share deidentified report?'),
+      uiJoin('Destination', ': ', 'Operating-system share sheet', ' · ',
+        'Size', ': ', uiCount(prepared.byteLength), ' ', 'bytes', ' · ',
+        'Included', ': ', 'App / publication / aggregate counts / timing / fixed checks', ' · ',
+        'Excluded', ': ', 'Raw logs / tracebacks / routes / product keys / device IDs / timestamps'),
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Share report',
+          text: uiLabel('Share'),
           onPress: () => {
             setSharingReport(true);
             void (async () => {
@@ -318,21 +238,17 @@ function PerformanceAuditScreenInner() {
                 wroteShareFile = true;
                 await Sharing.shareAsync(DEIDENTIFIED_AUDIT_SHARE_FILE, {
                   mimeType: 'application/json',
-                  dialogTitle: 'Share deidentified Australian Rates app health report',
+                  dialogTitle: uiLabel('Share deidentified report'),
                   UTI: 'public.json',
                 });
-              } catch (error) {
-                Alert.alert('Share failed', error instanceof Error ? error.message : String(error));
+              } catch {
+                Alert.alert(uiLabel('Share failed'));
               } finally {
                 if (wroteShareFile) {
                   try {
                     await FileSystem.deleteAsync(DEIDENTIFIED_AUDIT_SHARE_FILE, { idempotent: true });
-                  } catch (cleanupError) {
-                    Alert.alert(
-                      'Temporary report retained',
-                      `The deidentified report could not be removed from the share cache. ` +
-                      `Close and reopen Australian Rates before sharing again. ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
-                    );
+                  } catch {
+                    Alert.alert(uiLabel('Temporary report retained'), uiLabel('Deidentified'));
                   }
                 }
                 setSharingReport(false);
@@ -352,374 +268,121 @@ function PerformanceAuditScreenInner() {
         : theme.colors.danger
     : theme.colors.textMuted;
 
+  const auditDisabled = state.recoveryRequired || running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null;
+  const outcome = (value: 'healthy'|'attention'|'bottleneck'): UiCopy => value === 'healthy' ? 'Healthy' : value === 'attention' ? 'Needs review' : 'Failures found';
   return (
-    <ScreenScrollView
-      contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }}
-      onLayout={() => setLayoutReady(true)}
-    >
-      <Card style={{ gap: 12 }}>
-        <AppText variant="h2">App health audit</AppText>
-        <AppText variant="small" color="textMuted">
-          Checks responsiveness, data integrity, external links and whether graphs and loaded
-          information actually render. Your settings and saved rates are restored afterward.
-        </AppText>
-        <AppText variant="tiny" color="textMuted">
-          When the audit finishes, its compact diagnostic log, including product identities
-          and profile-based coverage counts, are uploaded to paste.
-          Anyone with the resulting link can read them. A separate deidentified report is also available.
-        </AppText>
-        <AppText variant="small" weight="700">Background checks: {passive.completed} of {passive.total} data checks and {passive.linksCompleted} of {passive.linksPreparing || passive.linksCapped ? 'at least ' : ''}{passive.linksTotal} links preloaded</AppText>
-        <AppText variant="tiny" color="textMuted">
-          Data and link checks preload slowly from data already on this device. Screen-off work runs
-          when Android or iOS permits; visual and interaction checks run in the foreground.
-          {passive.nativeStatus === 'restricted' ? ' Background execution is currently restricted by the system.' : ''}
-          {passive.nativeStatus === 'unavailable' ? ' This device supports preloading while the app is open only.' : ''}
-          {passive.linksPreparing ? ' More links await preparation from the loaded catalogue.' : ''}
-          {passive.linksCapped ? ' The background storage limit was reached; additional links are checked in the manual audit.' : ''}
-          {passive.updatedAt ? ` Last background evidence: ${new Date(passive.updatedAt).toLocaleString()}.` : ''}
-          {passive.lastError ? ` ${passive.lastError} Unfinished checks still run during the manual audit.` : ''}
-        </AppText>
-        <AppText variant="tiny" color="textMuted">
-          The screen stays awake throughout the audit. Locking the phone or leaving the app pauses the run and it
-          continues where it left off when you return — route and animation timings cannot be
-          measured while the app is off screen.
-        </AppText>
+    <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }} onLayout={() => setLayoutReady(true)}>
+      <Card style={{ gap: 10 }}>
+        <AppText variant="h2">{uiLabel('App health audit')}</AppText>
+        <InfoRow label={uiLabel(running ? 'Audit upload' : 'Next audit upload')} value={uiLabel(running ? state.uploadLog ? 'Public' : 'Local' : publicUpload ? 'Public' : 'Local')} />
+        <InfoRow label="Included" value="Product identities / profile coverage / failures" />
+        <InfoRow label={uiLabel(running ? 'Destination' : 'Next destination')} value={uiLabel((running ? state.uploadLog : publicUpload) ? 'Public hosting' : 'Debug log')} />
+        <ToggleRow icon="cloud-upload-outline" label="Public upload" value={running ? state.uploadLog : publicUpload} onChange={setPublicUpload} disabled={auditDisabled} />
+        <InfoRow label="Step limit" value={measuredMs(10_000)} />
         <View style={{ gap: 6 }}>
-          <AppText variant="small" weight="700">
-            Stall timeout
-          </AppText>
+          <AppText variant="small" weight="700">{uiLabel('Stall timeout')}</AppText>
           <Row style={{ alignItems: 'center' }} gap={8}>
-            <TextInput
-              accessibilityLabel="Audit stall timeout in seconds"
-              accessibilityHint={`Enter a value from ${MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS} to ${MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS} seconds`}
-              value={hangTimeoutInput}
-              onChangeText={setHangTimeoutInput}
-              editable={!running}
-              keyboardType="number-pad"
-              inputMode="numeric"
-              maxLength={4}
-              selectTextOnFocus
-              style={{
-                ...fontStyle(),
-                minWidth: 112,
-                minHeight: 48,
-                paddingHorizontal: 12,
-                borderWidth: 1,
-                borderColor:
-                  hangTimeoutSeconds == null
-                    ? theme.colors.danger
-                    : theme.colors.border,
-                borderRadius: theme.radius.md,
-                backgroundColor: theme.colors.surfaceAlt,
-                color: theme.colors.text,
-                fontSize: theme.font.body,
-              }}
-            />
-            <AppText variant="small" color="textMuted">
-              seconds
-            </AppText>
+            <TextInput accessibilityLabel={uiLabel('Stall timeout')} value={uiInputNumber(hangTimeoutInput)} onChangeText={setHangTimeoutInput}
+              editable={!running} keyboardType="number-pad" inputMode="numeric" maxLength={4} selectTextOnFocus
+              style={{ ...fontStyle(), minWidth:112, minHeight:48, paddingHorizontal:12, borderWidth:1,
+                borderColor:hangTimeoutSeconds == null ? theme.colors.danger : theme.colors.border,
+                borderRadius:theme.radius.md, backgroundColor:theme.colors.surfaceAlt, color:theme.colors.text, fontSize:theme.font.body }} />
+            <AppText variant="small" color="textMuted">{uiLabel('seconds')}</AppText>
           </Row>
-          <AppText
-            variant="tiny"
-            color={hangTimeoutSeconds == null ? 'danger' : 'textFaint'}
-          >
-            {hangTimeoutSeconds == null
-              ? `Enter a whole number from ${MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS} to ${MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS}.`
-              : 'Default: 10 seconds. Every individual check has a fixed 10-second limit even if this stall timeout is increased.'}
+          <AppText variant="tiny" color={hangTimeoutSeconds == null ? 'danger':'textFaint'}>
+            {uiJoin(hangTimeoutSeconds == null ? 'Invalid timeout' : 'Range', ': ', uiCount(MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS),'–',uiCount(MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS),' ','seconds')}
           </AppText>
         </View>
-        <Button
-          title={report ? 'Run audit and upload log again' : 'Run audit and upload log'}
-          icon="pulse-outline"
-          loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'}
-          disabled={state.recoveryRequired || running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
-          onPress={() => void runAudit('local')}
-        />
-        <Button
-          title="Run with live data and link checks"
-          icon="cloud-download-outline"
-          variant="secondary"
-          loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'}
-          disabled={state.recoveryRequired || running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
-          onPress={() => void runAudit('live-source')}
-        />
-        <AppText variant="tiny" color="textMuted">
-          Local checks validate link addresses and installed browser handlers. Live checks also
-          contact approved websites; blocked sites, timeouts and unchecked links stay unverified.
-          Graph checks require plotted data and measured layout, or a visible no-data state.
-          After the audit finishes,
-          the compact diagnostic log is uploaded to paste and the verified link is copied
-          to your clipboard. Anyone with the link can read the log.
-        </AppText>
-        {updateBlocksAudit ? (
-          <AppText variant="tiny" color="danger" accessibilityLiveRegion="polite">
-            Finish the active app update before running an audit. Update work would distort its
-            network and timing evidence.
-          </AppText>
-        ) : null}
+        <Button title="Run audit" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
+        <Button title="Live audit" icon="cloud-download-outline" variant="secondary" loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'} disabled={auditDisabled} onPress={() => void runAudit('live-source')} />
+        <InfoRow label="Local checks" value="Addresses / browser handlers / loaded data" />
+        <InfoRow label="Live checks" value="Approved websites" />
+        <InfoRow label="Off screen" value="Paused" />
+        {updateBlocksAudit ? <AppText color="danger" accessibilityLiveRegion="polite">{uiLabel('App update active')}</AppText>:null}
+        <Disclosure title="Background checks" open={backgroundOpen} onToggle={() => setBackgroundOpen(!backgroundOpen)}>
+          <InfoRow label="Data" value={countPair(passive.completed,passive.total)} />
+          <InfoRow label="Links" value={uiJoin(countPair(passive.linksCompleted,passive.linksTotal), passive.linksPreparing || passive.linksCapped ? uiJoin(' · ','Partial coverage'):null)} />
+          <InfoRow label="System" value={uiLabel(passive.nativeStatus === 'restricted' ? 'System restricted' : passive.nativeStatus === 'unavailable' ? 'Foreground only' : passive.nativeStatus === 'registered' ? 'Ready':'Unknown')} />
+          {passive.linksPreparing ? <InfoRow label="Preparation" value="Pending" />:null}
+          {passive.linksCapped ? <InfoRow label="Storage" value="Storage limit reached" />:null}
+          {passive.updatedAt ? <InfoRow label="Last evidence" value={uiDate(passive.updatedAt)} />:null}
+          {passive.lastError ? <InfoRow label="Background checks" value="Failed" />:null}
+        </Disclosure>
       </Card>
-
       <DebugLogUploadStatus sessionId={state.sessionId} />
-
-      {state.status === 'cancelled' ? (
-        <Card style={{ gap: 6 }}>
-          <AppText variant="body" weight="700">
-            Audit cancelled
-          </AppText>
-          <AppText variant="small" color="textMuted">
-            Completed results remain in the debug log. You can start again when convenient.
-          </AppText>
+      {state.status === 'cancelled' ? <Card><AppText>{uiLabel('Audit cancelled')}</AppText><InfoRow label="Results" value="Debug log" /></Card>:null}
+      {state.status === 'failed' ? <Card style={{gap:8,borderColor:theme.colors.danger}}>
+        <AppText color="danger">{uiLabel('Audit runner failed')}</AppText>
+        <InfoRow label="Saved checks" value={uiCount(state.storedCheckCount)} />
+        <InfoRow label="Last evidence" value={uiDate(state.lastStoredCheckAt)} />
+        <InfoRow label="Raw report" value="Debug log" />
+      </Card>:null}
+      {report ? <>
+        <Card style={{ gap: 8,borderWidth:1,borderColor:summaryColor }}>
+          <Row style={{justifyContent:'space-between'}}><AppText variant="h3">{uiLabel('Diagnosis')}</AppText><AppText style={{color:summaryColor}}>{outcome(report.summary.overall)}</AppText></Row>
+          <InfoRow label="Good" value={uiCount(report.summary.pass)} />
+          <InfoRow label="Needs review" value={uiCount(report.summary.warn)} />
+          <InfoRow label="Failed" value={uiCount(report.summary.fail)} />
+          <InfoRow label="Not run" value={uiCount(report.summary.skipped)} />
+          <InfoRow label="Unavailable · Overlapping outcomes" value={uiCount(report.summary.unavailable)} />
+          <InfoRow label="Check completion" value={report.summary.coveragePercent == null ? 'Unknown':uiJoin(uiNumber(report.summary.coveragePercent,1),'%')} />
+          <InfoRow label="Executed" value={uiCount(report.summary.executed)} />
+          <InfoRow label="Declared unavailable" value={uiCount(report.summary.justifiedSkipped)} />
+          <InfoRow label="Unexpected" value={uiCount(report.summary.unexpectedSkipped)} />
+          {report.coverage ? <>
+            <InfoRow label="Journey checks" value={countPair(report.coverage.executedJourneyChecks,report.coverage.plannedJourneyChecks)} />
+            <InfoRow label="Terminal unavailable" value={uiCount(report.coverage.justifiedSkippedJourneyChecks)} />
+            <InfoRow label="Unavailable journeys" value={uiCount(report.coverage.unavailableJourneyChecks)} />
+            <InfoRow label="Unexpected journeys" value={uiCount(report.coverage.unexpectedSkippedJourneyChecks)} />
+            <InfoRow label="Unsafe side effects excluded" value={uiCount(report.coverage.excludedUnsafeFacetCount)} />
+          </>:null}
+          <InfoRow label="Slowest check" value={measuredMs(report.summary.slowestCheckMs)} />
+          <InfoRow label="Max JS lag" value={measuredMs(report.summary.maxEventLoopLagMs)} />
+          <InfoRow label="JS animation gap" value={measuredMs(report.summary.maxFrameGapMs)} />
+          <InfoRow label="Duration" value={measuredMs(report.durationMs)} />
+          <InfoRow label="Wall clock" value={measuredMs(report.wallClockMs)} />
+          <InfoRow label="Stall timeout" value={measuredMs(report.watchdog.hangTimeoutMs)} />
+          <InfoRow label="Saved checks" value={uiCount(report.watchdog.storedCheckCount)} />
+          <InfoRow label="Version" value={uiIdentifier(report.environment.appVersion)} />
+          <InfoRow label="Build" value={uiIdentifier(report.environment.buildVersion)} />
+          <Button title="Share deidentified report" icon="share-outline" variant="ghost" loading={sharingReport} disabled={sharingReport} onPress={confirmShareReport} />
+          <Disclosure title="Raw report" open={rawReportOpen} onToggle={() => setRawReportOpen(!rawReportOpen)}><AuditEvidenceText report={report}/></Disclosure>
         </Card>
-      ) : null}
-
-      {state.status === 'failed' ? (
-        <Card style={{ gap: 8, borderWidth: 1, borderColor: theme.colors.danger }}>
-          <AppText variant="body" weight="700" style={{ color: theme.colors.danger }}>
-            Audit runner failed
-          </AppText>
-          <AppText variant="tiny" selectable style={{ fontFamily: 'monospace' }}>
-            {state.error}
-          </AppText>
-          <AppText variant="tiny" color="textMuted">
-            Saved {state.storedCheckCount} checks
-            {state.lastStoredCheckAt ? `; last progress ${state.lastStoredCheckAt}` : ''}.
-          </AppText>
-        </Card>
-      ) : null}
-
-      {report ? (
-        <>
-          <Card style={{ gap: 10, borderWidth: 1, borderColor: summaryColor }}>
-            <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <AppText variant="h3">Diagnosis</AppText>
-              <AppText variant="body" weight="700" style={{ color: summaryColor }}>
-                {report.summary.overall === 'healthy'
-                  ? 'Healthy'
-                  : report.summary.overall === 'attention'
-                    ? 'Needs review'
-                    : 'Failures found'}
-              </AppText>
-            </Row>
-            <AppText variant="small" color="textMuted">
-              Recorded outcomes: {report.summary.pass} good · {report.summary.warn} needs review · {report.summary.fail}{' '}
-              failed · {report.summary.skipped} not run
-            </AppText>
-            <AppText variant="small" color="textMuted">
-              Availability: {report.summary.unavailable} checks could not be exercised. This is tracked separately and can overlap the outcomes above.
-            </AppText>
-            <AppText
-              variant="small"
-              color={report.summary.unexpectedSkipped > 0 ? 'danger' : 'textMuted'}
-            >
-              Audit check completion {report.summary.coveragePercent == null
-                ? 'unavailable'
-                : `${report.summary.coveragePercent.toFixed(1)}%`} · {report.summary.executed}{' '}
-              executed · {report.summary.justifiedSkipped} declared unavailable ·{' '}
-              {report.summary.unexpectedSkipped} interrupted/unexpected
-            </AppText>
-            {report.coverage ? (
-              <AppText variant="small" color={report.coverage.complete ? 'textMuted' : 'danger'}>
-                Safe journey checks {report.coverage.executedJourneyChecks}/
-                {report.coverage.plannedJourneyChecks} executed ·{' '}
-                {report.coverage.justifiedSkippedJourneyChecks} terminal unavailable ·{' '}
-                {report.coverage.unavailableJourneyChecks} unavailable ·{' '}
-                {report.coverage.unexpectedSkippedJourneyChecks} unexpected ·{' '}
-                {report.coverage.excludedUnsafeFacetCount} unsafe side effects declared separately
-              </AppText>
-            ) : null}
-            <AppText variant="small" color="textMuted">
-              Slowest: {report.summary.slowestCheckLabel ?? 'unavailable'} (
-              {report.summary.slowestCheckMs == null
-                ? 'not measured'
-                : `${report.summary.slowestCheckMs.toFixed(0)} ms`})
-            </AppText>
-            <AppText variant="small" color="textMuted">
-              Worst JS lag {report.summary.maxEventLoopLagMs == null
-                ? 'not measured'
-                : `${report.summary.maxEventLoopLagMs.toFixed(0)} ms`} · Worst frame gap{' '}
-              {report.summary.maxFrameGapMs == null
-                ? 'not measured'
-                : `${report.summary.maxFrameGapMs.toFixed(0)} ms`} · Total{' '}
-              {(report.durationMs / 1_000).toFixed(1)} s
-              {report.wallClockMs != null && report.wallClockMs - report.durationMs >= 1_000
-                ? ` (+ ${((report.wallClockMs - report.durationMs) / 1_000).toFixed(1)} s paused)`
-                : ''}
-            </AppText>
-            <AppText variant="small" color="textMuted">
-              Stall timeout {(report.watchdog.hangTimeoutMs / 1_000).toFixed(0)} s; saved{' '}
-              {report.watchdog.storedCheckCount} checks
-            </AppText>
-            <AppText variant="small" color="textMuted">
-              App v{report.environment.appVersion} (build {report.environment.buildVersion})
-            </AppText>
-            <AppText variant="small" color="textMuted">
-              Results are saved locally. The log upload and clipboard status are shown above.
-            </AppText>
-            <Button
-              title="Share deidentified report"
-              icon="share-outline"
-              variant="ghost"
-              loading={sharingReport}
-              disabled={sharingReport}
-              onPress={confirmShareReport}
-            />
-          </Card>
-
-          {report.backgroundWorkWait ? <BackgroundWorkDiagnosis wait={report.backgroundWorkWait} /> : null}
-
-          <AuditCatalogueCoverage
-            check={report.appHealth?.checks.find(check => check.code === 'catalogue-identity-coverage')}
-            sampling={report.plan?.inputs.sampling}
-          />
-
-          {report.appHealth ? (
-            <View style={{ gap: 8 }}>
-              <AppText variant="h3">Data and display health</AppText>
-              <AppText variant="small" color="textMuted">
-                Mode: {report.appHealth.mode === 'local' ? 'Local · zero network' : 'Live-source allowlist'}
-                {' · '}Check completion {report.appHealth.summary.coveragePercent == null
-                  ? 'unavailable'
-                  : `${report.appHealth.summary.coveragePercent.toFixed(1)}%`}
-              </AppText>
-              {report.appHealth.domains
-                .filter((domain) => domain.total > 0)
-                .map((domain) => (
-                  <Card key={domain.domain} style={{ gap: 4 }}>
-                    <Row style={{ justifyContent: 'space-between' }}>
-                      <AppText variant="small" weight="700">
-                        {domain.domain.replace(/-/g, ' ')}
-                      </AppText>
-                      <AppText
-                        variant="tiny"
-                        weight="700"
-                        color={domain.overall === 'healthy'
-                          ? 'success'
-                          : domain.overall === 'attention'
-                            ? 'warning'
-                            : 'danger'}
-                      >
-                        {domain.overall === 'healthy'
-                          ? 'Good'
-                          : domain.overall === 'attention'
-                            ? 'Needs review'
-                            : 'Failed'}
-                      </AppText>
-                    </Row>
-                    <AppText variant="tiny" color="textMuted">
-                      {domain.pass} good · {domain.warn} review · {domain.fail} failed ·{' '}
-                      {domain.unavailable} unavailable · {domain.notRun} not run
-                    </AppText>
-                  </Card>
-                ))}
-              {report.appHealth.checks
-                .filter((check) => check.status !== 'pass')
-                .map((check) => (
-                  <Card key={check.id} style={{ gap: 4 }}>
-                    <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <AppText variant="small" weight="700" style={{ flex: 1, paddingRight: 8 }}>
-                        {check.label}
-                      </AppText>
-                      <AppText
-                        variant="tiny"
-                        weight="700"
-                        color={check.status === 'fail'
-                          ? 'danger'
-                          : check.status === 'warn'
-                            ? 'warning'
-                            : 'textMuted'}
-                      >
-                        {check.status === 'fail'
-                          ? 'Failed'
-                          : check.status === 'warn'
-                            ? 'Needs review'
-                            : 'Unavailable'}
-                      </AppText>
-                    </Row>
-                    {check.summary ? (
-                      <AppText variant="tiny" color="textMuted">{check.summary}</AppText>
-                    ) : null}
-                  </Card>
-                ))}
-            </View>
-          ) : null}
-
-          {report.routeAggregates.length > 0 ? (
-            <View style={{ gap: 8 }}>
-              <AppText variant="tiny" weight="700" color="textFaint" style={{ marginLeft: 4 }}>
-                FIRST VS REPEAT ROUTE ROUND TRIPS
-              </AppText>
-              {report.routeAggregates.map((route) => (
-                <Card key={route.journeyId} style={{ gap: 4 }}>
-                  <AppText variant="small" weight="700">{route.label}</AppText>
-                  <AppText variant="tiny" color="textFaint">
-                    Open {route.coldForwardMs.toFixed(0)} → {route.warmForwardMs.toFixed(0)} ms
-                    {' · '}Back {route.coldBackMs.toFixed(0)} → {route.warmBackMs.toFixed(0)} ms
-                  </AppText>
-                </Card>
-              ))}
-            </View>
-          ) : null}
-
-          <View style={{ gap: 8 }}>
-            <AppText variant="tiny" weight="700" color="textFaint" style={{ marginLeft: 4 }}>
-              CHECK RESULTS
-            </AppText>
-            {reportedChecks.length < orderedChecks.length ? (
-              <AppText
-                variant="tiny"
-                color="textFaint"
-                style={{ marginLeft: 4 }}
-                accessibilityLiveRegion="polite"
-              >
-                Showing {reportedChecks.length} of {orderedChecks.length} checks. All
-                failures, warnings and unavailable facets come before successful checks.
-              </AppText>
-            ) : null}
-            {reportedChecks.map((check) => {
-              const color =
-                check.status === 'pass'
-                  ? theme.colors.success
-                  : check.status === 'warn'
-                    ? theme.colors.warning
-                    : check.status === 'fail'
-                      ? theme.colors.danger
-                      : theme.colors.textFaint;
-              return (
-                <Card key={check.id} style={{ gap: 4 }}>
-                  <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <AppText variant="small" weight="700" style={{ flex: 1, paddingRight: 8 }}>
-                      {check.label}
-                    </AppText>
-                    <AppText variant="tiny" weight="700" style={{ color }}>
-                      {statusLabel(check)}
-                    </AppText>
-                  </Row>
-                  <AppText variant="tiny" color="textFaint">
-                    {checkDetail(check)}
-                  </AppText>
-                  {check.error ? (
-                    <AppText variant="tiny" color="textMuted" numberOfLines={3}>
-                      {check.error}
-                    </AppText>
-                  ) : null}
-                </Card>
-              );
-            })}
-            {reportedChecks.length < orderedChecks.length ? (
-              <Button
-                title={`Show next ${Math.min(
-                  MAX_REPORTED_AUDIT_CHECKS,
-                  orderedChecks.length - reportedChecks.length,
-                )} checks`}
-                icon="chevron-down-outline"
-                variant="ghost"
-                onPress={() => setVisibleCheckLimit((current) =>
-                  Math.min(orderedChecks.length, current + MAX_REPORTED_AUDIT_CHECKS))}
-              />
-            ) : null}
-          </View>
-        </>
-      ) : null}
+        {report.backgroundWorkWait ? <BackgroundWorkDiagnosis wait={report.backgroundWorkWait}/>:null}
+        <AuditCatalogueCoverage check={report.appHealth?.checks.find(check => check.code === 'catalogue-identity-coverage')} sampling={report.plan?.inputs.sampling}/>
+        {report.appHealth ? <Card style={{gap:8}}>
+          <AppText variant="h3">{uiLabel('Data and display health')}</AppText>
+          <InfoRow label="Mode" value={uiLabel(report.appHealth.mode === 'local' ? 'Local checks':'Live checks')} />
+          <InfoRow label="Check completion" value={report.appHealth.summary.coveragePercent == null ? 'Unknown':uiJoin(uiNumber(report.appHealth.summary.coveragePercent,1),'%')}/>
+          {report.appHealth.domains.filter(domain => domain.total > 0).map(domain => <View key={domain.domain}>
+            <InfoRow label={DOMAIN_LABELS[domain.domain]} value={outcome(domain.overall)} />
+            <AppText variant="tiny">{uiJoin('Good',': ',uiCount(domain.pass),' · ','Needs review',': ',uiCount(domain.warn),' · ','Failed',': ',uiCount(domain.fail),' · ','Unavailable',': ',uiCount(domain.unavailable),' · ','Not run',': ',uiCount(domain.notRun))}</AppText>
+          </View>)}
+          {report.appHealth.checks.filter(check => check.status !== 'pass').map(check => <InfoRow key={check.id} label={uiIdentifier(check.id)} value={uiLabel(check.status === 'fail' ? 'Failed':check.status === 'warn' ? 'Needs review':check.status === 'not-run' ? 'Not run':'Unavailable')}/>)}
+        </Card>:null}
+        {report.routeAggregates.length ? <Card style={{gap:8}}><AppText variant="h3">{uiLabel('First / repeat')}</AppText>
+          {report.routeAggregates.map(route => <View key={route.journeyId}>
+            <AppText weight="700">{uiIdentifier(route.journeyId)}</AppText>
+            <InfoRow label="Open" value={uiJoin(measuredMs(route.coldForwardMs),' → ',measuredMs(route.warmForwardMs))}/>
+            <InfoRow label="Back" value={uiJoin(measuredMs(route.coldBackMs),' → ',measuredMs(route.warmBackMs))}/>
+          </View>)}
+        </Card>:null}
+        <View style={{gap:8}}><AppText variant="h3">{uiLabel('Check results')}</AppText>
+          <AppText variant="tiny">{countPair(reportedChecks.length,orderedChecks.length)}</AppText>
+          {reportedChecks.map(check => <Card key={check.id} style={{gap:4}}>
+            <InfoRow label={uiIdentifier(check.id)} value={statusLabel(check)}/>
+            <InfoRow label="Duration" value={measuredMs(checkDuration(check))}/>
+            {check.kind === 'journey' ? <>
+              <InfoRow label="Open" value={measuredMs(metricNumber(check,'forwardMs'),1)}/>
+              <InfoRow label="Back" value={measuredMs(metricNumber(check,'backMs'),1)}/>
+              <InfoRow label="Action" value={measuredMs(metricNumber(check,'actionMs'),1)}/>
+              <InfoRow label="Max JS lag" value={measuredMs(metricNumber(check,'maxEventLoopLagMs'),1)}/>
+              <InfoRow label="JS animation gap" value={measuredMs(metricNumber(check,'maxFrameGapMs'),1)}/>
+            </>:null}
+          </Card>)}
+          {reportedChecks.length < orderedChecks.length ? <Button title={uiJoin('Show', ' ', uiCount(Math.min(MAX_REPORTED_AUDIT_CHECKS,orderedChecks.length-reportedChecks.length)), ' ', 'Checks')} icon="chevron-down-outline" variant="ghost" onPress={() => setVisibleCheckLimit(current => Math.min(orderedChecks.length,current+MAX_REPORTED_AUDIT_CHECKS))}/>:null}
+        </View>
+      </>:null}
     </ScreenScrollView>
   );
 }

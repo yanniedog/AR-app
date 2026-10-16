@@ -15,7 +15,7 @@ beforeEach(() => {
   mockDismissTo.mockClear();
 });
 
-it.each(['/', '/browse', '/market', '/watchlist', '/tools', '/(tabs)/tools'])(
+it.each(['/', '/browse', '/market', '/watchlist'])(
   'switches existing tabs directly when already at %s',
   (pathname) => {
     navigateToPrimaryTab('market', pathname);
@@ -24,7 +24,7 @@ it.each(['/', '/browse', '/market', '/watchlist', '/tools', '/(tabs)/tools'])(
   },
 );
 
-it.each(['/search', '/product/a', '/settings', '/compare', '/categories', '/unknown'])(
+it.each(['/search', '/product/a', '/settings', '/compare', '/categories', '/tools', '/(tabs)/tools', '/unknown'])(
   'returns to the existing tab navigator from %s',
   (pathname) => {
     navigateToPrimaryTab('market', pathname);
@@ -34,9 +34,9 @@ it.each(['/search', '/product/a', '/settings', '/compare', '/categories', '/unkn
 );
 
 it('uses the same section-return behavior for menu and breadcrumb destinations', () => {
-  navigateToAppDestination('/(tabs)/tools', '/projections');
-  expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/tools');
-  navigateToAppDestination({ pathname: '/calculator', params: { section: 'Savings' } }, '/tools');
+  navigateToAppDestination('/(tabs)/browse', '/projections');
+  expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/browse');
+  navigateToAppDestination({ pathname: '/calculator', params: { section: 'Savings' } }, '/browse');
   expect(mockNavigate).toHaveBeenCalledWith({ pathname: '/calculator', params: { section: 'Savings' } });
 });
 
@@ -44,7 +44,7 @@ it('POP_TO preserves the mounted tab navigator and its nested state after a deta
   const navigator = StackRouter({ initialRouteName: '(tabs)' });
   const options = { routeNames: ['(tabs)', 'search'], routeParamList: {}, routeGetIdList: {} };
   const initial = navigator.getInitialState(options);
-  const nestedTabs = { index: 1, routes: [{ key: 'home', name: 'index' }, { key: 'rates', name: 'browse', params: { query: 'retained' } }] };
+  const nestedTabs = { index: 1, routes: [{ key: 'saved', name: 'watchlist' }, { key: 'rates', name: 'browse', params: { query: 'retained' } }] };
   const existingTabs = { ...initial.routes[0], state: nestedTabs };
   const state = { ...initial, index: 1, routes: [existingTabs, { key: 'search', name: 'search' }] };
   // Expo's dismissTo from a detail route targets the first divergent navigator:

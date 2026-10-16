@@ -28,7 +28,7 @@ describe('ScenarioRecoveryBanner', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOs });
   });
 
-  it('explains recovered defaults at the navigation root and can be acknowledged', async () => {
+  it('shows the reset status at the navigation root and can be acknowledged', async () => {
     jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key) => (
       key === 'user-rate-scenario-v1'
         ? JSON.stringify({ kind: 'ar.secure-value', schemaVersion: 1, generation: 'missing', chunks: 1 })
@@ -42,7 +42,7 @@ describe('ScenarioRecoveryBanner', () => {
     });
     expect(tree.root.findByProps({ accessibilityRole: 'alert' })).toBeTruthy();
     const dismiss = tree.root.findByProps({
-      accessibilityLabel: 'Dismiss saved scenario reset notice',
+      accessibilityLabel: 'Dismiss',
     });
     act(() => {
       (dismiss.props.onPress as () => void)();

@@ -132,7 +132,7 @@ describe('bank detail profile-filtered history', () => {
         { date: '2026-09-27', min: null, max: null, mean: null, median: null, count: 0 },
         { date: '2026-09-28', min: 0.035, max: 0.055, mean: 0.045, median: 0.0475, count: 4 },
       ]);
-      expect(copy(tree)).toContain('Range, mean and median of this lender’s advertised rates matching your settings');
+      expect(copy(tree)).toContain('Advertised range / mean / median');
       expect(copy(tree)).not.toContain('sharpest offer to its typical rate');
     } finally { act(() => tree.unmount()); }
   });
@@ -146,8 +146,8 @@ describe('bank detail profile-filtered history', () => {
       act(() => tree.update(<BankDetail />));
       expect(tree.root.findAllByType('BankHistoryChart')).toHaveLength(0);
       expect(copy(tree)).toContain(state === 'updating'
-        ? 'Updating historical rates for your settings…'
-        : 'Historical rates could not be prepared. Try refreshing the data.');
+        ? 'Loading'
+        : 'History unavailable');
     } finally { act(() => tree.unmount()); }
   });
 

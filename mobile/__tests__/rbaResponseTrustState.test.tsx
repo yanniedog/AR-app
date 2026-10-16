@@ -106,7 +106,7 @@ describe('Bank response trust state', () => {
     expect(tree.root.findAllByType('BankResponseDashboard')).toHaveLength(1);
 
     await act(async () => {
-      (tree.root.findByProps({ title: 'Retry Bank response data' }).props.onPress as () => void)();
+      (cachedError.findByProps({ title: 'Retry' }).props.onPress as () => void)();
       await Promise.resolve();
     });
     expect(mockRetryBankInsights).toHaveBeenCalledTimes(1);

@@ -50,7 +50,8 @@ export function normalizeHistoryBanksPayload(raw: unknown): HistoryBanksPayload 
 
   const sections: HistoryBanksPayload['sections'] = {};
   for (const [key, value] of Object.entries(sectionsRaw as Record<string, unknown>)) {
-    if (!(SECTION_KEYS as readonly string[]).includes(key) || !value || typeof value !== 'object') continue;
+    const section = SECTION_KEYS.find(section => section === key);
+    if (!section || !value || typeof value !== 'object') continue;
     const pointsRaw = (value as { points?: unknown }).points;
     if (!Array.isArray(pointsRaw) || !pointsRaw.length) continue;
     const points: BankHistoryPoint[] = [];
@@ -61,7 +62,7 @@ export function normalizeHistoryBanksPayload(raw: unknown): HistoryBanksPayload 
       if (!date) continue;
       points.push(sanitizeRibbonPoint(date, partial));
     }
-    if (points.length) sections[key as SectionKey] = { points };
+    if (points.length) sections[section] = { points };
   }
 
   if (!Object.keys(sections).length) return null;

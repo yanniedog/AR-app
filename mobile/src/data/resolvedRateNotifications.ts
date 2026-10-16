@@ -1,3 +1,4 @@
+import { uiJoin, uiPublicProductName, uiPublicProviderName, uiProviderName, uiProductName, uiRate } from '../lib/uiCopy';
 import type { CorePayload, ProductDetail, RateRow } from '../types';
 import type { UserRateScenario } from './userRateScenario';
 import type { ProfileFilters } from './profile';
@@ -48,10 +49,12 @@ export function resolvedRateNotificationChanges({ previous, current, oldCore, ne
       const magnitude = change.compare(Decimal.parse('0')) < 0 ? Decimal.parse('0').sub(change) : change;
       if (magnitude.compare(threshold) < 0 || magnitude.compare(Decimal.parse('0')) === 0) continue;
       const row = bindingRow(newCore, programme.sourceBindings);
-      messages.push({ title: `${product.providerName} public product rate changed`,
-        body: `${product.name}: ${(Number(oldRate.payableRate) * 100).toFixed(2)}% → ${(Number(rate.payableRate) * 100).toFixed(2)}% · Basis: selected public scenario · Charged rate: unverified`,
-        productKey: product.productKey, ...(row?.rate_index != null ? { rateIndex: row.rate_index } : {}),
-      });
+      const message: NotifyMessage = { title: uiJoin(uiPublicProviderName(product), ' · ', 'Rate changed'),
+        body: uiJoin(uiPublicProductName(product), ': ', uiRate(Number(oldRate.payableRate)), ' → ', uiRate(Number(rate.payableRate)), ' · ', 'Basis', ': ', 'Selected public scenario', ' · ', 'Charged rate', ': ', 'Unverified'),
+        productKey: product.productKey,
+      };
+      if (row?.rate_index != null) message.rateIndex = row.rate_index;
+      messages.push(message);
     }
   }
   if (subscriptions.some(subscription => subscription.kind === 'search')) {
@@ -81,7 +84,7 @@ export function resolvedRateNotificationChanges({ previous, current, oldCore, ne
         Number.isFinite(thresholdBps) && thresholdBps >= 0 ? thresholdBps : 1);
       if (!hit) continue;
       const metric = trackedRateValue(hit.row, subscription.section, depositRankMetric, mortgageRateMetric).metric;
-      messages.push({ title: 'Public search rate changed', body: `${hit.row.provider} ${hit.row.product_name}: ${formatRate(hit.from)} → ${formatRate(hit.to)} · Metric: ${metric === 'comparison' ? 'published comparison rate' : metric === 'ranked' ? 'selected published rate metric' : 'public payable rate'} · Basis: public scenario · Charged rate: unverified`,
+      messages.push({ title: uiJoin('Search alert', ' · ', 'Rate changed'), body: uiJoin(uiProviderName(hit.row), ' · ', uiProductName(hit.row), ': ', formatRate(hit.from), ' → ', formatRate(hit.to), ' · ', 'Basis', ': ', metric === 'comparison' ? 'Comparison rate' : metric === 'ranked' ? 'Selected rate' : 'Payable rate', ' · ', 'Selected public scenario', ' · ', 'Charged rate', ': ', 'Unverified'),
         search: { section: subscription.section, path: subscription.path, subscriptionId: subscription.id, sort: subscription.sort, hierarchyScoped: subscription.hierarchyScoped } });
     }
   }

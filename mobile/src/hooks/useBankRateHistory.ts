@@ -7,7 +7,6 @@ import { cachedHistoricalBankRateCatalogue, missingHistoricalCatalogueDates, pre
 import { profileFeaturesForSection } from '../data/profile';
 import { cachedBankRateHistoryScope, prepareBankRateHistoryScope } from '../data/bankRateHistoryScope';
 import { getMandatoryEligibilityRevision } from '../data/eligibilityGate';
-import { normalizeInterests } from '../data/interests';
 import { useStore } from '../data/store';
 import { yieldToUi } from '../lib/yieldToUi';
 import { useSuitabilityRevision } from './useSuitabilityRevision';
@@ -29,8 +28,8 @@ export function useBankRateHistory(enabled = true) {
   const mandatoryRevision = getMandatoryEligibilityRevision();
   const historyLoading = enabled && loading;
   const scopeInput = useMemo(() => enabled && core ? { core, details, includeNonStandard: prefs.includeNonStandard,
-    interests: prefs.interests, onboarded: prefs.onboarded, profileFilters: prefs.profileFilters, suitabilityRevision, mandatoryRevision } : null,
-  [core, details, enabled, prefs.includeNonStandard, prefs.interests, prefs.onboarded, prefs.profileFilters, suitabilityRevision, mandatoryRevision]);
+    interests: SECTION_KEYS, profileFilters: prefs.profileFilters, suitabilityRevision, mandatoryRevision } : null,
+  [core, details, enabled, prefs.includeNonStandard, prefs.profileFilters, suitabilityRevision, mandatoryRevision]);
   const [scopeSettled, setScopeSettled] = useState<{ input: typeof scopeInput; failed: boolean } | null>(null);
   const readyScope = useMemo(() => {
     void scopeSettled;
@@ -52,9 +51,9 @@ export function useBankRateHistory(enabled = true) {
   }, [core, details, enabled, ensureDetails, prefs.includeNonStandard, prefs.profileFilters]);
   const request = useMemo(() => ({ core, scope, enabled, historyRevision, suitabilityRevision, filters: {
     profileFilters: prefs.profileFilters,
-    interests: prefs.onboarded ? normalizeInterests(prefs.interests) : SECTION_KEYS,
+    interests: SECTION_KEYS,
     includeNonStandard: prefs.includeNonStandard,
-  } }), [core, scope, enabled, historyRevision, suitabilityRevision, prefs.profileFilters, prefs.onboarded, prefs.interests, prefs.includeNonStandard]);
+  } }), [core, scope, enabled, historyRevision, suitabilityRevision, prefs.profileFilters, prefs.includeNonStandard]);
   const [settled, setSettled] = useState<{ request: typeof request; failed: boolean } | null>(null);
   const [invalidRich, setInvalidRich] = useState<{ core: CorePayload; value: unknown } | null>(null);
   const catalogue = enabled && core ? cachedHistoricalBankRateCatalogue(core) : null;
