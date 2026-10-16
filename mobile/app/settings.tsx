@@ -4,7 +4,7 @@ import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { useScrollToTop } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { Alert, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import { SegmentedControl } from '../src/components/controls';
 import { Screen, ScreenScrollView } from '../src/components/Screen';
@@ -53,6 +53,8 @@ import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditRead
 const THRESHOLDS = [1, 5, 10, 25];
 
 export default function Settings() {
+  const { width, fontScale } = useWindowDimensions();
+  const stackDataActions = width < 400 || fontScale >= 1.3;
   const suitabilityRevision = useSuitabilityRevision();
   const router = useRouter();
   const prefs = useStore((s) => s.prefs);
@@ -531,19 +533,19 @@ export default function Settings() {
           onChange={(v) => setPref('wifiOnly', v)}
         />
         <SettingsGap size={10} />
-        <Row gap={12}>
+        <Row gap={12} style={{ flexDirection: stackDataActions ? 'column' : 'row', alignItems: 'stretch' }}>
           <Button
             title="Refresh now"
             icon="refresh"
             variant="secondary"
-            style={{ flex: 1 }}
+            style={{ flex: stackDataActions ? undefined : 1 }}
             onPress={() => void refresh({ manual: true })}
           />
           <Button
             title="Clear cache"
             icon="trash-outline"
             variant="ghost"
-            style={{ flex: 1 }}
+            style={{ flex: stackDataActions ? undefined : 1 }}
             onPress={() =>
               Alert.alert('Clear cached data?', 'Offline data removed', [
                 { text: 'Cancel', style: 'cancel' },
