@@ -49,6 +49,26 @@ function render(exact: RateRow = row, props: Partial<React.ComponentProps<typeof
 function mainTarget(tree: Tree) {
   return tree.root.findAllByType('PressFeedback').find(node => !node.props.testID && !String(node.props.accessibilityLabel).startsWith('View '))!;
 }
+
+test.each([false, true])('logo height follows content shrinking independently of the old outer row with embedded=%s', embedded => {
+  const tree = render(row, { embedded });
+  const outer = () => tree.root.findByProps({ testID: 'compact-product-row' });
+  const avatar = () => tree.root.findAllByType('BankAvatar')[0].props;
+  const layout = (height: number) => ({ nativeEvent: { layout: { width: 328, height } } });
+  const normal = COMPACT_ROW.minHeight - 6 - (embedded ? 0 : StyleSheet.hairlineWidth);
+  try {
+    act(() => outer().props.onLayout(layout(119)));
+    expect(avatar().height).toBeCloseTo(normal);
+    act(() => mainTarget(tree).props.onLayout(layout(112)));
+    expect(avatar().height).toBeCloseTo(112);
+    act(() => outer().props.onLayout(layout(119)));
+    act(() => mainTarget(tree).props.onLayout(layout(48)));
+    expect(avatar().height).toBeCloseTo(normal);
+    act(() => outer().props.onLayout(layout(119)));
+    expect(avatar().height).toBeCloseTo(normal);
+  } finally { act(() => tree.unmount()); }
+});
+
 function railWidth(layout: CompactProductRowLayout) {
   const cells = [layout.identity, layout.primary, layout.facet].filter(width => width > 0);
   return cells.reduce((total, width) => total + width, 0) + (cells.length - 1) * COMPACT_ROW.gap

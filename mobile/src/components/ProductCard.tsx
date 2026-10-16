@@ -199,8 +199,6 @@ function ProductCardView({
   const onRowLayout = (event: LayoutChangeEvent) => {
     const next = event.nativeEvent.layout.width;
     if (next > 0) setMeasuredWidth(previous => previous === next ? previous : next);
-    const height = event.nativeEvent.layout.height;
-    if (Number.isFinite(height) && height > 0) setRowHeight(previous => previous === height ? previous : height);
   };
   const measureMetric = (key: 'primary' | 'secondary') => (event: NativeSyntheticEvent<TextLayoutEventData>) => {
     if (activeMeasurementKey.current !== measurementKey) return;
@@ -324,6 +322,13 @@ function ProductCardView({
           const { width: targetWidth, height: targetHeight } = event.nativeEvent.layout;
           mainBounds.current = Number.isFinite(targetWidth) && targetWidth > 0 && Number.isFinite(targetHeight) && targetHeight > 0
             ? { width: targetWidth, height: targetHeight } : null;
+          // Measure content independently: a logo measured from the whole row
+          // would preserve its previous height after large text shrinks again.
+          if (Number.isFinite(targetHeight) && targetHeight > 0) {
+            const height = Math.max(COMPACT_ROW.minHeight,
+              targetHeight + 2 * logoFrame.inset + (embedded ? 0 : StyleSheet.hairlineWidth));
+            setRowHeight(previous => previous === height ? previous : height);
+          }
         }}
       >
         <View key={geometryKey} pointerEvents="none" accessible={false}
