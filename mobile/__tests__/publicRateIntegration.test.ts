@@ -188,6 +188,8 @@ it('combined audit plans and saved/compare selection use one semantic offer for 
   expect(plan.inputs.sampledProducts.map(p => p.programmeId).sort()).toEqual(['other-programme', 'unit-programme']);
   const selections = plan.passes[0].steps.filter(step => /^search.compare.select.[01]$/.test(step.semanticActionId));
   expect(new Set(selections.map(step => step.parameters.selectionToken))).toEqual(new Set(tokens));
+  const pages = plan.passes[0].steps.filter(step => /^search.compare.page.[01]$/.test(step.semanticActionId));
+  expect(new Set(pages.map(step => step.parameters.selectionToken))).toEqual(new Set(tokens));
   const productJourney = journeys.find(journey => journey.id === 'product')!;
   expect((productJourney.href as any).params.programme).toBe(plan.inputs.primaryProduct!.programmeId);
   const savedStep = plan.passes[0].steps.find(step => step.semanticActionId === 'saved.product.open')!;

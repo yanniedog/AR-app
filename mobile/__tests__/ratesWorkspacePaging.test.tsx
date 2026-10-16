@@ -1,3 +1,4 @@
+import { catalogue as publicCatalogueFixture, programme as publicProgramme, product as publicProduct } from '../testUtils/publicRateJourney';
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
@@ -8,7 +9,7 @@ import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { buildDeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
-import { openCompare } from '../src/lib/nav';
+import { openCompare, openProduct } from '../src/lib/nav';
 import { isVerifiedRatesPagePreparation } from '../src/lib/ratesAuditPage';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditMutationBarrier } from '../src/lib/performanceAuditTiming';
 import { PerformanceAuditReadinessRegistry, PerformanceAuditReadinessTimeoutError } from '../src/lib/performanceAuditReadiness';
@@ -37,8 +38,12 @@ jest.mock('../src/components/IconAction', () => ({ IconAction: 'IconAction' }));
 jest.mock('../src/components/controls', () => ({ SearchBar: 'SearchBar', SegmentedControl: 'SegmentedControl' }));
 jest.mock('../src/components/icons/AppIcon', () => ({ __esModule: true, default: 'Icon' }));
 jest.mock('../src/components/feedback', () => ({ EmptyState: 'EmptyState', LoadingRows: 'LoadingRows', ScreenSkeleton: 'ScreenSkeleton', IndeterminateProgressBar: 'Progress' }));
-jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Row: 'Row', Button: 'Button', Chip: 'Chip' }));
+jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Row: 'Row', Button: 'Button', Chip: 'Chip', Card: 'Card', Disclosure: 'Disclosure' }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {}, font: { body: 14 }, spacing: (n: number) => n * 4 }) }));
+let mockPublicCatalogue: any = null;
+const mockUnavailableCatalogue = { status: 'unavailable', generationId: null, products: [], coverage: [], references: [], evidence: [], allLoaded: false,
+  getProduct: () => undefined, getProgrammes: () => [], loadAll: async () => undefined };
+jest.mock('../src/data/publicRateCatalogue', () => ({ usePublicRateCatalogue: () => mockPublicCatalogue ?? mockUnavailableCatalogue }));
 let mockAuditCancelled = false;
 let mockEmitLoad = true;
 const mockCancelListeners = new Set<() => void>();
@@ -106,7 +111,7 @@ const rows = Array.from({ length: 45 }, (_, i) => ({ product_key: `p-${i}`, prod
 function install(profile = DEFAULT_PREFS.profileFilters) { installMandatoryEligibility(selectMandatoryEligibility(mockStore.getState().core, profile, null)); }
 beforeEach(() => {
   jest.clearAllMocks();
-  mockAuditCancelled = false; mockEmitLoad = true; mockCancelListeners.clear();
+  mockPublicCatalogue = null; mockAuditCancelled = false; mockEmitLoad = true; mockCancelListeners.clear();
   mockHoldScroll = false; mockRejectScroll = false; mockAutoViewability = true; mockScrollCalls.length = 0; mockScrollResolutions.length = 0;
   jest.spyOn(global, 'requestAnimationFrame').mockImplementation(callback => { callback(0); return 0; });
   restoreRatesSession(original); clearMortgageComparison();
@@ -536,4 +541,33 @@ test('native completion without exact viewability uses bounded readiness and per
     expect(captureRatesSession()).toEqual(before);
     expect(useMortgageComparison.getState()).toEqual(inputs);
   } finally { jest.useRealTimers(); act(() => tree.unmount()); }
+});
+
+
+test.each([10, 20])('combined ready public catalogue uses exact virtualized offer keys and programme navigation with %s-row pages', async (pageSize) => {
+  const products = rows.map(row => ({ ...publicProduct, productId: row.product_key, productKey: row.product_key, name: row.product_name, programmeIds: [`programme-${row.rate_index}`] }));
+  const programmes = rows.map(row => publicProgramme({ productId: row.product_key, programmeId: `programme-${row.rate_index}`, offerId: `offer-${row.rate_index}`,
+    sourceBindings: [{ rateIndex: row.rate_index, pointer: `/lendingRates/${row.rate_index}` }] }));
+  mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes, products, []), generationId: 'synthetic-generation-1' };
+  mockStore.setState((state: any) => ({ prefs: { ...state.prefs, ratesPageSize: pageSize } }));
+  updateRatesSection('Mortgage', { page: Math.floor(35 / pageSize) + 1, selectMode: true });
+  const tree = mount(), token = 'offer:offer-35#p-35';
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  try {
+    await act(async () => { await Promise.resolve(); });
+    expect(surface().actions!['search.compare.select.1']({ selectionToken: token })).toHaveProperty('unavailableReason');
+    let pending: unknown;
+    act(() => { pending = surface().actions!['search.compare.page.1']({ selectionToken: token }); });
+    await act(async () => { await pending; });
+    const list = tree.root.findByType('FlashList').props;
+    const localIndex = 35 % pageSize;
+    expect(list.keyExtractor(list.data[localIndex], localIndex)).toBe('p-35-offer-35');
+    expect(surface().probes!.find(probe => probe.id === 'search.audit-target')).toMatchObject({ status: 'ready', visibleCount: 1 });
+    act(() => { surface().actions!['search.compare.select.1']({ selectionToken: token }); });
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([token]);
+    act(() => { updateRatesSection('Mortgage', { selectMode: false }); });
+    const card = tree.root.findAllByType('ProductCard').find((node: any) => node.props.row.rate_index === 35);
+    act(() => { card.props.onPress(); });
+    expect(openProduct).toHaveBeenCalledWith('p-35', 35, 'programme-35');
+  } finally { act(() => tree.unmount()); }
 });
