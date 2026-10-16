@@ -1,3 +1,4 @@
+import { ratesResultRowKey } from '../../data/ratesResultRowKey';
 import { PublicPricingCoverage, PublicProductDiscovery } from '../scenario/PublicPricingCoverage';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
 import { publicComparisonCore, publicRateScenario, publicRecommendationRows } from '../../data/publicRateIntegration';
@@ -583,7 +584,7 @@ export default function RatesWorkspace() {
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
           extraData={listRevision}
-          keyExtractor={(item, i) => 'product_key' in item ? `${item.product_key}-${item.public_offer_id ?? item.rate_index ?? i}` : item.key}
+          keyExtractor={ratesResultRowKey}
           getItemType={item => 'product_key' in item ? 'rate' : 'unlisted'}
           onScroll={event => {
             if (restoration.current.applied && restoration.current.revision === listDataRevision
