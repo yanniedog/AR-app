@@ -868,6 +868,7 @@ async function runDeepAuditStepBody(
     actionRevisionBefore = sourceBefore?.actionRevision ?? null;
     renderRevisionBefore = sourceBefore?.renderRevision ?? null;
     execution.attempted = true;
+    const actionAbort = new AbortController();
     const pendingAction = mountedMutationBarrier.track(measureAuditAction(
       () => {
         execution.invoked = true;
@@ -876,6 +877,7 @@ async function runDeepAuditStepBody(
           source.id,
           step.semanticActionId,
           step.parameters,
+          { signal: actionAbort.signal },
         );
       },
       () => monitor.snapshot(),
@@ -884,7 +886,12 @@ async function runDeepAuditStepBody(
     try {
       measuredAction = await awaitAuditWork(pendingAction, watchdog, `${label} mounted action`);
     } catch (error) {
-      if (mountedMutationBarrier.hasPending) throw new PerformanceAuditPendingMutationError(label);
+      // Cancel unissued preparation, then distinguish it from issued native work.
+      // This never resolves or races an outstanding native scroll promise.
+      actionAbort.abort();
+      if (mountedMutationBarrier.hasPending && !(await mountedMutationBarrier.drain(0))) {
+        throw new PerformanceAuditPendingMutationError(label);
+      }
       throw error;
     }
     const immediateCompletion = performanceAuditReadinessRegistry.snapshot([source.id]).surfaces

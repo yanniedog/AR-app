@@ -35,6 +35,9 @@ const initial = (): RatesSessionSnapshot => ({ initialized: false, section: 'Mor
   sections: { Mortgage: emptySection(), Savings: emptySection(), TD: emptySection() } });
 /** Ephemeral task state: never persisted, logged or sent to a provider. */
 export const useRatesSession = create<RatesSessionSnapshot>(() => initial());
+let restoreRevision = 0;
+/** Explicit snapshot restoration can change scroll on the same data/page. */
+export function getRatesSessionRestoreRevision(): number { return restoreRevision; }
 function preferenceKey(prefs: Prefs, section: SectionKey): string {
   return JSON.stringify([prefs.includeNonStandard, section === 'Mortgage' ? prefs.mortgageRateMetric : prefs.depositRankMetric,
     PROFILE_GROUPS.filter(group => group.section === section).map(group => prefs.profileFilters[group.key]),
@@ -89,5 +92,6 @@ export function captureRatesSession(): RatesSessionSnapshot {
 }
 /** Restoring wakes mounted subscribers; audit cleanup restores this before navigation. */
 export function restoreRatesSession(snapshot: RatesSessionSnapshot): void {
+  restoreRevision++;
   useRatesSession.setState(JSON.parse(JSON.stringify(snapshot)) as RatesSessionSnapshot, true);
 }

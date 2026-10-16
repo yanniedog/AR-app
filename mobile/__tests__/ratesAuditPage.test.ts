@@ -4,7 +4,7 @@ import { assertObservableAuditActionEffect } from '../src/lib/performanceAuditAc
 
 const token = '35#p-35';
 const evidence: RatesAuditPagePreparation = { selectionToken: token, resultIndex: 35, pageSize: 20,
-  pageBefore: 2, selectionModeBefore: true, requestedPage: 2, renderedSelectionToken: token };
+  pageBefore: 2, selectionModeBefore: true, requestedPage: 2, renderedSelectionToken: token, committedSelectionToken: token, viewableSelectionToken: token };
 
 test.each([
   ['search.compare.select.0', token, evidence],
@@ -12,6 +12,8 @@ test.each([
   ['search.compare.page.0', 'other', evidence],
   ['search.compare.page.0', token, null],
   ['search.compare.page.0', token, { ...evidence, renderedSelectionToken: null }],
+  ['search.compare.page.0', token, { ...evidence, committedSelectionToken: null }],
+  ['search.compare.page.0', token, { ...evidence, viewableSelectionToken: null }],
   ['search.compare.page.0', token, { ...evidence, selectionModeBefore: false }],
   ['search.compare.page.0', token, { ...evidence, selectionModeBefore: undefined }],
   ['search.compare.page.0', token, { ...evidence, pageBefore: 1 }],

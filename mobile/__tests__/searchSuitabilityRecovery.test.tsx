@@ -63,14 +63,20 @@ jest.mock('@shopify/flash-list', () => {
   return { FlashList: React.forwardRef(function MockFlashList(props: any, ref: any) {
     const measure = () => {
       if (!mockSuppressViewability) props.onViewableItemsChanged({ viewableItems:
-        props.data.slice(0, mockVisibleCount ?? 3).map((item: unknown) => ({ isViewable: true, item })) });
+        props.data.slice(0, mockVisibleCount ?? 3).map((item: unknown, index: number) => ({ isViewable: true, item, index, key: props.keyExtractor(item, index) })) });
     };
+    const propsRef = React.useRef(props); propsRef.current = props;
     const measureRef = React.useRef(measure);
     measureRef.current = measure;
     const loadRef = React.useRef(props.onLoad);
     loadRef.current = props.onLoad;
     const { extraData, onCommitLayoutEffect } = props;
-    React.useImperativeHandle(ref, () => ({ scrollToOffset: (...args: unknown[]) => mockScrollToOffset(...args), recomputeViewableItems: () => {
+    React.useImperativeHandle(ref, () => ({
+      get props() { return propsRef.current; }, getLayout: (index: number) => ({ x: 0, y: index * 100, height: 100, width: 320 }),
+      getWindowSize: () => ({ width: 320, height: (mockVisibleCount ?? 3) * 100 }),
+      getFirstItemOffset: () => 0, getAbsoluteLastScrollOffset: () => 0,
+      computeVisibleIndices: () => ({ startIndex: 0, endIndex: Math.min(mockVisibleCount ?? 3, propsRef.current.data.length) - 1 }),
+      scrollToIndex: () => Promise.resolve(), scrollToOffset: (...args: unknown[]) => mockScrollToOffset(...args), recomputeViewableItems: () => {
       mockRecomputeViewableItems(); measureRef.current();
     } }), []);
     React.useEffect(() => {
@@ -82,7 +88,7 @@ jest.mock('@shopify/flash-list', () => {
     React.useEffect(() => { onCommitLayoutEffect(); }, [extraData, onCommitLayoutEffect]);
     return React.createElement('FlashList', props, props.ListHeaderComponent,
       props.data.length ? props.data.map((item: any, index: number) =>
-        React.createElement('Rate', { key: index }, props.renderItem({ item })))
+        React.createElement('Rate', { key: index }, props.renderItem({ item, index, target: index < (mockVisibleCount ?? 3) ? 'Cell' : 'Measurement' })))
         : props.ListEmptyComponent);
   }) };
 });
@@ -350,6 +356,7 @@ test('comparison and filter disclosure commit without remounting unchanged searc
     let measurements = mockRecomputeViewableItems.mock.calls.length;
     const token = `${first.rate_index}#${first.product_key}`;
     let previousRevision = mockSurfaces.get('rates.results').renderRevision;
+    let previousListRevision = tree.root.findByType('FlashList' as any).props.extraData;
     for (const [action, parameters] of [
       ['search.filters.open'], ['search.filters.apply'], ['search.compare.mode'],
       ['search.compare.select.0', { selectionToken: token }],
@@ -360,7 +367,10 @@ test('comparison and filter disclosure commit without remounting unchanged searc
       expect(tree.root.findByType('FlashList' as any).props.data).toBe(initialRows);
       const revision = mockSurfaces.get('rates.results').renderRevision;
       expect(revision).not.toBe(previousRevision);
-      expect(tree.root.findByType('FlashList' as any).props.extraData).toBe(revision);
+      const listRevision = tree.root.findByType('FlashList' as any).props.extraData;
+      expect(listRevision).not.toBe(previousListRevision);
+      expect(mockSurfaces.get('rates.results').probes.find((probe: any) => probe.id === 'search.layout').renderRevision).toBe(revision);
+      previousListRevision = listRevision;
       expect(listProbe().visibleCount).toBe(measuredCount);
       expect(mockRecomputeViewableItems).toHaveBeenCalledTimes(++measurements);
       previousRevision = revision;

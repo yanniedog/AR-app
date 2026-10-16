@@ -8,6 +8,8 @@ export interface RatesAuditPagePreparation {
   selectionModeBefore: boolean;
   requestedPage: number;
   renderedSelectionToken: string | null;
+  committedSelectionToken: string | null;
+  viewableSelectionToken: string | null;
 }
 
 /** An already-rendered target needs ready probes, but no fabricated page change. */
@@ -15,7 +17,8 @@ export function isVerifiedRatesPagePreparation(actionId: string, token: unknown,
   if (!['search.compare.page.0', 'search.compare.page.1'].includes(actionId) ||
     typeof token !== 'string' || !token || result == null || typeof result !== 'object' || Array.isArray(result)) return false;
   const evidence = result as Partial<RatesAuditPagePreparation>;
-  if (evidence.selectionToken !== token || evidence.renderedSelectionToken !== token || evidence.selectionModeBefore !== true ||
+  if (evidence.selectionToken !== token || evidence.renderedSelectionToken !== token ||
+    evidence.committedSelectionToken !== token || evidence.viewableSelectionToken !== token || evidence.selectionModeBefore !== true ||
     (evidence.pageSize !== 10 && evidence.pageSize !== 20) || typeof evidence.resultIndex !== 'number' ||
     !Number.isSafeInteger(evidence.resultIndex) || evidence.resultIndex < 0) return false;
   const page = Math.floor(evidence.resultIndex / evidence.pageSize) + 1;

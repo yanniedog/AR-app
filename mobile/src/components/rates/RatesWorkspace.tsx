@@ -8,18 +8,18 @@ import { SegmentedControl } from '../controls';
 import { sectionSegmentOptions } from '../../data/interests';
 import { verifiedCatalogueDetails, detailsOnlyCatalogue } from '../../data/detailsCatalogue';
 import { EMPTY_SEARCH_FILTER_OPTIONS } from '../../data/searchFilterOptions';
-import { initializeRatesSession, syncRatesPreferences, changeRatesSection, updateRatesSection, recordRatesScroll, useRatesSession, type RateAvailability } from '../../data/ratesSession';
+import { initializeRatesSession, syncRatesPreferences, changeRatesSection, updateRatesSection, recordRatesScroll, getRatesSessionRestoreRevision, useRatesSession, type RateAvailability } from '../../data/ratesSession';
 import { normalizeRatesPageSize, ratesPageWindow } from '../../data/ratesPagination';
 import { ratesIntentKey, resolveRatesIntent, RATES_INTENT_KEYS, type RatesRouteParams } from '../../lib/ratesIntent';
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
-import type { RatesAuditPagePreparation } from '../../lib/ratesAuditPage';
+import { useRatesAuditTarget } from '../../hooks/useRatesAuditTarget';
 import { SearchReportExport } from '../../components/SearchReportExport';
 import { isSuitabilityFilterReady } from '../../data/suitabilityGate';
 import Ionicons from '../../components/icons/AppIcon';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import { FilterSheet } from '../../components/FilterSheet';
@@ -89,12 +89,16 @@ const rowToken = (r: { rate_index?: number | string; product_key: string }) =>
   r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
 
 const SearchProductRow = React.memo(function SearchProductRow({ row, section, selectMode, selected, onToggleSelect,
-  onLogoRenderStateChange, comparisonUnverified }: {
+  onLogoRenderStateChange, comparisonUnverified, auditCell, auditRevision, onAuditCellCommit }: {
   row: RateRow; section: SectionKey; selectMode: boolean; selected: boolean;
   onToggleSelect: (token: string) => void;
   onLogoRenderStateChange: (id: string, state: LogoRenderState) => void;
   comparisonUnverified: boolean;
+  auditCell: boolean; auditRevision: string;
+  onAuditCellCommit: (row: RateRow, revision: string) => () => void;
 }) {
+  useLayoutEffect(() => auditCell ? onAuditCellCommit(row, auditRevision) : undefined,
+    [auditCell, auditRevision, onAuditCellCommit, row]);
   const onPress = useCallback(() => selectMode ? onToggleSelect(rowToken(row)) : openProduct(row.product_key, row.rate_index),
     [selectMode, onToggleSelect, row]);
   return <ProductCard row={row} section={section} comparisonUnverified={comparisonUnverified}
@@ -370,28 +374,109 @@ export default function RatesWorkspace() {
     updateRatesSection(section, { query: '', path: [], hierarchyScoped: false, intentError: null,
       filters: { ...EMPTY_FILTERS, includeNonStandard }, includeNonStandardOverride: null }, true);
   }, [includeNonStandard, section]);
+  const intentPending = Boolean(intentKey && consumedIntent.current !== intentKey) || !session.initialized;
+  const searchPending = intentPending || (availability === 'unlisted' ? !catalogueDetails : detailFiltersPending || searchIndexLoading || !preparedResults.ready);
+  useEffect(() => {
+    if (!searchPending && task.page !== pagination.page) updateRatesSection(section, { page: pagination.page }, true);
+  }, [pagination.page, searchPending, section, task.page]);
+  const dataTracker = useRef(new OpaquePerformanceAuditRenderRevision());
+  const uiTracker = useRef(new OpaquePerformanceAuditRenderRevision());
+  const listDataRevision = dataTracker.current.update([coreSha ?? core?.run_date ?? 'none', manifest?.files.details.sha256,
+    section, path, hierarchyScoped, debouncedQuery, sortKey, effectiveFilters, availability, task.intentError,
+    queryNeedsSearchIndex, resultSearchIndex != null, suitabilityRevision, resultRows.length, pagination.page, pageSize, mortgageInputs]);
+  // Selection and disclosure changes need a fresh committed render, but keep
+  // the same list and decoded logos while its result identities are unchanged.
+  const listRevision = uiTracker.current.update([listDataRevision, filterOpen, draftFilters, draftAvailability, sortOpen, toolsOpen, selectMode, selected]);
+  const listReadiness = useVirtualizedListReadiness(listRevision, pageRows.length);
+  const { onCommitLayoutEffect: markListCommit, onLoad: markListLoad, onViewableItemsChanged: markListViewability } = listReadiness;
+  const listRef = useRef<FlashListRef<ResultRow>>(null);
+  const listLoaded = useRef(false);
+  const [restoredDataRevision, setRestoredDataRevision] = useState<string | null>(null);
+  type ViewabilityInfo = { viewableItems: { isViewable?: boolean | null; item: ResultRow; index?: number | null; key?: string }[] };
+  const auditViewability = useRef<(info: ViewabilityInfo) => void>(() => {});
+  const currentRows = useRef(pageRows);
+  currentRows.current = pageRows;
+  const restorationKey = JSON.stringify([listDataRevision, getRatesSessionRestoreRevision()]);
+  // Initial native zero-offset events must not erase this list's requested restore.
+  const restoration = useRef({ revision: restorationKey, section, offset: task.scrollOffset, scheduled: false, applied: false });
+  if (restoration.current.revision !== restorationKey) {
+    restoration.current = { revision: restorationKey, section, offset: task.scrollOffset, scheduled: false, applied: false };
+  }
+  const attachList = useCallback((list: FlashListRef<ResultRow> | null) => {
+    if (listRef.current !== list) {
+      listLoaded.current = false;
+      restoration.current.scheduled = false;
+      restoration.current.applied = false;
+    }
+    listRef.current = list;
+  }, []);
+  const restoreCommittedScroll = useCallback(() => {
+    const list = listRef.current, pending = restoration.current;
+    if (!listLoaded.current || !list || pending.scheduled || pending.applied) return;
+    pending.scheduled = true;
+    requestAnimationFrame(() => {
+      if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) return;
+      list.scrollToOffset({ offset: pending.offset, animated: false });
+      // Wait for the native scroll to reach a frame before asking for current
+      // viewport evidence. A measurement from before that move is insufficient.
+      requestAnimationFrame(() => {
+        if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) return;
+        pending.applied = true;
+        setRestoredDataRevision(pending.revision);
+        list.recomputeViewableItems();
+      });
+    });
+  }, []);
+  useEffect(() => { restoreCommittedScroll(); }, [restorationKey, restoreCommittedScroll]);
+  const onListCommit = useCallback(() => {
+    markListCommit();
+    restoreCommittedScroll();
+  }, [markListCommit, restoreCommittedScroll]);
+  const onListLoad = useCallback(() => {
+    listLoaded.current = true;
+    markListLoad();
+    restoreCommittedScroll();
+  }, [markListLoad, restoreCommittedScroll]);
+  const onViewableItemsChanged = useCallback((info: ViewabilityInfo) => {
+    if (!restoration.current.applied || info.viewableItems.some(token => token.isViewable === true && !currentRows.current.includes(token.item))) return;
+    markListViewability(info);
+    auditViewability.current(info);
+  }, [markListViewability]);
+  useEffect(() => {
+    // In-place selection/disclosure changes do not change visible indices, so
+    // FlashList may omit its usual viewability callback. Request a fresh native
+    // measurement after this render commits; layout alone is not visible proof.
+    if (listReadiness.ready) listRef.current?.recomputeViewableItems();
+  }, [listRevision, listReadiness.ready]);
+  const logoReadiness = useLogoReadiness(listDataRevision);
+  const auditTarget = useRatesAuditTarget({ rows: pageRows, results: resultRows, page: pagination.page, size: pageSize,
+    revision: listRevision, context: JSON.stringify([coreSha ?? core?.run_date, manifest?.files.details.sha256,
+      section, path, hierarchyScoped, debouncedQuery, sortKey, effectiveFilters, availability, pageSize, mortgageInputs, getRatesSessionRestoreRevision()]),
+    selectMode, canScroll: restoredDataRevision === restorationKey && listReadiness.ready, list: listRef,
+    token: row => 'product_key' in row ? rowToken(row) : null,
+    key: (row, i) => 'product_key' in row ? `${row.product_key}-${row.rate_index ?? pagination.offset + i}` : row.key,
+    navigate: page => {
+      if (page !== pagination.page || !selectMode) updateRatesSection(section, { page, selectMode: true }, page !== pagination.page);
+    },
+  });
+  const { isVisible: isAuditTargetVisible, selectionFinished: finishAuditTargetSelection, prepare: prepareAuditTarget } = auditTarget;
+  auditViewability.current = auditTarget.onViewableItemsChanged;
+  const surfaceTracker = useRef(new OpaquePerformanceAuditRenderRevision());
+  const surfaceRevision = surfaceTracker.current.update([listRevision, auditTarget.cellRevision, auditTarget.viewport]);
   const selectAuditToken = useCallback((...args: unknown[]) => {
     const token = auditActionString(args, 'selectionToken');
-    if (!token || !pageRows.some(row => 'product_key' in row && rowToken(row) === token)) {
+    const row = token ? pageRows.find(row => 'product_key' in row && rowToken(row) === token) : undefined;
+    if (!row) {
       return { unavailableReason: 'The selected exact rate is not on the rendered results page' };
     }
     if (!selectMode) return { unavailableReason: 'Comparison selection is not active' };
-    toggleSelect(token);
-  }, [pageRows, selectMode, toggleSelect]);
-  const prepareAuditComparePage = useCallback((...args: unknown[]) => {
-    const token = auditActionString(args, 'selectionToken');
-    const resultIndex = token ? resultRows.findIndex(row => 'product_key' in row && rowToken(row) === token) : -1;
-    if (!token || resultIndex < 0) return { unavailableReason: 'The selected exact rate is not in the filtered results' };
-    const requestedPage = Math.floor(resultIndex / pageSize) + 1;
-    const evidence: RatesAuditPagePreparation = { selectionToken: token, resultIndex, pageSize,
-      pageBefore: pagination.page, selectionModeBefore: selectMode, requestedPage,
-      renderedSelectionToken: pageRows.some(row => 'product_key' in row && rowToken(row) === token) ? token : null };
-    // Prepare visible controls only; selection still requires the fresh rendered page.
-    if (requestedPage !== pagination.page || !selectMode) {
-      updateRatesSection(section, { page: requestedPage, selectMode: true }, requestedPage !== pagination.page);
-    }
-    return evidence;
-  }, [pageRows, pageSize, pagination.page, resultRows, section, selectMode]);
+    if (!isAuditTargetVisible(row)) return { unavailableReason: 'The selected exact rate is not committed and visible' };
+    toggleSelect(token!);
+    finishAuditTargetSelection(row);
+  }, [isAuditTargetVisible, finishAuditTargetSelection, pageRows, selectMode, toggleSelect]);
+  const prepareAuditComparePage = useCallback((...args: unknown[]) =>
+    prepareAuditTarget(auditActionString(args, 'selectionToken') ?? '',
+      (args[1] as { signal?: AbortSignal } | undefined)?.signal), [prepareAuditTarget]);
   const auditActions = useMemo(() => ({
     'search.open': () => undefined,
     'search.section.next': () => changeSection(SECTION_ORDER[(SECTION_ORDER.indexOf(section) + 1) % SECTION_ORDER.length]),
@@ -426,91 +511,25 @@ export default function RatesWorkspace() {
       if (tokens.length >= 2) openCompare(tokens);
     },
   }), [applyFilters, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
-  const intentPending = Boolean(intentKey && consumedIntent.current !== intentKey) || !session.initialized;
-  const searchPending = intentPending || (availability === 'unlisted' ? !catalogueDetails : detailFiltersPending || searchIndexLoading || !preparedResults.ready);
-  useEffect(() => {
-    if (!searchPending && task.page !== pagination.page) updateRatesSection(section, { page: pagination.page }, true);
-  }, [pagination.page, searchPending, section, task.page]);
-  const dataTracker = useRef(new OpaquePerformanceAuditRenderRevision());
-  const uiTracker = useRef(new OpaquePerformanceAuditRenderRevision());
-  const listDataRevision = dataTracker.current.update([coreSha ?? core?.run_date ?? 'none', manifest?.files.details.sha256,
-    section, path, hierarchyScoped, debouncedQuery, sortKey, effectiveFilters, availability, task.intentError,
-    queryNeedsSearchIndex, resultSearchIndex != null, suitabilityRevision, resultRows.length, pagination.page, pageSize, mortgageInputs]);
-  // Selection and disclosure changes need a fresh committed render, but keep
-  // the same list and decoded logos while its result identities are unchanged.
-  const listRevision = uiTracker.current.update([listDataRevision, filterOpen, draftFilters, draftAvailability, sortOpen, toolsOpen, selectMode, selected]);
-  const listReadiness = useVirtualizedListReadiness(listRevision, pageRows.length);
-  const { onCommitLayoutEffect: markListCommit, onLoad: markListLoad, onViewableItemsChanged: markListViewability } = listReadiness;
-  const listRef = useRef<FlashListRef<ResultRow>>(null);
-  const listLoaded = useRef(false);
-  const currentRows = useRef(pageRows);
-  currentRows.current = pageRows;
-  // Initial native zero-offset events must not erase this list's requested restore.
-  const restoration = useRef({ revision: listDataRevision, section, offset: task.scrollOffset, scheduled: false, applied: false });
-  if (restoration.current.revision !== listDataRevision) {
-    restoration.current = { revision: listDataRevision, section, offset: task.scrollOffset, scheduled: false, applied: false };
-  }
-  const attachList = useCallback((list: FlashListRef<ResultRow> | null) => {
-    if (listRef.current !== list) {
-      listLoaded.current = false;
-      restoration.current.scheduled = false;
-      restoration.current.applied = false;
-    }
-    listRef.current = list;
-  }, []);
-  const restoreCommittedScroll = useCallback(() => {
-    const list = listRef.current, pending = restoration.current;
-    if (!listLoaded.current || !list || pending.scheduled || pending.applied) return;
-    pending.scheduled = true;
-    requestAnimationFrame(() => {
-      if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) return;
-      list.scrollToOffset({ offset: pending.offset, animated: false });
-      // Wait for the native scroll to reach a frame before asking for current
-      // viewport evidence. A measurement from before that move is insufficient.
-      requestAnimationFrame(() => {
-        if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) return;
-        pending.applied = true;
-        list.recomputeViewableItems();
-      });
-    });
-  }, []);
-  const onListCommit = useCallback(() => {
-    markListCommit();
-    restoreCommittedScroll();
-  }, [markListCommit, restoreCommittedScroll]);
-  const onListLoad = useCallback(() => {
-    listLoaded.current = true;
-    markListLoad();
-    restoreCommittedScroll();
-  }, [markListLoad, restoreCommittedScroll]);
-  const onViewableItemsChanged = useCallback((info: { viewableItems: { isViewable?: boolean | null; item: ResultRow }[] }) => {
-    if (!restoration.current.applied || info.viewableItems.some(token => token.isViewable === true && !currentRows.current.includes(token.item))) return;
-    markListViewability(info);
-  }, [markListViewability]);
-  useEffect(() => {
-    // In-place selection/disclosure changes do not change visible indices, so
-    // FlashList may omit its usual viewability callback. Request a fresh native
-    // measurement after this render commits; layout alone is not visible proof.
-    if (listReadiness.ready) listRef.current?.recomputeViewableItems();
-  }, [listRevision, listReadiness.ready]);
-  const logoReadiness = useLogoReadiness(listDataRevision);
-  const renderProduct = useCallback(({ item }: { item: ResultRow }) => 'product_key' in item ? (
+  const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => 'product_key' in item ? (
     <SearchProductRow row={item} section={section} onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
       comparisonUnverified={section === 'Mortgage' && mortgageScope.unverifiedRows.has(item)}
+      auditCell={target === 'Cell'} auditRevision={listRevision} onAuditCellCommit={auditTarget.onCellCommit}
       selectMode={selectMode} selected={selected.includes(rowToken(item))} onToggleSelect={toggleSelect} />
   ) : <TouchTarget fill onPress={() => openProduct(item.key)} accessibilityRole="button"
       accessibilityLabel={uiProductName({product_name:item.name??''})} style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
       <AppText variant="body" weight="600">{uiProductName({product_name:item.name??''})}</AppText>
       <AppText variant="small" color="textMuted">{uiJoin(uiProviderName({provider:item.provider??''}),' · ',humanizeEnum(item.productCategory??''))}</AppText>
       <AppText variant="small" color="textMuted">{uiLabel("No listed rate")}</AppText>
-    </TouchTarget>, [section, logoReadiness.onLogoRenderStateChange, selectMode, selected, toggleSelect, theme.colors.border, mortgageScope.unverifiedRows]);
+    </TouchTarget>, [auditTarget.onCellCommit, listRevision, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, toggleSelect, theme.colors.border, mortgageScope.unverifiedRows]);
   usePerformanceAuditSurface({
     id: 'rates.results',
     routeKey: '/browse',
     datasetRevision: coreSha ?? core?.run_date ?? null,
-    renderRevision: listRevision,
+    renderRevision: surfaceRevision,
     actions: auditActions,
     probes: [
+      auditTarget.targetProbe,
       {
         id: 'search.data',
         kind: 'data',
@@ -535,7 +554,7 @@ export default function RatesWorkspace() {
         kind: 'layout',
         status: listReadiness.ready ? 'ready' : 'pending',
         layoutMeasured: listReadiness.ready,
-        renderRevision: listRevision,
+        renderRevision: surfaceRevision,
       },
       {
         id: 'search.filters',
@@ -624,7 +643,7 @@ export default function RatesWorkspace() {
           keyExtractor={(item, i) => 'product_key' in item ? `${item.product_key}-${item.rate_index ?? pagination.offset + i}` : item.key}
           getItemType={item => 'product_key' in item ? 'rate' : 'unlisted'}
           onScroll={event => {
-            if (restoration.current.applied && restoration.current.revision === listDataRevision
+            if (restoration.current.applied && restoration.current.revision === restorationKey
               && useRatesSession.getState().section === section) recordRatesScroll(section, event.nativeEvent.contentOffset.y);
           }}
           scrollEventThrottle={64}
