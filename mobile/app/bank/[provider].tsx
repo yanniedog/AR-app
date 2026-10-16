@@ -35,7 +35,7 @@ import {
 } from '../../src/data/productHistory';
 import { excludeTokenDepositRates, sortRows } from '../../src/data/selectors';
 import { rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
-import { rowsForProductKey, rowsForProvider } from '../../src/data/rateRowIndex';
+import { rowsForProvider } from '../../src/data/rateRowIndex';
 import { useStore } from '../../src/data/store';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
@@ -458,11 +458,8 @@ export default function BankDetail() {
       'lender.product.first': (...args: unknown[]) => {
       const productKey = auditActionString(args, 'productKey');
       const rateIndex = auditActionInteger(args, 'rateIndex');
-      const exact = SECTION_ORDER
-        .flatMap((section) => rowsForProductKey(core?.sections[section].rates ?? [], productKey ?? ''))
-        .find((candidate) => candidate.product_key === productKey &&
-          candidate.provider === provider &&
-          (rateIndex == null || candidate.rate_index === rateIndex));
+      const exact = productItems.find(({ row }) => row.product_key === productKey &&
+        (rateIndex == null || row.rate_index === rateIndex))?.row;
         if (!exact) return { unavailableReason: 'The exact planned lender product is not rendered' };
         openProduct(exact.product_key, exact.rate_index);
         return { expectedPath: `/product/${encodeURIComponent(exact.product_key)}` };
@@ -503,7 +500,7 @@ export default function BankDetail() {
       };
     }
     return actions;
-  }, [activeChartSection, bankEvents, chartModel, chartSections, core, handleMoveSelect, provider, visibleBankEvents]);
+  }, [activeChartSection, bankEvents, chartModel, chartSections, handleMoveSelect, productItems, provider, visibleBankEvents]);
   const lenderLogoIds = useMemo(
     () => provider ? [`lender:header:${provider}`] : [],
     [provider],

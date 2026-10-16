@@ -8,6 +8,9 @@ import type { BankRateSnapshot } from '../src/data/bankRateOverview';
 import * as productHistory from '../src/data/productHistoryModel';
 import type { ProductHistoryPayload } from '../src/data/productHistory';
 import type { CorePayload, RateRow } from '../src/types';
+import { installMandatoryEligibility } from '../src/data/eligibilityGate';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { openProduct } from '../src/lib/nav';
 
 type TestNode = {
   props: Record<string, any>;
@@ -117,12 +120,47 @@ function copy(tree: Renderer): string {
 
 describe('bank detail profile-filtered history', () => {
   beforeEach(() => {
+    jest.clearAllMocks();
+    installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() });
     mockState.core = core;
     mockState.productHistory = null;
     mockParams.provider = row.provider;
     Object.assign(mockRateHistory, {
       snapshots, historyAvailable: true, updating: false, failed: false, missingDates: [], revision: 'profile-1',
     });
+  });
+
+  afterEach(() => installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() }));
+
+  it('opens the exact rendered tier and refuses a deduplicated sibling from the raw catalogue', () => {
+    const hidden = { ...row, rate_index: 998, rate: '0.01', comparison_rate: '0.01' };
+    const visible = { ...row, rate_index: 999, rate: '0.06', comparison_rate: '0.06' };
+    mockState.core = { ...core, sections: { ...core.sections,
+      Savings: { ...core.sections.Savings, rates: [hidden, visible] } } };
+    const tree = mount();
+    try {
+      expect(tree.root.findAllByType('FlashList')[0].props.data.map((item: { row: RateRow }) => item.row)).toEqual([visible]);
+      const surface = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+      const open = surface.actions!['lender.product.first'];
+      expect(open({ productKey: row.product_key, rateIndex: hidden.rate_index }))
+        .toEqual({ unavailableReason: 'The exact planned lender product is not rendered' });
+      expect(openProduct).not.toHaveBeenCalled();
+      expect(open({ productKey: row.product_key, rateIndex: visible.rate_index }))
+        .toEqual({ expectedPath: `/product/${encodeURIComponent(row.product_key)}` });
+      expect(openProduct).toHaveBeenCalledWith(row.product_key, visible.rate_index);
+    } finally { act(() => tree.unmount()); }
+  });
+
+  it('refuses a raw catalogue row excluded by the active eligibility gate', () => {
+    installMandatoryEligibility({ active: true, loading: false, rows: new WeakSet(), productKeys: new Set() });
+    const tree = mount();
+    try {
+      expect(tree.root.findAllByType('FlashList')[0].props.data).toEqual([]);
+      const surface = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+      expect(surface.actions!['lender.product.first']({ productKey: row.product_key, rateIndex: row.rate_index }))
+        .toEqual({ unavailableReason: 'The exact planned lender product is not rendered' });
+      expect(openProduct).not.toHaveBeenCalled();
+    } finally { act(() => tree.unmount()); }
   });
 
   it('keeps lender rows stable through layout and replaces them when the lender changes', () => {

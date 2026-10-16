@@ -78,3 +78,47 @@ or a definite primary-service failure. A bounded live decision must identify the
 exact reviewed body and chosen host, allow its POST and exact-body GET read-back,
 and retain its secure deletion receipt. No such live write is required for the
 flow checks above or has been performed here.
+
+## 16 October cloud reconciliation
+
+The branch is integrated with main `8e5c1cb84696be2728996b8789adf5c913086c1e`,
+including the Settings large-text changes and install QR refresh. A rendered
+lender-route test identified an audit action that could open a raw catalogue
+tier absent from the displayed lender list. The action now uses the same
+filtered, ranked, deduplicated rows as that list. Tests exercise the exact
+rendered tier, a hidden sibling tier and a row excluded by mandatory eligibility.
+This corrects journey evidence; it does not establish a device timing improvement.
+
+The latest user-supplied audit is
+`https://paste.c-net.org/450f3863-0af5-ab8e-8d24-e3c0855b9ad1`, app 1.0.242 /
+build 299. It also predates this patch. Its supplied summary records 68 timing
+failures and two missing `settings.app-update` observations. All 14 product-to-
+lender openings stall, with a worst reported gap of 670.3 ms. All 2,723 check
+records were saved, while 344/352 journeys were usable: six optional Economy
+actions lack local data and two sampled lender moves were absent. Randomized
+inputs prevent a controlled regression claim. The audit's normal font size
+does not validate large-text behavior. Public paste retrieval, by itself, would
+not establish automatic-upload completion. Direct retrieval returned HTTP 403
+and the browser tool could not access the URL in this cloud session; these
+figures are attributed to the supplied summary, not a fresh raw-log analysis.
+
+The repeated full-row lookups and premature move-attribution work are covered
+by the existing row-index and lender-route tests. Native chart, navigation and
+layout costs remain possible contributors that these mocked tests cannot
+measure. The current cloud target inspection found no `adb` executable or
+Android SDK. The user's PC is offline. Physical-device timings, Android
+process-death/background transport, large-text layout and a real upload receipt
+remain separate acceptance gates. No public POST, device installation, ingest
+change, release, draft promotion, remote push or PR merge was performed.
+
+For this integrated tree, typecheck, lint (zero errors; eight existing warnings),
+the zero-violation UI-copy check, prepared-history pins and both history
+benchmarks passed. All 438 script tests passed with an isolated matching Java
+compiler, including the native codec and headless-timer unit tests. All 378 Jest
+suites / 4,316 tests passed, covering lifecycle, upload, storage, Settings and
+lender behavior. Android, iOS and web exports passed, including the compiled
+external-link and Android audit screen-awake guards; artifact-size guards passed.
+An APK was not built. The canonical `npm run ci` command remains blocked at Expo
+Doctor: 16/18 checks passed, while Expo schema and React Native Directory remote
+metadata checks could not complete. The remaining canonical commands were run
+directly without changing their checks or budgets.
