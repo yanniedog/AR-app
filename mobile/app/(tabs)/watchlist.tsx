@@ -15,7 +15,7 @@ import { SwipeableRow } from '../../src/components/SwipeableRow';
 import { AppText, Button, Card, Disclosure, Row, SectionHeading } from '../../src/components/ui';
 import { SECTION_ORDER, SECTIONS } from '../../src/constants';
 import { computeLvr } from '../../src/data/calc';
-import { toggleCompareSelection } from '../../src/data/compareSelection';
+import { toggleCompareSelection, resolveCompareSelections } from '../../src/data/compareSelection';
 import { formatRate, toFraction } from '../../src/data/format';
 import {
   profileFeaturesForSection,
@@ -215,18 +215,10 @@ export default function MyRates() {
   }, [core, selected, publicCatalogue, scenario, profileFilters]);
   const findExactRow = useCallback((token: string): RateRow | null => {
     if (!core) return null;
-    const hash = token.indexOf('#');
-    const rateIndex = hash > 0 && Number.isInteger(Number(token.slice(0, hash)))
-      ? Number(token.slice(0, hash))
-      : null;
-    const productKey = rateIndex == null ? token : token.slice(hash + 1);
-    for (const section of Object.values(core.sections)) {
-      const exact = section.rates.find((row) =>
-        row.product_key === productKey && (rateIndex == null || row.rate_index === rateIndex));
-      if (exact) return exact;
-    }
-    return null;
-  }, [core]);
+    const effectiveCore = publicComparisonCore(core, publicCatalogue,
+      section => publicRateScenario(section, scenario, profileFilters));
+    return resolveCompareSelections(effectiveCore, [token])[0]?.row ?? null;
+  }, [core, publicCatalogue, scenario, profileFilters]);
   const ensureExactPair = useCallback((...args: unknown[]) => {
     const tokens = auditActionStrings(args, 'selectionTokens');
     auditSavedFixtureSnapshot ??= {
@@ -243,7 +235,7 @@ export default function MyRates() {
       const retained = state.savedRates.filter((ref) => !fixtureKeys.has(ref.productKey));
       const additions = rows.map((row) => makeSavedRateRef(
         row,
-        Number.isInteger(row.rate_index) ? 'rate' : 'product',
+        row.public_offer_id || Number.isInteger(row.rate_index) ? 'rate' : 'product',
       ));
       const next = [...retained, ...additions];
       return {

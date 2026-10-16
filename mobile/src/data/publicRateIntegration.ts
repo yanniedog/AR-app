@@ -128,9 +128,15 @@ export function publicRecommendationRows(rows: readonly RateRow[], catalogue: Pu
   if (catalogue.status === 'unavailable') return [...rows];
   const current = rows.filter(row => includeExistingLegacy || catalogue.getProduct(row.product_key)?.status !== 'legacy')
     .map(row => bindCurrentPublicRow(row, catalogue));
-  const semanticKey = (row: RateRow) => row.product_key + ':' + row.public_offer_id;
-  const semanticIds = new Set(current.filter(row => row.public_offer_id).map(semanticKey));
-  return [...current, ...publicCatalogueOfferRows(catalogue, section, scenario).filter(row => !semanticIds.has(semanticKey(row)))];
+  const seen = new Set<string>();
+  // Multiple source occurrences can legally bind to one semantic offer. Keep
+  // provenance in the immutable source/catalogue; expose one selectable offer.
+  return [...current, ...publicCatalogueOfferRows(catalogue, section, scenario)].filter(row => {
+    if (!row.public_offer_id) return true;
+    const key = JSON.stringify([row.product_key, row.public_offer_id]);
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
 }
 
 /** Ephemeral view for semantic selections; original core assets stay immutable. */

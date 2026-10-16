@@ -1,5 +1,6 @@
+import { buildPerformanceAuditSetupPlans } from '../src/lib/performanceAuditSetup';
 import { matchesLvrTier, parseLvrRange, lvrRangeContains } from '../src/data/lvrRange';
-import { bindCurrentPublicRow, payableRateForRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate,
+import { publicComparisonCore, bindCurrentPublicRow, payableRateForRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate,
   resolveProductPublicRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import type { UserRateScenario } from '../src/data/userRateScenario';
@@ -168,4 +169,41 @@ it('preserves inclusive CDR minima and strict maxima in public offer facets', ()
   expect(publicRecommendationRows([], closed, 'Mortgage', { lvr: '0.95' })[0].lvr_tier).toBe('lvr_>=80.01-95%');
   const tied = catalogue([programme({ conditions: [condition, { ...condition, conditionId: 'strict-min', minimumInclusive: false }] })]);
   expect(publicRecommendationRows([], tied, 'Mortgage', { lvr: '0.85' })[0].lvr_tier).toBe('lvr_>80.01-<95%');
+});
+
+
+it('combined audit plans and saved/compare selection use one semantic offer for multiple source occurrences', () => {
+  const second = { ...product, productId: 'other-product', productKey: 'UNIT|OTHER', name: 'Other Loan', programmeIds: ['other-programme'] };
+  const firstProgramme = programme({ sourceBindings: [{ rateIndex: 7, pointer: '/lendingRates/7' }, { rateIndex: 8, pointer: '/lendingRates/8' }] });
+  const secondProgramme = programme({ productId: second.productId, programmeId: 'other-programme', offerId: 'other-offer', sourceBindings: [{ rateIndex: 9, pointer: '/lendingRates/9' }] });
+  const source = core([{ ...row, rate_index: 7 }, { ...row, rate_index: 8 }, { ...row, product_key: second.productKey, product_name: second.name, rate_index: 9 }]);
+  const view = catalogue([firstProgramme, secondProgramme], [product, second]);
+  const effective = publicComparisonCore(source, view, () => ({}));
+  expect(source.sections.Mortgage.rates).toHaveLength(3); // Raw provenance stays intact.
+  expect(effective.sections.Mortgage.rates).toHaveLength(2);
+  const tokens = [`offer:unit-offer#${product.productKey}`, `offer:other-offer#${second.productKey}`];
+  expect(resolveCompareSelections(effective, tokens)).toHaveLength(2);
+  const { plan, journeys } = buildPerformanceAuditSetupPlans(effective, { seed: 'combined-semantic', includeNonStandard: true });
+  expect(new Set(plan.inputs.compareSelectionTokens)).toEqual(new Set(tokens));
+  expect(plan.inputs.sampledProducts.map(p => p.programmeId).sort()).toEqual(['other-programme', 'unit-programme']);
+  const selections = plan.passes[0].steps.filter(step => /^search.compare.select.[01]$/.test(step.semanticActionId));
+  expect(new Set(selections.map(step => step.parameters.selectionToken))).toEqual(new Set(tokens));
+  const productJourney = journeys.find(journey => journey.id === 'product')!;
+  expect((productJourney.href as any).params.programme).toBe(plan.inputs.primaryProduct!.programmeId);
+  const savedStep = plan.passes[0].steps.find(step => step.semanticActionId === 'saved.product.open')!;
+  expect(savedStep.parameters.savedId).toContain(':offer:');
+  const refs = effective.sections.Mortgage.rates.map(row => makeSavedRateRef(row, 'rate', AS_OF));
+  expect(resolveSavedRates(source, refs, view).map(item => item.row.public_offer_id).sort()).toEqual(['other-offer', 'unit-offer']);
+});
+
+
+it('distinct semantic pairs containing colons remain distinct selectable offers', () => {
+  const products = [{ ...product, productId: 'one', productKey: 'UNIT:ONE', programmeIds: ['one-programme'] },
+    { ...product, productId: 'two', productKey: 'UNIT', programmeIds: ['two-programme'] }];
+  const programmes = [programme({ productId: 'one', programmeId: 'one-programme', offerId: 'two', sourceBindings: [{ rateIndex: 0, pointer: '/rates/0' }] }),
+    programme({ productId: 'two', programmeId: 'two-programme', offerId: 'ONE:two', sourceBindings: [{ rateIndex: 1, pointer: '/rates/1' }] })];
+  const source = core(products.map((item, index) => ({ ...row, product_key: item.productKey, rate_index: index })));
+  const effective = publicComparisonCore(source, catalogue(programmes, products), () => ({}));
+  expect(effective.sections.Mortgage.rates).toHaveLength(2);
+  expect(resolveCompareSelections(effective, ['offer:two#UNIT:ONE', 'offer:ONE:two#UNIT'])).toHaveLength(2);
 });
