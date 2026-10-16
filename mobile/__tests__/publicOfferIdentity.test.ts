@@ -69,3 +69,11 @@ test('ambiguous legacy date IDs cannot copy one private date onto two different 
   const old = { id: legacyPublicOfferRefId('rate', refs[0].productKey, refs[0].offerId!), relevantDate: '2027-01-31', relevantDateKind: 'fixed-rate-end' };
   expect(normalizeTrackedRates([old], refs).map(item => item.relevantDate)).toEqual([null, null]);
 });
+
+test('an old public date cannot be claimed through a colliding legacy rate ID', () => {
+  const legacy = makeSavedRateRef({ ...row('UNIT:offer:A', 'unused'), public_offer_id: undefined });
+  const semantic = makeSavedRateRef(row('UNIT', 'A:0', 1));
+  const old = { id: legacy.id, relevantDate: '2027-01-31', relevantDateKind: 'fixed-rate-end' };
+  expect(old.id).toBe(legacyPublicOfferRefId('rate', semantic.productKey, semantic.offerId!));
+  expect(normalizeTrackedRates([old], [legacy, semantic]).map(item => item.relevantDate)).toEqual([null, null]);
+});

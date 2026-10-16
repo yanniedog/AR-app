@@ -56,6 +56,59 @@ interface SecureRecordManifest {
 export interface TrackedRatesSecureLoadResult {
   status: 'ready' | 'unavailable';
   trackedRates: TrackedRate[];
+  reason?: 'ambiguous-legacy-identity';
+}
+
+class AmbiguousLegacyTrackedRateError extends Error {
+  constructor() { super('Ambiguous legacy tracked-rate date identity; original secure record retained for recovery'); }
+}
+
+function ambiguousLegacyId(id: string): boolean {
+  if (!id.startsWith('rate:')) return false;
+  const first = id.indexOf(':offer:');
+  if (first < 0) return false;
+  // Markers may overlap: ':offer:offer:' contains two possible boundaries.
+  if (id.indexOf(':offer:', first + 1) >= 0) return true;
+  const tail = id.slice(id.lastIndexOf(':') + 1);
+  return Number.isInteger(Number(tail)) && String(Number(tail)) === tail;
+}
+
+function legacyDateId(productKey: string, rateIndex: number): string {
+  return `legacy-rate-date-v2:${JSON.stringify([productKey, rateIndex])}`;
+}
+
+function isStructuredLegacyRate(item: Partial<TrackedRate>, ref: SavedRateRef): boolean {
+  return ref.scope === 'rate' && !ref.offerId && item.productKey === ref.productKey && item.scope === ref.scope
+    && item.rateIndex === ref.rateIndex && item.id === `rate:${ref.productKey}:${ref.rateIndex}`;
+}
+
+function assertUnambiguousPrivateDates(records: unknown): void {
+  if (!Array.isArray(records)) return;
+  for (const value of records) {
+    if (value && typeof value === 'object' && typeof value.id === 'string'
+      && ambiguousLegacyId(value.id) && validCalendarDate(value.relevantDate)) throw new AmbiguousLegacyTrackedRateError();
+  }
+}
+
+function validatePrivateRecords(records: unknown, fullWebRecords = false): asserts records is unknown[] {
+  if (!Array.isArray(records)) throw new Error('Invalid tracked-rate private record');
+  for (const value of records) {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.id !== 'string' || !value.id) {
+      throw new Error('Invalid tracked-rate private record');
+    }
+    const keys = Object.keys(value);
+    const compact = keys.every(key => ['id', 'relevantDate', 'relevantDateKind'].includes(key))
+      && validCalendarDate(value.relevantDate) && dateKind(value.relevantDateKind);
+    const full = fullWebRecords && keys.every(key => ['schemaVersion', 'id', 'scope', 'productKey', 'rateIndex', 'trackedAt', 'observedRate', 'relevantDate', 'relevantDateKind'].includes(key))
+      && value.schemaVersion === TRACKED_RATE_SCHEMA_VERSION && ['rate', 'product'].includes(value.scope)
+      && typeof value.productKey === 'string' && value.productKey.length > 0
+      && (value.rateIndex === null || Number.isInteger(value.rateIndex))
+      && typeof value.trackedAt === 'string' && value.trackedAt.length > 0
+      && (value.observedRate === null || typeof value.observedRate === 'number' && Number.isFinite(value.observedRate))
+      && (value.relevantDate === null && value.relevantDateKind === null
+        || validCalendarDate(value.relevantDate) && dateKind(value.relevantDateKind));
+    if (!compact && !full) throw new Error('Invalid tracked-rate private record');
+  }
 }
 
 function validCalendarDate(value: unknown): string | null {
@@ -129,10 +182,15 @@ export function normalizeTrackedRates(
       ? legacyPublicOfferRefId('rate', ref.productKey, ref.offerId) : ref.id;
     // Private companions retained only the old ID. An ambiguous old ID cannot
     // authorize copying one product's date onto another semantic offer.
-    const legacy = legacyCounts.get(legacyId) === 1 ? previous.get(legacyId) : undefined;
+    const legacy = !ambiguousLegacyId(legacyId) && legacyCounts.get(legacyId) === 1 ? previous.get(legacyId) : undefined;
     const safeLegacy = legacy && (legacy.productKey === undefined || legacy.productKey === ref.productKey)
       && (legacy.scope === undefined || legacy.scope === ref.scope) ? legacy : undefined;
-    const item = previous.get(ref.id) ?? safeLegacy;
+    const direct = previous.get(ref.id);
+    const safeDirect = direct && ((!ambiguousLegacyId(ref.id) && (legacyCounts.get(ref.id) ?? 0) <= 1)
+      || isStructuredLegacyRate(direct, ref)) ? direct : undefined;
+    const encodedLegacy = ref.scope === 'rate' && !ref.offerId && ref.rateIndex != null
+      ? previous.get(legacyDateId(ref.productKey, ref.rateIndex)) : undefined;
+    const item = safeDirect ?? encodedLegacy ?? safeLegacy;
     const identityContradicts = !!item && (
       (item.scope !== undefined && item.scope !== ref.scope) ||
       (item.productKey !== undefined && item.productKey !== ref.productKey) ||
@@ -187,7 +245,18 @@ function privateDates(value: readonly TrackedRate[]): PrivateTrackedRate[] {
       relevantDate: string;
       relevantDateKind: TrackedRateDateKind;
     } => !!item.relevantDate && !!item.relevantDateKind)
-    .map(({ id, relevantDate, relevantDateKind }) => ({ id, relevantDate, relevantDateKind }));
+    .map((item) => {
+      let id = item.id;
+      if (ambiguousLegacyId(id)) {
+        if (item.scope !== 'rate' || item.rateIndex == null || !Number.isInteger(item.rateIndex) || id !== `rate:${item.productKey}:${item.rateIndex}`) {
+          throw new AmbiguousLegacyTrackedRateError();
+        }
+        // A current, structured legacy rate is unambiguous. Give its private
+        // date a tagged key rather than creating a new ambiguous old record.
+        id = legacyDateId(item.productKey, item.rateIndex);
+      }
+      return { id, relevantDate: item.relevantDate, relevantDateKind: item.relevantDateKind };
+    });
 }
 
 function secureChunks(value: readonly PrivateTrackedRate[]): string[] {
@@ -237,53 +306,46 @@ function chunkKey(
   return defineSecureStoreKey(`${storageKey}.chunk.${generation}.${index}`);
 }
 
+async function readPrivateRecords(
+  storageKey: SecureStoreKey,
+  previousRaw?: string | null,
+): Promise<unknown[]> {
+  if (Platform.OS === 'web') {
+    const records = webMemory.get(storageKey) ?? [];
+    validatePrivateRecords(records, true);
+    return records;
+  }
+  const raw = previousRaw === undefined ? await SecureStore.getItemAsync(storageKey) : previousRaw;
+  const manifest = parseManifest(raw);
+  if (!manifest) {
+    // Version 1 stored the compact private-date array directly at the base key.
+    const value: unknown = raw === null ? [] : JSON.parse(raw);
+    validatePrivateRecords(value);
+    return value;
+  }
+  const records: unknown[] = [];
+  for (let index = 0; index < manifest.chunks; index += 1) {
+    const chunk = await SecureStore.getItemAsync(chunkKey(storageKey, manifest.generation, index));
+    if (!chunk) throw new Error('Missing tracked-rate private chunk');
+    const parsed: unknown = JSON.parse(chunk);
+    validatePrivateRecords(parsed);
+    records.push(...parsed);
+  }
+  return records;
+}
+
 async function loadTrackedRatesFromStorage(
   savedRates: readonly SavedRateRef[],
   storageKey: SecureStoreKey,
 ): Promise<TrackedRatesSecureLoadResult> {
-  const empty = () => normalizeTrackedRates(undefined, savedRates);
-  if (Platform.OS === 'web') {
-    return {
-      status: 'ready',
-      trackedRates: normalizeTrackedRates(webMemory.get(storageKey), savedRates),
-    };
-  }
-  let raw: string | null;
   try {
-    raw = await SecureStore.getItemAsync(storageKey);
-  } catch {
-    return { status: 'unavailable', trackedRates: empty() };
+    const records = await readPrivateRecords(storageKey);
+    assertUnambiguousPrivateDates(records);
+    return { status: 'ready', trackedRates: normalizeTrackedRates(records, savedRates) };
+  } catch (error) {
+    return { status: 'unavailable', trackedRates: normalizeTrackedRates(undefined, savedRates),
+      ...(error instanceof AmbiguousLegacyTrackedRateError ? { reason: 'ambiguous-legacy-identity' as const } : {}) };
   }
-  const manifest = parseManifest(raw);
-  if (!manifest) {
-    try {
-      // Version 1 stored the compact private-date array directly at the base key.
-      return {
-        status: 'ready',
-        trackedRates: normalizeTrackedRates(raw ? JSON.parse(raw) : undefined, savedRates),
-      };
-    } catch {
-      return { status: 'unavailable', trackedRates: empty() };
-    }
-  }
-  const records: unknown[] = [];
-  for (let index = 0; index < manifest.chunks; index += 1) {
-    let chunk: string | null;
-    try {
-      chunk = await SecureStore.getItemAsync(chunkKey(storageKey, manifest.generation, index));
-    } catch {
-      return { status: 'unavailable', trackedRates: empty() };
-    }
-    if (!chunk) return { status: 'unavailable', trackedRates: empty() };
-    try {
-      const parsed = JSON.parse(chunk);
-      if (!Array.isArray(parsed)) return { status: 'unavailable', trackedRates: empty() };
-      records.push(...parsed);
-    } catch {
-      return { status: 'unavailable', trackedRates: empty() };
-    }
-  }
-  return { status: 'ready', trackedRates: normalizeTrackedRates(records, savedRates) };
 }
 
 async function saveTrackedRatesToStorage(
@@ -291,13 +353,17 @@ async function saveTrackedRatesToStorage(
   storageKey: SecureStoreKey,
 ): Promise<void> {
   const copy = value.map((item) => ({ ...item }));
+  const dates = privateDates(copy);
+  validatePrivateRecords(dates);
   if (Platform.OS === 'web') {
-    webMemory.set(storageKey, copy);
+    assertUnambiguousPrivateDates(await readPrivateRecords(storageKey));
+    webMemory.set(storageKey, copy.map(item => ambiguousLegacyId(item.id) && item.relevantDate && item.rateIndex != null
+      ? { ...item, id: legacyDateId(item.productKey, item.rateIndex) } : item));
     return;
   }
-  const previousRaw = await SecureStore.getItemAsync(storageKey).catch(() => null);
+  const previousRaw = await SecureStore.getItemAsync(storageKey);
+  assertUnambiguousPrivateDates(await readPrivateRecords(storageKey, previousRaw));
   const previousManifest = parseManifest(previousRaw);
-  const dates = privateDates(copy);
   if (!dates.length) {
     await SecureStore.setItemAsync(storageKey, '[]', {
       keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -390,7 +456,11 @@ export function loadTrackedRatesAuditRollbackSecure(
   savedRates: readonly SavedRateRef[],
 ): Promise<TrackedRate[]> {
   return loadTrackedRatesFromStorage(savedRates, TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY)
-    .then((result) => result.trackedRates);
+    .then((result) => {
+      if (result.reason === 'ambiguous-legacy-identity') throw new AmbiguousLegacyTrackedRateError();
+      if (result.status === 'unavailable') throw new Error('Performance audit rollback tracked-rate metadata is unavailable; journal retained for recovery');
+      return result.trackedRates;
+    });
 }
 
 export function saveTrackedRatesAuditRollbackSecure(

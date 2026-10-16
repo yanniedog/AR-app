@@ -247,6 +247,37 @@ describe('performance audit rollback journal', () => {
     await expect(loadTrackedRatesSecure([saved])).resolves.toEqual([expect.objectContaining({ id: saved.id, relevantDate: tracked.relevantDate })]);
   });
 
+  it('retains every rollback artifact when an ambiguous old date exists beside a unique date', async () => {
+    const refs = [makeSavedRateRef({ provider: 'Unit', product_name: 'Loan A', product_key: 'UNIT:offer:A', public_offer_id: 'B', rate_index: 0, rate: '0.05' }),
+      makeSavedRateRef({ provider: 'Unit', product_name: 'Loan B', product_key: 'UNIT', public_offer_id: 'A:offer:B', rate_index: 1, rate: '0.05' }),
+      makeSavedRateRef({ provider: 'Unit', product_name: 'Loan C', product_key: 'UNIQUE', public_offer_id: 'UNIQUE', rate_index: 2, rate: '0.05' })];
+    const old = refs.map(ref => ({ ...ref, id: legacyPublicOfferRefId('rate', ref.productKey, ref.offerId!) }));
+    const tracked = old.map(ref => ({ ...makeTrackedRate(ref), relevantDate: '2027-01-31', relevantDateKind: 'fixed-rate-end' as const }));
+    // Exact version-1 journal/private shape emitted by the old binary.
+    const snapshot = capturePerformanceAuditUserSnapshot({ ...makeState(), savedRates: old, trackedRates: tracked }, null);
+    const { trackedRates: _private, userRateScenario: _scenario, ...publicSnapshot } = snapshot;
+    await AsyncStorage.setItem(PERFORMANCE_AUDIT_ROLLBACK_KEY, JSON.stringify({ schemaVersion: 1, startedAt: '2026-10-16',
+      snapshot: { ...publicSnapshot, userRateScenario: null, userRateScenarioCaptured: false, trackedRatesCaptured: true } }));
+    secureStore.set(TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY, JSON.stringify(tracked.map(({ id, relevantDate, relevantDateKind }) => ({ id, relevantDate, relevantDateKind }))));
+    const privateBefore = new Map(secureStore), journalBefore = await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY);
+    await expect(recoverInterruptedPerformanceAudit(makeStore())).rejects.toThrow(/Ambiguous legacy/);
+    expect(await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).toBe(journalBefore);
+    expect(secureStore).toEqual(privateBefore);
+  });
+
+  it('retains malformed private rollback evidence even when the old captured flag is false', async () => {
+    const snapshot = capturePerformanceAuditUserSnapshot(makeState(), null);
+    const { trackedRates: _private, userRateScenario: _scenario, ...publicSnapshot } = snapshot;
+    const raw = JSON.stringify({ schemaVersion: 1, startedAt: '2026-10-16', snapshot: { ...publicSnapshot,
+      userRateScenario: null, userRateScenarioCaptured: false, trackedRatesCaptured: false } });
+    await AsyncStorage.setItem(PERFORMANCE_AUDIT_ROLLBACK_KEY, raw);
+    secureStore.set(TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY, '[null]');
+    const before = new Map(secureStore);
+    await expect(recoverInterruptedPerformanceAudit(makeStore())).rejects.toThrow(/unavailable; journal retained/);
+    expect(await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).toBe(raw);
+    expect(secureStore).toEqual(before);
+  });
+
   it('recovers an interrupted audit from its durable journal on the next launch', async () => {
     const store = makeStore();
     await ensureUserRateScenarioLoaded();
