@@ -1,4 +1,5 @@
 import { ratesResultRowKey } from '../../data/ratesResultRowKey';
+import { publicOfferSelectionToken } from '../../data/publicOfferIdentity';
 import { PublicPricingCoverage, PublicProductDiscovery } from '../scenario/PublicPricingCoverage';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
 import { publicComparisonCore, publicRateScenario, publicRecommendationRows } from '../../data/publicRateIntegration';
@@ -84,7 +85,7 @@ function availableSortOptions(
   ];
 }
 
-const rowToken = (r: RateRow) => r.public_offer_id ? `offer:${r.public_offer_id}#${r.product_key}` :
+const rowToken = (r: RateRow) => r.public_offer_id ? publicOfferSelectionToken(r.product_key, r.public_offer_id) :
   r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
 
 const SearchProductRow = React.memo(function SearchProductRow({ row, section, selectMode, selected, onToggleSelect,

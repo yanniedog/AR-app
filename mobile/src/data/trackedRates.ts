@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import type { SavedRateRef } from './savedRates';
+import { legacyPublicOfferRefId } from './publicOfferIdentity';
 import {
   defineSecureStoreKey,
   SECURE_STORE_KEYS,
@@ -109,6 +110,12 @@ export function normalizeTrackedRates(
   savedRates: readonly SavedRateRef[],
 ): TrackedRate[] {
   const previous = new Map<string, Partial<TrackedRate>>();
+  const legacyCounts = new Map<string, number>();
+  for (const ref of savedRates) {
+    const alias = ref.scope === 'rate' && ref.offerId
+      ? legacyPublicOfferRefId('rate', ref.productKey, ref.offerId) : ref.id;
+    legacyCounts.set(alias, (legacyCounts.get(alias) ?? 0) + 1);
+  }
   if (Array.isArray(raw)) {
     for (const value of raw) {
       if (!value || typeof value !== 'object') continue;
@@ -118,7 +125,14 @@ export function normalizeTrackedRates(
     }
   }
   return savedRates.map((ref) => {
-    const item = previous.get(ref.id);
+    const legacyId = ref.scope === 'rate' && ref.offerId
+      ? legacyPublicOfferRefId('rate', ref.productKey, ref.offerId) : ref.id;
+    // Private companions retained only the old ID. An ambiguous old ID cannot
+    // authorize copying one product's date onto another semantic offer.
+    const legacy = legacyCounts.get(legacyId) === 1 ? previous.get(legacyId) : undefined;
+    const safeLegacy = legacy && (legacy.productKey === undefined || legacy.productKey === ref.productKey)
+      && (legacy.scope === undefined || legacy.scope === ref.scope) ? legacy : undefined;
+    const item = previous.get(ref.id) ?? safeLegacy;
     const identityContradicts = !!item && (
       (item.scope !== undefined && item.scope !== ref.scope) ||
       (item.productKey !== undefined && item.productKey !== ref.productKey) ||

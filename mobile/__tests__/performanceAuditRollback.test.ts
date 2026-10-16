@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 
 import { DEFAULT_PREFS, type AppState } from '../src/data/storeTypes';
 import { makeSavedRateRef } from '../src/data/savedRates';
+import { legacyPublicOfferRefId } from '../src/data/publicOfferIdentity';
 import {
   loadTrackedRatesSecure,
   makeTrackedRate,
@@ -226,6 +227,24 @@ describe('performance audit rollback journal', () => {
       expect.objectContaining({ relevantDate: '2027-08-13' }),
     ]);
     expect(secureStore.has(TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY)).toBe(false);
+  });
+
+  it('recovers old semantic IDs with their encrypted date and alert after restart', async () => {
+    const saved = makeSavedRateRef({ provider: 'Unit Bank', product_key: 'UNIT', product_name: 'Unit Loan', rate_index: 4,
+      rate: '0.05', public_offer_id: 'A#B' }, 'rate', '2026-10-16');
+    const old = { ...saved, id: legacyPublicOfferRefId('rate', saved.productKey, saved.offerId!) };
+    const tracked = { ...makeTrackedRate(old), relevantDate: '2027-01-31', relevantDateKind: 'fixed-rate-end' as const };
+    const subscription = { id: legacyPublicOfferRefId('product', saved.productKey, saved.offerId!), kind: 'product' as const,
+      productKey: saved.productKey, rateIndex: saved.rateIndex, offerId: saved.offerId, label: 'Unit Loan', createdAt: '2026-10-16' };
+    const store = makeStore({ ...makeState(), savedRates: [old], trackedRates: [tracked], subscriptions: [subscription] });
+    await beginPerformanceAuditRollback(store);
+    expect(await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).not.toContain('2027-01-31');
+    const restarted = makeStore();
+    await expect(recoverInterruptedPerformanceAudit(restarted)).resolves.toBe(true);
+    expect(restarted.getState().savedRates).toEqual([saved]);
+    expect(restarted.getState().trackedRates[0]).toMatchObject({ id: saved.id, relevantDate: tracked.relevantDate, relevantDateKind: tracked.relevantDateKind });
+    expect(restarted.getState().subscriptions[0]).toMatchObject({ ...subscription, id: expect.stringMatching(/^product-offer-v2:/) });
+    await expect(loadTrackedRatesSecure([saved])).resolves.toEqual([expect.objectContaining({ id: saved.id, relevantDate: tracked.relevantDate })]);
   });
 
   it('recovers an interrupted audit from its durable journal on the next launch', async () => {

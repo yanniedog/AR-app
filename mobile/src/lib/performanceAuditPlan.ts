@@ -2,6 +2,7 @@ import { ROOT } from '../data/taxonomy';
 import { EMPTY_FILTERS, filterRows } from '../data/selectors';
 import { isSuitabilityFilterReady } from '../data/suitabilityGate';
 import { savedRateId } from '../data/savedRates';
+import { publicOfferSelectionToken } from '../data/publicOfferIdentity';
 import { SECTION_KEYS, type CorePayload, type ProductDetail, type RateRow, type SectionKey } from '../types';
 import { MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID } from './performanceAuditProfile';
 
@@ -291,7 +292,7 @@ function exactProduct(row: RateRow, section: SectionKey): DeepAuditExactProduct 
     productKey: row.product_key,
     productName: row.product_name,
     rateIndex,
-    selectionToken: row.public_offer_id ? `offer:${row.public_offer_id}#${row.product_key}` : selectionToken(row.product_key, rateIndex),
+    selectionToken: row.public_offer_id ? publicOfferSelectionToken(row.product_key, row.public_offer_id) : selectionToken(row.product_key, rateIndex),
     ...(row.public_offer_id ? { offerId: row.public_offer_id } : {}),
     ...(row.public_programme_id ? { programmeId: row.public_programme_id } : {}),
     taxonomyPath: taxonomyPath(row, section),

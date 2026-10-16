@@ -3,6 +3,7 @@ import type { CorePayload, RateRow, SectionKey } from '../types';
 import { toFraction } from './format';
 import { bindCurrentPublicRow, publicRecommendationRows, type PublicCatalogueView } from './publicRateIntegration';
 import type { RateScenario } from './publicRateModel';
+import { publicOfferRefId } from './publicOfferIdentity';
 
 export interface SavedRateRef {
   schemaVersion: 1 | 2;
@@ -31,7 +32,7 @@ export function unresolvedSavedRateRefs(
 }
 
 export function savedRateId(productKey: string, rateIndex: number | null, scope: SavedRateRef['scope'], offerId?: string): string {
-  if (scope === 'rate' && offerId) return `rate:${productKey}:offer:${offerId}`;
+  if (scope === 'rate' && offerId) return publicOfferRefId('rate', productKey, offerId);
   return scope === 'rate' && rateIndex != null
     ? `rate:${productKey}:${rateIndex}`
     : `product:${productKey}`;
