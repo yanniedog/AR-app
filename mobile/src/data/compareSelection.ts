@@ -1,5 +1,6 @@
 import type { CorePayload, RateRow, SectionKey } from '../types';
 import { findEligibleByKey } from './selectors';
+import { parsePublicOfferSelectionToken } from './publicOfferIdentity';
 
 export interface CompareSelection {
   row: RateRow;
@@ -26,14 +27,23 @@ export interface CompareSelectionUpdate {
 
 export function resolveCompareSelections(core: CorePayload, tokens: readonly string[]): CompareSelection[] {
   return [...new Set(tokens)].flatMap((token) => {
-    const semantic = /^offer:([^#]+)#([\s\S]+)$/.exec(token);
+    let semantic = parsePublicOfferSelectionToken(token);
+    if (token.startsWith('offer-v2:') && !semantic) return [];
+    if (token.startsWith('offer:')) {
+      // Old tokens were unescaped. Accept only one exact tuple; never split an
+      // opaque offer ID at '#' and silently select another legal product.
+      const matches = Object.values(core.sections).flatMap(section => section.rates)
+        .filter(row => row.public_offer_id && `offer:${row.public_offer_id}#${row.product_key}` === token);
+      if (matches.length !== 1) return [];
+      semantic = { offerId: matches[0].public_offer_id!, productKey: matches[0].product_key };
+    }
     const match = /^(\d+)#([\s\S]+)$/.exec(token);
     const rateIndex = match ? Number(match[1]) : null;
-    const productKey = semantic ? semantic[2] : match ? match[2] : token;
+    const productKey = semantic ? semantic.productKey : match ? match[2] : token;
     const found = findEligibleByKey(core.sections, productKey);
     if (!found) return [];
     if (semantic) {
-      const matches = found.siblings.filter(row => row.public_offer_id === semantic[1]);
+      const matches = found.siblings.filter(row => row.public_offer_id === semantic.offerId);
       return matches.length === 1 ? [{ row: matches[0], section: found.section }] : [];
     }
     if (rateIndex == null) return [{ row: found.row, section: found.section }];

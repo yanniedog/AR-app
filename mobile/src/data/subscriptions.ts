@@ -10,6 +10,7 @@ import { activeFilterCount, filterRows, rankFraction, type Filters, type Mortgag
 import { breadcrumb, rowsForSearchScope } from './taxonomy';
 import { factCriterionId, normalizeFactCriterion } from './productFactsCore';
 import { lvrTierDisplay, refreshLvrLabelText } from './lvrTier';
+import { publicOfferRefId } from './publicOfferIdentity';
 
 /** factCriteria is optional only for persisted snapshots created before this field existed. */
 export type FilterSnapshot = Omit<Filters, 'query' | 'factCriteria'> & {
@@ -47,7 +48,7 @@ export function rowIdentity(row: RateRow): string {
 }
 
 export function productSubscriptionId(productKey: string, rateIndex: number | null, offerId?: string): string {
-  if (offerId) return `product:${productKey}:offer:${offerId}`;
+  if (offerId) return publicOfferRefId('product', productKey, offerId);
   return `product:${productKey}:${rateIndex ?? 'all'}`;
 }
 
@@ -171,6 +172,20 @@ export function makeSearchSubscription(input: {
 export function addSubscription(list: Subscription[], next: Subscription): Subscription[] {
   if (list.some((s) => s.id === next.id)) return list;
   return [...list, next];
+}
+
+/** Re-key persisted semantic refs from their retained fields before deduping. */
+export function normalizeProductSubscriptionIds(list: Subscription[]): Subscription[] {
+  const out = new Map<string, Subscription>();
+  let changed = false;
+  for (const sub of list) {
+    const id = sub.kind === 'product' && sub.offerId
+      ? productSubscriptionId(sub.productKey, sub.rateIndex, sub.offerId) : sub.id;
+    const next = id === sub.id ? sub : { ...sub, id };
+    if (next !== sub || out.has(id)) changed = true;
+    if (!out.has(id)) out.set(id, next);
+  }
+  return changed ? [...out.values()] : list;
 }
 
 export function removeSubscription(list: Subscription[], id: string): Subscription[] {

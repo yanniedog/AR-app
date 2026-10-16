@@ -1,4 +1,5 @@
 import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
+import { publicOfferSelectionToken } from '../../src/data/publicOfferIdentity';
 import { publicComparisonCore, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolvedPublicRankingRows } from '../../src/data/publicRateIntegration';
 import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiSectionName, type UiCopy } from "../../src/lib/uiCopy";
 import { mandatoryEligibleRows } from '../../src/data/eligibilityGate';
@@ -50,7 +51,7 @@ import type { RateRow, SectionKey } from '../../src/types';
 import { savedEmptyState } from '../../src/lib/savedEmptyState';
 
 function compareToken(productKey: string, rateIndex: number | null, offerId?: string): string {
-  return offerId ? `offer:${offerId}#${productKey}` : rateIndex == null ? productKey : `${rateIndex}#${productKey}`;
+  return offerId ? publicOfferSelectionToken(productKey, offerId) : rateIndex == null ? productKey : `${rateIndex}#${productKey}`;
 }
 
 interface RatePosition {

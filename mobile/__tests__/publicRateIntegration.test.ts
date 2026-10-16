@@ -1,4 +1,5 @@
 import { buildPerformanceAuditSetupPlans } from '../src/lib/performanceAuditSetup';
+import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
 import { matchesLvrTier, parseLvrRange, lvrRangeContains } from '../src/data/lvrRange';
 import { publicComparisonCore, bindCurrentPublicRow, payableRateForRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate,
   resolveProductPublicRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
@@ -181,7 +182,7 @@ it('combined audit plans and saved/compare selection use one semantic offer for 
   const effective = publicComparisonCore(source, view, () => ({}));
   expect(source.sections.Mortgage.rates).toHaveLength(3); // Raw provenance stays intact.
   expect(effective.sections.Mortgage.rates).toHaveLength(2);
-  const tokens = [`offer:unit-offer#${product.productKey}`, `offer:other-offer#${second.productKey}`];
+  const tokens = [publicOfferSelectionToken(product.productKey, 'unit-offer'), publicOfferSelectionToken(second.productKey, 'other-offer')];
   expect(resolveCompareSelections(effective, tokens)).toHaveLength(2);
   const { plan, journeys } = buildPerformanceAuditSetupPlans(effective, { seed: 'combined-semantic', includeNonStandard: true });
   expect(new Set(plan.inputs.compareSelectionTokens)).toEqual(new Set(tokens));
@@ -193,7 +194,7 @@ it('combined audit plans and saved/compare selection use one semantic offer for 
   const productJourney = journeys.find(journey => journey.id === 'product')!;
   expect((productJourney.href as any).params.programme).toBe(plan.inputs.primaryProduct!.programmeId);
   const savedStep = plan.passes[0].steps.find(step => step.semanticActionId === 'saved.product.open')!;
-  expect(savedStep.parameters.savedId).toContain(':offer:');
+  expect(savedStep.parameters.savedId).toMatch(/^rate-offer-v2:/);
   const refs = effective.sections.Mortgage.rates.map(row => makeSavedRateRef(row, 'rate', AS_OF));
   expect(resolveSavedRates(source, refs, view).map(item => item.row.public_offer_id).sort()).toEqual(['other-offer', 'unit-offer']);
 });

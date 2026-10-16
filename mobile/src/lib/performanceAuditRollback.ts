@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 import type { AppState } from '../data/storeTypes';
+import { normalizeSavedRates } from '../data/savedRates';
+import { normalizeProductSubscriptionIds } from '../data/subscriptions';
 import {
   clearTrackedRatesAuditRollbackSecure,
   loadTrackedRatesAuditRollbackSecure,
@@ -177,17 +179,18 @@ function parseJournal(raw: string | null): {
       return null;
     }
     const legacyScenario = snapshot.userRateScenario ?? null;
+    const savedRates = normalizeSavedRates(snapshot.savedRates);
     return {
       journal: {
         schemaVersion: ROLLBACK_SCHEMA_VERSION,
         startedAt: journal.startedAt,
         snapshot: {
           prefs: snapshot.prefs,
-          savedRates: snapshot.savedRates,
+          savedRates,
           // Loaded from the private companion after this public journal parses.
-          trackedRates: normalizeTrackedRates(undefined, snapshot.savedRates),
+          trackedRates: normalizeTrackedRates(undefined, savedRates),
           favorites: snapshot.favorites,
-          subscriptions: snapshot.subscriptions,
+          subscriptions: normalizeProductSubscriptionIds(snapshot.subscriptions),
           activeSection: snapshot.activeSection,
           userRateScenario: null,
         },
@@ -309,6 +312,9 @@ async function restoreSnapshot(
   snapshot: PerformanceAuditUserSnapshot,
 ): Promise<void> {
   const restored = clone(snapshot);
+  restored.savedRates = normalizeSavedRates(restored.savedRates);
+  restored.subscriptions = normalizeProductSubscriptionIds(restored.subscriptions);
+  restored.trackedRates = normalizeTrackedRates(restored.trackedRates, restored.savedRates);
   // Complete the private write before changing the public saved references so
   // process death cannot strand an exact tier without its date metadata.
   await queueTrackedRatesSecureSave(restored.trackedRates);
