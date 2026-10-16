@@ -31,7 +31,7 @@ export function DebugLogUploadStatus({ sessionId }: { sessionId?: string | null 
     <Card style={{ gap: 8 }}>
       <AuditDeliverySymbol outcome={uploadOutcome(state)} />
       <AppText variant="small" weight="700" accessibilityLiveRegion="polite">
-        {state.phase === 'failed' ? uiLabel(state.verified ? 'Copy failed' : state.url || state.mayHaveUploaded ? 'Upload uncertain' : 'Upload failed') : LABELS[state.phase]}
+        {state.phase === 'failed' ? uiLabel(state.verified ? state.error ? 'Copy failed' : 'Uploaded' : state.url || state.mayHaveUploaded ? 'Upload uncertain' : 'Upload failed') : LABELS[state.phase]}
       </AppText>
       {state.url ? <AppText variant="small" selectable>{uiIdentifier(state.url)}</AppText> : null}
       {state.error ? <AppText variant="small" color="danger">{uiLabel(state.verified ? 'Copy failed' : state.mayHaveUploaded || state.url ? 'Upload uncertain' : 'Upload failed')}</AppText> : null}
