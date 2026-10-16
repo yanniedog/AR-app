@@ -2,12 +2,17 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { EMPTY_FILTERS } from '../src/data/selectors';
-import { captureRatesSession, restoreRatesSession, initializeRatesSession, updateRatesSection, useRatesSession } from '../src/data/ratesSession';
+import { captureRatesSession, restoreRatesSession, initializeRatesSession, updateRatesSection, recordRatesScroll, useRatesSession } from '../src/data/ratesSession';
 import { clearMortgageComparison, useMortgageComparison } from '../src/data/mortgageComparison';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
+import { buildDeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { openCompare } from '../src/lib/nav';
+import { isVerifiedRatesPagePreparation } from '../src/lib/ratesAuditPage';
 
 jest.mock('../src/data/store', () => ({ useStore: jest.requireActual('zustand').create(() => ({})) }));
+jest.mock('../src/lib/nav', () => ({ ...jest.requireActual('../src/lib/nav'), openCompare: jest.fn(), openProduct: jest.fn() }));
 jest.mock('expo-router', () => ({ Stack: { Screen: 'StackScreen' }, router: { push: jest.fn() }, useLocalSearchParams: () => ({}) }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true, useNavigation: () => ({}) }));
 jest.mock('../src/hooks/useReadyNavigationEffect', () => ({ useReadyNavigationEffect: () => {} }));
@@ -50,13 +55,14 @@ const rows = Array.from({ length: 45 }, (_, i) => ({ product_key: `p-${i}`, prod
   rate: String((500 + i) / 10000), comparison_rate: String((510 + i) / 10000), rate_index: i, rate_type: i % 2 ? 'FIXED' : 'VARIABLE', account_class: 'standard' })).reverse();
 function install(profile = DEFAULT_PREFS.profileFilters) { installMandatoryEligibility(selectMandatoryEligibility(mockStore.getState().core, profile, null)); }
 beforeEach(() => {
+  jest.clearAllMocks();
   restoreRatesSession(original); clearMortgageComparison();
   mockStore.setState({ hydrated: true, activeSection: 'Mortgage', source: 'sample',
     prefs: { ...DEFAULT_PREFS, includeNonStandard: true, enableDeepSearch: false },
     core: { run_date: '2026-10-16', sections: { Mortgage: { rates: rows }, Savings: { rates: [] }, TD: { rates: [] } } },
     details: null, manifest: null, coreIntegrity: null, subscriptions: [], searchIndexStatus: 'idle',
     ensureDetails: jest.fn(), ensureSearchIndex: jest.fn(), subscribeSearch: jest.fn(), unsubscribeSearch: jest.fn(),
-    setPref: (key: string, value: unknown) => { mockStore.setState((state: any) => ({ prefs: { ...state.prefs, [key]: value } })); install(mockStore.getState().prefs.profileFilters); },
+    setPref: jest.fn((key: string, value: unknown) => { mockStore.setState((state: any) => ({ prefs: { ...state.prefs, [key]: value } })); install(mockStore.getState().prefs.profileFilters); }),
   }, true);
   initializeRatesSession(mockStore.getState().prefs, 'Mortgage'); install();
 });
@@ -102,5 +108,95 @@ test('comparison uncertainty counts the complete filtered result set, not the pr
     act(() => updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS, includeNonStandard: true, providers: ['B'] } }));
     expect(tree.root.findByType('FlashList').props.data).toHaveLength(20);
     expect(tree.root.findAllByType('AppText').some((node: any) => node.props.children === 'Eligibility unverified · 22')).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each([10, 20] as const)('the seeded audit reaches exact later-page targets and restores the mounted %s-row session', pageSize => {
+  const catalogue = Array.from({ length: 45 }, (_, i) => ({ product_key: `p-${String(i).padStart(2, '0')}`,
+    product_name: `Loan ${String(i).padStart(2, '0')}`, provider: 'Bank', rate_index: i,
+    rate: String((500 + i) / 10000), comparison_rate: String((510 + i) / 10000), account_class: 'standard' }));
+  mockStore.setState((state: any) => ({ prefs: { ...state.prefs, ratesPageSize: pageSize },
+    core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: catalogue } } } }));
+  install();
+  updateRatesSection('Mortgage', { query: 'Loan', selected: ['1#p-01'], selectMode: true });
+  updateRatesSection('Mortgage', { page: 2 }); recordRatesScroll('Mortgage', 137);
+  useMortgageComparison.setState({ loanAmount: '123456', lvr: '78' });
+  const before = captureRatesSession(), preferences = JSON.parse(JSON.stringify(mockStore.getState().prefs));
+  const comparison = { ...useMortgageComparison.getState() };
+  const plan = buildDeepPerformanceAuditPlan(mockStore.getState().core, { seed: 'review-412', includeNonStandard: true });
+  const targets = [plan.inputs.primaryProduct!, plan.inputs.secondaryProduct!];
+  expect(targets.map(target => target.productKey)).toEqual(['p-20', 'p-35']);
+  const steps = plan.passes[0].steps.filter(step => step.scenarioId === 'route.rates');
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  try {
+    for (const step of steps) {
+      const action = surface().actions![step.semanticActionId];
+      expect(action).toEqual(expect.any(Function));
+      let result: unknown;
+      act(() => { result = action(step.parameters); });
+      expect(result ?? {}).not.toHaveProperty('unavailableReason');
+      if (step.semanticActionId === 'search.filters.clear') {
+        expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
+        expect(surface().actions!['search.compare.select.0']({ selectionToken: targets[0].selectionToken }))
+          .toHaveProperty('unavailableReason');
+      }
+      if (step.semanticActionId.startsWith('search.compare.page.')) {
+        const target = targets[Number(step.semanticActionId.at(-1))];
+        expect(isVerifiedRatesPagePreparation(step.semanticActionId, target.selectionToken, result))
+          .toBe(pageSize === 20 && step.semanticActionId.endsWith('.1'));
+        expect(list().data.some((row: any) => row.product_key === target.productKey && row.rate_index === target.rateIndex)).toBe(true);
+        const evidence = surface().probes!.find(probe => probe.id === 'search.list')!;
+        expect(evidence.expectedCount).toBe(list().data.length);
+        expect(evidence.expectedCount).toBeLessThanOrEqual(pageSize);
+        expect(evidence.visibleCount).toBe(list().data.length);
+      }
+    }
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(targets.map(target => target.selectionToken));
+    expect(openCompare).toHaveBeenCalledWith(targets.map(target => target.selectionToken));
+    expect(mockStore.getState().prefs).toEqual(preferences);
+    expect(mockStore.getState().setPref).not.toHaveBeenCalled();
+    act(() => { surface().actions!['search.compare.page.0']({ selectionToken: '44#p-44' }); });
+    expect(list().data).toHaveLength(5);
+    expect(list().data.at(-1).rate_index).toBe(44);
+    expect(surface().probes!.find(probe => probe.id === 'search.list')!.expectedCount).toBe(5);
+  } finally {
+    // The runner restores the same production snapshots after success/cancellation.
+    act(() => { useMortgageComparison.setState(comparison); restoreRatesSession(before); });
+    expect(captureRatesSession()).toEqual(before);
+    expect(useMortgageComparison.getState()).toEqual(comparison);
+    expect(mockStore.getState().prefs).toEqual(preferences);
+    expect(list().data[0].rate_index).toBe(pageSize);
+    act(() => tree.unmount());
+  }
+});
+
+test('cancelled page preparation restores page, selection and scroll; absent or filtered targets never mutate state', () => {
+  updateRatesSection('Mortgage', { selected: ['0#p-0'], selectMode: true, page: 3 });
+  recordRatesScroll('Mortgage', 219);
+  updateRatesSection('Savings', { query: 'retained', page: 2 });
+  updateRatesSection('Savings', { page: 2 });
+  const before = captureRatesSession(), preferences = JSON.parse(JSON.stringify(mockStore.getState().prefs));
+  let tree = mount();
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  try {
+    act(() => { surface().actions!['search.compare.page.0']({ selectionToken: '35#p-35' }); });
+    expect(useRatesSession.getState().sections.Mortgage.page).toBe(2);
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(before.sections.Mortgage.selected);
+    const prepared = captureRatesSession();
+    expect(surface().actions!['search.compare.page.1']({ selectionToken: '35#missing' })).toHaveProperty('unavailableReason');
+    expect(captureRatesSession()).toEqual(prepared);
+    act(() => updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS, includeNonStandard: true, providers: ['A'] } }));
+    const filtered = captureRatesSession();
+    // p-35 exists in core but is outside these actual results.
+    expect(surface().actions!['search.compare.page.0']({ selectionToken: '35#p-35' })).toHaveProperty('unavailableReason');
+    expect(captureRatesSession()).toEqual(filtered);
+    act(() => tree.unmount());
+    restoreRatesSession(before);
+    tree = mount();
+    expect(captureRatesSession()).toEqual(before);
+    expect(tree.root.findByType('FlashList').props.data[0].rate_index).toBe(40);
+    expect(mockStore.getState().prefs).toEqual(preferences);
+    expect(mockStore.getState().setPref).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });
