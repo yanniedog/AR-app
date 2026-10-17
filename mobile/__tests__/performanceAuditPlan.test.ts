@@ -16,6 +16,10 @@ import { ANDROID_UPDATE_READINESS_AUDIT, PERFORMANCE_AUDIT_DEDICATED_CHECKS,
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
+import { DEFAULT_PREFS } from '../src/data/storeTypes';
+import { maximumPerformanceAuditPrefs } from '../src/lib/performanceAuditProfile';
+import { buildPerformanceAuditSetupPlans } from '../src/lib/performanceAuditSetup';
+import { lenderProductRows } from '../src/data/selectors';
 
 
 const EMPTY_RIBBON: Ribbon = {
@@ -369,6 +373,80 @@ describe('deep performance audit plan', () => {
     expect(reached).toEqual(new Set(Object.values(core.sections).flatMap(section => section.rates)
       .map(row => `${row.rate_index}#${row.product_key}`)));
     expect(primaries.size).toBe(8);
+  });
+
+  test('records a separately ranked lender-return tier without replacing any random exact sample', () => {
+    const core = corePayload();
+    const headline = rate({ provider: 'Zed Bank', product_key: 'mortgage-zed', rate_index: 19,
+      rate: '0.04', comparison_rate: '0.08' });
+    const comparison = rate({ provider: 'Zed Bank', product_key: 'mortgage-zed', rate_index: 20,
+      rate: '0.06', comparison_rate: '0.07' });
+    core.sections.Mortgage.rates = [headline, comparison];
+    core.sections.Savings.rates = [];
+    const options = { seed: 'ranked-lender-return', includeNonStandard: true };
+    const comparisonPlan = buildDeepPerformanceAuditPlan(core, { ...options, mortgageRateMetric: 'comparison' });
+    const headlinePlan = buildDeepPerformanceAuditPlan(core, { ...options, mortgageRateMetric: 'headline' });
+    expect(comparisonPlan.inputs.primaryProduct).toEqual(headlinePlan.inputs.primaryProduct);
+    expect(comparisonPlan.inputs.sampledProducts).toEqual(headlinePlan.inputs.sampledProducts);
+    expect(comparisonPlan.inputs.lenderReturnProduct).toMatchObject({ productKey: 'mortgage-zed', rateIndex: 20 });
+    expect(headlinePlan.inputs.lenderReturnProduct).toMatchObject({ productKey: 'mortgage-zed', rateIndex: 19 });
+    expect([comparisonPlan, headlinePlan].some(plan =>
+      plan.inputs.primaryProduct?.rateIndex !== plan.inputs.lenderReturnProduct?.rateIndex)).toBe(true);
+    for (const plan of [comparisonPlan, headlinePlan]) {
+      for (const pass of plan.passes) {
+        expect(pass.steps.find(step => step.semanticActionId === 'lender.product.first')).toMatchObject({
+          expectedPath: '/product/mortgage-zed', skipReason: null,
+          parameters: { section: 'Mortgage', provider: 'Zed Bank', productKey: 'mortgage-zed',
+            rateIndex: plan.inputs.lenderReturnProduct?.rateIndex },
+        });
+        expect(pass.steps.find(step => step.scenarioId === 'route.product' && step.semanticActionId === 'product.open'))
+          .toMatchObject({ parameters: { rateIndex: plan.inputs.primaryProduct?.rateIndex } });
+      }
+    }
+  });
+
+  test('keeps the lender-return target inside the current eligibility gate and unavailable when blocked', () => {
+    const core = corePayload();
+    const permitted = core.sections.Mortgage.rates.filter(row => row.rate_index === 19);
+    installMandatoryEligibility({ active: true, loading: false,
+      rows: new WeakSet(permitted), productKeys: new Set(permitted.map(row => row.product_key)) });
+    const inputs = deriveDeepAuditInputs(core, { includeNonStandard: true });
+    expect(inputs.lenderReturnProduct).toMatchObject({ productKey: 'mortgage-zed', rateIndex: 19 });
+    installMandatoryEligibility({ active: true, loading: true, rows: new WeakSet(), productKeys: new Set() });
+    const blocked = buildDeepPerformanceAuditPlan(core, { includeNonStandard: true });
+    expect(blocked.inputs.lenderReturnProduct).toBeNull();
+    expect(blocked.passes[0].steps.find(step => step.semanticActionId === 'lender.product.first'))
+      .toMatchObject({ parameters: {}, skipReason: 'No rendered lender product is available' });
+  });
+
+  test('pins lender-return tiers to the mounted maximum profile rather than the user’s earlier base/headline preferences', () => {
+    const original = { ...DEFAULT_PREFS, depositRankMetric: 'base' as const, mortgageRateMetric: 'headline' as const };
+    const auditPrefs = maximumPerformanceAuditPrefs(original);
+    for (const section of ['Mortgage', 'Savings'] as const) {
+      const core = corePayload();
+      for (const data of Object.values(core.sections)) data.rates = [];
+      const rows = section === 'Mortgage' ? [
+        rate({ provider: 'Bank', product_key: 'same-product', rate_index: 0, rate: '0.04', comparison_rate: '0.08' }),
+        rate({ provider: 'Bank', product_key: 'same-product', rate_index: 2, rate: '0.06', comparison_rate: '0.07' }),
+      ] : [
+        rate({ provider: 'Bank', product_key: 'same-product', rate_index: 0, rate: '0.045', ribbon_deposit_kind: 'base' }),
+        rate({ provider: 'Bank', product_key: 'same-product', rate_index: 2, rate: '0.06', ongoing_rate: '0.01', ribbon_deposit_kind: 'bonus' }),
+      ];
+      core.sections[section].rates = rows;
+      const options = { seed: 'pre-profile', includeNonStandard: true };
+      const before = buildPerformanceAuditSetupPlans(core, { ...options,
+        depositRankMetric: original.depositRankMetric, mortgageRateMetric: original.mortgageRateMetric }).plan;
+      const actual = buildPerformanceAuditSetupPlans(core, { ...options,
+        depositRankMetric: auditPrefs.depositRankMetric, mortgageRateMetric: auditPrefs.mortgageRateMetric }).plan;
+      const rendered = lenderProductRows(rows, section, auditPrefs.depositRankMetric, auditPrefs.mortgageRateMetric, true);
+      expect(before.inputs.lenderReturnProduct?.rateIndex).toBe(0);
+      expect(actual.inputs.lenderReturnProduct?.rateIndex).toBe(2);
+      expect(actual.inputs.primaryProduct).toEqual(before.inputs.primaryProduct);
+      expect(actual.inputs.sampledProducts).toEqual(before.inputs.sampledProducts);
+      expect(actual.passes[0].steps.find(step => step.semanticActionId === 'lender.product.first'))
+        .toMatchObject({ parameters: { section, productKey: rendered[0].product_key, rateIndex: rendered[0].rate_index } });
+    }
+    expect(original).toMatchObject({ depositRankMetric: 'base', mortgageRateMetric: 'headline' });
   });
 
   test('never samples profile-excluded products even with full-catalogue opt-in', () => {

@@ -67,6 +67,33 @@ describe('automatic audit log sharing', () => {
     expect(log.deleteDebugLogUpload).not.toHaveBeenCalled();
   });
 
+  it('keeps new network diagnostics local in both the current report and serialized audit journal', async () => {
+    const check = { code: 'network-policy', status: 'fail', metrics: { policyViolations: 1 },
+      localEvidence: { networkViolations: [{ finalHost: 'private.example', responseStatus: 302 }], retained: 'actual evidence' } };
+    const localReport = { sessionId: 'audit-private', coverage: { complete: false }, appHealth: { checks: [check] } };
+    const current = { ...request, sessionId: localReport.sessionId,
+      audit: { summaryMarker: 'SUMMARY audit-private', report: localReport } };
+    const local = `${JSON.stringify(localReport)}\n2026-10-17T00:00:00Z [WARN ] perf-audit: ${JSON.stringify({ kind: 'report-fallback', sessionId: 'older', report: localReport })}`;
+    (log.debugLog.readCompleteText as jest.Mock).mockResolvedValueOnce(local);
+    expect(await sharing.startDebugLogUpload(current)).toMatchObject({ phase: 'copied', verified: true });
+    const uploaded = (log.uploadDebugLog as jest.Mock).mock.calls[0][0] as string;
+    expect(uploaded).not.toMatch(/private\.example|networkViolations/);
+    expect(uploaded).toContain('"policyViolations":1');
+    expect(uploaded).toContain('"complete":false');
+    expect(uploaded).toContain('actual evidence');
+    expect(log.verifyDebugLogUpload).toHaveBeenCalledWith(receipt, uploaded);
+    expect(log.debugLog.readCompleteText).toHaveBeenCalledWith(current.audit);
+    expect(localReport.appHealth.checks[0].localEvidence.networkViolations[0].finalHost).toBe('private.example');
+    expect(local).toContain('private.example');
+  });
+
+  it('does not create a public copy when damaged local diagnostics cannot be safely separated', async () => {
+    (log.debugLog.readCompleteText as jest.Mock).mockResolvedValueOnce('{"localEvidence":{"networkViolations":[{"finalHost":"private.example"}');
+    expect(await sharing.startDebugLogUpload(request)).toMatchObject({ phase: 'failed' });
+    expect(log.uploadDebugLog).not.toHaveBeenCalled();
+    expect(clipboard.setStringAsync).not.toHaveBeenCalled();
+  });
+
   it('queues the completed audit behind an in-flight manual upload', async () => {
     let finishManual: ((value: typeof result) => void) | undefined;
     (log.uploadDebugLog as jest.Mock).mockImplementationOnce(() => new Promise((resolve) => { finishManual = resolve; }));

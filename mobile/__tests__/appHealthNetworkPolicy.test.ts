@@ -117,5 +117,35 @@ describe('app-health network policy', () => {
 
     expect(snapshot.policyViolations).toBe(1);
     expect(appHealthNetworkCheck(snapshot).status).toBe('fail');
+    expect(snapshot.violations).toEqual([{ reason: 'unattributed-transport' }]);
+  });
+
+  it('retains bounded detached local diagnostics without credentials, paths or query values', () => {
+    const { contract } = makeHealthyDataFixture();
+    const policy = new AppHealthNetworkPolicy();
+    const handle = policy.begin({ mode: 'live-source', contract });
+    for (let index = 0; index < 12; index += 1) {
+      policy.recordPolicyViolation(handle, {
+        purpose: 'asset', requestedUrl: `${contract.manifestUrl}?token=private-token`,
+        finalUrl: 'https://user:password@blocked.example/account-123?token=secret#private',
+        responseStatus: 302,
+      });
+    }
+    const first = policy.snapshot(handle)!;
+    expect(first.policyViolations).toBe(12);
+    expect(first.violations).toHaveLength(8);
+    expect(first.violations![0]).toMatchObject({
+      reason: 'untrusted-final-url', purpose: 'asset', finalHost: 'blocked.example', responseStatus: 302,
+    });
+    (first.violations![0] as { finalHost: string }).finalHost = 'mutated.example';
+    const actual = policy.end(handle)!;
+    const check = appHealthNetworkCheck(actual);
+    expect(check.status).toBe('fail');
+    expect(actual.violations![0].finalHost).toBe('blocked.example');
+    expect(check.metrics).not.toHaveProperty('networkViolations');
+    const evidence = JSON.stringify(check.localEvidence);
+    for (const value of ['private-token', 'password', 'account-123', 'secret', '#private', 'user:']) {
+      expect(evidence).not.toContain(value);
+    }
   });
 });

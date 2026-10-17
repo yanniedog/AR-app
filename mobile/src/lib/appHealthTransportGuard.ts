@@ -151,11 +151,13 @@ export function installAppHealthTransportGuard(options: {
     const permittedExternal = external && typeof input === 'string' &&
       init?.method === 'HEAD' && init.credentials === 'omit' &&
       init.body == null && init.headers == null;
+    const purpose = permittedUpdateManifest ? 'app-update-manifest'
+      : permittedExternal ? 'external-link' : purposeFor(url, contract);
     const response = await executeAppHealthRequest(
       policy,
       handle,
       url,
-      permittedUpdateManifest ? 'app-update-manifest' : permittedExternal ? 'external-link' : purposeFor(url, contract),
+      purpose,
       () => {
         // React Native implements fetch on top of XMLHttpRequest. Mark only
         // the synchronous XHR created by this already-authorized fetch call;
@@ -180,7 +182,11 @@ export function installAppHealthTransportGuard(options: {
         (finalExternal?.ok === true));
     if (!(permittedUpdateManifest ? acceptedFinalFetchUrl(url, response, contract, true)
       : external ? acceptedExternal : acceptedFinalFetchUrl(url, response, contract))) {
-      policy.recordPolicyViolation(handle);
+      policy.recordPolicyViolation(handle, {
+        purpose, requestedUrl: url,
+        finalUrl: typeof response.url === 'string' ? response.url : undefined,
+        responseStatus: response.status,
+      });
       throw new AppHealthNetworkPolicyError({ allowed: false, reason: 'not-allowlisted' });
     }
     return response;

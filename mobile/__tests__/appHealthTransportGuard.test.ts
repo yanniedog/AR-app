@@ -243,6 +243,10 @@ describe('installAppHealthTransportGuard', () => {
 
     await expect(target.fetch(contract.manifestUrl)).rejects.toThrow('blocked');
     expect(guard.snapshot()).toMatchObject({ transportCalls: 1, policyViolations: 1 });
+    expect(guard.snapshot().violations).toEqual([{
+      reason: 'untrusted-final-url', purpose: 'manifest',
+      requestedHost: new URL(contract.manifestUrl).hostname, finalHost: null,
+    }]);
     guard.restore();
   });
 

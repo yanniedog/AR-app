@@ -111,10 +111,15 @@ describe('live app-health source validation', () => {
         'dates-index:fetched',
         'Core asset:downloaded',
         'Core asset:hash-verified',
+        'Core asset:inflated',
+        'Core asset:text-decoded',
         'Core asset:decoded',
+        'core:history-sealed',
         'core:normalized',
         'Details asset:downloaded',
         'Details asset:hash-verified',
+        'Details asset:inflated',
+        'Details asset:text-decoded',
         'Details asset:decoded',
       ]);
     } finally {

@@ -5,7 +5,12 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
 import type { BankInsightsPayload } from '../src/data/bankInsights';
 import type { BankRateSnapshot } from '../src/data/bankRateOverview';
+import * as productHistory from '../src/data/productHistoryModel';
+import type { ProductHistoryPayload } from '../src/data/productHistory';
 import type { CorePayload, RateRow } from '../src/types';
+import { installMandatoryEligibility } from '../src/data/eligibilityGate';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { openProduct } from '../src/lib/nav';
 
 type TestNode = {
   props: Record<string, any>;
@@ -59,7 +64,7 @@ const mockState = {
   details: { products: { [row.product_key]: fixture.detail } },
   prefs: { includeNonStandard: true, depositRankMetric: 'base', mortgageRateMetric: 'comparison' },
   bankInsights: mockTodayInsights,
-  productHistory: null,
+  productHistory: null as ProductHistoryPayload | null,
   productHistoryError: null,
   ensureBankInsights: jest.fn(async () => undefined),
   ensureProductHistory: jest.fn(async () => undefined),
@@ -115,9 +120,78 @@ function copy(tree: Renderer): string {
 
 describe('bank detail profile-filtered history', () => {
   beforeEach(() => {
+    jest.clearAllMocks();
+    installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() });
+    mockState.core = core;
+    mockState.productHistory = null;
+    mockParams.provider = row.provider;
     Object.assign(mockRateHistory, {
       snapshots, historyAvailable: true, updating: false, failed: false, missingDates: [], revision: 'profile-1',
     });
+  });
+
+  afterEach(() => installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() }));
+
+  it('opens only the exact rendered lender tier and section, with the observed identity retained', () => {
+    const hidden = { ...row, rate_index: 998, rate: '0.01' };
+    const visible = { ...row, rate_index: 999, rate: '0.06' };
+    mockState.core = { ...core, sections: { ...core.sections,
+      Savings: { ...core.sections.Savings, rates: [hidden, visible] } } };
+    const tree = mount();
+    try {
+      expect(tree.root.findAllByType('FlashList')[0].props.data.map((item: { row: RateRow }) => item.row)).toEqual([visible]);
+      const surface = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+      const open = surface.actions!['lender.product.first'];
+      expect(open({ productKey: row.product_key, rateIndex: hidden.rate_index, section: 'Savings' }))
+        .toEqual({ unavailableReason: 'The exact planned lender product is not rendered' });
+      expect(open({ productKey: row.product_key, rateIndex: visible.rate_index, section: 'Mortgage' }))
+        .toEqual({ unavailableReason: 'The exact planned lender product is not rendered' });
+      expect(openProduct).not.toHaveBeenCalled();
+      expect(open({ productKey: row.product_key, rateIndex: visible.rate_index, section: 'Savings' }))
+        .toEqual({ expectedPath: `/product/${encodeURIComponent(row.product_key)}`,
+          productKey: row.product_key, rateIndex: visible.rate_index, section: 'Savings' });
+      expect(openProduct).toHaveBeenCalledWith(row.product_key, visible.rate_index);
+    } finally { act(() => tree.unmount()); }
+  });
+
+  it('refuses a lender product excluded by the current eligibility revision', () => {
+    installMandatoryEligibility({ active: true, loading: false, rows: new WeakSet(), productKeys: new Set() });
+    const tree = mount();
+    try {
+      expect(tree.root.findAllByType('FlashList')[0].props.data).toEqual([]);
+      const surface = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+      expect(surface.actions!['lender.product.first']({ productKey: row.product_key, rateIndex: row.rate_index, section: 'Savings' }))
+        .toEqual({ unavailableReason: 'The exact planned lender product is not rendered' });
+      expect(openProduct).not.toHaveBeenCalled();
+    } finally { act(() => tree.unmount()); }
+  });
+
+  it('keeps lender rows stable through layout and replaces them when the lender changes', () => {
+    const another = { ...row, provider: 'Another bank', product_key: 'another-product' };
+    mockState.core = { ...core, sections: { ...core.sections,
+      Savings: { ...core.sections.Savings, rates: [row, another] } } };
+    const tree = mount();
+    try {
+      const data = tree.root.findAllByType('FlashList')[0].props.data;
+      expect(data.map((item: { row: RateRow }) => item.row)).toEqual([row]);
+      act(() => tree.root.findAllByType('FlashList')[0].props.onLayout());
+      expect(tree.root.findAllByType('FlashList')[0].props.data).toBe(data);
+      mockParams.provider = another.provider;
+      act(() => tree.update(<BankDetail />));
+      expect(tree.root.findAllByType('FlashList')[0].props.data.map((item: { row: RateRow }) => item.row)).toEqual([another]);
+    } finally { act(() => tree.unmount()); }
+  });
+
+  it('prepares product move attribution only after a ledger exists', () => {
+    const represents = jest.spyOn(productHistory, 'productHistoryRepresentsRateRow');
+    const tree = mount();
+    try {
+      expect(represents).not.toHaveBeenCalled();
+      mockState.productHistory = { schema_version: 1, run_date: core.run_date,
+        run_dates: [core.run_date], products: { [row.product_key]: [0.05] } };
+      act(() => tree.update(<BankDetail />));
+      expect(represents).toHaveBeenCalledWith(core, row);
+    } finally { act(() => tree.unmount()); represents.mockRestore(); }
   });
 
   it('retains earlier dates, full ranges and real statistics when the legacy aggregate only contains today', () => {

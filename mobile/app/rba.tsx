@@ -18,10 +18,13 @@ import { loadRbaMarketOutlook, RBA_F17_FORWARD_URL, RBA_J1_FORECAST_URL, subscri
 import { useStore } from '../src/data/store';
 import { usePerformanceAuditProbe, usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { yieldToPaintFrames } from '../src/lib/yieldToUi';
-import type { ChartRenderEvidence } from '../src/lib/chartRenderEvidence';
+import { hasPositiveChartLayout, type ChartRenderEvidence } from '../src/lib/chartRenderEvidence';
+import type { PerformanceAuditProbeDefinition } from '../src/lib/performanceAuditReadiness';
 
 const ASX_TRACKER_URL = 'https://www.asx.com.au/markets/trade-our-derivatives-market/futures-market/rba-rate-tracker';
 const DAY_MS = 86_400_000;
+type OutlookChart = 'forecast' | 'bonds';
+type MeasuredOutlookChart = ChartRenderEvidence & { renderToken: object };
 
 export default function RbaRates() {
   const focused = useIsFocused();
@@ -44,7 +47,7 @@ export default function RbaRates() {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
-  const [graphReady, setGraphReady] = useState<{ forecast: ChartRenderEvidence | null; bonds: ChartRenderEvidence | null }>({ forecast: null, bonds: null });
+  const [graphReady, setGraphReady] = useState<Record<OutlookChart, MeasuredOutlookChart | null>>({ forecast: null, bonds: null });
   const [activeAuditChart, setActiveAuditChart] = useState<'forecast' | 'bonds' | null>(null);
   const epoch = useRef(0);
   const today = sydneyYmd(now);
@@ -111,8 +114,21 @@ export default function RbaRates() {
     if (focused && core?.run_date && calendarAsset) void ensureRbaCalendar();
   }, [calendarAsset, core?.run_date, ensureRbaCalendar, focused]);
 
-  const forecastReady = useCallback((evidence: ChartRenderEvidence) => setGraphReady((previous) => ({ ...previous, forecast: evidence })), []);
-  const bondsReady = useCallback((evidence: ChartRenderEvidence) => setGraphReady((previous) => ({ ...previous, bonds: evidence })), []);
+  const forecastGraphicKey = `${forecastRevision}:${cashRate}:${forecasts.length ? Math.max(0, Math.min(forecastIndex, forecasts.length - 1)) : `${epoch.current}:${loading}`}`;
+  const bondGraphicKey = `${bondRevision}:${cashRate}:${bonds?.length ? Math.max(0, Math.min(bondIndex, bonds.length - 1)) : `${epoch.current}:${loading}`}`;
+  const forecastGraphicToken = useMemo(() => ({ key: forecastGraphicKey }), [forecastGraphicKey]);
+  const bondGraphicToken = useMemo(() => ({ key: bondGraphicKey }), [bondGraphicKey]);
+  const currentGraphicTokens = useRef({ forecast: forecastGraphicToken, bonds: bondGraphicToken });
+  currentGraphicTokens.current = { forecast: forecastGraphicToken, bonds: bondGraphicToken };
+  const recordGraphic = useCallback((chart: OutlookChart, renderToken: object, evidence: ChartRenderEvidence) => {
+    // Late native layout from an older selection or removed chart cannot prove
+    // the currently displayed chart, or erase its newer measured evidence.
+    if (currentGraphicTokens.current[chart] !== renderToken) return;
+    setGraphReady((previous) => currentGraphicTokens.current[chart] === renderToken
+      ? { ...previous, [chart]: { ...evidence, renderToken } } : previous);
+  }, []);
+  const forecastReady = useCallback((evidence: ChartRenderEvidence) => recordGraphic('forecast', forecastGraphicToken, evidence), [forecastGraphicToken, recordGraphic]);
+  const bondsReady = useCallback((evidence: ChartRenderEvidence) => recordGraphic('bonds', bondGraphicToken, evidence), [bondGraphicToken, recordGraphic]);
   const datasetRevision = outlook?.checkedAt ?? core?.run_date ?? null;
   const renderRevision = `${datasetRevision}:${forecastIndex}:${bondIndex}:${activeAuditChart ?? 'open'}`;
   const auditSurface = usePerformanceAuditSurface({
@@ -141,17 +157,22 @@ export default function RbaRates() {
     id: 'rba.layout', kind: 'layout', datasetRevision, renderRevision,
     status: layoutReady ? 'ready' : 'pending', layoutMeasured: layoutReady,
   });
-  const chartRevision = activeAuditChart === 'forecast' ? forecastRevision : bondRevision;
-  const graphicEvidence = activeAuditChart ? graphReady[activeAuditChart] : null;
-  const chartRendered = !!graphicEvidence && graphicEvidence.revision === chartRevision && graphicEvidence.layoutMeasured;
-  const pointCount = activeAuditChart === 'forecast' ? forecasts.length : activeAuditChart === 'bonds' ? bonds?.length ?? 0 : 0;
-  usePerformanceAuditProbe(auditSurface, {
-    id: 'rba.chart', kind: 'graphic', required: activeAuditChart != null, datasetRevision, renderRevision,
-    status: chartRendered ? 'ready' : 'pending', expectedCount: pointCount,
-    actualCount: chartRendered ? graphicEvidence.pointCount : 0,
-    accessibleSummary: chartRendered && graphicEvidence.accessibleSummary,
-    layoutMeasured: chartRendered, emptyStateRendered: chartRendered && graphicEvidence.emptyStateRendered,
-  });
+  const chartProbe = (chart: OutlookChart, revision: string, pointCount: number): PerformanceAuditProbeDefinition => {
+    const evidence = graphReady[chart];
+    const measured = !!evidence && evidence.renderToken === currentGraphicTokens.current[chart]
+      && evidence.revision === revision && evidence.layoutMeasured;
+    const complete = measured && evidence.expectedCount === pointCount && evidence.pointCount === pointCount
+      && (pointCount > 0 ? evidence.accessibleSummary && !evidence.emptyStateRendered : evidence.emptyStateRendered);
+    return {
+      id: `rba.${chart}.chart`, kind: 'graphic', required: true, datasetRevision, renderRevision,
+      status: complete ? 'ready' : 'pending', expectedCount: pointCount,
+      actualCount: measured ? evidence.pointCount : 0,
+      accessibleSummary: measured && evidence.accessibleSummary,
+      layoutMeasured: measured, emptyStateRendered: measured && evidence.emptyStateRendered,
+    };
+  };
+  usePerformanceAuditProbe(auditSurface, chartProbe('forecast', forecastRevision, forecasts.length));
+  usePerformanceAuditProbe(auditSurface, chartProbe('bonds', bondRevision, bonds?.length ?? 0));
 
   const sourceLink = (url: string, label: UiCopy) => requestExternalUrl({ url, label, purpose: 'official_economic_source' });
   const bondStale = outlook?.bondForwards && now - Date.parse(outlook.bondForwards.observationDate) > 45 * DAY_MS;
@@ -187,12 +208,18 @@ export default function RbaRates() {
         </LedgerSection>
 
         <LedgerSection title="Economists’ cash-rate forecast">
-          {forecasts.length ? <RateOutlookChart label="Economists’ cash-rate forecast" points={forecasts} cashRate={cashRate} selectedIndex={forecastIndex} onSelect={setForecastIndex} onGraphicReady={forecastReady} /> : <LedgerText tone="mutedInk">{loading ? uiLabel("Loading") : uiLabel("Forecast unavailable")}</LedgerText>}
+          {forecasts.length ? <RateOutlookChart key={`forecast:${cashRate}`} label="Economists’ cash-rate forecast" points={forecasts} cashRate={cashRate} selectedIndex={forecastIndex} onSelect={setForecastIndex} onGraphicReady={forecastReady} /> : <LedgerText key={forecastGraphicKey} tone="mutedInk" onLayout={(event) => {
+            if (!loading) forecastReady({ revision: forecastRevision, expectedCount: 0, pointCount: 0,
+              accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+          }}>{loading ? uiLabel("Loading") : uiLabel("Forecast unavailable")}</LedgerText>}
           {outlook?.economists ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA J1', ' ', '·', ' ', 'Survey', ' ', uiDate(outlook.economists.surveyDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.economists.publicationDate), surveyStale ? uiJoin(' ', '·', ' ', 'Older survey') : '')}</LedgerText> : null}
         </LedgerSection>
 
         <LedgerSection title="Bond-market forward rates">
-          {bonds?.length ? <RateOutlookChart label="Bond-market forward rates" points={bonds} cashRate={cashRate} tone="info" selectedIndex={bondIndex} onSelect={setBondIndex} onGraphicReady={bondsReady} /> : <LedgerText tone="mutedInk">{loading ? uiLabel("Loading") : uiLabel("Bond data unavailable")}</LedgerText>}
+          {bonds?.length ? <RateOutlookChart key={`bonds:${cashRate}`} label="Bond-market forward rates" points={bonds} cashRate={cashRate} tone="info" selectedIndex={bondIndex} onSelect={setBondIndex} onGraphicReady={bondsReady} /> : <LedgerText key={bondGraphicKey} tone="mutedInk" onLayout={(event) => {
+            if (!loading) bondsReady({ revision: bondRevision, expectedCount: 0, pointCount: 0,
+              accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+          }}>{loading ? uiLabel("Loading") : uiLabel("Bond data unavailable")}</LedgerText>}
           {outlook?.bondForwards ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA F17', ' ', '·', ' ', 'Observed', ' ', uiDate(outlook.bondForwards.observationDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.bondForwards.publicationDate), bondStale ? uiJoin(' ', '·', ' ', 'Older observation') : '')}</LedgerText> : null}
         </LedgerSection>
 

@@ -1750,6 +1750,8 @@ async function runNetworkCheck(
     const started = now();
     const responsivenessAt = monitor.snapshot();
     const controller = new AbortController();
+    const stageDurations: Record<string, number> = {};
+    let lastProgressAt = started;
     try {
       const snapshot = await awaitAuditWork(
         readLiveAppHealthSnapshot({
@@ -1757,7 +1759,11 @@ async function runNetworkCheck(
           contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
           appVersion: Application.nativeApplicationVersion ?? '0.0.0',
           signal: controller.signal,
-          onProgress: () => {
+          onProgress: (stage) => {
+            const at = now();
+            // These are observed intervals, including yields/transport, not CPU-only timings.
+            stageDurations[`liveStage:${stage}:ms`] = roundMetric(at - lastProgressAt);
+            lastProgressAt = at;
             assertSessionActive(watchdog);
             watchdog.touchProgress();
           },
@@ -1766,6 +1772,7 @@ async function runNetworkCheck(
         'Live-source publication validation',
       );
       onSnapshot(snapshot);
+      stageDurations['liveStage:snapshot-built:ms'] = roundMetric(now() - lastProgressAt);
       const responsiveness = monitor.metricsSince(responsivenessAt);
       return {
         id: 'manifest-network',
@@ -1782,6 +1789,8 @@ async function runNetworkCheck(
           datesIndexValidated: true,
           coreHashValidated: true,
           detailsHashValidated: true,
+          nonTimingFailure: false,
+          ...stageDurations,
           ...responsivenessRecord(responsiveness),
         },
       };
@@ -1793,7 +1802,7 @@ async function runNetworkCheck(
         kind: 'network',
         status: 'fail',
         durationMs: roundMetric(now() - started),
-        metrics: { executionAttempted: true, allowlistedSource: true },
+        metrics: { executionAttempted: true, allowlistedSource: true, ...stageDurations },
         error: formatAuditError(error),
         trace: captureAuditTrace('live-source manifest transport failed'),
       };
@@ -2920,8 +2929,11 @@ export function PerformanceAuditRunner() {
           const datasetRevision = captureDatasetRevision();
           activeDatasetRevision = datasetRevision;
           assertDatasetRevision(datasetRevision);
+          const auditPrefs = maximumPerformanceAuditPrefs(initialStore.prefs);
           const prepared = buildPerformanceAuditSetupPlans(initialStore.core,
-            { seed: sessionId, includeNonStandard: true, detailsProducts: initialStore.details?.products }, SECTION_ORDER);
+            { seed: sessionId, includeNonStandard: true, detailsProducts: initialStore.details?.products,
+              depositRankMetric: auditPrefs.depositRankMetric,
+              mortgageRateMetric: auditPrefs.mortgageRateMetric }, SECTION_ORDER);
           plan = prepared.plan;
           navigationJourneys = prepared.journeys;
           total = platformBenchmarkChecks + SECTION_ORDER.length + reservedLinkChecks +

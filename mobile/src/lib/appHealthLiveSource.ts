@@ -71,7 +71,10 @@ async function fetchVerifiedAsset<T>(
     ? await gunzipCooperatively(raw, 64 * 1024, MAX_INFLATED_BYTES)
     : raw;
   if (inflated.byteLength > MAX_INFLATED_BYTES) throw new Error(`${label} exceeds its decoded size limit`);
-  const parsed = await parseJsonHeavy<T>(strFromU8(inflated));
+  await onProgress?.(`${label}:inflated`);
+  const text = strFromU8(inflated);
+  await onProgress?.(`${label}:text-decoded`);
+  const parsed = await parseJsonHeavy<T>(text);
   await onProgress?.(`${label}:decoded`);
   return parsed;
 }
@@ -126,6 +129,7 @@ export async function readLiveAppHealthSnapshot(options: {
 
   const coreRaw = await fetchVerifiedAsset<CorePayload>(coreFile, 'Core asset', onProgress, signal);
   await sealCoreHistoryAsync(coreRaw, () => yieldToUi(0));
+  await onProgress?.('core:history-sealed');
   const coreResult = normalizeCoreWithIntegrity(coreRaw, { coreSha256: coreFile.sha256 });
   await onProgress?.('core:normalized');
   const details = await fetchVerifiedAsset<DetailsPayload>(
