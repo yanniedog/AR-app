@@ -25,6 +25,9 @@ test('bundled structured cashback ranges retain both AUD bounds and their origin
 test('cashback range admission is bounded numeric syntax in the exact feature field', () => {
   expect(uiDetailItem({ label: 'CASHBACK_OFFER', value: '$2,500.25 – $3,000.75' }, 0, 'Features').value).toBe('$2,500.25–$3,000.75');
   expect(uiDetailItem({ label: 'CASHBACK_OFFER', value: '0 - 0' }, 0, 'Features').value).toBe('$0–$0');
+  expect(uiDetailItem({ label: 'CASHBACK_OFFER', value: '2500.75' }, 0, 'Features').value).toBe('2,500.75');
+  expect(uiDetailItem({ label: 'CASHBACK_OFFER', value: '0'.repeat(76) + '2500' }, 0, 'Features').value).toBe('2,500');
+  expect(uiDetailItem({ label: 'CASHBACK_OFFER', value: '0'.repeat(77) + '2500' }, 0, 'Features').value).toBe('Unknown');
   for (const value of ['3000-2500', '-1-2500', '2,50-3,000', '1e3-2e3', '2500.001-3000',
     '2500-3000 cashback', '2500-3000\n', 'up to 3000', '2500 - ', '1'.repeat(100)]) {
     expect(uiDetailItem({ label: 'CASHBACK_OFFER', value, info: 'Unreviewed source condition.' }, 0, 'Features')).toMatchObject({ value: 'Unknown', conditions: 'source-review-required' });

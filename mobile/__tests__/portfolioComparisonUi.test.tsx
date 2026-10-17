@@ -69,7 +69,7 @@ test('holding periods expose ISO syntax and unequal opening totals retain their 
     act(() => tree.root.findByProps({ title: 'Calculate Holding set' }).props.onPress());
     expect(JSON.stringify(tree.toJSON())).toContain('Status: Unavailable · Issues: 1');
     expect(JSON.stringify(tree.toJSON())).toContain('Issue code: comparison_frame_mismatch');
-    expect(tree.root.findAllByType('Disclosure')).toHaveLength(0); // No account result can explain this top-level blocker.
+    expect(tree.root.findAllByType(HoldingsResultDetails)).toHaveLength(0);
     await act(async () => tree.root.findByProps({ title: 'Copy Receipt' }).props.onPress());
     const copied = JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls.at(-1)[0]).receipt;
     expect(copied.available).toBe(false); expect(copied.results).toEqual([]);

@@ -4,6 +4,7 @@ import { descriptiveValue } from '../data/descriptiveValue';
 import { uiCount, uiDuration, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiPublishedFeeName, uiRate, type UiCopy, type UiLabel, type UiText } from './uiCopy';
 
 export interface ProductPresentationFact { label: UiCopy; value: UiText; reference: UiText; conditions: 'source-review-required' | 'none'; scope: readonly UiText[] }
+const CASHBACK_VALUE_MAX_LENGTH = 80;
 function number(value: unknown): number | null {
   if (typeof value !== 'number' && (typeof value !== 'string' || !/^\s*\$?\s*[+-]?(?:\d+|[1-9]\d{0,2}(?:,\d{3})+)(?:\.\d+)?\s*$/.test(value))) return null;
   const n = Number(String(value).replace(/[$,\s]/g, '')); return Number.isFinite(n) ? n : null;
@@ -33,7 +34,7 @@ function ratePart(raw: unknown): UiText | null {
 }
 function cashbackRange(item: DetailItem): UiText | null {
   if (item.label !== 'CASHBACK_OFFER' || typeof item.value !== 'string'
-    || item.value.length > 80 || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(item.value)) return null;
+    || item.value.length > CASHBACK_VALUE_MAX_LENGTH || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(item.value)) return null;
   const bound = '(?:\\d{1,12}|[1-9]\\d{0,2}(?:,\\d{3}){1,3})(?:\\.\\d{1,2})?';
   const match = new RegExp(`^ *\\$? *(${bound}) *[-–] *\\$? *(${bound}) *$`).exec(item.value);
   if (!match) return null;
@@ -137,7 +138,9 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
     category && feeName.trim().toLowerCase() !== category.trim().toLowerCase() ? uiJoin(' · ', category) : null) : category;
   const info = /^(?:Australian resident|Permanent resident)\.?$/i.exec(item.info?.trim() ?? '');
   const knownInfo = info ? uiLabel(/^Australian/i.test(info[0]) ? 'Australian resident' : 'Permanent resident') : null;
-  const scalar = descriptiveValue(item.value);
+  const rejectedCashback = group === 'Features' && item.label === 'CASHBACK_OFFER'
+    && typeof item.value === 'string' && item.value.length > CASHBACK_VALUE_MAX_LENGTH;
+  const scalar = rejectedCashback ? null : descriptiveValue(item.value);
   const numeric = number(scalar);
   const residencyField = group === 'Eligibility' && item.label === 'RESIDENCY_STATUS';
   const residency = residencyField ? residencyValue(item) : null;
