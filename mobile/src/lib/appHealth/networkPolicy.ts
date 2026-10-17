@@ -10,6 +10,7 @@ import {
 } from './types';
 import { StandardUrl as URL } from '../standardUrl';
 import { trustedExternalUrl, type TrustedExternalUrlRequest } from '../trustedExternalUrl';
+import { OFFICIAL_PUBLIC_DATA_URLS } from '../../data/officialEconomicSources';
 
 export interface AppHealthNetworkSessionHandle {
   readonly token: number;
@@ -45,6 +46,12 @@ interface ActiveSession {
 }
 
 const MAX_LOCAL_VIOLATIONS = 8;
+const officialPublicDataUrls = new Set(OFFICIAL_PUBLIC_DATA_URLS);
+
+/** No query normalization: the fixed ABS query and its order are part of identity. */
+export function canonicalOfficialPublicDataUrl(url: string): string | null {
+  return officialPublicDataUrls.has(url) ? url : null;
+}
 
 function diagnosticHost(value?: string): string | null {
   if (!value) return null;
@@ -224,6 +231,11 @@ export class AppHealthNetworkPolicy {
       return { allowed: false, reason: 'local-mode' };
     }
     if (purpose === 'external-link' && session.externalUrls.has(url)) {
+      session.authorizedAttempts += 1;
+      session.pendingAuthorizations += 1;
+      return { allowed: true, reason: 'allowlisted' };
+    }
+    if (purpose === 'official-public-data' && canonicalOfficialPublicDataUrl(url)) {
       session.authorizedAttempts += 1;
       session.pendingAuthorizations += 1;
       return { allowed: true, reason: 'allowlisted' };

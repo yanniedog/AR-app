@@ -3,10 +3,47 @@ import {
   AppHealthNetworkPolicy,
   AppHealthNetworkPolicyError,
   appHealthNetworkCheck,
+  canonicalOfficialPublicDataUrl,
   executeAppHealthRequest,
 } from '../src/lib/appHealth/networkPolicy';
+import { ABS_HEADLINE_CPI_URL, OFFICIAL_PUBLIC_DATA_URLS } from '../src/data/officialEconomicSources';
 
 describe('app-health network policy', () => {
+  it('admits only compiled exact official data identities under their separate live purpose', async () => {
+    const { contract } = makeHealthyDataFixture();
+    const policy = new AppHealthNetworkPolicy();
+    const handle = policy.begin({ mode: 'live-source', contract });
+    const transport = jest.fn(async () => 'public CSV');
+    for (const url of OFFICIAL_PUBLIC_DATA_URLS) {
+      expect(canonicalOfficialPublicDataUrl(url)).toBe(url);
+      await expect(executeAppHealthRequest(policy, handle, url, 'official-public-data', transport)).resolves.toBe('public CSV');
+    }
+    // The ABS query exception belongs only to this exact purpose and endpoint.
+    expect(policy.authorize(handle, ABS_HEADLINE_CPI_URL, 'asset').allowed).toBe(false);
+    for (const url of [ABS_HEADLINE_CPI_URL.replace('2015-01', '2000-01'),
+      ABS_HEADLINE_CPI_URL.replace('startPeriod=2015-01&format=csv', 'format=csv&startPeriod=2015-01'),
+      `${ABS_HEADLINE_CPI_URL}&_=1`, `${ABS_HEADLINE_CPI_URL}#fragment`,
+      OFFICIAL_PUBLIC_DATA_URLS[0].replace('g1-data', 'g2-data'),
+      OFFICIAL_PUBLIC_DATA_URLS[0].replace('www.rba.gov.au', 'other.rba.gov.au')]) {
+      expect(canonicalOfficialPublicDataUrl(url)).toBeNull();
+      expect(policy.authorize(handle, url, 'official-public-data').allowed).toBe(false);
+    }
+    expect(policy.end(handle)).toMatchObject({ transportCalls: 8, authorizedAttempts: 8, blockedAttempts: 7, policyViolations: 0 });
+  });
+
+  it('denies the exact official-data capability first in local mode', async () => {
+    const { contract } = makeHealthyDataFixture();
+    const policy = new AppHealthNetworkPolicy();
+    const handle = policy.begin({ mode: 'local', contract });
+    const transport = jest.fn();
+    for (const url of OFFICIAL_PUBLIC_DATA_URLS) {
+      expect(policy.authorize(handle, url, 'official-public-data')).toEqual({ allowed: false, reason: 'local-mode' });
+      await expect(executeAppHealthRequest(policy, handle, url, 'official-public-data', transport)).rejects.toThrow('blocked');
+    }
+    expect(transport).not.toHaveBeenCalled();
+    expect(policy.end(handle)).toMatchObject({ transportCalls: 0, authorizedAttempts: 0, blockedAttempts: 16, policyViolations: 0 });
+  });
+
   it('reports a clean local session only when no transport boundary was crossed', () => {
     const { contract } = makeHealthyDataFixture();
     const policy = new AppHealthNetworkPolicy();

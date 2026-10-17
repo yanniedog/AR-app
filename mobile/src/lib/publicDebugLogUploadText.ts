@@ -10,7 +10,7 @@ function withoutLocalNetworkDiagnostics(value: unknown): unknown {
     if (!text.startsWith('{') && !text.startsWith('[')) return value;
     let parsed: unknown;
     try { parsed = JSON.parse(text); } catch {
-      if (hasLocalNetworkField(text)) throw new Error('Local network diagnostics could not be removed from the public upload. The full log remains on this device.');
+      if (hasLocalNetworkField(text)) throw new Error('Network diagnostics unavailable');
       return value;
     }
     const next = withoutLocalNetworkDiagnostics(parsed);
@@ -46,7 +46,7 @@ export function publicDebugLogUploadText(text: string): string {
       try { parsed = JSON.parse(line.slice(jsonStart)); } catch {
         // A partial diagnostic must not escape just because a saved/logged JSON
         // record is damaged. Fail before the POST; do not discard other evidence.
-        if (hasLocalNetworkField(line)) throw new Error('Local network diagnostics could not be removed from the public upload. The full log remains on this device.');
+        if (hasLocalNetworkField(line)) throw new Error('Network diagnostics unavailable');
         return line;
       }
     }

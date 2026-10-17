@@ -2,6 +2,7 @@ import { getLocalAppHealthAuditGeneration, installAppHealthTransportGuard, isLoc
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceContract';
 import { automaticDataUrl } from '../src/lib/automaticDataAccess';
 import { APK_MANIFEST_URL } from '../src/config';
+import { ABS_HEADLINE_CPI_URL, OFFICIAL_PUBLIC_DATA_URLS } from '../src/data/officialEconomicSources';
 
 function targetWithSpies() {
   const fetchSpy = jest.fn(async (input: RequestInfo | URL) => ({
@@ -37,6 +38,99 @@ describe('installAppHealthTransportGuard', () => {
   const contract = createV1AppHealthSourceContract({
     manifestUrl: 'https://example.test/manifest.json',
     datesIndexUrl: 'https://example.test/dates-index.json',
+  });
+
+  it('permits only the eight exact credential-free official CSV GETs without widening the payload or link policies', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    const safe = { method: 'GET', credentials: 'omit', headers: { Accept: 'text/csv' } } as const;
+    try {
+      for (const url of OFFICIAL_PUBLIC_DATA_URLS) await expect(target.fetch(url, safe)).resolves.toMatchObject({ ok: true, url });
+      expect(fetchSpy).toHaveBeenCalledTimes(8);
+      expect(fetchSpy).toHaveBeenCalledWith(ABS_HEADLINE_CPI_URL, safe);
+      expect(guard.snapshot()).toMatchObject({ authorizedAttempts: 8, transportCalls: 8, policyViolations: 0, blockedAttempts: 0 });
+      await expect(target.fetch(OFFICIAL_PUBLIC_DATA_URLS[0], { method: 'HEAD', credentials: 'omit' })).rejects.toThrow('blocked');
+      expect(fetchSpy).toHaveBeenCalledTimes(8);
+    } finally { guard.restore(); }
+  });
+
+  it('rejects unsafe official request forms before transport, including headers, bodies and referrer tunnels', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    const url = OFFICIAL_PUBLIC_DATA_URLS[0];
+    const safe = { method: 'GET', credentials: 'omit', headers: { Accept: 'text/csv' } } as const;
+    const getter = jest.fn(() => 'GET');
+    const invalid: (RequestInit | undefined)[] = [undefined, {},
+      { ...safe, method: 'POST' }, { ...safe, method: 'HEAD' }, { ...safe, credentials: 'include' },
+      { ...safe, credentials: undefined }, { ...safe, body: 'private' },
+      { ...safe, headers: { Accept: 'text/csv', Authorization: 'private' } },
+      { ...safe, headers: { Cookie: 'private' } }, { ...safe, headers: { Accept: 'application/json' } },
+      { ...safe, headers: { 'X-Private': 'private' } }, { ...safe, referrer: 'https://private.test/account' },
+      { ...safe, redirect: 'follow' }, Object.defineProperty({ credentials: 'omit' }, 'method', { get: getter }),
+    ];
+    try {
+      for (const init of invalid) await expect(target.fetch(url, init)).rejects.toThrow('blocked');
+      await expect(target.fetch(new Request(url), safe)).rejects.toThrow('blocked');
+      await expect(target.fetch(new URL(url), safe)).rejects.toThrow('blocked');
+      expect(getter).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(guard.snapshot()).toMatchObject({ blockedAttempts: invalid.length + 2, transportCalls: 0, policyViolations: 0 });
+    } finally { guard.restore(); }
+  });
+
+  it('denies sibling endpoints, changed query identity, unknown hosts and insecure or credentialed URLs', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    const url = OFFICIAL_PUBLIC_DATA_URLS[0];
+    const safe = { method: 'GET', credentials: 'omit', headers: { Accept: 'text/csv' } } as const;
+    const invalid = [url.replace('g1-data', 'unknown'), url.replace('www.rba.gov.au', 'unknown.test'),
+      url.replace('www.rba.gov.au', 'sub.rba.gov.au'), url.replace('https:', 'http:'),
+      url.replace('www.rba.gov.au', 'www.rba.gov.au:443'), url.replace('https://', 'https://user:password@'),
+      `${url}?_=123`, `${url}#fragment`, ABS_HEADLINE_CPI_URL.replace('2015-01', '2000-01'),
+      ABS_HEADLINE_CPI_URL.replace('startPeriod=2015-01&format=csv', 'format=csv&startPeriod=2015-01'),
+      `${ABS_HEADLINE_CPI_URL}&extra=1`, ABS_HEADLINE_CPI_URL.replace('data.api.abs.gov.au', 'www.abs.gov.au')];
+    try {
+      for (const value of invalid) await expect(target.fetch(value, safe)).rejects.toThrow('blocked');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(guard.snapshot()).toMatchObject({ blockedAttempts: invalid.length, transportCalls: 0 });
+    } finally { guard.restore(); }
+  });
+
+  it('requires the exact official final URL and records a real violation for a redirect or missing identity', async () => {
+    const url = OFFICIAL_PUBLIC_DATA_URLS[0];
+    const finals = [{ url: OFFICIAL_PUBLIC_DATA_URLS[1], redirected: true },
+      { url: 'https://unknown.test/data.csv', redirected: true },
+      { url: `${url}?extra=1`, redirected: false }, { url: '', redirected: false },
+      { url, redirected: true }];
+    const { target, fetchSpy } = targetWithSpies();
+    for (const final of finals) jest.mocked(fetchSpy).mockResolvedValueOnce({ ok: true, status: 200, ...final } as Response);
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    try {
+      for (let attempt = 0; attempt < finals.length; attempt += 1) await expect(target.fetch(url, { method: 'GET', credentials: 'omit', headers: { Accept: 'text/csv' } })).rejects.toThrow('blocked');
+      expect(guard.snapshot()).toMatchObject({ authorizedAttempts: 5, transportCalls: 5, policyViolations: 5 });
+      expect(guard.snapshot().violations?.every(item => item.purpose === 'official-public-data' && item.requestedHost === 'www.rba.gov.au')).toBe(true);
+    } finally { guard.restore(); }
+  });
+
+  it('keeps all official source GETs and direct XHR blocked in a local audit', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    const guard = installAppHealthTransportGuard({ target, mode: 'local', contract });
+    try {
+      for (const url of OFFICIAL_PUBLIC_DATA_URLS) await expect(target.fetch(url, { method: 'GET', credentials: 'omit', headers: { Accept: 'text/csv' } })).rejects.toThrow('blocked');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(guard.snapshot()).toMatchObject({ blockedAttempts: 8, authorizedAttempts: 0, transportCalls: 0 });
+    } finally { guard.restore(); }
+    class SourceXhr { open(_method: string, _url: string | URL, ..._rest: unknown[]): void {} send(): void {} }
+    const send = jest.spyOn(SourceXhr.prototype, 'send');
+    const xhrTarget = { fetch: fetchSpy, XMLHttpRequest: { prototype: SourceXhr.prototype } };
+    const live = installAppHealthTransportGuard({ target: xhrTarget, mode: 'live-source', contract });
+    try {
+      const xhr = new SourceXhr();
+      xhr.open('GET', OFFICIAL_PUBLIC_DATA_URLS[0]);
+      expect(() => xhr.send()).toThrow('blocked');
+      expect(send).not.toHaveBeenCalled();
+      expect(live.snapshot()).toMatchObject({ blockedAttempts: 1, transportCalls: 0 });
+    } finally { live.restore(); send.mockRestore(); }
   });
 
   it('temporarily permits only exact credential-free configured APK manifest GETs', async () => {
@@ -110,6 +204,28 @@ describe('installAppHealthTransportGuard', () => {
     try {
       await expect(target.fetch(request.url, { method: 'HEAD', credentials: 'omit' })).rejects.toThrow('blocked');
       expect(fetchSpy).not.toHaveBeenCalled();
+    } finally { guard.restore(); }
+  });
+
+  it('registers successive external batches without granting later or sibling destinations early', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    const requests = ['f1', 'f2', 'f3', 'f4', 'f5'].map(table => ({
+      url: `https://www.rba.gov.au/statistics/tables/?table=${table}`,
+      label: 'Statistics', purpose: 'official_economic_source' as const,
+    }));
+    const head = (url: string) => target.fetch(url, { method: 'HEAD', credentials: 'omit' });
+    try {
+      expect(guard.allowExternalUrls(requests.slice(0, 4))).toBe(4);
+      await expect(head(requests[4].url)).rejects.toThrow('blocked');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      for (const request of requests.slice(0, 4)) await expect(head(request.url)).resolves.toMatchObject({ ok: true });
+      expect(guard.allowExternalUrls(requests.slice(4))).toBe(1);
+      await expect(head(requests[4].url)).resolves.toMatchObject({ ok: true });
+      await expect(head(requests[0].url)).resolves.toMatchObject({ ok: true });
+      await expect(head(`${requests[4].url}0`)).rejects.toThrow('blocked');
+      expect(fetchSpy).toHaveBeenCalledTimes(6);
+      expect(guard.snapshot().policyViolations).toBe(0);
     } finally { guard.restore(); }
   });
 

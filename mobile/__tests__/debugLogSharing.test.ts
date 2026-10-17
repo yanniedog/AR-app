@@ -89,7 +89,7 @@ describe('automatic audit log sharing', () => {
 
   it('does not create a public copy when damaged local diagnostics cannot be safely separated', async () => {
     (log.debugLog.readCompleteText as jest.Mock).mockResolvedValueOnce('{"localEvidence":{"networkViolations":[{"finalHost":"private.example"}');
-    expect(await sharing.startDebugLogUpload(request)).toMatchObject({ phase: 'failed' });
+    expect(await sharing.startDebugLogUpload(request)).toMatchObject({ phase: 'failed', error: 'Network diagnostics unavailable' });
     expect(log.uploadDebugLog).not.toHaveBeenCalled();
     expect(clipboard.setStringAsync).not.toHaveBeenCalled();
   });

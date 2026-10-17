@@ -3,6 +3,7 @@ import { strFromU8 } from 'fflate';
 
 import { parseDatesIndex } from '../data/historyDaily';
 import { gunzipCooperatively } from '../data/payload';
+import { inflatePayloadOffThread } from '../data/payloadInflation';
 import { normalizeCoreWithIntegrity, sealCoreHistoryAsync } from '../data/sectionIntegrity';
 import { parseJsonHeavy, yieldToUi } from './yieldToUi';
 import type { CorePayload, DetailsPayload, Manifest, ManifestFile } from '../types';
@@ -67,12 +68,25 @@ async function fetchVerifiedAsset<T>(
   if (digest !== file.sha256) throw new Error(`${label} sha256 mismatch`);
   await onProgress?.(`${label}:hash-verified`);
   const gzipped = raw.length > 2 && raw[0] === 0x1f && raw[1] === 0x8b;
-  const inflated = gzipped
-    ? await gunzipCooperatively(raw, 64 * 1024, MAX_INFLATED_BYTES)
-    : raw;
-  if (inflated.byteLength > MAX_INFLATED_BYTES) throw new Error(`${label} exceeds its decoded size limit`);
-  await onProgress?.(`${label}:inflated`);
-  const text = strFromU8(inflated);
+  // The existing optional codec performs gzip and strict UTF-8 conversion on
+  // its background queue. Only absent support returns null; validation errors
+  // must propagate rather than retrying a damaged source in the JS fallback.
+  const nativeText = gzipped ? await inflatePayloadOffThread(raw, MAX_INFLATED_BYTES) : null;
+  let text: string;
+  if (nativeText !== null) {
+    // This interval includes both operations and the returned string transfer.
+    // The following milestones do not claim separately timed native phases.
+    await onProgress?.(`${label}:native-inflated-and-text-decoded`);
+    await onProgress?.(`${label}:inflated`);
+    text = nativeText;
+  } else {
+    const inflated = gzipped
+      ? await gunzipCooperatively(raw, 64 * 1024, MAX_INFLATED_BYTES)
+      : raw;
+    if (inflated.byteLength > MAX_INFLATED_BYTES) throw new Error(`${label} exceeds its decoded size limit`);
+    await onProgress?.(`${label}:inflated`);
+    text = strFromU8(inflated);
+  }
   await onProgress?.(`${label}:text-decoded`);
   const parsed = await parseJsonHeavy<T>(text);
   await onProgress?.(`${label}:decoded`);

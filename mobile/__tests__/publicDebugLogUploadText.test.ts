@@ -40,7 +40,7 @@ it('fails before publication for damaged diagnostic JSON instead of silently los
   for (const text of [
     '2026-10-17T00:00:00Z [WARN ] perf-audit: {"localEvidence":{"networkViolations":[{"finalHost":"private.example"}',
     String.raw`{"reportJson":"{\"localEvidence\":{\"network\u0056iolations\":[\"private.example\"]`,
-  ]) expect(() => publicDebugLogUploadText(text)).toThrow('full log remains on this device');
+  ]) expect(() => publicDebugLogUploadText(text)).toThrow('Network diagnostics unavailable');
 });
 
 it('keeps ordinary log text, failures and JSON without these diagnostics byte-for-byte', () => {

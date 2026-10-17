@@ -5,6 +5,7 @@ import { trustedExternalUrl, type TrustedExternalUrlRequest } from './trustedExt
 import {
   AppHealthNetworkPolicy,
   AppHealthNetworkPolicyError,
+  canonicalOfficialPublicDataUrl,
   executeAppHealthRequest,
   type AppHealthNetworkSessionHandle,
 } from './appHealth/networkPolicy';
@@ -79,6 +80,25 @@ function purposeFor(url: string, contract: AppHealthSourceContract): AppHealthNe
   return 'asset';
 }
 
+const officialInitKeys = new Set(['method', 'credentials', 'headers', 'signal', 'body']);
+
+function safeOfficialDataInit(init?: RequestInit): boolean {
+  if (!init || (Object.getPrototypeOf(init) !== Object.prototype && Object.getPrototypeOf(init) !== null)) return false;
+  for (const key of Reflect.ownKeys(init)) {
+    const descriptor = Object.getOwnPropertyDescriptor(init, key);
+    if (typeof key !== 'string' || !officialInitKeys.has(key) ||
+        !descriptor || !Object.hasOwn(descriptor, 'value')) return false;
+  }
+  if (init.method !== 'GET' || init.credentials !== 'omit' || init.body != null) return false;
+  const headers = init.headers;
+  if (headers == null) return true;
+  if (typeof headers !== 'object' || (Object.getPrototypeOf(headers) !== Object.prototype && Object.getPrototypeOf(headers) !== null)) return false;
+  const keys = Reflect.ownKeys(headers);
+  if (!keys.length) return true;
+  return keys.length === 1 && typeof keys[0] === 'string' && keys[0].toLowerCase() === 'accept'
+    && Object.getOwnPropertyDescriptor(headers, keys[0])?.value === 'text/csv';
+}
+
 const GITHUB_RELEASE_DELIVERY_HOSTS = new Set([
   'objects.githubusercontent.com',
   'release-assets.githubusercontent.com',
@@ -151,8 +171,10 @@ export function installAppHealthTransportGuard(options: {
     const permittedExternal = external && typeof input === 'string' &&
       init?.method === 'HEAD' && init.credentials === 'omit' &&
       init.body == null && init.headers == null;
+    const permittedOfficialData = typeof input === 'string' && canonicalOfficialPublicDataUrl(input) != null
+      && safeOfficialDataInit(init);
     const purpose = permittedUpdateManifest ? 'app-update-manifest'
-      : permittedExternal ? 'external-link' : purposeFor(url, contract);
+      : permittedExternal ? 'external-link' : permittedOfficialData ? 'official-public-data' : purposeFor(url, contract);
     const response = await executeAppHealthRequest(
       policy,
       handle,
@@ -180,7 +202,8 @@ export function installAppHealthTransportGuard(options: {
     const acceptedExternal = external &&
       ((response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) ||
         (finalExternal?.ok === true));
-    if (!(permittedUpdateManifest ? acceptedFinalFetchUrl(url, response, contract, true)
+    if (!(permittedOfficialData ? response.url === url && response.redirected !== true
+      : permittedUpdateManifest ? acceptedFinalFetchUrl(url, response, contract, true)
       : external ? acceptedExternal : acceptedFinalFetchUrl(url, response, contract))) {
       policy.recordPolicyViolation(handle, {
         purpose, requestedUrl: url,

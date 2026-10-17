@@ -246,7 +246,7 @@ export interface AppHealthSurfaceObservation {
   >>;
 }
 
-export type AppHealthNetworkPurpose = 'manifest' | 'dates-index' | 'asset' | 'external-link' | 'app-update-manifest';
+export type AppHealthNetworkPurpose = 'manifest' | 'dates-index' | 'asset' | 'external-link' | 'app-update-manifest' | 'official-public-data';
 
 export interface AppHealthNetworkDecision {
   allowed: boolean;

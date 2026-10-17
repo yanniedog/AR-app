@@ -455,8 +455,11 @@ export default function RatesWorkspace() {
     // In-place selection/disclosure changes do not change visible indices, so
     // FlashList may omit its usual viewability callback. Request a fresh native
     // measurement after this render commits; layout alone is not visible proof.
-    if (listReadiness.ready) listRef.current?.recomputeViewableItems();
-  }, [listRevision, listReadiness.ready]);
+    // A retained, hidden list can also commit a revision without a visible
+    // viewport. Refocus must request that measurement even if its data did not
+    // change again; only the resulting native callback establishes visibility.
+    if (isFocused && listReadiness.ready) listRef.current?.recomputeViewableItems();
+  }, [isFocused, listRevision, listReadiness.ready]);
   const logoReadiness = useLogoReadiness(listDataRevision);
   const renderProduct = useCallback(({ item }: { item: ResultRow }) => 'product_key' in item ? (
     <SearchProductRow row={item} section={section} onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
