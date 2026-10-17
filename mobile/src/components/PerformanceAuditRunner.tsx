@@ -1750,6 +1750,8 @@ async function runNetworkCheck(
     const started = now();
     const responsivenessAt = monitor.snapshot();
     const controller = new AbortController();
+    const stageDurations: Record<string, number> = {};
+    let lastProgressAt = started;
     try {
       const snapshot = await awaitAuditWork(
         readLiveAppHealthSnapshot({
@@ -1757,7 +1759,11 @@ async function runNetworkCheck(
           contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
           appVersion: Application.nativeApplicationVersion ?? '0.0.0',
           signal: controller.signal,
-          onProgress: () => {
+          onProgress: (stage) => {
+            const at = now();
+            // These are observed intervals, including yields/transport, not CPU-only timings.
+            stageDurations[`liveStage:${stage}:ms`] = roundMetric(at - lastProgressAt);
+            lastProgressAt = at;
             assertSessionActive(watchdog);
             watchdog.touchProgress();
           },
@@ -1766,6 +1772,7 @@ async function runNetworkCheck(
         'Live-source publication validation',
       );
       onSnapshot(snapshot);
+      stageDurations['liveStage:snapshot-built:ms'] = roundMetric(now() - lastProgressAt);
       const responsiveness = monitor.metricsSince(responsivenessAt);
       return {
         id: 'manifest-network',
@@ -1782,6 +1789,8 @@ async function runNetworkCheck(
           datesIndexValidated: true,
           coreHashValidated: true,
           detailsHashValidated: true,
+          nonTimingFailure: false,
+          ...stageDurations,
           ...responsivenessRecord(responsiveness),
         },
       };
@@ -1793,7 +1802,7 @@ async function runNetworkCheck(
         kind: 'network',
         status: 'fail',
         durationMs: roundMetric(now() - started),
-        metrics: { executionAttempted: true, allowlistedSource: true },
+        metrics: { executionAttempted: true, allowlistedSource: true, ...stageDurations },
         error: formatAuditError(error),
         trace: captureAuditTrace('live-source manifest transport failed'),
       };
@@ -2920,8 +2929,11 @@ export function PerformanceAuditRunner() {
           const datasetRevision = captureDatasetRevision();
           activeDatasetRevision = datasetRevision;
           assertDatasetRevision(datasetRevision);
+          const auditPrefs = maximumPerformanceAuditPrefs(initialStore.prefs);
           const prepared = buildPerformanceAuditSetupPlans(initialStore.core,
-            { seed: sessionId, includeNonStandard: true, detailsProducts: initialStore.details?.products }, SECTION_ORDER);
+            { seed: sessionId, includeNonStandard: true, detailsProducts: initialStore.details?.products,
+              depositRankMetric: auditPrefs.depositRankMetric,
+              mortgageRateMetric: auditPrefs.mortgageRateMetric }, SECTION_ORDER);
           plan = prepared.plan;
           navigationJourneys = prepared.journeys;
           total = platformBenchmarkChecks + SECTION_ORDER.length + reservedLinkChecks +
@@ -3239,11 +3251,14 @@ export function PerformanceAuditRunner() {
         });
         inventoryFailureEvidence = {};
         const linkDeadline = Date.now() + 90_000;
-        transportGuard.allowExternalUrls(externalLinks);
         for (let offset = 0; offset < externalLinks.length; offset += 4) {
           await waitWhilePaused(watchdog);
           assertSessionActive(watchdog);
           const chunk = externalLinks.slice(offset, offset + 4);
+          // Validate and register only the destinations about to be checked.
+          // Revalidating the whole inventory synchronously can exhaust the
+          // stored-check watchdog before the first real link check begins.
+          transportGuard.allowExternalUrls(chunk);
           const remaining = Math.max(0, linkDeadline - Date.now());
           const pending = chunk.map((request, index) => runExternalLinkAuditCheck(request, offset + index, {
             platform: Platform.OS,
@@ -3554,11 +3569,11 @@ export function PerformanceAuditRunner() {
             'Section benchmarks time named selector, filter, hierarchy, statistics and ranking phases. Their deliberately synchronous work is recorded but excluded from responsiveness scoring; they do not provide native CPU instruction sampling or React component commit attribution.',
             auditMode === 'local'
               ? 'Local mode validates link addresses and OS browser handlers without HTTP transport. Website reachability remains unverified. It records the existing Android download snapshot without contacting a host or launching the installer.'
-              : 'Live-source mode permits public payload files and exact approved external destinations for credential-free HEAD checks. Link checks have a 90-second transport/handler budget; remaining destinations are validated but stay unverified. No browser or installer is launched.',
+              : 'Live-source mode permits public payload files, eight exact compiled official CSV destinations for credential-free GETs, and exact approved external destinations for credential-free HEAD checks. Link checks have a 90-second transport/handler budget; remaining destinations are validated but stay unverified. No browser or installer is launched.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
             auditMode === 'local'
               ? 'Local audit measurements perform no network or clipboard action.'
-              : 'The live-source audit may read allowlisted public payload files during measurement.',
+              : 'The live-source audit may read allowlisted public payload files and the eight compiled official CSV destinations during measurement.',
             uploadLog
               ? 'Public log upload requested after local finalization.'
               : 'Public log upload disabled.',

@@ -58,26 +58,12 @@ export interface EconomicOutlookPayload {
   cashRateHistory?: EconomicPoint[];
 }
 
-const RBA_TABLE_BASE = 'https://www.rba.gov.au/statistics/tables/csv';
 export const RBA_ECONOMIC_TABLE_URL = 'https://www.rba.gov.au/statistics/tables/';
-/** ABS CPI Data API — year-ended % change, all groups, Australia, monthly. */
-const ABS_DATA_API_BASE = 'https://data.api.abs.gov.au/rest/data/ABS,CPI,2.0.0';
-/** Headline CPI year-ended (MEASURE=3, INDEX=10001, original, Australia, monthly). */
-export const ABS_HEADLINE_CPI_URL =
-  `${ABS_DATA_API_BASE}/3.10001.10.50.M?startPeriod=2015-01&format=csv`;
+export { ABS_HEADLINE_CPI_URL, ECONOMIC_URLS } from './officialEconomicSources';
 export const ABS_CPI_RELEASE_URL =
   'https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/latest-release';
 /** Active sessions re-check often enough to pick up an official release promptly. */
 export const ECONOMIC_RECHECK_MS = 15 * 60 * 1000;
-
-export const ECONOMIC_URLS = {
-  inflation: `${RBA_TABLE_BASE}/g1-data.csv`,
-  expectations: `${RBA_TABLE_BASE}/g3-data.csv`,
-  labour: `${RBA_TABLE_BASE}/h5-data.csv`,
-  wages: `${RBA_TABLE_BASE}/h4-data.csv`,
-  cashForecast: `${RBA_TABLE_BASE}/j1-cash-rate.csv`,
-  cashRate: `${RBA_TABLE_BASE}/f1-data.csv`,
-} as const;
 
 export type RequiredSourceKey = 'inflation' | 'expectations' | 'labour' | 'wages';
 

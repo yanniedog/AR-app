@@ -1,4 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
+import { publicDebugLogUploadText } from './publicDebugLogUploadText';
 
 import {
   debugLog,
@@ -65,7 +66,7 @@ async function executeUpload(): Promise<DebugLogUploadSnapshot> {
       await loadDebugLogUploadReceipts();
       const request = lastRequest!;
       preparedBody = formatVersionedLogExport(
-        await debugLog.readCompleteText(request.audit), request.appVersion, request.buildVersion,
+        publicDebugLogUploadText(await debugLog.readCompleteText(request.audit)), request.appVersion, request.buildVersion,
       );
       update({ phase: 'uploading' });
       const result = await uploadDebugLog(preparedBody);

@@ -7,12 +7,12 @@ import {
   parseRbaEconomistsCsv,
 } from './rbaMarketOutlookParse';
 import type { RbaBondForwards, RbaMarketOutlook } from './rbaMarketOutlookTypes';
+import { RBA_F17_FORWARD_URL, RBA_J1_FORECAST_URL } from './officialEconomicSources';
 
 export type { RbaBondForwards, RbaMarketOutlook } from './rbaMarketOutlookTypes';
 export { parseRbaBondForwardsCsv, parseRbaEconomistsCsv } from './rbaMarketOutlookParse';
 
-export const RBA_F17_FORWARD_URL = 'https://www.rba.gov.au/statistics/tables/csv/f17-forward-rates.csv';
-export const RBA_J1_FORECAST_URL = 'https://www.rba.gov.au/statistics/tables/csv/j1-cash-rate.csv';
+export { RBA_F17_FORWARD_URL, RBA_J1_FORECAST_URL } from './officialEconomicSources';
 
 let inFlight: { force: boolean; promise: Promise<RbaMarketOutlook> } | null = null;
 let requestSequence = 0;
@@ -117,7 +117,7 @@ async function fetchCsv(url: string): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8_000);
   try {
-    const response = await fetch(url, { headers: { Accept: 'text/csv' }, signal: controller.signal });
+    const response = await fetch(url, { method: 'GET', credentials: 'omit', headers: { Accept: 'text/csv' }, signal: controller.signal });
     if (!response.ok) throw new Error(`Official RBA data request failed (${response.status})`);
     return await response.text();
   } finally {

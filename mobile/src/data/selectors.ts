@@ -1,5 +1,6 @@
 import { SECTIONS } from '../constants';
 import { mandatoryEligibleRows } from './eligibilityGate';
+import { rowsForProductKey } from './rateRowIndex';
 import { matchesLvrTier } from './lvrRange';
 import { yieldToUi } from '../lib/yieldToUi';
 import { isMeaningfulDepositRate, MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
@@ -333,6 +334,25 @@ export function sortRows(
       comparePreparedRows(a, b, sortKey, section, lowerIsBetter, mortgageMetric),
     )
     .map(({ row }) => row);
+}
+
+/** The actual lender cards: one visible ranked tier per product, in display order. */
+export function lenderProductRows(
+  rows: RateRow[],
+  section: SectionKey,
+  metric: RankMetric = 'base',
+  mortgageMetric: MortgageRateMetric = 'comparison',
+  includeNonStandard = false,
+  detailsProducts?: Record<string, ProductDetail> | null,
+): RateRow[] {
+  const visible = excludeTokenDepositRates(
+    visibleAccountRows(rows, includeNonStandard, detailsProducts), section,
+  );
+  const products = new Map<string, RateRow>();
+  for (const row of sortRows(visible, 'rate', section, metric, mortgageMetric)) {
+    if (!products.has(row.product_key)) products.set(row.product_key, row);
+  }
+  return [...products.values()];
 }
 
 /** Same ranking as sortRows, with bounded preparation and merge slices. */
@@ -676,7 +696,7 @@ export function findByKey(
   productKey: string,
 ): { row: RateRow; section: SectionKey; siblings: RateRow[] } | null {
   for (const section of Object.keys(sections) as SectionKey[]) {
-    const matches = sections[section].rates.filter((r) => r.product_key === productKey);
+    const matches = rowsForProductKey(sections[section].rates, productKey);
     if (matches.length) {
       return { row: matches[0], section, siblings: matches };
     }
@@ -690,7 +710,7 @@ export function findEligibleByKey(
   productKey: string,
 ): ReturnType<typeof findByKey> {
   for (const section of Object.keys(sections) as SectionKey[]) {
-    const siblings = mandatoryEligibleRows(sections[section].rates.filter(row => row.product_key === productKey));
+    const siblings = mandatoryEligibleRows(rowsForProductKey(sections[section].rates, productKey));
     if (siblings.length) return { row: siblings[0], section, siblings };
   }
   return null;

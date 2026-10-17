@@ -137,7 +137,7 @@ test('explicit cache clearing removes page state and ignores a pending refresh r
   expect(text()).not.toContain('Refreshing outlook');
   expect(mockSurface.actions!['rba.forecast.next']()).toEqual({ unavailableReason: expect.any(String) });
   expect(jest.mocked(usePerformanceAuditProbe).mock.calls.at(-1)?.[1]).toMatchObject({
-    id: 'rba.chart', required: false, actualCount: 0, accessibleSummary: false,
+    id: 'rba.bonds.chart', required: true, actualCount: 0, accessibleSummary: false,
   });
 });
 

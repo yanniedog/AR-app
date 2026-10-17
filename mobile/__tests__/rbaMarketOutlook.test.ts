@@ -16,6 +16,8 @@ import { normalizeRbaMarketOutlook, rbaSourceToday } from '../src/data/rbaMarket
 import type { AppState } from '../src/data/storeTypes';
 import { createUserActions } from '../src/data/storeUser';
 import { isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
+import { ABS_HEADLINE_CPI_URL, ECONOMIC_URLS } from '../src/data/economicOutlookTypes';
+import { OFFICIAL_PUBLIC_DATA_URLS } from '../src/data/officialEconomicSources';
 
 jest.mock('../src/lib/appHealthTransportGuard', () => ({ isLocalAppHealthAudit: jest.fn(() => false) }));
 
@@ -160,9 +162,28 @@ test('loads both official sources, preserves source dates and persists a bounded
   expect(result.economists?.surveyDate).toBe('2026-08-01');
   expect(result.fetchedAt).toBe(new Date(NOW).toISOString());
   expect(fetch).toHaveBeenCalledTimes(2);
-  expect(fetch).toHaveBeenCalledWith(RBA_J1_FORECAST_URL, expect.any(Object));
+  for (const url of [RBA_J1_FORECAST_URL, RBA_F17_FORWARD_URL]) expect(fetch).toHaveBeenCalledWith(url, {
+    method: 'GET', credentials: 'omit', headers: { Accept: 'text/csv' }, signal: expect.any(Object),
+  });
   expect(cache.writeRbaMarketOutlook).toHaveBeenCalledWith(result);
   expect(Object.isFrozen(result.bondForwards?.points)).toBe(true);
+});
+
+test('preserves every existing official source export while centralizing exactly eight data endpoints', () => {
+  expect(ECONOMIC_URLS).toEqual({
+    inflation: 'https://www.rba.gov.au/statistics/tables/csv/g1-data.csv',
+    expectations: 'https://www.rba.gov.au/statistics/tables/csv/g3-data.csv',
+    labour: 'https://www.rba.gov.au/statistics/tables/csv/h5-data.csv',
+    wages: 'https://www.rba.gov.au/statistics/tables/csv/h4-data.csv',
+    cashForecast: 'https://www.rba.gov.au/statistics/tables/csv/j1-cash-rate.csv',
+    cashRate: 'https://www.rba.gov.au/statistics/tables/csv/f1-data.csv',
+  });
+  expect(RBA_J1_FORECAST_URL).toBe(ECONOMIC_URLS.cashForecast);
+  expect(RBA_F17_FORWARD_URL).toBe('https://www.rba.gov.au/statistics/tables/csv/f17-forward-rates.csv');
+  expect(ABS_HEADLINE_CPI_URL).toBe('https://data.api.abs.gov.au/rest/data/ABS,CPI,2.0.0/3.10001.10.50.M?startPeriod=2015-01&format=csv');
+  expect(OFFICIAL_PUBLIC_DATA_URLS).toEqual([...Object.values(ECONOMIC_URLS), RBA_F17_FORWARD_URL, ABS_HEADLINE_CPI_URL]);
+  expect(new Set(OFFICIAL_PUBLIC_DATA_URLS).size).toBe(8);
+  expect(Object.isFrozen(OFFICIAL_PUBLIC_DATA_URLS)).toBe(true);
 });
 
 test('coalesces simultaneous requests and respects cached recheck interval', async () => {
