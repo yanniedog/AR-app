@@ -40,9 +40,29 @@ export interface CurrentProductReference {
   /** Optional exact catalogue match. The entered balance/rate remain authoritative. */
   productKey: string;
   rateIndex: number | null;
+  /** Semantic public offer identity. Array positions are compatibility hints only. */
+  offerId?: string;
+  programmeId?: string;
 }
 
 export type CurrentProductReferences = Record<ScenarioSection, CurrentProductReference>;
+
+export interface LocalRateInputs {
+  mode: 'entered' | 'reference';
+  /** A named public reference family selected explicitly by the user. */
+  referenceId: string;
+  /** Signed total adjustment in percentage points; public discounts are not added. */
+  totalAdjustment: string;
+  /** Historical source use is a local assumption, never current verified pricing. */
+  allowHistorical: boolean;
+  referenceChangeAlerts: boolean;
+  /** Explicit assumptions for this existing loan; never copied from source conditions. */
+  referenceScenario: Partial<Record<'purpose' | 'repayment' | 'package' | 'customerCategory' | 'channel' | 'termMonths' | 'termDays', string>>;
+}
+
+export const EMPTY_LOCAL_RATE_INPUTS: LocalRateInputs = {
+  mode: 'entered', referenceId: '', totalAdjustment: '', allowHistorical: false, referenceChangeAlerts: false, referenceScenario: {},
+};
 
 export type OffsetAvailabilityOverride = 'auto' | 'yes' | 'no';
 export type SwitchFundingMethod = 'cash-or-offset' | 'new-loan';
@@ -64,13 +84,14 @@ export interface MortgageSwitchInputs {
 }
 
 export interface UserRateScenario {
-  version: 3;
+  version: 4;
   mortgage: CalcInputs;
   savings: DepositScenario;
   termDeposit: DepositScenario;
   projections: ProjectionInputsBySection;
   currentProducts: CurrentProductReferences;
   mortgageSwitch: MortgageSwitchInputs;
+  localRates: Record<ScenarioSection, LocalRateInputs>;
 }
 
 const EMPTY_CURRENT_PRODUCT_REFERENCE: CurrentProductReference = {
@@ -92,7 +113,7 @@ export const EMPTY_MORTGAGE_SWITCH_INPUTS: MortgageSwitchInputs = {
 };
 
 export const EMPTY_USER_RATE_SCENARIO: UserRateScenario = {
-  version: 3,
+  version: 4,
   mortgage: { ...EMPTY_CALC },
   savings: { balance: '', currentRate: '' },
   termDeposit: { balance: '', currentRate: '' },
@@ -107,6 +128,11 @@ export const EMPTY_USER_RATE_SCENARIO: UserRateScenario = {
     termDeposit: { ...EMPTY_CURRENT_PRODUCT_REFERENCE },
   },
   mortgageSwitch: { ...EMPTY_MORTGAGE_SWITCH_INPUTS },
+  localRates: {
+    mortgage: { ...EMPTY_LOCAL_RATE_INPUTS },
+    savings: { ...EMPTY_LOCAL_RATE_INPUTS },
+    termDeposit: { ...EMPTY_LOCAL_RATE_INPUTS },
+  },
 };
 
 export function normalizeUserRateScenario(value: unknown): UserRateScenario {
@@ -127,7 +153,11 @@ export function normalizeUserRateScenario(value: unknown): UserRateScenario {
     const rateIndex = productKey && Number.isInteger(item.rateIndex) && Number(item.rateIndex) >= 0
       ? Number(item.rateIndex)
       : null;
-    return { provider, productKey, rateIndex };
+    return {
+      provider, productKey, rateIndex,
+      ...(productKey && typeof item.offerId === 'string' && item.offerId ? { offerId: item.offerId } : {}),
+      ...(productKey && typeof item.programmeId === 'string' && item.programmeId ? { programmeId: item.programmeId } : {}),
+    };
   };
   const references = obj.currentProducts && typeof obj.currentProducts === 'object'
     ? obj.currentProducts as Partial<CurrentProductReferences>
@@ -137,8 +167,25 @@ export function normalizeUserRateScenario(value: unknown): UserRateScenario {
     : {};
   const switchString = (key: keyof Omit<MortgageSwitchInputs, 'targetOffsetAvailable' | 'fundingMethod'>): string =>
     typeof switchInput[key] === 'string' ? switchInput[key] : '';
+  const localRates = obj.localRates && typeof obj.localRates === 'object' ? obj.localRates : {};
+  const localRate = (key: ScenarioSection): LocalRateInputs => {
+    const input = (localRates as Partial<Record<ScenarioSection, LocalRateInputs>>)[key];
+    const referenceScenario: LocalRateInputs['referenceScenario'] = {};
+    for (const field of ['purpose', 'repayment', 'package', 'customerCategory', 'channel', 'termMonths', 'termDays'] as const) {
+      const value = input?.referenceScenario?.[field];
+      if (typeof value === 'string' && value.trim()) referenceScenario[field] = value.trim();
+    }
+    return {
+      mode: input?.mode === 'reference' ? 'reference' : 'entered',
+      referenceId: typeof input?.referenceId === 'string' ? input.referenceId : '',
+      totalAdjustment: typeof input?.totalAdjustment === 'string' ? input.totalAdjustment : '',
+      allowHistorical: input?.allowHistorical === true,
+      referenceChangeAlerts: input?.referenceChangeAlerts === true,
+      referenceScenario,
+    };
+  };
   return {
-    version: 3,
+    version: 4,
     mortgage: normalizeCalcInputs(obj.mortgage),
     savings: deposit(obj.savings),
     termDeposit: deposit(obj.termDeposit),
@@ -161,6 +208,7 @@ export function normalizeUserRateScenario(value: unknown): UserRateScenario {
         ? switchInput.targetOffsetAvailable
         : 'auto',
     },
+    localRates: { mortgage: localRate('mortgage'), savings: localRate('savings'), termDeposit: localRate('termDeposit') },
   };
 }
 

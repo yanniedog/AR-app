@@ -78,7 +78,7 @@ function prepare(section: SectionKey, rows: RateRow[], clauses: { rateIndex: num
 }
 const mortgageScenario = (balance = '450000') => normalizeUserRateScenario({ mortgage: {
   mode: 'refi', propertyValue: '500000', loanBalance: balance, currentRate: '8', years: '25' },
-  projections: { mortgage: { periodicAmount: '3500' } },
+  projections: { mortgage: { periodicAmount: '3500', holdVariableRate: true, horizonYears: '50' } },
 });
 function surface(id: string) {
   return jest.mocked(usePerformanceAuditSurface).mock.calls.map(call => call[0]).reverse().find(value => value.id === id)!;
@@ -314,5 +314,20 @@ test('entered projection zero and positive amounts still reach the unchanged lif
     expect(numericField(tree, 'Current loan balance').value).toBe('450000');
     expect(numericField(tree, 'Current interest rate').value).toBe('8');
     expect(numericField(tree, 'Years remaining').value).toBe('25');
+  } finally { act(() => tree.unmount()); }
+});
+
+
+test('variable projections require an explicit held-rate assumption before charting money', () => {
+  const scenario = mortgageScenario(); scenario.projections.mortgage.holdVariableRate = false;
+  prepare('Mortgage', [loan], [], scenario, '4');
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<ProjectionWorkspace />) as InspectableRenderer; });
+  try {
+    expect(tree.root.findAllByType('LifecycleChart')).toHaveLength(0);
+    const toggle = tree.root.findAllByType('CompactToggle').find(node => node.props.label === 'Variable rate held')!;
+    act(() => { (toggle.props.onChange as (value: boolean) => void)(true); tree.update(<ProjectionWorkspace />); });
+    expect(mockScenario.projections.mortgage.holdVariableRate).toBe(true);
+    expect(tree.root.findAllByType('LifecycleChart')).toHaveLength(1);
   } finally { act(() => tree.unmount()); }
 });

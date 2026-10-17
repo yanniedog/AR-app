@@ -45,6 +45,8 @@ export interface Prefs {
   /** Explicit standing consent to download verified APK updates after an automatic check. */
   apkUpdatesAutoDownload: boolean;
   includeNonStandard: boolean;
+  /** Rates pagination only; does not truncate filtering, sorting or comparisons. */
+  ratesPageSize: 10 | 20;
   /** How savings & term-deposit lists rank: 'base' ongoing rate (default, honest)
    *  vs 'max' headline/bonus rate. Mirrors RankMetric in data/selectors. */
   depositRankMetric: 'base' | 'max';
@@ -104,6 +106,7 @@ export const DEFAULT_PREFS: Prefs = {
   apkUpdatesWifiOnly: true,
   apkUpdatesAutoDownload: false,
   includeNonStandard: false,
+  ratesPageSize: 20,
   depositRankMetric: 'base',
   mortgageRateMetric: 'comparison',
   mortgageRatePreferenceVersion: CURRENT_MORTGAGE_RATE_PREFERENCE_VERSION,
@@ -224,9 +227,9 @@ export interface AppState {
     relevantDate: string | null,
     kind: TrackedRateDateKind | null,
   ) => Promise<void>;
-  isRateSaved: (productKey: string, rateIndex: number | null) => boolean;
+  isRateSaved: (productKey: string, rateIndex: number | null, offerId?: string) => boolean;
   subscribeProduct: (productKey: string, rateIndex: number | null, labelRow: RateRow) => boolean;
-  unsubscribeProduct: (productKey: string, rateIndex: number | null) => void;
+  unsubscribeProduct: (productKey: string, rateIndex: number | null, offerId?: string) => void;
   subscribeSearch: (input: {
     section: SectionKey;
     path: string[];
@@ -238,7 +241,7 @@ export interface AppState {
   unsubscribeSearch: (id: string) => void;
   removeSubscription: (id: string) => void;
   restoreSubscription: (sub: Subscription) => void;
-  isProductSubscribed: (productKey: string, rateIndex: number | null) => boolean;
+  isProductSubscribed: (productKey: string, rateIndex: number | null, offerId?: string) => boolean;
   findSearchSubscription: (input: {
     section: SectionKey;
     path: string[];

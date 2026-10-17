@@ -10,6 +10,7 @@ import { activeFilterCount, filterRows, rankFraction, type Filters, type Mortgag
 import { breadcrumb, rowsForSearchScope } from './taxonomy';
 import { factCriterionId, normalizeFactCriterion } from './productFactsCore';
 import { lvrTierDisplay, refreshLvrLabelText } from './lvrTier';
+import { publicOfferRefId } from './publicOfferIdentity';
 
 /** factCriteria is optional only for persisted snapshots created before this field existed. */
 export type FilterSnapshot = Omit<Filters, 'query' | 'factCriteria'> & {
@@ -23,6 +24,8 @@ export interface ProductSubscription {
   rateIndex: number | null;
   label: string;
   createdAt: string;
+  offerId?: string;
+  programmeId?: string;
 }
 
 export interface SearchSubscription {
@@ -44,7 +47,8 @@ export function rowIdentity(row: RateRow): string {
   return `${row.product_key}#${row.rate_index ?? 0}`;
 }
 
-export function productSubscriptionId(productKey: string, rateIndex: number | null): string {
+export function productSubscriptionId(productKey: string, rateIndex: number | null, offerId?: string): string {
+  if (offerId) return publicOfferRefId('product', productKey, offerId);
   return `product:${productKey}:${rateIndex ?? 'all'}`;
 }
 
@@ -128,13 +132,16 @@ export function refreshProductSubscriptionLabels(list: Subscription[]): Subscrip
 }
 
 export function makeProductSubscription(row: RateRow, rateIndex: number | null): ProductSubscription {
+  const exact = rateIndex != null || row.rate_index == null && row.exact_alert_eligible === true;
   return {
-    id: productSubscriptionId(row.product_key, rateIndex),
+    id: productSubscriptionId(row.product_key, rateIndex, exact ? row.public_offer_id : undefined),
     kind: 'product',
     productKey: row.product_key,
     rateIndex,
     label: buildProductLabel(row, rateIndex),
     createdAt: new Date().toISOString(),
+    ...(exact && row.public_offer_id ? { offerId: row.public_offer_id } : {}),
+    ...(exact && row.public_programme_id ? { programmeId: row.public_programme_id } : {}),
   };
 }
 
@@ -165,6 +172,20 @@ export function makeSearchSubscription(input: {
 export function addSubscription(list: Subscription[], next: Subscription): Subscription[] {
   if (list.some((s) => s.id === next.id)) return list;
   return [...list, next];
+}
+
+/** Re-key persisted semantic refs from their retained fields before deduping. */
+export function normalizeProductSubscriptionIds(list: Subscription[]): Subscription[] {
+  const out = new Map<string, Subscription>();
+  let changed = false;
+  for (const sub of list) {
+    const id = sub.kind === 'product' && sub.offerId
+      ? productSubscriptionId(sub.productKey, sub.rateIndex, sub.offerId) : sub.id;
+    const next = id === sub.id ? sub : { ...sub, id };
+    if (next !== sub || out.has(id)) changed = true;
+    if (!out.has(id)) out.set(id, next);
+  }
+  return changed ? [...out.values()] : list;
 }
 
 export function removeSubscription(list: Subscription[], id: string): Subscription[] {
@@ -211,12 +232,13 @@ export function isProductSubscribed(
   list: Subscription[],
   productKey: string,
   rateIndex: number | null,
+  offerId?: string,
 ): boolean {
   return list.some(
     (s) =>
       s.kind === 'product' &&
       s.productKey === productKey &&
-      (s.rateIndex === rateIndex || (s.rateIndex === null && rateIndex === null)),
+      (offerId ? s.offerId === offerId : !s.offerId && s.rateIndex === rateIndex),
   );
 }
 
@@ -229,6 +251,7 @@ export function savedRatesWithAlerts(
     subscriptions,
     ref.productKey,
     ref.scope === 'product' ? null : ref.rateIndex,
+    ref.offerId,
   ));
 }
 
@@ -397,6 +420,7 @@ export function computeSubscriptionChanges(
 
   for (const sub of subscriptions) {
     if (sub.kind === 'product') {
+      if (sub.offerId) continue; // Public semantic watches use the shared resolver path.
       const hit = largestRateChange(
         productRatesByIndex(oldCore, sub.productKey, sub.rateIndex, depositRankMetric, mortgageRateMetric),
         productRatesByIndex(newCore, sub.productKey, sub.rateIndex, depositRankMetric, mortgageRateMetric),

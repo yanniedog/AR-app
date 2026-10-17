@@ -1,5 +1,11 @@
+import { captureUserRateScenarioForAudit } from '../hooks/useUserRateScenario';
+import { AuditDatasetChangedError, prepareAuditPublicCore, assertAuditPublicCataloguePinned } from '../lib/performanceAuditDataset';
+import type { PublicCatalogueView } from '../data/publicRateIntegration';
+import { getPublicRateCatalogueSnapshot } from '../data/publicRateCatalogue';
+import { normalizeUserRateScenario } from '../data/userRateScenario';
 import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
 import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSelection';
+import { isVerifiedRatesPagePreparation } from '../lib/ratesAuditPage';
 import { assertObservableAuditActionEffect } from '../lib/performanceAuditActionEvidence';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { toPublicAppHealthReport } from '../lib/appHealth';
@@ -24,6 +30,7 @@ import { resolveSectionRibbonStats } from '../data/ribbonStats';
 import { excludeTokenDepositRates, rankFraction, sortRows } from '../data/selectors';
 import { useStore } from '../data/store';
 import { captureRatesSession, restoreRatesSession } from '../data/ratesSession';
+import { useMortgageComparison } from '../data/mortgageComparison';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
@@ -183,18 +190,12 @@ class AuditInactivityError extends Error {
   }
 }
 
-class AuditDatasetChangedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'AuditDatasetChangedError';
-  }
-}
-
 interface AuditDatasetRevision {
   runDate: string | null;
   manifestRunDate: string | null;
   coreSha: string | null;
   detailsSha: string | null;
+  publicCatalogue: PublicCatalogueView | null;
 }
 
 function now(): number {
@@ -369,10 +370,11 @@ function captureDatasetRevision(): AuditDatasetRevision {
     manifestRunDate: state.manifest?.run_date ?? null,
     coreSha: state.manifest?.files.core.sha256 ?? null,
     detailsSha: state.manifest?.files.details.sha256 ?? null,
+    publicCatalogue: state.manifest ? getPublicRateCatalogueSnapshot(state.manifest) : null,
   };
 }
 
-function datasetRevisionLabel(revision: AuditDatasetRevision): string {
+function datasetRevisionLabel(revision: Pick<AuditDatasetRevision, 'runDate' | 'manifestRunDate' | 'coreSha' | 'detailsSha'>): string {
   return [
     revision.runDate ?? 'no-core',
     revision.manifestRunDate ?? 'no-manifest',
@@ -387,6 +389,7 @@ function assertDatasetRevision(expected: AuditDatasetRevision): void {
     throw new AuditDatasetChangedError('Dataset refresh started during the performance audit');
   }
   const actual = captureDatasetRevision();
+  assertAuditPublicCataloguePinned(expected.publicCatalogue, actual.publicCatalogue);
   if (datasetRevisionLabel(actual) !== datasetRevisionLabel(expected)) {
     throw new AuditDatasetChangedError(
       `Dataset revision changed during the performance audit: expected ${datasetRevisionLabel(expected)}, received ${datasetRevisionLabel(actual)}`,
@@ -469,6 +472,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
   const section = stringParameter(step, 'section');
   const productKey = stringParameter(step, 'productKey');
   const rateIndex = numberParameter(step, 'rateIndex');
+  const programmeId = stringParameter(step, 'programmeId');
   const selectionTokens = stringArrayParameter(step, 'selectionTokens');
   switch (step.semanticActionId) {
     case 'rates.open': return '/browse' as Href;
@@ -491,7 +495,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
             pathname: '/product/[key]',
             params: {
               key: productKey,
-              ...(rateIndex == null ? {} : { ri: String(rateIndex) }),
+              ...(programmeId ? { programme: programmeId } : rateIndex == null ? {} : { ri: String(rateIndex) }),
             },
           } as unknown as Href)
         : null;
@@ -501,7 +505,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
             pathname: '/rate-receipt',
             params: {
               key: productKey,
-              ...(rateIndex == null ? {} : { ri: String(rateIndex) }),
+              ...(programmeId ? { programme: programmeId } : rateIndex == null ? {} : { ri: String(rateIndex) }),
             },
           } as unknown as Href)
         : null;
@@ -866,6 +870,7 @@ async function runDeepAuditStepBody(
     actionRevisionBefore = sourceBefore?.actionRevision ?? null;
     renderRevisionBefore = sourceBefore?.renderRevision ?? null;
     execution.attempted = true;
+    const actionAbort = new AbortController();
     const pendingAction = mountedMutationBarrier.track(measureAuditAction(
       () => {
         execution.invoked = true;
@@ -874,6 +879,7 @@ async function runDeepAuditStepBody(
           source.id,
           step.semanticActionId,
           step.parameters,
+          { signal: actionAbort.signal },
         );
       },
       () => monitor.snapshot(),
@@ -882,7 +888,12 @@ async function runDeepAuditStepBody(
     try {
       measuredAction = await awaitAuditWork(pendingAction, watchdog, `${label} mounted action`);
     } catch (error) {
-      if (mountedMutationBarrier.hasPending) throw new PerformanceAuditPendingMutationError(label);
+      // Cancel unissued preparation, then distinguish it from issued native work.
+      // This never resolves or races an outstanding native scroll promise.
+      actionAbort.abort();
+      if (mountedMutationBarrier.hasPending && !(await mountedMutationBarrier.drain(0))) {
+        throw new PerformanceAuditPendingMutationError(label);
+      }
       throw error;
     }
     const immediateCompletion = performanceAuditReadinessRegistry.snapshot([source.id]).surfaces
@@ -911,6 +922,9 @@ async function runDeepAuditStepBody(
     }
     verifiedIdempotentFixture ||= isVerifiedCalculatorSectionSelection(
       step.semanticActionId, step.parameters?.section, actionResult,
+    );
+    verifiedIdempotentFixture ||= isVerifiedRatesPagePreparation(
+      step.semanticActionId, step.parameters?.selectionToken, actionResult,
     );
     if (
       actionResult != null &&
@@ -2684,9 +2698,12 @@ export function PerformanceAuditRunner() {
       let lastStoredCheckAt: string | null = null;
       let rollbackSnapshot: Awaited<ReturnType<typeof beginPerformanceAuditRollback>> | null = null;
       let ratesSessionSnapshot: ReturnType<typeof captureRatesSession> | null = null;
+      // These exploratory amounts never enter the durable rollback journal or report.
+      const mortgageComparisonSnapshot = { ...useMortgageComparison.getState() };
       let ratesSessionRestored = false;
       const restoreRatesUi = () => {
         if (ratesSessionSnapshot && !ratesSessionRestored) {
+          useMortgageComparison.setState(mortgageComparisonSnapshot);
           restoreRatesSession(ratesSessionSnapshot);
           ratesSessionRestored = true;
         }
@@ -2920,7 +2937,10 @@ export function PerformanceAuditRunner() {
           const datasetRevision = captureDatasetRevision();
           activeDatasetRevision = datasetRevision;
           assertDatasetRevision(datasetRevision);
-          const prepared = buildPerformanceAuditSetupPlans(initialStore.core,
+          const publicCatalogue = datasetRevision.publicCatalogue;
+          const publicScenario = captureUserRateScenarioForAudit() ?? normalizeUserRateScenario(undefined);
+          const auditCore = prepareAuditPublicCore(initialStore.core, publicCatalogue, publicScenario, initialStore.prefs.profileFilters);
+          const prepared = buildPerformanceAuditSetupPlans(auditCore,
             { seed: sessionId, includeNonStandard: true, detailsProducts: initialStore.details?.products }, SECTION_ORDER);
           plan = prepared.plan;
           navigationJourneys = prepared.journeys;
@@ -2952,7 +2972,7 @@ export function PerformanceAuditRunner() {
             watchdogMode: 'stored-check-inactivity',
             storedCheckCount: watchdog.storedCheckCount,
             lastStoredCheckAt,
-            datasetRevision,
+            datasetRevision: datasetRevisionLabel(datasetRevision),
             payloadWork: captureAuditPayloadWork(useStore.getState()),
           });
           // Include the setup marker write in this bounded environment stage.

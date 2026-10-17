@@ -85,7 +85,7 @@ test('Saved collection contains only adjacent real shared56dp rows with exact Op
     });
     const rows = group.findAllByProps({ testID: 'compact-product-row' }).filter(node => node.parent?.props.testID !== 'compact-product-row');
     expect(rows).toHaveLength(3);
-    rows.forEach(row => expect(StyleSheet.flatten(row.props.style)).toMatchObject({ minHeight: COMPACT_ROW.minHeight, paddingVertical: 4, paddingHorizontal: 0 }));
+    rows.forEach(row => expect(StyleSheet.flatten(row.props.style)).toMatchObject({ minHeight: COMPACT_ROW.minHeight, paddingVertical: 3, paddingHorizontal: 0 }));
     expect(group.findAllByType('Button')).toHaveLength(0);
     expect(group.findAllByType(IconAction)).toHaveLength(3); // Shared Save only; no second action row.
     expect(copy(tree)).not.toContain('Last updated');

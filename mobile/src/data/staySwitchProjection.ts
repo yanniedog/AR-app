@@ -87,7 +87,7 @@ export interface StaySwitchProjection {
   ready: boolean;
   missing: string[];
   asAt: string;
-  projectionScope: 'remaining-term' | 'published-fixed-period';
+  projectionScope: 'remaining-term' | 'comparison-period' | 'published-fixed-period';
   targetProductKey: string;
   targetProvider: string;
   targetProductName: string;
@@ -457,10 +457,12 @@ export function buildStaySwitchProjection({
   const targetIsFixed = target.ribbon_rate_structure?.toLowerCase() === 'fixed'
     || target.rate_type?.toLowerCase().includes('fixed') === true;
   const publishedFixedMonths = targetIsFixed ? advertisedTermMonths(target) : null;
-  const modelMonths = targetIsFixed && publishedFixedMonths
-    ? Math.min(months, publishedFixedMonths)
-    : months;
   const projectionInputs = scenario.projections.mortgage;
+  const comparisonMonths = Math.round(Number(projectionInputs.horizonYears || '3') * 12);
+  const currentFixed = projectionInputs.mortgageRateStructure === 'fixed';
+  const currentFixedMonths = Math.round(Number(projectionInputs.fixedPeriodMonths));
+  const modelMonths = Math.min(months, comparisonMonths, targetIsFixed && publishedFixedMonths ? publishedFixedMonths : months,
+    currentFixed ? currentFixedMonths : months);
   const invalidSwitchValues = [
     ...FEE_KEYS.map((key) => [scenario.mortgageSwitch[key], key] as const),
     [scenario.mortgageSwitch.cashback, 'cashback'] as const,
@@ -477,6 +479,9 @@ export function buildStaySwitchProjection({
     ...(targetRate != null && targetRate >= 0 && targetRate <= 1 ? [] : ['target advertised rate']),
     ...(months > 0 && months <= MAX_MONTHS ? [] : ['remaining term from 1 month to 50 years']),
     ...(targetIsFixed && !publishedFixedMonths ? ['published target fixed period'] : []),
+    ...(comparisonMonths > 0 && comparisonMonths <= MAX_MONTHS ? [] : ['valid comparison period']),
+    ...((!currentFixed || !targetIsFixed) && !projectionInputs.holdVariableRate ? ['explicit assumption to hold variable rates unchanged'] : []),
+    ...(currentFixed && (currentFixedMonths <= 0 || currentFixedMonths > months) ? ['current fixed period no longer than the remaining term'] : []),
     ...invalidSwitchValues.map((label) => `${label} from $0 to $1 trillion`),
     ...invalidProjectionValues.map((label) => `${label} from $0 to $1 trillion`),
   ];
@@ -596,7 +601,8 @@ export function buildStaySwitchProjection({
     ready: true,
     missing: [],
     asAt,
-    projectionScope: targetIsFixed ? 'published-fixed-period' : 'remaining-term',
+    projectionScope: targetIsFixed && modelMonths === publishedFixedMonths ? 'published-fixed-period'
+      : modelMonths === months ? 'remaining-term' : 'comparison-period',
     targetProductKey: target.product_key,
     targetProvider: target.provider,
     targetProductName: target.product_name,
@@ -643,7 +649,7 @@ export function buildStaySwitchProjection({
       : null,
     facts: staySwitchFacts({ openingBalance: balance, remainingYears: years, openingOffset,
       householdMonthlyAllocation: householdAllocation, targetMonthlyShortfall: targetAllocationShortfall,
-      targetHasOffset, offsetEvidence, funding: scenario.mortgageSwitch.fundingMethod === 'new-loan' ? 'new-loan' : 'cash', fixed: targetIsFixed, months: modelMonths,
+      targetHasOffset, offsetEvidence, funding: scenario.mortgageSwitch.fundingMethod === 'new-loan' ? 'new-loan' : 'cash', fixed: targetIsFixed, comparisonPeriod: modelMonths < months && !(targetIsFixed && modelMonths === publishedFixedMonths), months: modelMonths,
       fees: { entries: fees.fees, costClaimsAvailable: fees.costClaimsAvailable, feeInputsComplete: fees.feeInputsComplete,
         grossFees: fees.grossFees, cashback: fees.cashback, netSwitchCost: fees.netSwitchCost,
         unpricedUpfrontCount: fees.unpricedUpfrontFees.length, unpricedPeriodicCount: fees.unpricedPeriodicFees.length } }),

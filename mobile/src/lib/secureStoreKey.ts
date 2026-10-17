@@ -33,4 +33,5 @@ export const SECURE_STORE_KEYS = Object.freeze({
   ),
   trackedRateMetadata: defineSecureStoreKey('ar-rates.tracked-rate-metadata.v1'),
   userRateScenario: defineSecureStoreKey('user-rate-scenario-v1'),
+  referenceRateAlertBaseline: defineSecureStoreKey('ar.public-reference-alert-baseline.v1'),
 });

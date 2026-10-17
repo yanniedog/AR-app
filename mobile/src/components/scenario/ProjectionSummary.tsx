@@ -26,7 +26,7 @@ export function ProjectionSummary({ section, result }: { section: SectionKey; re
     <FinancialFactRows rows={[
       { label: 'Interest difference', value: uiMoney(offset.interestDifference) },
       { label: 'Interest-bearing balance', value: uiMoney(offset.effectiveInterestBearingBalance) },
-      { label: 'Projection horizon', value: uiJoin(uiDuration(offset.comparisonMonths, 'months'), ' · ', offset.comparisonScope === 'fixed-period' ? 'Fixed-rate scope' : 'Remaining-term scope') },
+      { label: 'Projection horizon', value: uiJoin(uiDuration(offset.comparisonMonths, 'months'), ' · ', offset.comparisonScope === 'fixed-period' ? 'Fixed-rate scope' : offset.comparisonScope === 'comparison-period' ? 'Comparison period' : 'Remaining-term scope') },
       ...(offset.payoffMonthsEarlier && offset.payoffMonthsEarlier > 0 ? [{ label: 'Payoff difference' as const, value: uiDuration(offset.payoffMonthsEarlier, 'months') }] : []),
       { label: 'Net offset difference', value: uiLabel('Unavailable') }, { label: 'Fees', value: uiLabel('Unverified') },
     ]} />

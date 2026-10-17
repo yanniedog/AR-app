@@ -4,6 +4,7 @@ import { create } from 'zustand';
 
 import { DEFAULT_INTERESTS, normalizeInterests, resolveInterestSection } from './interests';
 import { normalizeProfileFilters } from './profile';
+import { normalizeRatesPageSize } from './ratesPagination';
 import { normalizeCalcInputs } from './calc';
 import { migrateLegacyCalculatorInputs } from './userRateScenario';
 import { bootstrapInitialState, createBootstrapActions } from './storeBootstrap';
@@ -19,7 +20,7 @@ import {
 import type { SectionKey } from '../types';
 import { SECTION_ORDER } from '../constants';
 import { normalizeSavedRates } from './savedRates';
-import { refreshProductSubscriptionLabels } from './subscriptions';
+import { normalizeProductSubscriptionIds, refreshProductSubscriptionLabels } from './subscriptions';
 import { loadTrackedRatesSecureResult, normalizeTrackedRates } from './trackedRates';
 import { debugLog } from '../lib/debugLog';
 import { setCrashReportsEnabled } from '../lib/observability';
@@ -114,6 +115,7 @@ export const useStore = create<AppState>()(
           ...migratedMortgageRatePreference(persistedPrefs),
           interests: normalizeInterests(persistedPrefs?.interests ?? DEFAULT_INTERESTS),
           profileFilters: normalizeProfileFilters(persistedPrefs?.profileFilters),
+          ratesPageSize: normalizeRatesPageSize(persistedPrefs?.ratesPageSize),
           calc: normalizeCalcInputs(persistedPrefs?.calc),
         };
         const persistedActiveSection = p?.activeSection;
@@ -127,7 +129,7 @@ export const useStore = create<AppState>()(
           ...current,
           ...p,
           ...(Array.isArray(p?.subscriptions)
-            ? { subscriptions: refreshProductSubscriptionLabels(p.subscriptions) }
+            ? { subscriptions: refreshProductSubscriptionLabels(normalizeProductSubscriptionIds(p.subscriptions)) }
             : {}),
           prefs,
           savedRates,

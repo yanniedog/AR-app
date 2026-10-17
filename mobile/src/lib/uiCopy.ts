@@ -13,11 +13,22 @@ import { LENDER_ARTWORK_TERMS, OPTIONAL_DIAGNOSTICS_TERMS } from './privacyPolic
 import { Decimal } from './productTermsEngine/decimal';
 import { readBoundCustomerQuestion, type CustomerQuestionBinding } from './customerQuestionBinding';
 import type { BackgroundWorkSnapshot } from './backgroundPayloadWork';
+import type { MortgageComparisonInputs } from '../data/mortgageComparison';
+import type { PublicProduct, PublicReferenceRate, PublicCoverage, PublicEvidence } from '../data/publicRateModel';
+import type { CurrentProductOption } from '../data/scenarioCatalog';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
   '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '#', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
   'Rates', 'Saved', 'Market', 'Account', 'Profile', 'Settings', 'About',
+  'Saved requirements', 'Temporary filters', 'After saved requirements', 'All screens', 'Catalogue',
+  'Edit saved requirements', 'Clear Home loans requirements', 'Clear all saved requirements',
+  'Reset temporary filters', 'Reset Rates view', 'Other saved selections',
+  'Rates per page', 'Products per page', 'Page', 'First', 'Previous', 'Next', 'Last',
+  'First page', 'Previous page', 'Next page', 'Last page',
+  'Freshness', 'Overdue', 'Stale',
+  'Invalid comparison inputs', 'Clear comparison inputs',
+  'Shared requirements',
   'Home loans', 'Savings', 'Savings accounts', 'Term deposits', 'Mortgage', 'TD',
   'Calculate', 'Rate check', 'Projection', 'Compare', 'Filter', 'Sort', 'Search', 'More', 'Bonus', 'Conditional',
   'Search rates or banks', 'Search actions', 'Clear search', 'Clear', 'Reset', 'Apply',
@@ -58,7 +69,7 @@ export const UI_LABELS = [
   'Newest', 'Oldest', 'Name', 'Date', 'Version', 'Build', 'Update', 'Install',
   'Download', 'Downloaded', 'Download failed', 'Update available', 'Up to date',
   'Pause', 'Resume', 'Stop', 'Start', 'Run audit', 'Live audit', 'Public upload', 'Next audit upload', 'Next destination', 'Audit', 'Performance audit',
-  'Debug log', 'Upload', 'Uploaded', 'Upload failed', 'Upload status', 'Clear cache',
+  'Debug log', 'Report', 'Upload', 'Upload report', 'Uploaded', 'Upload failed', 'Upload status', 'Clear cache',
   'Reset app', 'Delete local data', 'Data deleted', 'Authentication required', 'Unlock',
   'Authenticate', 'Export data key', 'Import data key', 'Share data key', 'External link',
   'Open link', 'Domain', 'Address', 'Email', 'Website', 'Licence', 'Legal', 'Terms and privacy',
@@ -368,6 +379,27 @@ export const UI_LABELS = [
   'Fee waiver', 'Fee ordering', 'Payment allocation', 'Payment obligation', 'Business calendar',
   'Posting calendar', 'Payment destination', 'Tax treatment', 'Break fee', 'Principal recovery',
   'Bonus qualification', 'Projected payments', 'Contract scope', 'Issue code', 'Unpaid', 'Activity', 'Holdings', 'Repayment due', 'Paid',
+  'Passed', 'Warnings', 'Failures', 'Timing overruns', 'Skipped', 'Untested links', 'Verified upload', 'Upload uncertain',
+  'Public pricing', 'Payable rate', 'Reference rate', 'Reference', 'Adjustment', 'Margin',
+  'Customer category', 'Channel', 'Qualification', 'Monthly deposits ($)', 'Monthly withdrawals',
+  'Balance growth ($)', 'Card purchases', 'Scope', 'Pricing programme', 'Choose programme',
+  'Pricing unresolved', 'From', 'Public payable rate', 'Calculated payable rate', 'Local reference estimate',
+  'Last verified pricing', 'Pricing evidence', 'Public comparisons incomplete', 'Public products',
+  'Unresolved offers', 'Other products', 'Aliases', 'New applications', 'Selected public scenario',
+  'Negotiated rate', 'Approval', 'Last successful check', 'Historical pricing assumption', 'Current pricing',
+  'Complete-cost ranking', 'Current-rate ranking', 'SHA-256', 'Reference scope', 'Reference + adjustment',
+  'Select reference', 'Historical reference', 'Reference alerts', 'Total adjustment (pp)',
+  'Protected on device', 'Discount sign', 'Public discounts', 'Total adjustment', 'Unmet',
+  'Cost / return', 'Interest cost', 'Interest earned', 'Known fees', 'Interest + known fees',
+  'Known return', 'Principal repaid', 'Ending balance', 'Charged rate', 'Payable nominal rate',
+  'Complete under assumptions', 'Missing fees', 'Verified savings', 'Public source unavailable',
+  'Comparison period', 'Rate assumption missing', 'Variable rate held', 'Local renewal rate',
+  'Renewal rate unchanged', 'Public reference', 'Condition state', 'of', 'Purpose', 'Quoted term',
+  'Publication', 'Stale', 'Monthly nominal', 'Repayments', 'Month end', 'Rounding', 'Cents',
+  'Rate phases', 'Accrual', 'Offset-funded fees', 'Financed upfront fees', 'Revalidated after financing',
+  'Cash-flow conflict', 'Interest basis', 'Actual days/365', 'Cash flows', 'Month boundaries',
+  'Quoted maturity', 'Periodic interest', 'Paid outside deposit', 'Reinvestment return', 'Charges',
+  'Recurring fees', 'Frequency interval start',
 ] as const;
 
 export type UiLabel = typeof UI_LABELS[number];
@@ -411,6 +443,7 @@ export function useReceiptImportInput() { return useInputController(); }
 export function useSetupKeyInput() { return useInputController(); }
 export function useProviderSearchInput() { return useInputController(); }
 export function uiRatesQuery(session: Pick<RatesSectionState, 'query'>): UiInputText { return inputText(session.query); }
+export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr'): UiInputText { return inputText(model[field]); }
 export function uiPrivateOfferInput(model: Pick<MortgageInputs, 'confirmedOfferFacts' | 'provenance'>, field: 'purpose' | 'security' | 'repaymentType'): UiInputText {
   const value = model.confirmedOfferFacts[field] ?? '';
   return inputText(model.provenance === 'user_reported_bank_offer_and_statement' && value.length <= 2000 && !/[\r\n\t]/.test(value) ? value : '');
@@ -577,6 +610,11 @@ export function uiDetailsProductReference(details: DetailsPayload | null | undef
   return identity(productKey);
 }
 export function uiProviderName(row: Pick<RateRow, 'provider'>): UiText { return identity(row.provider); }
+export function uiPublicProductName(product: PublicProduct | CurrentProductOption): UiText { return identity(product.name); }
+export function uiPublicAliasName(alias: PublicProduct['aliases'][number]): UiText { return identity(alias.name); }
+export function uiPublicReferenceName(reference: PublicReferenceRate): UiText { return identity(reference.name); }
+export function uiPublicProviderName(item: PublicProduct | PublicCoverage): UiText { return identity(item.providerName); }
+export function uiPublicEvidenceLocator(evidence: PublicEvidence): UiText { return uiIdentifier(evidence.locator); }
 /** Rebind navigator titles to reviewed labels or current catalogue identities. */
 export function uiNavigationTitle(value: string | undefined, core: CorePayload | null | undefined, fallback: UiCopy): UiCopy {
   const label = UI_LABELS.find(approved => approved === value);
