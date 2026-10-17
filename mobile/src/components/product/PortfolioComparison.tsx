@@ -15,6 +15,13 @@ import { uiCount, uiDate, uiDecimal, uiIdentifier, uiInputIdentifier, uiJoin, ui
 import { EngineReceiptFacts, uiEngineStatus } from './EngineReceiptFacts';
 import { uiEngineScope } from './engineComparisonUi';
 
+const COMPARISON_ISSUE_CODES = new Set([
+  'comparison_alternatives_invalid', 'comparison_input_limit', 'comparison_reference_missing',
+  'comparison_frame_mismatch', 'comparison_material_inputs_incomplete',
+  'comparison_conditional_not_permitted', 'comparison_daily_frame_incomplete',
+  'comparison_input_invalid', 'evaluation_output_budget_exceeded',
+]);
+
 export function HoldingsResultDetails({ result, referenceId }: { result: ComparisonReceipt['results'][number]; referenceId: string }) {
   const [open, setOpen] = useState(false), b = result.breakEven;
   return <Disclosure title={uiJoin(uiIdentifier(result.id), ' · ', 'Results')} open={open} onToggle={() => setOpen(!open)}>
@@ -51,8 +58,8 @@ export function HoldingsForm({ context, options }: { context: SavingsContext; op
   function dates(value: string, setter: (s: string) => void) { setter(value); setSets(old => old.map(a => a.map(v => ({ ...v, confirmedAt: null })))); setConfirmed(false); }
   return <View style={{ gap: 10 }}>
     <AppText variant="small">{uiJoin('Basis', ' · ', 'History', ' · ', 'Equal opening totals', ' · ', 'Common period', ' · ', 'Tax', ' · ', 'Excluded', ' · ', 'No forecast', ' · ', 'No approval')}</AppText>
-    <LedgerField label={uiJoin('Common start', ' · ', 'Included')} value={uiInputIdentifier(start)} onChangeText={s => dates(s, setStart)} />
-    <LedgerField label={uiJoin('Common end', ' · ', 'Excluded')} value={uiInputIdentifier(end)} onChangeText={s => dates(s, setEnd)} />
+    <LedgerField label={uiJoin('Common start', ' · ', 'Included')} accessibilityLabel={uiJoin('Common start', ' · ', 'Included', ' · ', 'YYYY-MM-DD')} placeholder="YYYY-MM-DD" value={uiInputIdentifier(start)} onChangeText={s => dates(s, setStart)} />
+    <LedgerField label={uiJoin('Common end', ' · ', 'Excluded')} accessibilityLabel={uiJoin('Common end', ' · ', 'Excluded', ' · ', 'YYYY-MM-DD')} placeholder="YYYY-MM-DD" value={uiInputIdentifier(end)} onChangeText={s => dates(s, setEnd)} />
     {sets.map((accounts, n) => <View key={n} style={{ gap: 8 }}><AppText>{uiJoin('Holding set', ' ', uiCount(n + 1))}</AppText>
       <Chip label={uiJoin('Reference', ' ', uiCount(n + 1))} selected={referenceId === 'set-'+(n + 1)} onPress={() => setReference('set-'+(n + 1))} />
       {accounts.map((a, j) => <View key={j}><PortfolioAccountEditor value={a} options={options} context={context} start={start} end={end} onChange={v => { setConfirmed(false); setSets(old => old.map((list, i) => i === n ? list.map((item, k) => k === j ? v : item) : list)); }} />
@@ -66,6 +73,7 @@ export function HoldingsForm({ context, options }: { context: SavingsContext; op
     <Button title={uiJoin('Calculate', ' ', 'Holding set')} onPress={() => { setCopyStatus(''); try { setResult({ identity, value: assemble() }); } catch (e) { setResult({ identity, error: e instanceof Error ? e.message : 'Comparison unavailable' }); } }} />
     {!!current?.error && <AppText>{uiLabel('Unavailable')}</AppText>}
     {current?.value && <><AppText>{uiJoin('Status', ': ', uiLabel(current.value.receipt.available ? 'Complete' : 'Unavailable'), ' · ', 'Issues', ': ', uiCount(current.value.receipt.issues.length))}</AppText>
+      {current.value.receipt.issues.map((code, index) => <AppText key={`comparison-issue-${index}`} variant="small">{uiJoin('Issue code', ': ', COMPARISON_ISSUE_CODES.has(code) ? uiIdentifier(code) : uiLabel('Source review required'))}</AppText>)}
       {current.value.receipt.results.map(r => <View key={r.id}><AppText>{uiJoin(uiIdentifier(r.id), ' · ', uiEngineStatus(r.receipt.completeness), ' · ', 'Closing wealth', ': ', uiDecimal(r.receipt.closingNetWorth), ' · ', 'Interest and fee cost', ': ', uiDecimal(r.receipt.netInterestFeeCost), ' · ', 'Rank', ': ', uiCount(r.rank))}</AppText><AppText variant="small">{uiJoin('Issues', ': ', uiCount(r.receipt.issues.length + Object.values(r.receipt.accounts).reduce((n,a)=>n+a.issues.length,0)))}</AppText><HoldingsResultDetails result={r} referenceId={current.value!.receipt.referenceId} /></View>)}
       <Button title={uiJoin('Copy', ' ', 'Receipt')} onPress={() => { try { const fresh = assemble(); if (fresh.inputSha256 !== current.value!.inputSha256) throw new Error('Inputs changed. Calculate again.'); void Clipboard.setStringAsync(JSON.stringify(fresh, null, 2)).then(() => setCopyStatus('Copied'), () => setCopyStatus('Copy failed')); } catch { setResult({ identity, error: 'Publication or inputs changed. Calculate again.' }); } }} />
     </>}

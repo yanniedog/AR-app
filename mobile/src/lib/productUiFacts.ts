@@ -31,6 +31,16 @@ function amountRange(lo: unknown, hi: unknown, currency?: string): UiText {
 function ratePart(raw: unknown): UiText | null {
   const n = number(raw); if (n === null || n < 0) return null; return uiRate(toFraction(n));
 }
+function cashbackRange(item: DetailItem): UiText | null {
+  if (item.label !== 'CASHBACK_OFFER' || typeof item.value !== 'string'
+    || item.value.length > 80 || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(item.value)) return null;
+  const bound = '(?:\\d{1,12}|[1-9]\\d{0,2}(?:,\\d{3}){1,3})(?:\\.\\d{1,2})?';
+  const match = new RegExp(`^ *\\$? *(${bound}) *[-–] *\\$? *(${bound}) *$`).exec(item.value);
+  if (!match) return null;
+  const lower = number(match[1]), upper = number(match[2]);
+  return lower !== null && upper !== null && lower <= upper
+    ? uiJoin(money(lower, item.currency), '–', money(upper, item.currency)) : null;
+}
 export function uiFeeValue(item: DetailItem): UiText {
   const method = item.feeMethodUType?.toLowerCase();
   if (item.amountStatus === 'variable' || method === 'variable' || item.label === 'VARIABLE') return amountRange(item.variable?.feeMinimum, item.variable?.feeMaximum, item.currency);
@@ -131,6 +141,7 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
   const numeric = number(scalar);
   const residencyField = group === 'Eligibility' && item.label === 'RESIDENCY_STATUS';
   const residency = residencyField ? residencyValue(item) : null;
+  const cashback = group === 'Features' ? cashbackRange(item) : null;
   // These published CDR constraint codes establish the unit. Older payloads
   // contain both ratios (0.8) and percentage numbers (98), like the rate DTO.
   const lvr = group === 'Constraints' && /^(?:MIN|MAX)_LVR$/.test(item.label ?? '');
@@ -140,7 +151,7 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
     ? uiRate(toFraction(numeric), Math.max(2, Math.min(6, lvrDecimals - (numeric <= 1 ? 2 : 0)))) : uiLabel('Unknown');
   const value = group === 'Fees' ? uiFeeValue(item) : residencyField ? residency ?? uiLabel('Unknown') : lvr ? lvrValue : numeric !== null ? uiJoin(group === 'Constraints' && /^(?:MIN|MAX)_(?:LIMIT|BALANCE|AMOUNT)$/.test(item.label ?? '') ? uiMoney(numeric, Math.min(2, precision(numeric))) : uiNumber(numeric, precision(numeric)),
     ['Minimum age', 'Maximum age'].includes(controlled ?? '') ? uiJoin(' ', 'years') : null)
-    : residency ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null && !item.info ? uiLabel('Included') : scalar ? humanizeEnum(scalar) : uiLabel('Unknown'));
+    : residency ?? cashback ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null && !item.info ? uiLabel('Included') : scalar ? humanizeEnum(scalar) : uiLabel('Unknown'));
   return { label: label || uiJoin(group, ' ', uiCount(index + 1)), value: uiJoin(value || uiLabel('Unknown'), knownInfo && knownInfo !== residency ? uiJoin(' · ', knownInfo) : null),
     reference: uiCount(index + 1), conditions: item.info?.trim() && !knownInfo || feeName === 'Unknown' && !!item.name?.trim()
       || group === 'Eligibility' && item.label === 'RESIDENCY_STATUS' && !!scalar && !residency

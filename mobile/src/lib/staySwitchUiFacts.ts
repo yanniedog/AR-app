@@ -13,9 +13,9 @@ export function uiStaySwitchFact(fact: StaySwitchFact): readonly FinancialFactRo
   switch (fact.kind) {
     case 'switch-opening-inputs': return [{ label: 'Starting balance', value: uiStaySwitchMoney(fact.balance) }, { label: 'Remaining term', value: uiDuration(fact.remainingYears, 'years') }, { label: 'Opening offset', value: uiStaySwitchMoney(fact.offsetAmount) }];
     case 'switch-rate-basis': return [{ label: 'Basis', value: uiJoin('Advertised rate', ' · ', 'Rate held') }];
-    case 'household-allocation': return [{ label: 'Monthly repayment', value: uiJoin(uiStaySwitchMoney(fact.monthlyAmount), ' · ', fact.policy === 'additional-required' ? 'Required' : 'Entered') }];
+    case 'household-allocation': return [{ label: 'Monthly household allocation', value: uiJoin(uiStaySwitchMoney(fact.monthlyAmount), ' · ', 'Current') }];
     case 'target-allocation-shortfall': return [{ label: 'Repayment shortfall', value: uiJoin(uiStaySwitchMoney(fact.monthlyAmount), ' ', 'per month') }];
-    case 'target-offset': return [{ label: 'Target offset', value: uiJoin(fact.available ? 'Yes' : 'No', ' · ', fact.evidence === 'entered' ? 'Entered' : fact.evidence === 'published' ? 'Published' : 'Unverified') },
+    case 'target-offset': return [{ label: 'Target offset', value: uiJoin(fact.available ? 'Yes' : 'No', ' · ', fact.evidence === 'entered' ? 'Entered' : fact.evidence === 'published' ? 'Published' : fact.evidence === 'not-published' ? 'Not published' : 'Unverified') },
       { label: 'Offset contribution', value: uiLabel(fact.spareDestination === 'offset' ? 'Offset' : 'Principal') },
       { label: 'Maximum', value: uiLabel(fact.offsetCap === 'uncapped' ? 'Uncapped' : 'Not applicable') }];
     case 'switch-funding': return [{ label: 'Funding', value: uiJoin(fact.method === 'new-loan' ? 'New loan' : 'Cash / offset', ' · ', uiStaySwitchMoney(fact.netCostAmount)) }];
@@ -28,6 +28,6 @@ export function uiStaySwitchFact(fact: StaySwitchFact): readonly FinancialFactRo
       { label: 'Eligibility', value: uiLabel('Unverified') }, { label: 'Payment', value: uiLabel('Unverified') }];
     case 'switch-horizon': return [{ label: 'Projection horizon', value: uiJoin(uiDuration(fact.months, 'months'), ' · ', fact.scope === 'published-fixed-period' ? 'Fixed-rate scope' : 'Remaining-term scope') },
       ...(fact.futureReversionRate === 'unknown' ? [{ label: 'Reversion rate' as const, value: uiLabel('Unknown') }] : [])];
-    case 'switch-exclusions': return [{ label: 'Tax', value: uiLabel('Excluded') }, { label: 'Payment', value: uiLabel('Unverified') }, { label: 'Rate', value: uiLabel('No forecast') }];
+    case 'switch-exclusions': return [{ label: 'Tax', value: uiLabel('Excluded') }, { label: 'Refinancing timing', value: uiLabel('Unverified') }, { label: 'Rate', value: uiLabel('No forecast') }];
   }
 }

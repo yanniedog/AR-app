@@ -46,6 +46,37 @@ test('technical private form explicitly calculates, exports, invalidates edits a
   act(() => tree.unmount());
 });
 
+test('holding periods expose ISO syntax and unequal opening totals retain their real comparison blocker', async () => {
+  const h = await savingsHarness(), [selection] = await h.load();
+  const options = [{ id: 'scope', label: uiProductName({ product_name: 'Technical savings scope' }), selection, target: h.target }];
+  let tree: any; act(() => { tree = TestRenderer.create(<HoldingsForm context={h.context} options={options} />); });
+  try {
+    for (const label of ['Common start · Included', 'Common end · Excluded']) {
+      const field = tree.root.findByProps({ label });
+      expect(field.props.value).toBe('');
+      expect(field.props.placeholder).toBe('YYYY-MM-DD');
+      expect(field.props.accessibilityLabel).toBe(`${label} · YYYY-MM-DD`);
+      act(() => field.props.onChangeText(label.includes('start') ? '2026-01-01' : '2026-01-11'));
+    }
+    for (let n = 0; n < 2; n++) {
+      act(() => tree.root.findAllByProps({ label: 'Technical savings scope' })[n].props.onPress());
+      act(() => tree.root.findAllByProps({ label: 'Local account reference' })[n].props.onChangeText(`account-${n}`));
+      act(() => tree.root.findAllByProps({ label: 'Opening balance (AUD)' })[n].props.onChangeText(n ? '2000' : '1000'));
+      act(() => tree.root.findAllByProps({ label: 'Confirmed annual rate (%) · period-1:tier-1' })[n].props.onChangeText('3.65'));
+      act(() => tree.root.findAllByProps({ label: 'Confirm details' })[n].props.onPress());
+    }
+    act(() => tree.root.findByProps({ label: 'No linked effects' }).props.onPress());
+    act(() => tree.root.findByProps({ title: 'Calculate Holding set' }).props.onPress());
+    expect(JSON.stringify(tree.toJSON())).toContain('Status: Unavailable · Issues: 1');
+    expect(JSON.stringify(tree.toJSON())).toContain('Issue code: comparison_frame_mismatch');
+    expect(tree.root.findAllByType('Disclosure')).toHaveLength(0); // No account result can explain this top-level blocker.
+    await act(async () => tree.root.findByProps({ title: 'Copy Receipt' }).props.onPress());
+    const copied = JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls.at(-1)[0]).receipt;
+    expect(copied.available).toBe(false); expect(copied.results).toEqual([]);
+    expect(copied.issues).toEqual(['comparison_frame_mismatch']);
+  } finally { act(() => tree.unmount()); }
+});
+
 test('technical comparison disclosure loads only reviewed savings and removes a replaced edition', async () => {
   const h = await savingsHarness();
   const row = { provider: 'Technical', product_key: h.target.productKey, product_name: 'Technical holding', rate: '0.0365', rate_index: 1 };
