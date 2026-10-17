@@ -47,6 +47,17 @@ function registerLegacyYamlCliChecks(projectDir) {
         assert.deepEqual(JSON.parse(valid.stdout), { build: { android: { buildType: 'apk' } } });
         assert.equal(valid.stderr, '');
       }
+      const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'ar-yaml cli-'));
+      try {
+        const file = path.join(temporary, 'build profile.yaml');
+        fs.writeFileSync(file, 'build:\n  android:\n    buildType: apk\n');
+        const positional = run([file]);
+        assert.equal(positional.status, 0);
+        assert.deepEqual(JSON.parse(positional.stdout), { build: { android: { buildType: 'apk' } } });
+        assert.equal(positional.stderr, '');
+      } finally {
+        fs.rmSync(temporary, { recursive: true, force: true });
+      }
       const invalidOption = run(['--unknown-option']);
       assert.equal(invalidOption.status, 2);
       assert.match(invalidOption.stderr, /unrecognized arguments.*--unknown-option/i);
