@@ -30,6 +30,10 @@ function verifyNativeAnalysis(workflow, sources) {
   assert.match(compile, /--rerun-tasks/);
   assert(sources.length > 0, "native module inventory must not be empty");
   const tasks = new Set(compile.match(/:[\w-]+:compileRelease(?:Kotlin|JavaWithJavac)\b/g));
+  // npm postinstall copies our HeadlessTaskController.java into expo-task-manager.
+  // Scan that runtime helper and its Kotlin lifecycle consumer, not Java test fixtures.
+  assert(tasks.has(":expo-task-manager:compileReleaseJavaWithJavac"), "CodeQL must compile the copied runtime Java helper");
+  assert(tasks.has(":expo-background-task:compileReleaseKotlin"), "CodeQL must compile the background task lifecycle");
   for (const source of sources) {
     const [, moduleName, extension] = source.match(/^mobile\/modules\/([^/]+)\/android\/src\/main\/.*\.(kt|java)$/) ?? [];
     assert(moduleName, `unrecognized native source layout: ${source}`);
@@ -51,9 +55,11 @@ export function verifyCodeqlWorkflow() {
   assert.throws(() => verifyNativeAnalysis(workflow.replace("build-mode: manual", "build-mode: none"), sources));
   assert.throws(() => verifyNativeAnalysis(workflow.replace("--rerun-tasks", ""), sources));
   assert.throws(() => verifyNativeAnalysis(workflow.replace(":ar-history-codec:compileReleaseJavaWithJavac", ""), sources));
+  assert.throws(() => verifyNativeAnalysis(workflow.replace(":expo-task-manager:compileReleaseJavaWithJavac", ""), sources));
+  assert.throws(() => verifyNativeAnalysis(workflow.replace(":expo-background-task:compileReleaseKotlin", ""), sources));
   assert.throws(() => verifyNativeAnalysis(workflow.replace("set -o pipefail", "true"), sources));
   assert.throws(() => verifyNativeAnalysis(workflow.replace("timeout-minutes: 10", "continue-on-error: true\n        timeout-minutes: 10"), sources));
   const withoutPreparation = workflow.replace(/      - name: Prepare Android settings dependencies[\s\S]*?(?=      - name: Initialize CodeQL)/, "");
   assert.throws(() => verifyNativeAnalysis(withoutPreparation, sources));
-  console.log(`CodeQL workflow verification passed (${sources.length} native module sources).`);
+  console.log(`CodeQL workflow verification passed (${sources.length} native module sources plus copied runtime Java and background lifecycle).`);
 }

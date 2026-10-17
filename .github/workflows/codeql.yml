@@ -87,6 +87,8 @@ jobs:
             :ar-history-codec:compileReleaseKotlin \
             :ar-history-codec:compileReleaseJavaWithJavac \
             :ar-audit-screen-awake:compileReleaseKotlin \
+            :expo-task-manager:compileReleaseJavaWithJavac \
+            :expo-background-task:compileReleaseKotlin \
             --no-daemon --no-build-cache --rerun-tasks --info --stacktrace \
             2>&1 | tee "$RUNNER_TEMP/codeql-gradle-compile.log"
       - name: Perform CodeQL analysis
