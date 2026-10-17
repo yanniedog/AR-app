@@ -28,6 +28,9 @@ import {
 } from "./review-bot-control.mjs";
 import { evaluateRequiredCheckState } from "./lib/required-ci-checks.mjs";
 import { verifyQwenDiff } from "./verify-qwen-diff.mjs";
+import { verifyCodeqlWorkflow } from "./verify-codeql-workflow.mjs";
+
+verifyCodeqlWorkflow();
 
 function indentedBlock(source, heading) {
   const lines = source.split(/\r?\n/);
