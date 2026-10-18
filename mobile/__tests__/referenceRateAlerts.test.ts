@@ -63,7 +63,24 @@ it('uses a separate protected baseline and respects generation changes and an op
   const optedOut = normalizeUserRateScenario({ ...input, localRates: {} });
   jest.mocked(loadUserRateScenario).mockResolvedValueOnce(input).mockResolvedValueOnce(optedOut);
   await checkPublicReferenceChanges(manifest, 1);
-  expect(notify).toHaveBeenLastCalledWith([]);
+  expect(notify).toHaveBeenLastCalledWith([], expect.any(Function));
   expect(JSON.stringify(input)).toBe(before);
   expect(saveUserRateScenario).not.toHaveBeenCalled();
+});
+
+it('rechecks the active reference watch at delivery after permission or transport waits', async () => {
+  const input = scenario(), optedOut = scenario();
+  optedOut.localRates.mortgage.referenceChangeAlerts = false;
+  jest.mocked(loadUserRateScenario).mockResolvedValue(input);
+  jest.mocked(ensurePublicRateCatalogueLoaded).mockResolvedValue(catalogue([], [], [reference({ value: '9.14' })]) as Awaited<ReturnType<typeof ensurePublicRateCatalogueLoaded>>);
+  jest.mocked(readSecureStoreValue).mockResolvedValue(JSON.stringify({ 'unit-reference': { fraction: '0.0889' } }));
+  const decisions: boolean[] = [];
+  jest.mocked(notify).mockImplementationOnce(async (messages, canDeliver) => {
+    expect(messages).toHaveLength(1);
+    jest.mocked(loadUserRateScenario).mockResolvedValue(optedOut);
+    decisions.push(await canDeliver!(messages[0]));
+  });
+  await checkPublicReferenceChanges({ public_rate_catalogue: {} } as Manifest, 1);
+  expect(decisions).toEqual([false]);
+  expect(writeSecureStoreValue).toHaveBeenLastCalledWith(SECURE_STORE_KEYS.referenceRateAlertBaseline, '{}');
 });

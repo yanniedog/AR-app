@@ -475,7 +475,7 @@ export async function ensurePermissions(): Promise<boolean> {
   }
 }
 
-export async function notify(messages: NotifyMessage[]): Promise<void> {
+export async function notify(messages: NotifyMessage[], canDeliver: (message: NotifyMessage) => boolean | Promise<boolean> = () => true): Promise<void> {
   if (!messages.length) return;
   const eligibilityRevision = getMandatoryEligibilityRevision();
   debugLog.debug('notify', `scheduling ${messages.length} notification(s)`);
@@ -485,6 +485,7 @@ export async function notify(messages: NotifyMessage[]): Promise<void> {
   }
   // Collapse a flurry into at most a few notifications.
   for (const msg of messages.slice(0, 3)) {
+    if (!(await canDeliver(msg))) continue;
     if (eligibilityRevision !== getMandatoryEligibilityRevision()) return;
     if (hasMandatoryRequirements() && (msg.productKey || msg.search)) continue;
     const data = notificationDataFromMessage(msg);

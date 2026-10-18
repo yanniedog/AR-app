@@ -6,6 +6,11 @@ import * as payload from '../src/data/payload';
 import * as notifications from '../src/data/notifications';
 import { bindVerifiedDetails } from '../src/data/detailsIdentity';
 import { EMPTY_FILTERS } from '../src/data/selectors';
+import * as publicCatalogue from '../src/data/publicRateCatalogue';
+import * as referenceAlerts from '../src/data/referenceRateAlerts';
+import * as resolvedAlerts from '../src/data/resolvedRateNotifications';
+import * as scenarios from '../src/data/userRateScenario';
+import { uiJoin } from '../src/lib/uiCopy';
 
 const mockReadBundle = jest.fn();
 const mockReadMeta = jest.fn();
@@ -146,6 +151,38 @@ describe('store refresh lifecycle', () => {
       min_date: remoteManifest.run_date,
       latest_date: remoteManifest.run_date,
     });
+  });
+
+  it.each(['master', 'watch'] as const)('rechecks %s opt-out after protected scenario loading during public refresh', async kind => {
+    const previous = { ...remoteManifest, public_rate_catalogue: {} } as Manifest;
+    const next = { ...previous, files: { ...previous.files, core: { ...previous.files.core, sha256: 'c'.repeat(64) } } };
+    const view: Awaited<ReturnType<typeof publicCatalogue.ensurePublicRateCatalogueLoaded>> = { status: 'ready', products: [], references: [],
+      coverage: [], evidence: [], error: null, generationId: 'current', allLoaded: true, getProduct: () => undefined, getProgrammes: () => [],
+      loadProduct: async () => {}, loadAll: async () => {} };
+    const ensure = jest.spyOn(publicCatalogue, 'ensurePublicRateCatalogueLoaded').mockResolvedValue(view);
+    const references = jest.spyOn(referenceAlerts, 'checkPublicReferenceChanges').mockResolvedValue();
+    const message = { title: uiJoin('Rate changed'), body: uiJoin('Rate changed'), productKey: 'watched' };
+    const rates = jest.spyOn(resolvedAlerts, 'resolvedRateNotificationChanges').mockImplementation(options => options.subscriptions.length ? [message] : []);
+    const economic = jest.spyOn(notifications, 'computeChanges').mockReturnValue([]);
+    const notify = jest.spyOn(notifications, 'notify').mockResolvedValue();
+    const scenario = jest.spyOn(scenarios, 'loadUserRateScenario').mockImplementation(async () => {
+      if (kind === 'master') useStore.setState(state => ({ prefs: { ...state.prefs, notificationsEnabled: false } }));
+      else useStore.setState({ subscriptions: [] });
+      return scenarios.normalizeUserRateScenario({});
+    });
+    try {
+      useStore.setState({ source: 'remote', manifest: previous, prefs: { ...useStore.getState().prefs, notificationsEnabled: true },
+        subscriptions: [{ id: 'watched', kind: 'product', productKey: 'watched', rateIndex: null, label: 'Watched', createdAt: previous.generated_at }],
+        ensureDetails: mockEnsureDetails, ensureRbaCalendar: mockEnsureRbaCalendar, ensureHistoryBanks: mockEnsureHistoryBanks,
+        ensureBankInsights: mockEnsureBankInsights, ensureBankSpreadHistory: mockEnsureBankSpreadHistory });
+      mockReadMeta.mockResolvedValue({ manifest: previous, source: 'remote', savedAt: previous.generated_at, coreSha: previous.files.core.sha256 });
+      mockFetchManifest.mockResolvedValue(next);
+      mockDownloadCore.mockResolvedValue({ core: remoteCore, text: JSON.stringify(remoteCore), integrity: sampleCoreIntegrity });
+      await expect(useStore.getState().refresh({ background: true })).resolves.toBe(true);
+      expect(scenario).toHaveBeenCalled();
+      expect(notify.mock.calls.every(([messages]) => messages.length === 0)).toBe(true);
+      if (kind === 'watch') expect(rates.mock.calls[0][0].subscriptions).toEqual([]);
+    } finally { ensure.mockRestore(); references.mockRestore(); rates.mockRestore(); economic.mockRestore(); notify.mockRestore(); scenario.mockRestore(); }
   });
 
   it.each([
