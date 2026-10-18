@@ -69,6 +69,7 @@ export async function gunzipCooperatively(
 }
 
 export interface DownloadOpts {
+  signal?: AbortSignal;
   fileName?: string;
   expectedBytes?: number;
   /** Hard ceiling for bytes received before hash verification. */
@@ -109,6 +110,7 @@ async function downloadWireBytes(
   url: string,
   opts: DownloadOpts & { phase?: PayloadProgressPhase; legacySha?: string } = {},
 ): Promise<ArrayBuffer> {
+  if (opts.signal?.aborted) throw new Error('Payload download cancelled');
   const deliveryUrl = automaticDataUrl(url);
   const legacyHeaders = opts.legacySha ? { 'X-AR-Legacy-SHA256': opts.legacySha } : undefined;
   if (opts.legacySha && (!deliveryUrl || !/^[a-f0-9]{64}$/.test(opts.legacySha))) {
@@ -143,6 +145,9 @@ async function downloadWireBytes(
 
   if (hasAppHealthFetchGuard()) {
     const controller = new AbortController();
+    const abort = () => controller.abort();
+    opts.signal?.addEventListener('abort', abort, { once: true });
+    if (opts.signal?.aborted) controller.abort();
     const timer = setTimeout(() => controller.abort(), 30_000);
     try {
       const response = await globalThis.fetch(url, { signal: controller.signal, headers: legacyHeaders });
@@ -161,6 +166,7 @@ async function downloadWireBytes(
       return buf;
     } finally {
       clearTimeout(timer);
+      opts.signal?.removeEventListener('abort', abort);
     }
   }
 
@@ -228,6 +234,10 @@ async function downloadWireBytes(
       logFetchHttpError(url, 0, `${phase}:network_error`);
       reject(new Error('network error'));
     };
+    const abort = () => { xhr.abort(); reject(new Error('Payload download cancelled')); };
+    opts.signal?.addEventListener('abort', abort, { once: true });
+    xhr.onloadend = () => opts.signal?.removeEventListener('abort', abort);
+    if (opts.signal?.aborted) { abort(); return; }
     xhr.send();
   });
 }

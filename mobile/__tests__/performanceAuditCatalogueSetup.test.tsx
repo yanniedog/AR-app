@@ -37,7 +37,10 @@ jest.mock('../src/lib/debugLog', () => ({
 jest.mock('../src/data/publicRateCatalogue', () => ({
   ...jest.requireActual('../src/data/publicRateCatalogue'),
   getPublicRateCatalogueSnapshot: () => mockClient.snapshot(),
-  ensurePublicRateCatalogueLoaded: jest.fn(async () => { await mockClient.snapshot().loadAll(); return mockClient.snapshot(); }),
+  preparePublicRateCatalogueForAudit: jest.fn(() => {
+    const ready = mockClient.snapshot().loadAll().then(() => mockClient.snapshot());
+    return { ready, cancelAndDrain: async () => { await ready.catch(() => undefined); }, quiesce: () => undefined, release: () => undefined };
+  }),
 }));
 jest.mock('../src/lib/performanceAuditSetup', () => {
   const real = jest.requireActual('../src/lib/performanceAuditSetup');
