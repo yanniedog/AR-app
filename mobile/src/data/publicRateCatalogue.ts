@@ -71,6 +71,11 @@ function assertCatalogueActive(signal?: AbortSignal): void {
 }
 const unavailable: PublicRateCatalogueState = { status: 'unavailable', products: [], coverage: [], references: [], evidence: [], allLoaded: false, error: null, generationId: null,
   getProduct: () => undefined, getProgrammes: () => [], loadProduct: async () => undefined, loadAll: async () => undefined };
+// A legacy manifest has one immutable absence snapshot. Audit reservations cache
+// wrappers by client identity, so recreating this client makes unchanged absence
+// look like a new catalogue revision on every read.
+const unavailableClient: CatalogueClient = { snapshot: () => unavailable,
+  subscribe: () => () => undefined, start: async () => undefined };
 
 async function acquire(edition: string, asset: PublicRateAsset, isIndex: boolean, signal?: AbortSignal, localOnly = false): Promise<unknown> {
   assertCatalogueActive(signal);
@@ -211,7 +216,7 @@ export function createPublicRateCatalogueClient(manifest: Manifest,
 }
 
 function clientFor(manifest: Manifest | null): CatalogueClient {
-  if (!manifest?.public_rate_catalogue) return { snapshot: () => unavailable, subscribe: () => () => undefined, start: async () => undefined };
+  if (!manifest?.public_rate_catalogue) return unavailableClient;
   const key = manifestKey(manifest)!;
   const cached = clients.get(key); if (cached) return cached;
   let client: CatalogueClient;

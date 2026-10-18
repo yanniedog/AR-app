@@ -31,3 +31,27 @@ test('absent manifest capability retains the original raw core and never adopts 
   expect(prepareAuditPublicCore(source, null, scenario, profile)).toBe(source);
   expect(() => assertAuditPublicCataloguePinned(null, catalogue())).toThrow(AuditDatasetChangedError);
 });
+
+test.each([false, true])('presence-only changes do not invent a generation change (adding: %s)', adding => {
+  const unavailable = { ...catalogue(), status: 'unavailable' as const, generationId: null };
+  try {
+    assertAuditPublicCataloguePinned(adding ? null : unavailable, adding ? unavailable : null);
+    throw new Error('Expected a catalogue presence change');
+  } catch (error) {
+    expect(error).toBeInstanceOf(AuditDatasetChangedError);
+    expect((error as AuditDatasetChangedError).evidence).toMatchObject({
+      publicCatalogueChanged: true, catalogueGenerationChanged: false,
+      expectedCataloguePresent: !adding, actualCataloguePresent: adding,
+    });
+  }
+});
+
+test('actual catalogue generations remain distinguishable in structured evidence', () => {
+  try {
+    assertAuditPublicCataloguePinned({ ...catalogue(), generationId: 'old' }, { ...catalogue(), generationId: 'new' });
+    throw new Error('Expected a generation change');
+  } catch (error) {
+    expect(error).toBeInstanceOf(AuditDatasetChangedError);
+    expect((error as AuditDatasetChangedError).evidence.catalogueGenerationChanged).toBe(true);
+  }
+});

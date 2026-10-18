@@ -1,5 +1,5 @@
 import { captureUserRateScenarioForAudit } from '../hooks/useUserRateScenario';
-import { AuditDatasetChangedError, prepareAuditPublicCore, assertAuditPublicCataloguePinned } from '../lib/performanceAuditDataset';
+import { AuditDatasetChangedError, auditDatasetFailureMetrics, prepareAuditPublicCore, assertAuditPublicCataloguePinned } from '../lib/performanceAuditDataset';
 import type { PublicCatalogueView } from '../data/publicRateIntegration';
 import { validatePublicRateCapability } from '../data/publicRateWire';
 import { beginPublicRateCatalogueAudit, preparePublicRateCatalogueForAudit, getPublicRateCatalogueSnapshot } from '../data/publicRateCatalogue';
@@ -394,7 +394,7 @@ function datasetRevisionLabel(revision: Pick<AuditDatasetRevision, 'runDate' | '
 function assertDatasetRevision(expected: AuditDatasetRevision): void {
   const state = useStore.getState();
   if (state.refreshing || state.postRefreshWarming || state.bankRateHistoryLoading) {
-    throw new AuditDatasetChangedError('Dataset refresh started during the performance audit');
+    throw new AuditDatasetChangedError('Dataset refresh started during the performance audit', { datasetRefreshStarted: true });
   }
   const actual = captureDatasetRevision();
   assertAuditPublicCataloguePinned(expected.publicCatalogue, actual.publicCatalogue);
@@ -3029,7 +3029,7 @@ export function PerformanceAuditRunner() {
             }
           }
           const initialStore = useStore.getState();
-          if (initialStore.manifest !== manifest) throw new AuditDatasetChangedError('Dataset manifest changed during public catalogue preparation');
+          if (initialStore.manifest !== manifest) throw new AuditDatasetChangedError('Dataset manifest changed during public catalogue preparation', { datasetManifestChanged: true });
           if (auditMode === 'local') captureInitialHealthData(initialStore);
           const datasetRevision = captureDatasetRevision();
           activeDatasetRevision = datasetRevision;
@@ -3887,6 +3887,7 @@ export function PerformanceAuditRunner() {
               backgroundWorkDetail: backgroundWorkWait ? describeAuditBackgroundWork(backgroundWorkWait) : null,
               ...inventoryFailureEvidence,
               ...setupFailure.check?.metrics,
+              ...auditDatasetFailureMetrics(caught),
               completedBeforeFailure: completed,
               recoveryRequired: mutationRecoveryRequired,
               rollbackRestored: rollbackOutcome.restored,
