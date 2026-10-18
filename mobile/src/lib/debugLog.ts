@@ -1,7 +1,7 @@
 import { htmlPlainText } from './htmlPlainText';
 import { clearCompletedPerformanceAudit } from './performanceAuditReportStorage';
 import { clearCompletedPerformanceAuditState } from './performanceAudit';
-import { clearPublicReportUploadAttempts } from './publicReportUploadAttempt';
+import { beginPublicReportUploadAttemptsClear } from './publicReportUploadAttempt';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
@@ -829,6 +829,7 @@ export const debugLog = {
   },
   clear(): Promise<void> {
     if (clearPromise) return clearPromise;
+    const finishUploadAttemptsClear = beginPublicReportUploadAttemptsClear();
     clearState = 'clearing';
     fileWriteEpoch += 1;
     buffer.clear();
@@ -852,9 +853,9 @@ export const debugLog = {
     clearPromise = (async () => {
       try {
         await clearCompletedPerformanceAudit(async () => {
+        try {
         if (inFlight) await inFlight.catch(() => {});
         if (coldStartResetPromise) await coldStartResetPromise;
-        await clearPublicReportUploadAttempts();
         const storageKeys = [
           STORAGE_KEY,
           LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
@@ -888,6 +889,7 @@ export const debugLog = {
           );
         }
         clearCompletedPerformanceAuditState();
+        } finally { await finishUploadAttemptsClear(); }
         });
         pendingLogRotation = false;
         clearState = 'ready';

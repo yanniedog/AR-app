@@ -99,6 +99,9 @@ export async function loadCompletedPerformanceAudit(): Promise<PerformanceAuditR
 function validateCompletedReport(value: unknown): PerformanceAuditReport {
   if (!value || typeof value !== 'object') throw new Error('The saved completed audit is invalid.');
   const report = value as PerformanceAuditReport;
+  const app = report.app as unknown as Record<string, unknown>;
+  const summary = report.summary as unknown as Record<string, unknown>;
+  const environment = report.environment as unknown as Record<string, unknown>;
   const object = (entry: unknown): entry is Record<string, unknown> => !!entry && typeof entry === 'object' && !Array.isArray(entry);
   const finite = (entry: unknown) => typeof entry === 'number' && Number.isFinite(entry) && entry >= 0;
   const date = (entry: unknown) => typeof entry === 'string' && Number.isFinite(Date.parse(entry));
@@ -108,19 +111,19 @@ function validateCompletedReport(value: unknown): PerformanceAuditReport {
   if (![6, PERFORMANCE_AUDIT_SCHEMA_VERSION].includes(report.schemaVersion) || typeof report.sessionId !== 'string' || !report.sessionId ||
       !report.app || !report.environment || !report.summary || !report.watchdog ||
       !date(report.startedAt) || !date(report.finishedAt) || !finite(report.durationMs) ||
-      !object(report.app) || !['appVersion', 'buildVersion'].every(key => typeof report.app[key] === 'string') ||
+      !object(report.app) || !['appVersion', 'buildVersion'].every(key => typeof app[key] === 'string') ||
       !object(report.summary) || !['healthy', 'attention', 'bottleneck'].includes(report.summary.overall) ||
-      !['pass', 'warn', 'fail', 'skipped', 'unavailable', 'executed', 'justifiedSkipped', 'unexpectedSkipped'].every(key => count(report.summary[key])) ||
-      !['coveragePercent', 'slowestCheckMs', 'maxEventLoopLagMs', 'maxFrameGapMs'].every(key => nullableNumber(report.summary[key])) ||
-      !['slowestCheckId', 'slowestCheckLabel'].every(key => nullableText(report.summary[key])) ||
+      !['pass', 'warn', 'fail', 'skipped', 'unavailable', 'executed', 'justifiedSkipped', 'unexpectedSkipped'].every(key => count(summary[key])) ||
+      !['coveragePercent', 'slowestCheckMs', 'maxEventLoopLagMs', 'maxFrameGapMs'].every(key => nullableNumber(summary[key])) ||
+      !['slowestCheckId', 'slowestCheckLabel'].every(key => nullableText(summary[key])) ||
       !finite(report.watchdog.hangTimeoutMs) || !count(report.watchdog.storedCheckCount) ||
       !(report.watchdog.lastStoredCheckAt === null || date(report.watchdog.lastStoredCheckAt)) ||
-      !object(report.environment) || !['appVersion', 'buildVersion', 'platform', 'platformVersion', 'jsEngine', 'payloadSource'].every(key => typeof report.environment[key] === 'string') ||
-      !['manufacturer', 'brand', 'model', 'osName', 'osVersion', 'payloadRunDate', 'networkType'].every(key => nullableText(report.environment[key])) ||
-      !['viewportWidth', 'viewportHeight', 'fontScale', 'payloadProducts', 'payloadProviders'].every(key => finite(report.environment[key])) ||
+      !object(report.environment) || !['appVersion', 'buildVersion', 'platform', 'platformVersion', 'jsEngine', 'payloadSource'].every(key => typeof environment[key] === 'string') ||
+      !['manufacturer', 'brand', 'model', 'osName', 'osVersion', 'payloadRunDate', 'networkType'].every(key => nullableText(environment[key])) ||
+      !['viewportWidth', 'viewportHeight', 'fontScale', 'payloadProducts', 'payloadProviders'].every(key => finite(environment[key])) ||
       !nullableNumber(report.environment.totalMemoryBytes) ||
-      !['developmentBuild', 'detailsLoaded', 'historyLoaded', 'productHistoryLoaded', 'diagnosticsUploadEnabled'].every(key => typeof report.environment[key] === 'boolean') ||
-      !['networkConnected', 'networkInternetReachable'].every(key => report.environment[key] === null || typeof report.environment[key] === 'boolean') ||
+      !['developmentBuild', 'detailsLoaded', 'historyLoaded', 'productHistoryLoaded', 'diagnosticsUploadEnabled'].every(key => typeof environment[key] === 'boolean') ||
+      !['networkConnected', 'networkInternetReachable'].every(key => environment[key] === null || typeof environment[key] === 'boolean') ||
       !Array.isArray(report.routeAggregates) || !report.routeAggregates.every(route => object(route) && typeof route.journeyId === 'string' && typeof route.label === 'string' &&
         ['coldStatus', 'warmStatus'].every(key => ['pass', 'warn', 'fail', 'skipped'].includes(String(route[key]))) &&
         ['coldForwardMs', 'warmForwardMs', 'coldBackMs', 'warmBackMs', 'forwardChangeMs', 'backChangeMs'].every(key => typeof route[key] === 'number' && Number.isFinite(route[key]))) ||
