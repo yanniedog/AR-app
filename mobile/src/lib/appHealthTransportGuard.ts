@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { automaticDataUrl } from './automaticDataAccess';
 import { APK_ARM_MANIFEST_URL, APK_MANIFEST_URL } from '../config';
 import { StandardUrl as URL } from './standardUrl';
@@ -184,6 +185,9 @@ export function installAppHealthTransportGuard(options: {
         if (permittedOfficialData) {
           // React Native's XHR-backed fetch ignores redirect:error. Expo's
           // native transport disables redirect following before sending a hop.
+          if (Platform.OS === 'web') {
+            return Reflect.apply(originalFetch, target, [url, { ...init, redirect: 'error' }]) as ReturnType<typeof fetch>;
+          }
           // Load only on the approved official-data path; local audits need no native transport.
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { fetch: nativeFetch } = require('expo/fetch') as typeof import('expo/fetch');

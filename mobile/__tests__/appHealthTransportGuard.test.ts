@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { fetch as nativeFetch } from 'expo/fetch';
 import { getLocalAppHealthAuditGeneration, installAppHealthTransportGuard, isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceContract';
@@ -73,6 +74,26 @@ describe('installAppHealthTransportGuard', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(guard.snapshot()).toMatchObject({ authorizedAttempts: 1, transportCalls: 1 });
     } finally { guard.restore(); }
+  });
+
+  it('uses the browser redirect-error transport directly on web', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    const platform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'web' });
+    jest.mocked(nativeFetch).mockClear();
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    try {
+      await expect(target.fetch(OFFICIAL_PUBLIC_DATA_URLS[0], {
+        method: 'GET', credentials: 'omit',
+      })).resolves.toMatchObject({ ok: true });
+      expect(fetchSpy).toHaveBeenCalledWith(OFFICIAL_PUBLIC_DATA_URLS[0], {
+        method: 'GET', credentials: 'omit', redirect: 'error',
+      });
+      expect(nativeFetch).not.toHaveBeenCalled();
+    } finally {
+      guard.restore();
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: platform });
+    }
   });
 
   it('rejects unsafe official request forms before transport, including headers, bodies and referrer tunnels', async () => {
