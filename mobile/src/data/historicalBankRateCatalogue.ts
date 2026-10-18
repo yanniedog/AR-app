@@ -99,8 +99,8 @@ export function selectHistoricalCatalogueDates(primary: PreparedHistoricalBankRa
   if (!state || (fallback && !states.has(fallback))) throw new Error('History was not prepared');
   const key = JSON.stringify([[...dates].sort(), index?.dates ?? null, index?.revision_heads ?? null, [...conflicts].sort()]), cached = selectedCatalogues.get(primary);
   if (cached?.fallback === fallback && cached.dates === key) return cached.prepared;
-  const first = [primary.catalogue.run_dates[0], fallback?.catalogue.run_dates[0]].filter(Boolean).sort()[0];
-  const last = [primary.catalogue.run_dates.at(-1)!, fallback?.catalogue.run_dates.at(-1)].filter(Boolean).sort().at(-1)!;
+  const calendar = [...primary.catalogue.run_dates, ...(fallback?.catalogue.run_dates ?? []), ...(index?.dates ?? [])].sort();
+  const first = calendar[0], last = calendar.at(-1)!;
   if ((Date.parse(last) - Date.parse(first!)) / 86_400_000 >= HISTORICAL_CATALOGUE_LIMITS.days) throw new Error('History calendar exceeds budget');
   const result = Object.freeze({ ...primary });
   states.set(result, { ...state, selection: { dates: new Set(dates), fallback, index, conflicts: new Set(conflicts) },

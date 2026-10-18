@@ -185,6 +185,15 @@ test('missing detached archive keeps the bundled preparation path available', as
   expect(get().bankRateHistoryLoading).toBe(false);
 });
 
+test('rejected downloaded preparation records fallback evidence when signed history succeeds', async () => {
+  const { get, set } = store(), manifest = detachedManifest();
+  set({ manifest });
+  jest.mocked(loadDetachedHistoricalBankRateReady).mockResolvedValueOnce({} as HistoricalBankRateReady);
+  jest.mocked(prepareReadyBankRateHistory).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  await prepareBankRateHistoryAfterPaint(set, get, sampleCore, manifest);
+  expect(backgroundPayloadWork.snapshot().reverse().find(job => job.label === 'Bank rate history preparation')?.outcome).toBe('fallback');
+});
+
 test('an invalid legacy descriptor uses prepared fallback without opening the raw archive', async () => {
   const { get, set } = store();
   const manifest = { ...sampleManifest, bank_rate_history_catalogue: { schema_version: 1 as const,

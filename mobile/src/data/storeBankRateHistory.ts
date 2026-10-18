@@ -79,7 +79,7 @@ export async function prepareBankRateHistoryAfterPaint(
       try { ready = await prepareReadyBankRateHistory(core, manifest, index, detached, isCurrent); }
       catch (error) { debugLog.warn('store', `prepared history unavailable; trying compatible archive: ${String(error)}`); }
     }
-    let publishedHistory = !!detached;
+    let publishedHistory = ready;
     if (!isCurrent()) return;
     if (!ready && validateDetachedHistoricalCatalogueDescriptor(manifest)) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports

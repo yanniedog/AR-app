@@ -239,6 +239,13 @@ test('the complete selected calendar survives missing heads and invalidates sele
   expect(historicalBankRateSnapshots(second, current, scope, filters)[secondAbsent]).toEqual({});
 });
 
+test('selected index dates cannot expand history beyond the shared calendar budget', () => {
+  const primary = capturedDay(0);
+  const outside = new Date(Date.parse(older) - 5000 * 86_400_000).toISOString().slice(0, 10);
+  expect(() => selectHistoricalCatalogueDates(primary, new Set([older]), null,
+    { ...index, dates: [outside, ...index.dates] })).toThrow('History calendar exceeds budget');
+});
+
 test('independent verified history remains usable when signed fallback preparation throws', async () => {
   const current = core();
   const archive = { ...raw, sources: { ...raw.sources, [latest]: { kind: 'selected_contract' as const,
