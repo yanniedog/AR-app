@@ -32,6 +32,8 @@ const { validateLegacyHistoricalCatalogueDescriptor, validatePackedHistoricalCat
 const { validateHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCatalogueWire.ts');
 const { unpackHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCataloguePacked.ts');
 const { validateHistoricalBankRateReadyForApp } = require('../src/data/historicalBankRateReady.ts');
+const { validatePublicRateCapability, validatePublicRateDiscovery, validatePublicRateIndex, validatePublicRateShard,
+  PUBLIC_RATE_INDEX_DECODED, PUBLIC_RATE_SHARD_DECODED } = require('../src/data/publicRateWire.ts');
 
 const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const MAX_COMPRESSED = 64 * 1024 * 1024;
@@ -164,10 +166,10 @@ async function audit(opts) {
     assertRevisionManifest(manifest, binding, date, opts.repo);
   }
   if (manifest.run_date !== date || manifest.repo !== opts.repo) throw new Error('Manifest run/repository mismatch');
-  if ((manifest.bank_rate_history_catalogue || manifest.bank_rate_history_catalogue_packed || manifest.bank_rate_history_ready) && manifest.payload_revision) {
+  if ((manifest.bank_rate_history_catalogue || manifest.bank_rate_history_catalogue_packed || manifest.bank_rate_history_ready || manifest.public_rate_catalogue) && manifest.payload_revision) {
     const bundle = payloadBundleIdentity(manifest);
     if (manifest.payload_revision.bundle_sha256 !== bundle ||
-        manifest.payload_revision.generation_id !== `sha256-${bundle}`) throw new Error('Detached history bundle identity mismatch');
+        manifest.payload_revision.generation_id !== `sha256-${bundle}`) throw new Error(manifest.public_rate_catalogue ? 'Detached public pricing bundle identity mismatch' : 'Detached history bundle identity mismatch');
   }
   const decoded = {};
   const evidence = {};
@@ -235,6 +237,53 @@ async function audit(opts) {
           products: Object.fromEntries(Object.entries(catalogue.products).map(([section, products]) => [section, products.length])) } : {}),
         acquisition: directory ? 'local_file' : 'public_http' };
     } catch (error) { evidence[key] = { status: 'FAIL', error: error.message }; }
+  }
+  if (manifest.public_rate_catalogue !== undefined) {
+    try {
+      const capability = validatePublicRateCapability(manifest, opts.repo);
+      if (!capability || decoded.core?.public_rate_catalogue !== undefined) throw new Error('Public pricing must preserve the compact startup core');
+      const acquirePricing = async (file, maximum) => {
+        const bytes = directory ? privateFile(directory, file.name, file.bytes + 1) : await publicBytes(file.url, file.bytes + 1);
+        if (bytes.length !== file.bytes || hash(bytes) !== file.sha256 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) throw new Error('Public pricing asset size/hash/encoding mismatch');
+        const body = zlib.gunzipSync(bytes, { maxOutputLength: maximum });
+        if (body.length !== file.decodedBytes) throw new Error('Public pricing decoded size mismatch');
+        return JSON.parse(body.toString('utf8'));
+      };
+      const pricingIndex = validatePublicRateIndex(await acquirePricing(capability.index, PUBLIC_RATE_INDEX_DECODED), manifest);
+      const programmes = [], references = [], evidenceIds = new Set(), feeSets = new Map(), products = [...pricingIndex.products];
+      const assets = [...capability.shards].sort((a, b) => Number(pricingIndex.routes?.some(route => route.name === b.name && route.kind === 'discovery'))
+        - Number(pricingIndex.routes?.some(route => route.name === a.name && route.kind === 'discovery')));
+      for (const asset of assets) {
+        const shard = validatePublicRateShard(await acquirePricing(asset, PUBLIC_RATE_SHARD_DECODED), manifest, pricingIndex, asset, products);
+        for (const product of shard.products ?? []) {
+          if (products.some(item => item.productId === product.productId || item.productKey === product.productKey)) throw new Error('Conflicting public product identity');
+          products.push(product);
+        }
+        programmes.push(...shard.programmes); references.push(...shard.referenceRates);
+        for (const set of shard.feeSets ?? []) {
+          const existing = feeSets.get(set.feeSetId);
+          if (existing && JSON.stringify(existing) !== JSON.stringify(set)) throw new Error('Conflicting public fee set');
+          feeSets.set(set.feeSetId, set);
+        }
+        shard.evidence.forEach(item => evidenceIds.add(item.evidenceId));
+      }
+      validatePublicRateDiscovery(pricingIndex, products);
+      products.forEach(product => { if (product.sourceEvidence) evidenceIds.add(product.sourceEvidence.evidenceId); });
+      const declared = new Set(programmes.map(item => item.programmeId));
+      if (products.some(product => product.programmeIds.some(id => !declared.has(id)))) throw new Error('Public pricing programme missing from declared shards');
+      for (const programme of programmes) if (programme.feeSetId && (!feeSets.has(programme.feeSetId) || feeSets.get(programme.feeSetId).productId !== programme.productId)) throw new Error('Public pricing fee set missing or belongs to another product');
+      evidence.public_rate_catalogue = { status: 'PASS', acquisition: directory ? 'local_file' : 'public_http',
+        generation_id: capability.generationId, index_sha256: capability.index.sha256, shards: capability.shards.length,
+        bytes: [capability.index, ...capability.shards].reduce((sum, file) => sum + file.bytes, 0),
+        decoded_bytes: [capability.index, ...capability.shards].reduce((sum, file) => sum + file.decodedBytes, 0),
+        products: products.length, programmes: declared.size, reference_observations: references.length,
+        discovery_shards: pricingIndex.routes?.filter(route => route.kind === 'discovery').length ?? 0,
+        suppressed_programmes: products.reduce((sum, product) => sum + (product.suppressedProgrammeCount ?? 0), 0),
+        evidence_records: evidenceIds.size, pricing_supported: programmes.filter(item => item.formula !== undefined).length,
+        pricing_unresolved: programmes.filter(item => item.formula === undefined).length,
+        fee_coverage: Object.fromEntries(['complete', 'partial', 'unknown'].map(status => [status, programmes.filter(item => (item.feeCoverage?.status ?? feeSets.get(item.feeSetId)?.feeCoverage?.status ?? 'unknown') === status).length])),
+        coverage: pricingIndex.coverage };
+    } catch (error) { evidence.public_rate_catalogue = { status: 'FAIL', error: error.message }; }
   }
   const normalized = decoded.core ? normalizeCoreWithIntegrity(decoded.core, { coreSha256: manifest.files.core.sha256 }) : null;
   const coreKeys = new Set(Object.values(normalized?.core.sections ?? {}).flatMap((section) => section.rates).map((row) => row.product_key));

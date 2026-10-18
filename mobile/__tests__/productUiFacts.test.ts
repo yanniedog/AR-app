@@ -7,6 +7,35 @@ import { uiPublishedFeeName } from '../src/lib/uiCopy';
 
 const detail = fixture.detail as ProductDetail;
 
+test('bundled structured cashback ranges retain both AUD bounds and their original condition reference', () => {
+  const rows = Object.entries(sample.products as Record<string, ProductDetail>).flatMap(([key, product]) =>
+    (product.features ?? []).map((item, index) => ({ key, item, index })))
+    .filter(({ item }) => item.label === 'CASHBACK_OFFER' && ['2,500-3,000', '2500.00 - 3000.00'].includes(String(item.value)));
+  expect(rows).toHaveLength(3);
+  expect(rows.some(({ key }) => key.startsWith('Greater Bank Limited|'))).toBe(true);
+  expect(rows.some(({ key }) => key.startsWith('Newcastle Permanent Building Society|'))).toBe(true);
+  for (const { item, index } of rows) {
+    const original = JSON.stringify(item), fact = uiDetailItem(item, index, 'Features');
+    expect(fact).toMatchObject({ value: '$2,500–$3,000', reference: String(index + 1), conditions: 'source-review-required' });
+    expect(JSON.stringify(fact)).not.toContain(item.info);
+    expect(JSON.stringify(item)).toBe(original);
+  }
+});
+
+test('cashback range admission is bounded numeric syntax in the exact feature field', () => {
+  expect(uiDetailItem({ label: 'CASHBACK_OFFER', value: '$2,500.25 – $3,000.75' }, 0, 'Features').value).toBe('$2,500.25–$3,000.75');
+  expect(uiDetailItem({ label: 'CASHBACK_OFFER', value: '0 - 0' }, 0, 'Features').value).toBe('$0–$0');
+  expect(uiDetailItem({ label: 'CASHBACK_OFFER', value: '2500.75' }, 0, 'Features').value).toBe('2,500.75');
+  expect(uiDetailItem({ label: 'CASHBACK_OFFER', value: '0'.repeat(76) + '2500' }, 0, 'Features').value).toBe('2,500');
+  expect(uiDetailItem({ label: 'CASHBACK_OFFER', value: '0'.repeat(77) + '2500' }, 0, 'Features').value).toBe('Unknown');
+  for (const value of ['3000-2500', '-1-2500', '2,50-3,000', '1e3-2e3', '2500.001-3000',
+    '2500-3000 cashback', '2500-3000\n', 'up to 3000', '2500 - ', '1'.repeat(100)]) {
+    expect(uiDetailItem({ label: 'CASHBACK_OFFER', value, info: 'Unreviewed source condition.' }, 0, 'Features')).toMatchObject({ value: 'Unknown', conditions: 'source-review-required' });
+  }
+  expect(uiDetailItem({ label: 'OTHER', value: '2500-3000' }, 0, 'Features').value).toBe('Unknown');
+  expect(uiDetailItem({ label: 'CASHBACK_OFFER', value: '2500-3000' }, 0, 'Eligibility').value).toBe('Unknown');
+});
+
 test('the published Bankwest charge names, categories, amounts and conditions survive', () => {
   const facts = detail.fees!.map((item, index) => uiDetailItem(item, index, 'Fees'));
   expect(facts.map(fact => [fact.label, fact.value, fact.reference])).toEqual([

@@ -13,6 +13,8 @@ import { LENDER_ARTWORK_TERMS, OPTIONAL_DIAGNOSTICS_TERMS } from './privacyPolic
 import { Decimal } from './productTermsEngine/decimal';
 import { readBoundCustomerQuestion, type CustomerQuestionBinding } from './customerQuestionBinding';
 import type { BackgroundWorkSnapshot } from './backgroundPayloadWork';
+import type { PublicProduct, PublicReferenceRate, PublicCoverage, PublicEvidence } from '../data/publicRateModel';
+import type { CurrentProductOption } from '../data/scenarioCatalog';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
@@ -108,7 +110,7 @@ export const UI_LABELS = [
   'Lower / base / higher', 'Lower scenario', 'LVR · Balance · Repayment · Term · Bonus · Package',
   'Market research', 'Match / gap basis', 'Matched observed rate', 'Matching details unavailable',
   'Matching rates', 'Missing details', 'Model facts', 'Monthly', 'Monthly nominal / maturity',
-  'Monthly repayment', 'Net offset difference', 'No comparable rates observed',
+  'Monthly repayment', 'Monthly household allocation', 'Refinancing timing', 'Not published', 'Net offset difference', 'No comparable rates observed',
   'No other differences', 'No saved tiers', 'Observed dataset', 'Offset as repayment',
   'Offset basis', 'Offset boost', 'Offset contribution', 'Offset fees', 'Open-source notices',
   'Opening offset', 'Past offset changes', 'Past rate / payment changes', 'Personal advice',
@@ -368,6 +370,26 @@ export const UI_LABELS = [
   'Fee waiver', 'Fee ordering', 'Payment allocation', 'Payment obligation', 'Business calendar',
   'Posting calendar', 'Payment destination', 'Tax treatment', 'Break fee', 'Principal recovery',
   'Bonus qualification', 'Projected payments', 'Contract scope', 'Issue code', 'Unpaid', 'Activity', 'Holdings', 'Repayment due', 'Paid',
+  'Public pricing', 'Payable rate', 'Reference rate', 'Reference', 'Adjustment', 'Margin',
+  'Customer category', 'Channel', 'Qualification', 'Monthly deposits ($)', 'Monthly withdrawals',
+  'Balance growth ($)', 'Card purchases', 'Scope', 'Pricing programme', 'Choose programme',
+  'Pricing unresolved', 'From', 'Public payable rate', 'Calculated payable rate', 'Local reference estimate',
+  'Last verified pricing', 'Pricing evidence', 'Public comparisons incomplete', 'Public products',
+  'Unresolved offers', 'Other products', 'Aliases', 'New applications', 'Selected public scenario',
+  'Negotiated rate', 'Approval', 'Last successful check', 'Historical pricing assumption', 'Current pricing',
+  'Complete-cost ranking', 'Current-rate ranking', 'SHA-256', 'Reference scope', 'Reference + adjustment',
+  'Select reference', 'Historical reference', 'Reference alerts', 'Total adjustment (pp)',
+  'Protected on device', 'Discount sign', 'Public discounts', 'Total adjustment', 'Unmet',
+  'Cost / return', 'Interest cost', 'Interest earned', 'Known fees', 'Interest + known fees',
+  'Known return', 'Principal repaid', 'Ending balance', 'Charged rate', 'Payable nominal rate',
+  'Complete under assumptions', 'Missing fees', 'Verified savings', 'Public source unavailable',
+  'Comparison period', 'Rate assumption missing', 'Variable rate held', 'Local renewal rate',
+  'Renewal rate unchanged', 'Public reference', 'Condition state', 'of', 'Purpose', 'Quoted term',
+  'Publication', 'Stale', 'Monthly nominal', 'Repayments', 'Month end', 'Rounding', 'Cents',
+  'Rate phases', 'Accrual', 'Offset-funded fees', 'Financed upfront fees', 'Revalidated after financing',
+  'Cash-flow conflict', 'Interest basis', 'Actual days/365', 'Cash flows', 'Month boundaries',
+  'Quoted maturity', 'Periodic interest', 'Paid outside deposit', 'Reinvestment return', 'Charges',
+  'Recurring fees', 'Frequency interval start',
 ] as const;
 
 export type UiLabel = typeof UI_LABELS[number];
@@ -577,6 +599,11 @@ export function uiDetailsProductReference(details: DetailsPayload | null | undef
   return identity(productKey);
 }
 export function uiProviderName(row: Pick<RateRow, 'provider'>): UiText { return identity(row.provider); }
+export function uiPublicProductName(product: PublicProduct | CurrentProductOption): UiText { return identity(product.name); }
+export function uiPublicAliasName(alias: PublicProduct['aliases'][number]): UiText { return identity(alias.name); }
+export function uiPublicReferenceName(reference: PublicReferenceRate): UiText { return identity(reference.name); }
+export function uiPublicProviderName(item: PublicProduct | PublicCoverage): UiText { return identity(item.providerName); }
+export function uiPublicEvidenceLocator(evidence: PublicEvidence): UiText { return uiIdentifier(evidence.locator); }
 /** Rebind navigator titles to reviewed labels or current catalogue identities. */
 export function uiNavigationTitle(value: string | undefined, core: CorePayload | null | undefined, fallback: UiCopy): UiCopy {
   const label = UI_LABELS.find(approved => approved === value);

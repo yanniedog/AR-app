@@ -18,6 +18,12 @@ This directory pins the command-line tool used by the EAS build and submission w
 
 Keep each override until EAS CLI selects an equal or newer patched version. Do not broaden an override to unrelated dependency majors. The jsdiff major update and UUID consumer overrides are covered by behavioral compatibility tests. Compatible lockfile updates also retain the patched Moment, brace-expansion and fast-uri resolutions.
 
+The `js-yaml@3.15.2` override selects dependency-free `argparse@2.0.1` to remove
+`sprintf-js`. The compatibility command adapts only the legacy YAML CLI caller
+to argparse 2, with exact installed-version and source-hash checks. Tests cover
+the real CLI and both Expo plugins' Oclif YAML table output. See the
+[compatibility and remaining-alert assessment](../../scripts/DEPENDENCY_COMPAT.md#legacy-yaml-command-line-parser).
+
 Run `npm ci --ignore-scripts --no-audit --no-fund && npm run compat && npm test` in this directory to verify build-profile validation, metadata UUID validation, fingerprint line diffs, telemetry/Xcode UUID consumers YAML parsing, and real project generation with unsafe-key filtering. The required mobile CI job runs the same compatibility suite. Preserve these checks when adding future caller adapters.
 
 ## Licence review
