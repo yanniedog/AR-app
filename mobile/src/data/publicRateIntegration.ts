@@ -1,3 +1,4 @@
+import { canonicalPurpose, canonicalRepayment } from './mortgageFacets';
 import type { CorePayload, RateRow, SectionKey } from '../types';
 import { calculatorAmount, computeLvr, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
 import type { ProfileFilters } from './profile';
@@ -82,18 +83,6 @@ function programmePublicRow(row: RateRow, programme: PublicProgramme): RateRow {
     ...(metadata?.quotedTerm?.unit === 'day' ? { term: 'P' + metadata.quotedTerm.value + 'D' } : {}),
     ...(base.length === 1 ? { ongoing_rate: decimalText(rateDecimal(base[0].value!, base[0].unit)) } : {}),
   });
-}
-
-function canonicalPurpose(value?: string): string | undefined {
-  const key = value?.toUpperCase();
-  return key === 'OO' || key === 'OWNER_OCCUPIED' ? 'OWNER_OCCUPIED'
-    : key === 'INV' || key === 'INVESTMENT' ? 'INVESTMENT' : value;
-}
-
-function canonicalRepayment(value?: string): string | undefined {
-  const key = value?.toUpperCase();
-  return key === 'PI' || key === 'P&I' || key === 'PRINCIPAL_AND_INTEREST' ? 'PRINCIPAL_AND_INTEREST'
-    : key === 'IO' || key === 'INTEREST_ONLY' ? 'INTEREST_ONLY' : value;
 }
 
 /** Newly resolved programmes enter app comparisons even when no legacy absolute row exists. */
