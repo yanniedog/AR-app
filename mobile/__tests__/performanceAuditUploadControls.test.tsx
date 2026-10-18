@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PerformanceAuditScreen from '../app/performance-audit';
-import { getPerformanceAuditState, completePerformanceAudit, failPerformanceAudit, markPerformanceAuditCancelled, resetPerformanceAuditForTests, PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY } from '../src/lib/performanceAudit';
+import { getPerformanceAuditState, completePerformanceAudit, failPerformanceAudit, markPerformanceAuditCancelled, clearCompletedPerformanceAuditState, resetPerformanceAuditForTests, PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY } from '../src/lib/performanceAudit';
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { restorePerformanceAuditUpload, uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
 import { loadCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
@@ -273,4 +273,50 @@ test('an unsaved deletion receipt exposes its recovery route and blocks another 
     expect(open).toHaveBeenCalledWith('/debug-log');
     expect(getPerformanceAuditState().report).toBe(report);
   } finally { open.mockRestore(); }
+});
+
+test.each(['cancelled', 'failed'] as const)('a diagnosis loaded after a new run starts remains available after %s', async terminal => {
+  const saved = makePerformanceAuditReport('previous-diagnosis');
+  let finish!: (value: typeof saved) => void;
+  jest.mocked(loadCompletedPerformanceAudit).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await mount(); await press('Run audit');
+  const active = getPerformanceAuditState();
+  await act(async () => { finish(saved); await Promise.resolve(); });
+  expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', sessionId: active.sessionId, startedAt: active.startedAt, report: saved });
+  act(() => terminal === 'failed' ? failPerformanceAudit('new-run-error') : markPerformanceAuditCancelled());
+  expect(getPerformanceAuditState()).toMatchObject({ status: terminal, sessionId: active.sessionId, report: saved });
+  expect(tree!.root.findByProps({ title: 'Upload report' })).toBeDefined();
+  await press('Upload report');
+  expect(uploadCompletedPerformanceAudit).toHaveBeenCalledWith(saved);
+});
+
+test('late disk recovery cannot replace a newer completed diagnosis', async () => {
+  const saved = makePerformanceAuditReport('previous-diagnosis');
+  let finish!: (value: typeof saved) => void;
+  jest.mocked(loadCompletedPerformanceAudit).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await mount(); await press('Run audit');
+  const current = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
+  act(() => completePerformanceAudit(current));
+  await act(async () => { finish(saved); await Promise.resolve(); });
+  expect(getPerformanceAuditState().report).toBe(current);
+});
+
+test('successful diagnostic Clear removes the displayed diagnosis and upload action', async () => {
+  const saved = makePerformanceAuditReport('clear-diagnosis');
+  jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(saved);
+  await mount();
+  expect(tree!.root.findByProps({ title: 'Upload report' })).toBeDefined();
+  act(() => clearCompletedPerformanceAuditState());
+  expect(getPerformanceAuditState()).toMatchObject({ status: 'idle', report: null });
+  expect(() => tree!.root.findByProps({ title: 'Upload report' })).toThrow();
+});
+
+test('diagnostic Clear retains the active run identity and progress', async () => {
+  const saved = makePerformanceAuditReport('clear-previous-diagnosis');
+  jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(saved);
+  await mount(); await press('Run audit');
+  const active = getPerformanceAuditState();
+  act(() => clearCompletedPerformanceAuditState());
+  expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', sessionId: active.sessionId,
+    startedAt: active.startedAt, progress: active.progress, report: null });
 });
