@@ -28,6 +28,7 @@ import {
   parsePerformanceAuditHangTimeoutSeconds,
   PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY,
   requestPerformanceAudit,
+  restoreCompletedPerformanceAudit,
   selectReportedAuditChecks,
   MAX_REPORTED_AUDIT_CHECKS,
   subscribePerformanceAudit,
@@ -43,6 +44,8 @@ import { blocksPerformanceAudit } from '../src/lib/appUpdateDownloadLogic';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { getPassiveAuditStatus, subscribePassiveAudit } from '../src/lib/passiveAudit';
+import { restorePerformanceAuditUpload, uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
+import { loadCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
 
 const DEIDENTIFIED_AUDIT_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-app-health-report.json`;
 
@@ -85,7 +88,7 @@ function countPair(done: number,total: number): UiText { return uiJoin(uiCount(d
 function PerformanceAuditScreenInner() {
   const theme = useTheme();
   const state = usePerformanceAuditState();
-  useSyncExternalStore(subscribeDebugLogUpload, getDebugLogUploadSnapshot, getDebugLogUploadSnapshot);
+  const uploadState = useSyncExternalStore(subscribeDebugLogUpload, getDebugLogUploadSnapshot, getDebugLogUploadSnapshot);
   const uploadBusy = isDebugLogUploadBusy();
   const apkDownload = useApkDownloadState();
   const updateBlocksAudit = blocksPerformanceAudit(apkDownload);
@@ -96,13 +99,15 @@ function PerformanceAuditScreenInner() {
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
   const [sharingReport, setSharingReport] = useState(false);
-  const [publicUpload, setPublicUpload] = useState(false);
+  const [publicUpload, setPublicUpload] = useState(true);
   const [rawReportOpen, setRawReportOpen] = useState(false);
   const [backgroundOpen, setBackgroundOpen] = useState(false);
   const auditPreflightLocked = useRef(false);
+  const mounted = useRef(true);
   const [auditPreflightMode, setAuditPreflightMode] = useState<'local' | 'live-source' | null>(null);
   const [visibleCheckLimit, setVisibleCheckLimit] = useState(MAX_REPORTED_AUDIT_CHECKS);
-  const report = state.report;
+  const running = state.status === 'queued' || state.status === 'running';
+  const report = running ? null : state.report;
   const orderedChecks = useMemo(
     () => (report ? selectReportedAuditChecks(report.checks) : []),
     [report],
@@ -111,7 +116,17 @@ function PerformanceAuditScreenInner() {
   useEffect(() => {
     setVisibleCheckLimit(MAX_REPORTED_AUDIT_CHECKS);
   }, [report?.sessionId]);
-  const running = state.status === 'queued' || state.status === 'running';
+  useEffect(() => {
+    let active = true;
+    mounted.current = true;
+    void loadCompletedPerformanceAudit().then(saved => {
+      if (active && saved) restoreCompletedPerformanceAudit(saved);
+    }).catch(() => {});
+    return () => { active = false; mounted.current = false; };
+  }, []);
+  useEffect(() => {
+    if (report) void restorePerformanceAuditUpload(report).catch(() => {});
+  }, [report]);
   const hangTimeoutSeconds = parsePerformanceAuditHangTimeoutSeconds(hangTimeoutInput);
   const auditActions = useMemo(() => ({
     'audit.pass.complete': () => ({
@@ -184,12 +199,14 @@ function PerformanceAuditScreenInner() {
       try {
         currentDownload = await getHydratedApkDownloadSnapshot();
       } catch {
+        if (!mounted.current) return;
         Alert.alert(
           uiLabel('Report unavailable'),
           uiLabel('Update state unconfirmed'),
         );
         return;
       }
+      if (!mounted.current) return;
       if (blocksPerformanceAudit(currentDownload)) {
         Alert.alert(
           uiLabel('Report unavailable'),
@@ -198,10 +215,9 @@ function PerformanceAuditScreenInner() {
         return;
       }
       requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000, mode, uploadLog: requestedUpload });
-      setPublicUpload(false);
     } finally {
       auditPreflightLocked.current = false;
-      setAuditPreflightMode(null);
+      if (mounted.current) setAuditPreflightMode(null);
     }
   };
   const confirmShareReport = () => {
@@ -272,8 +288,10 @@ function PerformanceAuditScreenInner() {
       <Card style={{ gap: 10 }}>
         <AppText variant="h2">{uiLabel('App health audit')}</AppText>
         <InfoRow label={uiLabel(running ? 'Audit upload' : 'Next audit upload')} value={uiLabel(running ? state.uploadLog ? 'Public' : 'Local' : publicUpload ? 'Public' : 'Local')} />
-        <InfoRow label="Included" value="Product identities / profile coverage / failures" />
+        <InfoRow label="Included" value="App / publication / aggregate counts / timing / fixed checks" />
+        <InfoRow label="Excluded" value="Raw logs / tracebacks / routes / product keys / device IDs / timestamps" />
         <InfoRow label={uiLabel(running ? 'Destination' : 'Next destination')} value={uiLabel((running ? state.uploadLog : publicUpload) ? 'Public hosting' : 'Debug log')} />
+        <InfoRow label="Public hosting" value={uiJoin(uiIdentifier('paste.rs'), ' / ', uiIdentifier('paste.c-net.org'))} />
         <ToggleRow icon="cloud-upload-outline" label="Public upload" value={running ? state.uploadLog : publicUpload} onChange={setPublicUpload} disabled={auditDisabled} />
         <InfoRow label="Step limit" value={measuredMs(10_000)} />
         <View style={{ gap: 6 }}>
@@ -306,7 +324,7 @@ function PerformanceAuditScreenInner() {
           {passive.lastError ? <InfoRow label="Background checks" value="Failed" />:null}
         </Disclosure>
       </Card>
-      <DebugLogUploadStatus sessionId={state.sessionId} />
+      {!running ? <DebugLogUploadStatus sessionId={report && uploadState.sessionId === report.sessionId ? report.sessionId : state.sessionId} /> : null}
       {state.status === 'cancelled' ? <Card><AppText>{uiLabel('Audit cancelled')}</AppText><InfoRow label="Results" value="Debug log" /></Card>:null}
       {state.status === 'failed' ? <Card style={{gap:8,borderColor:theme.colors.danger}}>
         <AppText color="danger">{uiLabel('Audit runner failed')}</AppText>
@@ -315,8 +333,18 @@ function PerformanceAuditScreenInner() {
         <InfoRow label="Raw report" value="Debug log" />
       </Card>:null}
       {report ? <>
+        <Card style={{ gap: 8 }}>
+          <InfoRow label="Report" value="Deidentified" />
+          <InfoRow label="Destination" value="Public hosting" />
+          <InfoRow label="Public hosting" value={uiJoin(uiIdentifier('paste.rs'), ' / ', uiIdentifier('paste.c-net.org'))} />
+          <Button title="Upload report" icon="cloud-upload-outline" disabled={uploadBusy} onPress={() => {
+            void uploadCompletedPerformanceAudit(report).catch(() => Alert.alert(uiLabel('Report unavailable')));
+          }} />
+        </Card>
         <Card style={{ gap: 8,borderWidth:1,borderColor:summaryColor }}>
           <Row style={{justifyContent:'space-between'}}><AppText variant="h3">{uiLabel('Diagnosis')}</AppText><AppText style={{color:summaryColor}}>{outcome(report.summary.overall)}</AppText></Row>
+          <InfoRow label="Report" value={report.sessionId === state.sessionId ? 'Complete' : 'Saved'} />
+          <InfoRow label="As at" value={uiDate(report.finishedAt)} />
           <AuditOutcomeSymbols checks={report.checks} />
           <InfoRow label="Check completion" value={report.summary.coveragePercent == null ? 'Unknown':uiJoin(uiNumber(report.summary.coveragePercent,1),'%')} />
           <InfoRow label="Executed" value={uiCount(report.summary.executed)} />

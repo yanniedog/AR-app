@@ -2,6 +2,8 @@ import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { rowsForProductKey, rowsForProvider } from '../src/data/rateRowIndex';
 import { findByKey, findEligibleByKey } from '../src/data/selectors';
 import type { RateRow, SectionKey } from '../src/types';
+import { makeSavedRateRef, resolveSavedRates } from '../src/data/savedRates';
+import { catalogue, core as publicCore } from '../testUtils/publicRateJourney';
 
 const row = (product_key: string, provider = 'Bank', rate_index = 1): RateRow => ({
   product_key, provider, product_name: product_key, rate_index, rate: '0.05',
@@ -70,4 +72,23 @@ it('applies every live eligibility revision after raw source lookup and preserve
   installMandatoryEligibility({ active: true, loading: false, rows: new WeakSet(), productKeys: new Set() });
   expect(findEligibleByKey(sections, 'Shared')).toBeNull();
   expect(rowsForProvider(sections.Mortgage.rates, 'Bank')).toEqual([loan]);
+});
+
+
+it('combined saved resolution retains the reusable edition index when public pricing is unavailable', () => {
+  let productReads = 0;
+  const rows = Array.from({ length: 1_000 }, (_, index) => ({ product_name: `Product ${index}`, provider: 'Bank', rate: '0.05', rate_index: index,
+    get product_key() { productReads++; return `P${index}`; } }));
+  const core = publicCore(rows);
+  const ref = makeSavedRateRef(rows[900], 'rate', '2026-10-16T00:00:00Z');
+  productReads = 0;
+  const unavailable = { ...catalogue(), status: 'unavailable' as const };
+  expect(resolveSavedRates(core, [ref], unavailable)[0].row).toBe(rows[900]);
+  const firstReads = productReads;
+  expect(firstReads).toBe(1_000);
+  for (let i = 0; i < 10; i++) expect(resolveSavedRates(core, [ref], unavailable)[0].row).toBe(rows[900]);
+  expect(productReads).toBe(firstReads);
+  const replacement = { ...rows[900], rate: '0.06' };
+  core.sections.Mortgage.rates = [replacement];
+  expect(resolveSavedRates(core, [ref], unavailable)[0].row).toBe(replacement);
 });

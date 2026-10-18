@@ -28,6 +28,12 @@ import {
   type CompareSelectionIssue,
 } from '../src/data/compareSelection';
 import { useStore } from '../src/data/store';
+import { usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
+import { publicComparisonCore, publicRateScenario, resolveRowPublicRate, rowWithPublicResolution } from '../src/data/publicRateIntegration';
+import { publicRateText } from '../src/data/publicRatePresentation';
+import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
+import { PublicRateEvidence } from '../src/components/scenario/PublicRateEvidence';
+import { PublicCostComparison } from '../src/components/scenario/PublicCostComparison';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
 import {
@@ -78,6 +84,10 @@ export default function Compare() {
   const compact = usesCompactCompareLayout(width, fontScale);
   const { keys } = useLocalSearchParams<{ keys: string }>();
   const core = useStore((s) => s.core);
+  const manifest = useStore(state => state.manifest);
+  const profile = useStore(state => state.prefs.profileFilters);
+  const catalogue = usePublicRateCatalogue(manifest);
+  const { scenario } = useUserRateScenario();
   const details = useStore((s) => s.details);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
@@ -87,6 +97,7 @@ export default function Compare() {
   const [layoutReady, setLayoutReady] = useState(false);
 
   const comparison = useMemo(() => {
+    void suitabilityRevision;
     if (!core) return null;
     let list: string[];
     try {
@@ -97,11 +108,15 @@ export default function Compare() {
     } catch {
       list = keys ? keys.split(',') : [];
     }
-    return validateCompareSelections(core, list);
-  }, [core, keys, suitabilityRevision]);
+    return validateCompareSelections(publicComparisonCore(core, catalogue,
+      section => publicRateScenario(section, scenario, profile)), list);
+  }, [core, keys, suitabilityRevision, catalogue, scenario, profile]);
   const entries = useMemo<Entry[]>(
-    () => comparison && comparison.issue == null ? comparison.entries : [],
-    [comparison],
+    () => comparison && comparison.issue == null ? comparison.entries.map(entry => {
+      const resolution = resolveRowPublicRate(entry.row, catalogue, publicRateScenario(entry.section, scenario, profile, entry.row));
+      return resolution ? { ...entry, row: rowWithPublicResolution(entry.row, resolution) } : entry;
+    }) : [],
+    [comparison, catalogue, scenario, profile],
   );
 
   const calculationRows = useMemo(() => entries.map(entry => entry.row), [entries]);
@@ -109,6 +124,8 @@ export default function Compare() {
   useEffect(() => {
     if (core && !details) void ensureDetails();
   }, [core, details, ensureDetails]);
+  const { status: catalogueStatus, allLoaded, loadAll } = catalogue;
+  useEffect(() => { if (catalogueStatus === 'ready' && !allLoaded) void loadAll().catch(() => undefined); }, [catalogueStatus, allLoaded, loadAll]);
 
   const logoIds = useMemo(
     () => entries.map((entry) =>
@@ -174,6 +191,10 @@ export default function Compare() {
   });
 
   if (!core) return <ScreenSkeleton />;
+  const comparisonLoading = catalogue.status !== 'unavailable' && !(catalogue.status === 'ready' && catalogue.allLoaded);
+  if (comparisonLoading && comparison?.issue) return <Screen>
+    <AppText variant="small" color="textMuted">{uiJoin('Public pricing', ': ', catalogue.status === 'error' ? 'Unavailable' : 'Loading')}</AppText>
+  </Screen>;
   if (comparison?.issue) {
     const copy = comparisonIssueCopy(comparison.issue);
     return (
@@ -192,7 +213,8 @@ export default function Compare() {
   );
   const valid = fractions.filter((f): f is number => f !== null);
   const bestVal =
-    valid.length ? (lowerIsBetter ? Math.min(...valid) : Math.max(...valid)) : null;
+    !comparisonLoading && valid.length === entries.length && valid.length
+      ? (lowerIsBetter ? Math.min(...valid) : Math.max(...valid)) : null;
   const bestTone = lowerIsBetter ? 'success' : 'primary';
   const bestHighlightBg =
     bestTone === 'success' ? `${theme.colors.success}33` : theme.colors.primaryMuted;
@@ -203,7 +225,7 @@ export default function Compare() {
   const detailFor = (entry: Entry): ProductDetail | undefined =>
     details?.products?.[entry.row.product_key];
   const commonRows: AttrRow[] = [
-    { label: uiLabel("Advertised rate"), get: (e) => formatRate(e.row.rate), tabular: true },
+    { label: uiLabel('Payable rate'), get: (e) => { const resolution = resolveRowPublicRate(e.row, catalogue, publicRateScenario(e.section, scenario, profile, e.row)); return resolution ? publicRateText(resolution) : formatRate(e.row.rate); }, tabular: true },
     {
       label: uiLabel("Ongoing rate"),
       get: (e) => e.row.ongoing_rate ? formatRate(e.row.ongoing_rate) : 'Unknown',
@@ -512,6 +534,10 @@ export default function Compare() {
       </Card>)}
       {/* Differences first; calculations and document terms are follow-up detail. */}
       <CanonicalTermsComparison rows={calculationRows} />
+      {entries.map(entry => <View key={`public:${entry.row.product_key}:${entry.row.public_offer_id ?? entry.row.rate_index}`}>
+        <PublicRateEvidence productKey={entry.row.product_key} row={entry.row} />
+        <PublicCostComparison section={entry.section} target={entry.row} scenario={scenario} />
+      </View>)}
       {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : entries.every(entry => entry.section === 'Savings') ? <PortfolioComparison rows={entries} /> : entries.every(entry => entry.section === 'Mortgage') ? <MortgageComparison rows={entries} /> : <PersonalCostComparisonDisclosure />}
 
       <AppText variant="h3">{uiLabel("Published product details")}</AppText>

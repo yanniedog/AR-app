@@ -40,6 +40,9 @@ export interface RateRow {
   account_class?: string;
   /** Canonical semantic-tier identity is safe for an exact saved-rate alert. */
   exact_alert_eligible?: boolean;
+  /** Resolved catalogue identity added by the app; never inferred from nearest rate. */
+  public_programme_id?: string;
+  public_offer_id?: string;
   rate_index?: number;
   /** Section-local reference into the core's compressed bank-rate history. */
   bank_rate_tier?: number;
@@ -300,6 +303,8 @@ export interface ManifestFile {
 }
 
 export interface Manifest {
+  /** Public pricing is lazy, independently hashed and bound to the selected ingest. */
+  public_rate_catalogue?: import('./data/publicRateModel').PublicRateCapability;
   /** Verified full history loaded after first paint, outside legacy eager files. */
   bank_rate_history_catalogue?: { schema_version: 1; file: ManifestFile };
   /** Routing follows the manifest's trusted release; no embedded URL. */

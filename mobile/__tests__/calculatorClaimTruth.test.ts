@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { estimateEnteredRate } from '../src/data/publicRateLocal';
 
 const calculatorSource = fs.readFileSync(path.join(__dirname, '..', 'src/components/calculation/RateCheckWorkspace.tsx'), 'utf8');
 
@@ -21,7 +22,12 @@ describe('quick calculator claim truth', () => {
 
   it('shows explicit input bounds before producing candidate claims', () => {
     expect(calculatorSource).toContain("uiJoin('Property value',': ',uiMoney(0),'–',uiMoney(MAX_CALCULATOR_MORTGAGE_AMOUNT))");
-    expect(calculatorSource).toContain("uiJoin('Current rate',': ','>',0,'–',100,'%')");
-    expect(calculatorSource).toContain("if (inputIssueKey || currentRate === null || balance <= 0");
+    expect(calculatorSource).toContain("uiJoin('Current rate',': ',0,'–',100,'%')");
+    expect(calculatorSource).toContain("if (!comparisonsReady || inputIssueKey || currentRate === null || balance <= 0");
+  });
+  it('keeps zero as an explicit entered rate and rejects missing or out-of-range input', () => {
+    expect(estimateEnteredRate('0')).toMatchObject({ status: 'exact', payableRate: '0', origin: 'user_entered' });
+    expect(estimateEnteredRate('100')).toMatchObject({ status: 'exact', payableRate: '1' });
+    for (const value of ['', '-0.01', '100.01']) expect(estimateEnteredRate(value)).toMatchObject({ status: 'unresolved' });
   });
 });

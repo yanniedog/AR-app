@@ -3,6 +3,10 @@ import { prepareBankRateHistoryAfterPaint } from './storeBankRateHistory';
 import { parseHistoryDatesIndex } from './historyDatesIndex';
 import type { PayloadProgressSnapshot } from './downloadProgress';
 import { computeChanges, notify } from './notifications';
+import { checkPublicReferenceChanges } from './referenceRateAlerts';
+import { resolvedRateNotificationChanges } from './resolvedRateNotifications';
+import { ensurePublicRateCatalogueLoaded } from './publicRateCatalogue';
+import { loadUserRateScenario } from './userRateScenario';
 import {
   downloadCore,
   downloadDetails,
@@ -42,6 +46,7 @@ import { verifiedDetailsSha } from './detailsIdentity';
 
 type NotifyContext = {
   previousCore: CorePayload | null;
+  previousManifest: Manifest | null;
   previousSource: AppState['source'];
   previousDetailsProducts: DetailsPayload['products'] | null;
   core: CorePayload;
@@ -190,10 +195,29 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               return;
             }
             if (!state.prefs.notificationsEnabled) return;
+            if (state.manifest?.public_rate_catalogue) {
+              work.stage('Checking public reference-rate watches');
+              await checkPublicReferenceChanges(state.manifest, state.prefs.rateMoveThresholdBps, () => get().manifest === state.manifest)
+                .catch(() => debugLog.warn('notify', 'Public reference alerts unavailable; scenario inputs were preserved.'));
+            }
             // Re-read favorites/subscriptions at notify time so a user who
             // unsubscribes during the yield window is not notified for them.
             work.stage('Computing rate-change notifications');
-            const messages = computeChanges(
+            const messages = state.manifest?.public_rate_catalogue ? await (async () => {
+              const previous = await ensurePublicRateCatalogueLoaded(notifyCtx.previousManifest);
+              const current = await ensurePublicRateCatalogueLoaded(state.manifest);
+              if (get().manifest !== state.manifest) return [];
+              const latest = get();
+              if (!latest.prefs.notificationsEnabled) return [];
+              const rates = resolvedRateNotificationChanges({ previous, current, oldCore: notifyCtx.previousCore, newCore: notifyCtx.core,
+                saved: latest.savedRates, subscriptions: latest.subscriptions, scenario: await loadUserRateScenario(),
+                profile: latest.prefs.profileFilters, thresholdBps: latest.prefs.rateMoveThresholdBps,
+                oldDetailsProducts: notifyCtx.previousDetailsProducts, newDetailsProducts: latest.details?.products,
+                depositRankMetric: latest.prefs.depositRankMetric, mortgageRateMetric: latest.prefs.mortgageRateMetric });
+              const economic = computeChanges(notifyCtx.previousCore, notifyCtx.core, [], state.prefs.rateMoveThresholdBps)
+                .filter(message => message.title === 'RBA cash rate changed' || message.title === 'RBA cash rate held');
+              return [...rates, ...economic];
+            })() : computeChanges(
               notifyCtx.previousCore,
               notifyCtx.core,
               savedRatesWithAlerts(state.savedRates ?? [], state.subscriptions),
@@ -205,6 +229,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               state.prefs.mortgageRateMetric,
             );
             work.stage('Delivering rate-change notifications');
+            if (get().manifest !== state.manifest) return;
             await notify(messages);
             debugLog.info('store', `notified ${messages.length} rate-change message(s)`);
           }
@@ -628,6 +653,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         historyWork = prepareBankRateHistoryAfterPaint(set, get, core, remote, resolution.datesIndex, stagedDetails, { warm: !background });
         notifyCtx = {
           previousCore,
+          previousManifest: adoptionOwner,
           previousSource,
           previousDetailsProducts,
           core,

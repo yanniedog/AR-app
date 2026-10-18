@@ -24,6 +24,7 @@ export function defineSecureStoreKey<const T extends string>(value: T): T & Secu
 export const SECURE_STORE_KEYS = Object.freeze({
   customerProfile: defineSecureStoreKey('ar.customer-profile.v1'),
   debugLogUploadReceipt: defineSecureStoreKey('ar.debug-log.public-upload-receipt.v1'),
+  debugLogUploadRecoveryReceipt: defineSecureStoreKey('ar.debug-log.public-upload-recovery-receipt.v1'),
   payloadDecryptionKey: defineSecureStoreKey('ar.payload.deckey'),
   performanceAuditRollbackScenario: defineSecureStoreKey(
     'performance-audit-rollback-scenario-v1',
@@ -33,4 +34,5 @@ export const SECURE_STORE_KEYS = Object.freeze({
   ),
   trackedRateMetadata: defineSecureStoreKey('ar-rates.tracked-rate-metadata.v1'),
   userRateScenario: defineSecureStoreKey('user-rate-scenario-v1'),
+  referenceRateAlertBaseline: defineSecureStoreKey('ar.public-reference-alert-baseline.v1'),
 });
