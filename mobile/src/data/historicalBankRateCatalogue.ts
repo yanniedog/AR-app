@@ -97,7 +97,7 @@ export function selectHistoricalCatalogueDates(primary: PreparedHistoricalBankRa
   conflicts: ReadonlySet<string> = new Set()): PreparedHistoricalBankRateCatalogue {
   const state = states.get(primary);
   if (!state || (fallback && !states.has(fallback))) throw new Error('History was not prepared');
-  const key = JSON.stringify([[...dates].sort(), index?.revision_heads ?? null, [...conflicts].sort()]), cached = selectedCatalogues.get(primary);
+  const key = JSON.stringify([[...dates].sort(), index?.dates ?? null, index?.revision_heads ?? null, [...conflicts].sort()]), cached = selectedCatalogues.get(primary);
   if (cached?.fallback === fallback && cached.dates === key) return cached.prepared;
   const first = [primary.catalogue.run_dates[0], fallback?.catalogue.run_dates[0]].filter(Boolean).sort()[0];
   const last = [primary.catalogue.run_dates.at(-1)!, fallback?.catalogue.run_dates.at(-1)].filter(Boolean).sort().at(-1)!;

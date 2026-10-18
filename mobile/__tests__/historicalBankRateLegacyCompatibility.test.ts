@@ -17,6 +17,8 @@ import { downloadDatedCore, fetchDatesIndexJson } from '../src/data/historyDaily
 import { HISTORY_DERIVATION_VERSION } from '../src/data/historyDerivation';
 import { sampleCore } from '../src/data/sample';
 import { missingHistoricalCatalogueDates } from '../src/data/historicalBankRateCatalogueStore';
+import { prepareReadyBankRateHistory } from '../src/data/historicalBankRateReadySync';
+import { yieldToUi } from '../src/lib/yieldToUi';
 
 let mockSelection: unknown;
 jest.mock('../src/data/historicalBankRateReadySync', () => ({
@@ -197,4 +199,72 @@ test('a retained equal-revision conflict clears an already cached product observ
       run_dates: [rejected], products: { [latestProduct]: [0.0525] }, source_identities: { [rejected]: historicalSourceIdentity(index, rejected) } } });
   expect(result.products[latestProduct][result.run_dates.indexOf(rejected)]).toBeNull();
   expect(result.source_identities?.[rejected]).toBeUndefined();
+});
+
+test('independent producer observations survive public conflicts and cached public corrections', async () => {
+  const current = { ...sampleCore, run_date: '2026-09-27' };
+  mockSelection = { prepared: prepareHistoricalBankRateReady(compileHistoricalBankRateReady(raw, compiler.sha256))!, heads, conflicts: new Set([latest]) };
+  const archive = { ...raw, sources: { ...raw.sources, [latest]: { kind: 'selected_contract' as const,
+    banks_sha256: 'b'.repeat(64), bytes: 100, generation_id: 'independent-conflict', contract_digest: 'c'.repeat(64) } } };
+  await prepareLegacyBankRateHistory(current, sampleManifest, index, archive, () => true);
+  const combined = cachedHistoricalBankRateCatalogue(current)!;
+  const identity = readyProductHistoryIdentity(combined, index, latest);
+  expect(identity).toMatch(/^catalogue:[a-f0-9]{64}$/);
+  const projected = await productRatesFromHistoricalCatalogue(combined, index, [latest], () => true, async () => {});
+  expect(projected.get(latest)?.get(latestProduct)).toBe(0.0525);
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: current.run_date, currentCore: current,
+    catalogue: combined, preparedOnly: true, allowNetwork: false,
+    existing: { schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION, run_date: current.run_date,
+      run_dates: [latest], products: { [latestProduct]: [0.01] }, source_identities: { [latest]: historicalSourceIdentity(index, latest) } } });
+  expect(result.products[latestProduct][result.run_dates.indexOf(latest)]).toBe(0.0525);
+  expect(result.source_identities?.[latest]).toBe(identity);
+  const cached = await syncProductHistoryFromDailyPayloads({ targetRunDate: current.run_date, currentCore: current,
+    catalogue: combined, preparedOnly: true, allowNetwork: false, existing: result });
+  expect(cached.products[latestProduct][cached.run_dates.indexOf(latest)]).toBe(0.0525);
+});
+
+test('the complete selected calendar survives missing heads and invalidates selection memoization', async () => {
+  const current = core(), fallback = prepareHistoricalBankRateReady(compileHistoricalBankRateReady(raw, compiler.sha256))!;
+  const absent = new Date(Date.parse(older) - 86_400_000).toISOString().slice(0, 10);
+  mockSelection = { prepared: fallback, heads, dates: new Set([...heads.keys(), absent]), conflicts: new Set() };
+  await prepareLegacyBankRateHistory(current, sampleManifest, null, raw, () => true);
+  const first = cachedHistoricalBankRateCatalogue(current)!;
+  expect(historicalBankRateSnapshots(first, current, scope, filters)[absent]).toEqual({});
+  expect(missingHistoricalCatalogueDates(current)).toContain(absent);
+  const secondAbsent = new Date(Date.parse(absent) - 86_400_000).toISOString().slice(0, 10);
+  mockSelection = { prepared: fallback, heads, dates: new Set([...heads.keys(), absent, secondAbsent]), conflicts: new Set() };
+  await prepareLegacyBankRateHistory(current, sampleManifest, null, raw, () => true);
+  const second = cachedHistoricalBankRateCatalogue(current)!;
+  expect(second).not.toBe(first);
+  expect(historicalBankRateSnapshots(second, current, scope, filters)[secondAbsent]).toEqual({});
+});
+
+test('independent verified history remains usable when signed fallback preparation throws', async () => {
+  const current = core();
+  const archive = { ...raw, sources: { ...raw.sources, [latest]: { kind: 'selected_contract' as const,
+    banks_sha256: 'b'.repeat(64), bytes: 100, generation_id: 'without-fallback', contract_digest: 'c'.repeat(64) } } };
+  jest.mocked(prepareReadyBankRateHistory).mockRejectedValueOnce(new Error('cache unavailable'));
+  expect(await prepareLegacyBankRateHistory(current, sampleManifest, index, archive, () => true)).toBe(true);
+  const combined = cachedHistoricalBankRateCatalogue(current)!;
+  const projected = await productRatesFromHistoricalCatalogue(combined, index, [older, latest], () => true, async () => {});
+  expect(projected.has(older)).toBe(false);
+  expect(projected.get(latest)?.get(latestProduct)).toBe(0.0525);
+});
+
+test('a retired consumer cannot cancel a successor sharing archive validation', async () => {
+  const current = core(), archive = { ...raw };
+  mockSelection = { prepared: prepareHistoricalBankRateReady(compileHistoricalBankRateReady(raw, compiler.sha256))!, heads, conflicts: new Set() };
+  let entered!: () => void, release!: () => void, firstCurrent = true;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const paused = new Promise<void>(resolve => { release = resolve; });
+  jest.mocked(yieldToUi).mockImplementationOnce(async () => { entered(); await paused; });
+  const first = prepareLegacyBankRateHistory(current, sampleManifest, index, archive, () => firstCurrent);
+  await started;
+  firstCurrent = false;
+  const successor = prepareLegacyBankRateHistory(current, sampleManifest, index, archive, () => true);
+  release();
+  expect(await first).toBe(false);
+  expect(await successor).toBe(true);
+  const projected = await productRatesFromHistoricalCatalogue(cachedHistoricalBankRateCatalogue(current)!, index, [latest], () => true, async () => {});
+  expect(projected.get(latest)?.get(latestProduct)).toBe(0.0525);
 });

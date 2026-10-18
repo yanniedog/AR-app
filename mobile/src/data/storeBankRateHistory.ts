@@ -74,7 +74,11 @@ export async function prepareBankRateHistoryAfterPaint(
     }
     if (!isCurrent()) return;
     work.stage('Selecting verified prepared history');
-    let ready = detached ? await prepareReadyBankRateHistory(core, manifest, index, detached, isCurrent) : false;
+    let ready = false;
+    if (detached) {
+      try { ready = await prepareReadyBankRateHistory(core, manifest, index, detached, isCurrent); }
+      catch (error) { debugLog.warn('store', `prepared history unavailable; trying compatible archive: ${String(error)}`); }
+    }
     let publishedHistory = !!detached;
     if (!isCurrent()) return;
     if (!ready && validateDetachedHistoricalCatalogueDescriptor(manifest)) {

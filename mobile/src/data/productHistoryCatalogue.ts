@@ -45,7 +45,6 @@ export function readyProductHistoryIdentity(prepared: PreparedHistoricalBankRate
   if (!prepared) return undefined;
   const selection = historicalCatalogueSelection(prepared);
   index = productCatalogueIndex(prepared, index);
-  if (productCatalogueIndexConflicts(index, day)) return undefined;
   if (selection && !selection.dates.has(day)) return readyProductHistoryIdentity(selection.fallback, index, day);
   const inputs = preparedReadySources(prepared);
   const input = inputs?.find(item => item.acceptedDates.includes(day));
@@ -53,7 +52,7 @@ export function readyProductHistoryIdentity(prepared: PreparedHistoricalBankRate
   const source = input?.ready.sources[day] ?? (trustedLegacy && !prepared.catalogue.unavailable_dates[day]
     ? prepared.catalogue.sources[day] : undefined);
   if (!source) return undefined;
-  if (source.kind === 'published_core') return index?.revision_heads?.[day]?.manifest_sha256 === source.manifest_sha256
+  if (source.kind === 'published_core') return !productCatalogueIndexConflicts(index, day) && index?.revision_heads?.[day]?.manifest_sha256 === source.manifest_sha256
     ? historicalSourceIdentity(index, day) : undefined;
   return input ? `prepared:${input.ready.compiler_sha256}:${source.banks_sha256}` :
     `catalogue:${bytesToHex(sha256(utf8ToBytes(JSON.stringify([historicalCatalogueArchiveReceipt(prepared) ?? null, source]))))}`;
@@ -90,8 +89,8 @@ export async function productRatesFromHistoricalCatalogue(
   const result = new Map<string, Map<string, number>>();
   const byPosition = catalogue.run_dates.map(day => {
     const source = catalogue.sources[day], head = index?.revision_heads?.[day];
-    if (!requested.has(day) || !source || catalogue.unavailable_dates[day] || productCatalogueIndexConflicts(index, day) || (selection && !selection.dates.has(day))) return null;
-    if (source.kind === 'published_core' ? !selected.has(day) || !head || source.manifest_sha256 !== head.manifest_sha256 : !readySources && !trustedLegacy) return null;
+    if (!requested.has(day) || !source || catalogue.unavailable_dates[day] || (selection && !selection.dates.has(day))) return null;
+    if (source.kind === 'published_core' ? productCatalogueIndexConflicts(index, day) || !selected.has(day) || !head || source.manifest_sha256 !== head.manifest_sha256 : !readySources && !trustedLegacy) return null;
     const rates = new Map<string, number>();
     result.set(day, rates);
     return rates;

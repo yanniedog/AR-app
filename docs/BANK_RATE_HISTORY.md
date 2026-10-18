@@ -31,7 +31,7 @@ The verified fallback covers 134 observed dates across 137 calendar days, from
 descriptors and 8,199 evidence records to 4,672 cohorts and 3,175 product series.
 The prepared JSON is about 2.62 MB and its gzip about 280 KB. May 14, June 26 and
 September 23 are gaps. Dates after the fallback's coverage also remain gaps until
-verified prepared data supplies them; no rate is carried across a missing date.
+verified prepared data or a verified legacy archive supplies them; no rate is carried across a missing date.
 
 ## Producer and offline recovery
 

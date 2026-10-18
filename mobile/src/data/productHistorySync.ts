@@ -114,15 +114,14 @@ export async function syncProductHistoryFromDailyPayloads(
   const sameDerivation = opts.existing?.derivation_version === HISTORY_DERIVATION_VERSION;
   const publications = !preparedOnly && selectedIndex && networkAvailable ? await resolveLegacyPublications(selectedIndex, indexedDates.filter(d => d !== targetRunDate), opts.isCurrent) : new Map();
   const selectedIdentity = (date: string): string | undefined => {
-    if (productCatalogueIndexConflicts(selectedIndex ?? candidateIndex, date)) return undefined;
-    const identity = readyProductHistoryIdentity(opts.catalogue, selectedIndex, date) ??
-      (selectedIndex?.revision_heads?.[date] ? historicalSourceIdentity(selectedIndex, date) : publications.get(date)?.identity);
+    const independentOrSelected = readyProductHistoryIdentity(opts.catalogue, selectedIndex, date);
+    const identity = independentOrSelected ?? (productCatalogueIndexConflicts(selectedIndex ?? candidateIndex, date) ? undefined :
+      selectedIndex?.revision_heads?.[date] ? historicalSourceIdentity(selectedIndex, date) : publications.get(date)?.identity);
     return publicIndexRejected && identity?.startsWith('revision:') ? undefined : identity;
   };
   // A local receipt cannot re-resolve mutable legacy manifests. Preserve their
   // already verified cached slices, without inventing identities for new ones.
   const reusableDates = new Set((opts.existing?.run_dates ?? []).filter(date => {
-    if (productCatalogueIndexConflicts(candidateIndex, date)) return false;
     const previous = opts.existing?.source_identities?.[date];
     if (!sameDerivation || !previous) return false;
     const readyIdentity = readyProductHistoryIdentity(opts.catalogue, selectedIndex, date);
@@ -130,6 +129,7 @@ export async function syncProductHistoryFromDailyPayloads(
     // payload. They neither need a public index nor survive its removal from
     // that payload; a failed index refresh must not keep an older producer's rate.
     if ([previous, readyIdentity].some(value => value?.startsWith('prepared:') || value?.startsWith('catalogue:'))) return previous === readyIdentity;
+    if (productCatalogueIndexConflicts(candidateIndex, date)) return false;
     return !selectedIndex || (preparedDates.has(date) ? previous === selectedIdentity(date) :
       !indexedDates.includes(date) || (opts.existing?.schema_version === 3 &&
         ((!networkAvailable && !selectedIndex.revision_heads?.[date]) || previous === selectedIdentity(date))));

@@ -199,7 +199,7 @@ test('an invalid legacy descriptor uses prepared fallback without opening the ra
   expect(get()).toMatchObject({ bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
 });
 
-test.each([[false, false, false], [true, false, false], [false, true, false], [false, true, true]])('verified legacy history is prepared after paint with local audit=%s, unavailable ready asset=%s, rejected preparation=%s', async (audit, unavailableReady, rejectedPreparation) => {
+test.each([[false, false, false], [true, false, false], [false, true, false], [false, true, true], [false, true, 'throws']])('verified legacy history is prepared after paint with local audit=%s, unavailable ready asset=%s, rejected preparation=%s', async (audit, unavailableReady, rejectedPreparation) => {
   const { get, set } = store(), manifest = revisionManifest(1);
   const sha = 'b'.repeat(64), name = `bank-rate-history-catalogue-${manifest.run_date}-${sha.slice(0, 12)}.json.gz`;
   delete manifest.files.core.enc;
@@ -208,7 +208,8 @@ test.each([[false, false, false], [true, false, false], [false, true, false], [f
   if (unavailableReady) manifest.bank_rate_history_ready = detachedManifest().bank_rate_history_ready;
   if (rejectedPreparation) {
     jest.mocked(loadDetachedHistoricalBankRateReady).mockResolvedValueOnce({} as HistoricalBankRateReady);
-    jest.mocked(prepareReadyBankRateHistory).mockResolvedValueOnce(false);
+    if (rejectedPreparation === 'throws') jest.mocked(prepareReadyBankRateHistory).mockRejectedValueOnce(new Error('cache unavailable'));
+    else jest.mocked(prepareReadyBankRateHistory).mockResolvedValueOnce(false);
   }
   set({ manifest });
   const legacy = { schema_version: 2 as const, run_dates: [sampleCore.run_date], sources: {}, unavailable_dates: {},

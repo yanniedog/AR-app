@@ -11,8 +11,9 @@ import { yieldToUi } from '../lib/yieldToUi';
  * old raw APK snapshot or download dated cores. */
 export async function prepareLegacyBankRateHistory(core: CorePayload, manifest: Manifest, index: DatesIndex | null,
   archive: HistoricalBankRateCatalogue, isCurrent: () => boolean): Promise<boolean> {
-  const checkpoint = async () => { await yieldToUi(0); if (!isCurrent()) throw new Error('Legacy history superseded'); };
-  const fallbackReady = await prepareReadyBankRateHistory(core, manifest, index, null, isCurrent);
+  let fallbackReady = false;
+  try { fallbackReady = await prepareReadyBankRateHistory(core, manifest, index, null, isCurrent); }
+  catch { /* Independent verified observations do not require the signed fallback. */ }
   if (!isCurrent()) return false;
   const selected = fallbackReady ? selectedPreparedHistoryHeads(core) : null;
   // Without selected heads only independent producer observations are usable.
@@ -22,10 +23,12 @@ export async function prepareLegacyBankRateHistory(core: CorePayload, manifest: 
       (source.kind !== 'published_core' || (selected && !selected.conflicts.has(day) &&
         source.manifest_sha256 === selected.heads.get(day)?.manifest_sha256));
   }));
-  const primary = await prepareHistoricalBankRateCatalogueAsync(archive, checkpoint);
+  // Validation is shared by archive identity. One retired consumer must not
+  // cancel a live successor joining the same immutable archive.
+  const primary = await prepareHistoricalBankRateCatalogueAsync(archive, () => yieldToUi(0));
   if (!primary || !isCurrent()) return false;
   const fallback = selected?.prepared ?? null;
-  const knownDates = [...(selected?.heads.keys() ?? [])].sort();
+  const knownDates = [...(selected?.dates ?? selected?.heads.keys() ?? [])].sort();
   const selectedIndex: DatesIndex | undefined = knownDates.length ? {
     schema_version: 1, revision_protocol: 1, dates: knownDates, count: knownDates.length,
     min_date: knownDates[0], latest_date: knownDates.at(-1)!, revision_heads: Object.fromEntries(selected!.heads),
