@@ -200,7 +200,8 @@ describe('deidentified diagnostics privacy boundary', () => {
     expect(screen).toContain('const requestedUpload = publicUpload');
     expect(screen).toContain('uploadLog: requestedUpload');
     expect(screen.indexOf('const requestedUpload = publicUpload')).toBeLessThan(screen.indexOf('await getHydratedApkDownloadSnapshot()'));
-    expect(screen).toContain('useState(false)');
+    expect(screen).toContain('const [publicUpload, setPublicUpload] = useState(true)');
+    expect(screen).toContain('title="Upload report"');
     expect(screen).toContain('Public upload');
     const completion = runner.indexOf('await publishPerformanceAuditAfterFinalization(report');
     const upload = runner.indexOf('startPerformanceAuditLogUpload(uploadLog,');

@@ -57,9 +57,9 @@ test.each([['weekly', 52], ['fortnightly', 26], ['monthly', 12]] as const)('actu
   const now = new Date('2026-08-04T10:00:00Z');
   const scenario = normalizeUserRateScenario({ mortgage: { loanBalance: '500000', currentRate: '6', years: '25' },
     savings: { balance: '10000', currentRate: '4' }, projections: {
-      mortgage: { periodicAmount: '1200', periodicFrequency: frequency, extraRepaymentAmount: '120', extraRepaymentFrequency: frequency,
+      mortgage: { holdVariableRate: true, periodicAmount: '1200', periodicFrequency: frequency, extraRepaymentAmount: '120', extraRepaymentFrequency: frequency,
         offsetContributionAmount: '60', offsetContributionFrequency: frequency, offsetBoostAmount: '24' },
-      savings: { horizonYears: '2', periodicAmount: '120', periodicFrequency: frequency, withdrawalAmount: '24', withdrawalFrequency: frequency },
+      savings: { holdVariableRate: true, horizonYears: '2', periodicAmount: '120', periodicFrequency: frequency, withdrawalAmount: '24', withdrawalFrequency: frequency },
     } });
   const mortgageResult = buildLifecycleProjection('Mortgage', scenario, now);
   const savingsResult = buildLifecycleProjection('Savings', scenario, now);
@@ -82,7 +82,7 @@ test.each([['weekly', 52], ['fortnightly', 26], ['monthly', 12]] as const)('actu
 
 test('illustrative mortgage repayment is monthly even when an unused input frequency is weekly', () => {
   const scenario = normalizeUserRateScenario({ mortgage: { loanBalance: '500000', currentRate: '6', years: '25' },
-    projections: { mortgage: { periodicAmount: '', periodicFrequency: 'weekly' } } });
+    projections: { mortgage: { holdVariableRate: true, periodicAmount: '', periodicFrequency: 'weekly' } } });
   const result = buildLifecycleProjection('Mortgage', scenario, new Date('2026-08-04T10:00:00Z'));
   const fact = result.facts.find(value => value.kind === 'monthly-repayment')!;
   expect(fact).toMatchObject({ source: 'illustrative', enteredAmount: 0 });

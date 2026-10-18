@@ -19,6 +19,8 @@ function scenario() {
     mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' },
     projections: {
       mortgage: {
+        holdVariableRate: true,
+        horizonYears: '25',
         offsetBalance: '30000',
         offsetContributionAmount: '500',
         offsetContributionFrequency: 'monthly',

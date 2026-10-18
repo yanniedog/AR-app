@@ -1,5 +1,8 @@
+import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
+import { publicOfferSelectionToken } from '../../src/data/publicOfferIdentity';
+import { publicComparisonCore, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolvedPublicRankingRows } from '../../src/data/publicRateIntegration';
 import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiSectionName, type UiCopy } from "../../src/lib/uiCopy";
-import { mandatoryEligibleRows, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
+import { mandatoryEligibleRows } from '../../src/data/eligibilityGate';
 import { useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -13,8 +16,7 @@ import { SwipeableRow } from '../../src/components/SwipeableRow';
 import { AppText, Button, Card, Disclosure, Row, SectionHeading } from '../../src/components/ui';
 import { SECTION_ORDER, SECTIONS } from '../../src/constants';
 import { computeLvr } from '../../src/data/calc';
-import { toggleCompareSelection } from '../../src/data/compareSelection';
-import { percentageInputFraction } from '../../src/data/decisionInsights';
+import { toggleCompareSelection, resolveCompareSelections } from '../../src/data/compareSelection';
 import { formatRate, toFraction } from '../../src/data/format';
 import {
   profileFeaturesForSection,
@@ -26,7 +28,7 @@ import {
   unresolvedSavedRateRefs,
   type SavedRateRef,
 } from '../../src/data/savedRates';
-import { bestRow, rankFraction } from '../../src/data/selectors';
+import { bestRow } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
 import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
 import {
@@ -48,8 +50,8 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 import type { RateRow, SectionKey } from '../../src/types';
 import { savedEmptyState } from '../../src/lib/savedEmptyState';
 
-function compareToken(productKey: string, rateIndex: number | null): string {
-  return rateIndex == null ? productKey : `${rateIndex}#${productKey}`;
+function compareToken(productKey: string, rateIndex: number | null, offerId?: string): string {
+  return offerId ? publicOfferSelectionToken(productKey, offerId) : rateIndex == null ? productKey : `${rateIndex}#${productKey}`;
 }
 
 interface RatePosition {
@@ -79,6 +81,8 @@ export default function MyRates() {
   const theme = useTheme();
   const [positionsOpen, setPositionsOpen] = useState(false);
   const core = useStore((s) => s.core);
+  const manifest = useStore((s) => s.manifest);
+  const publicCatalogue = usePublicRateCatalogue(manifest);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const storeStatus = useStore((s) => s.status);
   const storeError = useStore((s) => s.error);
@@ -106,10 +110,10 @@ export default function MyRates() {
 
   const items = useMemo(() => {
     void suitabilityRevision;
-    return core ? resolveSavedRates(core, savedRates).filter(item => mandatoryEligibleRows([item.row]).length > 0) : [];
-  }, [core, savedRates, suitabilityRevision]);
+    return core ? resolveSavedRates(core, savedRates, publicCatalogue, section => publicRateScenario(section, scenario, profileFilters)).filter(item => mandatoryEligibleRows([item.row]).length > 0) : [];
+  }, [core, savedRates, suitabilityRevision, publicCatalogue, scenario, profileFilters]);
   const unavailableRefs = useMemo(
-    () => unresolvedSavedRateRefs(savedRates.filter(ref => mandatoryProductAllowed(ref.productKey)), items),
+    () => unresolvedSavedRateRefs(savedRates, items),
     [items, savedRates],
   );
   const trackedById = useMemo(
@@ -129,14 +133,13 @@ export default function MyRates() {
     if (!core || scenarioStatus !== 'ready') return [];
     const mortgage = computeLvr(scenario.mortgage);
     return SECTION_ORDER.flatMap((section): RatePosition[] => {
-      const deposit = section === 'Savings' ? scenario.savings : scenario.termDeposit;
-      const currentRate = section === 'Mortgage'
-        ? percentageInputFraction(scenario.mortgage.currentRate)
-        : percentageInputFraction(deposit.currentRate);
+      const local = resolveLocalCurrentRate(section, scenario, publicCatalogue.references, undefined, publicCatalogue, profileFilters);
+      const currentRate = local.status === 'exact' && local.payableRate != null ? Number(local.payableRate) : null;
       if (currentRate == null) return [];
       const rows = core.sections[section]?.rates ?? [];
       const ready = isSuitabilityFilterReady(includeNonStandard)
-        && !(profileFeaturesForSection(profileFilters, section).length > 0 && !detailsProducts);
+        && !(profileFeaturesForSection(profileFilters, section).length > 0 && !detailsProducts)
+        && (publicCatalogue.status === 'unavailable' || publicCatalogue.status === 'ready' && publicCatalogue.allLoaded);
       if (!ready) {
         return [{
           section,
@@ -146,8 +149,11 @@ export default function MyRates() {
           ready: false,
         }];
       }
+      const candidates = publicRecommendationRows(rows, publicCatalogue, section, publicRateScenario(section, scenario, profileFilters));
+      const pricing = resolvedPublicRankingRows(scenarioProfileFilterRows(candidates, profileFilters, section, mortgage.lvr, detailsProducts), publicCatalogue,
+        row => publicRateScenario(section, scenario, profileFilters, row));
       const match = bestRow(
-        scenarioProfileFilterRows(rows, profileFilters, section, mortgage.lvr, detailsProducts),
+        pricing.rows,
         section,
         includeNonStandard,
         depositRankMetric,
@@ -156,11 +162,7 @@ export default function MyRates() {
       );
       // A comparison-rate ranking may select the mortgage product, but its
       // observed interest rate is the like-for-like input for dollar impact.
-      const matchedRate = match
-        ? section === 'Mortgage'
-          ? toFraction(match.rate)
-          : rankFraction(match, section, depositRankMetric, mortgageRateMetric)
-        : null;
+      const matchedRate = match ? toFraction(match.rate) : null;
       const gapRate = matchedRate == null
         ? null
         : Math.max(0, section === 'Mortgage' ? currentRate - matchedRate : matchedRate - currentRate);
@@ -182,6 +184,7 @@ export default function MyRates() {
     scenario,
     scenarioStatus,
     suitabilityRevision,
+    publicCatalogue,
   ]);
 
   const openRateEditor = useCallback((section: SectionKey) => {
@@ -195,7 +198,8 @@ export default function MyRates() {
   }, []);
   const toggleSelection = useCallback((token: string) => {
     if (!core) return;
-    const update = toggleCompareSelection(core, selected, token);
+    const update = toggleCompareSelection(publicComparisonCore(core, publicCatalogue,
+      section => publicRateScenario(section, scenario, profileFilters)), selected, token);
     if (update.rejection === 'limit_reached') {
       Alert.alert('Maximum 4 rates');
       return;
@@ -209,21 +213,13 @@ export default function MyRates() {
       return;
     }
     setSelected(update.tokens);
-  }, [core, selected]);
+  }, [core, selected, publicCatalogue, scenario, profileFilters]);
   const findExactRow = useCallback((token: string): RateRow | null => {
     if (!core) return null;
-    const hash = token.indexOf('#');
-    const rateIndex = hash > 0 && Number.isInteger(Number(token.slice(0, hash)))
-      ? Number(token.slice(0, hash))
-      : null;
-    const productKey = rateIndex == null ? token : token.slice(hash + 1);
-    for (const section of Object.values(core.sections)) {
-      const exact = section.rates.find((row) =>
-        row.product_key === productKey && (rateIndex == null || row.rate_index === rateIndex));
-      if (exact) return exact;
-    }
-    return null;
-  }, [core]);
+    const effectiveCore = publicComparisonCore(core, publicCatalogue,
+      section => publicRateScenario(section, scenario, profileFilters));
+    return resolveCompareSelections(effectiveCore, [token])[0]?.row ?? null;
+  }, [core, publicCatalogue, scenario, profileFilters]);
   const ensureExactPair = useCallback((...args: unknown[]) => {
     const tokens = auditActionStrings(args, 'selectionTokens');
     auditSavedFixtureSnapshot ??= {
@@ -240,7 +236,7 @@ export default function MyRates() {
       const retained = state.savedRates.filter((ref) => !fixtureKeys.has(ref.productKey));
       const additions = rows.map((row) => makeSavedRateRef(
         row,
-        Number.isInteger(row.rate_index) ? 'rate' : 'product',
+        row.public_offer_id || Number.isInteger(row.rate_index) ? 'rate' : 'product',
       ));
       const next = [...retained, ...additions];
       return {
@@ -284,7 +280,8 @@ export default function MyRates() {
   );
   const savedLogos = useLogoReadiness(savedRenderRevision, savedLogoIds);
   const openSavedProduct = useCallback((row: RateRow) => {
-    openProduct(row.product_key, row.rate_index);
+    if (row.public_programme_id) openProduct(row.product_key, row.rate_index, row.public_programme_id);
+    else openProduct(row.product_key, row.rate_index);
     return { expectedPath: `/product/${encodeURIComponent(row.product_key)}` };
   }, []);
   const openSavedProductForAudit = useCallback((...args: unknown[]) => {
@@ -349,7 +346,7 @@ export default function MyRates() {
     if (!item) return;
     removeSavedRate(id);
     setSelected((prev) => prev.filter((token) =>
-      token !== compareToken(item.row.product_key, item.row.rate_index ?? null)));
+      token !== compareToken(item.row.product_key, item.row.rate_index ?? null, item.row.public_offer_id)));
     showUndo('Removed', () => {
       restoreSavedRate(item.ref, tracked);
     });
@@ -415,6 +412,8 @@ export default function MyRates() {
             <AppText variant="small" color="textMuted">
               {uiJoin('Unavailable tiers',': ',uiCount(unavailableRefs.length))}
             </AppText>
+            {unavailableRefs.map(ref => <Button key={ref.id} title="Choose product"
+              variant="ghost" onPress={() => openProduct(ref.productKey)} />)}
             <Button
               title="Remove unavailable saves"
               variant="secondary"
@@ -441,7 +440,7 @@ export default function MyRates() {
               </AppText>
               <View testID="saved-product-rows">
               {sectionItems.map(({ ref, row, section }) => {
-                const token = compareToken(row.product_key, row.rate_index ?? null);
+                const token = compareToken(row.product_key, row.rate_index ?? null, row.public_offer_id);
                 return <SwipeableRow key={ref.id} onDelete={() => remove(ref.id)} deleteLabel="Stop watching">
                   <ProductCard row={row} section={section} selectMode={selectMode} selected={selected.includes(token)}
                     logoRenderStateId={`saved:${ref.id}`} onLogoRenderStateChange={savedLogos.onLogoRenderStateChange}

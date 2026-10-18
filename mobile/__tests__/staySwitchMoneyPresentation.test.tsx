@@ -20,7 +20,7 @@ const labels = ['Current bank exit fees', 'Application fees', 'Valuation fees', 
 type TestNode = { props: Record<string, any> };
 type Tree = ReactTestRenderer & { root: { findAllByType(type: unknown): TestNode[]; findByType(type: unknown): TestNode; findAll(predicate: (node: TestNode) => boolean): TestNode[] }; toJSON(): unknown };
 const texts = (tree: Tree) => tree.root.findAllByType('AppText' as never).map(node => String(node.props.children)).join('\n');
-const scenario = () => normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '500000.50', currentRate: '6', years: '25' } });
+const scenario = () => normalizeUserRateScenario({ projections: { mortgage: { holdVariableRate: true, horizonYears: '50' } }, mortgage: { mode: 'refi', loanBalance: '500000.50', currentRate: '6', years: '25' } });
 
 test('six fees and cashback show AUD in visible and accessible field labels without altering entered cents', () => {
   const inputs = { ...scenario().mortgageSwitch, ...Object.fromEntries(fees.map(key => [key, '99.50'])), cashback: '0.50' };

@@ -95,6 +95,20 @@ function allSteps(core: CorePayload | null = corePayload()): DeepAuditStep[] {
 }
 
 describe('deep performance audit plan', () => {
+  test('prepares each exact target page immediately before selection in both passes', () => {
+    for (const pass of buildDeepPerformanceAuditPlan(corePayload()).passes) {
+      for (const index of [0, 1]) {
+        const position = pass.steps.findIndex(step => step.semanticActionId === `search.compare.select.${index}`);
+        const selection = pass.steps[position], preparation = pass.steps[position - 1];
+        expect(preparation.semanticActionId).toBe(`search.compare.page.${index}`);
+        expect(preparation.parameters.selectionToken).toBe(selection.parameters.selectionToken);
+        expect(preparation.expectedSurface).toBe('rates.results');
+        expect(preparation.safety.stateImpact).toBe('local-only');
+        expect(preparation.readiness).toContain('list');
+      }
+    }
+  });
+
   afterEach(() => {
     installMandatoryEligibility(selectMandatoryEligibility(null, null, null));
     setSuitabilityAllowed(null);

@@ -169,13 +169,13 @@ export function FilterSheet({
   return (
     <SheetSurface
       visible={visible}
-      title="Filters"
+      title="Temporary filters"
       onClose={onClose}
       footer={(
         <>
           <Divider />
           <Row gap={12} style={{ paddingHorizontal: 16, paddingTop: 12 }}>
-            <Button title="Reset" variant="ghost" style={{ flex: 1 }} onPress={() => setDraft({ ...filters, ...resetFilters() })} />
+            <Button title="Reset temporary filters" variant="ghost" style={{ flex: 1 }} onPress={() => setDraft({ ...filters, ...resetFilters() })} />
             <Button title={applyTitle} style={{ flex: 2 }} onPress={() => { onApply(draft); onClose(); }} />
           </Row>
         </>

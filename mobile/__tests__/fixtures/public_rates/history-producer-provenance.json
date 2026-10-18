@@ -1,0 +1,9 @@
+{
+  "repository": "yanniedog/AR-local",
+  "commit": "6d33142ae1bac736ed738cf9182eaecec38e7893",
+  "observationsPath": "tests/fixtures/bank_rate_catalogue_real_2026-05-19_2026-09-26.json",
+  "observationsSha256": "6b03da88fb9c49ed05f938ea88f9e3f7bb2a65bc34eefb1eb54d51b3354a8334",
+  "readyPath": "tests/fixtures/history-ready-real.json",
+  "richReproduction": "upsertHistoricalCatalogueDay with each original observation, public source receipt and published details; no numerical or source substitution",
+  "acceptanceBoundary": "Fixture compatibility only. Natural daily shadows, exact producer head, deployment, native acceptance and release remain pending."
+}
