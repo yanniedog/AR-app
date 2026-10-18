@@ -44,3 +44,16 @@ test('the actual step-limit producer marks non-journey overruns as timing unless
   expect(auditOutcome(enforcePerformanceAuditStepLimit({ ...source, durationMs: 10_000 }))).toBe('pass');
   expect(source.status).toBe('pass'); expect(source.metrics).toEqual({});
 });
+
+
+test('completed route round trips classify latency while navigation and back contract failures remain failures', () => {
+  const route: AuditCheck = { id: 'journey-product-1', kind: 'journey', label: 'Product', status: 'fail', durationMs: 3500,
+    metrics: { measurementMode: 'route-round-trip', actionCompleted: true, forwardMs: 2800, backMs: 300,
+      backReturnedToAudit: true, backChangedPath: true, nonTimingFailure: false } };
+  expect(auditOutcome(route)).toBe('timing');
+  const invalid: AuditCheck['metrics'][] = [{ nonTimingFailure: true }, { actionCompleted: false }, { backChangedPath: false },
+    { backReturnedToAudit: false }, { backMs: null }, { forwardMs: NaN }];
+  for (const metrics of invalid) {
+    expect(auditOutcome({ ...route, metrics: { ...route.metrics, ...metrics } })).toBe('failure');
+  }
+});

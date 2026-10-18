@@ -15,6 +15,10 @@ export function auditOutcome(check: AuditCheck): AuditOutcome {
   if (check.status === 'fail') {
     const measured = check.metrics.performanceStatus === 'fail' || check.metrics.measurementAvailable === true
       || (check.metrics.actionCompleted === true && typeof check.metrics.actionMs === 'number')
+      || (check.metrics.measurementMode === 'route-round-trip' && check.metrics.actionCompleted === true
+        && check.metrics.backReturnedToAudit === true && check.metrics.backChangedPath === true
+        && typeof check.metrics.forwardMs === 'number' && Number.isFinite(check.metrics.forwardMs)
+        && typeof check.metrics.backMs === 'number' && Number.isFinite(check.metrics.backMs) && check.metrics.backMs > 0)
       || (check.id === 'runtime-responsiveness' && (Number(check.metrics.eventLoopSamples) > 0 || Number(check.metrics.frameSamples) > 0));
     return check.metrics.nonTimingFailure === false && measured ? 'timing' : 'failure';
   }
