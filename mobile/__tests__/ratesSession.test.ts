@@ -1,11 +1,20 @@
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { EMPTY_FILTERS } from '../src/data/selectors';
-import { captureRatesSession, restoreRatesSession, initializeRatesSession, changeRatesSection, updateRatesSection, recordRatesScroll, useRatesSession } from '../src/data/ratesSession';
+import { captureRatesSession, restoreRatesSession, initializeRatesSession, syncRatesPreferences, changeRatesSection, updateRatesSection, recordRatesScroll, useRatesSession } from '../src/data/ratesSession';
 import { resolveRatesIntent, ratesIntentKey } from '../src/lib/ratesIntent';
 import { rowsForSearchScope } from '../src/data/taxonomy';
 import type { RateRow } from '../src/types';
 const original = captureRatesSession();
 beforeEach(() => restoreRatesSession(original));
+
+test('changing page size clears saved offsets and pages while preserving temporary choices and selections', () => {
+  initializeRatesSession({ ...DEFAULT_PREFS, ratesPageSize: 20 }, 'Mortgage');
+  updateRatesSection('Mortgage', { page: 2, query: 'retained', selected: ['7#x'], filters: { ...EMPTY_FILTERS, providers: ['Bank A'] } });
+  recordRatesScroll('Mortgage', 600);
+  syncRatesPreferences({ ...DEFAULT_PREFS, ratesPageSize: 10 });
+  expect(useRatesSession.getState().sections.Mortgage).toMatchObject({ page: 1, scrollOffset: 0,
+    query: 'retained', selected: ['7#x'], filters: { providers: ['Bank A'] } });
+});
 test('per-family query/filter/sort/selection and offset survive switching and exact snapshot restoration', () => {
   initializeRatesSession(DEFAULT_PREFS, 'Savings');
   updateRatesSection('Savings', { query: 'Bank A', sort: 'bank', filters: { ...EMPTY_FILTERS, providers: ['Bank A'] }, selectMode: true, selected: ['7#x'] });

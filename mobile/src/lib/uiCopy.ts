@@ -13,6 +13,7 @@ import { LENDER_ARTWORK_TERMS, OPTIONAL_DIAGNOSTICS_TERMS } from './privacyPolic
 import { Decimal } from './productTermsEngine/decimal';
 import { readBoundCustomerQuestion, type CustomerQuestionBinding } from './customerQuestionBinding';
 import type { BackgroundWorkSnapshot } from './backgroundPayloadWork';
+import type { MortgageComparisonInputs } from '../data/mortgageComparison';
 import type { PublicProduct, PublicReferenceRate, PublicCoverage, PublicEvidence } from '../data/publicRateModel';
 import type { CurrentProductOption } from '../data/scenarioCatalog';
 
@@ -20,6 +21,14 @@ import type { CurrentProductOption } from '../data/scenarioCatalog';
 export const UI_LABELS = [
   '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '#', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
   'Rates', 'Saved', 'Market', 'Account', 'Profile', 'Settings', 'About',
+  'Saved requirements', 'Temporary filters', 'After saved requirements', 'All screens', 'Catalogue',
+  'Edit saved requirements', 'Clear Home loans requirements', 'Clear all saved requirements',
+  'Reset temporary filters', 'Reset Rates view', 'Other saved selections',
+  'Rates per page', 'Products per page', 'Page', 'First', 'Previous', 'Next', 'Last',
+  'First page', 'Previous page', 'Next page', 'Last page',
+  'Freshness', 'Overdue', 'Stale',
+  'Invalid comparison inputs', 'Clear comparison inputs',
+  'Shared requirements',
   'Home loans', 'Savings', 'Savings accounts', 'Term deposits', 'Mortgage', 'TD',
   'Calculate', 'Rate check', 'Projection', 'Compare', 'Filter', 'Sort', 'Search', 'More', 'Bonus', 'Conditional',
   'Search rates or banks', 'Search actions', 'Clear search', 'Clear', 'Reset', 'Apply',
@@ -434,6 +443,7 @@ export function useReceiptImportInput() { return useInputController(); }
 export function useSetupKeyInput() { return useInputController(); }
 export function useProviderSearchInput() { return useInputController(); }
 export function uiRatesQuery(session: Pick<RatesSectionState, 'query'>): UiInputText { return inputText(session.query); }
+export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr'): UiInputText { return inputText(model[field]); }
 export function uiPrivateOfferInput(model: Pick<MortgageInputs, 'confirmedOfferFacts' | 'provenance'>, field: 'purpose' | 'security' | 'repaymentType'): UiInputText {
   const value = model.confirmedOfferFacts[field] ?? '';
   return inputText(model.provenance === 'user_reported_bank_offer_and_statement' && value.length <= 2000 && !/[\r\n\t]/.test(value) ? value : '');

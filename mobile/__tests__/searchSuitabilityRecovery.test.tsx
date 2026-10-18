@@ -1,4 +1,5 @@
 import React from 'react';
+import type { RateRow } from '../src/types';
 import TestRenderer, { act } from 'react-test-renderer';
 
 import Search from '../src/components/rates/RatesWorkspace';
@@ -62,14 +63,20 @@ jest.mock('@shopify/flash-list', () => {
   return { FlashList: React.forwardRef(function MockFlashList(props: any, ref: any) {
     const measure = () => {
       if (!mockSuppressViewability) props.onViewableItemsChanged({ viewableItems:
-        props.data.slice(0, mockVisibleCount ?? 3).map((item: unknown) => ({ isViewable: true, item })) });
+        props.data.slice(0, mockVisibleCount ?? 3).map((item: unknown, index: number) => ({ isViewable: true, item, index, key: props.keyExtractor(item, index) })) });
     };
+    const propsRef = React.useRef(props); propsRef.current = props;
     const measureRef = React.useRef(measure);
     measureRef.current = measure;
     const loadRef = React.useRef(props.onLoad);
     loadRef.current = props.onLoad;
     const { extraData, onCommitLayoutEffect } = props;
-    React.useImperativeHandle(ref, () => ({ scrollToOffset: (...args: unknown[]) => mockScrollToOffset(...args), recomputeViewableItems: () => {
+    React.useImperativeHandle(ref, () => ({
+      get props() { return propsRef.current; }, getLayout: (index: number) => ({ x: 0, y: index * 100, height: 100, width: 320 }),
+      getWindowSize: () => ({ width: 320, height: (mockVisibleCount ?? 3) * 100 }),
+      getFirstItemOffset: () => 0, getAbsoluteLastScrollOffset: () => 0,
+      computeVisibleIndices: () => ({ startIndex: 0, endIndex: Math.min(mockVisibleCount ?? 3, propsRef.current.data.length) - 1 }),
+      scrollToIndex: () => Promise.resolve(), scrollToOffset: (...args: unknown[]) => mockScrollToOffset(...args), recomputeViewableItems: () => {
       mockRecomputeViewableItems(); measureRef.current();
     } }), []);
     React.useEffect(() => {
@@ -81,7 +88,7 @@ jest.mock('@shopify/flash-list', () => {
     React.useEffect(() => { onCommitLayoutEffect(); }, [extraData, onCommitLayoutEffect]);
     return React.createElement('FlashList', props, props.ListHeaderComponent,
       props.data.length ? props.data.map((item: any, index: number) =>
-        React.createElement('Rate', { key: index }, props.renderItem({ item })))
+        React.createElement('Rate', { key: index }, props.renderItem({ item, index, target: index < (mockVisibleCount ?? 3) ? 'Cell' : 'Measurement' })))
         : props.ListEmptyComponent);
   }) };
 });
@@ -134,7 +141,7 @@ test('a closed suitability gate offers recovery instead of claiming no products 
   act(() => { tree = TestRenderer.create(<Search />); });
   try {
     expect(tree.root.findByType('EmptyState' as any).props.title).toBe('Rates unavailable');
-    expect(tree.root.findAllByProps({ title: 'Clear filters' })).toHaveLength(0);
+    expect(tree.root.findAllByProps({ title: 'Reset Rates view' })).toHaveLength(0);
     expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(true);
     expect(mockSurfaces.get('rates.results').probes.find((probe: any) => probe.id === 'search.list').status).toBe('pending');
     act(() => tree.root.findByProps({ title: 'Retry' }).props.onPress());
@@ -161,7 +168,7 @@ test('a verified empty result still offers the normal filter controls', () => {
   act(() => { tree = TestRenderer.create(<Search />); });
   try {
     expect(tree.root.findByType('EmptyState' as any).props.title).toBe('No matching products');
-    expect(tree.root.findAllByProps({ title: 'Clear filters' })).toHaveLength(1);
+    expect(tree.root.findAllByProps({ title: 'Reset Rates view' })).toHaveLength(1);
     expect(tree.root.findAllByProps({ title: 'Retry' })).toHaveLength(0);
   } finally { act(() => tree.unmount()); }
 });
@@ -292,7 +299,7 @@ test('audit comparison reports a missing filtered rate immediately and can clear
     act(() => mockSurfaces.get('rates.results').actions['search.filters.apply']());
     expect(tree.root.findByType('FlashList' as any).props.data).toHaveLength(0);
     expect(mockSurfaces.get('rates.results').actions['search.compare.select.0']({ selectionToken: 'missing' }))
-      .toEqual({ unavailableReason: 'The selected exact rate is not in the current filtered search results' });
+      .toEqual({ unavailableReason: 'The selected exact rate is not on the rendered results page' });
     act(() => mockSurfaces.get('rates.results').actions['search.filters.clear']());
     expect(tree.root.findByType('FlashList' as any).props.data.length).toBeGreaterThan(0);
   } finally { act(() => tree.unmount()); }
@@ -349,6 +356,7 @@ test('comparison and filter disclosure commit without remounting unchanged searc
     let measurements = mockRecomputeViewableItems.mock.calls.length;
     const token = `${first.rate_index}#${first.product_key}`;
     let previousRevision = mockSurfaces.get('rates.results').renderRevision;
+    let previousListRevision = tree.root.findByType('FlashList' as any).props.extraData;
     for (const [action, parameters] of [
       ['search.filters.open'], ['search.filters.apply'], ['search.compare.mode'],
       ['search.compare.select.0', { selectionToken: token }],
@@ -359,7 +367,10 @@ test('comparison and filter disclosure commit without remounting unchanged searc
       expect(tree.root.findByType('FlashList' as any).props.data).toBe(initialRows);
       const revision = mockSurfaces.get('rates.results').renderRevision;
       expect(revision).not.toBe(previousRevision);
-      expect(tree.root.findByType('FlashList' as any).props.extraData).toBe(revision);
+      const listRevision = tree.root.findByType('FlashList' as any).props.extraData;
+      expect(listRevision).not.toBe(previousListRevision);
+      expect(mockSurfaces.get('rates.results').probes.find((probe: any) => probe.id === 'search.layout').renderRevision).toBe(revision);
+      previousListRevision = listRevision;
       expect(listProbe().visibleCount).toBe(measuredCount);
       expect(mockRecomputeViewableItems).toHaveBeenCalledTimes(++measurements);
       previousRevision = revision;
@@ -431,16 +442,19 @@ test('filter Cancel discards the real draft and preserves query/type/sort/offset
     expect(mockScrollToOffset).toHaveBeenLastCalledWith({ offset: 0, animated: false });
   } finally { act(() => tree.unmount()); }
 });
-test('the canonical list has no five-row preview gate and product taps preserve the exact rate', () => {
+test('the canonical list pages all 24 rows in groups of 20 and taps preserve the exact rate', () => {
   mockState.prefs.includeNonStandard = true;
   const sample = mockState.core.sections.TD.rates[0];
   mockState.core.sections.TD.rates = Array.from({ length: 24 }, (_, index) => ({ ...sample, product_key: 'p-' + index, rate_index: index, rate: '0.045' }));
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
-    const list = tree.root.findByType('FlashList' as any); expect(list.props.data).toHaveLength(24);
+    const list = tree.root.findByType('FlashList' as any); expect(list.props.data).toHaveLength(20);
+    expect(list.props.ListFooterComponent.props).toMatchObject({ total: 24, page: 1, size: 20 });
     const card = tree.root.findAllByType('ProductCard' as any)[0]; act(() => card.props.onPress());
-    expect(router.push).toHaveBeenCalledWith({ pathname: '/product/[key]', params: { key: card.props.row.product_key, ri: String(card.props.row.rate_index) } });
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/product/[key]', params: { key: card.props.row.product_key, ri: String(card.props.row.rate_index), origin: 'rates-comparison' } });
     expect(mockSurfaces.get('rates.results').routeKey).toBe('/browse');
+    act(() => list.props.ListFooterComponent.props.onPage(2));
+    expect(list.props.data.map((row: RateRow) => row.rate_index)).toEqual([20, 21, 22, 23]);
   } finally { act(() => tree.unmount()); }
 });
 test('unlisted entries stay verified product identities without fabricated rates or description UI', () => {
@@ -521,7 +535,7 @@ test.each([
     expect(actions.props.icon).toBe('ellipsis-horizontal');
     expect(tree.root.findByProps({ testID: 'rates-task-controls' }).findAllByType('AppText' as any).map((node: any) =>
       React.Children.toArray(node.props.children).join(''))).toEqual([
-        tree.root.findByType('FlashList' as any).props.data.length + ' results', 'Advertised',
+        tree.root.findByType('FlashList' as any).props.data.length + ' rates', 'Advertised',
       ]);
     expect(tree.root.findByType('FlashList' as any).props.contentContainerStyle.paddingTop).toBe(0);
     act(() => controls[0].props.onPress());
@@ -529,7 +543,7 @@ test.each([
     expect(filter.props.visible).toBe(true);
     act(() => filter.props.onApply({ ...filter.props.filters, providers: ['Macquarie'] }));
     expect(controls[0].props.badge).toBe(1);
-    expect(controls[0].props.accessibilityLabel).toBe('Filter (1)');
+    expect(controls[0].props.accessibilityLabel).toBe('Temporary filters (1)');
     act(() => controls[1].props.onPress());
     expect(tree.root.findAllByType('SheetSurface' as any).some((node: any) => node.props.visible && node.props.title === 'Sort')).toBe(true);
     act(() => controls[2].props.onPress());
@@ -555,7 +569,7 @@ test.each([[411, 1], [360, 2]])('task controls remain outside a scrolled list at
   try {
     const list = tree.root.findByType('FlashList' as any);
     const controls = tree.root.findByProps({ testID: 'rates-task-controls' });
-    expect(list.props.ListHeaderComponent).toBeUndefined();
+    expect(list.props.ListHeaderComponent).toBeDefined();
     expect(list.findAllByType('SearchBar' as any)).toHaveLength(0);
     expect(controls.findAllByType('SearchBar' as any)).toHaveLength(1);
     act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 2400 } } }));
@@ -650,7 +664,7 @@ test.each([[411, 1, 0], [360, 2, 48]])('Compare reserves its own bottom space at
 
     act(() => button.props.onPress());
     expect(router.push).toHaveBeenCalledTimes(1);
-    expect(router.push).toHaveBeenCalledWith({ pathname: '/compare', params: { keys: JSON.stringify(tokens) } });
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/compare', params: { keys: JSON.stringify(tokens), origin: 'rates-comparison' } });
     expect(cards.map((card: any) => card.props.selected)).toEqual([true, true]);
     expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(420);
     expect(tree.root.findByType('FlashList' as any)).toBe(list);

@@ -1,3 +1,4 @@
+import { matchesMortgageFacet } from './mortgageFacets';
 import * as compiler from '../../contracts/history-ready/compiler-manifest.json';
 import { SECTION_KEYS, type SectionKey } from '../types';
 import { normalizeProfileFilters, profileFeaturesForSection, PROFILE_FEATURE_OPTIONS } from './profile';
@@ -44,6 +45,7 @@ export function* historicalReadySnapshots(ready: HistoricalBankRateReady,
     for (const [provider, dims, known, broad, features, timeline] of ready.sections[section]) {
       yield;
       if (lists.some((list, i) => section === 'Mortgage' && i === 3 ? !matchesLvrTier(dims[i], list) :
+          section === 'Mortgage' && (i === 0 || i === 2) ? !matchesMortgageFacet(dims[i] ?? undefined, list, i === 0 ? 'purpose' : 'repayment') :
           list.length && (dims[i] === null || !list.includes(dims[i]!))) ||
           (!known ? !filters.includeNonStandard || mask !== 0 : (!filters.includeNonStandard && !broad) || (features & mask) !== mask)) continue;
       for (const [date, changes] of timeline) {
