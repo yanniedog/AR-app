@@ -283,7 +283,13 @@ export default function RatesWorkspace() {
     void suitabilityRevision;
     return task.intentError ? [] : rowsForSearchScope(resolvedCatalogueRows, section, path, hierarchyScoped);
   }, [resolvedCatalogueRows, section, path, hierarchyScoped, task.intentError, suitabilityRevision]);
-  const summaryCatalogueRows = catalogue.status === 'loading' || catalogue.status === 'error' ? null : resolvedCatalogueRows;
+  const savedCatalogueRows = useMemo(() => {
+    const candidates = publicRecommendationRows(core?.sections[section]?.rates ?? [], catalogue, section,
+      publicRateScenario(section, scenario, prefs.profileFilters));
+    return resolvedPublicRankingRows(candidates, catalogue,
+      row => publicRateScenario(section, scenario, prefs.profileFilters, row)).rows;
+  }, [core, catalogue, section, scenario, prefs.profileFilters]);
+  const summaryCatalogueRows = catalogue.status === 'loading' || catalogue.status === 'error' ? null : savedCatalogueRows;
   const mortgageScope = useMemo(() => section === 'Mortgage' ? mortgageComparisonRows(baseRows, mortgageInputs,
     { core, details, manifest, coreIntegrity })
     : { rows: baseRows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false },

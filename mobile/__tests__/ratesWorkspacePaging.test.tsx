@@ -653,18 +653,24 @@ test('entered comparison inputs select public pricing before ranking, cards and 
       components: [{ ...programme.components[0], value, scopeId: id }] };
   });
   mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes, products, []), generationId: 'input-pricing' };
-  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [] } } } }));
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [] } } },
+    prefs: { ...state.prefs, profileFilters: { ...state.prefs.profileFilters, rateTypes: ['VARIABLE'] } } }));
   useMortgageComparison.setState({ loanAmount: '600000', lvr: '75' });
   install();
   const tree = mount(), list = () => tree.root.findByType('FlashList').props;
   try {
     expect(list().data.map((row: any) => [row.public_offer_id, row.rate])).toEqual([['high-lvr', '0.06']]);
+    const savedFacts = () => tree.root.findAllByType('AppText').map((node: any) => node.props.children);
+    expect(savedFacts()).toContain('Catalogue: 0 products · 0 banks · 0 rates');
+    expect(savedFacts()).toContain('After saved requirements: 0 products · 0 banks · 0 rates');
     expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.75' });
     act(() => updateRatesSection('Mortgage', { selectMode: true }));
     act(() => tree.root.findByType('ProductCard').props.onPress());
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([publicOfferSelectionToken(publicProduct.productKey, 'high-lvr')]);
     act(() => useMortgageComparison.setState({ lvr: '65' }));
     expect(list().data.map((row: any) => [row.public_offer_id, row.rate])).toEqual([['low-lvr', '0.05']]);
+    expect(savedFacts()).toContain('Catalogue: 0 products · 0 banks · 0 rates');
+    expect(savedFacts()).not.toContain('Catalogue: 1 products · 1 banks · 1 rates');
     expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.65' });
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
     act(() => tree.root.findByType('ProductCard').props.onPress());
