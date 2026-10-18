@@ -157,8 +157,9 @@ it('keeps stale estimates out of current complete-cost rankings and waits for al
   const candidates = [{ id: 'high', resolution: resolution({ payableRate: '0.08' }) }, { id: 'low', resolution: resolution({ payableRate: '0.04' }) }, { id: 'range', resolution: resolution({ status: 'range', payableRate: undefined, minimumRate: '0.03' }) }];
   expect(rankPublicCandidates(candidates, false, { section: 'Mortgage', eligibleCount: 3 }).lowestRate).toBeUndefined();
   expect(rankPublicCandidates(candidates, true, { section: 'Mortgage', eligibleCount: 4 }).lowestRate).toBeUndefined();
-  expect(rankPublicCandidates(candidates, true, { section: 'Mortgage', eligibleCount: 3 })).toMatchObject({ priced: 2, unresolved: 1, lowestRate: { id: 'low' } });
-  expect(rankPublicCandidates(candidates, true, { section: 'Savings', eligibleCount: 3 }).highestRate?.id).toBe('high');
+  expect(rankPublicCandidates(candidates, true, { section: 'Mortgage', eligibleCount: 3 })).toMatchObject({ priced: 2, unresolved: 1, completeScope: false });
+  expect(rankPublicCandidates(candidates, true, { section: 'Mortgage', eligibleCount: 3 }).lowestRate).toBeUndefined();
+  expect(rankPublicCandidates(candidates, true, { section: 'Savings', eligibleCount: 3 }).highestRate).toBeUndefined();
 });
 
 it('does not equate product fee coverage with complete switching or offset costs', () => {
