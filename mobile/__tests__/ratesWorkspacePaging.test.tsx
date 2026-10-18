@@ -136,7 +136,7 @@ function currentProgramme(row: (typeof rows)[number], programmeId: string, offer
     { ...value.components[0], componentId: 'comparison', role: 'comparison' as const, value: row.comparison_rate, scopeId: offerId },
   ] };
 }
-test('the mounted workspace pages sorted rows, retains cross-page selections, and clamps size/dataset changes', () => {
+test('the mounted workspace pages sorted rows, retains selections, resets page-size position and clamps dataset changes', () => {
   const tree = mount();
   const list = () => tree.root.findByType('FlashList').props;
   const button = (name: string) => tree.root.findAllByType('Button').find((node: any) => node.props.accessibilityLabel === name);
@@ -147,7 +147,8 @@ test('the mounted workspace pages sorted rows, retains cross-page selections, an
     expect(list().data[0].rate_index).toBe(20); expect(list().data).toHaveLength(20);
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['0#p-0']);
     act(() => button('Last page').props.onPress()); expect(list().data.map((row: any) => row.rate_index)).toEqual([40, 41, 42, 43, 44]);
-    act(() => mockStore.getState().setPref('ratesPageSize', 10)); expect(list().data[0].rate_index).toBe(20); expect(list().data).toHaveLength(10);
+    act(() => mockStore.getState().setPref('ratesPageSize', 10)); expect(list().data[0].rate_index).toBe(0); expect(list().data).toHaveLength(10);
+    expect(useRatesSession.getState().sections.Mortgage).toMatchObject({ page: 1, scrollOffset: 0, selected: ['0#p-0'] });
     act(() => button('Last page').props.onPress()); expect(list().data[0].rate_index).toBe(40);
     act(() => mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: rows.slice(-11) } } } })));
     expect(list().data).toHaveLength(1); expect(list().data[0].rate_index).toBe(10);
