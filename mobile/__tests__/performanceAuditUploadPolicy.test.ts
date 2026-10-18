@@ -94,9 +94,8 @@ test('local completion waits for the final flush and releases transport without 
 });
 
 test('automatic upload verifies the receipt before an explicit copy action without a duplicate upload', async () => {
-  dispatch(true, request);
-  for (let turn = 0; turn < 100 && !sharing.getDebugLogUploadSnapshot().verified; turn++) await Promise.resolve();
-  dispatch(true, request);
+  await dispatch(true, request);
+  await dispatch(true, request);
   expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
   expect(log.debugLog.readCompleteText).not.toHaveBeenCalled();
   expect(log.verifyDebugLogUpload).toHaveBeenCalledWith(receipt, performanceAuditUploadRequest(request.audit.report).publicReport.body);
