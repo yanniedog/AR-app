@@ -689,7 +689,7 @@ export default function RatesWorkspace() {
             <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows} />
             {catalogue.status !== 'unavailable' ? <><PublicPricingCoverage section={section} rows={pricingCandidates} scenario={scenario} scenarioForRow={rowScenario} compact />
               <PublicProductDiscovery section={section} rateScenario={scenarioFor(section)} rows={baseRows} query={debouncedQuery} /></> : null}
-            {section === 'Mortgage' ? <MortgageComparisonControls rows={core.sections.Mortgage.rates} filters={filters}
+            {section === 'Mortgage' ? <MortgageComparisonControls catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={filters}
               unverified={unverifiedResultCount} invalid={mortgageScope.invalid} /> : null}
           </View> : null}
           ListFooterComponent={<RatesPagination total={resultRows.length} page={pagination.page} size={pageSize}

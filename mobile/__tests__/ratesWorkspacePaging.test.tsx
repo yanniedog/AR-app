@@ -1,4 +1,4 @@
-import { catalogue as publicCatalogueFixture, programme as publicProgramme, product as publicProduct } from '../testUtils/publicRateJourney';
+import { catalogue as publicCatalogueFixture, programme as publicProgramme, product as publicProduct, row as publicRow } from '../testUtils/publicRateJourney';
 import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
 import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 import React from 'react';
@@ -754,5 +754,40 @@ test('a selected deduplicated source occurrence survives catalogue binding and s
     expect(tree.root.findByType('ProductCard').props.selected).toBe(true);
     act(() => tree.root.findByType('ProductCard').props.onPress());
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each([false, true])('public-only facet chips reveal an offer with saved legacy aliases: %s', (bound) => {
+  const source = { ...publicRow, rate_index: 0, loan_purpose: 'OO', repayment_type: 'PI', ribbon_repayment_type: 'PI' };
+  const p = publicProgramme({ sourceBindings: bound ? [{ rateIndex: source.rate_index, pointer: `/lendingRates/${source.rate_index}` }] : [], conditions: [
+    { conditionId: 'purpose', field: 'purpose', operator: 'in', values: ['OWNER_OCCUPIED', 'INVESTMENT'], evidenceIds: [] },
+    { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: 'PRINCIPAL_AND_INTEREST', evidenceIds: [] },
+  ] });
+  mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([{ ...p,
+    freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() } }], [publicProduct], []), generationId: 'public-facet-chips' };
+  const profile = { ...DEFAULT_PREFS.profileFilters, loanPurposes: ['OO'], repaymentTypes: ['PI'] };
+  mockStore.setState((state: any) => ({ prefs: { ...state.prefs, profileFilters: profile }, core: { ...state.core,
+    sections: { ...state.core.sections, Mortgage: { rates: bound ? [source] : [] } } } }));
+  install(profile);
+  const saved = JSON.stringify(mockStore.getState().prefs.profileFilters);
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  const controls = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' });
+  const chips = () => controls().findAllByType('Chip');
+  try {
+    const labels = chips().map((chip: any) => chip.props.label);
+    expect(labels.filter((label: string) => label === 'Owner occupied')).toHaveLength(1);
+    expect(labels.filter((label: string) => label === 'Principal & interest')).toHaveLength(1);
+    const purpose = chips().find((chip: any) => chip.props.label === 'Owner occupied');
+    expect({ labels, found: Boolean(purpose) }).toMatchObject({ found: true });
+    const repayment = chips().find((chip: any) => chip.props.label === 'Principal & interest');
+    expect({ labels, found: Boolean(repayment) }).toMatchObject({ found: true });
+    act(() => purpose!.props.onPress());
+    act(() => repayment!.props.onPress());
+    expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
+    act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
+      loanPurposes: ['OWNER_OCCUPIED'], repaymentTypes: ['PRINCIPAL_AND_INTEREST'] } })));
+    expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
+    expect(JSON.stringify(mockStore.getState().prefs.profileFilters)).toBe(saved);
+    expect(mockStore.getState().setPref).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });
