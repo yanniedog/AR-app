@@ -50,6 +50,8 @@ export interface NotifySearchRoute {
 export interface NotifyMessage {
   title: UiCopy;
   body: UiCopy;
+  /** Public candidate identity for delivery revalidation; not a route payload field. */
+  referenceId?: string;
   productKey?: string;
   rateIndex?: number | null;
   search?: NotifySearchRoute;

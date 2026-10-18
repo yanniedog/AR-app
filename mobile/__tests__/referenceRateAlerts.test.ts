@@ -84,3 +84,31 @@ it('rechecks the active reference watch at delivery after permission or transpor
   expect(decisions).toEqual([false]);
   expect(writeSecureStoreValue).toHaveBeenLastCalledWith(SECURE_STORE_KEYS.referenceRateAlertBaseline, '{}');
 });
+
+
+it('revalidates identical reference display messages by their originating watch identity', async () => {
+  const input = scenario();
+  input.localRates.savings = { ...input.localRates.mortgage, referenceId: 'other-reference' };
+  const optedOut = normalizeUserRateScenario(input);
+  optedOut.localRates.mortgage.referenceChangeAlerts = false;
+  const original = JSON.stringify(input);
+  jest.mocked(loadUserRateScenario).mockResolvedValue(input);
+  jest.mocked(ensurePublicRateCatalogueLoaded).mockResolvedValue(catalogue([], [], [
+    reference({ value: '9.14' }), reference({ referenceId: 'other-reference', value: '9.14' }),
+  ]) as Awaited<ReturnType<typeof ensurePublicRateCatalogueLoaded>>);
+  jest.mocked(readSecureStoreValue).mockResolvedValue(JSON.stringify({
+    'unit-reference': { fraction: '0.0889' }, 'other-reference': { fraction: '0.0889' },
+  }));
+  const decisions: boolean[] = [];
+  jest.mocked(notify).mockImplementationOnce(async (messages, canDeliver) => {
+    expect(messages).toHaveLength(2);
+    expect(messages[0].title).toBe(messages[1].title);
+    expect(messages[0].body).toBe(messages[1].body);
+    // The permission wait removed one watch, while its identically named peer remains.
+    jest.mocked(loadUserRateScenario).mockResolvedValue(optedOut);
+    for (const message of messages) decisions.push(await canDeliver!(message));
+  });
+  await checkPublicReferenceChanges({ public_rate_catalogue: {} } as Manifest, 1);
+  expect(decisions).toEqual([false, true]);
+  expect(JSON.stringify(input)).toBe(original);
+});
