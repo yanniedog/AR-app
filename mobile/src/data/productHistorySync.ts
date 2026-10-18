@@ -8,7 +8,7 @@ import { normalizeTimelineDates } from './bankHistoryTransform';
 import { assertHistoricalIdentitiesAdvance, historicalRevisionHighWater, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
 import { bestRatesForCore, productKeysForCore, buildProductHistoryFromRatesAsync, type ProductHistoryPayload } from './productHistoryModel';
 import { preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
-import { productRatesFromHistoricalCatalogue, readyProductHistoryIdentity } from './productHistoryCatalogue';
+import { productCatalogueDates, productRatesFromHistoricalCatalogue, readyProductHistoryIdentity } from './productHistoryCatalogue';
 import {
   createDatedFetchCircuit,
   DATED_FETCH_CIRCUIT_LIMIT,
@@ -68,7 +68,7 @@ export async function syncProductHistoryFromDailyPayloads(
   const preparedSources = opts.catalogue ? preparedReadySources(opts.catalogue) : null;
   const preparedOnly = opts.preparedOnly === true || preparedSources !== null;
   const preparedDates = new Set(preparedSources?.flatMap(input => [...input.acceptedDates]) ??
-    opts.catalogue?.catalogue.run_dates.filter(day => !!readyProductHistoryIdentity(opts.catalogue, undefined, day)) ?? []);
+    (opts.catalogue ? productCatalogueDates(opts.catalogue).filter(day => !!readyProductHistoryIdentity(opts.catalogue, undefined, day)) : []));
 
   let indexedDates: string[] = [];
   let selectedIndex: DatesIndex | undefined;

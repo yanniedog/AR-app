@@ -28,7 +28,7 @@ import { compileHistoricalBankRateReady } from '../src/data/historicalBankRateRe
 import type { HistoricalBankRateReady } from '../src/data/historicalBankRateReadyWire';
 import compilerManifest from '../contracts/history-ready/compiler-manifest.json';
 import { loadDetachedHistoricalBankRateCatalogue } from '../src/data/detachedHistoricalBankRateCatalogue';
-import { prepareHistoricalBankRateHistory } from '../src/data/historicalBankRateCatalogueSync';
+import { prepareLegacyBankRateHistory } from '../src/data/historicalBankRateLegacyCompatibility';
 
 let mockLegacyCatalogue: HistoricalBankRateCatalogue;
 let mockReadyCatalogue: HistoricalBankRateReady;
@@ -43,7 +43,7 @@ jest.mock('../src/data/bundledHistoricalBankRateCatalogue', () => ({
 jest.mock('../src/data/detachedHistoricalBankRateCatalogue', () => ({
   loadDetachedHistoricalBankRateCatalogue: jest.fn(async () => null),
 }));
-jest.mock('../src/data/historicalBankRateCatalogueSync', () => ({ prepareHistoricalBankRateHistory: jest.fn(async () => true) }));
+jest.mock('../src/data/historicalBankRateLegacyCompatibility', () => ({ prepareLegacyBankRateHistory: jest.fn(async () => true) }));
 
 jest.mock('expo-crypto', () => ({ CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
   digest: jest.fn(async (_: unknown, bytes: Uint8Array) => new Uint8Array(jest.requireActual('@noble/hashes/sha256').sha256(bytes)).buffer),
@@ -91,7 +91,7 @@ beforeEach(() => {
   jest.mocked(cache.readDetails).mockResolvedValue(null);
   jest.mocked(loadDetachedHistoricalBankRateReady).mockResolvedValue(null);
   jest.mocked(loadDetachedHistoricalBankRateCatalogue).mockResolvedValue(null);
-  jest.mocked(prepareHistoricalBankRateHistory).mockResolvedValue(true);
+  jest.mocked(prepareLegacyBankRateHistory).mockResolvedValue(true);
   jest.mocked(isLocalAppHealthAudit).mockReturnValue(false);
   jest.mocked(configureNativeHistoricalCatalogueCodec).mockResolvedValue(false);
 });
@@ -221,7 +221,7 @@ test.each([[false, false], [true, false], [false, true]])('verified legacy histo
   const pending = prepareBankRateHistoryAfterPaint(set, get, sampleCore, manifest);
   expect(loadDetachedHistoricalBankRateCatalogue).not.toHaveBeenCalled();
   paint.resolve(); await pending;
-  expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, null, legacy, expect.any(Function));
+  expect(prepareLegacyBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, legacy, expect.any(Function));
   expect(prepareReadyBankRateHistory).not.toHaveBeenCalled();
   expect(get()).toMatchObject({ bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
 });

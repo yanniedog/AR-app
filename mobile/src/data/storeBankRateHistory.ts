@@ -86,8 +86,8 @@ export async function prepareBankRateHistoryAfterPaint(
       if (!isCurrent()) return;
       if (legacy) {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { prepareHistoricalBankRateHistory } = require('./historicalBankRateCatalogueSync') as typeof import('./historicalBankRateCatalogueSync');
-        ready = await prepareHistoricalBankRateHistory(core, manifest, index, details, legacy, isCurrent);
+        const { prepareLegacyBankRateHistory } = require('./historicalBankRateLegacyCompatibility') as typeof import('./historicalBankRateLegacyCompatibility');
+        ready = await prepareLegacyBankRateHistory(core, manifest, index, legacy, isCurrent);
         publishedHistory = ready;
       }
     }

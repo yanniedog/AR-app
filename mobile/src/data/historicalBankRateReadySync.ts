@@ -12,7 +12,9 @@ import { yieldToUi } from '../lib/yieldToUi';
 import { compactPublicReadyHistory, decodeRetainedReadyHistory, encodeRetainedReadyHistory, needsRetainedReadyMigration, type RetainedReadyHistory } from './historicalBankRateReadyRetention';
 import { debugLog } from '../lib/debugLog';
 
-const installed = new WeakMap<CorePayload, { sources: HistoricalBankRateReady[]; receipt: string; prepared: PreparedHistoricalBankRateCatalogue }>();
+const installed = new WeakMap<CorePayload, { sources: HistoricalBankRateReady[]; receipt: string; prepared: PreparedHistoricalBankRateCatalogue;
+  heads: ReadonlyMap<string, PayloadRevisionHead>; conflicts: ReadonlySet<string> }>();
+export const selectedPreparedHistoryHeads = (core: CorePayload) => installed.get(historicalCatalogueOwner(core));
 
 /** Select receipts and date masks only. Classification, tier merging and archive
  * rebuilding are producer work; missing or superseded dates remain gaps. */
@@ -81,7 +83,7 @@ export async function prepareReadyBankRateHistory(core: CorePayload, manifest: M
       .filter(day => day < core.run_date && !covered.has(day)).sort();
     clearHistoricalBankRateCatalogue(core);
     installPreparedHistoricalBankRateCatalogue(core, prepared, missing);
-    installed.set(historicalCatalogueOwner(core), { sources: inputs.map(input => input.ready), receipt, prepared });
+    installed.set(historicalCatalogueOwner(core), { sources: inputs.map(input => input.ready), receipt, prepared, heads, conflicts });
     // Retain only public observations the APK cannot restore. Independent
     // selected-contract observations belong to their current core's payload.
     const retainedDates = new Set<string>();
