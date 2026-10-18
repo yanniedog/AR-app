@@ -50,7 +50,8 @@ import {
   type SortKey,
 } from '../../data/selectors';
 import { ensurePermissions } from '../../data/notifications';
-import { toggleCompareSelection } from '../../data/compareSelection';
+import { resolveCompareSelections, toggleCompareSelection } from '../../data/compareSelection';
+import { isMandatoryEligibilityReady } from '../../data/eligibilityGate';
 import { findSearchSubscription, type SearchSubscription } from '../../data/subscriptions';
 import { useStore } from '../../data/store';
 import { useSuitabilityRevision } from '../../hooks/useSuitabilityRevision';
@@ -210,6 +211,21 @@ export default function RatesWorkspace() {
   const setSortKey = useCallback((value: SortKey | ((current: SortKey) => SortKey)) =>
     updateRatesSection(section, current => ({ sort: typeof value === 'function' ? value(current.sort) : value }), true), [section]);
   const setSelected = useCallback((value: string[]) => updateRatesSection(section, { selected: value }), [section]);
+  useEffect(() => {
+    void suitabilityRevision;
+    if (!comparisonCore || !selected.length || !isMandatoryEligibilityReady() ||
+        (catalogue.status !== 'unavailable' && (catalogue.status !== 'ready' || !catalogue.allLoaded))) return;
+    const applicable = selected.filter(token => {
+      const entry = resolveCompareSelections(comparisonCore, [token])[0];
+      if (!entry) return false;
+      const priced = resolvedPublicRankingRows([entry.row], catalogue,
+        row => scenarioFor(entry.section, row)).rows;
+      return entry.section === 'Mortgage'
+        ? mortgageComparisonRows(priced, mortgageInputs, { core, details, manifest, coreIntegrity }).rows.length > 0
+        : priced.length > 0;
+    });
+    if (applicable.length !== selected.length) setSelected(applicable);
+  }, [comparisonCore, selected, catalogue, scenarioFor, mortgageInputs, core, details, manifest, coreIntegrity, suitabilityRevision, setSelected]);
   const debouncedQuery = useDebouncedValue(query, 120);
   const sortOptions = useMemo(() => availableSortOptions(section, mortgageRateMetric, depositRankMetric),
     [depositRankMetric, mortgageRateMetric, section]);

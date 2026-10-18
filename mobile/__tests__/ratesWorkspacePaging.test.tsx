@@ -665,7 +665,11 @@ test('entered comparison inputs select public pricing before ranking, cards and 
     act(() => useMortgageComparison.setState({ lvr: '65' }));
     expect(list().data.map((row: any) => [row.public_offer_id, row.rate])).toEqual([['low-lvr', '0.05']]);
     expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.65' });
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([publicOfferSelectionToken(publicProduct.productKey, 'low-lvr')]);
     act(() => useMortgageComparison.setState({ loanAmount: '400000' }));
     expect(list().data).toEqual([]);
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
   } finally { act(() => tree.unmount()); }
 });
