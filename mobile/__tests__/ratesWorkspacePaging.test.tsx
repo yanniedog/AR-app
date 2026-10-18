@@ -128,6 +128,14 @@ beforeEach(() => {
 });
 afterEach(() => { jest.restoreAllMocks(); restoreRatesSession(original); clearMortgageComparison(); installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null)); });
 function mount() { let tree: any; act(() => { tree = TestRenderer.create(<RatesWorkspace />); }); return tree; }
+function currentProgramme(row: (typeof rows)[number], programmeId: string, offerId: string) {
+  const value = publicProgramme({ productId: row.product_key, programmeId, offerId,
+    sourceBindings: [{ rateIndex: row.rate_index, pointer: `/lendingRates/${row.rate_index}` }] });
+  return { ...value, freshness: { ...value.freshness, lastSuccessAt: new Date().toISOString() }, components: [
+    { ...value.components[0], value: row.rate, scopeId: offerId },
+    { ...value.components[0], componentId: 'comparison', role: 'comparison' as const, value: row.comparison_rate, scopeId: offerId },
+  ] };
+}
 test('the mounted workspace pages sorted rows, retains cross-page selections, and clamps size/dataset changes', () => {
   const tree = mount();
   const list = () => tree.root.findByType('FlashList').props;
@@ -547,8 +555,7 @@ test('native completion without exact viewability uses bounded readiness and per
 
 test.each([10, 20])('combined ready public catalogue uses exact virtualized offer keys and programme navigation with %s-row pages', async (pageSize) => {
   const products = rows.map(row => ({ ...publicProduct, productId: row.product_key, productKey: row.product_key, name: row.product_name, programmeIds: [`programme-${row.rate_index}`] }));
-  const programmes = rows.map(row => publicProgramme({ productId: row.product_key, programmeId: `programme-${row.rate_index}`, offerId: `offer-${row.rate_index}`,
-    sourceBindings: [{ rateIndex: row.rate_index, pointer: `/lendingRates/${row.rate_index}` }] }));
+  const programmes = rows.map(row => currentProgramme(row, `programme-${row.rate_index}`, `offer-${row.rate_index}`));
   mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes, products, []), generationId: 'synthetic-generation-1' };
   mockStore.setState((state: any) => ({ prefs: { ...state.prefs, ratesPageSize: pageSize } }));
   updateRatesSection('Mortgage', { page: Math.floor(35 / pageSize) + 1, selectMode: true });
@@ -578,9 +585,7 @@ test('distinct opaque public pairs retain separate native keys and exact audit s
     { ...rows.at(-2)!, product_key: 'UNIT', product_name: 'Loan B', rate_index: 1 }];
   const products = collisionRows.map((row, index) => ({ ...publicProduct, productId: row.product_key, productKey: row.product_key,
     name: row.product_name, programmeIds: [`collision-programme-${index}`] }));
-  const programmes = collisionRows.map((row, index) => publicProgramme({ productId: row.product_key,
-    programmeId: `collision-programme-${index}`, offerId: index === 0 ? 'B' : 'A-B',
-    sourceBindings: [{ rateIndex: index, pointer: `/lendingRates/${index}` }] }));
+  const programmes = collisionRows.map((row, index) => currentProgramme(row, `collision-programme-${index}`, index === 0 ? 'B' : 'A-B'));
   mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes, products, []), generationId: 'collision-generation' };
   mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: collisionRows } } } }));
   install(); updateRatesSection('Mortgage', { selectMode: true });
