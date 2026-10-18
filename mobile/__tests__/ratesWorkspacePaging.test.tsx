@@ -147,7 +147,9 @@ test('the mounted workspace pages sorted rows, retains cross-page selections, an
     expect(list().data[0].rate_index).toBe(20); expect(list().data).toHaveLength(20);
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['0#p-0']);
     act(() => button('Last page').props.onPress()); expect(list().data.map((row: any) => row.rate_index)).toEqual([40, 41, 42, 43, 44]);
-    act(() => mockStore.getState().setPref('ratesPageSize', 10)); expect(list().data[0].rate_index).toBe(20); expect(list().data).toHaveLength(10);
+    act(() => mockStore.getState().setPref('ratesPageSize', 10)); expect(list().data[0].rate_index).toBe(0); expect(list().data).toHaveLength(10);
+    expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['0#p-0']);
     act(() => button('Last page').props.onPress()); expect(list().data[0].rate_index).toBe(40);
     act(() => mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: rows.slice(-11) } } } })));
     expect(list().data).toHaveLength(1); expect(list().data[0].rate_index).toBe(10);
