@@ -346,6 +346,21 @@ export function beginPublicRateCatalogueAudit() {
           const failure = outcomes.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
           if (failure) throw failure.reason;
           assertCatalogueActive(controller.signal);
+          const index = retainedValues.has(capability.index.name)
+            ? validatePublicRateIndex(retainedValues.get(capability.index.name), manifest) : null;
+          const discoveries = capability.shards.filter(asset => index?.routes?.some(route => route.name === asset.name && route.kind === 'discovery'));
+          const products = [...(index?.products ?? [])];
+          for (const asset of discoveries) {
+            if (retainedValues.has(asset.name)) products.push(...validatePublicRateShard(retainedValues.get(asset.name), manifest, index, asset).products!);
+          }
+          const discoveryComplete = discoveries.every(asset => retainedValues.has(asset.name));
+          for (const asset of capability.shards) {
+            if (retainedValues.has(asset.name)) validatePublicRateShard(retainedValues.get(asset.name), manifest,
+              discoveryComplete ? index : null, asset, products);
+            await yieldToUi(0);
+            assertCatalogueActive(controller.signal);
+          }
+          if (index && discoveryComplete) validatePublicRateDiscovery(index, products);
           if (missing) throw missing;
         }
         await client.snapshot().loadAll();

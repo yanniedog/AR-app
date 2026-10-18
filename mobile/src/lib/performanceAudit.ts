@@ -674,6 +674,15 @@ export function failPerformanceAudit(error: string, recoveryRequired = false, re
   });
 }
 
+export function auditReportCompletionLabel(
+  report: Pick<PerformanceAuditReport, 'sessionId' | 'coverage' | 'appHealth'>,
+  state: Pick<PerformanceAuditState, 'sessionId' | 'status'>,
+): 'Complete' | 'Partial' | 'Saved' {
+  if (report.sessionId !== state.sessionId) return 'Saved';
+  return state.status === 'complete' && report.coverage?.complete !== false && report.appHealth?.coverage.complete !== false
+    ? 'Complete' : 'Partial';
+}
+
 /** Page size used by the results screen. The selector returns every check in
  * diagnostic order; the screen progressively mounts pages so no finding is
  * hidden and report teardown is not forced to render hundreds of cards at once. */

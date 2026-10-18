@@ -2648,6 +2648,7 @@ export function PerformanceAuditRunner() {
       };
       logAuditCheck(app, state.sessionId, check);
       const finishedAt = new Date().toISOString();
+      const summaryMarker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=${state.sessionId} partial=true admissionRejected=true`;
       const report: PerformanceAuditReport = {
         schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION, sessionId: state.sessionId,
         startedAt: state.startedAt, finishedAt, durationMs: 0,
@@ -2660,11 +2661,13 @@ export function PerformanceAuditRunner() {
         let storageError: string | null = null;
         try {
           await timeoutAfter(debugLog.storePerformanceAudit(
-            `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=${report.sessionId} partial=true admissionRejected=true`, report,
+            summaryMarker, report,
           ), PERFORMANCE_AUDIT_STEP_LIMIT_MS, 'Admission failure persistence');
         } catch (caught) { storageError = formatAuditError(caught); }
         finally {
           failPerformanceAudit([error, ...(storageError ? [storageError] : [])].join('\n'), false, report);
+          startPerformanceAuditLogUpload(state.uploadLog, { sessionId: report.sessionId,
+            appVersion: app.appVersion, buildVersion: app.buildVersion, audit: { summaryMarker, report } });
           releaseRun();
         }
       })();

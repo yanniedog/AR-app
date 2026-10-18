@@ -16,6 +16,10 @@ import { core } from '../testUtils/publicRateJourney';
 import { debugLog } from '../src/lib/debugLog';
 import { EMPTY_PROFILE } from '../src/data/profile';
 import { buildDeidentifiedPerformanceAudit } from '../src/lib/diagnosticsEnvelope';
+import { startPerformanceAuditLogUpload } from '../src/lib/performanceAuditSharing';
+jest.mock('../src/lib/performanceAuditSharing', () => ({
+  ...jest.requireActual('../src/lib/performanceAuditSharing'), startPerformanceAuditLogUpload: jest.fn(),
+}));
 
 const originalFetch = globalThis.fetch;
 jest.mock('../src/data/publicRateCache', () => ({ publicRateAssetCache: { read: jest.fn(async () => null), retain: jest.fn(async () => {}) } }));
@@ -112,7 +116,7 @@ test('a local audit cache miss is unavailable without attempting even one guarde
 });
 
 
-test.each(['local', 'live-source'] as const)('mounted %s audit rejects a pre-existing normal request before setup or guard installation', async mode => {
+test.each([['local', false], ['local', true], ['live-source', false], ['live-source', true]] as const)('mounted %s audit rejects pre-existing work and honors upload %s', async (mode, uploadLog) => {
   Object.defineProperty(AppState, 'currentState', { configurable: true, value: 'active' });
   const f = catalogueFixture();
   f.manifest.payload_revision = { ...f.manifest.payload_revision!, bundle_sha256: (mode === 'local' ? 'a' : 'b').repeat(64) };
@@ -129,7 +133,7 @@ test.each(['local', 'live-source'] as const)('mounted %s audit rejects a pre-exi
   expect(reject).toBeDefined();
   jest.mocked(beginPublicRateCatalogueAudit).mockImplementationOnce(jest.requireActual('../src/data/publicRateCatalogue').beginPublicRateCatalogueAudit);
   mockState = { manifest: f.manifest };
-  requestPerformanceAudit({ uploadLog: false, mode });
+  requestPerformanceAudit({ uploadLog, mode });
   let tree!: ReactTestRenderer;
   try {
     await act(async () => { tree = TestRenderer.create(<PerformanceAuditRunner />); });
@@ -142,6 +146,9 @@ test.each(['local', 'live-source'] as const)('mounted %s audit rejects a pre-exi
       checks: [expect.objectContaining({ metrics: expect.objectContaining({ catalogueAdmissionRejected: true, executionAttempted: false }) })],
     }));
     const firstReport = getPerformanceAuditState().report!;
+    expect(startPerformanceAuditLogUpload).toHaveBeenCalledWith(uploadLog, expect.objectContaining({
+      sessionId: firstReport.sessionId, audit: expect.objectContaining({ report: firstReport }),
+    }));
     expect(buildDeidentifiedPerformanceAudit(firstReport).checks[0]).toMatchObject({
       id: 'setup-pinned-inputs', failureCode: 'catalogue-work-in-progress', durationMs: null,
     });

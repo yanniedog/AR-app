@@ -6,7 +6,7 @@ import { measurePerformanceAuditSetupStage, PERFORMANCE_AUDIT_SETUP_STAGES } fro
 import type { AuditCheck } from '../src/lib/performanceAudit';
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
-import { gzipSync, strToU8 } from 'fflate';
+import { gzipSync, gunzipSync, strFromU8, strToU8 } from 'fflate';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import { catalogueFixture } from '../testUtils/publicRates';
@@ -161,6 +161,26 @@ test('an audit cache storage failure cannot turn into an unavailable catalogue',
   jest.mocked(publicRateAssetCache.read).mockRejectedValueOnce(new Error('storage fixture failed'));
   const local = guard(f, 'local'), load = preparePublicRateCatalogueForAudit(f.manifest);
   try { await expect(load.ready).rejects.toThrow('storage fixture failed'); }
+  finally { await load.cancelAndDrain(); local.restore(); load.release(); }
+});
+
+test.each([false, true])('schema-invalid retained shards remain fatal behind cache misses (missing index: %s)', async missingIndex => {
+  const f = fixture(), asset = f.capability.shards[3], oldName = asset.name;
+  const raw = JSON.parse(strFromU8(gunzipSync(f.values.get(asset.url)!)));
+  raw.programmes = 'invalid';
+  const json = JSON.stringify(raw), bytes = gzipSync(strToU8(json)), hash = bytesToHex(sha256(bytes));
+  const name = oldName.replace(/[a-f0-9]{12}(?=\.json\.gz$)/, hash.slice(0, 12));
+  Object.assign(asset, { name, url: asset.url.replace(oldName, name), bytes: bytes.length, decodedBytes: strToU8(json).length, sha256: hash });
+  mockCache.set(name, bytes);
+  if (!missingIndex) {
+    Object.assign(f.index.shards[3], { name, bytes: asset.bytes, decodedBytes: asset.decodedBytes, sha256: hash });
+    const indexJson = JSON.stringify(f.index), indexBytes = gzipSync(strToU8(indexJson)), indexHash = bytesToHex(sha256(indexBytes));
+    const indexAsset = f.capability.index, prior = indexAsset.name, indexName = prior.replace(/[a-f0-9]{12}(?=\.json\.gz$)/, indexHash.slice(0, 12));
+    Object.assign(indexAsset, { name: indexName, url: indexAsset.url.replace(prior, indexName), bytes: indexBytes.length, decodedBytes: strToU8(indexJson).length, sha256: indexHash });
+    mockCache.set(indexName, indexBytes);
+  }
+  const local = guard(f, 'local'), load = preparePublicRateCatalogueForAudit(f.manifest);
+  try { await expect(load.ready).rejects.toThrow('Invalid public rate shard'); }
   finally { await load.cancelAndDrain(); local.restore(); load.release(); }
 });
 
