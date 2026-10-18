@@ -6,6 +6,20 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import { gzipSync } from 'node:zlib';
 import { PUBLIC_RATE_INDEX_COMPRESSED, PUBLIC_RATE_INDEX_DECODED, PUBLIC_RATE_SHARD_COMPRESSED, PUBLIC_RATE_SHARD_DECODED } from '../src/data/publicRateWire';
 
+it('recovers a transient index failure through loadAll on the same catalogue client', async () => {
+  const { manifest, index, shard } = catalogueFixture();
+  let fail = true;
+  const client = createPublicRateCatalogueClient(manifest, async (_asset, isIndex) => {
+    if (isIndex && fail) throw new Error('Temporary index outage');
+    return isIndex ? index : shard;
+  });
+  await expect(client.start()).rejects.toThrow('Temporary index outage');
+  expect(client.snapshot().status).toBe('error');
+  fail = false;
+  await client.snapshot().loadAll();
+  expect(client.snapshot()).toMatchObject({ status: 'ready', allLoaded: true, error: null });
+});
+
 it('discovers unresolved products before programme downloads and publishes no partial shard', async () => {
   const { manifest, index, shard, capability } = catalogueFixture();
   let failDownload = true;

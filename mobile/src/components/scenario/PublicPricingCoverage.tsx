@@ -29,6 +29,7 @@ export function PublicPricingCoverage({ section, rows, scenario, compact = false
   const profile = useStore(state => state.prefs?.profileFilters);
   const catalogue = usePublicRateCatalogue(manifest);
   const [open, setOpen] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const { status: catalogueStatus, allLoaded, loadAll } = catalogue;
   useEffect(() => {
     if (catalogueStatus === 'ready' && !allLoaded) void loadAll().catch(() => undefined);
@@ -40,6 +41,8 @@ export function PublicPricingCoverage({ section, rows, scenario, compact = false
     ? uiJoin('Payable rate', ': ', uiCount(pricing.priced), ' · ', 'Unresolved offers', ': ', uiCount(pricing.unresolved))
     : uiJoin('Public pricing', ': ', 'Partial');
   return <View style={{ marginBottom: compact ? 6 : 16 }}>
+    {catalogue.status === 'error' ? <Button title="Retry" variant="secondary" disabled={retrying}
+      onPress={() => { setRetrying(true); void loadAll().catch(() => undefined).finally(() => setRetrying(false)); }} /> : null}
     <Disclosure title={summary} open={open} onToggle={() => setOpen(value => !value)}>
       <View style={{ gap: 6 }}>
         <AppText variant="small">{uiJoin('Public products', ': ', uiCount(products.length))}</AppText>
