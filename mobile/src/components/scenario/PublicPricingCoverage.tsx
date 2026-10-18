@@ -10,7 +10,7 @@ import type { UserRateScenario } from '../../data/userRateScenario';
 import { useStore } from '../../data/store';
 import type { RateRow, SectionKey } from '../../types';
 import { AppText, Button, Card, Disclosure } from '../ui';
-import { openProduct } from '../../lib/nav';
+import { openProduct, type ProductPricingOrigin } from '../../lib/nav';
 import { uiCount, uiJoin, uiLabel, uiOpaqueEnum, uiPublicAliasName, uiPublicProductName, uiPublicProviderName, type UiCopy } from '../../lib/uiCopy';
 
 function coverageStatus(value: unknown) {
@@ -60,8 +60,8 @@ export function PublicPricingCoverage({ section, rows, scenario, scenarioForRow,
 }
 
 /** Discovery identities never become synthetic zero-price rows. */
-export function PublicProductDiscovery({ section, query = '', rows = [], rateScenario }: {
-  section: SectionKey; query?: string; rows?: readonly RateRow[]; rateScenario?: RateScenario;
+export function PublicProductDiscovery({ section, query = '', rows = [], rateScenario, pricingOrigin }: {
+  section: SectionKey; query?: string; rows?: readonly RateRow[]; rateScenario?: RateScenario; pricingOrigin?: ProductPricingOrigin;
 }) {
   const manifest = useStore(state => state.manifest);
   const catalogue = usePublicRateCatalogue(manifest);
@@ -78,7 +78,7 @@ export function PublicProductDiscovery({ section, query = '', rows = [], rateSce
   return <Card style={{ marginVertical: 12, gap: 8 }}>
     <AppText variant="h3">{uiJoin('Other products', ': ', uiCount(products.length))}</AppText>
     {products.slice(0, limit).map(product => <View key={product.productId} style={{ gap: 2 }}>
-      <Button title={uiJoin(uiPublicProviderName(product), ' · ', uiPublicProductName(product))} variant="ghost" onPress={() => openProduct(product.productKey)} />
+      <Button title={uiJoin(uiPublicProviderName(product), ' · ', uiPublicProductName(product))} variant="ghost" onPress={() => pricingOrigin ? openProduct(product.productKey, undefined, undefined, pricingOrigin) : openProduct(product.productKey)} />
       {product.aliases.length ? <AppText variant="tiny" color="textMuted">{uiJoin('Aliases', ': ', ...product.aliases.flatMap<UiCopy>((alias, i) => i ? [', ', uiPublicAliasName(alias)] : [uiPublicAliasName(alias)]))}</AppText> : null}
       {product.status === 'legacy' ? <AppText variant="tiny" color="textMuted">{uiJoin('New applications', ': ', 'Unavailable')}</AppText> : null}
     </View>)}

@@ -578,7 +578,7 @@ test.each([10, 20])('combined ready public catalogue uses exact virtualized offe
     act(() => { updateRatesSection('Mortgage', { selectMode: false }); });
     const card = tree.root.findAllByType('ProductCard').find((node: any) => node.props.row.rate_index === 35);
     act(() => { card.props.onPress(); });
-    expect(openProduct).toHaveBeenCalledWith('p-35', 35, 'programme-35');
+    expect(openProduct).toHaveBeenCalledWith('p-35', 35, 'programme-35', 'rates-comparison');
   } finally { act(() => tree.unmount()); }
 });
 

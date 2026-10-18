@@ -18,7 +18,7 @@ import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, type Pr
 import { normalizedProductFacts } from '../../data/productFacts';
 import { uiCount, uiIdentifier, uiJoin, uiLabel, uiProductName, type UiCopy, type UiLabel } from '../../lib/uiCopy';
 import type { DetailItem, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
-import { openProduct } from '../../lib/nav';
+import { openProduct, type ProductPricingOrigin } from '../../lib/nav';
 import { FinancialFactRows } from './FinancialFactRows';
 import { SelectedRateConditions } from './RateConditionsDisclosure';
 export { SelectedRateConditions } from './RateConditionsDisclosure';
@@ -92,7 +92,7 @@ export function OfficialLinks({ links, sourceDocuments }: { links?: ProductDetai
   </View></Disclosure>;
 }
 export function SectionTitle({ text }: { text: UiCopy; icon?: keyof typeof Ionicons.glyphMap }) { return <AppText variant="small" weight="700">{text}</AppText>; }
-export function ProductRatesList({ rows, section, accent, defaultOpen = false }: { rows: RateRow[]; section: SectionKey; accent: string; defaultOpen?: boolean }) {
+export function ProductRatesList({ rows, section, accent, defaultOpen = false, pricingOrigin }: { rows: RateRow[]; section: SectionKey; accent: string; defaultOpen?: boolean; pricingOrigin?: ProductPricingOrigin }) {
   const metric = useStore(s => s.prefs.mortgageRateMetric);
   const [open, setOpen] = useState(defaultOpen); if (!rows.length) return null;
   return <Disclosure title={uiJoin('Rates', ' (', uiCount(rows.length), ')')} open={open} onToggle={() => setOpen(v => !v)}>
@@ -105,7 +105,9 @@ export function ProductRatesList({ rows, section, accent, defaultOpen = false }:
       return <View key={`${row.rate_index}:${i}`} style={{ gap: 6 }}>
       <RateRowLine row={row} section={section} accent={accent} />
       <Button title="Open" variant="ghost" accessibilityLabel={actionLabel}
-        onPress={() => row.public_programme_id
+        onPress={() => pricingOrigin
+          ? openProduct(row.product_key, row.rate_index, row.public_programme_id, pricingOrigin)
+          : row.public_programme_id
           ? openProduct(row.product_key, row.rate_index, row.public_programme_id)
           : openProduct(row.product_key, row.rate_index)} />
     </View>; })}</View> : null}
