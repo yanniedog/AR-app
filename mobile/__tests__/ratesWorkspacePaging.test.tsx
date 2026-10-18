@@ -178,7 +178,7 @@ test('comparison uncertainty counts the complete filtered result set, not the pr
     act(() => useMortgageComparison.setState({ loanAmount: '300000' }));
     act(() => updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS, includeNonStandard: true, providers: ['B'] } }));
     expect(tree.root.findByType('FlashList').props.data).toHaveLength(20);
-    expect(tree.root.findAllByType('AppText').some((node: any) => node.props.children === 'Eligibility unverified · 22')).toBe(true);
+    expect(tree.root.findAllByType('AppText').some((node: any) => node.props.children === 'Eligibility unverified Â· 22')).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
 

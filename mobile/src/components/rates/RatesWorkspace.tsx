@@ -81,16 +81,16 @@ function availableSortOptions(
 ): { key: SortKey; label: UiCopy }[] {
   if (section === 'Mortgage') {
     return mortgageMetric === 'comparison'
-      ? [{ key: 'rate', label: uiLabel("Comparison rate") }, { key: 'bank', label: uiLabel("Bank A–Z") }]
+      ? [{ key: 'rate', label: uiLabel("Comparison rate") }, { key: 'bank', label: uiLabel("Bank Aâ€“Z") }]
       : [
           { key: 'rate', label: uiLabel("Advertised rate") },
           { key: 'comparison', label: uiLabel("Comparison rate") },
-          { key: 'bank', label: uiLabel("Bank A–Z") },
+          { key: 'bank', label: uiLabel("Bank Aâ€“Z") },
         ];
   }
   return [
     { key: 'rate', label: section === 'TD' ? 'Advertised rate' : depositMetric === 'base' ? 'Ongoing rate' : 'Headline rate' },
-    { key: 'bank', label: uiLabel("Bank A–Z") },
+    { key: 'bank', label: uiLabel("Bank Aâ€“Z") },
   ];
 }
 
@@ -552,7 +552,7 @@ export default function RatesWorkspace() {
   ) : <TouchTarget fill onPress={() => openProduct(item.key)} accessibilityRole="button"
       accessibilityLabel={uiProductName({product_name:item.name??''})} style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
       <AppText variant="body" weight="600">{uiProductName({product_name:item.name??''})}</AppText>
-      <AppText variant="small" color="textMuted">{uiJoin(uiProviderName({provider:item.provider??''}),' · ',humanizeEnum(item.productCategory??''))}</AppText>
+      <AppText variant="small" color="textMuted">{uiJoin(uiProviderName({provider:item.provider??''}),' Â· ',humanizeEnum(item.productCategory??''))}</AppText>
       <AppText variant="small" color="textMuted">{uiLabel("No listed rate")}</AppText>
     </TouchTarget>, [auditTarget.onCellCommit, listRevision, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, toggleSelect, theme.colors.border, mortgageScope.unverifiedRows, rowScenario]);
   usePerformanceAuditSurface({
@@ -609,12 +609,12 @@ export default function RatesWorkspace() {
 
   if (!core || intentPending) return <ScreenSkeleton />;
   const filterCount = availability === 'unlisted' ? filters.providers.length : activeFilterCount(effectiveFilters);
-  const sortLabel = availability === 'unlisted' ? 'All product types · No listed rate' : sortOptions.find(option => option.key === sortKey)?.label ?? 'Rate';
+  const sortLabel = availability === 'unlisted' ? 'All product types Â· No listed rate' : sortOptions.find(option => option.key === sortKey)?.label ?? 'Rate';
   const compactSortLabel = sortLabel === 'Comparison rate' ? uiLabel('Comparison')
     : sortLabel === 'Advertised rate' ? uiLabel('Advertised')
       : sortLabel === 'Ongoing rate' ? uiLabel('Ongoing')
         : sortLabel === 'Headline rate' ? uiLabel('Headline')
-          : sortLabel === 'Bank A–Z' ? uiLabel('Bank') : sortLabel;
+          : sortLabel === 'Bank Aâ€“Z' ? uiLabel('Bank') : sortLabel;
   const quickSortKey = sortKey === 'bank' ? 'rate' : 'bank';
   return (
     <Screen>
@@ -632,14 +632,14 @@ export default function RatesWorkspace() {
               <IconAction icon={selectMode ? 'checkmark-circle' : 'git-compare'} word={selectMode ? 'Done' : 'Compare'}
                 active={selectMode} accessibilityState={{ selected: selectMode }}
                 onPress={toggleCompareMode} disabled={availability === 'unlisted'} />
-              <IconAction icon="business-outline" word="Bank" accessibilityLabel="Bank A–Z"
+              <IconAction icon="business-outline" word="Bank" accessibilityLabel="Bank Aâ€“Z"
                 active={sortKey === 'bank'} accessibilityState={{ selected: sortKey === 'bank' }}
                 disabled={availability === 'unlisted'} onPress={() => setSortKey(quickSortKey)} />
               <IconAction icon="ellipsis-horizontal" word="More" onPress={() => setToolsOpen(true)}
                 accessibilityLabel="Search actions" accessibilityState={{ expanded: toolsOpen }} />
             </Row>
             <View style={{ width: '100%', flexShrink: 0, gap: 2 }}>
-              <AppText variant="tiny" color="textMuted">{uiJoin(searchPending ? 'Loading':uiJoin(uiCount(resultRows.length),' ',availability === 'listed' ? 'rates' : 'products'),searchSub?uiJoin(' · ','Alert on'):null)}</AppText>
+              <AppText variant="tiny" color="textMuted">{uiJoin(searchPending ? 'Loading':uiJoin(uiCount(resultRows.length),' ',availability === 'listed' ? 'rates' : 'products'),searchSub?uiJoin(' Â· ','Alert on'):null)}</AppText>
               <AppText variant="tiny" color="textMuted" accessibilityLabel={sortLabel}>{compactSortLabel}</AppText>
             </View>
             {path.length ? <Button title="Clear scope" variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
@@ -780,7 +780,7 @@ export default function RatesWorkspace() {
               else if (section === 'Savings') setPref('depositRankMetric', option.metric as 'base' | 'max');
               setSortKey('rate'); setSortOpen(false);
             }} />)}
-          <Button title="Bank A–Z" variant="ghost" onPress={() => { setSortKey('bank'); setSortOpen(false); }} />
+          <Button title="Bank Aâ€“Z" variant="ghost" onPress={() => { setSortKey('bank'); setSortOpen(false); }} />
           <Button title="Cancel" variant="ghost" onPress={() => setSortOpen(false)} />
         </ScrollView>
       </SheetSurface>
