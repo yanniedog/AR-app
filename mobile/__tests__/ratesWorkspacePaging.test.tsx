@@ -1,5 +1,6 @@
 import { catalogue as publicCatalogueFixture, programme as publicProgramme, product as publicProduct } from '../testUtils/publicRateJourney';
 import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
+import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
@@ -609,6 +610,34 @@ test('distinct opaque public pairs retain separate native keys and exact audit s
   } finally { act(() => tree.unmount()); }
 });
 
+
+test('public-resolved rows retain exact admitted source bounds in the mounted comparison pipeline', () => {
+  const sourceRow = { ...rows.find(row => row.rate_index === 4)!, product_key: publicProduct.productKey,
+    product_name: publicProduct.name, provider: publicProduct.providerName, lvr_tier: 'lvr_=80%' };
+  const publication = selectedConstraintFixture('Mortgage', [sourceRow], [{ rateIndex: 4, text: 'LVR up to 70%.' }]);
+  const product = { ...publicProduct, productId: sourceRow.product_key, programmeIds: ['source-bound'] };
+  const programme = currentProgramme(sourceRow, 'source-bound', 'source-bound-offer');
+  mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([programme], [product], []), generationId: 'verified-source-pricing' };
+  mockStore.setState({ core: publication.core, coreIntegrity: publication.coreIntegrity,
+    details: publication.details, manifest: publication.manifest });
+  useMortgageComparison.setState({ loanAmount: '', lvr: '75' });
+  install();
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  try {
+    // The normalized tier admits 75%, but exact verified source wording does not.
+    expect(list().data).toEqual([]);
+    act(() => useMortgageComparison.setState({ lvr: '65' }));
+    expect(list().data).toHaveLength(1);
+    expect(list().data[0]).toMatchObject({ public_offer_id: 'source-bound-offer' });
+    expect(list().data[0]).not.toBe(publication.rows[0]);
+    expect(tree.root.findByType('ProductCard').props.comparisonUnverified).toBe(false);
+    expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ lvr: '0.65' });
+    act(() => useMortgageComparison.setState({ lvr: '70' }));
+    expect(list().data).toHaveLength(1);
+    act(() => useMortgageComparison.setState({ lvr: '70.01' }));
+    expect(list().data).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
 
 test('entered comparison inputs select public pricing before ranking, cards and comparison selections', () => {
   const products = [{ ...publicProduct, programmeIds: ['low-lvr', 'high-lvr'] }];
