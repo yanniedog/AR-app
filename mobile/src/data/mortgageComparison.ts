@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { sourceRowForPublicRow } from './publicRateIntegration';
 import type { RateRow } from '../types';
 import { calculatorAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
 import { lvrRangeContains, parseLvrRange } from './lvrRange';
@@ -29,7 +30,7 @@ function within(value: number, lower: NumericConditionBoundary, upper: NumericCo
 function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateConditionContext): MortgageComparisonMatch {
   if (parsed.invalid) return 'invalid';
   if (parsed.lvr !== null || parsed.amount !== null) {
-    const source = scopedFinancialConditionFacts(scopedRateConditions(row, 'Mortgage', context));
+    const source = scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context));
     if (source.state === 'admitted') {
       let unknown = source.unresolved.length > 0;
       const dimensions: readonly [number | null, readonly PublishedNumericConditionFact[]][] = [

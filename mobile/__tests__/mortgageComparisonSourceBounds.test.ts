@@ -1,4 +1,6 @@
 import { mortgageComparisonMatch, mortgageComparisonRows } from '../src/data/mortgageComparison';
+import { catalogue, product, programme } from '../testUtils/publicRateJourney';
+import { publicRecommendationRows, resolvedPublicRankingRows, sourceRowForPublicRow } from '../src/data/publicRateIntegration';
 import { scopedRateConditions } from '../src/data/rateConditions';
 import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 import type { RateRow } from '../src/types';
@@ -40,4 +42,26 @@ test('independent exact ranges are alternatives and stale or cloned source conte
   expect(mortgageComparisonMatch({ ...f.rows[0] }, { loanAmount: '', lvr: '73' }, f)).toBe('listed');
   f.details.run_date = '2026-10-13';
   expect(mortgageComparisonMatch(f.rows[0], { loanAmount: '', lvr: '73' }, f)).toBe('listed');
+});
+
+test('real recommendation and resolved-price transformations retain only their admitted source occurrence', () => {
+  const source = { ...row, product_key: product.productKey, provider: product.providerName, rate_index: 4 };
+  const f = selectedConstraintFixture('Mortgage', [source], [{ rateIndex: 4, text: 'LVR up to 70%.' }]);
+  const view = catalogue([programme({ sourceBindings: [{ rateIndex: 4, pointer: '/lendingRates/3' }],
+    freshness: { state: 'current', checkedAt: new Date().toISOString(), lastSuccessAt: new Date().toISOString(), reasonCodes: [] } })]);
+  const recommendations = publicRecommendationRows(f.rows, view, 'Mortgage', {});
+  const resolved = resolvedPublicRankingRows(recommendations, view).rows;
+  expect(resolved).toHaveLength(1);
+  expect(resolved[0]).not.toBe(f.rows[0]);
+  expect(sourceRowForPublicRow(resolved[0])).toBe(f.rows[0]);
+  expect(scopedRateConditions(sourceRowForPublicRow(resolved[0]), 'Mortgage', f).status).toBe('available');
+  expect(mortgageComparisonMatch(resolved[0], { loanAmount: '', lvr: '75' }, f)).toBe('outside');
+  expect(mortgageComparisonMatch(resolved[0], { loanAmount: '', lvr: '70' }, f)).toBe('listed');
+  const forged = { ...resolved[0] };
+  expect(sourceRowForPublicRow(forged)).toBe(forged);
+  expect(scopedRateConditions(sourceRowForPublicRow(forged), 'Mortgage', f).status).toBe('unavailable');
+  const synthetic = resolvedPublicRankingRows(publicRecommendationRows([], view, 'Mortgage', {}), view).rows[0];
+  expect(scopedRateConditions(sourceRowForPublicRow(synthetic), 'Mortgage', f).status).toBe('unavailable');
+  resolved[0].rate_index = 5;
+  expect(sourceRowForPublicRow(resolved[0])).toBe(resolved[0]);
 });
