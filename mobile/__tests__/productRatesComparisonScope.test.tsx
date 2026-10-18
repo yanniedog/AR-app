@@ -1,6 +1,8 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { router } from 'expo-router';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import RateReceiptScreen from '../app/rate-receipt';
 import { openProduct } from '../src/lib/nav';
 import { buildStaySwitchProjection } from '../src/data/staySwitchProjection';
 import { catalogue, product, programme, core as emptyCore } from '../testUtils/publicRateJourney';
@@ -81,7 +83,7 @@ jest.mock('../src/data/store', () => ({
   useStore: jest.requireActual('zustand').create(() => mockState),
 }));
 jest.mock('expo-router', () => ({
-  router: { back: jest.fn(), push: jest.fn() },
+  router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() },
   Stack: { Screen: 'StackScreen' },
   useLocalSearchParams: () => mockRoute,
 }));
@@ -105,7 +107,7 @@ jest.mock('../src/components/product/ProductDetailParts', () => ({
 }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView', Screen: 'Screen', screenScrollContentStyle: () => ({}) }));
 jest.mock('../src/components/ui', () => ({
-  AppText: 'AppText', Button: 'Button', Card: 'Card', IconButton: 'IconButton', Row: 'Row', Disclosure: 'Disclosure', Chip: 'Chip',
+  AppText: 'AppText', Button: 'Button', Card: 'Card', IconButton: 'IconButton', Row: 'Row', Disclosure: 'Disclosure', Chip: 'Chip', Divider: 'Divider',
 }));
 jest.mock('../src/components/scenario/StaySwitchChart', () => ({ StaySwitchChart: 'StaySwitchChart' }));
 jest.mock('../src/data/bankInsights', () => ({ filterBankInsightsForSuitability: () => null }));
@@ -115,7 +117,8 @@ jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: () => 
   richHistory: false, missingDates: [], revision: 'history-disabled',
 }) }));
 jest.mock('../src/data/notifications', () => ({ ensurePermissions: jest.fn(async () => true) }));
-jest.mock('../src/data/rateReceipt', () => ({ buildRateReceipt: () => null, buildNegotiationBrief: () => null }));
+jest.mock('../src/hooks/useAuditExternalLinks', () => ({ useAuditExternalLinks: jest.fn() }));
+jest.mock('../src/components/ExternalLinkConfirmation', () => ({ useTrustedExternalUrl: () => ({ requestExternalUrl: jest.fn() }) }));
 jest.mock('../src/data/staySwitchProjection', () => ({ buildStaySwitchProjection: jest.fn(() => null) }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/hooks/useLogoReadiness', () => ({
@@ -123,7 +126,7 @@ jest.mock('../src/hooks/useLogoReadiness', () => ({
 }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 1 }));
 const mockScenario = normalizeUserRateScenario(undefined);
-Object.assign(mockScenario.mortgage, { mode: 'refi', loanBalance: '100000', propertyValue: '800000' });
+Object.assign(mockScenario.mortgage, { mode: 'refi', loanBalance: '100000', propertyValue: '800000', currentRate: '8' });
 let mockCatalogue: any;
 jest.mock('../src/data/publicRateCatalogue', () => ({ usePublicRateCatalogue: () => mockCatalogue }));
 jest.mock('../src/components/scenario/PublicRateEvidence', () => ({ PublicRateEvidence: 'PublicRateEvidence' }));
@@ -131,7 +134,7 @@ jest.mock('../src/components/scenario/PublicCostComparison', () => ({ PublicCost
 jest.mock('../src/components/product/DetailsOnlyProduct', () => ({ DetailsOnlyProduct: 'DetailsOnlyProduct' }));
 jest.mock('../src/hooks/useUserRateScenario', () => ({
   useUserRateScenario: () => ({
-    scenario: mockScenario,
+    scenario: mockScenario, storageStatus: 'ready',
   }),
 }));
 
@@ -216,6 +219,26 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     expect(evidence.props.scenario).toMatchObject({ amount: '600000', lvr: '0.75',
       ...(useOr ? { purpose: 'INVESTMENT', repayment: 'INTEREST_ONLY' } : {}) });
     expect(detail.root.findAllByType('PublicCostComparison')[0].props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.75' });
+    act(() => detail.root.findAllByProps({ title: 'Bank-call brief' })[0].props.onPress());
+    const receiptDestination = jest.mocked(router.push).mock.calls.at(-1)![0] as unknown as { params: typeof mockRoute };
+    expect(receiptDestination.params).toEqual({ key: product.productKey, programme: p.programmeId, origin: 'rates-comparison' });
+    Object.assign(mockRoute, receiptDestination.params);
+    act(() => detail.unmount());
+    await act(async () => { detail = TestRenderer.create(<RateReceiptScreen />) as InspectableRenderer; });
+    expect(detail.root.findAllByProps({ title: 'Copy' })).toHaveLength(1);
+    const texts = detail.root.findAllByType('AppText').map(node => node.props.children);
+    expect(texts).toContain('$600,000');
+    expect(texts).not.toContain('$100,000');
+    expect(texts).not.toContain('Simple interest-rate difference');
+    const surface = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+    act(() => { surface.actions!['receipt.back-to-product']({ productKey: product.productKey, rateIndex: 0 }); });
+    expect(jest.mocked(router.replace).mock.calls.at(-1)![0]).toMatchObject({ params: {
+      key: product.productKey, programme: p.programmeId, origin: 'rates-comparison' } });
+    act(() => detail.unmount());
+    delete mockRoute.origin;
+    await act(async () => { detail = TestRenderer.create(<RateReceiptScreen />) as InspectableRenderer; });
+    expect(detail.root.findAllByType('PublicRateEvidence')[0].props.scenario).toMatchObject({ amount: '100000' });
+    expect(detail.root.findAllByProps({ title: 'Copy' })).toHaveLength(0);
     act(() => detail.unmount());
     // A Saved/Dashboard-style open must keep its saved 100k assumptions even
     // while the in-memory Rates comparison still contains 600k.
@@ -232,6 +255,12 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     await act(async () => { detail = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
     expect(buildStaySwitchProjection).toHaveBeenCalled();
     expect(jest.mocked(buildStaySwitchProjection).mock.calls.at(-1)![0].scenario.mortgage.loanBalance).toBe('100000');
+    act(() => detail.unmount());
+    await act(async () => { detail = TestRenderer.create(<RateReceiptScreen />) as InspectableRenderer; });
+    const normalTexts = detail.root.findAllByType('AppText').map(node => node.props.children);
+    expect(normalTexts).toContain('$100,000');
+    expect(normalTexts).toContain('Simple interest-rate difference');
+    expect(normalTexts).not.toContain('$600,000');
     expect(JSON.stringify(mockScenario)).toBe(saved);
   } finally {
     act(() => { detail?.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });

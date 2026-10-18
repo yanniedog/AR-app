@@ -506,6 +506,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
             pathname: '/rate-receipt',
             params: {
               key: productKey,
+              ...(stringParameter(step, 'origin') === 'rates-comparison' ? { origin: 'rates-comparison' } : {}),
               ...(programmeId ? { programme: programmeId } : rateIndex == null ? {} : { ri: String(rateIndex) }),
             },
           } as unknown as Href)
