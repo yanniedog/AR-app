@@ -1,6 +1,7 @@
 import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter';
 import type { CorePayload, RateRow, SectionKey } from '../types';
 import { toFraction } from './format';
+import { rowsForProductKey } from './rateRowIndex';
 import { bindCurrentPublicRow, publicRecommendationRows, type PublicCatalogueView } from './publicRateIntegration';
 import type { RateScenario } from './publicRateModel';
 import { publicOfferRefId } from './publicOfferIdentity';
@@ -184,12 +185,11 @@ export function resolveSavedRates(core: CorePayload, refs: readonly SavedRateRef
   scenarioFor: (section: SectionKey) => RateScenario = () => ({})): ResolvedSavedRate[] {
   const resolved: ResolvedSavedRate[] = [];
   const candidates = new Map((Object.entries(core.sections) as [SectionKey, CorePayload['sections'][SectionKey]][])
-    .map(([section, data]) => [section, catalogue ? publicRecommendationRows(data?.rates ?? [], catalogue, section, scenarioFor(section), true) : data?.rates ?? []]));
+    .map(([section, data]) => [section, catalogue && catalogue.status !== 'unavailable' ? publicRecommendationRows(data?.rates ?? [], catalogue, section, scenarioFor(section), true) : data?.rates ?? []]));
   for (const ref of refs) {
     let fallback: ResolvedSavedRate | null = null;
     for (const [section, rows] of candidates) {
-      for (const original of rows) {
-        if (original.product_key !== ref.productKey) continue;
+      for (const original of rowsForProductKey(rows, ref.productKey)) {
         const row = catalogue ? bindCurrentPublicRow(original, catalogue) : original;
         const candidate = { ref, row, section };
         if (

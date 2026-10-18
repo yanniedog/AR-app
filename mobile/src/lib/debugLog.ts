@@ -1,4 +1,5 @@
 import { htmlPlainText } from './htmlPlainText';
+import { clearCompletedPerformanceAudit } from './performanceAuditReportStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
@@ -850,6 +851,7 @@ export const debugLog = {
       try {
         if (inFlight) await inFlight.catch(() => {});
         if (coldStartResetPromise) await coldStartResetPromise;
+        await clearCompletedPerformanceAudit();
         const storageKeys = [
           STORAGE_KEY,
           LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
@@ -860,6 +862,7 @@ export const debugLog = {
           LOG_FILE,
           PREVIOUS_LOG_FILE,
           PERFORMANCE_AUDIT_SIDECAR_FILE,
+          `${LOG_DIR}ar-performance-audit-completed.json`,
           ...(FileSystem.cacheDirectory ? [DEBUG_LOG_SHARE_FILE] : []),
         ];
         await Promise.all(filePaths.map((path) =>
@@ -1213,6 +1216,8 @@ export interface DebugLogUploadReceipt {
   createdAt: string;
   /** Persisted only after an exact full-body read-back succeeds. */
   verified?: boolean;
+  /** Local-only identity of an allowlisted report; never sent to the host. */
+  contentSha256?: string;
 }
 
 // Serialize read/modify/write so a completed upload cannot erase another
@@ -1262,7 +1267,8 @@ function validateDebugLogUploadReceipt(value: unknown): DebugLogUploadReceipt {
     (expectedProvider === 'paste.c-net.org' &&
       (typeof receipt.deleteKey !== 'string' || !receipt.deleteKey)) ||
     (receipt.deleteKey != null && typeof receipt.deleteKey !== 'string') ||
-    (receipt.verified != null && typeof receipt.verified !== 'boolean')
+    (receipt.verified != null && typeof receipt.verified !== 'boolean') ||
+    (receipt.contentSha256 != null && !/^[a-f0-9]{64}$/.test(receipt.contentSha256))
   ) {
     throw new Error('The saved upload deletion receipt is invalid.');
   }
@@ -1273,12 +1279,14 @@ function validateDebugLogUploadReceipt(value: unknown): DebugLogUploadReceipt {
     ...(receipt.deleteKey ? { deleteKey: receipt.deleteKey } : {}),
     createdAt: receipt.createdAt,
     ...(receipt.verified ? { verified: true } : {}),
+    ...(receipt.contentSha256 ? { contentSha256: receipt.contentSha256 } : {}),
   };
 }
 
 export async function saveDebugLogUploadReceipt(
   result: Pick<DebugLogUploadResult, 'url' | 'provider' | 'deleteKey'>,
   createdAt = new Date().toISOString(),
+  contentSha256?: string,
 ): Promise<DebugLogUploadReceipt> {
   const receipt = validateDebugLogUploadReceipt({
     schemaVersion: 1,
@@ -1286,6 +1294,7 @@ export async function saveDebugLogUploadReceipt(
     provider: result.provider,
     ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
     createdAt,
+    ...(contentSha256 ? { contentSha256 } : {}),
   });
   await mutateUploadReceipts(async () => {
     const receipts = await loadDebugLogUploadReceipts();

@@ -528,7 +528,7 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     estimate: null,
     cancelRequested: false,
     paused: false,
-    report: null,
+    report: auditState.report,
     error: null,
   });
   return sessionId;
@@ -608,7 +608,7 @@ export function cancelPerformanceAudit(): void {
   });
 }
 
-/** Publish the finished report locally. Sharing is a separate user action. */
+/** Publish the finished report locally before applying the run's upload choice. */
 export function completePerformanceAudit(report: PerformanceAuditReport): void {
   emit({
     ...auditState,
@@ -623,6 +623,15 @@ export function completePerformanceAudit(report: PerformanceAuditReport): void {
     report,
     error: null,
   });
+}
+
+/** Reopen the last finished diagnosis without starting work or publishing it. */
+export function restoreCompletedPerformanceAudit(report: PerformanceAuditReport): void {
+  if (auditState.status !== 'idle' || auditState.report) return;
+  emit({ ...auditState, status: 'complete', sessionId: report.sessionId, report,
+    startedAt: report.startedAt, storedCheckCount: report.watchdog.storedCheckCount,
+    lastStoredCheckAt: report.watchdog.lastStoredCheckAt, progress: { completed: report.checks.length,
+      total: report.checks.length, label: 'Audit complete' } });
 }
 
 export function markPerformanceAuditCancelled(): void {
