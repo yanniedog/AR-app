@@ -736,7 +736,7 @@ export default function ProductDetail() {
         ) : null}
 
         <AccessNotice name={row.product_name} provider={row.provider} productDetails={detail} loading={detailsLoading} />
-        <AppText variant="small" color="textMuted">{uiTargetConstraint(selectedTargetConstraint(row, section, scenario,
+        <AppText variant="small" color="textMuted">{fromRatesComparison ? uiLabel('Eligibility unverified') : uiTargetConstraint(selectedTargetConstraint(row, section, scenario,
           { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity }))}</AppText>
 
         <MemoProductSpecs row={row} section={section} productDetails={detail} />
