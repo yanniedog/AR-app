@@ -103,7 +103,7 @@ test('every stay/switch monetary fact retains cents and provenance while unknown
 
 test('real stay/switch facts distinguish current household allocation, target shortfall and refinancing timing', () => {
   const value = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' },
-    projections: { mortgage: { periodicAmount: '3500', periodicFrequency: 'monthly', extraRepaymentAmount: '200', extraRepaymentFrequency: 'monthly', offsetContributionAmount: '500', offsetContributionFrequency: 'monthly' } } });
+    projections: { mortgage: { holdVariableRate: true, periodicAmount: '3500', periodicFrequency: 'monthly', extraRepaymentAmount: '200', extraRepaymentFrequency: 'monthly', offsetContributionAmount: '500', offsetContributionFrequency: 'monthly' } } });
   const target: RateRow = { provider: 'Target Bank', product_key: 'target', product_name: 'Loan', rate: '0.15' };
   const model = buildStaySwitchProjection({ scenario: value, target, targetDetail: {}, now: new Date('2026-10-15T01:00:00Z') });
   expect(model.ready).toBe(true); expect(model.householdAllocation).toBe(4200);
