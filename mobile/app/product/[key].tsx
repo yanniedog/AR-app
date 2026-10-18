@@ -398,7 +398,7 @@ export default function ProductDetail() {
       'product.open': () => undefined,
       'product.calculate.open': openCalculate,
       'product.receipt.open': () => {
-        if (row) openRateReceipt(productKey, row.rate_index, row.public_programme_id);
+        if (row) openRateReceipt(productKey, row.rate_index, row.public_programme_id, fromRatesComparison ? 'rates-comparison' : undefined);
       },
       'product.lender.open': (...args: unknown[]) => {
         const provider = auditActionString(args, 'provider') || row?.provider || null;
@@ -421,7 +421,7 @@ export default function ProductDetail() {
         : { unavailableReason: 'The mounted product has no multi-date history chart' },
     };
     return actions;
-  }, [historyGraphicEvidence?.window, productKey, row, openCalculate]);
+  }, [historyGraphicEvidence?.window, productKey, row, openCalculate, fromRatesComparison]);
   const productLogoIds = useMemo(
     () => row ? [`product:${row.rate_index ?? 'default'}#${row.product_key}`] : [],
     [row],
@@ -746,7 +746,7 @@ export default function ProductDetail() {
           icon="receipt-outline"
           variant="secondary"
           style={{ marginBottom: 16 }}
-          onPress={() => openRateReceipt(productKey, row.rate_index, row.public_programme_id)}
+          onPress={() => openRateReceipt(productKey, row.rate_index, row.public_programme_id, fromRatesComparison ? 'rates-comparison' : undefined)}
         />
 
         <SectionTitle text="Published product history" icon="trending-up-outline" />

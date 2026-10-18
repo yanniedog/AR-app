@@ -1,13 +1,16 @@
-import { uiCount, uiDate, uiJoin, uiLabel, uiMoney, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
+import { useMortgageComparison } from '../src/data/mortgageComparison';
+import { mortgageComparisonScenario } from '../src/data/mortgageComparisonScenario';
+import { useRatesSession } from '../src/data/ratesSession';
+import { uiCount, uiDate, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
 import { uiConditionalRateFact } from "../src/lib/financialUiCopy";
 import Ionicons from '../src/components/icons/AppIcon';
 import { usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
-import { bindCurrentPublicRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolveRowPublicRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
+import { bindCurrentPublicRow, publicScenarioForRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolveRowPublicRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
 import { PublicRateEvidence } from '../src/components/scenario/PublicRateEvidence';
 import * as Clipboard from 'expo-clipboard';
 import { Stack, router, useLocalSearchParams, type Href } from 'expo-router';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Share, type ScrollView, View } from 'react-native';
 
 import { useTrustedExternalUrl } from '../src/components/ExternalLinkConfirmation';
@@ -25,6 +28,7 @@ import {
   type ReceiptFact,
   type ReceiptStatusFact,
 } from '../src/data/rateReceipt';
+import type { RateRow, SectionKey } from '../src/types';
 import { findEligibleByKey } from '../src/data/selectors';
 import { isMandatoryEligibilityReady } from '../src/data/eligibilityGate';
 import { useStore } from '../src/data/store';
@@ -75,7 +79,10 @@ export default function RateReceiptScreen() {
   const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
   const { requestExternalUrl } = useTrustedExternalUrl();
-  const { key, ri, programme: requestedProgramme } = useLocalSearchParams<{ key?: string; ri?: string; programme?: string }>();
+  const { key, ri, programme: requestedProgramme, origin } = useLocalSearchParams<{ key?: string; ri?: string; programme?: string; origin?: string }>();
+  const fromRatesComparison = origin === 'rates-comparison';
+  const comparisonInputs = useMortgageComparison();
+  const mortgageFilters = useRatesSession(state => state.sections.Mortgage.filters);
   const productKey = key ?? '';
   const requestedRateIndex = ri == null || ri === '' ? null : Number(ri);
   const validRateIndex = requestedRateIndex == null || Number.isInteger(requestedRateIndex);
@@ -91,6 +98,11 @@ export default function RateReceiptScreen() {
   const ensureDetails = useStore((state) => state.ensureDetails);
   const { scenario, storageStatus } = useUserRateScenario();
   const scenarioLoaded = storageStatus === 'ready';
+  const scenarioFor = useCallback((section: SectionKey, row?: RateRow) => {
+    const saved = publicRateScenario(section, scenario, profile, row);
+    return publicScenarioForRow(row, publicCatalogue, fromRatesComparison
+      ? mortgageComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved);
+  }, [scenario, profile, publicCatalogue, fromRatesComparison, comparisonInputs, mortgageFilters]);
   const scrollRef = useRef<ScrollView>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
@@ -111,10 +123,10 @@ export default function RateReceiptScreen() {
       if (!core) return null;
       const sections = publicProduct ? { ...core.sections, [publicProduct.section]: { ...core.sections[publicProduct.section],
         rates: publicRecommendationRows(core.sections[publicProduct.section].rates, publicCatalogue, publicProduct.section,
-          publicRateScenario(publicProduct.section, scenario, profile)) } } : core.sections;
+          scenarioFor(publicProduct.section)) } } : core.sections;
       return findEligibleByKey(sections, productKey);
     },
-    [core, productKey, suitabilityRevision, publicProduct, publicCatalogue, scenario, profile],
+    [core, productKey, suitabilityRevision, publicProduct, publicCatalogue, scenarioFor],
   );
   const selectedRow = found && validRateIndex
     ? requestedProgramme ? found.siblings.find(candidate => bindCurrentPublicRow(candidate, publicCatalogue).public_programme_id === requestedProgramme) ?? null
@@ -122,7 +134,7 @@ export default function RateReceiptScreen() {
       ? found.row
       : found.siblings.find((candidate) => candidate.rate_index === requestedRateIndex) ?? null
     : null;
-  const publicResolution = selectedRow && found ? resolveRowPublicRate(selectedRow, publicCatalogue, publicRateScenario(found.section, scenario, profile, selectedRow)) : undefined;
+  const publicResolution = selectedRow && found ? resolveRowPublicRate(selectedRow, publicCatalogue, scenarioFor(found.section, selectedRow)) : undefined;
   const row = useMemo(() => selectedRow && publicResolution?.status === 'exact' && publicResolution.verifiedCurrent
     ? { ...selectedRow, rate: publicResolution.payableRate ?? '' } : selectedRow, [selectedRow, publicResolution]);
   const calculationScenario = found ? scenarioWithLocalCurrentRate(found.section, scenario,
@@ -134,19 +146,30 @@ export default function RateReceiptScreen() {
     [core, detail, details, manifest, coreIntegrity, found, row],
   );
   const brief = useMemo(
-    () => receipt && found
-      ? buildNegotiationBrief({
+    () => {
+      if (!receipt || !found) return null;
+      const brief = buildNegotiationBrief({
           receipt,
           scenario: calculationScenario,
           sectionRows: comparisonsReady ? resolvedPublicRankingRows(publicRecommendationRows(
             core?.sections[found.section].rates ?? [], publicCatalogue, found.section,
-            publicRateScenario(found.section, scenario, profile)), publicCatalogue,
-            row => publicRateScenario(found.section, scenario, profile, row)).rows : [],
+            scenarioFor(found.section)), publicCatalogue,
+            row => scenarioFor(found.section, row)).rows : [],
           comparisonsReady,
           detailsProducts,
-        })
-      : null,
-    [core, detailsProducts, found, receipt, scenario, calculationScenario, publicCatalogue, profile, comparisonsReady],
+        });
+      if (!fromRatesComparison || found.section !== 'Mortgage') return brief;
+      const scoped = scenarioFor(found.section, selectedRow ?? undefined);
+      // Rates inputs describe offer applicability, not the saved current loan.
+      // Do not combine a qualified offer with a different saved principal/rate.
+      const facts: ReceiptFact[] = [];
+      if (typeof scoped.amount === 'string' && Number(scoped.amount) > 0)
+        facts.push({ label: uiLabel('Loan amount'), value: uiMoney(Number(scoped.amount)) });
+      if (typeof scoped.lvr === 'string' && Number.isFinite(Number(scoped.lvr)))
+        facts.push({ label: uiLabel('Scenario LVR'), value: uiJoin(uiNumber(Number(scoped.lvr) * 100, 1), '%') });
+      return { ...brief, illustration: null, scenario: facts };
+    },
+    [core, detailsProducts, found, receipt, calculationScenario, publicCatalogue, comparisonsReady, fromRatesComparison, scenarioFor, selectedRow],
   );
   useAuditExternalLinks((receipt?.officialSources ?? []).map((source) => ({ url: source.url, purpose: 'lender_source', label: source.label })));
   const shareText = useMemo(() => {
@@ -181,14 +204,16 @@ export default function RateReceiptScreen() {
           pathname: '/product/[key]',
           params: {
             key: plannedKey,
-            ...(typeof plannedRateIndex === 'number' ? { ri: String(plannedRateIndex) } : {}),
+            ...(plannedKey === productKey && requestedProgramme ? { programme: requestedProgramme }
+              : typeof plannedRateIndex === 'number' ? { ri: String(plannedRateIndex) } : {}),
+            ...(fromRatesComparison ? { origin: 'rates-comparison' } : {}),
           },
         } as unknown as Href);
       } else {
         router.back();
       }
     },
-  }), []);
+  }), [productKey, requestedProgramme, fromRatesComparison]);
   const receiptFactCount = receipt
     ? receipt.tier.length + receipt.conditions.length + receipt.fees.length
     : 0;
@@ -244,7 +269,7 @@ export default function RateReceiptScreen() {
   if (publicProduct && (!found || !row) || publicResolution && (publicResolution.status !== 'exact' || !publicResolution.verifiedCurrent)) return <>
     <Stack.Screen options={{ title: 'Pricing evidence' }} />
     <ScreenScrollView><AppText variant="small">{uiJoin('Bank-call brief', ': ', 'Unavailable', ' · ', 'Pricing unresolved')}</AppText>
-      <PublicRateEvidence productKey={productKey} row={selectedRow ?? undefined} programmeId={requestedProgramme} />
+      <PublicRateEvidence productKey={productKey} row={selectedRow ?? undefined} programmeId={requestedProgramme} scenario={publicProduct ? scenarioFor(publicProduct.section, selectedRow ?? undefined) : undefined} />
     </ScreenScrollView>
   </>;
   if (!found || !row || !receipt || !brief) {
@@ -283,7 +308,7 @@ export default function RateReceiptScreen() {
         <AppText variant="tiny" color="textMuted">{uiJoin(brief.cohortSummary,brief.typicalAdvertisedRate ? uiJoin(' · ','Median',': ',brief.typicalAdvertisedRate):null)}</AppText>
         {brief.comparables.length ? brief.comparables.map((comparable,index)=><Pressable key={`${comparable.productKey}#${comparable.rateIndex??'default'}`}
           accessibilityRole="button" accessibilityLabel={uiJoin('Open',' ',uiProviderName({provider:comparable.provider}),' · ',uiProductName({product_name:comparable.productName}))}
-          onPress={()=>router.push({pathname:'/product/[key]',params:{key:comparable.productKey,...(comparable.rateIndex!=null?{ri:String(comparable.rateIndex)}:{})}} as Href)}
+          onPress={()=>router.push({pathname:'/product/[key]',params:{key:comparable.productKey,...(comparable.programmeId ? {programme:comparable.programmeId} : comparable.rateIndex!=null?{ri:String(comparable.rateIndex)}:{}),...(fromRatesComparison?{origin:'rates-comparison'}:{})}} as Href)}
           style={{minHeight:TOUCH_TARGET_MIN,justifyContent:'center',gap:4}}>
           {index ? <Divider/>:null}
           <Row style={{justifyContent:'space-between',gap:12}}><View style={{flex:1}}><AppText weight="700">{uiProviderName({provider:comparable.provider})}</AppText><AppText variant="tiny" color="textMuted">{uiProductName({product_name:comparable.productName})}</AppText></View><AppText weight="800">{comparable.advertisedRate}</AppText></Row>

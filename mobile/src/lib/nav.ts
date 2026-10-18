@@ -21,10 +21,10 @@ export const openProduct = (productKey: string, rateIndex?: number, programmeId?
   });
 
 /** Open the on-device receipt for one exact product-rate row. */
-export const openRateReceipt = (productKey: string, rateIndex?: number, programmeId?: string) =>
+export const openRateReceipt = (productKey: string, rateIndex?: number, programmeId?: string, origin?: ProductPricingOrigin) =>
   router.push({
     pathname: '/rate-receipt',
-    params: { key: productKey, ...(programmeId ? { programme: programmeId } : rateIndex != null ? { ri: String(rateIndex) } : {}) },
+    params: { key: productKey, ...(programmeId ? { programme: programmeId } : rateIndex != null ? { ri: String(rateIndex) } : {}), ...(origin ? { origin } : {}) },
   } as unknown as Href);
 
 /** Open a lender page; optional date/section focus a specific bank-move drill-down. */
