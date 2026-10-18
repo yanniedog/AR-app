@@ -76,7 +76,7 @@ export async function prepareBankRateHistoryAfterPaint(
     work.stage('Selecting verified prepared history');
     let ready = false;
     let publishedHistory = !!detached;
-    if (!manifest.bank_rate_history_ready && validateDetachedHistoricalCatalogueDescriptor(manifest)) {
+    if (!detached && validateDetachedHistoricalCatalogueDescriptor(manifest)) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { loadDetachedHistoricalBankRateCatalogue } = require('./detachedHistoricalBankRateCatalogue') as typeof import('./detachedHistoricalBankRateCatalogue');
       work.stage('Loading compatible bank history');
