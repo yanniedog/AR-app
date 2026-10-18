@@ -65,6 +65,7 @@ test.each([10, 20] as const)('pager %i exposes range, numbered selection and all
     act(() => button('Next page').props.onPress()); expect(page).toBe(2);
     act(() => tree.update(render())); act(() => button('Page 1').props.onPress()); expect(page).toBe(1);
     act(() => tree.root.findByType('SegmentedControl').props.onChange('10')); expect(onSize).toHaveBeenCalledWith(10);
+    act(() => tree.root.findByType('SegmentedControl').props.onChange('20')); expect(onSize).toHaveBeenLastCalledWith(20);
     act(() => tree.update(render(0)));
     expect(tree.root.findAllByType('Button').every((n: any) => n.props.disabled)).toBe(true);
     expect(tree.root.findByProps({ testID: 'rates-pagination' }).props.style.width).toBe('100%');

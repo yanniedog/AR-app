@@ -39,7 +39,7 @@ let restoreRevision = 0;
 /** Explicit snapshot restoration can change scroll on the same data/page. */
 export function getRatesSessionRestoreRevision(): number { return restoreRevision; }
 function preferenceKey(prefs: Prefs, section: SectionKey): string {
-  return JSON.stringify([prefs.includeNonStandard, section === 'Mortgage' ? prefs.mortgageRateMetric : prefs.depositRankMetric,
+  return JSON.stringify([prefs.includeNonStandard, prefs.ratesPageSize, section === 'Mortgage' ? prefs.mortgageRateMetric : prefs.depositRankMetric,
     PROFILE_GROUPS.filter(group => group.section === section).map(group => prefs.profileFilters[group.key]),
     profileFeaturesForSection(prefs.profileFilters, section)]);
 }

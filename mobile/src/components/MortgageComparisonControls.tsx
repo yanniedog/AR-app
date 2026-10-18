@@ -43,7 +43,7 @@ export function MortgageComparisonControls({ rows, filters, unverified, invalid 
       onChange={next => useStore.getState().setPref('mortgageRateMetric', next)} />
     {invalid ? <AppText color="danger">{uiLabel('Invalid comparison inputs')}</AppText> : unverified > 0 ? <AppText variant="small">{uiJoin('Eligibility unverified', ' · ', uiCount(unverified))}</AppText> : null}
     <Button title="Clear comparison inputs" variant="ghost" onPress={() => {
-      clearMortgageComparison(); updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: [], repaymentTypes: [] }, page: 1 }), true);
+      clearMortgageComparison(); updateRatesSection('Mortgage', { page: 1 }, true);
     }} />
   </View>;
 }

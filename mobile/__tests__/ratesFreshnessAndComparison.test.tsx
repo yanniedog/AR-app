@@ -1,4 +1,5 @@
 import React from 'react';
+import { LIGHT } from '../src/theme/colors';
 import TestRenderer, { act } from 'react-test-renderer';
 import { rateFreshness, rowVerificationReceipt, DAILY_VERIFICATION_CADENCE_MS } from '../src/data/rateFreshness';
 import { CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT } from '../src/lib/appHealth/sourceContract';
@@ -27,14 +28,17 @@ test('freshness follows daily successful verification plus the existing grace; p
   expect(rowVerificationReceipt({ ...row, last_updated: '2026-10-16T00:00:00Z' })).toBeNull();
 });
 test('freshness states have distinct shapes, colours and nonvisual names', () => {
-  const shapes: string[] = [], names: string[] = [];
+  const shapes: string[] = [], names: string[] = [], colors: string[] = [];
   for (const [age, evidence] of [[0, receipt], [86400001, receipt], [172800001, receipt], [0, null]] as const) {
     let tree: any; act(() => { tree = TestRenderer.create(<RateFreshnessSymbol row={row} receipt={evidence} now={checked + age} />); });
     shapes.push(tree.root.findByType('Icon').props.name);
+    colors.push(tree.root.findByType('Icon').props.color);
     names.push(tree.root.findByProps({ testID: 'rate-freshness' }).props.accessibilityLabel);
     act(() => tree.unmount());
   }
   expect(new Set(shapes).size).toBe(4);
+  expect(colors).toEqual([LIGHT.success, LIGHT.warning, LIGHT.danger, LIGHT.textMuted]);
+  expect(new Set(colors).size).toBe(4);
   expect(names).toEqual(['Freshness · Current', 'Freshness · Overdue', 'Freshness · Stale', 'Freshness · Unknown']);
 });
 test('comparison keeps unknown bounds explicit, rejects known outside limits and invalid inputs, and respects exact LVR edges', () => {
