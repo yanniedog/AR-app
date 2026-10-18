@@ -178,7 +178,7 @@ test('comparison uncertainty counts the complete filtered result set, not the pr
     act(() => useMortgageComparison.setState({ loanAmount: '300000' }));
     act(() => updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS, includeNonStandard: true, providers: ['B'] } }));
     expect(tree.root.findByType('FlashList').props.data).toHaveLength(20);
-    expect(tree.root.findAllByType('AppText').some((node: any) => node.props.children === 'Eligibility unverified Â· 22')).toBe(true);
+    expect(tree.root.findAllByType('AppText').some((node: any) => node.props.children === 'Eligibility unverified · 22')).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
 
@@ -668,5 +668,29 @@ test('entered comparison inputs select public pricing before ranking, cards and 
     expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.65' });
     act(() => useMortgageComparison.setState({ loanAmount: '400000' }));
     expect(list().data).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
+
+
+test('active legacy compare selections follow semantic binding arrival and toggle off once', () => {
+  const row = rows.find(item => item.rate_index === 0)!;
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [row] } } } }));
+  install();
+  updateRatesSection('Mortgage', { selectMode: true });
+  const tree = mount();
+  try {
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['0#p-0']);
+    const p = publicProgramme({ productId: row.product_key, programmeId: 'arrived', offerId: 'arrived' });
+    mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([
+      { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() },
+        components: [{ ...p.components[0], value: row.rate, scopeId: 'arrived' }] },
+    ], [{ ...publicProduct, productId: row.product_key, productKey: row.product_key, programmeIds: ['arrived'] }], []), generationId: 'binding-arrived' };
+    act(() => tree.update(<RatesWorkspace />));
+    const semantic = publicOfferSelectionToken(row.product_key, 'arrived');
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([semantic]);
+    expect(tree.root.findByType('ProductCard').props.selected).toBe(true);
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
   } finally { act(() => tree.unmount()); }
 });
