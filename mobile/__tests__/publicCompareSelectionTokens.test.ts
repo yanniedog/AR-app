@@ -23,3 +23,18 @@ test('stale semantic fields without a current catalogue binding do not upgrade a
   expect(reconcilePublicCompareSelectionTokens(core([stale]), catalogue(), [`0#${product.productKey}`]))
     .toEqual([`0#${product.productKey}`]);
 });
+
+
+test.each([false, true])('partial acquisition preserves the occurrence until the final binding is settled: ambiguous=%s', ambiguous => {
+  const source = core();
+  const first = programme();
+  const legacy = [`0#${product.productKey}`];
+  const partial = { ...catalogue([first]), allLoaded: false };
+  // Other product routes can still supply a second binding. A choice made here
+  // could not be reversed once the token had already become a semantic identity.
+  const pending = reconcilePublicCompareSelectionTokens(source, partial, legacy);
+  expect(pending).toEqual(legacy);
+  const complete = catalogue(ambiguous ? [first, programme({ programmeId: 'later', offerId: 'later' })] : [first]);
+  expect(reconcilePublicCompareSelectionTokens(source, complete, pending)).toEqual(ambiguous
+    ? legacy : [publicOfferSelectionToken(product.productKey, first.offerId)]);
+});
