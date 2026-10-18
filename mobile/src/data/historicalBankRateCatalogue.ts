@@ -313,7 +313,7 @@ function* historicalSnapshots(preparation: PreparedHistoricalBankRateCatalogue, 
     const needsFallback = fallback && fallback.catalogue.run_dates.some(day => !dates.has(day) && !!fallback.catalogue.sources[day]);
     const older = needsFallback && fallbackState
       ? yield* historicalSnapshots(fallback, fallbackState, filters, normalized) : {};
-    for (const day of new Set([...catalogue.run_dates, ...Object.keys(older)])) {
+    for (const day of new Set([...catalogue.run_dates, ...(fallback?.catalogue.run_dates ?? []), ...Object.keys(older)])) {
       if (!dates.has(day)) snapshots[day] = older[day] ?? {};
     }
   }
@@ -403,9 +403,10 @@ function currentSnapshots(preparation: PreparedHistoricalBankRateCatalogue, stat
   const last = preparation.catalogue.run_dates.at(-1)!;
   let days = Object.keys(snapshots).length;
   for (let day = Date.parse(last) + 86_400_000; day < Date.parse(core.run_date); day += 86_400_000) {
-    if (++days >= 5000) break;
     const date = new Date(day).toISOString().slice(0, 10);
-    if (!Object.hasOwn(snapshots, date)) snapshots[date] = {};
+    if (Object.hasOwn(snapshots, date)) continue;
+    if (++days >= 5000) break;
+    snapshots[date] = {};
   }
   snapshots[core.run_date] = snapshotBankRates(bankRateScope(currentRows));
   if (cache.size >= 8) cache.delete(cache.keys().next().value!);

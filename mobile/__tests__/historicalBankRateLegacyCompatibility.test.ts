@@ -40,6 +40,16 @@ const filters = { profileFilters: EMPTY_PROFILE, interests: SECTION_KEYS, includ
 const oldProduct = 'AMP - My AMP|AMP_SAVER|TRANS_AND_SAVINGS_ACCOUNTS|AMP Saver Account';
 const latestProduct = 'AMP Bank GO|7c034be5-b76d-4b26-959a-29ef8e045b7f|TRANS_AND_SAVINGS_ACCOUNTS|AMP Bank GO Save';
 
+function capturedDay(position: number) {
+  const day = raw.run_dates[position];
+  return prepareHistoricalBankRateCatalogue({ ...raw, run_dates: [day], sources: { [day]: raw.sources[day] },
+    sections: Object.fromEntries(SECTION_KEYS.map(section => [section, raw.sections[section].flatMap(tier => {
+      const spans = tier.spans.filter(([start, count]) => position >= start && position < start + count)
+        .map(([, , rates, evidence]) => [0, 1, rates, evidence]);
+      return spans.length ? [{ ...tier, spans }] : [];
+    })])) })!;
+}
+
 test('legacy observations and selected prepared fallback retain exact summaries without duplicate dates', async () => {
   const current = core(), ready = compileHistoricalBankRateReady(raw, compiler.sha256);
   const fallback = prepareHistoricalBankRateReady(ready, [older])!;
@@ -114,4 +124,28 @@ test('a short legacy archive preserves later prepared fallback dates and reuses 
   const actual = historicalBankRateSnapshots(selected, current, scope, filters);
   const expected = historicalBankRateSnapshots(fallback, current, scope, filters);
   expect(actual[latest]).toEqual(expected[latest]);
+});
+
+test('fallback-only unavailable dates remain explicit even when the primary covers every fallback observation', () => {
+  const primary = capturedDay(raw.run_dates.indexOf(latest));
+  const fallback = prepareHistoricalBankRateReady(compileHistoricalBankRateReady(raw, compiler.sha256), [latest])!;
+  const combined = selectHistoricalCatalogueDates(primary, new Set([latest]), fallback);
+  const snapshots = historicalBankRateSnapshots(combined, core(), scope, filters);
+  expect(snapshots[older]).toEqual({});
+  expect(Object.hasOwn(snapshots, raw.run_dates[1])).toBe(true);
+  expect(snapshots[latest].sectionTotals).toBeDefined();
+});
+
+test('existing fallback dates do not consume the budget for newly inserted unknown dates', () => {
+  const primary = capturedDay(0);
+  const date = (offset: number) => new Date(Date.parse(older) + offset * 86_400_000).toISOString().slice(0, 10);
+  // Only the first day is a captured observation; all added calendar days are unknown.
+  const extended = { ...primary.catalogue, run_dates: Array.from({ length: 4997 }, (_, position) => date(position)) };
+  const fallback = prepareHistoricalBankRateReady(compileHistoricalBankRateReady(extended, compiler.sha256))!;
+  const combined = selectHistoricalCatalogueDates(primary, new Set([older]), fallback);
+  const current = { ...core(), run_date: date(4999) };
+  const snapshots = historicalBankRateSnapshots(combined, current, scope, filters);
+  expect(snapshots[date(4997)]).toEqual({});
+  expect(snapshots[date(4998)]).toEqual({});
+  expect(Object.keys(snapshots)).toHaveLength(5000);
 });
