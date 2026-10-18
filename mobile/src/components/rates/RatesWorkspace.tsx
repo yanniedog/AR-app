@@ -2,7 +2,7 @@ import { ratesResultRowKey } from '../../data/ratesResultRowKey';
 import { publicOfferSelectionToken } from '../../data/publicOfferIdentity';
 import { PublicPricingCoverage, PublicProductDiscovery } from '../scenario/PublicPricingCoverage';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
-import { publicComparisonCore, publicRateScenario, publicRecommendationRows } from '../../data/publicRateIntegration';
+import { publicComparisonCore, publicRateScenario, publicRecommendationRows, resolvedPublicRankingRows } from '../../data/publicRateIntegration';
 import { useUserRateScenario } from '../../hooks/useUserRateScenario';
 import { uiCount,uiJoin,uiLabel,uiRatesQuery,uiProductName,uiProviderName,type UiCopy } from '../../lib/uiCopy';
 import { humanizeEnum } from '../../data/format';
@@ -236,11 +236,14 @@ export default function RatesWorkspace() {
     if (sortKey === 'comparison' && (section !== 'Mortgage' || mortgageRateMetric === 'comparison')) setSortKey('rate');
   }, [mortgageRateMetric, section, setSortKey, sortKey]);
 
-  const baseRows = useMemo(() => {
+  const pricingCandidates = useMemo(() => {
     void suitabilityRevision;
-    const all = publicRecommendationRows(core?.sections[section]?.rates ?? [], catalogue, section, publicRateScenario(section, scenario, prefs.profileFilters));
-    return task.intentError ? [] : rowsForSearchScope(all, section, path, hierarchyScoped);
+    const candidates = publicRecommendationRows(core?.sections[section]?.rates ?? [], catalogue, section, publicRateScenario(section, scenario, prefs.profileFilters));
+    return task.intentError ? [] : rowsForSearchScope(candidates, section, path, hierarchyScoped);
   }, [core, catalogue, scenario, prefs.profileFilters, section, path, hierarchyScoped, suitabilityRevision, task.intentError]);
+  const baseRows = useMemo(() => resolvedPublicRankingRows(pricingCandidates, catalogue,
+    row => publicRateScenario(section, scenario, prefs.profileFilters, row)).rows,
+  [pricingCandidates, catalogue, section, scenario, prefs.profileFilters]);
   const mortgageInputs = useMortgageComparison();
   const mortgageScope = useMemo(() => section === 'Mortgage' ? mortgageComparisonRows(baseRows, mortgageInputs)
     : { rows: baseRows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false }, [baseRows, mortgageInputs, section]);
@@ -637,7 +640,7 @@ export default function RatesWorkspace() {
           data={pageRows}
           ListHeaderComponent={availability === 'listed' ? <View style={{ gap: 8 }}>
             <SavedRequirementsSummary section={section} />
-            {catalogue.status !== 'unavailable' ? <><PublicPricingCoverage section={section} rows={baseRows} scenario={scenario} compact />
+            {catalogue.status !== 'unavailable' ? <><PublicPricingCoverage section={section} rows={pricingCandidates} scenario={scenario} compact />
               <PublicProductDiscovery section={section} rows={baseRows} query={debouncedQuery} /></> : null}
             {section === 'Mortgage' ? <MortgageComparisonControls rows={core.sections.Mortgage.rates} filters={filters}
               unverified={unverifiedResultCount} invalid={mortgageScope.invalid} /> : null}

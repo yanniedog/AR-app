@@ -7,6 +7,33 @@ import { resolvePublicRate } from '../src/data/publicRateResolver';
 const base = { asOf: PUBLIC_AS_OF, rateBehaviour: 'fixed' as const, holdCurrentRate: false, feesKnown: true, fees: [] };
 const fee = (amount: string, rest: Partial<PublicCostFee> = {}): PublicCostFee => ({ feeId: 'fee', kind: 'upfront', amount, conditions: [], evidenceIds: ['public-source'], origin: 'public', ...rest });
 
+it('deducts savings fees at the start of their interval before monthly or daily interest', () => {
+  const scenario = { ...base, section: 'Savings' as const, startingBalance: '1000', comparisonMonths: 1,
+    fees: [fee('100', { kind: 'recurring', everyMonths: 1 })] };
+  expect(estimatePublicCost(resolution({ payableRate: '0.12' }), { ...scenario, interestPayment: 'monthly' }))
+    .toMatchObject({ interest: '9.00', endingBalance: '909.00', fees: '100.00', netReturn: '-91.00' });
+  const daily = { interestPayment: 'daily' as const, interestBasis: 'actual_365' as const };
+  const charged = estimatePublicCost(resolution({ payableRate: '0.12' }), { ...scenario, ...daily });
+  const netOpening = estimatePublicCost(resolution({ payableRate: '0.12' }), { ...scenario, ...daily, startingBalance: '900', fees: [] });
+  expect(charged.interest).toBe(netOpening.interest);
+  expect(charged.endingBalance).toBe(netOpening.endingBalance);
+});
+
+it.each([
+  condition('monthlyDeposit', { operator: 'eq', value: '10' }),
+  condition('monthlyDeposit', { operator: 'bounds', maximum: '10' }),
+])('rechecks deposit qualifications against projected contributions: %j', qualification => {
+  const source = programme({ section: 'Savings', conditions: [qualification] });
+  const scope = { monthlyDeposit: '10' }, resolved = resolvePublicRate(source, scope, PUBLIC_AS_OF);
+  const scenario: PublicCostScenario = { ...base, section: 'Savings', startingBalance: '1000', interestPayment: 'monthly',
+    programme: source, rateScenario: scope, monthlyContribution: '20' };
+  const estimate = estimatePublicCost(resolved, scenario);
+  expect(estimate).toMatchObject({ completeness: 'unsupported', projectedMonths: 0, verifiedCurrent: false });
+  expect(estimate.reasonCodes).toContain('qualification_cashflow_conflict');
+  expect(estimate.netReturn).toBeUndefined();
+  expect(scope).toEqual({ monthlyDeposit: '10' });
+});
+
 it('amortises payable nominal interest and separates principal from one-month borrowing cost', () => {
   const estimate = estimatePublicCost(resolution({ payableRate: '0.12', comparisonRate: '0.80' }), { ...base, section: 'Mortgage', principal: '1000', remainingTermMonths: 1,
     repayment: 'principal_and_interest', fees: [fee('12')] });

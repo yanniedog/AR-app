@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
+import { eligiblePublicProductKeys } from '../../data/publicProductEligibility';
+import { useUserRateScenario } from '../../hooks/useUserRateScenario';
+import { useSuitabilityRevision } from '../../hooks/useSuitabilityRevision';
 import { publicRateScenario, resolvedPublicRankingRows } from '../../data/publicRateIntegration';
 import type { UserRateScenario } from '../../data/userRateScenario';
 import { useStore } from '../../data/store';
@@ -26,6 +29,7 @@ export function PublicPricingCoverage({ section, rows, scenario, compact = false
   const profile = useStore(state => state.prefs?.profileFilters);
   const catalogue = usePublicRateCatalogue(manifest);
   const [open, setOpen] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const { status: catalogueStatus, allLoaded, loadAll } = catalogue;
   useEffect(() => {
     if (catalogueStatus === 'ready' && !allLoaded) void loadAll().catch(() => undefined);
@@ -37,6 +41,8 @@ export function PublicPricingCoverage({ section, rows, scenario, compact = false
     ? uiJoin('Payable rate', ': ', uiCount(pricing.priced), ' · ', 'Unresolved offers', ': ', uiCount(pricing.unresolved))
     : uiJoin('Public pricing', ': ', 'Partial');
   return <View style={{ marginBottom: compact ? 6 : 16 }}>
+    {catalogue.status === 'error' ? <Button title="Retry" variant="secondary" disabled={retrying}
+      onPress={() => { setRetrying(true); void loadAll().catch(() => undefined).finally(() => setRetrying(false)); }} /> : null}
     <Disclosure title={summary} open={open} onToggle={() => setOpen(value => !value)}>
       <View style={{ gap: 6 }}>
         <AppText variant="small">{uiJoin('Public products', ': ', uiCount(products.length))}</AppText>
@@ -59,9 +65,13 @@ export function PublicProductDiscovery({ section, query = '', rows = [] }: {
   const manifest = useStore(state => state.manifest);
   const catalogue = usePublicRateCatalogue(manifest);
   const [limit, setLimit] = useState(20);
+  useSuitabilityRevision();
+  const profile = useStore(state => state.prefs?.profileFilters);
+  const { scenario } = useUserRateScenario();
+  const eligible = eligiblePublicProductKeys(catalogue, section, publicRateScenario(section, scenario, profile));
   const represented = new Set(rows.map(row => row.product_key));
   const needle = query.trim().toLocaleLowerCase('en-AU');
-  const products = catalogue.products.filter(product => product.section === section && !represented.has(product.productKey)
+  const products = catalogue.products.filter(product => product.section === section && eligible.has(product.productKey) && !represented.has(product.productKey)
     && (!needle || (product.name + ' ' + product.providerName + ' ' + product.aliases.map(alias => alias.name).join(' ')).toLocaleLowerCase('en-AU').includes(needle)));
   if (!products.length) return null;
   return <Card style={{ marginVertical: 12, gap: 8 }}>

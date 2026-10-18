@@ -137,7 +137,8 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
     toggleSavedRate(row: Parameters<AppState['toggleSavedRate']>[0], scope: Parameters<AppState['toggleSavedRate']>[1] = 'rate') {
       const catalogue = get().manifest?.public_rate_catalogue ? getPublicRateCatalogueSnapshot(get().manifest) : undefined;
       const bound = catalogue ? bindCurrentPublicRow(row, catalogue) : row;
-      const selectedScope = scope === 'rate' && catalogue && !bound.public_offer_id ? 'product' : scope;
+      // Discovery alone is not evidence that an indexed tier has no public offer.
+      const selectedScope = scope === 'rate' && catalogue?.status === 'ready' && catalogue.allLoaded && !bound.public_offer_id ? 'product' : scope;
       const savedRates = toggleSavedRateRefs(get().savedRates, bound, selectedScope);
       const trackedRates = normalizeTrackedRates(get().trackedRates, savedRates);
       set({
