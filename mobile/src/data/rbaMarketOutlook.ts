@@ -18,6 +18,10 @@ let inFlight: { force: boolean; promise: Promise<RbaMarketOutlook> } | null = nu
 let requestSequence = 0;
 let latest: { sequence: number; payload: RbaMarketOutlook } | null = null;
 let commitQueue: Promise<void> = Promise.resolve();
+// Native writes cannot be cancelled; local readers must not adopt a write that
+// crossed into their audit before its online publication was accepted.
+let cacheWriteFence: { key: string; fallback: RbaMarketOutlook | null; pending: boolean } | null = null;
+const cacheValueKey = (value: RbaMarketOutlook) => JSON.stringify(normalizeRbaMarketOutlook(value));
 let generation = 0;
 let clearing: Promise<void> | null = null;
 const resetListeners = new Set<() => void>();
@@ -32,6 +36,7 @@ export function resetRbaMarketOutlookRuntimeCache(clearStorage: () => Promise<vo
   if (clearing) return clearing;
   generation += 1;
   latest = null;
+  cacheWriteFence = null;
   inFlight = null;
   const run = (async () => {
     await commitQueue;
@@ -54,6 +59,7 @@ export function resetRbaMarketOutlookRuntimeCacheForTests(): void {
   inFlight = null;
   requestSequence = 0;
   latest = null;
+  cacheWriteFence = null;
   commitQueue = Promise.resolve();
 }
 
@@ -100,11 +106,17 @@ function mergeCached(stored: RbaMarketOutlook | null, memory: RbaMarketOutlook |
   };
 }
 
-async function readCached(expectedGeneration: number): Promise<RbaMarketOutlook | null> {
+async function readCached(expectedGeneration: number, localOnly = false): Promise<RbaMarketOutlook | null> {
   // Validate stored public data before allowing an offline audit to rely on it.
   const stored = normalizeRbaMarketOutlook(await cache.readRbaMarketOutlook());
   assertCurrentGeneration(expectedGeneration);
-  return mergeCached(stored, latest?.payload ?? null);
+  const local = localOnly || isLocalAppHealthAudit();
+  const fence = cacheWriteFence;
+  const matchesFence = stored && fence && cacheValueKey(stored) === fence.key;
+  const trustedStored = local && matchesFence ? fence.fallback : stored;
+  // A later normal read can adopt the now-settled public cache for future audits.
+  if (!local && matchesFence && !fence.pending && cacheWriteFence === fence) cacheWriteFence = null;
+  return mergeCached(trustedStored, latest?.payload ?? null);
 }
 
 function offline(cached: RbaMarketOutlook | null): RbaMarketOutlook {
@@ -164,10 +176,14 @@ async function commit(
       bondForwards: sources.bondForwards,
       economists: sources.economists,
     });
+    // Reserve the previous trusted view before entering an uncancellable write.
+    const fence = { key: cacheValueKey(accepted), fallback: previous, pending: true };
+    cacheWriteFence = fence;
     // A storage failure must not erase successfully fetched public information.
     try {
       await cache.writeRbaMarketOutlook(accepted);
     } catch { /* This session can still use the validated in-memory copy. */ }
+    finally { fence.pending = false; }
     assertCurrentGeneration(expectedGeneration);
     // A native write already in progress cannot be cancelled. Do not publish
     // its online result if a local audit began while the write was pending.
@@ -175,6 +191,7 @@ async function commit(
       accepted = offline(latest?.payload ?? cached);
       return;
     }
+    if (cacheWriteFence === fence) cacheWriteFence = null;
     latest = { sequence: Math.max(sequence, latest?.sequence ?? 0), payload: accepted };
   });
   commitQueue = run.catch(() => undefined);
@@ -189,7 +206,7 @@ export async function loadRbaMarketOutlook(force = false): Promise<RbaMarketOutl
   if (clearing) await clearing;
   const expectedGeneration = generation;
   // Do not join a network refresh that began before a local audit installed its guard.
-  if (localOnly || isLocalAppHealthAudit()) return offline(await readCached(expectedGeneration));
+  if (localOnly || isLocalAppHealthAudit()) return offline(await readCached(expectedGeneration, true));
   if (inFlight && (!force || inFlight.force)) return inFlight.promise;
   const sequence = ++requestSequence;
   const run = (async () => {

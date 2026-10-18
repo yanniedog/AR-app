@@ -432,3 +432,37 @@ test('clearing drains an active write and holds new loads until deletion complet
   localAudit.mockReturnValue(true);
   await expect(loadRbaMarketOutlook()).resolves.toMatchObject({ checkedAt: cached.checkedAt, refreshStatus: 'offline' });
  });
+
+
+test.each([true, false])('an already-started native cache write cannot enter a local audit (retained cache: %s)', async retained => {
+  const previous = retained ? payload() : null;
+  let disk: RbaMarketOutlook | null = previous;
+  const writing = deferred<void>(); const started = deferred<void>();
+  jest.mocked(cache.readRbaMarketOutlook).mockImplementation(async () => disk);
+  jest.mocked(cache.writeRbaMarketOutlook).mockImplementationOnce(async value => {
+    started.resolve(); await writing.promise; disk = value;
+  });
+  const refreshing = loadRbaMarketOutlook(true).catch((error: Error) => error);
+  await started.promise;
+  localAudit.mockReturnValue(true);
+  jest.mocked(getLocalAppHealthAuditGeneration).mockReturnValue(1);
+  if (previous) await expect(loadRbaMarketOutlook()).resolves.toMatchObject({ checkedAt: previous.checkedAt, refreshStatus: 'offline' });
+  else await expect(loadRbaMarketOutlook()).rejects.toThrow('not cached');
+  writing.resolve();
+  const result = await refreshing;
+  if (previous) expect(result).toMatchObject({ checkedAt: previous.checkedAt, refreshStatus: 'offline' });
+  else expect(result).toBeInstanceOf(Error);
+  expect(disk).not.toBe(previous);
+  if (previous) await expect(loadRbaMarketOutlook()).resolves.toMatchObject({ checkedAt: previous.checkedAt, refreshStatus: 'offline' });
+  else await expect(loadRbaMarketOutlook()).rejects.toThrow('not cached');
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(cache.writeRbaMarketOutlook).toHaveBeenCalledTimes(1);
+  // Outside the ended audit, the settled public cache can be adopted normally.
+  localAudit.mockReturnValue(false);
+  const normal = await loadRbaMarketOutlook();
+  expect(normal.refreshStatus).toBe('current');
+  localAudit.mockReturnValue(true);
+  jest.mocked(getLocalAppHealthAuditGeneration).mockReturnValue(2);
+  await expect(loadRbaMarketOutlook()).resolves.toMatchObject({ checkedAt: normal.checkedAt, refreshStatus: 'offline' });
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
