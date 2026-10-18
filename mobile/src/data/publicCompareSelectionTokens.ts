@@ -5,7 +5,9 @@ import { publicOfferSelectionToken } from './publicOfferIdentity';
 /** Upgrade only exact current source occurrences; uncertain selections stay intact. */
 export function reconcilePublicCompareSelectionTokens(core: CorePayload, catalogue: PublicCatalogueView,
   tokens: readonly string[]): string[] {
-  if (catalogue.status !== 'ready') return [...tokens];
+  // A ready discovery index can still be missing a product route that adds
+  // another source binding. Wait for the complete validated generation.
+  if (catalogue.status !== 'ready' || !catalogue.allLoaded) return [...tokens];
   return [...new Set(tokens.map(token => {
     const legacy = /^(\d+)#([\s\S]+)$/.exec(token);
     if (!legacy) return token;
