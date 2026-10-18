@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-10-13T20:55:13.935Z",
+  "generated_at": "2026-10-18T16:04:18.105Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -1011,6 +1011,18 @@
         "Fix audit action evidence and reduce repeated list rendering (#394)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.238"
+    },
+    {
+      "version": "1.0.243",
+      "date": "2026-10-18",
+      "summaryBullets": [
+        "Fix Live audit isolation and public pricing correctness (#415)",
+        "Finish public catalogue audit and notification integration (#414)",
+        "Fix saved requirements and paginate Rates with compact mortgage controls (#412)",
+        "Distinguish audit outcomes and reduce repeated lender lookups (#413)",
+        "Retain audit reports and automatically upload sanitized results (#408)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.243"
     }
   ]
 }
