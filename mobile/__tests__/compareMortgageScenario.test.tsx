@@ -8,6 +8,7 @@ import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 
+type Tree = ReactTestRenderer & { root: { findAllByType(type: string): { props: Record<string, any> }[] } };
 let mockState: any;
 let mockCatalogue: any;
 let mockKeys: string;
@@ -48,8 +49,8 @@ test('Compare retains amount/LVR eligibility and pricing for offers selected wit
   mockKeys = JSON.stringify(products.map(item => publicOfferSelectionToken(item.productKey, item.productId)));
   installMandatoryEligibility(selectMandatoryEligibility(mockState.core, DEFAULT_PREFS.profileFilters, null));
   useMortgageComparison.setState({ loanAmount: '600000', lvr: '75' });
-  let tree!: ReactTestRenderer;
-  act(() => { tree = TestRenderer.create(<Compare />); });
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<Compare />) as Tree; });
   try {
     expect(tree.root.findAllByType('EmptyState')).toHaveLength(0);
     const evidence = tree.root.findAllByType('PublicRateEvidence');
