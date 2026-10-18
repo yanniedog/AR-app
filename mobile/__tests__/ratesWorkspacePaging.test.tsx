@@ -673,3 +673,31 @@ test('entered comparison inputs select public pricing before ranking, cards and 
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
   } finally { act(() => tree.unmount()); }
 });
+
+test('temporary purpose and repayment chips resolve public offers before filtering and keep saved requirements mandatory', () => {
+  const p = publicProgramme({ sourceBindings: [], conditions: [
+    { conditionId: 'purpose', field: 'purpose', operator: 'eq', value: 'INVESTMENT', evidenceIds: [] },
+    { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: 'INTEREST_ONLY', evidenceIds: [] },
+  ] });
+  mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([{ ...p,
+    freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() } }], [publicProduct], []), generationId: 'temporary-facets' };
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [] } } } }));
+  install();
+  const saved = JSON.stringify(mockStore.getState().prefs.profileFilters);
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  try {
+    expect(list().data).toEqual([]);
+    act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: ['INVESTMENT'] } })));
+    expect(list().data).toEqual([]);
+    act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, repaymentTypes: ['INTEREST_ONLY'] } })));
+    expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
+    expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ purpose: 'INVESTMENT', repayment: 'INTEREST_ONLY' });
+    expect(JSON.stringify(mockStore.getState().prefs.profileFilters)).toBe(saved);
+    expect(mockStore.getState().setPref).not.toHaveBeenCalled();
+    act(() => {
+      const profile = { ...DEFAULT_PREFS.profileFilters, loanPurposes: ['OWNER_OCCUPIED'] };
+      mockStore.setState((state: any) => ({ prefs: { ...state.prefs, profileFilters: profile } })); install(profile);
+    });
+    expect(list().data).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});

@@ -150,8 +150,9 @@ export default function RatesWorkspace() {
   const catalogue = usePublicRateCatalogue(manifest);
   const { scenario } = useUserRateScenario();
   const mortgageInputs = useMortgageComparison();
+  const mortgageFilters = session.sections.Mortgage.filters;
   const scenarioFor = useCallback((selected: SectionKey, row?: RateRow) => mortgageComparisonScenario(selected,
-    publicRateScenario(selected, scenario, prefs.profileFilters, row), mortgageInputs), [scenario, prefs.profileFilters, mortgageInputs]);
+    publicRateScenario(selected, scenario, prefs.profileFilters, row), mortgageInputs, mortgageFilters), [scenario, prefs.profileFilters, mortgageInputs, mortgageFilters]);
   const rowScenario = useCallback((row: RateRow) => scenarioFor(section, row), [scenarioFor, section]);
   const comparisonCore = useMemo(() => core ? publicComparisonCore(core, catalogue, scenarioFor) : null, [core, catalogue, scenarioFor]);
   useReadyNavigationEffect(useCallback(() => {

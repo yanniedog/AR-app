@@ -2,6 +2,7 @@ import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import Compare from '../app/compare';
 import { catalogue, core, product, programme } from '../testUtils/publicRateJourney';
+import { captureRatesSession, restoreRatesSession, updateRatesSection } from '../src/data/ratesSession';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { useMortgageComparison, clearMortgageComparison } from '../src/data/mortgageComparison';
 import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
@@ -62,6 +63,34 @@ test('Compare retains amount/LVR eligibility and pricing for offers selected wit
     expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(0);
   } finally {
     act(() => { tree.unmount(); clearMortgageComparison(); });
+    installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));
+  }
+});
+
+test('Compare and rate evidence reuse temporary purpose and repayment from the Rates session', () => {
+  const previous = captureRatesSession();
+  const products = ['a', 'b'].map(id => ({ ...product, productId: id, productKey: id, name: id, programmeIds: [id] }));
+  const programmes = products.map(item => {
+    const p = programme({ productId: item.productId, programmeId: item.productId, offerId: item.productId, sourceBindings: [], conditions: [
+      { conditionId: 'purpose', field: 'purpose', operator: 'eq', value: 'INVESTMENT', evidenceIds: [] },
+      { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: 'INTEREST_ONLY', evidenceIds: [] },
+    ] });
+    return { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() }, components: [{ ...p.components[0], scopeId: item.productId }] };
+  });
+  mockCatalogue = { ...catalogue(programmes, products, []), loadAll: async () => undefined };
+  mockState = { core: core([]), manifest: null, prefs: DEFAULT_PREFS, details: { products: {} }, ensureDetails: jest.fn() };
+  mockKeys = JSON.stringify(products.map(item => publicOfferSelectionToken(item.productKey, item.productId)));
+  installMandatoryEligibility(selectMandatoryEligibility(mockState.core, DEFAULT_PREFS.profileFilters, null));
+  updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: ['INVESTMENT'], repaymentTypes: ['INTEREST_ONLY'] } }));
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<Compare />) as Tree; });
+  try {
+    expect(tree.root.findAllByType('EmptyState')).toHaveLength(0);
+    const evidence = tree.root.findAllByType('PublicRateEvidence');
+    expect(evidence).toHaveLength(2);
+    expect(evidence.every(node => node.props.scenario.purpose === 'INVESTMENT' && node.props.scenario.repayment === 'INTEREST_ONLY')).toBe(true);
+  } finally {
+    act(() => { tree.unmount(); restoreRatesSession(previous); });
     installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));
   }
 });
