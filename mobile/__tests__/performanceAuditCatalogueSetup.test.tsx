@@ -15,6 +15,7 @@ import { catalogueFixture } from '../testUtils/publicRates';
 import { core } from '../testUtils/publicRateJourney';
 import { debugLog } from '../src/lib/debugLog';
 import { EMPTY_PROFILE } from '../src/data/profile';
+import { buildDeidentifiedPerformanceAudit } from '../src/lib/diagnosticsEnvelope';
 
 const originalFetch = globalThis.fetch;
 jest.mock('../src/data/publicRateCache', () => ({ publicRateAssetCache: { read: jest.fn(async () => null), retain: jest.fn(async () => {}) } }));
@@ -136,7 +137,14 @@ test.each(['local', 'live-source'] as const)('mounted %s audit rejects a pre-exi
     expect(hasAppHealthFetchGuard()).toBe(false);
     expect(debugLog.error).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('catalogueAdmissionRejected'));
     expect(debugLog.error).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('completedBeforeFailure'));
-    expect(debugLog.storePerformanceAudit).not.toHaveBeenCalled();
+    expect(debugLog.storePerformanceAudit).toHaveBeenCalledWith(expect.stringContaining('admissionRejected=true'), expect.objectContaining({
+      sessionId: getPerformanceAuditState().sessionId,
+      checks: [expect.objectContaining({ metrics: expect.objectContaining({ catalogueAdmissionRejected: true, executionAttempted: false }) })],
+    }));
+    const firstReport = getPerformanceAuditState().report!;
+    expect(buildDeidentifiedPerformanceAudit(firstReport).checks[0]).toMatchObject({
+      id: 'setup-pinned-inputs', failureCode: 'catalogue-work-in-progress', durationMs: null,
+    });
     expect(measurePerformanceAuditSetupStage).not.toHaveBeenCalled();
     expect(buildPerformanceAuditSetupPlans).not.toHaveBeenCalled();
     // The failed admission releases the run gate, so a new user attempt is
@@ -146,6 +154,7 @@ test.each(['local', 'live-source'] as const)('mounted %s audit rejects a pre-exi
     await act(async () => { requestPerformanceAudit({ uploadLog: false, mode }); });
     expect(beginPublicRateCatalogueAudit).toHaveBeenCalledTimes(admissions + 1);
     expect(getPerformanceAuditState().status).toBe('failed');
+    expect(getPerformanceAuditState().report).not.toBe(firstReport);
     expect(hasAppHealthFetchGuard()).toBe(false);
     // A late completion cannot resume this rejected run or pin its result.
     await act(async () => { reject(new Error('normal request fixture finished')); await normal; });
