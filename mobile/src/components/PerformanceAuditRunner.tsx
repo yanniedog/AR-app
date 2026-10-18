@@ -2,7 +2,7 @@ import { captureUserRateScenarioForAudit } from '../hooks/useUserRateScenario';
 import { AuditDatasetChangedError, prepareAuditPublicCore, assertAuditPublicCataloguePinned } from '../lib/performanceAuditDataset';
 import type { PublicCatalogueView } from '../data/publicRateIntegration';
 import { validatePublicRateCapability } from '../data/publicRateWire';
-import { preparePublicRateCatalogueForAudit, getPublicRateCatalogueSnapshot } from '../data/publicRateCatalogue';
+import { beginPublicRateCatalogueAudit, preparePublicRateCatalogueForAudit, getPublicRateCatalogueSnapshot } from '../data/publicRateCatalogue';
 import { normalizeUserRateScenario } from '../data/userRateScenario';
 import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
 import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSelection';
@@ -2625,6 +2625,22 @@ export function PerformanceAuditRunner() {
     // re-runs this effect once that run lets go of the gate.
     if (!claimRun(state.sessionId)) return;
 
+    // Admission and reservation share one synchronous boundary with guard setup.
+    // A normal request opened before this point cannot belong to this audit.
+    let catalogueSession: ReturnType<typeof beginPublicRateCatalogueAudit>;
+    try { catalogueSession = beginPublicRateCatalogueAudit(); }
+    catch (caught) {
+      const error = formatAuditErrorForLog(caught);
+      logAuditCheck(installedAuditIdentity(), state.sessionId, {
+        ...PERFORMANCE_AUDIT_SETUP_STAGES.inputs, status: 'fail', durationMs: null,
+        metrics: { nonTimingFailure: true, measurementAvailable: false, completedBeforeFailure: 0,
+          catalogueAdmissionRejected: true }, error, trace: undefined,
+      });
+      failPerformanceAudit(error);
+      releaseRun();
+      return;
+    }
+
     const execute = async () => {
       setPassiveAuditPaused(true);
       const sessionId = state.sessionId!;
@@ -2721,7 +2737,7 @@ export function PerformanceAuditRunner() {
       let ratesSessionSnapshot: ReturnType<typeof captureRatesSession> | null = null;
       // These exploratory amounts never enter the durable rollback journal or report.
       const mortgageComparisonSnapshot = { ...useMortgageComparison.getState() };
-      let quiesceAuditCatalogue: (() => void) | undefined;
+      let quiesceAuditCatalogue: (() => void) | undefined = catalogueSession.quiesce;
       let ratesSessionRestored = false;
       const restoreRatesUi = () => {
         if (ratesSessionSnapshot && !ratesSessionRestored) {
@@ -2758,7 +2774,7 @@ export function PerformanceAuditRunner() {
         contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
       });
       let drainAuditCatalogue: (() => Promise<void>) | undefined;
-      let releaseAuditCatalogue: (() => void) | undefined;
+      let releaseAuditCatalogue: (() => void) | undefined = catalogueSession.release;
       let transportGuardRestored = false;
       const restoreTransportGuard = () => {
         if (transportGuardRestored) return;
@@ -2967,7 +2983,7 @@ export function PerformanceAuditRunner() {
           if (manifest?.public_rate_catalogue) {
             const capability = validatePublicRateCapability(manifest);
             if (capability) transportGuard.allowManifestAssets([capability.index.url, ...capability.shards.map(asset => asset.url)]);
-            const catalogueLoad = preparePublicRateCatalogueForAudit(manifest);
+            const catalogueLoad = catalogueSession.prepare(manifest);
             drainAuditCatalogue = catalogueLoad.cancelAndDrain;
             releaseAuditCatalogue = catalogueLoad.release;
             quiesceAuditCatalogue = catalogueLoad.quiesce;

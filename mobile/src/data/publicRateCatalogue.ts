@@ -27,6 +27,8 @@ export interface PublicRateCatalogueState {
 }
 interface CatalogueClient { snapshot(): PublicRateCatalogueState; subscribe(listener: () => void): () => void; start(): Promise<void> }
 const clients = new Map<string, CatalogueClient>();
+// Includes clients evicted from the small cache while their workers still run.
+const normalCatalogueWork = new Set<object>();
 let mostRecent: PublicRateCatalogueState | undefined;
 let activeClient: CatalogueClient | undefined;
 let activeManifestKey: string | undefined;
@@ -94,7 +96,16 @@ async function acquire(edition: string, asset: PublicRateAsset, isIndex: boolean
 
 export function createPublicRateCatalogueClient(manifest: Manifest,
   acquisition: (asset: PublicRateAsset, isIndex: boolean) => Promise<unknown> = (asset, isIndex) => acquire(hashText(canonical(manifest.public_rate_catalogue)), asset, isIndex),
-  lifecycle: { signal?: AbortSignal; abort?: () => void } = {}): CatalogueClient {
+  lifecycle: { signal?: AbortSignal; abort?: () => void; normalOwner?: object } = {}): CatalogueClient {
+  let workCount = 0;
+  const tracked = <T,>(work: () => Promise<T>): Promise<T> => {
+    // Gate the original methods too: callers can retain a pre-audit snapshot.
+    if (lifecycle.normalOwner && auditReservation) return auditReservation.released.then(() => tracked(work));
+    if (lifecycle.normalOwner && workCount++ === 0) normalCatalogueWork.add(lifecycle.normalOwner);
+    return (async () => { try { return await work(); } finally {
+      if (lifecycle.normalOwner && --workCount === 0) normalCatalogueWork.delete(lifecycle.normalOwner);
+    } })();
+  };
   const active = () => assertCatalogueActive(lifecycle.signal);
   const workers = async (work: () => Promise<void>) => {
     let firstFailure: unknown;
@@ -135,7 +146,7 @@ export function createPublicRateCatalogueClient(manifest: Manifest,
     if (activeClient?.snapshot() === state) mostRecent = state;
     listeners.forEach(listener => listener());
   };
-  const start = () => {
+  const start = () => tracked(async () => {
     active();
     if (!startPromise) startPromise = acquisition(capability.index, true).then(async raw => {
       active();
@@ -150,7 +161,7 @@ export function createPublicRateCatalogueClient(manifest: Manifest,
       if (!(error instanceof LocalCatalogueCacheMiss)) publish(error instanceof Error ? error.message : 'Public rate catalogue unavailable'); startPromise = undefined; throw error;
     });
     return startPromise;
-  };
+  });
   const loadShard = (asset: PublicRateAsset): Promise<void> => {
     active();
     if (loaded.has(asset.name)) return Promise.resolve();
@@ -182,17 +193,17 @@ export function createPublicRateCatalogueClient(manifest: Manifest,
     }).catch((error: unknown) => { if (!(error instanceof LocalCatalogueCacheMiss)) publish(error instanceof Error ? error.message : 'Public pricing shard unavailable'); throw error; }).finally(() => { pending.delete(asset.name); });
     pending.set(asset.name, task); return task;
   };
-  const loadProduct = async (productId: string) => {
+  const loadProduct = (productId: string) => tracked(async () => {
     await start();
     const routes = index!.shards.filter(shard => shard.productIds.includes(productId));
     for (const route of routes) await loadShard(capability.shards.find(asset => asset.name === route.name)!);
-  };
-  const loadAll = async () => {
+  });
+  const loadAll = () => tracked(async () => {
     await start();
     let cursor = 0;
     const worker = async () => { while (cursor < capability.shards.length) { active(); const asset = capability.shards[cursor++]; await loadShard(asset); await yieldToUi(0); } };
     await workers(worker); publish();
-  };
+  });
   state = { ...unavailable, status: 'loading', generationId: capability.generationId, getProduct, getProgrammes, loadProduct, loadAll };
   return { snapshot: () => state, subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, start };
 }
@@ -202,7 +213,7 @@ function clientFor(manifest: Manifest | null): CatalogueClient {
   const key = manifestKey(manifest)!;
   const cached = clients.get(key); if (cached) return cached;
   let client: CatalogueClient;
-  try { client = createPublicRateCatalogueClient(manifest); }
+  try { client = createPublicRateCatalogueClient(manifest, undefined, { normalOwner: {} }); }
   catch (error) {
     const failed = { ...unavailable, status: 'error' as const, error: error instanceof Error ? error.message : 'Invalid public rate catalogue' };
     client = { snapshot: () => failed, subscribe: () => () => undefined, start: async () => undefined };
@@ -256,17 +267,15 @@ export interface AuditPublicRateCatalogueLoad {
   release(): void;
 }
 
-/** Audit probing cannot publish expected cache misses into the normal UI client. */
-export function preparePublicRateCatalogueForAudit(manifest: Manifest): AuditPublicRateCatalogueLoad {
-  const normalClient = clientFor(manifest), existing = normalClient.snapshot();
-  const key = manifestKey(manifest);
-  if (!key) return { ready: Promise.resolve(existing), cancelAndDrain: async () => undefined,
-    quiesce: () => undefined, release: () => undefined };
-  const controller = new AbortController(), owner = {};
+/** Reserve synchronously before installing an audit guard or awaiting setup. */
+export function beginPublicRateCatalogueAudit() {
+  if (normalCatalogueWork.size) throw new Error('Public pricing catalogue work is in progress. Retry the audit after it finishes.');
   if (auditReservation) throw new Error('Public pricing catalogue preparation already belongs to an audit');
+  const controller = new AbortController(), owner = {};
   let resume!: () => void;
   const released = new Promise<void>(resolve => { resume = resolve; });
   auditReservation = { owner, released, resume, snapshots: new WeakMap() };
+  let quiescePrepared = () => undefined as void;
   const release = () => {
     controller.abort();
     if (auditReservation?.owner !== owner) return;
@@ -276,40 +285,54 @@ export function preparePublicRateCatalogueForAudit(manifest: Manifest): AuditPub
     lease.resume();
     auditListeners.forEach(listener => listener());
   };
-  const quiesce = () => {
-    controller.abort();
-    if (auditOverlay?.owner !== owner) return;
-    auditOverlay = { owner, key, state: reservedSnapshot(normalClient) };
+  const prepare = (manifest: Manifest): AuditPublicRateCatalogueLoad => {
+    if (auditReservation?.owner !== owner || controller.signal.aborted) throw new Error('Public pricing catalogue audit reservation has ended');
+    const normalClient = clientFor(manifest), existing = normalClient.snapshot();
+    const key = manifestKey(manifest);
+    if (!key) return { ready: Promise.resolve(existing), cancelAndDrain: async () => undefined, quiesce: () => undefined, release };
+    const quiesce = quiescePrepared = () => {
+      controller.abort();
+      if (auditOverlay?.owner !== owner) return;
+      auditOverlay = { owner, key, state: reservedSnapshot(normalClient) };
+      auditListeners.forEach(listener => listener());
+    };
+    // The warm path keeps its validated snapshot and does no acquisition, while
+    // still reserving different-generation UI requests until audit teardown.
+    if (existing.status === 'ready' && existing.allLoaded) {
+      auditOverlay = { owner, key, state: existing };
+      auditListeners.forEach(listener => listener());
+      return { ready: Promise.resolve(existing), cancelAndDrain: async () => { controller.abort(); }, quiesce, release };
+    }
+    const localOnly = isLocalAppHealthAudit();
+    let client: CatalogueClient;
+    try {
+      client = createPublicRateCatalogueClient(manifest,
+        (asset, isIndex) => acquire(hashText(canonical(manifest.public_rate_catalogue)), asset, isIndex, controller.signal, localOnly),
+        { signal: controller.signal, abort: () => controller.abort() });
+    } catch (error) { release(); throw error; }
+    // While preparing, mounted hooks retain usable metadata but route their
+    // load requests to this lease instead of starting shared-client requests.
+    let ready!: Promise<PublicRateCatalogueState>;
+    const pendingState = { ...existing, loadProduct: async () => { await ready; }, loadAll: async () => { await ready; } };
+    auditOverlay = { owner, key, state: pendingState };
+    ready = (async () => {
+      await client.snapshot().loadAll();
+      assertCatalogueActive(controller.signal);
+      const state = client.snapshot();
+      if (state.status !== 'ready' || !state.allLoaded) throw new Error('Public pricing catalogue is not fully available');
+      auditOverlay = { owner, key, state };
+      auditListeners.forEach(listener => listener());
+      return state;
+    })();
     auditListeners.forEach(listener => listener());
+    return { ready, async cancelAndDrain() { controller.abort(); await ready.catch(() => undefined); }, quiesce, release };
   };
-  // The warm path keeps its validated snapshot and does no acquisition, while
-  // still reserving different-generation UI requests until audit teardown.
-  if (existing.status === 'ready' && existing.allLoaded) {
-    auditOverlay = { owner, key, state: existing };
-    auditListeners.forEach(listener => listener());
-    return { ready: Promise.resolve(existing), cancelAndDrain: async () => { controller.abort(); }, quiesce, release };
-  }
-  const localOnly = isLocalAppHealthAudit();
-  let client: CatalogueClient;
-  try {
-    client = createPublicRateCatalogueClient(manifest,
-      (asset, isIndex) => acquire(hashText(canonical(manifest.public_rate_catalogue)), asset, isIndex, controller.signal, localOnly),
-      { signal: controller.signal, abort: () => controller.abort() });
-  } catch (error) { release(); throw error; }
-  // While preparing, mounted hooks retain usable metadata but route their
-  // load requests to this lease instead of starting shared-client requests.
-  let ready!: Promise<PublicRateCatalogueState>;
-  const pendingState = { ...existing, loadProduct: async () => { await ready; }, loadAll: async () => { await ready; } };
-  auditOverlay = { owner, key, state: pendingState };
-  ready = (async () => {
-    await client.snapshot().loadAll();
-    assertCatalogueActive(controller.signal);
-    const state = client.snapshot();
-    if (state.status !== 'ready' || !state.allLoaded) throw new Error('Public pricing catalogue is not fully available');
-    auditOverlay = { owner, key, state };
-    auditListeners.forEach(listener => listener());
-    return state;
-  })();
   auditListeners.forEach(listener => listener());
-  return { ready, async cancelAndDrain() { controller.abort(); await ready.catch(() => undefined); }, quiesce, release };
+  return { prepare, release, quiesce: () => quiescePrepared() };
+}
+
+/** Audit probing cannot publish expected cache misses into the normal UI client. */
+export function preparePublicRateCatalogueForAudit(manifest: Manifest): AuditPublicRateCatalogueLoad {
+  const session = beginPublicRateCatalogueAudit();
+  try { return session.prepare(manifest); } catch (error) { session.release(); throw error; }
 }

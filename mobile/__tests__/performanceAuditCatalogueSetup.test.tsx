@@ -4,15 +4,16 @@ import { gzipSync } from 'node:zlib';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import { automaticDataUrl } from '../src/lib/automaticDataAccess';
-import { installAppHealthTransportGuard } from '../src/lib/appHealthTransportGuard';
+import { installAppHealthTransportGuard, hasAppHealthFetchGuard } from '../src/lib/appHealthTransportGuard';
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceContract';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { PerformanceAuditRunner } from '../src/components/PerformanceAuditRunner';
 import { getPerformanceAuditState, requestPerformanceAudit, resetPerformanceAuditForTests } from '../src/lib/performanceAudit';
-import { createPublicRateCatalogueClient } from '../src/data/publicRateCatalogue';
+import { beginPublicRateCatalogueAudit, createPublicRateCatalogueClient, ensurePublicRateCatalogueLoaded } from '../src/data/publicRateCatalogue';
 import { buildPerformanceAuditSetupPlans, measurePerformanceAuditSetupStage } from '../src/lib/performanceAuditSetup';
 import { catalogueFixture } from '../testUtils/publicRates';
 import { core } from '../testUtils/publicRateJourney';
+import { debugLog } from '../src/lib/debugLog';
 import { EMPTY_PROFILE } from '../src/data/profile';
 
 const originalFetch = globalThis.fetch;
@@ -37,10 +38,10 @@ jest.mock('../src/lib/debugLog', () => ({
 jest.mock('../src/data/publicRateCatalogue', () => ({
   ...jest.requireActual('../src/data/publicRateCatalogue'),
   getPublicRateCatalogueSnapshot: () => mockClient.snapshot(),
-  preparePublicRateCatalogueForAudit: jest.fn(() => {
+  beginPublicRateCatalogueAudit: jest.fn(() => ({ release: () => undefined, quiesce: () => undefined, prepare: () => {
     const ready = mockClient.snapshot().loadAll().then(() => mockClient.snapshot());
     return { ready, cancelAndDrain: async () => { await ready.catch(() => undefined); }, quiesce: () => undefined, release: () => undefined };
-  }),
+  } })),
 }));
 jest.mock('../src/lib/performanceAuditSetup', () => {
   const real = jest.requireActual('../src/lib/performanceAuditSetup');
@@ -107,4 +108,48 @@ test('a local audit cache miss is unavailable without attempting even one guarde
     expect(transport).not.toHaveBeenCalled();
     expect(guard.snapshot()).toMatchObject({ authorizationAttempts: 0, transportCalls: 0, blockedAttempts: 0 });
   } finally { guard.restore(); }
+});
+
+
+test.each(['local', 'live-source'] as const)('mounted %s audit rejects a pre-existing normal request before setup or guard installation', async mode => {
+  Object.defineProperty(AppState, 'currentState', { configurable: true, value: 'active' });
+  const f = catalogueFixture();
+  f.manifest.payload_revision = { ...f.manifest.payload_revision!, bundle_sha256: (mode === 'local' ? 'a' : 'b').repeat(64) };
+  let reject!: (error: Error) => void;
+  const originalXhr = globalThis.XMLHttpRequest;
+  class PendingXhr {
+    status = 500; onload?: () => void; onloadend?: () => void;
+    open() {} setRequestHeader() {} abort() {}
+    send() { reject = () => { this.onload?.(); this.onloadend?.(); }; }
+  }
+  globalThis.XMLHttpRequest = PendingXhr as unknown as typeof XMLHttpRequest;
+  const normal = ensurePublicRateCatalogueLoaded(f.manifest).catch(() => undefined);
+  for (let turn = 0; turn < 100 && !reject; turn++) await Promise.resolve();
+  expect(reject).toBeDefined();
+  jest.mocked(beginPublicRateCatalogueAudit).mockImplementationOnce(jest.requireActual('../src/data/publicRateCatalogue').beginPublicRateCatalogueAudit);
+  mockState = { manifest: f.manifest };
+  requestPerformanceAudit({ uploadLog: false, mode });
+  let tree!: ReactTestRenderer;
+  try {
+    await act(async () => { tree = TestRenderer.create(<PerformanceAuditRunner />); });
+    expect(getPerformanceAuditState()).toMatchObject({ status: 'failed', error: expect.stringContaining('work is in progress') });
+    expect(hasAppHealthFetchGuard()).toBe(false);
+    expect(debugLog.error).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('catalogueAdmissionRejected'));
+    expect(debugLog.error).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('completedBeforeFailure'));
+    expect(debugLog.storePerformanceAudit).not.toHaveBeenCalled();
+    expect(measurePerformanceAuditSetupStage).not.toHaveBeenCalled();
+    expect(buildPerformanceAuditSetupPlans).not.toHaveBeenCalled();
+    // The failed admission releases the run gate, so a new user attempt is
+    // checked again rather than remaining queued behind the rejected run.
+    const admissions = jest.mocked(beginPublicRateCatalogueAudit).mock.calls.length;
+    jest.mocked(beginPublicRateCatalogueAudit).mockImplementationOnce(jest.requireActual('../src/data/publicRateCatalogue').beginPublicRateCatalogueAudit);
+    await act(async () => { requestPerformanceAudit({ uploadLog: false, mode }); });
+    expect(beginPublicRateCatalogueAudit).toHaveBeenCalledTimes(admissions + 1);
+    expect(getPerformanceAuditState().status).toBe('failed');
+    expect(hasAppHealthFetchGuard()).toBe(false);
+    // A late completion cannot resume this rejected run or pin its result.
+    await act(async () => { reject(new Error('normal request fixture finished')); await normal; });
+    expect(getPerformanceAuditState().status).toBe('failed');
+    expect(measurePerformanceAuditSetupStage).not.toHaveBeenCalled();
+  } finally { act(() => tree?.unmount()); globalThis.XMLHttpRequest = originalXhr; }
 });

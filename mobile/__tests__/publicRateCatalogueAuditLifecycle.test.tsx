@@ -10,7 +10,7 @@ import { gzipSync, strToU8 } from 'fflate';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import { catalogueFixture } from '../testUtils/publicRates';
-import { ensurePublicRateCatalogueLoaded, getPublicRateCatalogueSnapshot, preparePublicRateCatalogueForAudit, usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
+import { beginPublicRateCatalogueAudit, ensurePublicRateCatalogueLoaded, getPublicRateCatalogueSnapshot, preparePublicRateCatalogueForAudit, usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
 import { installAppHealthTransportGuard, hasAppHealthFetchGuard } from '../src/lib/appHealthTransportGuard';
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceContract';
 import { automaticDataUrl } from '../src/lib/automaticDataAccess';
@@ -293,4 +293,73 @@ test('the optional download signal also aborts XHR and removes its listener outs
       .rejects.toThrow('Payload download cancelled');
     expect(create).not.toHaveBeenCalled();
   } finally { globalThis.XMLHttpRequest = originalXhr; removed.mockRestore(); }
+});
+
+
+test.each(['local', 'live-source'] as const)('early %s admission rejects existing normal workers, including evicted clients, without adopting their later result', async mode => {
+  const f = fixture(); cache(f, [f.capability.index]);
+  const completions: (() => void)[] = [];
+  const originalXhr = globalThis.XMLHttpRequest;
+  class DeferredXhr {
+    status = 200; response: ArrayBuffer | null = null; url = '';
+    onload?: () => void; onloadend?: () => void;
+    open(_method: string, url: string) { this.url = url; }
+    send() { completions.push(() => {
+      this.response = Uint8Array.from(f.values.get(this.url)!).buffer;
+      this.onload?.(); this.onloadend?.();
+    }); }
+    setRequestHeader() {} abort() {}
+  }
+  globalThis.XMLHttpRequest = DeferredXhr as unknown as typeof XMLHttpRequest;
+  const work = ensurePublicRateCatalogueLoaded(f.manifest);
+  await until(() => completions.length === 2);
+  // Eviction must not erase actual worker ownership.
+  getPublicRateCatalogueSnapshot(fixture().manifest);
+  getPublicRateCatalogueSnapshot(fixture().manifest);
+  expect(() => beginPublicRateCatalogueAudit()).toThrow('work is in progress');
+  expect(hasAppHealthFetchGuard()).toBe(false);
+  expect(publicRateAssetCache.retain).not.toHaveBeenCalled();
+  // No audit guard was installed. The legitimate UI operation can finish, but
+  // there is no accepted audit snapshot or later preparation to consume it.
+  for (let n = 0; n < 4; n++) { await until(() => completions.length > n); completions[n](); }
+  await work;
+  const session = beginPublicRateCatalogueAudit();
+  const policy = guard(f, mode);
+  try { expect(hasAppHealthFetchGuard()).toBe(true); }
+  finally { policy.restore(); session.release(); globalThis.XMLHttpRequest = originalXhr; }
+});
+
+test('early reservation gates original captured methods before delayed preparation', async () => {
+  const f = fixture(); cache(f, [f.capability.index]);
+  await ensurePublicRateCatalogueLoaded(f.manifest, false);
+  const stale = getPublicRateCatalogueSnapshot(f.manifest);
+  const wire = jest.fn(async (input: RequestInfo | URL) => response(String(input), f.values.get(String(input))!));
+  globalThis.fetch = wire as typeof fetch;
+  const session = beginPublicRateCatalogueAudit();
+  const policy = guard(f, 'local');
+  let settled = false;
+  const normal = stale.loadAll().then(() => { settled = true; });
+  await Promise.resolve(); await Promise.resolve();
+  expect(wire).not.toHaveBeenCalled(); expect(settled).toBe(false);
+  const load = session.prepare(f.manifest);
+  await expect(load.ready).rejects.toThrow('retained offline cache');
+  await load.cancelAndDrain(); session.quiesce();
+  expect(wire).not.toHaveBeenCalled(); expect(settled).toBe(false);
+  policy.restore();
+  const live = guard(f, 'live-source');
+  session.release();
+  try { await normal; expect(wire).toHaveBeenCalledTimes(4); } finally { live.restore(); }
+});
+
+
+test('a legacy manifest keeps the early reservation until explicit release and permits the next audit', async () => {
+  const f = fixture();
+  const legacy = { ...f.manifest, public_rate_catalogue: undefined };
+  const session = beginPublicRateCatalogueAudit();
+  const load = session.prepare(legacy);
+  expect(await load.ready).toMatchObject({ status: 'unavailable' });
+  await load.cancelAndDrain(); session.quiesce();
+  expect(() => beginPublicRateCatalogueAudit()).toThrow('already belongs');
+  session.release();
+  const next = beginPublicRateCatalogueAudit(); next.release();
 });
