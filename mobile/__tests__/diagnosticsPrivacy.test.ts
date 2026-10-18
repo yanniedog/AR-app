@@ -60,6 +60,26 @@ function reportFixture(checks: AuditCheck[]): PerformanceAuditReport {
 }
 
 describe('deidentified diagnostics privacy boundary', () => {
+  it('retains fixed setup identities and safe outcomes while excluding private errors', () => {
+    const ids = ['setup-safety', 'setup-payload-settle', 'setup-pinned-inputs',
+      'setup-external-link-inventory', 'setup-environment', 'setup-private-account'];
+    const checks: AuditCheck[] = ids.map(id => ({ id, label: 'Private label', kind: 'data',
+      status: 'fail', durationMs: 306.6, error: 'Private account: 123456; https://private.invalid',
+      metrics: { setupStage: true, stepLimitMs: 10_000, stepLimitExceeded: false } }));
+    checks[2] = { ...checks[2], status: 'skipped', metrics: {
+      publicCatalogueCacheMiss: true, availabilityFailure: true, executionAttempted: true,
+    } };
+    const body = createDeidentifiedDiagnosticsShare(reportFixture(checks)).body;
+    const parsed = JSON.parse(body);
+    expect(parsed.checks.map((check: { id: string | null }) => check.id)).toEqual([...ids.slice(0, 5), null]);
+    expect(parsed.checks[0].failureCode).toBe('check-failed');
+    expect(createDeidentifiedDiagnosticsShare(reportFixture(checks)).fields.join(' ')).toContain('enumerated failure codes');
+    expect(parsed.checks[2]).toMatchObject({ failureCode: 'public-catalogue-cache-miss',
+      metrics: { publicCatalogueCacheMiss: true, availabilityFailure: true } });
+    expect(body).not.toContain('Private');
+    expect(body).not.toContain('123456');
+    expect(body).not.toContain('private.invalid');
+  });
   it.each(['pass', 'skipped'] as const)('preserves measured readiness savings for %s checks without private evidence', (status) => {
     const checks: AuditCheck[] = [true, false].map((reused) => ({
       id: 'deep-first-pass.search.action', label: 'Private label', kind: 'journey', status,

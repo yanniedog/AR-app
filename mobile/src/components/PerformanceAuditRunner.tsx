@@ -2640,13 +2640,37 @@ export function PerformanceAuditRunner() {
     try { catalogueSession = beginPublicRateCatalogueAudit(); }
     catch (caught) {
       const error = formatAuditErrorForLog(caught);
-      logAuditCheck(installedAuditIdentity(), state.sessionId, {
+      const app = installedAuditIdentity();
+      const check: AuditCheck = {
         ...PERFORMANCE_AUDIT_SETUP_STAGES.inputs, status: 'fail', durationMs: null,
         metrics: { nonTimingFailure: true, measurementAvailable: false, completedBeforeFailure: 0,
-          catalogueAdmissionRejected: true }, error, trace: undefined,
-      });
-      failPerformanceAudit(error);
-      releaseRun();
+          catalogueAdmissionRejected: true, executionAttempted: false }, error, trace: undefined,
+      };
+      logAuditCheck(app, state.sessionId, check);
+      const finishedAt = new Date().toISOString();
+      const summaryMarker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=${state.sessionId} partial=true admissionRejected=true`;
+      const report: PerformanceAuditReport = {
+        schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION, sessionId: state.sessionId,
+        startedAt: state.startedAt, finishedAt, durationMs: 0,
+        app, watchdog: { hangTimeoutMs: state.hangTimeoutMs, storedCheckCount: 0, lastStoredCheckAt: null },
+        environment: fallbackEnvironment(app, dimensions.width, dimensions.height, dimensions.fontScale),
+        checks: [check], summary: summarizePerformanceAudit([check]), routeAggregates: [],
+        limitations: ['Audit admission failed before setup or any foreground checks ran.'],
+      };
+      void (async () => {
+        let storageError: string | null = null;
+        try {
+          await timeoutAfter(debugLog.storePerformanceAudit(
+            summaryMarker, report,
+          ), PERFORMANCE_AUDIT_STEP_LIMIT_MS, 'Admission failure persistence');
+        } catch (caught) { storageError = formatAuditError(caught); }
+        finally {
+          failPerformanceAudit([error, ...(storageError ? [storageError] : [])].join('\n'), false, report);
+          startPerformanceAuditLogUpload(state.uploadLog, { sessionId: report.sessionId,
+            appVersion: app.appVersion, buildVersion: app.buildVersion, audit: { summaryMarker, report } });
+          releaseRun();
+        }
+      })();
       return;
     }
 
@@ -3024,6 +3048,10 @@ export function PerformanceAuditRunner() {
             navigationJourneys.length * 2 + plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
           return { initialStore, datasetRevision };
         }, ({ datasetRevision }) => ({ datasetRevision: datasetRevisionLabel(datasetRevision),
+          ...(datasetRevision.publicCatalogue?.auditUnavailableReason === 'cache-miss' ? {
+            availabilityFailure: true, publicCatalogueCacheMiss: true,
+            skipClassification: 'terminal-availability',
+          } : {}),
           samplingSeed: plan.inputs.sampling.seed, sampledProducts: plan.inputs.sampling.sampledProducts,
           sampledProviders: plan.inputs.sampling.sampledProviders, foregroundCatalogueRendered: false }));
 
@@ -4040,7 +4068,7 @@ export function PerformanceAuditRunner() {
           failPerformanceAudit([
             error,
             ...(partialStoreError ? [`Partial report storage failed: ${partialStoreError}`] : []),
-          ].join('\n'), mutationRecoveryRequired);
+          ].join('\n'), mutationRecoveryRequired, partialReport);
           startPerformanceAuditLogUpload(uploadLog, {
             sessionId,
             appVersion: app.appVersion,

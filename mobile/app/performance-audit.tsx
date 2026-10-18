@@ -22,6 +22,7 @@ import {
 import { AppText, Button, Card, Disclosure, Row } from '../src/components/ui';
 import {
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
+  auditReportCompletionLabel,
   getPerformanceAuditState,
   MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
   MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
@@ -343,7 +344,7 @@ function PerformanceAuditScreenInner() {
         </Card>
         <Card style={{ gap: 8,borderWidth:1,borderColor:summaryColor }}>
           <Row style={{justifyContent:'space-between'}}><AppText variant="h3">{uiLabel('Diagnosis')}</AppText><AppText style={{color:summaryColor}}>{outcome(report.summary.overall)}</AppText></Row>
-          <InfoRow label="Report" value={report.sessionId === state.sessionId ? 'Complete' : 'Saved'} />
+          <InfoRow label="Report" value={auditReportCompletionLabel(report, state)} />
           <InfoRow label="As at" value={uiDate(report.finishedAt)} />
           <AuditOutcomeSymbols checks={report.checks} />
           <InfoRow label="Check completion" value={report.summary.coveragePercent == null ? 'Unknown':uiJoin(uiNumber(report.summary.coveragePercent,1),'%')} />

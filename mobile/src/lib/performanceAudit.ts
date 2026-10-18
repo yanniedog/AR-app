@@ -661,16 +661,26 @@ export function markPerformanceAuditCancelled(): void {
   });
 }
 
-export function failPerformanceAudit(error: string, recoveryRequired = false): void {
+export function failPerformanceAudit(error: string, recoveryRequired = false, report?: PerformanceAuditReport): void {
   emit({
     ...auditState,
     status: 'failed',
     recoveryRequired,
+    report: report ?? auditState.report,
     cancelRequested: false,
     paused: false,
     progress: { ...auditState.progress, label: 'Audit failed' },
     error,
   });
+}
+
+export function auditReportCompletionLabel(
+  report: Pick<PerformanceAuditReport, 'sessionId' | 'coverage' | 'appHealth'>,
+  state: Pick<PerformanceAuditState, 'sessionId' | 'status'>,
+): 'Complete' | 'Partial' | 'Saved' {
+  if (report.sessionId !== state.sessionId) return 'Saved';
+  return state.status === 'complete' && report.coverage?.complete !== false && report.appHealth?.coverage.complete !== false
+    ? 'Complete' : 'Partial';
 }
 
 /** Page size used by the results screen. The selector returns every check in

@@ -33,6 +33,12 @@ describe('app-health v1 source contract', () => {
 });
 
 describe('app-health data quality', () => {
+  it('identifies the optional asset not observed without inventing a loaded result', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.assets!.rba_calendar = { state: 'not-requested' };
+    const result = byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS), APP_HEALTH_CHECK_CODES.ASSET_AVAILABILITY);
+    expect(result).toMatchObject({ status: 'unavailable', metrics: { optionalNotObserved: 1, rba_calendarState: 'not-requested' } });
+  });
   it.each(retainedNegativeRates.observations)(
     'accepts retained CommBank foreign currency rates from $source',
     ({ records }) => {

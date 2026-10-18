@@ -22,16 +22,22 @@ export function createPublicRateAssetCache(storage: PublicRateCacheStorage) {
     return `${edition}-${asset.sha256}.hex`;
   };
   return {
-    async read(edition: string, asset: PublicRateAsset): Promise<Uint8Array | null> {
+    async read(edition: string, asset: PublicRateAsset, options: { strict?: boolean } = {}): Promise<Uint8Array | null> {
       await queue.catch(() => undefined);
-      const name = filename(edition, asset), raw = await storage.read(name, asset.bytes * 2).catch(() => null);
+      const name = filename(edition, asset), raw = await storage.read(name, asset.bytes * 2).catch(error => {
+        if (options.strict) throw error;
+        return null;
+      });
       if (raw === null) return null;
       try {
         if (raw.length !== asset.bytes * 2 || !/^[a-f0-9]+$/.test(raw)) throw new Error('Corrupt public rate cache');
         const bytes = hexToBytes(raw);
         if (bytesToHex(sha256(bytes)) !== asset.sha256) throw new Error('Corrupt public rate cache hash');
         return bytes;
-      } catch { await storage.remove(name).catch(() => undefined); return null; }
+      } catch (error) {
+        if (options.strict) throw error;
+        await storage.remove(name).catch(() => undefined); return null;
+      }
     },
     retain(edition: string, asset: PublicRateAsset, bytes: Uint8Array): Promise<void> {
       const run = queue.catch(() => undefined).then(async () => {
@@ -76,9 +82,14 @@ const root = `${FileSystem.cacheDirectory}public-rates-v1/`;
 const key = (name: string) => `ar-public-rate-v1:${name}`;
 const storage: PublicRateCacheStorage = {
   async read(name, maximum) {
-    if (Platform.OS === 'web') { const value = globalThis.localStorage?.getItem(key(name)) ?? null; return value && value.length <= maximum ? value : null; }
+    if (Platform.OS === 'web') {
+      const value = globalThis.localStorage?.getItem(key(name)) ?? null;
+      if (value !== null && value.length > maximum) throw new Error('Oversized public rate cache');
+      return value;
+    }
     const info = await FileSystem.getInfoAsync(root + name);
-    if (!info.exists || info.isDirectory || info.size > maximum) return null;
+    if (!info.exists) return null;
+    if (info.isDirectory || info.size > maximum) throw new Error('Invalid public rate cache entry');
     return FileSystem.readAsStringAsync(root + name);
   },
   async writeAtomic(name, value) {

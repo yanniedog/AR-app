@@ -1,7 +1,10 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { toPublicAppHealthReport } from './appHealth';
+import { PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from './performanceAuditSetup';
 
 const METRIC_ALLOWLIST = new Set([
+  'setupStage', 'stepLimitMs', 'stepLimitExceeded', 'nonTimingFailure',
+  'publicCatalogueCacheMiss', 'catalogueAdmissionRejected',
   'durationMs',
   'forwardMs',
   'preActionWaitMs',
@@ -56,6 +59,7 @@ const METRIC_ALLOWLIST = new Set([
 ]);
 
 const FIXED_CHECK_IDS = new Set([
+  ...PERFORMANCE_AUDIT_SETUP_CHECK_IDS,
   'runtime-responsiveness',
   'maximum-coverage-profile',
   'async-storage',
@@ -82,7 +86,7 @@ export const DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW = [
   'payload source, run date, product/provider counts and optional-asset availability',
   'aggregate outcome/counts and measured responsiveness values',
   'aggregate data-quality, asset, display and network-policy findings',
-  'fixed check IDs, status, measured duration and allowlisted numeric/boolean metrics',
+  'fixed check IDs, status, enumerated failure codes, measured duration and allowlisted numeric/boolean metrics',
 ] as const;
 
 export interface DeidentifiedDiagnosticsShare {
@@ -151,6 +155,15 @@ function safePayloadSource(value: string): string {
   return ['remote', 'cache', 'sample'].includes(value) ? value : 'unknown';
 }
 
+/** Enumerated outcomes only: raw errors can contain routes and private data. */
+function failureCode(check: AuditCheck): string | null {
+  if (check.metrics.publicCatalogueCacheMiss === true) return 'public-catalogue-cache-miss';
+  if (check.metrics.catalogueAdmissionRejected === true) return 'catalogue-work-in-progress';
+  if (check.metrics.stepLimitExceeded === true) return 'step-limit-exceeded';
+  if (check.metrics.availabilityFailure === true) return 'unavailable';
+  return check.status === 'fail' ? 'check-failed' : null;
+}
+
 function safeDuration(check: AuditCheck): number | null {
   const value = check.durationMs;
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
@@ -205,6 +218,7 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
       id: safeCheckId(check.id),
       kind: check.kind,
       status: check.status,
+      failureCode: failureCode(check),
       durationMs: safeDuration(check),
       metrics: allowlistedMetrics(check),
     })),

@@ -47,7 +47,7 @@ export async function measurePerformanceAuditSetupStage<T>(
     });
     const evidence = options.metrics?.(value) ?? {};
     watchdog.assertWithinBudget();
-    return { value, check: { ...stage, status: 'pass', durationMs: roundMetric(watchdog.elapsedMs),
+    return { value, check: { ...stage, status: evidence.availabilityFailure === true ? 'skipped' : 'pass', durationMs: roundMetric(watchdog.elapsedMs),
       metrics: { ...metrics, ...evidence } } };
   } catch (error) {
     options.onFailure({ ...stage, status: 'fail', durationMs: roundMetric(watchdog.elapsedMs),
