@@ -1,0 +1,57 @@
+{
+  "version": "1.0.243",
+  "releaseTag": "app-arm-v1.0.243",
+  "date": "2026-10-18",
+  "summaryBullets": [
+    "Fix Live audit isolation and public pricing correctness (#415)",
+    "Finish public catalogue audit and notification integration (#414)",
+    "Fix saved requirements and paginate Rates with compact mortgage controls (#412)",
+    "Distinguish audit outcomes and reduce repeated lender lookups (#413)",
+    "Retain audit reports and automatically upload sanitized results (#408)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Fix Live audit isolation and public pricing correctness (#415)"
+        },
+        {
+          "text": "Finish public catalogue audit and notification integration (#414)"
+        },
+        {
+          "text": "Fix saved requirements and paginate Rates with compact mortgage controls (#412)"
+        },
+        {
+          "text": "Distinguish audit outcomes and reduce repeated lender lookups (#413)"
+        },
+        {
+          "text": "Retain audit reports and automatically upload sanitized results (#408)"
+        },
+        {
+          "text": "Resolve public product pricing and compare payable rates and costs (#402)"
+        },
+        {
+          "text": "Restore structured financial facts and identifiable term actions (#417)"
+        },
+        {
+          "text": "Remove vulnerable YAML formatter and isolate CodeQL Android setup (#416)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.243"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.242"
+        }
+      ]
+    }
+  ]
+}
