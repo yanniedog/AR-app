@@ -7,6 +7,7 @@ import { PERFORMANCE_AUDIT_STEP_LIMIT_MS } from './performanceAuditTiming';
 import { awaitPerformanceAuditWork } from './performanceAuditWork';
 import { buildDeepPerformanceAuditPlanFromInputs, deriveDeepAuditInputs, type DeepAuditSelectionOptions } from './performanceAuditPlan';
 import type { CorePayload, SectionKey } from '../types';
+import { auditDatasetFailureMetrics } from './performanceAuditDataset';
 
 export function buildPerformanceAuditSetupPlans(core: CorePayload | null,
   options: DeepAuditSelectionOptions = {}, interests?: SectionKey[]) {
@@ -51,7 +52,7 @@ export async function measurePerformanceAuditSetupStage<T>(
       metrics: { ...metrics, ...evidence } } };
   } catch (error) {
     options.onFailure({ ...stage, status: 'fail', durationMs: roundMetric(watchdog.elapsedMs),
-      metrics: { ...metrics, stepLimitExceeded: watchdog.elapsedMs >= PERFORMANCE_AUDIT_STEP_LIMIT_MS },
+      metrics: { ...metrics, ...auditDatasetFailureMetrics(error), stepLimitExceeded: watchdog.elapsedMs >= PERFORMANCE_AUDIT_STEP_LIMIT_MS },
       error: formatAuditError(error) });
     await options.drainOnFailure?.();
     throw error;

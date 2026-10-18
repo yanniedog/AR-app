@@ -15,7 +15,7 @@ import { installAppHealthTransportGuard, hasAppHealthFetchGuard } from '../src/l
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceContract';
 import { automaticDataUrl } from '../src/lib/automaticDataAccess';
 import { publicRateAssetCache } from '../src/data/publicRateCache';
-import { prepareAuditPublicCore } from '../src/lib/performanceAuditDataset';
+import { assertAuditPublicCataloguePinned, prepareAuditPublicCore } from '../src/lib/performanceAuditDataset';
 import { core } from '../testUtils/publicRateJourney';
 import { EMPTY_PROFILE } from '../src/data/profile';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
@@ -79,6 +79,33 @@ async function until(predicate: () => boolean) {
 }
 beforeEach(() => { mockCache.clear(); jest.clearAllMocks(); });
 afterEach(() => { globalThis.fetch = originalFetch; resetPerformanceAuditForTests(); jest.useRealTimers(); });
+
+test.each(['local', 'live-source'] as const)('legacy manifests keep a stable pinned snapshot throughout a %s audit', async mode => {
+  const { manifest } = fixture();
+  delete manifest.public_rate_catalogue;
+  const baseline = getPublicRateCatalogueSnapshot(manifest);
+  let shown = baseline;
+  function Probe() { shown = usePublicRateCatalogue(manifest); return null; }
+  let tree!: ReturnType<typeof TestRenderer.create>;
+  await act(async () => { tree = TestRenderer.create(<Probe />); });
+  const wire = jest.fn(); globalThis.fetch = wire;
+  let session!: ReturnType<typeof beginPublicRateCatalogueAudit>;
+  act(() => { session = beginPublicRateCatalogueAudit(); });
+  const policy = installAppHealthTransportGuard({ target: globalThis, mode, contract: createV1AppHealthSourceContract() });
+  try {
+    const pinned = getPublicRateCatalogueSnapshot(manifest);
+    expect(shown).toBe(pinned);
+    expect(() => assertAuditPublicCataloguePinned(pinned, getPublicRateCatalogueSnapshot(manifest))).not.toThrow();
+    const load = session.prepare(manifest);
+    await load.ready;
+    expect(getPublicRateCatalogueSnapshot(manifest)).toBe(pinned);
+    expect(prepareAuditPublicCore(core([]), pinned, normalizeUserRateScenario(undefined), EMPTY_PROFILE)).toBeDefined();
+    act(() => session.quiesce());
+    expect(getPublicRateCatalogueSnapshot(manifest)).toBe(pinned);
+    expect(wire).not.toHaveBeenCalled();
+  } finally { policy.restore(); act(() => session.release()); act(() => tree.unmount()); }
+  expect(getPublicRateCatalogueSnapshot(manifest)).toBe(baseline);
+});
 
 test('local probing leaves the ready partial UI client usable and normal loads recover after guard release', async () => {
   const f = fixture(); cache(f, [f.capability.index, f.capability.shards[0]]);
