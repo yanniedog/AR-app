@@ -484,7 +484,9 @@ export async function notify(messages: NotifyMessage[], canDeliver: (message: No
     return;
   }
   // Collapse a flurry into at most a few notifications.
-  for (const msg of messages.slice(0, 3)) {
+  let scheduled = 0;
+  for (const msg of messages) {
+    if (scheduled >= 3) break;
     if (!(await canDeliver(msg))) continue;
     if (eligibilityRevision !== getMandatoryEligibilityRevision()) return;
     if (hasMandatoryRequirements() && (msg.productKey || msg.search)) continue;
@@ -493,6 +495,7 @@ export async function notify(messages: NotifyMessage[], canDeliver: (message: No
       content: { title: msg.title, body: msg.body, data: data as Record<string, unknown> },
       trigger: null, // immediate
     });
+    scheduled++;
   }
 }
 
