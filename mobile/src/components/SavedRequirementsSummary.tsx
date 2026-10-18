@@ -5,7 +5,7 @@ import { verifiedCatalogueDetails } from '../data/detailsCatalogue';
 import { profileSectionCount } from '../data/profile';
 import { clearHomeLoanRequirements, profileRequirementImpact, type catalogueCounts } from '../data/profileRequirements';
 import { useStore } from '../data/store';
-import type { SectionKey } from '../types';
+import type { RateRow, SectionKey } from '../types';
 import { uiCount, uiJoin, type UiLabel } from '../lib/uiCopy';
 import { AppText, Button, Row } from './ui';
 
@@ -16,7 +16,9 @@ function countFacts(label: UiLabel, counts: ReturnType<typeof catalogueCounts> |
 }
 
 /** Saved scope stays visible even when temporary filters return zero products. */
-export function SavedRequirementsSummary({ section, onEdit }: { section: SectionKey; onEdit?: () => void }) {
+export function SavedRequirementsSummary({ section, onEdit, catalogueRows }: {
+  section: SectionKey; onEdit?: () => void; catalogueRows?: readonly RateRow[] | null;
+}) {
   const core = useStore(state => state.core);
   const profile = useStore(state => state.prefs.profileFilters);
   const details = useStore(state => state.details);
@@ -24,7 +26,7 @@ export function SavedRequirementsSummary({ section, onEdit }: { section: Section
   const manifest = useStore(state => state.manifest);
   const products = verifiedCatalogueDetails(core, integrity, manifest, details)?.products ?? null;
   const count = profileSectionCount(profile, section);
-  const impact = useMemo(() => profileRequirementImpact(core, profile, section, products), [core, profile, products, section]);
+  const impact = useMemo(() => profileRequirementImpact(core, profile, section, products, catalogueRows), [core, profile, products, section, catalogueRows]);
   return <View style={{ gap: 6, paddingVertical: 8 }} testID="saved-requirements-summary">
     <AppText variant="small" weight="700">{uiJoin('Saved requirements', ' · ', uiCount(count))}</AppText>
     {count > 0 ? <>
