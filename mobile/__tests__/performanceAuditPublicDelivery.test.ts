@@ -46,10 +46,10 @@ function reload() {
 }
 beforeEach(async () => { await AsyncStorage.clear(); jest.clearAllMocks(); receipts = []; reload(); });
 
-test('automatic and concurrent post-completion requests upload only the complete sanitized body once', async () => {
+test('automatic dispatch alone uploads and verifies only the complete sanitized body', async () => {
   delivery.startPerformanceAuditLogUpload(true, { sessionId: report.sessionId, ...report.app,
     audit: { report, summaryMarker: 'PRIVATE RAW MARKER' } });
-  await Promise.all([delivery.uploadCompletedPerformanceAudit(report), delivery.uploadCompletedPerformanceAudit(report)]);
+  for (let turn = 0; turn < 100 && !sharing.getDebugLogUploadSnapshot().verified; turn++) await Promise.resolve();
   expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
   expect(log.debugLog.readCompleteText).not.toHaveBeenCalled();
   const body = jest.mocked(log.uploadDebugLog).mock.calls[0][0];
@@ -57,6 +57,13 @@ test('automatic and concurrent post-completion requests upload only the complete
   for (const text of ['private', 'secret', 'traceback', 'RAW', 'user@example.com', '/profile']) expect(body).not.toContain(text);
   expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ verified: true, url: result.url });
   expect(log.verifyDebugLogUpload).toHaveBeenCalledWith(expect.any(Object), body);
+});
+
+test('concurrent manual post-completion requests share one upload', async () => {
+  await Promise.all([delivery.uploadCompletedPerformanceAudit(report), delivery.uploadCompletedPerformanceAudit(report)]);
+  expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
+  expect(log.verifyDebugLogUpload).toHaveBeenCalledTimes(1);
+  expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ verified: true, url: result.url });
 });
 
 test('a definite failure permits retry while preserving the completed report and using single flight', async () => {

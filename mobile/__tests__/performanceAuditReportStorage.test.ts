@@ -12,6 +12,10 @@ beforeEach(() => {
     if (!files.has(file)) throw new Error('missing'); return files.get(file)!;
   });
   jest.mocked(FileSystem.deleteAsync).mockImplementation(async file => { files.delete(file); });
+  jest.mocked(FileSystem.moveAsync).mockImplementation(async ({ from, to }) => {
+    if (!files.has(from)) throw new Error('missing staged report');
+    files.set(to, files.get(from)!); files.delete(from);
+  });
 });
 
 test('the completed diagnosis is restored from local storage and never replaced by a later partial sidecar', async () => {
@@ -115,4 +119,50 @@ test('Clear waits for a pending write and deletes the finished report without re
   const clear = clearCompletedPerformanceAudit();
   finish(); await Promise.all([write, clear]);
   expect(files.has(path)).toBe(false);
+});
+
+test('saves during the complete Clear transaction cannot resurrect a cleared diagnosis', async () => {
+  let finish!: () => void;
+  const clear = clearCompletedPerformanceAudit(async () => { await new Promise<void>(resolve => { finish = resolve; }); });
+  while (!finish) await Promise.resolve();
+  await saveCompletedPerformanceAudit(makePerformanceAuditReport('during-clear'));
+  finish(); await clear;
+  expect(files.has(path)).toBe(false);
+  await saveCompletedPerformanceAudit(makePerformanceAuditReport('after-clear'));
+  expect(await loadCompletedPerformanceAudit()).toMatchObject({ sessionId: 'after-clear' });
+});
+
+test('an interrupted staged write preserves the prior completed diagnosis', async () => {
+  const report = makePerformanceAuditReport();
+  await saveCompletedPerformanceAudit(report);
+  jest.mocked(FileSystem.writeAsStringAsync).mockImplementationOnce(async file => { files.set(file, '{partial'); throw new Error('process interrupted'); });
+  await expect(saveCompletedPerformanceAudit({ ...report, sessionId: 'newer' })).rejects.toThrow('interrupted');
+  files.set('file:///docs/logs/ar-performance-audit-latest.json', JSON.stringify({ summaryMarker: 'partial=true', reportJson: '{}' }));
+  expect(await loadCompletedPerformanceAudit()).toEqual(report);
+});
+
+test('a complete staged copy survives an interrupted replacement and repairs the dedicated copy', async () => {
+  const report = makePerformanceAuditReport();
+  files.set(`${path}.tmp`, JSON.stringify(report));
+  expect(await loadCompletedPerformanceAudit()).toEqual(report);
+  expect(JSON.parse(files.get(path)!)).toEqual(report);
+});
+
+test.each([
+  { finishedAt: 'invalid' }, { summary: { overall: 'healthy' } }, { checks: [{ id: 'incomplete', metrics: {} }] },
+  { environment: {} }, { routeAggregates: [{}] }, { limitations: 'invalid' },
+])('a malformed newer sidecar cannot replace a valid completed report: %j', async malformed => {
+  const report = makePerformanceAuditReport();
+  await saveCompletedPerformanceAudit(report);
+  files.set('file:///docs/logs/ar-performance-audit-latest.json', JSON.stringify({ summaryMarker: 'PERFORMANCE_AUDIT_SUMMARY',
+    reportJson: JSON.stringify({ ...report, finishedAt: '2026-10-16T20:00:00Z', ...malformed }) }));
+  expect(await loadCompletedPerformanceAudit()).toEqual(report);
+});
+
+test('a complete supported schema-6 sidecar is migrated into the current dedicated recovery copy', async () => {
+  const report = makePerformanceAuditReport();
+  files.set('file:///docs/logs/ar-performance-audit-latest.json', JSON.stringify({ summaryMarker: 'PERFORMANCE_AUDIT_SUMMARY',
+    reportJson: JSON.stringify({ ...report, schemaVersion: 6 }) }));
+  expect(await loadCompletedPerformanceAudit()).toEqual(report);
+  expect(JSON.parse(files.get(path)!)).toEqual(report);
 });

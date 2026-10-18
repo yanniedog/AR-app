@@ -99,8 +99,7 @@ describe('automatic audit log sharing', () => {
     (log.uploadDebugLog as jest.Mock).mockImplementationOnce(() => new Promise((resolve) => { finishManual = resolve; }));
     const manual = sharing.startDebugLogUpload({ ...request, sessionId: null, audit: undefined });
     // Let preparation reach the pending POST before completing the audit.
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let tick = 0; tick < 20 && !(log.uploadDebugLog as jest.Mock).mock.calls.length; tick++) await Promise.resolve();
     const audit = sharing.startDebugLogUpload(request);
     expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
     finishManual?.(result);
@@ -193,6 +192,7 @@ describe('automatic audit log sharing', () => {
       recoveryReceipt: { url: result.url, deleteKey: result.deleteKey },
     });
     expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
+    await require('../src/lib/debugLogUploadRecovery').removeDebugLogUploadRecoveryReceipt(result.url);
     sharing.forgetDeletedDebugLogUpload(result.url);
     expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ phase: 'failed', sessionId: 'audit-2', recoveryReceipt: null });
     expect(await sharing.retryDebugLogUpload()).toMatchObject({ phase: 'copied', sessionId: 'audit-2' });
