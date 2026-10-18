@@ -27,3 +27,10 @@ test('temporary purpose and repayment canonicalize before pricing without changi
   expect(mortgageComparisonScenario('Mortgage', saved, { loanAmount: '', lvr: '' }, { loanPurposes: [], repaymentTypes: [] })).toEqual(saved);
   expect(mortgageComparisonScenario('Mortgage', saved, { loanAmount: '', lvr: '' }, { loanPurposes: ['OO', 'INV'], repaymentTypes: [] }).purpose).toBeUndefined();
 });
+
+test('duplicate aliases remain one semantic purpose and repayment choice', () => {
+  const filters = { loanPurposes: ['OO', 'OWNER_OCCUPIED'], repaymentTypes: ['PI', 'P&I'] };
+  const result = mortgageComparisonScenario('Mortgage', {}, { loanAmount: '', lvr: '' }, filters);
+  expect(result).toMatchObject({ purpose: 'OWNER_OCCUPIED', repayment: 'PRINCIPAL_AND_INTEREST' });
+  expect(filters).toEqual({ loanPurposes: ['OO', 'OWNER_OCCUPIED'], repaymentTypes: ['PI', 'P&I'] });
+});
