@@ -5,6 +5,9 @@ export type AuditOutcome = 'pass' | 'warning' | 'failure' | 'timing' | 'skipped'
 /** Mutually exclusive display buckets. The original recorded scores stay intact. */
 export function auditOutcome(check: AuditCheck): AuditOutcome {
   if (check.status === 'fail' && check.metrics.nonTimingFailure === true) return 'failure';
+  if (check.status === 'fail' && check.metrics.stepLimitExceeded === true) return 'timing';
+  if (check.status === 'skipped' && check.metrics.availabilityFailure !== true &&
+    check.metrics.skipClassification !== 'terminal-availability') return 'skipped';
   if (check.id.startsWith('external-link-') && check.status !== 'fail' &&
     (check.metrics.httpAttempted !== true || check.metrics.httpReachability === 'unknown' || check.metrics.browserHandler === 'unknown')) return 'untested-link';
   if (check.metrics.executionAttempted === false || check.metrics.availabilityFailure === true) return 'unavailable';

@@ -42,8 +42,8 @@ it('does not rescan a full edition for repeat product or lender lookups', () => 
   expect(productReads).toBe(rows.length);
   expect(providerReads).toBe(rows.length);
   for (let index = 0; index < 20; index += 1) {
-    expect(rowsForProductKey(rows, `P${index}`)).toHaveLength(1);
-    expect(rowsForProvider(rows, `Bank ${index}`)).toHaveLength(50);
+    expect(rowsForProductKey(rows, `P${index}`)).toEqual([rows[index]]);
+    expect(rowsForProvider(rows, `Bank ${index}`)).toEqual(rows.filter((_row, position) => position % 20 === index));
   }
   expect(productReads).toBe(rows.length);
   expect(providerReads).toBe(rows.length);
