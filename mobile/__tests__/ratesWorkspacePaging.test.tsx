@@ -662,6 +662,14 @@ test('entered comparison inputs select public pricing before ranking, cards and 
     act(() => updateRatesSection('Mortgage', { selectMode: true }));
     act(() => tree.root.findByType('ProductCard').props.onPress());
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([publicOfferSelectionToken(publicProduct.productKey, 'high-lvr')]);
+    const completeCatalogue = mockPublicCatalogue;
+    for (const status of ['loading', 'error', 'ready']) {
+      mockPublicCatalogue = { ...completeCatalogue, status, allLoaded: false };
+      act(() => { tree.update(<RatesWorkspace />); });
+      expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([publicOfferSelectionToken(publicProduct.productKey, 'high-lvr')]);
+    }
+    mockPublicCatalogue = completeCatalogue;
+    act(() => { tree.update(<RatesWorkspace />); });
     act(() => useMortgageComparison.setState({ lvr: '65' }));
     expect(list().data.map((row: any) => [row.public_offer_id, row.rate])).toEqual([['low-lvr', '0.05']]);
     expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.65' });
