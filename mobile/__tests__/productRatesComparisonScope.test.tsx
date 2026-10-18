@@ -270,3 +270,53 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
 
 
 
+
+test('Rates 75% offer does not show the saved 90% LVR contradiction; ordinary Product retains its saved-tier warning', async () => {
+  const previous = captureRatesSession(), savedMortgage = { ...mockScenario.mortgage };
+  const p = programme({ sourceBindings: [], conditions: [
+    { conditionId: 'amount', field: 'amount', operator: 'bounds', minimum: '500000', evidenceIds: [] },
+    { conditionId: 'lvr', field: 'lvr', operator: 'bounds', maximum: '0.8', evidenceIds: [] },
+  ] });
+  mockCatalogue = { ...catalogue([{ ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() } }], [product], []),
+    coverage: [], evidence: [], loadAll: async () => undefined, loadProduct: async () => undefined };
+  Object.assign(mockScenario.mortgage, { mode: 'refi', loanBalance: '450000', propertyValue: '500000' });
+  const store = jest.requireMock('../src/data/store').useStore;
+  store.setState({ ...mockState, hydrated: true, source: 'sample', activeSection: 'Mortgage', core: emptyCore([]),
+    details: { products: { [product.productKey]: {} } }, prefs: { ...DEFAULT_PREFS, includeNonStandard: true },
+    subscriptions: [], searchIndexStatus: 'idle', setActiveSection: jest.fn(), ensureSearchIndex: jest.fn(),
+    subscribeSearch: jest.fn(), unsubscribeSearch: jest.fn() }, true);
+  initializeRatesSession(store.getState().prefs, 'Mortgage'); clearMortgageComparison();
+  installMandatoryEligibility(selectMandatoryEligibility(store.getState().core, DEFAULT_PREFS.profileFilters, null));
+  let rates!: InspectableRenderer, detail!: InspectableRenderer;
+  try {
+    act(() => { rates = TestRenderer.create(<RatesWorkspace />) as InspectableRenderer; });
+    act(() => {
+      rates.root.findAllByProps({ accessibilityLabel: 'Loan amount' })[0].props.onChangeText('600000');
+      rates.root.findAllByProps({ accessibilityLabel: 'LVR' })[0].props.onChangeText('75');
+    });
+    const card = rates.root.findAllByType('ProductCard')[0];
+    expect(card.props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.75' });
+    act(() => card.props.onPress());
+    Object.assign(mockRoute, (jest.mocked(router.push).mock.calls.at(-1)![0] as unknown as { params: typeof mockRoute }).params);
+    act(() => rates.unmount());
+    await act(async () => { detail = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
+    expect(detail.root.findAllByType('PublicRateEvidence')[0].props.scenario).toMatchObject({ amount: '600000', lvr: '0.75' });
+    const scopedTexts = detail.root.findAllByType('AppText').map(node => node.props.children);
+    expect(scopedTexts).toContain('Eligibility unverified');
+    expect(scopedTexts).not.toContain('Outside listed LVR tier');
+    expect(scopedTexts).not.toContain('Outside published LVR');
+    act(() => detail.unmount());
+    // An ordinary catalogue Product still checks the saved account's 90% LVR.
+    mockCatalogue = { ...mockCatalogue, ...catalogue([], [], []), status: 'unavailable' };
+    store.setState({ core: emptyCore([{ ...row, product_key: product.productKey, lvr_tier: 'lvr_=80%' }]) });
+    delete mockRoute.origin; delete mockRoute.programme;
+    await act(async () => { detail = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
+    expect(detail.root.findAllByType('AppText').map(node => node.props.children)).toContain('Outside listed LVR tier');
+    expect(mockScenario.mortgage.loanBalance).toBe('450000');
+  } finally {
+    act(() => { detail?.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });
+    Object.assign(mockScenario.mortgage, savedMortgage);
+    delete mockRoute.origin; delete mockRoute.programme;
+    installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));
+  }
+});
