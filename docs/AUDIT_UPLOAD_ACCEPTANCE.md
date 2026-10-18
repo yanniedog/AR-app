@@ -137,3 +137,11 @@ source rows when public pricing is unavailable. Four focused suites pass 45
 tests covering public-rate integration, completed-report storage, rendered
 upload controls and indexed row lookup. Upload allowlists, secure deletion
 receipts and the 10-second step limit are unchanged by this reconciliation.
+
+The coordinated review fixes pass 12 local suites / 264 tests and TypeScript.
+They cover restart-safe secure deletion recovery, explicit clipboard copying,
+Clear across pending report/upload work, interrupted staged report replacement,
+required-field validation, schema-6 migration and late diagnosis restoration.
+The actual mounted runner fatal path now proves partial-report persistence;
+automatic publication is exercised independently from concurrent manual calls.
+All transport/native storage APIs in these tests remain mocked.
