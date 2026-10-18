@@ -2,7 +2,7 @@ import { htmlPlainText } from './htmlPlainText';
 import { loadDebugLogUploadRecoveryReceipt, removeDebugLogUploadRecoveryReceipt } from './debugLogUploadRecovery';
 import { clearCompletedPerformanceAudit } from './performanceAuditReportStorage';
 import { clearCompletedPerformanceAuditState } from './performanceAudit';
-import { beginPublicReportUploadAttemptsClear } from './publicReportUploadAttempt';
+import { beginPublicReportUploadAttemptsClear, recordPublicReportUploadAttempt } from './publicReportUploadAttempt';
 import { resetClearedPublicReportUpload } from './debugLogSharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -1844,6 +1844,7 @@ export async function deleteDebugLogUploadAndReceipt(
 ): Promise<void> {
   const validated = validateDebugLogUploadReceipt(receipt);
   await deleteDebugLogUpload(validated.url, validated.deleteKey, fetchImpl, timeoutMs);
+  if (validated.contentSha256) await recordPublicReportUploadAttempt(validated.contentSha256, null);
   await mutateUploadReceipts(async () => {
     const receipts = await loadDebugLogUploadReceipts();
     await writeUploadReceipts(receipts.filter((item) => item.url !== validated.url));

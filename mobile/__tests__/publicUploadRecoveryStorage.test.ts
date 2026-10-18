@@ -13,17 +13,30 @@ import { beginPublicReportUploadAttemptsClear, clearPublicReportUploadAttempts, 
 
 it('reopens securely stored deletion access through the actual Debug log receipt loader and removes it after host deletion', async () => {
   const receipt = { schemaVersion: 1 as const, url: 'https://paste.c-net.org/recovery', provider: 'paste.c-net.org' as const,
-    deleteKey: 'private-delete-capability', createdAt: '2026-10-18T00:00:00Z' };
+    deleteKey: 'private-delete-capability', createdAt: '2026-10-18T00:00:00Z', contentSha256: 'd'.repeat(64) };
   await saveDebugLogUploadRecoveryReceipt(receipt);
   expect(SecureStore.setItemAsync).toHaveBeenCalledWith(SECURE_STORE_KEYS.debugLogUploadRecoveryReceipt, JSON.stringify(receipt),
     { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
   jest.resetModules();
   const log = require('../src/lib/debugLog') as typeof import('../src/lib/debugLog');
+  const journal = require('../src/lib/publicReportUploadAttempt') as typeof import('../src/lib/publicReportUploadAttempt');
+  await journal.recordPublicReportUploadAttempt(receipt.contentSha256, 'pending');
   expect(await log.loadDebugLogUploadReceipts()).toContainEqual(receipt);
   const fetcher = jest.fn(async () => ({ ok: true, status: 204 })) as unknown as typeof fetch;
   await log.deleteDebugLogUploadAndReceipt(receipt, fetcher);
   expect(await log.loadDebugLogUploadReceipts()).toEqual([]);
   expect(await SecureStore.getItemAsync(SECURE_STORE_KEYS.debugLogUploadRecoveryReceipt)).toBeNull();
+  expect(await journal.publicReportUploadAttempt(receipt.contentSha256)).toBeNull();
+});
+
+it('Clear recovers an unreadable intent journal without allowing an uncertain upload before reset', async () => {
+  const hash = 'e'.repeat(64);
+  await AsyncStorage.setItem('@ar/public-report-upload-attempts-v1', '{invalid');
+  await expect(publicReportUploadAttempt(hash)).rejects.toThrow();
+  await clearPublicReportUploadAttempts();
+  await recordPublicReportUploadAttempt(hash, 'pending');
+  expect(await publicReportUploadAttempt(hash)).toBe('pending');
+  await clearPublicReportUploadAttempts();
 });
 it('Clear removes pending and failed hashes after queued writes and permits a fresh attempt', async () => {
   const one = 'a'.repeat(64), two = 'b'.repeat(64);
