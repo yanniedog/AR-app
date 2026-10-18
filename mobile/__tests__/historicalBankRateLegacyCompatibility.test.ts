@@ -87,6 +87,10 @@ test('accepted public observations retain exact rates and identities with no ext
   expect(result.products[oldProduct][result.run_dates.indexOf(older)]).toBe(0.0025);
   expect(result.products[latestProduct][result.run_dates.indexOf(latest)]).toBe(0.0525);
   expect(result.source_identities?.[older]).toBe(historicalSourceIdentity(index, older));
+  const unavailable = raw.run_dates[1];
+  expect(result.run_dates).toContain(unavailable);
+  expect(result.products[oldProduct][result.run_dates.indexOf(unavailable)]).toBeNull();
+  expect(result.date_status?.[unavailable]).toBe('unavailable');
   expect(downloadDatedCore).not.toHaveBeenCalled();
   expect(fetchDatesIndexJson).not.toHaveBeenCalled();
 });

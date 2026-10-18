@@ -7,7 +7,7 @@ import type { DatesIndex } from './datesIndex';
 import { normalizeTimelineDates } from './bankHistoryTransform';
 import { assertHistoricalIdentitiesAdvance, historicalRevisionHighWater, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
 import { bestRatesForCore, productKeysForCore, buildProductHistoryFromRatesAsync, type ProductHistoryPayload } from './productHistoryModel';
-import { preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
+import { historicalCatalogueSelection, preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
 import { productCatalogueDates, productCatalogueIndex, productCatalogueIndexConflicts, productRatesFromHistoricalCatalogue, readyProductHistoryIdentity } from './productHistoryCatalogue';
 import {
   createDatedFetchCircuit,
@@ -105,6 +105,7 @@ export async function syncProductHistoryFromDailyPayloads(
   const wantedDates = normalizeTimelineDates([
     ...indexedDates,
     ...preparedDates,
+    ...(opts.catalogue && historicalCatalogueSelection(opts.catalogue) ? productCatalogueDates(opts.catalogue) : []),
     ...(opts.existing?.run_dates ?? []),
     targetRunDate,
   ]);
