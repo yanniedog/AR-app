@@ -787,3 +787,27 @@ test('multiple mortgage chips retain both public-only offers with exact row pric
     expect(mockStore.getState().setPref).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });
+
+
+test('active legacy compare selections follow semantic binding arrival and toggle off once', () => {
+  const row = rows.find(item => item.rate_index === 0)!;
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [row] } } } }));
+  install();
+  updateRatesSection('Mortgage', { selectMode: true });
+  const tree = mount();
+  try {
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['0#p-0']);
+    const p = publicProgramme({ productId: row.product_key, programmeId: 'arrived', offerId: 'arrived' });
+    mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([
+      { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() },
+        components: [{ ...p.components[0], value: row.rate, scopeId: 'arrived' }] },
+    ], [{ ...publicProduct, productId: row.product_key, productKey: row.product_key, programmeIds: ['arrived'] }], []), generationId: 'binding-arrived' };
+    act(() => tree.update(<RatesWorkspace />));
+    const semantic = publicOfferSelectionToken(row.product_key, 'arrived');
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([semantic]);
+    expect(tree.root.findByType('ProductCard').props.selected).toBe(true);
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});

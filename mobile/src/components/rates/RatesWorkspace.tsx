@@ -1,3 +1,4 @@
+import { reconcilePublicCompareSelectionTokens } from '../../data/publicCompareSelectionTokens';
 import { publicScenarioForRow } from '../../data/publicRateIntegration';
 import { mortgageComparisonScenario } from '../../data/mortgageComparisonScenario';
 import type { RateScenario } from '../../data/publicRateModel';
@@ -149,6 +150,13 @@ export default function RatesWorkspace() {
   const coreIntegrity = useStore(state => state.coreIntegrity);
   const manifest = useStore(state => state.manifest);
   const catalogue = usePublicRateCatalogue(manifest);
+  useLayoutEffect(() => {
+    if (!core) return;
+    const next = reconcilePublicCompareSelectionTokens(core, catalogue, task.selected);
+    if (next.length !== task.selected.length || next.some((token, index) => token !== task.selected[index])) {
+      updateRatesSection(section, { selected: next });
+    }
+  }, [core, catalogue, section, task.selected]);
   const { scenario } = useUserRateScenario();
   const mortgageInputs = useMortgageComparison();
   const mortgageFilters = session.sections.Mortgage.filters;
