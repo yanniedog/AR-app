@@ -36,7 +36,7 @@ export function referenceRateChanges(scenario: UserRateScenario, references: rea
       const threshold = Decimal.parse(String(Number.isFinite(thresholdBps) && thresholdBps >= 0 ? thresholdBps : 1)).div(Decimal.parse('10000'));
       const magnitude = change.compare(Decimal.parse('0')) < 0 ? Decimal.parse('0').sub(change) : change;
       if (magnitude.compare(threshold) < 0) continue;
-      messages.push({ title: uiJoin('Public reference', ' · ', 'Rate changed'),
+      messages.push({ referenceId: id, title: uiJoin('Public reference', ' · ', 'Rate changed'),
         body: uiJoin(uiPublicReferenceName(reference), ' · ', publicReferenceScope(reference), ' · ', 'Public reference', ': ', uiRate(Number(prior.fraction)), ' → ', uiRate(Number(fraction)), ' · ', 'Local reference estimate', ' · ', 'Charged rate', ': ', 'Unverified'),
         href: 'arrates://calculator',
       });
@@ -75,7 +75,8 @@ export async function checkPublicReferenceChanges(manifest: Manifest | null, thr
   await notify(result.messages, async message => {
     deliveryScenario = await loadUserRateScenario();
     return isCurrent() && referenceRateChanges(deliveryScenario, catalogue.references, previous, thresholdBps).messages
-      .some(current => current.title === message.title && current.body === message.body);
+      .some(current => message.referenceId != null && current.referenceId === message.referenceId
+        && current.title === message.title && current.body === message.body);
   });
   // Baseline is separate from userRateScenario: a public refresh can never overwrite entered rates or discounts.
   if (isCurrent()) await writeSecureStoreValue(SECURE_STORE_KEYS.referenceRateAlertBaseline,
