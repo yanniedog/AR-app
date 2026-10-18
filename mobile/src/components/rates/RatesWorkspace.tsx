@@ -570,7 +570,7 @@ export default function RatesWorkspace() {
     'search.compare.open': (...args: unknown[]) => {
       const exactTokens = auditActionStrings(args, 'selectionTokens');
       const tokens = exactTokens.length >= 2 ? exactTokens : selected;
-      if (tokens.length >= 2) openCompare(tokens);
+      if (tokens.length >= 2) openCompare(tokens, 'rates-comparison');
     },
   }), [applyFilters, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
   const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => 'product_key' in item ? (
@@ -774,7 +774,7 @@ export default function RatesWorkspace() {
       {selectMode && selected.length >= 2 ? (
         <CompareDock
           count={selected.length}
-          onPress={() => openCompare(selected)}
+          onPress={() => openCompare(selected, 'rates-comparison')}
         />
       ) : null}
 

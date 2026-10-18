@@ -232,7 +232,7 @@ test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seed
       }
     }
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(targets.map(target => target.selectionToken));
-    expect(openCompare).toHaveBeenCalledWith(targets.map(target => target.selectionToken));
+    expect(openCompare).toHaveBeenCalledWith(targets.map(target => target.selectionToken), 'rates-comparison');
     expect(mockStore.getState().prefs).toEqual(preferences);
     expect(mockStore.getState().setPref).not.toHaveBeenCalled();
     let lastPage: unknown; act(() => { lastPage = surface().actions!['search.compare.page.0']({ selectionToken: '44#p-44' }); });

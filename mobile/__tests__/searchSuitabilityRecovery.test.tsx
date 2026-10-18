@@ -711,7 +711,7 @@ test.each([[411, 1, 0], [360, 2, 48]])('Compare reserves its own bottom space at
 
     act(() => button.props.onPress());
     expect(router.push).toHaveBeenCalledTimes(1);
-    expect(router.push).toHaveBeenCalledWith({ pathname: '/compare', params: { keys: JSON.stringify(tokens) } });
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/compare', params: { keys: JSON.stringify(tokens), origin: 'rates-comparison' } });
     expect(cards.map((card: any) => card.props.selected)).toEqual([true, true]);
     expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(420);
     expect(tree.root.findByType('FlashList' as any)).toBe(list);
