@@ -187,7 +187,8 @@ export function installAppHealthTransportGuard(options: {
           // Load only on the approved official-data path; local audits need no native transport.
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { fetch: nativeFetch } = require('expo/fetch') as typeof import('expo/fetch');
-          return nativeFetch(url, { ...init, redirect: 'error' });
+          return nativeFetch(url, { method: 'GET', credentials: 'omit',
+            headers: init?.headers, signal: init?.signal ?? undefined, redirect: 'error' });
         }
         // React Native implements fetch on top of XMLHttpRequest. Mark only
         // the synchronous XHR created by this already-authorized fetch call;

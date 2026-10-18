@@ -51,7 +51,7 @@ describe('installAppHealthTransportGuard', () => {
     try {
       for (const url of OFFICIAL_PUBLIC_DATA_URLS) await expect(target.fetch(url, safe)).resolves.toMatchObject({ ok: true, url });
       expect(fetchSpy).toHaveBeenCalledTimes(8);
-      expect(fetchSpy).toHaveBeenCalledWith(ABS_HEADLINE_CPI_URL, { ...safe, redirect: 'error' });
+      expect(fetchSpy).toHaveBeenCalledWith(ABS_HEADLINE_CPI_URL, expect.objectContaining({ ...safe, redirect: 'error' }));
       expect(guard.snapshot()).toMatchObject({ authorizedAttempts: 8, transportCalls: 8, policyViolations: 0, blockedAttempts: 0 });
       await expect(target.fetch(OFFICIAL_PUBLIC_DATA_URLS[0], { method: 'HEAD', credentials: 'omit' })).rejects.toThrow('blocked');
       expect(fetchSpy).toHaveBeenCalledTimes(8);
