@@ -1,7 +1,7 @@
 import { captureUserRateScenarioForAudit } from '../hooks/useUserRateScenario';
 import { AuditDatasetChangedError, prepareAuditPublicCore, assertAuditPublicCataloguePinned } from '../lib/performanceAuditDataset';
 import type { PublicCatalogueView } from '../data/publicRateIntegration';
-import { getPublicRateCatalogueSnapshot } from '../data/publicRateCatalogue';
+import { ensurePublicRateCatalogueLoaded, getPublicRateCatalogueSnapshot } from '../data/publicRateCatalogue';
 import { normalizeUserRateScenario } from '../data/userRateScenario';
 import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
 import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSelection';
@@ -2942,8 +2942,12 @@ export function PerformanceAuditRunner() {
         // pinned to. Capturing that from a backgrounded process would pin the
         // report to state the user cannot see, so wait for the foreground here
         // too rather than only at the first measured check.
-        const { initialStore, datasetRevision } = await runSetupStage(PERFORMANCE_AUDIT_SETUP_STAGES.inputs, () => {
+        const { initialStore, datasetRevision } = await runSetupStage(PERFORMANCE_AUDIT_SETUP_STAGES.inputs, async (stageWatchdog) => {
+          const manifest = useStore.getState().manifest;
+          if (manifest?.public_rate_catalogue) await awaitAuditWork(
+            ensurePublicRateCatalogueLoaded(manifest), stageWatchdog, 'Public pricing catalogue preparation');
           const initialStore = useStore.getState();
+          if (initialStore.manifest !== manifest) throw new AuditDatasetChangedError('Dataset manifest changed during public catalogue preparation');
           if (auditMode === 'local') captureInitialHealthData(initialStore);
           const datasetRevision = captureDatasetRevision();
           activeDatasetRevision = datasetRevision;
