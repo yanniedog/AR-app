@@ -7,6 +7,20 @@ import { estimateEnteredRate, estimateReferenceAdjustment, selectPublicReference
 import { Decimal, decimalText, rateDecimal } from './publicRateDecimal';
 import type { UserRateScenario } from './userRateScenario';
 
+
+// Preserve occurrence identity only through transformations authored here.
+// The strict source-condition gate still requires that root object in current core.
+const publicRowSources = new WeakMap<RateRow, RateRow>();
+export function sourceRowForPublicRow(row: RateRow): RateRow {
+  const source = publicRowSources.get(row);
+  return source && source.product_key === row.product_key && source.rate_index === row.rate_index
+    && source.provider === row.provider ? source : row;
+}
+function publicRowDerivedFrom(row: RateRow, derived: RateRow): RateRow {
+  publicRowSources.set(derived, sourceRowForPublicRow(row));
+  return derived;
+}
+
 /** Read-only view: the catalogue and private scenario never become source evidence. */
 export interface PublicCatalogueView {
   status: 'unavailable' | 'loading' | 'ready' | 'error';
@@ -59,7 +73,7 @@ export function bindCurrentPublicRow(row: RateRow, catalogue: PublicCatalogueVie
 function programmePublicRow(row: RateRow, programme: PublicProgramme): RateRow {
   const metadata = programme.metadata;
   const base = programme.components.filter(component => component.source.rawType === 'BASE' && component.value != null);
-  return { ...row, public_programme_id: programme.programmeId, public_offer_id: programme.offerId,
+  return publicRowDerivedFrom(row, { ...row, public_programme_id: programme.programmeId, public_offer_id: programme.offerId,
     ...(metadata?.rateStructure ? { ribbon_rate_structure: metadata.rateStructure } : {}),
     ...(programme.section === 'Savings' && metadata?.rateStructure === 'conditional' ? { ribbon_deposit_kind: 'bonus' } : {}),
     ...(programme.section === 'Savings' && metadata?.rateStructure === 'introductory' ? { ribbon_deposit_kind: 'introductory' } : {}),
@@ -67,7 +81,7 @@ function programmePublicRow(row: RateRow, programme: PublicProgramme): RateRow {
     ...(metadata?.quotedTerm?.unit === 'month' ? { term_months: metadata.quotedTerm.value, term: 'P' + metadata.quotedTerm.value + 'M' } : {}),
     ...(metadata?.quotedTerm?.unit === 'day' ? { term: 'P' + metadata.quotedTerm.value + 'D' } : {}),
     ...(base.length === 1 ? { ongoing_rate: decimalText(rateDecimal(base[0].value!, base[0].unit)) } : {}),
-  };
+  });
 }
 
 function canonicalPurpose(value?: string): string | undefined {
@@ -278,8 +292,8 @@ export function payableRateForRow(row: RateRow, resolution?: RateResolution): nu
 export function rowWithPublicResolution(row: RateRow, resolution?: RateResolution): RateRow {
   if (!resolution) return row;
   const payable = payableRateForRow(row, resolution);
-  return { ...row, rate: payable == null ? '' : String(payable),
-    comparison_rate: payable == null ? undefined : resolution.comparisonRate };
+  return publicRowDerivedFrom(row, { ...row, rate: payable == null ? '' : String(payable),
+    comparison_rate: payable == null ? undefined : resolution.comparisonRate });
 }
 
 export function resolvedPublicRankingRows(
