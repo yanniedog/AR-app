@@ -1,4 +1,4 @@
-import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
+import { getLocalAppHealthAuditGeneration, isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { cache } from './cache';
 import { ECONOMIC_RECHECK_MS, type CashRateForecast } from './economicOutlookTypes';
 import {
@@ -128,12 +128,17 @@ async function fetchCsv(url: string): Promise<string> {
 async function commit(
   sequence: number,
   expectedGeneration: number,
+  auditGeneration: number,
   incoming: RbaMarketOutlook,
   cached: RbaMarketOutlook | null,
 ): Promise<RbaMarketOutlook> {
   let accepted = incoming;
   const run = commitQueue.then(async () => {
     assertCurrentGeneration(expectedGeneration);
+    if (isLocalAppHealthAudit() || auditGeneration !== getLocalAppHealthAuditGeneration()) {
+      accepted = offline(latest?.payload ?? cached);
+      return;
+    }
     const previous = mergeCached(cached, latest?.payload ?? null);
     const isNewerRequest = sequence >= (latest?.sequence ?? 0);
     const sources = previous ? mergeSources(incoming, previous, isNewerRequest) : incoming;
@@ -164,6 +169,12 @@ async function commit(
       await cache.writeRbaMarketOutlook(accepted);
     } catch { /* This session can still use the validated in-memory copy. */ }
     assertCurrentGeneration(expectedGeneration);
+    // A native write already in progress cannot be cancelled. Do not publish
+    // its online result if a local audit began while the write was pending.
+    if (isLocalAppHealthAudit() || auditGeneration !== getLocalAppHealthAuditGeneration()) {
+      accepted = offline(latest?.payload ?? cached);
+      return;
+    }
     latest = { sequence: Math.max(sequence, latest?.sequence ?? 0), payload: accepted };
   });
   commitQueue = run.catch(() => undefined);
@@ -174,6 +185,7 @@ async function commit(
 /** Public RBA context only: no personal preferences or portfolio data leave the device. */
 export async function loadRbaMarketOutlook(force = false): Promise<RbaMarketOutlook> {
   const localOnly = isLocalAppHealthAudit();
+  const auditGeneration = getLocalAppHealthAuditGeneration();
   if (clearing) await clearing;
   const expectedGeneration = generation;
   // Do not join a network refresh that began before a local audit installed its guard.
@@ -182,7 +194,7 @@ export async function loadRbaMarketOutlook(force = false): Promise<RbaMarketOutl
   const sequence = ++requestSequence;
   const run = (async () => {
     const cached = await readCached(expectedGeneration);
-    if (isLocalAppHealthAudit()) return offline(cached);
+    if (isLocalAppHealthAudit() || auditGeneration !== getLocalAppHealthAuditGeneration()) return offline(cached);
     const age = cached ? Date.now() - Date.parse(cached.checkedAt) : Infinity;
     if (!force && cached?.refreshStatus === 'current' && age >= 0 && age < ECONOMIC_RECHECK_MS) return freezePayload(cached);
     const checkedAt = new Date().toISOString();
@@ -190,7 +202,7 @@ export async function loadRbaMarketOutlook(force = false): Promise<RbaMarketOutl
       fetchCsv(RBA_F17_FORWARD_URL).then((text) => parseRbaBondForwardsCsv(text)),
       fetchCsv(RBA_J1_FORECAST_URL).then((text) => parseRbaEconomistsCsv(text)),
     ]);
-    return commit(sequence, expectedGeneration, {
+    return commit(sequence, expectedGeneration, auditGeneration, {
       schema_version: 1,
       fetchedAt: checkedAt,
       checkedAt,

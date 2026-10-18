@@ -15,11 +15,11 @@ import {
 import { normalizeRbaMarketOutlook, rbaSourceToday } from '../src/data/rbaMarketOutlookParse';
 import type { AppState } from '../src/data/storeTypes';
 import { createUserActions } from '../src/data/storeUser';
-import { isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
+import { getLocalAppHealthAuditGeneration, isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 import { ABS_HEADLINE_CPI_URL, ECONOMIC_URLS } from '../src/data/economicOutlookTypes';
 import { OFFICIAL_PUBLIC_DATA_URLS } from '../src/data/officialEconomicSources';
 
-jest.mock('../src/lib/appHealthTransportGuard', () => ({ isLocalAppHealthAudit: jest.fn(() => false) }));
+jest.mock('../src/lib/appHealthTransportGuard', () => ({ isLocalAppHealthAudit: jest.fn(() => false), getLocalAppHealthAuditGeneration: jest.fn(() => 0) }));
 
 const fixture = (name: string) => readFileSync(join(__dirname, 'fixtures', 'rba-market', name), 'utf8');
 const bondsCsv = fixture('f17-2026-09-04.csv');
@@ -63,6 +63,7 @@ beforeEach(() => {
   jest.useFakeTimers().setSystemTime(NOW);
   resetRbaMarketOutlookRuntimeCacheForTests();
   localAudit.mockReturnValue(false);
+  jest.mocked(getLocalAppHealthAuditGeneration).mockReturnValue(0);
   jest.spyOn(cache, 'readRbaMarketOutlook').mockResolvedValue(null);
   jest.spyOn(cache, 'writeRbaMarketOutlook').mockResolvedValue();
   jest.spyOn(cache, 'clear').mockResolvedValue();
@@ -340,6 +341,7 @@ test('the app clear-cache action removes runtime data and the next ordinary visi
   await expect(loadRbaMarketOutlook()).rejects.toThrow('not cached');
   expect(fetch).toHaveBeenCalledTimes(2);
   localAudit.mockReturnValue(false);
+  jest.mocked(getLocalAppHealthAuditGeneration).mockReturnValue(0);
   await loadRbaMarketOutlook();
   expect(fetch).toHaveBeenCalledTimes(4);
 });
@@ -363,6 +365,7 @@ test('an audit call waiting for cache deletion stays local even after its guard 
   localAudit.mockReturnValue(true);
   const audit = loadRbaMarketOutlook().catch((error: Error) => error);
   localAudit.mockReturnValue(false);
+  jest.mocked(getLocalAppHealthAuditGeneration).mockReturnValue(0);
   deleting.resolve();
   await clearing;
   expect(await audit).toEqual(expect.objectContaining({ message: expect.stringContaining('not cached') }));
@@ -412,3 +415,20 @@ test('clearing drains an active write and holds new loads until deletion complet
   expect(fetch).toHaveBeenCalledTimes(4);
   expect(cache.writeRbaMarketOutlook).toHaveBeenCalledTimes(2);
 });
+
+ test.each([true, false])('does not commit an online refresh after a local audit starts (still active: %s)', async (active) => {
+  const cached = payload();
+  jest.mocked(cache.readRbaMarketOutlook).mockResolvedValue(cached);
+  const pending = deferred<Response>();
+  const started = deferred<void>();
+  globalThis.fetch = jest.fn(() => { started.resolve(); return pending.promise; });
+  const loading = loadRbaMarketOutlook(true);
+  await started.promise;
+  localAudit.mockReturnValue(active);
+  jest.mocked(getLocalAppHealthAuditGeneration).mockReturnValue(1);
+  pending.resolve(response(bondsCsv));
+  await expect(loading).resolves.toMatchObject({ checkedAt: cached.checkedAt, refreshStatus: 'offline' });
+  expect(cache.writeRbaMarketOutlook).not.toHaveBeenCalled();
+  localAudit.mockReturnValue(true);
+  await expect(loadRbaMarketOutlook()).resolves.toMatchObject({ checkedAt: cached.checkedAt, refreshStatus: 'offline' });
+ });

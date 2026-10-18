@@ -1,8 +1,11 @@
+import { fetch as nativeFetch } from 'expo/fetch';
 import { getLocalAppHealthAuditGeneration, installAppHealthTransportGuard, isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceContract';
 import { automaticDataUrl } from '../src/lib/automaticDataAccess';
 import { APK_MANIFEST_URL } from '../src/config';
 import { ABS_HEADLINE_CPI_URL, OFFICIAL_PUBLIC_DATA_URLS } from '../src/data/officialEconomicSources';
+
+jest.mock('expo/fetch', () => ({ fetch: jest.fn() }));
 
 function targetWithSpies() {
   const fetchSpy = jest.fn(async (input: RequestInfo | URL) => ({
@@ -44,13 +47,31 @@ describe('installAppHealthTransportGuard', () => {
     const { target, fetchSpy } = targetWithSpies();
     const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
     const safe = { method: 'GET', credentials: 'omit', headers: { Accept: 'text/csv' } } as const;
+    jest.mocked(nativeFetch).mockImplementation(fetchSpy as typeof nativeFetch);
     try {
       for (const url of OFFICIAL_PUBLIC_DATA_URLS) await expect(target.fetch(url, safe)).resolves.toMatchObject({ ok: true, url });
       expect(fetchSpy).toHaveBeenCalledTimes(8);
-      expect(fetchSpy).toHaveBeenCalledWith(ABS_HEADLINE_CPI_URL, safe);
+      expect(fetchSpy).toHaveBeenCalledWith(ABS_HEADLINE_CPI_URL, { ...safe, redirect: 'error' });
       expect(guard.snapshot()).toMatchObject({ authorizedAttempts: 8, transportCalls: 8, policyViolations: 0, blockedAttempts: 0 });
       await expect(target.fetch(OFFICIAL_PUBLIC_DATA_URLS[0], { method: 'HEAD', credentials: 'omit' })).rejects.toThrow('blocked');
       expect(fetchSpy).toHaveBeenCalledTimes(8);
+    } finally { guard.restore(); }
+  });
+
+  it('uses redirect-rejecting native transport without entering the XHR-backed fetch', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    jest.mocked(nativeFetch).mockImplementation(async (_url, init) => {
+      expect(init?.redirect).toBe('error');
+      expect(init?.credentials).toBe('omit');
+      throw new TypeError('Redirect rejected before following Location');
+    });
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    try {
+      await expect(target.fetch(OFFICIAL_PUBLIC_DATA_URLS[0], {
+        method: 'GET', credentials: 'omit',
+      })).rejects.toThrow('Redirect rejected');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(guard.snapshot()).toMatchObject({ authorizedAttempts: 1, transportCalls: 1 });
     } finally { guard.restore(); }
   });
 
@@ -103,6 +124,7 @@ describe('installAppHealthTransportGuard', () => {
       { url: `${url}?extra=1`, redirected: false }, { url: '', redirected: false },
       { url, redirected: true }];
     const { target, fetchSpy } = targetWithSpies();
+    jest.mocked(nativeFetch).mockImplementation(fetchSpy as typeof nativeFetch);
     for (const final of finals) jest.mocked(fetchSpy).mockResolvedValueOnce({ ok: true, status: 200, ...final } as Response);
     const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
     try {

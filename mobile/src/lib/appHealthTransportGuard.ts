@@ -181,6 +181,14 @@ export function installAppHealthTransportGuard(options: {
       url,
       purpose,
       () => {
+        if (permittedOfficialData) {
+          // React Native's XHR-backed fetch ignores redirect:error. Expo's
+          // native transport disables redirect following before sending a hop.
+          // Load only on the approved official-data path; local audits need no native transport.
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { fetch: nativeFetch } = require('expo/fetch') as typeof import('expo/fetch');
+          return nativeFetch(url, { ...init, redirect: 'error' });
+        }
         // React Native implements fetch on top of XMLHttpRequest. Mark only
         // the synchronous XHR created by this already-authorized fetch call;
         // direct XHR remains blocked because its redirect cannot be verified.
