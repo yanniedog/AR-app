@@ -98,6 +98,13 @@ describe('integrated app-health display evidence', () => {
     expect(checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_MODEL)?.status).toBe('not-run');
   });
 
+  it('does not invent a missing live update surface for a local snapshot that never visited it', () => {
+    const checks = updateDisplayReport('', 'local');
+    expect(checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT))
+      .toMatchObject({ status: 'not-run', metrics: { missingSurfaces: 0, plannedSurfaces: 0 } });
+    expect(checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT)?.status).toBe('not-run');
+  });
+
   it('retains a terminal failed result even when its data probe is optional', () => {
     const surface = ANDROID_UPDATE_READINESS_AUDIT.expectedSurface;
     const checks = updateDisplayReport([

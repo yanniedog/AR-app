@@ -1,5 +1,6 @@
 import { SECTIONS } from '../constants';
 import { mandatoryEligibleRows } from './eligibilityGate';
+import { rowsForProductKey } from './rateRowIndex';
 import { matchesLvrTier } from './lvrRange';
 import { yieldToUi } from '../lib/yieldToUi';
 import { isMeaningfulDepositRate, MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
@@ -676,7 +677,7 @@ export function findByKey(
   productKey: string,
 ): { row: RateRow; section: SectionKey; siblings: RateRow[] } | null {
   for (const section of Object.keys(sections) as SectionKey[]) {
-    const matches = sections[section].rates.filter((r) => r.product_key === productKey);
+    const matches = rowsForProductKey(sections[section].rates, productKey);
     if (matches.length) {
       return { row: matches[0], section, siblings: matches };
     }
@@ -690,7 +691,7 @@ export function findEligibleByKey(
   productKey: string,
 ): ReturnType<typeof findByKey> {
   for (const section of Object.keys(sections) as SectionKey[]) {
-    const siblings = mandatoryEligibleRows(sections[section].rates.filter(row => row.product_key === productKey));
+    const siblings = mandatoryEligibleRows(rowsForProductKey(sections[section].rates, productKey));
     if (siblings.length) return { row: siblings[0], section, siblings };
   }
   return null;

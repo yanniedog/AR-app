@@ -1,5 +1,6 @@
 import { uiLabel } from '../lib/uiCopy';
 import React, { useSyncExternalStore } from 'react';
+import { router } from 'expo-router';
 
 import {
   getDebugLogUploadSnapshot,
@@ -14,6 +15,7 @@ const LABELS: Record<ReturnType<typeof getDebugLogUploadSnapshot>['phase'], UiLa
   preparing: 'Preparing',
   uploading: 'Uploading',
   verifying: 'Verifying',
+  verified: 'Uploaded',
   copying: 'Copying',
   copied: 'Copied',
   failed: 'Upload failed',
@@ -27,12 +29,16 @@ export function DebugLogUploadStatus({ sessionId }: { sessionId?: string | null 
   return (
     <Card style={{ gap: 8 }}>
       <AppText variant="small" weight="700" accessibilityLiveRegion="polite">
-        {LABELS[state.phase]}
+        {state.verified && state.phase === 'failed' && !state.error ? uiLabel('Uploaded') : LABELS[state.phase]}
       </AppText>
       {state.url ? <AppText variant="small" selectable>{uiIdentifier(state.url)}</AppText> : null}
       {state.error ? <AppText variant="small" color="danger">{uiLabel("Upload failed")}</AppText> : null}
       {state.mayHaveUploaded && !state.verified ? <AppText variant="small">{uiJoin('Public copy', ': ', 'Unverified', ' · ', 'Duplicate public copy possible')}</AppText> : null}
-      {state.phase === 'failed' || state.phase === 'copied' ? (
+      {state.recoveryReceipt ? <>
+        <AppText variant="small">{uiJoin('Delete uploaded log', ': ', 'Required')}</AppText>
+        <Button title="Debug log" variant="secondary" onPress={() => router.push('/debug-log')} />
+      </> : null}
+      {!state.preparationFailed && (state.phase === 'failed' || state.phase === 'copied' || state.phase === 'verified') ? (
         <Button
           title={state.verified ? 'Copy link' : state.url ? 'Retry verification' : state.mayHaveUploaded ? 'Upload another copy' : 'Retry upload'}
           variant="secondary"

@@ -68,6 +68,7 @@ const FIXED_CHECK_IDS = new Set([
   'external-link-inventory',
 ]);
 const JOURNEY_IDS = [
+  'rates', 'rates-mortgage', 'rates-savings', 'rates-td', 'market', 'bank-rates',
   'home', 'response', 'outlook', 'rba', 'rba-redirect', 'watchlist', 'settings', 'search',
   'calculator', 'projections', 'lenders', 'profile', 'product', 'rate-receipt',
   'lender', 'compare', 'terms', 'debug-log',
@@ -229,4 +230,14 @@ export function createDeidentifiedDiagnosticsShare(
     destination: DEIDENTIFIED_DIAGNOSTICS_DESTINATION,
     fields: DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW,
   };
+}
+
+/** Public pastes carry the allowlisted report only. Keep all checks; reject
+ * oversize reports instead of silently uploading a partial diagnostic. */
+export function createPublicPerformanceAuditReport(report: PerformanceAuditReport): string {
+  const body = JSON.stringify(buildDeidentifiedPerformanceAudit(report));
+  if (new TextEncoder().encode(body).length > 2 * 1024 * 1024) {
+    throw new Error('The deidentified report exceeds the public upload limit.');
+  }
+  return body;
 }

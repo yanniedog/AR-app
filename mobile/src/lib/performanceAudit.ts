@@ -528,7 +528,7 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     estimate: null,
     cancelRequested: false,
     paused: false,
-    report: null,
+    report: auditState.report,
     error: null,
   });
   return sessionId;
@@ -608,7 +608,7 @@ export function cancelPerformanceAudit(): void {
   });
 }
 
-/** Publish the finished report locally. Sharing is a separate user action. */
+/** Publish the finished report locally before applying the run's upload choice. */
 export function completePerformanceAudit(report: PerformanceAuditReport): void {
   emit({
     ...auditState,
@@ -623,6 +623,29 @@ export function completePerformanceAudit(report: PerformanceAuditReport): void {
     report,
     error: null,
   });
+}
+
+/** Reopen the last finished diagnosis without starting work or publishing it. */
+export function restoreCompletedPerformanceAudit(report: PerformanceAuditReport): void {
+  if (auditState.report) return;
+  // Disk recovery can finish after a new run starts or terminates. Keep that
+  // run's identity/progress/error while retaining the previous diagnosis; the
+  // screen already hides completed reports during active work.
+  if (auditState.status !== 'idle') {
+    emit({ ...auditState, report });
+    return;
+  }
+  emit({ ...auditState, status: 'complete', sessionId: report.sessionId, report,
+    startedAt: report.startedAt, storedCheckCount: report.watchdog.storedCheckCount,
+    lastStoredCheckAt: report.watchdog.lastStoredCheckAt, progress: { completed: report.checks.length,
+      total: report.checks.length, label: 'Audit complete' } });
+}
+
+/** Clear diagnostics without cancelling active work or its recovery barrier. */
+export function clearCompletedPerformanceAuditState(): void {
+  emit({ ...auditState, report: null,
+    ...(auditState.status === 'complete' ? { status: 'idle' as const, sessionId: null, startedAt: null,
+      storedCheckCount: 0, lastStoredCheckAt: null, progress: { completed: 0, total: 0, label: 'Ready' }, error: null } : {}) });
 }
 
 export function markPerformanceAuditCancelled(): void {
