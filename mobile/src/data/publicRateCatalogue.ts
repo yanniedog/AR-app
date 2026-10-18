@@ -46,8 +46,20 @@ function reservedSnapshot(client: CatalogueClient): PublicRateCatalogueState {
   return reserved;
 }
 let auditOverlay: { owner: object; key: string; state: PublicRateCatalogueState } | undefined;
-function manifestKey(manifest: Manifest): string {
-  return `${manifest.payload_revision?.bundle_sha256 ?? ''}:${hashText(canonical(manifest.public_rate_catalogue))}`;
+const malformedManifestKeys = new WeakMap<Manifest, string>();
+let malformedManifestSequence = 0;
+function manifestKey(manifest: Manifest): string | undefined {
+  // Legacy publications have no catalogue capability and require no key.
+  if (!manifest.public_rate_catalogue) return undefined;
+  try {
+    return `${manifest.payload_revision?.bundle_sha256 ?? ''}:${hashText(canonical(manifest.public_rate_catalogue))}`;
+  } catch {
+    // Non-JSON capability data must reach the normal failed-client validation
+    // view, rather than throwing while a React hook derives its cache identity.
+    let key = malformedManifestKeys.get(manifest);
+    if (!key) { key = `invalid-public-rate-capability:${++malformedManifestSequence}`; malformedManifestKeys.set(manifest, key); }
+    return key;
+  }
 }
 class LocalCatalogueCacheMiss extends Error {}
 function assertCatalogueActive(signal?: AbortSignal): void {
@@ -187,7 +199,7 @@ export function createPublicRateCatalogueClient(manifest: Manifest,
 
 function clientFor(manifest: Manifest | null): CatalogueClient {
   if (!manifest?.public_rate_catalogue) return { snapshot: () => unavailable, subscribe: () => () => undefined, start: async () => undefined };
-  const key = manifestKey(manifest);
+  const key = manifestKey(manifest)!;
   const cached = clients.get(key); if (cached) return cached;
   let client: CatalogueClient;
   try { client = createPublicRateCatalogueClient(manifest); }
@@ -247,7 +259,10 @@ export interface AuditPublicRateCatalogueLoad {
 /** Audit probing cannot publish expected cache misses into the normal UI client. */
 export function preparePublicRateCatalogueForAudit(manifest: Manifest): AuditPublicRateCatalogueLoad {
   const normalClient = clientFor(manifest), existing = normalClient.snapshot();
-  const controller = new AbortController(), owner = {}, key = manifestKey(manifest);
+  const key = manifestKey(manifest);
+  if (!key) return { ready: Promise.resolve(existing), cancelAndDrain: async () => undefined,
+    quiesce: () => undefined, release: () => undefined };
+  const controller = new AbortController(), owner = {};
   if (auditReservation) throw new Error('Public pricing catalogue preparation already belongs to an audit');
   let resume!: () => void;
   const released = new Promise<void>(resolve => { resume = resolve; });
