@@ -144,6 +144,26 @@ test('a corrupt retained catalogue remains a failure instead of using the cache-
   finally { await load.cancelAndDrain(); local.restore(); load.release(); }
 });
 
+test.each([false, true])('a missing first shard cannot hide a later corrupt retained shard (missing index: %s)', async missingIndex => {
+  const f = fixture();
+  if (!missingIndex) cache(f, [f.capability.index]);
+  mockCache.set(f.capability.shards[3].name, strToU8('corrupt'));
+  const local = guard(f, 'local'), load = preparePublicRateCatalogueForAudit(f.manifest);
+  try {
+    await expect(load.ready).rejects.toThrow();
+    expect(jest.mocked(publicRateAssetCache.read).mock.calls.some(([, asset]) => asset.name === f.capability.shards[3].name)).toBe(true);
+    expect(local.snapshot()).toMatchObject({ transportCalls: 0 });
+  } finally { await load.cancelAndDrain(); local.restore(); load.release(); }
+});
+
+test('an audit cache storage failure cannot turn into an unavailable catalogue', async () => {
+  const f = fixture();
+  jest.mocked(publicRateAssetCache.read).mockRejectedValueOnce(new Error('storage fixture failed'));
+  const local = guard(f, 'local'), load = preparePublicRateCatalogueForAudit(f.manifest);
+  try { await expect(load.ready).rejects.toThrow('storage fixture failed'); }
+  finally { await load.cancelAndDrain(); local.restore(); load.release(); }
+});
+
 test('warm complete validated clients are reused without cache reads, acquisition or overlay replacement', async () => {
   const f = fixture(); cache(f, [f.capability.index, ...f.capability.shards]);
   const baseline = await ensurePublicRateCatalogueLoaded(f.manifest);

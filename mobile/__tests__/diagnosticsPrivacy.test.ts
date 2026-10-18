@@ -73,6 +73,7 @@ describe('deidentified diagnostics privacy boundary', () => {
     const parsed = JSON.parse(body);
     expect(parsed.checks.map((check: { id: string | null }) => check.id)).toEqual([...ids.slice(0, 5), null]);
     expect(parsed.checks[0].failureCode).toBe('check-failed');
+    expect(createDeidentifiedDiagnosticsShare(reportFixture(checks)).fields.join(' ')).toContain('enumerated failure codes');
     expect(parsed.checks[2]).toMatchObject({ failureCode: 'public-catalogue-cache-miss',
       metrics: { publicCatalogueCacheMiss: true, availabilityFailure: true } });
     expect(body).not.toContain('Private');

@@ -86,7 +86,7 @@ export const DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW = [
   'payload source, run date, product/provider counts and optional-asset availability',
   'aggregate outcome/counts and measured responsiveness values',
   'aggregate data-quality, asset, display and network-policy findings',
-  'fixed check IDs, status, measured duration and allowlisted numeric/boolean metrics',
+  'fixed check IDs, status, enumerated failure codes, measured duration and allowlisted numeric/boolean metrics',
 ] as const;
 
 export interface DeidentifiedDiagnosticsShare {

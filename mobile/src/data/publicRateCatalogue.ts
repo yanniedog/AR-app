@@ -75,7 +75,7 @@ const unavailable: PublicRateCatalogueState = { status: 'unavailable', products:
 async function acquire(edition: string, asset: PublicRateAsset, isIndex: boolean, signal?: AbortSignal, localOnly = false): Promise<unknown> {
   assertCatalogueActive(signal);
   const maximum = isIndex ? PUBLIC_RATE_INDEX_DECODED : PUBLIC_RATE_SHARD_DECODED;
-  const retained = await publicRateAssetCache.read(edition, asset).catch(() => null);
+  const retained = await publicRateAssetCache.read(edition, asset, { strict: localOnly || isLocalAppHealthAudit() });
   assertCatalogueActive(signal);
   if (retained) {
     const decoded = await gunzipCooperatively(retained, 64 * 1024, maximum);
@@ -306,10 +306,12 @@ export function beginPublicRateCatalogueAudit() {
       return { ready: Promise.resolve(existing), cancelAndDrain: async () => { controller.abort(); }, quiesce, release };
     }
     const localOnly = isLocalAppHealthAudit();
+    const retainedValues = new Map<string, unknown>();
     let client: CatalogueClient;
     try {
       client = createPublicRateCatalogueClient(manifest,
-        (asset, isIndex) => acquire(hashText(canonical(manifest.public_rate_catalogue)), asset, isIndex, controller.signal, localOnly),
+        (asset, isIndex) => localOnly ? Promise.resolve(retainedValues.get(asset.name))
+          : acquire(hashText(canonical(manifest.public_rate_catalogue)), asset, isIndex, controller.signal),
         { signal: controller.signal, abort: () => controller.abort() });
     } catch (error) { release(); throw error; }
     // While preparing, mounted hooks retain usable metadata but route their
@@ -320,8 +322,35 @@ export function beginPublicRateCatalogueAudit() {
     let cancelled = false;
     ready = (async () => {
       try {
+        if (localOnly) {
+          // Inspect every retained asset before choosing the absence fallback.
+          // Missing entries never cancel sibling validation, and hard failures
+          // take priority. Keep decoded results for the client's schema checks.
+          const capability = validatePublicRateCapability(manifest)!;
+          const assets = [capability.index, ...capability.shards];
+          const edition = hashText(canonical(manifest.public_rate_catalogue));
+          let cursor = 0, missing: LocalCatalogueCacheMiss | undefined;
+          const inspect = async () => {
+            while (cursor < assets.length) {
+              const asset = assets[cursor++];
+              try {
+                retainedValues.set(asset.name, await acquire(edition, asset, asset === capability.index, controller.signal, true));
+              } catch (error) {
+                if (!(error instanceof LocalCatalogueCacheMiss)) throw error;
+                missing ??= error;
+              }
+              await yieldToUi(0);
+            }
+          };
+          const outcomes = await Promise.allSettled([inspect(), inspect()]);
+          const failure = outcomes.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+          if (failure) throw failure.reason;
+          assertCatalogueActive(controller.signal);
+          if (missing) throw missing;
+        }
         await client.snapshot().loadAll();
       } catch (error) {
+        retainedValues.clear();
         // Workers have drained before loadAll rejects. A missing optional local
         // cache must not prevent auditing the core payload and its screens.
         // Corruption, live-source failures and cancellation remain fatal.
@@ -331,6 +360,7 @@ export function beginPublicRateCatalogueAudit() {
         auditListeners.forEach(listener => listener());
         return state;
       }
+      retainedValues.clear();
       assertCatalogueActive(controller.signal);
       const state = client.snapshot();
       if (state.status !== 'ready' || !state.allLoaded) throw new Error('Public pricing catalogue is not fully available');
