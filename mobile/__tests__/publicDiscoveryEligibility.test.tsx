@@ -7,6 +7,7 @@ import { openProduct } from '../src/lib/nav';
 import { AS_OF, catalogue, core, product } from '../testUtils/publicRateJourney';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 
+type InspectableRenderer = ReactTestRenderer & { root: { findByType(type: string): { props: Record<string, any> }; findAllByType(type: string): unknown[] } };
 const mockCatalogue = catalogue();
 const mockScenario = normalizeUserRateScenario(undefined);
 jest.mock('../src/data/publicRateCatalogue', () => ({ usePublicRateCatalogue: () => mockCatalogue }));
@@ -20,13 +21,13 @@ afterEach(() => { installMandatoryEligibility(selectMandatoryEligibility(null, n
 
 it('opens a matching catalogue-only discovery product and removes it when a mandatory feature becomes unknown', () => {
   installMandatoryEligibility(selectMandatoryEligibility(core([]), { rateTypes: ['VARIABLE'] }, {}));
-  let tree!: ReactTestRenderer;
-  act(() => { tree = TestRenderer.create(<PublicProductDiscovery section="Mortgage" />); });
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<PublicProductDiscovery section="Mortgage" />) as InspectableRenderer; });
   try {
-    const button = tree.root.findByType('Button' as never);
+    const button = tree.root.findByType('Button');
     act(() => button.props.onPress());
     expect(openProduct).toHaveBeenCalledWith(product.productKey);
     act(() => installMandatoryEligibility(selectMandatoryEligibility(core([]), { accountFeatures: ['OFFSET'] }, {})));
-    expect(tree.root.findAllByType('Button' as never)).toHaveLength(0);
+    expect(tree.root.findAllByType('Button')).toHaveLength(0);
   } finally { act(() => tree.unmount()); }
 });
