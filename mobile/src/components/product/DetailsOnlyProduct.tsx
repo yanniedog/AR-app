@@ -1,3 +1,4 @@
+import type { RateScenario } from '../../data/publicRateModel';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
 import { PublicRateEvidence } from '../scenario/PublicRateEvidence';
 import { ActivityPeriodCalculation } from './ActivityPeriodCalculation';
@@ -14,7 +15,7 @@ import { AppText, Button } from '../ui';
 import { DetailGroup, OfficialLinks, ProductFacts } from './ProductDetailParts';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
 import { uiLabel, uiDate, uiIdentifier, uiJoin, uiProductName, uiProviderName, uiPublicProductName } from '../../lib/uiCopy';
-export function DetailsOnlyProduct({ productKey, programmeId }: { productKey: string; programmeId?: string }) {
+export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { productKey: string; programmeId?: string; rateScenario?: RateScenario }) {
   const { details, manifest, loading, retry } = useDetailsCatalogue();
   const detail = details && Object.hasOwn(details.products, productKey) ? details.products[productKey] : null;
   const identity = detailsDisplayIdentity(detail);
@@ -24,7 +25,7 @@ export function DetailsOnlyProduct({ productKey, programmeId }: { productKey: st
     <AppText weight="700">{product ? uiPublicProductName(product) : identity.name ? uiProductName({ product_name: identity.name }) : uiLabel('Product')}
     </AppText>
     {(identity.provider || identity.productCategory) && <AppText variant="small">{uiJoin(identity.provider ? uiProviderName({ provider: identity.provider }) : null, identity.productCategory ? uiJoin(' · ', uiIdentifier(identity.productCategory)) : null)}</AppText>}
-    <PublicRateEvidence productKey={productKey} programmeId={programmeId} />
+    <PublicRateEvidence productKey={productKey} programmeId={programmeId} scenario={rateScenario} />
     {detail ? <>
       <AppText variant="small">{uiJoin('Published', ' · ', uiDate(manifest?.run_date), ' · ', 'Rate', ' · ', 'Unavailable')}</AppText>
       <DetailGroup loading={false} icon="cash-outline" title="Fees" items={detail.fees} /><DetailGroup loading={false} icon="person-outline" title="Eligibility" items={detail.eligibility} />

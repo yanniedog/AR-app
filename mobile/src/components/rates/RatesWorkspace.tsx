@@ -110,7 +110,7 @@ const SearchProductRow = React.memo(function SearchProductRow({ row, section, se
 }) {
   useLayoutEffect(() => auditCell ? onAuditCellCommit(row, auditRevision) : undefined,
     [auditCell, auditRevision, onAuditCellCommit, row]);
-  const onPress = useCallback(() => selectMode ? onToggleSelect(rowToken(row)) : openProduct(row.product_key, row.rate_index, row.public_programme_id),
+  const onPress = useCallback(() => selectMode ? onToggleSelect(rowToken(row)) : openProduct(row.product_key, row.rate_index, row.public_programme_id, 'rates-comparison'),
     [selectMode, onToggleSelect, row]);
   return <ProductCard row={row} section={section} comparisonUnverified={comparisonUnverified} rateScenario={rateScenario}
     logoRenderStateId={`search:${row.rate_index ?? 'default'}#${row.product_key}`}
@@ -689,7 +689,7 @@ export default function RatesWorkspace() {
           ListHeaderComponent={availability === 'listed' ? <View style={{ gap: 8 }}>
             <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows} />
             {catalogue.status !== 'unavailable' ? <><PublicPricingCoverage section={section} rows={pricingCandidates} scenario={scenario} scenarioForRow={rowScenario} compact />
-              <PublicProductDiscovery section={section} rateScenario={scenarioFor(section)} rows={baseRows} query={debouncedQuery} /></> : null}
+              <PublicProductDiscovery section={section} rateScenario={scenarioFor(section)} pricingOrigin="rates-comparison" rows={baseRows} query={debouncedQuery} /></> : null}
             {section === 'Mortgage' ? <MortgageComparisonControls catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={filters}
               unverified={unverifiedResultCount} invalid={mortgageScope.invalid} /> : null}
           </View> : null}
