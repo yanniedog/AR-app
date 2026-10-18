@@ -1,5 +1,7 @@
 import type { RateRow } from '../types';
 
+// Adapted from yanniedog/AR-app#413, reviewed head
+// 6018ae6c9ae30a28d62778a9bf9c7a217943c530 (Jay Kay).
 type RowField = 'product_key' | 'provider';
 
 // Installed payload row arrays are immutable. Route transitions repeatedly look

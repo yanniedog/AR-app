@@ -1,5 +1,5 @@
 import type { ProductDetail, RateRow, SectionKey } from '../types';
-import { advertisedTermMonths, calculatorAmount, computeLvr, MAX_CALCULATOR_MORTGAGE_AMOUNT, num } from './calc';
+import { advertisedTermMonths, calculatorAmount, computeLvr, MAX_CALCULATOR_MORTGAGE_AMOUNT, MAX_CALCULATOR_DEPOSIT_AMOUNT } from './calc';
 import { productHasAllFeatures } from './features';
 import type { PublicProgramme, RateScenario } from './publicRateModel';
 import type { PublicCostFee, PublicCostScenario } from './publicCostModel';
@@ -17,8 +17,10 @@ export function publicInterestPayment(value?: string): 'monthly' | 'quarterly' |
   return 'unknown';
 }
 
-const monthly = (value: string, frequency: string) => {
-  const amount = num(value);
+const monthly = (value: string, frequency: string, maximum: number): string | null => {
+  if (!['weekly', 'fortnightly', 'monthly'].includes(frequency)) return null;
+  const amount = value.trim() ? calculatorAmount(value, maximum) : 0;
+  if (amount === null) return null;
   return String(frequency === 'weekly' ? amount * 52 / 12 : frequency === 'fortnightly' ? amount * 26 / 12 : amount);
 };
 const clean = (value: string) => value.replace(/[$,\s]/g, '');
@@ -55,6 +57,8 @@ export function scenarioPublicCost({ section, scenario, row, programme, rateScen
     ...(section === 'Mortgage' && fixed ? { fixedPeriodMonths: advertisedTermMonths(row) ?? undefined } : {}),
   };
   if (section === 'Mortgage') {
+    const extraMonthlyRepayment = monthly(inputs.extraRepaymentAmount, inputs.extraRepaymentFrequency, MAX_CALCULATOR_MORTGAGE_AMOUNT);
+    if (extraMonthlyRepayment === null) return { reasonCodes: ['scenario_inputs_missing'], assumptions };
     // The comparison principal describes the target loan. Never write it into
     // the persisted current-loan scenario or silently price its older balance.
     const principal = Object.hasOwn(rateScenario, 'amount')
@@ -95,15 +99,19 @@ export function scenarioPublicCost({ section, scenario, row, programme, rateScen
       remainingTermMonths: Math.round(Number(scenario.mortgage.years) * 12),
       repayment: repayment === 'INTEREST_ONLY' || repayment === 'IO' ? 'interest_only' : 'principal_and_interest',
       offsetBalance: offset, offsetSupported,
-      extraMonthlyRepayment: monthly(inputs.extraRepaymentAmount, inputs.extraRepaymentFrequency),
+      extraMonthlyRepayment,
     }, reasonCodes: feeContext.reasonCodes, assumptions };
   }
   const interestPayment = publicInterestPayment(programme?.metadata?.interestPayment?.type === 'maturity' ? 'MATURITY'
     : programme?.metadata?.interestPayment?.frequency ?? row.interest_payment);
-  if (section === 'Savings') return { scenario: { ...base, section: 'Savings', startingBalance: clean(scenario.savings.balance),
-    monthlyContribution: monthly(inputs.periodicAmount, inputs.periodicFrequency), monthlyWithdrawal: monthly(inputs.withdrawalAmount, inputs.withdrawalFrequency),
-    interestPayment, interestBasis: interestPayment === 'daily' ? 'actual_365' : 'monthly_nominal',
-  }, reasonCodes: feeContext.reasonCodes, assumptions };
+  if (section === 'Savings') {
+    const monthlyContribution = monthly(inputs.periodicAmount, inputs.periodicFrequency, MAX_CALCULATOR_DEPOSIT_AMOUNT);
+    const monthlyWithdrawal = monthly(inputs.withdrawalAmount, inputs.withdrawalFrequency, MAX_CALCULATOR_DEPOSIT_AMOUNT);
+    if (monthlyContribution === null || monthlyWithdrawal === null) return { reasonCodes: ['scenario_inputs_missing'], assumptions };
+    return { scenario: { ...base, section: 'Savings', startingBalance: clean(scenario.savings.balance), monthlyContribution, monthlyWithdrawal,
+      interestPayment, interestBasis: interestPayment === 'daily' ? 'actual_365' : 'monthly_nominal',
+    }, reasonCodes: feeContext.reasonCodes, assumptions };
+  }
   if (interestPayment === 'daily') return { reasonCodes: ['interest_payment_frequency_unsupported'], assumptions };
   const dayTerm = programme?.metadata?.quotedTerm?.unit === 'day' ? Number(programme.metadata.quotedTerm.value)
     : row.term && /^P\d+D$/.test(row.term) ? Number(row.term.slice(1, -1)) : undefined;

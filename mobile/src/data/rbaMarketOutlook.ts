@@ -1,4 +1,4 @@
-import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
+import { getLocalAppHealthAuditGeneration, isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { cache } from './cache';
 import { ECONOMIC_RECHECK_MS, type CashRateForecast } from './economicOutlookTypes';
 import {
@@ -7,17 +7,21 @@ import {
   parseRbaEconomistsCsv,
 } from './rbaMarketOutlookParse';
 import type { RbaBondForwards, RbaMarketOutlook } from './rbaMarketOutlookTypes';
+import { RBA_F17_FORWARD_URL, RBA_J1_FORECAST_URL } from './officialEconomicSources';
 
 export type { RbaBondForwards, RbaMarketOutlook } from './rbaMarketOutlookTypes';
 export { parseRbaBondForwardsCsv, parseRbaEconomistsCsv } from './rbaMarketOutlookParse';
 
-export const RBA_F17_FORWARD_URL = 'https://www.rba.gov.au/statistics/tables/csv/f17-forward-rates.csv';
-export const RBA_J1_FORECAST_URL = 'https://www.rba.gov.au/statistics/tables/csv/j1-cash-rate.csv';
+export { RBA_F17_FORWARD_URL, RBA_J1_FORECAST_URL } from './officialEconomicSources';
 
 let inFlight: { force: boolean; promise: Promise<RbaMarketOutlook> } | null = null;
 let requestSequence = 0;
 let latest: { sequence: number; payload: RbaMarketOutlook } | null = null;
 let commitQueue: Promise<void> = Promise.resolve();
+// Native writes cannot be cancelled; local readers must not adopt a write that
+// crossed into their audit before its online publication was accepted.
+let cacheWriteFence: { key: string; fallback: RbaMarketOutlook | null; pending: boolean } | null = null;
+const cacheValueKey = (value: RbaMarketOutlook) => JSON.stringify(normalizeRbaMarketOutlook(value));
 let generation = 0;
 let clearing: Promise<void> | null = null;
 const resetListeners = new Set<() => void>();
@@ -32,6 +36,7 @@ export function resetRbaMarketOutlookRuntimeCache(clearStorage: () => Promise<vo
   if (clearing) return clearing;
   generation += 1;
   latest = null;
+  cacheWriteFence = null;
   inFlight = null;
   const run = (async () => {
     await commitQueue;
@@ -54,6 +59,7 @@ export function resetRbaMarketOutlookRuntimeCacheForTests(): void {
   inFlight = null;
   requestSequence = 0;
   latest = null;
+  cacheWriteFence = null;
   commitQueue = Promise.resolve();
 }
 
@@ -100,11 +106,17 @@ function mergeCached(stored: RbaMarketOutlook | null, memory: RbaMarketOutlook |
   };
 }
 
-async function readCached(expectedGeneration: number): Promise<RbaMarketOutlook | null> {
+async function readCached(expectedGeneration: number, localOnly = false): Promise<RbaMarketOutlook | null> {
   // Validate stored public data before allowing an offline audit to rely on it.
   const stored = normalizeRbaMarketOutlook(await cache.readRbaMarketOutlook());
   assertCurrentGeneration(expectedGeneration);
-  return mergeCached(stored, latest?.payload ?? null);
+  const local = localOnly || isLocalAppHealthAudit();
+  const fence = cacheWriteFence;
+  const matchesFence = stored && fence && cacheValueKey(stored) === fence.key;
+  const trustedStored = local && matchesFence ? fence.fallback : stored;
+  // A later normal read can adopt the now-settled public cache for future audits.
+  if (!local && matchesFence && !fence.pending && cacheWriteFence === fence) cacheWriteFence = null;
+  return mergeCached(trustedStored, latest?.payload ?? null);
 }
 
 function offline(cached: RbaMarketOutlook | null): RbaMarketOutlook {
@@ -117,7 +129,7 @@ async function fetchCsv(url: string): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8_000);
   try {
-    const response = await fetch(url, { headers: { Accept: 'text/csv' }, signal: controller.signal });
+    const response = await fetch(url, { method: 'GET', credentials: 'omit', headers: { Accept: 'text/csv' }, signal: controller.signal });
     if (!response.ok) throw new Error(`Official RBA data request failed (${response.status})`);
     return await response.text();
   } finally {
@@ -128,12 +140,17 @@ async function fetchCsv(url: string): Promise<string> {
 async function commit(
   sequence: number,
   expectedGeneration: number,
+  auditGeneration: number,
   incoming: RbaMarketOutlook,
   cached: RbaMarketOutlook | null,
 ): Promise<RbaMarketOutlook> {
   let accepted = incoming;
   const run = commitQueue.then(async () => {
     assertCurrentGeneration(expectedGeneration);
+    if (isLocalAppHealthAudit() || auditGeneration !== getLocalAppHealthAuditGeneration()) {
+      accepted = offline(latest?.payload ?? cached);
+      return;
+    }
     const previous = mergeCached(cached, latest?.payload ?? null);
     const isNewerRequest = sequence >= (latest?.sequence ?? 0);
     const sources = previous ? mergeSources(incoming, previous, isNewerRequest) : incoming;
@@ -159,11 +176,22 @@ async function commit(
       bondForwards: sources.bondForwards,
       economists: sources.economists,
     });
+    // Reserve the previous trusted view before entering an uncancellable write.
+    const fence = { key: cacheValueKey(accepted), fallback: previous, pending: true };
+    cacheWriteFence = fence;
     // A storage failure must not erase successfully fetched public information.
     try {
       await cache.writeRbaMarketOutlook(accepted);
     } catch { /* This session can still use the validated in-memory copy. */ }
+    finally { fence.pending = false; }
     assertCurrentGeneration(expectedGeneration);
+    // A native write already in progress cannot be cancelled. Do not publish
+    // its online result if a local audit began while the write was pending.
+    if (isLocalAppHealthAudit() || auditGeneration !== getLocalAppHealthAuditGeneration()) {
+      accepted = offline(latest?.payload ?? cached);
+      return;
+    }
+    if (cacheWriteFence === fence) cacheWriteFence = null;
     latest = { sequence: Math.max(sequence, latest?.sequence ?? 0), payload: accepted };
   });
   commitQueue = run.catch(() => undefined);
@@ -174,15 +202,16 @@ async function commit(
 /** Public RBA context only: no personal preferences or portfolio data leave the device. */
 export async function loadRbaMarketOutlook(force = false): Promise<RbaMarketOutlook> {
   const localOnly = isLocalAppHealthAudit();
+  const auditGeneration = getLocalAppHealthAuditGeneration();
   if (clearing) await clearing;
   const expectedGeneration = generation;
   // Do not join a network refresh that began before a local audit installed its guard.
-  if (localOnly || isLocalAppHealthAudit()) return offline(await readCached(expectedGeneration));
+  if (localOnly || isLocalAppHealthAudit()) return offline(await readCached(expectedGeneration, true));
   if (inFlight && (!force || inFlight.force)) return inFlight.promise;
   const sequence = ++requestSequence;
   const run = (async () => {
     const cached = await readCached(expectedGeneration);
-    if (isLocalAppHealthAudit()) return offline(cached);
+    if (isLocalAppHealthAudit() || auditGeneration !== getLocalAppHealthAuditGeneration()) return offline(cached);
     const age = cached ? Date.now() - Date.parse(cached.checkedAt) : Infinity;
     if (!force && cached?.refreshStatus === 'current' && age >= 0 && age < ECONOMIC_RECHECK_MS) return freezePayload(cached);
     const checkedAt = new Date().toISOString();
@@ -190,7 +219,7 @@ export async function loadRbaMarketOutlook(force = false): Promise<RbaMarketOutl
       fetchCsv(RBA_F17_FORWARD_URL).then((text) => parseRbaBondForwardsCsv(text)),
       fetchCsv(RBA_J1_FORECAST_URL).then((text) => parseRbaEconomistsCsv(text)),
     ]);
-    return commit(sequence, expectedGeneration, {
+    return commit(sequence, expectedGeneration, auditGeneration, {
       schema_version: 1,
       fetchedAt: checkedAt,
       checkedAt,

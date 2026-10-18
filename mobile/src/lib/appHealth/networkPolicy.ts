@@ -5,10 +5,12 @@ import {
   type AppHealthNetworkDecision,
   type AppHealthNetworkPurpose,
   type AppHealthNetworkSnapshot,
+  type AppHealthNetworkViolation,
   type AppHealthSourceContract,
 } from './types';
 import { StandardUrl as URL } from '../standardUrl';
 import { trustedExternalUrl, type TrustedExternalUrlRequest } from '../trustedExternalUrl';
+import { OFFICIAL_PUBLIC_DATA_URLS } from '../../data/officialEconomicSources';
 
 export interface AppHealthNetworkSessionHandle {
   readonly token: number;
@@ -40,6 +42,30 @@ interface ActiveSession {
   transportCalls: number;
   policyViolations: number;
   pendingAuthorizations: number;
+  violations: AppHealthNetworkViolation[];
+}
+
+const MAX_LOCAL_VIOLATIONS = 8;
+const officialPublicDataUrls = new Set(OFFICIAL_PUBLIC_DATA_URLS);
+
+/** No query normalization: the fixed ABS query and its order are part of identity. */
+export function canonicalOfficialPublicDataUrl(url: string): string | null {
+  return officialPublicDataUrls.has(url) ? url : null;
+}
+
+function diagnosticHost(value?: string): string | null {
+  if (!value) return null;
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return host.length <= 253 ? host : null;
+  } catch {
+    return null;
+  }
+}
+
+function recordViolation(session: ActiveSession, violation: AppHealthNetworkViolation): void {
+  session.policyViolations += 1;
+  if (session.violations.length < MAX_LOCAL_VIOLATIONS) session.violations.push(violation);
 }
 
 function canonicalAuditUrl(url: string): string | null {
@@ -104,6 +130,7 @@ function snapshotOf(session: ActiveSession): AppHealthNetworkSnapshot {
     blockedAttempts: session.blockedAttempts,
     transportCalls: session.transportCalls,
     policyViolations: session.policyViolations,
+    ...(session.violations.length ? { violations: session.violations.map(item => ({ ...item })) } : {}),
   };
 }
 
@@ -163,6 +190,7 @@ export class AppHealthNetworkPolicy {
       transportCalls: 0,
       policyViolations: 0,
       pendingAuthorizations: 0,
+      violations: [],
     };
     return handle;
   }
@@ -203,6 +231,11 @@ export class AppHealthNetworkPolicy {
       return { allowed: false, reason: 'local-mode' };
     }
     if (purpose === 'external-link' && session.externalUrls.has(url)) {
+      session.authorizedAttempts += 1;
+      session.pendingAuthorizations += 1;
+      return { allowed: true, reason: 'allowlisted' };
+    }
+    if (purpose === 'official-public-data' && canonicalOfficialPublicDataUrl(url)) {
       session.authorizedAttempts += 1;
       session.pendingAuthorizations += 1;
       return { allowed: true, reason: 'allowlisted' };
@@ -253,7 +286,7 @@ export class AppHealthNetworkPolicy {
     if (!session) return;
     session.transportCalls += 1;
     if (!decision.allowed || session.pendingAuthorizations <= 0) {
-      session.policyViolations += 1;
+      recordViolation(session, { reason: 'unattributed-transport' });
       return;
     }
     session.pendingAuthorizations -= 1;
@@ -273,9 +306,23 @@ export class AppHealthNetworkPolicy {
   }
 
   /** Record a post-transport boundary violation such as an unsafe redirect. */
-  recordPolicyViolation(handle: AppHealthNetworkSessionHandle): void {
+  recordPolicyViolation(handle: AppHealthNetworkSessionHandle, context?: {
+    purpose: AppHealthNetworkPurpose;
+    requestedUrl: string;
+    finalUrl?: string;
+    responseStatus?: number;
+  }): void {
     const session = this.sessionFor(handle);
-    if (session) session.policyViolations += 1;
+    if (session) recordViolation(session, {
+      reason: 'untrusted-final-url',
+      ...(context ? {
+        purpose: context.purpose,
+        requestedHost: diagnosticHost(context.requestedUrl),
+        finalHost: diagnosticHost(context.finalUrl),
+        ...(Number.isInteger(context.responseStatus) && context.responseStatus! >= 0 && context.responseStatus! <= 599
+          ? { responseStatus: context.responseStatus } : {}),
+      } : {}),
+    });
   }
 
   snapshot(handle: AppHealthNetworkSessionHandle): AppHealthNetworkSnapshot | null {
@@ -335,6 +382,9 @@ export function appHealthNetworkCheck(snapshot: AppHealthNetworkSnapshot): AppHe
       transportCalls: snapshot.transportCalls,
       policyViolations: snapshot.policyViolations,
     },
+    ...(snapshot.violations?.length ? {
+      localEvidence: { networkViolations: snapshot.violations.map(item => ({ ...item })) },
+    } : {}),
     ...(violation
       ? { summary: 'Network activity crossed the audit policy boundary.' }
       : blockedCodePath

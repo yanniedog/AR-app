@@ -137,7 +137,7 @@ function currentProgramme(row: (typeof rows)[number], programmeId: string, offer
     { ...value.components[0], componentId: 'comparison', role: 'comparison' as const, value: row.comparison_rate, scopeId: offerId },
   ] };
 }
-test('the mounted workspace pages sorted rows, retains selections, resets page-size position and clamps dataset changes', () => {
+test('the mounted workspace pages sorted rows, retains cross-page selections, and clamps size/dataset changes', () => {
   const tree = mount();
   const list = () => tree.root.findByType('FlashList').props;
   const button = (name: string) => tree.root.findAllByType('Button').find((node: any) => node.props.accessibilityLabel === name);
@@ -691,6 +691,30 @@ test('entered comparison inputs select public pricing before ranking, cards and 
   } finally { act(() => tree.unmount()); }
 });
 
+
+test('active legacy compare selections follow semantic binding arrival and toggle off once', () => {
+  const row = rows.find(item => item.rate_index === 0)!;
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [row] } } } }));
+  install();
+  updateRatesSection('Mortgage', { selectMode: true });
+  const tree = mount();
+  try {
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['0#p-0']);
+    const p = publicProgramme({ productId: row.product_key, programmeId: 'arrived', offerId: 'arrived' });
+    mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([
+      { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() },
+        components: [{ ...p.components[0], value: row.rate, scopeId: 'arrived' }] },
+    ], [{ ...publicProduct, productId: row.product_key, productKey: row.product_key, programmeIds: ['arrived'] }], []), generationId: 'binding-arrived' };
+    act(() => tree.update(<RatesWorkspace />));
+    const semantic = publicOfferSelectionToken(row.product_key, 'arrived');
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([semantic]);
+    expect(tree.root.findByType('ProductCard').props.selected).toBe(true);
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
+
 test('temporary purpose and repayment chips resolve public offers before filtering and keep saved requirements mandatory', () => {
   const p = publicProgramme({ sourceBindings: [], conditions: [
     { conditionId: 'purpose', field: 'purpose', operator: 'eq', value: 'INVESTMENT', evidenceIds: [] },
@@ -719,6 +743,29 @@ test('temporary purpose and repayment chips resolve public offers before filteri
   } finally { act(() => tree.unmount()); }
 });
 
+
+test('a selected deduplicated source occurrence survives catalogue binding and stale-token cleanup', () => {
+  const row = rows.find(item => item.rate_index === 0)!;
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [row, { ...row, rate_index: 1 }] } } } }));
+  install();
+  updateRatesSection('Mortgage', { selectMode: true });
+  const tree = mount();
+  try {
+    act(() => updateRatesSection('Mortgage', { selected: ['1#p-0'] }));
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['1#p-0']);
+    const p = publicProgramme({ productId: row.product_key, programmeId: 'arrived', offerId: 'arrived', sourceBindings: [{ rateIndex: 0, pointer: '/lendingRates/0' }, { rateIndex: 1, pointer: '/lendingRates/1' }] });
+    mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([
+      { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() },
+        components: [{ ...p.components[0], value: row.rate, scopeId: 'arrived' }] },
+    ], [{ ...publicProduct, productId: row.product_key, productKey: row.product_key, programmeIds: ['arrived'] }], []), generationId: 'binding-arrived' };
+    act(() => tree.update(<RatesWorkspace />));
+    const semantic = publicOfferSelectionToken(row.product_key, 'arrived');
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([semantic]);
+    expect(tree.root.findByType('ProductCard').props.selected).toBe(true);
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
 
 test.each([false, true])('public-only facet chips reveal an offer with saved legacy aliases: %s', (bound) => {
   const source = { ...publicRow, rate_index: 0, loan_purpose: 'OO', repayment_type: 'PI', ribbon_repayment_type: 'PI' };
@@ -787,55 +834,6 @@ test('multiple mortgage chips retain both public-only offers with exact row pric
     expect(mockStore.getState().setPref).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });
-
-
-test('active legacy compare selections follow semantic binding arrival and toggle off once', () => {
-  const row = rows.find(item => item.rate_index === 0)!;
-  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [row] } } } }));
-  install();
-  updateRatesSection('Mortgage', { selectMode: true });
-  const tree = mount();
-  try {
-    act(() => tree.root.findByType('ProductCard').props.onPress());
-    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['0#p-0']);
-    const p = publicProgramme({ productId: row.product_key, programmeId: 'arrived', offerId: 'arrived' });
-    mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([
-      { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() },
-        components: [{ ...p.components[0], value: row.rate, scopeId: 'arrived' }] },
-    ], [{ ...publicProduct, productId: row.product_key, productKey: row.product_key, programmeIds: ['arrived'] }], []), generationId: 'binding-arrived' };
-    act(() => tree.update(<RatesWorkspace />));
-    const semantic = publicOfferSelectionToken(row.product_key, 'arrived');
-    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([semantic]);
-    expect(tree.root.findByType('ProductCard').props.selected).toBe(true);
-    act(() => tree.root.findByType('ProductCard').props.onPress());
-    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
-  } finally { act(() => tree.unmount()); }
-});
-
-
-test('a selected deduplicated source occurrence survives catalogue binding and stale-token cleanup', () => {
-  const row = rows.find(item => item.rate_index === 0)!;
-  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [row, { ...row, rate_index: 1 }] } } } }));
-  install();
-  updateRatesSection('Mortgage', { selectMode: true });
-  const tree = mount();
-  try {
-    act(() => updateRatesSection('Mortgage', { selected: ['1#p-0'] }));
-    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['1#p-0']);
-    const p = publicProgramme({ productId: row.product_key, programmeId: 'arrived', offerId: 'arrived', sourceBindings: [{ rateIndex: 0, pointer: '/lendingRates/0' }, { rateIndex: 1, pointer: '/lendingRates/1' }] });
-    mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([
-      { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() },
-        components: [{ ...p.components[0], value: row.rate, scopeId: 'arrived' }] },
-    ], [{ ...publicProduct, productId: row.product_key, productKey: row.product_key, programmeIds: ['arrived'] }], []), generationId: 'binding-arrived' };
-    act(() => tree.update(<RatesWorkspace />));
-    const semantic = publicOfferSelectionToken(row.product_key, 'arrived');
-    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([semantic]);
-    expect(tree.root.findByType('ProductCard').props.selected).toBe(true);
-    act(() => tree.root.findByType('ProductCard').props.onPress());
-    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
-  } finally { act(() => tree.unmount()); }
-});
-
 
 test('partial pricing keeps an existing legacy occurrence checked and removable without semantic association', () => {
   const row = rows.find(item => item.rate_index === 0)!;

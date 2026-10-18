@@ -289,6 +289,9 @@ describe('economic outlook', () => {
     );
 
     const first = await loadEconomicOutlook(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(7);
+    expect(fetchSpy.mock.calls.every(([, init]) => init?.method === 'GET' && init.credentials === 'omit'
+      && JSON.stringify(init.headers) === JSON.stringify({ Accept: 'text/csv' }) && init.body == null)).toBe(true);
     readSpy.mockClear();
     fetchSpy.mockClear();
     const second = await loadEconomicOutlook(false);

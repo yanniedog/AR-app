@@ -78,6 +78,20 @@ describe('saved rate references', () => {
     expect(resolveSavedRates(core, [ref])).toEqual([]);
   });
 
+  it('adopts a same-day correction without changing the saved observation or keeping a removed tier', () => {
+    const original = row(2, '0.06');
+    const corrected = row(2, '0.065');
+    const ref = makeSavedRateRef(original);
+    const edition = { ...core, sections: { ...core.sections,
+      Mortgage: { ...core.sections.Mortgage, rates: [original] } } };
+    expect(resolveSavedRates(edition, [ref])[0]?.row).toBe(original);
+    edition.sections.Mortgage.rates = [corrected];
+    expect(resolveSavedRates(edition, [ref])[0]).toEqual({ ref, row: corrected, section: 'Mortgage' });
+    expect(ref.savedRate).toBe(0.06);
+    edition.sections.Mortgage.rates = [row(1, '0.055')];
+    expect(resolveSavedRates(edition, [ref])).toEqual([]);
+  });
+
   it('surfaces a missing product-wide save for removal', () => {
     const productRef = normalizeSavedRates(undefined, ['REMOVED|PRODUCT'])[0];
     expect(unresolvedSavedRateRefs([productRef], resolveSavedRates(core, [productRef]))).toEqual([

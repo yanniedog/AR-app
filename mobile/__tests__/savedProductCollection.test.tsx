@@ -1,3 +1,4 @@
+import { isProductSubscribed, makeProductSubscription, productSubscriptionId } from '../src/data/subscriptions';
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { Alert, Modal, StyleSheet, TextInput } from 'react-native';
@@ -124,7 +125,7 @@ test('Product context retains exact-tier alert management without subscribing it
     act(() => tree.update(<WordBubbleProvider><SavedRateActions row={row} section="TD" /></WordBubbleProvider>));
     expect(tree.root.findByType(IconAction).props).toMatchObject({ active: true, accessibilityLabel: 'Disable alerts' });
     await act(async () => { tree.root.findByType(IconAction).props.onPress(); });
-    expect(mockState.unsubscribeProduct).toHaveBeenCalledWith(row.product_key, row.rate_index);
+    expect(mockState.unsubscribeProduct).toHaveBeenCalledWith(row.product_key, row.rate_index, undefined);
     expect(ensurePermissions).toHaveBeenCalledTimes(1);
   } finally { act(() => tree.unmount()); }
 });
@@ -180,4 +181,36 @@ test('Saved UI/audit comparison opens without a Rates pricing origin while explo
     expect(openCompare).toHaveBeenCalledWith(tokens);
     expect(useMortgageComparison.getState()).toMatchObject({ loanAmount: '600000', lvr: '90' });
   } finally { act(() => tree.unmount()); clearMortgageComparison(); }
+});
+
+test('catalogue-only saved offers retain their own alert state and can unsubscribe without touching siblings', async () => {
+  const base = mockState.core.sections.TD.rates[1];
+  const sibling = { ...base, rate_index: undefined, exact_alert_eligible: true, public_offer_id: 'offer-a', public_programme_id: 'programme-a' };
+  const row = { ...base, rate_index: undefined, exact_alert_eligible: true, public_offer_id: 'offer-b', public_programme_id: 'programme-b' };
+  const refs = [makeSavedRateRef(sibling), makeSavedRateRef(row)];
+  mockState.savedRates = refs; mockState.trackedRates = refs.map(ref => makeTrackedRate(ref));
+  mockState.subscriptions = [makeProductSubscription(sibling, null)];
+  mockState.isProductSubscribed.mockImplementation((key: string, index: number | null, offer?: string) =>
+    isProductSubscribed(mockState.subscriptions, key, index, offer));
+  mockState.subscribeProduct.mockImplementation((_key: string, index: number | null, selected: typeof row) => {
+    mockState.subscriptions = [...mockState.subscriptions, makeProductSubscription(selected, index)];
+  });
+  mockState.unsubscribeProduct.mockImplementation((key: string, index: number | null, offer?: string) => {
+    mockState.subscriptions = mockState.subscriptions.filter((sub: { id: string }) => sub.id !== productSubscriptionId(key, index, offer));
+  });
+  const tree = mount(<SavedRateActions row={row} section="TD" />);
+  try {
+    expect(tree.root.findByType(IconAction).props.active).toBe(false);
+    await act(async () => { tree.root.findByType(IconAction).props.onPress(); });
+    expect(mockState.subscribeProduct).toHaveBeenCalledWith(row.product_key, null, row);
+    act(() => tree.update(<WordBubbleProvider><SavedRateActions row={row} section="TD" /></WordBubbleProvider>));
+    expect(tree.root.findByType(IconAction).props.active).toBe(true);
+    await act(async () => { tree.root.findByType(IconAction).props.onPress(); });
+    expect(mockState.unsubscribeProduct).toHaveBeenCalledWith(row.product_key, null, 'offer-b');
+    expect(mockState.subscriptions.map((sub: { offerId: string }) => sub.offerId)).toEqual(['offer-a']);
+    act(() => button(tree, 'Add maturity date').props.onPress());
+    act(() => tree.root.findByType(TextInput).props.onChangeText('2027-03-04'));
+    await act(async () => { button(tree, 'Save date').props.onPress(); });
+    expect(mockState.setTrackedRateRelevantDate).toHaveBeenCalledWith(refs[1].id, '2027-03-04', 'term-maturity');
+  } finally { act(() => tree.unmount()); }
 });

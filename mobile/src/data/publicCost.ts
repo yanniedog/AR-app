@@ -320,10 +320,14 @@ export function rankPublicCandidates(candidates: PublicCostCandidate[], allLoade
     if (a.cost!.netReturn !== undefined && b.cost!.netReturn !== undefined) return Decimal.parse(b.cost!.netReturn).compare(Decimal.parse(a.cost!.netReturn));
     return 0;
   });
-  const completeScope = allLoaded && scope !== undefined && scope.eligibleCount === candidates.length;
+  const completeScope = allLoaded && scope !== undefined && scope.eligibleCount === candidates.length
+    && priced.length === candidates.length;
+  // A complete inventory does not prove a market-wide extremum when an
+  // eligible offer's rate or comparable costs are still unknown.
+  const completeCostScope = completeScope && completeCosts.length === candidates.length && costRanking.length === candidates.length;
   return { allLoaded, completeScope, priced: priced.length, unresolved: candidates.length - priced.length, completeCosts: completeCosts.length,
     rateRanking, costRanking, ...(completeScope && rateRanking.length && scope.section === 'Mortgage' ? { lowestRate: rateRanking[0] } : {}),
     ...(completeScope && rateRanking.length && scope.section !== 'Mortgage' ? { highestRate: rateRanking[0] } : {}),
-    ...(completeScope && costRanking[0]?.cost?.interestAndFeeCost !== undefined ? { lowestCost: costRanking[0] } : {}),
-    ...(completeScope && costRanking[0]?.cost?.netReturn !== undefined ? { highestReturn: costRanking[0] } : {}) };
+    ...(completeCostScope && scope.section === 'Mortgage' && costRanking.every(candidate => candidate.cost!.interestAndFeeCost !== undefined) && costRanking[0]?.cost?.interestAndFeeCost !== undefined ? { lowestCost: costRanking[0] } : {}),
+    ...(completeCostScope && scope.section !== 'Mortgage' && costRanking.every(candidate => candidate.cost!.netReturn !== undefined) && costRanking[0]?.cost?.netReturn !== undefined ? { highestReturn: costRanking[0] } : {}) };
 }

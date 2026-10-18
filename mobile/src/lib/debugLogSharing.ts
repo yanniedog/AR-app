@@ -1,4 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
+import { publicDebugLogUploadText } from './publicDebugLogUploadText';
 import { loadDebugLogUploadRecoveryReceipt, saveDebugLogUploadRecoveryReceipt, removeDebugLogUploadRecoveryReceipt } from './debugLogUploadRecovery';
 import { publicReportUploadAttempt, publicReportUploadUncertain, recordPublicReportUploadAttempt, publicReportUploadAttemptEpoch, publicReportUploadAttemptIsCurrent } from './publicReportUploadAttempt';
 
@@ -101,7 +102,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
       if (!uploadRequest) return snapshot;
       const request = uploadRequest;
       preparedBody = request.publicReport?.body ?? formatVersionedLogExport(
-        await debugLog.readCompleteText(request.audit), request.appVersion, request.buildVersion,
+        publicDebugLogUploadText(await debugLog.readCompleteText(request.audit)), request.appVersion, request.buildVersion,
       );
       if (flightEpoch !== uploadFlightEpoch) { preparedBody = null; return snapshot; }
       const hash = request.publicReport?.contentSha256;

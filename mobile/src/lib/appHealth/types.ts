@@ -246,7 +246,7 @@ export interface AppHealthSurfaceObservation {
   >>;
 }
 
-export type AppHealthNetworkPurpose = 'manifest' | 'dates-index' | 'asset' | 'external-link' | 'app-update-manifest';
+export type AppHealthNetworkPurpose = 'manifest' | 'dates-index' | 'asset' | 'external-link' | 'app-update-manifest' | 'official-public-data';
 
 export interface AppHealthNetworkDecision {
   allowed: boolean;
@@ -260,6 +260,16 @@ export interface AppHealthNetworkSnapshot {
   blockedAttempts: number;
   transportCalls: number;
   policyViolations: number;
+  /** Bounded local evidence; never part of public diagnostics. */
+  violations?: readonly AppHealthNetworkViolation[];
+}
+
+export interface AppHealthNetworkViolation {
+  reason: 'unattributed-transport' | 'untrusted-final-url';
+  purpose?: AppHealthNetworkPurpose;
+  requestedHost?: string | null;
+  finalHost?: string | null;
+  responseStatus?: number;
 }
 
 export interface AppHealthDomainSummary {

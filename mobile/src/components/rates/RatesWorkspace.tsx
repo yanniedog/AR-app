@@ -514,8 +514,8 @@ export default function RatesWorkspace() {
     // In-place selection/disclosure changes do not change visible indices, so
     // FlashList may omit its usual viewability callback. Request a fresh native
     // measurement after this render commits; layout alone is not visible proof.
-    if (listReadiness.ready) listRef.current?.recomputeViewableItems();
-  }, [listRevision, listReadiness.ready]);
+    if (isFocused && listReadiness.ready) listRef.current?.recomputeViewableItems();
+  }, [isFocused, listRevision, listReadiness.ready]);
   const logoReadiness = useLogoReadiness(listDataRevision);
   const auditTarget = useRatesAuditTarget({ rows: pageRows, results: resultRows, page: pagination.page, size: pageSize,
     revision: listRevision, context: JSON.stringify([coreSha ?? core?.run_date, manifest?.files.details.sha256, catalogue.generationId, catalogue.status, scenario,
@@ -880,3 +880,4 @@ function CompareDock({
     </View>
   );
 }
+

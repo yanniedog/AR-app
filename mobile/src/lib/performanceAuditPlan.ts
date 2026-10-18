@@ -1,5 +1,6 @@
 import { ROOT } from '../data/taxonomy';
-import { EMPTY_FILTERS, filterRows } from '../data/selectors';
+import { EMPTY_FILTERS, filterRows, lenderProductRows, type MortgageRateMetric, type RankMetric } from '../data/selectors';
+import { rowsForProductKey } from '../data/rateRowIndex';
 import { isSuitabilityFilterReady } from '../data/suitabilityGate';
 import { savedRateId } from '../data/savedRates';
 import { publicOfferSelectionToken } from '../data/publicOfferIdentity';
@@ -75,6 +76,8 @@ export interface DeepAuditDerivedInputs {
   searchQuery: string | null;
   primaryProduct: DeepAuditExactProduct | null;
   secondaryProduct: DeepAuditExactProduct | null;
+  /** A separate rendered lender-card target; never replaces any sampled exact tier. */
+  lenderReturnProduct: DeepAuditExactProduct | null;
   compareSelectionTokens: string[];
   /** A bounded foreground sample, never evidence that the entire catalogue rendered. */
   sampledProducts: DeepAuditExactProduct[];
@@ -96,6 +99,8 @@ export interface DeepAuditSelectionOptions {
   seed?: string;
   includeNonStandard?: boolean;
   detailsProducts?: Record<string, ProductDetail> | null;
+  depositRankMetric?: RankMetric;
+  mortgageRateMetric?: MortgageRateMetric;
 }
 
 export interface DeepAuditSkipSafety {
@@ -333,6 +338,14 @@ export function deriveDeepAuditInputs(
     ?? sections.find(section => samples.get(section)!.length > 0) ?? null;
   const primaryProduct = chosenSection ? samples.get(chosenSection)![0] ?? null : null;
   const secondaryProduct = chosenSection ? samples.get(chosenSection)![1] ?? null : null;
+  // Other journeys retain the random exact tier. A lender card deduplicates its
+  // tiers under the mounted ranking, so pin that distinct return target too.
+  const lenderReturnRow = core && primaryProduct ? lenderProductRows(
+    rowsForProductKey(core.sections[primaryProduct.section].rates, primaryProduct.productKey)
+      .filter(row => row.provider === primaryProduct.provider),
+    primaryProduct.section, options.depositRankMetric ?? 'max', options.mortgageRateMetric ?? 'comparison',
+    options.includeNonStandard ?? false, options.detailsProducts,
+  )[0] : null;
   const sampledProducts = sections.flatMap(section => samples.get(section)!);
   return {
     datasetDate: core?.run_date ?? null,
@@ -342,6 +355,7 @@ export function deriveDeepAuditInputs(
     searchQuery: primaryProduct?.provider ?? null,
     primaryProduct,
     secondaryProduct,
+    lenderReturnProduct: lenderReturnRow && primaryProduct ? exactProduct(lenderReturnRow, primaryProduct.section) : null,
     compareSelectionTokens: primaryProduct && secondaryProduct
       ? [primaryProduct.selectionToken, secondaryProduct.selectionToken] : [],
     sampledProducts,
@@ -388,6 +402,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   const templates: StepTemplate[] = [];
   const primary = inputs.primaryProduct;
   const secondary = inputs.secondaryProduct;
+  const lenderReturn = inputs.lenderReturnProduct;
   const section = inputs.section;
   const missingCore = inputs.datasetDate ? null : 'No active core payload is loaded';
   const missingPrimary = primary ? null : 'No exact product row is available';
@@ -413,6 +428,10 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
         ...(primary.programmeId ? { programmeId: primary.programmeId } : {}),
       }
     : {};
+  const lenderReturnParameters: Record<string, DeepAuditParameter> = lenderReturn ? {
+    section: lenderReturn.section, provider: lenderReturn.provider,
+    productKey: lenderReturn.productKey, rateIndex: lenderReturn.rateIndex,
+  } : {};
   const compareParameters: Record<string, DeepAuditParameter> = {
     section: section ?? null,
     selectionTokens: inputs.compareSelectionTokens,
@@ -674,7 +693,10 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 2, semanticActionId: 'lender.history.window.next', readiness: ['bank-insights', 'bank-history', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 3, semanticActionId: 'lender.history.date.previous', readiness: ['bank-insights', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'lender.move.first', readiness: ['bank-insights', 'product-history'], optional: true, ...optionalFeatureSkip },
-    { depth: 2, semanticActionId: 'lender.product.first', expectedPath: productPath, expectedSurface: 'product.details', readiness: ['details', 'logos'], parameters: exactProductParameters, optional: true, skipReason: missingPrimary },
+    { depth: 2, semanticActionId: 'lender.product.first',
+      expectedPath: lenderReturn ? `/product/${encodeURIComponent(lenderReturn.productKey)}` : '/product',
+      expectedSurface: 'product.details', readiness: ['details', 'logos'], parameters: lenderReturnParameters,
+      optional: true, skipReason: lenderReturn ? null : 'No rendered lender product is available' },
   ]);
 
   // Category-stratified spot checks are separate independent entries. A failed

@@ -42,8 +42,16 @@ export function PublicRateEvidence({ productKey, programmeId, row, scenario: sup
   if (!product) return <AppText variant="tiny" color="textMuted">{uiJoin('Public products', ': ', catalogue.status === 'loading' ? 'Loading' : 'Unavailable')}</AppText>;
   const applicable = { ...(suppliedScenario ?? publicRateScenario(product.section, scenario, profile, row, 'published')), allowHistorical: historical };
   const productFreshness = product.freshness ? publicRateFreshness(product.freshness, new Date().toISOString()) : undefined;
-  const resolution = row && !selected ? resolveRowPublicRate(row, catalogue, applicable) : resolveProductPublicRate(product, catalogue, applicable, selected);
+  const asOf = new Date().toISOString();
+  const resolve = (allowHistorical: boolean) => row && !selected
+    ? resolveRowPublicRate(row, catalogue, { ...applicable, allowHistorical }, asOf)
+    : resolveProductPublicRate(product, catalogue, { ...applicable, allowHistorical }, selected, asOf);
+  const resolution = resolve(historical);
   if (!resolution) return null;
+  // Only offer the assumption when freshness is the sole barrier to pricing.
+  const historicalResolution = !historical && resolution.reasonCodes.includes('source_not_verified_current') ? resolve(true) : undefined;
+  const canAssumeHistorical = historical || historicalResolution !== undefined && historicalResolution.status !== 'unresolved'
+    && historicalResolution.conditions.unknown.length === 0 && historicalResolution.conditions.unmet.length === 0;
   const title = uiJoin(compact ? 'Pricing evidence' : 'Public pricing', ' · ', publicRateText(resolution));
   return <Disclosure title={title} open={open} onToggle={() => setOpen(value => !value)}>
     <View style={{ gap: 8 }}>
@@ -67,7 +75,7 @@ export function PublicRateEvidence({ productKey, programmeId, row, scenario: sup
       {resolution.freshness.lastSuccessAt ? <AppText variant="tiny" color="textMuted">{uiJoin('Last successful check', ': ', uiDate(resolution.freshness.lastSuccessAt))}</AppText> : null}
       {resolution.effectiveFrom ? <AppText variant="tiny" color="textMuted">{uiJoin('Effective from', ': ', uiDate(resolution.effectiveFrom), resolution.effectiveTo ? uiJoin(' · ', 'Effective to', ': ', uiDate(resolution.effectiveTo)) : null)}</AppText> : null}
       {!resolution.verifiedCurrent ? <AppText variant="tiny" style={{ color: theme.colors.warning }}>{uiJoin('Current-rate ranking', ': ', 'Excluded', ' · ', 'Complete-cost ranking', ': ', 'Excluded')}</AppText> : null}
-      {programmes.length > 0 && !resolution.verifiedCurrent && resolution.freshness.lastSuccessAt ? <Button title={historical ? 'Current pricing' : 'Historical pricing assumption'} variant="secondary" onPress={() => setHistorical(value => !value)} /> : null}
+      {programmes.length > 0 && canAssumeHistorical && resolution.freshness.lastSuccessAt ? <Button title={historical ? 'Current pricing' : 'Historical pricing assumption'} variant="secondary" onPress={() => setHistorical(value => !value)} /> : null}
       {resolution.appliedComponents.map(component => <AppText key={component.componentId} variant="tiny" color="textMuted">{publicComponentFact(component)}</AppText>)}
       {resolution.phases.map(phase => <AppText key={phase.phaseId} variant="tiny" color="textMuted">{uiJoin('Months', ': ', uiNumber(phase.startMonth), '–', phase.endMonth == null ? uiLabel('Ongoing') : uiNumber(phase.endMonth), ' · ', uiOpaqueEnum(phase.status.toUpperCase()), phase.payableRate ? uiJoin(' · ', uiRate(Number(phase.payableRate), 4)) : null)}</AppText>)}
       {[...new Map([...catalogue.evidence.filter(item => resolution.evidenceIds.includes(item.evidenceId)), ...(!programmes.length && product.sourceEvidence ? [product.sourceEvidence] : [])].map(item => [item.evidenceId, item])).values()].map(item => <View key={item.evidenceId} style={{ gap: 3 }}>

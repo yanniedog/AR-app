@@ -26,14 +26,14 @@ import {
   type BankEventRateContext,
   type BankRateEvent,
 } from '../../src/data/bankInsights';
-import { formatRate, visibleAccountRows } from '../../src/data/format';
+import { formatRate } from '../../src/data/format';
 import {
   productHistoryRepresentsRateRow,
   productMoveBreakdownForCatalog,
   type ProductMoveCatalogEntry,
   type ProductRateMove,
 } from '../../src/data/productHistory';
-import { excludeTokenDepositRates, sortRows } from '../../src/data/selectors';
+import { lenderProductRows } from '../../src/data/selectors';
 import { rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
 import { rowsForProvider } from '../../src/data/rateRowIndex';
 import { useStore } from '../../src/data/store';
@@ -257,20 +257,11 @@ export default function BankDetail() {
     const out: { section: SectionKey; rows: RateRow[] }[] = [];
     if (!core) return out;
     for (const section of SECTION_ORDER) {
-      const rows = excludeTokenDepositRates(
-        visibleAccountRows(
-          rowsForProvider(core.sections[section]?.rates ?? [], provider),
-          includeNonStandard,
-          detailsProducts,
-        ),
-        section,
+      const rows = lenderProductRows(
+        rowsForProvider(core.sections[section]?.rates ?? [], provider),
+        section, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts,
       );
-      // De-duplicate to one card per product (best rate row under the ranking metric).
-      const byProduct = new Map<string, RateRow>();
-      for (const r of sortRows(rows, 'rate', section, depositRankMetric, mortgageRateMetric)) {
-        if (!byProduct.has(r.product_key)) byProduct.set(r.product_key, r);
-      }
-      if (byProduct.size) out.push({ section, rows: Array.from(byProduct.values()) });
+      if (rows.length) out.push({ section, rows });
     }
     return out;
   }, [core, provider, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts, suitabilityRevision]);
@@ -456,13 +447,16 @@ export default function BankDetail() {
       // Do not claim product.lender.open here — a stale mounted lender surface
       // would no-op the product-page action and abort the deep audit.
       'lender.product.first': (...args: unknown[]) => {
-      const productKey = auditActionString(args, 'productKey');
-      const rateIndex = auditActionInteger(args, 'rateIndex');
-      const exact = productItems.find(({ row }) => row.product_key === productKey &&
-        (rateIndex == null || row.rate_index === rateIndex))?.row;
+        const productKey = auditActionString(args, 'productKey');
+        const rateIndex = auditActionInteger(args, 'rateIndex');
+        const plannedSection = auditActionString(args, 'section');
+        const exact = productItems.find(({ row, section }) => row.product_key === productKey &&
+          (plannedSection == null || section === plannedSection) &&
+          (rateIndex == null || row.rate_index === rateIndex));
         if (!exact) return { unavailableReason: 'The exact planned lender product is not rendered' };
-        openProduct(exact.product_key, exact.rate_index);
-        return { expectedPath: `/product/${encodeURIComponent(exact.product_key)}` };
+        openProduct(exact.row.product_key, exact.row.rate_index);
+        return { expectedPath: `/product/${encodeURIComponent(exact.row.product_key)}`,
+          section: exact.section, productKey: exact.row.product_key, rateIndex: exact.row.rate_index ?? null };
       },
       'lender.chart.section.next': () => ({
         unavailableReason: 'This lender has fewer than two rendered chart sections',

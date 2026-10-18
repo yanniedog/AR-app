@@ -29,12 +29,14 @@ export function SavedRateActions({ row, section }: { row: RateRow; section: Sect
   const setTrackedRateRelevantDate = useStore(s => s.setTrackedRateRelevantDate);
   const [editing, setEditing] = useState(false);
   const [dateValue, setDateValue] = useState('');
-  const ref = saved?.find(value => value.productKey === row.product_key && value.scope === 'rate' && value.rateIndex === row.rate_index)
+  const ref = saved?.find(value => value.productKey === row.product_key && value.scope === 'rate'
+    && row.public_offer_id && value.offerId === row.public_offer_id)
+    ?? saved?.find(value => value.productKey === row.product_key && value.scope === 'rate' && !value.offerId && value.rateIndex === row.rate_index)
     ?? saved?.find(value => value.productKey === row.product_key && value.scope === 'product');
   if (!ref) return null;
   const tracked = trackedRates?.find(value => value.id === ref.id);
   const rateIndex = row.rate_index ?? null;
-  const subscribed = notificationsEnabled && isProductSubscribed(row.product_key, rateIndex);
+  const subscribed = notificationsEnabled && isProductSubscribed(row.product_key, rateIndex, row.public_offer_id);
   const currentRate = toFraction(row.rate);
   const changeBps = tracked?.observedRate != null && currentRate != null
     ? Math.round((currentRate - tracked.observedRate) * 10_000) : 0;
@@ -44,13 +46,13 @@ export function SavedRateActions({ row, section }: { row: RateRow; section: Sect
   const supportsDate = section === 'TD' || tracked?.relevantDateKind === 'fixed-rate-end'
     || row.rate_type?.toUpperCase().includes('FIXED') || row.ribbon_rate_structure?.toLowerCase() === 'fixed';
   const toggleAlert = async () => {
-    if (isProductSubscribed(row.product_key, rateIndex) && notificationsEnabled) {
-      unsubscribeProduct(row.product_key, rateIndex);
+    if (isProductSubscribed(row.product_key, rateIndex, row.public_offer_id) && notificationsEnabled) {
+      unsubscribeProduct(row.product_key, rateIndex, row.public_offer_id);
       return;
     }
     if (!(await ensurePermissions())) { Alert.alert('Notifications disabled'); return; }
     if (!notificationsEnabled) setPref('notificationsEnabled', true);
-    if (!isProductSubscribed(row.product_key, rateIndex)) subscribeProduct(row.product_key, rateIndex, row);
+    if (!isProductSubscribed(row.product_key, rateIndex, row.public_offer_id)) subscribeProduct(row.product_key, rateIndex, row);
   };
   const saveDate = async () => {
     try {

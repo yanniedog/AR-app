@@ -23,6 +23,7 @@ const mockSearchMount = jest.fn();
 const mockSearchUnmount = jest.fn();
 let mockVisibleCount: number | null = null;
 let mockSuppressViewability = false;
+let mockIsFocused = true;
 let mockNavigationReady = true;
 let mockCommittedQuery: string | null = null;
 let mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
@@ -43,7 +44,7 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useNavigationContainerRef: () => mockNavigation,
 }));
-jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true, useNavigation: () => mockNavigation }));
+jest.mock('@react-navigation/native', () => ({ useIsFocused: () => mockIsFocused, useNavigation: () => mockNavigation }));
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ default: () => mockDimensions }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: mockBottomInset }) }));
 jest.mock('../src/theme/ThemeProvider', () => ({
@@ -62,7 +63,7 @@ jest.mock('@shopify/flash-list', () => {
   const React = jest.requireActual('react');
   return { FlashList: React.forwardRef(function MockFlashList(props: any, ref: any) {
     const measure = () => {
-      if (!mockSuppressViewability) props.onViewableItemsChanged({ viewableItems:
+      if (mockIsFocused && !mockSuppressViewability) props.onViewableItemsChanged({ viewableItems:
         props.data.slice(0, mockVisibleCount ?? 3).map((item: unknown, index: number) => ({ isViewable: true, item, index, key: props.keyExtractor(item, index) })) });
     };
     const propsRef = React.useRef(props); propsRef.current = props;
@@ -116,6 +117,7 @@ beforeEach(() => {
   mockDimensions = { width: 411, height: 914, scale: 1, fontScale: 1 };
   mockBottomInset = 0;
   mockNavigationReady = true; mockNavigationListeners.ready.clear(); mockNavigationListeners.state.clear(); mockNavigationListeners.blur.clear();
+  mockIsFocused = true;
   mockCommittedQuery = null;
   (router.setParams as jest.Mock).mockClear();
   restoreRatesSession(originalRatesSession); mockParams = { section: 'TD' };
@@ -419,6 +421,51 @@ test('a missing fresh native callback leaves the current viewport unverified', (
     }));
     expect(listProbe().visibleCount).toBe(1);
     expect(listProbe().status).toBe('ready');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('a retained list requests real viewport evidence when refocused after a hidden revision commits', () => {
+  mockState.prefs.includeNonStandard = true;
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const list = tree.root.findByType('FlashList' as any);
+    const probe = () => mockSurfaces.get('rates.results').probes.find((item: any) => item.id === 'search.list');
+    expect(probe().visibleCount).toBeGreaterThan(0);
+
+    // Navigation keeps the list mounted. A new result revision can commit
+    // while its native viewport is hidden and therefore report no rows.
+    mockIsFocused = false;
+    act(() => {
+      updateRatesSection('TD', { sort: 'bank' });
+      tree.update(<Search />);
+    });
+    expect(probe().visibleCount).toBeNull();
+    expect(probe().status).toBe('pending');
+    const revision = list.props.extraData;
+    const measurements = mockRecomputeViewableItems.mock.calls.length;
+
+    mockIsFocused = true;
+    act(() => tree.update(<Search />));
+    expect(tree.root.findByType('FlashList' as any)).toBe(list);
+    expect(list.props.extraData).toBe(revision);
+    expect(mockListMount).toHaveBeenCalledTimes(1);
+    expect(mockRecomputeViewableItems.mock.calls.length).toBeGreaterThan(measurements);
+    expect(probe().visibleCount).toBeGreaterThan(0);
+    expect(probe().status).toBe('ready');
+
+    mockIsFocused = false;
+    act(() => { updateRatesSection('TD', { sort: 'rate' }); tree.update(<Search />); });
+    mockSuppressViewability = true;
+    mockIsFocused = true;
+    act(() => tree.update(<Search />));
+    expect(probe().visibleCount).toBeNull();
+    expect(probe().status).toBe('pending');
+    act(() => list.props.onViewableItemsChanged({
+      viewableItems: [{ isViewable: true, item: list.props.data[0] }],
+    }));
+    expect(probe().visibleCount).toBe(1);
+    expect(probe().status).toBe('ready');
   } finally { act(() => tree.unmount()); }
 });
 

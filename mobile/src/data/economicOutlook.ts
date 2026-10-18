@@ -134,6 +134,8 @@ async function fetchCsv(url: string, timeoutMs = 15_000): Promise<FetchedCsv> {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
+      method: 'GET',
+      credentials: 'omit',
       headers: { Accept: 'text/csv' },
       signal: controller.signal,
     });

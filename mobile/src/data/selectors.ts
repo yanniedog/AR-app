@@ -337,6 +337,25 @@ export function sortRows(
     .map(({ row }) => row);
 }
 
+/** The actual lender cards: one visible ranked tier per product, in display order. */
+export function lenderProductRows(
+  rows: RateRow[],
+  section: SectionKey,
+  metric: RankMetric = 'base',
+  mortgageMetric: MortgageRateMetric = 'comparison',
+  includeNonStandard = false,
+  detailsProducts?: Record<string, ProductDetail> | null,
+): RateRow[] {
+  const visible = excludeTokenDepositRates(
+    visibleAccountRows(rows, includeNonStandard, detailsProducts), section,
+  );
+  const products = new Map<string, RateRow>();
+  for (const row of sortRows(visible, 'rate', section, metric, mortgageMetric)) {
+    if (!products.has(row.product_key)) products.set(row.product_key, row);
+  }
+  return [...products.values()];
+}
+
 /** Same ranking as sortRows, with bounded preparation and merge slices. */
 export async function sortRowsCooperatively(
   rows: RateRow[],
