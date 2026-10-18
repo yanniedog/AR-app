@@ -2,11 +2,12 @@ import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { router } from 'expo-router';
 import { openProduct } from '../src/lib/nav';
+import { buildStaySwitchProjection } from '../src/data/staySwitchProjection';
 import { catalogue, product, programme, core as emptyCore } from '../testUtils/publicRateJourney';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import { clearMortgageComparison } from '../src/data/mortgageComparison';
-import { captureRatesSession, restoreRatesSession, initializeRatesSession } from '../src/data/ratesSession';
+import { captureRatesSession, restoreRatesSession, initializeRatesSession, updateRatesSection } from '../src/data/ratesSession';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 
@@ -115,7 +116,7 @@ jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: () => 
 }) }));
 jest.mock('../src/data/notifications', () => ({ ensurePermissions: jest.fn(async () => true) }));
 jest.mock('../src/data/rateReceipt', () => ({ buildRateReceipt: () => null, buildNegotiationBrief: () => null }));
-jest.mock('../src/data/staySwitchProjection', () => ({ buildStaySwitchProjection: () => null }));
+jest.mock('../src/data/staySwitchProjection', () => ({ buildStaySwitchProjection: jest.fn(() => null) }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/hooks/useLogoReadiness', () => ({
   useLogoReadiness: () => ({ ready: true, expectedCount: 1, terminalCount: 1, onLogoRenderStateChange: jest.fn() }),
@@ -168,20 +169,28 @@ jest.mock('@shopify/flash-list', () => ({ FlashList: jest.requireActual('react')
 // eslint-disable-next-line import/first -- mount both routes against the same store/router harness
 import RatesWorkspace from '../src/components/rates/RatesWorkspace';
 
-test('Rates opens a public-only mortgage with the same in-memory pricing scope without putting private inputs in the route', async () => {
+test.each([false, true])('Rates opens a public-only mortgage with private pricing scope and OR facets=%s', async useOr => {
   const previous = captureRatesSession();
   const saved = JSON.stringify(mockScenario);
+  jest.mocked(buildStaySwitchProjection).mockClear();
   const p = programme({ sourceBindings: [], conditions: [
     { conditionId: 'amount', field: 'amount', operator: 'bounds', minimum: '500000', evidenceIds: [] },
     { conditionId: 'lvr', field: 'lvr', operator: 'bounds', maximum: '0.8', evidenceIds: [] },
+    ...(useOr ? [
+      { conditionId: 'purpose', field: 'purpose' as const, operator: 'eq' as const, value: 'INVESTMENT', evidenceIds: [] },
+      { conditionId: 'repayment', field: 'repayment' as const, operator: 'eq' as const, value: 'INTEREST_ONLY', evidenceIds: [] },
+    ] : []),
   ] });
   mockCatalogue = { ...catalogue([{ ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() } }], [product], []),
     coverage: [], evidence: [], loadAll: async () => undefined, loadProduct: async () => undefined };
   const store = jest.requireMock('../src/data/store').useStore;
   store.setState({ ...mockState, hydrated: true, source: 'sample', activeSection: 'Mortgage', core: emptyCore([]),
+    details: { products: { [product.productKey]: {} } },
     prefs: { ...DEFAULT_PREFS, includeNonStandard: true }, subscriptions: [], searchIndexStatus: 'idle',
     setActiveSection: jest.fn(), ensureSearchIndex: jest.fn(), subscribeSearch: jest.fn(), unsubscribeSearch: jest.fn() }, true);
   initializeRatesSession(store.getState().prefs, 'Mortgage');
+  if (useOr) updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
+    loanPurposes: ['OO', 'INV'], repaymentTypes: ['PI', 'IO'] } }));
   installMandatoryEligibility(selectMandatoryEligibility(store.getState().core, DEFAULT_PREFS.profileFilters, null));
   clearMortgageComparison();
   let rates!: InspectableRenderer, detail!: InspectableRenderer;
@@ -201,9 +210,11 @@ test('Rates opens a public-only mortgage with the same in-memory pricing scope w
     act(() => rates.unmount());
     await act(async () => { detail = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
     expect(detail.root.findAllByType('DetailsOnlyProduct')).toHaveLength(0);
+    expect(buildStaySwitchProjection).not.toHaveBeenCalled();
     const evidence = detail.root.findAllByType('PublicRateEvidence')[0];
     expect(evidence.props.row.rate).toBe('0.06');
-    expect(evidence.props.scenario).toMatchObject({ amount: '600000', lvr: '0.75' });
+    expect(evidence.props.scenario).toMatchObject({ amount: '600000', lvr: '0.75',
+      ...(useOr ? { purpose: 'INVESTMENT', repayment: 'INTEREST_ONLY' } : {}) });
     expect(detail.root.findAllByType('PublicCostComparison')[0].props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.75' });
     act(() => detail.unmount());
     // A Saved/Dashboard-style open must keep its saved 100k assumptions even
@@ -214,6 +225,13 @@ test('Rates opens a public-only mortgage with the same in-memory pricing scope w
     delete mockRoute.origin;
     await act(async () => { detail = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
     expect(detail.root.findAllByType('DetailsOnlyProduct')).toHaveLength(1);
+    act(() => detail.unmount());
+    // Normal Product pricing still constructs its persisted Stay/Switch model
+    // when the selected programme actually applies at the saved amount.
+    mockCatalogue = { ...mockCatalogue, ...catalogue([{ ...p, conditions: [], freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() } }], [product], []) };
+    await act(async () => { detail = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
+    expect(buildStaySwitchProjection).toHaveBeenCalled();
+    expect(jest.mocked(buildStaySwitchProjection).mock.calls.at(-1)![0].scenario.mortgage.loanBalance).toBe('100000');
     expect(JSON.stringify(mockScenario)).toBe(saved);
   } finally {
     act(() => { detail?.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });
