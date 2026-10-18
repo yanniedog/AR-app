@@ -68,3 +68,17 @@ it('preserves saved-search alerts through the shared resolver without source-ind
   expect(resolvedRateNotificationChanges({ ...options, current: unchanged })).toEqual([]);
   expect(resolvedRateNotificationChanges({ ...options, current: { ...current, allLoaded: false } })).toEqual([]);
 });
+
+it('constructs catalogue-only search candidates at their historical observation after a multi-day gap', () => {
+  const asOf = '2026-10-18T03:00:00Z';
+  const oldProgramme = programme({ sourceBindings: [] });
+  const newProgramme = programme({ sourceBindings: [], freshness: { state: 'current', checkedAt: asOf, lastSuccessAt: asOf, reasonCodes: [] },
+    components: [{ ...programme().components[0], value: '0.0625' }] });
+  const messages = resolvedRateNotificationChanges({ previous: catalogue([oldProgramme]), current: catalogue([newProgramme]),
+    oldCore: core([]), newCore: core([]), saved: [], subscriptions: [makeSearchSubscription({ section: 'Mortgage', path: [],
+      hierarchyScoped: false, query: '', filters: { ...EMPTY_FILTERS, includeNonStandard: true } })],
+    scenario: normalizeUserRateScenario({}), profile: normalizeProfileFilters({}), thresholdBps: 1, asOf, mortgageRateMetric: 'headline' });
+  expect(messages).toHaveLength(1);
+  expect(messages[0].body).toContain('6.00% → 6.25%');
+  expect(oldProgramme.freshness.lastSuccessAt).toBe(AS_OF);
+});

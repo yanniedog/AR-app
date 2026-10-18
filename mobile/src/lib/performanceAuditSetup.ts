@@ -33,6 +33,8 @@ export async function measurePerformanceAuditSetupStage<T>(
     assertActive: () => void;
     metrics?: (result: T) => Record<string, AuditMetricValue>;
     onFailure: (check: AuditCheck) => void;
+    /** Drain owned work after recording failure, before an outer caller restores policy. */
+    drainOnFailure?: () => Promise<void>;
     clock?: () => number;
   },
 ): Promise<{ value: T; check: AuditCheck }> {
@@ -51,6 +53,7 @@ export async function measurePerformanceAuditSetupStage<T>(
     options.onFailure({ ...stage, status: 'fail', durationMs: roundMetric(watchdog.elapsedMs),
       metrics: { ...metrics, stepLimitExceeded: watchdog.elapsedMs >= PERFORMANCE_AUDIT_STEP_LIMIT_MS },
       error: formatAuditError(error) });
+    await options.drainOnFailure?.();
     throw error;
   } finally {
     watchdog.close();

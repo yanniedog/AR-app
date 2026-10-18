@@ -50,6 +50,8 @@ export interface NotifySearchRoute {
 export interface NotifyMessage {
   title: UiCopy;
   body: UiCopy;
+  /** Public candidate identity for delivery revalidation; not a route payload field. */
+  referenceId?: string;
   productKey?: string;
   rateIndex?: number | null;
   search?: NotifySearchRoute;
@@ -475,7 +477,7 @@ export async function ensurePermissions(): Promise<boolean> {
   }
 }
 
-export async function notify(messages: NotifyMessage[]): Promise<void> {
+export async function notify(messages: NotifyMessage[], canDeliver: (message: NotifyMessage) => boolean | Promise<boolean> = () => true): Promise<void> {
   if (!messages.length) return;
   const eligibilityRevision = getMandatoryEligibilityRevision();
   debugLog.debug('notify', `scheduling ${messages.length} notification(s)`);
@@ -484,7 +486,10 @@ export async function notify(messages: NotifyMessage[]): Promise<void> {
     return;
   }
   // Collapse a flurry into at most a few notifications.
-  for (const msg of messages.slice(0, 3)) {
+  let scheduled = 0;
+  for (const msg of messages) {
+    if (scheduled >= 3) break;
+    if (!(await canDeliver(msg))) continue;
     if (eligibilityRevision !== getMandatoryEligibilityRevision()) return;
     if (hasMandatoryRequirements() && (msg.productKey || msg.search)) continue;
     const data = notificationDataFromMessage(msg);
@@ -492,6 +497,7 @@ export async function notify(messages: NotifyMessage[]): Promise<void> {
       content: { title: msg.title, body: msg.body, data: data as Record<string, unknown> },
       trigger: null, // immediate
     });
+    scheduled++;
   }
 }
 

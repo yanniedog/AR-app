@@ -88,15 +88,17 @@ function programmePublicRow(row: RateRow, programme: PublicProgramme): RateRow {
 }
 
 /** Newly resolved programmes enter app comparisons even when no legacy absolute row exists. */
-export function publicCatalogueOfferRows(catalogue: PublicCatalogueView, section: SectionKey, scenario: RateScenario): RateRow[] {
+export function publicCatalogueOfferRows(catalogue: PublicCatalogueView, section: SectionKey, scenario: RateScenario,
+  asOfForProgramme: (programme: PublicProgramme) => string = () => new Date().toISOString()): RateRow[] {
   if (catalogue.status !== 'ready') return [];
   const rows: RateRow[] = [];
   for (const product of catalogue.products) {
     if (product.section !== section || product.status === 'legacy') continue;
     for (const programme of catalogue.getProgrammes(product.productId)) {
-      const selectedScenario = scenarioForPublicProgramme(programme, scenario, new Date().toISOString());
+      const asOf = asOfForProgramme(programme);
+      const selectedScenario = scenarioForPublicProgramme(programme, scenario, asOf);
       if (!selectedScenario) continue;
-      const resolution = resolvePublicRate(programme, selectedScenario, new Date().toISOString());
+      const resolution = resolvePublicRate(programme, selectedScenario, asOf);
       if (resolution.status !== 'exact' || !resolution.verifiedCurrent || resolution.payableRate == null) continue;
       const condition = (field: string) => programme.conditions.find(item => item.field === field && item.operator === 'eq')?.value;
       const lvr = programme.conditions.filter(item => item.field === 'lvr' && item.operator === 'bounds');
@@ -131,14 +133,15 @@ export function publicCatalogueOfferRows(catalogue: PublicCatalogueView, section
 }
 
 /** One candidate set for every consumer. Source positions never form the deduplication key. */
-export function publicRecommendationRows(rows: readonly RateRow[], catalogue: PublicCatalogueView, section: SectionKey, scenario: RateScenario, includeExistingLegacy = false): RateRow[] {
+export function publicRecommendationRows(rows: readonly RateRow[], catalogue: PublicCatalogueView, section: SectionKey, scenario: RateScenario, includeExistingLegacy = false,
+  asOfForProgramme?: (programme: PublicProgramme) => string): RateRow[] {
   if (catalogue.status === 'unavailable') return [...rows];
   const current = rows.filter(row => includeExistingLegacy || catalogue.getProduct(row.product_key)?.status !== 'legacy')
     .map(row => bindCurrentPublicRow(row, catalogue));
   const seen = new Set<string>();
   // Multiple source occurrences can legally bind to one semantic offer. Keep
   // provenance in the immutable source/catalogue; expose one selectable offer.
-  return [...current, ...publicCatalogueOfferRows(catalogue, section, scenario)].filter(row => {
+  return [...current, ...publicCatalogueOfferRows(catalogue, section, scenario, asOfForProgramme)].filter(row => {
     if (!row.public_offer_id) return true;
     const key = JSON.stringify([row.product_key, row.public_offer_id]);
     if (seen.has(key)) return false;
@@ -147,11 +150,12 @@ export function publicRecommendationRows(rows: readonly RateRow[], catalogue: Pu
 }
 
 /** Ephemeral view for semantic selections; original core assets stay immutable. */
-export function publicComparisonCore(core: CorePayload, catalogue: PublicCatalogueView, scenarioFor: (section: SectionKey) => RateScenario): CorePayload {
+export function publicComparisonCore(core: CorePayload, catalogue: PublicCatalogueView, scenarioFor: (section: SectionKey) => RateScenario,
+  asOfForProgramme?: (programme: PublicProgramme) => string): CorePayload {
   if (catalogue.status === 'unavailable') return core;
   const sections = { ...core.sections };
   for (const section of ['Mortgage', 'Savings', 'TD'] as const) sections[section] = { ...core.sections[section],
-    rates: publicRecommendationRows(core.sections[section].rates, catalogue, section, scenarioFor(section)) };
+    rates: publicRecommendationRows(core.sections[section].rates, catalogue, section, scenarioFor(section), false, asOfForProgramme) };
   return { ...core, sections };
 }
 
