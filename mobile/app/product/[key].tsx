@@ -49,6 +49,7 @@ import { uiTargetConstraint } from '../../src/lib/financialUiCopy';
 import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
 import { normalizedProductFacts } from '../../src/data/productFacts';
 import { verifiedDetailsSha } from '../../src/data/detailsIdentity';
+import { eligiblePublicProductKeys } from '../../src/data/publicProductEligibility';
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
 import { sortRows, findEligibleByKey } from '../../src/data/selectors';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
@@ -519,7 +520,9 @@ export default function ProductDetail() {
     ],
   });
 
-  if (!isMandatoryEligibilityReady() || !mandatoryProductAllowed(productKey)) {
+  const publicProductAllowed = publicProduct && eligiblePublicProductKeys(publicCatalogue, publicProduct.section,
+    publicRateScenario(publicProduct.section, pricingScenario, profile)).has(productKey);
+  if (!isMandatoryEligibilityReady() || (!mandatoryProductAllowed(productKey) && !publicProductAllowed)) {
     return <><Stack.Screen options={{ title: 'Product unavailable' }} /><EmptyState icon="alert-circle-outline" title={!isMandatoryEligibilityReady() ? 'Loading' : 'Unavailable'} /></>;
   }
   if (!found) {

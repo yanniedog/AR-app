@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
+import { eligiblePublicProductKeys } from '../../data/publicProductEligibility';
+import { useUserRateScenario } from '../../hooks/useUserRateScenario';
+import { useSuitabilityRevision } from '../../hooks/useSuitabilityRevision';
 import { publicRateScenario, resolvedPublicRankingRows } from '../../data/publicRateIntegration';
 import type { UserRateScenario } from '../../data/userRateScenario';
 import { useStore } from '../../data/store';
@@ -59,9 +62,13 @@ export function PublicProductDiscovery({ section, query = '', rows = [] }: {
   const manifest = useStore(state => state.manifest);
   const catalogue = usePublicRateCatalogue(manifest);
   const [limit, setLimit] = useState(20);
+  useSuitabilityRevision();
+  const profile = useStore(state => state.prefs?.profileFilters);
+  const { scenario } = useUserRateScenario();
+  const eligible = eligiblePublicProductKeys(catalogue, section, publicRateScenario(section, scenario, profile));
   const represented = new Set(rows.map(row => row.product_key));
   const needle = query.trim().toLocaleLowerCase('en-AU');
-  const products = catalogue.products.filter(product => product.section === section && !represented.has(product.productKey)
+  const products = catalogue.products.filter(product => product.section === section && eligible.has(product.productKey) && !represented.has(product.productKey)
     && (!needle || (product.name + ' ' + product.providerName + ' ' + product.aliases.map(alias => alias.name).join(' ')).toLocaleLowerCase('en-AU').includes(needle)));
   if (!products.length) return null;
   return <Card style={{ marginVertical: 12, gap: 8 }}>
