@@ -29,7 +29,7 @@ import {
 } from '../src/data/compareSelection';
 import { useStore } from '../src/data/store';
 import { usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
-import { publicComparisonCore, publicRateScenario, resolveRowPublicRate } from '../src/data/publicRateIntegration';
+import { publicComparisonCore, publicRateScenario, resolveRowPublicRate, rowWithPublicResolution } from '../src/data/publicRateIntegration';
 import { publicRateText } from '../src/data/publicRatePresentation';
 import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { PublicRateEvidence } from '../src/components/scenario/PublicRateEvidence';
@@ -114,7 +114,7 @@ export default function Compare() {
   const entries = useMemo<Entry[]>(
     () => comparison && comparison.issue == null ? comparison.entries.map(entry => {
       const resolution = resolveRowPublicRate(entry.row, catalogue, publicRateScenario(entry.section, scenario, profile, entry.row));
-      return resolution ? { ...entry, row: { ...entry.row, rate: resolution.status === 'exact' && resolution.verifiedCurrent ? resolution.payableRate ?? '' : '' } } : entry;
+      return resolution ? { ...entry, row: rowWithPublicResolution(entry.row, resolution) } : entry;
     }) : [],
     [comparison, catalogue, scenario, profile],
   );

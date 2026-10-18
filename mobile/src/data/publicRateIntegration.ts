@@ -274,6 +274,14 @@ export function payableRateForRow(row: RateRow, resolution?: RateResolution): nu
   return row.rate.trim() && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
 }
 
+/** Keep all displayed/ranked rate fields on the same resolved programme. */
+export function rowWithPublicResolution(row: RateRow, resolution?: RateResolution): RateRow {
+  if (!resolution) return row;
+  const payable = payableRateForRow(row, resolution);
+  return { ...row, rate: payable == null ? '' : String(payable),
+    comparison_rate: payable == null ? undefined : resolution.comparisonRate };
+}
+
 export function resolvedPublicRankingRows(
   rows: readonly RateRow[], catalogue: PublicCatalogueView,
   scenarioFor: (row: RateRow) => RateScenario = () => ({}),
@@ -285,7 +293,7 @@ export function resolvedPublicRankingRows(
     const result = resolveRowPublicRate(row, catalogue, scenarioFor(row));
     const payable = payableRateForRow(row, result);
     if (payable == null) { unresolved += 1; continue; }
-    resolved.push({ ...bindCurrentPublicRow(row, catalogue), rate: String(payable), ...(result?.comparisonRate ? { comparison_rate: result.comparisonRate } : {}) });
+    resolved.push(rowWithPublicResolution(bindCurrentPublicRow(row, catalogue), result));
   }
   return { rows: resolved, priced: resolved.length, unresolved, complete: catalogue.status === 'ready' && catalogue.allLoaded };
 }
