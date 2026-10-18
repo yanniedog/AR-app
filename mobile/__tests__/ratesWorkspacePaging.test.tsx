@@ -778,6 +778,9 @@ test('multiple mortgage chips retain both public-only offers with exact row pric
     act(() => updateRatesSection('Mortgage', { selectMode: true }));
     for (const card of tree.root.findAllByType('ProductCard')) act(() => card.props.onPress());
     expect(useRatesSession.getState().sections.Mortgage.selected).toHaveLength(2);
+    act(() => chips().find((chip: any) => chip.props.label === 'Owner occupied')!.props.onPress());
+    expect(tree.root.findByType('FlashList').props.data.map((row: any) => row.public_offer_id)).toEqual(['investor-io']);
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([publicOfferSelectionToken(publicProduct.productKey, 'investor-io')]);
     expect(mockStore.getState().setPref).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });
