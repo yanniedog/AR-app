@@ -58,6 +58,7 @@ test('Compare retains amount/LVR eligibility and pricing for offers selected wit
     expect(evidence).toHaveLength(2);
     expect(evidence.map(node => node.props.row.rate)).toEqual(['0.05', '0.06']);
     expect(evidence.every(node => node.props.scenario.amount === '600000' && node.props.scenario.lvr === '0.75')).toBe(true);
+    expect(tree.root.findAllByType('PublicCostComparison').every(node => node.props.rateScenario.amount === '600000' && node.props.rateScenario.lvr === '0.75')).toBe(true);
     act(() => useMortgageComparison.setState({ loanAmount: '400000' }));
     expect(tree.root.findAllByType('EmptyState')).toHaveLength(1);
     expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(0);

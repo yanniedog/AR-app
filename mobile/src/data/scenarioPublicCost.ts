@@ -55,7 +55,14 @@ export function scenarioPublicCost({ section, scenario, row, programme, rateScen
     ...(section === 'Mortgage' && fixed ? { fixedPeriodMonths: advertisedTermMonths(row) ?? undefined } : {}),
   };
   if (section === 'Mortgage') {
-    const principal = scenario.mortgage.mode === 'refi' ? calculatorAmount(scenario.mortgage.loanBalance, MAX_CALCULATOR_MORTGAGE_AMOUNT) : computeLvr(scenario.mortgage).loan;
+    // The comparison principal describes the target loan. Never write it into
+    // the persisted current-loan scenario or silently price its older balance.
+    const principal = Object.hasOwn(rateScenario, 'amount')
+      ? typeof rateScenario.amount === 'string' ? calculatorAmount(rateScenario.amount, MAX_CALCULATOR_MORTGAGE_AMOUNT) : null
+      : scenario.mortgage.mode === 'refi' ? calculatorAmount(scenario.mortgage.loanBalance, MAX_CALCULATOR_MORTGAGE_AMOUNT) : computeLvr(scenario.mortgage).loan;
+    if (Object.hasOwn(rateScenario, 'lvr') && rateScenario.lvr === undefined) {
+      return { reasonCodes: ['scenario_inputs_missing'], assumptions };
+    }
     if (principal == null || principal <= 0) return { reasonCodes: ['loan_amount_unknown'], assumptions };
     const repayment = (rateScenario.repayment ?? row.repayment_type ?? row.ribbon_repayment_type)?.toUpperCase();
     if (repayment !== 'PRINCIPAL_AND_INTEREST' && repayment !== 'P&I' && repayment !== 'PI' && repayment !== 'INTEREST_ONLY' && repayment !== 'IO') {

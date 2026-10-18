@@ -61,3 +61,29 @@ it('retains an exact day-quoted maturity and never guesses a renewal rate or pay
   const unknown = scenarioPublicCost({ section: 'TD', scenario: input, row: { ...row, term_months: 12 }, asOf: AS_OF });
   expect(estimatePublicCost(resolvePublicRate(publicProgramme, {}, AS_OF), unknown.scenario!).completeness).toBe('unsupported');
 });
+
+
+it('uses the comparison principal and LVR consistently without changing saved current-loan inputs', () => {
+  const input = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '100000', propertyValue: '200000', years: '25' },
+    projections: { mortgage: { holdVariableRate: true, horizonYears: '1' } } });
+  const before = JSON.stringify(input);
+  const p = programme({ conditions: [
+    { conditionId: 'amount', field: 'amount', operator: 'bounds', minimum: '500000', evidenceIds: [] },
+    { conditionId: 'lvr', field: 'lvr', operator: 'bounds', maximum: '0.8', evidenceIds: [] },
+  ], components: [{ ...programme().components[0], value: '0.05' }] });
+  const scope = { amount: '600000', lvr: '0.75', repayment: 'INTEREST_ONLY' };
+  const rate = resolvePublicRate(p, scope, AS_OF);
+  expect(rate).toMatchObject({ status: 'exact', payableRate: '0.05' });
+  const bridge = scenarioPublicCost({ section: 'Mortgage', scenario: input, row, programme: p, rateScenario: scope, asOf: AS_OF });
+  expect(bridge.scenario).toMatchObject({ principal: '600000', rateScenario: scope });
+  // Independent interest-only anchor: 600,000 * 5% for twelve months.
+  expect(estimatePublicCost(rate, bridge.scenario!)).toMatchObject({ interest: '30000.00', endingBalance: '600000.00' });
+  expect(JSON.stringify(input)).toBe(before);
+});
+
+it.each([{ amount: undefined }, { amount: '-1' }, { amount: '600000', lvr: undefined }])(
+  'does not fall back to the saved principal for invalid comparison scope: %p', rateScenario => {
+    const input = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '100000', years: '25' } });
+    expect(scenarioPublicCost({ section: 'Mortgage', scenario: input, row, rateScenario }).scenario).toBeUndefined();
+  },
+);

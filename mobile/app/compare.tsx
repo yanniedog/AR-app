@@ -543,7 +543,7 @@ export default function Compare() {
       <CanonicalTermsComparison rows={calculationRows} />
       {entries.map(entry => <View key={`public:${entry.row.product_key}:${entry.row.public_offer_id ?? entry.row.rate_index}`}>
         <PublicRateEvidence productKey={entry.row.product_key} row={entry.row} scenario={scenarioFor(entry.section, entry.row)} />
-        <PublicCostComparison section={entry.section} target={entry.row} scenario={scenario} />
+        <PublicCostComparison section={entry.section} target={entry.row} scenario={scenario} rateScenario={scenarioFor(entry.section, entry.row)} />
       </View>)}
       {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : entries.every(entry => entry.section === 'Savings') ? <PortfolioComparison rows={entries} /> : entries.every(entry => entry.section === 'Mortgage') ? <MortgageComparison rows={entries} /> : <PersonalCostComparisonDisclosure />}
 
