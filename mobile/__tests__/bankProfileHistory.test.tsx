@@ -133,8 +133,8 @@ describe('bank detail profile-filtered history', () => {
   afterEach(() => installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() }));
 
   it('opens only the exact rendered lender tier and section, with the observed identity retained', () => {
-    const hidden = { ...row, rate_index: 998, rate: '0.01' };
-    const visible = { ...row, rate_index: 999, rate: '0.06' };
+    const hidden = { ...row, rate_index: 998, rate: '0.01', comparison_rate: '0.01' };
+    const visible = { ...row, rate_index: 999, rate: '0.06', comparison_rate: '0.06' };
     mockState.core = { ...core, sections: { ...core.sections,
       Savings: { ...core.sections.Savings, rates: [hidden, visible] } } };
     const tree = mount();
