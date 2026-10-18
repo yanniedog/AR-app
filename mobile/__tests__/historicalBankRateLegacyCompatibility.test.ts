@@ -3,7 +3,7 @@ import compiler from '../contracts/history-ready/compiler-manifest.json';
 import { compileHistoricalBankRateReady } from '../src/data/historicalBankRateReadyCompiler';
 import { historicalBankRateSnapshots, prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateReady, selectHistoricalCatalogueDates } from '../src/data/historicalBankRateCatalogue';
 import { prepareLegacyBankRateHistory } from '../src/data/historicalBankRateLegacyCompatibility';
-import { cachedHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
+import { cachedHistoricalBankRateCatalogue, installPreparedHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
 import { readyProductHistoryIdentity, productRatesFromHistoricalCatalogue } from '../src/data/productHistoryCatalogue';
 import { bankRateScope } from '../src/data/bankRateOverview';
 import { EMPTY_PROFILE } from '../src/data/profile';
@@ -64,7 +64,8 @@ test('legacy observations and selected prepared fallback retain exact summaries 
   // Protocol-only availability change; the masked source is never plotted.
   const prepared = prepareHistoricalBankRateCatalogue(raw)!;
   const expected = historicalBankRateSnapshots(prepared, current, scope, filters);
-  expect(await prepareLegacyBankRateHistory(current, { ...sampleManifest, run_date: current.run_date }, index, archive, () => true)).toBe(true);
+  expect(await prepareLegacyBankRateHistory(current, { ...sampleManifest, run_date: current.run_date }, index, archive, () => true))
+    .toEqual({ ready: true, contributed: true });
   const combined = cachedHistoricalBankRateCatalogue(current)!;
   const actual = historicalBankRateSnapshots(combined, current, scope, filters);
   expect(actual[older]).toEqual(expected[older]);
@@ -113,7 +114,8 @@ test('offline selected heads cannot resurrect a public date below a retained rev
 
 test('a superseded legacy request cannot install its history', async () => {
   const current = core();
-  expect(await prepareLegacyBankRateHistory(current, sampleManifest, index, raw, () => false)).toBe(false);
+  expect(await prepareLegacyBankRateHistory(current, sampleManifest, index, raw, () => false))
+    .toEqual({ ready: false, contributed: false });
   expect(cachedHistoricalBankRateCatalogue(current)).toBeNull();
 });
 
@@ -251,7 +253,8 @@ test('independent verified history remains usable when signed fallback preparati
   const archive = { ...raw, sources: { ...raw.sources, [latest]: { kind: 'selected_contract' as const,
     banks_sha256: 'b'.repeat(64), bytes: 100, generation_id: 'without-fallback', contract_digest: 'c'.repeat(64) } } };
   jest.mocked(prepareReadyBankRateHistory).mockRejectedValueOnce(new Error('cache unavailable'));
-  expect(await prepareLegacyBankRateHistory(current, sampleManifest, index, archive, () => true)).toBe(true);
+  expect(await prepareLegacyBankRateHistory(current, sampleManifest, index, archive, () => true))
+    .toEqual({ ready: true, contributed: true });
   const combined = cachedHistoricalBankRateCatalogue(current)!;
   const projected = await productRatesFromHistoricalCatalogue(combined, index, [older, latest], () => true, async () => {});
   expect(projected.has(older)).toBe(false);
@@ -270,8 +273,70 @@ test('a retired consumer cannot cancel a successor sharing archive validation', 
   firstCurrent = false;
   const successor = prepareLegacyBankRateHistory(current, sampleManifest, index, archive, () => true);
   release();
-  expect(await first).toBe(false);
-  expect(await successor).toBe(true);
+  expect(await first).toEqual({ ready: false, contributed: false });
+  expect(await successor).toEqual({ ready: true, contributed: true });
   const projected = await productRatesFromHistoricalCatalogue(cachedHistoricalBankRateCatalogue(current)!, index, [latest], () => true, async () => {});
   expect(projected.get(latest)?.get(latestProduct)).toBe(0.0525);
+});
+
+test.each(['false', 'throws'] as const)('an earlier supplied index gap survives %s fallback preparation', async failure => {
+  const current = core(), absent = new Date(Date.parse(older) - 86_400_000).toISOString().slice(0, 10);
+  const supplied = { ...index, dates: [absent, ...index.dates] };
+  const archive = { ...raw, sources: { ...raw.sources, [latest]: { kind: 'selected_contract' as const,
+    banks_sha256: 'b'.repeat(64), bytes: 100, generation_id: 'axis-without-fallback', contract_digest: 'c'.repeat(64) } } };
+  if (failure === 'throws') jest.mocked(prepareReadyBankRateHistory).mockRejectedValueOnce(new Error('signed fallback unavailable'));
+  else jest.mocked(prepareReadyBankRateHistory).mockResolvedValueOnce(false);
+  await prepareLegacyBankRateHistory(current, sampleManifest, supplied, archive, () => true);
+  const combined = cachedHistoricalBankRateCatalogue(current)!;
+  expect(missingHistoricalCatalogueDates(current)).toContain(absent);
+  expect(historicalBankRateSnapshots(combined, current, scope, filters)[absent]).toEqual({});
+  expect(readyProductHistoryIdentity(combined, undefined, older)).toBeUndefined();
+  expect(readyProductHistoryIdentity(combined, undefined, latest)).toMatch(/^catalogue:[a-f0-9]{64}$/);
+});
+
+test.each(['superseded', 'conflicted', 'unavailable'] as const)('an entirely %s archive reports fallback without contribution', async reason => {
+  const current = core(), fallback = prepareHistoricalBankRateReady(compileHistoricalBankRateReady(raw, compiler.sha256),
+    reason === 'conflicted' ? [] : undefined)!;
+  mockSelection = { prepared: fallback, heads, conflicts: new Set(reason === 'conflicted' ? heads.keys() : []) };
+  const archive = { ...raw, ...(reason === 'superseded' ? { sources: Object.fromEntries(Object.entries(raw.sources)
+    .map(([day, source]) => [day, { ...source, manifest_sha256: 'e'.repeat(64) }])) } : {}),
+    ...(reason === 'unavailable' ? { unavailable_dates: Object.fromEntries(raw.run_dates.map(day => [day, 'unavailable'])),
+      sections: { Mortgage: [], Savings: [], TD: [] } } : {}) };
+  expect(prepareHistoricalBankRateCatalogue(archive)).not.toBeNull();
+  const result = await prepareLegacyBankRateHistory(current, sampleManifest, index, archive, () => true);
+  expect(result).toEqual({ ready: true, contributed: false });
+  const actual = historicalBankRateSnapshots(cachedHistoricalBankRateCatalogue(current)!, current, scope, filters);
+  const expected = historicalBankRateSnapshots(fallback, current, scope, filters);
+  expect(Object.keys(actual)).toEqual(Object.keys(expected));
+  if (reason === 'conflicted') {
+    for (const day of raw.run_dates) {
+      expect(actual[day].sectionTotals).toBeUndefined();
+      for (const section of SECTION_KEYS) expect(Object.keys(actual[day][section] ?? {})).toHaveLength(0);
+    }
+  } else expect(actual).toEqual(expected);
+});
+
+test('no selected legacy observations and no fallback report unavailable while preserving unknown dates', async () => {
+  const current = core(), absent = new Date(Date.parse(older) - 86_400_000).toISOString().slice(0, 10);
+  jest.mocked(prepareReadyBankRateHistory).mockResolvedValueOnce(false);
+  const supplied = { ...index, dates: [absent, ...index.dates] };
+  expect(await prepareLegacyBankRateHistory(current, sampleManifest, supplied, raw, () => true))
+    .toEqual({ ready: false, contributed: false });
+  const combined = cachedHistoricalBankRateCatalogue(current)!;
+  const snapshots = historicalBankRateSnapshots(combined, current, scope, filters);
+  expect(snapshots[absent]).toEqual({});
+  for (const day of [absent, ...raw.run_dates]) expect(snapshots[day]).toEqual({});
+  expect(readyProductHistoryIdentity(combined, undefined, latest)).toBeUndefined();
+});
+
+test.each([true, false])('a rejected archive preserves existing fallback readiness=%s without claiming contribution', async ready => {
+  const current = core(), fallback = prepareHistoricalBankRateReady(compileHistoricalBankRateReady(raw, compiler.sha256))!;
+  mockSelection = { prepared: fallback, heads, conflicts: new Set() };
+  jest.mocked(prepareReadyBankRateHistory).mockResolvedValueOnce(ready);
+  if (ready) installPreparedHistoricalBankRateCatalogue(current, fallback);
+  const invalid = { ...raw, sections: { ...raw.sections, Savings: [...raw.sections.Savings, ...raw.sections.Savings] } };
+  expect(prepareHistoricalBankRateCatalogue(invalid)).toBeNull();
+  expect(await prepareLegacyBankRateHistory(current, sampleManifest, index, invalid, () => true))
+    .toEqual({ ready, contributed: false });
+  expect(cachedHistoricalBankRateCatalogue(current)).toBe(ready ? fallback : null);
 });
