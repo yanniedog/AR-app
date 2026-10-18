@@ -2,6 +2,7 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import sampleDetails from '../assets/sample/details.json';
 import { CustomerProfileContent } from '../src/components/CustomerProfilePanel';
+import { NegotiatedTermsEditor } from '../src/components/NegotiatedTermsEditor';
 import { migrateCustomerProfile } from '../src/data/customerProfileMigration';
 import type { CustomerProfile, NegotiatedTerm } from '../src/data/customerProfile';
 import type { DetailsPayload } from '../src/types';
@@ -33,6 +34,11 @@ test('global Profile distinguishes actual pipe-key associations and retains exac
   try {
     expect(keys[0]).toContain('|'); expect(keys[1]).toContain('|');
     expect(texts(tree)).toContain(keys[0]); expect(texts(tree)).toContain(keys[1]);
+    for (const action of ['Edit', 'Remove']) {
+      const names = tree.root.findAllByProps({ title: action }).map((node: any) => node.props.accessibilityLabel);
+      expect(names).toEqual([`${action} Agreed rate · user.one · ${keys[0]}`, `${action} Agreed rate · user.two · ${keys[1]}`]);
+      expect(new Set(names).size).toBe(2);
+    }
     act(() => tree.root.findAllByProps({ title: 'Edit' })[1].props.onPress());
     expect(tree.root.findByProps({ label: 'Note' }).props.value).toBe(original.negotiatedTerms[1].note);
     act(() => tree.root.findByProps({ label: 'Value' }).props.onChangeText('4.25'));
@@ -59,6 +65,25 @@ test('unavailable, stale, mismatched and malformed associations stay Unknown wit
     act(() => tree.update(<CustomerProfileContent />));
     expect(texts(tree)).not.toContain(keys[0]); expect(texts(tree)).not.toContain(keys[1]);
     expect(texts(tree).filter(value => value === 'Unknown')).toHaveLength(3);
+    for (const node of tree.root.findAllByType('Button').filter((node: any) => ['Edit', 'Remove'].includes(node.props.title))) {
+      expect(node.props.accessibilityLabel).toContain(' · Unknown');
+      expect(node.props.accessibilityLabel).not.toContain(malformed);
+    }
     expect(JSON.stringify(mockProfile)).toBe(original); expect(mockUpdate).not.toHaveBeenCalled();
+  } finally { act(() => tree.unmount()); }
+});
+
+test('product-scoped term actions distinguish equal labels by their actual saved term IDs', async () => {
+  mockProfile.negotiatedTerms = [term('user.one', keys[0]), term('user.two', keys[0])];
+  const original = structuredClone(mockProfile);
+  let tree: any; act(() => { tree = TestRenderer.create(<NegotiatedTermsEditor profile={mockProfile} productKey={keys[0]} disabled={false} update={mockUpdate} />); });
+  try {
+    act(() => tree.root.findByProps({ title: 'Negotiated terms' }).props.onToggle());
+    for (const action of ['Edit', 'Remove']) {
+      expect(tree.root.findAllByProps({ title: action }).map((node: any) => node.props.accessibilityLabel))
+        .toEqual([`${action} Agreed rate · user.one`, `${action} Agreed rate · user.two`]);
+    }
+    await act(async () => tree.root.findByProps({ accessibilityLabel: 'Remove Agreed rate · user.two' }).props.onPress());
+    expect(mockProfile.negotiatedTerms).toEqual([original.negotiatedTerms[0]]);
   } finally { act(() => tree.unmount()); }
 });

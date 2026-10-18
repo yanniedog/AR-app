@@ -18,7 +18,7 @@ import { AppText, Chip, Button, Disclosure } from '../ui';
 import { ReviewedCriteria } from './DepositCriteria';
 import { EngineReceiptFacts, uiEngineStatus } from './EngineReceiptFacts';
 import { uiEngineScope } from './engineComparisonUi';
-import { uiCount, uiDate, uiDecimal, uiIdentifier, uiInputIdentifier, uiInputNumber, uiJoin, uiLabel, uiPrivateOfferInput, type UiCopy, type UiLabel } from '../../lib/uiCopy';
+import { uiCount, uiDate, uiDecimal, uiIdentifier, uiInputIdentifier, uiInputNumber, uiJoin, uiLabel, uiNumber, uiPrivateOfferInput, type UiCopy, type UiLabel } from '../../lib/uiCopy';
 const labels = { principal: 'Principal', postedInterest: 'Interest posted', accruedInterest: 'Interest unposted', capitalizedCharges: 'Capitalised charges', otherDebt: 'Other debt' } as const;
 export function MortgageResultDetails({ receipt }: { receipt: CalculationReceipt }) {
  const [open,setOpen]=useState(false),loan=receipt.loan,t=receipt.totals;
@@ -48,9 +48,9 @@ export function MortgagePeriodForm({selections,context,target,onComparisonInput}
  useEffect(()=>{onComparisonInput?.(selection?{selection,inputs:JSON.parse(inputKey)}:null);},[selection,inputKey,onComparisonInput]);
  if(!customer.profile)return <AppText variant="small">{uiLabel(customer.error?'Unavailable':'Loading')}</AppText>;
  const requirements=s?mortgageRequirements(s,inputs,customer.profile):null,criteria=s?evaluateEligibility(s.policy.eligibility,mortgageFacts(s,inputs,customer.profile).facts):null;
- const field=(key:string,label:UiCopy,decimal=false)=>{
+  const field=(key:string,label:UiCopy,decimal=false,placeholder?:UiCopy)=>{
   const value=key==='purpose'||key==='security'||key==='repaymentType'?uiPrivateOfferInput(inputs,key):decimal?uiInputNumber(text[key]??''):uiInputIdentifier(text[key]??'');
-  return <LedgerField key={key} label={label} value={value} keyboardType={decimal?'decimal-pad':'default'} onChangeText={value=>change(key,value)}/>;
+   return <LedgerField key={key} label={label} value={value} placeholder={placeholder} keyboardType={decimal?'decimal-pad':'default'} onChangeText={value=>change(key,value)}/>;
  };
  return <View style={{gap:12}}>
   <AppText variant="small">{uiJoin('Basis', ' · ', 'History', ' · ', 'Local storage', ' · ', 'No approval')}</AppText>
@@ -60,7 +60,7 @@ export function MortgagePeriodForm({selections,context,target,onComparisonInput}
    <AppText variant="small">{uiJoin('Coverage', ' · ', uiDate(s.scope.from), ' ', '–', ' ', uiDate(s.scope.toExclusive), ' · ', 'End excluded')}</AppText>
    {field('account','Local loan account reference')}{field('offer','Local offer reference')}{field('version','Offer version reference')}{field('snapshot','Opening statement reference')}
    {field('rate','Confirmed annual rate (%)',true)}{field('outstanding','Opening total debt (AUD)',true)}
-   {LOAN_COMPONENTS.map(k=>field(k,uiJoin(labels[k], ' (', 'AUD', ')'),true))}
+    {LOAN_COMPONENTS.map(k=>field(k,uiJoin(labels[k], ' (', 'AUD', ')'),true,uiNumber(0)))}
    {field('obligation','Confirmed monthly amount due (AUD)',true)}{field('anchor',uiJoin('Original monthly due date', ' · ', 'YYYY-MM-DD'))}
    <AppText variant="small">{uiJoin('Payment phase', ' · ', s.policy.paymentPhase==='before_accrual'?'Before daily interest':'After daily interest')}</AppText>
    {due.map(date=>field('paid:'+date,uiJoin('Cleared payment', ' · ', uiDate(date), ' (', 'AUD', ')'),true))}
