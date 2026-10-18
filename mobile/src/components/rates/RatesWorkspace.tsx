@@ -225,7 +225,11 @@ export default function RatesWorkspace() {
     void suitabilityRevision;
     if (!comparisonCore || !selected.length || !isMandatoryEligibilityReady() ||
         (catalogue.status !== 'unavailable' && (catalogue.status !== 'ready' || !catalogue.allLoaded))) return;
-    const applicable = selected.filter(token => {
+    // A layout reconciliation may already have upgraded legacy aliases. Do
+    // not overwrite that newer selection from this render's passive effect.
+    if (useRatesSession.getState().sections[section].selected !== selected) return;
+    const canonical = core ? reconcilePublicCompareSelectionTokens(core, catalogue, selected) : selected;
+    const applicable = canonical.filter(token => {
       const entry = resolveCompareSelections(comparisonCore, [token])[0];
       if (!entry) return false;
       const priced = resolvedPublicRankingRows([entry.row], catalogue,
@@ -234,8 +238,8 @@ export default function RatesWorkspace() {
         ? mortgageComparisonRows(priced, mortgageInputs, { core, details, manifest, coreIntegrity }).rows.length > 0
         : priced.length > 0;
     });
-    if (applicable.length !== selected.length) setSelected(applicable);
-  }, [comparisonCore, selected, catalogue, scenarioFor, mortgageInputs, core, details, manifest, coreIntegrity, suitabilityRevision, setSelected]);
+    if (applicable.length !== selected.length || applicable.some((token, index) => token !== selected[index])) setSelected(applicable);
+  }, [comparisonCore, selected, catalogue, scenarioFor, mortgageInputs, core, details, manifest, coreIntegrity, suitabilityRevision, setSelected, section]);
   const debouncedQuery = useDebouncedValue(query, 120);
   const sortOptions = useMemo(() => availableSortOptions(section, mortgageRateMetric, depositRankMetric),
     [depositRankMetric, mortgageRateMetric, section]);
