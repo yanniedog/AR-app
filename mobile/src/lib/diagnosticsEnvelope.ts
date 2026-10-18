@@ -5,6 +5,11 @@ import { PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from './performanceAuditSetup';
 const METRIC_ALLOWLIST = new Set([
   'setupStage', 'stepLimitMs', 'stepLimitExceeded', 'nonTimingFailure',
   'publicCatalogueCacheMiss', 'catalogueAdmissionRejected',
+  'datasetChanged', 'publicCatalogueChanged', 'datasetRefreshStarted', 'datasetManifestChanged', 'datasetRevisionChanged',
+  'expectedCataloguePresent', 'actualCataloguePresent', 'expectedCatalogueReady', 'actualCatalogueReady',
+  'expectedCatalogueUnavailable', 'actualCatalogueUnavailable', 'expectedCatalogueAllLoaded', 'actualCatalogueAllLoaded',
+  'expectedCatalogueProducts', 'actualCatalogueProducts', 'catalogueGenerationChanged',
+  'completedBeforeFailure', 'plannedChecks', 'recoveryRequired', 'rollbackRestored',
   'durationMs',
   'forwardMs',
   'preActionWaitMs',
@@ -160,6 +165,14 @@ function failureCode(check: AuditCheck): string | null {
   if (check.metrics.publicCatalogueCacheMiss === true) return 'public-catalogue-cache-miss';
   if (check.metrics.catalogueAdmissionRejected === true) return 'catalogue-work-in-progress';
   if (check.metrics.stepLimitExceeded === true) return 'step-limit-exceeded';
+  if (check.metrics.publicCatalogueChanged === true) return 'public-catalogue-changed';
+  if (check.metrics.datasetRefreshStarted === true) return 'dataset-refresh-started';
+  if (check.metrics.datasetManifestChanged === true) return 'dataset-manifest-changed';
+  if (check.metrics.datasetChanged === true) return 'dataset-revision-changed';
+  // Saved reports from older builds predate structured causes. Recognize only
+  // this exact fixed first line; never export any part of the raw error/stack.
+  if (check.status === 'fail' && check.error?.split(/\r?\n|\\n/, 1)[0] ===
+    'AuditDatasetChangedError: Public pricing catalogue changed during the performance audit') return 'public-catalogue-changed';
   if (check.metrics.availabilityFailure === true) return 'unavailable';
   return check.status === 'fail' ? 'check-failed' : null;
 }
