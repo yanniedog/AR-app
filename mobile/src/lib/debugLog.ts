@@ -1,5 +1,7 @@
 import { htmlPlainText } from './htmlPlainText';
 import { clearCompletedPerformanceAudit } from './performanceAuditReportStorage';
+import { clearCompletedPerformanceAuditState } from './performanceAudit';
+import { clearPublicReportUploadAttempts } from './publicReportUploadAttempt';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
@@ -849,9 +851,10 @@ export const debugLog = {
     notify();
     clearPromise = (async () => {
       try {
+        await clearCompletedPerformanceAudit(async () => {
         if (inFlight) await inFlight.catch(() => {});
         if (coldStartResetPromise) await coldStartResetPromise;
-        await clearCompletedPerformanceAudit();
+        await clearPublicReportUploadAttempts();
         const storageKeys = [
           STORAGE_KEY,
           LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
@@ -884,6 +887,8 @@ export const debugLog = {
             [...retainedStorageKeys, ...retainedFiles].join(', '),
           );
         }
+        clearCompletedPerformanceAuditState();
+        });
         pendingLogRotation = false;
         clearState = 'ready';
         if (buffer.getEntries().length > 0) schedulePersist();
