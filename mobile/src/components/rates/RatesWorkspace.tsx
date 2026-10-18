@@ -880,4 +880,3 @@ function CompareDock({
     </View>
   );
 }
-
