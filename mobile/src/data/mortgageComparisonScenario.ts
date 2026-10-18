@@ -14,7 +14,12 @@ export function mortgageComparisonScenario(section: SectionKey, scenario: RateSc
   if (section !== 'Mortgage') return scenario;
   const result = { ...scenario };
   if (temporary) {
-    const facets = publicRateScenario('Mortgage', undefined, normalizeProfileFilters(temporary));
+    const unique = (values: string[], canonical: (value?: string) => string | undefined) =>
+      [...new Map(values.map(value => [canonical(value), value])).values()];
+    const facets = publicRateScenario('Mortgage', undefined, normalizeProfileFilters({
+      loanPurposes: unique(temporary.loanPurposes, canonicalPurpose),
+      repaymentTypes: unique(temporary.repaymentTypes, canonicalRepayment),
+    }));
     if (temporary.loanPurposes.length) {
       result.purpose = facets.purpose; result.profileLoanPurpose = facets.profileLoanPurpose;
     }
