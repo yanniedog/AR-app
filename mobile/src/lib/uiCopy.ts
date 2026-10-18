@@ -110,7 +110,7 @@ export const UI_LABELS = [
   'Lower / base / higher', 'Lower scenario', 'LVR · Balance · Repayment · Term · Bonus · Package',
   'Market research', 'Match / gap basis', 'Matched observed rate', 'Matching details unavailable',
   'Matching rates', 'Missing details', 'Model facts', 'Monthly', 'Monthly nominal / maturity',
-  'Monthly repayment', 'Net offset difference', 'No comparable rates observed',
+  'Monthly repayment', 'Monthly household allocation', 'Refinancing timing', 'Not published', 'Net offset difference', 'No comparable rates observed',
   'No other differences', 'No saved tiers', 'Observed dataset', 'Offset as repayment',
   'Offset basis', 'Offset boost', 'Offset contribution', 'Offset fees', 'Open-source notices',
   'Opening offset', 'Past offset changes', 'Past rate / payment changes', 'Personal advice',

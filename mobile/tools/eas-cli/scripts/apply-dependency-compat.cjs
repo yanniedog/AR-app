@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const { patchExport } = require('../../../scripts/apply-dependency-compat.cjs');
 const { createRequire } = require('node:module');
 const resolveFrom = createRequire(path.resolve(__dirname, '../package.json'));
+require('../../../scripts/patch-legacy-yaml-cli.cjs').patchLegacyYamlCli(path.resolve(__dirname, '..'));
 const pinned = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8')).dependencies['eas-cli'];
 const installed = resolveFrom('eas-cli/package.json').version;
 if (installed !== pinned) throw new Error(`Expected EAS ${pinned}, found ${installed}`);

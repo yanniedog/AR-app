@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { type CustomerProfile, type NegotiatedTerm, safeId, userProvenance, validProvenance } from '../data/customerProfile';
 import { useStore } from '../data/store';
-import { uiLabel, uiDate, uiDetailsProductReference, uiJoin, uiNegotiatedTermField, useNegotiatedTermDraft } from '../lib/uiCopy';
+import { uiLabel, uiDate, uiDetailsProductReference, uiIdentifier, uiJoin, uiNegotiatedTermField, useNegotiatedTermDraft } from '../lib/uiCopy';
 import type { DetailsPayload } from '../types';
 import { LedgerField } from './ledger/LedgerField';
 import { AppText, Button, Disclosure } from './ui';
@@ -51,8 +51,8 @@ export function NegotiatedTermsEditor({ profile, productKey, disabled, update }:
       <AppText variant="small">{uiJoin(uiNegotiatedTermField(t, 'value'), ' ', uiNegotiatedTermField(t, 'unit'))}</AppText>
       <AppText variant="tiny">{uiJoin('Recorded', ' ', uiDate(t.provenance.recordedAt), ' · ', 'Effective from', ' ', uiDate(t.provenance.effectiveFrom), ' · ', 'Effective to', ' ', uiDate(t.provenance.effectiveToExclusive))}</AppText>
       {!productKey ? <AppText variant="tiny">{termProductReference(t, details)}</AppText> : null}
-      <Button title="Edit" variant="secondary" disabled={busy} onPress={() => edit(t)} />
-      <Button title="Remove" variant="ghost" disabled={busy} onPress={() => void update(p => ({ ...p, negotiatedTerms: p.negotiatedTerms.filter(v => v.id !== t.id) }))} />
+      <Button title="Edit" accessibilityLabel={uiJoin('Edit', ' ', uiNegotiatedTermField(t, 'label'), ' · ', uiIdentifier(t.id), !productKey ? uiJoin(' · ', termProductReference(t, details)) : null)} variant="secondary" disabled={busy} onPress={() => edit(t)} />
+      <Button title="Remove" accessibilityLabel={uiJoin('Remove', ' ', uiNegotiatedTermField(t, 'label'), ' · ', uiIdentifier(t.id), !productKey ? uiJoin(' · ', termProductReference(t, details)) : null)} variant="ghost" disabled={busy} onPress={() => void update(p => ({ ...p, negotiatedTerms: p.negotiatedTerms.filter(v => v.id !== t.id) }))} />
     </View>)}
     {productKey || editing ? <>
       {([['label', 'Term'], ['value', 'Value'], ['unit', 'Unit'], ['from', 'Effective from'], ['to', 'Effective to']] as const).map(([key, label]) => <LedgerField key={key} label={label} value={draft[key]} editable={!busy} maxLength={key === 'value' ? 2000 : key === 'unit' ? 80 : 160} onChangeText={v => termDraft.change(key, v)} autoCorrect={false} />)}

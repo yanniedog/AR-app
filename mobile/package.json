@@ -141,7 +141,10 @@
     "metro-symbolicate@0.83.3": "0.83.8",
     "metro-transform-plugins@0.83.3": "0.83.8",
     "metro-transform-worker@0.83.3": "0.83.8",
-    "decode-uri-component": "0.5.0"
+    "decode-uri-component": "0.5.0",
+    "js-yaml@3.15.2": {
+      "argparse": "2.0.1"
+    }
   },
   "jest": {
     "preset": "jest-expo",
