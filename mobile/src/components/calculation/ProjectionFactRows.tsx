@@ -11,7 +11,7 @@ const SCENARIO = {
   'rate-lower': 'Lower rate', 'rate-base': 'Base rate', 'rate-higher': 'Higher rate',
   'offset-none': 'No offset', 'offset-steady': 'Current offset', 'offset-plan': 'Offset plan', 'offset-boost': 'Offset boost',
 } as const satisfies Record<ProjectionSeriesId, string>;
-const HORIZON = { 'full-term': 'Remaining term', 'fixed-period': 'Fixed period', 'savings-horizon': 'Savings horizon', 'deposit-maturity': 'Deposit maturity' } as const;
+const HORIZON = { 'comparison-period': 'Comparison period', 'full-term': 'Remaining term', 'fixed-period': 'Fixed period', 'savings-horizon': 'Savings horizon', 'deposit-maturity': 'Deposit maturity' } as const;
 
 function CashflowRows({ label, amount, enteredAmount, enteredFrequency, annualPeriods }: {
   label: UiCopy; amount: number;

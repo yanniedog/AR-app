@@ -227,9 +227,9 @@ export interface AppState {
     relevantDate: string | null,
     kind: TrackedRateDateKind | null,
   ) => Promise<void>;
-  isRateSaved: (productKey: string, rateIndex: number | null) => boolean;
+  isRateSaved: (productKey: string, rateIndex: number | null, offerId?: string) => boolean;
   subscribeProduct: (productKey: string, rateIndex: number | null, labelRow: RateRow) => boolean;
-  unsubscribeProduct: (productKey: string, rateIndex: number | null) => void;
+  unsubscribeProduct: (productKey: string, rateIndex: number | null, offerId?: string) => void;
   subscribeSearch: (input: {
     section: SectionKey;
     path: string[];
@@ -241,7 +241,7 @@ export interface AppState {
   unsubscribeSearch: (id: string) => void;
   removeSubscription: (id: string) => void;
   restoreSubscription: (sub: Subscription) => void;
-  isProductSubscribed: (productKey: string, rateIndex: number | null) => boolean;
+  isProductSubscribed: (productKey: string, rateIndex: number | null, offerId?: string) => boolean;
   findSearchSubscription: (input: {
     section: SectionKey;
     path: string[];

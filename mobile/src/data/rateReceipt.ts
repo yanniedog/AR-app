@@ -340,11 +340,13 @@ export function buildNegotiationBrief(input: {
   receipt: RateReceipt;
   scenario: UserRateScenario;
   sectionRows: RateRow[];
+  comparisonsReady?: boolean;
   detailsProducts?: Record<string, ProductDetail> | null;
 }): NegotiationBrief {
   const { receipt, scenario, sectionRows, detailsProducts } = input;
+  const comparisonsReady = input.comparisonsReady !== false;
   const scenarioData = scenarioForSection(scenario, receipt.section);
-  const broadlyAvailableRows = visibleAccountRows(sectionRows, false, detailsProducts);
+  const broadlyAvailableRows = comparisonsReady ? visibleAccountRows(sectionRows, false, detailsProducts) : [];
   const standardRates = broadlyAvailableRows
     .map((row) => toFraction(row.rate))
     .filter((rate): rate is number => rate !== null);

@@ -1,3 +1,9 @@
+import { ratesResultRowKey } from '../../data/ratesResultRowKey';
+import { publicOfferSelectionToken } from '../../data/publicOfferIdentity';
+import { PublicPricingCoverage, PublicProductDiscovery } from '../scenario/PublicPricingCoverage';
+import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
+import { publicComparisonCore, publicRateScenario, publicRecommendationRows } from '../../data/publicRateIntegration';
+import { useUserRateScenario } from '../../hooks/useUserRateScenario';
 import { uiCount,uiJoin,uiLabel,uiRatesQuery,uiProductName,uiProviderName,type UiCopy } from '../../lib/uiCopy';
 import { humanizeEnum } from '../../data/format';
 import { useReadyNavigationEffect } from '../../hooks/useReadyNavigationEffect';
@@ -85,7 +91,7 @@ function availableSortOptions(
   ];
 }
 
-const rowToken = (r: { rate_index?: number | string; product_key: string }) =>
+const rowToken = (r: RateRow) => r.public_offer_id ? publicOfferSelectionToken(r.product_key, r.public_offer_id) :
   r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
 
 const SearchProductRow = React.memo(function SearchProductRow({ row, section, selectMode, selected, onToggleSelect,
@@ -99,7 +105,7 @@ const SearchProductRow = React.memo(function SearchProductRow({ row, section, se
 }) {
   useLayoutEffect(() => auditCell ? onAuditCellCommit(row, auditRevision) : undefined,
     [auditCell, auditRevision, onAuditCellCommit, row]);
-  const onPress = useCallback(() => selectMode ? onToggleSelect(rowToken(row)) : openProduct(row.product_key, row.rate_index),
+  const onPress = useCallback(() => selectMode ? onToggleSelect(rowToken(row)) : openProduct(row.product_key, row.rate_index, row.public_programme_id),
     [selectMode, onToggleSelect, row]);
   return <ProductCard row={row} section={section} comparisonUnverified={comparisonUnverified}
     logoRenderStateId={`search:${row.rate_index ?? 'default'}#${row.product_key}`}
@@ -138,6 +144,9 @@ export default function RatesWorkspace() {
   const ensureSearchIndex = useStore((s) => s.ensureSearchIndex);
   const coreIntegrity = useStore(state => state.coreIntegrity);
   const manifest = useStore(state => state.manifest);
+  const catalogue = usePublicRateCatalogue(manifest);
+  const { scenario } = useUserRateScenario();
+  const comparisonCore = useMemo(() => core ? publicComparisonCore(core, catalogue, s => publicRateScenario(s, scenario, prefs.profileFilters)) : null, [core, catalogue, scenario, prefs.profileFilters]);
   useReadyNavigationEffect(useCallback(() => {
     if (!hydrated || !isFocused) return;
     initializeRatesSession(prefs, activeSection);
@@ -229,9 +238,9 @@ export default function RatesWorkspace() {
 
   const baseRows = useMemo(() => {
     void suitabilityRevision;
-    const all = core?.sections[section]?.rates ?? [];
+    const all = publicRecommendationRows(core?.sections[section]?.rates ?? [], catalogue, section, publicRateScenario(section, scenario, prefs.profileFilters));
     return task.intentError ? [] : rowsForSearchScope(all, section, path, hierarchyScoped);
-  }, [core, section, path, hierarchyScoped, suitabilityRevision, task.intentError]);
+  }, [core, catalogue, scenario, prefs.profileFilters, section, path, hierarchyScoped, suitabilityRevision, task.intentError]);
   const mortgageInputs = useMortgageComparison();
   const mortgageScope = useMemo(() => section === 'Mortgage' ? mortgageComparisonRows(baseRows, mortgageInputs)
     : { rows: baseRows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false }, [baseRows, mortgageInputs, section]);
@@ -272,6 +281,7 @@ export default function RatesWorkspace() {
   const pageSize = normalizeRatesPageSize(prefs.ratesPageSize);
   const pagination = ratesPageWindow(resultRows.length, task.page, pageSize);
   const pageRows = useMemo(() => resultRows.slice(pagination.offset, pagination.to), [resultRows, pagination.offset, pagination.to]);
+  const resultRowKey = useCallback((row: ResultRow, i: number) => ratesResultRowKey(row, pagination.offset + i), [pagination.offset]);
   const catalogueOptions = useMemo(() => ({ ...EMPTY_SEARCH_FILTER_OPTIONS,
     providers: [...new Set(unlistedEntries.map(item => item.provider).filter((value): value is string => Boolean(value)))].sort() }), [unlistedEntries]);
   const activeFilterOptions = draftAvailability === 'unlisted' ? catalogueOptions : filterOptions.options;
@@ -349,7 +359,7 @@ export default function RatesWorkspace() {
 
   const toggleSelect = useCallback((key: string) => {
     if (!core) return;
-    const update = toggleCompareSelection(core, selected, key);
+    const update = toggleCompareSelection(comparisonCore!, selected, key);
     if (update.rejection === 'limit_reached') {
       Alert.alert('Four-rate limit');
       return;
@@ -363,7 +373,7 @@ export default function RatesWorkspace() {
       return;
     }
     setSelected(update.tokens);
-  }, [core, selected, setSelected]);
+  }, [core, comparisonCore, selected, setSelected]);
 
   const toggleCompareMode = useCallback(() => {
     hapticSelection();
@@ -381,7 +391,7 @@ export default function RatesWorkspace() {
   }, [pagination.page, searchPending, section, task.page]);
   const dataTracker = useRef(new OpaquePerformanceAuditRenderRevision());
   const uiTracker = useRef(new OpaquePerformanceAuditRenderRevision());
-  const listDataRevision = dataTracker.current.update([coreSha ?? core?.run_date ?? 'none', manifest?.files.details.sha256,
+  const listDataRevision = dataTracker.current.update([coreSha ?? core?.run_date ?? 'none', manifest?.files.details.sha256, catalogue.generationId, catalogue.status, scenario,
     section, path, hierarchyScoped, debouncedQuery, sortKey, effectiveFilters, availability, task.intentError,
     queryNeedsSearchIndex, resultSearchIndex != null, suitabilityRevision, resultRows.length, pagination.page, pageSize, mortgageInputs]);
   // Selection and disclosure changes need a fresh committed render, but keep
@@ -450,11 +460,11 @@ export default function RatesWorkspace() {
   }, [listRevision, listReadiness.ready]);
   const logoReadiness = useLogoReadiness(listDataRevision);
   const auditTarget = useRatesAuditTarget({ rows: pageRows, results: resultRows, page: pagination.page, size: pageSize,
-    revision: listRevision, context: JSON.stringify([coreSha ?? core?.run_date, manifest?.files.details.sha256,
+    revision: listRevision, context: JSON.stringify([coreSha ?? core?.run_date, manifest?.files.details.sha256, catalogue.generationId, catalogue.status, scenario,
       section, path, hierarchyScoped, debouncedQuery, sortKey, effectiveFilters, availability, pageSize, mortgageInputs, getRatesSessionRestoreRevision()]),
     selectMode, canScroll: restoredDataRevision === restorationKey && listReadiness.ready, list: listRef,
     token: row => 'product_key' in row ? rowToken(row) : null,
-    key: (row, i) => 'product_key' in row ? `${row.product_key}-${row.rate_index ?? pagination.offset + i}` : row.key,
+    key: resultRowKey,
     navigate: page => {
       if (page !== pagination.page || !selectMode) updateRatesSection(section, { page, selectMode: true }, page !== pagination.page);
     },
@@ -627,6 +637,8 @@ export default function RatesWorkspace() {
           data={pageRows}
           ListHeaderComponent={availability === 'listed' ? <View style={{ gap: 8 }}>
             <SavedRequirementsSummary section={section} />
+            {catalogue.status !== 'unavailable' ? <><PublicPricingCoverage section={section} rows={baseRows} scenario={scenario} compact />
+              <PublicProductDiscovery section={section} rows={baseRows} query={debouncedQuery} /></> : null}
             {section === 'Mortgage' ? <MortgageComparisonControls rows={core.sections.Mortgage.rates} filters={filters}
               unverified={unverifiedResultCount} invalid={mortgageScope.invalid} /> : null}
           </View> : null}
@@ -640,7 +652,7 @@ export default function RatesWorkspace() {
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
           extraData={listRevision}
-          keyExtractor={(item, i) => 'product_key' in item ? `${item.product_key}-${item.rate_index ?? pagination.offset + i}` : item.key}
+          keyExtractor={resultRowKey}
           getItemType={item => 'product_key' in item ? 'rate' : 'unlisted'}
           onScroll={event => {
             if (restoration.current.applied && restoration.current.revision === restorationKey

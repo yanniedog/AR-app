@@ -437,4 +437,3 @@ export function receiptCriterionFacts(receipt: CalculationReceipt): readonly Rec
   }
   return facts;
 }
-

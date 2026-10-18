@@ -8,7 +8,7 @@ import type { RateConditionContext } from '../data/rateConditions';
 import { selectedTargetConstraint, targetConstraintContradicted, type SelectedTargetConstraint } from './selectedTargetConstraints';
 
 type Param = string | string[] | undefined;
-export interface CalculationTargetParams { target?: Param; ri?: Param }
+export interface CalculationTargetParams { target?: Param; ri?: Param; programme?: Param }
 export type CalculationTarget =
   | { status: 'none' }
   | { status: 'pending' }
@@ -28,6 +28,7 @@ export function buildCalculationRoute(row: RateRow, section: SectionKey, mode: '
   return { pathname: '/calculator' as const, params: {
     section, mode, target: row.product_key,
     ...(row.rate_index != null ? { ri: String(row.rate_index) } : {}),
+    ...(row.public_programme_id ? { programme: row.public_programme_id } : {}),
   } };
 }
 
@@ -37,13 +38,16 @@ export function resolveCalculationTarget(core: CorePayload | null, section: Sect
   const key = single(params.target);
   if (key === '') return { status: 'none' };
   if (!key || key.length > 2048) return { status: 'unavailable' };
+  const programme = single(params.programme);
+  if (params.programme !== undefined && (!programme || programme.length > 2048)) return { status: 'unavailable' };
   const index = single(params.ri);
   if (params.ri !== undefined && (index === undefined || (index !== '' && (!/^\d+$/.test(index) || !Number.isSafeInteger(Number(index)))))) return { status: 'unavailable' };
   if (!core) return { status: 'pending' };
   const found = findEligibleByKey(core.sections, key);
   if (!found && !isMandatoryEligibilityReady()) return { status: 'pending' };
   if (!found || found.section !== section) return { status: 'unavailable' };
-  const row = !index ? found.row : found.siblings.find(item => item.rate_index === Number(index));
+  const row = programme ? found.siblings.find(item => item.public_programme_id === programme)
+    : !index ? found.row : found.siblings.find(item => item.rate_index === Number(index));
   return row ? { status: 'available', row, section } : { status: 'unavailable' };
 }
 

@@ -11,11 +11,11 @@ export function parseLvrRange(value: string | undefined): LvrRange | null {
     return hi > 0 && hi <= 100 ? { lo: 0, hi, inclusive: false,
       ...(match[1] === '<' ? { hiInclusive: false } : {}) } : null;
   }
-  match = /^(>=|>)?(\d+(?:\.\d+)?)\s*[-–_]\s*(\d+(?:\.\d+)?)$/.exec(text);
+  match = /^(>=|>)?(\d+(?:\.\d+)?)\s*[-–_]\s*(<=|<)?(\d+(?:\.\d+)?)$/.exec(text);
   if (match) {
-    const lo = Number(match[2]), hi = Number(match[3]), inclusive = match[1] === '>=';
-    return lo >= 0 && hi <= 100 && (lo < hi || (inclusive && lo === hi))
-      ? { lo, hi, inclusive } : null;
+    const lo = Number(match[2]), hi = Number(match[4]), inclusive = match[1] === '>=';
+    return lo >= 0 && hi <= 100 && (lo < hi || (inclusive && match[3] !== '<' && lo === hi))
+      ? { lo, hi, inclusive, ...(match[3] === '<' ? { hiInclusive: false } : {}) } : null;
   }
   match = /^(>=|>)(\d+(?:\.\d+)?)$|^(\d+(?:\.\d+)?)\+$/.exec(text);
   if (!match) return null;

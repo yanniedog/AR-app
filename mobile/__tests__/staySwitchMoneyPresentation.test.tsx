@@ -20,7 +20,7 @@ const labels = ['Current bank exit fees', 'Application fees', 'Valuation fees', 
 type TestNode = { props: Record<string, any> };
 type Tree = ReactTestRenderer & { root: { findAllByType(type: unknown): TestNode[]; findByType(type: unknown): TestNode; findAll(predicate: (node: TestNode) => boolean): TestNode[] }; toJSON(): unknown };
 const texts = (tree: Tree) => tree.root.findAllByType('AppText' as never).map(node => String(node.props.children)).join('\n');
-const scenario = () => normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '500000.50', currentRate: '6', years: '25' } });
+const scenario = () => normalizeUserRateScenario({ projections: { mortgage: { holdVariableRate: true, horizonYears: '50' } }, mortgage: { mode: 'refi', loanBalance: '500000.50', currentRate: '6', years: '25' } });
 
 test('six fees and cashback show AUD in visible and accessible field labels without altering entered cents', () => {
   const inputs = { ...scenario().mortgageSwitch, ...Object.fromEntries(fees.map(key => [key, '99.50'])), cashback: '0.50' };
@@ -75,8 +75,8 @@ test('published cents, explicit zero and unknown/malformed fees keep distinct fa
 test('every stay/switch monetary fact retains cents and provenance while unknown and withheld facts stay nonnumeric', () => {
   const examples: readonly { fact: StaySwitchFact; values: readonly string[] }[] = [
     { fact: { kind: 'switch-opening-inputs', balance: 500000.5, remainingYears: 25, offsetAmount: 99.5 }, values: ['$500,000.50', '25 years', '$99.50'] },
-    { fact: { kind: 'household-allocation', monthlyAmount: 99.5, policy: 'baseline' }, values: ['$99.50 · Entered'] },
-    { fact: { kind: 'household-allocation', monthlyAmount: 99.5, policy: 'additional-required' }, values: ['$99.50 · Required'] },
+    { fact: { kind: 'household-allocation', monthlyAmount: 99.5, policy: 'baseline' }, values: ['$99.50 · Current'] },
+    { fact: { kind: 'household-allocation', monthlyAmount: 99.5, policy: 'additional-required' }, values: ['$99.50 · Current'] },
     { fact: { kind: 'target-allocation-shortfall', monthlyAmount: 0.5 }, values: ['$0.50 per month'] },
     { fact: { kind: 'switch-funding', method: 'cash', netCostAmount: -0.5 }, values: ['Cash / offset · -$0.50'] },
     { fact: { kind: 'switch-funding', method: 'new-loan', netCostAmount: 99.5 }, values: ['New loan · $99.50'] },
@@ -99,6 +99,34 @@ test('every stay/switch monetary fact retains cents and provenance while unknown
   expect(uiStaySwitchMoney(0)).toBe('$0.00');
   expect(uiStaySwitchMoney(-99.5)).toBe('-$99.50');
   expect(uiMoney(99.5)).toBe('$100'); // This change does not alter the general compact formatter.
+});
+
+test('real stay/switch facts distinguish current household allocation, target shortfall and refinancing timing', () => {
+  const value = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' },
+    projections: { mortgage: { periodicAmount: '3500', periodicFrequency: 'monthly', extraRepaymentAmount: '200', extraRepaymentFrequency: 'monthly', offsetContributionAmount: '500', offsetContributionFrequency: 'monthly' } } });
+  const target: RateRow = { provider: 'Target Bank', product_key: 'target', product_name: 'Loan', rate: '0.15' };
+  const model = buildStaySwitchProjection({ scenario: value, target, targetDetail: {}, now: new Date('2026-10-15T01:00:00Z') });
+  expect(model.ready).toBe(true); expect(model.householdAllocation).toBe(4200);
+  expect(model.targetAllocationShortfall).toBeGreaterThan(0);
+  const original = JSON.stringify(model), rows = model.facts.flatMap(uiStaySwitchFact);
+  expect(rows).toContainEqual({ label: 'Monthly household allocation', value: '$4,200.00 · Current' });
+  expect(rows).toContainEqual({ label: 'Repayment shortfall', value: `${uiStaySwitchMoney(model.targetAllocationShortfall)} per month` });
+  expect(rows).toContainEqual({ label: 'Refinancing timing', value: 'Unverified' });
+  expect(rows.some(row => row.label === 'Monthly repayment' || row.value === '$4,200.00 · Required')).toBe(false);
+  expect(JSON.stringify(model)).toBe(original);
+});
+
+test('real target offset facts preserve published absence separately from unavailable evidence', () => {
+  const target: RateRow = { provider: 'Target Bank', product_key: 'target', product_name: 'Loan', rate: '0.05' };
+  const cases: readonly [ProductDetail | undefined, string][] = [[{}, 'No · Not published'], [undefined, 'No · Unverified'], [{ features: [{ label: 'OFFSET' }] }, 'Yes · Published']];
+  for (const [targetDetail, expected] of cases) {
+    const model = buildStaySwitchProjection({ scenario: scenario(), target, targetDetail, now: new Date('2026-10-15T01:00:00Z') });
+    const original = JSON.stringify(model), fact = model.facts.find(fact => fact.kind === 'target-offset')!;
+    const rows = uiStaySwitchFact(fact);
+    expect(rows[0]).toEqual({ label: 'Target offset', value: expected });
+    expect(rows[1].value).toBe(model.targetHasOffset ? 'Offset' : 'Principal');
+    expect(JSON.stringify(model)).toBe(original);
+  }
 });
 
 function projection(): StaySwitchProjection {

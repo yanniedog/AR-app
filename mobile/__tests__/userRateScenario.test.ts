@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   loadUserRateScenario,
@@ -25,7 +26,7 @@ describe('UserRateScenario', () => {
     expect(value.mortgage.currentRate).toBe('6.1');
     expect(value.savings).toEqual({ balance: '20000', currentRate: '4.2' });
     expect(value.termDeposit).toEqual({ balance: '50000', currentRate: '4.8' });
-    expect(value.version).toBe(3);
+    expect(value.version).toBe(4);
     expect(value.projections.mortgage.periodicFrequency).toBe('monthly');
     expect(value.currentProducts.mortgage).toEqual({ provider: '', productKey: '', rateIndex: null });
     expect(value.mortgageSwitch.fundingMethod).toBe('cash-or-offset');
@@ -42,10 +43,34 @@ describe('UserRateScenario', () => {
         },
       },
     });
-    expect(value.version).toBe(3);
+    expect(value.version).toBe(4);
     expect(value.projections.mortgage.offsetBalance).toBe('32000');
     expect(value.projections.mortgage.offsetContributionFrequency).toBe('weekly');
     expect(value.projections.mortgage.periodicFrequency).toBe('monthly');
+  });
+
+  it('migrates v3 entered values and semantic product references without opting into reference estimates or alerts', () => {
+    const value = normalizeUserRateScenario({ version: 3, mortgage: { currentRate: '6.271' }, savings: { currentRate: '0.50' },
+      currentProducts: { mortgage: { provider: 'Unit Bank', productKey: 'unit-product', offerId: 'stable-offer', programmeId: 'stable-programme', rateIndex: 8 } } });
+    expect(value.mortgage.currentRate).toBe('6.271'); expect(value.savings.currentRate).toBe('0.50');
+    expect(value.localRates.mortgage).toMatchObject({ mode: 'entered', totalAdjustment: '', referenceChangeAlerts: false, referenceScenario: {} });
+    expect(value.currentProducts.mortgage).toMatchObject({ offerId: 'stable-offer', programmeId: 'stable-programme' });
+    expect(value.projections.mortgage.holdVariableRate).toBe(false);
+    expect(value.projections.savings.bonusQualification).toBe('unknown');
+  });
+
+  it('keeps numerical assumptions and explicit reference scope in protected storage, outside ordinary app caches and logs', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    const log = jest.spyOn(console, 'log'), info = jest.spyOn(console, 'info');
+    const value = normalizeUserRateScenario({ mortgage: { currentRate: '6.271', loanBalance: '487321' }, localRates: { mortgage: {
+      mode: 'reference', referenceId: 'public-family', totalAdjustment: '-2.619', referenceScenario: { customerCategory: 'OVERSEAS_BORROWER', termMonths: '24', secret: 'must-drop' } } } });
+    await saveUserRateScenario(value);
+    expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled(); expect(info).not.toHaveBeenCalled();
+    expect(value.localRates.mortgage.referenceScenario).toEqual({ customerCategory: 'OVERSEAS_BORROWER', termMonths: '24' });
+    await expect(loadUserRateScenario()).resolves.toEqual(value);
+    expect(value.mortgage.currentRate).toBe('6.271');
+    log.mockRestore(); info.mockRestore();
   });
 
   it('migrates v2 values and normalizes section bank and optional product references', () => {
@@ -63,7 +88,7 @@ describe('UserRateScenario', () => {
         targetOffsetAvailable: 'yes',
       },
     });
-    expect(value.version).toBe(3);
+    expect(value.version).toBe(4);
     expect(value.mortgage.loanBalance).toBe('480000');
     expect(value.projections.mortgage.offsetBalance).toBe('40000');
     expect(value.currentProducts.mortgage).toEqual({ provider: 'Bank Australia', productKey: 'loan-key', rateIndex: 3 });

@@ -63,6 +63,14 @@ jobs:
           node scripts/ensure-firebase-config.mjs
           npx expo prebuild --platform android --no-install
           chmod +x android/gradlew
+      - name: Prepare Android settings dependencies
+        if: matrix.language == 'java-kotlin'
+        working-directory: mobile/android
+        timeout-minutes: 10
+        # Resolve settings plugins before tracing; help does not compile app modules.
+        run: |
+          set -o pipefail
+          timeout 8m ./gradlew help --no-daemon --no-build-cache --info --stacktrace 2>&1 | tee "$RUNNER_TEMP/codeql-gradle-prepare.log"
       - name: Initialize CodeQL
         uses: github/codeql-action/init@cee97f86b972a3ded3c58d04148362b193ddc518 # v4.38.3
         with:
@@ -72,14 +80,27 @@ jobs:
         if: matrix.language == 'java-kotlin'
         working-directory: mobile/android
         # Force compilation under the tracer, even if Gradle has cached outputs.
-        run: >-
-          ./gradlew
-          :ar-apk-identity-verifier:compileReleaseKotlin
-          :ar-history-codec:compileReleaseKotlin
-          :ar-history-codec:compileReleaseJavaWithJavac
-          :ar-audit-screen-awake:compileReleaseKotlin
-          --no-daemon --no-build-cache --rerun-tasks
+        run: |
+          set -o pipefail
+          ./gradlew \
+            :ar-apk-identity-verifier:compileReleaseKotlin \
+            :ar-history-codec:compileReleaseKotlin \
+            :ar-history-codec:compileReleaseJavaWithJavac \
+            :ar-audit-screen-awake:compileReleaseKotlin \
+            :expo-task-manager:compileReleaseJavaWithJavac \
+            :expo-background-task:compileReleaseKotlin \
+            --no-daemon --no-build-cache --rerun-tasks --info --stacktrace \
+            2>&1 | tee "$RUNNER_TEMP/codeql-gradle-compile.log"
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           category: /language:${{ matrix.language }}
+      - name: Retain native build diagnostics
+        if: always() && matrix.language == 'java-kotlin'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: codeql-native-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/codeql-gradle-prepare.log
+            ${{ runner.temp }}/codeql-gradle-compile.log
+          retention-days: 7

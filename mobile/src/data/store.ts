@@ -20,7 +20,7 @@ import {
 import type { SectionKey } from '../types';
 import { SECTION_ORDER } from '../constants';
 import { normalizeSavedRates } from './savedRates';
-import { refreshProductSubscriptionLabels } from './subscriptions';
+import { normalizeProductSubscriptionIds, refreshProductSubscriptionLabels } from './subscriptions';
 import { loadTrackedRatesSecureResult, normalizeTrackedRates } from './trackedRates';
 import { debugLog } from '../lib/debugLog';
 import { setCrashReportsEnabled } from '../lib/observability';
@@ -129,7 +129,7 @@ export const useStore = create<AppState>()(
           ...current,
           ...p,
           ...(Array.isArray(p?.subscriptions)
-            ? { subscriptions: refreshProductSubscriptionLabels(p.subscriptions) }
+            ? { subscriptions: refreshProductSubscriptionLabels(normalizeProductSubscriptionIds(p.subscriptions)) }
             : {}),
           prefs,
           savedRates,
