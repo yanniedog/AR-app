@@ -1,4 +1,5 @@
 import { reconcilePublicCompareSelectionTokens } from '../../data/publicCompareSelectionTokens';
+import { publicScenarioForRow } from '../../data/publicRateIntegration';
 import { mortgageComparisonScenario } from '../../data/mortgageComparisonScenario';
 import type { RateScenario } from '../../data/publicRateModel';
 import { ratesResultRowKey } from '../../data/ratesResultRowKey';
@@ -159,8 +160,8 @@ export default function RatesWorkspace() {
   const { scenario } = useUserRateScenario();
   const mortgageInputs = useMortgageComparison();
   const mortgageFilters = session.sections.Mortgage.filters;
-  const scenarioFor = useCallback((selected: SectionKey, row?: RateRow) => mortgageComparisonScenario(selected,
-    publicRateScenario(selected, scenario, prefs.profileFilters, row), mortgageInputs, mortgageFilters), [scenario, prefs.profileFilters, mortgageInputs, mortgageFilters]);
+  const scenarioFor = useCallback((selected: SectionKey, row?: RateRow) => publicScenarioForRow(row, catalogue, mortgageComparisonScenario(selected,
+    publicRateScenario(selected, scenario, prefs.profileFilters, row), mortgageInputs, mortgageFilters)), [catalogue, scenario, prefs.profileFilters, mortgageInputs, mortgageFilters]);
   const rowScenario = useCallback((row: RateRow) => scenarioFor(section, row), [scenarioFor, section]);
   const comparisonCore = useMemo(() => core ? publicComparisonCore(core, catalogue, scenarioFor) : null, [core, catalogue, scenarioFor]);
   useReadyNavigationEffect(useCallback(() => {

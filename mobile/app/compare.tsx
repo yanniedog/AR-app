@@ -1,3 +1,4 @@
+import { publicScenarioForRow } from '../src/data/publicRateIntegration';
 import { useRatesSession } from '../src/data/ratesSession';
 import { mortgageComparisonScenario } from '../src/data/mortgageComparisonScenario';
 import { useMortgageComparison } from '../src/data/mortgageComparison';
@@ -93,8 +94,8 @@ export default function Compare() {
   const { scenario } = useUserRateScenario();
   const comparisonInputs = useMortgageComparison();
   const mortgageFilters = useRatesSession(state => state.sections.Mortgage.filters);
-  const scenarioFor = useCallback((section: SectionKey, row?: RateRow) => mortgageComparisonScenario(section,
-    publicRateScenario(section, scenario, profile, row), comparisonInputs, mortgageFilters), [scenario, profile, comparisonInputs, mortgageFilters]);
+  const scenarioFor = useCallback((section: SectionKey, row?: RateRow) => publicScenarioForRow(row, catalogue, mortgageComparisonScenario(section,
+    publicRateScenario(section, scenario, profile, row), comparisonInputs, mortgageFilters)), [catalogue, scenario, profile, comparisonInputs, mortgageFilters]);
   const details = useStore((s) => s.details);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);

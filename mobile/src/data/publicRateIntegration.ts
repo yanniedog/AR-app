@@ -1,3 +1,4 @@
+import { scenarioForPublicProgramme } from './publicRateAlternatives';
 import { canonicalPurpose, canonicalRepayment } from './mortgageFacets';
 import type { CorePayload, RateRow, SectionKey } from '../types';
 import { calculatorAmount, computeLvr, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
@@ -57,7 +58,8 @@ export function resolveRowPublicRate(
       : item.sourceBindings?.some(binding => binding.rateIndex === row.rate_index)
   ));
   if (matching.length !== 1) return unresolvedPublicRate('semantic_offer_binding_missing');
-  return resolvePublicRate(matching[0], scenario, asOf);
+  const selected = scenarioForPublicProgramme(matching[0], scenario, asOf);
+  return selected ? resolvePublicRate(matching[0], selected, asOf) : unresolvedPublicRate('ambiguous_comparison_facets');
 }
 
 /** Occurrence pointers bind only the current validated generation; saved selections retain semantic ids. */
@@ -93,7 +95,10 @@ export function publicCatalogueOfferRows(catalogue: PublicCatalogueView, section
   for (const product of catalogue.products) {
     if (product.section !== section || product.status === 'legacy') continue;
     for (const programme of catalogue.getProgrammes(product.productId)) {
-      const resolution = resolvePublicRate(programme, scenario, asOfForProgramme(programme));
+      const asOf = asOfForProgramme(programme);
+      const selectedScenario = scenarioForPublicProgramme(programme, scenario, asOf);
+      if (!selectedScenario) continue;
+      const resolution = resolvePublicRate(programme, selectedScenario, asOf);
       if (resolution.status !== 'exact' || !resolution.verifiedCurrent || resolution.payableRate == null) continue;
       const condition = (field: string) => programme.conditions.find(item => item.field === field && item.operator === 'eq')?.value;
       const lvr = programme.conditions.filter(item => item.field === 'lvr' && item.operator === 'bounds');
@@ -104,8 +109,8 @@ export function publicCatalogueOfferRows(catalogue: PublicCatalogueView, section
       const upperInclusive = lvr.filter(item => item.maximum != null && upper != null && Decimal.parse(item.maximum).compare(Decimal.parse(upper)) === 0)
         .every(item => item.maximumInclusive !== false);
       const percent = (value: string) => decimalText(Decimal.parse(value).mul(Decimal.parse('100')));
-      const purpose = String(condition('purpose') ?? scenario.purpose ?? '');
-      const repayment = String(condition('repayment') ?? scenario.repayment ?? '');
+      const purpose = String(condition('purpose') ?? selectedScenario.purpose ?? '');
+      const repayment = String(condition('repayment') ?? selectedScenario.repayment ?? '');
       const profilePurpose = typeof scenario.profileLoanPurpose === 'string' ? scenario.profileLoanPurpose : undefined;
       const profileRepayment = typeof scenario.profileRepayment === 'string' ? scenario.profileRepayment : undefined;
       rows.push(programmePublicRow({
@@ -166,7 +171,9 @@ export function resolveProductPublicRate(
   const selectedId = programmeId ?? product.programmeIds[0];
   const programme = catalogue.getProgrammes(product.productId).find(item => item.programmeId === selectedId
     && item.productId === product.productId);
-  return programme ? resolvePublicRate(programme, scenario, asOf) : unresolvedPublicRate('programme_not_loaded');
+  if (!programme) return unresolvedPublicRate('programme_not_loaded');
+  const selected = scenarioForPublicProgramme(programme, scenario, asOf);
+  return selected ? resolvePublicRate(programme, selected, asOf) : unresolvedPublicRate('ambiguous_comparison_facets');
 }
 
 export function publicRateScenario(
@@ -302,4 +309,16 @@ export function resolvedPublicRankingRows(
     resolved.push(rowWithPublicResolution(bindCurrentPublicRow(row, catalogue), result));
   }
   return { rows: resolved, priced: resolved.length, unresolved, complete: catalogue.status === 'ready' && catalogue.allLoaded };
+}
+
+/** Retain the exact offer's local facet scope for evidence and cost calculations. */
+export function publicScenarioForRow(row: RateRow | undefined, catalogue: PublicCatalogueView, scenario: RateScenario): RateScenario {
+  if (!row || catalogue.status !== 'ready') return scenario;
+  const product = catalogue.getProduct(row.product_key);
+  const matching = product ? catalogue.getProgrammes(product.productId).filter(item =>
+    row.public_programme_id && row.public_offer_id
+      ? item.programmeId === row.public_programme_id && item.offerId === row.public_offer_id
+      : item.sourceBindings?.some(binding => binding.rateIndex === row.rate_index)) : [];
+  return matching.length === 1
+    ? scenarioForPublicProgramme(matching[0], scenario, new Date().toISOString()) ?? scenario : scenario;
 }

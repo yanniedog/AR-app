@@ -68,13 +68,13 @@ test('Compare retains amount/LVR eligibility and pricing for offers selected wit
   }
 });
 
-test('Compare and rate evidence reuse temporary purpose and repayment from the Rates session', () => {
+test.each([false, true])('Compare evidence and costs retain each selected offer scope with multiple chips: %s', multiple => {
   const previous = captureRatesSession();
   const products = ['a', 'b'].map(id => ({ ...product, productId: id, productKey: id, name: id, programmeIds: [id] }));
-  const programmes = products.map(item => {
+  const programmes = products.map((item, index) => {
     const p = programme({ productId: item.productId, programmeId: item.productId, offerId: item.productId, sourceBindings: [], conditions: [
-      { conditionId: 'purpose', field: 'purpose', operator: 'eq', value: 'INVESTMENT', evidenceIds: [] },
-      { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: 'INTEREST_ONLY', evidenceIds: [] },
+      { conditionId: 'purpose', field: 'purpose', operator: 'eq', value: multiple && index === 0 ? 'OWNER_OCCUPIED' : 'INVESTMENT', evidenceIds: [] },
+      { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: multiple && index === 0 ? 'PRINCIPAL_AND_INTEREST' : 'INTEREST_ONLY', evidenceIds: [] },
     ] });
     return { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() }, components: [{ ...p.components[0], scopeId: item.productId }] };
   });
@@ -82,14 +82,16 @@ test('Compare and rate evidence reuse temporary purpose and repayment from the R
   mockState = { core: core([]), manifest: null, prefs: DEFAULT_PREFS, details: { products: {} }, ensureDetails: jest.fn() };
   mockKeys = JSON.stringify(products.map(item => publicOfferSelectionToken(item.productKey, item.productId)));
   installMandatoryEligibility(selectMandatoryEligibility(mockState.core, DEFAULT_PREFS.profileFilters, null));
-  updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: ['INVESTMENT'], repaymentTypes: ['INTEREST_ONLY'] } }));
+  updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: multiple ? ['OO', 'INV'] : ['INVESTMENT'], repaymentTypes: multiple ? ['PI', 'IO'] : ['INTEREST_ONLY'] } }));
   let tree!: Tree;
   act(() => { tree = TestRenderer.create(<Compare />) as Tree; });
   try {
     expect(tree.root.findAllByType('EmptyState')).toHaveLength(0);
     const evidence = tree.root.findAllByType('PublicRateEvidence');
     expect(evidence).toHaveLength(2);
-    expect(evidence.every(node => node.props.scenario.purpose === 'INVESTMENT' && node.props.scenario.repayment === 'INTEREST_ONLY')).toBe(true);
+    const scopes = evidence.map(node => [node.props.scenario.purpose, node.props.scenario.repayment]);
+    expect(scopes).toEqual(multiple ? [['OWNER_OCCUPIED', 'PRINCIPAL_AND_INTEREST'], ['INVESTMENT', 'INTEREST_ONLY']] : [['INVESTMENT', 'INTEREST_ONLY'], ['INVESTMENT', 'INTEREST_ONLY']]);
+    expect(tree.root.findAllByType('PublicCostComparison').map(node => [node.props.rateScenario.purpose, node.props.rateScenario.repayment])).toEqual(scopes);
   } finally {
     act(() => { tree.unmount(); restoreRatesSession(previous); });
     installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));
