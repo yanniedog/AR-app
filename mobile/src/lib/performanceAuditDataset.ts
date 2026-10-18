@@ -33,6 +33,6 @@ export function assertAuditPublicCataloguePinned(expected: PublicCatalogueView |
     expectedCatalogueUnavailable: expected?.status === 'unavailable', actualCatalogueUnavailable: actual?.status === 'unavailable',
     expectedCatalogueAllLoaded: expected?.allLoaded === true, actualCatalogueAllLoaded: actual?.allLoaded === true,
     expectedCatalogueProducts: expected?.products.length ?? 0, actualCatalogueProducts: actual?.products.length ?? 0,
-    catalogueGenerationChanged: expected?.generationId !== actual?.generationId,
+    catalogueGenerationChanged: (expected?.generationId ?? null) !== (actual?.generationId ?? null),
   });
 }

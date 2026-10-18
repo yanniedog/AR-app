@@ -64,12 +64,25 @@ function reportFixture(checks: AuditCheck[]): PerformanceAuditReport {
 }
 
 describe('deidentified diagnostics privacy boundary', () => {
+  it('preserves observed zero progress and empty catalogue counts when no measurement ran', () => {
+    const failed: AuditCheck = { id: 'fatal-1', label: 'Private label', kind: 'runtime', status: 'fail', durationMs: null,
+      metrics: { executionAttempted: false, completedBeforeFailure: 0, plannedChecks: 355,
+        expectedCatalogueProducts: 0, actualCatalogueProducts: 0, eventLoopSamples: 0, maxEventLoopLagMs: 0 } };
+    expect(buildDeidentifiedPerformanceAudit(reportFixture([failed])).checks[0].metrics).toMatchObject({
+      executionAttempted: false, completedBeforeFailure: 0, plannedChecks: 355,
+      expectedCatalogueProducts: 0, actualCatalogueProducts: 0, eventLoopSamples: null, maxEventLoopLagMs: null,
+    });
+  });
+
   it('recovers the fixed catalogue cause from a saved build-301 failure without exporting its stack', () => {
     const failed: AuditCheck = { id: 'setup-pinned-inputs', label: 'Private label', kind: 'data',
       status: 'fail', durationMs: 280.8, metrics: { stepLimitExceeded: false },
       error: 'AuditDatasetChangedError: Public pricing catalogue changed during the performance audit\n    at private-account-123456' };
-    expect(JSON.parse(createPublicPerformanceAuditReport(reportFixture([failed]))).checks[0].failureCode)
+    const legacyBody = createPublicPerformanceAuditReport(reportFixture([failed]));
+    expect(JSON.parse(legacyBody).checks[0].failureCode)
       .toBe('public-catalogue-changed');
+    expect(legacyBody).not.toContain('private-account-123456');
+    expect(legacyBody).not.toContain('AuditDatasetChangedError');
     failed.error = 'Private account: 123456\nAuditDatasetChangedError: Public pricing catalogue changed during the performance audit';
     const body = createPublicPerformanceAuditReport(reportFixture([failed]));
     expect(JSON.parse(body).checks[0].failureCode).toBe('check-failed');
@@ -106,11 +119,15 @@ describe('deidentified diagnostics privacy boundary', () => {
     [{ datasetRefreshStarted: true }, 'dataset-refresh-started'],
     [{ datasetManifestChanged: true }, 'dataset-manifest-changed'],
     [{ datasetRevisionChanged: true }, 'dataset-revision-changed'],
-  ] as const)('distinguishes dataset stops from timing failures: %s', (evidence, code) => {
+  ] as const)('preserves the dataset stop cause alongside an exceeded deadline: %s', (evidence, code) => {
     const failed: AuditCheck = { id: 'fatal-3', label: 'Private label', kind: 'runtime', status: 'fail', durationMs: null,
       metrics: auditDatasetFailureMetrics(new AuditDatasetChangedError('Private error', evidence)) };
     expect(buildDeidentifiedPerformanceAudit(reportFixture([failed])).checks[0].failureCode).toBe(code);
     failed.metrics.stepLimitExceeded = true;
+    expect(buildDeidentifiedPerformanceAudit(reportFixture([failed])).checks[0]).toMatchObject({
+      failureCode: code, metrics: { stepLimitExceeded: true },
+    });
+    failed.metrics = { stepLimitExceeded: true };
     expect(buildDeidentifiedPerformanceAudit(reportFixture([failed])).checks[0].failureCode).toBe('step-limit-exceeded');
   });
 

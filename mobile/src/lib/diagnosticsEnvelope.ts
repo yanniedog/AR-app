@@ -112,6 +112,10 @@ const EVENT_LOOP_MEASUREMENT_KEYS = new Set([
 const FRAME_MEASUREMENT_KEYS = new Set([
   'frameP95Ms', 'maxFrameGapMs', 'framesOver50Ms',
 ]);
+// These are directly observed snapshot/progress counts, not timing samples.
+const OBSERVED_COUNT_KEYS = new Set([
+  'expectedCatalogueProducts', 'actualCatalogueProducts', 'completedBeforeFailure', 'plannedChecks',
+]);
 
 function allowlistedMetrics(check: AuditCheck): Record<string, string | number | boolean | null> {
   const metrics = check.metrics;
@@ -123,7 +127,7 @@ function allowlistedMetrics(check: AuditCheck): Record<string, string | number |
         result[key] = null;
         continue;
       }
-      const zeroProven = metrics.executionAttempted === true || metrics.measurementAvailable === true;
+      const zeroProven = OBSERVED_COUNT_KEYS.has(key) || metrics.executionAttempted === true || metrics.measurementAvailable === true;
       const sampleProven = EVENT_LOOP_MEASUREMENT_KEYS.has(key)
         ? typeof metrics.eventLoopSamples === 'number' && metrics.eventLoopSamples > 0
         : FRAME_MEASUREMENT_KEYS.has(key)
@@ -164,7 +168,6 @@ function safePayloadSource(value: string): string {
 function failureCode(check: AuditCheck): string | null {
   if (check.metrics.publicCatalogueCacheMiss === true) return 'public-catalogue-cache-miss';
   if (check.metrics.catalogueAdmissionRejected === true) return 'catalogue-work-in-progress';
-  if (check.metrics.stepLimitExceeded === true) return 'step-limit-exceeded';
   if (check.metrics.publicCatalogueChanged === true) return 'public-catalogue-changed';
   if (check.metrics.datasetRefreshStarted === true) return 'dataset-refresh-started';
   if (check.metrics.datasetManifestChanged === true) return 'dataset-manifest-changed';
@@ -173,6 +176,7 @@ function failureCode(check: AuditCheck): string | null {
   // this exact fixed first line; never export any part of the raw error/stack.
   if (check.status === 'fail' && check.error?.split(/\r?\n|\\n/, 1)[0] ===
     'AuditDatasetChangedError: Public pricing catalogue changed during the performance audit') return 'public-catalogue-changed';
+  if (check.metrics.stepLimitExceeded === true) return 'step-limit-exceeded';
   if (check.metrics.availabilityFailure === true) return 'unavailable';
   return check.status === 'fail' ? 'check-failed' : null;
 }
