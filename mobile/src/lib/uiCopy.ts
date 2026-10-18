@@ -370,6 +370,7 @@ export const UI_LABELS = [
   'Fee waiver', 'Fee ordering', 'Payment allocation', 'Payment obligation', 'Business calendar',
   'Posting calendar', 'Payment destination', 'Tax treatment', 'Break fee', 'Principal recovery',
   'Bonus qualification', 'Projected payments', 'Contract scope', 'Issue code', 'Unpaid', 'Activity', 'Holdings', 'Repayment due', 'Paid',
+  'Passed', 'Warnings', 'Failures', 'Timing overruns', 'Skipped', 'Untested links', 'Verified upload', 'Upload uncertain',
   'Public pricing', 'Payable rate', 'Reference rate', 'Reference', 'Adjustment', 'Margin',
   'Customer category', 'Channel', 'Qualification', 'Monthly deposits ($)', 'Monthly withdrawals',
   'Balance growth ($)', 'Card purchases', 'Scope', 'Pricing programme', 'Choose programme',

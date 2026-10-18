@@ -13,6 +13,7 @@ import type { AppHealthDomain } from '../src/lib/appHealth/types';
 import { DebugLogUploadStatus } from '../src/components/DebugLogUploadStatus';
 import { BackgroundWorkDiagnosis } from '../src/components/BackgroundWorkDiagnosis';
 import { AuditCatalogueCoverage } from '../src/components/AuditCatalogueCoverage';
+import { AuditCheckSymbol, AuditOutcomeSymbols } from '../src/components/AuditOutcomeSymbols';
 import {
   getDebugLogUploadSnapshot,
   isDebugLogUploadBusy,
@@ -69,10 +70,6 @@ const DOMAIN_LABELS: Record<AppHealthDomain, UiLabel> = {
   'asset-availability': 'Asset availability', 'display-completeness': 'Display completeness',
   storage: 'Storage', network: 'Network', update: 'App update',
 };
-function statusLabel(check: AuditCheck): UiText {
-  if (check.metrics.availabilityFailure === true || check.metrics.executionAttempted === false) return uiLabel('Unavailable');
-  return uiLabel(check.status === 'pass' ? 'Good' : check.status === 'warn' ? 'Needs review' : check.status === 'fail' ? 'Failed' : 'Not run');
-}
 function metricNumber(check: AuditCheck, key: string): number | null {
   const value=check.metrics[key];
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
@@ -348,11 +345,7 @@ function PerformanceAuditScreenInner() {
           <Row style={{justifyContent:'space-between'}}><AppText variant="h3">{uiLabel('Diagnosis')}</AppText><AppText style={{color:summaryColor}}>{outcome(report.summary.overall)}</AppText></Row>
           <InfoRow label="Report" value={report.sessionId === state.sessionId ? 'Complete' : 'Saved'} />
           <InfoRow label="As at" value={uiDate(report.finishedAt)} />
-          <InfoRow label="Good" value={uiCount(report.summary.pass)} />
-          <InfoRow label="Needs review" value={uiCount(report.summary.warn)} />
-          <InfoRow label="Failed" value={uiCount(report.summary.fail)} />
-          <InfoRow label="Not run" value={uiCount(report.summary.skipped)} />
-          <InfoRow label="Unavailable · Overlapping outcomes" value={uiCount(report.summary.unavailable)} />
+          <AuditOutcomeSymbols checks={report.checks} />
           <InfoRow label="Check completion" value={report.summary.coveragePercent == null ? 'Unknown':uiJoin(uiNumber(report.summary.coveragePercent,1),'%')} />
           <InfoRow label="Executed" value={uiCount(report.summary.executed)} />
           <InfoRow label="Declared unavailable" value={uiCount(report.summary.justifiedSkipped)} />
@@ -398,7 +391,7 @@ function PerformanceAuditScreenInner() {
         <View style={{gap:8}}><AppText variant="h3">{uiLabel('Check results')}</AppText>
           <AppText variant="tiny">{countPair(reportedChecks.length,orderedChecks.length)}</AppText>
           {reportedChecks.map(check => <Card key={check.id} style={{gap:4}}>
-            <InfoRow label={uiIdentifier(check.id)} value={statusLabel(check)}/>
+            <Row gap={8} style={{ flexWrap: 'wrap', justifyContent: 'space-between' }}><AppText variant="small">{uiIdentifier(check.id)}</AppText><AuditCheckSymbol check={check} /></Row>
             <InfoRow label="Duration" value={measuredMs(checkDuration(check))}/>
             {check.kind === 'journey' ? <>
               <InfoRow label="Open" value={measuredMs(metricNumber(check,'forwardMs'),1)}/>
