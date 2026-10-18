@@ -88,7 +88,7 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { ratePresentation } from '../../src/data/ratePresentation';
 import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
-import { bindCurrentPublicRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
+import { bindCurrentPublicRow, publicRateScenario, publicScenarioForRow, publicRecommendationRows, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
 import { publicRateOriginLabel, publicRateText } from '../../src/data/publicRatePresentation';
 import { PublicRateEvidence } from '../../src/components/scenario/PublicRateEvidence';
 import { PublicCostComparison } from '../../src/components/scenario/PublicCostComparison';
@@ -134,8 +134,9 @@ export default function ProductDetail() {
   const pricingScenario = publicProduct ? scenario : undefined;
   const scenarioFor = useCallback((section: SectionKey, row?: RateRow) => {
     const saved = publicRateScenario(section, pricingScenario, profile, row);
-    return fromRatesComparison ? mortgageComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved;
-  }, [pricingScenario, profile, fromRatesComparison, comparisonInputs, mortgageFilters]);
+    const scoped = fromRatesComparison ? mortgageComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved;
+    return publicScenarioForRow(row, publicCatalogue, scoped);
+  }, [pricingScenario, profile, fromRatesComparison, comparisonInputs, mortgageFilters, publicCatalogue]);
   const found = useMemo(
     () => {
       void suitabilityRevision;
@@ -282,7 +283,9 @@ export default function ProductDetail() {
       : 'The selected exact rate is absent from the eligible current catalogue'
     : null;
   const staySwitchProjection = useMemo(() => {
-    if (!row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
+    // This legacy model compares the persisted current account and principal.
+    // Its assumptions cannot consume a target priced for exploratory inputs.
+    if (fromRatesComparison || !row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
     if (targetConstraintContradicted(selectedTargetConstraint(row, 'Mortgage', scenario,
       { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity }))) return null;
     const currentRef = scenario.currentProducts.mortgage;
@@ -292,7 +295,7 @@ export default function ProductDetail() {
       currentDetail: currentRef?.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts[currentRef.productKey] : null,
       targetDetail: detail,
     });
-  }, [detail, detailsProducts, found?.section, row, scenario, calculationScenario, core, detailsPayload, rateConditionManifest, coreIntegrity]);
+  }, [fromRatesComparison, detail, detailsProducts, found?.section, row, scenario, calculationScenario, core, detailsPayload, rateConditionManifest, coreIntegrity]);
   const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
     && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
     ? scenario.currentProducts.mortgage.provider
