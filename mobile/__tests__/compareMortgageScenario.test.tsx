@@ -1,5 +1,5 @@
 import React from 'react';
-import TestRenderer, { act } from 'react-test-renderer';
+import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import Compare from '../app/compare';
 import { catalogue, core, product, programme } from '../testUtils/publicRateJourney';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
@@ -48,7 +48,7 @@ test('Compare retains amount/LVR eligibility and pricing for offers selected wit
   mockKeys = JSON.stringify(products.map(item => publicOfferSelectionToken(item.productKey, item.productId)));
   installMandatoryEligibility(selectMandatoryEligibility(mockState.core, DEFAULT_PREFS.profileFilters, null));
   useMortgageComparison.setState({ loanAmount: '600000', lvr: '75' });
-  let tree!: TestRenderer.ReactTestRenderer;
+  let tree!: ReactTestRenderer;
   act(() => { tree = TestRenderer.create(<Compare />); });
   try {
     expect(tree.root.findAllByType('EmptyState')).toHaveLength(0);
