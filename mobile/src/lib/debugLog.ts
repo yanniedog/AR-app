@@ -1,5 +1,9 @@
 import { htmlPlainText } from './htmlPlainText';
+import { loadDebugLogUploadRecoveryReceipt, removeDebugLogUploadRecoveryReceipt } from './debugLogUploadRecovery';
 import { clearCompletedPerformanceAudit } from './performanceAuditReportStorage';
+import { clearCompletedPerformanceAuditState } from './performanceAudit';
+import { beginPublicReportUploadAttemptsClear } from './publicReportUploadAttempt';
+import { resetClearedPublicReportUpload } from './debugLogSharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
@@ -827,6 +831,8 @@ export const debugLog = {
   },
   clear(): Promise<void> {
     if (clearPromise) return clearPromise;
+    const finishUploadAttemptsClear = beginPublicReportUploadAttemptsClear();
+    resetClearedPublicReportUpload();
     clearState = 'clearing';
     fileWriteEpoch += 1;
     buffer.clear();
@@ -849,9 +855,10 @@ export const debugLog = {
     notify();
     clearPromise = (async () => {
       try {
+        await clearCompletedPerformanceAudit(async () => {
+        try {
         if (inFlight) await inFlight.catch(() => {});
         if (coldStartResetPromise) await coldStartResetPromise;
-        await clearCompletedPerformanceAudit();
         const storageKeys = [
           STORAGE_KEY,
           LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
@@ -884,6 +891,9 @@ export const debugLog = {
             [...retainedStorageKeys, ...retainedFiles].join(', '),
           );
         }
+        clearCompletedPerformanceAuditState();
+        } finally { await finishUploadAttemptsClear(); }
+        });
         pendingLogRotation = false;
         clearState = 'ready';
         if (buffer.getEntries().length > 0) schedulePersist();
@@ -1321,8 +1331,9 @@ export async function markDebugLogUploadReceiptVerified(
 }
 
 export async function loadDebugLogUploadReceipts(): Promise<DebugLogUploadReceipt[]> {
+  const recovery = await loadDebugLogUploadRecoveryReceipt();
   const raw = await SecureStore.getItemAsync(DEBUG_LOG_UPLOAD_RECEIPT_KEY);
-  if (raw == null) return [];
+  if (raw == null) return recovery ? [validateDebugLogUploadReceipt(recovery)] : [];
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -1330,7 +1341,8 @@ export async function loadDebugLogUploadReceipts(): Promise<DebugLogUploadReceip
     throw new Error('The saved upload deletion receipt cannot be read.');
   }
   // Migrate the original single receipt on the next write without losing it.
-  return (Array.isArray(parsed) ? parsed : [parsed]).map(validateDebugLogUploadReceipt);
+  const receipts = (Array.isArray(parsed) ? parsed : [parsed]).map(validateDebugLogUploadReceipt);
+  return recovery ? [validateDebugLogUploadReceipt(recovery), ...receipts.filter(receipt => receipt.url !== recovery.url)] : receipts;
 }
 
 /** Read back the exact submitted text before claiming the link is usable. */
@@ -1835,6 +1847,7 @@ export async function deleteDebugLogUploadAndReceipt(
   await mutateUploadReceipts(async () => {
     const receipts = await loadDebugLogUploadReceipts();
     await writeUploadReceipts(receipts.filter((item) => item.url !== validated.url));
+    await removeDebugLogUploadRecoveryReceipt(validated.url);
   });
 }
 

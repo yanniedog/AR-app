@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
+import { completePerformanceAudit, getPerformanceAuditState } from '../src/lib/performanceAudit';
+import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 
 // eslint-disable-next-line import/first -- imports after jest mocks
 import {
@@ -1430,9 +1432,11 @@ describe('persistent log file', () => {
   });
 
   it('clear deletes the persistent log file', async () => {
+    completePerformanceAudit(makePerformanceAuditReport());
     debugLog.info('test', 'before clear');
     await debugLog.flushToFile();
     await debugLog.clear();
+    expect(getPerformanceAuditState().report).toBeNull();
 
     expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
       LOG_PATH,
