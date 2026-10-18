@@ -607,3 +607,36 @@ test('distinct opaque public pairs retain separate native keys and exact audit s
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([token]);
   } finally { act(() => tree.unmount()); }
 });
+
+
+test('entered comparison inputs select public pricing before ranking, cards and comparison selections', () => {
+  const products = [{ ...publicProduct, programmeIds: ['low-lvr', 'high-lvr'] }];
+  const programmes = [
+    { id: 'low-lvr', min: undefined, max: '0.7', value: '0.05' },
+    { id: 'high-lvr', min: '0.7', max: '0.8', value: '0.06' },
+  ].map(({ id, min, max, value }) => {
+    const programme = publicProgramme({ programmeId: id, offerId: id, sourceBindings: [], conditions: [
+      { conditionId: id + '-amount', field: 'amount', operator: 'bounds', minimum: '500000', evidenceIds: [] },
+      { conditionId: id + '-lvr', field: 'lvr', operator: 'bounds', minimum: min, maximum: max, evidenceIds: [] },
+    ] });
+    return { ...programme, freshness: { ...programme.freshness, lastSuccessAt: new Date().toISOString() },
+      components: [{ ...programme.components[0], value, scopeId: id }] };
+  });
+  mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes, products, []), generationId: 'input-pricing' };
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [] } } } }));
+  useMortgageComparison.setState({ loanAmount: '600000', lvr: '75' });
+  install();
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  try {
+    expect(list().data.map((row: any) => [row.public_offer_id, row.rate])).toEqual([['high-lvr', '0.06']]);
+    expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.75' });
+    act(() => updateRatesSection('Mortgage', { selectMode: true }));
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([publicOfferSelectionToken(publicProduct.productKey, 'high-lvr')]);
+    act(() => useMortgageComparison.setState({ lvr: '65' }));
+    expect(list().data.map((row: any) => [row.public_offer_id, row.rate])).toEqual([['low-lvr', '0.05']]);
+    expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.65' });
+    act(() => useMortgageComparison.setState({ loanAmount: '400000' }));
+    expect(list().data).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});

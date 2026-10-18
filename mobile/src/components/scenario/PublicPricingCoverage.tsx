@@ -1,3 +1,4 @@
+import type { RateScenario } from '../../data/publicRateModel';
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
@@ -22,8 +23,8 @@ function coverageStatus(value: unknown) {
 }
 
 /** Complete ranking requires the full selected catalogue, independently of cost coverage. */
-export function PublicPricingCoverage({ section, rows, scenario, compact = false }: {
-  section: SectionKey; rows: readonly RateRow[]; scenario?: UserRateScenario; compact?: boolean;
+export function PublicPricingCoverage({ section, rows, scenario, scenarioForRow, compact = false }: {
+  section: SectionKey; rows: readonly RateRow[]; scenario?: UserRateScenario; scenarioForRow?: (row: RateRow) => RateScenario; compact?: boolean;
 }) {
   const manifest = useStore(state => state.manifest);
   const profile = useStore(state => state.prefs?.profileFilters);
@@ -34,7 +35,7 @@ export function PublicPricingCoverage({ section, rows, scenario, compact = false
   useEffect(() => {
     if (catalogueStatus === 'ready' && !allLoaded) void loadAll().catch(() => undefined);
   }, [catalogueStatus, allLoaded, loadAll]);
-  const pricing = useMemo(() => resolvedPublicRankingRows(rows, catalogue, row => publicRateScenario(section, scenario, profile, row)), [rows, catalogue, section, scenario, profile]);
+  const pricing = useMemo(() => resolvedPublicRankingRows(rows, catalogue, row => scenarioForRow?.(row) ?? publicRateScenario(section, scenario, profile, row)), [rows, catalogue, section, scenario, profile, scenarioForRow]);
   if (catalogue.status === 'unavailable') return null;
   const products = catalogue.products.filter(product => product.section === section);
   const summary = catalogue.status === 'ready' && catalogue.allLoaded
@@ -59,8 +60,8 @@ export function PublicPricingCoverage({ section, rows, scenario, compact = false
 }
 
 /** Discovery identities never become synthetic zero-price rows. */
-export function PublicProductDiscovery({ section, query = '', rows = [] }: {
-  section: SectionKey; query?: string; rows?: readonly RateRow[];
+export function PublicProductDiscovery({ section, query = '', rows = [], rateScenario }: {
+  section: SectionKey; query?: string; rows?: readonly RateRow[]; rateScenario?: RateScenario;
 }) {
   const manifest = useStore(state => state.manifest);
   const catalogue = usePublicRateCatalogue(manifest);
@@ -68,7 +69,7 @@ export function PublicProductDiscovery({ section, query = '', rows = [] }: {
   useSuitabilityRevision();
   const profile = useStore(state => state.prefs?.profileFilters);
   const { scenario } = useUserRateScenario();
-  const eligible = eligiblePublicProductKeys(catalogue, section, publicRateScenario(section, scenario, profile));
+  const eligible = eligiblePublicProductKeys(catalogue, section, rateScenario ?? publicRateScenario(section, scenario, profile));
   const represented = new Set(rows.map(row => row.product_key));
   const needle = query.trim().toLocaleLowerCase('en-AU');
   const products = catalogue.products.filter(product => product.section === section && eligible.has(product.productKey) && !represented.has(product.productKey)

@@ -1,3 +1,4 @@
+import type { RateScenario } from '../data/publicRateModel';
 import { usePublicRateCatalogue } from '../data/publicRateCatalogue';
 import { bindCurrentPublicRow, publicRateScenario, resolveRowPublicRate } from '../data/publicRateIntegration';
 import { publicRateOriginLabel, publicRateText } from '../data/publicRatePresentation';
@@ -88,6 +89,7 @@ function ProductCardView({
   logoRenderStateId,
   onLogoRenderStateChange,
   comparisonUnverified = false,
+  rateScenario,
 }: {
   row: RateRow;
   section: SectionKey;
@@ -108,6 +110,8 @@ function ProductCardView({
   logoRenderStateId?: string;
   onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
   comparisonUnverified?: boolean;
+  /** Pricing assumptions supplied by the ephemeral comparison surface. */
+  rateScenario?: RateScenario;
 }) {
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
@@ -125,7 +129,7 @@ function ProductCardView({
   const profile = useStore(state => state.prefs.profileFilters);
   const catalogue = usePublicRateCatalogue(manifest);
   const boundRow = React.useMemo(() => bindCurrentPublicRow(row, catalogue), [row, catalogue]);
-  const resolution = React.useMemo(() => resolveRowPublicRate(boundRow, catalogue, publicRateScenario(section, undefined, profile, boundRow, 'published')), [boundRow, catalogue, section, profile]);
+  const resolution = React.useMemo(() => resolveRowPublicRate(boundRow, catalogue, rateScenario ?? publicRateScenario(section, undefined, profile, boundRow, 'published')), [boundRow, catalogue, section, profile, rateScenario]);
   const favorite = useStore(state => state.isRateSaved(row.product_key, row.rate_index ?? null, boundRow.public_offer_id));
   const admittedConditions = React.useMemo(() => scopedRateConditions(row, section, { core, details, manifest, coreIntegrity }),
     [row, section, core, details, manifest, coreIntegrity]);
