@@ -726,3 +726,27 @@ test('temporary purpose and repayment chips resolve public offers before filteri
     expect(list().data).toEqual([]);
   } finally { act(() => tree.unmount()); }
 });
+
+
+test('a selected deduplicated source occurrence survives catalogue binding and stale-token cleanup', () => {
+  const row = rows.find(item => item.rate_index === 0)!;
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [row, { ...row, rate_index: 1 }] } } } }));
+  install();
+  updateRatesSection('Mortgage', { selectMode: true });
+  const tree = mount();
+  try {
+    act(() => updateRatesSection('Mortgage', { selected: ['1#p-0'] }));
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['1#p-0']);
+    const p = publicProgramme({ productId: row.product_key, programmeId: 'arrived', offerId: 'arrived', sourceBindings: [{ rateIndex: 0, pointer: '/lendingRates/0' }, { rateIndex: 1, pointer: '/lendingRates/1' }] });
+    mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([
+      { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() },
+        components: [{ ...p.components[0], value: row.rate, scopeId: 'arrived' }] },
+    ], [{ ...publicProduct, productId: row.product_key, productKey: row.product_key, programmeIds: ['arrived'] }], []), generationId: 'binding-arrived' };
+    act(() => tree.update(<RatesWorkspace />));
+    const semantic = publicOfferSelectionToken(row.product_key, 'arrived');
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([semantic]);
+    expect(tree.root.findByType('ProductCard').props.selected).toBe(true);
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
