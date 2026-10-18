@@ -834,3 +834,23 @@ test('multiple mortgage chips retain both public-only offers with exact row pric
     expect(mockStore.getState().setPref).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });
+
+test('partial pricing keeps an existing legacy occurrence checked and removable without semantic association', () => {
+  const row = rows.find(item => item.rate_index === 0)!;
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [row] } } } }));
+  install();
+  updateRatesSection('Mortgage', { selectMode: true });
+  const tree = mount();
+  try {
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    const p = currentProgramme(row, 'partial', 'partial');
+    mockPublicCatalogue = { ...mockUnavailableCatalogue,
+      ...publicCatalogueFixture([p], [{ ...publicProduct, productId: row.product_key, productKey: row.product_key, programmeIds: ['partial'] }], []),
+      allLoaded: false, generationId: 'partial-binding' };
+    act(() => tree.update(<RatesWorkspace />));
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['0#p-0']);
+    expect(tree.root.findByType('ProductCard').props.selected).toBe(true);
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});

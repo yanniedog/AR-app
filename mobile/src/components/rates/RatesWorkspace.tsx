@@ -99,9 +99,9 @@ function availableSortOptions(
 const rowToken = (r: RateRow) => r.public_offer_id ? publicOfferSelectionToken(r.product_key, r.public_offer_id) :
   r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
 
-const SearchProductRow = React.memo(function SearchProductRow({ row, section, selectMode, selected, onToggleSelect,
+const SearchProductRow = React.memo(function SearchProductRow({ row, section, selectMode, selected, selectionToken, onToggleSelect,
   onLogoRenderStateChange, comparisonUnverified, rateScenario, auditCell, auditRevision, onAuditCellCommit }: {
-  row: RateRow; section: SectionKey; selectMode: boolean; selected: boolean;
+  row: RateRow; section: SectionKey; selectMode: boolean; selected: boolean; selectionToken: string;
   onToggleSelect: (token: string) => void;
   onLogoRenderStateChange: (id: string, state: LogoRenderState) => void;
   comparisonUnverified: boolean; rateScenario: RateScenario;
@@ -110,8 +110,8 @@ const SearchProductRow = React.memo(function SearchProductRow({ row, section, se
 }) {
   useLayoutEffect(() => auditCell ? onAuditCellCommit(row, auditRevision) : undefined,
     [auditCell, auditRevision, onAuditCellCommit, row]);
-  const onPress = useCallback(() => selectMode ? onToggleSelect(rowToken(row)) : openProduct(row.product_key, row.rate_index, row.public_programme_id, 'rates-comparison'),
-    [selectMode, onToggleSelect, row]);
+  const onPress = useCallback(() => selectMode ? onToggleSelect(selectionToken) : openProduct(row.product_key, row.rate_index, row.public_programme_id, 'rates-comparison'),
+    [selectMode, onToggleSelect, row, selectionToken]);
   return <ProductCard row={row} section={section} comparisonUnverified={comparisonUnverified} rateScenario={rateScenario}
     logoRenderStateId={`search:${row.rate_index ?? 'default'}#${row.product_key}`}
     onLogoRenderStateChange={onLogoRenderStateChange} selectMode={selectMode} selected={selected} onPress={onPress} />;
@@ -221,6 +221,12 @@ export default function RatesWorkspace() {
   const setSortKey = useCallback((value: SortKey | ((current: SortKey) => SortKey)) =>
     updateRatesSection(section, current => ({ sort: typeof value === 'function' ? value(current.sort) : value }), true), [section]);
   const setSelected = useCallback((value: string[]) => updateRatesSection(section, { selected: value }), [section]);
+  const selectionTokenFor = useCallback((row: RateRow) => {
+    const legacy = row.rate_index == null ? row.product_key : `${row.rate_index}#${row.product_key}`;
+    // Keep an existing occurrence selected/removable until all product routes
+    // settle. This does not associate it with the first loaded public offer.
+    return !catalogue.allLoaded && row.rate_index != null && selected.includes(legacy) ? legacy : rowToken(row);
+  }, [catalogue.allLoaded, selected]);
   useEffect(() => {
     void suitabilityRevision;
     if (!comparisonCore || !selected.length || !isMandatoryEligibilityReady() ||
@@ -577,13 +583,13 @@ export default function RatesWorkspace() {
     <SearchProductRow row={item} section={section} onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
       rateScenario={rowScenario(item)} comparisonUnverified={section === 'Mortgage' && mortgageScope.unverifiedRows.has(item)}
       auditCell={target === 'Cell'} auditRevision={listRevision} onAuditCellCommit={auditTarget.onCellCommit}
-      selectMode={selectMode} selected={selected.includes(rowToken(item))} onToggleSelect={toggleSelect} />
+      selectMode={selectMode} selectionToken={selectionTokenFor(item)} selected={selected.includes(selectionTokenFor(item))} onToggleSelect={toggleSelect} />
   ) : <TouchTarget fill onPress={() => openProduct(item.key)} accessibilityRole="button"
       accessibilityLabel={uiProductName({product_name:item.name??''})} style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
       <AppText variant="body" weight="600">{uiProductName({product_name:item.name??''})}</AppText>
       <AppText variant="small" color="textMuted">{uiJoin(uiProviderName({provider:item.provider??''}),' · ',humanizeEnum(item.productCategory??''))}</AppText>
       <AppText variant="small" color="textMuted">{uiLabel("No listed rate")}</AppText>
-    </TouchTarget>, [auditTarget.onCellCommit, listRevision, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, toggleSelect, theme.colors.border, mortgageScope.unverifiedRows, rowScenario]);
+    </TouchTarget>, [auditTarget.onCellCommit, listRevision, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, mortgageScope.unverifiedRows, rowScenario]);
   usePerformanceAuditSurface({
     id: 'rates.results',
     routeKey: '/browse',
@@ -874,3 +880,4 @@ function CompareDock({
     </View>
   );
 }
+
