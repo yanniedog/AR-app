@@ -10,6 +10,7 @@ import { HISTORICAL_CATALOGUE_LIMITS, validateHistoricalBankRateCatalogue, valid
 import { isValidCalendarDate } from '../lib/calendarDate';
 import { historicalReadySnapshots, validateHistoricalBankRateReadyForApp, type ReadyHistorySource } from './historicalBankRateReady';
 import type { HistoricalBankRateReady } from './historicalBankRateReadyWire';
+import type { DatesIndex } from './datesIndex';
 
 export type { HistoricalBankRateCatalogue, HistoricalCatalogueEvidence, HistoricalCatalogueSource } from './historicalBankRateCatalogueWire';
 export interface HistoricalCatalogueFilters {
@@ -23,7 +24,8 @@ export interface PreparedHistoricalBankRateCatalogue {
 }
 interface TierState { tier: HistoricalCatalogueTier; broad: Map<number, boolean>; features: Map<string, boolean> }
 interface PreparedState {
-  selection?: { dates: ReadonlySet<string>; fallback: PreparedHistoricalBankRateCatalogue | null };
+  selection?: { dates: ReadonlySet<string>; fallback: PreparedHistoricalBankRateCatalogue | null; index?: DatesIndex };
+  archiveSha?: string;
   ready?: readonly ReadyHistorySource[];
   sections: Record<SectionKey, TierState[]>;
   snapshots: Map<string, Record<string, BankRateSnapshot>>;
@@ -81,20 +83,26 @@ const selectedCatalogues = new WeakMap<PreparedHistoricalBankRateCatalogue, {
 }>();
 export const isPreparedHistoricalBankRateCatalogue = (value: PreparedHistoricalBankRateCatalogue): boolean => states.has(value);
 export const historicalCatalogueSelection = (value: PreparedHistoricalBankRateCatalogue) => states.get(value)?.selection;
+export const historicalCatalogueArchiveReceipt = (value: PreparedHistoricalBankRateCatalogue) => states.get(value)?.archiveSha;
+export function bindHistoricalCatalogueArchiveReceipt(value: PreparedHistoricalBankRateCatalogue, sha: string): void {
+  const state = states.get(value);
+  if (!state || !/^[a-f0-9]{64}$/.test(sha) || (state.archiveSha && state.archiveSha !== sha)) throw new Error('Invalid history archive receipt');
+  state.archiveSha = sha;
+}
 
 /** Overlay verified legacy dates on the selected prepared fallback without
  * decoding or embedding the obsolete raw APK archive. Each request owns caches. */
 export function selectHistoricalCatalogueDates(primary: PreparedHistoricalBankRateCatalogue,
-  dates: ReadonlySet<string>, fallback: PreparedHistoricalBankRateCatalogue | null): PreparedHistoricalBankRateCatalogue {
+  dates: ReadonlySet<string>, fallback: PreparedHistoricalBankRateCatalogue | null, index?: DatesIndex): PreparedHistoricalBankRateCatalogue {
   const state = states.get(primary);
   if (!state || (fallback && !states.has(fallback))) throw new Error('History was not prepared');
-  const key = JSON.stringify([...dates].sort()), cached = selectedCatalogues.get(primary);
+  const key = JSON.stringify([[...dates].sort(), index?.revision_heads ?? null]), cached = selectedCatalogues.get(primary);
   if (cached?.fallback === fallback && cached.dates === key) return cached.prepared;
   const first = [primary.catalogue.run_dates[0], fallback?.catalogue.run_dates[0]].filter(Boolean).sort()[0];
   const last = [primary.catalogue.run_dates.at(-1)!, fallback?.catalogue.run_dates.at(-1)].filter(Boolean).sort().at(-1)!;
   if ((Date.parse(last) - Date.parse(first!)) / 86_400_000 >= HISTORICAL_CATALOGUE_LIMITS.days) throw new Error('History calendar exceeds budget');
   const result = Object.freeze({ ...primary });
-  states.set(result, { ...state, selection: { dates: new Set(dates), fallback },
+  states.set(result, { ...state, selection: { dates: new Set(dates), fallback, index },
     snapshots: new Map(), current: new WeakMap(), pendingSnapshots: new Map(), scopes: new WeakMap() });
   selectedCatalogues.set(primary, { fallback, dates: key, prepared: result });
   return result;

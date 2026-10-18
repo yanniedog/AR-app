@@ -7,7 +7,7 @@ import type { DatesIndex } from './datesIndex';
 import { normalizeTimelineDates } from './bankHistoryTransform';
 import { assertHistoricalIdentitiesAdvance, historicalRevisionHighWater, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
 import { bestRatesForCore, productKeysForCore, buildProductHistoryFromRatesAsync, type ProductHistoryPayload } from './productHistoryModel';
-import { preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
+import { historicalCatalogueSelection, preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
 import { productCatalogueDates, productRatesFromHistoricalCatalogue, readyProductHistoryIdentity } from './productHistoryCatalogue';
 import {
   createDatedFetchCircuit,
@@ -77,6 +77,7 @@ export async function syncProductHistoryFromDailyPayloads(
   );
   let networkAvailable = opts.allowNetwork !== false;
   let candidateIndex: DatesIndex | null | undefined;
+  let publicIndexRejected = false;
   if (networkAvailable) {
     try { candidateIndex = await fetchDatesIndexJson(); }
     catch (err) {
@@ -84,7 +85,7 @@ export async function syncProductHistoryFromDailyPayloads(
       debugLog.warn('productHistory', `dates index unavailable; using verified cache receipt: ${String((err as Error)?.message ?? err)}`);
     }
   }
-  if (!networkAvailable) candidateIndex = opts.fallbackIndex;
+  if (!networkAvailable) candidateIndex = opts.fallbackIndex ?? (opts.catalogue ? historicalCatalogueSelection(opts.catalogue)?.index : undefined);
   try {
     if (!candidateIndex) throw new Error('No selected historical publication receipt');
     const candidateDates = historyDatesUpTo(candidateIndex, targetRunDate);
@@ -94,6 +95,7 @@ export async function syncProductHistoryFromDailyPayloads(
     selectedIndex = candidateIndex;
     indexedDates = candidateDates;
   } catch (err) {
+    publicIndexRejected = !!candidateIndex;
     debugLog.warn(
       'productHistory',
       `dates index rejected; retaining cached/current dates: ${String((err as Error)?.message ?? err)}`,
@@ -109,8 +111,11 @@ export async function syncProductHistoryFromDailyPayloads(
   const keys = productKeysForCore(opts.currentCore);
   const sameDerivation = opts.existing?.derivation_version === HISTORY_DERIVATION_VERSION;
   const publications = !preparedOnly && selectedIndex && networkAvailable ? await resolveLegacyPublications(selectedIndex, indexedDates.filter(d => d !== targetRunDate), opts.isCurrent) : new Map();
-  const selectedIdentity = (date: string): string | undefined => readyProductHistoryIdentity(opts.catalogue, selectedIndex, date) ??
-    (selectedIndex?.revision_heads?.[date] ? historicalSourceIdentity(selectedIndex, date) : publications.get(date)?.identity);
+  const selectedIdentity = (date: string): string | undefined => {
+    const identity = readyProductHistoryIdentity(opts.catalogue, selectedIndex, date) ??
+      (selectedIndex?.revision_heads?.[date] ? historicalSourceIdentity(selectedIndex, date) : publications.get(date)?.identity);
+    return publicIndexRejected && identity?.startsWith('revision:') ? undefined : identity;
+  };
   // A local receipt cannot re-resolve mutable legacy manifests. Preserve their
   // already verified cached slices, without inventing identities for new ones.
   const reusableDates = new Set((opts.existing?.run_dates ?? []).filter(date => {

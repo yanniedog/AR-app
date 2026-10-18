@@ -11,6 +11,11 @@ import { sampleManifest } from '../src/data/sample';
 import { SECTION_KEYS, type CorePayload } from '../src/types';
 import type { DatesIndex } from '../src/data/datesIndex';
 import type { PayloadRevisionHead } from '../src/data/payloadRevision';
+import { historicalSourceIdentity } from '../src/data/historyIdentity';
+import { syncProductHistoryFromDailyPayloads } from '../src/data/productHistorySync';
+import { downloadDatedCore, fetchDatesIndexJson } from '../src/data/historyDaily';
+import { HISTORY_DERIVATION_VERSION } from '../src/data/historyDerivation';
+import { sampleCore } from '../src/data/sample';
 
 let mockSelection: unknown;
 jest.mock('../src/data/historicalBankRateReadySync', () => ({
@@ -18,6 +23,8 @@ jest.mock('../src/data/historicalBankRateReadySync', () => ({
 }));
 jest.mock('../src/data/bundledHistoricalBankRateCatalogue', () => { throw new Error('Obsolete raw APK archive must stay unreachable'); });
 jest.mock('../src/lib/yieldToUi', () => ({ yieldToUi: jest.fn(async () => {}) }));
+jest.mock('../src/data/historyDaily', () => ({ ...jest.requireActual('../src/data/historyDaily'),
+  downloadDatedCore: jest.fn(), fetchDatesIndexJson: jest.fn() }));
 const raw = prepareHistoricalBankRateCatalogue(fixture)!.catalogue;
 const [older, rejected, latest] = Object.keys(raw.sources);
 const heads = new Map(Object.entries(raw.sources).map(([day, source]) => [day, {
@@ -30,6 +37,8 @@ const core = (): CorePayload => ({ run_date: '2026-09-27', sections: {
   Mortgage: { rates: [] }, Savings: { rates: [] }, TD: { rates: [] },
 } } as unknown as CorePayload);
 const filters = { profileFilters: EMPTY_PROFILE, interests: SECTION_KEYS, includeNonStandard: true };
+const oldProduct = 'AMP - My AMP|AMP_SAVER|TRANS_AND_SAVINGS_ACCOUNTS|AMP Saver Account';
+const latestProduct = 'AMP Bank GO|7c034be5-b76d-4b26-959a-29ef8e045b7f|TRANS_AND_SAVINGS_ACCOUNTS|AMP Bank GO Save';
 
 test('legacy observations and selected prepared fallback retain exact summaries without duplicate dates', async () => {
   const current = core(), ready = compileHistoricalBankRateReady(raw, compiler.sha256);
@@ -50,12 +59,39 @@ test('legacy observations and selected prepared fallback retain exact summaries 
   expect(actual[rejected].sectionTotals).toBeUndefined();
   for (const section of SECTION_KEYS) expect(Object.keys(actual[rejected][section] ?? {})).toHaveLength(0);
   const products = await productRatesFromHistoricalCatalogue(combined, index, [older, rejected, latest], () => true, async () => {});
-  expect(products.has(older)).toBe(true);
-  expect(products.has(latest)).toBe(true);
+  expect(products.get(older)?.get(oldProduct)).toBe(0.0025);
+  expect(products.get(latest)?.get(latestProduct)).toBe(0.0525);
   expect(products.has(rejected)).toBe(false);
-  expect(readyProductHistoryIdentity(combined, index, older)).toMatch(/^revision:/);
-  expect(readyProductHistoryIdentity(combined, index, latest)).toBe(`catalogue:${'b'.repeat(64)}`);
+  expect(readyProductHistoryIdentity(combined, index, older)).toBe(historicalSourceIdentity(index, older));
+  expect(readyProductHistoryIdentity(combined, index, latest)).toMatch(/^catalogue:[a-f0-9]{64}$/);
   expect(readyProductHistoryIdentity(combined, index, rejected)).toBeUndefined();
+});
+
+test('accepted public observations retain exact rates and identities with no external index offline', async () => {
+  const current = core(), fallback = prepareHistoricalBankRateReady(compileHistoricalBankRateReady(raw, compiler.sha256))!;
+  mockSelection = { prepared: fallback, heads, conflicts: new Set() };
+  await prepareLegacyBankRateHistory(current, sampleManifest, null, raw, () => true);
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: current.run_date, currentCore: current,
+    catalogue: cachedHistoricalBankRateCatalogue(current), preparedOnly: true, allowNetwork: false });
+  expect(result.products[oldProduct][result.run_dates.indexOf(older)]).toBe(0.0025);
+  expect(result.products[latestProduct][result.run_dates.indexOf(latest)]).toBe(0.0525);
+  expect(result.source_identities?.[older]).toBe(historicalSourceIdentity(index, older));
+  expect(downloadDatedCore).not.toHaveBeenCalled();
+  expect(fetchDatesIndexJson).not.toHaveBeenCalled();
+});
+
+test('offline selected heads cannot resurrect a public date below a retained revision high-water mark', async () => {
+  const current = { ...sampleCore, run_date: '2026-09-27' };
+  mockSelection = { prepared: prepareHistoricalBankRateReady(compileHistoricalBankRateReady(raw, compiler.sha256))!, heads, conflicts: new Set() };
+  await prepareLegacyBankRateHistory(current, sampleManifest, null, raw, () => true);
+  const high = `revision:2:${'b'.repeat(64)}:${'c'.repeat(64)}`;
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: current.run_date, currentCore: current,
+    catalogue: cachedHistoricalBankRateCatalogue(current), preparedOnly: true, allowNetwork: false,
+    existing: { schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION, run_date: current.run_date,
+      run_dates: [older], products: {}, revision_high_water: { [older]: high } } });
+  expect(result.source_identities?.[older]).toBeUndefined();
+  expect(result.revision_high_water?.[older]).toBe(high);
+  expect(Object.values(result.products).every(series => series[result.run_dates.indexOf(older)] === null)).toBe(true);
 });
 
 test('a superseded legacy request cannot install its history', async () => {

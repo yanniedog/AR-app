@@ -1,6 +1,8 @@
 import { SECTION_KEYS } from '../types';
 import type { DatesIndex } from './datesIndex';
-import { historicalCatalogueSelection, isPreparedHistoricalBankRateCatalogue, preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
+import { historicalCatalogueArchiveReceipt, historicalCatalogueSelection, isPreparedHistoricalBankRateCatalogue, preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import { isExplicitTermDepositProduct } from './sectionIntegrity';
 import { historicalSourceIdentity } from './historyIdentity';
 
@@ -10,6 +12,7 @@ export function readyProductHistoryIdentity(prepared: PreparedHistoricalBankRate
   index: DatesIndex | undefined, day: string): string | undefined {
   if (!prepared) return undefined;
   const selection = historicalCatalogueSelection(prepared);
+  index ??= selection?.index;
   if (selection && !selection.dates.has(day)) return readyProductHistoryIdentity(selection.fallback, index, day);
   const inputs = preparedReadySources(prepared);
   const input = inputs?.find(item => item.acceptedDates.includes(day));
@@ -19,7 +22,8 @@ export function readyProductHistoryIdentity(prepared: PreparedHistoricalBankRate
   if (!source) return undefined;
   if (source.kind === 'published_core') return index?.revision_heads?.[day]?.manifest_sha256 === source.manifest_sha256
     ? historicalSourceIdentity(index, day) : undefined;
-  return input ? `prepared:${input.ready.compiler_sha256}:${source.banks_sha256}` : `catalogue:${source.banks_sha256}`;
+  return input ? `prepared:${input.ready.compiler_sha256}:${source.banks_sha256}` :
+    `catalogue:${bytesToHex(sha256(utf8ToBytes(JSON.stringify([historicalCatalogueArchiveReceipt(prepared) ?? null, source]))))}`;
 }
 
 export function productCatalogueDates(prepared: PreparedHistoricalBankRateCatalogue): string[] {
@@ -43,9 +47,10 @@ export async function productRatesFromHistoricalCatalogue(
   },
 ): Promise<Map<string, Map<string, number>>> {
   const catalogue = prepared.catalogue;
+  const selection = historicalCatalogueSelection(prepared);
+  index ??= selection?.index ?? null;
   const requested = new Set(requestedDates), selected = new Set(index?.dates ?? []);
   const readySources = preparedReadySources(prepared);
-  const selection = historicalCatalogueSelection(prepared);
   const fallbackRates = selection?.fallback ? await productRatesFromHistoricalCatalogue(selection.fallback, index,
     requestedDates.filter(day => !selection.dates.has(day)), isCurrent, yieldWork) : new Map<string, Map<string, number>>();
   const trustedLegacy = !readySources && isPreparedHistoricalBankRateCatalogue(prepared);

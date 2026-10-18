@@ -74,9 +74,10 @@ export async function prepareBankRateHistoryAfterPaint(
     }
     if (!isCurrent()) return;
     work.stage('Selecting verified prepared history');
-    let ready = false;
+    let ready = detached ? await prepareReadyBankRateHistory(core, manifest, index, detached, isCurrent) : false;
     let publishedHistory = !!detached;
-    if (!detached && validateDetachedHistoricalCatalogueDescriptor(manifest)) {
+    if (!isCurrent()) return;
+    if (!ready && validateDetachedHistoricalCatalogueDescriptor(manifest)) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { loadDetachedHistoricalBankRateCatalogue } = require('./detachedHistoricalBankRateCatalogue') as typeof import('./detachedHistoricalBankRateCatalogue');
       work.stage('Loading compatible bank history');
@@ -92,7 +93,7 @@ export async function prepareBankRateHistoryAfterPaint(
       }
     }
     if (!isCurrent()) return;
-    if (!ready) ready = await prepareReadyBankRateHistory(core, manifest, index, detached, isCurrent);
+    if (!ready) ready = await prepareReadyBankRateHistory(core, manifest, index, null, isCurrent);
     if (!isCurrent()) return;
     const prefs = get().prefs;
     if (options.warm !== false) {
