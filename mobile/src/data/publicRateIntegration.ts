@@ -25,6 +25,7 @@ function publicRowDerivedFrom(row: RateRow, derived: RateRow): RateRow {
 
 /** Read-only view: the catalogue and private scenario never become source evidence. */
 export interface PublicCatalogueView {
+  auditUnavailableReason?: 'cache-miss';
   status: 'unavailable' | 'loading' | 'ready' | 'error';
   products: readonly PublicProduct[];
   references: readonly PublicReferenceRate[];

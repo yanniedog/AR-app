@@ -3024,6 +3024,10 @@ export function PerformanceAuditRunner() {
             navigationJourneys.length * 2 + plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
           return { initialStore, datasetRevision };
         }, ({ datasetRevision }) => ({ datasetRevision: datasetRevisionLabel(datasetRevision),
+          ...(datasetRevision.publicCatalogue?.auditUnavailableReason === 'cache-miss' ? {
+            availabilityFailure: true, publicCatalogueCacheMiss: true,
+            skipClassification: 'terminal-availability',
+          } : {}),
           samplingSeed: plan.inputs.sampling.seed, sampledProducts: plan.inputs.sampling.sampledProducts,
           sampledProviders: plan.inputs.sampling.sampledProviders, foregroundCatalogueRendered: false }));
 

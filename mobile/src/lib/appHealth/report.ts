@@ -344,6 +344,8 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
     'optionalEmpty',
     'optionalNotObserved',
     'mismatchedRunDates',
+    'coreState', 'detailsState', 'search_indexState', 'history_banksState',
+    'bank_historyState', 'bank_spread_historyState', 'rba_calendarState',
   ],
   [APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT]: [
     'plannedSurfaces',
@@ -378,6 +380,7 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
     'duplicatePlannedChecks',
     'reservedPlanChecks',
     'complete',
+    'interrupted',
   ],
 };
 

@@ -112,6 +112,16 @@ describe('app-health report finalization', () => {
     expect(publicReport.coverage).not.toHaveProperty('missingPlannedCheckIds');
   });
 
+  it('identifies interrupted execution even when every planned record exists', () => {
+    const source = passingCheck();
+    const report = finalizeAppHealthReport({ ...baseInput, checks: [source],
+      plannedCheckIds: [source.id], incompleteReason: 'Private local failure' });
+    const published = toPublicAppHealthReport(report);
+    expect(published.coverage).toMatchObject({ complete: false, plannedChecks: 2, storedChecks: 2 });
+    expect(published.checks.at(-1)).toMatchObject({ status: 'fail', metrics: { interrupted: true, missingChecks: 0 } });
+    expect(JSON.stringify(published)).not.toContain('Private');
+  });
+
   it('reads schema v7 and still recognizes a schema-v6 performance report', () => {
     const check = passingCheck();
     const report = finalizeAppHealthReport({

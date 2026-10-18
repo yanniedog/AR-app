@@ -15,6 +15,10 @@ import { installAppHealthTransportGuard, hasAppHealthFetchGuard } from '../src/l
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceContract';
 import { automaticDataUrl } from '../src/lib/automaticDataAccess';
 import { publicRateAssetCache } from '../src/data/publicRateCache';
+import { prepareAuditPublicCore } from '../src/lib/performanceAuditDataset';
+import { core } from '../testUtils/publicRateJourney';
+import { EMPTY_PROFILE } from '../src/data/profile';
+import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import type { PublicRateAsset } from '../src/data/publicRateModel';
 import type { Manifest } from '../src/types';
 
@@ -92,10 +96,11 @@ test('local probing leaves the ready partial UI client usable and normal loads r
   let load!: ReturnType<typeof preparePublicRateCatalogueForAudit>;
   act(() => { load = preparePublicRateCatalogueForAudit(f.manifest); });
   try {
-    await expect(load.ready).rejects.toThrow('retained offline cache');
-    await load.cancelAndDrain();
+    await act(async () => {
+      await expect(load.ready).resolves.toMatchObject({ status: 'unavailable', allLoaded: false, auditUnavailableReason: 'cache-miss' });
+    });
     expect(wire).not.toHaveBeenCalled();
-    expect(shown.status).toBe('ready'); expect(shown.error).toBeNull();
+    expect(shown.status).toBe('unavailable'); expect(shown.error).toBeNull();
     expect(local.snapshot()).toMatchObject({ authorizationAttempts: 0, transportCalls: 0 });
   } finally { local.restore(); act(() => load.release()); }
   expect(getPublicRateCatalogueSnapshot(f.manifest)).toBe(baseline);
@@ -107,6 +112,36 @@ test('local probing leaves the ready partial UI client usable and normal loads r
     await act(async () => { await getPublicRateCatalogueSnapshot(f.manifest).loadAll(); });
     expect(shown).toMatchObject({ status: 'ready', allLoaded: true, error: null });
   } finally { live.restore(); act(() => tree.unmount()); }
+});
+
+test('a cold local audit continues with its core plan and records the missing catalogue without transport', async () => {
+  const f = fixture(), baseline = core([]);
+  const wire = jest.fn(); globalThis.fetch = wire;
+  const local = guard(f, 'local'), load = preparePublicRateCatalogueForAudit(f.manifest);
+  try {
+    const result = await measurePerformanceAuditSetupStage(PERFORMANCE_AUDIT_SETUP_STAGES.inputs, async () => {
+      const catalogue = await load.ready;
+      const auditCore = prepareAuditPublicCore(baseline, catalogue, normalizeUserRateScenario(undefined), EMPTY_PROFILE);
+      return { catalogue, auditCore };
+    }, { assertActive: () => {}, onFailure: jest.fn(), metrics: ({ catalogue }) => ({
+      availabilityFailure: catalogue.auditUnavailableReason === 'cache-miss',
+      publicCatalogueCacheMiss: catalogue.auditUnavailableReason === 'cache-miss',
+      skipClassification: 'terminal-availability',
+    }) });
+    expect(result.value.auditCore).toBe(baseline);
+    expect(result.check).toMatchObject({ status: 'skipped', metrics: { availabilityFailure: true, publicCatalogueCacheMiss: true } });
+    expect(getPublicRateCatalogueSnapshot(f.manifest)).toBe(result.value.catalogue);
+    expect(wire).not.toHaveBeenCalled();
+    expect(local.snapshot()).toMatchObject({ authorizationAttempts: 0, transportCalls: 0 });
+  } finally { local.restore(); load.release(); }
+});
+
+test('a corrupt retained catalogue remains a failure instead of using the cache-miss fallback', async () => {
+  const f = fixture();
+  mockCache.set(f.capability.index.name, strToU8('corrupt'));
+  const local = guard(f, 'local'), load = preparePublicRateCatalogueForAudit(f.manifest);
+  try { await expect(load.ready).rejects.toThrow(); }
+  finally { await load.cancelAndDrain(); local.restore(); load.release(); }
 });
 
 test('warm complete validated clients are reused without cache reads, acquisition or overlay replacement', async () => {
@@ -342,8 +377,8 @@ test('early reservation gates original captured methods before delayed preparati
   await Promise.resolve(); await Promise.resolve();
   expect(wire).not.toHaveBeenCalled(); expect(settled).toBe(false);
   const load = session.prepare(f.manifest);
-  await expect(load.ready).rejects.toThrow('retained offline cache');
-  await load.cancelAndDrain(); session.quiesce();
+  await expect(load.ready).resolves.toMatchObject({ status: 'unavailable', auditUnavailableReason: 'cache-miss' });
+  session.quiesce();
   expect(wire).not.toHaveBeenCalled(); expect(settled).toBe(false);
   policy.restore();
   const live = guard(f, 'live-source');

@@ -20,6 +20,8 @@ export interface PublicRateCatalogueState {
   allLoaded: boolean;
   error: string | null;
   generationId: string | null;
+  /** Audit-only limitation; never installed in the normal catalogue client. */
+  auditUnavailableReason?: 'cache-miss';
   getProduct(productKey: string): PublicProduct | undefined;
   getProgrammes(productId: string): PublicProgramme[];
   loadProduct(productId: string): Promise<void>;
@@ -315,8 +317,20 @@ export function beginPublicRateCatalogueAudit() {
     let ready!: Promise<PublicRateCatalogueState>;
     const pendingState = { ...existing, loadProduct: async () => { await ready; }, loadAll: async () => { await ready; } };
     auditOverlay = { owner, key, state: pendingState };
+    let cancelled = false;
     ready = (async () => {
-      await client.snapshot().loadAll();
+      try {
+        await client.snapshot().loadAll();
+      } catch (error) {
+        // Workers have drained before loadAll rejects. A missing optional local
+        // cache must not prevent auditing the core payload and its screens.
+        // Corruption, live-source failures and cancellation remain fatal.
+        if (!localOnly || !(error instanceof LocalCatalogueCacheMiss) || cancelled || auditReservation?.owner !== owner) throw error;
+        const state: PublicRateCatalogueState = { ...unavailable, auditUnavailableReason: 'cache-miss' };
+        auditOverlay = { owner, key, state };
+        auditListeners.forEach(listener => listener());
+        return state;
+      }
       assertCatalogueActive(controller.signal);
       const state = client.snapshot();
       if (state.status !== 'ready' || !state.allLoaded) throw new Error('Public pricing catalogue is not fully available');
@@ -325,7 +339,7 @@ export function beginPublicRateCatalogueAudit() {
       return state;
     })();
     auditListeners.forEach(listener => listener());
-    return { ready, async cancelAndDrain() { controller.abort(); await ready.catch(() => undefined); }, quiesce, release };
+    return { ready, async cancelAndDrain() { cancelled = true; controller.abort(); await ready.catch(() => undefined); }, quiesce, release };
   };
   auditListeners.forEach(listener => listener());
   return { prepare, release, quiesce: () => quiescePrepared() };
