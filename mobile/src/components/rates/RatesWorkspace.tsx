@@ -2,7 +2,7 @@ import { ratesResultRowKey } from '../../data/ratesResultRowKey';
 import { publicOfferSelectionToken } from '../../data/publicOfferIdentity';
 import { PublicPricingCoverage, PublicProductDiscovery } from '../scenario/PublicPricingCoverage';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
-import { publicComparisonCore, publicRateScenario, publicRecommendationRows } from '../../data/publicRateIntegration';
+import { publicComparisonCore, publicRateScenario, publicRecommendationRows, resolvedPublicRankingRows } from '../../data/publicRateIntegration';
 import { useUserRateScenario } from '../../hooks/useUserRateScenario';
 import { uiCount,uiJoin,uiLabel,uiRatesQuery,uiProductName,uiProviderName,type UiCopy } from '../../lib/uiCopy';
 import { humanizeEnum } from '../../data/format';
@@ -224,11 +224,14 @@ export default function RatesWorkspace() {
     if (sortKey === 'comparison' && (section !== 'Mortgage' || mortgageRateMetric === 'comparison')) setSortKey('rate');
   }, [mortgageRateMetric, section, setSortKey, sortKey]);
 
-  const baseRows = useMemo(() => {
+  const pricingCandidates = useMemo(() => {
     void suitabilityRevision;
-    const all = publicRecommendationRows(core?.sections[section]?.rates ?? [], catalogue, section, publicRateScenario(section, scenario, prefs.profileFilters));
-    return task.intentError ? [] : rowsForSearchScope(all, section, path, hierarchyScoped);
+    const candidates = publicRecommendationRows(core?.sections[section]?.rates ?? [], catalogue, section, publicRateScenario(section, scenario, prefs.profileFilters));
+    return task.intentError ? [] : rowsForSearchScope(candidates, section, path, hierarchyScoped);
   }, [core, catalogue, scenario, prefs.profileFilters, section, path, hierarchyScoped, suitabilityRevision, task.intentError]);
+  const baseRows = useMemo(() => resolvedPublicRankingRows(pricingCandidates, catalogue,
+    row => publicRateScenario(section, scenario, prefs.profileFilters, row)).rows,
+  [pricingCandidates, catalogue, section, scenario, prefs.profileFilters]);
   const filterOptions = useSearchFilterOptions(baseRows, details?.products, section, suitabilityRevision);
 
   const effectiveFilters = useMemo(
@@ -577,7 +580,7 @@ export default function RatesWorkspace() {
           maintainVisibleContentPosition={{ disabled: true }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          ListHeaderComponent={catalogue.status === 'unavailable' ? undefined : <><PublicPricingCoverage section={section} rows={baseRows} scenario={scenario} compact /><PublicProductDiscovery section={section} rows={baseRows} query={debouncedQuery} /></>}
+          ListHeaderComponent={catalogue.status === 'unavailable' ? undefined : <><PublicPricingCoverage section={section} rows={pricingCandidates} scenario={scenario} compact /><PublicProductDiscovery section={section} rows={baseRows} query={debouncedQuery} /></>}
           data={resultRows}
           onCommitLayoutEffect={onListCommit}
           onLoad={onListLoad}
