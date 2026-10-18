@@ -78,7 +78,7 @@ export function ProfileEditor({
     });
   };
 
-  const otherFeatures = sections.length === 3 ? otherProfileFeatures(value) : [];
+  const otherFeatures = otherProfileFeatures(value);
   return (
     <View style={{ gap: 18 }}>
       {sections.map(section => <View key={section} style={{ gap: 12 }}>

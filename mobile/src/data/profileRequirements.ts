@@ -20,11 +20,12 @@ export function profileAttributeOptions(rows: readonly RateRow[], field: keyof R
   return [...new Set([...selected, ...available])];
 }
 
-/** Home-loan fields/features are disjoint from Savings and Term deposits. */
+/** Clear Home-loan fields and exclusive features; shared selections keep their other scopes. */
 export function clearHomeLoanRequirements(profile: ProfileFilters): ProfileFilters {
   const mortgageFeatures = new Set(PROFILE_FEATURE_OPTIONS.Mortgage);
+  const otherFeatures = new Set([...PROFILE_FEATURE_OPTIONS.Savings, ...PROFILE_FEATURE_OPTIONS.TD]);
   return { ...profile, loanPurposes: [], rateTypes: [], repaymentTypes: [], lvrTiers: [],
-    accountFeatures: profile.accountFeatures.filter(feature => !mortgageFeatures.has(feature)) };
+    accountFeatures: profile.accountFeatures.filter(feature => !mortgageFeatures.has(feature) || otherFeatures.has(feature)) };
 }
 
 /** Legacy/unrecognised feature selections remain removable without assigning a new meaning. */
