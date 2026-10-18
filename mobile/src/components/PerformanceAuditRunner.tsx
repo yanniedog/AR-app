@@ -2,7 +2,7 @@ import { captureUserRateScenarioForAudit } from '../hooks/useUserRateScenario';
 import { AuditDatasetChangedError, prepareAuditPublicCore, assertAuditPublicCataloguePinned } from '../lib/performanceAuditDataset';
 import type { PublicCatalogueView } from '../data/publicRateIntegration';
 import { validatePublicRateCapability } from '../data/publicRateWire';
-import { ensurePublicRateCatalogueLoaded, getPublicRateCatalogueSnapshot } from '../data/publicRateCatalogue';
+import { preparePublicRateCatalogueForAudit, getPublicRateCatalogueSnapshot } from '../data/publicRateCatalogue';
 import { normalizeUserRateScenario } from '../data/userRateScenario';
 import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
 import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSelection';
@@ -328,6 +328,13 @@ async function awaitAuditWork<T>(
   } finally {
     if (timer) clearInterval(timer);
   }
+}
+
+/** Keep a losing cancellation/deadline race responsible for its actual workers. */
+export async function awaitAuditCatalogueLoad(load: ReturnType<typeof preparePublicRateCatalogueForAudit>,
+  watchdog: PerformanceAuditInactivityWatchdog) {
+  try { return await awaitAuditWork(load.ready, watchdog, 'Public pricing catalogue preparation'); }
+  catch (error) { await load.cancelAndDrain(); throw error; }
 }
 
 async function awaitAuditWorkWithTimeout<T>(
@@ -2603,6 +2610,8 @@ export function PerformanceAuditRunner() {
   );
   const runGate = usePerformanceAuditRunGate();
   const { claim: claimRun, release: releaseRun, releaseCount } = runGate;
+  const cancelCataloguePreparation = useRef<(() => void) | null>(null);
+  useEffect(() => () => { cancelCataloguePreparation.current?.(); }, []);
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
 
@@ -2712,9 +2721,13 @@ export function PerformanceAuditRunner() {
       let ratesSessionSnapshot: ReturnType<typeof captureRatesSession> | null = null;
       // These exploratory amounts never enter the durable rollback journal or report.
       const mortgageComparisonSnapshot = { ...useMortgageComparison.getState() };
+      let quiesceAuditCatalogue: (() => void) | undefined;
       let ratesSessionRestored = false;
       const restoreRatesUi = () => {
         if (ratesSessionSnapshot && !ratesSessionRestored) {
+          // Restore baseline catalogue data before legacy tokens, but keep UI
+          // loads reserved and the policy guard active through measured rollback.
+          quiesceAuditCatalogue?.();
           useMortgageComparison.setState(mortgageComparisonSnapshot);
           restoreRatesSession(ratesSessionSnapshot);
           ratesSessionRestored = true;
@@ -2744,11 +2757,14 @@ export function PerformanceAuditRunner() {
         mode: auditMode,
         contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
       });
+      let drainAuditCatalogue: (() => Promise<void>) | undefined;
+      let releaseAuditCatalogue: (() => void) | undefined;
       let transportGuardRestored = false;
       const restoreTransportGuard = () => {
         if (transportGuardRestored) return;
         transportGuard.restore();
         transportGuardRestored = true;
+        releaseAuditCatalogue?.();
       };
 
       const awaitStoredCheckFlush = async (): Promise<void> => {
@@ -2792,6 +2808,9 @@ export function PerformanceAuditRunner() {
         const measured = await measurePerformanceAuditSetupStage(stage, run, {
           assertActive: assertAuditActive, metrics,
           onFailure: check => { setupFailure.check = check; },
+          // The measured wrapper also races its callback. Retain ownership at
+          // this outer boundary after it records a genuine failed step.
+          drainOnFailure: async () => { await drainAuditCatalogue?.(); },
         });
         // A real stage has now completed within its own deadline. Its physical
         // log write gets the separate bounded durability budget used by checks.
@@ -2948,7 +2967,17 @@ export function PerformanceAuditRunner() {
           if (manifest?.public_rate_catalogue) {
             const capability = validatePublicRateCapability(manifest);
             if (capability) transportGuard.allowManifestAssets([capability.index.url, ...capability.shards.map(asset => asset.url)]);
-            await awaitAuditWork(ensurePublicRateCatalogueLoaded(manifest), stageWatchdog, 'Public pricing catalogue preparation');
+            const catalogueLoad = preparePublicRateCatalogueForAudit(manifest);
+            drainAuditCatalogue = catalogueLoad.cancelAndDrain;
+            releaseAuditCatalogue = catalogueLoad.release;
+            quiesceAuditCatalogue = catalogueLoad.quiesce;
+            const cancelPreparation = () => { cancelPerformanceAudit(); void catalogueLoad.cancelAndDrain(); };
+            cancelCataloguePreparation.current = cancelPreparation;
+            try {
+              await awaitAuditCatalogueLoad(catalogueLoad, stageWatchdog);
+            } finally {
+              if (cancelCataloguePreparation.current === cancelPreparation) cancelCataloguePreparation.current = null;
+            }
           }
           const initialStore = useStore.getState();
           if (initialStore.manifest !== manifest) throw new AuditDatasetChangedError('Dataset manifest changed during public catalogue preparation');
@@ -3715,6 +3744,7 @@ export function PerformanceAuditRunner() {
         });
 
       } catch (caught) {
+        await drainAuditCatalogue?.();
         // Route recovery/rollback can change loading flags. Preserve failure-time
         // evidence before either starts, including preflight failures with no pin.
         const failedPayloadWork = captureAuditPayloadWork(useStore.getState());
@@ -3988,6 +4018,7 @@ export function PerformanceAuditRunner() {
           });
         }
       } finally {
+        await drainAuditCatalogue?.();
         if (!mutationRecoveryRequired) restoreRatesUi();
         setPassiveAuditPaused(mutationRecoveryRequired);
         wakeLockSubscription.current?.remove();
