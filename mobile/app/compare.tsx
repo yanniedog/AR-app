@@ -86,7 +86,8 @@ export default function Compare() {
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
   const compact = usesCompactCompareLayout(width, fontScale);
-  const { keys } = useLocalSearchParams<{ keys: string }>();
+  const { keys, origin } = useLocalSearchParams<{ keys: string; origin?: string }>();
+  const fromRatesComparison = origin === 'rates-comparison';
   const core = useStore((s) => s.core);
   const manifest = useStore(state => state.manifest);
   const profile = useStore(state => state.prefs.profileFilters);
@@ -94,8 +95,11 @@ export default function Compare() {
   const { scenario } = useUserRateScenario();
   const comparisonInputs = useMortgageComparison();
   const mortgageFilters = useRatesSession(state => state.sections.Mortgage.filters);
-  const scenarioFor = useCallback((section: SectionKey, row?: RateRow) => publicScenarioForRow(row, catalogue, mortgageComparisonScenario(section,
-    publicRateScenario(section, scenario, profile, row), comparisonInputs, mortgageFilters)), [catalogue, scenario, profile, comparisonInputs, mortgageFilters]);
+  const scenarioFor = useCallback((section: SectionKey, row?: RateRow) => {
+    const saved = publicRateScenario(section, scenario, profile, row);
+    return publicScenarioForRow(row, catalogue, fromRatesComparison
+      ? mortgageComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved);
+  }, [catalogue, scenario, profile, fromRatesComparison, comparisonInputs, mortgageFilters]);
   const details = useStore((s) => s.details);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);

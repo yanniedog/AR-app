@@ -1,6 +1,9 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import Compare from '../app/compare';
+import { router } from 'expo-router';
+import { openCompare } from '../src/lib/nav';
+import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import { catalogue, core, product, programme } from '../testUtils/publicRateJourney';
 import { captureRatesSession, restoreRatesSession, updateRatesSection } from '../src/data/ratesSession';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
@@ -13,10 +16,13 @@ type Tree = ReactTestRenderer & { root: { findAllByType(type: string): { props: 
 let mockState: any;
 let mockCatalogue: any;
 let mockKeys: string;
+let mockOrigin: string | undefined;
+let mockScenario = normalizeUserRateScenario(undefined);
+beforeEach(() => { mockOrigin = 'rates-comparison'; mockScenario = normalizeUserRateScenario(undefined); jest.clearAllMocks(); });
 jest.mock('../src/data/store', () => ({ useStore: (select: (state: any) => unknown) => select(mockState) }));
 jest.mock('../src/data/publicRateCatalogue', () => ({ usePublicRateCatalogue: () => mockCatalogue }));
-jest.mock('expo-router', () => ({ router: { back: jest.fn() }, useLocalSearchParams: () => ({ keys: mockKeys }) }));
-jest.mock('../src/hooks/useUserRateScenario', () => ({ useUserRateScenario: () => ({ scenario: jest.requireActual('../src/data/userRateScenario').normalizeUserRateScenario(undefined) }) }));
+jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() }, useLocalSearchParams: () => ({ keys: mockKeys, origin: mockOrigin }) }));
+jest.mock('../src/hooks/useUserRateScenario', () => ({ useUserRateScenario: () => ({ scenario: mockScenario }) }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 0 }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/hooks/useLogoReadiness', () => ({ useLogoReadiness: () => ({ ready: true }) }));
@@ -94,6 +100,50 @@ test.each([false, true])('Compare evidence and costs retain each selected offer 
     expect(tree.root.findAllByType('PublicCostComparison').map(node => [node.props.rateScenario.purpose, node.props.rateScenario.repayment])).toEqual(scopes);
   } finally {
     act(() => { tree.unmount(); restoreRatesSession(previous); });
+    installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));
+  }
+});
+
+
+test.each([undefined, 'other'])('Saved/default Compare ignores lingering Rates amount/LVR and facets for origin=%s', origin => {
+  const previous = captureRatesSession();
+  mockOrigin = origin;
+  Object.assign(mockScenario.mortgage, { mode: 'refi', loanBalance: '100000', propertyValue: '200000' });
+  const savedScenario = JSON.stringify(mockScenario);
+  const products = ['a', 'b'].map(id => ({ ...product, productId: id, productKey: id, name: id, programmeIds: [id] }));
+  const programmes = products.map((item, index) => {
+    const p = programme({ productId: item.productId, programmeId: item.productId, offerId: item.productId, sourceBindings: [], conditions: [
+      { conditionId: 'amount', field: 'amount', operator: 'bounds', maximum: '150000', evidenceIds: [] },
+      { conditionId: 'purpose', field: 'purpose', operator: 'eq', value: 'OWNER_OCCUPIED', evidenceIds: [] },
+      { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: 'PRINCIPAL_AND_INTEREST', evidenceIds: [] },
+    ] });
+    return { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() }, components: [{ ...p.components[0], value: index ? '0.06' : '0.05', scopeId: item.productId }] };
+  });
+  mockCatalogue = { ...catalogue(programmes, products, []), loadAll: async () => undefined };
+  const profile = { ...DEFAULT_PREFS.profileFilters, loanPurposes: ['OO'], repaymentTypes: ['PI'] };
+  mockState = { core: core([]), manifest: null, prefs: { ...DEFAULT_PREFS, profileFilters: profile }, details: { products: {} }, ensureDetails: jest.fn() };
+  const tokens = products.map(item => publicOfferSelectionToken(item.productKey, item.productId));
+  // Saved's shared UI/audit callback uses this default navigation contract.
+  openCompare(tokens);
+  expect(router.push).toHaveBeenLastCalledWith({ pathname: '/compare', params: { keys: JSON.stringify(tokens) } });
+  mockKeys = JSON.stringify(tokens);
+  installMandatoryEligibility(selectMandatoryEligibility(mockState.core, profile, null));
+  useMortgageComparison.setState({ loanAmount: '600000', lvr: '90' });
+  updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: ['INV'], repaymentTypes: ['IO'] } }));
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<Compare />) as Tree; });
+  try {
+    expect(tree.root.findAllByType('EmptyState')).toHaveLength(0);
+    const evidence = tree.root.findAllByType('PublicRateEvidence');
+    expect(evidence.map(node => node.props.row.rate)).toEqual(['0.05', '0.06']);
+    expect(evidence.every(node => node.props.scenario.amount === '100000' && node.props.scenario.lvr === '0.5'
+      && node.props.scenario.purpose === 'OWNER_OCCUPIED' && node.props.scenario.repayment === 'PRINCIPAL_AND_INTEREST')).toBe(true);
+    expect(tree.root.findAllByType('PublicCostComparison').every(node => node.props.rateScenario.amount === '100000')).toBe(true);
+    act(() => useMortgageComparison.setState({ loanAmount: '999999', lvr: '99' }));
+    expect(tree.root.findAllByType('PublicRateEvidence').map(node => node.props.row.rate)).toEqual(['0.05', '0.06']);
+    expect(JSON.stringify(mockScenario)).toBe(savedScenario);
+  } finally {
+    act(() => { tree.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });
     installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));
   }
 });

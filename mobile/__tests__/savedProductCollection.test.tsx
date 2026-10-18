@@ -16,7 +16,8 @@ import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import { ensurePermissions } from '../src/data/notifications';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
-import { openProduct } from '../src/lib/nav';
+import { openProduct, openCompare } from '../src/lib/nav';
+import { useMortgageComparison, clearMortgageComparison } from '../src/data/mortgageComparison';
 import { rateConditionFixture } from '../testUtils/rateConditions';
 
 type Node = { props: Record<string, any>; parent: Node | null; children: unknown[];
@@ -163,4 +164,20 @@ test('unsaved sibling has no saved controls; permission denial creates no subscr
     expect(mockState.setPref).not.toHaveBeenCalled();
     expect(alert).toHaveBeenCalledWith('Notifications disabled');
   } finally { act(() => tree.unmount()); alert.mockRestore(); }
+});
+
+
+test('Saved UI/audit comparison opens without a Rates pricing origin while exploratory inputs linger', () => {
+  useMortgageComparison.setState({ loanAmount: '600000', lvr: '90' });
+  const tree = mount(<MyRates />);
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.map(call => call[0]).filter(value => value.id === 'saved.list').at(-1)!;
+  const tokens = mockState.savedRates.slice(0, 2).map((ref: any) => `${ref.rateIndex}#${ref.productKey}`);
+  try {
+    act(() => { surface().actions!['saved.compare.mode'](); });
+    act(() => { surface().actions!['saved.compare.select.0']({ selectionToken: tokens[0] }); });
+    act(() => { surface().actions!['saved.compare.select.1']({ selectionToken: tokens[1] }); });
+    act(() => { surface().actions!['saved.compare.open'](); });
+    expect(openCompare).toHaveBeenCalledWith(tokens);
+    expect(useMortgageComparison.getState()).toMatchObject({ loanAmount: '600000', lvr: '90' });
+  } finally { act(() => tree.unmount()); clearMortgageComparison(); }
 });

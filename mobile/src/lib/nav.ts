@@ -71,5 +71,5 @@ export const openRibbonProducts = (section: SectionKey, sort: SortKey) =>
 
 // Product keys can contain commas, so serialize the array unambiguously (JSON)
 // rather than comma-joining.
-export const openCompare = (keys: string[]) =>
-  router.push({ pathname: '/compare', params: { keys: JSON.stringify(keys) } });
+export const openCompare = (keys: string[], origin?: 'rates-comparison') =>
+  router.push({ pathname: '/compare', params: { keys: JSON.stringify(keys), ...(origin ? { origin } : {}) } });
