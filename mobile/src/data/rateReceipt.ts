@@ -324,7 +324,7 @@ function buildComparables(
     const qualifier = rateQualifier(row, section);
     result.push({
       productKey: row.product_key,
-      ...(row.public_programme_id ? { programmeId: row.public_programme_id } : {}),
+      programmeId: row.public_programme_id,
       rateIndex: row.rate_index ?? null,
       provider: row.provider,
       productName: row.product_name,
