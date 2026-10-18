@@ -20,7 +20,7 @@ const labels = ['Current bank exit fees', 'Application fees', 'Valuation fees', 
 type TestNode = { props: Record<string, any> };
 type Tree = ReactTestRenderer & { root: { findAllByType(type: unknown): TestNode[]; findByType(type: unknown): TestNode; findAll(predicate: (node: TestNode) => boolean): TestNode[] }; toJSON(): unknown };
 const texts = (tree: Tree) => tree.root.findAllByType('AppText' as never).map(node => String(node.props.children)).join('\n');
-const scenario = () => normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '500000.50', currentRate: '6', years: '25' } });
+const scenario = () => normalizeUserRateScenario({ projections: { mortgage: { holdVariableRate: true, horizonYears: '50' } }, mortgage: { mode: 'refi', loanBalance: '500000.50', currentRate: '6', years: '25' } });
 
 test('six fees and cashback show AUD in visible and accessible field labels without altering entered cents', () => {
   const inputs = { ...scenario().mortgageSwitch, ...Object.fromEntries(fees.map(key => [key, '99.50'])), cashback: '0.50' };
@@ -103,7 +103,7 @@ test('every stay/switch monetary fact retains cents and provenance while unknown
 
 test('real stay/switch facts distinguish current household allocation, target shortfall and refinancing timing', () => {
   const value = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' },
-    projections: { mortgage: { periodicAmount: '3500', periodicFrequency: 'monthly', extraRepaymentAmount: '200', extraRepaymentFrequency: 'monthly', offsetContributionAmount: '500', offsetContributionFrequency: 'monthly' } } });
+    projections: { mortgage: { holdVariableRate: true, periodicAmount: '3500', periodicFrequency: 'monthly', extraRepaymentAmount: '200', extraRepaymentFrequency: 'monthly', offsetContributionAmount: '500', offsetContributionFrequency: 'monthly' } } });
   const target: RateRow = { provider: 'Target Bank', product_key: 'target', product_name: 'Loan', rate: '0.15' };
   const model = buildStaySwitchProjection({ scenario: value, target, targetDetail: {}, now: new Date('2026-10-15T01:00:00Z') });
   expect(model.ready).toBe(true); expect(model.householdAllocation).toBe(4200);

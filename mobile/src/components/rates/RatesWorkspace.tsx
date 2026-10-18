@@ -1,3 +1,9 @@
+import { ratesResultRowKey } from '../../data/ratesResultRowKey';
+import { publicOfferSelectionToken } from '../../data/publicOfferIdentity';
+import { PublicPricingCoverage, PublicProductDiscovery } from '../scenario/PublicPricingCoverage';
+import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
+import { publicComparisonCore, publicRateScenario, publicRecommendationRows, resolvedPublicRankingRows } from '../../data/publicRateIntegration';
+import { useUserRateScenario } from '../../hooks/useUserRateScenario';
 import { uiCount,uiJoin,uiLabel,uiRatesQuery,uiProductName,uiProviderName,type UiCopy } from '../../lib/uiCopy';
 import { humanizeEnum } from '../../data/format';
 import { useReadyNavigationEffect } from '../../hooks/useReadyNavigationEffect';
@@ -79,7 +85,7 @@ function availableSortOptions(
   ];
 }
 
-const rowToken = (r: { rate_index?: number | string; product_key: string }) =>
+const rowToken = (r: RateRow) => r.public_offer_id ? publicOfferSelectionToken(r.product_key, r.public_offer_id) :
   r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
 
 const SearchProductRow = React.memo(function SearchProductRow({ row, section, selectMode, selected, onToggleSelect,
@@ -88,7 +94,7 @@ const SearchProductRow = React.memo(function SearchProductRow({ row, section, se
   onToggleSelect: (token: string) => void;
   onLogoRenderStateChange: (id: string, state: LogoRenderState) => void;
 }) {
-  const onPress = useCallback(() => selectMode ? onToggleSelect(rowToken(row)) : openProduct(row.product_key, row.rate_index),
+  const onPress = useCallback(() => selectMode ? onToggleSelect(rowToken(row)) : openProduct(row.product_key, row.rate_index, row.public_programme_id),
     [selectMode, onToggleSelect, row]);
   return <ProductCard row={row} section={section}
     logoRenderStateId={`search:${row.rate_index ?? 'default'}#${row.product_key}`}
@@ -126,6 +132,9 @@ export default function RatesWorkspace() {
   const ensureSearchIndex = useStore((s) => s.ensureSearchIndex);
   const coreIntegrity = useStore(state => state.coreIntegrity);
   const manifest = useStore(state => state.manifest);
+  const catalogue = usePublicRateCatalogue(manifest);
+  const { scenario } = useUserRateScenario();
+  const comparisonCore = useMemo(() => core ? publicComparisonCore(core, catalogue, s => publicRateScenario(s, scenario, prefs.profileFilters)) : null, [core, catalogue, scenario, prefs.profileFilters]);
   useReadyNavigationEffect(useCallback(() => {
     if (!hydrated || !isFocused) return;
     initializeRatesSession(prefs, activeSection);
@@ -215,11 +224,14 @@ export default function RatesWorkspace() {
     if (sortKey === 'comparison' && (section !== 'Mortgage' || mortgageRateMetric === 'comparison')) setSortKey('rate');
   }, [mortgageRateMetric, section, setSortKey, sortKey]);
 
-  const baseRows = useMemo(() => {
+  const pricingCandidates = useMemo(() => {
     void suitabilityRevision;
-    const all = core?.sections[section]?.rates ?? [];
-    return task.intentError ? [] : rowsForSearchScope(all, section, path, hierarchyScoped);
-  }, [core, section, path, hierarchyScoped, suitabilityRevision, task.intentError]);
+    const candidates = publicRecommendationRows(core?.sections[section]?.rates ?? [], catalogue, section, publicRateScenario(section, scenario, prefs.profileFilters));
+    return task.intentError ? [] : rowsForSearchScope(candidates, section, path, hierarchyScoped);
+  }, [core, catalogue, scenario, prefs.profileFilters, section, path, hierarchyScoped, suitabilityRevision, task.intentError]);
+  const baseRows = useMemo(() => resolvedPublicRankingRows(pricingCandidates, catalogue,
+    row => publicRateScenario(section, scenario, prefs.profileFilters, row)).rows,
+  [pricingCandidates, catalogue, section, scenario, prefs.profileFilters]);
   const filterOptions = useSearchFilterOptions(baseRows, details?.products, section, suitabilityRevision);
 
   const effectiveFilters = useMemo(
@@ -330,7 +342,7 @@ export default function RatesWorkspace() {
 
   const toggleSelect = useCallback((key: string) => {
     if (!core) return;
-    const update = toggleCompareSelection(core, selected, key);
+    const update = toggleCompareSelection(comparisonCore!, selected, key);
     if (update.rejection === 'limit_reached') {
       Alert.alert('Four-rate limit');
       return;
@@ -344,7 +356,7 @@ export default function RatesWorkspace() {
       return;
     }
     setSelected(update.tokens);
-  }, [core, selected, setSelected]);
+  }, [core, comparisonCore, selected, setSelected]);
 
   const toggleCompareMode = useCallback(() => {
     hapticSelection();
@@ -568,6 +580,7 @@ export default function RatesWorkspace() {
           maintainVisibleContentPosition={{ disabled: true }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          ListHeaderComponent={catalogue.status === 'unavailable' ? undefined : <><PublicPricingCoverage section={section} rows={pricingCandidates} scenario={scenario} compact /><PublicProductDiscovery section={section} rows={baseRows} query={debouncedQuery} /></>}
           data={resultRows}
           onCommitLayoutEffect={onListCommit}
           onLoad={onListLoad}
@@ -575,7 +588,7 @@ export default function RatesWorkspace() {
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
           extraData={listRevision}
-          keyExtractor={(item, i) => 'product_key' in item ? `${item.product_key}-${item.rate_index ?? i}` : item.key}
+          keyExtractor={ratesResultRowKey}
           getItemType={item => 'product_key' in item ? 'rate' : 'unlisted'}
           onScroll={event => {
             if (restoration.current.applied && restoration.current.revision === listDataRevision

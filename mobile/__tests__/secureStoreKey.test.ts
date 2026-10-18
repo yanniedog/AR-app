@@ -12,6 +12,7 @@ describe('SecureStore key contract', () => {
       customerProfile: 'ar.customer-profile.v1',
       debugLogUploadReceipt: 'ar.debug-log.public-upload-receipt.v1',
       payloadDecryptionKey: 'ar.payload.deckey',
+      referenceRateAlertBaseline: 'ar.public-reference-alert-baseline.v1',
       performanceAuditRollbackScenario: 'performance-audit-rollback-scenario-v1',
       trackedRateAuditRollbackMetadata:
         'ar-rates.performance-audit.tracked-rate-metadata.v1',

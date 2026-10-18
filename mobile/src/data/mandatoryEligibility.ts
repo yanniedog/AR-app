@@ -6,6 +6,8 @@ export interface MandatoryEligibility {
   loading: boolean;
   rows: WeakSet<RateRow>;
   productKeys: ReadonlySet<string>;
+  profile?: ProfileFilters;
+  verifiedProducts?: Record<string, ProductDetail> | null;
 }
 
 /** One mandatory selection, before any screen narrowing, ranking or aggregation. */
@@ -23,5 +25,5 @@ export function selectMandatoryEligibility(
       rows.add(row); productKeys.add(row.product_key);
     }
   }
-  return { active, loading, rows, productKeys };
+  return { active, loading, rows, productKeys, profile: required, verifiedProducts };
 }

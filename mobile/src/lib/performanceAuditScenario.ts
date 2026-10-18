@@ -7,9 +7,14 @@ export function prepareProjectionAuditScenario(current: UserRateScenario): UserR
     ...current,
     savings: { balance: '50000', currentRate: '4.50' },
     termDeposit: { balance: '50000', currentRate: '4.50' },
+    localRates: {
+      mortgage: { ...current.localRates.mortgage, mode: 'entered' },
+      savings: { ...current.localRates.savings, mode: 'entered' },
+      termDeposit: { ...current.localRates.termDeposit, mode: 'entered' },
+    },
     projections: {
-      mortgage: { ...EMPTY_PROJECTION_INPUTS },
-      savings: { ...EMPTY_PROJECTION_INPUTS, horizonYears: '5' },
+      mortgage: { ...EMPTY_PROJECTION_INPUTS, horizonYears: '3', holdVariableRate: true },
+      savings: { ...EMPTY_PROJECTION_INPUTS, horizonYears: '1', holdVariableRate: true },
       termDeposit: { ...EMPTY_PROJECTION_INPUTS, termMonths: '12' },
     },
   };

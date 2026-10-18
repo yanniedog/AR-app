@@ -26,7 +26,7 @@ export function uiStaySwitchFact(fact: StaySwitchFact): readonly FinancialFactRo
     case 'unpriced-switch-fees': return [{ label: 'Unpriced fees', value: uiJoin(uiCount(fact.upfrontCount), ' / ', uiCount(fact.periodicCount)) }];
     case 'cashback-exceeds-fees': return [{ label: 'Cashback', value: uiStaySwitchMoney(fact.cashbackAmount) }, { label: 'Known costs', value: uiStaySwitchMoney(fact.modelledFeesAmount) },
       { label: 'Eligibility', value: uiLabel('Unverified') }, { label: 'Payment', value: uiLabel('Unverified') }];
-    case 'switch-horizon': return [{ label: 'Projection horizon', value: uiJoin(uiDuration(fact.months, 'months'), ' · ', fact.scope === 'published-fixed-period' ? 'Fixed-rate scope' : 'Remaining-term scope') },
+    case 'switch-horizon': return [{ label: 'Projection horizon', value: uiJoin(uiDuration(fact.months, 'months'), ' · ', fact.scope === 'published-fixed-period' ? 'Fixed-rate scope' : fact.scope === 'comparison-period' ? 'Comparison period' : 'Remaining-term scope') },
       ...(fact.futureReversionRate === 'unknown' ? [{ label: 'Reversion rate' as const, value: uiLabel('Unknown') }] : [])];
     case 'switch-exclusions': return [{ label: 'Tax', value: uiLabel('Excluded') }, { label: 'Refinancing timing', value: uiLabel('Unverified') }, { label: 'Rate', value: uiLabel('No forecast') }];
   }
