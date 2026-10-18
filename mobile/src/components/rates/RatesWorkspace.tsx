@@ -278,7 +278,8 @@ export default function RatesWorkspace() {
     return resolvedPublicRankingRows(candidates, catalogue,
       row => publicRateScenario(section, scenario, prefs.profileFilters, row)).rows;
   }, [core, catalogue, section, scenario, prefs.profileFilters]);
-  const summaryCatalogueRows = catalogue.status === 'loading' || catalogue.status === 'error' ? null : savedCatalogueRows;
+  const summaryCatalogueRows = catalogue.status === 'unavailable' || (catalogue.status === 'ready' && catalogue.allLoaded)
+    ? savedCatalogueRows : null;
   const mortgageScope = useMemo(() => section === 'Mortgage' ? mortgageComparisonRows(baseRows, mortgageInputs,
     { core, details, manifest, coreIntegrity })
     : { rows: baseRows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false },

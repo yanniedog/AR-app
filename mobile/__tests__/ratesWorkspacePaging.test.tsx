@@ -670,6 +670,9 @@ test('entered comparison inputs select public pricing before ranking, cards and 
     for (const status of ['loading', 'error', 'ready']) {
       mockPublicCatalogue = { ...completeCatalogue, status, allLoaded: false };
       act(() => { tree.update(<RatesWorkspace />); });
+      expect(savedFacts()).toContain('Catalogue: Pending');
+      expect(savedFacts()).toContain('After saved requirements: Pending');
+      expect(savedFacts()).not.toContain('Catalogue: 0 products · 0 banks · 0 rates');
       expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([publicOfferSelectionToken(publicProduct.productKey, 'high-lvr')]);
     }
     mockPublicCatalogue = completeCatalogue;
