@@ -7,6 +7,7 @@ import type { DatesIndex } from './datesIndex';
 import { prepareReadyBankRateHistory } from './historicalBankRateReadySync';
 import { historicalCatalogueOwner, markPreparedHistoricalBankRateHistory, warmHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import { samePayloadIdentity } from './payloadRevision';
+import { validateDetachedHistoricalCatalogueDescriptor } from './detachedHistoricalBankRateCatalogueWire';
 import type { StoreGet, StoreSet } from './storeTypes';
 
 const requests = new WeakMap<StoreGet, { completion: Promise<void>; finish: () => void; work: ReturnType<typeof backgroundPayloadWork.begin> }>();
@@ -59,8 +60,9 @@ export async function prepareBankRateHistoryAfterPaint(
     work.stage('Configuring native history decoder');
     await configureNativeHistoricalCatalogueCodec();
     if (!isCurrent()) return;
-    // Prepared charts are the only mobile history path. Older publishers use
-    // the preclassified APK fallback; they never trigger raw archive rebuilding.
+    // Prefer producer-prepared charts. A legacy publisher can still supply a
+    // verified full history archive; ignoring it strands every graph at the
+    // APK fallback's last date. Never rebuild history by fetching dated cores.
     let detached = null;
     if (manifest.bank_rate_history_ready) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -72,7 +74,25 @@ export async function prepareBankRateHistoryAfterPaint(
     }
     if (!isCurrent()) return;
     work.stage('Selecting verified prepared history');
-    const ready = await prepareReadyBankRateHistory(core, manifest, index, detached, isCurrent);
+    let ready = false;
+    let publishedHistory = !!detached;
+    if (!manifest.bank_rate_history_ready && validateDetachedHistoricalCatalogueDescriptor(manifest)) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { loadDetachedHistoricalBankRateCatalogue } = require('./detachedHistoricalBankRateCatalogue') as typeof import('./detachedHistoricalBankRateCatalogue');
+      work.stage('Loading compatible bank history');
+      const legacy = await loadDetachedHistoricalBankRateCatalogue(manifest, {
+        allowNetwork: !isLocalAppHealthAudit(), isCurrent, isAssetCurrent,
+      });
+      if (!isCurrent()) return;
+      if (legacy) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { prepareHistoricalBankRateHistory } = require('./historicalBankRateCatalogueSync') as typeof import('./historicalBankRateCatalogueSync');
+        ready = await prepareHistoricalBankRateHistory(core, manifest, index, details, legacy, isCurrent);
+        publishedHistory = ready;
+      }
+    }
+    if (!isCurrent()) return;
+    if (!ready) ready = await prepareReadyBankRateHistory(core, manifest, index, detached, isCurrent);
     if (!isCurrent()) return;
     const prefs = get().prefs;
     if (options.warm !== false) {
@@ -82,7 +102,7 @@ export async function prepareBankRateHistoryAfterPaint(
         interests: SECTION_KEYS,
       });
     }
-    if (isCurrent()) outcome = !ready ? 'unavailable' : detached ? 'completed' : 'fallback';
+    if (isCurrent()) outcome = !ready ? 'unavailable' : publishedHistory ? 'completed' : 'fallback';
     if (isCurrent()) debugLog.info('store', `bank history prepared after first paint elapsed_ms=${Date.now() - started}`);
   } catch (error) {
     outcome = 'failed';

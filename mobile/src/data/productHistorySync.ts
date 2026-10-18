@@ -67,7 +67,8 @@ export async function syncProductHistoryFromDailyPayloads(
   if (!targetRunDate) throw new Error('syncProductHistoryFromDailyPayloads: missing targetRunDate');
   const preparedSources = opts.catalogue ? preparedReadySources(opts.catalogue) : null;
   const preparedOnly = opts.preparedOnly === true || preparedSources !== null;
-  const preparedDates = new Set(preparedSources?.flatMap(input => [...input.acceptedDates]) ?? []);
+  const preparedDates = new Set(preparedSources?.flatMap(input => [...input.acceptedDates]) ??
+    opts.catalogue?.catalogue.run_dates.filter(day => !!readyProductHistoryIdentity(opts.catalogue, undefined, day)) ?? []);
 
   let indexedDates: string[] = [];
   let selectedIndex: DatesIndex | undefined;
@@ -119,7 +120,7 @@ export async function syncProductHistoryFromDailyPayloads(
     // Independent producer observations belong to the current core's ready
     // payload. They neither need a public index nor survive its removal from
     // that payload; a failed index refresh must not keep an older producer's rate.
-    if (previous.startsWith('prepared:') || readyIdentity?.startsWith('prepared:')) return previous === readyIdentity;
+    if ([previous, readyIdentity].some(value => value?.startsWith('prepared:') || value?.startsWith('catalogue:'))) return previous === readyIdentity;
     return !selectedIndex || (preparedDates.has(date) ? previous === selectedIdentity(date) :
       !indexedDates.includes(date) || (opts.existing?.schema_version === 3 &&
         ((!networkAvailable && !selectedIndex.revision_heads?.[date]) || previous === selectedIdentity(date))));
@@ -150,7 +151,7 @@ export async function syncProductHistoryFromDailyPayloads(
   ) {
     return opts.existing;
   }
-  const bestByDate = opts.catalogue && (selectedIndex || preparedSources) && toFetch.length
+  const bestByDate = opts.catalogue && (selectedIndex || preparedDates.size) && toFetch.length
     ? await productRatesFromHistoricalCatalogue(opts.catalogue, selectedIndex ?? null, toFetch, opts.isCurrent)
     : new Map<string, Map<string, number>>();
   const packedDates = bestByDate.size;

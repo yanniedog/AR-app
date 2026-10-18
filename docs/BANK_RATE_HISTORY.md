@@ -2,12 +2,16 @@
 
 ## Prepared data is the mobile contract
 
-The app consumes `manifest.bank_rate_history_ready`. AR-local runs the pinned
-app compiler before publication; the phone does not classify historical product
-descriptions, merge raw tiers, or rebuild missing history from dated core files.
-A publisher without this capability uses the signed app's prepared fallback.
-Raw schema-2 and `ar-history-dag-v1` catalogues remain compatible producer/tooling
-assets for older apps. They are not the new mobile preparation path.
+The app prefers `manifest.bank_rate_history_ready`. For this capability AR-local
+runs the pinned app compiler before publication, so the phone only filters and
+aggregates the prepared cohorts.
+A publisher without this capability may supply a verified schema-2 or
+`ar-history-dag-v1` archive. The app opens that archive after first paint through
+the existing cooperative validator and source reconciliation path. Ignoring a
+valid legacy archive would leave all newer history blank after the APK fallback's
+last observation. Missing or invalid archives use the signed prepared fallback.
+Neither path downloads dated cores to reconstruct history. Prepared producer
+history remains preferred when both capabilities are present.
 
 The ready projection contains preclassified bank cohorts, sparse changes to exact
 rate-frequency distributions, product-best rate spans, and original dated source

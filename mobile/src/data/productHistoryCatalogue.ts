@@ -1,6 +1,6 @@
 import { SECTION_KEYS } from '../types';
 import type { DatesIndex } from './datesIndex';
-import { preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
+import { cachedPreparedHistoricalBankRateCatalogue, preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
 import { isExplicitTermDepositProduct } from './sectionIntegrity';
 import { historicalSourceIdentity } from './historyIdentity';
 
@@ -11,11 +11,13 @@ export function readyProductHistoryIdentity(prepared: PreparedHistoricalBankRate
   if (!prepared) return undefined;
   const inputs = preparedReadySources(prepared);
   const input = inputs?.find(item => item.acceptedDates.includes(day));
-  const source = input?.ready.sources[day];
-  if (!input || !source) return undefined;
+  const trustedLegacy = !inputs && cachedPreparedHistoricalBankRateCatalogue(prepared.catalogue) === prepared;
+  const source = input?.ready.sources[day] ?? (trustedLegacy && !prepared.catalogue.unavailable_dates[day]
+    ? prepared.catalogue.sources[day] : undefined);
+  if (!source) return undefined;
   if (source.kind === 'published_core') return index?.revision_heads?.[day]?.manifest_sha256 === source.manifest_sha256
     ? historicalSourceIdentity(index, day) : undefined;
-  return `prepared:${input.ready.compiler_sha256}:${source.banks_sha256}`;
+  return input ? `prepared:${input.ready.compiler_sha256}:${source.banks_sha256}` : `catalogue:${source.banks_sha256}`;
 }
 
 /** Project the existing product-best ledger from a validated full-tier catalogue.
@@ -36,11 +38,12 @@ export async function productRatesFromHistoricalCatalogue(
   const catalogue = prepared.catalogue;
   const requested = new Set(requestedDates), selected = new Set(index?.dates ?? []);
   const readySources = preparedReadySources(prepared);
+  const trustedLegacy = !readySources && cachedPreparedHistoricalBankRateCatalogue(catalogue) === prepared;
   const result = new Map<string, Map<string, number>>();
   const byPosition = catalogue.run_dates.map(day => {
     const source = catalogue.sources[day], head = index?.revision_heads?.[day];
     if (!requested.has(day) || !source || catalogue.unavailable_dates[day]) return null;
-    if (source.kind === 'published_core' ? !selected.has(day) || !head || source.manifest_sha256 !== head.manifest_sha256 : !readySources) return null;
+    if (source.kind === 'published_core' ? !selected.has(day) || !head || source.manifest_sha256 !== head.manifest_sha256 : !readySources && !trustedLegacy) return null;
     const rates = new Map<string, number>();
     result.set(day, rates);
     return rates;

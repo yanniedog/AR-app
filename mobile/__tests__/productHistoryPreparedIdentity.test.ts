@@ -1,5 +1,5 @@
 import * as compiler from '../contracts/history-ready/compiler-manifest.json';
-import { prepareHistoricalBankRateReady } from '../src/data/historicalBankRateCatalogue';
+import { prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateReady } from '../src/data/historicalBankRateCatalogue';
 import { syncProductHistoryFromDailyPayloads } from '../src/data/productHistorySync';
 import { HISTORY_DERIVATION_VERSION } from '../src/data/historyDerivation';
 import type { HistoricalBankRateReady } from '../src/data/historicalBankRateReadyWire';
@@ -27,6 +27,39 @@ function existing(source = identity(sha)): ProductHistoryPayload {
     products: { P: [0.05, 0.07] }, source_identities: { [day]: source } };
 }
 beforeEach(() => jest.clearAllMocks());
+
+function legacy(banks = sha, rate = 5) {
+  return prepareHistoricalBankRateCatalogue({ schema_version: 2, run_dates: [day],
+    sources: { [day]: { kind: 'selected_contract', banks_sha256: banks, bytes: 100,
+      generation_id: 'selected', contract_digest: sha } }, unavailable_dates: {},
+    evidence: [{ status: 'unknown' }], sections: { Mortgage: [], TD: [], Savings: [{
+      row: { provider: 'Bank', product_key: 'P', product_name: 'Savings', ribbon_normalized: true },
+      spans: [[0, 1, [rate], 0]],
+    }] } })!;
+}
+
+test('legacy producer history restores product observations offline without dated-core downloads', async () => {
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: today, currentCore: current,
+    catalogue: legacy(), preparedOnly: true, allowNetwork: false });
+  expect(result.products.P).toEqual([0.05, 0.07]);
+  expect(result.source_identities?.[day]).toBe(`catalogue:${sha}`);
+  expect(result.date_status?.[day]).toBe('verified');
+  expect(downloadDatedCore).not.toHaveBeenCalled();
+  expect(fetchDatesIndexJson).not.toHaveBeenCalled();
+});
+
+test('legacy independent receipts replace changed observations and disappear with their owning archive', async () => {
+  const prior = existing(`catalogue:${sha}`), banks = 'b'.repeat(64);
+  const corrected = await syncProductHistoryFromDailyPayloads({ targetRunDate: today, currentCore: current,
+    existing: prior, catalogue: legacy(banks, 6), preparedOnly: true, allowNetwork: false });
+  expect(corrected.products.P).toEqual([0.06, 0.07]);
+  expect(corrected.source_identities?.[day]).toBe(`catalogue:${banks}`);
+  const missing = await syncProductHistoryFromDailyPayloads({ targetRunDate: today, currentCore: current,
+    existing: corrected, preparedOnly: true, allowNetwork: false });
+  expect(missing.products.P).toEqual([null, 0.07]);
+  expect(missing.source_identities?.[day]).toBeUndefined();
+  expect(downloadDatedCore).not.toHaveBeenCalled();
+});
 
 test.each(['unavailable', 'rejected'])('current independent ready identity replaces an older cached producer when public index is %s', async mode => {
   const prior = existing();
