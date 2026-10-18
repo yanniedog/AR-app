@@ -5,7 +5,21 @@ import { makeProductSubscription, makeSearchSubscription } from '../src/data/sub
 import { EMPTY_FILTERS } from '../src/data/selectors';
 import { makeSavedRateRef } from '../src/data/savedRates';
 import { bindCurrentPublicRow } from '../src/data/publicRateIntegration';
-import { AS_OF, catalogue, core, programme, row } from '../testUtils/publicRateJourney';
+import { AS_OF, catalogue, core, product, programme, row } from '../testUtils/publicRateJourney';
+
+it('keeps notification watches distinct when different products share an opaque offer ID', () => {
+  const otherProduct = { ...product, productId: 'other-product', productKey: 'OTHER|LOAN', name: 'Other Loan', programmeIds: ['other-programme'] };
+  const products = [product, otherProduct], other = programme({ productId: otherProduct.productId, programmeId: 'other-programme' });
+  const before = [programme(), other], after = before.map(value => ({ ...value, components: [{ ...value.components[0], value: '0.0625' }] }));
+  const previous = catalogue(before, products), current = catalogue(after, products);
+  const rows = [row, { ...row, product_key: otherProduct.productKey, product_name: otherProduct.name }];
+  const selected = rows.map(value => bindCurrentPublicRow(value, previous));
+  const options = { previous, current, oldCore: core(rows), newCore: core(rows), saved: selected.map(value => makeSavedRateRef(value)),
+    subscriptions: selected.map(value => makeProductSubscription(value, 0)), scenario: normalizeUserRateScenario({}),
+    profile: normalizeProfileFilters({}), thresholdBps: 1, asOf: AS_OF };
+  expect(resolvedRateNotificationChanges(options).map(message => message.productKey).sort()).toEqual(products.map(value => value.productKey).sort());
+  expect(resolvedRateNotificationChanges({ ...options, subscriptions: [options.subscriptions[0]] }).map(message => message.productKey)).toEqual([product.productKey]);
+});
 
 it('uses semantic programme identities for alerts after reordering and describes public scenario pricing', () => {
   const previous = catalogue(), current = catalogue([programme({ sourceBindings: [{ rateIndex: 3, pointer: '/lendingRates/3' }],

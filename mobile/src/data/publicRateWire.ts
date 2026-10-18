@@ -65,6 +65,7 @@ function freshness(value: unknown): boolean {
 function condition(value: unknown): value is PublicCondition {
   return object(value) && keys(value, ['conditionId', 'field', 'operator', 'evidenceIds'], ['value', 'values', 'minimum', 'maximum', 'minimumInclusive', 'maximumInclusive', 'description']) &&
     text(value.conditionId, 256) && FIELDS.includes(String(value.field)) && ['eq', 'in', 'bounds', 'known'].includes(String(value.operator)) && strings(value.evidenceIds) &&
+    (value.operator !== 'bounds' || value.minimum !== undefined || value.maximum !== undefined) &&
     (value.value === undefined || typeof value.value === 'string' || typeof value.value === 'boolean') &&
     (value.values === undefined || Array.isArray(value.values) && value.values.length <= 64 && value.values.every(item => typeof item === 'string' || typeof item === 'boolean')) &&
     (value.minimum === undefined || finiteDecimal(value.minimum)) && (value.maximum === undefined || finiteDecimal(value.maximum)) &&
