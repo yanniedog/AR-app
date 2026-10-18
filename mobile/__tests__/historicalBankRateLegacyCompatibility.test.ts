@@ -16,6 +16,7 @@ import { syncProductHistoryFromDailyPayloads } from '../src/data/productHistoryS
 import { downloadDatedCore, fetchDatesIndexJson } from '../src/data/historyDaily';
 import { HISTORY_DERIVATION_VERSION } from '../src/data/historyDerivation';
 import { sampleCore } from '../src/data/sample';
+import { missingHistoricalCatalogueDates } from '../src/data/historicalBankRateCatalogueStore';
 
 let mockSelection: unknown;
 jest.mock('../src/data/historicalBankRateReadySync', () => ({
@@ -148,4 +149,48 @@ test('existing fallback dates do not consume the budget for newly inserted unkno
   expect(snapshots[date(4997)]).toEqual({});
   expect(snapshots[date(4998)]).toEqual({});
   expect(Object.keys(snapshots)).toHaveLength(5000);
+});
+
+test.each(['older', 'newer', 'conflicting'] as const)('product observations reconcile a %s caller head against retained selection', async mode => {
+  const current = core(), retained = new Map(heads);
+  const selectedHead = { ...heads.get(latest)!, revision: 2, manifest_sha256: 'd'.repeat(64) };
+  retained.set(latest, selectedHead);
+  const archive = { ...raw, sources: { ...raw.sources, [latest]: { ...raw.sources[latest], manifest_sha256: selectedHead.manifest_sha256 } } };
+  mockSelection = { prepared: prepareHistoricalBankRateReady(compileHistoricalBankRateReady(raw, compiler.sha256))!, heads: retained, conflicts: new Set() };
+  await prepareLegacyBankRateHistory(current, sampleManifest, null, archive, () => true);
+  const combined = cachedHistoricalBankRateCatalogue(current)!;
+  const caller = { ...index, revision_heads: { ...index.revision_heads,
+    ...(mode !== 'older' ? { [latest]: { ...selectedHead, revision: mode === 'newer' ? 3 : 2, manifest_sha256: 'e'.repeat(64) } } : {}) } };
+  const rates = await productRatesFromHistoricalCatalogue(combined, caller, [latest], () => true, async () => {});
+  const receipt = readyProductHistoryIdentity(combined, caller, latest);
+  if (mode === 'older') {
+    expect(rates.get(latest)?.get(latestProduct)).toBe(0.0525);
+    expect(receipt).toBe(`revision:2:${selectedHead.bundle_sha256}:${selectedHead.manifest_sha256}`);
+  } else {
+    expect(rates.has(latest)).toBe(false);
+    expect(receipt).toBeUndefined();
+  }
+});
+
+test('offline selected-head dates outside both archives remain explicit bank-history gaps', async () => {
+  const current = core(), retained = new Map(heads);
+  const absent = new Date(Date.parse(older) - 86_400_000).toISOString().slice(0, 10);
+  retained.set(absent, { ...heads.get(older)! });
+  mockSelection = { prepared: prepareHistoricalBankRateReady(compileHistoricalBankRateReady(raw, compiler.sha256))!, heads: retained, conflicts: new Set() };
+  await prepareLegacyBankRateHistory(current, sampleManifest, null, raw, () => true);
+  const snapshots = historicalBankRateSnapshots(cachedHistoricalBankRateCatalogue(current)!, current, scope, filters);
+  expect(snapshots[absent]).toEqual({});
+  expect(missingHistoricalCatalogueDates(current)).toContain(absent);
+});
+
+test('a retained equal-revision conflict clears an already cached product observation', async () => {
+  const current = { ...sampleCore, run_date: '2026-09-27' };
+  mockSelection = { prepared: prepareHistoricalBankRateReady(compileHistoricalBankRateReady(raw, compiler.sha256), [older, latest])!, heads, conflicts: new Set([rejected]) };
+  await prepareLegacyBankRateHistory(current, sampleManifest, null, raw, () => true);
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: current.run_date, currentCore: current,
+    catalogue: cachedHistoricalBankRateCatalogue(current), preparedOnly: true, allowNetwork: false,
+    existing: { schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION, run_date: current.run_date,
+      run_dates: [rejected], products: { [latestProduct]: [0.0525] }, source_identities: { [rejected]: historicalSourceIdentity(index, rejected) } } });
+  expect(result.products[latestProduct][result.run_dates.indexOf(rejected)]).toBeNull();
+  expect(result.source_identities?.[rejected]).toBeUndefined();
 });

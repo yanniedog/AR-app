@@ -30,9 +30,9 @@ export async function prepareLegacyBankRateHistory(core: CorePayload, manifest: 
     schema_version: 1, revision_protocol: 1, dates: knownDates, count: knownDates.length,
     min_date: knownDates[0], latest_date: knownDates.at(-1)!, revision_heads: Object.fromEntries(selected!.heads),
   } : undefined;
-  const combined = selectHistoricalCatalogueDates(primary, dates, fallback, selectedIndex);
+  const combined = selectHistoricalCatalogueDates(primary, dates, fallback, selectedIndex, selected?.conflicts);
   const covered = new Set([...dates, ...Object.keys(fallback?.catalogue.sources ?? {})]);
-  const calendar = new Set([...archive.run_dates, ...(fallback?.catalogue.run_dates ?? []), ...(index?.dates ?? [])]);
+  const calendar = new Set([...archive.run_dates, ...(fallback?.catalogue.run_dates ?? []), ...(selectedIndex?.dates ?? []), ...(index?.dates ?? [])]);
   for (let time = Date.parse(archive.run_dates.at(-1)!) + 86_400_000; time < Date.parse(core.run_date) && calendar.size < 5000; time += 86_400_000) {
     calendar.add(new Date(time).toISOString().slice(0, 10));
   }

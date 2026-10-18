@@ -6,13 +6,46 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import { isExplicitTermDepositProduct } from './sectionIntegrity';
 import { historicalSourceIdentity } from './historyIdentity';
 
+const indexOwners = new WeakMap<DatesIndex, PreparedHistoricalBankRateCatalogue>();
+const indexConflicts = new WeakMap<DatesIndex, ReadonlySet<string>>();
+const mergedIndexes = new WeakMap<PreparedHistoricalBankRateCatalogue, WeakMap<DatesIndex, DatesIndex>>();
+
+/** A caller may be behind retained corrections or ahead of the archive. Select
+ * the greatest head per date; equal-revision equivocation cannot authorize data. */
+export function productCatalogueIndex(prepared: PreparedHistoricalBankRateCatalogue | null | undefined,
+  caller: DatesIndex | null | undefined): DatesIndex | undefined {
+  const selection = prepared && historicalCatalogueSelection(prepared);
+  const selected = selection?.index;
+  if (selected && selection) indexConflicts.set(selected, selection.conflicts);
+  if (!prepared || !selected || caller === selected || !caller || indexOwners.get(caller) === prepared) return caller ?? selected ?? undefined;
+  const cache = mergedIndexes.get(prepared) ?? new WeakMap<DatesIndex, DatesIndex>();
+  if (cache.has(caller)) return cache.get(caller);
+  const heads = { ...selected.revision_heads }, conflicts = new Set(indexConflicts.get(selected));
+  for (const [day, head] of Object.entries(caller.revision_heads ?? {})) {
+    const previous = heads[day];
+    if (!previous || head.revision > previous.revision) { heads[day] = head; conflicts.delete(day); }
+    else if (head.revision === previous.revision && (head.manifest_sha256 !== previous.manifest_sha256 ||
+      head.bundle_sha256 !== previous.bundle_sha256 || head.generation_id !== previous.generation_id)) {
+      delete heads[day]; conflicts.add(day);
+    }
+  }
+  const dates = [...new Set([...selected.dates, ...caller.dates])].sort();
+  const result: DatesIndex = { ...selected, dates, count: dates.length, min_date: dates[0], latest_date: dates.at(-1)!, revision_heads: heads };
+  indexOwners.set(result, prepared); indexConflicts.set(result, conflicts);
+  cache.set(caller, result); mergedIndexes.set(prepared, cache);
+  return result;
+}
+export const productCatalogueIndexConflicts = (index: DatesIndex | null | undefined, day: string): boolean =>
+  !!index && !!indexConflicts.get(index)?.has(day);
+
 /** Producer observations retain their own identity; never relabel them as a
  * public core edition just because their calendar date is the same. */
 export function readyProductHistoryIdentity(prepared: PreparedHistoricalBankRateCatalogue | null | undefined,
   index: DatesIndex | undefined, day: string): string | undefined {
   if (!prepared) return undefined;
   const selection = historicalCatalogueSelection(prepared);
-  index ??= selection?.index;
+  index = productCatalogueIndex(prepared, index);
+  if (productCatalogueIndexConflicts(index, day)) return undefined;
   if (selection && !selection.dates.has(day)) return readyProductHistoryIdentity(selection.fallback, index, day);
   const inputs = preparedReadySources(prepared);
   const input = inputs?.find(item => item.acceptedDates.includes(day));
@@ -48,7 +81,7 @@ export async function productRatesFromHistoricalCatalogue(
 ): Promise<Map<string, Map<string, number>>> {
   const catalogue = prepared.catalogue;
   const selection = historicalCatalogueSelection(prepared);
-  index ??= selection?.index ?? null;
+  index = productCatalogueIndex(prepared, index) ?? null;
   const requested = new Set(requestedDates), selected = new Set(index?.dates ?? []);
   const readySources = preparedReadySources(prepared);
   const fallbackRates = selection?.fallback ? await productRatesFromHistoricalCatalogue(selection.fallback, index,
@@ -57,7 +90,7 @@ export async function productRatesFromHistoricalCatalogue(
   const result = new Map<string, Map<string, number>>();
   const byPosition = catalogue.run_dates.map(day => {
     const source = catalogue.sources[day], head = index?.revision_heads?.[day];
-    if (!requested.has(day) || !source || catalogue.unavailable_dates[day] || (selection && !selection.dates.has(day))) return null;
+    if (!requested.has(day) || !source || catalogue.unavailable_dates[day] || productCatalogueIndexConflicts(index, day) || (selection && !selection.dates.has(day))) return null;
     if (source.kind === 'published_core' ? !selected.has(day) || !head || source.manifest_sha256 !== head.manifest_sha256 : !readySources && !trustedLegacy) return null;
     const rates = new Map<string, number>();
     result.set(day, rates);

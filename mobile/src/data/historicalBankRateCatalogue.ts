@@ -24,7 +24,7 @@ export interface PreparedHistoricalBankRateCatalogue {
 }
 interface TierState { tier: HistoricalCatalogueTier; broad: Map<number, boolean>; features: Map<string, boolean> }
 interface PreparedState {
-  selection?: { dates: ReadonlySet<string>; fallback: PreparedHistoricalBankRateCatalogue | null; index?: DatesIndex };
+  selection?: { dates: ReadonlySet<string>; fallback: PreparedHistoricalBankRateCatalogue | null; index?: DatesIndex; conflicts: ReadonlySet<string> };
   archiveSha?: string;
   ready?: readonly ReadyHistorySource[];
   sections: Record<SectionKey, TierState[]>;
@@ -93,16 +93,17 @@ export function bindHistoricalCatalogueArchiveReceipt(value: PreparedHistoricalB
 /** Overlay verified legacy dates on the selected prepared fallback without
  * decoding or embedding the obsolete raw APK archive. Each request owns caches. */
 export function selectHistoricalCatalogueDates(primary: PreparedHistoricalBankRateCatalogue,
-  dates: ReadonlySet<string>, fallback: PreparedHistoricalBankRateCatalogue | null, index?: DatesIndex): PreparedHistoricalBankRateCatalogue {
+  dates: ReadonlySet<string>, fallback: PreparedHistoricalBankRateCatalogue | null, index?: DatesIndex,
+  conflicts: ReadonlySet<string> = new Set()): PreparedHistoricalBankRateCatalogue {
   const state = states.get(primary);
   if (!state || (fallback && !states.has(fallback))) throw new Error('History was not prepared');
-  const key = JSON.stringify([[...dates].sort(), index?.revision_heads ?? null]), cached = selectedCatalogues.get(primary);
+  const key = JSON.stringify([[...dates].sort(), index?.revision_heads ?? null, [...conflicts].sort()]), cached = selectedCatalogues.get(primary);
   if (cached?.fallback === fallback && cached.dates === key) return cached.prepared;
   const first = [primary.catalogue.run_dates[0], fallback?.catalogue.run_dates[0]].filter(Boolean).sort()[0];
   const last = [primary.catalogue.run_dates.at(-1)!, fallback?.catalogue.run_dates.at(-1)].filter(Boolean).sort().at(-1)!;
   if ((Date.parse(last) - Date.parse(first!)) / 86_400_000 >= HISTORICAL_CATALOGUE_LIMITS.days) throw new Error('History calendar exceeds budget');
   const result = Object.freeze({ ...primary });
-  states.set(result, { ...state, selection: { dates: new Set(dates), fallback, index },
+  states.set(result, { ...state, selection: { dates: new Set(dates), fallback, index, conflicts: new Set(conflicts) },
     snapshots: new Map(), current: new WeakMap(), pendingSnapshots: new Map(), scopes: new WeakMap() });
   selectedCatalogues.set(primary, { fallback, dates: key, prepared: result });
   return result;
@@ -313,7 +314,7 @@ function* historicalSnapshots(preparation: PreparedHistoricalBankRateCatalogue, 
     const needsFallback = fallback && fallback.catalogue.run_dates.some(day => !dates.has(day) && !!fallback.catalogue.sources[day]);
     const older = needsFallback && fallbackState
       ? yield* historicalSnapshots(fallback, fallbackState, filters, normalized) : {};
-    for (const day of new Set([...catalogue.run_dates, ...(fallback?.catalogue.run_dates ?? []), ...Object.keys(older)])) {
+    for (const day of new Set([...catalogue.run_dates, ...(fallback?.catalogue.run_dates ?? []), ...(state.selection.index?.dates ?? []), ...Object.keys(older)])) {
       if (!dates.has(day)) snapshots[day] = older[day] ?? {};
     }
   }
