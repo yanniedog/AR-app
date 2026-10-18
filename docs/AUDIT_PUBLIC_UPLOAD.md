@@ -26,6 +26,18 @@ uncertain response blocks another copy until the user acknowledges duplicate
 risk. A confirmed receipt clears that uncertainty. No deletion capability or
 local content hash is added to the public body.
 
+Automatic publication verifies its receipt without changing the clipboard;
+**Copy link** is an explicit action. A separate SecureStore recovery record keeps
+the deletion capability if primary receipt persistence fails. If both secure
+writes and cleanup fail, the app explicitly warns that it must stay open until
+deletion succeeds; it does not claim restart-safe recovery in that situation.
+
+Clear invalidates pending report requests and the upload-attempt journal before
+asynchronous deletion, while retaining secure deletion capabilities for external
+copies. Report saves cannot race the full Clear transaction. Completed reports
+use staged replacement with staged-copy recovery, and supported schema-6
+diagnoses are validated and migrated when reopened.
+
 Local-mode update snapshots do not declare an unvisited live update surface as
 missing. Live update journeys still require their actual data and measured layout.
 Responsiveness thresholds and the 10-second step limit are unchanged. Shared

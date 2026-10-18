@@ -20,11 +20,12 @@ export function profileAttributeOptions(rows: readonly RateRow[], field: keyof R
   return [...new Set([...selected, ...available])];
 }
 
-/** Home-loan fields/features are disjoint from Savings and Term deposits. */
+/** Clear Home-loan fields and exclusive features; shared selections keep their other scopes. */
 export function clearHomeLoanRequirements(profile: ProfileFilters): ProfileFilters {
   const mortgageFeatures = new Set(PROFILE_FEATURE_OPTIONS.Mortgage);
+  const otherFeatures = new Set([...PROFILE_FEATURE_OPTIONS.Savings, ...PROFILE_FEATURE_OPTIONS.TD]);
   return { ...profile, loanPurposes: [], rateTypes: [], repaymentTypes: [], lvrTiers: [],
-    accountFeatures: profile.accountFeatures.filter(feature => !mortgageFeatures.has(feature)) };
+    accountFeatures: profile.accountFeatures.filter(feature => !mortgageFeatures.has(feature) || otherFeatures.has(feature)) };
 }
 
 /** Legacy/unrecognised feature selections remain removable without assigning a new meaning. */
@@ -47,9 +48,11 @@ export function catalogueCounts(rows: readonly RateRow[]) {
 
 /** Counts describe the saved layer only; temporary filters and suitability are separate. */
 export function profileRequirementImpact(core: CorePayload | null, profile: ProfileFilters,
-  section: SectionKey, verifiedProducts: Record<string, ProductDetail> | null) {
-  const rows = core?.sections[section].rates ?? [];
-  const pending = !core || (profileFeaturesForSection(profile, section).length > 0 && !verifiedProducts);
-  return { catalogue: core ? catalogueCounts(rows) : null,
-    matching: pending ? null : catalogueCounts(profileFilterRows(rows, profile, section, verifiedProducts)) };
+  section: SectionKey, verifiedProducts: Record<string, ProductDetail> | null,
+  catalogueRows?: readonly RateRow[] | null) {
+  const rows = catalogueRows === undefined ? core?.sections[section].rates ?? [] : catalogueRows ?? [];
+  const catalogueReady = !!core && catalogueRows !== null;
+  const pending = !catalogueReady || (profileFeaturesForSection(profile, section).length > 0 && !verifiedProducts);
+  return { catalogue: catalogueReady ? catalogueCounts(rows) : null,
+    matching: pending ? null : catalogueCounts(profileFilterRows([...rows], profile, section, verifiedProducts)) };
 }

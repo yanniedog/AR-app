@@ -1,8 +1,12 @@
+import { publicScenarioForRow } from '../src/data/publicRateIntegration';
+import { useRatesSession } from '../src/data/ratesSession';
+import { mortgageComparisonScenario } from '../src/data/mortgageComparisonScenario';
+import { useMortgageComparison } from '../src/data/mortgageComparison';
 import { uiCount, uiDate, uiJoin, uiLabel, uiProductName, uiProviderName, type UiCopy, type UiChild } from "../src/lib/uiCopy";
 import { SelectedRateConditions } from "../src/components/product/RateConditionsDisclosure";
 import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { BankAvatar } from '../src/components/BankAvatar';
@@ -29,7 +33,7 @@ import {
 } from '../src/data/compareSelection';
 import { useStore } from '../src/data/store';
 import { usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
-import { publicComparisonCore, publicRateScenario, resolveRowPublicRate } from '../src/data/publicRateIntegration';
+import { publicComparisonCore, publicRateScenario, resolveRowPublicRate, rowWithPublicResolution } from '../src/data/publicRateIntegration';
 import { publicRateText } from '../src/data/publicRatePresentation';
 import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { PublicRateEvidence } from '../src/components/scenario/PublicRateEvidence';
@@ -82,12 +86,20 @@ export default function Compare() {
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
   const compact = usesCompactCompareLayout(width, fontScale);
-  const { keys } = useLocalSearchParams<{ keys: string }>();
+  const { keys, origin } = useLocalSearchParams<{ keys: string; origin?: string }>();
+  const fromRatesComparison = origin === 'rates-comparison';
   const core = useStore((s) => s.core);
   const manifest = useStore(state => state.manifest);
   const profile = useStore(state => state.prefs.profileFilters);
   const catalogue = usePublicRateCatalogue(manifest);
   const { scenario } = useUserRateScenario();
+  const comparisonInputs = useMortgageComparison();
+  const mortgageFilters = useRatesSession(state => state.sections.Mortgage.filters);
+  const scenarioFor = useCallback((section: SectionKey, row?: RateRow) => {
+    const saved = publicRateScenario(section, scenario, profile, row);
+    return publicScenarioForRow(row, catalogue, fromRatesComparison
+      ? mortgageComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved);
+  }, [catalogue, scenario, profile, fromRatesComparison, comparisonInputs, mortgageFilters]);
   const details = useStore((s) => s.details);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
@@ -109,14 +121,14 @@ export default function Compare() {
       list = keys ? keys.split(',') : [];
     }
     return validateCompareSelections(publicComparisonCore(core, catalogue,
-      section => publicRateScenario(section, scenario, profile)), list);
-  }, [core, keys, suitabilityRevision, catalogue, scenario, profile]);
+      section => scenarioFor(section)), list);
+  }, [core, keys, suitabilityRevision, catalogue, scenarioFor]);
   const entries = useMemo<Entry[]>(
     () => comparison && comparison.issue == null ? comparison.entries.map(entry => {
-      const resolution = resolveRowPublicRate(entry.row, catalogue, publicRateScenario(entry.section, scenario, profile, entry.row));
-      return resolution ? { ...entry, row: { ...entry.row, rate: resolution.status === 'exact' && resolution.verifiedCurrent ? resolution.payableRate ?? '' : '' } } : entry;
+      const resolution = resolveRowPublicRate(entry.row, catalogue, scenarioFor(entry.section, entry.row));
+      return resolution ? { ...entry, row: rowWithPublicResolution(entry.row, resolution) } : entry;
     }) : [],
-    [comparison, catalogue, scenario, profile],
+    [comparison, catalogue, scenarioFor],
   );
 
   const calculationRows = useMemo(() => entries.map(entry => entry.row), [entries]);
@@ -225,7 +237,7 @@ export default function Compare() {
   const detailFor = (entry: Entry): ProductDetail | undefined =>
     details?.products?.[entry.row.product_key];
   const commonRows: AttrRow[] = [
-    { label: uiLabel('Payable rate'), get: (e) => { const resolution = resolveRowPublicRate(e.row, catalogue, publicRateScenario(e.section, scenario, profile, e.row)); return resolution ? publicRateText(resolution) : formatRate(e.row.rate); }, tabular: true },
+    { label: uiLabel('Payable rate'), get: (e) => { const resolution = resolveRowPublicRate(e.row, catalogue, scenarioFor(e.section, e.row)); return resolution ? publicRateText(resolution) : formatRate(e.row.rate); }, tabular: true },
     {
       label: uiLabel("Ongoing rate"),
       get: (e) => e.row.ongoing_rate ? formatRate(e.row.ongoing_rate) : 'Unknown',
@@ -535,8 +547,8 @@ export default function Compare() {
       {/* Differences first; calculations and document terms are follow-up detail. */}
       <CanonicalTermsComparison rows={calculationRows} />
       {entries.map(entry => <View key={`public:${entry.row.product_key}:${entry.row.public_offer_id ?? entry.row.rate_index}`}>
-        <PublicRateEvidence productKey={entry.row.product_key} row={entry.row} />
-        <PublicCostComparison section={entry.section} target={entry.row} scenario={scenario} />
+        <PublicRateEvidence productKey={entry.row.product_key} row={entry.row} scenario={scenarioFor(entry.section, entry.row)} />
+        <PublicCostComparison section={entry.section} target={entry.row} scenario={scenario} rateScenario={scenarioFor(entry.section, entry.row)} />
       </View>)}
       {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : entries.every(entry => entry.section === 'Savings') ? <PortfolioComparison rows={entries} /> : entries.every(entry => entry.section === 'Mortgage') ? <MortgageComparison rows={entries} /> : <PersonalCostComparisonDisclosure />}
 

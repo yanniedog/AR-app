@@ -88,6 +88,7 @@ export function rateReceiptShareText(receipt: RateReceipt): UiText {
 
 export interface NegotiationComparable {
   productKey: string;
+  programmeId?: string;
   rateIndex: number | null;
   provider: string;
   productName: string;
@@ -323,6 +324,7 @@ function buildComparables(
     const qualifier = rateQualifier(row, section);
     result.push({
       productKey: row.product_key,
+      programmeId: row.public_programme_id,
       rateIndex: row.rate_index ?? null,
       provider: row.provider,
       productName: row.product_name,

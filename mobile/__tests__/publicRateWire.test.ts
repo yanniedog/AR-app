@@ -3,6 +3,15 @@ import { validatePublicRateCapability, validatePublicRateDiscovery, validatePubl
 import { payloadBundleIdentity } from '../src/data/payloadBundleIdentity';
 import { mergeOptionalManifestFiles } from '../src/data/ingestFinalized';
 
+it('rejects bounds without either limit while admitting one-sided and zero bounds', () => {
+  const { manifest, capability, index, shard } = catalogueFixture();
+  for (const limits of [{}, { minimum: '0' }, { maximum: '10' }]) {
+    shard.programmes[0].conditions = [condition('amount', { operator: 'bounds', ...limits })];
+    const validate = () => validatePublicRateShard(shard, manifest, index, capability.shards[0]);
+    if (Object.keys(limits).length) expect(validate).not.toThrow(); else expect(validate).toThrow();
+  }
+});
+
 it('binds every catalogue index and shard to the selected generation and exact core/details bytes', () => {
   const { manifest, capability, index, shard } = catalogueFixture();
   expect(validatePublicRateCapability(manifest)).toEqual(capability);

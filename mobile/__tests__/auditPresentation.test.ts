@@ -1,5 +1,5 @@
 import { auditOutcome, auditOutcomeCounts, uploadOutcome } from '../src/lib/auditPresentation';
-import type { AuditCheck } from '../src/lib/performanceAudit';
+import { enforcePerformanceAuditStepLimit, type AuditCheck } from '../src/lib/performanceAudit';
 
 test('audit buckets keep timing, real failures, unavailable, skipped and untested links distinct without changing scores', () => {
   const check = (id: string, status: AuditCheck['status'], metrics: AuditCheck['metrics'] = {}): AuditCheck => ({ id, status, metrics, kind: 'journey', durationMs: null, label: id });
@@ -21,4 +21,39 @@ test('a verified upload with a clipboard failure stays verified; an unknown POST
   expect(uploadOutcome({ ...state, phase: 'failed', mayHaveUploaded: true })).toBe('uncertain');
   expect(uploadOutcome({ ...state, phase: 'failed', url: 'https://example.test/report' })).toBe('uncertain');
   expect(uploadOutcome({ ...state, phase: 'failed', verified: true })).toBe('verified');
+});
+
+test('scenario recovery remains skipped while terminal source availability remains unavailable', () => {
+  const recovered: AuditCheck = { id: 'deep-recovery', kind: 'journey', status: 'skipped', durationMs: null, label: 'Recovery',
+    metrics: { skipClassification: 'scenario-recovery', scenarioRecoveryCascade: true, executionAttempted: false,
+      actionInvoked: false, actionCompleted: false, routeStateInvalidated: false } };
+  const unavailable: AuditCheck = { ...recovered, id: 'deep-unavailable', metrics: { skipClassification: 'terminal-availability', executionAttempted: false } };
+  const before = JSON.stringify([recovered, unavailable]);
+  expect(auditOutcome(recovered)).toBe('skipped');
+  expect(auditOutcome(unavailable)).toBe('unavailable');
+  expect(auditOutcomeCounts([recovered, unavailable])).toMatchObject({ skipped: 1, unavailable: 1 });
+  expect(JSON.stringify([recovered, unavailable])).toBe(before);
+});
+
+test('the actual step-limit producer marks non-journey overruns as timing unless a real failure is recorded', () => {
+  const source: AuditCheck = { id: 'integrity-check', kind: 'data', status: 'pass', durationMs: 10_001, label: 'Integrity', metrics: {} };
+  const overrun = enforcePerformanceAuditStepLimit(source);
+  expect(overrun.metrics.stepLimitExceeded).toBe(true);
+  expect(auditOutcome(overrun)).toBe('timing');
+  expect(auditOutcome(enforcePerformanceAuditStepLimit({ ...source, status: 'fail', metrics: { nonTimingFailure: true } }))).toBe('failure');
+  expect(auditOutcome(enforcePerformanceAuditStepLimit({ ...source, durationMs: 10_000 }))).toBe('pass');
+  expect(source.status).toBe('pass'); expect(source.metrics).toEqual({});
+});
+
+
+test('completed route round trips classify latency while navigation and back contract failures remain failures', () => {
+  const route: AuditCheck = { id: 'journey-product-1', kind: 'journey', label: 'Product', status: 'fail', durationMs: 3500,
+    metrics: { measurementMode: 'route-round-trip', actionCompleted: true, forwardMs: 2800, backMs: 300,
+      backReturnedToAudit: true, backChangedPath: true, nonTimingFailure: false } };
+  expect(auditOutcome(route)).toBe('timing');
+  const invalid: AuditCheck['metrics'][] = [{ nonTimingFailure: true }, { actionCompleted: false }, { backChangedPath: false },
+    { backReturnedToAudit: false }, { backMs: null }, { forwardMs: NaN }];
+  for (const metrics of invalid) {
+    expect(auditOutcome({ ...route, metrics: { ...route.metrics, ...metrics } })).toBe('failure');
+  }
 });

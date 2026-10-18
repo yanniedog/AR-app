@@ -505,6 +505,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
             pathname: '/rate-receipt',
             params: {
               key: productKey,
+              ...(stringParameter(step, 'origin') === 'rates-comparison' ? { origin: 'rates-comparison' } : {}),
               ...(programmeId ? { programme: programmeId } : rateIndex == null ? {} : { ri: String(rateIndex) }),
             },
           } as unknown as Href)
@@ -1518,7 +1519,7 @@ async function runMaximumCoverageProfileCheck(
   };
 }
 
-async function runStorageCheck(
+export async function runStorageCheck(
   sessionId: string,
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
@@ -1580,6 +1581,8 @@ async function runStorageCheck(
         ),
     durationMs: roundMetric(now() - started),
     metrics: {
+      measurementAvailable: error == null,
+      nonTimingFailure: error != null,
       payloadBytes: payload.length,
       iterations: writeTimes.length,
       maxWriteMs: maxWriteMs == null ? null : roundMetric(maxWriteMs),
@@ -1597,7 +1600,7 @@ async function runStorageCheck(
   };
 }
 
-async function runFileSystemCheck(
+export async function runFileSystemCheck(
   sessionId: string,
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
@@ -1672,6 +1675,8 @@ async function runFileSystemCheck(
         ),
     durationMs: roundMetric(now() - started),
     metrics: {
+      measurementAvailable: error == null,
+      nonTimingFailure: error != null,
       payloadBytes: payload.length,
       writeMs: writeMs == null ? null : roundMetric(writeMs),
       readMs: readMs == null ? null : roundMetric(readMs),
@@ -1740,6 +1745,8 @@ async function runDataCheck(
     status: error ? 'fail' : processingStatus,
     durationMs: roundMetric(now() - started),
     metrics: {
+      measurementAvailable: error == null,
+      nonTimingFailure: error != null,
       ...capacityMetrics,
       payloadChars,
       rateRows,
@@ -1940,6 +1947,8 @@ async function runSectionModelCheck(
       : scoreLatency(phaseMaximum, 100, 500),
     durationMs: roundMetric(now() - started),
     metrics: {
+      measurementAvailable: error == null,
+      nonTimingFailure: error != null,
       section,
       rows: first?.rows ?? null,
       visibleRows: first?.visibleRows ?? null,
@@ -1963,7 +1972,7 @@ async function runSectionModelCheck(
   };
 }
 
-async function runLogIoCheck(
+export async function runLogIoCheck(
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
@@ -2009,6 +2018,8 @@ async function runLogIoCheck(
         ),
     durationMs: roundMetric(now() - started),
     metrics: {
+      measurementAvailable: error == null,
+      nonTimingFailure: error != null,
       bytes,
       sampledBytes: bytes == null ? null : Math.min(bytes, 16 * 1024),
       fullExportMeasured: false,

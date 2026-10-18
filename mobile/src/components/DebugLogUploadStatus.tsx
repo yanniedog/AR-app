@@ -17,6 +17,7 @@ const LABELS: Record<ReturnType<typeof getDebugLogUploadSnapshot>['phase'], UiLa
   preparing: 'Preparing',
   uploading: 'Uploading',
   verifying: 'Verifying',
+  verified: 'Uploaded',
   copying: 'Copying',
   copied: 'Copied',
   failed: 'Upload failed',
@@ -41,7 +42,7 @@ export function DebugLogUploadStatus({ sessionId }: { sessionId?: string | null 
         <AppText variant="small">{uiJoin('Delete uploaded log', ': ', 'Required')}</AppText>
         <Button title="Debug log" variant="secondary" onPress={() => router.push('/debug-log')} />
       </> : null}
-      {!state.preparationFailed && (state.phase === 'failed' || state.phase === 'copied') ? (
+      {!state.preparationFailed && (state.phase === 'failed' || state.phase === 'copied' || state.phase === 'verified') ? (
         <Button
           title={state.verified ? 'Copy link' : state.url ? 'Retry verification' : state.mayHaveUploaded ? 'Upload another copy' : 'Retry upload'}
           variant="secondary"

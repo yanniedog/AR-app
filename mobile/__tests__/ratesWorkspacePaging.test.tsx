@@ -1,5 +1,6 @@
-import { catalogue as publicCatalogueFixture, programme as publicProgramme, product as publicProduct } from '../testUtils/publicRateJourney';
+import { catalogue as publicCatalogueFixture, programme as publicProgramme, product as publicProduct, row as publicRow } from '../testUtils/publicRateJourney';
 import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
+import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
@@ -128,7 +129,15 @@ beforeEach(() => {
 });
 afterEach(() => { jest.restoreAllMocks(); restoreRatesSession(original); clearMortgageComparison(); installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null)); });
 function mount() { let tree: any; act(() => { tree = TestRenderer.create(<RatesWorkspace />); }); return tree; }
-test('the mounted workspace pages sorted rows, retains cross-page selections, and clamps size/dataset changes', () => {
+function currentProgramme(row: (typeof rows)[number], programmeId: string, offerId: string) {
+  const value = publicProgramme({ productId: row.product_key, programmeId, offerId,
+    sourceBindings: [{ rateIndex: row.rate_index, pointer: `/lendingRates/${row.rate_index}` }] });
+  return { ...value, freshness: { ...value.freshness, lastSuccessAt: new Date().toISOString() }, components: [
+    { ...value.components[0], value: row.rate, scopeId: offerId },
+    { ...value.components[0], componentId: 'comparison', role: 'comparison' as const, value: row.comparison_rate, scopeId: offerId },
+  ] };
+}
+test('the mounted workspace pages sorted rows, retains selections, resets page-size position and clamps dataset changes', () => {
   const tree = mount();
   const list = () => tree.root.findByType('FlashList').props;
   const button = (name: string) => tree.root.findAllByType('Button').find((node: any) => node.props.accessibilityLabel === name);
@@ -139,7 +148,8 @@ test('the mounted workspace pages sorted rows, retains cross-page selections, an
     expect(list().data[0].rate_index).toBe(20); expect(list().data).toHaveLength(20);
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['0#p-0']);
     act(() => button('Last page').props.onPress()); expect(list().data.map((row: any) => row.rate_index)).toEqual([40, 41, 42, 43, 44]);
-    act(() => mockStore.getState().setPref('ratesPageSize', 10)); expect(list().data[0].rate_index).toBe(20); expect(list().data).toHaveLength(10);
+    act(() => mockStore.getState().setPref('ratesPageSize', 10)); expect(list().data[0].rate_index).toBe(0); expect(list().data).toHaveLength(10);
+    expect(useRatesSession.getState().sections.Mortgage).toMatchObject({ page: 1, scrollOffset: 0, selected: ['0#p-0'] });
     act(() => button('Last page').props.onPress()); expect(list().data[0].rate_index).toBe(40);
     act(() => mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: rows.slice(-11) } } } })));
     expect(list().data).toHaveLength(1); expect(list().data[0].rate_index).toBe(10);
@@ -221,7 +231,7 @@ test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seed
       }
     }
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(targets.map(target => target.selectionToken));
-    expect(openCompare).toHaveBeenCalledWith(targets.map(target => target.selectionToken));
+    expect(openCompare).toHaveBeenCalledWith(targets.map(target => target.selectionToken), 'rates-comparison');
     expect(mockStore.getState().prefs).toEqual(preferences);
     expect(mockStore.getState().setPref).not.toHaveBeenCalled();
     let lastPage: unknown; act(() => { lastPage = surface().actions!['search.compare.page.0']({ selectionToken: '44#p-44' }); });
@@ -547,8 +557,7 @@ test('native completion without exact viewability uses bounded readiness and per
 
 test.each([10, 20])('combined ready public catalogue uses exact virtualized offer keys and programme navigation with %s-row pages', async (pageSize) => {
   const products = rows.map(row => ({ ...publicProduct, productId: row.product_key, productKey: row.product_key, name: row.product_name, programmeIds: [`programme-${row.rate_index}`] }));
-  const programmes = rows.map(row => publicProgramme({ productId: row.product_key, programmeId: `programme-${row.rate_index}`, offerId: `offer-${row.rate_index}`,
-    sourceBindings: [{ rateIndex: row.rate_index, pointer: `/lendingRates/${row.rate_index}` }] }));
+  const programmes = rows.map(row => currentProgramme(row, `programme-${row.rate_index}`, `offer-${row.rate_index}`));
   mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes, products, []), generationId: 'synthetic-generation-1' };
   mockStore.setState((state: any) => ({ prefs: { ...state.prefs, ratesPageSize: pageSize } }));
   updateRatesSection('Mortgage', { page: Math.floor(35 / pageSize) + 1, selectMode: true });
@@ -569,7 +578,7 @@ test.each([10, 20])('combined ready public catalogue uses exact virtualized offe
     act(() => { updateRatesSection('Mortgage', { selectMode: false }); });
     const card = tree.root.findAllByType('ProductCard').find((node: any) => node.props.row.rate_index === 35);
     act(() => { card.props.onPress(); });
-    expect(openProduct).toHaveBeenCalledWith('p-35', 35, 'programme-35');
+    expect(openProduct).toHaveBeenCalledWith('p-35', 35, 'programme-35', 'rates-comparison');
   } finally { act(() => tree.unmount()); }
 });
 
@@ -578,9 +587,7 @@ test('distinct opaque public pairs retain separate native keys and exact audit s
     { ...rows.at(-2)!, product_key: 'UNIT', product_name: 'Loan B', rate_index: 1 }];
   const products = collisionRows.map((row, index) => ({ ...publicProduct, productId: row.product_key, productKey: row.product_key,
     name: row.product_name, programmeIds: [`collision-programme-${index}`] }));
-  const programmes = collisionRows.map((row, index) => publicProgramme({ productId: row.product_key,
-    programmeId: `collision-programme-${index}`, offerId: index === 0 ? 'B' : 'A-B',
-    sourceBindings: [{ rateIndex: index, pointer: `/lendingRates/${index}` }] }));
+  const programmes = collisionRows.map((row, index) => currentProgramme(row, `collision-programme-${index}`, index === 0 ? 'B' : 'A-B'));
   mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes, products, []), generationId: 'collision-generation' };
   mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: collisionRows } } } }));
   install(); updateRatesSection('Mortgage', { selectMode: true });
@@ -599,5 +606,184 @@ test('distinct opaque public pairs retain separate native keys and exact audit s
     expect(surface().probes!.find(probe => probe.id === 'search.audit-target')).toMatchObject({ status: 'ready', visibleCount: 1 });
     act(() => { surface().actions!['search.compare.select.1']({ selectionToken: token }); });
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([token]);
+  } finally { act(() => tree.unmount()); }
+});
+
+
+test('public-resolved rows retain exact admitted source bounds in the mounted comparison pipeline', () => {
+  const sourceRow = { ...rows.find(row => row.rate_index === 4)!, product_key: publicProduct.productKey,
+    product_name: publicProduct.name, provider: publicProduct.providerName, lvr_tier: 'lvr_=80%' };
+  const publication = selectedConstraintFixture('Mortgage', [sourceRow], [{ rateIndex: 4, text: 'LVR up to 70%.' }]);
+  const product = { ...publicProduct, productId: sourceRow.product_key, programmeIds: ['source-bound'] };
+  const programme = currentProgramme(sourceRow, 'source-bound', 'source-bound-offer');
+  mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([programme], [product], []), generationId: 'verified-source-pricing' };
+  mockStore.setState({ core: publication.core, coreIntegrity: publication.coreIntegrity,
+    details: publication.details, manifest: publication.manifest });
+  useMortgageComparison.setState({ loanAmount: '', lvr: '75' });
+  install();
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  try {
+    // The normalized tier admits 75%, but exact verified source wording does not.
+    expect(list().data).toEqual([]);
+    act(() => useMortgageComparison.setState({ lvr: '65' }));
+    expect(list().data).toHaveLength(1);
+    expect(list().data[0]).toMatchObject({ public_offer_id: 'source-bound-offer' });
+    expect(list().data[0]).not.toBe(publication.rows[0]);
+    expect(tree.root.findByType('ProductCard').props.comparisonUnverified).toBe(false);
+    expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ lvr: '0.65' });
+    act(() => useMortgageComparison.setState({ lvr: '70' }));
+    expect(list().data).toHaveLength(1);
+    act(() => useMortgageComparison.setState({ lvr: '70.01' }));
+    expect(list().data).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('entered comparison inputs select public pricing before ranking, cards and comparison selections', () => {
+  const products = [{ ...publicProduct, programmeIds: ['low-lvr', 'high-lvr'] }];
+  const programmes = [
+    { id: 'low-lvr', min: undefined, max: '0.7', value: '0.05' },
+    { id: 'high-lvr', min: '0.7', max: '0.8', value: '0.06' },
+  ].map(({ id, min, max, value }) => {
+    const programme = publicProgramme({ programmeId: id, offerId: id, sourceBindings: [], conditions: [
+      { conditionId: id + '-amount', field: 'amount', operator: 'bounds', minimum: '500000', evidenceIds: [] },
+      { conditionId: id + '-lvr', field: 'lvr', operator: 'bounds', minimum: min, maximum: max, evidenceIds: [] },
+    ] });
+    return { ...programme, freshness: { ...programme.freshness, lastSuccessAt: new Date().toISOString() },
+      components: [{ ...programme.components[0], value, scopeId: id }] };
+  });
+  mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes, products, []), generationId: 'input-pricing' };
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [] } } },
+    prefs: { ...state.prefs, profileFilters: { ...state.prefs.profileFilters, rateTypes: ['VARIABLE'] } } }));
+  useMortgageComparison.setState({ loanAmount: '600000', lvr: '75' });
+  install();
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  try {
+    expect(list().data.map((row: any) => [row.public_offer_id, row.rate])).toEqual([['high-lvr', '0.06']]);
+    const savedFacts = () => tree.root.findAllByType('AppText').map((node: any) => node.props.children);
+    expect(savedFacts()).toContain('Catalogue: 0 products · 0 banks · 0 rates');
+    expect(savedFacts()).toContain('After saved requirements: 0 products · 0 banks · 0 rates');
+    expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.75' });
+    act(() => updateRatesSection('Mortgage', { selectMode: true }));
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([publicOfferSelectionToken(publicProduct.productKey, 'high-lvr')]);
+    const completeCatalogue = mockPublicCatalogue;
+    for (const status of ['loading', 'error', 'ready']) {
+      mockPublicCatalogue = { ...completeCatalogue, status, allLoaded: false };
+      act(() => { tree.update(<RatesWorkspace />); });
+      expect(savedFacts()).toContain('Catalogue: Pending');
+      expect(savedFacts()).toContain('After saved requirements: Pending');
+      expect(savedFacts()).not.toContain('Catalogue: 0 products · 0 banks · 0 rates');
+      expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([publicOfferSelectionToken(publicProduct.productKey, 'high-lvr')]);
+    }
+    mockPublicCatalogue = completeCatalogue;
+    act(() => { tree.update(<RatesWorkspace />); });
+    act(() => useMortgageComparison.setState({ lvr: '65' }));
+    expect(list().data.map((row: any) => [row.public_offer_id, row.rate])).toEqual([['low-lvr', '0.05']]);
+    expect(savedFacts()).toContain('Catalogue: 0 products · 0 banks · 0 rates');
+    expect(savedFacts()).not.toContain('Catalogue: 1 products · 1 banks · 1 rates');
+    expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.65' });
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
+    act(() => tree.root.findByType('ProductCard').props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([publicOfferSelectionToken(publicProduct.productKey, 'low-lvr')]);
+    act(() => useMortgageComparison.setState({ loanAmount: '400000' }));
+    expect(list().data).toEqual([]);
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('temporary purpose and repayment chips resolve public offers before filtering and keep saved requirements mandatory', () => {
+  const p = publicProgramme({ sourceBindings: [], conditions: [
+    { conditionId: 'purpose', field: 'purpose', operator: 'eq', value: 'INVESTMENT', evidenceIds: [] },
+    { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: 'INTEREST_ONLY', evidenceIds: [] },
+  ] });
+  mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([{ ...p,
+    freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() } }], [publicProduct], []), generationId: 'temporary-facets' };
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [] } } } }));
+  install();
+  const saved = JSON.stringify(mockStore.getState().prefs.profileFilters);
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  try {
+    expect(list().data).toEqual([]);
+    act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: ['INVESTMENT'] } })));
+    expect(list().data).toEqual([]);
+    act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, repaymentTypes: ['INTEREST_ONLY'] } })));
+    expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
+    expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ purpose: 'INVESTMENT', repayment: 'INTEREST_ONLY' });
+    expect(JSON.stringify(mockStore.getState().prefs.profileFilters)).toBe(saved);
+    expect(mockStore.getState().setPref).not.toHaveBeenCalled();
+    act(() => {
+      const profile = { ...DEFAULT_PREFS.profileFilters, loanPurposes: ['OWNER_OCCUPIED'] };
+      mockStore.setState((state: any) => ({ prefs: { ...state.prefs, profileFilters: profile } })); install(profile);
+    });
+    expect(list().data).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
+
+
+test.each([false, true])('public-only facet chips reveal an offer with saved legacy aliases: %s', (bound) => {
+  const source = { ...publicRow, rate_index: 0, loan_purpose: 'OO', repayment_type: 'PI', ribbon_repayment_type: 'PI' };
+  const p = publicProgramme({ sourceBindings: bound ? [{ rateIndex: source.rate_index, pointer: `/lendingRates/${source.rate_index}` }] : [], conditions: [
+    { conditionId: 'purpose', field: 'purpose', operator: 'in', values: ['OWNER_OCCUPIED', 'INVESTMENT'], evidenceIds: [] },
+    { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: 'PRINCIPAL_AND_INTEREST', evidenceIds: [] },
+  ] });
+  mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([{ ...p,
+    freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() } }], [publicProduct], []), generationId: 'public-facet-chips' };
+  const profile = { ...DEFAULT_PREFS.profileFilters, loanPurposes: ['OO'], repaymentTypes: ['PI'] };
+  mockStore.setState((state: any) => ({ prefs: { ...state.prefs, profileFilters: profile }, core: { ...state.core,
+    sections: { ...state.core.sections, Mortgage: { rates: bound ? [source] : [] } } } }));
+  install(profile);
+  const saved = JSON.stringify(mockStore.getState().prefs.profileFilters);
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  const controls = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' });
+  const chips = () => controls().findAllByType('Chip');
+  try {
+    const labels = chips().map((chip: any) => chip.props.label);
+    expect(labels.filter((label: string) => label === 'Owner occupied')).toHaveLength(1);
+    expect(labels.filter((label: string) => label === 'Principal & interest')).toHaveLength(1);
+    const purpose = chips().find((chip: any) => chip.props.label === 'Owner occupied');
+    expect({ labels, found: Boolean(purpose) }).toMatchObject({ found: true });
+    const repayment = chips().find((chip: any) => chip.props.label === 'Principal & interest');
+    expect({ labels, found: Boolean(repayment) }).toMatchObject({ found: true });
+    act(() => purpose!.props.onPress());
+    act(() => repayment!.props.onPress());
+    expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
+    act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
+      loanPurposes: ['OWNER_OCCUPIED'], repaymentTypes: ['PRINCIPAL_AND_INTEREST'] } })));
+    expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
+    expect(JSON.stringify(mockStore.getState().prefs.profileFilters)).toBe(saved);
+    expect(mockStore.getState().setPref).not.toHaveBeenCalled();
+  } finally { act(() => tree.unmount()); }
+});
+
+test('multiple mortgage chips retain both public-only offers with exact row pricing scope', () => {
+  const options = [['owner-pi', 'OWNER_OCCUPIED', 'PRINCIPAL_AND_INTEREST', '0.05'], ['investor-io', 'INVESTMENT', 'INTEREST_ONLY', '0.06']];
+  const programmes = options.map(([id, purpose, repayment, value]) => {
+    const p = publicProgramme({ programmeId: id, offerId: id, sourceBindings: [], conditions: [
+      { conditionId: id + '-purpose', field: 'purpose', operator: 'eq', value: purpose, evidenceIds: [] },
+      { conditionId: id + '-repayment', field: 'repayment', operator: 'eq', value: repayment, evidenceIds: [] },
+    ] });
+    return { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() }, components: [{ ...p.components[0], value, scopeId: id }] };
+  });
+  mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes,
+    [{ ...publicProduct, programmeIds: programmes.map(p => p.programmeId) }], []), generationId: 'or-facets' };
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [] } } } }));
+  install();
+  const tree = mount();
+  try {
+    const chips = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' }).findAllByType('Chip');
+    for (const label of ['Owner occupied', 'Investor', 'Principal & interest', 'Interest only']) {
+      act(() => chips().find((chip: any) => chip.props.label === label)!.props.onPress());
+    }
+    expect(tree.root.findByType('FlashList').props.data.map((row: any) => [row.public_offer_id, row.rate]))
+      .toEqual([['owner-pi', '0.05'], ['investor-io', '0.06']]);
+    expect(tree.root.findAllByType('ProductCard').map((card: any) => [card.props.rateScenario.purpose, card.props.rateScenario.repayment]))
+      .toEqual(options.map(([, purpose, repayment]) => [purpose, repayment]));
+    act(() => updateRatesSection('Mortgage', { selectMode: true }));
+    for (const card of tree.root.findAllByType('ProductCard')) act(() => card.props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toHaveLength(2);
+    act(() => chips().find((chip: any) => chip.props.label === 'Owner occupied')!.props.onPress());
+    expect(tree.root.findByType('FlashList').props.data.map((row: any) => row.public_offer_id)).toEqual(['investor-io']);
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([publicOfferSelectionToken(publicProduct.productKey, 'investor-io')]);
+    expect(mockStore.getState().setPref).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });

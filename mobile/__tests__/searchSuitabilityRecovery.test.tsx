@@ -451,7 +451,7 @@ test('the canonical list pages all 24 rows in groups of 20 and taps preserve the
     const list = tree.root.findByType('FlashList' as any); expect(list.props.data).toHaveLength(20);
     expect(list.props.ListFooterComponent.props).toMatchObject({ total: 24, page: 1, size: 20 });
     const card = tree.root.findAllByType('ProductCard' as any)[0]; act(() => card.props.onPress());
-    expect(router.push).toHaveBeenCalledWith({ pathname: '/product/[key]', params: { key: card.props.row.product_key, ri: String(card.props.row.rate_index) } });
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/product/[key]', params: { key: card.props.row.product_key, ri: String(card.props.row.rate_index), origin: 'rates-comparison' } });
     expect(mockSurfaces.get('rates.results').routeKey).toBe('/browse');
     act(() => list.props.ListFooterComponent.props.onPage(2));
     expect(list.props.data.map((row: RateRow) => row.rate_index)).toEqual([20, 21, 22, 23]);
@@ -664,7 +664,7 @@ test.each([[411, 1, 0], [360, 2, 48]])('Compare reserves its own bottom space at
 
     act(() => button.props.onPress());
     expect(router.push).toHaveBeenCalledTimes(1);
-    expect(router.push).toHaveBeenCalledWith({ pathname: '/compare', params: { keys: JSON.stringify(tokens) } });
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/compare', params: { keys: JSON.stringify(tokens), origin: 'rates-comparison' } });
     expect(cards.map((card: any) => card.props.selected)).toEqual([true, true]);
     expect(useRatesSession.getState().sections.TD.scrollOffset).toBe(420);
     expect(tree.root.findByType('FlashList' as any)).toBe(list);

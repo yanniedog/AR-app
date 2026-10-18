@@ -30,6 +30,7 @@ function patchQueryString(projectDir = path.resolve(__dirname, '..')) {
 
 if (require.main === module) {
   patchQueryString();
+  require('./patch-legacy-yaml-cli.cjs').patchLegacyYamlCli();
   require('./patch-task-manager-timers.cjs').patchTaskManagerTimers();
   require('./patch-background-task-scheduler.cjs').patchBackgroundTaskScheduler();
 }

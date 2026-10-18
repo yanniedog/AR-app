@@ -25,7 +25,7 @@ export function startPerformanceAuditLogUpload(
   uploadLog: boolean,
   request: { sessionId: string; appVersion: string; buildVersion: string;
     audit: { summaryMarker: string; report: PerformanceAuditReport } },
-): void {
+): ReturnType<typeof uploadCompletedPerformanceAudit> | undefined {
   if (!uploadLog) return;
-  void uploadCompletedPerformanceAudit(request.audit.report);
+  return uploadCompletedPerformanceAudit(request.audit.report);
 }

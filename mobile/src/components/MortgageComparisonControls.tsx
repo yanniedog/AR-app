@@ -1,3 +1,5 @@
+import { canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
+import type { PublicCatalogueView } from '../data/publicRateIntegration';
 import React, { useMemo } from 'react';
 import { TextInput, useWindowDimensions, View } from 'react-native';
 import { useMortgageComparison, clearMortgageComparison } from '../data/mortgageComparison';
@@ -12,16 +14,40 @@ import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Chip, Row } from './ui';
 import { SegmentedControl } from './controls';
 
-export function MortgageComparisonControls({ rows, filters, unverified, invalid }: {
-  rows: RateRow[]; filters: Filters; unverified: number; invalid: boolean;
+export function MortgageComparisonControls({ rows, catalogue, filters, unverified, invalid }: {
+  rows: RateRow[]; catalogue?: PublicCatalogueView; filters: Filters; unverified: number; invalid: boolean;
 }) {
   const theme = useTheme(), value = useMortgageComparison();
   const { fontScale } = useWindowDimensions();
   const metric = useStore(state => state.prefs.mortgageRateMetric);
   const groups = useMemo(() => [
-    { key: 'loanPurposes' as const, field: 'loan_purpose' as const },
-    { key: 'repaymentTypes' as const, field: 'ribbon_repayment_type' as const },
-  ].map(group => ({ ...group, options: profileAttributeOptions(rows, group.field, filters[group.key]) })), [filters, rows]);
+    { key: 'loanPurposes' as const, field: 'loan_purpose' as const, condition: 'purpose', canonical: canonicalPurpose },
+    { key: 'repaymentTypes' as const, field: 'ribbon_repayment_type' as const, condition: 'repayment', canonical: canonicalRepayment },
+  ].map(group => {
+    // Discover options before scenario resolution, including loaded offers whose conditions are not yet met.
+    const meanings = new Set<string | undefined>();
+    const options = profileAttributeOptions(rows, group.field, filters[group.key]).filter(option => {
+      const meaning = group.canonical(option), duplicate = meanings.has(meaning);
+      meanings.add(meaning);
+      return filters[group.key].includes(option) || !duplicate;
+    });
+    for (const product of catalogue?.products ?? []) {
+      if (product.section !== 'Mortgage' || product.status === 'legacy') continue;
+      for (const programme of catalogue!.getProgrammes(product.productId)) {
+        if (programme.section !== 'Mortgage') continue;
+        for (const condition of programme.conditions) {
+          if (condition.field !== group.condition) continue;
+          const values = condition.operator === 'eq' ? [condition.value] : condition.operator === 'in' ? condition.values ?? [] : [];
+          for (const value of values) {
+            if (typeof value !== 'string' || !value.trim()) continue;
+            const option = group.canonical(value)!;
+            if (!meanings.has(option)) { options.push(option); meanings.add(option); }
+          }
+        }
+      }
+    }
+    return { ...group, options };
+  }), [catalogue, filters, rows]);
   const change = (field: 'loanAmount' | 'lvr', text: string) => {
     useMortgageComparison.setState({ [field]: text }); updateRatesSection('Mortgage', { page: 1 }, true);
   };
@@ -43,7 +69,7 @@ export function MortgageComparisonControls({ rows, filters, unverified, invalid 
       onChange={next => useStore.getState().setPref('mortgageRateMetric', next)} />
     {invalid ? <AppText color="danger">{uiLabel('Invalid comparison inputs')}</AppText> : unverified > 0 ? <AppText variant="small">{uiJoin('Eligibility unverified', ' · ', uiCount(unverified))}</AppText> : null}
     <Button title="Clear comparison inputs" variant="ghost" onPress={() => {
-      clearMortgageComparison(); updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: [], repaymentTypes: [] }, page: 1 }), true);
+      clearMortgageComparison(); updateRatesSection('Mortgage', { page: 1 }, true);
     }} />
   </View>;
 }

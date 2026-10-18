@@ -1,3 +1,4 @@
+import type { RateScenario } from '../../data/publicRateModel';
 import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import type { RateRow, SectionKey } from '../../types';
@@ -9,7 +10,7 @@ import { scenarioPublicCost } from '../../data/scenarioPublicCost';
 import { estimatePublicCost } from '../../data/publicCost';
 import { publicRateReason } from '../../data/publicRatePresentation';
 import { AppText, Disclosure } from '../ui';
-import { uiCount, uiDecimal, uiJoin, uiLabel, uiOpaqueEnum, uiProductName, uiProviderName, type UiCopy } from '../../lib/uiCopy';
+import { uiCount, uiDecimal, uiJoin, uiLabel, uiOpaqueEnum, uiProductName, uiProviderName, uiRate, type UiCopy } from '../../lib/uiCopy';
 
 /** Closed presentation of deterministic model assumptions, never provider prose. */
 function assumptionFact(value: string) {
@@ -44,7 +45,7 @@ function assumptionFact(value: string) {
   return uiJoin(facts[value] ?? uiLabel('Source review required'));
 }
 
-export function PublicCostComparison({ section, target, scenario }: { section: SectionKey; target: RateRow; scenario: UserRateScenario }) {
+export function PublicCostComparison({ section, target, scenario, rateScenario }: { section: SectionKey; target: RateRow; scenario: UserRateScenario; rateScenario?: RateScenario }) {
   const manifest = useStore(state => state.manifest);
   const profile = useStore(state => state.prefs?.profileFilters);
   const details = useStore(state => state.details?.products);
@@ -52,7 +53,7 @@ export function PublicCostComparison({ section, target, scenario }: { section: S
   const [open, setOpen] = useState(false);
   const result = useMemo(() => {
     const row = bindCurrentPublicRow(target, catalogue);
-    const selectedScenario = publicRateScenario(section, scenario, profile, row);
+    const selectedScenario = rateScenario ?? publicRateScenario(section, scenario, profile, row);
     const rate = resolveRowPublicRate(row, catalogue, selectedScenario);
     if (!rate) return undefined;
     const product = catalogue.getProduct(row.product_key);
@@ -60,13 +61,15 @@ export function PublicCostComparison({ section, target, scenario }: { section: S
     const key = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
     const bridge = scenarioPublicCost({ section, scenario, row, programme, rateScenario: selectedScenario,
       targetDetail: details?.[row.product_key], currentDetail: details?.[scenario.currentProducts?.[key]?.productKey ?? ''] });
-    return { estimate: bridge.scenario ? estimatePublicCost(rate, bridge.scenario) : undefined, reasons: bridge.reasonCodes, assumptions: bridge.assumptions };
-  }, [target, catalogue, section, scenario, profile, details]);
+    return { estimate: bridge.scenario ? estimatePublicCost(rate, bridge.scenario) : undefined, reasons: bridge.reasonCodes, assumptions: bridge.assumptions, selectedScenario };
+  }, [target, catalogue, section, scenario, profile, details, rateScenario]);
   if (!result) return null;
   const estimate = result.estimate;
   return <View style={{ marginBottom: 16 }}><Disclosure title="Cost / return" open={open} onToggle={() => setOpen(value => !value)}>
     <View style={{ gap: 6 }}>
       <AppText variant="small" weight="700">{uiJoin(uiProviderName(target), ' · ', uiProductName(target))}</AppText>
+      {section === 'Mortgage' && result.selectedScenario.amount != null ? <AppText variant="tiny">{uiJoin('Loan amount', ': ', uiDecimal(result.selectedScenario.amount))}</AppText> : null}
+      {section === 'Mortgage' && result.selectedScenario.lvr != null ? <AppText variant="tiny">{uiJoin('LVR', ': ', uiRate(Number(result.selectedScenario.lvr), 4))}</AppText> : null}
       <AppText variant="small">{uiJoin('Costs', ': ', estimate?.completeness === 'complete' ? 'Complete under assumptions' : estimate ? uiOpaqueEnum(estimate.completeness.toUpperCase()) : 'Unavailable')}</AppText>
       <AppText variant="tiny" color="textMuted">{uiJoin('Interest basis', ': ', 'Payable nominal rate', ' · ', 'Comparison rate', ': ', 'Excluded', ' · ', 'Charged rate', ': ', 'Unverified')}</AppText>
       {estimate ? <AppText variant="tiny">{uiJoin('Projection horizon', ': ', uiCount(estimate.requestedDays != null ? estimate.projectedDays ?? 0 : estimate.projectedMonths), ' ', 'of', ' ', uiCount(estimate.requestedDays ?? estimate.requestedMonths), ' ', estimate.requestedDays != null ? 'days' : 'months')}</AppText> : null}

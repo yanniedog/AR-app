@@ -1,3 +1,7 @@
+import type { RateRow, SectionKey } from '../../src/types';
+import { useRatesSession } from '../../src/data/ratesSession';
+import { useMortgageComparison } from '../../src/data/mortgageComparison';
+import { mortgageComparisonScenario } from '../../src/data/mortgageComparisonScenario';
 import { ActivityPeriodCalculation } from '../../src/components/product/ActivityPeriodCalculation';
 import { MortgagePeriodCalculation } from '../../src/components/product/MortgagePeriodCalculation';
 import { SavingsPeriodCalculation } from '../../src/components/product/SavingsPeriodCalculation';
@@ -49,6 +53,7 @@ import { uiTargetConstraint } from '../../src/lib/financialUiCopy';
 import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
 import { normalizedProductFacts } from '../../src/data/productFacts';
 import { verifiedDetailsSha } from '../../src/data/detailsIdentity';
+import { eligiblePublicProductKeys } from '../../src/data/publicProductEligibility';
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
 import { sortRows, findEligibleByKey } from '../../src/data/selectors';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
@@ -83,7 +88,7 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { ratePresentation } from '../../src/data/ratePresentation';
 import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
-import { bindCurrentPublicRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
+import { bindCurrentPublicRow, publicRateScenario, publicScenarioForRow, publicRecommendationRows, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
 import { publicRateOriginLabel, publicRateText } from '../../src/data/publicRatePresentation';
 import { PublicRateEvidence } from '../../src/components/scenario/PublicRateEvidence';
 import { PublicCostComparison } from '../../src/components/scenario/PublicCostComparison';
@@ -112,7 +117,10 @@ const MemoMortgagePeriodCalculation = React.memo(MortgagePeriodCalculation);
 export default function ProductDetail() {
   const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
-  const { key, ri, programme: requestedProgramme } = useLocalSearchParams<{ key: string; ri?: string; programme?: string }>();
+  const { key, ri, programme: requestedProgramme, origin } = useLocalSearchParams<{ key: string; ri?: string; programme?: string; origin?: string }>();
+  const fromRatesComparison = origin === 'rates-comparison';
+  const comparisonInputs = useMortgageComparison();
+  const mortgageFilters = useRatesSession(state => state.sections.Mortgage.filters);
   const productKey = key ?? '';
   const exactRateRequested = ri != null && ri !== '';
   const parsedRateIndex = exactRateRequested ? Number(ri) : null;
@@ -124,16 +132,21 @@ export default function ProductDetail() {
   const publicProduct = publicCatalogue.getProduct(productKey);
   const { scenario } = useUserRateScenario();
   const pricingScenario = publicProduct ? scenario : undefined;
+  const scenarioFor = useCallback((section: SectionKey, row?: RateRow) => {
+    const saved = publicRateScenario(section, pricingScenario, profile, row);
+    const scoped = fromRatesComparison ? mortgageComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved;
+    return publicScenarioForRow(row, publicCatalogue, scoped);
+  }, [pricingScenario, profile, fromRatesComparison, comparisonInputs, mortgageFilters, publicCatalogue]);
   const found = useMemo(
     () => {
       void suitabilityRevision;
       if (!core) return null;
       const sections = publicProduct ? { ...core.sections, [publicProduct.section]: { ...core.sections[publicProduct.section],
         rates: publicRecommendationRows(core.sections[publicProduct.section].rates, publicCatalogue, publicProduct.section,
-          publicRateScenario(publicProduct.section, pricingScenario, profile)) } } : core.sections;
+          scenarioFor(publicProduct.section)) } } : core.sections;
       return findEligibleByKey(sections, productKey);
     },
-    [core, productKey, suitabilityRevision, publicCatalogue, publicProduct, pricingScenario, profile],
+    [core, productKey, suitabilityRevision, publicCatalogue, publicProduct, scenarioFor],
   );
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const rateConditionManifest = useStore(s => s.manifest);
@@ -243,8 +256,8 @@ export default function ProductDetail() {
       : found.row
     : null;
   const boundRow = useMemo(() => unboundRow ? bindCurrentPublicRow(unboundRow, publicCatalogue) : null, [unboundRow, publicCatalogue]);
-  const publicResolution = useMemo(() => boundRow && found ? resolveRowPublicRate(boundRow, publicCatalogue, publicRateScenario(found.section, scenario, profile, boundRow)) : undefined,
-    [boundRow, found, publicCatalogue, scenario, profile]);
+  const publicResolution = useMemo(() => boundRow && found ? resolveRowPublicRate(boundRow, publicCatalogue, scenarioFor(found.section, boundRow)) : undefined,
+    [boundRow, found, publicCatalogue, scenarioFor]);
   const row = useMemo(() => boundRow && publicResolution ? { ...boundRow, rate: publicResolution.status === 'exact' && publicResolution.verifiedCurrent ? publicResolution.payableRate ?? '' : '' } : boundRow,
     [boundRow, publicResolution]);
   const calculationScenario = useMemo(() => found ? scenarioWithLocalCurrentRate(found.section, scenario,
@@ -270,7 +283,9 @@ export default function ProductDetail() {
       : 'The selected exact rate is absent from the eligible current catalogue'
     : null;
   const staySwitchProjection = useMemo(() => {
-    if (!row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
+    // This legacy model compares the persisted current account and principal.
+    // Its assumptions cannot consume a target priced for exploratory inputs.
+    if (fromRatesComparison || !row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
     if (targetConstraintContradicted(selectedTargetConstraint(row, 'Mortgage', scenario,
       { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity }))) return null;
     const currentRef = scenario.currentProducts.mortgage;
@@ -280,7 +295,7 @@ export default function ProductDetail() {
       currentDetail: currentRef?.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts[currentRef.productKey] : null,
       targetDetail: detail,
     });
-  }, [detail, detailsProducts, found?.section, row, scenario, calculationScenario, core, detailsPayload, rateConditionManifest, coreIntegrity]);
+  }, [fromRatesComparison, detail, detailsProducts, found?.section, row, scenario, calculationScenario, core, detailsPayload, rateConditionManifest, coreIntegrity]);
   const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
     && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
     ? scenario.currentProducts.mortgage.provider
@@ -383,7 +398,7 @@ export default function ProductDetail() {
       'product.open': () => undefined,
       'product.calculate.open': openCalculate,
       'product.receipt.open': () => {
-        if (row) openRateReceipt(productKey, row.rate_index, row.public_programme_id);
+        if (row) openRateReceipt(productKey, row.rate_index, row.public_programme_id, fromRatesComparison ? 'rates-comparison' : undefined);
       },
       'product.lender.open': (...args: unknown[]) => {
         const provider = auditActionString(args, 'provider') || row?.provider || null;
@@ -406,7 +421,7 @@ export default function ProductDetail() {
         : { unavailableReason: 'The mounted product has no multi-date history chart' },
     };
     return actions;
-  }, [historyGraphicEvidence?.window, productKey, row, openCalculate]);
+  }, [historyGraphicEvidence?.window, productKey, row, openCalculate, fromRatesComparison]);
   const productLogoIds = useMemo(
     () => row ? [`product:${row.rate_index ?? 'default'}#${row.product_key}`] : [],
     [row],
@@ -519,18 +534,22 @@ export default function ProductDetail() {
     ],
   });
 
-  if (!isMandatoryEligibilityReady() || !mandatoryProductAllowed(productKey)) {
+  const publicProductAllowed = publicProduct && eligiblePublicProductKeys(publicCatalogue, publicProduct.section,
+    scenarioFor(publicProduct.section)).has(productKey);
+  if (!isMandatoryEligibilityReady() || (!mandatoryProductAllowed(productKey) && !publicProductAllowed)) {
     return <><Stack.Screen options={{ title: 'Product unavailable' }} /><EmptyState icon="alert-circle-outline" title={!isMandatoryEligibilityReady() ? 'Loading' : 'Unavailable'} /></>;
   }
   if (!found) {
-    if (publicProduct) return <DetailsOnlyProduct productKey={productKey} programmeId={requestedProgramme} />;
+    if (publicProduct) return <DetailsOnlyProduct productKey={productKey} programmeId={requestedProgramme}
+      rateScenario={fromRatesComparison && publicProduct ? scenarioFor(publicProduct.section) : undefined} />;
     if (exactRateRequested) return <><Stack.Screen options={{ title: 'Product rate unavailable' }} /><EmptyState icon="alert-circle-outline" title="Exact rate no longer available" /></>;
     return <DetailsOnlyProduct productKey={productKey} />;
   }
 
   const { section } = found;
   if (!row) {
-    if (publicProduct) return <DetailsOnlyProduct productKey={productKey} programmeId={requestedProgramme} />;
+    if (publicProduct) return <DetailsOnlyProduct productKey={productKey} programmeId={requestedProgramme}
+      rateScenario={fromRatesComparison && publicProduct ? scenarioFor(publicProduct.section) : undefined} />;
     return (
       <>
         <Stack.Screen options={{ title: 'Product rate unavailable' }} />
@@ -698,8 +717,10 @@ export default function ProductDetail() {
             onPress={openCalculate}
           />
         </Row>
-        <PublicRateEvidence productKey={productKey} row={row} programmeId={requestedProgramme} />
-        <PublicCostComparison section={section} target={row} scenario={calculationScenario} />
+        <PublicRateEvidence productKey={productKey} row={row} programmeId={requestedProgramme}
+          scenario={fromRatesComparison ? scenarioFor(section, row) : undefined} />
+        <PublicCostComparison section={section} target={row} scenario={calculationScenario}
+          rateScenario={fromRatesComparison ? scenarioFor(section, row) : undefined} />
 
         <SavedRateActions key={`${productKey}:${row.rate_index ?? 'product'}`} row={row} section={section} />
 
@@ -725,7 +746,7 @@ export default function ProductDetail() {
           icon="receipt-outline"
           variant="secondary"
           style={{ marginBottom: 16 }}
-          onPress={() => openRateReceipt(productKey, row.rate_index, row.public_programme_id)}
+          onPress={() => openRateReceipt(productKey, row.rate_index, row.public_programme_id, fromRatesComparison ? 'rates-comparison' : undefined)}
         />
 
         <SectionTitle text="Published product history" icon="trending-up-outline" />
@@ -821,7 +842,8 @@ export default function ProductDetail() {
           onPress={() => openBank(row.provider)}
         />
 
-        <MemoProductRatesList rows={rateRows} section={section} accent={theme.colors.primary} />
+        <MemoProductRatesList rows={rateRows} section={section} accent={theme.colors.primary}
+          pricingOrigin={fromRatesComparison ? 'rates-comparison' : undefined} />
 
         {exactSaveEligible ? <Button
           title={productWideSaved ? 'Remove all rates' : 'Save all rates'}

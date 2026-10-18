@@ -13,17 +13,18 @@ export const scalarRouteParam = (value?: string | string[]): string | undefined 
 // pre-encoded strings caused double-decode crashes for keys containing '%' and
 // ambiguous splits for keys containing ','. useLocalSearchParams returns the
 // original (decoded) values on the other side.
-export const openProduct = (productKey: string, rateIndex?: number, programmeId?: string) =>
+export type ProductPricingOrigin = 'rates-comparison';
+export const openProduct = (productKey: string, rateIndex?: number, programmeId?: string, origin?: ProductPricingOrigin) =>
   router.push({
     pathname: '/product/[key]',
-    params: { key: productKey, ...(programmeId ? { programme: programmeId } : rateIndex != null ? { ri: String(rateIndex) } : {}) },
+    params: { key: productKey, ...(programmeId ? { programme: programmeId } : rateIndex != null ? { ri: String(rateIndex) } : {}), ...(origin ? { origin } : {}) },
   });
 
 /** Open the on-device receipt for one exact product-rate row. */
-export const openRateReceipt = (productKey: string, rateIndex?: number, programmeId?: string) =>
+export const openRateReceipt = (productKey: string, rateIndex?: number, programmeId?: string, origin?: ProductPricingOrigin) =>
   router.push({
     pathname: '/rate-receipt',
-    params: { key: productKey, ...(programmeId ? { programme: programmeId } : rateIndex != null ? { ri: String(rateIndex) } : {}) },
+    params: { key: productKey, ...(programmeId ? { programme: programmeId } : rateIndex != null ? { ri: String(rateIndex) } : {}), ...(origin ? { origin } : {}) },
   } as unknown as Href);
 
 /** Open a lender page; optional date/section focus a specific bank-move drill-down. */
@@ -70,5 +71,5 @@ export const openRibbonProducts = (section: SectionKey, sort: SortKey) =>
 
 // Product keys can contain commas, so serialize the array unambiguously (JSON)
 // rather than comma-joining.
-export const openCompare = (keys: string[]) =>
-  router.push({ pathname: '/compare', params: { keys: JSON.stringify(keys) } });
+export const openCompare = (keys: string[], origin?: 'rates-comparison') =>
+  router.push({ pathname: '/compare', params: { keys: JSON.stringify(keys), ...(origin ? { origin } : {}) } });

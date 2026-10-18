@@ -1,7 +1,10 @@
 import { create } from 'zustand';
+import { sourceRowForPublicRow } from './publicRateIntegration';
 import type { RateRow } from '../types';
 import { calculatorAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
 import { lvrRangeContains, parseLvrRange } from './lvrRange';
+import { scopedRateConditions, type RateConditionContext } from './rateConditions';
+import { scopedFinancialConditionFacts, type PublishedNumericConditionFact, type NumericConditionBoundary } from './scopedFinancialConditionFacts';
 
 export interface MortgageComparisonInputs { loanAmount: string; lvr: string }
 /** Private exploratory inputs stay in memory, separate from saved searches and reports. */
@@ -17,11 +20,37 @@ function inputs(value: MortgageComparisonInputs) {
 }
 export type MortgageComparisonMatch = 'listed' | 'unverified' | 'outside' | 'invalid';
 /** Listed bounds are a comparison scope, never a bank approval or total-cost claim. */
-export function mortgageComparisonMatch(row: RateRow, value: MortgageComparisonInputs): MortgageComparisonMatch {
-  return match(row, inputs(value));
+export function mortgageComparisonMatch(row: RateRow, value: MortgageComparisonInputs, context?: RateConditionContext): MortgageComparisonMatch {
+  return match(row, inputs(value), context);
 }
-function match(row: RateRow, parsed: ReturnType<typeof inputs>): MortgageComparisonMatch {
+function within(value: number, lower: NumericConditionBoundary, upper: NumericConditionBoundary): boolean {
+  return (lower.state === 'unspecified' || (lower.inclusive ? value >= lower.value : value > lower.value))
+    && (upper.state === 'unspecified' || (upper.inclusive ? value <= upper.value : value < upper.value));
+}
+function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateConditionContext): MortgageComparisonMatch {
   if (parsed.invalid) return 'invalid';
+  if (parsed.lvr !== null || parsed.amount !== null) {
+    const source = scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context));
+    if (source.state === 'admitted') {
+      let unknown = source.unresolved.length > 0;
+      const dimensions: readonly [number | null, readonly PublishedNumericConditionFact[]][] = [
+        [parsed.lvr, source.facts.filter(fact => fact.kind === 'published-lvr-range')],
+        [parsed.amount, source.facts.filter(fact => fact.kind === 'published-balance-range'
+          && (fact.subject === 'loan-amount' || fact.subject === 'borrowing-amount'))],
+      ];
+      for (const [value, facts] of dimensions) {
+        if (value === null) continue;
+        if (!facts.length) { unknown = true; continue; }
+        // Independently published ranges can be applicability alternatives.
+        // Unparsed qualifications prevent a conclusive outside verdict.
+        if (facts.every(fact => !within(value, fact.lower, fact.upper))) {
+          if (source.unresolved.length) unknown = true;
+          else return 'outside';
+        }
+      }
+      return unknown ? 'unverified' : 'listed';
+    }
+  }
   let unverified = false;
   if (parsed.lvr !== null) {
     const range = parseLvrRange(row.lvr_tier);
@@ -39,12 +68,12 @@ function match(row: RateRow, parsed: ReturnType<typeof inputs>): MortgageCompari
   }
   return unverified ? 'unverified' : 'listed';
 }
-export function mortgageComparisonRows(rows: RateRow[], value: MortgageComparisonInputs) {
+export function mortgageComparisonRows(rows: RateRow[], value: MortgageComparisonInputs, context?: RateConditionContext) {
   const parsed = inputs(value);
   let unverified = 0;
   const unverifiedRows = new WeakSet<RateRow>();
   const selected = rows.filter(row => {
-    const state = match(row, parsed);
+    const state = match(row, parsed, context);
     if (state === 'unverified') { unverified++; unverifiedRows.add(row); }
     return state === 'listed' || state === 'unverified';
   });

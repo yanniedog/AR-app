@@ -1,3 +1,4 @@
+import { matchesMortgageFacet } from './mortgageFacets';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import { productHasAllFeatures } from './featuresCore';
 import type { Filters } from './selectors';
@@ -168,9 +169,9 @@ export function profileFilterRows(
     if (p.loanPurposes.length || p.rateTypes.length || p.repaymentTypes.length || p.lvrTiers.length) {
       out = out.filter(
         (r) =>
-          matches(r.loan_purpose ?? r.security_purpose, p.loanPurposes) &&
+          matchesMortgageFacet(r.loan_purpose ?? r.security_purpose, p.loanPurposes, 'purpose') &&
           matches(r.rate_type, p.rateTypes) &&
-          matches(r.ribbon_repayment_type ?? r.repayment_type, p.repaymentTypes) &&
+          matchesMortgageFacet(r.ribbon_repayment_type ?? r.repayment_type, p.repaymentTypes, 'repayment') &&
           matchesLvrTier(r.lvr_tier, p.lvrTiers),
       );
     }

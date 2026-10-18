@@ -5,6 +5,9 @@ export type AuditOutcome = 'pass' | 'warning' | 'failure' | 'timing' | 'skipped'
 /** Mutually exclusive display buckets. The original recorded scores stay intact. */
 export function auditOutcome(check: AuditCheck): AuditOutcome {
   if (check.status === 'fail' && check.metrics.nonTimingFailure === true) return 'failure';
+  if (check.status === 'fail' && check.metrics.stepLimitExceeded === true) return 'timing';
+  if (check.status === 'skipped' && check.metrics.availabilityFailure !== true &&
+    check.metrics.skipClassification !== 'terminal-availability') return 'skipped';
   if (check.id.startsWith('external-link-') && check.status !== 'fail' &&
     (check.metrics.httpAttempted !== true || check.metrics.httpReachability === 'unknown' || check.metrics.browserHandler === 'unknown')) return 'untested-link';
   if (check.metrics.executionAttempted === false || check.metrics.availabilityFailure === true) return 'unavailable';
@@ -12,6 +15,10 @@ export function auditOutcome(check: AuditCheck): AuditOutcome {
   if (check.status === 'fail') {
     const measured = check.metrics.performanceStatus === 'fail' || check.metrics.measurementAvailable === true
       || (check.metrics.actionCompleted === true && typeof check.metrics.actionMs === 'number')
+      || (check.metrics.measurementMode === 'route-round-trip' && check.metrics.actionCompleted === true
+        && check.metrics.backReturnedToAudit === true && check.metrics.backChangedPath === true
+        && typeof check.metrics.forwardMs === 'number' && Number.isFinite(check.metrics.forwardMs)
+        && typeof check.metrics.backMs === 'number' && Number.isFinite(check.metrics.backMs) && check.metrics.backMs > 0)
       || (check.id === 'runtime-responsiveness' && (Number(check.metrics.eventLoopSamples) > 0 || Number(check.metrics.frameSamples) > 0));
     return check.metrics.nonTimingFailure === false && measured ? 'timing' : 'failure';
   }

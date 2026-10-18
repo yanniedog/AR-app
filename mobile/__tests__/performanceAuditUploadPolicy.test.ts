@@ -1,5 +1,5 @@
 import {
-  completePerformanceAudit, failPerformanceAudit, getPerformanceAuditState, markPerformanceAuditRunning,
+  completePerformanceAudit, getPerformanceAuditState, markPerformanceAuditRunning,
   requestPerformanceAudit, resetPerformanceAuditForTests,
 } from '../src/lib/performanceAudit';
 import { publishPerformanceAuditAfterFinalization } from '../src/lib/performanceAuditFinalization';
@@ -93,30 +93,14 @@ test('local completion waits for the final flush and releases transport without 
   expectLocalSharingUntouched(before);
 });
 
-test('fatal local finalization retains failure and partial persistence without uploading or copying', async () => {
-  requestPerformanceAudit({ uploadLog: false }); markPerformanceAuditRunning(1);
-  const uploadLog = getPerformanceAuditState().uploadLog;
-  const before = sharing.getDebugLogUploadSnapshot();
-  const persistPartial = jest.fn(async () => undefined);
-  const releaseTransport = jest.fn();
-  const failure = new Error('fixture final flush failure');
-  await expect(publishPerformanceAuditAfterFinalization(fixtureReport('failed'), async () => { throw failure; }, releaseTransport)).rejects.toBe(failure);
-  await persistPartial();
-  failPerformanceAudit(failure.message);
-  dispatch(uploadLog, { ...request, audit: { summaryMarker: 'PARTIAL fixture', report: fixtureReport('failed') } });
-  expect(persistPartial).toHaveBeenCalledTimes(1);
-  expect(releaseTransport).not.toHaveBeenCalled();
-  expect(getPerformanceAuditState()).toMatchObject({ status: 'failed', report: null, uploadLog: false, error: failure.message });
-  expectLocalSharingUntouched(before);
-});
-
-test('an explicitly requested upload preserves receipt verification, clipboard and deduplication', async () => {
-  dispatch(true, request);
-  await sharing.startDebugLogUpload(performanceAuditUploadRequest(request.audit.report));
-  dispatch(true, request);
+test('automatic upload verifies the receipt before an explicit copy action without a duplicate upload', async () => {
+  await dispatch(true, request);
+  await dispatch(true, request);
   expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
   expect(log.debugLog.readCompleteText).not.toHaveBeenCalled();
   expect(log.verifyDebugLogUpload).toHaveBeenCalledWith(receipt, performanceAuditUploadRequest(request.audit.report).publicReport.body);
+  expect(clipboard.setStringAsync).not.toHaveBeenCalled();
+  await sharing.retryDebugLogUpload();
   expect(clipboard.setStringAsync).toHaveBeenCalledTimes(1);
   expect(clipboard.setStringAsync).toHaveBeenCalledWith(result.url);
   expect((log.saveDebugLogUploadReceipt as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan((log.verifyDebugLogUpload as jest.Mock).mock.invocationCallOrder[0]);

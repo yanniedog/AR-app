@@ -1,3 +1,4 @@
+import type { RateScenario } from '../data/publicRateModel';
 import { usePublicRateCatalogue } from '../data/publicRateCatalogue';
 import { bindCurrentPublicRow, publicRateScenario, resolveRowPublicRate } from '../data/publicRateIntegration';
 import { publicRateOriginLabel, publicRateText } from '../data/publicRatePresentation';
@@ -33,6 +34,7 @@ import { PressFeedback } from './PressFeedback';
 import { IconAction } from './IconAction';
 import { useWordBubble, type IconWord } from './WordBubble';
 import { COMPACT_ROW, compactBankLogoFrame, compactFactWidth, compactMetricHasPeers, compactProductFacet, compactProductRowLayout, compactTierIndex } from './product/compactProductRow';
+import { sourceRowForPublicRow } from '../data/publicRateIntegration';
 import { scopedRateConditions } from '../data/rateConditions';
 import { scopedFinancialConditionFacts, type ScopedFinancialConditionPresentation } from '../data/scopedFinancialConditionFacts';
 import { uiAccessBadge, uiConditionTag, uiListedLvr, uiLoanPurpose } from '../lib/financialUiCopy';
@@ -88,6 +90,7 @@ function ProductCardView({
   logoRenderStateId,
   onLogoRenderStateChange,
   comparisonUnverified = false,
+  rateScenario,
 }: {
   row: RateRow;
   section: SectionKey;
@@ -108,6 +111,8 @@ function ProductCardView({
   logoRenderStateId?: string;
   onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
   comparisonUnverified?: boolean;
+  /** Pricing assumptions supplied by the ephemeral comparison surface. */
+  rateScenario?: RateScenario;
 }) {
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
@@ -125,9 +130,9 @@ function ProductCardView({
   const profile = useStore(state => state.prefs.profileFilters);
   const catalogue = usePublicRateCatalogue(manifest);
   const boundRow = React.useMemo(() => bindCurrentPublicRow(row, catalogue), [row, catalogue]);
-  const resolution = React.useMemo(() => resolveRowPublicRate(boundRow, catalogue, publicRateScenario(section, undefined, profile, boundRow, 'published')), [boundRow, catalogue, section, profile]);
+  const resolution = React.useMemo(() => resolveRowPublicRate(boundRow, catalogue, rateScenario ?? publicRateScenario(section, undefined, profile, boundRow, 'published')), [boundRow, catalogue, section, profile, rateScenario]);
   const favorite = useStore(state => state.isRateSaved(row.product_key, row.rate_index ?? null, boundRow.public_offer_id));
-  const admittedConditions = React.useMemo(() => scopedRateConditions(row, section, { core, details, manifest, coreIntegrity }),
+  const admittedConditions = React.useMemo(() => scopedRateConditions(sourceRowForPublicRow(row), section, { core, details, manifest, coreIntegrity }),
     [row, section, core, details, manifest, coreIntegrity]);
   const conditions = React.useMemo(() => scopedFinancialConditionFacts(admittedConditions), [admittedConditions]);
   const nonStandard = isNonStandard(row);

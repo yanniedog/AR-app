@@ -1,6 +1,6 @@
 # Audit upload acceptance status
 
-This records flow acceptance for draft PR #408. It does not certify Android
+This records flow acceptance for PR #408. It does not certify Android
 interaction, physical-device performance, or a live public-host write.
 
 ## Independent checks
@@ -122,3 +122,26 @@ An APK was not built. The canonical `npm run ci` command remains blocked at Expo
 Doctor: 16/18 checks passed, while Expo schema and React Native Directory remote
 metadata checks could not complete. The remaining canonical commands were run
 directly without changing their checks or budgets.
+
+## 18 October queue closeout
+
+The owner has now requested completion of the open PR queue and the app update.
+The earlier draft hold is superseded by that instruction. Native interaction,
+physical-device timing and live public-host POST acceptance remain unverified;
+merging this change does not turn those boundaries into passed checks. No live
+POST is needed for this closeout.
+
+Integration with the reviewed public-pricing branch preserves semantic saved
+offer resolution and uses the existing row index without reconstructing the
+source rows when public pricing is unavailable. Four focused suites pass 45
+tests covering public-rate integration, completed-report storage, rendered
+upload controls and indexed row lookup. Upload allowlists, secure deletion
+receipts and the 10-second step limit are unchanged by this reconciliation.
+
+The coordinated review fixes pass 12 local suites / 264 tests and TypeScript.
+They cover restart-safe secure deletion recovery, explicit clipboard copying,
+Clear across pending report/upload work, interrupted staged report replacement,
+required-field validation, schema-6 migration and late diagnosis restoration.
+The actual mounted runner fatal path now proves partial-report persistence;
+automatic publication is exercised independently from concurrent manual calls.
+All transport/native storage APIs in these tests remain mocked.

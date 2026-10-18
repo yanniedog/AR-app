@@ -25,11 +25,12 @@ export function resolvedRateNotificationChanges({ previous, current, oldCore, ne
 }): NotifyMessage[] {
   if (!oldCore || previous.status !== 'ready' || current.status !== 'ready' || !previous.allLoaded || !current.allLoaded) return [];
   const watches = new Map<string, { productKey: string; offerId?: string; programmeId?: string }>();
+  const watchKey = (watch: { productKey: string; offerId?: string }) => JSON.stringify([watch.productKey, watch.offerId ?? null]);
   for (const subscription of subscriptions) if (subscription.kind === 'product') {
     if (subscription.rateIndex != null && !subscription.offerId) continue;
-    watches.set(subscription.offerId ?? subscription.productKey, subscription);
+    watches.set(watchKey(subscription), subscription);
   }
-  for (const ref of saved) if (ref.offerId && subscriptions.some(subscription => subscription.kind === 'product' && subscription.offerId === ref.offerId)) watches.set(ref.offerId, ref);
+  for (const ref of saved) if (ref.offerId && subscriptions.some(subscription => subscription.kind === 'product' && subscription.productKey === ref.productKey && subscription.offerId === ref.offerId)) watches.set(watchKey(ref), ref);
   const messages: NotifyMessage[] = [];
   const threshold = Decimal.parse(String(Number.isFinite(thresholdBps) && thresholdBps >= 0 ? thresholdBps : 1)).div(Decimal.parse('10000'));
   for (const watch of watches.values()) {

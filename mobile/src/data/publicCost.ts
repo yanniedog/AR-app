@@ -41,7 +41,7 @@ export function publicMortgagePayment(principal: string, payableFraction: string
 function phaseRate(resolution: RateResolution, scenario: PublicCostScenario, month: number, balance: Decimal): Decimal {
   let current = resolution;
   if (scenario.section === 'Savings' && scenario.programme) current = resolvePublicRate(scenario.programme,
-    { ...scenario.rateScenario, balance: balance.fixed(2) }, scenario.asOf);
+    { ...scenario.rateScenario, balance: balance.fixed(2), monthlyDeposit: scenario.monthlyContribution ?? '0' }, scenario.asOf);
   if (current.status !== 'exact' || current.payableRate === undefined) throw new Error('payable_rate_unresolved');
   if (scenario.fixedPeriodMonths !== undefined && month >= scenario.fixedPeriodMonths && !current.phases.some(phase => phase.startMonth <= month && (phase.endMonth === undefined || month < phase.endMonth))) throw new Error('reversion_rate_unknown');
   if (current.phases.length) {
@@ -186,9 +186,11 @@ function deposit(resolution: RateResolution, scenario: Extract<PublicCostScenari
   const withdrawal = money(scenario.section === 'Savings' ? scenario.monthlyWithdrawal ?? '0' : '0');
   if (scenario.section === 'Savings') {
     const fields = new Set(resolution.conditions.met.map(condition => condition.field));
-    const claimedDeposits = scenario.rateScenario?.monthlyDeposit;
     const claimedWithdrawals = scenario.rateScenario?.withdrawals;
-    if (fields.has('monthlyDeposit') && typeof claimedDeposits === 'string' && money(claimedDeposits).compare(contribution) > 0
+    const projectedQualification = scenario.programme && fields.has('monthlyDeposit')
+      ? resolvePublicRate(scenario.programme, { ...scenario.rateScenario, monthlyDeposit: contribution.fixed(2), balance: balance.fixed(2) }, scenario.asOf)
+      : undefined;
+    if (projectedQualification && projectedQualification.status !== 'exact'
       || fields.has('withdrawals') && typeof claimedWithdrawals === 'string' && money(claimedWithdrawals).compare(PUBLIC_ZERO) === 0 && withdrawal.compare(PUBLIC_ZERO) > 0) {
       result.assumptions.push('Savings qualification: conflicts with projected cash flows', 'Qualifying deposits/withdrawal counts: explicit inputs');
       throw new Error('qualification_cashflow_conflict');
@@ -208,10 +210,18 @@ function deposit(resolution: RateResolution, scenario: Extract<PublicCostScenari
     }
   }
   for (let month = 0; month < limit; month += 1) {
-    balance = balance.add(contribution).sub(withdrawal);
-    if (balance.compare(PUBLIC_ZERO) < 0) throw new Error('withdrawal_exceeds_balance');
+    let nextBalance = balance.add(contribution).sub(withdrawal);
+    if (nextBalance.compare(PUBLIC_ZERO) < 0) throw new Error('withdrawal_exceeds_balance');
+    let monthlyFees = PUBLIC_ZERO, monthlyCashback = PUBLIC_ZERO;
+    for (const fee of fees.applicable.filter(fee => due(fee, month))) {
+      const amount = money(fee.amount!);
+      if (fee.kind === 'cashback') monthlyCashback = monthlyCashback.add(amount); else monthlyFees = monthlyFees.add(amount);
+    }
+    if (scenario.section === 'Savings') nextBalance = nextBalance.sub(monthlyFees);
+    if (nextBalance.compare(PUBLIC_ZERO) < 0) throw new Error('fees_exceed_balance');
     let rate: Decimal;
-    try { rate = phaseRate(resolution, scenario, month, balance); } catch (error) { result.reasonCodes.push(error instanceof Error ? error.message : 'future_rate_unknown'); result.completeness = result.completeness === 'stale' ? 'stale' : 'partial'; break; }
+    try { rate = phaseRate(resolution, scenario, month, nextBalance); } catch (error) { result.reasonCodes.push(error instanceof Error ? error.message : 'future_rate_unknown'); result.completeness = result.completeness === 'stale' ? 'stale' : 'partial'; break; }
+    balance = nextBalance;
     let interest = PUBLIC_ZERO;
     if (frequency === -1) {
       for (let day = 0; day < monthDays(scenario.asOf, month); day += 1) {
@@ -231,13 +241,7 @@ function deposit(resolution: RateResolution, scenario: Extract<PublicCostScenari
       interestTotal = interestTotal.add(paid);
       accrued = PUBLIC_ZERO;
     }
-    let monthlyFees = PUBLIC_ZERO, monthlyCashback = PUBLIC_ZERO;
-    for (const fee of fees.applicable.filter(fee => due(fee, month))) {
-      const amount = money(fee.amount!);
-      if (fee.kind === 'cashback') monthlyCashback = monthlyCashback.add(amount); else monthlyFees = monthlyFees.add(amount);
-    }
-    if (scenario.section === 'Savings') balance = balance.sub(monthlyFees).add(monthlyCashback);
-    if (balance.compare(PUBLIC_ZERO) < 0) throw new Error('fees_exceed_balance');
+    if (scenario.section === 'Savings') balance = balance.add(monthlyCashback);
     feeTotal = feeTotal.add(monthlyFees); cashbackTotal = cashbackTotal.add(monthlyCashback);
     result.points.push({ month: month + 1, balance: balance.fixed(2), interest: interest.fixed(2), principalRepaid: '0.00', knownFees: monthlyFees.fixed(2), cashback: monthlyCashback.fixed(2) }); result.projectedMonths = month + 1;
   }
