@@ -218,7 +218,13 @@ export function resolvePublicRate(programme: PublicProgramme, scenario: RateScen
     base.verifiedCurrent = freshness.state === 'current' && eligibility !== 'unknown';
     const comparisons = programme.components.filter(component => component.role === 'comparison' && component.scopeId === programme.offerId && component.value !== undefined &&
       component.conditions.every(condition => evaluatePublicCondition(condition, scenario, asOf) === 'met'));
-    if (comparisons.length === 1) base.comparisonRate = decimalText(rateDecimal(comparisons[0].value!, comparisons[0].unit));
+    if (comparisons.length === 1) {
+      try {
+        const comparison = rateDecimal(comparisons[0].value!, comparisons[0].unit);
+        if (comparison.compare(PUBLIC_ZERO) < 0 || comparison.compare(PUBLIC_ONE) > 0) base.reasonCodes.push('comparison_rate_out_of_bounds');
+        else base.comparisonRate = decimalText(comparison);
+      } catch { base.reasonCodes.push('comparison_rate_invalid'); }
+    }
     if (comparisons.length > 1) base.reasonCodes.push('comparison_rate_conflicting');
     let previousEnd = 0;
     for (const phase of programme.phases ?? []) {
