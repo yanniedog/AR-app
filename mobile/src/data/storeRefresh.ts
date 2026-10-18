@@ -2,7 +2,7 @@ import { cache } from './cache';
 import { prepareBankRateHistoryAfterPaint } from './storeBankRateHistory';
 import { parseHistoryDatesIndex } from './historyDatesIndex';
 import type { PayloadProgressSnapshot } from './downloadProgress';
-import { computeChanges, notify } from './notifications';
+import { computeChanges, notify, type NotifyMessage } from './notifications';
 import { checkPublicReferenceChanges } from './referenceRateAlerts';
 import { resolvedRateNotificationChanges } from './resolvedRateNotifications';
 import { ensurePublicRateCatalogueLoaded } from './publicRateCatalogue';
@@ -197,26 +197,34 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             if (!state.prefs.notificationsEnabled) return;
             if (state.manifest?.public_rate_catalogue) {
               work.stage('Checking public reference-rate watches');
-              await checkPublicReferenceChanges(state.manifest, state.prefs.rateMoveThresholdBps, () => get().manifest === state.manifest)
+              await checkPublicReferenceChanges(state.manifest, state.prefs.rateMoveThresholdBps, () => {
+                const live = get();
+                return live.manifest === state.manifest && live.prefs.notificationsEnabled
+                  && live.prefs.rateMoveThresholdBps === state.prefs.rateMoveThresholdBps;
+              })
                 .catch(() => debugLog.warn('notify', 'Public reference alerts unavailable; scenario inputs were preserved.'));
             }
             // Re-read favorites/subscriptions at notify time so a user who
             // unsubscribes during the yield window is not notified for them.
             work.stage('Computing rate-change notifications');
+            let currentPublicMessages: (() => Promise<NotifyMessage[]>) | null = null;
             const messages = state.manifest?.public_rate_catalogue ? await (async () => {
               const previous = await ensurePublicRateCatalogueLoaded(notifyCtx.previousManifest);
               const current = await ensurePublicRateCatalogueLoaded(state.manifest);
-              if (get().manifest !== state.manifest) return [];
-              const latest = get();
-              if (!latest.prefs.notificationsEnabled) return [];
-              const rates = resolvedRateNotificationChanges({ previous, current, oldCore: notifyCtx.previousCore, newCore: notifyCtx.core,
-                saved: latest.savedRates, subscriptions: latest.subscriptions, scenario: await loadUserRateScenario(),
-                profile: latest.prefs.profileFilters, thresholdBps: latest.prefs.rateMoveThresholdBps,
-                oldDetailsProducts: notifyCtx.previousDetailsProducts, newDetailsProducts: latest.details?.products,
-                depositRankMetric: latest.prefs.depositRankMetric, mortgageRateMetric: latest.prefs.mortgageRateMetric });
-              const economic = computeChanges(notifyCtx.previousCore, notifyCtx.core, [], state.prefs.rateMoveThresholdBps)
-                .filter(message => message.title === 'RBA cash rate changed' || message.title === 'RBA cash rate held');
-              return [...rates, ...economic];
+              currentPublicMessages = async () => {
+                const scenario = await loadUserRateScenario();
+                const latest = get();
+                if (latest.manifest !== state.manifest || !latest.prefs.notificationsEnabled) return [];
+                const rates = resolvedRateNotificationChanges({ previous, current, oldCore: notifyCtx.previousCore, newCore: notifyCtx.core,
+                  saved: latest.savedRates, subscriptions: latest.subscriptions, scenario,
+                  profile: latest.prefs.profileFilters, thresholdBps: latest.prefs.rateMoveThresholdBps,
+                  oldDetailsProducts: notifyCtx.previousDetailsProducts, newDetailsProducts: latest.details?.products,
+                  depositRankMetric: latest.prefs.depositRankMetric, mortgageRateMetric: latest.prefs.mortgageRateMetric });
+                const economic = computeChanges(notifyCtx.previousCore, notifyCtx.core, [], latest.prefs.rateMoveThresholdBps)
+                  .filter(message => message.title === 'RBA cash rate changed' || message.title === 'RBA cash rate held');
+                return [...rates, ...economic];
+              };
+              return currentPublicMessages();
             })() : computeChanges(
               notifyCtx.previousCore,
               notifyCtx.core,
@@ -230,7 +238,16 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             );
             work.stage('Delivering rate-change notifications');
             if (get().manifest !== state.manifest) return;
-            await notify(messages);
+            await notify(messages, async message => {
+              const live = get();
+              if (live.manifest !== state.manifest || !live.prefs.notificationsEnabled) return false;
+              const current = currentPublicMessages ? await currentPublicMessages() : computeChanges(
+                notifyCtx.previousCore, notifyCtx.core, savedRatesWithAlerts(live.savedRates ?? [], live.subscriptions),
+                live.prefs.rateMoveThresholdBps, live.subscriptions, notifyCtx.previousDetailsProducts,
+                live.details?.products ?? null, live.prefs.depositRankMetric, live.prefs.mortgageRateMetric);
+              return get().manifest === state.manifest && get().prefs.notificationsEnabled
+                && current.some(candidate => JSON.stringify(candidate) === JSON.stringify(message));
+            });
             debugLog.info('store', `notified ${messages.length} rate-change message(s)`);
           }
         } catch (err) {

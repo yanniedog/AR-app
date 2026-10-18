@@ -71,7 +71,13 @@ export async function checkPublicReferenceChanges(manifest: Manifest | null, thr
   const latestScenario = await loadUserRateScenario();
   const result = referenceRateChanges(latestScenario, catalogue.references, previous, thresholdBps);
   if (!isCurrent()) return;
-  await notify(result.messages);
+  let deliveryScenario = latestScenario;
+  await notify(result.messages, async message => {
+    deliveryScenario = await loadUserRateScenario();
+    return isCurrent() && referenceRateChanges(deliveryScenario, catalogue.references, previous, thresholdBps).messages
+      .some(current => current.title === message.title && current.body === message.body);
+  });
   // Baseline is separate from userRateScenario: a public refresh can never overwrite entered rates or discounts.
-  if (isCurrent()) await writeSecureStoreValue(SECURE_STORE_KEYS.referenceRateAlertBaseline, JSON.stringify(result.baseline));
+  if (isCurrent()) await writeSecureStoreValue(SECURE_STORE_KEYS.referenceRateAlertBaseline,
+    JSON.stringify(referenceRateChanges(deliveryScenario, catalogue.references, previous, thresholdBps).baseline));
 }

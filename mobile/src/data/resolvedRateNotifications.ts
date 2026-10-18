@@ -60,7 +60,8 @@ export function resolvedRateNotificationChanges({ previous, current, oldCore, ne
   }
   if (subscriptions.some(subscription => subscription.kind === 'search')) {
     const rateCore = (source: CorePayload, catalogue: PublicCatalogueView, historical: boolean): CorePayload => {
-      const result = publicComparisonCore(source, catalogue, section => publicRateScenario(section, scenario, profile));
+      const result = publicComparisonCore(source, catalogue, section => ({ ...publicRateScenario(section, scenario, profile), allowHistorical: historical }),
+        programme => historical ? programme.freshness.lastSuccessAt ?? asOf : asOf);
       const sections = { ...result.sections };
       for (const section of ['Mortgage', 'Savings', 'TD'] as const) sections[section] = { ...result.sections[section], rates: result.sections[section].rates.flatMap(row => {
         const product = catalogue.getProduct(row.product_key);
