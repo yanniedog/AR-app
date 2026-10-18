@@ -246,10 +246,14 @@ export default function RatesWorkspace() {
     catalogue, section, scenarioFor(section)), [core, catalogue, section, scenarioFor]);
   const resolvedCatalogueRows = useMemo(() => resolvedPublicRankingRows(fullPricingCandidates, catalogue, rowScenario).rows,
     [fullPricingCandidates, catalogue, rowScenario]);
-  const pricingCandidates = useMemo(() => task.intentError ? [] : rowsForSearchScope(fullPricingCandidates, section, path, hierarchyScoped),
-    [fullPricingCandidates, section, path, hierarchyScoped, task.intentError]);
-  const baseRows = useMemo(() => task.intentError ? [] : rowsForSearchScope(resolvedCatalogueRows, section, path, hierarchyScoped),
-    [resolvedCatalogueRows, section, path, hierarchyScoped, task.intentError]);
+  const pricingCandidates = useMemo(() => {
+    void suitabilityRevision;
+    return task.intentError ? [] : rowsForSearchScope(fullPricingCandidates, section, path, hierarchyScoped);
+  }, [fullPricingCandidates, section, path, hierarchyScoped, task.intentError, suitabilityRevision]);
+  const baseRows = useMemo(() => {
+    void suitabilityRevision;
+    return task.intentError ? [] : rowsForSearchScope(resolvedCatalogueRows, section, path, hierarchyScoped);
+  }, [resolvedCatalogueRows, section, path, hierarchyScoped, task.intentError, suitabilityRevision]);
   const summaryCatalogueRows = catalogue.status === 'loading' || catalogue.status === 'error' ? null : resolvedCatalogueRows;
   const mortgageScope = useMemo(() => section === 'Mortgage' ? mortgageComparisonRows(baseRows, mortgageInputs,
     { core, details, manifest, coreIntegrity })
