@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { bytesToHex } from '@noble/hashes/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { strFromU8 } from 'fflate';
@@ -39,6 +40,7 @@ async function acquire(edition: string, asset: PublicRateAsset, isIndex: boolean
     if (decoded.length !== asset.decodedBytes || bytesToHex(sha256(retained)) !== asset.sha256) throw new Error('Retained public rate bytes mismatch');
     return parseJsonHeavy(strFromU8(decoded));
   }
+  if (isLocalAppHealthAudit()) throw new Error('Public pricing is unavailable in the retained offline cache.');
   let compressed: Uint8Array | undefined;
   const text = await downloadInflate(asset.url, asset.sha256, { fileName: asset.name, expectedBytes: asset.bytes,
     expectedInflatedBytes: asset.decodedBytes, requireExactBytes: true, expectedEncoding: 'gzip', allowEncrypted: false,

@@ -1,6 +1,7 @@
 import { captureUserRateScenarioForAudit } from '../hooks/useUserRateScenario';
 import { AuditDatasetChangedError, prepareAuditPublicCore, assertAuditPublicCataloguePinned } from '../lib/performanceAuditDataset';
 import type { PublicCatalogueView } from '../data/publicRateIntegration';
+import { validatePublicRateCapability } from '../data/publicRateWire';
 import { ensurePublicRateCatalogueLoaded, getPublicRateCatalogueSnapshot } from '../data/publicRateCatalogue';
 import { normalizeUserRateScenario } from '../data/userRateScenario';
 import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
@@ -2942,8 +2943,11 @@ export function PerformanceAuditRunner() {
         // too rather than only at the first measured check.
         const { initialStore, datasetRevision } = await runSetupStage(PERFORMANCE_AUDIT_SETUP_STAGES.inputs, async (stageWatchdog) => {
           const manifest = useStore.getState().manifest;
-          if (manifest?.public_rate_catalogue) await awaitAuditWork(
-            ensurePublicRateCatalogueLoaded(manifest), stageWatchdog, 'Public pricing catalogue preparation');
+          if (manifest?.public_rate_catalogue) {
+            const capability = validatePublicRateCapability(manifest);
+            if (capability) transportGuard.allowManifestAssets([capability.index.url, ...capability.shards.map(asset => asset.url)]);
+            await awaitAuditWork(ensurePublicRateCatalogueLoaded(manifest), stageWatchdog, 'Public pricing catalogue preparation');
+          }
           const initialStore = useStore.getState();
           if (initialStore.manifest !== manifest) throw new AuditDatasetChangedError('Dataset manifest changed during public catalogue preparation');
           if (auditMode === 'local') captureInitialHealthData(initialStore);
