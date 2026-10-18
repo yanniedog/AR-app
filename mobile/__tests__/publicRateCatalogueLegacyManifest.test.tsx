@@ -19,9 +19,11 @@ test.each([null, { ...sampleManifest }])('actual hook and imperative readers acc
     expect(snapshot).toMatchObject({ status: 'unavailable', allLoaded: false, error: null });
     expect(getPublicRateCatalogueSnapshot(manifest)).toMatchObject({ status: 'unavailable', allLoaded: false });
     if (manifest) {
-      const load = preparePublicRateCatalogueForAudit(manifest);
-      expect(await load.ready).toMatchObject({ status: 'unavailable', allLoaded: false });
-      await load.cancelAndDrain(); load.quiesce(); load.release();
+      await act(async () => {
+        const load = preparePublicRateCatalogueForAudit(manifest);
+        expect(await load.ready).toMatchObject({ status: 'unavailable', allLoaded: false });
+        await load.cancelAndDrain(); load.quiesce(); load.release();
+      });
     }
     expect(wire).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
