@@ -1,3 +1,5 @@
+import { withMortgageAlternatives } from './publicRateAlternatives';
+import { canonicalPurpose, canonicalRepayment } from './mortgageFacets';
 import { publicRateScenario } from './publicRateIntegration';
 import { normalizeProfileFilters } from './profile';
 import type { Filters } from './selectors';
@@ -28,5 +30,10 @@ export function mortgageComparisonScenario(section: SectionKey, scenario: RateSc
     const lvr = calculatorRateFraction(inputs.lvr);
     result.lvr = lvr != null ? String(lvr) : undefined;
   }
-  return result;
+  const purposes = [...new Set((temporary?.loanPurposes ?? []).map(canonicalPurpose))]
+    .filter((value): value is string => value === 'OWNER_OCCUPIED' || value === 'INVESTMENT');
+  const repayments = [...new Set((temporary?.repaymentTypes ?? []).map(canonicalRepayment))]
+    .filter((value): value is string => value === 'PRINCIPAL_AND_INTEREST' || value === 'INTEREST_ONLY');
+  return purposes.length > 1 || repayments.length > 1
+    ? withMortgageAlternatives(result, purposes, repayments) : result;
 }

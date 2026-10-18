@@ -751,3 +751,33 @@ test.each([false, true])('public-only facet chips reveal an offer with saved leg
     expect(mockStore.getState().setPref).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });
+
+test('multiple mortgage chips retain both public-only offers with exact row pricing scope', () => {
+  const options = [['owner-pi', 'OWNER_OCCUPIED', 'PRINCIPAL_AND_INTEREST', '0.05'], ['investor-io', 'INVESTMENT', 'INTEREST_ONLY', '0.06']];
+  const programmes = options.map(([id, purpose, repayment, value]) => {
+    const p = publicProgramme({ programmeId: id, offerId: id, sourceBindings: [], conditions: [
+      { conditionId: id + '-purpose', field: 'purpose', operator: 'eq', value: purpose, evidenceIds: [] },
+      { conditionId: id + '-repayment', field: 'repayment', operator: 'eq', value: repayment, evidenceIds: [] },
+    ] });
+    return { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() }, components: [{ ...p.components[0], value, scopeId: id }] };
+  });
+  mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes,
+    [{ ...publicProduct, programmeIds: programmes.map(p => p.programmeId) }], []), generationId: 'or-facets' };
+  mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [] } } } }));
+  install();
+  const tree = mount();
+  try {
+    const chips = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' }).findAllByType('Chip');
+    for (const label of ['Owner occupied', 'Investor', 'Principal & interest', 'Interest only']) {
+      act(() => chips().find((chip: any) => chip.props.label === label)!.props.onPress());
+    }
+    expect(tree.root.findByType('FlashList').props.data.map((row: any) => [row.public_offer_id, row.rate]))
+      .toEqual([['owner-pi', '0.05'], ['investor-io', '0.06']]);
+    expect(tree.root.findAllByType('ProductCard').map((card: any) => [card.props.rateScenario.purpose, card.props.rateScenario.repayment]))
+      .toEqual(options.map(([, purpose, repayment]) => [purpose, repayment]));
+    act(() => updateRatesSection('Mortgage', { selectMode: true }));
+    for (const card of tree.root.findAllByType('ProductCard')) act(() => card.props.onPress());
+    expect(useRatesSession.getState().sections.Mortgage.selected).toHaveLength(2);
+    expect(mockStore.getState().setPref).not.toHaveBeenCalled();
+  } finally { act(() => tree.unmount()); }
+});
