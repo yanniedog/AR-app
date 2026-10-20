@@ -17,7 +17,7 @@ export function measuredRatesViewport<Row>(list: {
     const viewableItems: { item: Row; index: number; key?: string; isViewable: true }[] = [];
     for (let index = Math.max(0, range.startIndex); index <= Math.min(rows.length - 1, range.endIndex); index++) {
       const layout = list.getLayout(index);
-      if (!layout || !Number.isFinite(layout.y) || !Number.isFinite(layout.height) || layout.height <= 0) continue;
+      if (!layout || !Number.isFinite(layout.y) || !Number.isFinite(layout.height) || layout.height <= 0) return null;
       const overlap = Math.min(layout.y + layout.height, offset + height) - Math.max(layout.y, offset);
       if (overlap > 0 && overlap / layout.height >= 0.01) viewableItems.push({ item: rows[index], index,
         key: list.props.keyExtractor?.(rows[index], index), isViewable: true });

@@ -23,6 +23,8 @@ const mockSearchMount = jest.fn();
 const mockSearchUnmount = jest.fn();
 let mockVisibleCount: number | null = null;
 let mockSuppressViewability = false;
+let mockGeometryAvailable = true;
+let mockEmptyCallback = false;
 let mockIsFocused = true;
 let mockNavigationReady = true;
 let mockCommittedQuery: string | null = null;
@@ -64,7 +66,7 @@ jest.mock('@shopify/flash-list', () => {
   return { FlashList: React.forwardRef(function MockFlashList(props: any, ref: any) {
     const measure = () => {
       if (mockIsFocused && !mockSuppressViewability) props.onViewableItemsChanged({ viewableItems:
-        props.data.slice(0, mockVisibleCount ?? 3).map((item: unknown, index: number) => ({ isViewable: true, item, index, key: props.keyExtractor(item, index) })) });
+        props.data.slice(0, mockEmptyCallback ? 0 : mockVisibleCount ?? 3).map((item: unknown, index: number) => ({ isViewable: true, item, index, key: props.keyExtractor(item, index) })) });
     };
     const propsRef = React.useRef(props); propsRef.current = props;
     const measureRef = React.useRef(measure);
@@ -73,7 +75,7 @@ jest.mock('@shopify/flash-list', () => {
     loadRef.current = props.onLoad;
     const { extraData, onCommitLayoutEffect } = props;
     React.useImperativeHandle(ref, () => ({
-      get props() { return propsRef.current; }, getLayout: (index: number) => ({ x: 0, y: index * 100, height: 100, width: 320 }),
+      get props() { return propsRef.current; }, getLayout: (index: number) => mockGeometryAvailable ? ({ x: 0, y: index * 100, height: 100, width: 320 }) : undefined,
       getWindowSize: () => ({ width: 320, height: (mockVisibleCount ?? 3) * 100 }),
       getFirstItemOffset: () => 0, getAbsoluteLastScrollOffset: () => 0,
       computeVisibleIndices: () => ({ startIndex: 0, endIndex: Math.min(mockVisibleCount ?? 3, propsRef.current.data.length) - 1 }),
@@ -124,6 +126,8 @@ beforeEach(() => {
   mockEnsureDetails.mockClear(); mockSurfaces.clear();
   mockListMount.mockClear(); mockListUnmount.mockClear();
   mockRecomputeViewableItems.mockClear(); mockScrollToOffset.mockClear(); mockVisibleCount = null; mockSuppressViewability = false;
+  mockGeometryAvailable = true;
+  mockEmptyCallback = false;
   mockSearchMount.mockClear(); mockSearchUnmount.mockClear();
   jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => { callback(0); return 0; });
   const fixture = rateConditionFixture();
@@ -404,7 +408,50 @@ test('an updated native viewport with no visible rows never inherits an earlier 
   } finally { act(() => tree.unmount()); }
 });
 
-test('a missing fresh native callback leaves the current viewport unverified', () => {
+test('both membership gates replace the count callback even with unchanged draft and preference identities', () => {
+  mockState.prefs.includeNonStandard = true;
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const counter = () => tree.root.findByType('FilterSheet' as any).props.resultCount;
+    const first = counter(), prefs = mockState.prefs;
+    act(() => installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() }));
+    const second = counter();
+    expect(second).not.toBe(first);
+    act(() => setSuitabilityAllowed(new Set(['changed-membership'])));
+    expect(counter()).not.toBe(second);
+    expect(mockState.prefs).toBe(prefs);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('an explicit empty callback wins over cached row geometry', () => {
+  mockState.prefs.includeNonStandard = true;
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    mockEmptyCallback = true;
+    act(() => mockSurfaces.get('rates.results').actions['search.compare.mode']());
+    const probe = mockSurfaces.get('rates.results').probes.find((item: any) => item.id === 'search.list');
+    expect(probe.visibleCount).toBe(0);
+    expect(probe.status).toBe('pending');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('a temporarily missing native layout is remeasured without a viewability callback', () => {
+  jest.useFakeTimers();
+  mockState.prefs.includeNonStandard = true;
+  mockSuppressViewability = true;
+  mockGeometryAvailable = false;
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const probe = () => mockSurfaces.get('rates.results').probes.find((item: any) => item.id === 'search.list');
+    expect(probe().status).toBe('pending');
+    mockGeometryAvailable = true;
+    act(() => jest.advanceTimersByTime(40));
+    expect(probe().visibleCount).toBeGreaterThan(0);
+    expect(probe().status).toBe('ready');
+  } finally { act(() => tree.unmount()); jest.useRealTimers(); }
+});
+
+test('missing native callbacks and geometry leave the current viewport unverified', () => {
   mockState.prefs.includeNonStandard = true;
   let tree: any;
   act(() => { tree = TestRenderer.create(<Search />); });
@@ -412,6 +459,7 @@ test('a missing fresh native callback leaves the current viewport unverified', (
     const listProbe = () => mockSurfaces.get('rates.results').probes.find((probe: any) => probe.id === 'search.list');
     expect(listProbe().visibleCount).toBeGreaterThan(0);
     mockSuppressViewability = true;
+    mockGeometryAvailable = false;
     act(() => mockSurfaces.get('rates.results').actions['search.compare.mode']());
     expect(mockListMount).toHaveBeenCalledTimes(1);
     expect(listProbe().visibleCount).toBeNull();
@@ -457,6 +505,7 @@ test('a retained list requests real viewport evidence when refocused after a hid
     mockIsFocused = false;
     act(() => { updateRatesSection('TD', { sort: 'rate' }); tree.update(<Search />); });
     mockSuppressViewability = true;
+    mockGeometryAvailable = false;
     mockIsFocused = true;
     act(() => tree.update(<Search />));
     expect(probe().visibleCount).toBeNull();
@@ -853,6 +902,7 @@ test('a data swap rejects prior-row visibility and a header-only viewport stays 
     const list = tree.root.findByType('FlashList' as any), previous = list.props.data[0];
     const probe = () => mockSurfaces.get('rates.results').probes.find((item: any) => item.id === 'search.list');
     mockSuppressViewability = true;
+    mockGeometryAvailable = false;
     const family = tree.root.findByProps({ testID: 'rates-task-controls' }).findAllByType('SegmentedControl' as any).find((node: any) => node.props.options.some((option: any) => option.value === 'Savings'));
     act(() => family.props.onChange('Savings'));
     expect(probe().status).toBe('pending');

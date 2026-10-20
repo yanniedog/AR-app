@@ -44,5 +44,10 @@ test('a settled calculation copy does not block the next mounted projection acti
     const calls = jest.mocked(usePerformanceAuditSurface).mock.calls;
     const surface = calls.filter(([definition]) => definition.id === 'projections.lifecycle-chart').at(-1)![0];
     expect(surface.probes!.find(probe => probe.id === 'projections.model')).toMatchObject({ status: 'ready', error: null });
+    let result: unknown;
+    act(() => { result = surface.actions!['projections.metric.next'](); });
+    expect(result).toBeUndefined();
+    const changed = jest.mocked(usePerformanceAuditSurface).mock.calls.filter(([definition]) => definition.id === 'projections.lifecycle-chart').at(-1)![0];
+    expect(changed.renderRevision).not.toBe(surface.renderRevision);
   } finally { act(() => tree.unmount()); }
 });

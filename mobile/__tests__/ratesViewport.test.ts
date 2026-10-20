@@ -14,6 +14,8 @@ test('rejects stale data, old UI revisions, invalid geometry and unavailable nat
   expect(measuredRatesViewport(native(), [...rows], 'current')).toBeNull();
   expect(measuredRatesViewport(native(), rows, 'old')).toBeNull();
   expect(measuredRatesViewport({ ...native(), getWindowSize: () => ({ height: 0 }) }, rows, 'current')).toBeNull();
-  expect(measuredRatesViewport({ ...native(), getLayout: () => ({ y: NaN, height: 100 }) }, rows, 'current')?.viewableItems).toEqual([]);
+  expect(measuredRatesViewport({ ...native(), getLayout: () => ({ y: NaN, height: 100 }) }, rows, 'current')).toBeNull();
+  expect(measuredRatesViewport({ ...native(), getLayout: () => undefined }, rows, 'current')).toBeNull();
+  expect(measuredRatesViewport({ ...native(), getAbsoluteLastScrollOffset: () => -500 }, rows, 'current')?.viewableItems).toEqual([]);
   expect(measuredRatesViewport({ ...native(), computeVisibleIndices: () => { throw new Error('not mounted'); } }, rows, 'current')).toBeNull();
 });

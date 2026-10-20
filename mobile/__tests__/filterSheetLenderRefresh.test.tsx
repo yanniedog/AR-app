@@ -49,9 +49,17 @@ test('a stale filter count cannot replace a newer draft or update a closed sheet
     expect(titles()).toContain('Show 2 products');
     await act(async () => pending[0].resolve(999));
     expect(titles()).not.toContain('Show 999 products');
-    await act(async () => tree.update(<FilterSheet {...props} visible={false} filters={latestFilters} />));
-    expect(pending.at(-1)!.cancelled()).toBe(true);
+    const closingDraft = { ...latestFilters, providers: ['Other bank'] };
+    await act(async () => tree.update(<FilterSheet {...props} visible filters={closingDraft} />));
+    const late = pending.at(-1)!;
+    await act(async () => tree.update(<FilterSheet {...props} visible={false} filters={closingDraft} />));
+    expect(late.cancelled()).toBe(true);
+    await act(async () => late.resolve(777));
+    await act(async () => tree.update(<FilterSheet {...props} visible filters={closingDraft} />));
+    expect(titles()).not.toContain('Show 777 products');
     expect(titles()).toContain('Apply');
+    await act(async () => pending.at(-1)!.resolve(3));
+    expect(titles()).toContain('Show 3 products');
   } finally { act(() => tree.unmount()); }
 });
 

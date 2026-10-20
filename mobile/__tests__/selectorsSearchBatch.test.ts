@@ -31,13 +31,21 @@ afterEach(() => {
 
 test('cooperative filter counts preserve exact membership and yield before scanning', async () => {
   let ticks = 0;
-  const yieldControl = jest.fn(async () => {});
+  const accessed = new Set<number>();
+  const observedRows = new Proxy(rows, { get(target, key, receiver) {
+    if (typeof key === 'string' && /^\d+$/.test(key)) accessed.add(Number(key));
+    return Reflect.get(target, key, receiver);
+  } });
+  const atYield: number[] = [];
+  const yieldControl = jest.fn(async () => { atYield.push(accessed.size); });
   const selected = { ...filters, query: 'solar', providers: ['Bank A'] };
-  const result = await filterRowsCooperatively(rows, selected, null, index, 'Mortgage', {
+  const result = await filterRowsCooperatively(observedRows, selected, null, index, 'Mortgage', {
     yieldControl, now: () => ++ticks * 7,
   });
   expect(result).toEqual(filterRows(rows, selected, null, index, 'Mortgage'));
   expect(yieldControl.mock.calls.length).toBeGreaterThan(10);
+  expect(atYield[0]).toBe(0);
+  expect(atYield.some(count => count > 0 && count < rows.length)).toBe(true);
   let cancelled = false;
   expect(await filterRowsCooperatively(rows, selected, null, index, 'Mortgage', {
     yieldControl: async () => { cancelled = true; }, cancelled: () => cancelled,
