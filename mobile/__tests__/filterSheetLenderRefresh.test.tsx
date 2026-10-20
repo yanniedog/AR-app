@@ -30,6 +30,31 @@ type TestNode = {
 };
 type InspectableRenderer = ReactTestRenderer & { root: TestNode };
 
+test('a stale filter count cannot replace a newer draft or update a closed sheet', async () => {
+  const options = (await prepareSearchFilterOptions([], null, 'Mortgage', { yieldControl: async () => {} }))!;
+  const pending: { resolve(value: number): void; cancelled: () => boolean }[] = [];
+  const resultCount = jest.fn((_draft: unknown, cancelled?: () => boolean) => new Promise<number>(resolve => {
+    pending.push({ resolve, cancelled: cancelled! });
+  }));
+  const filters = { ...EMPTY_FILTERS };
+  const props = { onClose: jest.fn(), onApply: jest.fn(), options, filters, resultCount };
+  let tree!: InspectableRenderer;
+  await act(async () => { tree = TestRenderer.create(<FilterSheet {...props} visible />) as InspectableRenderer; });
+  try {
+    const latestFilters = { ...filters, providers: ['Bank'] };
+    await act(async () => tree.update(<FilterSheet {...props} visible filters={latestFilters} />));
+    expect(pending[0].cancelled()).toBe(true);
+    await act(async () => pending.at(-1)!.resolve(2));
+    const titles = () => tree.root.findAll(node => node.type === 'Button').map(node => node.props.title);
+    expect(titles()).toContain('Show 2 products');
+    await act(async () => pending[0].resolve(999));
+    expect(titles()).not.toContain('Show 999 products');
+    await act(async () => tree.update(<FilterSheet {...props} visible={false} filters={latestFilters} />));
+    expect(pending.at(-1)!.cancelled()).toBe(true);
+    expect(titles()).toContain('Apply');
+  } finally { act(() => tree.unmount()); }
+});
+
 test('an active lender query stays clearable when live rows shrink below the search threshold', async () => {
   const rows: RateRow[] = Array.from({ length: 13 }, (_, i) => ({
     provider: `Bank ${i + 1}`,

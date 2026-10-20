@@ -493,6 +493,16 @@ export async function prepareSearchRows(
   metric: RankMetric = 'base', mortgageMetric: MortgageRateMetric = 'comparison',
   control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
 ): Promise<RateRow[] | null> {
+  const filtered = await filterRowsCooperatively(rows, filters, detailsProducts, searchIndex, section, control);
+  return filtered && sortRowsCooperatively(filtered, sortKey, section, metric, mortgageMetric, control);
+}
+
+/** Share search membership with live filter counts without a render-time catalogue scan. */
+export async function filterRowsCooperatively(
+  rows: RateRow[], filters: Filters, detailsProducts?: Record<string, ProductDetail> | null,
+  searchIndex?: SearchIndexPayload | null, section?: SectionKey | null,
+  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
+): Promise<RateRow[] | null> {
   const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
   const now = control.now ?? (() => performance.now());
   const cancelled = control.cancelled ?? (() => false);
@@ -512,7 +522,7 @@ export async function prepareSearchRows(
     }
     if (cancelled()) return null;
   }
-  return sortRowsCooperatively(filtered, sortKey, section, metric, mortgageMetric, control);
+  return filtered;
 }
 
 export function queryAndSort(

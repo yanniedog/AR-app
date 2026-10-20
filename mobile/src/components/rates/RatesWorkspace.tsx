@@ -23,6 +23,7 @@ import { normalizeRatesPageSize, ratesPageWindow } from '../../data/ratesPaginat
 import { ratesIntentKey, resolveRatesIntent, RATES_INTENT_KEYS, type RatesRouteParams } from '../../lib/ratesIntent';
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
 import { useRatesAuditTarget } from '../../hooks/useRatesAuditTarget';
+import { measuredRatesViewport } from '../../lib/ratesViewport';
 import { SearchReportExport } from '../../components/SearchReportExport';
 import { isSuitabilityFilterReady } from '../../data/suitabilityGate';
 import Ionicons from '../../components/icons/AppIcon';
@@ -47,7 +48,7 @@ import { SECTION_ORDER } from '../../constants';
 import {
   activeFilterCount,
   EMPTY_FILTERS,
-  filterRows,
+  filterRowsCooperatively,
   type Filters,
   type SortKey,
 } from '../../data/selectors';
@@ -345,16 +346,17 @@ export default function RatesWorkspace() {
   const activeFilterOptions = draftAvailability === 'unlisted' ? catalogueOptions : filterOptions.options;
 
   const draftResultCount = useCallback(
-    (draft: Filters) => (
+    async (draft: Filters, cancelled?: () => boolean) => (
       // Suitability rebuilds can keep the same row array; count against the gate the list uses.
       void suitabilityRevision,
-      filterRows(
+      (await filterRowsCooperatively(
         mortgageScope.rows,
         { ...draft, query: debouncedQuery },
         details?.products ?? null,
         resultSearchIndex,
         section,
-      ).length
+        { cancelled },
+      ))?.length ?? null
     ),
     [mortgageScope.rows, debouncedQuery, details?.products, resultSearchIndex, section, suitabilityRevision],
   );
@@ -514,8 +516,14 @@ export default function RatesWorkspace() {
     // In-place selection/disclosure changes do not change visible indices, so
     // FlashList may omit its usual viewability callback. Request a fresh native
     // measurement after this render commits; layout alone is not visible proof.
-    if (isFocused && listReadiness.ready) listRef.current?.recomputeViewableItems();
-  }, [isFocused, listRevision, listReadiness.ready]);
+    if (!isFocused || !listReadiness.ready || restoredDataRevision !== restorationKey) return;
+    const frame = requestAnimationFrame(() => {
+      listRef.current?.recomputeViewableItems();
+      const measured = measuredRatesViewport(listRef.current, currentRows.current, listRevision);
+      if (measured) onViewableItemsChanged(measured);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isFocused, listRevision, listReadiness.ready, restoredDataRevision, restorationKey, onViewableItemsChanged]);
   const logoReadiness = useLogoReadiness(listDataRevision);
   const auditTarget = useRatesAuditTarget({ rows: pageRows, results: resultRows, page: pagination.page, size: pageSize,
     revision: listRevision, context: JSON.stringify([coreSha ?? core?.run_date, manifest?.files.details.sha256, catalogue.generationId, catalogue.status, scenario,

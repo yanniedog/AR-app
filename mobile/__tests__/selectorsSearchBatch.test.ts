@@ -5,7 +5,7 @@ import {
   rowMatchesSearchQuery,
   type SearchIndexPayload,
 } from '../src/data/detailSearch';
-import { EMPTY_FILTERS, filterRows } from '../src/data/selectors';
+import { EMPTY_FILTERS, filterRows, filterRowsCooperatively } from '../src/data/selectors';
 import type { RateRow } from '../src/types';
 
 const rows: RateRow[] = Array.from({ length: 1000 }, (_, i) => ({
@@ -26,6 +26,21 @@ const filters = { ...EMPTY_FILTERS, includeNonStandard: true };
 afterEach(() => {
   jest.restoreAllMocks();
   resetDetailSearchIndexCache();
+});
+
+test('cooperative filter counts preserve exact membership and yield before scanning', async () => {
+  let ticks = 0;
+  const yieldControl = jest.fn(async () => {});
+  const selected = { ...filters, query: 'solar', providers: ['Bank A'] };
+  const result = await filterRowsCooperatively(rows, selected, null, index, 'Mortgage', {
+    yieldControl, now: () => ++ticks * 7,
+  });
+  expect(result).toEqual(filterRows(rows, selected, null, index, 'Mortgage'));
+  expect(yieldControl.mock.calls.length).toBeGreaterThan(10);
+  let cancelled = false;
+  expect(await filterRowsCooperatively(rows, selected, null, index, 'Mortgage', {
+    yieldControl: async () => { cancelled = true; }, cancelled: () => cancelled,
+  })).toBeNull();
 });
 
 test('a filtering pass copies the cached matching set once, independent of the row count', () => {

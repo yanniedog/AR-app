@@ -57,7 +57,7 @@ export function FilterSheet({
   filters: Filters;
   onApply: (f: Filters) => void;
   /** Products the list would show for a draft; labels the apply action. */
-  resultCount?: (draft: Filters) => number;
+  resultCount?: (draft: Filters, cancelled?: () => boolean) => number | null | Promise<number | null>;
   resultNoun?: 'rates' | 'products';
 }) {
   const [internalDraft, setInternalDraft] = useState<Filters>(filters);
@@ -88,10 +88,16 @@ export function FilterSheet({
 
   // Counting re-runs the list filter, so let chip presses paint first.
   const deferredDraft = useDeferredValue(draft);
-  const draftCount = useMemo(
-    () => (visible && resultCount ? resultCount(deferredDraft) : null),
-    [visible, resultCount, deferredDraft],
-  );
+  const [counted, setCounted] = useState<{ draft: Filters; counter: typeof resultCount; count: number } | null>(null);
+  useEffect(() => {
+    if (!visible || !resultCount) return;
+    let cancelled = false;
+    void Promise.resolve().then(() => cancelled ? null : resultCount(deferredDraft, () => cancelled)).then(count => {
+      if (!cancelled) setCounted(count == null ? null : { draft: deferredDraft, counter: resultCount, count });
+    }).catch(() => { if (!cancelled) setCounted(null); });
+    return () => { cancelled = true; };
+  }, [visible, resultCount, deferredDraft]);
+  const draftCount = visible && counted?.draft === deferredDraft && counted.counter === resultCount ? counted.count : null;
   const applyTitle = draftCount === null
     ? uiLabel('Apply')
     : uiJoin('Show', ' ', uiCount(draftCount), ' ', resultNoun === 'rates' ? draftCount === 1 ? 'Rate' : 'rates' : draftCount === 1 ? 'Product' : 'products');
