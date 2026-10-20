@@ -55,6 +55,28 @@ test('unknown property names and numeric or boolean values are private', () => {
   expect(Object.values(decoded.diagnosticLog.checks[0].metrics).filter(value => typeof value === 'string')).toHaveLength(3);
 });
 
+test('generic report scalar and enum keys in arbitrary metrics remain private', () => {
+  const report = makePerformanceAuditReport();
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 2,
+    metrics: { actual: 123456.25, expected: 234567.25, visible: 345678.25, pass: 456789.25, complete: true,
+      stage: 'readiness', platform: 'android', appVersion: '999999999', kind: 'journey', actionMs: 3.5 } }];
+  const decoded = fullAuditDiagnosticLog(report, id => id) as typeof report;
+  const metrics = decoded.checks[0].metrics;
+  expect(metrics.actionMs).toBe(3.5);
+  for (const [key, value] of Object.entries(metrics)) if (key !== 'actionMs') expect(value).toMatch(/^~private/);
+  expect(decoded.checks[0].durationMs).toBe(2);
+  expect(decoded.environment.platform).toBe('android');
+});
+
+test.each(['route-round-trip', 'semantic-action', 'segmented-payload-capacity'])('retains production measurement mode %s and navigation recovery', measurementMode => {
+  const report = makePerformanceAuditReport();
+  const navigationKinds = ['none', 'second-back', 'replace-recovery', 'second-back+replace-recovery', 'anchor-reset', 'second-back+anchor-reset'];
+  report.checks = navigationKinds.map(returnNavigationKind => ({ id: 'journey-rates-cold', label: 'Rates', kind: 'journey',
+    status: 'pass', durationMs: 1, metrics: { measurementMode, returnNavigationKind } }));
+  const decoded = fullAuditDiagnosticLog(report, id => id) as typeof report;
+  expect(decoded.checks.map(check => check.metrics)).toEqual(report.checks.map(check => check.metrics));
+});
+
 test('readiness IDs cannot use the check-ID exception', () => {
   const report = makePerformanceAuditReport();
   report.checks = [{ id: 'deep-first-pass.route.projections.projections.advanced.toggle', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 2,

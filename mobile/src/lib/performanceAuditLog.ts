@@ -13,9 +13,12 @@ export function encodePerformanceAuditEvent(
   event: Record<string, unknown>,
   includeIdentity = false,
 ): string {
+  const journalEvent = event.kind === 'report-fallback'
+    ? { ...event, report: compactPerformanceAuditReportForLog(event.report) }
+    : event;
   const identityNeeded = includeIdentity ||
     ['start', 'report', 'report-fallback', 'fatal', 'cancelled'].includes(String(event.kind));
-  if (!identityNeeded) return compactAuditLogJson(event);
+  if (!identityNeeded) return compactAuditLogJson(journalEvent);
   return compactAuditLogJson({
     app: { appVersion: app.appVersion, buildVersion: app.buildVersion },
     device: {
@@ -27,7 +30,7 @@ export function encodePerformanceAuditEvent(
       osName: device.osName ?? 'unknown',
       osVersion: device.osVersion ?? 'unknown',
     },
-    ...event,
+    ...journalEvent,
   });
 }
 

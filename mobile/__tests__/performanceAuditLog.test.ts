@@ -49,6 +49,16 @@ describe('self-contained audit log identity', () => {
     expect(JSON.parse(encodePerformanceAuditEvent(app, device, { kind: 'check', id: 'runtime' })))
       .toEqual({ kind: 'check', id: 'runtime' });
   });
+  it('compacts the actual fallback event encoder before serializing the journal', () => {
+    const check = { id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 7,
+      metrics: { actionMs: 2 }, diagnostic: { readiness: 'x'.repeat(3_000_000) } };
+    const report = { checks: [check] };
+    const body = encodePerformanceAuditEvent(app, device, { kind: 'report-fallback', report });
+    expect(body.length).toBeLessThan(1000);
+    expect(JSON.parse(body)).toMatchObject({ kind: 'report-fallback', report: { checks: [{ id: check.id, status: 'fail', durationMs: 7, metrics: { actionMs: 2 } }] } });
+    expect(body).not.toContain('readiness');
+    expect(check.diagnostic.readiness).toHaveLength(3_000_000);
+  });
 });
 
 describe('bounded audit evidence', () => {
