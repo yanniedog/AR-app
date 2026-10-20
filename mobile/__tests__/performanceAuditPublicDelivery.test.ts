@@ -129,7 +129,7 @@ test('failed report preparation cannot retry an earlier raw diagnostic request',
   // Arbitrary text is now aliased. Preserve enough distinct numeric evidence to
   // cross the encoded cap without relying on private text surviving redaction.
   const tooLarge = makePerformanceAuditReport('new-report', [{ ...report.checks[0],
-    metrics: { samples: Array.from({ length: 350_000 }, (_, index) => index + 0.123456789) } }]);
+    metrics: Object.fromEntries(Array.from({ length: 120_000 }, (_, index) => [`sample${index}`, index + 0.123456789])) }]);
   await delivery.uploadCompletedPerformanceAudit(tooLarge);
   await sharing.retryDebugLogUpload();
   expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ preparationFailed: true, sessionId: 'new-report' });
