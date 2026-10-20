@@ -13,9 +13,12 @@ export function encodePerformanceAuditEvent(
   event: Record<string, unknown>,
   includeIdentity = false,
 ): string {
+  const journalEvent = event.kind === 'report-fallback'
+    ? { ...event, report: compactPerformanceAuditReportForLog(event.report) }
+    : event;
   const identityNeeded = includeIdentity ||
     ['start', 'report', 'report-fallback', 'fatal', 'cancelled'].includes(String(event.kind));
-  if (!identityNeeded) return compactAuditLogJson(event);
+  if (!identityNeeded) return compactAuditLogJson(journalEvent);
   return compactAuditLogJson({
     app: { appVersion: app.appVersion, buildVersion: app.buildVersion },
     device: {
@@ -27,7 +30,7 @@ export function encodePerformanceAuditEvent(
       osName: device.osName ?? 'unknown',
       osVersion: device.osVersion ?? 'unknown',
     },
-    ...event,
+    ...journalEvent,
   });
 }
 
@@ -168,7 +171,6 @@ export function compactAuditCheckForLog(check: {
     kind: check.kind,
     status: check.status,
     durationMs: check.durationMs,
-    ...(check.diagnostic == null ? {} : { diagnostic: check.diagnostic }),
   };
   if (check.status === 'pass' || check.status === 'skipped') {
     if (check.metrics.iteration != null) base.phase = check.metrics.iteration;
@@ -213,7 +215,7 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
         typeof check.metrics !== 'object' ||
         Array.isArray(check.metrics)
       ) {
-        return omitNullishDeep(entry);
+        return omitNullishDeep(Object.fromEntries(Object.entries(check).filter(([key]) => key !== 'diagnostic')));
       }
       return compactAuditCheckForLog({
         id: check.id,

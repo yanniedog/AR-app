@@ -15,7 +15,10 @@ const MAX_COMPRESSED_BYTES = 64 * 1024 * 1024;
 const MAX_INFLATED_BYTES = 192 * 1024 * 1024;
 const SHA256 = /^[0-9a-f]{64}$/;
 
-export type AppHealthLiveProgress = (stage: string) => void | Promise<void>;
+type LiveAssetLabel = 'Core asset' | 'Details asset';
+export type AppHealthLiveStage = `${LiveAssetLabel}:${'downloaded' | 'hash-verified' | 'native-inflated-and-text-decoded' | 'inflated' | 'text-decoded' | 'decoded'}` |
+  'manifest:fetched' | 'dates-index:fetched' | 'revision:verified' | 'core:history-sealed' | 'core:normalized';
+export type AppHealthLiveProgress = (stage: AppHealthLiveStage) => void | Promise<void>;
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -52,7 +55,7 @@ function toHex(bytes: ArrayBuffer): string {
 
 async function fetchVerifiedAsset<T>(
   file: ManifestFile,
-  label: string,
+  label: LiveAssetLabel,
   onProgress?: AppHealthLiveProgress,
   signal?: AbortSignal,
 ): Promise<T> {
