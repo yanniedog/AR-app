@@ -1,18 +1,18 @@
 import type { PerformanceAuditReadinessSnapshot } from './performanceAuditReadiness';
 
-export type AuditDiagnosticStage = 'start' | 'route' | 'pre-action' | 'action' | 'path' | 'readiness' | 'settle' | 'complete' | 'check';
+export type AuditDiagnosticStage = 'start' | 'route' | 'pre-action' | 'action' | 'path' | 'data' | 'readiness' | 'settle' | 'back' | 'recovery' | 'origin-readiness' | 'complete' | 'check';
 export interface AuditCheckDiagnostic {
   stage: AuditDiagnosticStage;
   readiness: ReturnType<typeof diagnosticReadiness> | null;
 }
 
 // Probe IDs are source-authored roles. Reject arbitrary route/account content.
-const WORDS = new Set(('rates results search audit target data list layout filters logos logo model projections lifecycle chart inputs scenario storage calculator product details receipt evidence lender products history graphic compare table columns market snapshot outlook dashboard economy rba response calendar moves saved items profile local state options settings sections preferences update status terms notices content debug log entries buffer not found recovery bank bankrates providers window result suitability candidates core optional projection prepared visible pagination maximum features calculations readiness render').split(' '));
+const WORDS = new Set(('1 2 a about account active actual advance age all app assessment async audit august b back bank bankrates base bonus bound browse buffer calculations calculator calendar candidates chart check collision columns compare content contribution core coverage criterion dashboard data debug deposit details different discount due duplicate economic economy eligible empty entries environment evidence excess execution external facet facts fake features fee file filters first flat forecast found frame future graphic graphics group growth hierarchy history id inputs insights interest inventory io items later layout leader lender lifecycle link linked list local log logo logos maintenance manifest market maturity maximum metric minimum model modeled movements moves name network new not notices observed one ongoing optional options outlook overview package pagination participation payload payment payments pi pinned preceding preferences prepared primary product products profile progress projection projections providers purchases rate rates rba readiness receipt recovery remaining render repay repayment response responsiveness restoration result results reversal root rule runtime safety saved scenario search secondary sections self september settings settle setup snapshot source state status stop storage successor suitability system table target td terms there tier tiers transfer two unemployment unknown update visible wages waiver watchlist whole window zero').split(' '));
 function role(value: string | undefined): string | null {
   return value && value.length <= 100 && value.split(/[.-]/).every(word => WORDS.has(word)) ? value : null;
 }
 
-const STAGES = new Set(['start', 'route', 'pre-action', 'action', 'path', 'readiness', 'settle', 'complete', 'check']);
+const STAGES = new Set<AuditDiagnosticStage>(['start', 'route', 'pre-action', 'action', 'path', 'data', 'readiness', 'settle', 'back', 'recovery', 'origin-readiness', 'complete', 'check']);
 const KEYS = new Set('stage readiness ready capturing blockers code surface probe surfaces id actionRevision probes kind required status expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent'.split(' '));
 const CODES = new Set('capture-inactive no-surfaces no-probes probe-pending probe-error dataset-revision-mismatch render-revision-mismatch count-incomplete graphic-evidence-missing required-kind-missing'.split(' '));
 const NUMERIC = new Set('actionRevision expected actual visible fallback'.split(' '));
@@ -25,7 +25,7 @@ export function publicAuditDiagnostic(value: unknown): unknown {
     if (typeof item === 'number') return NUMERIC.has(key) && Number.isFinite(item) ? item : null;
     if (typeof item === 'string') {
       if (['id', 'surface', 'probe'].includes(key)) return role(item);
-      if (key === 'stage' && STAGES.has(item) || key === 'code' && CODES.has(item) ||
+      if (key === 'stage' && STAGES.has(item as AuditDiagnosticStage) || key === 'code' && CODES.has(item) ||
         key === 'kind' && ['data', 'list', 'logo', 'graphic', 'layout'].includes(item) ||
         key === 'status' && ['pending', 'ready', 'error'].includes(item)) return item;
       return null;

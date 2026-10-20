@@ -12,11 +12,11 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
     return name;
   };
   const privateField = /^(?:sessionId|startedAt|finishedAt|lastStoredCheckAt|manufacturer|brand|model|networkType|label|journeyLabel|slowestCheckLabel|query|searchQuery|parameters|inputs|profile|profileFilters|scenario|accountBalance|balance|loanBalance|loanAmount|propertyValue|currentRate|lvr|productKey|product_key|provider|selectionTokens?|actionResultEvidence|readinessEvidence|graphicEvidence|readinessActionEvidence|limitations|generationId|bundleSha|coreSha|payloadRevision|privateText)$/i;
-  const cleanText = (text: string) => text
+  const cleanText = (text: string) => (text.includes('@')
+    ? text.replace(/\b[A-Z0-9._%+-]{1,128}@[A-Z0-9.-]{1,253}\.[A-Z]{2,63}\b/gi, '[email]') : text)
     .replace(/\bBearer\s+\S+/gi, 'Bearer [secret]')
     .replace(/\b(?:authorization|api[_-]?key|token|secret|password)["']?\s*[:=]\s*["']?[^\s,;"']+["']?/gi, '[secret]')
     .replace(/\b(?:uid|user[_-]?id|subscription[_-]?id|account[_-]?(?:id|number))\s*[:=]\s*[^\s,;]+/gi, '[identifier]')
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email]')
     .replace(/https?:\/\/[^\s)'"\\]+/gi, '[url]')
     .replace(/\b[A-Z]:[\\/][^\s)]+/gi, '[path]')
     .replace(/\/(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+/g, '[path]')
@@ -24,7 +24,7 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
   const visit = (value: unknown, key = ''): unknown => {
     if (value == null) return value;
     if (typeof value === 'string' && /CheckIds?$/.test(key)) return safeCheckId(value) ?? alias(value);
-    if (privateField.test(key) || key === 'totalMemoryBytes' || /(?:password|secret|authorization|credential|privateKey|api[_-]?key|token|accountNumber|accountId|customerId|borrower|email|balance|amount|lvr)/i.test(key) ||
+    if (privateField.test(key) || key === 'account' || key === 'totalMemoryBytes' || /(?:password|secret|authorization|credential|privateKey|api[_-]?key|token|accountNumber|accountId|customerId|borrower|email|balance|amount|lvr)/i.test(key) ||
       typeof value === 'string' && /(?:revision|path|url)/i.test(key)) return alias(value);
     if (typeof value === 'string') return cleanText(value);
     if (Array.isArray(value)) return value.map(item => visit(item, key));

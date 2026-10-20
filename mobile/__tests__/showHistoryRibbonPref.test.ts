@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import core from '../assets/sample/core.json';
 import { selectBankHistoryChartModel } from '../src/data/historySelectors';
 import { DEFAULT_PREFS, useStore } from '../src/data/store';
+import { CURRENT_PRIVACY_CHOICE_VERSION } from '../src/data/storeTypes';
 import type { CorePayload } from '../src/types';
 
 const sample = core as CorePayload;
@@ -139,7 +140,7 @@ describe('showHistoryRibbon pref', () => {
     expect(useStore.getState().prefs.privacyChoiceVersion).toBe(0);
   });
 
-  it('requires v2 users to reconfirm the expanded private-triage disclosure', async () => {
+  it.each([2, 3])('requires v%s users to reconfirm the expanded diagnostic disclosure', async version => {
     await useStore.persist.clearStorage();
     await AsyncStorage.setItem(
       'ar-rates',
@@ -147,7 +148,7 @@ describe('showHistoryRibbon pref', () => {
         state: {
           prefs: {
             ...DEFAULT_PREFS,
-            privacyChoiceVersion: 2,
+            privacyChoiceVersion: version,
             crashReportsEnabled: true,
             sessionReplayEnabled: false,
           },
@@ -171,7 +172,7 @@ describe('showHistoryRibbon pref', () => {
         state: {
           prefs: {
             ...DEFAULT_PREFS,
-            privacyChoiceVersion: 3,
+            privacyChoiceVersion: CURRENT_PRIVACY_CHOICE_VERSION,
             crashReportsEnabled: false,
             sessionReplayEnabled: true,
           },
@@ -184,6 +185,6 @@ describe('showHistoryRibbon pref', () => {
     await useStore.persist.rehydrate();
     expect(useStore.getState().prefs.crashReportsEnabled).toBe(false);
     expect(useStore.getState().prefs.sessionReplayEnabled).toBe(true);
-    expect(useStore.getState().prefs.privacyChoiceVersion).toBe(3);
+    expect(useStore.getState().prefs.privacyChoiceVersion).toBe(CURRENT_PRIVACY_CHOICE_VERSION);
   });
 });

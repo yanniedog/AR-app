@@ -2377,6 +2377,7 @@ export async function runJourney(
   let backResponsiveness = EMPTY_RESPONSIVENESS;
   let routeError: string | undefined;
   let destinationDiagnostic: AuditCheck['diagnostic'];
+  let journeyStage: AuditDiagnosticStage = 'route';
 
   try {
     assertSessionActive(watchdog);
@@ -2384,12 +2385,14 @@ export async function runJourney(
     let at = now();
     const forwardResponsivenessAt = monitor.snapshot();
     router.push(journey.href);
+    journeyStage = 'path';
     await waitForPath(
       currentPath,
       journey.expectedPath,
       `${journey.label} forward navigation`,
       { watchdog },
     );
+    journeyStage = 'settle';
     await settleUi();
     assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
@@ -2402,6 +2405,7 @@ export async function runJourney(
       );
     }
     const backgroundResponsivenessAt = monitor.snapshot();
+    journeyStage = 'data';
     const background = await waitForJourneyData(
       journey,
       logCursor,
@@ -2418,6 +2422,7 @@ export async function runJourney(
       }
     }, 50);
     try {
+      journeyStage = 'readiness';
       const destinationSnapshot = await performanceAuditReadinessRegistry.waitForReady({
         pauseState: { getPaused: () => getPerformanceAuditState().paused, subscribe: subscribePerformanceAudit },
         surfaceIds: [journey.expectedSurface],
@@ -2437,12 +2442,14 @@ export async function runJourney(
     // Keep the destination mounted long enough to expose deferred work,
     // subscriptions, and JS stalls without charging the deliberate dwell to
     // the forward-navigation latency.
+    journeyStage = 'settle';
     await delay(ROUTE_DWELL_MS);
     backgroundResponsiveness = monitor.metricsSince(backgroundResponsivenessAt);
     assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
 
     const backResponsivenessAt = monitor.snapshot();
+    journeyStage = 'back';
     // Tab history returns through Rates before the root-stack audit origin.
     // Keep both real dispatches measured; an anchor reset is recovery, not Back.
     const measuredBack = await measureAuditBackNavigation({
@@ -2481,6 +2488,7 @@ export async function runJourney(
           ? navigationAnchor ? 'second-back+anchor-reset' : 'second-back+replace-recovery'
           : navigationAnchor ? 'anchor-reset' : 'replace-recovery';
       const fallbackStarted = now();
+      journeyStage = 'recovery';
       await recoverAuditRoute(currentPath, navigationAnchor);
       assertSessionActive(watchdog);
       const recoveryMs = now() - fallbackStarted;
@@ -2493,7 +2501,7 @@ export async function runJourney(
     routeError = formatAuditError(caught);
     destinationDiagnostic = captureAuditDiagnostic(
       caught instanceof PerformanceAuditReadinessTimeoutError || caught instanceof PerformanceAuditReadinessProbeError
-        ? caught.snapshot : performanceAuditReadinessRegistry.snapshot([journey.expectedSurface]), 'readiness');
+        ? caught.snapshot : performanceAuditReadinessRegistry.snapshot(), journeyStage);
     if (!pathMatches(currentPath(), AUDIT_HOME_PATH)) {
       try {
         await recoverAuditRoute(currentPath, navigationAnchor);
@@ -2506,6 +2514,7 @@ export async function runJourney(
   }
 
   if (!routeError && backReturnedToAudit) {
+    journeyStage = 'origin-readiness';
     const originReadinessStarted = now();
     const originReadinessAbort = new AbortController();
     const originReadinessGuard = setInterval(() => {
@@ -2526,6 +2535,9 @@ export async function runJourney(
       rethrowAuditControl(caught);
       assertSessionActive(watchdog);
       routeError = `Audit origin did not become ready after back navigation: ${formatAuditError(caught)}`;
+      destinationDiagnostic = captureAuditDiagnostic(
+        caught instanceof PerformanceAuditReadinessTimeoutError || caught instanceof PerformanceAuditReadinessProbeError
+          ? caught.snapshot : performanceAuditReadinessRegistry.snapshot(['audit.progress']), journeyStage);
     } finally {
       clearInterval(originReadinessGuard);
     }

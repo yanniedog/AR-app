@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
+import { decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 const mockStorage = new Map<string, string>();
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(async (key: string) => mockStorage.get(key) ?? null),
@@ -53,8 +54,11 @@ test('automatic dispatch alone uploads and verifies only the complete sanitized 
   expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
   expect(log.debugLog.readCompleteText).not.toHaveBeenCalled();
   const body = jest.mocked(log.uploadDebugLog).mock.calls[0][0];
-  expect(JSON.parse(body).checks[0]).toMatchObject({ id: 'journey-rates-cold', status: 'fail', metrics: { maxEventLoopLagMs: 300 } });
-  for (const text of ['private', 'secret', 'traceback', 'RAW', 'user@example.com', '/profile']) expect(body).not.toContain(text);
+  const decoded = decodeCompactDiagnosticJson(body) as any;
+  expect(decoded.checks[0]).toMatchObject({ id: 'journey-rates-cold', status: 'fail', metrics: { maxEventLoopLagMs: 300 } });
+  expect(decoded.diagnosticLog.checks[0].trace).toBe('raw traceback');
+  expect(decoded.diagnosticLog.checks[0].metrics.account).not.toBe('secret');
+  for (const text of ['private-session', 'private-product', 'secret-token', 'RAW SECRET MUST NEVER LEAVE', 'user@example.com', '/profile/private']) expect(body).not.toContain(text);
   expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ verified: true, url: result.url });
   expect(log.verifyDebugLogUpload).toHaveBeenCalledWith(expect.any(Object), body);
 });
@@ -121,7 +125,9 @@ test('a known unverified paste retries verification using its saved receipt inst
 test('failed report preparation cannot retry an earlier raw diagnostic request', async () => {
   jest.mocked(log.uploadDebugLog).mockRejectedValueOnce(new Error('offline'));
   await sharing.startDebugLogUpload({ sessionId: null, appVersion: '1', buildVersion: '1' });
-  const tooLarge = makePerformanceAuditReport('new-report', Array(30_000).fill(report.checks[0]));
+  // Repeated records now compress successfully. An incompressible string must
+  // cross the encoded UTF-8 cap to exercise preparation failure.
+  const tooLarge = makePerformanceAuditReport('new-report', [{ ...report.checks[0], error: '😀'.repeat(600_000) }]);
   await delivery.uploadCompletedPerformanceAudit(tooLarge);
   await sharing.retryDebugLogUpload();
   expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ preparationFailed: true, sessionId: 'new-report' });

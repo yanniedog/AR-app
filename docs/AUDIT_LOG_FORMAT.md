@@ -26,7 +26,8 @@ makes missing evidence in older saved reports explicit. Every probe retains
 status, requiredness, counts, visible rows, fallback counts, empty/layout/summary
 proof, revision-match outcomes and error presence. Diagnostic stages identify
 whether a failure occurred before action invocation, during the action, path
-transition, readiness wait or final settling.
+transition, data preparation, readiness wait, back navigation, recovery, origin
+readiness or final settling.
 The retained diagnostic log also carries registered/completed actions, probe
 errors, blocker messages, and timing of readiness updates. The explicit
 deidentified share option retains its stricter field allowlist.
