@@ -189,6 +189,14 @@ test('retains emitter-defined capacity, model, restoration and log-stall evidenc
   expect(JSON.stringify(decoded)).not.toContain('987654321');
 });
 
+test.each(['basic', 'deep'])('retains post-creation preload metrics and conditional search mode %s', searchMode => {
+  const report = makePerformanceAuditReport();
+  const metrics = { preloaded: true, preloadedAgeMs: 123.5, searchMode, deepSearchAvailable: true };
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'pass', durationMs: 1, metrics }];
+  const decoded = fullAuditDiagnosticLog(report, id => id) as typeof report;
+  expect(decoded.checks[0].metrics).toEqual(metrics);
+});
+
 test('retains complete source-authored deep-plan metadata while hiding private inputs', () => {
   const report = makePerformanceAuditReport();
   const empty = buildDeepPerformanceAuditPlan(null, { seed: 'PRIVATE-SEED' });
