@@ -142,6 +142,7 @@ import {
   omitNullishDeep,
 } from '../lib/performanceAuditLog';
 import { yieldToUi } from '../lib/yieldToUi';
+import { captureAuditDiagnostic, type AuditDiagnosticStage } from '../lib/performanceAuditDiagnostic';
 import { setPassiveAuditPaused } from '../lib/passiveAudit';
 import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAuditFinalization';
 import { awaitPerformanceAuditWork } from '../lib/performanceAuditWork';
@@ -629,7 +630,7 @@ async function runDeepAuditStep(
   datasetRevision: AuditDatasetRevision,
 ): Promise<AuditCheck> {
   const started = now();
-  const execution = { attempted: false, invoked: false };
+  const execution = { attempted: false, invoked: false, stage: 'start' as AuditDiagnosticStage };
   const iteration: JourneyIteration = step.passId === 'first-pass' ? 'cold' : 'warm';
   const label = `${step.scenarioId}: ${step.semanticActionId} (${step.passId})`;
   if (step.skipReason) {
@@ -754,6 +755,7 @@ async function runDeepAuditStep(
       },
       error: formatAuditError(caught),
       trace: captureAuditTrace(`deep step ${step.id} failed; audit continues`),
+      diagnostic: captureAuditDiagnostic(readiness, execution.stage),
     };
   }
 }
@@ -796,7 +798,7 @@ async function runDeepAuditStepBody(
   started: number,
   iteration: JourneyIteration,
   label: string,
-  execution: { attempted: boolean; invoked: boolean },
+  execution: { attempted: boolean; invoked: boolean; stage: AuditDiagnosticStage },
 ): Promise<AuditCheck> {
   assertSessionActive(watchdog);
   assertDatasetRevision(datasetRevision);
@@ -820,6 +822,7 @@ async function runDeepAuditStepBody(
   };
   const href = routeEntryHref(step);
   if (href) {
+    execution.stage = 'route';
     execution.attempted = true;
     measuredAction = await measureAuditAction(
       () => {
@@ -832,6 +835,7 @@ async function runDeepAuditStepBody(
       now,
     );
   } else {
+    execution.stage = 'pre-action';
     const preActionStarted = now();
     await ensureMountedActionRoute(
       step.semanticActionId,
@@ -882,6 +886,7 @@ async function runDeepAuditStepBody(
     const actionAbort = new AbortController();
     const pendingAction = mountedMutationBarrier.track(measureAuditAction(
       () => {
+        execution.stage = 'action';
         execution.invoked = true;
         assertSessionActive(watchdog);
         return performanceAuditReadinessRegistry.invokeAction(
@@ -991,6 +996,7 @@ async function runDeepAuditStepBody(
   const actionStarted = measuredAction.startedAt;
   const responsivenessAt = measuredAction.responsivenessAt;
 
+  execution.stage = 'path';
   await waitForPath(currentPath, expectedPath, label, { watchdog });
   assertDatasetRevision(datasetRevision);
   const readinessStarted = now();
@@ -1014,6 +1020,7 @@ async function runDeepAuditStepBody(
   }, 250);
   let readiness: PerformanceAuditReadinessSnapshot;
   try {
+    execution.stage = 'readiness';
     readiness = await performanceAuditReadinessRegistry.waitForReady({
       pauseState: { getPaused: () => getPerformanceAuditState().paused, subscribe: subscribePerformanceAudit },
       surfaceIds: [step.expectedSurface],
@@ -1081,6 +1088,7 @@ async function runDeepAuditStepBody(
       renderRevisionAfter,
     });
   }
+  execution.stage = 'settle';
   await settleUi();
   assertDatasetRevision(datasetRevision);
   const responsiveness = monitor.metricsSince(responsivenessAt);
@@ -1098,6 +1106,7 @@ async function runDeepAuditStepBody(
     label,
     kind: 'journey',
     status,
+    diagnostic: captureAuditDiagnostic(readiness, 'complete'),
     durationMs: roundMetric(now() - started),
     metrics: {
       journeyId: `${step.scenarioId}.${step.semanticActionId}`,
@@ -2367,6 +2376,7 @@ export async function runJourney(
   let backgroundResponsiveness = EMPTY_RESPONSIVENESS;
   let backResponsiveness = EMPTY_RESPONSIVENESS;
   let routeError: string | undefined;
+  let destinationDiagnostic: AuditCheck['diagnostic'];
 
   try {
     assertSessionActive(watchdog);
@@ -2408,13 +2418,14 @@ export async function runJourney(
       }
     }, 50);
     try {
-      await performanceAuditReadinessRegistry.waitForReady({
+      const destinationSnapshot = await performanceAuditReadinessRegistry.waitForReady({
         pauseState: { getPaused: () => getPerformanceAuditState().paused, subscribe: subscribePerformanceAudit },
         surfaceIds: [journey.expectedSurface],
         quietWindowMs: READINESS_QUIET_WINDOW_MS,
         timeoutMs: readinessTimeoutMs(watchdog),
         signal: destinationReadinessAbort.signal,
       });
+      destinationDiagnostic = captureAuditDiagnostic(destinationSnapshot, 'complete');
       watchdog.touchProgress();
     } finally {
       clearInterval(destinationReadinessGuard);
@@ -2480,6 +2491,9 @@ export async function runJourney(
   } catch (caught) {
     rethrowAuditControl(caught);
     routeError = formatAuditError(caught);
+    destinationDiagnostic = captureAuditDiagnostic(
+      caught instanceof PerformanceAuditReadinessTimeoutError || caught instanceof PerformanceAuditReadinessProbeError
+        ? caught.snapshot : performanceAuditReadinessRegistry.snapshot([journey.expectedSurface]), 'readiness');
     if (!pathMatches(currentPath(), AUDIT_HOME_PATH)) {
       try {
         await recoverAuditRoute(currentPath, navigationAnchor);
@@ -2536,6 +2550,7 @@ export async function runJourney(
     label: `${journey.label} (${iteration})`,
     kind: 'journey',
     status,
+    diagnostic: destinationDiagnostic,
     durationMs: roundMetric(now() - started),
     metrics: {
       measurementMode: 'route-round-trip',
@@ -2830,7 +2845,11 @@ export function PerformanceAuditRunner() {
         // Bound evidence at the one place every check enters the report. ~260
         // unbounded stacks and readiness dumps are what pushed the finished
         // report past the megabyte range and exhausted the heap in teardown.
-        const check = boundAuditCheckEvidence(enforcePerformanceAuditStepLimit(rawCheck));
+        const diagnostic = rawCheck.diagnostic ?? (rawCheck.kind === 'journey'
+          ? captureAuditDiagnostic(performanceAuditReadinessRegistry.snapshot(
+            typeof rawCheck.metrics.expectedSurface === 'string' ? [rawCheck.metrics.expectedSurface] : undefined,
+          ), 'check') : undefined);
+        const check = boundAuditCheckEvidence(enforcePerformanceAuditStepLimit({ ...rawCheck, diagnostic }));
         checks.push(check);
         logAuditCheck(app, sessionId, check);
         // Only durable completed-check progress keeps the hang watchdog alive.
@@ -3118,6 +3137,7 @@ export function PerformanceAuditRunner() {
             kind: 'runtime',
             status: 'fail',
             durationMs: roundMetric(now() - checkStarted),
+            diagnostic: captureAuditDiagnostic(performanceAuditReadinessRegistry.snapshot(), 'check'),
             metrics: {
               continuedAfterFailure: true,
               routeStateInvalidated: true,
@@ -3925,6 +3945,7 @@ export function PerformanceAuditRunner() {
             },
             error,
             trace: captureAuditTrace('performance audit stopped before later steps'),
+            diagnostic: captureAuditDiagnostic(readinessSnapshot, 'check'),
           });
           checks.push(failedCheck);
           logAuditCheck(app, sessionId, failedCheck);

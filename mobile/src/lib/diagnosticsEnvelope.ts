@@ -1,8 +1,16 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { toPublicAppHealthReport } from './appHealth';
 import { PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from './performanceAuditSetup';
+import { encodeCompactDiagnosticJson } from './compactDiagnosticJson';
+import { publicAuditDiagnostic, publicAuditError } from './performanceAuditDiagnostic';
+import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
 
 const METRIC_ALLOWLIST = new Set([
+  'actionMs', 'readinessMs', 'forwardWorkMs', 'readinessQuietWindowMs', 'destinationReadinessMs',
+  'originReadinessMs', 'firstBackMs', 'secondBackMs', 'replaceRecoveryMs', 'anchorResetMs',
+  'actionRevisionBefore', 'actionRevisionAfter', 'readinessProbeCount', 'readinessRequiredProbeCount',
+  'readinessPendingRequiredProbeCount', 'depth', 'optional', 'continuedAfterFailure',
+  'backChangedPath', 'backReturnedToAudit', 'scenarioRecoveryCascade', 'interruptedByBackground',
   'setupStage', 'stepLimitMs', 'stepLimitExceeded', 'nonTimingFailure',
   'publicCatalogueCacheMiss', 'catalogueAdmissionRejected',
   'datasetChanged', 'publicCatalogueChanged', 'datasetRefreshStarted', 'datasetManifestChanged', 'datasetRevisionChanged',
@@ -62,6 +70,10 @@ const METRIC_ALLOWLIST = new Set([
   'lenderDetailsLoaded',
   'observedDestinations',
 ]);
+for (const prefix of ['forward', 'background', 'back']) {
+  for (const metric of ['EventLoopSamples', 'EventLoopP95Ms', 'MaxEventLoopLagMs', 'StallsOver100Ms',
+    'FrameSamples', 'FrameP95Ms', 'MaxFrameGapMs', 'FramesOver50Ms']) METRIC_ALLOWLIST.add(`${prefix}${metric}`);
+}
 
 const FIXED_CHECK_IDS = new Set([
   ...PERFORMANCE_AUDIT_SETUP_CHECK_IDS,
@@ -122,16 +134,20 @@ function allowlistedMetrics(check: AuditCheck): Record<string, string | number |
   const result: Record<string, string | number | boolean | null> = {};
   for (const [key, value] of Object.entries(metrics)) {
     if (!METRIC_ALLOWLIST.has(key)) continue;
+    const prefix = ['forward', 'background', 'back'].find(candidate => key.startsWith(candidate) && /[A-Z]/.test(key[candidate.length] ?? ''));
+    const baseKey = prefix ? key[prefix.length].toLowerCase() + key.slice(prefix.length + 1) : key;
     if (typeof value === 'number' && value === 0) {
-      if (key === 'eventLoopSamples' || key === 'frameSamples') {
+      if (baseKey === 'eventLoopSamples' || baseKey === 'frameSamples') {
         result[key] = null;
         continue;
       }
       const zeroProven = OBSERVED_COUNT_KEYS.has(key) || metrics.executionAttempted === true || metrics.measurementAvailable === true;
-      const sampleProven = EVENT_LOOP_MEASUREMENT_KEYS.has(key)
-        ? typeof metrics.eventLoopSamples === 'number' && metrics.eventLoopSamples > 0
-        : FRAME_MEASUREMENT_KEYS.has(key)
-          ? typeof metrics.frameSamples === 'number' && metrics.frameSamples > 0
+      const loopSamples = metrics[prefix ? `${prefix}EventLoopSamples` : 'eventLoopSamples'];
+      const frameSamples = metrics[prefix ? `${prefix}FrameSamples` : 'frameSamples'];
+      const sampleProven = EVENT_LOOP_MEASUREMENT_KEYS.has(baseKey)
+        ? typeof loopSamples === 'number' && loopSamples > 0
+        : FRAME_MEASUREMENT_KEYS.has(baseKey)
+          ? typeof frameSamples === 'number' && frameSamples > 0
           : zeroProven;
       if (!sampleProven) {
         result[key] = null;
@@ -231,6 +247,15 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
       maxEventLoopLagMs: report.summary.maxEventLoopLagMs,
       maxFrameGapMs: report.summary.maxFrameGapMs,
     },
+    diagnostics: {
+      schemaVersion: 1,
+      durationMs: report.durationMs,
+      wallClockMs: report.wallClockMs ?? null,
+      watchdog: { hangTimeoutMs: report.watchdog.hangTimeoutMs, storedCheckCount: report.watchdog.storedCheckCount },
+      plannedChecks: report.coverage?.plannedChecks ?? report.checks.length,
+      storedChecks: report.checks.length,
+      readinessCapturedChecks: report.checks.filter(check => check.diagnostic != null).length,
+    },
     checks: report.checks.map((check) => ({
       id: safeCheckId(check.id),
       kind: check.kind,
@@ -238,6 +263,8 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
       failureCode: failureCode(check),
       durationMs: safeDuration(check),
       metrics: allowlistedMetrics(check),
+      diagnostic: publicAuditDiagnostic(check.diagnostic),
+      error: publicAuditError(check.error, check.trace),
     })),
     appHealth: report.appHealth ? toPublicAppHealthReport(report.appHealth) : null,
   };
@@ -266,7 +293,7 @@ export function createDeidentifiedDiagnosticsShare(
 /** Public pastes carry the allowlisted report only. Keep all checks; reject
  * oversize reports instead of silently uploading a partial diagnostic. */
 export function createPublicPerformanceAuditReport(report: PerformanceAuditReport): string {
-  const body = JSON.stringify(buildDeidentifiedPerformanceAudit(report));
+  const body = encodeCompactDiagnosticJson({ ...buildDeidentifiedPerformanceAudit(report), diagnosticLog: fullAuditDiagnosticLog(report) });
   if (new TextEncoder().encode(body).length > 2 * 1024 * 1024) {
     throw new Error('The deidentified report exceeds the public upload limit.');
   }

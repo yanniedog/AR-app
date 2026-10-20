@@ -16,6 +16,7 @@ import {
 import { assertAuditPublicCataloguePinned, AuditDatasetChangedError, auditDatasetFailureMetrics } from '../src/lib/performanceAuditDataset';
 import { measurePerformanceAuditSetupStage, PERFORMANCE_AUDIT_SETUP_STAGES } from '../src/lib/performanceAuditSetup';
 import { catalogue } from '../testUtils/publicRateJourney';
+import { decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 
 const read = (relativePath: string) => fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8');
 
@@ -79,13 +80,13 @@ describe('deidentified diagnostics privacy boundary', () => {
       status: 'fail', durationMs: 280.8, metrics: { stepLimitExceeded: false },
       error: 'AuditDatasetChangedError: Public pricing catalogue changed during the performance audit\n    at private-account-123456' };
     const legacyBody = createPublicPerformanceAuditReport(reportFixture([failed]));
-    expect(JSON.parse(legacyBody).checks[0].failureCode)
+    expect((decodeCompactDiagnosticJson(legacyBody) as any).checks[0].failureCode)
       .toBe('public-catalogue-changed');
     expect(legacyBody).not.toContain('private-account-123456');
-    expect(legacyBody).not.toContain('AuditDatasetChangedError');
+    expect((decodeCompactDiagnosticJson(legacyBody) as any).checks[0].error.type).toBe('AuditDatasetChangedError');
     failed.error = 'Private account: 123456\nAuditDatasetChangedError: Public pricing catalogue changed during the performance audit';
     const body = createPublicPerformanceAuditReport(reportFixture([failed]));
-    expect(JSON.parse(body).checks[0].failureCode).toBe('check-failed');
+    expect((decodeCompactDiagnosticJson(body) as any).checks[0].failureCode).toBe('check-failed');
     expect(body).not.toContain('123456');
   });
 
@@ -101,7 +102,9 @@ describe('deidentified diagnostics privacy boundary', () => {
     const report = reportFixture([failed]);
     const publicBody = createPublicPerformanceAuditReport(report);
     const shared = JSON.parse(createDeidentifiedDiagnosticsShare(report).body);
-    expect(JSON.parse(publicBody)).toEqual(shared);
+    const { diagnosticLog, ...publicSummary } = decodeCompactDiagnosticJson(publicBody) as any;
+    expect(publicSummary).toEqual(shared);
+    expect(diagnosticLog.checks).toHaveLength(report.checks.length);
     expect(shared.checks[0]).toMatchObject({ id: 'setup-pinned-inputs', status: 'fail',
       failureCode: 'public-catalogue-changed', metrics: {
         datasetChanged: true, publicCatalogueChanged: true, catalogueGenerationChanged: false,
@@ -110,7 +113,7 @@ describe('deidentified diagnostics privacy boundary', () => {
         expectedCatalogueAllLoaded: true, actualCatalogueAllLoaded: true,
         completedBeforeFailure: 2, plannedChecks: 355, recoveryRequired: false, rollbackRestored: true,
       } });
-    for (const secret of ['private-generation-id', 'private-revision', '/private/account', '123456', 'private.invalid', 'AuditDatasetChangedError']) {
+    for (const secret of ['private-generation-id', 'private-revision', '/private/account', '123456', 'private.invalid']) {
       expect(publicBody).not.toContain(secret);
     }
   });

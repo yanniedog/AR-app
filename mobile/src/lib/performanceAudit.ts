@@ -2,6 +2,7 @@ import { getRandomBytes } from 'expo-crypto';
 import type { Href } from 'expo-router';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, type PerformanceAuditEstimate } from './performanceAuditTiming';
 import type { AuditBackgroundWorkWait } from './performanceAuditBackgroundWork';
+import type { AuditCheckDiagnostic } from './performanceAuditDiagnostic';
 
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import type { Prefs } from '../data/storeTypes';
@@ -43,6 +44,8 @@ export interface AuditCheck {
   /** Full stacks are retained only for errors so the audit does not profile its own logging. */
   trace?: string;
   error?: string;
+  /** Complete structured readiness evidence; never truncated into metric text. */
+  diagnostic?: AuditCheckDiagnostic;
 }
 
 export interface AuditAppIdentity {
