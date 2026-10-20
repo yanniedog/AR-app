@@ -3,6 +3,7 @@ import { fullAuditDiagnosticLog } from '../src/lib/fullAuditDiagnosticLog';
 import { createPublicPerformanceAuditReport } from '../src/lib/diagnosticsEnvelope';
 import { decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 import { APP_HEALTH_CHECK_CODES, finalizeAppHealthReport, toPublicAppHealthReport } from '../src/lib/appHealth';
+import { buildDeepPerformanceAuditPlan, buildDeepPerformanceAuditPlanFromInputs } from '../src/lib/performanceAuditPlan';
 
 test('every upload includes all retained checks, errors, traces, metrics and diagnostic context', () => {
   const report = makePerformanceAuditReport('private-session');
@@ -132,6 +133,53 @@ test('unknown saved-check identities remain correlatable aliases rather than pri
   const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
   expect(body).not.toContain('account-123456');
   expect(decoded.diagnosticLog.summary.slowestCheckId).toBe(decoded.diagnosticLog.checks[0].id);
+});
+
+test('retains complete source-authored deep-plan metadata while hiding private inputs', () => {
+  const report = makePerformanceAuditReport();
+  const empty = buildDeepPerformanceAuditPlan(null, { seed: 'PRIVATE-SEED' });
+  report.plan = buildDeepPerformanceAuditPlanFromInputs({ ...empty.inputs, sampledProducts: [{ section: 'Mortgage',
+    provider: 'PRIVATE-PROVIDER', productKey: 'PRIVATE-PRODUCT', productName: 'PRIVATE-NAME', rateIndex: 0,
+    selectionToken: 'PRIVATE-TOKEN', taxonomyPath: [] }] });
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.plan).toMatchObject({ coverageProfile: report.plan.coverageProfile, safeActionCount: report.plan.safeActionCount });
+  for (let pass = 0; pass < report.plan.passes.length; pass++) {
+    const expected = report.plan.passes[pass];
+    const actual = decoded.diagnosticLog.plan!.passes[pass];
+    expect(actual.id).toBe(expected.id);
+    expect(actual.label).toBe(expected.label);
+    expect(actual.steps).toHaveLength(expected.steps.length);
+    expected.steps.forEach(({ parameters: _parameters, expectedPath, ...step }, index) => {
+      expect(actual.steps[index]).toMatchObject(step);
+      if (step.scenarioId.startsWith('sample.catalogue.')) expect(actual.steps[index].expectedPath).toMatch(/^~private/);
+      else expect(actual.steps[index].expectedPath).toBe(expectedPath);
+    });
+  }
+  expect(body).not.toMatch(/PRIVATE-SEED|PRIVATE-PROVIDER|PRIVATE-PRODUCT|PRIVATE-NAME|PRIVATE-TOKEN/);
+  expect(decoded.diagnosticLog.plan!.inputs).toMatch(/^~private/);
+});
+
+test('retains route identities, outcomes and background-worker evidence', () => {
+  const report = makePerformanceAuditReport();
+  report.routeAggregates = [{ journeyId: 'rates', label: 'Rates', coldStatus: 'fail', warmStatus: 'pass',
+    coldForwardMs: 31, warmForwardMs: 12, coldBackMs: 4, warmBackMs: 3, forwardChangeMs: -19, backChangeMs: -1 }];
+  report.backgroundWorkWait = { startedAt: 'PRIVATE-DATE', capturedAt: 'PRIVATE-DATE', elapsedMs: 5, status: 'interrupted',
+    payloadWork: { capturedAt: 'PRIVATE-DATE', refreshing: true, postRefreshWarming: false, bankRateHistoryLoading: false,
+      detailsLoading: false, activeWork: ['refreshing'], revision: { runDate: null, manifestRunDate: null, coreSha: null,
+        detailsSha: null, payloadRevision: null, bundleSha: null } },
+    jobs: (['completed', 'failed', 'fallback', 'superseded', 'unavailable'] as const).map((outcome, index) => ({ id: index,
+      label: 'PRIVATE-WORKER', runDate: null, startedAt: 'PRIVATE-DATE', finishedAt: null, elapsedMs: 3, outcome,
+      stage: 'PRIVATE-STAGE', stageElapsedMs: 2, omittedStages: 0, processingCheckpoints: 4, lastCheckpointAgeMs: 1,
+      stages: [{ label: 'PRIVATE-STAGE', startedAt: 'PRIVATE-DATE', durationMs: 2, active: true }] })) };
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.routeAggregates[0]).toMatchObject({ journeyId: 'rates', coldStatus: 'fail', warmStatus: 'pass', coldForwardMs: 31, warmForwardMs: 12 });
+  expect(decoded.diagnosticLog.backgroundWorkWait!.jobs.map(job => job.outcome)).toEqual(report.backgroundWorkWait!.jobs.map(job => job.outcome));
+  expect(decoded.diagnosticLog.backgroundWorkWait!.jobs[0]).toMatchObject({ id: 0, omittedStages: 0, processingCheckpoints: 4,
+    stages: [{ durationMs: 2, active: true }] });
+  expect(decoded.diagnosticLog.backgroundWorkWait!.payloadWork).toMatchObject({ refreshing: true, activeWork: ['refreshing'] });
+  expect(body).not.toMatch(/PRIVATE-DATE|PRIVATE-WORKER|PRIVATE-STAGE/);
 });
 
 test('preserves the complete dedicated public app-health schema', () => {
