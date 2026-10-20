@@ -197,6 +197,30 @@ test.each(['basic', 'deep'])('retains post-creation preload metrics and conditio
   expect(decoded.checks[0].metrics).toEqual(metrics);
 });
 
+test('retains setup-factory proof, sample counts and inventory phase', () => {
+  const report = makePerformanceAuditReport();
+  const metrics = { rollbackJournalCreated: true, backgroundWorkStatus: 'settled', sampledProducts: 5, sampledProviders: 3,
+    foregroundCatalogueRendered: false, inventoryPhase: 'setup' };
+  report.checks = [{ id: 'setup-environment', label: 'Setup', kind: 'data', status: 'pass', durationMs: 1, metrics }];
+  expect((fullAuditDiagnosticLog(report, id => id) as typeof report).checks[0].metrics).toEqual(metrics);
+});
+
+test.each(['2026-10-21', '2024-02-29'])('retains validated source publication date %s only at source-date paths', date => {
+  const report = makePerformanceAuditReport();
+  report.environment.payloadRunDate = date;
+  report.backgroundWorkWait = { payloadWork: { revision: { runDate: date, manifestRunDate: date } }, jobs: [{ runDate: date }] } as never;
+  const decoded = fullAuditDiagnosticLog(report, id => id) as typeof report;
+  expect(decoded.environment.payloadRunDate).toBe(date);
+  expect(decoded.backgroundWorkWait).toMatchObject({ payloadWork: { revision: { runDate: date, manifestRunDate: date } }, jobs: [{ runDate: date }] });
+  expect(decoded.startedAt).toMatch(/^~private/);
+});
+
+test.each(['2026-02-29', '2026-13-01', 'private-date'])('masks malformed or private publication date %s', date => {
+  const report = makePerformanceAuditReport();
+  report.environment.payloadRunDate = date;
+  expect((fullAuditDiagnosticLog(report, id => id) as typeof report).environment.payloadRunDate).toMatch(/^~private/);
+});
+
 test('retains complete source-authored deep-plan metadata while hiding private inputs', () => {
   const report = makePerformanceAuditReport();
   const empty = buildDeepPerformanceAuditPlan(null, { seed: 'PRIVATE-SEED' });

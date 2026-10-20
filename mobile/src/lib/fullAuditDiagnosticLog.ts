@@ -98,6 +98,13 @@ for (const field of ('message safety renderRevisionBefore renderRevisionAfter ac
 for (const names of Object.values(SCALAR_PATHS)) for (const name of names) FIELDS.add(name);
 for (const field of ('coverageProfile passId scenarioId semanticActionId expectedPath expectedSurface skipReason skipSafety when reason unsafeActionsExcluded excludedUnsafeActions stages runDate manifestRunDate revision coreSha detailsSha activeWork').split(' ')) FIELDS.add(field);
 for (const field of ('installedVersion installedBuild remoteVersion remoteBuild cachedBuild').split(' ')) FIELDS.add(field);
+const PUBLICATION_DATE_PATHS = new Set(['.environment.payloadRunDate', '.backgroundWorkWait.payloadWork.revision.runDate',
+  '.backgroundWorkWait.payloadWork.revision.manifestRunDate', '.backgroundWorkWait.jobs[].runDate']);
+function publicationDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const milliseconds = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString().slice(0, 10) === value;
+}
 
 /** Keep the canonical diagnostic report, replacing private inputs rather than
  * replacing the report with a summary. Opaque aliases retain equality evidence. */
@@ -113,6 +120,7 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
   const visit = (value: unknown, key = '', path = ''): unknown => {
     if (value == null) return value;
     const parent = path.slice(0, path.lastIndexOf('.'));
+    if (typeof value === 'string' && PUBLICATION_DATE_PATHS.has(path) && publicationDate(value)) return value;
     if (typeof value === 'string' && publicPlanText(path, value)) return value;
     if (path === '.routeAggregates[].journeyId' && typeof value === 'string') {
       const checkId = `journey-${value}-cold`;

@@ -34,6 +34,17 @@ const propertyName = node => ts.isIdentifier(node) || ts.isStringLiteral(node) ?
 const isMetrics = node => ts.isIdentifier(node) && node.text === 'metrics' || ts.isPropertyAccessExpression(node) && node.name.text === 'metrics' ||
   ts.isElementAccessExpression(node) && node.argumentExpression && ts.isStringLiteral(node.argumentExpression) && node.argumentExpression.text === 'metrics';
 function scanMetrics(expression) {
+  if (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)) {
+    if (!ts.isBlock(expression.body)) scanMetrics(expression.body);
+    else {
+      const returns = node => {
+        if (ts.isReturnStatement(node) && node.expression) scanMetrics(node.expression);
+        else if (!ts.isFunctionLike(node)) ts.forEachChild(node, returns);
+      };
+      ts.forEachChild(expression.body, returns);
+    }
+    return;
+  }
   const type = checker.getTypeAtLocation(expression);
   const objectTypes = (type.isUnion() ? type.types : [type]).filter(item => item.flags & (ts.TypeFlags.Object | ts.TypeFlags.Intersection));
   for (const objectType of objectTypes) for (const property of objectType.getProperties()) {
@@ -69,6 +80,7 @@ for (const source of program.getSourceFiles()) {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.expression.getText(source) === 'Object' && node.expression.name.text === 'assign' && node.arguments.length && isMetrics(node.arguments[0])) {
       node.arguments.slice(1).forEach(scanMetrics);
     }
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'runSetupStage' && node.arguments[2]) scanMetrics(node.arguments[2]);
     ts.forEachChild(node, visit);
   }
   visit(source);
