@@ -115,9 +115,19 @@ describe('performanceAuditLog compaction', () => {
       metrics: { actionMs: 1 }, diagnostic: { stage: 'readiness', readiness: { probes: 'x'.repeat(3_000_000) } } };
     const compact = compactAuditCheckForLog(check);
     expect(compact).not.toHaveProperty('diagnostic');
+    expect(compact).toMatchObject({ id: check.id, status, durationMs: 1, metrics: { actionMs: 1 } });
     expect(JSON.stringify(compact).length).toBeLessThan(300);
-    expect(JSON.stringify(compactPerformanceAuditReportForLog({ checks: [check] }))).not.toContain('probes');
+    const compactReport = compactPerformanceAuditReportForLog({ checks: [check] });
+    expect(JSON.stringify(compactReport)).not.toContain('probes');
+    expect(compactReport).toMatchObject({ checks: [{ id: check.id, status, durationMs: 1, metrics: { actionMs: 1 } }] });
     expect(check.diagnostic.readiness.probes).toHaveLength(3_000_000);
+  });
+  it('omits readiness snapshots even from malformed legacy check records', () => {
+    const check = { id: 'legacy-check', status: 'fail', durationMs: 5, diagnostic: { readiness: 'x'.repeat(3_000_000) } };
+    const compact = compactPerformanceAuditReportForLog({ checks: [check] });
+    expect(compact).toMatchObject({ checks: [{ id: 'legacy-check', status: 'fail', durationMs: 5 }] });
+    expect(JSON.stringify(compact).length).toBeLessThan(300);
+    expect(check.diagnostic.readiness).toHaveLength(3_000_000);
   });
   it('omits nullish fields deeply', () => {
     expect(omitNullishDeep({ a: 1, b: null, c: { d: undefined, e: 2 } })).toEqual({

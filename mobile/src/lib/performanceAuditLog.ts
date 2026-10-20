@@ -212,7 +212,7 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
         typeof check.metrics !== 'object' ||
         Array.isArray(check.metrics)
       ) {
-        return omitNullishDeep(entry);
+        return omitNullishDeep(Object.fromEntries(Object.entries(check).filter(([key]) => key !== 'diagnostic')));
       }
       return compactAuditCheckForLog({
         id: check.id,
