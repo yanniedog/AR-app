@@ -116,6 +116,14 @@ test.each(['healthy', 'attention', 'bottleneck'] as const)('retains source-autho
   expect(decoded.checks[0].metrics).toMatchObject({ measurementMode: 'basic', returnNavigationKind: 'second-back' });
 });
 
+test.each(['Hermes', 'SpiderMonkey', 'V8', 'JavaScriptCore', 'unknown'])('retains emitted engine %s and the actual maximum-coverage profile', jsEngine => {
+  const report = makePerformanceAuditReport();
+  report.environment.jsEngine = jsEngine;
+  report.environment.auditCoverageProfile = 'maximum-safe-coverage-v1';
+  const decoded = fullAuditDiagnosticLog(report, id => id) as typeof report;
+  expect(decoded.environment).toMatchObject({ jsEngine, auditCoverageProfile: 'maximum-safe-coverage-v1' });
+});
+
 test('fixed enum text is readable only in its source-authored field', () => {
   const report = makePerformanceAuditReport();
   report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 1,

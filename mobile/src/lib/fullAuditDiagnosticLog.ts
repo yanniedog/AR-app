@@ -30,9 +30,9 @@ function publicPlanText(path: string, value: string): boolean {
 const FIXED_TEXT: Record<string, ReadonlySet<string>> = Object.fromEntries(Object.entries({
   kind: 'runtime journey setup storage network filesystem data list logo graphic layout update',
   status: 'pass warn fail skipped unavailable pending ready error waiting settled interrupted',
-  platform: 'android ios web', osName: 'Android iOS', jsEngine: 'Hermes hermes jsc',
+  platform: 'android ios web', osName: 'Android iOS', jsEngine: 'Hermes hermes jsc SpiderMonkey V8 JavaScriptCore unknown',
   payloadSource: 'remote local bundled cache unknown sample',
-  overall: 'healthy attention bottleneck', auditCoverageProfile: 'basic maximum-safe',
+  overall: 'healthy attention bottleneck', auditCoverageProfile: 'basic maximum-safe maximum-safe-coverage-v1',
   measurementMode: 'basic deep route-round-trip semantic-action segmented-payload-capacity',
   returnNavigationKind: 'none back second-back replace anchor-reset replace-recovery second-back+replace-recovery second-back+anchor-reset',
   stateImpact: 'none local-only restorable',
