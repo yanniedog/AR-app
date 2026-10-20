@@ -3,7 +3,7 @@ import { toPublicAppHealthReport } from './appHealth';
 
 /** Keep the canonical diagnostic report, replacing private inputs rather than
  * replacing the report with a summary. Opaque aliases retain equality evidence. */
-export function fullAuditDiagnosticLog(report: PerformanceAuditReport): unknown {
+export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheckId: (value: string) => string | null): unknown {
   const aliases = new Map<string, string>();
   const alias = (value: unknown) => {
     const key = JSON.stringify(value);
@@ -23,6 +23,7 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport): unknown 
     .replace(/\b(?:private[-_ ]*)?(?:account|balance|loan[-_ ]?amount|lvr|property[-_ ]?value|current[-_ ]?rate)[\s:=#-]*\$?\d[\w.,%/-]*/gi, '[private value]');
   const visit = (value: unknown, key = ''): unknown => {
     if (value == null) return value;
+    if (typeof value === 'string' && /CheckIds?$/.test(key)) return safeCheckId(value) ?? alias(value);
     if (privateField.test(key) || key === 'totalMemoryBytes' || /(?:password|secret|authorization|credential|privateKey|api[_-]?key|token|accountNumber|accountId|customerId|borrower|email|balance|amount|lvr)/i.test(key) ||
       typeof value === 'string' && /(?:revision|path|url)/i.test(key)) return alias(value);
     if (typeof value === 'string') return cleanText(value);
@@ -31,6 +32,7 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport): unknown 
     return Object.fromEntries(Object.entries(value).filter(([name]) => name !== 'networkViolations')
       .map(([name, child]) => [name, visit(child, name)]));
   };
-  return visit({ ...report, environment: { ...report.environment, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion },
+  return visit({ ...report, checks: report.checks.map(check => ({ ...check, id: safeCheckId(check.id) ?? alias(check.id) })),
+    environment: { ...report.environment, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion },
     appHealth: report.appHealth ? toPublicAppHealthReport(report.appHealth) : null });
 }

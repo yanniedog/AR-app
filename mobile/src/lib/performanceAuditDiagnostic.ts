@@ -15,11 +15,14 @@ function role(value: string | undefined): string | null {
 const STAGES = new Set(['start', 'route', 'pre-action', 'action', 'path', 'readiness', 'settle', 'complete', 'check']);
 const KEYS = new Set('stage readiness ready capturing blockers code surface probe surfaces id actionRevision probes kind required status expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent'.split(' '));
 const CODES = new Set('capture-inactive no-surfaces no-probes probe-pending probe-error dataset-revision-mismatch render-revision-mismatch count-incomplete graphic-evidence-missing required-kind-missing'.split(' '));
+const NUMERIC = new Set('actionRevision expected actual visible fallback'.split(' '));
+const BOOLEAN = new Set('ready capturing required empty layout accessible datasetMatches renderMatches errorPresent'.split(' '));
 /** Repeat the field boundary for saved reports; arbitrary strings never become public evidence. */
 export function publicAuditDiagnostic(value: unknown): unknown {
   const visit = (item: unknown, key = ''): unknown => {
-    if (item == null || typeof item === 'boolean') return item;
-    if (typeof item === 'number') return Number.isFinite(item) ? item : null;
+    if (item == null) return item;
+    if (typeof item === 'boolean') return BOOLEAN.has(key) ? item : null;
+    if (typeof item === 'number') return NUMERIC.has(key) && Number.isFinite(item) ? item : null;
     if (typeof item === 'string') {
       if (['id', 'surface', 'probe'].includes(key)) return role(item);
       if (key === 'stage' && STAGES.has(item) || key === 'code' && CODES.has(item) ||
@@ -51,15 +54,19 @@ function diagnosticReadiness(snapshot: PerformanceAuditReadinessSnapshot) {
   return {
     ready: snapshot.ready,
     capturing: snapshot.capturing,
-    blockers: snapshot.blockers.map(blocker => ({ code: blocker.code, surface: role(blocker.surfaceId), probe: role(blocker.probeId) })),
+    blockers: snapshot.blockers.map(blocker => ({ code: blocker.code, surface: blocker.surfaceId ?? null, probe: blocker.probeId ?? null, message: blocker.message })),
     surfaces: snapshot.surfaces.map(surface => ({
-      id: role(surface.id), actionRevision: surface.actionRevision,
-      probes: surface.probes.map(probe => ({ id: role(probe.id), kind: probe.kind, required: probe.required, status: probe.status,
+      id: surface.id, actionRevision: surface.actionRevision,
+      actions: surface.actions, lastCompletedAction: surface.lastCompletedAction,
+      datasetRevision: surface.datasetRevision, renderRevision: surface.renderRevision,
+      registeredAtMs: surface.registeredAtMs, updatedAtMs: surface.updatedAtMs,
+      probes: surface.probes.map(probe => ({ id: probe.id, kind: probe.kind, required: probe.required, status: probe.status,
         expected: probe.expectedCount, actual: probe.actualCount, visible: probe.visibleCount, fallback: probe.fallbackCount,
         empty: probe.emptyStateRendered, layout: probe.layoutMeasured, accessible: probe.accessibleSummary,
         datasetMatches: probe.datasetRevision == null || surface.datasetRevision == null ? null : probe.datasetRevision === surface.datasetRevision,
         renderMatches: probe.renderRevision == null || surface.renderRevision == null ? null : probe.renderRevision === surface.renderRevision,
         errorPresent: probe.error !== null,
+        error: probe.error, datasetRevision: probe.datasetRevision, renderRevision: probe.renderRevision, updatedAtMs: probe.updatedAtMs,
       })),
     })),
   };

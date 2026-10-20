@@ -27,6 +27,9 @@ status, requiredness, counts, visible rows, fallback counts, empty/layout/summar
 proof, revision-match outcomes and error presence. Diagnostic stages identify
 whether a failure occurred before action invocation, during the action, path
 transition, readiness wait or final settling.
+The retained diagnostic log also carries registered/completed actions, probe
+errors, blocker messages, and timing of readiness updates. The explicit
+deidentified share option retains its stricter field allowlist.
 
 The October 21 sample round-trips all 2,658 checks from 774,015 to 308,546
 characters (60.1% smaller), before adding newly captured diagnostic evidence.

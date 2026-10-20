@@ -13,7 +13,7 @@ test('every upload includes all retained checks, errors, traces, metrics and dia
     diagnostic: { stage: 'pre-action', readiness: null } }];
   const body = createPublicPerformanceAuditReport(report);
   const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
-  expect(decoded.diagnosticLog).toEqual(fullAuditDiagnosticLog(report));
+  expect(decoded.diagnosticLog).toEqual(fullAuditDiagnosticLog(report, id => id));
   expect(decoded.diagnosticLog.checks).toHaveLength(1);
   expect(decoded.diagnosticLog.checks[0]).toMatchObject({ durationMs: 10031.1, metrics: { actionMs: 4.2, phaseDetail: 'model pending' }, diagnostic: { stage: 'pre-action' } });
   expect(decoded.diagnosticLog.checks[0].error).toContain('TypeError: model was not ready');
@@ -21,4 +21,13 @@ test('every upload includes all retained checks, errors, traces, metrics and dia
   expect(decoded.diagnosticLog.checks[0].metrics.renderRevisionBefore).toBe(decoded.diagnosticLog.checks[0].metrics.renderRevisionAfter);
   expect(body).not.toMatch(/private-session|Private input label|private-inputs|private\.example|987654|123456|TOPSECRET|KEYSECRET|BEARERSECRET/);
   expect(createPublicPerformanceAuditReport(report)).toBe(body);
+});
+test('unknown saved-check identities remain correlatable aliases rather than private strings', () => {
+  const report = makePerformanceAuditReport('private-session');
+  report.checks = [{ id: 'account-123456-private-check', label: 'Private label', kind: 'runtime', status: 'fail', durationMs: 1, metrics: {} }];
+  report.summary.slowestCheckId = report.checks[0].id;
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  expect(body).not.toContain('account-123456');
+  expect(decoded.diagnosticLog.summary.slowestCheckId).toBe(decoded.diagnosticLog.checks[0].id);
 });

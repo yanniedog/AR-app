@@ -254,7 +254,7 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
       watchdog: { hangTimeoutMs: report.watchdog.hangTimeoutMs, storedCheckCount: report.watchdog.storedCheckCount },
       plannedChecks: report.coverage?.plannedChecks ?? report.checks.length,
       storedChecks: report.checks.length,
-      readinessCapturedChecks: report.checks.filter(check => check.diagnostic != null).length,
+      readinessCapturedChecks: report.checks.filter(check => check.diagnostic?.readiness != null).length,
     },
     checks: report.checks.map((check) => ({
       id: safeCheckId(check.id),
@@ -293,7 +293,7 @@ export function createDeidentifiedDiagnosticsShare(
 /** Public pastes carry the allowlisted report only. Keep all checks; reject
  * oversize reports instead of silently uploading a partial diagnostic. */
 export function createPublicPerformanceAuditReport(report: PerformanceAuditReport): string {
-  const body = encodeCompactDiagnosticJson({ ...buildDeidentifiedPerformanceAudit(report), diagnosticLog: fullAuditDiagnosticLog(report) });
+  const body = encodeCompactDiagnosticJson({ ...buildDeidentifiedPerformanceAudit(report), diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId) });
   if (new TextEncoder().encode(body).length > 2 * 1024 * 1024) {
     throw new Error('The deidentified report exceeds the public upload limit.');
   }
