@@ -697,8 +697,16 @@ export const AUDIT_PRODUCER_ENUMS: Record<string, readonly string[]> = {
   "reason": [
     "Covers official sources, loaded lender details and links rendered during this run. Unloaded lazy sources remain outside this inventory.",
     "Enumerates all loaded source destinations; it does not certify OS handlers or HTTP reachability.",
+    "Fewer than two distinct exact products are available in one section",
+    "Fewer than two products are loaded",
     "Maximum coverage is unavailable because optional assets are not cached",
+    "No active core payload is loaded",
     "No active payload is loaded",
+    "No exact product row is available",
+    "No lender is loaded",
+    "No observed provider is available",
+    "No product is loaded",
+    "No rendered lender product is available",
     "Not run: Android-only",
     "Not run: local mode has a zero-network contract",
     "Not run: remote update checks are outside the local audit contract",
@@ -708,6 +716,7 @@ export const AUDIT_PRODUCER_ENUMS: Record<string, readonly string[]> = {
     "The app left the foreground during this check",
     "The app left the foreground during this check; the failure was observed before the interruption and timings are not reported",
     "The link verifier failed before it could record a result.",
+    "The selected exact product has no valid hierarchy path",
     "documentDirectory unavailable"
   ],
   "responsivenessClassification": [

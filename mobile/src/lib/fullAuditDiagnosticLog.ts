@@ -131,6 +131,8 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
     if (privateField.test(key) || ['currentPayloadRevision', 'deepSearchEnabled', 'historyExplorerEnabled', 'includeNonStandard', 'depositRankMetric', 'mortgageRateMetric', 'enabledSections', 'account', 'totalMemoryBytes'].includes(key) || /(?:password|secret|authorization|credential|privateKey|api[_-]?key|token|accountNumber|accountId|customerId|borrower|email|balance|amount|lvr)/i.test(key) ||
       typeof value === 'string' && /(?:revision|path|url)/i.test(key)) return alias(value);
     if (typeof value === 'string') {
+      if (parent === '.checks[].metrics' && (key === 'reason' && (publicPlanText('.plan.passes[].steps[].skipReason', value) || publicPlanText('.plan.passes[].steps[].skipSafety.reason', value)) ||
+        key === 'skipSafety' && publicPlanText('.plan.passes[].steps[].skipSafety.reason', value))) return value;
       if (parent === '.checks[].diagnostic.readiness.surfaces[]' && ['actions', 'lastCompletedAction'].includes(key)) {
         return AUDIT_REGISTERED_ACTION_IDS.has(value) || publicPlanText('.plan.passes[].steps[].semanticActionId', value) || value === ANDROID_UPDATE_READINESS_AUDIT.semanticActionId ? value : alias(value);
       }

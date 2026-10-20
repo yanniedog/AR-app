@@ -206,6 +206,26 @@ test('retains setup-factory proof, sample counts and inventory phase', () => {
   expect((fullAuditDiagnosticLog(report, id => id) as typeof report).checks[0].metrics).toEqual(metrics);
 });
 
+test.each(['No product is loaded', 'No lender is loaded', 'Fewer than two products are loaded'])('retains registry-derived skip prerequisite: %s', reason => {
+  const report = makePerformanceAuditReport();
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'skipped', durationMs: 0, metrics: { reason } },
+    { id: 'journey-rates-warm', label: 'Rates', kind: 'journey', status: 'skipped', durationMs: 0, metrics: { reason: 'PRIVATE USER PREREQUISITE' } }];
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.checks[0].metrics.reason).toBe(reason);
+  expect(decoded.diagnosticLog.checks[1].metrics.reason).toMatch(/^~private/);
+  expect(body).not.toContain('PRIVATE USER PREREQUISITE');
+});
+
+test('retains bounded plan skip and state-safety reasons used as check metrics', () => {
+  const plan = buildDeepPerformanceAuditPlan(null);
+  const step = plan.passes[0].steps.find(item => item.skipReason != null)!;
+  const report = makePerformanceAuditReport();
+  const metrics = { reason: step.skipReason, skipSafety: step.skipSafety.reason };
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'skipped', durationMs: 0, metrics }];
+  expect((fullAuditDiagnosticLog(report, id => id) as typeof report).checks[0].metrics).toEqual(metrics);
+});
+
 test('retains only finite source-defined live-stage timing keys', () => {
   const report = makePerformanceAuditReport();
   const metrics = { 'liveStage:Core asset:downloaded:ms': 4.5, 'liveStage:manifest:fetched:ms': 7,

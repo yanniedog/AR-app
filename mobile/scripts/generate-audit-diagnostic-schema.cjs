@@ -126,6 +126,7 @@ for (const source of program.getSourceFiles()) {
   if (file !== 'src/components/PerformanceAuditRunner.tsx' && !/^src\/lib\/performanceAudit[^/]*\.ts$/.test(file)) continue;
   function visit(node) {
     if (ts.isPropertyAssignment(node) && propertyName(node.name) === 'metrics') scanMetrics(node.initializer);
+    if (ts.isPropertyAssignment(node) && propertyName(node.name) === 'skipReason') record('reason', checker.getTypeAtLocation(node.initializer), node.initializer);
     if (ts.isShorthandPropertyAssignment(node) && node.name.text === 'metrics') scanMetrics(node.name);
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'metrics' && node.initializer) scanMetrics(node.initializer);
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
