@@ -168,7 +168,6 @@ export function compactAuditCheckForLog(check: {
     kind: check.kind,
     status: check.status,
     durationMs: check.durationMs,
-    ...(check.diagnostic == null ? {} : { diagnostic: check.diagnostic }),
   };
   if (check.status === 'pass' || check.status === 'skipped') {
     if (check.metrics.iteration != null) base.phase = check.metrics.iteration;

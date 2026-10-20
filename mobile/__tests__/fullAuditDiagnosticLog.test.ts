@@ -15,12 +15,26 @@ test('every upload includes all retained checks, errors, traces, metrics and dia
   const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
   expect(decoded.diagnosticLog).toEqual(fullAuditDiagnosticLog(report, id => id));
   expect(decoded.diagnosticLog.checks).toHaveLength(1);
-  expect(decoded.diagnosticLog.checks[0]).toMatchObject({ durationMs: 10031.1, metrics: { actionMs: 4.2, phaseDetail: 'model pending' }, diagnostic: { stage: 'pre-action' } });
-  expect(decoded.diagnosticLog.checks[0].error).toContain('TypeError: model was not ready');
-  expect(decoded.diagnosticLog.checks[0].trace).toContain('waitForReady');
+  expect(decoded.diagnosticLog.checks[0]).toMatchObject({ durationMs: 10031.1, metrics: { actionMs: 4.2, phaseDetail: expect.stringMatching(/^~private/) }, diagnostic: { stage: 'pre-action' },
+    errorDetails: { present: true, type: 'TypeError', frames: [['frame', 1, 1234]] } });
+  expect(decoded.diagnosticLog.checks[0].error).toMatch(/^~private/);
+  expect(decoded.diagnosticLog.checks[0].trace).toMatch(/^~private/);
   expect(decoded.diagnosticLog.checks[0].metrics.renderRevisionBefore).toBe(decoded.diagnosticLog.checks[0].metrics.renderRevisionAfter);
   expect(body).not.toMatch(/private-session|Private input label|private-inputs|private\.example|987654|123456|TOPSECRET|KEYSECRET|BEARERSECRET/);
   expect(createPublicPerformanceAuditReport(report)).toBe(body);
+});
+
+test('unlabelled runtime text defaults to opaque correlatable aliases', () => {
+  const report = makePerformanceAuditReport();
+  const privateValues = ['Jane Citizen', '+61 412 345 678', 'device-ABC123', 'Failed for customer ABC123'];
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 1,
+    error: privateValues[3], trace: privateValues[0], metrics: { incidental: privateValues[1], other: privateValues[2] },
+    diagnostic: { stage: 'readiness', readiness: { blockers: [{ message: privateValues[3] }] } } as never }];
+  const body = createPublicPerformanceAuditReport(report);
+  for (const value of privateValues) expect(body).not.toContain(value);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  const check = decoded.diagnosticLog.checks[0];
+  expect(check.diagnostic?.readiness).toMatchObject({ blockers: [{ message: check.error }] });
 });
 test('unknown saved-check identities remain correlatable aliases rather than private strings', () => {
   const report = makePerformanceAuditReport('private-session');

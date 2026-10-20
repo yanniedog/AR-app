@@ -110,6 +110,15 @@ describe('bounded audit evidence', () => {
 });
 
 describe('performanceAuditLog compaction', () => {
+  it.each(['pass', 'fail', 'skipped'])('keeps %s journal lines independent of full readiness evidence', (status) => {
+    const check = { id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status, durationMs: 1,
+      metrics: { actionMs: 1 }, diagnostic: { stage: 'readiness', readiness: { probes: 'x'.repeat(3_000_000) } } };
+    const compact = compactAuditCheckForLog(check);
+    expect(compact).not.toHaveProperty('diagnostic');
+    expect(JSON.stringify(compact).length).toBeLessThan(300);
+    expect(JSON.stringify(compactPerformanceAuditReportForLog({ checks: [check] }))).not.toContain('probes');
+    expect(check.diagnostic.readiness.probes).toHaveLength(3_000_000);
+  });
   it('omits nullish fields deeply', () => {
     expect(omitNullishDeep({ a: 1, b: null, c: { d: undefined, e: 2 } })).toEqual({
       a: 1,

@@ -46,7 +46,7 @@ export function publicAuditError(error?: string, trace?: string) {
   for (const line of [error ?? '', trace ?? ''].join('\n').split(/\r?\n|\\n/)) {
     const frame = line.match(/^\s*at\s+([A-Za-z_$][\w.$<>]*)\s+\([^\n]*:(\d+):(\d+)\)\s*$/) ??
       line.match(/^\s*([A-Za-z_$][\w.$<>]*)@[^\n]*:(\d+):(\d+)\s*$/);
-    if (frame) frames.push([frame[1], Number(frame[2]), Number(frame[3])]);
+    if (frame) frames.push(['frame', Number(frame[2]), Number(frame[3])]);
   }
   return { present: Boolean(error), type, frames };
 }

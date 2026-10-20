@@ -5,7 +5,9 @@ complete retained canonical audit report, alongside the diagnostic summary.
 This includes all checks, timing metrics, error messages, traces, coverage,
 watchdog context and captured readiness evidence. Private inputs, identities,
 routes and credentials are replaced with stable aliases or redaction markers;
-local-only network violation records remain local. The application journal and
+all arbitrary runtime strings default to aliases, including errors and traces.
+Structured error types and anonymous source-coordinate tuples remain readable.
+Local-only network violation records remain local. The application journal and
 private input values are not needed to reconstruct the audit's check results.
 
 New uploads use `ar-audit-dict-v1`. The payload contains its own encoding legend:
@@ -31,6 +33,8 @@ readiness or final settling.
 The retained diagnostic log also carries registered/completed actions, probe
 errors, blocker messages, and timing of readiness updates. The explicit
 deidentified share option retains its stricter field allowlist.
+Full readiness snapshots stay in the persisted report and upload; bounded
+per-check journal lines omit those snapshots to avoid rollover work during a run.
 
 The October 21 sample round-trips all 2,658 checks from 774,015 to 308,546
 characters (60.1% smaller), before adding newly captured diagnostic evidence.

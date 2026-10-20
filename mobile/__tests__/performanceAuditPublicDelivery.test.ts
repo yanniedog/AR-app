@@ -56,7 +56,8 @@ test('automatic dispatch alone uploads and verifies only the complete sanitized 
   const body = jest.mocked(log.uploadDebugLog).mock.calls[0][0];
   const decoded = decodeCompactDiagnosticJson(body) as any;
   expect(decoded.checks[0]).toMatchObject({ id: 'journey-rates-cold', status: 'fail', metrics: { maxEventLoopLagMs: 300 } });
-  expect(decoded.diagnosticLog.checks[0].trace).toBe('raw traceback');
+  expect(decoded.diagnosticLog.checks[0].trace).toMatch(/^~private/);
+  expect(body).not.toContain('raw traceback');
   expect(decoded.diagnosticLog.checks[0].metrics.account).not.toBe('secret');
   for (const text of ['private-session', 'private-product', 'secret-token', 'RAW SECRET MUST NEVER LEAVE', 'user@example.com', '/profile/private']) expect(body).not.toContain(text);
   expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ verified: true, url: result.url });
@@ -125,9 +126,10 @@ test('a known unverified paste retries verification using its saved receipt inst
 test('failed report preparation cannot retry an earlier raw diagnostic request', async () => {
   jest.mocked(log.uploadDebugLog).mockRejectedValueOnce(new Error('offline'));
   await sharing.startDebugLogUpload({ sessionId: null, appVersion: '1', buildVersion: '1' });
-  // Repeated records now compress successfully. An incompressible string must
-  // cross the encoded UTF-8 cap to exercise preparation failure.
-  const tooLarge = makePerformanceAuditReport('new-report', [{ ...report.checks[0], error: '😀'.repeat(600_000) }]);
+  // Arbitrary text is now aliased. Preserve enough distinct numeric evidence to
+  // cross the encoded cap without relying on private text surviving redaction.
+  const tooLarge = makePerformanceAuditReport('new-report', [{ ...report.checks[0],
+    metrics: { samples: Array.from({ length: 350_000 }, (_, index) => index + 0.123456789) } }]);
   await delivery.uploadCompletedPerformanceAudit(tooLarge);
   await sharing.retryDebugLogUpload();
   expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ preparationFailed: true, sessionId: 'new-report' });
