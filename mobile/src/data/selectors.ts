@@ -1,6 +1,7 @@
 import { matchesMortgageFacet } from './mortgageFacets';
 import { SECTIONS } from '../constants';
-import { mandatoryEligibleRows } from './eligibilityGate';
+import { getMandatoryEligibilityRevision, mandatoryEligibleRows } from './eligibilityGate';
+import { getSuitabilityRevision } from './suitabilityGate';
 import { rowsForProductKey } from './rateRowIndex';
 import { matchesLvrTier } from './lvrRange';
 import { yieldToUi } from '../lib/yieldToUi';
@@ -505,10 +506,13 @@ export async function filterRowsCooperatively(
 ): Promise<RateRow[] | null> {
   const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
   const now = control.now ?? (() => performance.now());
-  const cancelled = control.cancelled ?? (() => false);
+  const eligibilityRevision = getMandatoryEligibilityRevision();
+  const suitabilityRevision = getSuitabilityRevision();
+  const cancelled = () => Boolean(control.cancelled?.()) ||
+    getMandatoryEligibilityRevision() !== eligibilityRevision || getSuitabilityRevision() !== suitabilityRevision;
   await yieldControl();
   if (cancelled()) return null;
-  const matchesSearch = rows.length ? await prepareRowSearchQueryCooperatively(filters.query, searchIndex, control) : () => false;
+  const matchesSearch = rows.length ? await prepareRowSearchQueryCooperatively(filters.query, searchIndex, { ...control, cancelled }) : () => false;
   if (!matchesSearch || cancelled()) return null;
   const predicate = prepareRowFilter(filters, detailsProducts, searchIndex, section, matchesSearch);
   const filtered: RateRow[] = [];

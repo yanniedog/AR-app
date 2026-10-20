@@ -7,6 +7,7 @@ import {
 } from '../src/data/detailSearch';
 import { EMPTY_FILTERS, filterRows, filterRowsCooperatively } from '../src/data/selectors';
 import type { RateRow } from '../src/types';
+import * as suitabilityGate from '../src/data/suitabilityGate';
 
 const rows: RateRow[] = Array.from({ length: 1000 }, (_, i) => ({
   provider: i % 2 ? 'Bank A' : 'Bank B',
@@ -40,6 +41,14 @@ test('cooperative filter counts preserve exact membership and yield before scann
   let cancelled = false;
   expect(await filterRowsCooperatively(rows, selected, null, index, 'Mortgage', {
     yieldControl: async () => { cancelled = true; }, cancelled: () => cancelled,
+  })).toBeNull();
+});
+
+test('cooperative counting rejects a membership gate that changes between slices', async () => {
+  let revision = 1;
+  jest.spyOn(suitabilityGate, 'getSuitabilityRevision').mockImplementation(() => revision);
+  expect(await filterRowsCooperatively(rows, filters, null, null, 'Mortgage', {
+    yieldControl: async () => { revision++; },
   })).toBeNull();
 });
 
