@@ -36,5 +36,12 @@ deidentified share option retains its stricter field allowlist.
 Full readiness snapshots stay in the persisted report and upload; bounded
 per-check journal lines omit those snapshots to avoid rollover work during a run.
 
+The retained metric schema is generated from production audit emitters' numeric,
+boolean and fixed-string types; arbitrary strings and private input fields stay
+opaque. Regenerate with `node scripts/generate-audit-diagnostic-schema.cjs` after
+changing emitters. Canonical CI checks that this schema is current. This keeps
+new technical timing/count/status evidence from disappearing behind the narrower
+operating-system share allowlist.
+
 The October 21 sample round-trips all 2,658 checks from 774,015 to 308,546
 characters (60.1% smaller), before adding newly captured diagnostic evidence.

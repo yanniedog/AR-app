@@ -37,11 +37,13 @@ export function publicAuditDiagnostic(value: unknown): unknown {
   return value ? visit(value) : null;
 }
 
+export const PUBLIC_AUDIT_ERROR_TYPES = ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError',
+  'EvalError', 'URIError', 'AggregateError', 'InternalError', 'DOMException', 'AbortError', 'TimeoutError',
+  'AuditDatasetChangedError', 'PerformanceAuditReadinessTimeoutError', 'PerformanceAuditReadinessProbeError',
+  'PerformanceAuditStepTimeoutError', 'PerformanceAuditPendingMutationError'] as const;
 /** Keep actionable code locations without exporting URLs, paths or raw error text. */
 export function publicAuditError(error?: string, trace?: string) {
-  const types = ['Error', 'TypeError', 'RangeError', 'AuditDatasetChangedError', 'PerformanceAuditReadinessTimeoutError',
-    'PerformanceAuditReadinessProbeError', 'PerformanceAuditStepTimeoutError', 'PerformanceAuditPendingMutationError'];
-  const type = types.find(name => error?.startsWith(`${name}:`)) ?? null;
+  const type = PUBLIC_AUDIT_ERROR_TYPES.find(name => error?.startsWith(`${name}:`)) ?? null;
   const frames: (string | number)[][] = [];
   for (const line of [error ?? '', trace ?? ''].join('\n').split(/\r?\n|\\n/)) {
     const frame = line.match(/^\s*at\s+([A-Za-z_$][\w.$<>]*)\s+\([^\n]*:(\d+):(\d+)\)\s*$/) ??

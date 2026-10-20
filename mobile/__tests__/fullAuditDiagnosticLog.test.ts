@@ -4,6 +4,7 @@ import { createPublicPerformanceAuditReport } from '../src/lib/diagnosticsEnvelo
 import { decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 import { APP_HEALTH_CHECK_CODES, finalizeAppHealthReport, toPublicAppHealthReport } from '../src/lib/appHealth';
 import { buildDeepPerformanceAuditPlan, buildDeepPerformanceAuditPlanFromInputs } from '../src/lib/performanceAuditPlan';
+import { ANDROID_UPDATE_READINESS_AUDIT } from '../src/lib/performanceAuditCheckInventory';
 
 test('every upload includes all retained checks, errors, traces, metrics and diagnostic context', () => {
   const report = makePerformanceAuditReport('private-session');
@@ -141,6 +142,51 @@ test('unknown saved-check identities remain correlatable aliases rather than pri
   const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
   expect(body).not.toContain('account-123456');
   expect(decoded.diagnosticLog.summary.slowestCheckId).toBe(decoded.diagnosticLog.checks[0].id);
+});
+
+test.each(['Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'EvalError', 'URIError', 'AggregateError'])('retains standard %s classification without raw private error text', type => {
+  const report = makePerformanceAuditReport();
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 1,
+    metrics: {}, error: `${type}: PRIVATE CUSTOMER CONTENT` }];
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: { checks: { errorDetails: unknown }[] } };
+  expect(decoded.diagnosticLog.checks[0].errorDetails).toMatchObject({ present: true, type });
+  expect(body).not.toContain('PRIVATE CUSTOMER CONTENT');
+});
+
+test('retains dedicated update-check technical evidence across statuses and download phases', () => {
+  for (const checkStatus of ['current', 'available', 'incompatible']) for (const downloadPhase of ['idle', 'waiting', 'downloading', 'retrying', 'verifying', 'ready', 'cancelled', 'error']) {
+    const report = makePerformanceAuditReport();
+    const metrics = { updateMetadataTransportCalls: 2, durationMayUseTtlCache: false, manifestMetadataValidated: true,
+      manifestPackageMatches: true, installedVersion: '1.0.246', installedBuild: '302', remoteVersion: '1.0.247', remoteBuild: '303',
+      checkStatus, manifestBytes: 46_352_641, manifestHasSha256: true, downloadPhase, downloadedBytes: 100,
+      downloadTotalBytes: 46_352_641, cachedBuild: '303', cachedReady: true, ownerCheckId: ANDROID_UPDATE_READINESS_AUDIT.checkId,
+      semanticActionId: ANDROID_UPDATE_READINESS_AUDIT.semanticActionId, executionPhase: ANDROID_UPDATE_READINESS_AUDIT.phase,
+      transportScope: ANDROID_UPDATE_READINESS_AUDIT.transportScope, expectedSurface: ANDROID_UPDATE_READINESS_AUDIT.expectedSurface,
+      actionSource: ANDROID_UPDATE_READINESS_AUDIT.expectedSurface };
+    report.checks = [{ id: 'update-readiness', label: 'Updates', kind: 'update', status: 'pass', durationMs: 1, metrics }];
+    const decoded = fullAuditDiagnosticLog(report, id => id) as typeof report;
+    expect(decoded.checks[0].metrics).toEqual(metrics);
+  }
+});
+
+test('retains emitter-defined capacity, model, restoration and log-stall evidence', () => {
+  const report = makePerformanceAuditReport();
+  const metrics = { chunks: 5, cpuMs: 12.3, maxSliceMs: 4.5, firstFilterMs: 3, repeatFilterMs: 1,
+    rows: 80, visibleRows: 12, logQueuedLines: 100, logFlushStageMs: 8, logFlushStage: 'rewrite',
+    logFlushLastFailedStage: 'append', rollbackStatus: 'restored', navigationKind: 'stack', passId: 'first-pass',
+    reason: 'No active payload is loaded', unknownPrivateMetric: 987654321,
+    deepSearchEnabled: true, mortgageRateMetric: 'comparison' };
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 1, metrics }];
+  const decoded = fullAuditDiagnosticLog(report, id => id) as typeof report;
+  const actual = decoded.checks[0].metrics;
+  for (const [key, value] of Object.entries(metrics)) {
+    if (['unknownPrivateMetric', 'deepSearchEnabled', 'mortgageRateMetric'].includes(key)) continue;
+    expect(actual[key]).toBe(value);
+  }
+  expect(actual.deepSearchEnabled).toMatch(/^~private/);
+  expect(actual.mortgageRateMetric).toMatch(/^~private/);
+  expect(JSON.stringify(decoded)).not.toContain('987654321');
 });
 
 test('retains complete source-authored deep-plan metadata while hiding private inputs', () => {

@@ -1,8 +1,10 @@
 import type { PerformanceAuditReport } from './performanceAudit';
 import { toPublicAppHealthReport } from './appHealth';
-import { publicAuditDiagnostic, publicAuditError } from './performanceAuditDiagnostic';
+import { PUBLIC_AUDIT_ERROR_TYPES, publicAuditDiagnostic, publicAuditError } from './performanceAuditDiagnostic';
 import { PUBLIC_AUDIT_METRIC_FIELDS } from './auditDiagnosticFields';
 import { buildDeepPerformanceAuditPlan } from './performanceAuditPlan';
+import { ANDROID_UPDATE_READINESS_AUDIT } from './performanceAuditCheckInventory';
+import { AUDIT_PRODUCER_ENUMS, AUDIT_PRODUCER_METRIC_FIELDS, AUDIT_PRODUCER_SCALARS } from './auditDiagnosticProducerFields';
 
 let planText: Map<string, Set<string>> | undefined;
 /** Derive only source-authored plan text from a plan with no user/payload input. */
@@ -38,12 +40,18 @@ const FIXED_TEXT: Record<string, ReadonlySet<string>> = Object.fromEntries(Objec
   stateImpact: 'none local-only restorable',
   iteration: 'cold warm deep-first-pass deep-repeat',
   stage: 'start route pre-action action path data readiness settle back recovery origin-readiness complete check',
-  type: 'Error TypeError RangeError AuditDatasetChangedError PerformanceAuditReadinessTimeoutError PerformanceAuditReadinessProbeError PerformanceAuditStepTimeoutError PerformanceAuditPendingMutationError',
+  type: PUBLIC_AUDIT_ERROR_TYPES.join(' '),
+  checkStatus: 'current available incompatible', downloadPhase: 'idle waiting downloading retrying verifying ready cancelled error',
+  ownerCheckId: ANDROID_UPDATE_READINESS_AUDIT.checkId,
+  semanticActionId: ANDROID_UPDATE_READINESS_AUDIT.semanticActionId,
+  executionPhase: ANDROID_UPDATE_READINESS_AUDIT.phase, transportScope: ANDROID_UPDATE_READINESS_AUDIT.transportScope,
+  actionSource: ANDROID_UPDATE_READINESS_AUDIT.expectedSurface, expectedSurface: ANDROID_UPDATE_READINESS_AUDIT.expectedSurface,
   frames: 'frame',
   coldStatus: 'pass warn fail skipped', warmStatus: 'pass warn fail skipped',
   outcome: 'completed failed fallback superseded unavailable',
   activeWork: 'refreshing postRefreshWarming bankRateHistoryLoading detailsLoading',
 }).map(([key, values]) => [key, new Set(values.split(' '))]));
+for (const [key, values] of Object.entries(AUDIT_PRODUCER_ENUMS)) FIXED_TEXT[key] = new Set([...(FIXED_TEXT[key] ?? []), ...values]);
 
 const SCALARS = new Set(('schemaVersion durationMs wallClockMs hangTimeoutMs storedCheckCount developmentBuild viewportWidth viewportHeight fontScale payloadProducts payloadProviders detailsLoaded historyLoaded productHistoryLoaded diagnosticsUploadEnabled networkConnected networkInternetReachable maximumSafeFeaturesEnabled pass warn fail skipped unavailable executed justifiedSkipped unexpectedSkipped coveragePercent slowestCheckMs plannedChecks storedChecks plannedJourneyChecks executedJourneyChecks justifiedSkippedJourneyChecks unexpectedSkippedJourneyChecks unavailableJourneyChecks attemptedPercent excludedUnsafeFacetCount complete partial coldForwardMs warmForwardMs coldBackMs warmBackMs forwardChangeMs backChangeMs ready capturing actionRevision registeredAtMs updatedAtMs required expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent present frames elapsedMs stageElapsedMs lastCheckpointAgeMs processingCheckpoints').split(' '));
 const PROBE_PATH = '.checks[].diagnostic.readiness.surfaces[].probes[]';
@@ -66,12 +74,14 @@ const SCALAR_PATHS: Record<string, ReadonlySet<string>> = Object.fromEntries(Obj
   '.plan': 'schemaVersion safeActionCount', '.plan.passes[].steps[]': 'depth optional mutatesRestorableState',
   '.plan.passes[].steps[].skipSafety': 'maySkip',
 }).map(([path, names]) => [path, new Set(names.split(' '))]));
-SCALAR_PATHS['.checks[].metrics'] = PUBLIC_AUDIT_METRIC_FIELDS;
+SCALAR_PATHS['.checks[].metrics'] = new Set([...PUBLIC_AUDIT_METRIC_FIELDS, ...AUDIT_PRODUCER_SCALARS]);
 
 function enumContext(key: string, parent: string): boolean {
+  if (parent === '.checks[].metrics' && AUDIT_PRODUCER_ENUMS[key]) return true;
   if (['platform', 'osName', 'jsEngine', 'payloadSource', 'auditCoverageProfile'].includes(key)) return parent === '.environment';
   if (key === 'overall') return parent === '.summary';
   if (['measurementMode', 'returnNavigationKind', 'iteration'].includes(key)) return parent === '.checks[].metrics';
+  if (['checkStatus', 'downloadPhase', 'ownerCheckId', 'semanticActionId', 'executionPhase', 'transportScope', 'actionSource', 'expectedSurface'].includes(key)) return parent === '.checks[].metrics';
   if (key === 'stage') return parent === '.checks[].diagnostic';
   if (key === 'type' || key === 'frames') return parent === '.checks[].errorDetails';
   if (key === 'stateImpact') return /^\.plan(?:\.passes\[\]\.steps\[\])?\.safety$/.test(parent);
@@ -82,11 +92,12 @@ function enumContext(key: string, parent: string): boolean {
   if (key === 'activeWork') return parent === '.backgroundWorkWait.payloadWork';
   return false;
 }
-const FIELDS = new Set([...PUBLIC_AUDIT_METRIC_FIELDS, ...SCALARS, ...Object.keys(FIXED_TEXT),
+const FIELDS = new Set([...PUBLIC_AUDIT_METRIC_FIELDS, ...AUDIT_PRODUCER_METRIC_FIELDS, ...SCALARS, ...Object.keys(FIXED_TEXT),
   ...('app environment watchdog plan inputs passes steps coverage summary checks routeAggregates limitations backgroundWorkWait payloadWork jobs diagnostic readiness blockers code surface probe surfaces id actions lastCompletedAction probes error errorDetails trace metrics appHealth appVersion buildVersion platformVersion osVersion payloadRunDate datasetRevision renderRevision sessionId startedAt finishedAt lastStoredCheckAt label journeyLabel slowestCheckLabel slowestCheckId missingPlannedCheckIds duplicateStoredCheckIds unexpectedStoredCheckIds journeyId manufacturer brand model totalMemoryBytes networkType phaseDetail capturedAt outcome stage reason').split(' ')]);
 for (const field of ('message safety renderRevisionBefore renderRevisionAfter actionResultEvidence readinessEvidence graphicEvidence readinessActionEvidence account accountBalance balance loanBalance loanAmount propertyValue currentRate lvr productKey product_key provider query searchQuery parameters profile profileFilters scenario selectionToken selectionTokens generationId bundleSha coreSha payloadRevision privateText').split(' ')) FIELDS.add(field);
 for (const names of Object.values(SCALAR_PATHS)) for (const name of names) FIELDS.add(name);
 for (const field of ('coverageProfile passId scenarioId semanticActionId expectedPath expectedSurface skipReason skipSafety when reason unsafeActionsExcluded excludedUnsafeActions stages runDate manifestRunDate revision coreSha detailsSha activeWork').split(' ')) FIELDS.add(field);
+for (const field of ('installedVersion installedBuild remoteVersion remoteBuild cachedBuild').split(' ')) FIELDS.add(field);
 
 /** Keep the canonical diagnostic report, replacing private inputs rather than
  * replacing the report with a summary. Opaque aliases retain equality evidence. */
@@ -109,9 +120,10 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
     }
     if (typeof value === 'string' && (parent === '.coverage' && /CheckIds$/.test(key) || path === '.summary.slowestCheckId')) return safeCheckId(value) ?? alias(value);
     if (path === '.checks[].id' && typeof value === 'string') return safeCheckId(value) ?? alias(value);
-    if (privateField.test(key) || key === 'account' || key === 'totalMemoryBytes' || /(?:password|secret|authorization|credential|privateKey|api[_-]?key|token|accountNumber|accountId|customerId|borrower|email|balance|amount|lvr)/i.test(key) ||
+    if (privateField.test(key) || ['currentPayloadRevision', 'deepSearchEnabled', 'historyExplorerEnabled', 'includeNonStandard', 'depositRankMetric', 'mortgageRateMetric', 'enabledSections', 'account', 'totalMemoryBytes'].includes(key) || /(?:password|secret|authorization|credential|privateKey|api[_-]?key|token|accountNumber|accountId|customerId|borrower|email|balance|amount|lvr)/i.test(key) ||
       typeof value === 'string' && /(?:revision|path|url)/i.test(key)) return alias(value);
     if (typeof value === 'string') {
+      if (parent === '.checks[].metrics' && ['installedVersion', 'installedBuild', 'remoteVersion', 'remoteBuild', 'cachedBuild'].includes(key) && /^\d+(?:\.\d+){0,3}$/.test(value) && value.length <= 32) return value;
       if (['.app', '.environment'].includes(parent) && /^(?:appVersion|buildVersion|platformVersion|osVersion)$/.test(key) && /^\d+(?:\.\d+){0,3}$/.test(value) && value.length <= 32) return value;
       if (parent.startsWith('.checks[].diagnostic.readiness.') && ['id', 'surface', 'probe', 'actions', 'lastCompletedAction', 'code'].includes(key)) {
         const roleKey = key === 'code' ? 'code' : 'id';
