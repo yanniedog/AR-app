@@ -36,6 +36,16 @@ test('unlabelled runtime text defaults to opaque correlatable aliases', () => {
   const check = decoded.diagnosticLog.checks[0];
   expect(check.diagnostic?.readiness).toMatchObject({ blockers: [{ message: check.error }] });
 });
+
+test('fixed enum text is readable only in its source-authored field', () => {
+  const report = makePerformanceAuditReport();
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 1,
+    metrics: { customerName: 'Hermes', person: 'Android', phoneOwner: 'ready', unexpected: 'TypeError' } }];
+  const decoded = decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report)) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.environment).toMatchObject({ jsEngine: 'Hermes', osName: 'Android' });
+  expect(decoded.diagnosticLog.checks[0]).toMatchObject({ kind: 'journey', status: 'fail' });
+  for (const value of Object.values(decoded.diagnosticLog.checks[0].metrics)) expect(value).toMatch(/^~private/);
+});
 test('unknown saved-check identities remain correlatable aliases rather than private strings', () => {
   const report = makePerformanceAuditReport('private-session');
   report.checks = [{ id: 'account-123456-private-check', label: 'Private label', kind: 'runtime', status: 'fail', durationMs: 1, metrics: {} }];

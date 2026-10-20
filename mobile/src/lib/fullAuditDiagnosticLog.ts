@@ -4,7 +4,16 @@ import { publicAuditDiagnostic, publicAuditError } from './performanceAuditDiagn
 
 // Only source-authored enum values are public text. Runtime text is opaque even
 // when it has no recognizable personal-data prefix or shape.
-const FIXED_TEXT = new Set(('pass warn fail skipped unavailable runtime journey setup storage network filesystem data list logo graphic layout pending ready error android ios web Android iOS Hermes hermes jsc remote local bundled cache unknown cold warm deep-first-pass deep-repeat foreground background complete partial start route pre-action action path readiness settle back recovery origin-readiness check Error TypeError RangeError AuditDatasetChangedError PerformanceAuditReadinessTimeoutError PerformanceAuditReadinessProbeError PerformanceAuditStepTimeoutError PerformanceAuditPendingMutationError frame').split(' '));
+const FIXED_TEXT: Record<string, ReadonlySet<string>> = Object.fromEntries(Object.entries({
+  kind: 'runtime journey setup storage network filesystem data list logo graphic layout',
+  status: 'pass warn fail skipped unavailable pending ready error',
+  platform: 'android ios web', osName: 'Android iOS', jsEngine: 'Hermes hermes jsc',
+  payloadSource: 'remote local bundled cache unknown',
+  iteration: 'cold warm deep-first-pass deep-repeat',
+  stage: 'start route pre-action action path data readiness settle back recovery origin-readiness complete check',
+  type: 'Error TypeError RangeError AuditDatasetChangedError PerformanceAuditReadinessTimeoutError PerformanceAuditReadinessProbeError PerformanceAuditStepTimeoutError PerformanceAuditPendingMutationError',
+  frames: 'frame',
+}).map(([key, values]) => [key, new Set(values.split(' '))]));
 
 /** Keep the canonical diagnostic report, replacing private inputs rather than
  * replacing the report with a summary. Opaque aliases retain equality evidence. */
@@ -31,7 +40,7 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
         const fixed = publicAuditDiagnostic({ [roleKey]: value }) as Record<string, unknown>;
         if (fixed[roleKey] === value || key === 'id' && safeCheckId(value) === value) return value;
       }
-      return FIXED_TEXT.has(value) && !['error', 'trace', 'message'].includes(key) ? value : alias(value);
+      return FIXED_TEXT[key]?.has(value) ? value : alias(value);
     }
     if (Array.isArray(value)) return value.map(item => visit(item, key));
     if (typeof value !== 'object') return value;
