@@ -2,6 +2,7 @@ import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditRepo
 import { fullAuditDiagnosticLog } from '../src/lib/fullAuditDiagnosticLog';
 import { createPublicPerformanceAuditReport } from '../src/lib/diagnosticsEnvelope';
 import { decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
+import { APP_HEALTH_CHECK_CODES, finalizeAppHealthReport, toPublicAppHealthReport } from '../src/lib/appHealth';
 
 test('every upload includes all retained checks, errors, traces, metrics and diagnostic context', () => {
   const report = makePerformanceAuditReport('private-session');
@@ -109,4 +110,19 @@ test('unknown saved-check identities remain correlatable aliases rather than pri
   const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
   expect(body).not.toContain('account-123456');
   expect(decoded.diagnosticLog.summary.slowestCheckId).toBe(decoded.diagnosticLog.checks[0].id);
+});
+
+test('preserves the complete dedicated public app-health schema', () => {
+  const report = makePerformanceAuditReport();
+  report.appHealth = finalizeAppHealthReport({ sessionId: 'private-health-session', mode: 'local',
+    startedAt: '2026-10-21T00:00:00Z', finishedAt: '2026-10-21T00:00:01Z',
+    plannedCheckIds: [APP_HEALTH_CHECK_CODES.SOURCE_STATE, APP_HEALTH_CHECK_CODES.AUDIT_PLAN],
+    checks: [{ id: APP_HEALTH_CHECK_CODES.SOURCE_STATE, code: APP_HEALTH_CHECK_CODES.SOURCE_STATE,
+      label: 'Source state', domain: 'data-integrity', status: 'fail', metrics: { source: 'cache', coreAvailable: false },
+      localEvidence: { providerNames: ['Private Bank'] } }] });
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: { appHealth: unknown } };
+  expect(decoded.diagnosticLog.appHealth).toEqual(toPublicAppHealthReport(report.appHealth));
+  expect(JSON.stringify(decoded.diagnosticLog.appHealth)).toContain('coreAvailable');
+  expect(body).not.toMatch(/Private Bank|private-health-session/);
 });

@@ -57,8 +57,11 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
         ? [name, visit(child, name, `${path}.${name}`)]
         : [alias(name, 'key'), alias(child)]));
   };
-  return visit({ ...report, checks: report.checks.map(check => ({ ...check,
+  const retained = visit({ ...report, checks: report.checks.map(check => ({ ...check,
     errorDetails: publicAuditError(check.error, check.trace) })),
     environment: { ...report.environment, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion },
-    appHealth: report.appHealth ? toPublicAppHealthReport(report.appHealth) : null });
+    appHealth: null }) as Record<string, unknown>;
+  // This dedicated sanitizer owns a complete public schema; do not obscure its
+  // quality counts or findings through a second, unrelated schema boundary.
+  return { ...retained, appHealth: report.appHealth ? toPublicAppHealthReport(report.appHealth) : null };
 }
