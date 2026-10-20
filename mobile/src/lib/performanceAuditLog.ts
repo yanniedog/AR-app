@@ -160,6 +160,7 @@ export function compactAuditCheckForLog(check: {
   metrics: Record<string, unknown>;
   error?: string | null;
   trace?: string | null;
+  diagnostic?: unknown;
 }): Record<string, unknown> {
   const base: Record<string, unknown> = {
     id: check.id,
@@ -167,6 +168,7 @@ export function compactAuditCheckForLog(check: {
     kind: check.kind,
     status: check.status,
     durationMs: check.durationMs,
+    ...(check.diagnostic == null ? {} : { diagnostic: check.diagnostic }),
   };
   if (check.status === 'pass' || check.status === 'skipped') {
     if (check.metrics.iteration != null) base.phase = check.metrics.iteration;
@@ -222,6 +224,7 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
         metrics: check.metrics as Record<string, unknown>,
         error: typeof check.error === 'string' ? check.error : null,
         trace: typeof check.trace === 'string' ? check.trace : null,
+        diagnostic: check.diagnostic,
       });
     })
     : source.checks;
