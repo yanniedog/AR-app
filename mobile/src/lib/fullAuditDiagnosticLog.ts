@@ -4,7 +4,7 @@ import { PUBLIC_AUDIT_ERROR_TYPES, publicAuditDiagnostic, publicAuditError } fro
 import { PUBLIC_AUDIT_METRIC_FIELDS } from './auditDiagnosticFields';
 import { buildDeepPerformanceAuditPlan } from './performanceAuditPlan';
 import { ANDROID_UPDATE_READINESS_AUDIT } from './performanceAuditCheckInventory';
-import { AUDIT_PRODUCER_ENUMS, AUDIT_PRODUCER_METRIC_FIELDS, AUDIT_PRODUCER_SCALARS } from './auditDiagnosticProducerFields';
+import { AUDIT_PRODUCER_ENUMS, AUDIT_PRODUCER_METRIC_FIELDS, AUDIT_PRODUCER_SCALARS, AUDIT_REGISTERED_ACTION_IDS } from './auditDiagnosticProducerFields';
 
 let planText: Map<string, Set<string>> | undefined;
 /** Derive only source-authored plan text from a plan with no user/payload input. */
@@ -131,6 +131,9 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
     if (privateField.test(key) || ['currentPayloadRevision', 'deepSearchEnabled', 'historyExplorerEnabled', 'includeNonStandard', 'depositRankMetric', 'mortgageRateMetric', 'enabledSections', 'account', 'totalMemoryBytes'].includes(key) || /(?:password|secret|authorization|credential|privateKey|api[_-]?key|token|accountNumber|accountId|customerId|borrower|email|balance|amount|lvr)/i.test(key) ||
       typeof value === 'string' && /(?:revision|path|url)/i.test(key)) return alias(value);
     if (typeof value === 'string') {
+      if (parent === '.checks[].diagnostic.readiness.surfaces[]' && ['actions', 'lastCompletedAction'].includes(key)) {
+        return AUDIT_REGISTERED_ACTION_IDS.has(value) || publicPlanText('.plan.passes[].steps[].semanticActionId', value) || value === ANDROID_UPDATE_READINESS_AUDIT.semanticActionId ? value : alias(value);
+      }
       if (parent === '.checks[].metrics' && ['installedVersion', 'installedBuild', 'remoteVersion', 'remoteBuild', 'cachedBuild'].includes(key) && /^\d+(?:\.\d+){0,3}$/.test(value) && value.length <= 32) return value;
       if (['.app', '.environment'].includes(parent) && /^(?:appVersion|buildVersion|platformVersion|osVersion)$/.test(key) && /^\d+(?:\.\d+){0,3}$/.test(value) && value.length <= 32) return value;
       if (parent.startsWith('.checks[].diagnostic.readiness.') && ['id', 'surface', 'probe', 'actions', 'lastCompletedAction', 'code'].includes(key)) {

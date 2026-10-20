@@ -5,6 +5,7 @@ import { decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 import { APP_HEALTH_CHECK_CODES, finalizeAppHealthReport, toPublicAppHealthReport } from '../src/lib/appHealth';
 import { buildDeepPerformanceAuditPlan, buildDeepPerformanceAuditPlanFromInputs } from '../src/lib/performanceAuditPlan';
 import { ANDROID_UPDATE_READINESS_AUDIT } from '../src/lib/performanceAuditCheckInventory';
+import { AUDIT_REGISTERED_ACTION_IDS } from '../src/lib/auditDiagnosticProducerFields';
 
 test('every upload includes all retained checks, errors, traces, metrics and diagnostic context', () => {
   const report = makePerformanceAuditReport('private-session');
@@ -203,6 +204,32 @@ test('retains setup-factory proof, sample counts and inventory phase', () => {
     foregroundCatalogueRendered: false, inventoryPhase: 'setup' };
   report.checks = [{ id: 'setup-environment', label: 'Setup', kind: 'data', status: 'pass', durationMs: 1, metrics }];
   expect((fullAuditDiagnosticLog(report, id => id) as typeof report).checks[0].metrics).toEqual(metrics);
+});
+
+test('retains only finite source-defined live-stage timing keys', () => {
+  const report = makePerformanceAuditReport();
+  const metrics = { 'liveStage:Core asset:downloaded:ms': 4.5, 'liveStage:manifest:fetched:ms': 7,
+    'liveStage:snapshot-built:ms': 2, 'liveStage:PRIVATE-BORROWER:ms': 987654321 };
+  report.checks = [{ id: 'active-data', label: 'Live source', kind: 'data', status: 'pass', durationMs: 1, metrics }];
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.checks[0].metrics).toMatchObject({ 'liveStage:Core asset:downloaded:ms': 4.5,
+    'liveStage:manifest:fetched:ms': 7, 'liveStage:snapshot-built:ms': 2 });
+  expect(body).not.toMatch(/PRIVATE-BORROWER|987654321/);
+});
+
+test('retains registered and planned action IDs while masking private unknown actions', () => {
+  const report = makePerformanceAuditReport();
+  const actions = ['search.filters.apply', 'settings.theme.next', 'product.open', 'projections.metric.next'];
+  for (const action of ['search.filters.apply', 'settings.theme.next', 'projections.metric.next']) expect(AUDIT_REGISTERED_ACTION_IDS.has(action)).toBe(true);
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'pass', durationMs: 1,
+    metrics: {}, diagnostic: { stage: 'complete', readiness: { surfaces: [{ id: 'rates.results',
+      actions: [...actions, 'private-user@example.com'], lastCompletedAction: 'search.filters.apply' }] } } as never }];
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.checks[0].diagnostic!.readiness).toMatchObject({ surfaces: [{
+    actions: [...actions, expect.stringMatching(/^~private/)], lastCompletedAction: 'search.filters.apply' }] });
+  expect(body).not.toContain('private-user@example.com');
 });
 
 test.each(['2026-10-21', '2024-02-29'])('retains validated source publication date %s only at source-date paths', date => {

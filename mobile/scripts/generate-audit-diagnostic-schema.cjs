@@ -13,6 +13,53 @@ const checker = program.getTypeChecker();
 const names = new Set();
 const scalars = new Set();
 const enums = new Map();
+const actionIds = new Set();
+function finiteNames(expression) {
+  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) return [expression.text];
+  if (ts.isTemplateExpression(expression)) {
+    let values = [expression.head.text];
+    for (const span of expression.templateSpans) {
+      const options = finiteNames(span.expression);
+      if (!options.length) return [];
+      if (values.length * options.length > 256) throw new Error('Metric key vocabulary needs an explicit bound');
+      values = values.flatMap(prefix => options.map(value => prefix + value + span.literal.text));
+    }
+    return values;
+  }
+  const type = checker.getTypeAtLocation(expression);
+  const types = type.isUnion() ? type.types : [type];
+  return types.every(item => item.isStringLiteral()) ? types.map(item => item.value) : [];
+}
+function scanActions(expression, seen = new Set()) {
+  if (seen.has(expression)) return;
+  seen.add(expression);
+  const add = name => { if (/^[A-Za-z][A-Za-z0-9._:-]{0,99}$/.test(name)) actionIds.add(name); };
+  for (const property of checker.getTypeAtLocation(expression).getProperties()) {
+    if (checker.getTypeOfSymbolAtLocation(property, expression).getCallSignatures().length) add(property.getName());
+  }
+  if (ts.isIdentifier(expression)) {
+    const declaration = checker.getSymbolAtLocation(expression)?.valueDeclaration;
+    if (declaration && ts.isVariableDeclaration(declaration) && declaration.initializer) scanActions(declaration.initializer, seen);
+  } else if (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression) || ts.isSatisfiesExpression(expression)) scanActions(expression.expression, seen);
+  else if (ts.isCallExpression(expression) && /(?:^|\.)useMemo$|^Object\.freeze$/.test(expression.expression.getText()) && expression.arguments[0]) scanActions(expression.arguments[0], seen);
+  else if (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)) {
+    if (!ts.isBlock(expression.body)) scanActions(expression.body, seen);
+    else {
+      const returns = node => {
+        if (ts.isReturnStatement(node) && node.expression) scanActions(node.expression, seen);
+        else if (!ts.isFunctionLike(node)) ts.forEachChild(node, returns);
+      };
+      ts.forEachChild(expression.body, returns);
+    }
+  } else if (ts.isConditionalExpression(expression)) { scanActions(expression.whenTrue, seen); scanActions(expression.whenFalse, seen); }
+  else if (ts.isObjectLiteralExpression(expression)) for (const property of expression.properties) {
+    if (ts.isSpreadAssignment(property)) scanActions(property.expression, seen);
+    else if (property.name) {
+      if (ts.isComputedPropertyName(property.name)) finiteNames(property.name.expression).forEach(add);
+      else if (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) add(property.name.text);
+    }
+  }
+}
 function record(name, type, expression) {
   names.add(name);
   const types = (type.isUnion() ? type.types : [type]).filter(item => !(item.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)));
@@ -67,6 +114,15 @@ function scanMetrics(expression) {
 }
 for (const source of program.getSourceFiles()) {
   const file = path.relative(root, source.fileName).replaceAll('\\', '/');
+  if (/^(?:src|app)\/.*\.tsx?$/.test(file)) {
+    const visitActions = node => {
+      if (ts.isCallExpression(node) && /(?:^|\.)usePerformanceAuditSurface$/.test(node.expression.getText(source)) && node.arguments[0] && ts.isObjectLiteralExpression(node.arguments[0])) {
+        for (const property of node.arguments[0].properties) if (ts.isPropertyAssignment(property) && propertyName(property.name) === 'actions') scanActions(property.initializer);
+      }
+      ts.forEachChild(node, visitActions);
+    };
+    visitActions(source);
+  }
   if (file !== 'src/components/PerformanceAuditRunner.tsx' && !/^src\/lib\/performanceAudit[^/]*\.ts$/.test(file)) continue;
   function visit(node) {
     if (ts.isPropertyAssignment(node) && propertyName(node.name) === 'metrics') scanMetrics(node.initializer);
@@ -76,6 +132,9 @@ for (const source of program.getSourceFiles()) {
       if (isMetrics(node.left)) scanMetrics(node.right);
       else if (ts.isPropertyAccessExpression(node.left) && isMetrics(node.left.expression)) record(node.left.name.text, checker.getTypeAtLocation(node.right), node.right);
       else if (ts.isElementAccessExpression(node.left) && isMetrics(node.left.expression) && ts.isStringLiteral(node.left.argumentExpression)) record(node.left.argumentExpression.text, checker.getTypeAtLocation(node.right), node.right);
+      if (ts.isElementAccessExpression(node.left) && ts.isIdentifier(node.left.expression) && node.left.expression.text === 'stageDurations') {
+        finiteNames(node.left.argumentExpression).forEach(name => record(name, checker.getTypeAtLocation(node.right), node.right));
+      }
     }
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.expression.getText(source) === 'Object' && node.expression.name.text === 'assign' && node.arguments.length && isMetrics(node.arguments[0])) {
       node.arguments.slice(1).forEach(scanMetrics);
@@ -90,6 +149,7 @@ const enumValues = Object.fromEntries([...enums].sort(([a], [b]) => a < b ? -1 :
 const output = '// Generated from audit producers; run node scripts/generate-audit-diagnostic-schema.cjs.\n' +
   `export const AUDIT_PRODUCER_METRIC_FIELDS = new Set<string>(${JSON.stringify(sorted(names), null, 2)});\n` +
   `export const AUDIT_PRODUCER_SCALARS = new Set<string>(${JSON.stringify(sorted(scalars), null, 2)});\n` +
+  `export const AUDIT_REGISTERED_ACTION_IDS = new Set<string>(${JSON.stringify(sorted(actionIds), null, 2)});\n` +
   `export const AUDIT_PRODUCER_ENUMS: Record<string, readonly string[]> = ${JSON.stringify(enumValues, null, 2)};\n`;
 const target = path.join(root, 'src/lib/auditDiagnosticProducerFields.ts');
 if (process.argv.includes('--check')) {
