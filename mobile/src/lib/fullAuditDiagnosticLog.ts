@@ -4,7 +4,7 @@ import { PUBLIC_AUDIT_ERROR_TYPES, publicAuditDiagnostic, publicAuditError } fro
 import { PUBLIC_AUDIT_METRIC_FIELDS } from './auditDiagnosticFields';
 import { buildDeepPerformanceAuditPlan } from './performanceAuditPlan';
 import { ANDROID_UPDATE_READINESS_AUDIT } from './performanceAuditCheckInventory';
-import { AUDIT_PRODUCER_ENUMS, AUDIT_PRODUCER_METRIC_FIELDS, AUDIT_PRODUCER_SCALARS, AUDIT_REGISTERED_ACTION_IDS } from './auditDiagnosticProducerFields';
+import { AUDIT_PRODUCER_ENUMS, AUDIT_PRODUCER_METRIC_FIELDS, AUDIT_PRODUCER_SCALARS, AUDIT_REGISTERED_ACTION_IDS, AUDIT_REQUIRED_ASSET_IDS, AUDIT_WORKER_TEXT } from './auditDiagnosticProducerFields';
 
 let planText: Map<string, Set<string>> | undefined;
 /** Derive only source-authored plan text from a plan with no user/payload input. */
@@ -105,6 +105,11 @@ function publicationDate(value: string): boolean {
   const milliseconds = Date.parse(`${value}T00:00:00Z`);
   return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString().slice(0, 10) === value;
 }
+function missingAssetList(value: string, separator: string): boolean {
+  if (value.length > 256) return false;
+  const assets = value.split(separator);
+  return assets.length > 0 && assets.length <= AUDIT_REQUIRED_ASSET_IDS.size && new Set(assets).size === assets.length && assets.every(asset => AUDIT_REQUIRED_ASSET_IDS.has(asset));
+}
 
 /** Keep the canonical diagnostic report, replacing private inputs rather than
  * replacing the report with a summary. Opaque aliases retain equality evidence. */
@@ -120,6 +125,7 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
   const visit = (value: unknown, key = '', path = ''): unknown => {
     if (value == null) return value;
     const parent = path.slice(0, path.lastIndexOf('.'));
+    if (typeof value === 'string' && ['.backgroundWorkWait.jobs[].label', '.backgroundWorkWait.jobs[].stage', '.backgroundWorkWait.jobs[].stages[].label'].includes(path) && AUDIT_WORKER_TEXT.has(value)) return value;
     if (typeof value === 'string' && PUBLICATION_DATE_PATHS.has(path) && publicationDate(value)) return value;
     if (typeof value === 'string' && publicPlanText(path, value)) return value;
     if (path === '.routeAggregates[].journeyId' && typeof value === 'string') {
@@ -131,6 +137,8 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
     if (privateField.test(key) || ['currentPayloadRevision', 'deepSearchEnabled', 'historyExplorerEnabled', 'includeNonStandard', 'depositRankMetric', 'mortgageRateMetric', 'enabledSections', 'account', 'totalMemoryBytes'].includes(key) || /(?:password|secret|authorization|credential|privateKey|api[_-]?key|token|accountNumber|accountId|customerId|borrower|email|balance|amount|lvr)/i.test(key) ||
       typeof value === 'string' && /(?:revision|path|url)/i.test(key)) return alias(value);
     if (typeof value === 'string') {
+      if (parent === '.checks[].metrics' && (key === 'missingAssets' && missingAssetList(value, ',') ||
+        key === 'availabilityEvidence' && value.startsWith('Optional assets are not cached: ') && missingAssetList(value.slice('Optional assets are not cached: '.length), ', '))) return value;
       if (parent === '.checks[].metrics' && (key === 'reason' && (publicPlanText('.plan.passes[].steps[].skipReason', value) || publicPlanText('.plan.passes[].steps[].skipSafety.reason', value)) ||
         key === 'skipSafety' && publicPlanText('.plan.passes[].steps[].skipSafety.reason', value))) return value;
       if (parent === '.checks[].diagnostic.readiness.surfaces[]' && ['actions', 'lastCompletedAction'].includes(key)) {

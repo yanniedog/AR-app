@@ -206,6 +206,41 @@ test('retains setup-factory proof, sample counts and inventory phase', () => {
   expect((fullAuditDiagnosticLog(report, id => id) as typeof report).checks[0].metrics).toEqual(metrics);
 });
 
+test('retains late-assigned inventory failure counters spread into metrics', () => {
+  const report = makePerformanceAuditReport();
+  const metrics = { inventoryUniqueDestinations: 14, inventoryElapsedMs: 98.5, inventoryCpuMs: 34,
+    inventoryMaxSliceMs: 6, inventoryYieldMs: 10, inventoryMaxYieldMs: 4 };
+  report.checks = [{ id: 'fatal-1', label: 'Inventory failed', kind: 'runtime', status: 'fail', durationMs: 100, metrics }];
+  expect((fullAuditDiagnosticLog(report, id => id) as typeof report).checks[0].metrics).toEqual(metrics);
+});
+
+test('retains bounded missing-asset lists and rejects private additions', () => {
+  const report = makePerformanceAuditReport();
+  report.checks = [{ id: 'maximum-coverage-profile', label: 'Assets', kind: 'data', status: 'skipped', durationMs: 1,
+    metrics: { missingAssets: 'details,searchIndex,bankHistory', availabilityEvidence: 'Optional assets are not cached: details, searchIndex, bankHistory' } },
+    { id: 'active-data', label: 'Private assets', kind: 'data', status: 'skipped', durationMs: 1,
+      metrics: { missingAssets: 'details,PRIVATE-FILE', availabilityEvidence: 'Optional assets are not cached: details, PRIVATE-FILE' } }];
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.checks[0].metrics).toEqual(report.checks[0].metrics);
+  expect(decoded.diagnosticLog.checks[1].metrics.missingAssets).toMatch(/^~private/);
+  expect(decoded.diagnosticLog.checks[1].metrics.availabilityEvidence).toMatch(/^~private/);
+  expect(body).not.toContain('PRIVATE-FILE');
+});
+
+test('retains source-owned worker stages while masking filenames and unknown labels', () => {
+  const report = makePerformanceAuditReport();
+  report.backgroundWorkWait = { jobs: [{ label: 'PRIVATE WORKER', stage: 'Loading RBA calendar',
+    stages: [{ label: 'Reading and validating cached product details', durationMs: 15, active: true },
+      { label: 'Reading C:/Users/private-account.txt', durationMs: 2, active: false }] }] } as never;
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.backgroundWorkWait).toMatchObject({ jobs: [{ stage: 'Loading RBA calendar',
+    stages: [{ label: 'Reading and validating cached product details', durationMs: 15, active: true },
+      { label: expect.stringMatching(/^~private/), durationMs: 2, active: false }] }] });
+  expect(body).not.toMatch(/PRIVATE WORKER|private-account/);
+});
+
 test.each(['No product is loaded', 'No lender is loaded', 'Fewer than two products are loaded'])('retains registry-derived skip prerequisite: %s', reason => {
   const report = makePerformanceAuditReport();
   report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'skipped', durationMs: 0, metrics: { reason } },
