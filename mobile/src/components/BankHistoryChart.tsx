@@ -387,7 +387,8 @@ function BankHistoryChartView({
   };
 
   const hasMarketStatistics = activePoint && [activePoint.min, activePoint.median, activePoint.mean, activePoint.max].some(value => value != null && Number.isFinite(value));
-  const chartSummary = uiJoin(uiChartSection(section), ' · ', uiChartWindow(window), ' · ', uiCount(plotPoints.length), ' ', 'Observed', ' · ', uiDate(activeDate), ' · ',
+  const missingPointCount = plotDates.length - finitePointCount;
+  const chartSummary = uiJoin(uiChartSection(section), ' · ', uiChartWindow(window), ' · ', uiCount(finitePointCount), ' ', 'Observed', ' · ', uiDate(activeDate), ' · ',
     hasMarketStatistics ? uiJoin('Min', ' ', uiRate(activePoint?.min), ' · ', 'Median', ' ', uiRate(activePoint?.median), ' · ', 'Mean', ' ', uiRate(activePoint?.mean), ' · ', 'Max', ' ', uiRate(activePoint?.max)) : uiJoin('Rates', ' · ', 'Unavailable'),
     highlightSeries && activeHighlight != null ? uiJoin(' · ', highlightSeries.label, ' ', uiRate(activeHighlight)) : null);
 
@@ -701,6 +702,9 @@ function BankHistoryChartView({
           facts={hasMarketStatistics && activePoint ? [{ label: 'Median', value: uiRate(activePoint.median) }, { label: 'Mean', value: uiRate(activePoint.mean) }] : undefined}
         />
       ) : null}
+      {missingPointCount > 0 ? <AppText variant="tiny" color="textMuted">
+        {uiJoin('Missing observations', ': ', uiCount(missingPointCount), ' · ', 'Unknown')}
+      </AppText> : null}
     </View>
   );
 }

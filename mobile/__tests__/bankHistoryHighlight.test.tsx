@@ -5,6 +5,7 @@ import Svg, { Path } from 'react-native-svg';
 import { uiProductName } from '../src/lib/uiCopy';
 import { BankHistoryChart } from '../src/components/BankHistoryChart';
 import type { BankHistoryPoint } from '../src/types';
+import captured from './fixtures/public_rates/broken-hill-history-20261022.json';
 
 type TestNode = {
   props: Record<string, any>;
@@ -113,5 +114,54 @@ test('nonfinite product values cannot turn an empty market into an available cha
     expect(onGraphicReady).toHaveBeenLastCalledWith(expect.objectContaining({
       expectedCount: 2, layoutMeasured: true, emptyStateRendered: true, availability: 'unavailable', pointCount: 0, accessibleSummary: false,
     }));
+  } finally { act(() => tree.unmount()); }
+});
+
+test('captured lender observations and Unknown counts follow the selected window', () => {
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankHistoryChart {...captured.lender} section="Mortgage" />) as Renderer; });
+  try {
+    const chart = () => tree.root.findByProps({ accessibilityRole: 'image' });
+    const facts = () => tree.root.findAllByType('AppText').map(node => node.props.children);
+    expect(chart().props.accessibilityLabel).toContain('27 Observed');
+    expect(facts()).toContain('Missing observations: 4 · Unknown');
+    const all = tree.root.findAllByType('Chip').find(node => node.props.label === 'All')!;
+    act(() => all.props.onPress());
+    expect(chart().props.accessibilityLabel).toContain('126 Observed');
+    expect(facts()).toContain('Missing observations: 37 · Unknown');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('product observations exclude Unknown dates even when cash-rate context is available', () => {
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankHistoryChart section="Mortgage" dates={dates} points={emptyMarket}
+    highlightSeries={highlightSeries} rba={[{ date: dates[0], rate: 0.04 }]} />) as Renderer; });
+  try {
+    const chart = tree.root.findByProps({ accessibilityRole: 'image' });
+    expect(chart.props.accessibilityLabel).toContain('3 Observed');
+    expect(tree.root.findAllByType('AppText').map(node => node.props.children)).toContain('Missing observations: 1 · Unknown');
+    const controls = tree.root.findAllByType('ChartSliceControls')[0];
+    act(() => controls.props.onChangeIndex(2));
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('Unknown');
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.facts).toBeUndefined();
+  } finally { act(() => tree.unmount()); }
+});
+
+test('captured fallback-only gaps recover when the verified archive replaces the same-date projection', () => {
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankHistoryChart {...captured.fallbackLender} section="Mortgage" contentRevision="fallback" />) as Renderer; });
+  try {
+    const chart = () => tree.root.findByProps({ accessibilityRole: 'image' });
+    const facts = () => tree.root.findAllByType('AppText').map(node => node.props.children);
+    expect(captured.fallbackGlobalMissing).toHaveLength(28);
+    expect(chart().props.accessibilityLabel).toContain('5 Observed');
+    expect(facts()).toContain('Missing observations: 26 · Unknown');
+    act(() => tree.root.findAllByType('ChartSliceControls')[0].props.onChangeIndex(29));
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('Unknown');
+    act(() => tree.update(<BankHistoryChart {...captured.lender} section="Mortgage" contentRevision="verified-archive" />));
+    expect(chart().props.accessibilityLabel).toContain('27 Observed');
+    expect(facts()).toContain('Missing observations: 4 · Unknown');
+    act(() => tree.root.findAllByType('ChartSliceControls')[0].props.onChangeIndex(29));
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('5.94% – 13.75%');
   } finally { act(() => tree.unmount()); }
 });
