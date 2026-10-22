@@ -165,3 +165,23 @@ test('captured fallback-only gaps recover when the verified archive replaces the
     expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('5.94% – 13.75%');
   } finally { act(() => tree.unmount()); }
 });
+
+test.each(['Mortgage', 'Savings', 'TD'] as const)('%s product gaps cannot borrow market observations or values', section => {
+  const market = dates.map(date => ({ date, min: 0.01, max: 0.08, median: 0.04, mean: 0.045, count: 10 }));
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankHistoryChart section={section} dates={dates} points={market}
+    highlightSeries={highlightSeries} />) as Renderer; });
+  try {
+    expect(tree.root.findByProps({ accessibilityRole: 'image' }).props.accessibilityLabel).toContain('3 Observed');
+    expect(tree.root.findAllByType('AppText').map(node => node.props.children)).toContain('Missing observations: 1 · Unknown');
+    act(() => tree.root.findAllByType('ChartSliceControls')[0].props.onChangeIndex(2));
+    const controls = tree.root.findAllByType('ChartSliceControls')[0];
+    expect(controls.props.valueLabel).toBe('Unknown');
+    expect(controls.props.facts).toBeUndefined();
+    expect(tree.root.findByProps({ accessibilityRole: 'image' }).props.accessibilityLabel).toContain('Rates · Unavailable');
+    // Market context remains drawn; it cannot supply the missing product observation.
+    act(() => controls.props.onChangeIndex(1));
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('4.60%');
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.facts).toHaveLength(2);
+  } finally { act(() => tree.unmount()); }
+});

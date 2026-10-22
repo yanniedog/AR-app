@@ -386,9 +386,12 @@ function BankHistoryChartView({
     }
   };
 
-  const hasMarketStatistics = activePoint && [activePoint.min, activePoint.median, activePoint.mean, activePoint.max].some(value => value != null && Number.isFinite(value));
-  const missingPointCount = plotDates.length - finitePointCount;
-  const chartSummary = uiJoin(uiChartSection(section), ' · ', uiChartWindow(window), ' · ', uiCount(finitePointCount), ' ', 'Observed', ' · ', uiDate(activeDate), ' · ',
+  // A market ribbon supplies context, never a missing product observation.
+  const observedPointCount = highlightValues ? highlightValues.filter(isFiniteNumber).length : finitePointCount;
+  const hasMarketStatistics = (!highlightSeries || activeHighlight != null) && activePoint &&
+    [activePoint.min, activePoint.median, activePoint.mean, activePoint.max].some(value => value != null && Number.isFinite(value));
+  const missingPointCount = plotDates.length - observedPointCount;
+  const chartSummary = uiJoin(uiChartSection(section), ' · ', uiChartWindow(window), ' · ', uiCount(observedPointCount), ' ', 'Observed', ' · ', uiDate(activeDate), ' · ',
     hasMarketStatistics ? uiJoin('Min', ' ', uiRate(activePoint?.min), ' · ', 'Median', ' ', uiRate(activePoint?.median), ' · ', 'Mean', ' ', uiRate(activePoint?.mean), ' · ', 'Max', ' ', uiRate(activePoint?.max)) : uiJoin('Rates', ' · ', 'Unavailable'),
     highlightSeries && activeHighlight != null ? uiJoin(' · ', highlightSeries.label, ' ', uiRate(activeHighlight)) : null);
 
@@ -698,7 +701,7 @@ function BankHistoryChartView({
           }}
           valueLabel={activeHighlight != null
             ? uiJoin(pct(activeHighlight), highlightSeries?.valueScope ? uiJoin(' · ', highlightSeries.valueScope) : null)
-            : activePoint?.min != null && activePoint?.max != null ? uiJoin(pct(activePoint.min), ' ', '–', ' ', pct(activePoint.max)) : 'Unknown'}
+            : !highlightSeries && activePoint?.min != null && activePoint?.max != null ? uiJoin(pct(activePoint.min), ' ', '–', ' ', pct(activePoint.max)) : 'Unknown'}
           facts={hasMarketStatistics && activePoint ? [{ label: 'Median', value: uiRate(activePoint.median) }, { label: 'Mean', value: uiRate(activePoint.mean) }] : undefined}
         />
       ) : null}
