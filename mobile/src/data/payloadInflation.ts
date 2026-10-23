@@ -52,3 +52,15 @@ export async function inflatePayloadOffThread(bytes: Uint8Array, limit: number, 
   // Java UTF-16 allocation at once. Joining happens once in the JS heap.
   return codec?.inflatePayloadAsync ? (await codec.inflatePayloadAsync(bytes, limit, expected ?? -1)).join('') : null;
 }
+
+/** Optional native cache path; validation failures never request a JS retry. */
+export async function inflateCachedPayloadOffThread(encoded: string, compressedBytes: number, sha256: string, limit: number): Promise<string | null> {
+  if (!Number.isSafeInteger(compressedBytes) || compressedBytes < 18 || compressedBytes > 16 * 1024 * 1024 ||
+      typeof encoded !== 'string' || encoded.length !== Math.ceil(compressedBytes / 3) * 4 || !/^[a-f0-9]{64}$/.test(sha256) ||
+      !Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAYLOAD_INFLATED_BYTES) throw new Error('Invalid cached payload bounds');
+  if (Platform.OS !== 'android') return null;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getNativeHistoryCodec } = require('../../modules/history-codec') as typeof import('../../modules/history-codec');
+  const codec = getNativeHistoryCodec();
+  return codec?.inflateCachedPayloadAsync ? (await codec.inflateCachedPayloadAsync(encoded, compressedBytes, sha256, limit)).join('') : null;
+}

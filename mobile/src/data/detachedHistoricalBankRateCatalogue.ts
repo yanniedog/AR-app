@@ -3,6 +3,7 @@ import { strFromU8 } from 'fflate';
 import type { Manifest, ManifestFile } from '../types';
 import { cache } from './cache';
 import { downloadInflate, gunzipCooperatively } from './payload';
+import { inflateCachedPayloadOffThread } from './payloadInflation';
 import { decompressCatalogueAsync } from './historicalBankRateCatalogueCompression';
 import { unpackHistoricalBankRateCatalogueAsync } from './historicalBankRateCataloguePacked';
 import { bindHistoricalCatalogueArchiveReceipt, prepareHistoricalBankRateCatalogueAsync } from './historicalBankRateCatalogue';
@@ -132,8 +133,12 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
       if (!isCurrent()) return null;
       work.stage('Decoding compressed historical catalogue');
       stage('inner decode begin');
-      const decoded = await decompressCatalogueAsync(inner, { yieldControl: checkpoint });
+      const decoded = await decompressCatalogueAsync(inner, {
+        yieldControl: checkpoint,
+        onDecodeError: error => debugLog.warn('bank-history-detached', `Inner archive decode failed: ${String((error as Error)?.message ?? error).slice(0, 800)}`),
+      });
       if (!isCurrent()) return null;
+      if (decoded === null) { stage('inner decode unavailable'); return null; }
       if (packed && (!decoded || typeof decoded !== 'object' || (decoded as { format?: unknown }).format !== 'ar-history-dag-v1')) {
         throw new Error('Packed history capability requires the compact format');
       }
@@ -157,6 +162,13 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
       const cached = await cache.readDetachedBankRateHistoryAsset(async encoded => {
         await checkpoint();
         work.stage('Decoding and verifying cached asset bytes');
+        // The optional native path verifies the same exact compressed receipt,
+        // gzip bounds/CRC and UTF-8 without a multi-megabyte JS base64 loop.
+        // Encrypted legacy assets retain their existing key/verification path.
+        if (!file.enc) {
+          const text = await inflateCachedPayloadOffThread(encoded, file.bytes, file.sha256, DETACHED_HISTORY_MAX_DECODED);
+          if (text !== null) return isCurrent() ? prepare(text) : null;
+        }
         const raw = await decodeDetachedHistoryBytes(encoded, checkpoint);
         if (!raw || !await authentic(raw, file) || !isCurrent() || isEncryptedAsset(raw) !== !!file.enc) return null;
         const bytes = file.enc ? decryptAsset(raw, await resolvePayloadKeyHex(file.enc.key_id)) : raw;

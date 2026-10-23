@@ -46,6 +46,28 @@ test('valid compression and digest do not admit malformed JSON', () => {
 
 const cooperative = () => ({ yieldControl: jest.fn(async () => undefined), sliceMs: 0 });
 
+test('native chunk decoding preserves JSON and never retries a rejected receipt with a different decoder', async () => {
+  const value = { description: 'x'.repeat(65_535) + '\ud83e\uddea', rates: [5.94, 6.89] };
+  const json = JSON.stringify(value), encoded = encode(json);
+  const decompressAsync = jest.fn();
+  const decompressChunksAsync = jest.fn(async () => [json.slice(0, 65_536), json.slice(65_536)]);
+  configureHistoricalCatalogueCodec({ compressAsync: jest.fn(), decompressAsync, decompressChunksAsync });
+  expect(await decompressCatalogueAsync(encoded, cooperative())).toEqual(value);
+  expect(decompressChunksAsync).toHaveBeenCalledWith(encoded.gzip_base64, encoded.bytes, encoded.sha256);
+  expect(decompressAsync).not.toHaveBeenCalled();
+  const error = new Error('Catalogue digest mismatch'), onDecodeError = jest.fn();
+  decompressChunksAsync.mockRejectedValueOnce(error);
+  expect(await decompressCatalogueAsync(encoded, { ...cooperative(), onDecodeError })).toBeNull();
+  expect(onDecodeError).toHaveBeenCalledWith(error);
+  expect(decompressAsync).not.toHaveBeenCalled();
+});
+
+test.each([[], [''], ['{bad JSON'], ['x'.repeat(65_538)]])('invalid native chunk output remains unavailable: %j', async (...parts) => {
+  const encoded = encode('{"rate":5.94}');
+  configureHistoricalCatalogueCodec({ compressAsync: jest.fn(), decompressAsync: jest.fn(), decompressChunksAsync: jest.fn(async () => parts as string[]) });
+  expect(await decompressCatalogueAsync(encoded, cooperative())).toBeNull();
+});
+
 test('native compression receives the cooperatively validated exact JSON wire bytes', async () => {
   const compressAsync = jest.fn(async (json: string) => compressCatalogue(JSON.parse(json)));
   configureHistoricalCatalogueCodec({ compressAsync, decompressAsync: jest.fn() });

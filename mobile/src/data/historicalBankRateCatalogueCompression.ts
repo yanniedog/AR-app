@@ -8,6 +8,7 @@ export interface CompressedCatalogue { sha256: string; bytes: number; gzip_base6
 export interface HistoricalCatalogueCodec {
   compressAsync(json: string): Promise<CompressedCatalogue>;
   decompressAsync(gzipBase64: string, bytes: number, sha256: string): Promise<string>;
+  decompressChunksAsync?(gzipBase64: string, bytes: number, sha256: string): Promise<string[]>;
 }
 let nativeCodec: HistoricalCatalogueCodec | null = null;
 
@@ -87,6 +88,8 @@ export function decompressCatalogue(value: CompressedCatalogue): unknown | null 
 }
 
 export interface CatalogueCodecOptions {
+  /** Keep optional history unavailable while allowing its owner to record why. */
+  onDecodeError?: (error: unknown) => void;
   /** Tests may inject a scheduler; production uses the existing UI-yield helper. */
   yieldControl?: () => Promise<void>;
   /** Maximum target between yields; individual library calls remain atomic. */
@@ -257,7 +260,17 @@ export async function decompressCatalogueAsync(value: CompressedCatalogue, optio
     await checkpoint(true);
     const codec = nativeCodec;
     if (codec) {
-      const json = await codec.decompressAsync(value.gzip_base64, value.bytes, value.sha256);
+      let json: string;
+      if (codec.decompressChunksAsync) {
+        const parts = await codec.decompressChunksAsync(value.gzip_base64, value.bytes, value.sha256);
+        if (!Array.isArray(parts) || !parts.length || parts.length > Math.ceil(value.bytes / 65_536) + 1) return null;
+        let characters = 0;
+        for (const part of parts) {
+          if (typeof part !== 'string' || !part.length || part.length > 65_537 || (characters += part.length) > value.bytes) return null;
+          await checkpoint();
+        }
+        json = parts.join('');
+      } else json = await codec.decompressAsync(value.gzip_base64, value.bytes, value.sha256);
       if (typeof json !== 'string' || json.length > value.bytes) return null;
       await checkpoint(true);
       return JSON.parse(json);
@@ -286,5 +299,5 @@ export async function decompressCatalogueAsync(value: CompressedCatalogue, optio
     const json = parts.join('');
     await checkpoint(true);
     return JSON.parse(json);
-  } catch { return null; }
+  } catch (error) { options.onDecodeError?.(error); return null; }
 }

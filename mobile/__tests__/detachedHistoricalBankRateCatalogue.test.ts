@@ -11,6 +11,7 @@ import { cache } from '../src/data/cache';
 import { downloadInflate } from '../src/data/payload';
 import { compressCatalogue } from '../src/data/historicalBankRateCatalogueCompression';
 import * as catalogueCompression from '../src/data/historicalBankRateCatalogueCompression';
+import * as payloadInflation from '../src/data/payloadInflation';
 import { upsertHistoricalCatalogueDay } from '../src/data/historicalBankRateCatalogueMerge';
 import { sampleCore } from '../src/data/sample';
 import { revisionManifest } from '../testUtils/payloadRevision';
@@ -105,6 +106,7 @@ beforeEach(() => {
   jest.mocked(isLocalAppHealthAudit).mockReturnValue(false);
   jest.mocked(resolvePayloadKeyHex).mockRejectedValue(new Error('No local key'));
   jest.mocked(yieldToUi).mockResolvedValue(undefined);
+  jest.spyOn(payloadInflation, 'inflateCachedPayloadOffThread').mockResolvedValue(null);
 });
 
 test('a matching refresh takes over a bootstrap download and prepares it only once', async () => {
@@ -277,6 +279,39 @@ test('authenticates cached exact bytes and uses them offline without any transpo
   expect(cache.writeDetachedBankRateHistoryAsset).not.toHaveBeenCalled();
 });
 
+test('uses authenticated native cache inflation offline and still validates the envelope binding', async () => {
+  const value = fixture(); stored(value.raw);
+  jest.mocked(payloadInflation.inflateCachedPayloadOffThread).mockResolvedValue(value.text);
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false })).toEqual(catalogue);
+  expect(payloadInflation.inflateCachedPayloadOffThread).toHaveBeenCalledWith(base64(value.raw), value.raw.length,
+    value.manifest.bank_rate_history_catalogue!.file.sha256, DETACHED_HISTORY_MAX_DECODED);
+  expect(downloadInflate).not.toHaveBeenCalled();
+  expect(cache.writeDetachedBankRateHistoryAsset).not.toHaveBeenCalled();
+  const wrong = fixture(); stored(wrong.raw);
+  jest.mocked(payloadInflation.inflateCachedPayloadOffThread).mockResolvedValue(JSON.stringify({ ...wrong.envelope, core_sha256: 'f'.repeat(64) }));
+  expect(await loadDetachedHistoricalBankRateCatalogue(wrong.manifest, { allowNetwork: false })).toBeNull();
+});
+
+test('native cache validation failure cannot fall through to portable inflation of the same slot', async () => {
+  const value = fixture(); stored(value.raw);
+  jest.mocked(payloadInflation.inflateCachedPayloadOffThread).mockRejectedValue(new Error('Cached CRC mismatch'));
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false })).toBeNull();
+  expect(downloadInflate).not.toHaveBeenCalled();
+});
+
+test('superseded native cache inflation cannot expose or memoize its result', async () => {
+  const value = fixture(), started = deferred<void>(), finish = deferred<string>(); stored(value.raw);
+  let current = true;
+  jest.mocked(payloadInflation.inflateCachedPayloadOffThread).mockImplementationOnce(async () => { started.resolve(); return finish.promise; });
+  const pending = loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false, isCurrent: () => current });
+  await started.promise; current = false; finish.resolve(value.text);
+  expect(await pending).toBeNull();
+  jest.mocked(payloadInflation.inflateCachedPayloadOffThread).mockResolvedValue(value.text);
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false })).toEqual(catalogue);
+  expect(payloadInflation.inflateCachedPayloadOffThread).toHaveBeenCalledTimes(2);
+  expect(cache.writeDetachedBankRateHistoryAsset).not.toHaveBeenCalled();
+});
+
 test.each(['bundle', 'generation', 'descriptor'] as const)('rejects stale %s revision identity before cache or network access', async invalid => {
   const value = fixture();
   if (invalid === 'bundle') value.manifest.payload_revision!.bundle_sha256 = 'f'.repeat(64);
@@ -385,6 +420,7 @@ test('cached ARE1 uses only the matching local key and falls back offline when t
   expect(downloadInflate).not.toHaveBeenCalled();
   jest.mocked(resolvePayloadKeyHex).mockResolvedValue(bytesToHex(key));
   expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false })).toEqual(catalogue);
+  expect(payloadInflation.inflateCachedPayloadOffThread).not.toHaveBeenCalled();
   expect(downloadInflate).not.toHaveBeenCalled();
 });
 
