@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   buildDeidentifiedPerformanceAudit,
   createDeidentifiedDiagnosticsShare,
+  createPublicPerformanceAuditReport,
   DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES,
 } from '../src/lib/diagnosticsEnvelope';
 import {
@@ -12,6 +13,10 @@ import {
   type AuditCheck,
   type PerformanceAuditReport,
 } from '../src/lib/performanceAudit';
+import { assertAuditPublicCataloguePinned, AuditDatasetChangedError, auditDatasetFailureMetrics } from '../src/lib/performanceAuditDataset';
+import { measurePerformanceAuditSetupStage, PERFORMANCE_AUDIT_SETUP_STAGES } from '../src/lib/performanceAuditSetup';
+import { catalogue } from '../testUtils/publicRateJourney';
+import { decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 
 const read = (relativePath: string) => fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8');
 
@@ -60,6 +65,95 @@ function reportFixture(checks: AuditCheck[]): PerformanceAuditReport {
 }
 
 describe('deidentified diagnostics privacy boundary', () => {
+  it('preserves observed zero progress and empty catalogue counts when no measurement ran', () => {
+    const failed: AuditCheck = { id: 'fatal-1', label: 'Private label', kind: 'runtime', status: 'fail', durationMs: null,
+      metrics: { executionAttempted: false, completedBeforeFailure: 0, plannedChecks: 355,
+        expectedCatalogueProducts: 0, actualCatalogueProducts: 0, eventLoopSamples: 0, maxEventLoopLagMs: 0 } };
+    expect(buildDeidentifiedPerformanceAudit(reportFixture([failed])).checks[0].metrics).toMatchObject({
+      executionAttempted: false, completedBeforeFailure: 0, plannedChecks: 355,
+      expectedCatalogueProducts: 0, actualCatalogueProducts: 0, eventLoopSamples: null, maxEventLoopLagMs: null,
+    });
+  });
+
+  it('recovers the fixed catalogue cause from a saved build-301 failure without exporting its stack', () => {
+    const failed: AuditCheck = { id: 'setup-pinned-inputs', label: 'Private label', kind: 'data',
+      status: 'fail', durationMs: 280.8, metrics: { stepLimitExceeded: false },
+      error: 'AuditDatasetChangedError: Public pricing catalogue changed during the performance audit\n    at private-account-123456' };
+    const legacyBody = createPublicPerformanceAuditReport(reportFixture([failed]));
+    expect((decodeCompactDiagnosticJson(legacyBody) as any).checks[0].failureCode)
+      .toBe('public-catalogue-changed');
+    expect(legacyBody).not.toContain('private-account-123456');
+    expect((decodeCompactDiagnosticJson(legacyBody) as any).checks[0].error.type).toBe('AuditDatasetChangedError');
+    failed.error = 'Private account: 123456\nAuditDatasetChangedError: Public pricing catalogue changed during the performance audit';
+    const body = createPublicPerformanceAuditReport(reportFixture([failed]));
+    expect((decodeCompactDiagnosticJson(body) as any).checks[0].failureCode).toBe('check-failed');
+    expect(body).not.toContain('123456');
+  });
+
+  it('exports the real setup failure cause and stop context without exposing raw catalogue evidence', async () => {
+    const pinned = { ...catalogue(), generationId: 'private-generation-id' };
+    let failed!: AuditCheck;
+    await expect(measurePerformanceAuditSetupStage(PERFORMANCE_AUDIT_SETUP_STAGES.inputs, () => {
+      assertAuditPublicCataloguePinned(pinned, { ...pinned });
+    }, { assertActive: () => {}, onFailure: check => { failed = check; } })).rejects.toThrow(AuditDatasetChangedError);
+    failed.metrics = { ...failed.metrics, completedBeforeFailure: 2, plannedChecks: 355,
+      recoveryRequired: false, rollbackRestored: true, datasetRevision: 'private-revision', currentPath: '/private/account' };
+    failed.error += '\nPrivate account: 123456; https://private.invalid';
+    const report = reportFixture([failed]);
+    const publicBody = createPublicPerformanceAuditReport(report);
+    const shared = JSON.parse(createDeidentifiedDiagnosticsShare(report).body);
+    const { diagnosticLog, ...publicSummary } = decodeCompactDiagnosticJson(publicBody) as any;
+    expect(publicSummary).toEqual(shared);
+    expect(diagnosticLog.checks).toHaveLength(report.checks.length);
+    expect(shared.checks[0]).toMatchObject({ id: 'setup-pinned-inputs', status: 'fail',
+      failureCode: 'public-catalogue-changed', metrics: {
+        datasetChanged: true, publicCatalogueChanged: true, catalogueGenerationChanged: false,
+        expectedCataloguePresent: true, actualCataloguePresent: true,
+        expectedCatalogueReady: true, actualCatalogueReady: true,
+        expectedCatalogueAllLoaded: true, actualCatalogueAllLoaded: true,
+        completedBeforeFailure: 2, plannedChecks: 355, recoveryRequired: false, rollbackRestored: true,
+      } });
+    for (const secret of ['private-generation-id', 'private-revision', '/private/account', '123456', 'private.invalid']) {
+      expect(publicBody).not.toContain(secret);
+    }
+  });
+
+  it.each([
+    [{ datasetRefreshStarted: true }, 'dataset-refresh-started'],
+    [{ datasetManifestChanged: true }, 'dataset-manifest-changed'],
+    [{ datasetRevisionChanged: true }, 'dataset-revision-changed'],
+  ] as const)('preserves the dataset stop cause alongside an exceeded deadline: %s', (evidence, code) => {
+    const failed: AuditCheck = { id: 'fatal-3', label: 'Private label', kind: 'runtime', status: 'fail', durationMs: null,
+      metrics: auditDatasetFailureMetrics(new AuditDatasetChangedError('Private error', evidence)) };
+    expect(buildDeidentifiedPerformanceAudit(reportFixture([failed])).checks[0].failureCode).toBe(code);
+    failed.metrics.stepLimitExceeded = true;
+    expect(buildDeidentifiedPerformanceAudit(reportFixture([failed])).checks[0]).toMatchObject({
+      failureCode: code, metrics: { stepLimitExceeded: true },
+    });
+    failed.metrics = { stepLimitExceeded: true };
+    expect(buildDeidentifiedPerformanceAudit(reportFixture([failed])).checks[0].failureCode).toBe('step-limit-exceeded');
+  });
+
+  it('retains fixed setup identities and safe outcomes while excluding private errors', () => {
+    const ids = ['setup-safety', 'setup-payload-settle', 'setup-pinned-inputs',
+      'setup-external-link-inventory', 'setup-environment', 'setup-private-account'];
+    const checks: AuditCheck[] = ids.map(id => ({ id, label: 'Private label', kind: 'data',
+      status: 'fail', durationMs: 306.6, error: 'Private account: 123456; https://private.invalid',
+      metrics: { setupStage: true, stepLimitMs: 10_000, stepLimitExceeded: false } }));
+    checks[2] = { ...checks[2], status: 'skipped', metrics: {
+      publicCatalogueCacheMiss: true, availabilityFailure: true, executionAttempted: true,
+    } };
+    const body = createDeidentifiedDiagnosticsShare(reportFixture(checks)).body;
+    const parsed = JSON.parse(body);
+    expect(parsed.checks.map((check: { id: string | null }) => check.id)).toEqual([...ids.slice(0, 5), null]);
+    expect(parsed.checks[0].failureCode).toBe('check-failed');
+    expect(createDeidentifiedDiagnosticsShare(reportFixture(checks)).fields.join(' ')).toContain('enumerated failure codes');
+    expect(parsed.checks[2]).toMatchObject({ failureCode: 'public-catalogue-cache-miss',
+      metrics: { publicCatalogueCacheMiss: true, availabilityFailure: true } });
+    expect(body).not.toContain('Private');
+    expect(body).not.toContain('123456');
+    expect(body).not.toContain('private.invalid');
+  });
   it.each(['pass', 'skipped'] as const)('preserves measured readiness savings for %s checks without private evidence', (status) => {
     const checks: AuditCheck[] = [true, false].map((reused) => ({
       id: 'deep-first-pass.search.action', label: 'Private label', kind: 'journey', status,

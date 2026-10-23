@@ -51,7 +51,7 @@ test('the mounted runner persists its actual fatal partial report before exposin
     expect(marker).toContain('partial=true');
     expect(partial.summary.unexpectedSkipped).toBeGreaterThan(0);
     expect(partial.checks).toEqual(expect.arrayContaining([expect.objectContaining({ status: 'fail', error: expect.stringContaining('runner setup fixture failure') })]));
-    expect(getPerformanceAuditState()).toMatchObject({ status: 'failed', report: null, uploadLog: false, error: expect.stringContaining('runner setup fixture failure') });
+    expect(getPerformanceAuditState()).toMatchObject({ status: 'failed', report: partial, uploadLog: false, error: expect.stringContaining('runner setup fixture failure') });
     expect(startDebugLogUpload).not.toHaveBeenCalled();
     expect(Clipboard.setStringAsync).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }

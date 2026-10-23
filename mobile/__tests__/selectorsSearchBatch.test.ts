@@ -5,8 +5,9 @@ import {
   rowMatchesSearchQuery,
   type SearchIndexPayload,
 } from '../src/data/detailSearch';
-import { EMPTY_FILTERS, filterRows } from '../src/data/selectors';
+import { EMPTY_FILTERS, filterRows, filterRowsCooperatively } from '../src/data/selectors';
 import type { RateRow } from '../src/types';
+import * as suitabilityGate from '../src/data/suitabilityGate';
 
 const rows: RateRow[] = Array.from({ length: 1000 }, (_, i) => ({
   provider: i % 2 ? 'Bank A' : 'Bank B',
@@ -26,6 +27,37 @@ const filters = { ...EMPTY_FILTERS, includeNonStandard: true };
 afterEach(() => {
   jest.restoreAllMocks();
   resetDetailSearchIndexCache();
+});
+
+test('cooperative filter counts preserve exact membership and yield before scanning', async () => {
+  let ticks = 0;
+  const accessed = new Set<number>();
+  const observedRows = new Proxy(rows, { get(target, key, receiver) {
+    if (typeof key === 'string' && /^\d+$/.test(key)) accessed.add(Number(key));
+    return Reflect.get(target, key, receiver);
+  } });
+  const atYield: number[] = [];
+  const yieldControl = jest.fn(async () => { atYield.push(accessed.size); });
+  const selected = { ...filters, query: 'solar', providers: ['Bank A'] };
+  const result = await filterRowsCooperatively(observedRows, selected, null, index, 'Mortgage', {
+    yieldControl, now: () => ++ticks * 7,
+  });
+  expect(result).toEqual(filterRows(rows, selected, null, index, 'Mortgage'));
+  expect(yieldControl.mock.calls.length).toBeGreaterThan(10);
+  expect(atYield[0]).toBe(0);
+  expect(atYield.some(count => count > 0 && count < rows.length)).toBe(true);
+  let cancelled = false;
+  expect(await filterRowsCooperatively(rows, selected, null, index, 'Mortgage', {
+    yieldControl: async () => { cancelled = true; }, cancelled: () => cancelled,
+  })).toBeNull();
+});
+
+test('cooperative counting rejects a membership gate that changes between slices', async () => {
+  let revision = 1;
+  jest.spyOn(suitabilityGate, 'getSuitabilityRevision').mockImplementation(() => revision);
+  expect(await filterRowsCooperatively(rows, filters, null, null, 'Mortgage', {
+    yieldControl: async () => { revision++; },
+  })).toBeNull();
 });
 
 test('a filtering pass copies the cached matching set once, independent of the row count', () => {
