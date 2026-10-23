@@ -7,7 +7,7 @@ require('../../../scripts/patch-legacy-yaml-cli.cjs').patchLegacyYamlCli(path.re
 const pinned = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8')).dependencies['eas-cli'];
 const installed = resolveFrom('eas-cli/package.json').version;
 if (installed !== pinned) throw new Error(`Expected EAS ${pinned}, found ${installed}`);
-if (!['23.2.0', '24.7.0', '24.12.0'].includes(installed)) throw new Error(`Unsupported EAS compatibility target ${installed}`);
+if (!['23.2.0', '24.7.0', '24.12.0', '24.14.0'].includes(installed)) throw new Error(`Unsupported EAS compatibility target ${installed}`);
 const dependency = JSON.parse(fs.readFileSync(path.join(path.dirname(resolveFrom.resolve('ts-deepmerge')), '../package.json'), 'utf8'));
 if (dependency.version !== '8.0.0') throw new Error(`Unsupported ts-deepmerge version ${dependency.version}`);
 patchExport({
