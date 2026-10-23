@@ -1,61 +1,14 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { toPublicAppHealthReport } from './appHealth';
+import { PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from './performanceAuditSetup';
+import { encodeCompactDiagnosticJson } from './compactDiagnosticJson';
+import { publicAuditDiagnostic, publicAuditError } from './performanceAuditDiagnostic';
+import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
 
-const METRIC_ALLOWLIST = new Set([
-  'durationMs',
-  'forwardMs',
-  'preActionWaitMs',
-  'preActionQuietWindowReused',
-  'preActionQuietWindowAvoidedMs',
-  'backgroundSettleMs',
-  'backMs',
-  'returnFallbackMs',
-  'runtimeErrors',
-  'incidentalRuntimeErrors',
-  'eventLoopSamples',
-  'eventLoopP95Ms',
-  'maxEventLoopLagMs',
-  'stallsOver100Ms',
-  'frameSamples',
-  'frameP95Ms',
-  'maxFrameGapMs',
-  'framesOver50Ms',
-  'payloadBytes',
-  'iterations',
-  'maxWriteMs',
-  'maxReadMs',
-  'averageWriteMs',
-  'averageReadMs',
-  'temporaryKeyDeleted',
-  'writeMs',
-  'readMs',
-  'temporaryFileDeleted',
-  'payloadChars',
-  'rateRows',
-  'stringifyMs',
-  'parseMs',
-  'traversalMs',
-  'statusCode',
-  'responseChars',
-  'headersMs',
-  'bodyMs',
-  'timeoutMs',
-  'executionAttempted',
-  'actionInvoked',
-  'actionCompleted',
-  'measurementAvailable',
-  'eventLoopMeasurementAvailable',
-  'frameMeasurementAvailable',
-  'availabilityFailure',
-  'routeStateInvalidated',
-  'handlerAttempted',
-  'httpAttempted',
-  'uniqueDestinations',
-  'lenderDetailsLoaded',
-  'observedDestinations',
-]);
+import { PUBLIC_AUDIT_METRIC_FIELDS as METRIC_ALLOWLIST } from './auditDiagnosticFields';
 
 const FIXED_CHECK_IDS = new Set([
+  ...PERFORMANCE_AUDIT_SETUP_CHECK_IDS,
   'runtime-responsiveness',
   'maximum-coverage-profile',
   'async-storage',
@@ -82,7 +35,7 @@ export const DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW = [
   'payload source, run date, product/provider counts and optional-asset availability',
   'aggregate outcome/counts and measured responsiveness values',
   'aggregate data-quality, asset, display and network-policy findings',
-  'fixed check IDs, status, measured duration and allowlisted numeric/boolean metrics',
+  'fixed check IDs, status, enumerated failure codes, measured duration and allowlisted numeric/boolean metrics',
 ] as const;
 
 export interface DeidentifiedDiagnosticsShare {
@@ -103,22 +56,30 @@ const EVENT_LOOP_MEASUREMENT_KEYS = new Set([
 const FRAME_MEASUREMENT_KEYS = new Set([
   'frameP95Ms', 'maxFrameGapMs', 'framesOver50Ms',
 ]);
+// These are directly observed snapshot/progress counts, not timing samples.
+const OBSERVED_COUNT_KEYS = new Set([
+  'expectedCatalogueProducts', 'actualCatalogueProducts', 'completedBeforeFailure', 'plannedChecks',
+]);
 
 function allowlistedMetrics(check: AuditCheck): Record<string, string | number | boolean | null> {
   const metrics = check.metrics;
   const result: Record<string, string | number | boolean | null> = {};
   for (const [key, value] of Object.entries(metrics)) {
     if (!METRIC_ALLOWLIST.has(key)) continue;
+    const prefix = ['forward', 'background', 'back'].find(candidate => key.startsWith(candidate) && /[A-Z]/.test(key[candidate.length] ?? ''));
+    const baseKey = prefix ? key[prefix.length].toLowerCase() + key.slice(prefix.length + 1) : key;
     if (typeof value === 'number' && value === 0) {
-      if (key === 'eventLoopSamples' || key === 'frameSamples') {
+      if (baseKey === 'eventLoopSamples' || baseKey === 'frameSamples') {
         result[key] = null;
         continue;
       }
-      const zeroProven = metrics.executionAttempted === true || metrics.measurementAvailable === true;
-      const sampleProven = EVENT_LOOP_MEASUREMENT_KEYS.has(key)
-        ? typeof metrics.eventLoopSamples === 'number' && metrics.eventLoopSamples > 0
-        : FRAME_MEASUREMENT_KEYS.has(key)
-          ? typeof metrics.frameSamples === 'number' && metrics.frameSamples > 0
+      const zeroProven = OBSERVED_COUNT_KEYS.has(key) || metrics.executionAttempted === true || metrics.measurementAvailable === true;
+      const loopSamples = metrics[prefix ? `${prefix}EventLoopSamples` : 'eventLoopSamples'];
+      const frameSamples = metrics[prefix ? `${prefix}FrameSamples` : 'frameSamples'];
+      const sampleProven = EVENT_LOOP_MEASUREMENT_KEYS.has(baseKey)
+        ? typeof loopSamples === 'number' && loopSamples > 0
+        : FRAME_MEASUREMENT_KEYS.has(baseKey)
+          ? typeof frameSamples === 'number' && frameSamples > 0
           : zeroProven;
       if (!sampleProven) {
         result[key] = null;
@@ -149,6 +110,23 @@ function safeCheckId(value: string | null): string | null {
 
 function safePayloadSource(value: string): string {
   return ['remote', 'cache', 'sample'].includes(value) ? value : 'unknown';
+}
+
+/** Enumerated outcomes only: raw errors can contain routes and private data. */
+function failureCode(check: AuditCheck): string | null {
+  if (check.metrics.publicCatalogueCacheMiss === true) return 'public-catalogue-cache-miss';
+  if (check.metrics.catalogueAdmissionRejected === true) return 'catalogue-work-in-progress';
+  if (check.metrics.publicCatalogueChanged === true) return 'public-catalogue-changed';
+  if (check.metrics.datasetRefreshStarted === true) return 'dataset-refresh-started';
+  if (check.metrics.datasetManifestChanged === true) return 'dataset-manifest-changed';
+  if (check.metrics.datasetChanged === true) return 'dataset-revision-changed';
+  // Saved reports from older builds predate structured causes. Recognize only
+  // this exact fixed first line; never export any part of the raw error/stack.
+  if (check.status === 'fail' && check.error?.split(/\r?\n|\\n/, 1)[0] ===
+    'AuditDatasetChangedError: Public pricing catalogue changed during the performance audit') return 'public-catalogue-changed';
+  if (check.metrics.stepLimitExceeded === true) return 'step-limit-exceeded';
+  if (check.metrics.availabilityFailure === true) return 'unavailable';
+  return check.status === 'fail' ? 'check-failed' : null;
 }
 
 function safeDuration(check: AuditCheck): number | null {
@@ -201,12 +179,24 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
       maxEventLoopLagMs: report.summary.maxEventLoopLagMs,
       maxFrameGapMs: report.summary.maxFrameGapMs,
     },
+    diagnostics: {
+      schemaVersion: 1,
+      durationMs: report.durationMs,
+      wallClockMs: report.wallClockMs ?? null,
+      watchdog: { hangTimeoutMs: report.watchdog.hangTimeoutMs, storedCheckCount: report.watchdog.storedCheckCount },
+      plannedChecks: report.coverage?.plannedChecks ?? report.checks.length,
+      storedChecks: report.checks.length,
+      readinessCapturedChecks: report.checks.filter(check => check.diagnostic?.readiness != null).length,
+    },
     checks: report.checks.map((check) => ({
       id: safeCheckId(check.id),
       kind: check.kind,
       status: check.status,
+      failureCode: failureCode(check),
       durationMs: safeDuration(check),
       metrics: allowlistedMetrics(check),
+      diagnostic: publicAuditDiagnostic(check.diagnostic),
+      error: publicAuditError(check.error, check.trace),
     })),
     appHealth: report.appHealth ? toPublicAppHealthReport(report.appHealth) : null,
   };
@@ -235,7 +225,7 @@ export function createDeidentifiedDiagnosticsShare(
 /** Public pastes carry the allowlisted report only. Keep all checks; reject
  * oversize reports instead of silently uploading a partial diagnostic. */
 export function createPublicPerformanceAuditReport(report: PerformanceAuditReport): string {
-  const body = JSON.stringify(buildDeidentifiedPerformanceAudit(report));
+  const body = encodeCompactDiagnosticJson({ ...buildDeidentifiedPerformanceAudit(report), diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId) });
   if (new TextEncoder().encode(body).length > 2 * 1024 * 1024) {
     throw new Error('The deidentified report exceeds the public upload limit.');
   }

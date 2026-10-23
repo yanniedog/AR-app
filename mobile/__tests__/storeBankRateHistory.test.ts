@@ -27,6 +27,8 @@ import type { DatesIndex } from '../src/data/datesIndex';
 import { compileHistoricalBankRateReady } from '../src/data/historicalBankRateReadyCompiler';
 import type { HistoricalBankRateReady } from '../src/data/historicalBankRateReadyWire';
 import compilerManifest from '../contracts/history-ready/compiler-manifest.json';
+import { loadDetachedHistoricalBankRateCatalogue } from '../src/data/detachedHistoricalBankRateCatalogue';
+import { prepareLegacyBankRateHistory } from '../src/data/historicalBankRateLegacyCompatibility';
 
 let mockLegacyCatalogue: HistoricalBankRateCatalogue;
 let mockReadyCatalogue: HistoricalBankRateReady;
@@ -39,8 +41,9 @@ jest.mock('../src/data/bundledHistoricalBankRateCatalogue', () => ({
   getBundledHistoricalBankRateCatalogueAsync: jest.fn(() => { throw new Error('Raw history must not load in the app'); }),
 }));
 jest.mock('../src/data/detachedHistoricalBankRateCatalogue', () => ({
-  loadDetachedHistoricalBankRateCatalogue: jest.fn(() => { throw new Error('Raw history must not load in the app'); }),
+  loadDetachedHistoricalBankRateCatalogue: jest.fn(async () => null),
 }));
+jest.mock('../src/data/historicalBankRateLegacyCompatibility', () => ({ prepareLegacyBankRateHistory: jest.fn(async () => true) }));
 
 jest.mock('expo-crypto', () => ({ CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
   digest: jest.fn(async (_: unknown, bytes: Uint8Array) => new Uint8Array(jest.requireActual('@noble/hashes/sha256').sha256(bytes)).buffer),
@@ -87,6 +90,8 @@ beforeEach(() => {
   jest.mocked(warmHistoricalBankRateCatalogue).mockResolvedValue(undefined);
   jest.mocked(cache.readDetails).mockResolvedValue(null);
   jest.mocked(loadDetachedHistoricalBankRateReady).mockResolvedValue(null);
+  jest.mocked(loadDetachedHistoricalBankRateCatalogue).mockResolvedValue(null);
+  jest.mocked(prepareLegacyBankRateHistory).mockResolvedValue(true);
   jest.mocked(isLocalAppHealthAudit).mockReturnValue(false);
   jest.mocked(configureNativeHistoricalCatalogueCodec).mockResolvedValue(false);
 });
@@ -180,7 +185,16 @@ test('missing detached archive keeps the bundled preparation path available', as
   expect(get().bankRateHistoryLoading).toBe(false);
 });
 
-test('a legacy raw descriptor uses prepared fallback without opening the raw archive', async () => {
+test('rejected downloaded preparation records fallback evidence when signed history succeeds', async () => {
+  const { get, set } = store(), manifest = detachedManifest();
+  set({ manifest });
+  jest.mocked(loadDetachedHistoricalBankRateReady).mockResolvedValueOnce({} as HistoricalBankRateReady);
+  jest.mocked(prepareReadyBankRateHistory).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  await prepareBankRateHistoryAfterPaint(set, get, sampleCore, manifest);
+  expect(backgroundPayloadWork.snapshot().reverse().find(job => job.label === 'Bank rate history preparation')?.outcome).toBe('fallback');
+});
+
+test('an invalid legacy descriptor uses prepared fallback without opening the raw archive', async () => {
   const { get, set } = store();
   const manifest = { ...sampleManifest, bank_rate_history_catalogue: { schema_version: 1 as const,
     file: { name: 'legacy-history.json.gz', bytes: 123, sha256: 'a'.repeat(64), url: 'https://example.invalid/raw-history.json.gz' },
@@ -192,6 +206,52 @@ test('a legacy raw descriptor uses prepared fallback without opening the raw arc
   expect(jest.requireMock('../src/data/detachedHistoricalBankRateCatalogue').loadDetachedHistoricalBankRateCatalogue).not.toHaveBeenCalled();
   expect(jest.requireMock('../src/data/bundledHistoricalBankRateCatalogue').getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
   expect(get()).toMatchObject({ bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
+});
+
+test.each([[false, false, false], [true, false, false], [false, true, false], [false, true, true], [false, true, 'throws']])('verified legacy history is prepared after paint with local audit=%s, unavailable ready asset=%s, rejected preparation=%s', async (audit, unavailableReady, rejectedPreparation) => {
+  const { get, set } = store(), manifest = revisionManifest(1);
+  const sha = 'b'.repeat(64), name = `bank-rate-history-catalogue-${manifest.run_date}-${sha.slice(0, 12)}.json.gz`;
+  delete manifest.files.core.enc;
+  manifest.bank_rate_history_catalogue = { schema_version: 1, file: { name, bytes: 123, sha256: sha,
+    url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}` } };
+  if (unavailableReady) manifest.bank_rate_history_ready = detachedManifest().bank_rate_history_ready;
+  if (rejectedPreparation) {
+    jest.mocked(loadDetachedHistoricalBankRateReady).mockResolvedValueOnce({} as HistoricalBankRateReady);
+    if (rejectedPreparation === 'throws') jest.mocked(prepareReadyBankRateHistory).mockRejectedValueOnce(new Error('cache unavailable'));
+    else jest.mocked(prepareReadyBankRateHistory).mockResolvedValueOnce(false);
+  }
+  set({ manifest });
+  const legacy = { schema_version: 2 as const, run_dates: [sampleCore.run_date], sources: {}, unavailable_dates: {},
+    evidence: [{ status: 'unknown' as const }], sections: { Mortgage: [], Savings: [], TD: [] } };
+  const paint = deferred();
+  jest.mocked(yieldToPaintFrames).mockReturnValueOnce(paint.promise);
+  jest.mocked(isLocalAppHealthAudit).mockReturnValue(audit);
+  jest.mocked(loadDetachedHistoricalBankRateCatalogue).mockImplementationOnce(async (_manifest, options) => {
+    expect(configureNativeHistoricalCatalogueCodec).toHaveBeenCalled();
+    expect(options.allowNetwork).toBe(!audit);
+    expect(options.isCurrent?.()).toBe(true);
+    return legacy;
+  });
+  const pending = prepareBankRateHistoryAfterPaint(set, get, sampleCore, manifest);
+  expect(loadDetachedHistoricalBankRateCatalogue).not.toHaveBeenCalled();
+  paint.resolve(); await pending;
+  expect(prepareLegacyBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, legacy, expect.any(Function));
+  expect(prepareReadyBankRateHistory).toHaveBeenCalledTimes(rejectedPreparation ? 1 : 0);
+  expect(get()).toMatchObject({ bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
+});
+
+test('verified prepared history takes priority over an accompanying legacy archive', async () => {
+  const { get, set } = store(), manifest = revisionManifest(1);
+  delete manifest.files.core.enc;
+  manifest.bank_rate_history_ready = detachedManifest().bank_rate_history_ready;
+  const sha = 'b'.repeat(64), name = `bank-rate-history-catalogue-${manifest.run_date}-${sha.slice(0, 12)}.json.gz`;
+  jest.mocked(loadDetachedHistoricalBankRateReady).mockResolvedValueOnce({} as HistoricalBankRateReady);
+  set({ manifest: { ...manifest, bank_rate_history_catalogue: { schema_version: 1, file: {
+    name, bytes: 123, sha256: sha, url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}`,
+  } } } });
+  await prepareBankRateHistoryAfterPaint(set, get, sampleCore, get().manifest!);
+  expect(loadDetachedHistoricalBankRateReady).toHaveBeenCalledTimes(1);
+  expect(loadDetachedHistoricalBankRateCatalogue).not.toHaveBeenCalled();
 });
 
 test.each(['missing', 'corrupt', 'partial'])(

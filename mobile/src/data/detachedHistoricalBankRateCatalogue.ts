@@ -5,7 +5,7 @@ import { cache } from './cache';
 import { downloadInflate, gunzipCooperatively } from './payload';
 import { decompressCatalogueAsync } from './historicalBankRateCatalogueCompression';
 import { unpackHistoricalBankRateCatalogueAsync } from './historicalBankRateCataloguePacked';
-import { prepareHistoricalBankRateCatalogueAsync } from './historicalBankRateCatalogue';
+import { bindHistoricalCatalogueArchiveReceipt, prepareHistoricalBankRateCatalogueAsync } from './historicalBankRateCatalogue';
 import type { HistoricalBankRateCatalogue } from './historicalBankRateCatalogueWire';
 import { DETACHED_HISTORY_MAX_COMPRESSED, DETACHED_HISTORY_MAX_DECODED,
   PACKED_HISTORY_MAX_DECODED, validatePackedHistoricalCatalogueDescriptor,
@@ -142,6 +142,7 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
       stage('inner decode complete; validation begin');
       const prepared = await prepareHistoricalBankRateCatalogueAsync(catalogue, checkpoint);
       const result = isCurrent() && prepared && prepared.catalogue.run_dates.every(day => day <= runDate) ? prepared.catalogue : null;
+      if (result && prepared) bindHistoricalCatalogueArchiveReceipt(prepared, inner.sha256);
       if (result) stage('verified catalogue ready');
       else {
         work.stage(!isCurrent() ? 'History request superseded' : prepared

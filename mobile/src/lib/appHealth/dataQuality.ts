@@ -892,6 +892,7 @@ function evaluateAssetAvailability(
   let requiredUnavailable = 0;
   let optionalUnavailable = 0;
   let optionalNotObserved = 0;
+  const assetStates: Record<string, string> = {};
   let requiredEmpty = 0;
   let optionalEmpty = 0;
   let mismatchedRunDates = 0;
@@ -902,6 +903,7 @@ function evaluateAssetAvailability(
       : asset === 'details' && snapshot.details
         ? 'ready'
         : observation?.state;
+    assetStates[`${asset}State`] = inferredState ?? 'not-requested';
     const runDate = observation?.runDate ??
       (asset === 'core' ? snapshot.core?.run_date : asset === 'details' ? snapshot.details?.runDate : null);
     if (
@@ -942,6 +944,7 @@ function evaluateAssetAvailability(
       optionalEmpty,
       optionalNotObserved,
       mismatchedRunDates,
+      ...assetStates,
     },
     requiredUnavailable || requiredEmpty
       ? 'A required app data asset is unavailable or empty.'

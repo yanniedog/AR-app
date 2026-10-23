@@ -82,7 +82,8 @@ export const useStore = create<AppState>()(
           persistedPrefs?.privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
         const hasPreviousPrivacyChoice =
           persistedPrefs?.privacyChoiceVersion === 1 ||
-          persistedPrefs?.privacyChoiceVersion === 2;
+          persistedPrefs?.privacyChoiceVersion === 2 ||
+          persistedPrefs?.privacyChoiceVersion === 3;
         const hasRecordedPrivacyChoice =
           hasCurrentPrivacyChoice || hasPreviousPrivacyChoice;
         const savedRates = normalizeSavedRates(p?.savedRates, p?.favorites);
