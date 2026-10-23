@@ -7,8 +7,8 @@ import type { DatesIndex } from './datesIndex';
 import { normalizeTimelineDates } from './bankHistoryTransform';
 import { assertHistoricalIdentitiesAdvance, historicalRevisionHighWater, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
 import { bestRatesForCore, productKeysForCore, buildProductHistoryFromRatesAsync, type ProductHistoryPayload } from './productHistoryModel';
-import { preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
-import { productRatesFromHistoricalCatalogue, readyProductHistoryIdentity } from './productHistoryCatalogue';
+import { historicalCatalogueSelection, preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
+import { productCatalogueDates, productCatalogueIndex, productCatalogueIndexConflicts, productRatesFromHistoricalCatalogue, readyProductHistoryIdentity } from './productHistoryCatalogue';
 import {
   createDatedFetchCircuit,
   DATED_FETCH_CIRCUIT_LIMIT,
@@ -67,7 +67,8 @@ export async function syncProductHistoryFromDailyPayloads(
   if (!targetRunDate) throw new Error('syncProductHistoryFromDailyPayloads: missing targetRunDate');
   const preparedSources = opts.catalogue ? preparedReadySources(opts.catalogue) : null;
   const preparedOnly = opts.preparedOnly === true || preparedSources !== null;
-  const preparedDates = new Set(preparedSources?.flatMap(input => [...input.acceptedDates]) ?? []);
+  const preparedDates = new Set(preparedSources?.flatMap(input => [...input.acceptedDates]) ??
+    (opts.catalogue ? productCatalogueDates(opts.catalogue).filter(day => !!readyProductHistoryIdentity(opts.catalogue, undefined, day)) : []));
 
   let indexedDates: string[] = [];
   let selectedIndex: DatesIndex | undefined;
@@ -76,6 +77,7 @@ export async function syncProductHistoryFromDailyPayloads(
   );
   let networkAvailable = opts.allowNetwork !== false;
   let candidateIndex: DatesIndex | null | undefined;
+  let publicIndexRejected = false;
   if (networkAvailable) {
     try { candidateIndex = await fetchDatesIndexJson(); }
     catch (err) {
@@ -84,6 +86,7 @@ export async function syncProductHistoryFromDailyPayloads(
     }
   }
   if (!networkAvailable) candidateIndex = opts.fallbackIndex;
+  candidateIndex = productCatalogueIndex(opts.catalogue, candidateIndex);
   try {
     if (!candidateIndex) throw new Error('No selected historical publication receipt');
     const candidateDates = historyDatesUpTo(candidateIndex, targetRunDate);
@@ -93,6 +96,7 @@ export async function syncProductHistoryFromDailyPayloads(
     selectedIndex = candidateIndex;
     indexedDates = candidateDates;
   } catch (err) {
+    publicIndexRejected = !!candidateIndex;
     debugLog.warn(
       'productHistory',
       `dates index rejected; retaining cached/current dates: ${String((err as Error)?.message ?? err)}`,
@@ -101,6 +105,7 @@ export async function syncProductHistoryFromDailyPayloads(
   const wantedDates = normalizeTimelineDates([
     ...indexedDates,
     ...preparedDates,
+    ...(opts.catalogue && historicalCatalogueSelection(opts.catalogue) ? productCatalogueDates(opts.catalogue) : []),
     ...(opts.existing?.run_dates ?? []),
     targetRunDate,
   ]);
@@ -108,8 +113,12 @@ export async function syncProductHistoryFromDailyPayloads(
   const keys = productKeysForCore(opts.currentCore);
   const sameDerivation = opts.existing?.derivation_version === HISTORY_DERIVATION_VERSION;
   const publications = !preparedOnly && selectedIndex && networkAvailable ? await resolveLegacyPublications(selectedIndex, indexedDates.filter(d => d !== targetRunDate), opts.isCurrent) : new Map();
-  const selectedIdentity = (date: string): string | undefined => readyProductHistoryIdentity(opts.catalogue, selectedIndex, date) ??
-    (selectedIndex?.revision_heads?.[date] ? historicalSourceIdentity(selectedIndex, date) : publications.get(date)?.identity);
+  const selectedIdentity = (date: string): string | undefined => {
+    const independentOrSelected = readyProductHistoryIdentity(opts.catalogue, selectedIndex, date);
+    const identity = independentOrSelected ?? (productCatalogueIndexConflicts(selectedIndex ?? candidateIndex, date) ? undefined :
+      selectedIndex?.revision_heads?.[date] ? historicalSourceIdentity(selectedIndex, date) : publications.get(date)?.identity);
+    return publicIndexRejected && identity?.startsWith('revision:') ? undefined : identity;
+  };
   // A local receipt cannot re-resolve mutable legacy manifests. Preserve their
   // already verified cached slices, without inventing identities for new ones.
   const reusableDates = new Set((opts.existing?.run_dates ?? []).filter(date => {
@@ -119,7 +128,8 @@ export async function syncProductHistoryFromDailyPayloads(
     // Independent producer observations belong to the current core's ready
     // payload. They neither need a public index nor survive its removal from
     // that payload; a failed index refresh must not keep an older producer's rate.
-    if (previous.startsWith('prepared:') || readyIdentity?.startsWith('prepared:')) return previous === readyIdentity;
+    if ([previous, readyIdentity].some(value => value?.startsWith('prepared:') || value?.startsWith('catalogue:'))) return previous === readyIdentity;
+    if (productCatalogueIndexConflicts(candidateIndex, date)) return false;
     return !selectedIndex || (preparedDates.has(date) ? previous === selectedIdentity(date) :
       !indexedDates.includes(date) || (opts.existing?.schema_version === 3 &&
         ((!networkAvailable && !selectedIndex.revision_heads?.[date]) || previous === selectedIdentity(date))));
@@ -150,7 +160,7 @@ export async function syncProductHistoryFromDailyPayloads(
   ) {
     return opts.existing;
   }
-  const bestByDate = opts.catalogue && (selectedIndex || preparedSources) && toFetch.length
+  const bestByDate = opts.catalogue && (selectedIndex || preparedDates.size) && toFetch.length
     ? await productRatesFromHistoricalCatalogue(opts.catalogue, selectedIndex ?? null, toFetch, opts.isCurrent)
     : new Map<string, Map<string, number>>();
   const packedDates = bestByDate.size;

@@ -166,3 +166,19 @@ it('never accepts unverified cache bytes and evicts older generations within fix
   expect(await cache.read('b'.repeat(64), asset)).toEqual(bytes);
   expect(await cache.read('c'.repeat(64), asset)).toEqual(bytes);
 });
+
+it('strict audit reads distinguish absence, corruption and I/O errors without deleting evidence', async () => {
+  let raw: string | null = null;
+  const storage: PublicRateCacheStorage = { read: jest.fn(async () => raw), writeAtomic: jest.fn(async () => {}),
+    remove: jest.fn(async () => {}), list: async () => [] };
+  const cache = createPublicRateAssetCache(storage);
+  const { capability } = catalogueFixture(), asset = capability.index, edition = 'a'.repeat(64);
+  await expect(cache.read(edition, asset, { strict: true })).resolves.toBeNull();
+  raw = 'corrupt';
+  await expect(cache.read(edition, asset, { strict: true })).rejects.toThrow('Corrupt');
+  expect(storage.remove).not.toHaveBeenCalled();
+  jest.mocked(storage.read).mockRejectedValueOnce(new Error('storage read failed'));
+  await expect(cache.read(edition, asset, { strict: true })).rejects.toThrow('storage read failed');
+  await expect(cache.read(edition, asset)).resolves.toBeNull();
+  expect(storage.remove).toHaveBeenCalledTimes(1);
+});

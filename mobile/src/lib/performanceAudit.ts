@@ -2,6 +2,7 @@ import { getRandomBytes } from 'expo-crypto';
 import type { Href } from 'expo-router';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, type PerformanceAuditEstimate } from './performanceAuditTiming';
 import type { AuditBackgroundWorkWait } from './performanceAuditBackgroundWork';
+import type { AuditCheckDiagnostic } from './performanceAuditDiagnostic';
 
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import type { Prefs } from '../data/storeTypes';
@@ -43,6 +44,8 @@ export interface AuditCheck {
   /** Full stacks are retained only for errors so the audit does not profile its own logging. */
   trace?: string;
   error?: string;
+  /** Complete structured readiness evidence; never truncated into metric text. */
+  diagnostic?: AuditCheckDiagnostic;
 }
 
 export interface AuditAppIdentity {
@@ -661,16 +664,26 @@ export function markPerformanceAuditCancelled(): void {
   });
 }
 
-export function failPerformanceAudit(error: string, recoveryRequired = false): void {
+export function failPerformanceAudit(error: string, recoveryRequired = false, report?: PerformanceAuditReport): void {
   emit({
     ...auditState,
     status: 'failed',
     recoveryRequired,
+    report: report ?? auditState.report,
     cancelRequested: false,
     paused: false,
     progress: { ...auditState.progress, label: 'Audit failed' },
     error,
   });
+}
+
+export function auditReportCompletionLabel(
+  report: Pick<PerformanceAuditReport, 'sessionId' | 'coverage' | 'appHealth'>,
+  state: Pick<PerformanceAuditState, 'sessionId' | 'status'>,
+): 'Complete' | 'Partial' | 'Saved' {
+  if (report.sessionId !== state.sessionId) return 'Saved';
+  return state.status === 'complete' && report.coverage?.complete !== false && report.appHealth?.coverage.complete !== false
+    ? 'Complete' : 'Partial';
 }
 
 /** Page size used by the results screen. The selector returns every check in
