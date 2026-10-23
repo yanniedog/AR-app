@@ -259,22 +259,20 @@ export async function decompressCatalogueAsync(value: CompressedCatalogue, optio
     const checkpoint = scheduler(options);
     await checkpoint(true);
     const codec = nativeCodec;
-    if (codec) {
-      let json: string;
-      if (codec.decompressChunksAsync) {
-        const parts = await codec.decompressChunksAsync(value.gzip_base64, value.bytes, value.sha256);
-        if (!Array.isArray(parts) || !parts.length || parts.length > Math.ceil(value.bytes / 65_536) + 1) return null;
-        let characters = 0;
-        for (const part of parts) {
-          if (typeof part !== 'string' || !part.length || part.length > 65_537 || (characters += part.length) > value.bytes) return null;
-          await checkpoint();
-        }
-        json = parts.join('');
-      } else json = await codec.decompressAsync(value.gzip_base64, value.bytes, value.sha256);
+    if (codec?.decompressChunksAsync) {
+      const parts = await codec.decompressChunksAsync(value.gzip_base64, value.bytes, value.sha256);
+      if (!Array.isArray(parts) || !parts.length || parts.length > Math.ceil(value.bytes / 65_536) + 1) return null;
+      let characters = 0;
+      for (const part of parts) {
+        if (typeof part !== 'string' || !part.length || part.length > 65_537 || (characters += part.length) > value.bytes) return null;
+        await checkpoint();
+      }
+      const json = parts.join('');
       if (typeof json !== 'string' || json.length > value.bytes) return null;
       await checkpoint(true);
       return JSON.parse(json);
     }
+    // Older native hosts must not re-enter the original whole-buffer decoder.
     const gzip = await decodeBase64Async(value.gzip_base64, checkpoint);
     if (!gzip || gzip.length < 18 || new DataView(gzip.buffer, gzip.byteOffset + gzip.length - 4, 4).getUint32(0, true) !== value.bytes) return null;
     const bytes = new Uint8Array(value.bytes); let written = 0;

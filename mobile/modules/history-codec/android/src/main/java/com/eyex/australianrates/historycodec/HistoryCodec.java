@@ -111,12 +111,24 @@ public final class HistoryCodec {
 
   private static int digit(char value) { return ALPHABET.indexOf(value); }
 
+  /** Retained UTF-16 chunks must fit beside the input and bounded bridge work.
+   * Reject optional history before allocation instead of exhausting the VM. */
+  private static void requireNativeHeap(long additionalBytes) {
+    Runtime runtime = Runtime.getRuntime();
+    long available = runtime.maxMemory() - (runtime.totalMemory() - runtime.freeMemory());
+    long reserve = Math.max(16L * 1024 * 1024, runtime.maxMemory() / 16);
+    if (additionalBytes > available - reserve)
+      throw new IllegalArgumentException("History exceeds safe native heap budget");
+  }
+
   /** Keep verified UTF-8 in bridge-sized chunks instead of retaining a full
    * byte array, UTF-16 decoder buffer and full String at the same time. */
   public static List<String> decompressChunks(String text, double declaredBytes, String sha256) throws IOException {
     if (!Double.isFinite(declaredBytes) || declaredBytes != Math.floor(declaredBytes) || declaredBytes < 1 || declaredBytes > MAX_DECODED ||
         sha256 == null || !sha256.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("Invalid catalogue receipt");
     int length = (int) declaredBytes;
+    requireNativeHeap(2L * length + (text == null ? 0 : text.length() / 4L * 3) +
+      ((length + 65535L) / 65536) * 96 + 4L * 65537);
     byte[] compressed = decode(text);
     if (compressed.length < 18) throw new IllegalArgumentException("Invalid gzip length");
     int end = compressed.length;
@@ -139,7 +151,10 @@ public final class HistoryCodec {
           if (low < 0 || !Character.isLowSurrogate((char) low)) throw new IOException("Invalid UTF-8 surrogate pair");
           block[count++] = (char) low;
         }
-        if (count > 0) output.add(new String(block, 0, count));
+        if (count > 0) {
+          requireNativeHeap(2L * count + 96);
+          output.add(new String(block, 0, count));
+        }
       }
       if (decoded.count != length) throw new IllegalArgumentException("Catalogue inflated size mismatch");
     }
@@ -155,6 +170,10 @@ public final class HistoryCodec {
         !Double.isFinite(maximumBytes) || maximumBytes != Math.floor(maximumBytes) || maximumBytes < 1 || maximumBytes > 192 * 1024 * 1024 ||
         !Double.isFinite(expectedBytes) || expectedBytes != Math.floor(expectedBytes) || expectedBytes < -1 || expectedBytes > maximumBytes)
       throw new IllegalArgumentException("Invalid payload inflation bounds");
+    long footer = 0;
+    for (int i = 0; i < 4; i++) footer |= ((long) compressed[compressed.length - 4 + i] & 255) << (8 * i);
+    long retained = expectedBytes >= 0 ? (long) expectedBytes : Math.min((long) maximumBytes, footer);
+    requireNativeHeap(2L * retained + ((retained + 65535) / 65536) * 96 + 4L * 65537);
     List<String> output = new ArrayList<>();
     char[] block = new char[65537];
     try (BoundedDecodedInput decoded = new BoundedDecodedInput(
@@ -169,7 +188,10 @@ public final class HistoryCodec {
           if (low < 0 || !Character.isLowSurrogate((char) low)) throw new IOException("Invalid UTF-8 surrogate pair");
           block[count++] = (char) low;
         }
-        if (count > 0) output.add(new String(block, 0, count));
+        if (count > 0) {
+          requireNativeHeap(2L * count + 96);
+          output.add(new String(block, 0, count));
+        }
       }
       if (expectedBytes >= 0 && decoded.count != (int) expectedBytes)
         throw new IllegalArgumentException("Payload inflated size mismatch");

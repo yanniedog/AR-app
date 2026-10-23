@@ -3,7 +3,7 @@ import type { DatesIndex } from './datesIndex';
 import type { HistoricalBankRateCatalogue } from './historicalBankRateCatalogueWire';
 import { prepareHistoricalBankRateCatalogueAsync, selectHistoricalCatalogueDates } from './historicalBankRateCatalogue';
 import { prepareReadyBankRateHistory, selectedPreparedHistoryHeads } from './historicalBankRateReadySync';
-import { installPreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
+import { cachedHistoricalBankRateCatalogue, installPreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import { yieldToUi } from '../lib/yieldToUi';
 
 export interface LegacyBankRateHistoryResult {
@@ -34,7 +34,7 @@ export async function prepareLegacyBankRateHistory(core: CorePayload, manifest: 
   // cancel a live successor joining the same immutable archive.
   const primary = await prepareHistoricalBankRateCatalogueAsync(archive, () => yieldToUi(0));
   if (!isCurrent()) return { ready: false, contributed: false };
-  if (!primary) return { ready: !!fallback, contributed: false };
+  if (!primary) return { ready: !!fallback || !!cachedHistoricalBankRateCatalogue(core), contributed: false };
   // Keep known unavailable days even without a usable fallback. This calendar
   // does not authorize the supplied index's public revision receipts.
   const knownDates = [...new Set([...(selected?.dates ?? selected?.heads.keys() ?? []), ...(index?.dates ?? [])])].sort();

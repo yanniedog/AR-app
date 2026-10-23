@@ -26,7 +26,7 @@ test('native history codec preserves bytes and rejects corrupt, noncanonical and
     assert.match(memory.stdout, /payload memory assertions passed: 45188000 characters;/);
     const catalogueMemory = spawnSync(command('java'), ['-Xmx192m', '-XX:-CompactStrings', '-cp', directory, 'HistoryCatalogueMemoryTest'], { encoding: 'utf8', timeout: 30_000 });
     assert.equal(catalogueMemory.status, 0, String(catalogueMemory.error ?? catalogueMemory.stderr));
-    assert.match(catalogueMemory.stdout, /history catalogue memory assertions passed: 50000000 characters; Unicode and 7 rejection cases/);
+    assert.match(catalogueMemory.stdout, /history catalogue memory assertions passed: 50000000 characters; Unicode and 9 rejection cases/);
     const cachedPayload = spawnSync(command('java'), ['-Xmx192m', '-XX:-CompactStrings', '-cp', directory, 'CachedPayloadInflationTest'], { encoding: 'utf8', timeout: 30_000 });
     assert.equal(cachedPayload.status, 0, String(cachedPayload.error ?? cachedPayload.stderr));
     assert.match(cachedPayload.stdout, /cached payload assertions passed: 25; characters=4200011; compressed=/);

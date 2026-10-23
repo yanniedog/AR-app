@@ -33,6 +33,18 @@ const dates = ['2026-09-25', '2026-09-26', '2026-09-27', '2026-09-28'];
 const emptyMarket: BankHistoryPoint[] = dates.map(date => ({
   date, min: null, max: null, mean: null, median: null, count: 0,
 }));
+
+test('an entirely unknown selected window reports its missing dates without inventing a plot', () => {
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankHistoryChart section="Savings" dates={dates} points={emptyMarket} allDates={dates} />) as Renderer; });
+  try {
+    const rendered = JSON.stringify(tree.toJSON());
+    expect(rendered).toContain('No observations');
+    expect(rendered).toContain('Missing observations: 4');
+    expect(rendered).toContain('Unknown');
+    expect(tree.root.findAllByType(Svg)).toHaveLength(0);
+  } finally { act(() => tree.unmount()); }
+});
 const highlightSeries = {
   label: uiProductName({ product_name: 'Selected product' }),
   values: { '2026-09-25': 0.045, '2026-09-26': 0.046, '2026-09-27': null, '2026-09-28': 0.05 },

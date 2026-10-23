@@ -340,3 +340,14 @@ test.each([true, false])('a rejected archive preserves existing fallback readine
     .toEqual({ ready, contributed: false });
   expect(cachedHistoricalBankRateCatalogue(current)).toBe(ready ? fallback : null);
 });
+
+test('a rejected archive and failed fallback retry retain already installed same-owner history', async () => {
+  const current = core(), previous = prepareHistoricalBankRateCatalogue(raw)!;
+  installPreparedHistoricalBankRateCatalogue(current, previous, [rejected]);
+  jest.mocked(prepareReadyBankRateHistory).mockRejectedValueOnce(new Error('fallback decode unavailable'));
+  const invalid = { ...raw, sections: { ...raw.sections, Savings: [...raw.sections.Savings, ...raw.sections.Savings] } };
+  expect(await prepareLegacyBankRateHistory(current, sampleManifest, index, invalid, () => true))
+    .toEqual({ ready: true, contributed: false });
+  expect(cachedHistoricalBankRateCatalogue(current)).toBe(previous);
+  expect(missingHistoricalCatalogueDates(current)).toEqual([rejected]);
+});

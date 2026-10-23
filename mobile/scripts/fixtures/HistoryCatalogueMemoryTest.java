@@ -60,6 +60,31 @@ public final class HistoryCatalogueMemoryTest {
     try (GZIPOutputStream gzip = new GZIPOutputStream(badUtf8)) { gzip.write(invalid); }
     rejects(() -> HistoryCodec.decompressChunks(Base64.getEncoder().encodeToString(badUtf8.toByteArray()), invalid.length,
       hex(MessageDigest.getInstance("SHA-256").digest(invalid))));
-    System.out.println("history catalogue memory assertions passed: " + count + " characters; Unicode and 7 rejection cases");
+    // A valid near-limit ASCII archive cannot be retained as UTF-16 on this
+    // heap. Admission must fail with a controlled budget error, never an OOM.
+    int oversizedLength = 100_000_000;
+    MessageDigest largeHash = MessageDigest.getInstance("SHA-256");
+    ByteArrayOutputStream oversized = new ByteArrayOutputStream();
+    try (GZIPOutputStream gzip = new GZIPOutputStream(oversized)) {
+      for (int written = 0; written < oversizedLength;) {
+        int amount = Math.min(block.length, oversizedLength - written);
+        gzip.write(block, 0, amount); largeHash.update(block, 0, amount); written += amount;
+      }
+    }
+    byte[] largeBytes = oversized.toByteArray();
+    String largeBase64 = Base64.getEncoder().encodeToString(largeBytes), largeDigest = hex(largeHash.digest());
+    try {
+      HistoryCodec.decompressChunks(largeBase64, oversizedLength, largeDigest);
+      throw new AssertionError("Oversized catalogue should not be retained");
+    } catch (IllegalArgumentException expectedBudget) {
+      if (!expectedBudget.getMessage().contains("heap budget")) throw expectedBudget;
+    }
+    try {
+      HistoryCodec.inflatePayload(largeBytes, oversizedLength, oversizedLength);
+      throw new AssertionError("Oversized payload should not be retained");
+    } catch (IllegalArgumentException expectedBudget) {
+      if (!expectedBudget.getMessage().contains("heap budget")) throw expectedBudget;
+    }
+    System.out.println("history catalogue memory assertions passed: " + count + " characters; Unicode and 9 rejection cases");
   }
 }
