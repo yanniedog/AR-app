@@ -49,7 +49,7 @@
     "@shopify/flash-list": "2.0.2",
     "expo": "~54.0.37",
     "expo-application": "~7.0.8",
-    "expo-asset": "~12.0.13",
+    "expo-asset": "~12.0.14",
     "expo-background-task": "~1.0.10",
     "expo-build-properties": "~1.0.10",
     "expo-clipboard": "~8.0.8",
