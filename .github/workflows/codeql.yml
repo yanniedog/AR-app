@@ -72,7 +72,7 @@ jobs:
           set -o pipefail
           timeout 8m ./gradlew help --no-daemon --no-build-cache --info --stacktrace 2>&1 | tee "$RUNNER_TEMP/codeql-gradle-prepare.log"
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@cee97f86b972a3ded3c58d04148362b193ddc518 # v4.38.3
+        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
