@@ -250,6 +250,20 @@ test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seed
   }
 });
 
+test('list readiness remeasures native geometry when unchanged viewability events are omitted', async () => {
+  mockAutoViewability = false;
+  const tree = mount();
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  try {
+    await act(async () => { await Promise.resolve(); });
+    expect(surface().probes!.find(probe => probe.id === 'search.list')).toMatchObject({ status: 'ready', visibleCount: 5 });
+    act(() => { surface().actions!['search.filters.open'](); });
+    await act(async () => { await Promise.resolve(); });
+    expect(surface().probes!.find(probe => probe.id === 'search.list')).toMatchObject({ status: 'ready', visibleCount: 5 });
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
+
 test('same-page preparation activates visible controls before selection without resetting scroll or selections', async () => {
   updateRatesSection('Mortgage', { selected: ['0#p-0'], selectMode: false });
   recordRatesScroll('Mortgage', 137);

@@ -198,23 +198,25 @@ export function validatePublicRateIndex(value: unknown, manifest: Manifest): Pub
   return index;
 }
 
-export function validatePublicRateShard(value: unknown, manifest: Manifest, index: PublicRateIndex, asset: PublicRateAsset, products: readonly PublicProduct[] = index.products): PublicRateShard {
-  const route = index.shards.find(shard => shard.name === asset.name && shard.sha256 === asset.sha256);
-  if (!route || !binding(value, manifest) || !object(value) || !keys(value, ['schemaVersion', 'generationId', 'runDate', 'coreSha256', 'detailsSha256', 'programmes', 'referenceRates', 'evidence'], ['feeSets', 'products']) ||
+/** A null index permits intrinsic schema checks of retained shards when their
+ * index is absent. It never establishes routing or complete catalogue coverage. */
+export function validatePublicRateShard(value: unknown, manifest: Manifest, index: PublicRateIndex | null, asset: PublicRateAsset, products: readonly PublicProduct[] = index?.products ?? []): PublicRateShard {
+  const route = index?.shards.find(shard => shard.name === asset.name && shard.sha256 === asset.sha256);
+  if (index && !route || !binding(value, manifest) || !object(value) || !keys(value, ['schemaVersion', 'generationId', 'runDate', 'coreSha256', 'detailsSha256', 'programmes', 'referenceRates', 'evidence'], ['feeSets', 'products']) ||
       !Array.isArray(value.programmes) || value.programmes.length > 20000 || !value.programmes.every(programme) || !Array.isArray(value.referenceRates) || value.referenceRates.length > 10000 ||
       !Array.isArray(value.evidence) || value.evidence.length > 20000) invalid('Invalid public rate shard');
   const shard = value as unknown as PublicRateShard;
-  const kind = index.routes?.find(item => item.name === asset.name);
-  if (kind?.kind === 'discovery') {
+  const kind = index?.routes?.find(item => item.name === asset.name);
+  if (kind?.kind === 'discovery' || !index && shard.products !== undefined) {
     if (!Array.isArray(shard.products) || !shard.products.length || shard.products.length > 20000 || !shard.products.every(product) ||
         duplicates(shard.products.map(item => item.productId)) || duplicates(shard.products.map(item => item.productKey)) ||
-        shard.products.some(item => !kind.providerIds.includes(item.providerId) || !kind.sections.includes(item.section)) ||
+        kind && shard.products.some(item => !kind.providerIds.includes(item.providerId) || !kind.sections.includes(item.section)) ||
         shard.programmes.length || shard.referenceRates.length || shard.evidence.length || shard.feeSets?.length) invalid('Invalid public discovery shard');
   } else if (shard.products !== undefined) invalid('Products require a declared discovery shard');
   if (duplicates(shard.programmes.map(item => item.programmeId)) || duplicates(shard.evidence.map(item => item.evidenceId))) invalid('Duplicate public pricing identity');
-  for (const item of shard.programmes) {
+  for (const item of index ? shard.programmes : []) {
     const product = products.find(product => product.productId === item.productId);
-    if (!route.productIds.includes(item.productId) || !product?.programmeIds.includes(item.programmeId) || product.section !== item.section) invalid('Programme is not bound to the declared product');
+    if (!route!.productIds.includes(item.productId) || !product?.programmeIds.includes(item.programmeId) || product.section !== item.section) invalid('Programme is not bound to the declared product');
   }
   for (const item of shard.referenceRates) if (!object(item) || !keys(item, ['referenceId', 'providerId', 'name', 'unit', 'freshness', 'evidenceIds'], ['value', 'effectiveFrom', 'effectiveTo', 'scopeId', 'conditions']) ||
     !text(item.referenceId, 256) || !text(item.providerId, 256) || !text(item.name) || item.value !== undefined && !finiteDecimal(item.value) || !['fraction_per_annum', 'percentage_points', 'basis_points'].includes(item.unit) ||
@@ -231,7 +233,7 @@ export function validatePublicRateShard(value: unknown, manifest: Manifest, inde
   if (shard.feeSets !== undefined) {
     if (!Array.isArray(shard.feeSets) || shard.feeSets.length > 20000 || duplicates(shard.feeSets.map(set => set.feeSetId))) invalid('Invalid public fee sets');
     for (const set of shard.feeSets) {
-      if (!object(set) || !keys(set, ['feeSetId', 'productId', 'fees', 'feeCoverage']) || !text(set.feeSetId, 256) || !route.productIds.includes(set.productId) ||
+      if (!object(set) || !keys(set, ['feeSetId', 'productId', 'fees', 'feeCoverage']) || !text(set.feeSetId, 256) || route && !route.productIds.includes(set.productId) ||
           !programme({ schemaVersion: 1, programmeId: 'fee-validation', productId: set.productId, section: 'Mortgage', offerId: 'fee-validation', conditions: [], components: [], evidenceIds: [],
             freshness: { state: 'unknown', reasonCodes: [] }, reasonCodes: [], sourceBindings: [], fees: set.fees, feeCoverage: set.feeCoverage })) invalid('Invalid public fee set');
       if (set.fees.some(fee => fee.scopeId !== set.productId)) invalid('Fee set is not scoped to the declared product');

@@ -1,21 +1,66 @@
 import { SECTION_KEYS } from '../types';
 import type { DatesIndex } from './datesIndex';
-import { preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
+import { historicalCatalogueArchiveReceipt, historicalCatalogueSelection, isPreparedHistoricalBankRateCatalogue, preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import { isExplicitTermDepositProduct } from './sectionIntegrity';
 import { historicalSourceIdentity } from './historyIdentity';
+
+const indexOwners = new WeakMap<DatesIndex, PreparedHistoricalBankRateCatalogue>();
+const indexConflicts = new WeakMap<DatesIndex, ReadonlySet<string>>();
+const mergedIndexes = new WeakMap<PreparedHistoricalBankRateCatalogue, WeakMap<DatesIndex, DatesIndex>>();
+
+/** A caller may be behind retained corrections or ahead of the archive. Select
+ * the greatest head per date; equal-revision equivocation cannot authorize data. */
+export function productCatalogueIndex(prepared: PreparedHistoricalBankRateCatalogue | null | undefined,
+  caller: DatesIndex | null | undefined): DatesIndex | undefined {
+  const selection = prepared && historicalCatalogueSelection(prepared);
+  const selected = selection?.index;
+  if (selected && selection) indexConflicts.set(selected, selection.conflicts);
+  if (!prepared || !selected || caller === selected || !caller || indexOwners.get(caller) === prepared) return caller ?? selected ?? undefined;
+  const cache = mergedIndexes.get(prepared) ?? new WeakMap<DatesIndex, DatesIndex>();
+  if (cache.has(caller)) return cache.get(caller);
+  const heads = { ...selected.revision_heads }, conflicts = new Set(indexConflicts.get(selected));
+  for (const [day, head] of Object.entries(caller.revision_heads ?? {})) {
+    const previous = heads[day];
+    if (!previous || head.revision > previous.revision) { heads[day] = head; conflicts.delete(day); }
+    else if (head.revision === previous.revision && (head.manifest_sha256 !== previous.manifest_sha256 ||
+      head.bundle_sha256 !== previous.bundle_sha256 || head.generation_id !== previous.generation_id)) {
+      delete heads[day]; conflicts.add(day);
+    }
+  }
+  const dates = [...new Set([...selected.dates, ...caller.dates])].sort();
+  const result: DatesIndex = { ...selected, dates, count: dates.length, min_date: dates[0], latest_date: dates.at(-1)!, revision_heads: heads };
+  indexOwners.set(result, prepared); indexConflicts.set(result, conflicts);
+  cache.set(caller, result); mergedIndexes.set(prepared, cache);
+  return result;
+}
+export const productCatalogueIndexConflicts = (index: DatesIndex | null | undefined, day: string): boolean =>
+  !!index && !!indexConflicts.get(index)?.has(day);
 
 /** Producer observations retain their own identity; never relabel them as a
  * public core edition just because their calendar date is the same. */
 export function readyProductHistoryIdentity(prepared: PreparedHistoricalBankRateCatalogue | null | undefined,
   index: DatesIndex | undefined, day: string): string | undefined {
   if (!prepared) return undefined;
+  const selection = historicalCatalogueSelection(prepared);
+  index = productCatalogueIndex(prepared, index);
+  if (selection && !selection.dates.has(day)) return readyProductHistoryIdentity(selection.fallback, index, day);
   const inputs = preparedReadySources(prepared);
   const input = inputs?.find(item => item.acceptedDates.includes(day));
-  const source = input?.ready.sources[day];
-  if (!input || !source) return undefined;
-  if (source.kind === 'published_core') return index?.revision_heads?.[day]?.manifest_sha256 === source.manifest_sha256
+  const trustedLegacy = !inputs && isPreparedHistoricalBankRateCatalogue(prepared);
+  const source = input?.ready.sources[day] ?? (trustedLegacy && !prepared.catalogue.unavailable_dates[day]
+    ? prepared.catalogue.sources[day] : undefined);
+  if (!source) return undefined;
+  if (source.kind === 'published_core') return !productCatalogueIndexConflicts(index, day) && index?.revision_heads?.[day]?.manifest_sha256 === source.manifest_sha256
     ? historicalSourceIdentity(index, day) : undefined;
-  return `prepared:${input.ready.compiler_sha256}:${source.banks_sha256}`;
+  return input ? `prepared:${input.ready.compiler_sha256}:${source.banks_sha256}` :
+    `catalogue:${bytesToHex(sha256(utf8ToBytes(JSON.stringify([historicalCatalogueArchiveReceipt(prepared) ?? null, source]))))}`;
+}
+
+export function productCatalogueDates(prepared: PreparedHistoricalBankRateCatalogue): string[] {
+  const fallback = historicalCatalogueSelection(prepared)?.fallback;
+  return [...new Set([...prepared.catalogue.run_dates, ...(fallback ? productCatalogueDates(fallback) : [])])].sort();
 }
 
 /** Project the existing product-best ledger from a validated full-tier catalogue.
@@ -34,18 +79,23 @@ export async function productRatesFromHistoricalCatalogue(
   },
 ): Promise<Map<string, Map<string, number>>> {
   const catalogue = prepared.catalogue;
+  const selection = historicalCatalogueSelection(prepared);
+  index = productCatalogueIndex(prepared, index) ?? null;
   const requested = new Set(requestedDates), selected = new Set(index?.dates ?? []);
   const readySources = preparedReadySources(prepared);
+  const fallbackRates = selection?.fallback ? await productRatesFromHistoricalCatalogue(selection.fallback, index,
+    requestedDates.filter(day => !selection.dates.has(day)), isCurrent, yieldWork) : new Map<string, Map<string, number>>();
+  const trustedLegacy = !readySources && isPreparedHistoricalBankRateCatalogue(prepared);
   const result = new Map<string, Map<string, number>>();
   const byPosition = catalogue.run_dates.map(day => {
     const source = catalogue.sources[day], head = index?.revision_heads?.[day];
-    if (!requested.has(day) || !source || catalogue.unavailable_dates[day]) return null;
-    if (source.kind === 'published_core' ? !selected.has(day) || !head || source.manifest_sha256 !== head.manifest_sha256 : !readySources) return null;
+    if (!requested.has(day) || !source || catalogue.unavailable_dates[day] || (selection && !selection.dates.has(day))) return null;
+    if (source.kind === 'published_core' ? productCatalogueIndexConflicts(index, day) || !selected.has(day) || !head || source.manifest_sha256 !== head.manifest_sha256 : !readySources && !trustedLegacy) return null;
     const rates = new Map<string, number>();
     result.set(day, rates);
     return rates;
   });
-  if (!result.size) return result;
+  if (!result.size) return fallbackRates;
   await yieldWork();
   if (!isCurrent()) throw new Error('Product history catalogue projection superseded');
   let count = 0, started = Date.now();
@@ -99,5 +149,5 @@ export async function productRatesFromHistoricalCatalogue(
     }
   }
   if (!isCurrent()) throw new Error('Product history catalogue projection superseded');
-  return result;
+  return new Map([...fallbackRates, ...result]);
 }

@@ -15,6 +15,7 @@ jest.mock('expo-crypto', () => {
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import {
   aggregateRepeatedJourneys,
+  auditReportCompletionLabel,
   AUDIT_LATENCY_METRIC_KEYS,
   cancelPerformanceAudit,
   buildPerformanceAuditJourneys,
@@ -53,6 +54,15 @@ import {
   type AuditCheck,
   type AuditEnvironment,
 } from '../src/lib/performanceAudit';
+
+test.each(['failed', 'cancelled', 'queued', 'running'] as const)('%s current-session reports are partial', status => {
+  expect(auditReportCompletionLabel({ sessionId: 'current' }, { sessionId: 'current', status })).toBe('Partial');
+});
+test('completed and saved report labels require the appropriate session and complete coverage', () => {
+  expect(auditReportCompletionLabel({ sessionId: 'current' }, { sessionId: 'current', status: 'complete' })).toBe('Complete');
+  expect(auditReportCompletionLabel({ sessionId: 'previous' }, { sessionId: 'current', status: 'failed' })).toBe('Saved');
+  expect(auditReportCompletionLabel({ sessionId: 'current', coverage: { complete: false } as any }, { sessionId: 'current', status: 'complete' })).toBe('Partial');
+});
 
 describe('performance audit preference restoration', () => {
   it('writes once and awaits enabled optional assets concurrently', async () => {

@@ -20,6 +20,17 @@ const assertActive = () => {
   if (getPerformanceAuditState().cancelRequested) throw new Error('cancelled');
 };
 
+it('continues planning after an optional catalogue cache miss without claiming executed coverage', async () => {
+  const result = await measurePerformanceAuditSetupStage(PERFORMANCE_AUDIT_SETUP_STAGES.inputs,
+    () => buildPerformanceAuditSetupPlans(null), { assertActive, onFailure: jest.fn(), metrics: () => ({
+      availabilityFailure: true, publicCatalogueCacheMiss: true, skipClassification: 'terminal-availability',
+    }) });
+  expect(result.value.plan).toBeDefined();
+  expect(result.check).toMatchObject({ status: 'skipped', metrics: {
+    availabilityFailure: true, publicCatalogueCacheMiss: true, skipClassification: 'terminal-availability',
+  } });
+});
+
 it('permits genuine completed setup stages totalling more than ten seconds and retains their metrics', async () => {
   const checks: AuditCheck[] = [];
   const onFailure = jest.fn();

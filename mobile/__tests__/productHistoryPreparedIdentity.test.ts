@@ -1,5 +1,5 @@
 import * as compiler from '../contracts/history-ready/compiler-manifest.json';
-import { prepareHistoricalBankRateReady } from '../src/data/historicalBankRateCatalogue';
+import { bindHistoricalCatalogueArchiveReceipt, prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateReady } from '../src/data/historicalBankRateCatalogue';
 import { syncProductHistoryFromDailyPayloads } from '../src/data/productHistorySync';
 import { HISTORY_DERIVATION_VERSION } from '../src/data/historyDerivation';
 import type { HistoricalBankRateReady } from '../src/data/historicalBankRateReadyWire';
@@ -27,6 +27,53 @@ function existing(source = identity(sha)): ProductHistoryPayload {
     products: { P: [0.05, 0.07] }, source_identities: { [day]: source } };
 }
 beforeEach(() => jest.clearAllMocks());
+
+function legacy(banks = sha, rate = 5, generation = 'selected') {
+  return prepareHistoricalBankRateCatalogue({ schema_version: 2, run_dates: [day],
+    sources: { [day]: { kind: 'selected_contract', banks_sha256: banks, bytes: 100,
+      generation_id: generation, contract_digest: sha } }, unavailable_dates: {},
+    evidence: [{ status: 'unknown' }], sections: { Mortgage: [], TD: [], Savings: [{
+      row: { provider: 'Bank', product_key: 'P', product_name: 'Savings', ribbon_normalized: true },
+      spans: [[0, 1, [rate], 0]],
+    }] } })!;
+}
+
+test('legacy producer history restores product observations offline without dated-core downloads', async () => {
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: today, currentCore: current,
+    catalogue: legacy(), preparedOnly: true, allowNetwork: false });
+  expect(result.products.P).toEqual([0.05, 0.07]);
+  expect(result.source_identities?.[day]).toBe('catalogue:17061e67ad9dbddcb9f8a61982bdd4926fe635369d101df6a7b5021f412346a5');
+  expect(result.date_status?.[day]).toBe('verified');
+  expect(downloadDatedCore).not.toHaveBeenCalled();
+  expect(fetchDatesIndexJson).not.toHaveBeenCalled();
+});
+
+test('legacy independent receipts replace changed observations and disappear with their owning archive', async () => {
+  const prior = existing(`catalogue:${sha}`), banks = 'b'.repeat(64);
+  const corrected = await syncProductHistoryFromDailyPayloads({ targetRunDate: today, currentCore: current,
+    existing: prior, catalogue: legacy(banks, 6), preparedOnly: true, allowNetwork: false });
+  expect(corrected.products.P).toEqual([0.06, 0.07]);
+  expect(corrected.source_identities?.[day]).toBe('catalogue:dfceab58277402182e6e4ff6fb87b84605a5ed61486c9134bac70f7cf3243aa5');
+  const missing = await syncProductHistoryFromDailyPayloads({ targetRunDate: today, currentCore: current,
+    existing: corrected, preparedOnly: true, allowNetwork: false });
+  expect(missing.products.P).toEqual([null, 0.07]);
+  expect(missing.source_identities?.[day]).toBeUndefined();
+  expect(downloadDatedCore).not.toHaveBeenCalled();
+});
+
+test.each(['generation', 'archive'])('a changed %s refreshes legacy rates even when the banks digest is unchanged', async kind => {
+  const first = legacy();
+  if (kind === 'archive') bindHistoricalCatalogueArchiveReceipt(first, 'c'.repeat(64));
+  const initial = await syncProductHistoryFromDailyPayloads({ targetRunDate: today, currentCore: current,
+    catalogue: first, preparedOnly: true, allowNetwork: false });
+  const corrected = legacy(sha, 6, kind === 'generation' ? 'corrected' : 'selected');
+  if (kind === 'archive') bindHistoricalCatalogueArchiveReceipt(corrected, 'd'.repeat(64));
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: today, currentCore: current,
+    existing: initial, catalogue: corrected, preparedOnly: true, allowNetwork: false });
+  expect(result.products.P).toEqual([0.06, 0.07]);
+  expect(result.source_identities?.[day]).not.toBe(initial.source_identities?.[day]);
+  expect(downloadDatedCore).not.toHaveBeenCalled();
+});
 
 test.each(['unavailable', 'rejected'])('current independent ready identity replaces an older cached producer when public index is %s', async mode => {
   const prior = existing();

@@ -23,6 +23,8 @@ import { normalizeRatesPageSize, ratesPageWindow } from '../../data/ratesPaginat
 import { ratesIntentKey, resolveRatesIntent, RATES_INTENT_KEYS, type RatesRouteParams } from '../../lib/ratesIntent';
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
 import { useRatesAuditTarget } from '../../hooks/useRatesAuditTarget';
+import { measuredRatesViewport } from '../../lib/ratesViewport';
+import { countItemsCooperatively } from '../../lib/cooperativeCount';
 import { SearchReportExport } from '../../components/SearchReportExport';
 import { isSuitabilityFilterReady } from '../../data/suitabilityGate';
 import Ionicons from '../../components/icons/AppIcon';
@@ -47,7 +49,7 @@ import { SECTION_ORDER } from '../../constants';
 import {
   activeFilterCount,
   EMPTY_FILTERS,
-  filterRows,
+  filterRowsCooperatively,
   type Filters,
   type SortKey,
 } from '../../data/selectors';
@@ -345,19 +347,28 @@ export default function RatesWorkspace() {
   const activeFilterOptions = draftAvailability === 'unlisted' ? catalogueOptions : filterOptions.options;
 
   const draftResultCount = useCallback(
-    (draft: Filters) => (
+    async (draft: Filters, cancelled?: () => boolean) => (
       // Suitability rebuilds can keep the same row array; count against the gate the list uses.
       void suitabilityRevision,
-      filterRows(
+      (await filterRowsCooperatively(
         mortgageScope.rows,
         { ...draft, query: debouncedQuery },
         details?.products ?? null,
         resultSearchIndex,
         section,
-      ).length
+        { cancelled },
+      ))?.length ?? null
     ),
     [mortgageScope.rows, debouncedQuery, details?.products, resultSearchIndex, section, suitabilityRevision],
   );
+  const unlistedResultCount = useCallback((draft: Filters, cancelled?: () => boolean) => {
+    void suitabilityRevision;
+    const term = debouncedQuery.trim().toLocaleLowerCase();
+    return countItemsCooperatively(unlistedEntries, item =>
+      (!draft.providers.length || draft.providers.includes(item.provider ?? '')) &&
+      (!term || [item.key, item.name, item.provider, item.productCategory, item.description]
+        .filter(Boolean).join(' ').toLocaleLowerCase().includes(term)), { cancelled });
+  }, [unlistedEntries, debouncedQuery, suitabilityRevision]);
 
   const searchSnapshot = useMemo(
     () => ({
@@ -456,12 +467,15 @@ export default function RatesWorkspace() {
   // the same list and decoded logos while its result identities are unchanged.
   const listRevision = uiTracker.current.update([listDataRevision, filterOpen, draftFilters, draftAvailability, sortOpen, toolsOpen, selectMode, selected]);
   const listReadiness = useVirtualizedListReadiness(listRevision, pageRows.length);
+  const measuredVisibility = useRef(listReadiness.measuredVisibleCount);
+  measuredVisibility.current = listReadiness.measuredVisibleCount;
   const { onCommitLayoutEffect: markListCommit, onLoad: markListLoad, onViewableItemsChanged: markListViewability } = listReadiness;
   const listRef = useRef<FlashListRef<ResultRow>>(null);
   const listLoaded = useRef(false);
   const [restoredDataRevision, setRestoredDataRevision] = useState<string | null>(null);
   type ViewabilityInfo = { viewableItems: { isViewable?: boolean | null; item: ResultRow; index?: number | null; key?: string }[] };
   const auditViewability = useRef<(info: ViewabilityInfo) => void>(() => {});
+  const viewabilityEvents = useRef(0);
   const currentRows = useRef(pageRows);
   currentRows.current = pageRows;
   const restorationKey = JSON.stringify([listDataRevision, getRatesSessionRestoreRevision()]);
@@ -507,6 +521,7 @@ export default function RatesWorkspace() {
   }, [markListLoad, restoreCommittedScroll]);
   const onViewableItemsChanged = useCallback((info: ViewabilityInfo) => {
     if (!restoration.current.applied || info.viewableItems.some(token => token.isViewable === true && !currentRows.current.includes(token.item))) return;
+    viewabilityEvents.current++;
     markListViewability(info);
     auditViewability.current(info);
   }, [markListViewability]);
@@ -514,8 +529,30 @@ export default function RatesWorkspace() {
     // In-place selection/disclosure changes do not change visible indices, so
     // FlashList may omit its usual viewability callback. Request a fresh native
     // measurement after this render commits; layout alone is not visible proof.
-    if (isFocused && listReadiness.ready) listRef.current?.recomputeViewableItems();
-  }, [isFocused, listRevision, listReadiness.ready]);
+    if (!isFocused || !listReadiness.ready || restoredDataRevision !== restorationKey) return;
+    let frame: number | undefined;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    let attempts = 0;
+    const measure = () => { frame = requestAnimationFrame(() => {
+      if (stopped) return;
+      const before = viewabilityEvents.current;
+      listRef.current?.recomputeViewableItems();
+      // A native callback (including an explicitly empty viewport) wins.
+      if (viewabilityEvents.current !== before || measuredVisibility.current !== null) return;
+      const measured = measuredRatesViewport(listRef.current, currentRows.current, listRevision);
+      if (measured) onViewableItemsChanged(measured);
+      // Layout can lag a committed list. Retry briefly; never invent evidence
+      // or keep polling a hidden, replaced or unmounted list.
+      else if (++attempts < 30) retry = setTimeout(measure, 40);
+    }); };
+    measure();
+    return () => {
+      stopped = true;
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      if (retry !== undefined) clearTimeout(retry);
+    };
+  }, [isFocused, listRevision, listReadiness.ready, restoredDataRevision, restorationKey, onViewableItemsChanged]);
   const logoReadiness = useLogoReadiness(listDataRevision);
   const auditTarget = useRatesAuditTarget({ rows: pageRows, results: resultRows, page: pagination.page, size: pageSize,
     revision: listRevision, context: JSON.stringify([coreSha ?? core?.run_date, manifest?.files.details.sha256, catalogue.generationId, catalogue.status, scenario,
@@ -796,9 +833,7 @@ export default function RatesWorkspace() {
         onDraftChange={setDraftFilters}
         onApply={applyFilters}
         resultNoun={draftAvailability === 'listed' ? 'rates' : 'products'}
-        resultCount={draftAvailability === 'listed' ? draftResultCount : draft => unlistedEntries.filter(item =>
-          (!draft.providers.length || draft.providers.includes(item.provider ?? '')) &&
-          (!debouncedQuery.trim() || [item.key, item.name, item.provider, item.productCategory, item.description].filter(Boolean).join(' ').toLocaleLowerCase().includes(debouncedQuery.trim().toLocaleLowerCase()))).length}
+        resultCount={draftAvailability === 'listed' ? draftResultCount : unlistedResultCount}
       >
         {draftAvailability === 'listed' ? <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows}
           onEdit={() => { setFilterOpen(false); router.push('/profile'); }} /> : null}

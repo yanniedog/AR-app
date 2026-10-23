@@ -3,6 +3,7 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import type { CorePayload, DetailsPayload, Manifest, RateConditionEntry, RateConditions, RateRow, SectionKey } from '../types';
 import type { CoreIntegrityContext } from './sectionIntegrity';
 import { verifiedDetailsSha } from './detailsIdentity';
+import { rowsForProductKey } from './rateRowIndex';
 
 export interface RateConditionContext { core: CorePayload | null; details: DetailsPayload | null; manifest: Manifest | null; coreIntegrity: CoreIntegrityContext | null }
 export interface ScopedRateConditions {
@@ -53,7 +54,8 @@ export function scopedRateConditions(row: RateRow, section: SectionKey, context?
   const { core, details, manifest, coreIntegrity } = context ?? {};
   if (!core || !details || !manifest || !coreIntegrity || coreIntegrity.core !== core || coreIntegrity.runDate !== core.run_date || coreIntegrity.coreSha256 !== manifest.files.core.sha256 ||
       !hex(manifest.files.core.sha256) || !hex(manifest.files.details.sha256) || verifiedDetailsSha(details) !== manifest.files.details.sha256 ||
-      core.run_date !== details.run_date || core.run_date !== manifest.run_date || !core.sections[section]?.rates.includes(row)) return unavailable('Rate conditions unavailable: this rate and details are not verified from the same publication.');
+      core.run_date !== details.run_date || core.run_date !== manifest.run_date || !core.sections[section] ||
+      !rowsForProductKey(core.sections[section].rates, row.product_key).includes(row)) return unavailable('Rate conditions unavailable: this rate and details are not verified from the same publication.');
   const value = details.products[row.product_key]?.rateConditions;
   if (value === undefined) return unavailable('Rate conditions unavailable in this publication. This does not mean the rate is unconditional.');
   if (!validRateConditions(value)) return unavailable('Rate conditions unavailable: the published condition record is invalid.');

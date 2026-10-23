@@ -10,6 +10,7 @@ import { HISTORICAL_CATALOGUE_LIMITS, validateHistoricalBankRateCatalogue, valid
 import { isValidCalendarDate } from '../lib/calendarDate';
 import { historicalReadySnapshots, validateHistoricalBankRateReadyForApp, type ReadyHistorySource } from './historicalBankRateReady';
 import type { HistoricalBankRateReady } from './historicalBankRateReadyWire';
+import type { DatesIndex } from './datesIndex';
 
 export type { HistoricalBankRateCatalogue, HistoricalCatalogueEvidence, HistoricalCatalogueSource } from './historicalBankRateCatalogueWire';
 export interface HistoricalCatalogueFilters {
@@ -23,6 +24,8 @@ export interface PreparedHistoricalBankRateCatalogue {
 }
 interface TierState { tier: HistoricalCatalogueTier; broad: Map<number, boolean>; features: Map<string, boolean> }
 interface PreparedState {
+  selection?: { dates: ReadonlySet<string>; fallback: PreparedHistoricalBankRateCatalogue | null; index?: DatesIndex; conflicts: ReadonlySet<string> };
+  archiveSha?: string;
   ready?: readonly ReadyHistorySource[];
   sections: Record<SectionKey, TierState[]>;
   snapshots: Map<string, Record<string, BankRateSnapshot>>;
@@ -75,6 +78,36 @@ export function preparedReadySources(value: PreparedHistoricalBankRateCatalogue)
 }
 const prepared = new WeakMap<object, PreparedHistoricalBankRateCatalogue | null>();
 const states = new WeakMap<PreparedHistoricalBankRateCatalogue, PreparedState>();
+const selectedCatalogues = new WeakMap<PreparedHistoricalBankRateCatalogue, {
+  fallback: PreparedHistoricalBankRateCatalogue | null; dates: string; prepared: PreparedHistoricalBankRateCatalogue;
+}>();
+export const isPreparedHistoricalBankRateCatalogue = (value: PreparedHistoricalBankRateCatalogue): boolean => states.has(value);
+export const historicalCatalogueSelection = (value: PreparedHistoricalBankRateCatalogue) => states.get(value)?.selection;
+export const historicalCatalogueArchiveReceipt = (value: PreparedHistoricalBankRateCatalogue) => states.get(value)?.archiveSha;
+export function bindHistoricalCatalogueArchiveReceipt(value: PreparedHistoricalBankRateCatalogue, sha: string): void {
+  const state = states.get(value);
+  if (!state || !/^[a-f0-9]{64}$/.test(sha) || (state.archiveSha && state.archiveSha !== sha)) throw new Error('Invalid history archive receipt');
+  state.archiveSha = sha;
+}
+
+/** Overlay verified legacy dates on the selected prepared fallback without
+ * decoding or embedding the obsolete raw APK archive. Each request owns caches. */
+export function selectHistoricalCatalogueDates(primary: PreparedHistoricalBankRateCatalogue,
+  dates: ReadonlySet<string>, fallback: PreparedHistoricalBankRateCatalogue | null, index?: DatesIndex,
+  conflicts: ReadonlySet<string> = new Set()): PreparedHistoricalBankRateCatalogue {
+  const state = states.get(primary);
+  if (!state || (fallback && !states.has(fallback))) throw new Error('History was not prepared');
+  const key = JSON.stringify([[...dates].sort(), index?.dates ?? null, index?.revision_heads ?? null, [...conflicts].sort()]), cached = selectedCatalogues.get(primary);
+  if (cached?.fallback === fallback && cached.dates === key) return cached.prepared;
+  const calendar = [...primary.catalogue.run_dates, ...(fallback?.catalogue.run_dates ?? []), ...(index?.dates ?? [])].sort();
+  const first = calendar[0], last = calendar.at(-1)!;
+  if ((Date.parse(last) - Date.parse(first!)) / 86_400_000 >= HISTORICAL_CATALOGUE_LIMITS.days) throw new Error('History calendar exceeds budget');
+  const result = Object.freeze({ ...primary });
+  states.set(result, { ...state, selection: { dates: new Set(dates), fallback, index, conflicts: new Set(conflicts) },
+    snapshots: new Map(), current: new WeakMap(), pendingSnapshots: new Map(), scopes: new WeakMap() });
+  selectedCatalogues.set(primary, { fallback, dates: key, prepared: result });
+  return result;
+}
 const preparing = new WeakMap<object, Promise<PreparedHistoricalBankRateCatalogue | null>>();
 
 function installPrepared(value: HistoricalBankRateCatalogue, sections: PreparedState['sections'], quarantinedTierCount: number): PreparedHistoricalBankRateCatalogue {
@@ -275,6 +308,16 @@ function* historicalSnapshots(preparation: PreparedHistoricalBankRateCatalogue, 
       if (total) (snapshot.sectionTotals ??= {})[section] = total;
     });
   }
+  if (state.selection) {
+    const { dates, fallback } = state.selection;
+    const fallbackState = fallback && states.get(fallback);
+    const needsFallback = fallback && fallback.catalogue.run_dates.some(day => !dates.has(day) && !!fallback.catalogue.sources[day]);
+    const older = needsFallback && fallbackState
+      ? yield* historicalSnapshots(fallback, fallbackState, filters, normalized) : {};
+    for (const day of new Set([...catalogue.run_dates, ...(fallback?.catalogue.run_dates ?? []), ...(state.selection.index?.dates ?? []), ...Object.keys(older)])) {
+      if (!dates.has(day)) snapshots[day] = older[day] ?? {};
+    }
+  }
   if (state.snapshots.size >= 8) state.snapshots.delete(state.snapshots.keys().next().value!);
   state.snapshots.set(normalized.key, snapshots);
   return snapshots;
@@ -361,8 +404,10 @@ function currentSnapshots(preparation: PreparedHistoricalBankRateCatalogue, stat
   const last = preparation.catalogue.run_dates.at(-1)!;
   let days = Object.keys(snapshots).length;
   for (let day = Date.parse(last) + 86_400_000; day < Date.parse(core.run_date); day += 86_400_000) {
+    const date = new Date(day).toISOString().slice(0, 10);
+    if (Object.hasOwn(snapshots, date)) continue;
     if (++days >= 5000) break;
-    snapshots[new Date(day).toISOString().slice(0, 10)] = {};
+    snapshots[date] = {};
   }
   snapshots[core.run_date] = snapshotBankRates(bankRateScope(currentRows));
   if (cache.size >= 8) cache.delete(cache.keys().next().value!);

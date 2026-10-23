@@ -653,8 +653,8 @@ export function ProjectionWorkspace() {
         id: 'projections.model',
         kind: 'data',
         required: false,
-        status: deferredScenario !== scenario ? 'pending' : result.ready ? 'ready' : 'error',
-        error: deferredScenario !== scenario || result.ready ? null : `Incomplete scenario: ${result.missing.join(', ')}`,
+        status: deferredScenario !== calculationScenario ? 'pending' : result.ready ? 'ready' : 'error',
+        error: deferredScenario !== calculationScenario || result.ready ? null : `Incomplete scenario: ${result.missing.join(', ')}`,
       },
       {
         id: 'projections.chart',

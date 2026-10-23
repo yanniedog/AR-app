@@ -6,7 +6,7 @@ import { measurePerformanceAuditSetupStage, PERFORMANCE_AUDIT_SETUP_STAGES } fro
 import type { AuditCheck } from '../src/lib/performanceAudit';
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
-import { gzipSync, strToU8 } from 'fflate';
+import { gzipSync, gunzipSync, strFromU8, strToU8 } from 'fflate';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import { catalogueFixture } from '../testUtils/publicRates';
@@ -15,6 +15,10 @@ import { installAppHealthTransportGuard, hasAppHealthFetchGuard } from '../src/l
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceContract';
 import { automaticDataUrl } from '../src/lib/automaticDataAccess';
 import { publicRateAssetCache } from '../src/data/publicRateCache';
+import { assertAuditPublicCataloguePinned, prepareAuditPublicCore } from '../src/lib/performanceAuditDataset';
+import { core } from '../testUtils/publicRateJourney';
+import { EMPTY_PROFILE } from '../src/data/profile';
+import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import type { PublicRateAsset } from '../src/data/publicRateModel';
 import type { Manifest } from '../src/types';
 
@@ -76,6 +80,33 @@ async function until(predicate: () => boolean) {
 beforeEach(() => { mockCache.clear(); jest.clearAllMocks(); });
 afterEach(() => { globalThis.fetch = originalFetch; resetPerformanceAuditForTests(); jest.useRealTimers(); });
 
+test.each(['local', 'live-source'] as const)('legacy manifests keep a stable pinned snapshot throughout a %s audit', async mode => {
+  const { manifest } = fixture();
+  delete manifest.public_rate_catalogue;
+  const baseline = getPublicRateCatalogueSnapshot(manifest);
+  let shown = baseline;
+  function Probe() { shown = usePublicRateCatalogue(manifest); return null; }
+  let tree!: ReturnType<typeof TestRenderer.create>;
+  await act(async () => { tree = TestRenderer.create(<Probe />); });
+  const wire = jest.fn(); globalThis.fetch = wire;
+  let session!: ReturnType<typeof beginPublicRateCatalogueAudit>;
+  act(() => { session = beginPublicRateCatalogueAudit(); });
+  const policy = installAppHealthTransportGuard({ target: globalThis, mode, contract: createV1AppHealthSourceContract() });
+  try {
+    const pinned = getPublicRateCatalogueSnapshot(manifest);
+    expect(shown).toBe(pinned);
+    expect(() => assertAuditPublicCataloguePinned(pinned, getPublicRateCatalogueSnapshot(manifest))).not.toThrow();
+    const load = session.prepare(manifest);
+    await load.ready;
+    expect(getPublicRateCatalogueSnapshot(manifest)).toBe(pinned);
+    expect(prepareAuditPublicCore(core([]), pinned, normalizeUserRateScenario(undefined), EMPTY_PROFILE)).toBeDefined();
+    act(() => session.quiesce());
+    expect(getPublicRateCatalogueSnapshot(manifest)).toBe(pinned);
+    expect(wire).not.toHaveBeenCalled();
+  } finally { policy.restore(); act(() => session.release()); act(() => tree.unmount()); }
+  expect(getPublicRateCatalogueSnapshot(manifest)).toBe(baseline);
+});
+
 test('local probing leaves the ready partial UI client usable and normal loads recover after guard release', async () => {
   const f = fixture(); cache(f, [f.capability.index, f.capability.shards[0]]);
   await ensurePublicRateCatalogueLoaded(f.manifest, false);
@@ -92,10 +123,11 @@ test('local probing leaves the ready partial UI client usable and normal loads r
   let load!: ReturnType<typeof preparePublicRateCatalogueForAudit>;
   act(() => { load = preparePublicRateCatalogueForAudit(f.manifest); });
   try {
-    await expect(load.ready).rejects.toThrow('retained offline cache');
-    await load.cancelAndDrain();
+    await act(async () => {
+      await expect(load.ready).resolves.toMatchObject({ status: 'unavailable', allLoaded: false, auditUnavailableReason: 'cache-miss' });
+    });
     expect(wire).not.toHaveBeenCalled();
-    expect(shown.status).toBe('ready'); expect(shown.error).toBeNull();
+    expect(shown.status).toBe('unavailable'); expect(shown.error).toBeNull();
     expect(local.snapshot()).toMatchObject({ authorizationAttempts: 0, transportCalls: 0 });
   } finally { local.restore(); act(() => load.release()); }
   expect(getPublicRateCatalogueSnapshot(f.manifest)).toBe(baseline);
@@ -107,6 +139,76 @@ test('local probing leaves the ready partial UI client usable and normal loads r
     await act(async () => { await getPublicRateCatalogueSnapshot(f.manifest).loadAll(); });
     expect(shown).toMatchObject({ status: 'ready', allLoaded: true, error: null });
   } finally { live.restore(); act(() => tree.unmount()); }
+});
+
+test('a cold local audit continues with its core plan and records the missing catalogue without transport', async () => {
+  const f = fixture(), baseline = core([]);
+  const wire = jest.fn(); globalThis.fetch = wire;
+  const local = guard(f, 'local'), load = preparePublicRateCatalogueForAudit(f.manifest);
+  try {
+    const result = await measurePerformanceAuditSetupStage(PERFORMANCE_AUDIT_SETUP_STAGES.inputs, async () => {
+      const catalogue = await load.ready;
+      const auditCore = prepareAuditPublicCore(baseline, catalogue, normalizeUserRateScenario(undefined), EMPTY_PROFILE);
+      return { catalogue, auditCore };
+    }, { assertActive: () => {}, onFailure: jest.fn(), metrics: ({ catalogue }) => ({
+      availabilityFailure: catalogue.auditUnavailableReason === 'cache-miss',
+      publicCatalogueCacheMiss: catalogue.auditUnavailableReason === 'cache-miss',
+      skipClassification: 'terminal-availability',
+    }) });
+    expect(result.value.auditCore).toBe(baseline);
+    expect(result.check).toMatchObject({ status: 'skipped', metrics: { availabilityFailure: true, publicCatalogueCacheMiss: true } });
+    expect(getPublicRateCatalogueSnapshot(f.manifest)).toBe(result.value.catalogue);
+    expect(wire).not.toHaveBeenCalled();
+    expect(local.snapshot()).toMatchObject({ authorizationAttempts: 0, transportCalls: 0 });
+  } finally { local.restore(); load.release(); }
+});
+
+test('a corrupt retained catalogue remains a failure instead of using the cache-miss fallback', async () => {
+  const f = fixture();
+  mockCache.set(f.capability.index.name, strToU8('corrupt'));
+  const local = guard(f, 'local'), load = preparePublicRateCatalogueForAudit(f.manifest);
+  try { await expect(load.ready).rejects.toThrow(); }
+  finally { await load.cancelAndDrain(); local.restore(); load.release(); }
+});
+
+test.each([false, true])('a missing first shard cannot hide a later corrupt retained shard (missing index: %s)', async missingIndex => {
+  const f = fixture();
+  if (!missingIndex) cache(f, [f.capability.index]);
+  mockCache.set(f.capability.shards[3].name, strToU8('corrupt'));
+  const local = guard(f, 'local'), load = preparePublicRateCatalogueForAudit(f.manifest);
+  try {
+    await expect(load.ready).rejects.toThrow();
+    expect(jest.mocked(publicRateAssetCache.read).mock.calls.some(([, asset]) => asset.name === f.capability.shards[3].name)).toBe(true);
+    expect(local.snapshot()).toMatchObject({ transportCalls: 0 });
+  } finally { await load.cancelAndDrain(); local.restore(); load.release(); }
+});
+
+test('an audit cache storage failure cannot turn into an unavailable catalogue', async () => {
+  const f = fixture();
+  jest.mocked(publicRateAssetCache.read).mockRejectedValueOnce(new Error('storage fixture failed'));
+  const local = guard(f, 'local'), load = preparePublicRateCatalogueForAudit(f.manifest);
+  try { await expect(load.ready).rejects.toThrow('storage fixture failed'); }
+  finally { await load.cancelAndDrain(); local.restore(); load.release(); }
+});
+
+test.each([false, true])('schema-invalid retained shards remain fatal behind cache misses (missing index: %s)', async missingIndex => {
+  const f = fixture(), asset = f.capability.shards[3], oldName = asset.name;
+  const raw = JSON.parse(strFromU8(gunzipSync(f.values.get(asset.url)!)));
+  raw.programmes = 'invalid';
+  const json = JSON.stringify(raw), bytes = gzipSync(strToU8(json)), hash = bytesToHex(sha256(bytes));
+  const name = oldName.replace(/[a-f0-9]{12}(?=\.json\.gz$)/, hash.slice(0, 12));
+  Object.assign(asset, { name, url: asset.url.replace(oldName, name), bytes: bytes.length, decodedBytes: strToU8(json).length, sha256: hash });
+  mockCache.set(name, bytes);
+  if (!missingIndex) {
+    Object.assign(f.index.shards[3], { name, bytes: asset.bytes, decodedBytes: asset.decodedBytes, sha256: hash });
+    const indexJson = JSON.stringify(f.index), indexBytes = gzipSync(strToU8(indexJson)), indexHash = bytesToHex(sha256(indexBytes));
+    const indexAsset = f.capability.index, prior = indexAsset.name, indexName = prior.replace(/[a-f0-9]{12}(?=\.json\.gz$)/, indexHash.slice(0, 12));
+    Object.assign(indexAsset, { name: indexName, url: indexAsset.url.replace(prior, indexName), bytes: indexBytes.length, decodedBytes: strToU8(indexJson).length, sha256: indexHash });
+    mockCache.set(indexName, indexBytes);
+  }
+  const local = guard(f, 'local'), load = preparePublicRateCatalogueForAudit(f.manifest);
+  try { await expect(load.ready).rejects.toThrow('Invalid public rate shard'); }
+  finally { await load.cancelAndDrain(); local.restore(); load.release(); }
 });
 
 test('warm complete validated clients are reused without cache reads, acquisition or overlay replacement', async () => {
@@ -342,8 +444,8 @@ test('early reservation gates original captured methods before delayed preparati
   await Promise.resolve(); await Promise.resolve();
   expect(wire).not.toHaveBeenCalled(); expect(settled).toBe(false);
   const load = session.prepare(f.manifest);
-  await expect(load.ready).rejects.toThrow('retained offline cache');
-  await load.cancelAndDrain(); session.quiesce();
+  await expect(load.ready).resolves.toMatchObject({ status: 'unavailable', auditUnavailableReason: 'cache-miss' });
+  session.quiesce();
   expect(wire).not.toHaveBeenCalled(); expect(settled).toBe(false);
   policy.restore();
   const live = guard(f, 'live-source');
