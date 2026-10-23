@@ -46,6 +46,28 @@ test('valid compression and digest do not admit malformed JSON', () => {
 
 const cooperative = () => ({ yieldControl: jest.fn(async () => undefined), sliceMs: 0 });
 
+test('native chunk decoding preserves JSON and never retries a rejected receipt with a different decoder', async () => {
+  const value = { description: 'x'.repeat(65_535) + '\ud83e\uddea', rates: [5.94, 6.89] };
+  const json = JSON.stringify(value), encoded = encode(json);
+  const decompressAsync = jest.fn();
+  const decompressChunksAsync = jest.fn(async () => [json.slice(0, 65_536), json.slice(65_536)]);
+  configureHistoricalCatalogueCodec({ compressAsync: jest.fn(), decompressAsync, decompressChunksAsync });
+  expect(await decompressCatalogueAsync(encoded, cooperative())).toEqual(value);
+  expect(decompressChunksAsync).toHaveBeenCalledWith(encoded.gzip_base64, encoded.bytes, encoded.sha256);
+  expect(decompressAsync).not.toHaveBeenCalled();
+  const error = new Error('Catalogue digest mismatch'), onDecodeError = jest.fn();
+  decompressChunksAsync.mockRejectedValueOnce(error);
+  expect(await decompressCatalogueAsync(encoded, { ...cooperative(), onDecodeError })).toBeNull();
+  expect(onDecodeError).toHaveBeenCalledWith(error);
+  expect(decompressAsync).not.toHaveBeenCalled();
+});
+
+test.each([[], [''], ['{bad JSON'], ['x'.repeat(65_538)]])('invalid native chunk output remains unavailable: %j', async (...parts) => {
+  const encoded = encode('{"rate":5.94}');
+  configureHistoricalCatalogueCodec({ compressAsync: jest.fn(), decompressAsync: jest.fn(), decompressChunksAsync: jest.fn(async () => parts as string[]) });
+  expect(await decompressCatalogueAsync(encoded, cooperative())).toBeNull();
+});
+
 test('native compression receives the cooperatively validated exact JSON wire bytes', async () => {
   const compressAsync = jest.fn(async (json: string) => compressCatalogue(JSON.parse(json)));
   configureHistoricalCatalogueCodec({ compressAsync, decompressAsync: jest.fn() });
@@ -71,16 +93,16 @@ test('native compression cannot bypass type, circular or nesting validation', as
   expect(compressAsync).not.toHaveBeenCalled();
 });
 
-test('native decode parses only verified returned text and rejects native integrity failures', async () => {
+test('older native hosts use the verified portable decoder instead of the unsafe whole-buffer method', async () => {
   const encoded = compressCatalogue({ unicode: '日本語😀' });
   const decompressAsync = jest.fn(async () => JSON.stringify({ unicode: '日本語😀' }));
   configureHistoricalCatalogueCodec({ compressAsync: jest.fn(), decompressAsync });
   expect(await decompressCatalogueAsync(encoded, cooperative())).toEqual({ unicode: '日本語😀' });
-  expect(decompressAsync).toHaveBeenCalledWith(encoded.gzip_base64, encoded.bytes, encoded.sha256);
+  expect(decompressAsync).not.toHaveBeenCalled();
   decompressAsync.mockRejectedValueOnce(new Error('Catalogue digest mismatch'));
-  expect(await decompressCatalogueAsync(encoded, cooperative())).toBeNull();
+  expect(await decompressCatalogueAsync({ ...encoded, sha256: '0'.repeat(64) }, cooperative())).toBeNull();
   decompressAsync.mockResolvedValueOnce('{broken JSON');
-  expect(await decompressCatalogueAsync(encoded, cooperative())).toBeNull();
+  expect(await decompressCatalogueAsync(encode('{broken JSON'), cooperative())).toBeNull();
   decompressAsync.mockClear();
   expect(await decompressCatalogueAsync({ ...encoded, bytes: 128 * 1024 * 1024 + 1 }, cooperative())).toBeNull();
   expect(decompressAsync).not.toHaveBeenCalled();

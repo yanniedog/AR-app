@@ -16,8 +16,14 @@ class HistoryCodecModule : Module() {
     AsyncFunction("decompressAsync") { gzipBase64: String, bytes: Double, sha256: String ->
       HistoryCodec.decompress(gzipBase64, bytes, sha256)
     }
+    AsyncFunction("decompressChunksAsync") { gzipBase64: String, bytes: Double, sha256: String ->
+      HistoryCodec.decompressChunks(gzipBase64, bytes, sha256)
+    }
     AsyncFunction("inflatePayloadAsync") { compressed: ByteArray, maxBytes: Double, expectedBytes: Double ->
       HistoryCodec.inflatePayload(compressed, maxBytes, expectedBytes)
+    }
+    AsyncFunction("inflateCachedPayloadAsync") { encoded: String, compressedBytes: Double, sha256: String, maxBytes: Double ->
+      HistoryCodec.inflateCachedPayload(encoded, compressedBytes, sha256, maxBytes)
     }
   }
 }

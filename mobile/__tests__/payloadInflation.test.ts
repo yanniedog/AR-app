@@ -1,11 +1,43 @@
 import { gzipSync, strToU8 } from 'fflate';
 import { Platform } from 'react-native';
 import { getNativeHistoryCodec } from '../modules/history-codec';
-import { decodePayloadUtf8, inflatePayloadOffThread, inflatePayloadOnWeb } from '../src/data/payloadInflation';
+import { decodePayloadUtf8, inflateCachedPayloadOffThread, inflatePayloadOffThread, inflatePayloadOnWeb } from '../src/data/payloadInflation';
 
 jest.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 jest.mock('../modules/history-codec', () => ({ getNativeHistoryCodec: jest.fn() }));
 const getCodec = jest.mocked(getNativeHistoryCodec);
+
+it('delegates cached compressed receipt verification and inflation to the optional native worker', async () => {
+  const raw = gzipSync(strToU8('{"ready":true}')), encoded = Buffer.from(raw).toString('base64'), hash = 'c'.repeat(64);
+  const inflateCachedPayloadAsync = jest.fn().mockResolvedValue(['{"ready":', 'true}']);
+  getCodec.mockReturnValue({ inflateCachedPayloadAsync } as unknown as ReturnType<typeof getNativeHistoryCodec>);
+  await expect(inflateCachedPayloadOffThread(encoded, raw.length, hash, 100)).resolves.toBe('{"ready":true}');
+  expect(inflateCachedPayloadAsync).toHaveBeenCalledWith(encoded, raw.length, hash, 100);
+  const error = new Error('Cached payload digest mismatch');
+  inflateCachedPayloadAsync.mockRejectedValueOnce(error);
+  await expect(inflateCachedPayloadOffThread(encoded, raw.length, hash, 100)).rejects.toBe(error);
+});
+
+it('keeps older native hosts and other platforms on the existing cache path', async () => {
+  const encoded = Buffer.from(new Uint8Array(20)).toString('base64');
+  for (const codec of [null, {}]) {
+    getCodec.mockReturnValue(codec as ReturnType<typeof getNativeHistoryCodec>);
+    await expect(inflateCachedPayloadOffThread(encoded, 20, 'a'.repeat(64), 100)).resolves.toBeNull();
+  }
+  for (const OS of ['ios', 'web']) {
+    Object.assign(Platform, { OS });
+    await expect(inflateCachedPayloadOffThread(encoded, 20, 'a'.repeat(64), 100)).resolves.toBeNull();
+  }
+});
+
+it.each([
+  ['', 20, 'a'.repeat(64), 100], ['A'.repeat(28), 17, 'a'.repeat(64), 100],
+  ['A'.repeat(28), 20, 'A'.repeat(64), 100], ['A'.repeat(28), 20, 'a'.repeat(64), 0],
+  ['A'.repeat(28), 16 * 1024 * 1024 + 1, 'a'.repeat(64), 100],
+])('rejects malformed cached receipts before scheduling native work (%s)', async (encoded, bytes, hash, limit) => {
+  await expect(inflateCachedPayloadOffThread(encoded as string, bytes as number, hash as string, limit as number)).rejects.toThrow('bounds');
+  expect(getCodec).not.toHaveBeenCalled();
+});
 
 afterEach(() => { jest.resetAllMocks(); Object.assign(Platform, { OS: 'android' }); });
 

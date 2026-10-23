@@ -4,7 +4,7 @@ import { createBootstrapActions } from '../src/data/storeBootstrap';
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from '../src/data/storeTypes';
 import { sampleCore, sampleManifest } from '../src/data/sample';
 import { cache } from '../src/data/cache';
-import { prepareReadyBankRateHistory } from '../src/data/historicalBankRateReadySync';
+import { prepareReadyBankRateHistory, selectedPreparedHistoryHeads } from '../src/data/historicalBankRateReadySync';
 import { warmHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
 import { yieldToPaintFrames } from '../src/lib/yieldToUi';
 import { closeSuitabilityGateUntilRebuild } from '../src/data/suitabilityIndex';
@@ -29,6 +29,8 @@ import type { HistoricalBankRateReady } from '../src/data/historicalBankRateRead
 import compilerManifest from '../contracts/history-ready/compiler-manifest.json';
 import { loadDetachedHistoricalBankRateCatalogue } from '../src/data/detachedHistoricalBankRateCatalogue';
 import { prepareLegacyBankRateHistory } from '../src/data/historicalBankRateLegacyCompatibility';
+import publicHistoryFixture from './fixtures/public_rates/history-rich-producer-6d33142.json';
+import { prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateReady } from '../src/data/historicalBankRateCatalogue';
 
 let mockLegacyCatalogue: HistoricalBankRateCatalogue;
 let mockReadyCatalogue: HistoricalBankRateReady;
@@ -43,7 +45,7 @@ jest.mock('../src/data/bundledHistoricalBankRateCatalogue', () => ({
 jest.mock('../src/data/detachedHistoricalBankRateCatalogue', () => ({
   loadDetachedHistoricalBankRateCatalogue: jest.fn(async () => null),
 }));
-jest.mock('../src/data/historicalBankRateLegacyCompatibility', () => ({ prepareLegacyBankRateHistory: jest.fn(async () => true) }));
+jest.mock('../src/data/historicalBankRateLegacyCompatibility', () => ({ prepareLegacyBankRateHistory: jest.fn(async () => ({ ready: true, contributed: true })) }));
 
 jest.mock('expo-crypto', () => ({ CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
   digest: jest.fn(async (_: unknown, bytes: Uint8Array) => new Uint8Array(jest.requireActual('@noble/hashes/sha256').sha256(bytes)).buffer),
@@ -54,7 +56,7 @@ jest.mock('../src/data/cache', () => ({ cache: {
   readBundle: jest.fn(), readDetails: jest.fn(async () => null), readMeta: jest.fn(async () => null),
   readDetachedBankRateHistoryAsset: jest.fn(async () => null), writeDetachedBankRateHistoryAsset: jest.fn(async () => {}),
 } }));
-jest.mock('../src/data/historicalBankRateReadySync', () => ({ prepareReadyBankRateHistory: jest.fn(async () => true) }));
+jest.mock('../src/data/historicalBankRateReadySync', () => ({ prepareReadyBankRateHistory: jest.fn(async () => true), selectedPreparedHistoryHeads: jest.fn() }));
 jest.mock('../src/data/historicalBankRateCatalogueNative', () => ({ configureNativeHistoricalCatalogueCodec: jest.fn(async () => false) }));
 jest.mock('../src/data/detachedHistoricalBankRateReady', () => ({ loadDetachedHistoricalBankRateReady: jest.fn(async () => null) }));
 jest.mock('../src/lib/appHealthTransportGuard', () => ({ isLocalAppHealthAudit: jest.fn(() => false) }));
@@ -91,7 +93,8 @@ beforeEach(() => {
   jest.mocked(cache.readDetails).mockResolvedValue(null);
   jest.mocked(loadDetachedHistoricalBankRateReady).mockResolvedValue(null);
   jest.mocked(loadDetachedHistoricalBankRateCatalogue).mockResolvedValue(null);
-  jest.mocked(prepareLegacyBankRateHistory).mockResolvedValue(true);
+  jest.mocked(prepareLegacyBankRateHistory).mockResolvedValue({ ready: true, contributed: true });
+  jest.mocked(selectedPreparedHistoryHeads).mockReturnValue(undefined);
   jest.mocked(isLocalAppHealthAudit).mockReturnValue(false);
   jest.mocked(configureNativeHistoricalCatalogueCodec).mockResolvedValue(false);
 });
@@ -252,6 +255,33 @@ test('verified prepared history takes priority over an accompanying legacy archi
   await prepareBankRateHistoryAfterPaint(set, get, sampleCore, get().manifest!);
   expect(loadDetachedHistoricalBankRateReady).toHaveBeenCalledTimes(1);
   expect(loadDetachedHistoricalBankRateCatalogue).not.toHaveBeenCalled();
+});
+
+test('a verified archive with no accepted observations records signed fallback rather than completed recovery', async () => {
+  const { get, set } = store(), current = { ...sampleCore, run_date: '2026-09-27' };
+  const raw = prepareHistoricalBankRateCatalogue(publicHistoryFixture)!.catalogue;
+  const ready = compileHistoricalBankRateReady(raw, compilerManifest.sha256);
+  const fallback = prepareHistoricalBankRateReady(ready, [])!;
+  const heads = new Map(Object.entries(raw.sources).map(([day, source]) => [day, {
+    revision: 1, generation_id: 'captured-public', bundle_sha256: 'd'.repeat(64),
+    manifest_sha256: source.kind === 'published_core' ? source.manifest_sha256 : '',
+    manifest_url: `https://github.com/yanniedog/AR-local/releases/download/app-payload-${day}-r000001/manifest.json`,
+  }]));
+  jest.mocked(selectedPreparedHistoryHeads).mockReturnValue({ sources: [ready], receipt: 'captured', prepared: fallback,
+    heads, dates: new Set(raw.run_dates), conflicts: new Set(heads.keys()) });
+  const hash = 'b'.repeat(64), name = `bank-rate-history-catalogue-${current.run_date}-${hash.slice(0, 12)}.json.gz`;
+  const manifest = { ...sampleManifest, run_date: current.run_date, tag: 'app-payload-latest',
+    files: { ...sampleManifest.files, core: { ...sampleManifest.files.core } },
+    bank_rate_history_catalogue: { schema_version: 1 as const, file: { name, bytes: 123, sha256: hash,
+      url: `https://github.com/${sampleManifest.repo}/releases/download/app-payload-latest/${name}` } } };
+  delete manifest.payload_revision; delete manifest.files.core.enc;
+  set({ core: current, manifest });
+  jest.mocked(loadDetachedHistoricalBankRateCatalogue).mockResolvedValueOnce(raw);
+  jest.mocked(prepareLegacyBankRateHistory).mockImplementationOnce(
+    jest.requireActual('../src/data/historicalBankRateLegacyCompatibility').prepareLegacyBankRateHistory);
+  await prepareBankRateHistoryAfterPaint(set, get, current, manifest);
+  expect(cachedHistoricalBankRateCatalogue(current)).not.toBeNull();
+  expect(backgroundPayloadWork.snapshot().reverse().find(job => job.label === 'Bank rate history preparation')?.outcome).toBe('fallback');
 });
 
 test.each(['missing', 'corrupt', 'partial'])(

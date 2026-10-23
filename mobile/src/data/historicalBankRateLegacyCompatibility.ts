@@ -3,19 +3,26 @@ import type { DatesIndex } from './datesIndex';
 import type { HistoricalBankRateCatalogue } from './historicalBankRateCatalogueWire';
 import { prepareHistoricalBankRateCatalogueAsync, selectHistoricalCatalogueDates } from './historicalBankRateCatalogue';
 import { prepareReadyBankRateHistory, selectedPreparedHistoryHeads } from './historicalBankRateReadySync';
-import { installPreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
+import { cachedHistoricalBankRateCatalogue, installPreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import { yieldToUi } from '../lib/yieldToUi';
+
+export interface LegacyBankRateHistoryResult {
+  ready: boolean;
+  /** At least one verified archive date was actually selected. */
+  contributed: boolean;
+}
 
 /** Use only a transport-verified archive. Reuse the ready path's revision
  * high-water selection, public fallback and durable receipts; never load the
  * old raw APK snapshot or download dated cores. */
 export async function prepareLegacyBankRateHistory(core: CorePayload, manifest: Manifest, index: DatesIndex | null,
-  archive: HistoricalBankRateCatalogue, isCurrent: () => boolean): Promise<boolean> {
+  archive: HistoricalBankRateCatalogue, isCurrent: () => boolean): Promise<LegacyBankRateHistoryResult> {
   let fallbackReady = false;
   try { fallbackReady = await prepareReadyBankRateHistory(core, manifest, index, null, isCurrent); }
   catch { /* Independent verified observations do not require the signed fallback. */ }
-  if (!isCurrent()) return false;
+  if (!isCurrent()) return { ready: false, contributed: false };
   const selected = fallbackReady ? selectedPreparedHistoryHeads(core) : null;
+  const fallback = selected?.prepared ?? null;
   // Without selected heads only independent producer observations are usable.
   const dates = new Set(archive.run_dates.filter(day => {
     const source = archive.sources[day];
@@ -26,12 +33,14 @@ export async function prepareLegacyBankRateHistory(core: CorePayload, manifest: 
   // Validation is shared by archive identity. One retired consumer must not
   // cancel a live successor joining the same immutable archive.
   const primary = await prepareHistoricalBankRateCatalogueAsync(archive, () => yieldToUi(0));
-  if (!primary || !isCurrent()) return false;
-  const fallback = selected?.prepared ?? null;
-  const knownDates = [...(selected?.dates ?? selected?.heads.keys() ?? [])].sort();
+  if (!isCurrent()) return { ready: false, contributed: false };
+  if (!primary) return { ready: !!fallback || !!cachedHistoricalBankRateCatalogue(core), contributed: false };
+  // Keep known unavailable days even without a usable fallback. This calendar
+  // does not authorize the supplied index's public revision receipts.
+  const knownDates = [...new Set([...(selected?.dates ?? selected?.heads.keys() ?? []), ...(index?.dates ?? [])])].sort();
   const selectedIndex: DatesIndex | undefined = knownDates.length ? {
     schema_version: 1, revision_protocol: 1, dates: knownDates, count: knownDates.length,
-    min_date: knownDates[0], latest_date: knownDates.at(-1)!, revision_heads: Object.fromEntries(selected!.heads),
+    min_date: knownDates[0], latest_date: knownDates.at(-1)!, revision_heads: Object.fromEntries(selected?.heads ?? []),
   } : undefined;
   const combined = selectHistoricalCatalogueDates(primary, dates, fallback, selectedIndex, selected?.conflicts);
   const covered = new Set([...dates, ...Object.keys(fallback?.catalogue.sources ?? {})]);
@@ -40,7 +49,7 @@ export async function prepareLegacyBankRateHistory(core: CorePayload, manifest: 
     calendar.add(new Date(time).toISOString().slice(0, 10));
   }
   const missing = [...calendar].filter(day => day < core.run_date && !covered.has(day)).sort();
-  if (!isCurrent()) return false;
+  if (!isCurrent()) return { ready: false, contributed: false };
   installPreparedHistoricalBankRateCatalogue(core, combined, missing);
-  return true;
+  return { ready: !!fallback || dates.size > 0, contributed: dates.size > 0 };
 }

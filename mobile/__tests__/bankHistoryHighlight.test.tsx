@@ -5,6 +5,7 @@ import Svg, { Path } from 'react-native-svg';
 import { uiProductName } from '../src/lib/uiCopy';
 import { BankHistoryChart } from '../src/components/BankHistoryChart';
 import type { BankHistoryPoint } from '../src/types';
+import captured from './fixtures/public_rates/broken-hill-history-20261022.json';
 
 type TestNode = {
   props: Record<string, any>;
@@ -12,7 +13,7 @@ type TestNode = {
   findAllByProps: (props: Record<string, unknown>) => TestNode[];
   findAllByType: (type: React.ElementType | string) => TestNode[];
 };
-type Renderer = ReactTestRenderer & { root: TestNode };
+type Renderer = ReactTestRenderer & { root: TestNode; toJSON(): unknown };
 
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
@@ -32,6 +33,18 @@ const dates = ['2026-09-25', '2026-09-26', '2026-09-27', '2026-09-28'];
 const emptyMarket: BankHistoryPoint[] = dates.map(date => ({
   date, min: null, max: null, mean: null, median: null, count: 0,
 }));
+
+test('an entirely unknown selected window reports its missing dates without inventing a plot', () => {
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankHistoryChart section="Savings" dates={dates} points={emptyMarket} allDates={dates} />) as Renderer; });
+  try {
+    const rendered = JSON.stringify(tree.toJSON());
+    expect(rendered).toContain('No observations');
+    expect(rendered).toContain('Missing observations: 4');
+    expect(rendered).toContain('Unknown');
+    expect(tree.root.findAllByType(Svg)).toHaveLength(0);
+  } finally { act(() => tree.unmount()); }
+});
 const highlightSeries = {
   label: uiProductName({ product_name: 'Selected product' }),
   values: { '2026-09-25': 0.045, '2026-09-26': 0.046, '2026-09-27': null, '2026-09-28': 0.05 },
@@ -113,5 +126,74 @@ test('nonfinite product values cannot turn an empty market into an available cha
     expect(onGraphicReady).toHaveBeenLastCalledWith(expect.objectContaining({
       expectedCount: 2, layoutMeasured: true, emptyStateRendered: true, availability: 'unavailable', pointCount: 0, accessibleSummary: false,
     }));
+  } finally { act(() => tree.unmount()); }
+});
+
+test('captured lender observations and Unknown counts follow the selected window', () => {
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankHistoryChart {...captured.lender} section="Mortgage" />) as Renderer; });
+  try {
+    const chart = () => tree.root.findByProps({ accessibilityRole: 'image' });
+    const facts = () => tree.root.findAllByType('AppText').map(node => node.props.children);
+    expect(chart().props.accessibilityLabel).toContain('27 Observed');
+    expect(facts()).toContain('Missing observations: 4 · Unknown');
+    const all = tree.root.findAllByType('Chip').find(node => node.props.label === 'All')!;
+    act(() => all.props.onPress());
+    expect(chart().props.accessibilityLabel).toContain('126 Observed');
+    expect(facts()).toContain('Missing observations: 37 · Unknown');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('product observations exclude Unknown dates even when cash-rate context is available', () => {
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankHistoryChart section="Mortgage" dates={dates} points={emptyMarket}
+    highlightSeries={highlightSeries} rba={[{ date: dates[0], rate: 0.04 }]} />) as Renderer; });
+  try {
+    const chart = tree.root.findByProps({ accessibilityRole: 'image' });
+    expect(chart.props.accessibilityLabel).toContain('3 Observed');
+    expect(tree.root.findAllByType('AppText').map(node => node.props.children)).toContain('Missing observations: 1 · Unknown');
+    const controls = tree.root.findAllByType('ChartSliceControls')[0];
+    act(() => controls.props.onChangeIndex(2));
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('Unknown');
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.facts).toBeUndefined();
+  } finally { act(() => tree.unmount()); }
+});
+
+test('captured fallback-only gaps recover when the verified archive replaces the same-date projection', () => {
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankHistoryChart {...captured.fallbackLender} section="Mortgage" contentRevision="fallback" />) as Renderer; });
+  try {
+    const chart = () => tree.root.findByProps({ accessibilityRole: 'image' });
+    const facts = () => tree.root.findAllByType('AppText').map(node => node.props.children);
+    expect(captured.fallbackGlobalMissing).toHaveLength(28);
+    expect(chart().props.accessibilityLabel).toContain('5 Observed');
+    expect(facts()).toContain('Missing observations: 26 · Unknown');
+    act(() => tree.root.findAllByType('ChartSliceControls')[0].props.onChangeIndex(29));
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('Unknown');
+    act(() => tree.update(<BankHistoryChart {...captured.lender} section="Mortgage" contentRevision="verified-archive" />));
+    expect(chart().props.accessibilityLabel).toContain('27 Observed');
+    expect(facts()).toContain('Missing observations: 4 · Unknown');
+    act(() => tree.root.findAllByType('ChartSliceControls')[0].props.onChangeIndex(29));
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('5.94% – 13.75%');
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each(['Mortgage', 'Savings', 'TD'] as const)('%s product gaps cannot borrow market observations or values', section => {
+  const market = dates.map(date => ({ date, min: 0.01, max: 0.08, median: 0.04, mean: 0.045, count: 10 }));
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankHistoryChart section={section} dates={dates} points={market}
+    highlightSeries={highlightSeries} />) as Renderer; });
+  try {
+    expect(tree.root.findByProps({ accessibilityRole: 'image' }).props.accessibilityLabel).toContain('3 Observed');
+    expect(tree.root.findAllByType('AppText').map(node => node.props.children)).toContain('Missing observations: 1 · Unknown');
+    act(() => tree.root.findAllByType('ChartSliceControls')[0].props.onChangeIndex(2));
+    const controls = tree.root.findAllByType('ChartSliceControls')[0];
+    expect(controls.props.valueLabel).toBe('Unknown');
+    expect(controls.props.facts).toBeUndefined();
+    expect(tree.root.findByProps({ accessibilityRole: 'image' }).props.accessibilityLabel).toContain('Rates · Unavailable');
+    // Market context remains drawn; it cannot supply the missing product observation.
+    act(() => controls.props.onChangeIndex(1));
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('4.60%');
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.facts).toHaveLength(2);
   } finally { act(() => tree.unmount()); }
 });

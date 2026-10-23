@@ -8,6 +8,7 @@ import { sampleCore, sampleManifest } from '../src/data/sample';
 import type { HistoricalBankRateReady } from '../src/data/historicalBankRateReadyWire';
 import type { DatesIndex } from '../src/data/datesIndex';
 import { cache } from '../src/data/cache';
+import { getBundledHistoricalBankRateReady } from '../src/data/bundledHistoricalBankRateReady';
 
 let mockBaseline: HistoricalBankRateReady | null;
 let mockIndex: DatesIndex | null;
@@ -42,6 +43,16 @@ function current() {
   return { core, manifest: { ...sampleManifest, run_date: core.run_date } };
 }
 beforeEach(() => { mockBaseline = ready(); mockIndex = index(); mockRetention = null; jest.clearAllMocks(); });
+
+test('a failed same-owner retry keeps the installed catalogue and known gaps', async () => {
+  const { core, manifest } = current();
+  await prepareReadyBankRateHistory(core, manifest, null, null);
+  const previous = cachedHistoricalBankRateCatalogue(core), missing = [...missingHistoricalCatalogueDates(core)];
+  jest.mocked(getBundledHistoricalBankRateReady).mockRejectedValueOnce(new Error('fallback decode unavailable'));
+  await expect(prepareReadyBankRateHistory(core, manifest, null, null)).rejects.toThrow('fallback decode unavailable');
+  expect(cachedHistoricalBankRateCatalogue(core)).toBe(previous);
+  expect(missingHistoricalCatalogueDates(core)).toEqual(missing);
+});
 
 test('prepared fallback retains trailing calendar gaps and reuses warm preparation', async () => {
   const { core, manifest } = current();

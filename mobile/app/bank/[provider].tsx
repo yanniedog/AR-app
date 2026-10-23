@@ -770,7 +770,6 @@ export default function BankDetail() {
                   onGraphicReady={onHistoryGraphicReady}
                 />
               </ChartErrorBoundary>
-              {rateHistory.missingDates.length ? <AppText variant="tiny" color="textMuted">{uiJoin('Missing observations',': ',uiCount(rateHistory.missingDates.length),' · ','Unknown')}</AppText> : null}
               {rawBankEvents.length ? (
                 <>
                   <Divider style={{ marginVertical: 10 }} />

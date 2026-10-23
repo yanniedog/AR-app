@@ -25,7 +25,6 @@ export async function prepareReadyBankRateHistory(core: CorePayload, manifest: M
   markPreparedHistoricalBankRateHistory(core);
   try {
     if (!isCurrent()) return false;
-    clearHistoricalBankRateCatalogue(core);
     if (core.run_date !== manifest.run_date) { work.finish('unavailable'); return false; }
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getBundledHistoricalBankRateReady, bundledHistoricalReadyBinding } = require('./bundledHistoricalBankRateReady') as typeof import('./bundledHistoricalBankRateReady');
@@ -74,7 +73,10 @@ export async function prepareReadyBankRateHistory(core: CorePayload, manifest: M
     const prepared = previous?.receipt === receipt && previous.sources.length === inputs.length &&
       previous.sources.every((ready, index) => ready === inputs[index].ready)
       ? previous.prepared : prepareHistoricalBankRateReadySources(inputs);
-    if (!prepared || !isCurrent()) { work.finish('unavailable'); return false; }
+    if (!prepared || !isCurrent()) {
+      if (!prepared && isCurrent()) clearHistoricalBankRateCatalogue(core);
+      work.finish('unavailable'); return false;
+    }
     const calendar = [...prepared.catalogue.run_dates];
     for (let date = Date.parse(calendar.at(-1)!) + 86_400_000; date < Date.parse(core.run_date) && calendar.length < 5000; date += 86_400_000) {
       calendar.push(new Date(date).toISOString().slice(0, 10));
