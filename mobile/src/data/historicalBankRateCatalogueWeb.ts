@@ -71,5 +71,13 @@ export function getWebHistoryCodec(): HistoricalCatalogueCodec | null {
       }
       return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     },
+    async decompressChunksAsync(base64, length, digest) {
+      // Keep browser stream/hash verification while sharing the chunk-capable
+      // selection path with native hosts. Older Android codecs stay excluded.
+      const json = await this.decompressAsync(base64, length, digest);
+      const parts: string[] = [];
+      for (let start = 0; start < json.length; start += 65_536) parts.push(json.slice(start, start + 65_536));
+      return parts;
+    },
   };
 }

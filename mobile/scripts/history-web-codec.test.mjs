@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
+import { createRequire } from 'node:module';
 import test from 'node:test';
 import ts from 'typescript';
 
@@ -22,6 +23,32 @@ test('browser streams round-trip Unicode, hash and gzip bytes without the JS inf
   assert.equal(encoded.bytes, Buffer.byteLength(json));
   assert.equal(encoded.sha256, createHash('sha256').update(json).digest('hex'));
   assert.equal(await codec.decompressAsync(encoded.gzip_base64, encoded.bytes, encoded.sha256), json);
+  const parts = await codec.decompressChunksAsync(encoded.gzip_base64, encoded.bytes, encoded.sha256);
+  assert.equal(parts.join(''), json);
+  assert.ok(parts.length > 1);
+  assert.ok(parts.every(part => part.length > 0 && part.length <= 65_536));
+});
+
+test('configured browser codec retains stream verification through the application decode path', async () => {
+  const module = { exports: {} };
+  const source = readFileSync(new URL('../src/data/historicalBankRateCatalogueCompression.ts', import.meta.url), 'utf8');
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  new Function('exports', 'require', 'module', compiled)(module.exports, createRequire(import.meta.url), module);
+  let calls = 0;
+  const configured = { ...codec, async decompressChunksAsync(...args) {
+    calls++;
+    return codec.decompressChunksAsync(...args);
+  } };
+  module.exports.configureHistoricalCatalogueCodec(configured);
+  const value = { text: 'x'.repeat(65_535) + '\ud83e\uddea', rate: 5.94 };
+  const encoded = await codec.compressAsync(JSON.stringify(value));
+  const options = { yieldControl: async () => undefined };
+  assert.deepEqual(await module.exports.decompressCatalogueAsync(encoded, options), value);
+  assert.equal(calls, 1);
+  assert.equal(await module.exports.decompressCatalogueAsync({ ...encoded, sha256: '0'.repeat(64) }, options), null);
+  assert.equal(calls, 2);
 });
 
 test('browser streams reject corrupt bytes, noncanonical base64, receipts and inflation overrun', async () => {

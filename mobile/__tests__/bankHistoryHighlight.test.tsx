@@ -13,7 +13,7 @@ type TestNode = {
   findAllByProps: (props: Record<string, unknown>) => TestNode[];
   findAllByType: (type: React.ElementType | string) => TestNode[];
 };
-type Renderer = ReactTestRenderer & { root: TestNode };
+type Renderer = ReactTestRenderer & { root: TestNode; toJSON(): unknown };
 
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
