@@ -135,12 +135,16 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           REUSED_RELEASE_VERSION: ${{ inputs.release_version }}
           REUSED_RELEASE_VERSION_CODE: ${{ inputs.release_version_code }}
+          USE_CHECKED_IN_VERSION: ${{ inputs.follow_with_arm || inputs.release_version != '' }}
         run: |
           rolling_tag="app-apk-arm-latest"
           if [ "$APK_CHANNEL" = "universal" ]; then
             rolling_tag="app-apk-latest"
           fi
           reuse_args=()
+          if [ "$USE_CHECKED_IN_VERSION" = "true" ]; then
+            reuse_args+=(--use-checked-in-version)
+          fi
           if [ -n "$REUSED_RELEASE_VERSION" ] || [ -n "$REUSED_RELEASE_VERSION_CODE" ]; then
             reuse_args+=(--release-version "$REUSED_RELEASE_VERSION")
             reuse_args+=(--release-version-code "$REUSED_RELEASE_VERSION_CODE")

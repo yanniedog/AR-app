@@ -1,0 +1,18 @@
+{
+  "version": "1.0.245",
+  "releaseTag": "app-arm-v1.0.245",
+  "date": "2026-10-18",
+  "summaryBullets": [
+    "Fix local audit completion and safe diagnostic evidence (#424)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Fix local audit completion and safe diagnostic evidence (#424)"
+        }
+      ]
+    }
+  ]
+}

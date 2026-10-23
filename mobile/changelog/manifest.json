@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-10-23T22:08:41.192Z",
+  "generated_at": "2026-10-23T22:22:46.793Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -1023,6 +1023,30 @@
         "Retain audit reports and automatically upload sanitized results (#408)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.243"
+    },
+    {
+      "version": "1.0.244",
+      "date": "2026-10-18",
+      "summaryBullets": [
+        "chore(mobile): auto-release bump to v1.0.243 (after 26cb2b1) (#418)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.244"
+    },
+    {
+      "version": "1.0.245",
+      "date": "2026-10-18",
+      "summaryBullets": [
+        "Fix local audit completion and safe diagnostic evidence (#424)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.245"
+    },
+    {
+      "version": "1.0.246",
+      "date": "2026-10-18",
+      "summaryBullets": [
+        "Restore recent product graphs from published legacy history (#427)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.246"
     },
     {
       "version": "1.0.247",
