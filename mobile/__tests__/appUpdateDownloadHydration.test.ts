@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getExistingDownloadTasks } from '@kesha-antonov/react-native-background-downloader';
+import { createDownloadTask, getExistingDownloadTasks } from '@kesha-antonov/react-native-background-downloader';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
@@ -8,7 +8,7 @@ import {
   getHydratedApkDownloadSnapshot,
   resetApkDownloadStateForTests,
 } from '../src/lib/appUpdateDownload';
-import { IDLE_APK_DOWNLOAD } from '../src/lib/appUpdateDownloadLogic';
+import { apkDestinationPath, apkDownloadTaskId, IDLE_APK_DOWNLOAD } from '../src/lib/appUpdateDownloadLogic';
 import { verifyDownloadedApk } from '../src/lib/appUpdateInstall';
 import { TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256 } from '../src/lib/appUpdateLogic';
 
@@ -34,6 +34,8 @@ describe('APK update state hydration', () => {
     await resetApkDownloadStateForTests();
     await AsyncStorage.clear();
     getExistingTasksMock.mockResolvedValue([]);
+    jest.mocked(FileSystem.getInfoAsync).mockReset().mockResolvedValue({ exists: false } as never);
+    jest.mocked(verifyDownloadedApk).mockReset();
   });
 
   afterAll(() => {
@@ -137,7 +139,93 @@ describe('APK update state hydration', () => {
       buildNumber: '193',
     });
 
+    await expect(ensureApkBackgroundDownload(manifest)).resolves.toMatchObject({ phase: 'verifying' });
+    expect(verifyDownloadedApk).toHaveBeenCalledTimes(1);
+
     finishVerification({ size: 1234, verifiedSha256: true });
     await expect(ensure).resolves.toMatchObject({ phase: 'ready', buildNumber: '193' });
   });
+
+  const remote = {
+    schema_version: 1 as const,
+    version: '1.0.247',
+    build_number: '303',
+    download_url: 'https://github.com/yanniedog/AR-app/releases/download/app-v1.0.247/app-preview.apk',
+    published_at: '2026-10-24T00:00:00Z',
+    bytes: 46_382_909,
+    sha256: 'a'.repeat(64),
+    package_name: 'com.eyex.australianrates',
+    supported_abis: ['arm64-v8a'],
+    signing_certificate_sha256: TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
+  };
+  const destination = apkDestinationPath('file:///docs/', remote.build_number, remote.sha256);
+
+  it.each(['PENDING', 'DOWNLOADING', 'PAUSED'])(
+    'preserves the partial destination of a restored %s native task',
+    async (state) => {
+      const task = createDownloadTask({
+        id: apkDownloadTaskId(remote.build_number, remote.sha256),
+        url: remote.download_url,
+        destination,
+      });
+      Object.assign(task, { state, bytesDownloaded: 10_100_032, bytesTotal: remote.bytes });
+      getExistingTasksMock.mockResolvedValue([task]);
+      jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({
+        exists: true, isDirectory: false, size: 10_100_032, uri: destination,
+      } as never);
+      jest.mocked(verifyDownloadedApk).mockRejectedValue(new Error('APK size mismatch'));
+      jest.mocked(createDownloadTask).mockClear();
+
+      await expect(ensureApkBackgroundDownload(remote)).resolves.toMatchObject({
+        phase: 'downloading', bytesWritten: 10_100_032,
+      });
+      Object.assign(task, { state: 'DOWNLOADING', bytesDownloaded: 21_151_744 });
+      await expect(ensureApkBackgroundDownload(remote)).resolves.toMatchObject({
+        phase: 'downloading', bytesWritten: 21_151_744,
+      });
+
+      expect(verifyDownloadedApk).not.toHaveBeenCalled();
+      expect(task.stop).not.toHaveBeenCalled();
+      expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+      expect(createDownloadTask).not.toHaveBeenCalled();
+      if (state === 'PAUSED') expect(task.resume).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('verifies a completed native task before marking the APK ready', async () => {
+    const task = createDownloadTask({
+      id: apkDownloadTaskId(remote.build_number, remote.sha256),
+      url: remote.download_url,
+      destination,
+    });
+    Object.assign(task, { state: 'DONE', bytesDownloaded: remote.bytes, bytesTotal: remote.bytes });
+    getExistingTasksMock.mockResolvedValue([task]);
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({
+      exists: true, isDirectory: false, size: remote.bytes, uri: destination,
+    } as never);
+    jest.mocked(verifyDownloadedApk).mockResolvedValue({ size: remote.bytes, verifiedSha256: true });
+    jest.mocked(createDownloadTask).mockClear();
+
+    await expect(ensureApkBackgroundDownload(remote)).resolves.toMatchObject({
+      phase: 'ready', verifiedBytes: remote.bytes,
+    });
+    expect(verifyDownloadedApk).toHaveBeenCalledWith(destination, remote);
+    expect(task.stop).not.toHaveBeenCalled();
+    expect(createDownloadTask).not.toHaveBeenCalled();
+  });
+
+  it('replaces an invalid orphaned APK when no native task owns it', async () => {
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({
+      exists: true, isDirectory: false, size: 10_100_032, uri: destination,
+    } as never);
+    jest.mocked(verifyDownloadedApk).mockRejectedValue(new Error('APK size mismatch'));
+
+    await expect(ensureApkBackgroundDownload(remote)).resolves.toMatchObject({
+      phase: 'downloading', bytesWritten: 0,
+    });
+    expect(verifyDownloadedApk).toHaveBeenCalledTimes(1);
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith(destination, { idempotent: true });
+    expect(createDownloadTask).toHaveBeenCalledTimes(1);
+  });
+
 });

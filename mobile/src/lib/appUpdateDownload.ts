@@ -679,6 +679,82 @@ export async function ensureApkBackgroundDownload(
       return snapshot;
     }
 
+    if (isApkDownloadStalled(snapshot)) {
+      const network = await Network.getNetworkStateAsync().catch(() => null);
+      const waitingForWifi =
+        wifiOnly &&
+        (!network?.isConnected || network.type !== Network.NetworkStateType.WIFI);
+      if (waitingForWifi) {
+        debugLog.info(
+          'app-update',
+          `download waiting for Wi-Fi build=${manifest.build_number} bytes=${snapshot.bytesWritten}/${snapshot.totalBytes ?? 'unknown'}`,
+        );
+        await persist({
+          ...snapshot,
+          phase: 'waiting',
+          nativeState: snapshot.nativeState ?? 'PAUSED',
+          error: null,
+        });
+        return snapshot;
+      }
+
+      if (canAutoRetryApkDownload(snapshot)) {
+        const nextRetry = snapshot.retryCount + 1;
+        debugLog.warn(
+          'app-update',
+          `download stalled for ${APK_DOWNLOAD_STALL_MS}ms; retrying build=${manifest.build_number} attempt=${nextRetry}`,
+        );
+        await persist({
+          ...snapshot,
+          phase: 'retrying',
+          retryCount: nextRetry,
+          error: null,
+        });
+        autoRetry = true;
+        force = true;
+      } else {
+        const message = 'Update download stopped making progress. Tap Retry to try again.';
+        debugLog.error(
+          'app-update',
+          `download stalled after ${snapshot.retryCount} retries build=${manifest.build_number}`,
+        );
+        await persist({ ...snapshot, phase: 'error', error: message });
+        return snapshot;
+      }
+    }
+  }
+
+  if (!force && !shouldEnsureBackgroundDownload(snapshot, manifest.build_number)) {
+    // A notification action is an explicit user cancellation. Do not turn the
+    // app's periodic reconciliation into an automatic restart; only Retry
+    // calls this function with force=true.
+    if (snapshot.phase === 'cancelled') return snapshot;
+    if (snapshot.phase === 'verifying') {
+      if (currentProcessVerificationTaskId === apkDownloadTaskId(manifest.build_number, manifest.sha256)) {
+        return snapshot;
+      }
+      const verificationStarted = Date.parse(snapshot.lastProgressAt ?? snapshot.startedAt ?? '');
+      if (
+        Number.isFinite(verificationStarted) &&
+        Date.now() - verificationStarted < APK_VERIFICATION_STALL_MS
+      ) {
+        return snapshot;
+      }
+      await persist({
+        ...snapshot,
+        phase: 'error',
+        error: 'Downloaded update verification did not finish. Tap Retry to download it again.',
+      });
+      return snapshot;
+    }
+  }
+
+  if (!force) {
+    // The destination exists as soon as Android starts writing. Reconcile the
+    // native task before treating that path as a completed cached installer.
+    // This also recovers transfers whose JS receipt was lost on process death.
+    if (await reattachExisting(manifest)) return snapshot;
+
     const dest = apkDestinationPath(directories.documents, manifest.build_number, manifest.sha256);
     if (await fileExists(dest)) {
       const verificationTaskId = apkDownloadTaskId(manifest.build_number, manifest.sha256);
@@ -740,78 +816,6 @@ export async function ensureApkBackgroundDownload(
         }
       }
     }
-
-    if (isApkDownloadStalled(snapshot)) {
-      const network = await Network.getNetworkStateAsync().catch(() => null);
-      const waitingForWifi =
-        wifiOnly &&
-        (!network?.isConnected || network.type !== Network.NetworkStateType.WIFI);
-      if (waitingForWifi) {
-        debugLog.info(
-          'app-update',
-          `download waiting for Wi-Fi build=${manifest.build_number} bytes=${snapshot.bytesWritten}/${snapshot.totalBytes ?? 'unknown'}`,
-        );
-        await persist({
-          ...snapshot,
-          phase: 'waiting',
-          nativeState: snapshot.nativeState ?? 'PAUSED',
-          error: null,
-        });
-        return snapshot;
-      }
-
-      if (canAutoRetryApkDownload(snapshot)) {
-        const nextRetry = snapshot.retryCount + 1;
-        debugLog.warn(
-          'app-update',
-          `download stalled for ${APK_DOWNLOAD_STALL_MS}ms; retrying build=${manifest.build_number} attempt=${nextRetry}`,
-        );
-        await persist({
-          ...snapshot,
-          phase: 'retrying',
-          retryCount: nextRetry,
-          error: null,
-        });
-        autoRetry = true;
-        force = true;
-      } else {
-        const message = 'Update download stopped making progress. Tap Retry to try again.';
-        debugLog.error(
-          'app-update',
-          `download stalled after ${snapshot.retryCount} retries build=${manifest.build_number}`,
-        );
-        await persist({ ...snapshot, phase: 'error', error: message });
-        return snapshot;
-      }
-    }
-  }
-
-  if (!force && !shouldEnsureBackgroundDownload(snapshot, manifest.build_number)) {
-    // A notification action is an explicit user cancellation. Do not turn the
-    // app's periodic reconciliation into an automatic restart; only Retry
-    // calls this function with force=true.
-    if (snapshot.phase === 'cancelled') return snapshot;
-    if (snapshot.phase === 'verifying') {
-      const verificationStarted = Date.parse(snapshot.lastProgressAt ?? snapshot.startedAt ?? '');
-      if (
-        Number.isFinite(verificationStarted) &&
-        Date.now() - verificationStarted < APK_VERIFICATION_STALL_MS
-      ) {
-        return snapshot;
-      }
-      await persist({
-        ...snapshot,
-        phase: 'error',
-        error: 'Downloaded update verification did not finish. Tap Retry to download it again.',
-      });
-      return snapshot;
-    }
-    // Reattach handlers after process death / JS reload. If the OS no longer
-    // knows the persisted task, replace it instead of returning stale state.
-    // Always query native state even when the JS object still looks active:
-    // Android can finish/fail a UIDT job without delivering the terminal event.
-    if (await reattachExisting(manifest)) return snapshot;
-    force = true;
   }
 
   const manifestKey = apkDownloadTaskId(manifest.build_number, manifest.sha256);
