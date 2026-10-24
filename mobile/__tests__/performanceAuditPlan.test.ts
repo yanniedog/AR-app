@@ -173,7 +173,7 @@ describe('deep performance audit plan', () => {
   test('covers canonical workflows and compatibility aliases without obsolete surfaces', () => {
     const steps = buildDeepPerformanceAuditPlan(corePayload()).passes[0].steps;
     const scenarios = new Set(steps.map(item => item.scenarioId));
-    for (const id of ['route.rates', 'route.market', 'route.bank-rates', 'route.compare', 'route.product',
+    for (const id of ['route.rates', 'route.rates-mortgage-scope', 'route.market', 'route.bank-rates', 'route.compare', 'route.product',
       'route.receipt', 'route.lender', 'route.calculator', 'route.projections', 'route.moves',
       'route.rba', 'route.outlook', 'route.saved', 'route.profile', 'route.settings', 'route.terms',
       'route.debug-log', 'route.not-found', 'route.audit', 'redirect.root', 'redirect.node',
@@ -185,7 +185,9 @@ describe('deep performance audit plan', () => {
     expect(steps.some(item => ['home.hub', 'rates.hub', 'market.hub', 'tools.hub', 'today.hero', 'browse.hierarchy', 'lenders.list', 'changes.feed', 'search.results'].includes(item.expectedSurface))).toBe(false);
     const actions = steps.map(item => item.semanticActionId);
     expect(actions).toEqual(expect.arrayContaining(['search.query.product', 'search.compare.open',
-      'search.filter.provider.first', 'compare.scroll.last-column', 'product.receipt.open',
+      'search.filter.provider.first', 'search.mortgage.scope.apply.0', 'search.mortgage.scope.apply.1',
+      'search.mortgage.scope.clear',
+      'compare.scroll.last-column', 'product.receipt.open',
       'receipt.back-to-product', 'lender.history.date.previous', 'calculator.projections.open',
       'projections.chart.previous', 'projections.chart.next', 'outlook.economy.date.previous',
       'saved.fixture.ensure-exact-pair', 'saved.fixture.restore', 'profile.filter.restore', 'settings.update-status.observe']));
@@ -306,7 +308,56 @@ describe('deep performance audit plan', () => {
           'search.filters.cancel', 'search.sort.open', 'search.sort.cancel', 'search.section.next']);
       expect(pass.steps.filter(item => item.scenarioId === 'route.rates').map(item => item.semanticActionId))
         .toEqual(expect.arrayContaining(['search.filters.apply', 'search.filters.clear', 'search.compare.open']));
+      expect(pass.steps.filter(item => item.scenarioId === 'route.rates-mortgage-scope').map(item => item.semanticActionId))
+        .toEqual(['search.open', 'search.mortgage.scope.apply.0', 'search.mortgage.scope.apply.1', 'search.mortgage.scope.clear']);
     }
+  });
+
+  test('seeds reproducible mortgage comparison scopes and forces Mortgage for scope latency', () => {
+    const core = corePayload();
+    const options = { seed: 'mortgage-scope-latency' };
+    const inputs = deriveDeepAuditInputs(core, options);
+    expect(deriveDeepAuditInputs(core, options)).toEqual(inputs);
+    expect(inputs.mortgageScopePrimary).toEqual(expect.objectContaining({
+      loanAmount: expect.stringMatching(/^\d+$/),
+      lvr: expect.stringMatching(/^\d+$/),
+      loanPurposes: expect.arrayContaining([expect.any(String)]),
+      repaymentTypes: expect.arrayContaining([expect.any(String)]),
+    }));
+    expect(inputs.mortgageScopeAlternate).toEqual(expect.objectContaining({
+      loanAmount: expect.stringMatching(/^\d+$/),
+      lvr: expect.stringMatching(/^\d+$/),
+    }));
+    const amount = Number(inputs.mortgageScopePrimary!.loanAmount);
+    const lvr = Number(inputs.mortgageScopePrimary!.lvr);
+    expect(amount).toBeGreaterThanOrEqual(150_000);
+    expect(amount).toBeLessThanOrEqual(2_000_000);
+    expect(lvr).toBeGreaterThanOrEqual(50);
+    expect(lvr).toBeLessThanOrEqual(95);
+    const steps = buildDeepPerformanceAuditPlan(core, options).passes[0].steps
+      .filter(step => step.scenarioId === 'route.rates-mortgage-scope');
+    expect(steps[0]).toMatchObject({ semanticActionId: 'search.open', parameters: { section: 'Mortgage' } });
+    expect(steps[1]).toMatchObject({
+      semanticActionId: 'search.mortgage.scope.apply.0',
+      safety: { stateImpact: 'local-only' },
+      parameters: {
+        loanAmount: inputs.mortgageScopePrimary!.loanAmount,
+        lvr: inputs.mortgageScopePrimary!.lvr,
+        loanPurposes: inputs.mortgageScopePrimary!.loanPurposes,
+        repaymentTypes: inputs.mortgageScopePrimary!.repaymentTypes,
+      },
+    });
+    expect(steps[2]).toMatchObject({
+      semanticActionId: 'search.mortgage.scope.apply.1',
+      parameters: {
+        loanAmount: inputs.mortgageScopeAlternate!.loanAmount,
+        lvr: inputs.mortgageScopeAlternate!.lvr,
+        loanPurposes: inputs.mortgageScopeAlternate!.loanPurposes,
+        repaymentTypes: inputs.mortgageScopeAlternate!.repaymentTypes,
+      },
+    });
+    expect(steps[3].semanticActionId).toBe('search.mortgage.scope.clear');
+    expect(steps[1].readiness).toEqual(expect.arrayContaining(['list']));
   });
 
   test('targets contextual calculation from the exact product and saved fixture before comparison selection', () => {

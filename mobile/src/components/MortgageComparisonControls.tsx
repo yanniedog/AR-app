@@ -49,7 +49,8 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     return { ...group, options };
   }), [catalogue, filters, rows]);
   const change = (field: 'loanAmount' | 'lvr', text: string) => {
-    useMortgageComparison.setState({ [field]: text }); updateRatesSection('Mortgage', { page: 1 }, true);
+    // Keep typing local; RatesWorkspace debounces catalogue re-resolution.
+    useMortgageComparison.setState({ [field]: text });
   };
   return <View style={{ gap: 8 }} testID="mortgage-comparison-controls">
     <Row gap={8} style={{ flexWrap: 'wrap' }}>{(['loanAmount', 'lvr'] as const).map(field => <View key={field} style={{ flexBasis: Math.min(220, 120 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0, gap: 4 }}>

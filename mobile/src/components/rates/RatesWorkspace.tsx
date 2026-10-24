@@ -161,11 +161,24 @@ export default function RatesWorkspace() {
   }, [core, catalogue, section, task.selected]);
   const { scenario } = useUserRateScenario();
   const mortgageInputs = useMortgageComparison();
+  // Amount/LVR are typed digit-by-digit; each change re-resolves the full-day
+  // public catalogue. Defer that work until typing pauses (same idea as query).
+  const deferredMortgageInputs = useDebouncedValue(mortgageInputs, 200);
   const mortgageFilters = session.sections.Mortgage.filters;
   const scenarioFor = useCallback((selected: SectionKey, row?: RateRow) => publicScenarioForRow(row, catalogue, mortgageComparisonScenario(selected,
-    publicRateScenario(selected, scenario, prefs.profileFilters, row), mortgageInputs, mortgageFilters)), [catalogue, scenario, prefs.profileFilters, mortgageInputs, mortgageFilters]);
+    publicRateScenario(selected, scenario, prefs.profileFilters, row), deferredMortgageInputs, mortgageFilters)), [catalogue, scenario, prefs.profileFilters, deferredMortgageInputs, mortgageFilters]);
   const rowScenario = useCallback((row: RateRow) => scenarioFor(section, row), [scenarioFor, section]);
   const comparisonCore = useMemo(() => core ? publicComparisonCore(core, catalogue, scenarioFor) : null, [core, catalogue, scenarioFor]);
+  const previousDeferredMortgage = useRef(deferredMortgageInputs);
+  useEffect(() => {
+    const previous = previousDeferredMortgage.current;
+    previousDeferredMortgage.current = deferredMortgageInputs;
+    if (section !== 'Mortgage') return;
+    if (previous.loanAmount === deferredMortgageInputs.loanAmount
+      && previous.lvr === deferredMortgageInputs.lvr) return;
+    if (useRatesSession.getState().sections.Mortgage.page === 1) return;
+    updateRatesSection('Mortgage', { page: 1 }, true);
+  }, [deferredMortgageInputs, section]);
   useReadyNavigationEffect(useCallback(() => {
     if (!hydrated || !isFocused) return;
     initializeRatesSession(prefs, activeSection);
@@ -243,11 +256,11 @@ export default function RatesWorkspace() {
       const priced = resolvedPublicRankingRows([entry.row], catalogue,
         row => scenarioFor(entry.section, row)).rows;
       return entry.section === 'Mortgage'
-        ? mortgageComparisonRows(priced, mortgageInputs, { core, details, manifest, coreIntegrity }).rows.length > 0
+        ? mortgageComparisonRows(priced, deferredMortgageInputs, { core, details, manifest, coreIntegrity }).rows.length > 0
         : priced.length > 0;
     });
     if (applicable.length !== selected.length || applicable.some((token, index) => token !== selected[index])) setSelected(applicable);
-  }, [comparisonCore, selected, catalogue, scenarioFor, mortgageInputs, core, details, manifest, coreIntegrity, suitabilityRevision, setSelected, section]);
+  }, [comparisonCore, selected, catalogue, scenarioFor, deferredMortgageInputs, core, details, manifest, coreIntegrity, suitabilityRevision, setSelected, section]);
   const debouncedQuery = useDebouncedValue(query, 120);
   const sortOptions = useMemo(() => availableSortOptions(section, mortgageRateMetric, depositRankMetric),
     [depositRankMetric, mortgageRateMetric, section]);
@@ -300,10 +313,10 @@ export default function RatesWorkspace() {
   }, [core, catalogue, section, scenario, prefs.profileFilters]);
   const summaryCatalogueRows = catalogue.status === 'unavailable' || (catalogue.status === 'ready' && catalogue.allLoaded)
     ? savedCatalogueRows : null;
-  const mortgageScope = useMemo(() => section === 'Mortgage' ? mortgageComparisonRows(baseRows, mortgageInputs,
+  const mortgageScope = useMemo(() => section === 'Mortgage' ? mortgageComparisonRows(baseRows, deferredMortgageInputs,
     { core, details, manifest, coreIntegrity })
     : { rows: baseRows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false },
-    [baseRows, mortgageInputs, section, core, details, manifest, coreIntegrity]);
+    [baseRows, deferredMortgageInputs, section, core, details, manifest, coreIntegrity]);
   const filterOptions = useSearchFilterOptions(baseRows, details?.products, section, suitabilityRevision);
 
   const effectiveFilters = useMemo(
@@ -462,7 +475,7 @@ export default function RatesWorkspace() {
   const uiTracker = useRef(new OpaquePerformanceAuditRenderRevision());
   const listDataRevision = dataTracker.current.update([coreSha ?? core?.run_date ?? 'none', manifest?.files.details.sha256, catalogue.generationId, catalogue.status, scenario,
     section, path, hierarchyScoped, debouncedQuery, sortKey, effectiveFilters, availability, task.intentError,
-    queryNeedsSearchIndex, resultSearchIndex != null, suitabilityRevision, resultRows.length, pagination.page, pageSize, mortgageInputs]);
+    queryNeedsSearchIndex, resultSearchIndex != null, suitabilityRevision, resultRows.length, pagination.page, pageSize, deferredMortgageInputs]);
   // Selection and disclosure changes need a fresh committed render, but keep
   // the same list and decoded logos while its result identities are unchanged.
   const listRevision = uiTracker.current.update([listDataRevision, filterOpen, draftFilters, draftAvailability, sortOpen, toolsOpen, selectMode, selected]);
@@ -556,7 +569,7 @@ export default function RatesWorkspace() {
   const logoReadiness = useLogoReadiness(listDataRevision);
   const auditTarget = useRatesAuditTarget({ rows: pageRows, results: resultRows, page: pagination.page, size: pageSize,
     revision: listRevision, context: JSON.stringify([coreSha ?? core?.run_date, manifest?.files.details.sha256, catalogue.generationId, catalogue.status, scenario,
-      section, path, hierarchyScoped, debouncedQuery, sortKey, effectiveFilters, availability, pageSize, mortgageInputs, getRatesSessionRestoreRevision()]),
+      section, path, hierarchyScoped, debouncedQuery, sortKey, effectiveFilters, availability, pageSize, deferredMortgageInputs, getRatesSessionRestoreRevision()]),
     selectMode, canScroll: restoredDataRevision === restorationKey && listReadiness.ready, list: listRef,
     token: row => 'product_key' in row ? rowToken(row) : null,
     key: resultRowKey,
@@ -582,6 +595,22 @@ export default function RatesWorkspace() {
   const prepareAuditComparePage = useCallback((...args: unknown[]) =>
     prepareAuditTarget(auditActionString(args, 'selectionToken') ?? '',
       (args[1] as { signal?: AbortSignal } | undefined)?.signal), [prepareAuditTarget]);
+  const applyMortgageScope = useCallback((args: readonly unknown[]) => {
+    if (section !== 'Mortgage') return { unavailableReason: 'Mortgage comparison scope requires the Mortgage section' };
+    if (availability === 'unlisted') return { unavailableReason: 'Mortgage comparison scope requires listed rates' };
+    useMortgageComparison.setState({
+      loanAmount: auditActionString(args, 'loanAmount') ?? '',
+      lvr: auditActionString(args, 'lvr') ?? '',
+    });
+    updateRatesSection('Mortgage', current => ({
+      page: 1,
+      filters: {
+        ...current.filters,
+        loanPurposes: auditActionStrings(args, 'loanPurposes'),
+        repaymentTypes: auditActionStrings(args, 'repaymentTypes'),
+      },
+    }), true);
+  }, [availability, section]);
   const auditActions = useMemo(() => ({
     'search.open': () => undefined,
     'search.section.next': () => changeSection(SECTION_ORDER[(SECTION_ORDER.indexOf(section) + 1) % SECTION_ORDER.length]),
@@ -605,6 +634,16 @@ export default function RatesWorkspace() {
     'search.sort.open': () => setSortOpen(true),
     'search.sort.cancel': () => setSortOpen(false),
     'search.filters.clear': clearSearchFilters,
+    'search.mortgage.scope.apply.0': (...args: unknown[]) => applyMortgageScope(args),
+    'search.mortgage.scope.apply.1': (...args: unknown[]) => applyMortgageScope(args),
+    'search.mortgage.scope.clear': () => {
+      if (section !== 'Mortgage') return { unavailableReason: 'Mortgage comparison scope requires the Mortgage section' };
+      clearMortgageComparison();
+      updateRatesSection('Mortgage', current => ({
+        page: 1,
+        filters: { ...current.filters, loanPurposes: [], repaymentTypes: [] },
+      }), true);
+    },
     'search.compare.mode': toggleCompareMode,
     'search.compare.page.0': prepareAuditComparePage,
     'search.compare.select.0': selectAuditToken,
@@ -615,7 +654,7 @@ export default function RatesWorkspace() {
       const tokens = exactTokens.length >= 2 ? exactTokens : selected;
       if (tokens.length >= 2) openCompare(tokens, 'rates-comparison');
     },
-  }), [applyFilters, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
+  }), [applyFilters, applyMortgageScope, availability, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
   const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => 'product_key' in item ? (
     <SearchProductRow row={item} section={section} onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
       rateScenario={rowScenario(item)} comparisonUnverified={section === 'Mortgage' && mortgageScope.unverifiedRows.has(item)}

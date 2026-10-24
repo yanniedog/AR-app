@@ -4,6 +4,7 @@ import { rowsForProductKey } from '../data/rateRowIndex';
 import { isSuitabilityFilterReady } from '../data/suitabilityGate';
 import { savedRateId } from '../data/savedRates';
 import { publicOfferSelectionToken } from '../data/publicOfferIdentity';
+import { canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
 import { SECTION_KEYS, type CorePayload, type ProductDetail, type RateRow, type SectionKey } from '../types';
 import { MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID } from './performanceAuditProfile';
 
@@ -68,6 +69,14 @@ export interface DeepAuditExactProduct {
   taxonomyPath: string[];
 }
 
+/** Seeded Rates mortgage comparison controls (amount, LVR, purpose, repayment). */
+export interface DeepAuditMortgageScope {
+  loanAmount: string;
+  lvr: string;
+  loanPurposes: string[];
+  repaymentTypes: string[];
+}
+
 export interface DeepAuditDerivedInputs {
   datasetDate: string | null;
   section: SectionKey | null;
@@ -81,6 +90,10 @@ export interface DeepAuditDerivedInputs {
   compareSelectionTokens: string[];
   /** A bounded foreground sample, never evidence that the entire catalogue rendered. */
   sampledProducts: DeepAuditExactProduct[];
+  /** First seeded mortgage comparison scope for list-latency measurement. */
+  mortgageScopePrimary: DeepAuditMortgageScope | null;
+  /** Second seeded scope so re-filter cost is measured after the first apply. */
+  mortgageScopeAlternate: DeepAuditMortgageScope | null;
   sampling: {
     seed: string;
     method: 'section-provider-product-tier';
@@ -257,6 +270,42 @@ function shuffled<T>(values: readonly T[], random: () => number): T[] {
 }
 
 /** Give small banks the same opportunity as banks publishing many rate tiers. */
+function sampleFacetSubset(options: readonly string[], random: () => number): string[] {
+  if (!options.length) return [];
+  const pool = shuffled(options, random);
+  const count = 1 + Math.floor(random() * Math.min(2, pool.length));
+  return pool.slice(0, Math.max(1, Math.min(count, pool.length)));
+}
+
+/** Deterministic amount/LVR/facet draws for Rates mortgage comparison latency. */
+function sampleMortgageScope(rows: readonly RateRow[], random: () => number): DeepAuditMortgageScope {
+  const purposes = new Set<string>();
+  const repayments = new Set<string>();
+  for (const row of rows) {
+    const purpose = canonicalPurpose(row.loan_purpose);
+    if (purpose?.trim()) purposes.add(purpose);
+    const repayment = canonicalRepayment(row.ribbon_repayment_type ?? row.repayment_type);
+    if (repayment?.trim()) repayments.add(repayment);
+  }
+  const purposePool = purposes.size ? [...purposes] : ['OWNER_OCCUPIED', 'INVESTMENT'];
+  const repaymentPool = repayments.size ? [...repayments] : ['PRINCIPAL_AND_INTEREST', 'INTEREST_ONLY'];
+  return {
+    loanAmount: String(150_000 + Math.floor(random() * 1_850_001)),
+    lvr: String(50 + Math.floor(random() * 46)),
+    loanPurposes: sampleFacetSubset(purposePool, random),
+    repaymentTypes: sampleFacetSubset(repaymentPool, random),
+  };
+}
+
+function mortgageScopeParameters(scope: DeepAuditMortgageScope | null): Record<string, DeepAuditParameter> {
+  return scope ? {
+    loanAmount: scope.loanAmount,
+    lvr: scope.lvr,
+    loanPurposes: scope.loanPurposes,
+    repaymentTypes: scope.repaymentTypes,
+  } : {};
+}
+
 function stratifiedRows(rows: RateRow[], random: () => number): RateRow[] {
   const providers = new Map<string, Map<string, RateRow[]>>();
   for (const row of rows) {
@@ -347,6 +396,9 @@ export function deriveDeepAuditInputs(
     options.includeNonStandard ?? false, options.detailsProducts,
   )[0] : null;
   const sampledProducts = sections.flatMap(section => samples.get(section)!);
+  const mortgageRows = core?.sections.Mortgage?.rates ?? [];
+  const mortgageScopePrimary = mortgageRows.length ? sampleMortgageScope(mortgageRows, random) : null;
+  const mortgageScopeAlternate = mortgageRows.length ? sampleMortgageScope(mortgageRows, random) : null;
   return {
     datasetDate: core?.run_date ?? null,
     section: chosenSection,
@@ -359,6 +411,8 @@ export function deriveDeepAuditInputs(
     compareSelectionTokens: primaryProduct && secondaryProduct
       ? [primaryProduct.selectionToken, secondaryProduct.selectionToken] : [],
     sampledProducts,
+    mortgageScopePrimary,
+    mortgageScopeAlternate,
     sampling: {
       seed, method: 'section-provider-product-tier', filterReady,
       eligibleProducts: filterReady ? eligibleProducts.size : null,
@@ -536,6 +590,43 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 1, semanticActionId: 'search.sort.open', stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'search.sort.cancel', stateImpact: 'local-only' },
     { depth: 1, semanticActionId: 'search.section.next', stateImpact: 'local-only' },
+  ]);
+
+  const missingMortgageScope = inputs.mortgageScopePrimary && inputs.mortgageScopeAlternate
+    ? null
+    : 'No Mortgage rates are available for comparison-scope latency';
+  scenario(templates, 'route.rates-mortgage-scope', {
+    expectedPath: '/browse',
+    expectedSurface: 'rates.results',
+    readiness: ['app', 'data', 'details', 'suitability', 'list'],
+    skipReason: missingCore ?? missingMortgageScope,
+    skipWhen: ['Core data is unavailable', 'Mortgage rates are unavailable'],
+    skipExplanation: 'Mortgage comparison scope applies seeded amount, LVR and facets then waits for listed results.',
+  }, [
+    { depth: 0, semanticActionId: 'search.open', parameters: { section: 'Mortgage' } },
+    {
+      depth: 1,
+      semanticActionId: 'search.mortgage.scope.apply.0',
+      parameters: mortgageScopeParameters(inputs.mortgageScopePrimary),
+      stateImpact: 'local-only',
+      optional: true,
+      skipReason: missingMortgageScope,
+    },
+    {
+      depth: 1,
+      semanticActionId: 'search.mortgage.scope.apply.1',
+      parameters: mortgageScopeParameters(inputs.mortgageScopeAlternate),
+      stateImpact: 'local-only',
+      optional: true,
+      skipReason: missingMortgageScope,
+    },
+    {
+      depth: 1,
+      semanticActionId: 'search.mortgage.scope.clear',
+      stateImpact: 'local-only',
+      optional: true,
+      skipReason: missingMortgageScope,
+    },
   ]);
 
   scenario(templates, 'route.market', {
