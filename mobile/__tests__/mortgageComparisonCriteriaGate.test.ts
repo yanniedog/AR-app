@@ -101,4 +101,9 @@ test('Rates mortgage criteria require LVR, purpose, and repayment; amount stays 
     { loanPurposes: ['OO'], repaymentTypes: ['PI'] },
   )).toBe(true);
   expect(mortgageComparisonMatch(midBand, { loanAmount: '', lvr: '71% ' })).toBe('listed');
+  // Invalid LVR/amount with facets selected is not "incomplete" — callers surface invalid.
+  expect(mortgageComparisonCriteriaReady(
+    { loanAmount: '', lvr: '101' },
+    { loanPurposes: ['OO'], repaymentTypes: ['PI'] },
+  )).toBe(false);
 });

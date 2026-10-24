@@ -43,6 +43,7 @@ import {
   useMortgageComparison,
   mortgageComparisonRows,
   mortgageComparisonCriteriaReady,
+  mortgageComparisonInputsInvalid,
   clearMortgageComparison,
 } from '../../data/mortgageComparison';
 import { EmptyState, IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../../components/feedback';
@@ -176,6 +177,7 @@ export default function RatesWorkspace() {
   // are set. Empty criteria previously ran an identity pass over every row.
   const mortgageCriteriaReady = section !== 'Mortgage'
     || mortgageComparisonCriteriaReady(mortgageInputs, mortgageFilters);
+  const mortgageInputsInvalid = section === 'Mortgage' && mortgageComparisonInputsInvalid(mortgageInputs);
   const scenarioFor = useCallback((selected: SectionKey, row?: RateRow) => publicScenarioForRow(row, catalogue, mortgageComparisonScenario(selected,
     publicRateScenario(selected, scenario, prefs.profileFilters, row), mortgageInputs, mortgageFilters)), [catalogue, scenario, prefs.profileFilters, mortgageInputs, mortgageFilters]);
   const rowScenario = useCallback((row: RateRow) => scenarioFor(section, row), [scenarioFor, section]);
@@ -403,7 +405,12 @@ export default function RatesWorkspace() {
       return { rows: baseRows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
     }
     if (!mortgageCriteriaReady) {
-      return { rows: [] as RateRow[], unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
+      return {
+        rows: [] as RateRow[],
+        unverified: 0,
+        unverifiedRows: new WeakSet<RateRow>(),
+        invalid: mortgageInputsInvalid,
+      };
     }
     // Scope was applied to the full priced catalogue; re-apply hierarchy/path.
     const scoped = new Set(baseRows);
@@ -417,7 +424,7 @@ export default function RatesWorkspace() {
       }
     }
     return { rows, unverified, unverifiedRows, invalid: publicPricing.mortgageScope.invalid };
-  }, [section, baseRows, publicPricing.mortgageScope, mortgageCriteriaReady]);
+  }, [section, baseRows, publicPricing.mortgageScope, mortgageCriteriaReady, mortgageInputsInvalid]);
   // Skip facet option scans over the full catalogue while Mortgage criteria are incomplete.
   const filterOptions = useSearchFilterOptions(
     mortgageSearchActive ? baseRows : EMPTY_RATE_ROWS,
@@ -964,7 +971,7 @@ export default function RatesWorkspace() {
               </View>
             ) : section === 'Mortgage' && availability === 'listed' && !mortgageCriteriaReady ? (
               <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
-                <EmptyState title="Inputs incomplete" />
+                <EmptyState title={mortgageInputsInvalid ? 'Invalid comparison inputs' : 'Inputs incomplete'} />
               </View>
             ) : searchPending ? (
               <LoadingRows />

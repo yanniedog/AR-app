@@ -22,6 +22,11 @@ function inputs(value: MortgageComparisonInputs) {
     || !!lvrText && (lvr === null || !Number.isFinite(lvr) || lvr <= 0 || lvr > 100) };
 }
 
+/** True when loan amount or LVR text is present but not a usable comparison value. */
+export function mortgageComparisonInputsInvalid(value: MortgageComparisonInputs): boolean {
+  return inputs(value).invalid;
+}
+
 /** Rates Mortgage search runs only after LVR + purpose + repayment are set. Loan amount stays optional. */
 export function mortgageComparisonCriteriaReady(
   value: MortgageComparisonInputs,
