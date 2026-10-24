@@ -1,0 +1,32 @@
+{
+  "version": "1.0.248",
+  "releaseTag": "app-arm-v1.0.248",
+  "date": "2026-10-24",
+  "summaryBullets": [
+    "Fix updater restarting partially downloaded APKs (#436)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Fix updater restarting partially downloaded APKs (#436)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.248"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.247"
+        }
+      ]
+    }
+  ]
+}
