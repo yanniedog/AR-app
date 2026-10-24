@@ -868,6 +868,7 @@ async function runDeepAuditStepBody(
         surfaceIds: [source.id],
         onlyKinds: PRE_ACTION_READINESS_KINDS,
         quietWindowMs: READINESS_QUIET_WINDOW_MS,
+        creditExistingStableTime: true,
         reuseSettledEvidence: true,
         timeoutMs: readinessTimeoutMs(watchdog),
         signal: preActionAbort.signal,
@@ -1034,6 +1035,7 @@ async function runDeepAuditStepBody(
         ? { changedRender: { surfaceId: actionSource, previousRevision: renderRevisionBefore } }
         : {}),
       quietWindowMs: READINESS_QUIET_WINDOW_MS,
+        creditExistingStableTime: true,
       timeoutMs: readinessTimeoutMs(watchdog),
       signal: readinessAbort.signal,
     });
@@ -2439,6 +2441,7 @@ export async function runJourney(
         pauseState: { getPaused: () => getPerformanceAuditState().paused, subscribe: subscribePerformanceAudit },
         surfaceIds: [journey.expectedSurface],
         quietWindowMs: READINESS_QUIET_WINDOW_MS,
+        creditExistingStableTime: true,
         timeoutMs: readinessTimeoutMs(watchdog),
         signal: destinationReadinessAbort.signal,
       });
@@ -2539,6 +2542,7 @@ export async function runJourney(
         pauseState: { getPaused: () => getPerformanceAuditState().paused, subscribe: subscribePerformanceAudit },
         surfaceIds: ['audit.progress'],
         quietWindowMs: READINESS_QUIET_WINDOW_MS,
+        creditExistingStableTime: true,
         timeoutMs: readinessTimeoutMs(watchdog),
         signal: originReadinessAbort.signal,
       });
@@ -2865,7 +2869,28 @@ export function PerformanceAuditRunner() {
         );
       };
 
-      const record = async (rawCheck: AuditCheck) => {
+      const pendingStoredChecks: AuditCheck[] = [];
+      const flushRecordedChecks = async () => {
+        if (!pendingStoredChecks.length) return;
+        // One physical write can durably store the small completed link batch.
+        // Progress advances only after that write succeeds for every member.
+        await awaitStoredCheckFlush();
+        for (const check of pendingStoredChecks) {
+          watchdog.recordStoredCheck();
+          lastStoredCheckAt = new Date().toISOString();
+          completed += 1;
+          const recordedMs = activeDurationMs();
+          if (/^external-link-\d+$/.test(check.id)) {
+            etaCompletedLinks += 1;
+            etaLinkElapsedMs += Math.max(0, recordedMs - etaLastRecordedMs);
+          }
+          etaLastRecordedMs = recordedMs;
+          markPerformanceAuditCheckStored(completed, total, check.label, lastStoredCheckAt);
+        }
+        pendingStoredChecks.length = 0;
+      };
+
+      const record = async (rawCheck: AuditCheck, deferDurability = false) => {
         assertSessionActive(watchdog);
         // Keep canonical evidence intact. Only the scrolling journal is bounded;
         // a shared diagnosis must never silently inherit its text limits.
@@ -2877,18 +2902,8 @@ export function PerformanceAuditRunner() {
         evidenceBudget.retain(check);
         checks.push(check);
         logAuditCheck(app, sessionId, check);
-        // Only durable completed-check progress keeps the hang watchdog alive.
-        await awaitStoredCheckFlush();
-        watchdog.recordStoredCheck();
-        lastStoredCheckAt = new Date().toISOString();
-        completed += 1;
-        const recordedMs = activeDurationMs();
-        if (/^external-link-\d+$/.test(check.id)) {
-          etaCompletedLinks += 1;
-          etaLinkElapsedMs += Math.max(0, recordedMs - etaLastRecordedMs);
-        }
-        etaLastRecordedMs = recordedMs;
-        markPerformanceAuditCheckStored(completed, total, check.label, lastStoredCheckAt);
+        pendingStoredChecks.push(check);
+        if (!deferDurability) await flushRecordedChecks();
       };
 
       const runSetupStage = async <T,>(
@@ -3143,6 +3158,7 @@ export function PerformanceAuditRunner() {
         const recordContinuable = async (
           label: string,
           run: (stepWatchdog: PerformanceAuditInactivityWatchdog) => Promise<AuditCheck>,
+          deferDurability = false,
         ): Promise<boolean> => {
           const recoverAfterFailure = async () => {
             try {
@@ -3240,7 +3256,7 @@ export function PerformanceAuditRunner() {
           try {
             // Durable check storage/logging failures remain fatal — only the step
             // body itself is continuable after a recorded fail.
-            await record(check);
+            await record(check, deferDurability);
           } catch (caught) {
             rethrowAuditControl(caught);
             throw caught;
@@ -3427,8 +3443,9 @@ export function PerformanceAuditRunner() {
           for (let index = 0; index < pending.length; index += 1) {
             const label = `Checking external link ${offset + index + 1} of ${externalLinks.length}`;
             updatePerformanceAuditProgress(completed, total, label);
-            await recordContinuable(label, () => pending[index]);
+            await recordContinuable(label, () => pending[index], true);
           }
+          await flushRecordedChecks();
         }
 
         for (const section of SECTION_ORDER) {

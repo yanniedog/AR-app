@@ -80,6 +80,12 @@ function hobartParts(ms: number): HobartParts {
   return { year, month, day, hour, minute };
 }
 
+/** Calendar day used by audit coverage, independent of the device timezone. */
+export function hobartCalendarDate(nowMs = Date.now()): string {
+  const { year, month, day } = hobartParts(nowMs);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 function hobartLocalToUtcMs(year: number, month: number, day: number, hour: number, minute = 0): number {
   const target = Date.UTC(year, month - 1, day, hour, minute, 0);
   const { probeFmt: fmt } = getFormatters();

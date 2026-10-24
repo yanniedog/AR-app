@@ -13,6 +13,7 @@ import type { AppHealthDomain } from '../src/lib/appHealth/types';
 import { DebugLogUploadStatus } from '../src/components/DebugLogUploadStatus';
 import { BackgroundWorkDiagnosis } from '../src/components/BackgroundWorkDiagnosis';
 import { AuditCatalogueCoverage } from '../src/components/AuditCatalogueCoverage';
+import { AuditHistoryCoverage } from '../src/components/AuditHistoryCoverage';
 import { AuditCheckSymbol, AuditOutcomeSymbols } from '../src/components/AuditOutcomeSymbols';
 import {
   getDebugLogUploadSnapshot,
@@ -351,6 +352,8 @@ function PerformanceAuditScreenInner() {
           <InfoRow label="Report" value={completion.gaps.invalidCoverageReports || completion.gaps.invalidHealthReports
             ? report.sessionId === state.sessionId ? 'Partial' : 'Saved'
             : auditReportCompletionLabel(report, state)} />
+          <InfoRow label="Version" value={uiIdentifier(report.app.appVersion)} />
+          <InfoRow label="Build" value={uiIdentifier(report.app.buildVersion)} />
           <InfoRow label="Finished" value={uiIdentifier(completion.finishedAt)} />
           <InfoRow label="Audit ID" value={uiIdentifier(completion.auditId)} />
           <InfoRow label="Details" value={uiLabel(completion.detailsComplete ? 'Complete' : 'Incomplete')} />
@@ -368,6 +371,7 @@ function PerformanceAuditScreenInner() {
             void uploadCompletedPerformanceAudit(report).catch(() => Alert.alert(uiLabel('Report unavailable')));
           }} /> : null}
         </Card>
+        <AuditHistoryCoverage report={report} />
         {completion.failurePositions.length ? <Disclosure title="Failure positions" open={failuresOpen} onToggle={() => setFailuresOpen(!failuresOpen)}>
           {completion.failurePositions.map((failure, index) => <Card key={`${failure.source}:${failure.position}:${index}`} style={{gap:4}}>
             <InfoRow label="Position" value={uiCount(failure.position)} />

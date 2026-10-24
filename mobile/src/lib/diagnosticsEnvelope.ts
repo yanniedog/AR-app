@@ -1,7 +1,7 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { toPublicAppHealthReport } from './appHealth';
 import { PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from './performanceAuditSetup';
-import { encodeCompactDiagnosticJson } from './compactDiagnosticJson';
+import { encodeCompressedDiagnosticJson, MAX_COMPRESSED_DIAGNOSTIC_BYTES } from './compactDiagnosticJson';
 import { publicAuditDiagnostic, publicAuditError } from './performanceAuditDiagnostic';
 import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
 import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
@@ -234,15 +234,17 @@ export function createPublicPerformanceAuditReport(report: PerformanceAuditRepor
   const publicReport = buildDeidentifiedPerformanceAudit(report);
   const completion = publicReport.completion;
   // Keep the run identity and result readable at the top of the hosted file;
-  // dictionary encoding remains lossless for all detailed evidence below it.
-  const body = encodeCompactDiagnosticJson({ ...publicReport, diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId) },
-    { audit: { auditId: completion.auditId, finishedAt: completion.finishedAt,
+  // Gzip retains every field and occurrence; its digest and byte length verify
+  // the complete decoded evidence independently of the exact upload read-back.
+  const body = encodeCompressedDiagnosticJson({ ...publicReport, diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId) },
+    { audit: { auditId: completion.auditId, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
+    finishedAt: completion.finishedAt,
     outcome: completion.outcome, collectionComplete: completion.collectionComplete,
     coverageComplete: completion.coverageComplete, detailsComplete: completion.detailsComplete,
     performanceCheckCount: completion.performanceCheckCount, healthCheckCount: completion.healthCheckCount,
     failureCount: completion.failurePositions.length,
     timingFailureCount: completion.failurePositions.filter(failure => failure.category === 'timing').length } });
-  if (new TextEncoder().encode(body).length > 2 * 1024 * 1024) {
+  if (new TextEncoder().encode(body).length > MAX_COMPRESSED_DIAGNOSTIC_BYTES) {
     throw new Error('The deidentified report exceeds the public upload limit.');
   }
   return body;

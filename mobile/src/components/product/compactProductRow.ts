@@ -4,7 +4,7 @@ import { uiConditionRange, uiListedLvrRange } from '../../lib/financialUiCopy';
 import { uiCount, uiJoin, uiLabel, uiMoney, type UiCopy, type UiText } from '../../lib/uiCopy';
 import type { RateRow, SectionKey } from '../../types';
 
-export const COMPACT_ROW = { action: 48, gap: 4, fontSize: 14, icon: 12, minHeight: 56 } as const;
+export const COMPACT_ROW = { action: 48, gap: 4, fontSize: 14, icon: 16, minHeight: 56 } as const;
 /** The row's text determines its height. Artwork fits inside that height, never grows it. */
 export function compactBankLogoFrame(width: number, rowHeight: number, fontScale: number, border = 0) {
   const inset = 3;
@@ -95,64 +95,23 @@ export interface CompactProductRowLayout {
   readonly warningOnly: boolean;
 }
 
-/** A single rail, with no text scaling cap, numeric ellipsis or horizontal scroll. */
+/** Preserve every fact in a rail that can be scrubbed at any text size. */
 export function compactProductRowLayout(width: number, fontScale: number, primary: UiText,
   secondary: UiText | null, facet: CompactProductFacet, statusIcons: number,
-  measuredPrimary = 0, measuredSecondary = 0, tier: UiText | null = null, hasPeers = false,
-  logoWidth: number = COMPACT_ROW.action): CompactProductRowLayout {
-  const main = Math.max(0, width - logoWidth - COMPACT_ROW.action - 2 * COMPACT_ROW.gap);
-  const primaryTextWidth = Math.max(compactFactWidth(primary, fontScale), measuredPrimary);
+  measuredPrimary = 0, measuredSecondary = 0, tier: UiText | null = null,
+  logoWidth: number = COMPACT_ROW.action, productName: UiText = uiLabel('')): CompactProductRowLayout {
+  const scale = Math.max(1, fontScale);
+  const primaryWidth = Math.max(compactFactWidth(primary, scale), measuredPrimary) + COMPACT_ROW.icon + 6;
   const secondaryWidth = secondary === null ? 0
-    : Math.max(compactFactWidth(secondary, fontScale), measuredSecondary) + COMPACT_ROW.icon + 2;
-  // Only an actual glyph wider than the entire rail is unsupported. Optional
-  // identity/tier/status content must never turn a fitting rate into a warning.
-  if (primaryTextWidth > main) return { main, identity: 0, primary: main, secondary: secondaryWidth,
-    showSecondary: false, facet: 0, showFacetValue: false, showTier: false, showFacetSymbol: false,
-    combinedStatus: true, showStatuses: false, showPrimaryIcon: false, warningOnly: true };
-  const categoryWidth = facet.kind === 'LVR' ? compactFactWidth(uiLabel('%'), fontScale) : COMPACT_ROW.icon;
-  const symbolWidth = categoryWidth + statusIcons * (COMPACT_ROW.icon + 2);
-  const indexWidth = tier === null ? 0 : compactFactWidth(tier, fontScale);
-  let showSecondary = secondary !== null
-    && main >= primaryTextWidth + 14 + secondaryWidth + COMPACT_ROW.gap + symbolWidth
-      + (hasPeers ? indexWidth + 2 : 0) + 2 * COMPACT_ROW.gap + 48;
-  const metricsWidth = primaryTextWidth + 14 + (showSecondary ? secondaryWidth + COMPACT_ROW.gap : 0);
-  const availableFacet = main - metricsWidth - 2 * COMPACT_ROW.gap - 80;
-  const exactFacetWidth = compactFactWidth(facet.value, fontScale) + statusIcons * (COMPACT_ROW.icon + 2);
-  let showFacetValue = facet.known && exactFacetWidth + (hasPeers ? indexWidth + 2 : 0) <= availableFacet;
-  let showTier = tier !== null && (hasPeers || !showFacetValue);
-  let showFacetSymbol = true, combinedStatus = false, showPrimaryIcon = true, showStatuses = true;
-  const minimumIdentity = Math.max(24, COMPACT_ROW.fontSize * fontScale);
-  const sizes = () => {
-    const parts = [showFacetValue ? compactFactWidth(facet.value, fontScale) : showFacetSymbol ? categoryWidth : 0,
-      !showStatuses ? 0 : combinedStatus ? statusIcons ? COMPACT_ROW.icon : 0 : statusIcons * (COMPACT_ROW.icon + 2) - (statusIcons ? 2 : 0),
-      showTier ? indexWidth : 0].filter(value => value > 0);
-    const facetWidth = parts.reduce((sum, value) => sum + value, 0) + Math.max(0, parts.length - 1) * 2;
-    const primaryWidth = primaryTextWidth + (showPrimaryIcon ? 14 : 0);
-    return { primaryWidth, facetWidth, identity: main - primaryWidth
-      - (showSecondary ? secondaryWidth + COMPACT_ROW.gap : 0) - facetWidth
-      - (facetWidth ? 2 : 1) * COMPACT_ROW.gap };
-  };
-  if (sizes().identity < minimumIdentity && showFacetValue) { showFacetValue = false; showTier = tier !== null; }
-  if (sizes().identity < minimumIdentity) showSecondary = false;
-  if (sizes().identity < minimumIdentity) combinedStatus = true;
-  if (sizes().identity < minimumIdentity) showFacetSymbol = false;
-  if (sizes().identity < minimumIdentity) showPrimaryIcon = false;
-  if (sizes().identity < minimumIdentity) showTier = false;
-  // A caution that fits beside the full rate takes priority over a clipped name.
-  if (sizes().identity < minimumIdentity && statusIcons > 0
-    && primaryTextWidth + COMPACT_ROW.icon + COMPACT_ROW.gap <= main) {
-    return { main, identity: 0, primary: main - COMPACT_ROW.icon - COMPACT_ROW.gap, secondary: secondaryWidth,
-      showSecondary: false, facet: COMPACT_ROW.icon, showFacetValue: false, showTier: false, showFacetSymbol: false,
-      combinedStatus: true, showStatuses: true, showPrimaryIcon: false, warningOnly: false };
-  }
-  if (sizes().identity < minimumIdentity) showStatuses = false;
-  const final = sizes();
-  // If a full rate needs the last name-cell pixels, give it the rail rather
-  // than clipping its text or leaving an empty cell's gap in the budget.
-  if (final.identity < minimumIdentity) return { main, identity: 0, primary: main, secondary: secondaryWidth,
-    showSecondary: false, facet: 0, showFacetValue: false, showTier: false, showFacetSymbol: false,
-    combinedStatus: true, showStatuses: false, showPrimaryIcon: false, warningOnly: false };
-  return { main, primary: final.primaryWidth, secondary: secondaryWidth, showSecondary,
-    identity: final.identity, facet: final.facetWidth, showFacetValue, showTier,
-    showFacetSymbol, combinedStatus, showStatuses, showPrimaryIcon, warningOnly: false };
+    : Math.max(compactFactWidth(secondary, scale), measuredSecondary) + COMPACT_ROW.icon + 6;
+  const facetWidth = compactFactWidth(facet.value, scale) + COMPACT_ROW.icon + 6
+    + statusIcons * (COMPACT_ROW.icon + 6)
+    + (tier === null ? 0 : compactFactWidth(tier, scale) + COMPACT_ROW.icon + 6);
+  const identity = Math.max(160 * scale, compactFactWidth(productName, scale) + 8);
+  const content = primaryWidth + secondaryWidth + facetWidth + identity
+    + (secondary === null ? 2 : 3) * COMPACT_ROW.gap;
+  return { main: Math.max(content, width - logoWidth - COMPACT_ROW.action - 2 * COMPACT_ROW.gap),
+    identity, primary: primaryWidth, secondary: secondaryWidth, showSecondary: secondary !== null,
+    facet: facetWidth, showFacetValue: true, showTier: tier !== null, showFacetSymbol: true,
+    combinedStatus: false, showStatuses: true, showPrimaryIcon: true, warningOnly: false };
 }

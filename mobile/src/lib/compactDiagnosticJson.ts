@@ -1,3 +1,22 @@
+import { compressCatalogue, decompressCatalogue } from '../data/historicalBankRateCatalogueCompression';
+
+// Audit pastes have a smaller trust/resource boundary than historical archives.
+// Apply this before the shared decoder can allocate its declared output buffer.
+export const MAX_DECODED_DIAGNOSTIC_BYTES = 32 * 1024 * 1024;
+export const MAX_COMPRESSED_DIAGNOSTIC_BYTES = 2 * 1024 * 1024;
+
+/** Complete JSON compressed with a fixed gzip timestamp so retries reuse the same
+ * content hash and deletion receipt. Compression follows deidentification. */
+export function encodeCompressedDiagnosticJson(value: Record<string, unknown>, header?: Record<string, unknown>): string {
+  const compressed = compressCatalogue(value, { deterministic: true });
+  if (compressed.bytes > MAX_DECODED_DIAGNOSTIC_BYTES) throw new Error('The diagnostic report exceeds the decoded audit budget.');
+  const body = JSON.stringify({ ...header, format: 'ar-audit-gzip-v1',
+    encoding: 'gzip_base64=base64(gzip(UTF-8 JSON)); sha256=SHA-256(decoded UTF-8); bytes=decoded UTF-8 length',
+    ...compressed });
+  if (new TextEncoder().encode(body).length > MAX_COMPRESSED_DIAGNOSTIC_BYTES) throw new Error('The diagnostic report exceeds the public upload limit.');
+  return body;
+}
+
 /** Lossless JSON dictionary encoding. Numbers, false and null retain their meaning. */
 export function encodeCompactDiagnosticJson(value: unknown, header?: Record<string, unknown>): string {
   const strings: string[] = [];
@@ -52,9 +71,19 @@ export function encodeCompactDiagnosticJson(value: unknown, header?: Record<stri
     strings, templates, data: compact(encoded) });
 }
 
-/** Also accepts pre-dictionary uploads so existing pasted reports stay readable. */
+/** Accept gzip, dictionary and plain reports so existing pasted evidence stays readable. */
 export function decodeCompactDiagnosticJson(text: string): unknown {
   const input = JSON.parse(text);
+  if (input?.format === 'ar-audit-gzip-v1') {
+    if (!Number.isSafeInteger(input.bytes) || input.bytes < 1 || input.bytes > MAX_DECODED_DIAGNOSTIC_BYTES ||
+      text.length > MAX_COMPRESSED_DIAGNOSTIC_BYTES || new TextEncoder().encode(text).length > MAX_COMPRESSED_DIAGNOSTIC_BYTES) {
+      throw new Error('Invalid compressed diagnostic report');
+    }
+    const decoded = decompressCatalogue(input);
+    // A diagnostic is an object; null is also the codec's invalid-input result.
+    if (!decoded || typeof decoded !== 'object') throw new Error('Invalid compressed diagnostic report');
+    return decoded;
+  }
   if (input?.format !== 'ar-audit-dict-v1') return input;
   if (!Array.isArray(input.strings) || !input.strings.every((value: unknown) => typeof value === 'string')) throw new Error('Invalid diagnostic dictionary');
   const stringAt = (index: unknown): string => {

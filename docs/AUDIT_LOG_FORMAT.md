@@ -11,13 +11,21 @@ Local-only network violation records remain local. The application journal and
 private input values are not needed to reconstruct the audit's check results.
 
 Each hosted file starts with a readable `audit` header containing the audit's
-hashed reference, UTC finish timestamp, outcome, check counts and failure count
+hashed reference, app version/build, UTC finish timestamp, outcome, check counts and failure count
 (including a separate timing-failure count). The decoded report's `completion`
 contains the same identity and timestamp plus every failure's one-based result
 position, source (`performance` or `health`), fixed check identity, diagnostic
 stage and timing/functional classification. Positions are relative to each
 source's check array. A copied, verified URL identifies these exact report bytes;
 the timestamp describes the measurement's finish, not a later upload or copy.
+
+Historical gap lists retain every date, fixed reason, section and finite signed
+count. Optional provider/product identities become consistent opaque aliases. The nested
+JSON strings have their own validation boundary: malformed records retain one
+opaque invalid-evidence marker per record, while malformed lists declare an
+unknown record count. Invalid nested historical evidence makes coverage and
+details incomplete and identifies its health-check position; it cannot silently
+become an empty gap list or a complete report.
 
 `collectionComplete` means every declared result is retained. `coverageComplete`
 additionally requires execution without skipped/unavailable/not-run checks,
@@ -49,7 +57,20 @@ include the general application journal, or publish raw private strings. The
 `privacyBoundary` records these limits. Missing evidence and incomplete coverage
 remain explicit; a verified upload proves byte integrity, not successful checks.
 
-New uploads use `ar-audit-dict-v1`. The payload contains its own encoding legend:
+New uploads use `ar-audit-gzip-v1`. The readable `audit` header precedes a
+`gzip_base64` archive containing the full deidentified UTF-8 JSON report. `bytes`
+declares the decoded byte length and `sha256` verifies every decoded byte before
+the decoder returns evidence. Audit archives reject decoded lengths above 32 MiB
+and complete UTF-8 envelopes above 2 MiB before invoking the shared decoder or
+allocating its declared output buffer. Encoding enforces the same limits and
+never shortens evidence to fit. Historical catalogues retain their separate
+128 MiB capacity. Gzip uses a fixed timestamp so retries and
+restored reports have the same content hash and reuse their saved upload receipt.
+Compression happens after deidentification; compressed private text is never a
+substitute for redaction. Exact full-text GET read-back must still succeed before
+the app reports a new upload as verified or copies its URL.
+
+Existing `ar-audit-dict-v1` reports remain supported:
 
 - `[n]` refers to `strings[n]`.
 - `["a", ...items]` is an array.
@@ -57,7 +78,7 @@ New uploads use `ar-audit-dict-v1`. The payload contains its own encoding legend
 - `["r", n]` refers to `templates[n]`, a repeated object definition.
 
 `decodeCompactDiagnosticJson` in `mobile/src/lib/compactDiagnosticJson.ts` restores
-ordinary JSON and also accepts older plain JSON reports. No numeric rounding,
+ordinary JSON from gzip, dictionary and older plain JSON reports. No numeric rounding,
 sampling, check removal or evidence truncation occurs in this encoding. Uploads
 that exceed the byte limit are rejected rather than replaced with summaries.
 
@@ -86,5 +107,25 @@ changing emitters. Canonical CI checks that this schema is current. This keeps
 new technical timing/count/status evidence from disappearing behind the narrower
 operating-system share allowlist.
 
-The October 21 sample round-trips all 2,658 checks from 774,015 to 308,546
-characters (60.1% smaller), before adding newly captured diagnostic evidence.
+The October 24 supplied audit round-trips all 2,706 performance checks and their
+retained diagnostic records from 2,005,816 bytes to 345,568 bytes (82.8% smaller
+than its dictionary upload), preserving the exact 4,836,828-byte decoded JSON.
+This is a local encoding/read-back comparison, without creating a public copy.
+
+Daily coverage reconciles loaded historical observations independently against
+processed bank statistics and the chart projection for each category, bank and
+calendar date through the audit's current Hobart day. Missing dates, missing
+sources, count/value mismatches and missing or unexpected chart points remain
+individual gap records. Today's catalogue checks retain the selector, details
+and search-index reconciliation. Retained product series are checked against
+their chart projection, current headline rates and available historical source
+projections; explicit null observations remain gaps. These checks cannot certify unpublished
+upstream records or unsampled screen pixels: rendered coverage stays explicitly
+unverified outside the foreground journeys. The audit screen reads the saved
+run's version, build and gap evidence, rather than a later installed version.
+
+Readiness waits may credit stability already observed on unchanged foreground
+surfaces; actions, remounts and lifecycle changes invalidate that evidence. Link
+checks retain separate results while groups of four share a physical log flush.
+The stored-check watchdog advances only after successful durable persistence.
+Neither optimization changes the 10-second step limit or planned check inventory.

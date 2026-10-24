@@ -115,6 +115,7 @@ describe('deidentified diagnostics privacy boundary', () => {
       } });
     for (const secret of ['private-generation-id', 'private-revision', '/private/account', '123456', 'private.invalid']) {
       expect(publicBody).not.toContain(secret);
+      expect(JSON.stringify(decodeCompactDiagnosticJson(publicBody))).not.toContain(secret);
     }
   });
 

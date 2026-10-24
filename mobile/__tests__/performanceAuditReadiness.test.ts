@@ -132,6 +132,32 @@ describe('PerformanceAuditReadinessRegistry', () => {
     await rejected;
   });
 
+  it('credits foreground stability already elapsed while the route was settling', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('elapsed-stability');
+    const surface = registry.registerSurface({ id: 'screen', probes: [{ id: 'data', kind: 'data', status: 'ready' }] })!;
+    clock.advanceBy(500);
+    let done = false;
+    const wait = registry.waitForReady({ surfaceIds: ['screen'], quietWindowMs: 650,
+      creditExistingStableTime: true }).then(() => { done = true; });
+    clock.advanceBy(149);
+    await Promise.resolve();
+    expect(done).toBe(false);
+    clock.advanceBy(1);
+    await wait;
+    expect(clock.now()).toBe(650);
+    registry.updateProbe(surface, 'data', { actualCount: 1 });
+    registry.invalidateSettledReadiness();
+    let resumed = false;
+    const fresh = registry.waitForReady({ quietWindowMs: 650, creditExistingStableTime: true }).then(() => { resumed = true; });
+    clock.advanceBy(649);
+    await Promise.resolve();
+    expect(resumed).toBe(false);
+    clock.advanceBy(1);
+    await fresh;
+  });
+
   function settledFixture() {
     const clock = new FakeClock();
     const registry = new PerformanceAuditReadinessRegistry(clock);
