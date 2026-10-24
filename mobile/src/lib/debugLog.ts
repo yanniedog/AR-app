@@ -1773,9 +1773,12 @@ export async function uploadDebugLog(
   if (options.onContentHosted) await options.onContentHosted(baseResult);
 
   // Secondary: paste.rs holds only the content URL for a shorter share link.
+  // Bound independently so a slow shortener cannot block verification/copy of
+  // the already-persisted c-net content URL for the full attemptTimeoutMs.
+  const shortenerTimeoutMs = Math.min(timeoutMs, 8_000);
   attempts += 1;
   try {
-    const shortened = await runPasteRsAttempt(content.url, fetchImpl, timeoutMs);
+    const shortened = await runPasteRsAttempt(content.url, fetchImpl, shortenerTimeoutMs);
     if (shortened.truncated) {
       for (let cleanupAttempt = 0; cleanupAttempt < 2; cleanupAttempt += 1) {
         try {

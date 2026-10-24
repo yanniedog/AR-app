@@ -21,6 +21,7 @@ import {
   PASTE_RS_URL,
   RingBuffer,
   debugLog,
+  debugLogUploadShareUrl,
   deleteDebugLogUpload,
   deleteDebugLogUploadAndReceipt,
   formatEntry,
@@ -221,6 +222,15 @@ describe('uploadDebugLog', () => {
     status: 201,
     text: async () => JSON.stringify({ url: contentUrl, delete_key: 'delete-secret' }),
   };
+
+  it('prefers the paste.rs share URL over the content-host URL', () => {
+    expect(debugLogUploadShareUrl({
+      url: 'https://paste.c-net.org/content',
+      shareUrl: 'https://paste.rs/short',
+    })).toBe('https://paste.rs/short');
+    expect(debugLogUploadShareUrl({ url: 'https://paste.c-net.org/content' }))
+      .toBe('https://paste.c-net.org/content');
+  });
 
   it('uploads the full body to c-net then shortens only that URL via paste.rs', async () => {
     const mockFetch = jest
