@@ -31,12 +31,8 @@ function validCoverage(value: unknown): boolean {
     && typeof coverage.complete === 'boolean';
 }
 
-/** Completion and evidence retention are separate from whether checks passed. */
-export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
-  safeCheckId: (id: string) => string | null = id => id) {
-  const coverageValid = validCoverage(report.coverage);
-  const coverage = coverageValid ? report.coverage : undefined;
-  const healthValid = report.appHealth != null && validCoverage(report.appHealth.coverage)
+export function hasValidPerformanceAuditHealth(report: PerformanceAuditReport): boolean {
+  return report.appHealth != null && validCoverage(report.appHealth.coverage)
     && report.appHealth.summary != null && typeof report.appHealth.summary === 'object'
     && Array.isArray(report.appHealth.domains) && report.appHealth.domains.every(domain => domain != null
       && APP_HEALTH_DOMAINS.includes(domain.domain) && typeof domain.total === 'number')
@@ -44,6 +40,14 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
       && typeof check.id === 'string' && typeof check.code === 'string'
       && ['pass', 'warn', 'fail', 'unavailable', 'not-run'].includes(check.status)
       && check.metrics != null && typeof check.metrics === 'object' && !Array.isArray(check.metrics));
+}
+
+/** Completion and evidence retention are separate from whether checks passed. */
+export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
+  safeCheckId: (id: string) => string | null = id => id) {
+  const coverageValid = validCoverage(report.coverage);
+  const coverage = coverageValid ? report.coverage : undefined;
+  const healthValid = hasValidPerformanceAuditHealth(report);
   const health = healthValid ? report.appHealth : undefined;
   const healthChecks = health?.checks ?? [];
   let truncatedEvidenceFields = 0;

@@ -31,6 +31,9 @@ skipped, not-run, pending, missing readiness, absent schema-v7 health diagnosis
 and truncated evidence without private input text.
 Malformed optional coverage or health schemas in older recovery files are
 reported as invalid evidence, without deleting or rewriting the original report.
+Malformed health evidence stays in the hosted diagnostic log through the generic
+privacy visitor; its typed public health summary is null. Both share and upload
+retain the invalid-health/incomplete flags instead of failing preparation.
 Unknown private check identities remain null while their positions survive.
 Counts describe different overlapping facts and must not be added together.
 

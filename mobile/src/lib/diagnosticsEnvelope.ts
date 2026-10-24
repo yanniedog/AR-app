@@ -148,10 +148,11 @@ function safeDuration(check: AuditCheck): number | null {
  */
 export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport) {
   measureAuditEvidence(report);
+  const completion = buildPerformanceAuditCompletion(report, safeCheckId);
   return {
     schemaVersion: 1,
     kind: 'performance-audit',
-    completion: buildPerformanceAuditCompletion(report, safeCheckId),
+    completion,
     app: {
       version: report.app.appVersion,
       build: report.app.buildVersion,
@@ -203,7 +204,7 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
       diagnostic: publicAuditDiagnostic(check.diagnostic),
       error: publicAuditError(check.error, check.trace),
     })),
-    appHealth: report.appHealth ? toPublicAppHealthReport(report.appHealth) : null,
+    appHealth: report.appHealth && completion.gaps.invalidHealthReports === 0 ? toPublicAppHealthReport(report.appHealth) : null,
   };
 }
 

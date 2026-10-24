@@ -4,7 +4,7 @@ import { PUBLIC_AUDIT_ERROR_TYPES, publicAuditDiagnostic, publicAuditError } fro
 import { PUBLIC_AUDIT_METRIC_FIELDS } from './auditDiagnosticFields';
 import { buildDeepPerformanceAuditPlan } from './performanceAuditPlan';
 import { ANDROID_UPDATE_READINESS_AUDIT } from './performanceAuditCheckInventory';
-import { performanceAuditReference, publicAuditTimestamp } from './performanceAuditCompletion';
+import { hasValidPerformanceAuditHealth, performanceAuditReference, publicAuditTimestamp } from './performanceAuditCompletion';
 import { AUDIT_PRODUCER_ENUMS, AUDIT_PRODUCER_METRIC_FIELDS, AUDIT_PRODUCER_SCALARS, AUDIT_REGISTERED_ACTION_IDS, AUDIT_REQUIRED_ASSET_IDS, AUDIT_WORKER_TEXT } from './auditDiagnosticProducerFields';
 
 let planText: Map<string, Set<string>> | undefined;
@@ -182,5 +182,7 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
     appHealth: null }) as Record<string, unknown>;
   // This dedicated sanitizer owns a complete public schema; do not obscure its
   // quality counts or findings through a second, unrelated schema boundary.
-  return { ...retained, appHealth: report.appHealth ? toPublicAppHealthReport(report.appHealth) : null };
+  return { ...retained, appHealth: report.appHealth != null
+    ? hasValidPerformanceAuditHealth(report) ? toPublicAppHealthReport(report.appHealth) : visit(report.appHealth, 'appHealth', '.appHealth')
+    : null };
 }

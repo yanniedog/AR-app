@@ -1,6 +1,6 @@
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { buildPerformanceAuditCompletion, publicAuditTimestamp } from '../src/lib/performanceAuditCompletion';
-import { createPublicPerformanceAuditReport } from '../src/lib/diagnosticsEnvelope';
+import { createDeidentifiedDiagnosticsShare, createPublicPerformanceAuditReport } from '../src/lib/diagnosticsEnvelope';
 import { decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 import { APP_HEALTH_CHECK_CODES, finalizeAppHealthReport } from '../src/lib/appHealth';
 
@@ -216,3 +216,25 @@ test('capacity failures cannot claim complete diagnostic evidence even when all 
   expect(buildPerformanceAuditCompletion(report)).toMatchObject({ outcome: 'failed', detailsComplete: false,
     gaps: { evidenceCapacityFailures: 1 } });
 });
+
+test.each([{}, { coverage: {}, domains: 'private-domains', checks: [{ id: 'private-health-id', metrics: { account: 'private-account' } }] }])(
+  'malformed recovered health evidence %j remains shareable and fully represented through privacy aliases', malformed => {
+    const report = completeReport();
+    report.appHealth = malformed as never;
+    const share = JSON.parse(createDeidentifiedDiagnosticsShare(report).body);
+    const body = createPublicPerformanceAuditReport(report);
+    const decoded = decodeCompactDiagnosticJson(body) as any;
+    expect(share).toMatchObject({ appHealth: null, completion: { outcome: 'incomplete', detailsComplete: false,
+      gaps: { invalidHealthReports: 1, missingHealthReports: 1 } } });
+    expect(decoded.completion).toEqual(share.completion);
+    expect(decoded.diagnosticLog.appHealth).not.toBeNull();
+    expect(Object.keys(decoded.diagnosticLog.appHealth)).toHaveLength(Object.keys(malformed).length);
+    if ('checks' in malformed) expect(decoded.diagnosticLog.appHealth.checks).toMatchObject([
+      { id: expect.stringMatching(/^~private/), metrics: { account: expect.stringMatching(/^~private/) } },
+    ]);
+    for (const privateValue of ['private-domains', 'private-health-id', 'private-account']) {
+      expect(body).not.toContain(privateValue);
+      expect(JSON.stringify(share)).not.toContain(privateValue);
+    }
+    expect(report.appHealth).toBe(malformed);
+  });
