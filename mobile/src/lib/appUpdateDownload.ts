@@ -44,12 +44,12 @@ import { isPerformanceAuditActive } from './performanceAudit';
 
 const STORAGE_KEY = 'app-update-download-v1';
 const EXPLICIT_WAIT_STALL_MS = 3 * 60 * 1000;
-const APK_VERIFICATION_STALL_MS = 5 * 60 * 1000;
 
 let snapshot: ApkDownloadSnapshot = { ...IDLE_APK_DOWNLOAD };
 let hydrated = false;
 let hydratePromise: Promise<void> | null = null;
 let activeTask: DownloadTask | null = null;
+let activeTaskGeneration = 0;
 let activeDownloadWifiOnly: boolean | null = null;
 let currentProcessVerificationTaskId: string | null = null;
 let ensureInFlight: Promise<void> | null = null;
@@ -231,6 +231,11 @@ async function clearStaleFiles(keepFilename: string | null): Promise<void> {
 
 async function stopTaskQuietly(task: DownloadTask | null | undefined): Promise<void> {
   if (!task) return;
+  if (activeTask?.id === task.id) {
+    activeTaskGeneration += 1;
+    activeTask = null;
+    if (currentProcessVerificationTaskId === task.id) currentProcessVerificationTaskId = null;
+  }
   try {
     await task.stop();
   } catch {
@@ -259,8 +264,11 @@ async function stopMatchingTask(manifest: ApkManifest): Promise<void> {
 
 function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
   activeTask = task;
+  const generation = ++activeTaskGeneration;
+  const isCurrent = () => generation === activeTaskGeneration;
   task
     .begin(({ expectedBytes }) => {
+      if (!isCurrent()) return;
       const now = new Date().toISOString();
       void persist({
         ...snapshot,
@@ -281,6 +289,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
       );
     })
     .progress(({ bytesDownloaded, bytesTotal }) => {
+      if (!isCurrent()) return;
       const progressed = bytesDownloaded > snapshot.bytesWritten;
       void persist({
         ...snapshot,
@@ -297,6 +306,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
       });
     })
     .done(({ location, bytesDownloaded, bytesTotal }) => {
+      if (!isCurrent() || currentProcessVerificationTaskId === task.id) return;
       currentProcessVerificationTaskId = task.id;
       void (async () => {
         try {
@@ -315,9 +325,12 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
             'app-update',
             `download complete; verifying build=${manifest.build_number} bytes=${bytesDownloaded}`,
           );
+          if (!isCurrent()) return;
           await completeHandler(task.id);
+          if (!isCurrent()) return;
           const localUri = toFileUri(location);
           const verification = await verifyDownloadedApk(localUri, manifest);
+          if (!isCurrent()) return;
           await persist({
             phase: 'ready',
             buildNumber: manifest.build_number,
@@ -344,6 +357,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
           );
           await maybePromptUpgrade(manifest);
         } catch (err) {
+          if (!isCurrent()) return;
           const message = err instanceof Error ? err.message : String(err);
           debugLog.error('app-update', `post-download failed: ${message}`);
           await persist({
@@ -355,10 +369,10 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
             error: message,
           });
         } finally {
-          if (currentProcessVerificationTaskId === task.id) {
+          if (isCurrent() && currentProcessVerificationTaskId === task.id) {
             currentProcessVerificationTaskId = null;
           }
-          if (activeTask?.id === task.id) {
+          if (isCurrent() && activeTask?.id === task.id) {
             activeTask = null;
             activeDownloadWifiOnly = null;
           }
@@ -366,6 +380,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
       })();
     })
     .error(({ error, errorCode }) => {
+      if (!isCurrent()) return;
       const userCancelled = isUserCancelledDownload(error, errorCode);
       void persist({
         phase: userCancelled ? 'cancelled' : 'error',
@@ -406,7 +421,8 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     existing = await getExistingDownloadTasks();
   } catch (err) {
     debugLog.warn('app-update', `getExistingDownloadTasks failed: ${String((err as Error)?.message ?? err)}`);
-    return false;
+    // Unknown ownership must never authorize deleting a native writer's file.
+    throw err;
   }
   assertUpdateDownloadAllowed();
 
@@ -504,7 +520,8 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     return false;
   }
 
-  if (activeTask?.id !== match.id) {
+  const newlyAttached = activeTask?.id !== match.id;
+  if (newlyAttached) {
     attachHandlers(match, manifest);
   }
   activeDownloadWifiOnly = taskWifiOnly;
@@ -532,7 +549,7 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     wifiOnly: taskWifiOnly,
     startedAt: snapshot.startedAt ?? new Date().toISOString(),
     lastProgressAt:
-      match.bytesDownloaded > snapshot.bytesWritten
+      newlyAttached || match.bytesDownloaded > snapshot.bytesWritten
         ? new Date().toISOString()
         : snapshot.lastProgressAt,
     retryCount: snapshot.retryCount,
@@ -678,7 +695,75 @@ export async function ensureApkBackgroundDownload(
       await maybePromptUpgrade(manifest);
       return snapshot;
     }
+  }
 
+  if (!force && !shouldEnsureBackgroundDownload(snapshot, manifest.build_number)) {
+    // A notification action is an explicit user cancellation. Do not turn the
+    // app's periodic reconciliation into an automatic restart; only Retry
+    // calls this function with force=true.
+    if (snapshot.phase === 'cancelled') return snapshot;
+    // A persisted verification phase has no live promise after process death.
+    // Only this process's actual verifier can defer native/cache recovery.
+    if (snapshot.phase === 'verifying' &&
+        currentProcessVerificationTaskId === apkDownloadTaskId(manifest.build_number, manifest.sha256)) {
+      return snapshot;
+    }
+  }
+
+  if (!force) {
+    // The destination exists as soon as Android starts writing. Reconcile the
+    // native task before treating that path as a completed cached installer.
+    // This also recovers transfers whose JS receipt was lost on process death.
+    const reattached = await reattachExisting(manifest);
+    // Native progress may have continued while JavaScript was suspended.
+    // Refresh it before deciding that the transfer has stalled.
+    if (reattached && isApkDownloadStalled(snapshot)) {
+      const network = await Network.getNetworkStateAsync().catch(() => null);
+      const waitingForWifi =
+        wifiOnly &&
+        (!network?.isConnected || network.type !== Network.NetworkStateType.WIFI);
+      if (waitingForWifi) {
+        debugLog.info(
+          'app-update',
+          `download waiting for Wi-Fi build=${manifest.build_number} bytes=${snapshot.bytesWritten}/${snapshot.totalBytes ?? 'unknown'}`,
+        );
+        await persist({
+          ...snapshot,
+          phase: 'waiting',
+          nativeState: snapshot.nativeState ?? 'PAUSED',
+          error: null,
+        });
+        return snapshot;
+      }
+
+      if (canAutoRetryApkDownload(snapshot)) {
+        const nextRetry = snapshot.retryCount + 1;
+        debugLog.warn(
+          'app-update',
+          `download stalled for ${APK_DOWNLOAD_STALL_MS}ms; retrying build=${manifest.build_number} attempt=${nextRetry}`,
+        );
+        await persist({
+          ...snapshot,
+          phase: 'retrying',
+          retryCount: nextRetry,
+          error: null,
+        });
+        autoRetry = true;
+        force = true;
+      } else {
+        const message = 'Update download stopped making progress. Tap Retry to try again.';
+        debugLog.error(
+          'app-update',
+          `download stalled after ${snapshot.retryCount} retries build=${manifest.build_number}`,
+        );
+        await persist({ ...snapshot, phase: 'error', error: message });
+        return snapshot;
+      }
+    }
+    if (reattached && !force) return snapshot;
+  }
+
+  if (!force) {
     const dest = apkDestinationPath(directories.documents, manifest.build_number, manifest.sha256);
     if (await fileExists(dest)) {
       const verificationTaskId = apkDownloadTaskId(manifest.build_number, manifest.sha256);
@@ -740,78 +825,6 @@ export async function ensureApkBackgroundDownload(
         }
       }
     }
-
-    if (isApkDownloadStalled(snapshot)) {
-      const network = await Network.getNetworkStateAsync().catch(() => null);
-      const waitingForWifi =
-        wifiOnly &&
-        (!network?.isConnected || network.type !== Network.NetworkStateType.WIFI);
-      if (waitingForWifi) {
-        debugLog.info(
-          'app-update',
-          `download waiting for Wi-Fi build=${manifest.build_number} bytes=${snapshot.bytesWritten}/${snapshot.totalBytes ?? 'unknown'}`,
-        );
-        await persist({
-          ...snapshot,
-          phase: 'waiting',
-          nativeState: snapshot.nativeState ?? 'PAUSED',
-          error: null,
-        });
-        return snapshot;
-      }
-
-      if (canAutoRetryApkDownload(snapshot)) {
-        const nextRetry = snapshot.retryCount + 1;
-        debugLog.warn(
-          'app-update',
-          `download stalled for ${APK_DOWNLOAD_STALL_MS}ms; retrying build=${manifest.build_number} attempt=${nextRetry}`,
-        );
-        await persist({
-          ...snapshot,
-          phase: 'retrying',
-          retryCount: nextRetry,
-          error: null,
-        });
-        autoRetry = true;
-        force = true;
-      } else {
-        const message = 'Update download stopped making progress. Tap Retry to try again.';
-        debugLog.error(
-          'app-update',
-          `download stalled after ${snapshot.retryCount} retries build=${manifest.build_number}`,
-        );
-        await persist({ ...snapshot, phase: 'error', error: message });
-        return snapshot;
-      }
-    }
-  }
-
-  if (!force && !shouldEnsureBackgroundDownload(snapshot, manifest.build_number)) {
-    // A notification action is an explicit user cancellation. Do not turn the
-    // app's periodic reconciliation into an automatic restart; only Retry
-    // calls this function with force=true.
-    if (snapshot.phase === 'cancelled') return snapshot;
-    if (snapshot.phase === 'verifying') {
-      const verificationStarted = Date.parse(snapshot.lastProgressAt ?? snapshot.startedAt ?? '');
-      if (
-        Number.isFinite(verificationStarted) &&
-        Date.now() - verificationStarted < APK_VERIFICATION_STALL_MS
-      ) {
-        return snapshot;
-      }
-      await persist({
-        ...snapshot,
-        phase: 'error',
-        error: 'Downloaded update verification did not finish. Tap Retry to download it again.',
-      });
-      return snapshot;
-    }
-    // Reattach handlers after process death / JS reload. If the OS no longer
-    // knows the persisted task, replace it instead of returning stale state.
-    // Always query native state even when the JS object still looks active:
-    // Android can finish/fail a UIDT job without delivering the terminal event.
-    if (await reattachExisting(manifest)) return snapshot;
-    force = true;
   }
 
   const manifestKey = apkDownloadTaskId(manifest.build_number, manifest.sha256);
@@ -1153,6 +1166,7 @@ export async function resetApkDownloadStateForTests(): Promise<void> {
   hydrated = false;
   hydratePromise = null;
   activeTask = null;
+  activeTaskGeneration = 0;
   activeDownloadWifiOnly = null;
   currentProcessVerificationTaskId = null;
   ensureInFlight = null;
