@@ -6,7 +6,7 @@ import type { RatesSectionState } from '../data/ratesSession';
 import { scalarRouteParam } from './nav';
 
 export type RatesRouteParams = Record<string, string | string[] | undefined>;
-export const RATES_INTENT_KEYS = ['section', 'path', 'sort', 'scope', 'query', 'sub', 'compare', 'providers', 'availability', 'request'] as const;
+export const RATES_INTENT_KEYS = ['section', 'path', 'sort', 'scope', 'query', 'sub', 'compare', 'providers', 'availability', 'request', 'reset'] as const;
 export function ratesIntentKey(params: RatesRouteParams): string | null {
   const values = RATES_INTENT_KEYS.map(key => scalarRouteParam(params[key]));
   return values.some(value => value !== undefined) ? JSON.stringify(values) : null;
@@ -19,6 +19,11 @@ export function resolveRatesIntent(params: RatesRouteParams, currentSection: Sec
   const section = canonicalSection ?? sectionFromSlug(raw.section ?? '') ?? currentSection;
   const subscription = raw.sub ? subscriptions.find(item => item.id === raw.sub) : undefined;
   const patch: Partial<RatesSectionState> = { intentError: null, scrollOffset: 0 };
+  // An explicit fresh task drops only ephemeral choices. Saved requirements,
+  // preferences and the audit's rollback snapshot stay with their owners.
+  if (raw.reset === '1') Object.assign(patch, { query: '', path: [], hierarchyScoped: false,
+    sort: 'rate', filters: { ...EMPTY_FILTERS }, includeNonStandardOverride: null,
+    availability: 'listed', selectMode: false, selected: [], page: 1 });
   if (raw.section && !canonicalSection && !sectionFromSlug(raw.section)) patch.intentError = 'Invalid rate type';
   if (raw.sub) {
     if (!subscription) patch.intentError = 'Saved search unavailable';

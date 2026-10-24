@@ -279,7 +279,9 @@ export function ProjectionWorkspace() {
   );
   const target = useMemo(() => {
     void suitabilityRevision;
-    return resolveCalculationTarget(core ? publicComparisonCore(core, catalogue, s => publicRateScenario(s, deferredScenario, profile)) : null, section, { target: params.target, ri: params.ri, programme: params.programme });
+    return resolveCalculationTarget(() => core ? publicComparisonCore(core, catalogue,
+      s => publicRateScenario(s, deferredScenario, profile)) : null,
+    section, { target: params.target, ri: params.ri, programme: params.programme });
   }, [core, params.ri, params.target, params.programme, section, suitabilityRevision, catalogue, deferredScenario, profile]);
   const targetRow = target.status === 'available' && target.section === 'Mortgage' ? target.row : null;
   const rateConditionContext = useMemo(() => ({ core, details, manifest, coreIntegrity }), [core, details, manifest, coreIntegrity]);

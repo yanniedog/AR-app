@@ -143,8 +143,9 @@ export function RateCheckWorkspace() {
   } = useUserRateScenario();
   const target = useMemo(() => {
     void suitabilityRevision;
-    const comparisonCore = core ? publicComparisonCore(core, publicCatalogue, s => publicRateScenario(s, scenario, profileFilters)) : null;
-    return resolveCalculationTarget(comparisonCore, section, { target: params.target, ri: params.ri, programme: params.programme });
+    return resolveCalculationTarget(() => core ? publicComparisonCore(core, publicCatalogue,
+      s => publicRateScenario(s, scenario, profileFilters)) : null,
+    section, { target: params.target, ri: params.ri, programme: params.programme });
   }, [core, section, params.target, params.ri, params.programme, suitabilityRevision, publicCatalogue, profileFilters, scenario]);
   const suitabilityReady = useMemo(() => {
     void suitabilityRevision;

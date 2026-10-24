@@ -4,6 +4,7 @@ import { PUBLIC_AUDIT_ERROR_TYPES, publicAuditDiagnostic, publicAuditError } fro
 import { PUBLIC_AUDIT_METRIC_FIELDS } from './auditDiagnosticFields';
 import { buildDeepPerformanceAuditPlan } from './performanceAuditPlan';
 import { ANDROID_UPDATE_READINESS_AUDIT } from './performanceAuditCheckInventory';
+import { hasValidPerformanceAuditHealth, performanceAuditReference, publicAuditTimestamp } from './performanceAuditCompletion';
 import { AUDIT_PRODUCER_ENUMS, AUDIT_PRODUCER_METRIC_FIELDS, AUDIT_PRODUCER_SCALARS, AUDIT_REGISTERED_ACTION_IDS, AUDIT_REQUIRED_ASSET_IDS, AUDIT_WORKER_TEXT } from './auditDiagnosticProducerFields';
 
 let planText: Map<string, Set<string>> | undefined;
@@ -112,19 +113,33 @@ function missingAssetList(value: string, separator: string): boolean {
 }
 
 /** Keep the canonical diagnostic report, replacing private inputs rather than
- * replacing the report with a summary. Opaque aliases retain equality evidence. */
+ * replacing the report with a summary. Aliases retain primitive-value equality
+ * and repeated object identity without copying private object graphs. */
 export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheckId: (value: string) => string | null): unknown {
-  const aliases = new Map<string, string>();
+  const domains = new Map<string, { primitives: Map<unknown, string>; objects: WeakMap<object, string> }>();
+  let nextAlias = 0;
   const alias = (value: unknown, domain = 'value') => {
-    const key = JSON.stringify([domain, value]);
-    let name = aliases.get(key);
-    if (name === undefined) { name = `~private${aliases.size}`; aliases.set(key, name); }
+    let identities = domains.get(domain);
+    if (!identities) { identities = { primitives: new Map(), objects: new WeakMap() }; domains.set(domain, identities); }
+    // Reuse original primitive values and object identities. Serializing private
+    // evidence merely to name it duplicates long traces/graphs in the JS heap.
+    const object = value !== null && typeof value === 'object';
+    let name = object ? identities.objects.get(value) : identities.primitives.get(value);
+    if (name === undefined) {
+      name = `~private${nextAlias++}`;
+      if (object) identities.objects.set(value, name); else identities.primitives.set(value, name);
+    }
     return name;
   };
   const privateField = /^(?:sessionId|startedAt|finishedAt|lastStoredCheckAt|manufacturer|brand|model|networkType|label|journeyLabel|slowestCheckLabel|query|searchQuery|parameters|inputs|profile|profileFilters|scenario|accountBalance|balance|loanBalance|loanAmount|propertyValue|currentRate|lvr|productKey|product_key|provider|selectionTokens?|actionResultEvidence|readinessEvidence|graphicEvidence|readinessActionEvidence|limitations|generationId|bundleSha|coreSha|payloadRevision|privateText)$/i;
   const visit = (value: unknown, key = '', path = ''): unknown => {
     if (value == null) return value;
     const parent = path.slice(0, path.lastIndexOf('.'));
+    if (['.startedAt', '.finishedAt', '.watchdog.lastStoredCheckAt', '.backgroundWorkWait.startedAt', '.backgroundWorkWait.capturedAt',
+      '.backgroundWorkWait.jobs[].startedAt', '.backgroundWorkWait.jobs[].finishedAt', '.backgroundWorkWait.jobs[].stages[].startedAt'].includes(path)) {
+      return publicAuditTimestamp(value) ?? alias(value);
+    }
+    if (path === '.sessionId' && typeof value === 'string') return performanceAuditReference(value);
     if (typeof value === 'string' && ['.backgroundWorkWait.jobs[].label', '.backgroundWorkWait.jobs[].stage', '.backgroundWorkWait.jobs[].stages[].label'].includes(path) && AUDIT_WORKER_TEXT.has(value)) return value;
     if (typeof value === 'string' && PUBLICATION_DATE_PATHS.has(path) && publicationDate(value)) return value;
     if (typeof value === 'string' && publicPlanText(path, value)) return value;
@@ -167,5 +182,7 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
     appHealth: null }) as Record<string, unknown>;
   // This dedicated sanitizer owns a complete public schema; do not obscure its
   // quality counts or findings through a second, unrelated schema boundary.
-  return { ...retained, appHealth: report.appHealth ? toPublicAppHealthReport(report.appHealth) : null };
+  return { ...retained, appHealth: report.appHealth != null
+    ? hasValidPerformanceAuditHealth(report) ? toPublicAppHealthReport(report.appHealth) : visit(report.appHealth, 'appHealth', '.appHealth')
+    : null };
 }

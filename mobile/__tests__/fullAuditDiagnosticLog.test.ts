@@ -29,6 +29,7 @@ test('every upload includes all retained checks, errors, traces, metrics and dia
   expect(decoded.diagnosticLog.checks[0].trace).toMatch(/^~private/);
   expect(decoded.diagnosticLog.checks[0].metrics.renderRevisionBefore).toBe(decoded.diagnosticLog.checks[0].metrics.renderRevisionAfter);
   expect(body).not.toMatch(/private-session|Private input label|private-inputs|private\.example|987654|123456|TOPSECRET|KEYSECRET|BEARERSECRET/);
+  expect(JSON.stringify(decoded)).not.toMatch(/private-session|Private input label|private-inputs|private\.example|987654|123456|TOPSECRET|KEYSECRET|BEARERSECRET/);
   expect(createPublicPerformanceAuditReport(report)).toBe(body);
 });
 
@@ -101,6 +102,24 @@ test('source strings matching generated alias names remain distinct values', () 
   expect(second.checks[0].error).toBe(first.checks[0].error);
   expect(second.checks[0].error).toBe(second.checks[0].metrics.phaseDetail);
   expect(second.checks[0].trace).not.toBe(second.checks[0].error);
+});
+
+test('private aliases reuse original values without serializing their evidence', () => {
+  const report = makePerformanceAuditReport();
+  const evidence = { toJSON() { throw new Error('Private evidence must not be serialized for an alias'); },
+    largeText: 'private evidence'.repeat(100_000) };
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 1,
+    error: evidence.largeText, trace: evidence.largeText,
+    metrics: { actionResultEvidence: evidence, readinessEvidence: evidence, graphicEvidence: { ...evidence } } as never }];
+  const stringify = jest.spyOn(JSON, 'stringify');
+  let diagnostic: typeof report;
+  try { diagnostic = fullAuditDiagnosticLog(report, id => id) as typeof report;
+    expect(stringify.mock.calls.some(([value]) => Array.isArray(value)
+      && value.length === 2 && (value[1] === evidence || value[1] === evidence.largeText))).toBe(false);
+  } finally { stringify.mockRestore(); }
+  expect(diagnostic!.checks[0].error).toBe(diagnostic!.checks[0].trace);
+  expect(diagnostic!.checks[0].metrics.actionResultEvidence).toBe(diagnostic!.checks[0].metrics.readinessEvidence);
+  expect(diagnostic!.checks[0].metrics.actionResultEvidence).not.toBe(diagnostic!.checks[0].metrics.graphicEvidence);
 });
 
 test.each(['healthy', 'attention', 'bottleneck'] as const)('retains source-authored %s outcome and diagnostic modes', overall => {
@@ -294,7 +313,7 @@ test.each(['2026-10-21', '2024-02-29'])('retains validated source publication da
   const decoded = fullAuditDiagnosticLog(report, id => id) as typeof report;
   expect(decoded.environment.payloadRunDate).toBe(date);
   expect(decoded.backgroundWorkWait).toMatchObject({ payloadWork: { revision: { runDate: date, manifestRunDate: date } }, jobs: [{ runDate: date }] });
-  expect(decoded.startedAt).toMatch(/^~private/);
+  expect(decoded.startedAt).toBe(new Date(report.startedAt).toISOString());
 });
 
 test.each(['2026-02-29', '2026-13-01', 'private-date'])('masks malformed or private publication date %s', date => {

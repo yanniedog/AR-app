@@ -19,6 +19,7 @@ import type { CurrentProductOption } from '../data/scenarioCatalog';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
+  'Unverified details', 'Quarantined tiers', 'History days', 'Daily gaps', 'Rendered coverage', 'Chart gaps', 'Processing gaps', 'Source unavailable',
   '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '#', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
   'Rates', 'Saved', 'Market', 'Account', 'Profile', 'Settings', 'About',
   'Saved requirements', 'Temporary filters', 'After saved requirements', 'All screens', 'Catalogue',
@@ -210,7 +211,7 @@ export const UI_LABELS = [
   'Upload diagnostic log?', 'Clear debug log?', 'Delete uploaded log?', 'Debug log cleared',
   'Uploaded log deleted', 'Destination', 'Audit upload', 'Deidentified',
   'Checks / errors / traces / readiness / timing', 'Private inputs / identifiers / credentials',
-  'Raw logs / tracebacks / routes / product keys / device IDs / timestamps', 'Temporary report retained',
+  'Raw logs / tracebacks / routes / product keys / device IDs', 'Temporary report retained',
   'App update active', 'Update state unconfirmed', 'Report unavailable', 'Performance',
   'Data integrity', 'Data completeness', 'Asset availability', 'Display completeness',
   'Network', 'Range', 'Audit and upload', 'Live audit and upload',
@@ -381,6 +382,8 @@ export const UI_LABELS = [
   'Posting calendar', 'Payment destination', 'Tax treatment', 'Break fee', 'Principal recovery',
   'Bonus qualification', 'Projected payments', 'Contract scope', 'Issue code', 'Unpaid', 'Activity', 'Holdings', 'Repayment due', 'Paid',
   'Passed', 'Warnings', 'Failures', 'Timing overruns', 'Skipped', 'Untested links', 'Verified upload', 'Upload uncertain',
+  'Finished', 'Audit ID', 'Audit timestamps', 'Audit details', 'Run another audit', 'Collection', 'Successful', 'Failure positions', 'First failure', 'Check ID', 'Position', 'Stage',
+  'Missing checks', 'Duplicate checks', 'Unexpected checks', 'Missing readiness', 'Truncated fields', 'Omitted characters',
   'Public pricing', 'Payable rate', 'Reference rate', 'Reference', 'Adjustment', 'Margin',
   'Customer category', 'Channel', 'Qualification', 'Monthly deposits ($)', 'Monthly withdrawals',
   'Balance growth ($)', 'Card purchases', 'Scope', 'Pricing programme', 'Choose programme',

@@ -36,7 +36,7 @@ export function passiveAuditCheckKey(snapshot: AppHealthDataSnapshot, appBuild: 
     case 'freshness-window': observation = snapshot.manifest?.schedule; break;
     case 'asset-availability': observation = [core?.run_date, snapshot.details, snapshot.assets]; break;
     case 'details-completeness': observation = [rowIdentity, snapshot.details, snapshot.manifest?.files.details?.sha256]; break;
-    case 'catalogue-identity-coverage': observation = [rowIdentity, snapshot.catalogue]; break;
+    case 'catalogue-identity-coverage': observation = [rowIdentity, snapshot.catalogue, snapshot.historyCoverage]; break;
     default: observation = rowIdentity;
   }
   return bytesToHex(sha256(utf8ToBytes(JSON.stringify({ schema: PASSIVE_AUDIT_SCHEMA,

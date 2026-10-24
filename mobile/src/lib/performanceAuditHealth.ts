@@ -1,4 +1,5 @@
 import type { AppState } from '../data/storeTypes';
+import { historyCoverageEvidence } from './appHealth/historyCoverage';
 import { samePayloadIdentity } from '../data/payloadRevision';
 import { roundMetric, type AuditCheck, type AuditJourney, type PerformanceAuditSummary } from './performanceAudit';
 import type { DeepPerformanceAuditPlan } from './performanceAuditPlan';
@@ -333,7 +334,9 @@ function scopedHealthDataSnapshot(input: AppHealthDataInput): AppHealthDataSnaps
       core.run_date === manifest.run_date && data.core.run_date === core.run_date &&
       data.manifest.run_date === core.run_date && data.manifest.files.core.sha256 === manifest.files.core.sha256 &&
       samePayloadIdentity(manifest, data.manifest));
-    data = { ...data, catalogue: matchesLocal ? preparedAppHealthCatalogueSnapshot(input.state) : null };
+    data = { ...data, catalogue: matchesLocal ? preparedAppHealthCatalogueSnapshot(input.state) : null,
+      historyCoverage: matchesLocal && core ? historyCoverageEvidence(core, input.state.productHistory) :
+        data.historyCoverage ?? (data.core ? historyCoverageEvidence(data.core) : null) };
   }
   return data ?? appHealthDataSnapshot(input.state, input.appVersion);
 }
