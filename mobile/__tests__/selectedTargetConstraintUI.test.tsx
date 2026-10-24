@@ -13,6 +13,7 @@ import { ProjectionWorkspace } from '../src/components/calculation/ProjectionWor
 import MyRates from '../app/(tabs)/watchlist';
 import nabCapture from './fixtures/nab_lvr_app_contract_2026-10-14.json';
 import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
+import * as publicPricing from '../src/data/publicRateIntegration';
 import type { RateRow, SectionKey } from '../src/types';
 type InspectableRenderer = ReactTestRenderer & { root: {
   findAllByType(type: unknown): { props: Record<string, unknown> }[];
@@ -90,6 +91,24 @@ function texts(tree: InspectableRenderer): string[] {
 }
 beforeEach(() => { jest.clearAllMocks(); Object.keys(mockParams).forEach(key => delete mockParams[key]); });
 afterEach(() => installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null)));
+
+test('untargeted calculator edits skip full-catalogue target pricing and targeted routes retain it', () => {
+  prepare('Mortgage', [loan], [], mortgageScenario(), '4');
+  delete mockParams.target; delete mockParams.ri;
+  const prepareCore = jest.spyOn(publicPricing, 'publicComparisonCore');
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<RateCheckWorkspace />) as InspectableRenderer; });
+  try {
+    for (const mode of ['buy', 'refi'] as const) {
+      mockScenario = normalizeUserRateScenario({ ...mockScenario, mortgage: { ...mockScenario.mortgage, mode } });
+      act(() => tree.update(<RateCheckWorkspace />));
+    }
+    expect(prepareCore).not.toHaveBeenCalled();
+    Object.assign(mockParams, { target: loan.product_key, ri: '4' });
+    act(() => tree.update(<RateCheckWorkspace />));
+    expect(prepareCore).toHaveBeenCalled();
+  } finally { act(() => tree.unmount()); prepareCore.mockRestore(); }
+});
 
 test('actual rate-check compares broad and conventional lenders at the same calculated LVR', () => {
   const rows = [
