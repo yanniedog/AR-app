@@ -108,3 +108,17 @@ test('URL attributes are escaped without changing their decoded download, QR or 
   assert.ok(html.includes('&quot;quoted&quot;&amp;value=&lt;tag&gt;&#39;s'));
   assert.equal(bodyCopy(html), 'Australian Rates Download Scan Manifest');
 });
+test('the static README QR always resolves to the current ARM download URL', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { default: QRCode } = await import('qrcode');
+  const { PNG } = await import('pngjs');
+  const actual = PNG.sync.read(await readFile(new URL('../../docs/android-install-qr.png', import.meta.url)));
+  const expected = PNG.sync.read(await QRCode.toBuffer(
+    'https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/app-preview.apk',
+    { width: 256, margin: 2, errorCorrectionLevel: 'M' }));
+  assert.equal(actual.width, expected.width);
+  assert.equal(actual.height, expected.height);
+  assert.ok(actual.data.equals(expected.data));
+  const readme = await readFile(new URL('../../README.md', import.meta.url), 'utf8');
+  assert.match(readme, /docs\/android-install-qr\.png/);
+});

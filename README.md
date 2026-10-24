@@ -8,10 +8,12 @@ Installable Expo app and APK release automation for Australian Rates.
 <!-- app-android-install:start -->
 ### Android preview install
 
-Open the install page in **Android Chrome** for the current APK and QR code.
+Scan with **Android Chrome** or open the APK link to install the current release.
+This static QR points to the stable phone APK URL and needs no release update.
 
 | | |
 |---|---|
+| QR | ![Install current phone APK](docs/android-install-qr.png) |
 | ARM APK (most phones) | [app-preview.apk](https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/app-preview.apk) |
 | Install page | [install.html](https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/install.html) |
 | Version history | [app-arm-v* releases](https://github.com/yanniedog/AR-app/releases?q=app-arm-v&expanded=true) |
