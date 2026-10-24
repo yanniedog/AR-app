@@ -31,11 +31,11 @@ test('fast typing keeps the latest draft and unmount flushes without committing 
   const original = captureRatesSession();
   initializeRatesSession(DEFAULT_PREFS, 'Mortgage');
   clearMortgageComparison();
-  let tree!: ReactTestRenderer;
+  let tree!: ReactTestRenderer & { root: { findByProps: (props: object) => { props: { onChangeText: (text: string) => void } } } };
   act(() => {
     tree = TestRenderer.create(
       <MortgageComparisonControls rows={[]} filters={EMPTY_FILTERS} unverified={0} invalid={false} />,
-    );
+    ) as typeof tree;
   });
   try {
     const amount = tree.root.findByProps({ accessibilityLabel: 'Loan amount' });
@@ -49,6 +49,32 @@ test('fast typing keeps the latest draft and unmount flushes without committing 
     act(() => { tree.unmount(); });
     expect(useMortgageComparison.getState().loanAmount).toBe('625');
   } finally {
+    jest.useRealTimers();
+    restoreRatesSession(original);
+    clearMortgageComparison();
+  }
+});
+
+test('external store clear discards a pending typed draft instead of restoring it', () => {
+  jest.useFakeTimers();
+  const original = captureRatesSession();
+  initializeRatesSession(DEFAULT_PREFS, 'Mortgage');
+  clearMortgageComparison();
+  let tree!: ReactTestRenderer & { root: { findByProps: (props: object) => { props: { onChangeText: (text: string) => void; value?: string } } } };
+  act(() => {
+    tree = TestRenderer.create(
+      <MortgageComparisonControls rows={[]} filters={EMPTY_FILTERS} unverified={0} invalid={false} />,
+    ) as typeof tree;
+  });
+  try {
+    const amount = tree.root.findByProps({ accessibilityLabel: 'Loan amount' });
+    act(() => { amount.props.onChangeText('625000'); });
+    act(() => { clearMortgageComparison(); });
+    act(() => { jest.advanceTimersByTime(200); });
+    expect(useMortgageComparison.getState().loanAmount).toBe('');
+    expect(tree.root.findByProps({ accessibilityLabel: 'Loan amount' }).props.value ?? '').toBe('');
+  } finally {
+    act(() => { tree.unmount(); });
     jest.useRealTimers();
     restoreRatesSession(original);
     clearMortgageComparison();

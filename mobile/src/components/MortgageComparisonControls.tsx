@@ -26,22 +26,30 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   // Audit/programmatic store writes still apply immediately (dirty stays false).
   const [draft, setDraft] = useState(storeValue);
   const dirty = useRef(false);
+  const writing = useRef(false);
   const draftRef = useRef(draft);
   draftRef.current = draft;
-  useEffect(() => {
-    if (dirty.current) return;
-    setDraft(storeValue);
-  }, [storeValue.loanAmount, storeValue.lvr]);
+  const commitDraft = (next: typeof storeValue) => {
+    writing.current = true;
+    useMortgageComparison.setState(next);
+    dirty.current = false;
+    writing.current = false;
+  };
+  useEffect(() => useMortgageComparison.subscribe((state) => {
+    // External writes (clear / audit apply / Reset Rates view) must win over an
+    // in-progress draft, including same-value clears that leave loanAmount/lvr
+    // unchanged. Own commits set writing so they do not abandon themselves.
+    if (writing.current) return;
+    if (dirty.current) dirty.current = false;
+    setDraft(state);
+  }), []);
   useEffect(() => {
     if (!dirty.current) return;
     if (draft.loanAmount === storeValue.loanAmount && draft.lvr === storeValue.lvr) {
       dirty.current = false;
       return;
     }
-    const timer = setTimeout(() => {
-      useMortgageComparison.setState(draft);
-      dirty.current = false;
-    }, TYPING_DEBOUNCE_MS);
+    const timer = setTimeout(() => commitDraft(draft), TYPING_DEBOUNCE_MS);
     // Dependency-change cleanup must only cancel the timer. Flushing here would
     // commit a stale draft and clear dirty before the next keystroke schedules.
     return () => clearTimeout(timer);
@@ -50,8 +58,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   // committed store keeps the last typed amount/LVR.
   useEffect(() => () => {
     if (!dirty.current) return;
-    useMortgageComparison.setState(draftRef.current);
-    dirty.current = false;
+    commitDraft(draftRef.current);
   }, []);
   const groups = useMemo(() => [
     { key: 'loanPurposes' as const, field: 'loan_purpose' as const, condition: 'purpose', canonical: canonicalPurpose },
