@@ -248,10 +248,11 @@ export default function RatesWorkspace() {
   const detailsKey = details?.run_date ?? null;
   useEffect(() => {
     if (!isFocused) return;
-    // Incomplete Mortgage criteria must not kick multi-megabyte details /
+    // Incomplete listed Mortgage criteria must not kick multi-megabyte details /
     // suitability / search-index work — audit paste showed details+history
     // already competing for 50s+ on the JS thread during payload settle.
-    if (section === 'Mortgage' && !mortgageCriteriaReady) return;
+    // Unlisted browsing still needs details for the catalogue gate.
+    if (section === 'Mortgage' && task.availability !== 'unlisted' && !mortgageCriteriaReady) return;
     // Defer past first paint / navigation so cold open and post-refresh stays
     // interactive while heavy details work catches up.
     return scheduleAfterNavigation(() => {
@@ -260,7 +261,7 @@ export default function RatesWorkspace() {
       void ensureDetails({ force: true });
       if (deepSearchActive) void ensureSearchIndex();
     });
-  }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey, searchIndexSha, isFocused, section, mortgageCriteriaReady]);
+  }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey, searchIndexSha, isFocused, section, mortgageCriteriaReady, task.availability]);
   // A cached core reports deep search unavailable until a refresh confirms the
   // same edition is live; that promotion changes only `source`, so retry on the
   // transition itself. Status is read, not depended on: other unavailable
@@ -298,7 +299,9 @@ export default function RatesWorkspace() {
     const applicable = canonical.filter(token => {
       const entry = resolveCompareSelections(comparisonCore, [token])[0];
       if (!entry) return false;
-      if (entry.section === 'Mortgage' && !mortgageCriteriaReady) return false;
+      // Keep Mortgage compare selections while criteria are incomplete so
+      // clearing LVR/purpose/repayment does not wipe the tray.
+      if (entry.section === 'Mortgage' && !mortgageCriteriaReady) return true;
       const priced = resolvedPublicRankingRows([entry.row], catalogue,
         row => scenarioFor(entry.section, row)).rows;
       return entry.section === 'Mortgage'
