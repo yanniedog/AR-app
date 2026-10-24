@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import test from 'node:test';
-import { assertPublicationAdvance, buildApkPair, publishApkPair } from './android-apk-pair.mjs';
+import { assertPublicationAdvance, buildApkPair, publishApkPair, publishedManifest } from './android-apk-pair.mjs';
 
 const source = 'a'.repeat(40);
 const env = { GITHUB_REPOSITORY: 'owner/repo', GITHUB_SHA: source,
@@ -82,6 +82,8 @@ test('publication verifies both artifacts before delivery or public writes and n
   assert.ok(options.events.indexOf('verify:universal') < delivery);
   assert.ok(options.events.indexOf('verify:arm') < delivery);
   assert.ok(options.events.indexOf('publish-apk-manifest.mjs') > delivery);
+  assert.ok(options.events.indexOf('verify-github-release-source.mjs') > delivery);
+  assert.ok(options.events.indexOf('verify-github-release-source.mjs') < options.events.indexOf('publish-apk-manifest.mjs'));
   assert.equal(options.events.filter(event => event === 'publish-apk-manifest.mjs').length, 2);
   for (const channel of ['universal', 'arm']) {
     assert.equal(readFileSync(join(options.root, 'build/apk-published', channel, 'receipt.json'), 'utf8'),
@@ -125,6 +127,28 @@ test('a newer published source blocks an old rebuild even with a higher version 
   }, async isAncestor() { return false; } });
   await assert.rejects(publishApkPair(options), /source older/);
   assert.ok(!options.events.includes('publish-apk-manifest.mjs'));
+});
+
+test('a source removed from main during publication setup cannot publish', async t => {
+  const options = publication(t);
+  options.run = (_executable, args) => {
+    if (basename(args[0]) === 'verify-github-release-source.mjs') throw new Error('Source removed from main');
+    assert.equal(basename(args[0]), 'verify-public-delivery.cjs');
+  };
+  await assert.rejects(publishApkPair(options), /Source removed from main/);
+});
+
+test('missing manifest is a new channel only when the rolling release is absent', async () => {
+  for (const [status, message] of [[200, /manifest is missing/], [403, /Rolling release HTTP 403/]]) {
+    let reads = 0;
+    await assert.rejects(publishedManifest('owner/repo', 'app-apk-latest', undefined, async () => {
+      reads += 1;
+      return reads === 1 ? { status: 404 } : { status, ok: status === 200 };
+    }), message);
+    assert.equal(reads, 2);
+  }
+  assert.equal(await publishedManifest('owner/repo', 'app-apk-latest', undefined,
+    async () => ({ status: 404 })), null);
 });
 
 test('a versioned APK left by partial publication cannot be replaced by a rebuilt binary', async t => {

@@ -84,10 +84,18 @@ export function assertPublicationAdvance(local, remote, sourceSha) {
   throw new Error('Refusing to overwrite a newer or different published APK');
 }
 
-async function publishedManifest(repo, tag) {
-  const response = await fetch(`https://github.com/${repo}/releases/download/${tag}/app-apk-latest.json?_=${Date.now()}`,
+export async function publishedManifest(repo, tag, token, fetchImpl = fetch) {
+  const response = await fetchImpl(`https://github.com/${repo}/releases/download/${tag}/app-apk-latest.json?_=${Date.now()}`,
     { signal: AbortSignal.timeout(30000) });
-  if (response.status === 404) return null;
+  if (response.status === 404) {
+    const release = await fetchImpl(`https://api.github.com/repos/${repo}/releases/tags/${tag}`, {
+      headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (release.status === 404) return null;
+    if (!release.ok) throw new Error(`Rolling release HTTP ${release.status}`);
+    throw new Error(`Published manifest is missing from existing release ${tag}`);
+  }
   if (!response.ok) throw new Error(`Published manifest HTTP ${response.status}`);
   return response.json();
 }
@@ -125,7 +133,7 @@ export async function publishApkPair({ root = mobileRoot, env = process.env, run
   if (!repo || !/^[a-f0-9]{40}$/i.test(sourceSha ?? '')) throw new Error('Missing protected release source');
   // Check both artifacts and both rolling floors before the first mutation.
   for (const channel of channels) {
-    const remote = await readPublished(repo, rollingTag(channel));
+    const remote = await readPublished(repo, rollingTag(channel), env.GH_TOKEN);
     if (remote && (!/^[a-f0-9]{40}$/i.test(remote.source_sha ?? '')
         || (remote.source_sha !== sourceSha && !await isAncestor(repo, remote.source_sha, sourceSha, env.GH_TOKEN)))) {
       throw new Error('Refusing to publish source older than a published APK');
@@ -138,6 +146,7 @@ export async function publishApkPair({ root = mobileRoot, env = process.env, run
     }
   }
   run(process.execPath, [join(root, 'scripts/verify-public-delivery.cjs')], { cwd: root, env });
+  run(process.execPath, [join(root, 'scripts/verify-github-release-source.mjs'), '--allow-reviewed-ancestor'], { cwd: root, env });
   for (const channel of channels) {
     const directory = join(root, 'build/apk-pair', channel);
     run(process.execPath, [join(root, 'scripts/publish-apk-manifest.mjs'), '--apk', join(directory, 'app-preview.apk'),

@@ -42,4 +42,11 @@ test('both APKs share one allocation and publication restores that exact identit
   assert.equal(restore.env.RELEASE_VERSION, '${{ needs.build.outputs.version }}');
   assert.equal(restore.env.RELEASE_CODE, '${{ needs.build.outputs.version_code }}');
   assert.match(restore.run, /--release-version "\$RELEASE_VERSION" --release-version-code "\$RELEASE_CODE"/);
+  assert.match(step.run, /--fallback-repo yanniedog\/AR-local/);
+  const eas = yaml.load(readFileSync(new URL('../../.github/workflows/mobile-eas-build.yml', import.meta.url), 'utf8'));
+  assert.equal(workflow.concurrency.group, eas.concurrency.group);
+  assert.equal(workflow.concurrency['cancel-in-progress'], false);
+  assert.equal(eas.concurrency['cancel-in-progress'], false);
+  assert.equal(workflow.concurrency.queue, 'max');
+  assert.equal(eas.concurrency.queue, 'max');
 });

@@ -59,6 +59,7 @@ npm run ci
 - Reviewed source can finish building when later PRs merge. Publication rejects
   older source or version downgrades. There are no generated version or README
   PRs; the stable install links above always lead to the current release.
+  GitHub's native release queue preserves pending manual EAS requests.
 - `mobile-eas-build` and `mobile-eas-submit` remain manual EAS workflows.
 - The [review bot control guide](docs/REVIEW-BOT-CONTROL.md) links the pinned
   GitHub dashboard for Qwen and repository-owned review automation.

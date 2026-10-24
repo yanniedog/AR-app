@@ -11,10 +11,11 @@ permissions:
   contents: read
   pull-requests: read
   checks: read
-# Finish reviewed builds; keep only the newest pending release.
+# Serialize all publishers without dropping pending manual build requests.
 concurrency:
   group: mobile-apk-release
   cancel-in-progress: false
+  queue: max
 jobs:
   build:
     name: Build and verify both APKs
@@ -60,7 +61,7 @@ jobs:
       - name: Allocate one version for both APKs
         id: release
         run: |
-          node scripts/bump-android-version-code.mjs --repo "$GITHUB_REPOSITORY" --rolling-tag app-apk-arm-latest
+          node scripts/bump-android-version-code.mjs --repo "$GITHUB_REPOSITORY" --fallback-repo yanniedog/AR-local --rolling-tag app-apk-arm-latest
           node -e "const app=require('./app.json').expo; console.log('version='+app.version); console.log('version_code='+app.android.versionCode)" >> "$GITHUB_OUTPUT"
       - name: Prepare Firebase and signing key
         id: keystore
@@ -120,8 +121,6 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: mobile/package-lock.json
-      - name: Verify reviewed main source
-        run: node scripts/verify-github-release-source.mjs --allow-reviewed-ancestor
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin

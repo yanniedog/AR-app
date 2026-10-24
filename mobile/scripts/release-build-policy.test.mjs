@@ -92,7 +92,7 @@ test('EAS release jobs can verify the merged pull request for their main commit'
   assert.match(submitWorkflow, /pull-requests:\s+read/);
   for (const workflow of [buildWorkflow, submitWorkflow, apkWorkflow]) {
     assert.match(workflow, /checks:\s+read/);
-    const expectedSourceChecks = 2;
+    const expectedSourceChecks = workflow === apkWorkflow ? 1 : 2;
     assert.equal(
       workflow.match(/node scripts\/verify-github-release-source\.mjs/g)?.length,
       expectedSourceChecks,
