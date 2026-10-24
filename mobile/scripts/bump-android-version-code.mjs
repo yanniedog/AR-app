@@ -117,7 +117,7 @@ export async function fetchRemoteManifest(
   fetchImpl = fetch,
 ) {
   if (!targetRepo) return null;
-  const url = `https://github.com/${targetRepo}/releases/download/${tag}/${MANIFEST_ASSET}`;
+  const url = `https://github.com/${targetRepo}/releases/download/${tag}/${MANIFEST_ASSET}?_=${Date.now()}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   timer.unref?.();

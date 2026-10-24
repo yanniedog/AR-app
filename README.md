@@ -8,12 +8,10 @@ Installable Expo app and APK release automation for Australian Rates.
 <!-- app-android-install:start -->
 ### Android preview install
 
-Scan with **Android Chrome** to install the latest preview APK. Asset path is stable (`app-apk-arm-latest/app-preview-qr.png`); the README embed adds `?v=<build>` so the image refreshes after each APK publish.
+Open the install page in **Android Chrome** for the current APK and QR code.
 
 | | |
 |---|---|
-| Version | **1.0.248** (build 304) |
-| QR | ![Install QR](https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/app-preview-qr.png?v=304) |
 | ARM APK (most phones) | [app-preview.apk](https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/app-preview.apk) |
 | Install page | [install.html](https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/install.html) |
 | Version history | [app-arm-v* releases](https://github.com/yanniedog/AR-app/releases?q=app-arm-v&expanded=true) |
@@ -47,18 +45,20 @@ npm run ci
 ## Automation and release channels
 
 - `app-ci` runs mobile typecheck, lint, unit tests, script tests, and export.
-- `mobile-android-apk` builds the internal Android preview APK and publishes it to this repo.
-- `mobile-auto-release-on-queue-drain` checks whenever a PR closes or merges.
-  Once **no PRs remain open in the repository**, it releases the latest `main`
-  through a protected version-bump PR and automatic universal/ARM APK builds.
-  Closing the last PR without merging also triggers the check. It rechecks the
-  queue after the version PR merges; a newly opened PR defers APK dispatch.
-  After ARM publication and the install-QR README PR merge, the build explicitly
-  dispatches another queue check. This also covers builds started with
-  `GITHUB_TOKEN`, whose completion may not trigger `workflow_run`.
-  Already-published app content (including an install-QR-only README update)
-  does not create another release. Older build sources cannot replace a newer
-  `main` release.
+- `mobile-android-apk` runs after app/build-workflow changes merge to `main`, or
+  from **Run workflow**. Unrelated open PRs do not block releases.
+- One build job allocates a version from both published channels, prepares
+  Android once, and builds universal and ARM APKs using the same native outputs.
+  Signing, package identity, ABI, size and payload privacy checks gate both.
+  `mobile/app.json` supplies the source version floor; the build stamps its
+  allocated version locally. Published manifests are the release version record.
+- A separate publish job checks public data delivery and publishes both APKs,
+  manifests, install pages and QR codes. On an upload/delivery failure, use
+  **Re-run failed jobs** to retry publication without recompiling. Signed APKs
+  and their private verification evidence are retained for three days.
+- Reviewed source can finish building when later PRs merge. Publication rejects
+  older source or version downgrades. There are no generated version or README
+  PRs; the stable install links above always lead to the current release.
 - `mobile-eas-build` and `mobile-eas-submit` remain manual EAS workflows.
 - The [review bot control guide](docs/REVIEW-BOT-CONTROL.md) links the pinned
   GitHub dashboard for Qwen and repository-owned review automation.
