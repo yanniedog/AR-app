@@ -58,17 +58,20 @@ The shared behavioral suite runs the real legacy YAML command under
 flag, malformed YAML and invalid options. Separate tests exercise the real
 Istanbul configuration loader and both Oclif consumers' YAML table output.
 
-## Remaining upstream alerts (2026-10-17)
+## Pinned advisory overrides (2026-10-24)
 
-`braces@3.0.3` (GHSA-vfj7-8cjw-p6xm) and `node-forge@1.4.0`
-(GHSA-86w9-cpqp-85rv) remain in each lockfile. Neither has a published fix.
-Do not dismiss their four alerts based on toolchain placement alone.
+Mobile pins `fast-uri@3.1.9` and `undici@6.29.1` via npm overrides so the
+Dependabot patches from #440–#442 cannot regress. The isolated EAS toolchain
+pins `fast-uri@3.1.9` the same way. These clear GHSA-w74x-v6f9-j3xg,
+GHSA-xhq7-xmqj-769h, GHSA-wjr9-j795-jxcr, GHSA-333x-w4r6-6crp,
+GHSA-xjj6-f33q-929c, and GHSA-4qv8-2p9j-2685 once Dependabot re-scans
+`main`.
 
-Braces is used through micromatch for source globs in build/test/release tools;
-its character limit does not prevent deeply nested patterns exhausting the
-stack. Keep project patterns in reviewed source, run PR checks in bounded jobs
-without release credentials, and preserve protected-source release checks.
-Track [braces issue 70](https://github.com/micromatch/braces/issues/70).
+## Remaining upstream alerts (2026-10-24)
+
+`node-forge@1.4.0` (GHSA-86w9-cpqp-85rv) remains in each lockfile. There is
+still no published fix (`npm` latest is 1.4.0; advisory `first_patched_version`
+is null). Do not dismiss the alerts based on toolchain placement alone.
 
 Forge accepts extra nested DigestAlgorithm elements during RSA PKCS#1 v1.5
 signature verification, enabling forgery with low-exponent keys. It parses
@@ -86,3 +89,6 @@ import of these packages was found in this assessment. This does not prove
 their absence from the transitive Metro graph or shipped APK. An APK's native
 verifier and runtime acceptance remain separate. Export source-map checks can
 additionally enforce that these tooling packages stay outside shipped bundles.
+
+Revisit as soon as `node-forge` publishes a release newer than 1.4.0 that
+GHSA-86w9-cpqp-85rv marks as patched, then override both lockfiles.
