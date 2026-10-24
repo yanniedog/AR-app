@@ -17,6 +17,9 @@ describe('bankBrand', () => {
     expect(lookupProvider('ING BANK (Australia) Ltd')).toBe('ing');
     expect(lookupProvider('NATIONAL AUSTRALIA BANK')).toBe('national australia bank');
     expect(lookupProvider('St.George Bank')).toBe('st. george bank');
+    expect(lookupProvider('Queensland Country Bank')).toBe('queensland country bank');
+    expect(lookupProvider('Bank of Queensland Limited')).toBe('bank of queensland');
+    expect(lookupProvider('Example Bank')).toBe('Example Bank');
   });
 
   it('resolves bundled logo sources for major lenders', () => {

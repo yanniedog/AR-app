@@ -76,6 +76,7 @@ const BRAND_MAP: Record<string, BrandEntry> = {
   'bank first': { short: 'BFirst', aliases: [] },
   'bank of china': { short: 'BoC', aliases: [] },
   'bank of sydney': { short: 'BoSyd', aliases: [] },
+  'queensland country bank': { short: 'QCB', aliases: ['queensland country'] },
   'bank of us': { short: 'BoUs', aliases: [] },
   'border bank': { short: 'Border', aliases: [] },
   'cairns bank': { short: 'Cairns', aliases: [] },
@@ -122,13 +123,15 @@ function normalize(value: string): string {
 /** Align CDR provider labels with dashboard `local-brand.js` canonical keys. */
 export function lookupProvider(value: string): string {
   const raw = normalize(value);
+  const exact = ALIAS_TO_KEY.get(raw);
+  if (exact) return exact;
   if (/great southern bank business/i.test(raw)) return 'great southern bank business+';
   if (raw.includes('great southern')) return 'great southern bank';
   if (raw.includes('86400') || raw.includes('86 400')) return 'ubank';
   if (raw.includes('amp bank go') || raw === 'amp go') return 'amp bank go';
-  if (raw.includes('amp')) return 'amp bank';
+  if (/\bamp\b/.test(raw)) return 'amp bank';
   if (raw.includes('anz plus')) return 'anz plus';
-  if (raw.includes('anz')) return 'anz';
+  if (/\banz\b/.test(raw)) return 'anz';
   if (raw.includes('unloan')) return 'unloan';
   if (raw.includes('commonwealth') || raw.includes('commbank') || raw === 'cba') {
     return 'commonwealth bank of australia';
@@ -149,7 +152,7 @@ export function lookupProvider(value: string): string {
   if (/st\s*\.?\s*george/i.test(raw)) return 'st. george bank';
   if (raw.includes('bendigo')) return 'bendigo and adelaide bank';
   if (raw.includes('boq specialist')) return 'boq specialist';
-  if (raw.includes('queensland') || /\bboq\b/.test(raw)) return 'bank of queensland';
+  if (raw.includes('bank of queensland') || /\bboq\b/.test(raw)) return 'bank of queensland';
   if (raw.includes('melbourne') && raw.includes('bank')) return 'bank of melbourne';
   if (raw.includes('alex')) return 'alex bank';
   if (raw.includes('arab bank')) return 'arab bank australia';
