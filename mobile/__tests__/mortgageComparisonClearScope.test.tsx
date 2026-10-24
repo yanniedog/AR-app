@@ -25,3 +25,32 @@ test('clearing numerical comparison inputs preserves selected purpose, repayment
     expect(useRatesSession.getState().sections.Mortgage).toMatchObject({ filters, page: 1, scrollOffset: 0 });
   } finally { act(() => tree.unmount()); restoreRatesSession(original); clearMortgageComparison(); }
 });
+
+test('fast typing keeps the latest draft and unmount flushes without committing intermediate keystrokes early', () => {
+  jest.useFakeTimers();
+  const original = captureRatesSession();
+  initializeRatesSession(DEFAULT_PREFS, 'Mortgage');
+  clearMortgageComparison();
+  let tree!: ReactTestRenderer;
+  act(() => {
+    tree = TestRenderer.create(
+      <MortgageComparisonControls rows={[]} filters={EMPTY_FILTERS} unverified={0} invalid={false} />,
+    );
+  });
+  try {
+    const amount = tree.root.findByProps({ accessibilityLabel: 'Loan amount' });
+    act(() => { amount.props.onChangeText('6'); });
+    act(() => { amount.props.onChangeText('62'); });
+    expect(useMortgageComparison.getState().loanAmount).toBe('');
+    act(() => { jest.advanceTimersByTime(200); });
+    expect(useMortgageComparison.getState().loanAmount).toBe('62');
+    act(() => { amount.props.onChangeText('625'); });
+    expect(useMortgageComparison.getState().loanAmount).toBe('62');
+    act(() => { tree.unmount(); });
+    expect(useMortgageComparison.getState().loanAmount).toBe('625');
+  } finally {
+    jest.useRealTimers();
+    restoreRatesSession(original);
+    clearMortgageComparison();
+  }
+});

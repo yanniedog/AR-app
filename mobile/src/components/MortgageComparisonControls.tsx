@@ -26,6 +26,8 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   // Audit/programmatic store writes still apply immediately (dirty stays false).
   const [draft, setDraft] = useState(storeValue);
   const dirty = useRef(false);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   useEffect(() => {
     if (dirty.current) return;
     setDraft(storeValue);
@@ -40,16 +42,17 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
       useMortgageComparison.setState(draft);
       dirty.current = false;
     }, TYPING_DEBOUNCE_MS);
-    return () => {
-      clearTimeout(timer);
-      // Section switches unmount these controls; flush so the committed store
-      // keeps the last typed amount/LVR instead of the pre-keystroke values.
-      if (dirty.current) {
-        useMortgageComparison.setState(draft);
-        dirty.current = false;
-      }
-    };
+    // Dependency-change cleanup must only cancel the timer. Flushing here would
+    // commit a stale draft and clear dirty before the next keystroke schedules.
+    return () => clearTimeout(timer);
   }, [draft, storeValue.loanAmount, storeValue.lvr]);
+  // Section switches unmount these controls; flush the latest draft so the
+  // committed store keeps the last typed amount/LVR.
+  useEffect(() => () => {
+    if (!dirty.current) return;
+    useMortgageComparison.setState(draftRef.current);
+    dirty.current = false;
+  }, []);
   const groups = useMemo(() => [
     { key: 'loanPurposes' as const, field: 'loan_purpose' as const, condition: 'purpose', canonical: canonicalPurpose },
     { key: 'repaymentTypes' as const, field: 'ribbon_repayment_type' as const, condition: 'repayment', canonical: canonicalRepayment },
