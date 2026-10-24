@@ -3,7 +3,8 @@ import { PublicPricingCoverage } from '../scenario/PublicPricingCoverage';
 import { PublicCostComparison } from '../scenario/PublicCostComparison';
 import { SavingsQualificationEditor } from '../scenario/SavingsQualificationEditor';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
-import { publicComparisonCore, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate, resolveRowPublicRate, payableRateForRow } from '../../data/publicRateIntegration';
+import { publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, scenarioWithLocalCurrentRate, resolveRowPublicRate, payableRateForRow } from '../../data/publicRateIntegration';
+import { useResolvedPublicRankingRows } from '../../hooks/useResolvedPublicRankingRows';
 import { uiCount, uiDuration, uiInputNumber, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../lib/uiCopy";
 import { uiAccessBadge, uiListedLvr, uiTargetConstraint } from "../../lib/financialUiCopy";
 import { fontStyle } from '../../theme/fonts';
@@ -143,9 +144,24 @@ export function RateCheckWorkspace() {
   } = useUserRateScenario();
   const target = useMemo(() => {
     void suitabilityRevision;
-    return resolveCalculationTarget(() => core ? publicComparisonCore(core, publicCatalogue,
-      s => publicRateScenario(s, scenario, profileFilters)) : null,
-    section, { target: params.target, ri: params.ri, programme: params.programme });
+    return resolveCalculationTarget(() => {
+      if (!core) return null;
+      if (publicCatalogue.status === 'unavailable') return core;
+      // Only expand the mounted calculator section — full three-section
+      // publicComparisonCore stalled section switches past the lag budget.
+      return {
+        ...core,
+        sections: {
+          ...core.sections,
+          [section]: {
+            ...core.sections[section],
+            rates: publicRecommendationRows(
+              core.sections[section].rates, publicCatalogue, section,
+              publicRateScenario(section, scenario, profileFilters)),
+          },
+        },
+      };
+    }, section, { target: params.target, ri: params.ri, programme: params.programme });
   }, [core, section, params.target, params.ri, params.programme, suitabilityRevision, publicCatalogue, profileFilters, scenario]);
   const suitabilityReady = useMemo(() => {
     void suitabilityRevision;
@@ -264,9 +280,27 @@ export function RateCheckWorkspace() {
       details?.products,
     );
   }, [core, section, profileFilters, includeNonStandard, details, lvr, suitabilityRevision, publicCatalogue, scenario]);
-  const publicPricing = useMemo(() => resolvedPublicRankingRows(unpricedRows, publicCatalogue, row => publicRateScenario(section, scenario, profileFilters, row)), [unpricedRows, publicCatalogue, section, scenario, profileFilters]);
-  const comparisonsReady = publicCatalogue.status === 'unavailable' || publicPricing.complete;
-  const rows = publicPricing.rows;
+  const calculatorSectionScenario = useMemo(
+    () => publicRateScenario(section, scenario, profileFilters),
+    [section, scenario, profileFilters],
+  );
+  const calculatorRowScenario = useCallback(
+    (row: RateRow) => publicRateScenario(section, scenario, profileFilters, row),
+    [section, scenario, profileFilters],
+  );
+  const pricedCatalogue = useResolvedPublicRankingRows({
+    candidates: unpricedRows,
+    catalogue: publicCatalogue,
+    section,
+    sectionScenario: calculatorSectionScenario,
+    rowScenario: calculatorRowScenario,
+    focused: true,
+    revision: suitabilityRevision,
+  });
+  const publicPricing = pricedCatalogue.resolution;
+  const comparisonsReady = publicCatalogue.status === 'unavailable'
+    || (pricedCatalogue.ready && publicPricing.complete);
+  const rows = pricedCatalogue.ready ? publicPricing.rows : [];
 
   // ---- LVR (mortgage): a real calculation from several inputs ----
   // Deposit needed to drop into the next lower LVR band (better rates).
@@ -668,7 +702,8 @@ export function RateCheckWorkspace() {
         </View>
       ) : null}
 
-      <PublicPricingCoverage section={section} rows={unpricedRows} scenario={scenario} compact />
+      <PublicPricingCoverage section={section} rows={unpricedRows} scenario={scenario} compact
+        pricingSummary={pricedCatalogue.ready ? publicPricing : null} />
       <Card style={{ marginBottom: 16 }}>
         <LocalRateEditor section={section} scenario={scenario} editable={scenarioStorageStatus === 'ready'} onChange={patch => updateScenario(previous => ({ ...previous, localRates: { ...previous.localRates, [scenarioSectionKey]: { ...previous.localRates[scenarioSectionKey], ...patch } } }))}>
           {field('Current rate (%)', (section === 'Mortgage' ? inputs.currentRate : depositInputs.currentRate), currentRate => section === 'Mortgage' ? upd({ currentRate }) : updateScenario(previous => ({ ...previous, [scenarioSectionKey]: { ...previous[scenarioSectionKey], currentRate } })), CALCULATOR_FIELDS.currentRate)}

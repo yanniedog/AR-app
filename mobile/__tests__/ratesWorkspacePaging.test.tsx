@@ -183,6 +183,52 @@ test('comparison uncertainty counts the complete filtered result set, not the pr
   } finally { act(() => tree.unmount()); }
 });
 
+test('audit mortgage scope apply and clear update comparison inputs and temporary facets', () => {
+  install();
+  updateRatesSection('Mortgage', { page: 3, scrollOffset: 420 });
+  const tree = mount();
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  try {
+    expect(surface().actions!['search.mortgage.scope.apply.0']).toEqual(expect.any(Function));
+    expect(surface().actions!['search.mortgage.scope.apply.1']).toEqual(expect.any(Function));
+    expect(surface().actions!['search.mortgage.scope.clear']).toEqual(expect.any(Function));
+    act(() => {
+      surface().actions!['search.mortgage.scope.apply.0']!({
+        loanAmount: '625000',
+        lvr: '78',
+        loanPurposes: ['OWNER_OCCUPIED'],
+        repaymentTypes: ['PRINCIPAL_AND_INTEREST'],
+      });
+    });
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '625000', lvr: '78' });
+    expect(useRatesSession.getState().sections.Mortgage.filters).toMatchObject({
+      loanPurposes: ['OWNER_OCCUPIED'],
+      repaymentTypes: ['PRINCIPAL_AND_INTEREST'],
+    });
+    expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
+    expect(useRatesSession.getState().sections.Mortgage.scrollOffset).toBe(0);
+    act(() => {
+      surface().actions!['search.mortgage.scope.apply.1']!({
+        loanAmount: '410000',
+        lvr: '65',
+        loanPurposes: ['INVESTMENT'],
+        repaymentTypes: ['INTEREST_ONLY'],
+      });
+    });
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '410000', lvr: '65' });
+    expect(useRatesSession.getState().sections.Mortgage.filters).toMatchObject({
+      loanPurposes: ['INVESTMENT'],
+      repaymentTypes: ['INTEREST_ONLY'],
+    });
+    act(() => { surface().actions!['search.mortgage.scope.clear']!(); });
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '', lvr: '' });
+    expect(useRatesSession.getState().sections.Mortgage.filters).toMatchObject({
+      loanPurposes: [],
+      repaymentTypes: [],
+    });
+  } finally { act(() => tree.unmount()); }
+});
+
 test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seeded audit reaches exact later-page targets and restores the mounted %s-row session with initial comparison mode %s', async (pageSize, initialMode) => {
   const catalogue = Array.from({ length: 45 }, (_, i) => ({ product_key: `p-${String(i).padStart(2, '0')}`,
     product_name: `Loan ${String(i).padStart(2, '0')}`, provider: 'Bank', rate_index: i,

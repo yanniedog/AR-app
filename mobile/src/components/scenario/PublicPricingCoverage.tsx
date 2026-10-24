@@ -23,8 +23,10 @@ function coverageStatus(value: unknown) {
 }
 
 /** Complete ranking requires the full selected catalogue, independently of cost coverage. */
-export function PublicPricingCoverage({ section, rows, scenario, scenarioForRow, compact = false }: {
+export function PublicPricingCoverage({ section, rows, scenario, scenarioForRow, compact = false, pricingSummary = null }: {
   section: SectionKey; rows: readonly RateRow[]; scenario?: UserRateScenario; scenarioForRow?: (row: RateRow) => RateScenario; compact?: boolean;
+  /** Prefer parent-resolved counts so Rates does not price the catalogue twice. */
+  pricingSummary?: { priced: number; unresolved: number; complete: boolean } | null;
 }) {
   const manifest = useStore(state => state.manifest);
   const profile = useStore(state => state.prefs?.profileFilters);
@@ -35,10 +37,15 @@ export function PublicPricingCoverage({ section, rows, scenario, scenarioForRow,
   useEffect(() => {
     if (catalogueStatus === 'ready' && !allLoaded) void loadAll().catch(() => undefined);
   }, [catalogueStatus, allLoaded, loadAll]);
-  const pricing = useMemo(() => resolvedPublicRankingRows(rows, catalogue, row => scenarioForRow?.(row) ?? publicRateScenario(section, scenario, profile, row)), [rows, catalogue, section, scenario, profile, scenarioForRow]);
+  // Compact Rates header already paid for cooperative pricing; never re-scan.
+  const pricing = useMemo(() => {
+    if (pricingSummary) return pricingSummary;
+    if (compact) return { priced: 0, unresolved: 0, complete: false };
+    return resolvedPublicRankingRows(rows, catalogue, row => scenarioForRow?.(row) ?? publicRateScenario(section, scenario, profile, row));
+  }, [pricingSummary, compact, rows, catalogue, section, scenario, profile, scenarioForRow]);
   if (catalogue.status === 'unavailable') return null;
   const products = catalogue.products.filter(product => product.section === section);
-  const summary = catalogue.status === 'ready' && catalogue.allLoaded
+  const summary = catalogue.status === 'ready' && catalogue.allLoaded && (pricingSummary || !compact)
     ? uiJoin('Payable rate', ': ', uiCount(pricing.priced), ' · ', 'Unresolved offers', ': ', uiCount(pricing.unresolved))
     : uiJoin('Public pricing', ': ', 'Partial');
   return <View style={{ marginBottom: compact ? 6 : 16 }}>
