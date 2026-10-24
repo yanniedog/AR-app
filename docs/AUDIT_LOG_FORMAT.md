@@ -29,6 +29,8 @@ in older or interrupted runs yields incomplete status. `gaps`, `gapPositions`
 and `missingPlannedChecks` expose missing, duplicate, unexpected, unavailable,
 skipped, not-run, pending, missing readiness, absent schema-v7 health diagnosis
 and truncated evidence without private input text.
+Malformed optional coverage or health schemas in older recovery files are
+reported as invalid evidence, without deleting or rewriting the original report.
 Unknown private check identities remain null while their positions survive.
 Counts describe different overlapping facts and must not be added together.
 

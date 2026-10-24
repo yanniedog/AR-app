@@ -142,3 +142,25 @@ test('current schema without health diagnosis cannot claim exhaustive detail', (
   expect(buildPerformanceAuditCompletion(report)).toMatchObject({ outcome: 'incomplete',
     coverageComplete: false, detailsComplete: false, gaps: { missingHealthReports: 1 } });
 });
+
+test.each([{}, { plannedChecks: 1, storedChecks: 1, complete: true }, { missingPlannedCheckIds: null }])(
+  'recovered legacy optional coverage shape %j is incomplete evidence without crashing', coverage => {
+    const report = completeReport();
+    report.coverage = coverage as never;
+    expect(buildPerformanceAuditCompletion(report)).toMatchObject({ outcome: 'incomplete', collectionComplete: false,
+      coverageComplete: false, detailsComplete: false, gaps: { invalidCoverageReports: 1 } });
+  });
+
+test.each([{}, { coverage: {}, checks: [] }, { coverage: null, checks: 'invalid' }])(
+  'recovered optional health shape %j is incomplete evidence without crashing', health => {
+    const report = completeReport();
+    report.appHealth = health as never;
+    expect(buildPerformanceAuditCompletion(report)).toMatchObject({ outcome: 'incomplete', coverageComplete: false,
+      detailsComplete: false, gaps: { invalidHealthReports: 1, missingHealthReports: 1 } });
+  });
+
+test('health with valid check accounting but missing display schema remains invalid evidence', () => {
+  const report = completeReport();
+  delete (report.appHealth as unknown as Record<string, unknown>).domains;
+  expect(buildPerformanceAuditCompletion(report).gaps.invalidHealthReports).toBe(1);
+});

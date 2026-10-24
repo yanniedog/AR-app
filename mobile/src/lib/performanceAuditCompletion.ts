@@ -2,7 +2,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import type { PerformanceAuditReport } from './performanceAudit';
 import { auditOutcome } from './auditPresentation';
-import { APP_HEALTH_CHECK_CODES } from './appHealth';
+import { APP_HEALTH_CHECK_CODES, APP_HEALTH_DOMAINS } from './appHealth';
 import { publicAuditDiagnostic } from './performanceAuditDiagnostic';
 
 /** Only machine-authored ISO instants are public; arbitrary saved text is not. */
@@ -19,11 +19,32 @@ export function performanceAuditReference(sessionId: string): string {
   return `audit-${bytesToHex(sha256(utf8ToBytes(sessionId))).slice(0, 16)}`;
 }
 
+/** Older recovery files validate their core report but not these optional
+ * schemas. Unknown shapes are missing evidence, never a complete collection. */
+function validCoverage(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const coverage = value as Record<string, unknown>;
+  return ['plannedChecks', 'storedChecks'].every(key => typeof coverage[key] === 'number'
+    && Number.isSafeInteger(coverage[key]) && (coverage[key] as number) >= 0)
+    && ['missingPlannedCheckIds', 'duplicateStoredCheckIds', 'unexpectedStoredCheckIds']
+      .every(key => Array.isArray(coverage[key]) && (coverage[key] as unknown[]).every(id => typeof id === 'string'))
+    && typeof coverage.complete === 'boolean';
+}
+
 /** Completion and evidence retention are separate from whether checks passed. */
 export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   safeCheckId: (id: string) => string | null = id => id) {
-  const health = report.appHealth;
-  const coverage = report.coverage;
+  const coverageValid = validCoverage(report.coverage);
+  const coverage = coverageValid ? report.coverage : undefined;
+  const healthValid = report.appHealth != null && validCoverage(report.appHealth.coverage)
+    && report.appHealth.summary != null && typeof report.appHealth.summary === 'object'
+    && Array.isArray(report.appHealth.domains) && report.appHealth.domains.every(domain => domain != null
+      && APP_HEALTH_DOMAINS.includes(domain.domain) && typeof domain.total === 'number')
+    && Array.isArray(report.appHealth.checks) && report.appHealth.checks.every(check => check != null
+      && typeof check.id === 'string' && typeof check.code === 'string'
+      && ['pass', 'warn', 'fail', 'unavailable', 'not-run'].includes(check.status)
+      && check.metrics != null && typeof check.metrics === 'object' && !Array.isArray(check.metrics));
+  const health = healthValid ? report.appHealth : undefined;
   const healthChecks = health?.checks ?? [];
   let truncatedEvidenceFields = 0;
   let omittedEvidenceChars = 0;
@@ -69,6 +90,8 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
       && check.metrics.availabilityFailure !== true && check.status !== 'skipped' && !structuredReadiness(check)).length,
     unverifiedLinks: report.checks.filter(unverifiedLink).length,
     missingHealthReports: report.schemaVersion >= 7 && !health ? 1 : 0,
+    invalidCoverageReports: report.coverage != null && !coverageValid ? 1 : 0,
+    invalidHealthReports: report.appHealth != null && !healthValid ? 1 : 0,
     truncatedEvidenceFields, omittedEvidenceChars,
   };
   const collectionComplete = coverage != null && coverage.storedChecks === report.checks.length

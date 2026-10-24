@@ -119,6 +119,8 @@ function PerformanceAuditScreenInner() {
   );
   const reportedChecks = orderedChecks.slice(0, visibleCheckLimit);
   const completion = useMemo(() => report ? buildPerformanceAuditCompletion(report) : null, [report]);
+  const reportCoverage = completion?.gaps.invalidCoverageReports ? undefined : report?.coverage;
+  const reportHealth = completion?.gaps.invalidHealthReports ? undefined : report?.appHealth;
   useEffect(() => {
     setVisibleCheckLimit(MAX_REPORTED_AUDIT_CHECKS);
     setDetailsOpen(false);
@@ -346,13 +348,15 @@ function PerformanceAuditScreenInner() {
       {report && completion ? <>
         <Card style={{ gap: 8,borderWidth:1,borderColor:summaryColor }}>
           <Row style={{justifyContent:'space-between', flexWrap:'wrap'}}><AppText variant="h3">{uiLabel('App health audit')}</AppText><AppText style={{color:summaryColor}} accessibilityLiveRegion="polite">{uiLabel(completion.outcome === 'successful' ? 'Successful' : completion.outcome === 'failed' ? 'Failed' : completion.outcome === 'incomplete' ? 'Incomplete' : 'Needs review')}</AppText></Row>
-          <InfoRow label="Report" value={auditReportCompletionLabel(report, state)} />
+          <InfoRow label="Report" value={completion.gaps.invalidCoverageReports || completion.gaps.invalidHealthReports
+            ? report.sessionId === state.sessionId ? 'Partial' : 'Saved'
+            : auditReportCompletionLabel(report, state)} />
           <InfoRow label="Finished" value={uiIdentifier(completion.finishedAt)} />
           <InfoRow label="Audit ID" value={uiIdentifier(completion.auditId)} />
           <InfoRow label="Details" value={uiLabel(completion.detailsComplete ? 'Complete' : 'Incomplete')} />
           <InfoRow label="Coverage" value={uiLabel(completion.coverageComplete ? 'Complete' : 'Incomplete')} />
           <InfoRow label="Executed" value={countPair(report.summary.executed,
-            (report.coverage?.plannedChecks ?? report.checks.length) + (report.appHealth?.coverage.plannedChecks ?? 0))} />
+            (reportCoverage?.plannedChecks ?? report.checks.length) + (reportHealth?.coverage.plannedChecks ?? 0))} />
           <InfoRow label="Failures" value={uiCount(completion.failurePositions.length)} />
           {completion.failurePositions[0] ? <InfoRow label="First failure" value={uiJoin(
             completion.failurePositions[0].source === 'health' ? 'Data and display health' : 'Check results',
@@ -392,12 +396,12 @@ function PerformanceAuditScreenInner() {
           <InfoRow label="Executed" value={uiCount(report.summary.executed)} />
           <InfoRow label="Declared unavailable" value={uiCount(report.summary.justifiedSkipped)} />
           <InfoRow label="Unexpected" value={uiCount(report.summary.unexpectedSkipped)} />
-          {report.coverage ? <>
-            <InfoRow label="Journey checks" value={countPair(report.coverage.executedJourneyChecks,report.coverage.plannedJourneyChecks)} />
-            <InfoRow label="Terminal unavailable" value={uiCount(report.coverage.justifiedSkippedJourneyChecks)} />
-            <InfoRow label="Unavailable journeys" value={uiCount(report.coverage.unavailableJourneyChecks)} />
-            <InfoRow label="Unexpected journeys" value={uiCount(report.coverage.unexpectedSkippedJourneyChecks)} />
-            <InfoRow label="Unsafe side effects excluded" value={uiCount(report.coverage.excludedUnsafeFacetCount)} />
+          {reportCoverage ? <>
+            <InfoRow label="Journey checks" value={countPair(reportCoverage.executedJourneyChecks,reportCoverage.plannedJourneyChecks)} />
+            <InfoRow label="Terminal unavailable" value={uiCount(reportCoverage.justifiedSkippedJourneyChecks)} />
+            <InfoRow label="Unavailable journeys" value={uiCount(reportCoverage.unavailableJourneyChecks)} />
+            <InfoRow label="Unexpected journeys" value={uiCount(reportCoverage.unexpectedSkippedJourneyChecks)} />
+            <InfoRow label="Unsafe side effects excluded" value={uiCount(reportCoverage.excludedUnsafeFacetCount)} />
           </>:null}
           <InfoRow label="Slowest check" value={measuredMs(report.summary.slowestCheckMs)} />
           <InfoRow label="Max JS lag" value={measuredMs(report.summary.maxEventLoopLagMs)} />
@@ -412,16 +416,16 @@ function PerformanceAuditScreenInner() {
           <Disclosure title="Raw report" open={rawReportOpen} onToggle={() => setRawReportOpen(!rawReportOpen)}><AuditEvidenceText report={report}/></Disclosure>
         </Card>
         {report.backgroundWorkWait ? <BackgroundWorkDiagnosis wait={report.backgroundWorkWait}/>:null}
-        <AuditCatalogueCoverage check={report.appHealth?.checks.find(check => check.code === 'catalogue-identity-coverage')} sampling={report.plan?.inputs.sampling}/>
-        {report.appHealth ? <Card style={{gap:8}}>
+        <AuditCatalogueCoverage check={reportHealth?.checks.find(check => check.code === 'catalogue-identity-coverage')} sampling={report.plan?.inputs.sampling}/>
+        {reportHealth ? <Card style={{gap:8}}>
           <AppText variant="h3">{uiLabel('Data and display health')}</AppText>
-          <InfoRow label="Mode" value={uiLabel(report.appHealth.mode === 'local' ? 'Local checks':'Live checks')} />
-          <InfoRow label="Check completion" value={report.appHealth.summary.coveragePercent == null ? 'Unknown':uiJoin(uiNumber(report.appHealth.summary.coveragePercent,1),'%')}/>
-          {report.appHealth.domains.filter(domain => domain.total > 0).map(domain => <View key={domain.domain}>
+          <InfoRow label="Mode" value={uiLabel(reportHealth.mode === 'local' ? 'Local checks':'Live checks')} />
+          <InfoRow label="Check completion" value={reportHealth.summary.coveragePercent == null ? 'Unknown':uiJoin(uiNumber(reportHealth.summary.coveragePercent,1),'%')}/>
+          {reportHealth.domains.filter(domain => domain.total > 0).map(domain => <View key={domain.domain}>
             <InfoRow label={DOMAIN_LABELS[domain.domain]} value={outcome(domain.overall)} />
             <AppText variant="tiny">{uiJoin('Good',': ',uiCount(domain.pass),' · ','Needs review',': ',uiCount(domain.warn),' · ','Failed',': ',uiCount(domain.fail),' · ','Unavailable',': ',uiCount(domain.unavailable),' · ','Not run',': ',uiCount(domain.notRun))}</AppText>
           </View>)}
-          {report.appHealth.checks.filter(check => check.status !== 'pass').map(check => <InfoRow key={check.id} label={uiIdentifier(check.id)} value={uiLabel(check.status === 'fail' ? 'Failed':check.status === 'warn' ? 'Needs review':check.status === 'not-run' ? 'Not run':'Unavailable')}/>)}
+          {reportHealth.checks.filter(check => check.status !== 'pass').map(check => <InfoRow key={check.id} label={uiIdentifier(check.id)} value={uiLabel(check.status === 'fail' ? 'Failed':check.status === 'warn' ? 'Needs review':check.status === 'not-run' ? 'Not run':'Unavailable')}/>)}
         </Card>:null}
         {report.routeAggregates.length ? <Card style={{gap:8}}><AppText variant="h3">{uiLabel('First / repeat')}</AppText>
           {report.routeAggregates.map(route => <View key={route.journeyId}>

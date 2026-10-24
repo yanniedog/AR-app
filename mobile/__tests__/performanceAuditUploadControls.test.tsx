@@ -392,3 +392,16 @@ test('combined health totals use the complete denominator without counting warni
   expect(tree!.root.findByProps({ label: 'Executed', value: `${report.summary.executed} / ${allPlanned}` })).toBeDefined();
   expect(tree!.root.findByProps({ label: 'Warnings' }).props.value).toBe(String(report.summary.warn));
 });
+
+test('an older saved report with malformed optional coverage remains reviewable as incomplete', async () => {
+  const report = makePerformanceAuditReport('older-diagnosis');
+  report.coverage = {} as never;
+  report.appHealth = {} as never;
+  jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(report);
+  await mount();
+  expect(tree!.root.findByProps({ label: 'Details', value: 'Incomplete' })).toBeDefined();
+  expect(tree!.root.findByProps({ label: 'Coverage', value: 'Incomplete' })).toBeDefined();
+  expect(tree!.root.findByProps({ title: 'Upload report' })).toBeDefined();
+  expect(report.coverage).toEqual({});
+  expect(report.appHealth).toEqual({});
+});
