@@ -122,15 +122,20 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
         if (flightEpoch !== uploadFlightEpoch) { preparedBody = null; return snapshot; }
         publish({ phase: 'uploading' });
         let result: Awaited<ReturnType<typeof uploadDebugLog>>;
+        // Callback-assigned; keep a typed local so the else-narrowed pendingReceipt
+        // (null at branch entry) does not erase the early hosted createdAt.
+        let hostedCreatedAt: string | undefined;
         try {
           result = await uploadDebugLog(preparedBody, fetch, {
             onContentHosted: async (partial) => {
               // Best-effort early persist; final save below still owns failure recovery.
               try {
-                pendingReceipt = hash
+                const early = hash
                   ? await saveDebugLogUploadReceipt(partial, undefined, hash)
                   : await saveDebugLogUploadReceipt(partial);
-                publish({ url: debugLogUploadShareUrl(pendingReceipt) });
+                pendingReceipt = early;
+                hostedCreatedAt = early.createdAt;
+                publish({ url: debugLogUploadShareUrl(early) });
               } catch { /* SecureStore may be unavailable until the final save path. */ }
             },
           });
@@ -143,7 +148,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
           schemaVersion: 1, url: result.url, provider: result.provider,
           ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
           ...(result.shareUrl ? { shareUrl: result.shareUrl } : {}),
-          createdAt: pendingReceipt?.createdAt ?? new Date().toISOString(),
+          createdAt: hostedCreatedAt ?? new Date().toISOString(),
           ...(hash ? { contentSha256: hash } : {}),
         };
         try {
