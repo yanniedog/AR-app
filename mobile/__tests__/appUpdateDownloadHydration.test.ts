@@ -6,6 +6,7 @@ import { Platform } from 'react-native';
 import {
   ensureApkBackgroundDownload,
   getHydratedApkDownloadSnapshot,
+  getApkDownloadSnapshot,
   resetApkDownloadStateForTests,
 } from '../src/lib/appUpdateDownload';
 import { apkDestinationPath, apkDownloadTaskId, IDLE_APK_DOWNLOAD } from '../src/lib/appUpdateDownloadLogic';
@@ -239,6 +240,77 @@ describe('APK update state hydration', () => {
     expect(verifyDownloadedApk).toHaveBeenCalledTimes(1);
     expect(FileSystem.deleteAsync).toHaveBeenCalledWith(destination, { idempotent: true });
     expect(createDownloadTask).toHaveBeenCalledTimes(1);
+  });
+
+
+  it.each(['PENDING', 'PAUSED'])('preserves an old restored %s task without new bytes', async (state) => {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...IDLE_APK_DOWNLOAD, phase: 'downloading', buildNumber: remote.build_number,
+      bytesWritten: 10_100_032, lastProgressAt: new Date(Date.now() - 180_000).toISOString(),
+    }));
+    const task = createDownloadTask({
+      id: apkDownloadTaskId(remote.build_number, remote.sha256), url: remote.download_url, destination,
+    });
+    Object.assign(task, { state, bytesDownloaded: 10_100_032, bytesTotal: remote.bytes });
+    getExistingTasksMock.mockResolvedValue([task]);
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({ exists: true, size: 10_100_032 } as never);
+    jest.mocked(createDownloadTask).mockClear();
+
+    await expect(ensureApkBackgroundDownload(remote)).resolves.toMatchObject({
+      phase: 'downloading', bytesWritten: 10_100_032, retryCount: 0,
+    });
+    expect(task.stop).not.toHaveBeenCalled();
+    expect(createDownloadTask).not.toHaveBeenCalled();
+    expect(verifyDownloadedApk).not.toHaveBeenCalled();
+  });
+
+  it.each(['verifying', 'downloading'])('recovers an orphaned complete APK from restored %s', async (phase) => {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...IDLE_APK_DOWNLOAD, phase, buildNumber: remote.build_number,
+      lastProgressAt: new Date(Date.now() - 180_000).toISOString(),
+    }));
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({ exists: true, size: remote.bytes } as never);
+    jest.mocked(verifyDownloadedApk).mockResolvedValue({ size: remote.bytes, verifiedSha256: true });
+
+    await expect(ensureApkBackgroundDownload(remote)).resolves.toMatchObject({ phase: 'ready' });
+    expect(verifyDownloadedApk).toHaveBeenCalledTimes(1);
+    expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+    expect(createDownloadTask).not.toHaveBeenCalled();
+  });
+
+  it('preserves a partial APK when Android task enumeration fails', async () => {
+    await getHydratedApkDownloadSnapshot();
+    getExistingTasksMock.mockRejectedValueOnce(new Error('native bridge unavailable'));
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({ exists: true, size: 10_100_032 } as never);
+
+    await expect(ensureApkBackgroundDownload(remote)).rejects.toThrow('native bridge unavailable');
+    expect(verifyDownloadedApk).not.toHaveBeenCalled();
+    expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+    expect(createDownloadTask).not.toHaveBeenCalled();
+  });
+
+  it('ignores a stopped task callback after a stalled transfer is replaced with the same ID', async () => {
+    const task = createDownloadTask({
+      id: apkDownloadTaskId(remote.build_number, remote.sha256), url: remote.download_url, destination,
+    });
+    Object.assign(task, { state: 'DOWNLOADING', bytesDownloaded: 10_100_032, bytesTotal: remote.bytes });
+    getExistingTasksMock.mockResolvedValue([task]);
+    await ensureApkBackgroundDownload(remote);
+    const oldError = (task as unknown as {
+      handlers: { error: (event: { error: string; errorCode: number }) => void };
+    }).handlers.error;
+    const now = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now + 180_000);
+    try {
+      await expect(ensureApkBackgroundDownload(remote)).resolves.toMatchObject({
+        phase: 'downloading', retryCount: 1, bytesWritten: 0,
+      });
+      expect(task.stop).toHaveBeenCalled();
+      oldError({ error: 'stopped', errorCode: 1 });
+      expect(getApkDownloadSnapshot()).toMatchObject({ phase: 'downloading', error: null });
+    } finally {
+      clock.mockRestore();
+    }
   });
 
 });
