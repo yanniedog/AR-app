@@ -48,7 +48,11 @@ describe('automatic audit log sharing', () => {
     const unsubscribe = sharing.subscribeDebugLogUpload(() => phases.push(sharing.getDebugLogUploadSnapshot().phase));
     const state = await sharing.startDebugLogUpload(request);
     expect(log.debugLog.readCompleteText).toHaveBeenCalledWith(request.audit);
-    expect(log.uploadDebugLog).toHaveBeenCalledWith('versioned\nfull-log-with-complete-report');
+    expect(log.uploadDebugLog).toHaveBeenCalledWith(
+      'versioned\nfull-log-with-complete-report',
+      expect.any(Function),
+      expect.objectContaining({ onContentHosted: expect.any(Function) }),
+    );
     expect(log.verifyDebugLogUpload).toHaveBeenCalledWith(receipt, 'versioned\nfull-log-with-complete-report');
     expect(clipboard.setStringAsync).toHaveBeenCalledWith(result.shareUrl);
     expect(clipboard.setStringAsync).not.toHaveBeenCalledWith(result.url);
