@@ -40,3 +40,33 @@ test.each(['idle', 'other-report'])('%s cannot borrow another report upload stat
     expect(tree.root.findAllByType('AppText')).toHaveLength(0);
   } finally { act(() => tree.unmount()); }
 });
+
+test.each([false, true])('an audit never borrows a retained recovery URL even when verified=%s', verified => {
+  mockSnapshot = { sessionId: 'audit-b', phase: 'failed', verified, error: 'Recovery required',
+    mayHaveUploaded: false, url: 'https://paste.c-net.org/audit-a', recoveryReceipt: {
+      schemaVersion: 1, provider: 'paste.c-net.org', url: 'https://paste.c-net.org/audit-a',
+      deleteKey: 'fixture-only', createdAt: '2026-10-15T19:00:00Z',
+    } };
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<DebugLogUploadStatus sessionId="audit-b" />) as Tree; });
+  try {
+    expect(tree.root.findAllByType('AppText').some(node => node.props.children === mockSnapshot.url)).toBe(false);
+    expect(tree.root.findAllByType('Button').find(node => node.props.title === 'Debug log')).toBeDefined();
+    expect(tree.root.findAllByType('Button').filter(node => node.props.title !== 'Debug log').every(node => node.props.disabled === true)).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('an unverified URL stays hidden in its audit while generic debug recovery retains the address', () => {
+  mockSnapshot = { sessionId: 'audit-b', phase: 'failed', verified: false, error: 'Verification failed',
+    mayHaveUploaded: true, url: 'https://paste.c-net.org/unverified' };
+  let scoped!: Tree, generic!: Tree;
+  act(() => {
+    scoped = TestRenderer.create(<DebugLogUploadStatus sessionId="audit-b" />) as Tree;
+    generic = TestRenderer.create(<DebugLogUploadStatus />) as Tree;
+  });
+  try {
+    expect(scoped.root.findAllByType('AppText').some(node => node.props.children === mockSnapshot.url)).toBe(false);
+    expect(scoped.root.findAllByType('Button').some(node => node.props.title === 'Retry verification')).toBe(true);
+    expect(generic.root.findAllByType('AppText').some(node => node.props.children === mockSnapshot.url)).toBe(true);
+  } finally { act(() => { scoped.unmount(); generic.unmount(); }); }
+});
