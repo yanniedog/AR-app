@@ -2,6 +2,7 @@ import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditRepo
 import { buildPerformanceAuditCompletion, publicAuditTimestamp } from '../src/lib/performanceAuditCompletion';
 import { createDeidentifiedDiagnosticsShare, createPublicPerformanceAuditReport } from '../src/lib/diagnosticsEnvelope';
 import { decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
+import * as diagnosticCodec from '../src/lib/compactDiagnosticJson';
 import { APP_HEALTH_CHECK_CODES, finalizeAppHealthReport } from '../src/lib/appHealth';
 
 function completeReport() {
@@ -19,12 +20,21 @@ function completeReport() {
   return report;
 }
 
+test('an oversized compressed upload fails preparation without returning a partial summary', () => {
+  const encode = jest.spyOn(diagnosticCodec, 'encodeCompressedDiagnosticJson')
+    .mockReturnValueOnce('x'.repeat(2 * 1024 * 1024 + 1));
+  try {
+    expect(() => createPublicPerformanceAuditReport(completeReport())).toThrow('public upload limit');
+  } finally { encode.mockRestore(); }
+});
+
 test('hosted header and decoded full report identify the same exact completed audit', () => {
   const report = completeReport();
   const body = createPublicPerformanceAuditReport(report);
   const header = JSON.parse(body).audit;
   const decoded = decodeCompactDiagnosticJson(body) as any;
   expect(header).toMatchObject({ auditId: expect.stringMatching(/^audit-[a-f0-9]{16}$/),
+    appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
     finishedAt: '2026-10-15T18:01:00.000Z', outcome: 'successful', collectionComplete: true,
     coverageComplete: true, detailsComplete: true, performanceCheckCount: 1, healthCheckCount: 2, failureCount: 0 });
   expect(decoded.completion.auditId).toBe(header.auditId);

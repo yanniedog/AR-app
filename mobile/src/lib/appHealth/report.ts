@@ -1,3 +1,4 @@
+import { publicHistoryCoverageSanitizer } from './publicHistoryCoverage';
 import {
   APP_HEALTH_CHECK_CODES,
   APP_HEALTH_DOMAINS,
@@ -308,6 +309,8 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
     'invalidCounts',
   ],
   [APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE]: [
+    'historyAvailable', 'historyDaysChecked', 'historySourceGapDays', 'historyGaps',
+    'historyProcessingMismatches', 'historyChartProjectionMismatches', 'historicalPixelsVerified',
     'catalogueAvailable', 'exhaustiveLoadedCatalogueScan', 'sourceIdentityInventoryAvailable',
     'allProductsRendered', 'publishedRates', 'publishedProducts', 'publishedProviders',
     'sourceProducts', 'sourceRates', 'identityMismatches', 'missingDetails', 'missingSearchIndex',
@@ -384,9 +387,9 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
   ],
 };
 
-function publicMetrics(check: AppHealthCheck): Record<string, AppHealthMetricValue> {
+function publicMetrics(check: AppHealthCheck, sanitizeHistory: ReturnType<typeof publicHistoryCoverageSanitizer>): Record<string, AppHealthMetricValue> {
   const allowed = new Set(APP_HEALTH_PUBLIC_METRIC_ALLOWLIST[check.code] ?? []);
-  return Object.fromEntries(
+  const metrics = Object.fromEntries(
     Object.entries(check.metrics).filter(
       ([key, value]) =>
         allowed.has(key) &&
@@ -396,9 +399,12 @@ function publicMetrics(check: AppHealthCheck): Record<string, AppHealthMetricVal
           (typeof value === 'number' && Number.isFinite(value))),
     ),
   );
+  return check.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE
+    ? { ...metrics, ...sanitizeHistory(check.metrics) } : metrics;
 }
 
 export function toPublicAppHealthReport(report: AppHealthReport): PublicAppHealthReport {
+  const sanitizeHistory = publicHistoryCoverageSanitizer();
   return {
     schemaVersion: APP_HEALTH_SCHEMA_VERSION,
     mode: report.mode,
@@ -413,7 +419,7 @@ export function toPublicAppHealthReport(report: AppHealthReport): PublicAppHealt
       code: check.code,
       domain: check.domain,
       status: check.status,
-      metrics: publicMetrics(check),
+      metrics: publicMetrics(check, sanitizeHistory),
     })),
   };
 }

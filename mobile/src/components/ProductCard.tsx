@@ -4,7 +4,7 @@ import { bindCurrentPublicRow, publicRateScenario, resolveRowPublicRate } from '
 import { publicRateOriginLabel, publicRateText } from '../data/publicRatePresentation';
 import Ionicons from './icons/AppIcon';
 import React from 'react';
-import { StyleSheet, useWindowDimensions, View, type GestureResponderEvent, type LayoutChangeEvent, type TextLayoutEventData, type NativeSyntheticEvent } from 'react-native';
+import { ScrollView, StyleSheet, useWindowDimensions, View, type GestureResponderEvent, type LayoutChangeEvent, type TextLayoutEventData, type NativeSyntheticEvent } from 'react-native';
 
 import {
   formatBalanceRange,
@@ -33,7 +33,7 @@ import { androidRipple, AppText } from './ui';
 import { PressFeedback } from './PressFeedback';
 import { IconAction } from './IconAction';
 import { useWordBubble, type IconWord } from './WordBubble';
-import { COMPACT_ROW, compactBankLogoFrame, compactFactWidth, compactMetricHasPeers, compactProductFacet, compactProductRowLayout, compactTierIndex } from './product/compactProductRow';
+import { COMPACT_ROW, compactBankLogoFrame, compactFactWidth, compactProductFacet, compactProductRowLayout, compactTierIndex } from './product/compactProductRow';
 import { sourceRowForPublicRow } from '../data/publicRateIntegration';
 import { scopedRateConditions } from '../data/rateConditions';
 import { scopedFinancialConditionFacts, type ScopedFinancialConditionPresentation } from '../data/scopedFinancialConditionFacts';
@@ -203,11 +203,10 @@ function ProductCardView({
   activeMeasurementKey.current = measurementKey;
   const measurements = textMeasurements?.key === measurementKey ? textMeasurements : null;
   const tierIndex = compactTierIndex(row);
-  const hasMetricPeers = compactMetricHasPeers(row, core?.sections[section]?.rates, rateLabel);
   const logoFrame = compactBankLogoFrame(measuredWidth ?? width - 32, rowHeight, fontScale, embedded ? 0 : StyleSheet.hairlineWidth);
   const logoWidth = selectMode ? COMPACT_ROW.action : logoFrame.width;
   const layout = compactProductRowLayout(measuredWidth ?? width - 32, fontScale, rateText, secondaryText,
-    facet, statusIcons.length, measurements?.primary, measurements?.secondary, tierIndex, hasMetricPeers, logoWidth);
+    facet, statusIcons.length, measurements?.primary, measurements?.secondary, tierIndex, logoWidth, uiProductName(row));
   const onRowLayout = (event: LayoutChangeEvent) => {
     const next = event.nativeEvent.layout.width;
     if (next > 0) setMeasuredWidth(previous => previous === next ? previous : next);
@@ -223,12 +222,14 @@ function ProductCardView({
       return current[key] >= actual ? previous : { ...current, [key]: Math.ceil(actual) };
     });
   };
-  const metricIcon = (label: UiCopy): keyof typeof Ionicons.glyphMap => label === 'Comparison rate' ? 'git-compare-outline'
+  const metricIcon = (label: UiCopy): keyof typeof Ionicons.glyphMap => label === 'Comparison rate' ? 'calculator-outline'
     : label === 'Ongoing rate' ? 'time' : 'cash-outline';
   const metricWord = (label: UiCopy | null): IconWord => label === 'Comparison rate' ? 'Comparison'
     : label === 'Advertised rate' ? 'Advertised' : label === 'Ongoing rate' ? 'Ongoing'
       : label === 'Bonus rate' || label === 'Bonus' ? 'Bonus'
         : label === 'Rate' && section === 'Savings' && qualifier.kind === 'base' ? 'Ongoing' : 'Details';
+  const metricColor = (label: UiCopy) => label === 'Comparison rate' ? theme.colors.primary : theme.colors.success;
+  const facetIcon = facet.kind === 'LVR' ? 'home' : facet.kind === 'Term' ? 'calendar-outline' : 'wallet';
   const visibleStatuses = !layout.showStatuses ? [] : layout.combinedStatus && statusIcons.length
     ? [unknown ? 'help-circle-outline' as const : 'warning-outline' as const] : statusIcons;
   const statusWord = (icon: keyof typeof Ionicons.glyphMap): IconWord => icon === 'help-circle-outline' ? 'Unknown'
@@ -312,6 +313,10 @@ function ProductCardView({
         </View>}
       </View>
       <View ref={detailsBubble.anchorRef} collapsable={false} style={{ flex: 1, minWidth: 0 }}>
+      <ScrollView testID="compact-product-scroll" horizontal showsHorizontalScrollIndicator
+        directionalLockEnabled nestedScrollEnabled keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={() => { held.current = true; detailsBubble.dismiss(); }}
+        style={{ width: '100%' }} contentContainerStyle={{ minWidth: '100%' }}>
       <PressFeedback
         onPressIn={() => { held.current = false; }}
         onPress={() => { if (!held.current) { detailsBubble.dismiss(); onPress?.(); } held.current = false; }}
@@ -325,6 +330,7 @@ function ProductCardView({
         style={{
           minHeight: 48,
           minWidth: 48,
+          width: layout.main,
           alignItems: 'center',
           justifyContent: 'center',
           borderRadius: theme.radius.sm,
@@ -345,21 +351,18 @@ function ProductCardView({
       >
         <View key={geometryKey} pointerEvents="none" accessible={false}
           style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap }}>
-        {layout.identity > 0 ? <AppText testID="compact-product-name" variant="small" weight="600" numberOfLines={1} ellipsizeMode="tail"
-          onLayout={recordRegion('name')}
-          style={{ width: layout.identity, minWidth: 0, flexShrink: 1 }}>{uiProductName(row)}</AppText> : null}
         <View testID="compact-product-metrics" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           onLayout={recordRegion('metrics')}
           style={{ flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap, flexShrink: 0 }}>
           <View testID="compact-primary-cell" onLayout={recordRegion('primary')} style={{ width: layout.primary, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
             {layout.warningOnly ? <Ionicons name="warning-outline" size={16} color={theme.colors.warning} /> : <>
-            {layout.showPrimaryIcon ? <Ionicons name={metricIcon(rateLabel)} size={COMPACT_ROW.icon} color={theme.colors.textMuted} /> : null}
+            {layout.showPrimaryIcon ? <Ionicons name={metricIcon(rateLabel)} size={COMPACT_ROW.icon} color={metricColor(rateLabel)} /> : null}
             <AppText testID="compact-primary-rate" variant="small" weight="600" onTextLayout={measureMetric('primary')}
               style={{ fontVariant: ['tabular-nums'], flexShrink: 0 }}>{rateText}</AppText>
             </>}
           </View>
           {layout.showSecondary && secondaryText ? <View testID="compact-secondary-cell" onLayout={recordRegion('secondary')} style={{ width: layout.secondary, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-            <Ionicons name={metricIcon(secondaryLabel!)} size={COMPACT_ROW.icon} color={theme.colors.textMuted} />
+            <Ionicons name={metricIcon(secondaryLabel!)} size={COMPACT_ROW.icon} color={metricColor(secondaryLabel!)} />
             <AppText testID="compact-secondary-rate" variant="small" color="textMuted" onTextLayout={measureMetric('secondary')}
               style={{ fontVariant: ['tabular-nums'], flexShrink: 0 }}>{secondaryText}</AppText>
           </View> : null}
@@ -367,14 +370,21 @@ function ProductCardView({
         {layout.facet > 0 ? <View testID="compact-product-facts" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           onLayout={recordRegion('facts')}
           style={{ width: layout.facet, flexDirection: 'row', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          {layout.showFacetValue ? <AppText testID="compact-facet-value" onLayout={recordRegion('facet')} variant="small" color="textMuted" style={{ flexShrink: 0 }}>{facet.value}</AppText>
-            : layout.showFacetSymbol ? facet.kind === 'LVR' ? <AppText testID="compact-facet-symbol" onLayout={recordRegion('facet')} variant="small" color="textMuted">{uiLabel('%')}</AppText>
-              : <Ionicons testID="compact-facet-symbol" onLayout={recordRegion('facet')} name={facet.kind === 'Term' ? 'time' : 'cash-outline'} size={COMPACT_ROW.icon} color={theme.colors.textMuted} /> : null}
+          <View testID="compact-facet-cell" onLayout={recordRegion('facet')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Ionicons testID="compact-facet-symbol" name={facetIcon} size={COMPACT_ROW.icon} color={theme.colors.primary} />
+            <AppText testID="compact-facet-value" variant="small" color="textMuted" style={{ flexShrink: 0 }}>{facet.value}</AppText>
+          </View>
           {visibleStatuses.map((icon, index) => <Ionicons key={`${icon}:${index}`} testID={`compact-status-${index}`} onLayout={recordRegion(`status:${index}`)} name={icon} size={COMPACT_ROW.icon} color={theme.colors.warning} />)}
-          {layout.showTier ? <AppText testID="compact-tier-index" onLayout={recordRegion('tier')} variant="small" color="textMuted" style={{ flexShrink: 0 }}>{tierIndex}</AppText> : null}
+          {layout.showTier ? <View testID="compact-tier-cell" onLayout={recordRegion('tier')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Ionicons name="layers-outline" size={COMPACT_ROW.icon} color={theme.colors.textMuted} />
+            <AppText testID="compact-tier-index" variant="small" color="textMuted" style={{ flexShrink: 0 }}>{tierIndex}</AppText>
+          </View> : null}
         </View> : null}
+        <AppText testID="compact-product-name" variant="small" weight="600" numberOfLines={1}
+          onLayout={recordRegion('name')} style={{ width: layout.identity, minWidth: 0, flexShrink: 0 }}>{uiProductName(row)}</AppText>
         </View>
       </PressFeedback>
+      </ScrollView>
       </View>
       <View style={{ width: 48, opacity: selectMode ? 0 : 1 }} pointerEvents={selectMode ? 'none' : 'auto'}
         accessibilityElementsHidden={!!selectMode} importantForAccessibility={selectMode ? 'no-hide-descendants' : 'auto'}>

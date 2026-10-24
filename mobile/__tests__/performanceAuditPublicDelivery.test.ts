@@ -145,11 +145,14 @@ test('a known unverified paste retries verification using its saved receipt inst
 test('failed report preparation cannot retry an earlier raw diagnostic request', async () => {
   jest.mocked(log.uploadDebugLog).mockRejectedValueOnce(new Error('offline'));
   await sharing.startDebugLogUpload({ sessionId: null, appVersion: '1', buildVersion: '1' });
-  // Arbitrary text is now aliased. Preserve enough distinct numeric evidence to
-  // cross the encoded cap without relying on private text surviving redaction.
-  const tooLarge = makePerformanceAuditReport('new-report', [{ ...report.checks[0],
-    metrics: Object.fromEntries(Array.from({ length: 120_000 }, (_, index) => [`sample${index}`, index + 0.123456789])) }]);
-  await delivery.uploadCompletedPerformanceAudit(tooLarge);
+  // Preparation failures must fail closed regardless of the selected lossless
+  // encoding; a compressible fixture no longer represents an oversized upload.
+  const envelope = jest.requireActual<typeof import('../src/lib/diagnosticsEnvelope')>('../src/lib/diagnosticsEnvelope');
+  const preparation = jest.spyOn(envelope, 'createPublicPerformanceAuditReport').mockImplementationOnce(() => {
+    throw new Error('The deidentified report exceeds the public upload limit.');
+  });
+  try { await delivery.uploadCompletedPerformanceAudit(makePerformanceAuditReport('new-report')); }
+  finally { preparation.mockRestore(); }
   await sharing.retryDebugLogUpload();
   expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ preparationFailed: true, sessionId: 'new-report' });
   expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
