@@ -13,6 +13,7 @@ import type { AppHealthDomain } from '../src/lib/appHealth/types';
 import { DebugLogUploadStatus } from '../src/components/DebugLogUploadStatus';
 import { BackgroundWorkDiagnosis } from '../src/components/BackgroundWorkDiagnosis';
 import { AuditCatalogueCoverage } from '../src/components/AuditCatalogueCoverage';
+import { AuditHistoryCoverage } from '../src/components/AuditHistoryCoverage';
 import { AuditCheckSymbol, AuditOutcomeSymbols } from '../src/components/AuditOutcomeSymbols';
 import {
   getDebugLogUploadSnapshot,
@@ -47,6 +48,7 @@ import { useTheme } from '../src/theme/ThemeProvider';
 import { getPassiveAuditStatus, subscribePassiveAudit } from '../src/lib/passiveAudit';
 import { restorePerformanceAuditUpload, uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
 import { loadCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
+import { buildPerformanceAuditCompletion } from '../src/lib/performanceAuditCompletion';
 
 const DEIDENTIFIED_AUDIT_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-app-health-report.json`;
 
@@ -103,6 +105,9 @@ function PerformanceAuditScreenInner() {
   const [publicUpload, setPublicUpload] = useState(true);
   const [rawReportOpen, setRawReportOpen] = useState(false);
   const [backgroundOpen, setBackgroundOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [failuresOpen, setFailuresOpen] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
   const auditPreflightLocked = useRef(false);
   const mounted = useRef(true);
   const [auditPreflightMode, setAuditPreflightMode] = useState<'local' | 'live-source' | null>(null);
@@ -114,8 +119,15 @@ function PerformanceAuditScreenInner() {
     [report],
   );
   const reportedChecks = orderedChecks.slice(0, visibleCheckLimit);
+  const completion = useMemo(() => report ? buildPerformanceAuditCompletion(report) : null, [report]);
+  const reportCoverage = completion?.gaps.invalidCoverageReports ? undefined : report?.coverage;
+  const reportHealth = completion?.gaps.invalidHealthReports ? undefined : report?.appHealth;
   useEffect(() => {
     setVisibleCheckLimit(MAX_REPORTED_AUDIT_CHECKS);
+    setDetailsOpen(false);
+    setFailuresOpen(false);
+    setRawReportOpen(false);
+    setControlsOpen(false);
   }, [report?.sessionId]);
   useEffect(() => {
     let active = true;
@@ -234,8 +246,8 @@ function PerformanceAuditScreenInner() {
       uiLabel('Share deidentified report?'),
       uiJoin('Destination', ': ', 'Operating-system share sheet', ' · ',
         'Size', ': ', uiCount(prepared.byteLength), ' ', 'bytes', ' · ',
-        'Included', ': ', 'App / publication / aggregate counts / timing / fixed checks', ' · ',
-        'Excluded', ': ', 'Raw logs / tracebacks / routes / product keys / device IDs / timestamps'),
+        'Included', ': ', 'App / publication / aggregate counts / timing / fixed checks', ' / ', 'Audit timestamps', ' / ', 'Audit ID', ' · ',
+        'Excluded', ': ', 'Raw logs / tracebacks / routes / product keys / device IDs'),
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -274,19 +286,17 @@ function PerformanceAuditScreenInner() {
     );
   };
 
-  const summaryColor = report
-    ? report.summary.overall === 'healthy'
+  const summaryColor = completion
+    ? completion.outcome === 'successful'
       ? theme.colors.success
-      : report.summary.overall === 'attention'
+      : completion.outcome !== 'failed'
         ? theme.colors.warning
         : theme.colors.danger
     : theme.colors.textMuted;
 
   const auditDisabled = state.recoveryRequired || running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null;
   const outcome = (value: 'healthy'|'attention'|'bottleneck'): UiCopy => value === 'healthy' ? 'Healthy' : value === 'attention' ? 'Needs review' : 'Failures found';
-  return (
-    <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }} onLayout={() => setLayoutReady(true)}>
-      <Card style={{ gap: 10 }}>
+  const controls = <Card style={{ gap: 10 }}>
         <AppText variant="h2">{uiLabel('App health audit')}</AppText>
         <InfoRow label={uiLabel(running ? 'Audit upload' : 'Next audit upload')} value={uiLabel(running ? state.uploadLog ? 'Public' : 'Local' : publicUpload ? 'Public' : 'Local')} />
         <InfoRow label="Included" value="Checks / errors / traces / readiness / timing" />
@@ -324,8 +334,11 @@ function PerformanceAuditScreenInner() {
           {passive.updatedAt ? <InfoRow label="Last evidence" value={uiDate(passive.updatedAt)} />:null}
           {passive.lastError ? <InfoRow label="Background checks" value="Failed" />:null}
         </Disclosure>
-      </Card>
-      {!running ? <DebugLogUploadStatus sessionId={report && uploadState.sessionId === report.sessionId ? report.sessionId : state.sessionId} /> : null}
+      </Card>;
+  return (
+    <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }} onLayout={() => setLayoutReady(true)}>
+      {!report ? controls : null}
+      {!running && (!report || state.sessionId !== report.sessionId) ? <DebugLogUploadStatus sessionId={state.sessionId} /> : null}
       {state.status === 'cancelled' ? <Card><AppText>{uiLabel('Audit cancelled')}</AppText><InfoRow label="Results" value="Debug log" /></Card>:null}
       {state.status === 'failed' ? <Card style={{gap:8,borderColor:theme.colors.danger}}>
         <AppText color="danger">{uiLabel('Audit runner failed')}</AppText>
@@ -333,30 +346,66 @@ function PerformanceAuditScreenInner() {
         <InfoRow label="Last evidence" value={uiDate(state.lastStoredCheckAt)} />
         <InfoRow label="Raw report" value="Debug log" />
       </Card>:null}
-      {report ? <>
-        <Card style={{ gap: 8 }}>
-          <InfoRow label="Report" value="Redacted" />
-          <InfoRow label="Destination" value="Public hosting" />
-          <InfoRow label="Public hosting" value={uiJoin(uiIdentifier('paste.rs'), ' / ', uiIdentifier('paste.c-net.org'))} />
-          <Button title="Upload report" icon="cloud-upload-outline" disabled={uploadBusy} onPress={() => {
-            void uploadCompletedPerformanceAudit(report).catch(() => Alert.alert(uiLabel('Report unavailable')));
-          }} />
-        </Card>
+      {report && completion ? <>
         <Card style={{ gap: 8,borderWidth:1,borderColor:summaryColor }}>
-          <Row style={{justifyContent:'space-between'}}><AppText variant="h3">{uiLabel('Diagnosis')}</AppText><AppText style={{color:summaryColor}}>{outcome(report.summary.overall)}</AppText></Row>
-          <InfoRow label="Report" value={auditReportCompletionLabel(report, state)} />
-          <InfoRow label="As at" value={uiDate(report.finishedAt)} />
+          <Row style={{justifyContent:'space-between', flexWrap:'wrap'}}><AppText variant="h3">{uiLabel('App health audit')}</AppText><AppText style={{color:summaryColor}} accessibilityLiveRegion="polite">{uiLabel(completion.outcome === 'successful' ? 'Successful' : completion.outcome === 'failed' ? 'Failed' : completion.outcome === 'incomplete' ? 'Incomplete' : 'Needs review')}</AppText></Row>
+          <InfoRow label="Report" value={completion.gaps.invalidCoverageReports || completion.gaps.invalidHealthReports
+            ? report.sessionId === state.sessionId ? 'Partial' : 'Saved'
+            : auditReportCompletionLabel(report, state)} />
+          <InfoRow label="Version" value={uiIdentifier(report.app.appVersion)} />
+          <InfoRow label="Build" value={uiIdentifier(report.app.buildVersion)} />
+          <InfoRow label="Finished" value={uiIdentifier(completion.finishedAt)} />
+          <InfoRow label="Audit ID" value={uiIdentifier(completion.auditId)} />
+          <InfoRow label="Details" value={uiLabel(completion.detailsComplete ? 'Complete' : 'Incomplete')} />
+          <InfoRow label="Coverage" value={uiLabel(completion.coverageComplete ? 'Complete' : 'Incomplete')} />
+          <InfoRow label="Executed" value={countPair(report.summary.executed,
+            (reportCoverage?.plannedChecks ?? report.checks.length) + (reportHealth?.coverage.plannedChecks ?? 0))} />
+          <InfoRow label="Failures" value={uiCount(completion.failurePositions.length)} />
+          {completion.failurePositions[0] ? <InfoRow label="First failure" value={uiJoin(
+            completion.failurePositions[0].source === 'health' ? 'Data and display health' : 'Check results',
+            ' · ', uiCount(completion.failurePositions[0].position), ' · ', uiIdentifier(completion.failurePositions[0].checkId),
+          )} /> : null}
+          {report.summary.warn > 0 ? <InfoRow label="Warnings" value={uiCount(report.summary.warn)} /> : null}
+          <DebugLogUploadStatus sessionId={report.sessionId} />
+          {uploadState.sessionId !== report.sessionId || !uploadState.verified ? <Button title="Upload report" icon="cloud-upload-outline" disabled={uploadBusy} onPress={() => {
+            void uploadCompletedPerformanceAudit(report).catch(() => Alert.alert(uiLabel('Report unavailable')));
+          }} /> : null}
+        </Card>
+        <AuditHistoryCoverage report={report} />
+        {completion.failurePositions.length ? <Disclosure title="Failure positions" open={failuresOpen} onToggle={() => setFailuresOpen(!failuresOpen)}>
+          {completion.failurePositions.map((failure, index) => <Card key={`${failure.source}:${failure.position}:${index}`} style={{gap:4}}>
+            <InfoRow label="Position" value={uiCount(failure.position)} />
+            <InfoRow label="Source" value={uiLabel(failure.source === 'health' ? 'Data and display health' : 'Check results')} />
+            <InfoRow label="Check ID" value={uiIdentifier(failure.checkId)} />
+            <InfoRow label="Stage" value={uiIdentifier(failure.stage)} />
+          </Card>)}
+        </Disclosure> : null}
+        <Disclosure title="Audit details" open={detailsOpen} onToggle={() => setDetailsOpen(!detailsOpen)}>
+        <Card style={{gap:8}}>
           <AuditOutcomeSymbols checks={report.checks} />
+          <InfoRow label="Collection" value={uiLabel(completion.collectionComplete ? 'Complete' : 'Incomplete')} />
+          <InfoRow label="Missing checks" value={uiCount(completion.gaps.missingChecks)} />
+          <InfoRow label="Duplicate checks" value={uiCount(completion.gaps.duplicateChecks)} />
+          <InfoRow label="Unexpected checks" value={uiCount(completion.gaps.unexpectedChecks)} />
+          <InfoRow label="Missing readiness" value={uiCount(completion.gaps.missingReadinessChecks)} />
+          <InfoRow label="Untested links" value={uiCount(completion.gaps.unverifiedLinks)} />
+          {completion.gaps.missingHealthReports > 0 ? <InfoRow label="Data and display health" value="Not run" /> : null}
+          <InfoRow label="Truncated fields" value={uiCount(completion.gaps.truncatedEvidenceFields)} />
+          <InfoRow label="Omitted characters" value={uiCount(completion.gaps.omittedEvidenceChars)} />
+          <InfoRow label="Skipped" value={uiCount(completion.gaps.skippedChecks)} />
+          <InfoRow label="Unavailable" value={uiCount(completion.gaps.unavailableChecks)} />
+          <InfoRow label="Not run" value={uiCount(completion.gaps.notRunChecks)} />
+          <InfoRow label="Pending" value={uiCount(completion.gaps.pendingProbes)} />
           <InfoRow label="Check completion" value={report.summary.coveragePercent == null ? 'Unknown':uiJoin(uiNumber(report.summary.coveragePercent,1),'%')} />
           <InfoRow label="Executed" value={uiCount(report.summary.executed)} />
           <InfoRow label="Declared unavailable" value={uiCount(report.summary.justifiedSkipped)} />
           <InfoRow label="Unexpected" value={uiCount(report.summary.unexpectedSkipped)} />
-          {report.coverage ? <>
-            <InfoRow label="Journey checks" value={countPair(report.coverage.executedJourneyChecks,report.coverage.plannedJourneyChecks)} />
-            <InfoRow label="Terminal unavailable" value={uiCount(report.coverage.justifiedSkippedJourneyChecks)} />
-            <InfoRow label="Unavailable journeys" value={uiCount(report.coverage.unavailableJourneyChecks)} />
-            <InfoRow label="Unexpected journeys" value={uiCount(report.coverage.unexpectedSkippedJourneyChecks)} />
-            <InfoRow label="Unsafe side effects excluded" value={uiCount(report.coverage.excludedUnsafeFacetCount)} />
+          {reportCoverage ? <>
+            <InfoRow label="Journey checks" value={countPair(reportCoverage.executedJourneyChecks,reportCoverage.plannedJourneyChecks)} />
+            <InfoRow label="Terminal unavailable" value={uiCount(reportCoverage.justifiedSkippedJourneyChecks)} />
+            <InfoRow label="Unavailable journeys" value={uiCount(reportCoverage.unavailableJourneyChecks)} />
+            <InfoRow label="Unexpected journeys" value={uiCount(reportCoverage.unexpectedSkippedJourneyChecks)} />
+            <InfoRow label="Unsafe side effects excluded" value={uiCount(reportCoverage.excludedUnsafeFacetCount)} />
           </>:null}
           <InfoRow label="Slowest check" value={measuredMs(report.summary.slowestCheckMs)} />
           <InfoRow label="Max JS lag" value={measuredMs(report.summary.maxEventLoopLagMs)} />
@@ -371,16 +420,16 @@ function PerformanceAuditScreenInner() {
           <Disclosure title="Raw report" open={rawReportOpen} onToggle={() => setRawReportOpen(!rawReportOpen)}><AuditEvidenceText report={report}/></Disclosure>
         </Card>
         {report.backgroundWorkWait ? <BackgroundWorkDiagnosis wait={report.backgroundWorkWait}/>:null}
-        <AuditCatalogueCoverage check={report.appHealth?.checks.find(check => check.code === 'catalogue-identity-coverage')} sampling={report.plan?.inputs.sampling}/>
-        {report.appHealth ? <Card style={{gap:8}}>
+        <AuditCatalogueCoverage check={reportHealth?.checks.find(check => check.code === 'catalogue-identity-coverage')} sampling={report.plan?.inputs.sampling}/>
+        {reportHealth ? <Card style={{gap:8}}>
           <AppText variant="h3">{uiLabel('Data and display health')}</AppText>
-          <InfoRow label="Mode" value={uiLabel(report.appHealth.mode === 'local' ? 'Local checks':'Live checks')} />
-          <InfoRow label="Check completion" value={report.appHealth.summary.coveragePercent == null ? 'Unknown':uiJoin(uiNumber(report.appHealth.summary.coveragePercent,1),'%')}/>
-          {report.appHealth.domains.filter(domain => domain.total > 0).map(domain => <View key={domain.domain}>
+          <InfoRow label="Mode" value={uiLabel(reportHealth.mode === 'local' ? 'Local checks':'Live checks')} />
+          <InfoRow label="Check completion" value={reportHealth.summary.coveragePercent == null ? 'Unknown':uiJoin(uiNumber(reportHealth.summary.coveragePercent,1),'%')}/>
+          {reportHealth.domains.filter(domain => domain.total > 0).map(domain => <View key={domain.domain}>
             <InfoRow label={DOMAIN_LABELS[domain.domain]} value={outcome(domain.overall)} />
             <AppText variant="tiny">{uiJoin('Good',': ',uiCount(domain.pass),' · ','Needs review',': ',uiCount(domain.warn),' · ','Failed',': ',uiCount(domain.fail),' · ','Unavailable',': ',uiCount(domain.unavailable),' · ','Not run',': ',uiCount(domain.notRun))}</AppText>
           </View>)}
-          {report.appHealth.checks.filter(check => check.status !== 'pass').map(check => <InfoRow key={check.id} label={uiIdentifier(check.id)} value={uiLabel(check.status === 'fail' ? 'Failed':check.status === 'warn' ? 'Needs review':check.status === 'not-run' ? 'Not run':'Unavailable')}/>)}
+          {reportHealth.checks.filter(check => check.status !== 'pass').map(check => <InfoRow key={check.id} label={uiIdentifier(check.id)} value={uiLabel(check.status === 'fail' ? 'Failed':check.status === 'warn' ? 'Needs review':check.status === 'not-run' ? 'Not run':'Unavailable')}/>)}
         </Card>:null}
         {report.routeAggregates.length ? <Card style={{gap:8}}><AppText variant="h3">{uiLabel('First / repeat')}</AppText>
           {report.routeAggregates.map(route => <View key={route.journeyId}>
@@ -404,6 +453,8 @@ function PerformanceAuditScreenInner() {
           </Card>)}
           {reportedChecks.length < orderedChecks.length ? <Button title={uiJoin('Show', ' ', uiCount(Math.min(MAX_REPORTED_AUDIT_CHECKS,orderedChecks.length-reportedChecks.length)), ' ', 'Checks')} icon="chevron-down-outline" variant="ghost" onPress={() => setVisibleCheckLimit(current => Math.min(orderedChecks.length,current+MAX_REPORTED_AUDIT_CHECKS))}/>:null}
         </View>
+        </Disclosure>
+        <Disclosure title="Run another audit" open={controlsOpen} onToggle={() => setControlsOpen(!controlsOpen)}>{controls}</Disclosure>
       </>:null}
     </ScreenScrollView>
   );

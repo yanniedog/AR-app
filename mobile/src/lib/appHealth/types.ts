@@ -165,6 +165,7 @@ export interface AppHealthQuarantineObservation {
 }
 
 export interface AppHealthDataSnapshot {
+  historyCoverage?: import('./historyCoverage').HistoryCoverageEvidence | null;
   source: PayloadSource | 'unavailable';
   core: CorePayload | null;
   manifest: Manifest | null;

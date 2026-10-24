@@ -1,3 +1,4 @@
+import { historyCoverageEvidence } from './appHealth/historyCoverage';
 import type { AppState } from '../data/storeTypes';
 import type { AppHealthAssetObservation, AppHealthAssetKey, AppHealthDataSnapshot } from './appHealth/types';
 import { clearPreparedAppHealthCatalogueSnapshot, preparedAppHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
@@ -80,6 +81,7 @@ export function appHealthDataSnapshot(
     ),
   };
   return {
+    historyCoverage: includeCatalogue && state.core ? historyCoverageEvidence(state.core, state.productHistory) : null,
     catalogue: includeCatalogue ? preparedAppHealthCatalogueSnapshot(state) : null,
     source: state.source,
     core: state.core,

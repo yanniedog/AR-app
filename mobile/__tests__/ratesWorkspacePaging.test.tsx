@@ -13,6 +13,8 @@ import { buildDeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { openCompare, openProduct } from '../src/lib/nav';
 import { isVerifiedRatesPagePreparation } from '../src/lib/ratesAuditPage';
+import { auditSearchEntryParams } from '../src/lib/performanceAuditActionParams';
+import { resolveRatesIntent } from '../src/lib/ratesIntent';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditMutationBarrier } from '../src/lib/performanceAuditTiming';
 import { PerformanceAuditReadinessRegistry, PerformanceAuditReadinessTimeoutError } from '../src/lib/performanceAuditReadiness';
 
@@ -188,19 +190,26 @@ test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seed
   mockStore.setState((state: any) => ({ prefs: { ...state.prefs, ratesPageSize: pageSize },
     core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: catalogue } } } }));
   install();
-  updateRatesSection('Mortgage', { query: 'Loan', selected: ['1#p-01'], selectMode: initialMode });
-  updateRatesSection('Mortgage', { page: 2 }); recordRatesScroll('Mortgage', 137);
+  updateRatesSection('Mortgage', { query: 'Loan', selected: ['1#p-01'], selectMode: initialMode,
+    sort: 'bank', filters: { ...EMPTY_FILTERS, providers: ['Missing Bank'], rateTypes: ['FIXED'] }, includeNonStandardOverride: false });
+  updateRatesSection('Mortgage', { page: 1 }); recordRatesScroll('Mortgage', 137);
   useMortgageComparison.setState({ loanAmount: '123456', lvr: '78' });
   const before = captureRatesSession(), preferences = JSON.parse(JSON.stringify(mockStore.getState().prefs));
   const comparison = { ...useMortgageComparison.getState() };
   const plan = buildDeepPerformanceAuditPlan(mockStore.getState().core, { seed: 'review-412', includeNonStandard: true });
   const targets = [plan.inputs.primaryProduct!, plan.inputs.secondaryProduct!];
   expect(targets.map(target => target.productKey)).toEqual(['p-20', 'p-35']);
-  const steps = plan.passes[0].steps.filter(step => step.scenarioId === 'route.rates');
+  const steps = plan.passes.flatMap(pass => pass.steps.filter(step => step.scenarioId === 'route.rates'));
   const tree = mount(), list = () => tree.root.findByType('FlashList').props;
   const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
   try {
     for (const step of steps) {
+      if (step.semanticActionId === 'search.open') {
+        // Expo Router supplies this entry intent on each real scenario visit.
+        // This harness mounts the workspace directly and mocks navigation.
+        const intent = resolveRatesIntent(auditSearchEntryParams('Mortgage', step.id), 'Mortgage', []);
+        act(() => updateRatesSection(intent.section, intent.patch, true));
+      }
       const action = surface().actions![step.semanticActionId];
       expect(action).toEqual(expect.any(Function));
       if (step.semanticActionId.startsWith('search.compare.select.')) {
@@ -245,7 +254,7 @@ test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seed
     expect(captureRatesSession()).toEqual(before);
     expect(useMortgageComparison.getState()).toEqual(comparison);
     expect(mockStore.getState().prefs).toEqual(preferences);
-    expect(list().data[0].rate_index).toBe(pageSize);
+    expect(list().data).toHaveLength(0); // Original missing-bank/FIXED scope is restored too.
     act(() => tree.unmount());
   }
 });

@@ -1,9 +1,11 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { toPublicAppHealthReport } from './appHealth';
 import { PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from './performanceAuditSetup';
-import { encodeCompactDiagnosticJson } from './compactDiagnosticJson';
+import { encodeCompressedDiagnosticJson, MAX_COMPRESSED_DIAGNOSTIC_BYTES } from './compactDiagnosticJson';
 import { publicAuditDiagnostic, publicAuditError } from './performanceAuditDiagnostic';
 import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
+import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
+import { measureAuditEvidence } from './auditEvidenceCapacity';
 
 import { PUBLIC_AUDIT_METRIC_FIELDS as METRIC_ALLOWLIST } from './auditDiagnosticFields';
 
@@ -31,6 +33,7 @@ export const DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES = 256 * 1024;
 export const DEIDENTIFIED_DIAGNOSTICS_DESTINATION =
   'No host selected; the operating-system share sheet chooses the destination';
 export const DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW = [
+  'validated audit start and finish timestamps plus a hashed audit reference',
   'app version, build, platform, OS major version and JavaScript engine',
   'payload source, run date, product/provider counts and optional-asset availability',
   'aggregate outcome/counts and measured responsiveness values',
@@ -140,13 +143,16 @@ function safeDuration(check: AuditCheck): number | null {
 
 /**
  * Build the only performance-audit shape allowed to leave the device.
- * It deliberately excludes timestamps, session IDs, model/manufacturer,
+ * It includes validated audit timestamps and a hashed audit reference, excluding raw session IDs, model/manufacturer,
  * viewport, memory, routes, product keys, messages, traces and raw log text.
  */
 export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport) {
+  measureAuditEvidence(report);
+  const completion = buildPerformanceAuditCompletion(report, safeCheckId);
   return {
     schemaVersion: 1,
     kind: 'performance-audit',
+    completion,
     app: {
       version: report.app.appVersion,
       build: report.app.buildVersion,
@@ -198,7 +204,7 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
       diagnostic: publicAuditDiagnostic(check.diagnostic),
       error: publicAuditError(check.error, check.trace),
     })),
-    appHealth: report.appHealth ? toPublicAppHealthReport(report.appHealth) : null,
+    appHealth: report.appHealth && completion.gaps.invalidHealthReports === 0 ? toPublicAppHealthReport(report.appHealth) : null,
   };
 }
 
@@ -225,8 +231,20 @@ export function createDeidentifiedDiagnosticsShare(
 /** Public pastes carry the allowlisted report only. Keep all checks; reject
  * oversize reports instead of silently uploading a partial diagnostic. */
 export function createPublicPerformanceAuditReport(report: PerformanceAuditReport): string {
-  const body = encodeCompactDiagnosticJson({ ...buildDeidentifiedPerformanceAudit(report), diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId) });
-  if (new TextEncoder().encode(body).length > 2 * 1024 * 1024) {
+  const publicReport = buildDeidentifiedPerformanceAudit(report);
+  const completion = publicReport.completion;
+  // Keep the run identity and result readable at the top of the hosted file;
+  // Gzip retains every field and occurrence; its digest and byte length verify
+  // the complete decoded evidence independently of the exact upload read-back.
+  const body = encodeCompressedDiagnosticJson({ ...publicReport, diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId) },
+    { audit: { auditId: completion.auditId, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
+    finishedAt: completion.finishedAt,
+    outcome: completion.outcome, collectionComplete: completion.collectionComplete,
+    coverageComplete: completion.coverageComplete, detailsComplete: completion.detailsComplete,
+    performanceCheckCount: completion.performanceCheckCount, healthCheckCount: completion.healthCheckCount,
+    failureCount: completion.failurePositions.length,
+    timingFailureCount: completion.failurePositions.filter(failure => failure.category === 'timing').length } });
+  if (new TextEncoder().encode(body).length > MAX_COMPRESSED_DIAGNOSTIC_BYTES) {
     throw new Error('The deidentified report exceeds the public upload limit.');
   }
   return body;

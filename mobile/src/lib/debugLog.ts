@@ -1,4 +1,5 @@
 import { htmlPlainText } from './htmlPlainText';
+import { measureAuditEvidence } from './auditEvidenceCapacity';
 import { loadDebugLogUploadRecoveryReceipt, removeDebugLogUploadRecoveryReceipt } from './debugLogUploadRecovery';
 import { clearCompletedPerformanceAudit } from './performanceAuditReportStorage';
 import { clearCompletedPerformanceAuditState } from './performanceAudit';
@@ -956,6 +957,7 @@ export const debugLog = {
     onStage: (stage: string) => Promise<void> | void = () => {},
   ): Promise<void> {
     await onStage('Serializing the report');
+    measureAuditEvidence(report);
     const stored: StoredPerformanceAudit = {
       schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
       summaryMarker: redactSecrets(summaryMarker),

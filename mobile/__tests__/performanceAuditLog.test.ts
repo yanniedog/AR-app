@@ -120,6 +120,19 @@ describe('bounded audit evidence', () => {
 });
 
 describe('performanceAuditLog compaction', () => {
+  it('bounds journal text without losing the canonical check evidence', () => {
+    const check = { id: 'failure', label: 'Failure', kind: 'journey', status: 'fail', durationMs: 1,
+      metrics: { readinessEvidence: 'p'.repeat(4_000) },
+      error: 'e'.repeat(7_000), trace: 't'.repeat(7_000),
+      diagnostic: { stage: 'readiness', readiness: { full: true } } };
+    const journal = compactAuditCheckForLog(check);
+    expect(String(journal.error)).toContain('[truncated');
+    expect(String((journal.metrics as Record<string, unknown>).readinessEvidence)).toContain('[truncated');
+    expect(check.metrics.readinessEvidence).toHaveLength(4_000);
+    expect(check.error).toHaveLength(7_000);
+    expect(check.trace).toHaveLength(7_000);
+    expect(check.diagnostic.readiness).toEqual({ full: true });
+  });
   it.each(['pass', 'fail', 'skipped'])('keeps %s journal lines independent of full readiness evidence', (status) => {
     const check = { id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status, durationMs: 1,
       metrics: { actionMs: 1 }, diagnostic: { stage: 'readiness', readiness: { probes: 'x'.repeat(3_000_000) } } };
