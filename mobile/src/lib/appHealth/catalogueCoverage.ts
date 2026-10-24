@@ -47,10 +47,20 @@ export interface AppHealthCatalogueObservation {
 /** Full loaded-catalogue identity check. It does not certify upstream or visual coverage. */
 export function evaluateAppHealthCatalogueCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
   const catalogue = snapshot.catalogue;
+  const history = snapshot.historyCoverage;
+  const historyMetrics: AppHealthCheck['metrics'] = {
+    historyAvailable: history?.available ?? null,
+    historyDaysChecked: history?.days ?? null,
+    historySourceGapDays: history ? JSON.stringify(history.sourceGapDays) : null,
+    historyGaps: history ? JSON.stringify(history.gaps) : null,
+    historyProcessingMismatches: history?.processingMismatches ?? null,
+    historyChartProjectionMismatches: history?.chartProjectionMismatches ?? null,
+    historicalPixelsVerified: false,
+  };
   const base = { id: APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE, code: APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE,
     label: 'All banks and products: catalogue coverage', domain: 'data-completeness' as const };
   if (!snapshot.core || !catalogue) return { ...base, status: 'unavailable',
-    metrics: { catalogueAvailable: false, publishedProducts: null, eligibleProducts: null,
+    metrics: { ...historyMetrics, catalogueAvailable: false, publishedProducts: null, eligibleProducts: null,
       sourceIdentityInventoryAvailable: false, allProductsRendered: false },
     summary: 'A current catalogue and selector snapshot are required to reconcile all banks and products.' };
   const accounting = validatePayloadAccounting(snapshot);
@@ -63,11 +73,13 @@ export function evaluateAppHealthCatalogueCoverage(snapshot: AppHealthDataSnapsh
     (section.searchUnexpected?.length ?? 0) + (section.directoryMissing?.length ?? 0) +
     (section.directoryUnexpected?.length ?? 0)) : null;
   const unavailable = !ready || !catalogue.detailsAvailable || !catalogue.searchIndexAvailable;
-  const status = identityMismatches || catalogue.searchIndexRunMatches === false ? 'fail'
-    : (missingDetails ?? 0) > 0 || (missingSearchIndex ?? 0) > 0 ? 'warn'
+  const status = identityMismatches || catalogue.searchIndexRunMatches === false || (history?.processingMismatches ?? 0) > 0 || (history?.chartProjectionMismatches ?? 0) > 0 ? 'fail'
+    : !history ? 'unavailable'
+    : (missingDetails ?? 0) > 0 || (missingSearchIndex ?? 0) > 0 || (history?.gaps.length ?? 0) > 0 ? 'warn'
       : unavailable ? 'unavailable' : 'pass';
   const allRows = SECTION_KEYS.flatMap(section => snapshot.core!.sections[section]?.rates ?? []);
   const metrics: AppHealthCheck['metrics'] = {
+    ...historyMetrics,
     catalogueAvailable: true, exhaustiveLoadedCatalogueScan: true, sourceIdentityInventoryAvailable: false,
     allProductsRendered: false, filterReady: ready, includeNonStandard: catalogue.includeNonStandard,
     publishedRates: allRows.length, publishedProducts: new Set(allRows.map(row => row.product_key)).size,
@@ -100,11 +112,12 @@ export function evaluateAppHealthCatalogueCoverage(snapshot: AppHealthDataSnapsh
     summary: !ready ? 'Visibility is blocked while eligibility or suitability is preparing; eligible coverage remains unknown.'
       : identityMismatches ? 'Exact product/tier identities differ between the eligible catalogue and Search or Banks.'
         : catalogue.searchIndexRunMatches === false ? 'Search index identities belong to a different publication run.'
+        : !history ? 'Daily historical audit evidence is unavailable; previous-day processing and chart coverage are unknown.'
         : `${metrics.publishedProducts} published products across ${metrics.publishedProviders} banks were reconciled by identity. ` +
           `${metrics.eligibleProducts} products remain after profile, suitability and token-rate exclusions. ` +
           `Missing details: ${missingDetails ?? 'unknown'}; missing search index entries: ${missingSearchIndex ?? 'unknown'}. ` +
           'See the per-bank/category breakdown. Foreground rendering is sampled; loaded records alone do not prove complete upstream bank catalogues.',
-    localEvidence: { sections, brandedProvidersWithoutPublishedRates: catalogue.brandedProvidersWithoutPublishedRates,
+    localEvidence: { historyCoverage: history, sections, brandedProvidersWithoutPublishedRates: catalogue.brandedProvidersWithoutPublishedRates,
       publishedProvidersWithoutBrand: catalogue.publishedProvidersWithoutBrand,
       detailsOnlyProductKeys: catalogue.detailsOnlyProductKeys,
       sourceAccounting: accounting.valid ? snapshot.core.coverage?.payload_accounting : null,

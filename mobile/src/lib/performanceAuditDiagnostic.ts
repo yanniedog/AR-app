@@ -37,7 +37,7 @@ export function publicAuditDiagnostic(value: unknown): unknown {
   return value ? visit(value) : null;
 }
 
-export const PUBLIC_AUDIT_ERROR_TYPES = ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError',
+export const PUBLIC_AUDIT_ERROR_TYPES = ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'AuditEvidenceCapacityError',
   'EvalError', 'URIError', 'AggregateError', 'InternalError', 'DOMException', 'AbortError', 'TimeoutError',
   'AuditDatasetChangedError', 'PerformanceAuditReadinessTimeoutError', 'PerformanceAuditReadinessProbeError',
   'PerformanceAuditStepTimeoutError', 'PerformanceAuditPendingMutationError'] as const;

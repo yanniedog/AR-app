@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { encodeCompressedDiagnosticJson, decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 import {
   DEBUG_LOG_UPLOAD_RECEIPT_KEY,
   deleteDebugLogUploadAndReceipt,
@@ -30,6 +31,19 @@ describe('verified full paste read-back', () => {
       .mockResolvedValueOnce({ status: 200, text: async () => 'full log' });
     await verifyDebugLogUpload(receipt, 'full log', fetcher, options);
     expect(fetcher.mock.calls.map((call) => call[1].method)).toEqual(['GET', 'GET']);
+  });
+
+  it('verifies every compressed byte and rejects a changed archive even with the same audit header', async () => {
+    const evidence = { checks: Array.from({ length: 2732 }, (_, index) => ({ id: index, actual: 0, expected: null })) };
+    const body = encodeCompressedDiagnosticJson(evidence, { audit: { appVersion: '1.2.3', buildVersion: '456' } });
+    const exact = jest.fn().mockResolvedValue({ status: 200, text: async () => body });
+    await expect(verifyDebugLogUpload(receipt, body, exact, options)).resolves.toBeUndefined();
+    expect(decodeCompactDiagnosticJson(await (await exact()).text())).toEqual(evidence);
+    const changed = JSON.parse(body);
+    changed.gzip_base64 = changed.gzip_base64.slice(0, -4);
+    const corrupt = jest.fn().mockResolvedValue({ status: 200, text: async () => JSON.stringify(changed) });
+    await expect(verifyDebugLogUpload(receipt, body, corrupt, options)).rejects.toThrow('complete log');
+    expect(corrupt.mock.calls.every(call => call[1].method === 'GET')).toBe(true);
   });
 
   it.each([

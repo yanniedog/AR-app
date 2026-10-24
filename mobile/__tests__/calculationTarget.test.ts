@@ -12,6 +12,24 @@ const second = { ...first, rate_index: 7, rate: '0.03' };
 const core = { sections: { Mortgage: { rates: [] }, Savings: { rates: [first, second] }, TD: { rates: [] } } } as unknown as CorePayload;
 afterEach(() => installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null)));
 
+test('ordinary calculations and invalid targets skip full-catalogue preparation across scenario edits', () => {
+  const prepareComparisonCore = jest.fn(() => core);
+  for (let edit = 0; edit < 5; edit++) {
+    for (const target of [undefined, '', ['', ''], [key, 'another']]) {
+      const resolved = resolveCalculationTarget(prepareComparisonCore, 'Savings', { target });
+      expect(resolved.status).toBe(Array.isArray(target) && target[0] === key ? 'unavailable' : 'none');
+    }
+  }
+  expect(prepareComparisonCore).not.toHaveBeenCalled();
+  expect(resolveCalculationTarget(prepareComparisonCore, 'Savings', { target: key, ri: '7' }))
+    .toEqual({ status: 'available', section: 'Savings', row: second });
+  expect(prepareComparisonCore).toHaveBeenCalledTimes(1);
+  expect(resolveCalculationTarget(prepareComparisonCore, 'Savings', { target: key, ri: '99' }))
+    .toEqual({ status: 'unavailable' });
+  expect(prepareComparisonCore).toHaveBeenCalledTimes(2);
+  expect(resolveCalculationTarget(() => null, 'Savings', { target: key, ri: '7' })).toEqual({ status: 'pending' });
+});
+
 test('waits for required profile evidence, without blocking an already eligible deposit target', () => {
   const mortgage = { ...first, product_key: 'profile-mortgage', taxonomy_path: 'HOME_LOAN.OO.PI.VARIABLE', rate_type: 'VARIABLE' };
   const publication = { ...core, sections: { ...core.sections, Mortgage: { rates: [mortgage] } } } as CorePayload;

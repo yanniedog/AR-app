@@ -41,8 +41,8 @@ const LONG_HEX = /\b[a-f0-9]{24,}\b/gi;
  * runtime-error lists are individually unbounded, so a run with many failed
  * steps produced multi-megabyte reports; teardown then serialized, redacted,
  * compacted and exported several copies of that body at once and exhausted the
- * JS heap right after progress reached 100%. Evidence is capped per check so
- * the report stays diagnosable without being unbounded.
+ * JS heap right after progress reached 100%. Bound journal copies only; the
+ * canonical report retains the original evidence for lossless export.
  */
 export const MAX_AUDIT_EVIDENCE_CHARS = 2_000;
 export const MAX_AUDIT_METRIC_TEXT_CHARS = 512;
@@ -87,12 +87,12 @@ export function truncateAuditText(value: string, maxChars: number): string {
 
 interface BoundableAuditCheck {
   metrics: Record<string, unknown>;
-  trace?: string;
-  error?: string;
+  trace?: string | null;
+  error?: string | null;
 }
 
 /**
- * Cap a single check's evidence text. The same object is returned when nothing
+ * Cap a journal copy's evidence text. The same object is returned when nothing
  * exceeds its budget so a healthy run allocates no replacement checks.
  */
 export function boundAuditCheckEvidence<T extends BoundableAuditCheck>(check: T): T {
@@ -165,6 +165,7 @@ export function compactAuditCheckForLog(check: {
   trace?: string | null;
   diagnostic?: unknown;
 }): Record<string, unknown> {
+  check = boundAuditCheckEvidence(check);
   const base: Record<string, unknown> = {
     id: check.id,
     label: check.label,

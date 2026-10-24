@@ -64,6 +64,25 @@ test('automatic dispatch alone uploads and verifies only the complete sanitized 
   expect(log.verifyDebugLogUpload).toHaveBeenCalledWith(expect.any(Object), body);
 });
 
+test('a recovered malformed health report uploads its incomplete evidence instead of failing preparation', async () => {
+  const malformed = { checks: [{ id: 'private-health-id', metrics: { account: 'private-health-value' } }] };
+  const recovered = { ...report, appHealth: malformed } as unknown as typeof report;
+  await delivery.uploadCompletedPerformanceAudit(recovered);
+  expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
+  const body = jest.mocked(log.uploadDebugLog).mock.calls[0][0];
+  const decoded = decodeCompactDiagnosticJson(body) as any;
+  expect(decoded.completion).toMatchObject({ detailsComplete: false,
+    gaps: { invalidHealthReports: 1, missingHealthReports: 1 } });
+  expect(decoded.appHealth).toBeNull();
+  expect(decoded.diagnosticLog.appHealth).toMatchObject({ checks: [
+    { id: expect.stringMatching(/^~private/), metrics: { account: expect.stringMatching(/^~private/) } },
+  ] });
+  expect(body).not.toContain('private-health-id');
+  expect(body).not.toContain('private-health-value');
+  expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ verified: true, url: result.url });
+  expect(recovered.appHealth).toBe(malformed);
+});
+
 test('concurrent manual post-completion requests share one upload', async () => {
   await Promise.all([delivery.uploadCompletedPerformanceAudit(report), delivery.uploadCompletedPerformanceAudit(report)]);
   expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
@@ -126,11 +145,14 @@ test('a known unverified paste retries verification using its saved receipt inst
 test('failed report preparation cannot retry an earlier raw diagnostic request', async () => {
   jest.mocked(log.uploadDebugLog).mockRejectedValueOnce(new Error('offline'));
   await sharing.startDebugLogUpload({ sessionId: null, appVersion: '1', buildVersion: '1' });
-  // Arbitrary text is now aliased. Preserve enough distinct numeric evidence to
-  // cross the encoded cap without relying on private text surviving redaction.
-  const tooLarge = makePerformanceAuditReport('new-report', [{ ...report.checks[0],
-    metrics: Object.fromEntries(Array.from({ length: 120_000 }, (_, index) => [`sample${index}`, index + 0.123456789])) }]);
-  await delivery.uploadCompletedPerformanceAudit(tooLarge);
+  // Preparation failures must fail closed regardless of the selected lossless
+  // encoding; a compressible fixture no longer represents an oversized upload.
+  const envelope = jest.requireActual<typeof import('../src/lib/diagnosticsEnvelope')>('../src/lib/diagnosticsEnvelope');
+  const preparation = jest.spyOn(envelope, 'createPublicPerformanceAuditReport').mockImplementationOnce(() => {
+    throw new Error('The deidentified report exceeds the public upload limit.');
+  });
+  try { await delivery.uploadCompletedPerformanceAudit(makePerformanceAuditReport('new-report')); }
+  finally { preparation.mockRestore(); }
   await sharing.retryDebugLogUpload();
   expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ preparationFailed: true, sessionId: 'new-report' });
   expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);

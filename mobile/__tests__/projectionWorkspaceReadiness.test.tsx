@@ -2,6 +2,7 @@ import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { publicComparisonCore } from '../src/data/publicRateIntegration';
 
 const mockScenario = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '600000', currentRate: '6.4', years: '28' } });
 mockScenario.projections.mortgage.holdVariableRate = true;
@@ -15,9 +16,8 @@ jest.mock('../src/data/publicRateCatalogue', () => ({ usePublicRateCatalogue: ()
 jest.mock('../src/data/publicRateIntegration', () => ({
   ...jest.requireActual('../src/data/publicRateIntegration'),
   resolveLocalCurrentRate: () => ({ status: 'exact', payableRate: '0.064' }),
-  publicComparisonCore: () => mockCore,
+  publicComparisonCore: jest.fn(() => mockCore),
 }));
-jest.mock('../src/lib/calculationTarget', () => ({ resolveCalculationTarget: () => ({ status: 'none' }) }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {}, radius: { md: 8 }, font: { body: 16 }, spacing: (value: number) => value }) }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
@@ -49,5 +49,6 @@ test('a settled calculation copy does not block the next mounted projection acti
     expect(result).toBeUndefined();
     const changed = jest.mocked(usePerformanceAuditSurface).mock.calls.filter(([definition]) => definition.id === 'projections.lifecycle-chart').at(-1)![0];
     expect(changed.renderRevision).not.toBe(surface.renderRevision);
+    expect(publicComparisonCore).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });
