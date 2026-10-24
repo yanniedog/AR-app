@@ -62,10 +62,10 @@ function encodeBase64(bytes: Uint8Array): string {
   return parts.join('');
 }
 
-export function compressCatalogue(value: unknown): CompressedCatalogue {
+export function compressCatalogue(value: unknown, options: { deterministic?: boolean } = {}): CompressedCatalogue {
   const bytes = strToU8(JSON.stringify(value));
   if (bytes.length > MAX_DECODED) throw new Error('Historical catalogue exceeds decoded budget');
-  const gzip = gzipSync(bytes, { level: 6 });
+  const gzip = gzipSync(bytes, { level: 6, ...(options.deterministic ? { mtime: 0 } : {}) });
   if (gzip.length > MAX_COMPRESSED) throw new Error('Historical catalogue exceeds compressed budget');
   return { sha256: bytesToHex(sha256(bytes)), bytes: bytes.length, gzip_base64: encodeBase64(gzip) };
 }

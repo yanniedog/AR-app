@@ -214,10 +214,13 @@ test('rendered failure and success controls retain the diagnosis while retrying 
 
 test('a cold screen restores the completed report and offers upload without publishing it on mount', async () => {
   const report = makePerformanceAuditReport('completed-before-restart');
+  report.app = { appVersion: '1.0.247', buildVersion: '303' };
   jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(report);
   expect(getPerformanceAuditState().status).toBe('idle');
   await mount();
   expect(getPerformanceAuditState()).toMatchObject({ status: 'complete', report });
+  expect(tree!.root.findAllByType('InfoRow').find(row => row.props.label === 'Version')?.props.value).toBe(report.app.appVersion);
+  expect(tree!.root.findAllByType('InfoRow').find(row => row.props.label === 'Build')?.props.value).toBe(report.app.buildVersion);
   expect(tree!.root.findByProps({ title: 'Upload report' }).props.disabled).toBe(false);
   expect(restorePerformanceAuditUpload).toHaveBeenCalledWith(report);
   expect(uploadCompletedPerformanceAudit).not.toHaveBeenCalled();

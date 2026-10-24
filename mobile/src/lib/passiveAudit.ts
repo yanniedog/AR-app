@@ -1,3 +1,4 @@
+import { hobartCalendarDate } from './nextIngest';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import * as BackgroundTask from 'expo-background-task';
@@ -80,12 +81,12 @@ function stateBusy(state: AppState): boolean {
   return Boolean(state.refreshing || state.postRefreshWarming || state.detailsLoading || state.bankRateHistoryLoading);
 }
 function prepareLoadedState(state: AppState): void {
-  const next = [state.core, state.manifest, state.coreIntegrity, state.source,
+  const next = [state.core, state.productHistory, state.bankRateHistoryRevision, state.manifest, state.coreIntegrity, state.source,
     state.details, state.searchIndex, state.searchIndexStatus, state.historyBanks, state.historyBanksError,
     state.bankInsights, state.bankInsightsError, state.bankSpreadHistory, state.bankSpreadHistoryError,
     state.rbaCalendar, state.rbaCalendarError, state.prefs.profileFilters, state.prefs.interests,
     state.prefs.includeNonStandard, state.prefs.depositRankMetric, state.prefs.mortgageRateMetric,
-    getSuitabilityIndex(), getSuitabilityRevision(), getMandatoryEligibilityRevision()];
+    getSuitabilityIndex(), getSuitabilityRevision(), getMandatoryEligibilityRevision(), hobartCalendarDate()];
   if (record && snapshot && passiveAuditRecordFresh(record, Date.now()) &&
     next.length === references.length && next.every((value, i) => value === references[i])) return;
   // A cold standard-only catalogue would invoke expensive fallback classifiers.

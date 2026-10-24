@@ -1,0 +1,112 @@
+import compiler from '../contracts/history-ready/compiler-manifest.json';
+import { compileHistoricalBankRateReady } from '../src/data/historicalBankRateReadyCompiler';
+import { installPreparedHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
+import * as productProjection from '../src/data/productHistoryModel';
+import { makeHealthyCore } from '../__fixtures__/appHealth';
+import { installHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
+import * as catalogueProjection from '../src/data/historicalBankRateCatalogue';
+import { historyCoverageEvidence, reconcileHistoryCoverage, type HistoryCoverageEvidence } from '../src/lib/appHealth/historyCoverage';
+import { toPublicAppHealthReport, finalizeAppHealthReport } from '../src/lib/appHealth/report';
+import { APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth/types';
+import { encodeCompactDiagnosticJson, decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
+import { type BankRateSnapshot } from '../src/data/bankRateOverview';
+
+const evidence = (): HistoryCoverageEvidence => ({ available: true, runDate: '2026-10-24', days: 0,
+  sourceGapDays: [], gaps: [], processingMismatches: 0, chartProjectionMismatches: 0, historicalPixelsVerified: false });
+const counts = (count: number) => ({ Mortgage: { Bank: { ...stats, count } } });
+const stats = { min: 5, mean: 6, median: 6, max: 7, count: 2 };
+
+it('retains every unavailable and unprocessed day, even when current data works', () => {
+  const days = ['2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24'];
+  const result = reconcileHistoryCoverage(evidence(), days, { '2026-10-21': {}, '2026-10-23': {} },
+    { '2026-10-22': 'Not retained' }, { '2026-10-21': counts(2), '2026-10-23': counts(3) }, {
+      '2026-10-21': { Mortgage: { Bank: stats } }, '2026-10-23': { Mortgage: { Bank: stats } },
+      '2026-10-24': { Mortgage: { Bank: stats } },
+    });
+  expect(result.days).toBe(4);
+  expect(result.sourceGapDays).toEqual(['2026-10-22']);
+  expect(result.gaps).toContainEqual(['2026-10-22', 'processed-day-missing', null, 1]);
+  expect(result.gaps).toContainEqual(['2026-10-23', 'source-to-model-count-mismatch', 'Mortgage', 1, 'Bank']);
+  expect(result).toMatchObject({ processingMismatches: 1, chartProjectionMismatches: 0, historicalPixelsVerified: false });
+});
+
+it('checks every projected statistic and detects non-finite chart values', () => {
+  const snapshots: Record<string, BankRateSnapshot> = { '2026-10-24': { Mortgage: { Bank: { ...stats, mean: NaN } } } };
+  const result = reconcileHistoryCoverage(evidence(), ['2026-10-24'], {}, {}, {}, snapshots);
+  expect(result.gaps).toContainEqual(['2026-10-24', 'model-to-chart-mean-mismatch', 'Mortgage', 1, 'Bank']);
+});
+
+it('preserves all public daily gap evidence through compact upload round trips', () => {
+  const gaps = Array.from({ length: 400 }, (_, index) => ['2025-10-01', 'source-to-model-count-mismatch', 'Mortgage', index]);
+  const report = finalizeAppHealthReport({ sessionId: 'test', mode: 'local', startedAt: '2026-10-24T00:00:00Z',
+    finishedAt: '2026-10-24T00:00:01Z', checks: [{ id: APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE,
+      code: APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE, label: 'Catalogue', domain: 'data-completeness', status: 'fail',
+      metrics: { historyGaps: JSON.stringify(gaps), historySourceGapDays: JSON.stringify(['2025-10-01']),
+        historicalPixelsVerified: false } }], plannedCheckIds: [APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE] });
+  const publicReport = toPublicAppHealthReport(report);
+  expect(decodeCompactDiagnosticJson(encodeCompactDiagnosticJson(publicReport))).toEqual(publicReport);
+  expect(publicReport.checks[0].metrics.historyGaps).toBe(JSON.stringify(gaps));
+});
+
+it('detects entirely missing intermediate calendar days and equal-count wrong values', () => {
+  const result = reconcileHistoryCoverage(evidence(), ['2026-10-21', '2026-10-24'], { '2026-10-21': {} }, {},
+    { '2026-10-21': { Mortgage: { Bank: { ...stats, mean: 5.5 } } } },
+    { '2026-10-21': { Mortgage: { Bank: stats } }, '2026-10-24': {} });
+  expect(result.sourceGapDays).toEqual(['2026-10-22', '2026-10-23']);
+  expect(result.gaps).toContainEqual(['2026-10-21', 'source-to-model-mean-mismatch', 'Mortgage', 1, 'Bank']);
+  expect(result.days).toBe(4);
+});
+
+it('reconciles original source spans and detects a wrong reducer value with unchanged counts', () => {
+  const core = makeHealthyCore();
+  core.run_date = '2026-10-24';
+  const catalogue = { schema_version: 2, run_dates: ['2026-10-22', '2026-10-23', '2026-10-24'],
+    sources: Object.fromEntries(['2026-10-22', '2026-10-23'].map(day => [day,
+      { kind: 'retained_legacy_export', banks_sha256: 'a'.repeat(64), bytes: 100 }])),
+    unavailable_dates: { '2026-10-24': 'Current core owns today' }, evidence: [{ status: 'unknown' }],
+    sections: { Mortgage: [{ row: { provider: 'Bank', product_key: 'mortgage', product_name: 'Home loan' },
+      spans: [[0, 2, [5, 7], 0]] }], Savings: [], TD: [] } };
+  expect(installHistoricalBankRateCatalogue(core, catalogue)).toBe(true);
+  expect(historyCoverageEvidence(core, null, Date.parse('2026-10-24T01:00:00Z'))).toMatchObject({ processingMismatches: 0, chartProjectionMismatches: 0, days: 3 });
+  expect(historyCoverageEvidence(core, null, Date.parse('2026-10-24T01:00:00Z')).gaps).toContainEqual(['2026-10-22', 'historical-detail-evidence-unknown', 'Mortgage', 2]);
+  const another = { ...core };
+  expect(installHistoricalBankRateCatalogue(another, catalogue)).toBe(true);
+  const original = catalogueProjection.historicalBankRateSnapshots;
+  const spy = jest.spyOn(catalogueProjection, 'historicalBankRateSnapshots').mockImplementation((...args) => {
+    const model = original(...args);
+    return { ...model, '2026-10-22': { ...model['2026-10-22'], Mortgage: {
+      ...model['2026-10-22'].Mortgage, Bank: { ...model['2026-10-22'].Mortgage!.Bank, mean: 6.5 },
+    } } };
+  });
+  try {
+    expect(historyCoverageEvidence(another, null, Date.parse('2026-10-24T01:00:00Z')).gaps).toContainEqual(['2026-10-22', 'source-to-model-mean-mismatch', 'Mortgage', 1, 'Bank']);
+  } finally { spy.mockRestore(); }
+});
+
+it('checks product source rates, preserves unknown nulls and reports stale current days', () => {
+  const core = makeHealthyCore(); core.run_date = '2026-10-24';
+  const source = { schema_version: 2, run_dates: ['2026-10-22', '2026-10-23', '2026-10-24'],
+    sources: Object.fromEntries(['2026-10-22', '2026-10-23'].map(day => [day,
+      { kind: 'retained_legacy_export', banks_sha256: 'a'.repeat(64), bytes: 100 }])),
+    unavailable_dates: { '2026-10-24': 'Current core owns today' }, evidence: [{ status: 'unknown' }],
+    sections: { Mortgage: [{ row: { provider: 'Bank', product_key: 'mortgage', product_name: 'Home loan' },
+      spans: [[0, 2, [5, 7], 0]] }], Savings: [], TD: [] } };
+  const prepared = catalogueProjection.prepareHistoricalBankRateReady(compileHistoricalBankRateReady(source, compiler.sha256))!;
+  installPreparedHistoricalBankRateCatalogue(core, prepared);
+  const history: productProjection.ProductHistoryPayload = { schema_version: 3, run_date: core.run_date,
+    run_dates: source.run_dates, products: { mortgage: [0.05, 0.06, null] } };
+  const before = JSON.stringify(history);
+  const result = historyCoverageEvidence(core, history, Date.parse('2026-10-25T14:30:00Z'));
+  expect(result.gaps).toContainEqual(['2026-10-23', 'product-source-to-model-mismatch', 'Mortgage', 1, 'mortgage']);
+  expect(result.gaps).toContainEqual(['2026-10-25', 'current-payload-stale', null, 1]);
+  expect(result.gaps).toContainEqual(['2026-10-26', 'current-payload-stale', null, 1]);
+  expect(JSON.stringify(history)).toBe(before);
+  const another = { ...core }; installPreparedHistoricalBankRateCatalogue(another, prepared);
+  const original = productProjection.productSeriesRecordForChart;
+  const spy = jest.spyOn(productProjection, 'productSeriesRecordForChart').mockImplementation((...args) =>
+    ({ ...original(...args), '2026-10-24': args[1] === 'mortgage' ? 0.05 : original(...args)['2026-10-24'] }));
+  try {
+    expect(historyCoverageEvidence(another, history, Date.parse('2026-10-24T01:00:00Z')).gaps)
+      .toContainEqual(['2026-10-24', 'product-model-to-chart-mismatch', null, 1, 'mortgage']);
+  } finally { spy.mockRestore(); }
+});

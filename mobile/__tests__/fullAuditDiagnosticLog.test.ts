@@ -29,6 +29,7 @@ test('every upload includes all retained checks, errors, traces, metrics and dia
   expect(decoded.diagnosticLog.checks[0].trace).toMatch(/^~private/);
   expect(decoded.diagnosticLog.checks[0].metrics.renderRevisionBefore).toBe(decoded.diagnosticLog.checks[0].metrics.renderRevisionAfter);
   expect(body).not.toMatch(/private-session|Private input label|private-inputs|private\.example|987654|123456|TOPSECRET|KEYSECRET|BEARERSECRET/);
+  expect(JSON.stringify(decoded)).not.toMatch(/private-session|Private input label|private-inputs|private\.example|987654|123456|TOPSECRET|KEYSECRET|BEARERSECRET/);
   expect(createPublicPerformanceAuditReport(report)).toBe(body);
 });
 

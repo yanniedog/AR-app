@@ -4,6 +4,7 @@ import type { PerformanceAuditReport } from './performanceAudit';
 import { auditOutcome } from './auditPresentation';
 import { APP_HEALTH_CHECK_CODES, APP_HEALTH_DOMAINS } from './appHealth';
 import { publicAuditDiagnostic } from './performanceAuditDiagnostic';
+import { publicHistoryCoverageSanitizer } from './appHealth/publicHistoryCoverage';
 
 /** Only machine-authored ISO instants are public; arbitrary saved text is not. */
 export function publicAuditTimestamp(value: unknown): string | null {
@@ -50,6 +51,9 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   const healthValid = hasValidPerformanceAuditHealth(report);
   const health = healthValid ? report.appHealth : undefined;
   const healthChecks = health?.checks ?? [];
+  const sanitizeHistory = publicHistoryCoverageSanitizer();
+  const invalidHistoryChecks = new Set(healthChecks.filter(check => check.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE
+    && sanitizeHistory(check.metrics).historyGapEvidenceInvalid === true));
   let truncatedEvidenceFields = 0;
   let omittedEvidenceChars = 0;
   // Older builds bounded evidence before storage. Preserve that loss explicitly
@@ -98,6 +102,7 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     missingHealthReports: report.schemaVersion >= 7 && !health ? 1 : 0,
     invalidCoverageReports: report.coverage != null && !coverageValid ? 1 : 0,
     invalidHealthReports: report.appHealth != null && !healthValid ? 1 : 0,
+    invalidHistoryEvidenceChecks: invalidHistoryChecks.size,
     evidenceCapacityFailures: report.checks.filter(check => check.metrics.evidenceCapacityExceeded === true).length,
     truncatedEvidenceFields, omittedEvidenceChars,
   };
@@ -107,12 +112,13 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     && (!health || health.coverage.storedChecks === healthChecks.length && health.coverage.plannedChecks === healthChecks.length);
   const coverageComplete = collectionComplete && coverage.complete && health?.coverage.complete !== false
     && gaps.skippedChecks === 0 && gaps.unavailableChecks === 0 && gaps.notRunChecks === 0 && gaps.pendingProbes === 0
-    && gaps.unverifiedLinks === 0 && gaps.missingHealthReports === 0;
+    && gaps.unverifiedLinks === 0 && gaps.missingHealthReports === 0 && gaps.invalidHistoryEvidenceChecks === 0;
   const startedAt = publicAuditTimestamp(report.startedAt);
   const finishedAt = publicAuditTimestamp(report.finishedAt);
   const timestampsValid = startedAt != null && finishedAt != null && startedAt <= finishedAt;
   const detailsComplete = collectionComplete && timestampsValid && truncatedEvidenceFields === 0
-    && gaps.missingReadinessChecks === 0 && gaps.missingHealthReports === 0 && gaps.evidenceCapacityFailures === 0;
+    && gaps.missingReadinessChecks === 0 && gaps.missingHealthReports === 0 && gaps.evidenceCapacityFailures === 0
+    && gaps.invalidHistoryEvidenceChecks === 0;
   const failurePositions: { source: 'performance' | 'health'; position: number; checkId: string | null;
     stage: string | null; category: 'failure' | 'timing' }[] = [];
   report.checks.forEach((check, index) => {
@@ -136,7 +142,7 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     ...(health?.coverage.missingPlannedCheckIds ?? []).map(id => ({ source: 'health' as const, checkId: healthId(id) })),
   ];
   type GapPosition = { source: 'performance' | 'health'; position: number; checkId: string | null;
-    reason: 'unavailable' | 'skipped' | 'unverified-link' | 'not-run' | 'pending-probe' | 'missing-readiness' | 'duplicate' | 'unexpected' };
+    reason: 'unavailable' | 'skipped' | 'unverified-link' | 'not-run' | 'pending-probe' | 'missing-readiness' | 'duplicate' | 'unexpected' | 'invalid-history-evidence' };
   const gapPositions: GapPosition[] = [
     ...report.checks.flatMap((check, index) => check.status === 'skipped' || check.metrics.availabilityFailure === true || check.metrics.executionAttempted === false || unverifiedLink(check)
       ? [{ source: 'performance' as const, position: index + 1, checkId: safeCheckId(check.id),
@@ -145,6 +151,10 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     ...healthChecks.flatMap((check, index) => check.status === 'unavailable' || check.status === 'not-run'
       ? [{ source: 'health' as const, position: index + 1, checkId: healthId(check.code), reason: check.status }] : []),
   ];
+  healthChecks.forEach((check, index) => {
+    if (invalidHistoryChecks.has(check)) gapPositions.push({ source: 'health', position: index + 1,
+      checkId: healthId(check.code), reason: 'invalid-history-evidence' });
+  });
   const duplicateStoredChecks: { source: 'performance' | 'health'; checkId: string | null; positions: number[] }[] = [];
   const unexpectedStoredChecks: typeof duplicateStoredChecks = [];
   const addIdentityGaps = (source: 'performance' | 'health', checks: readonly { id: string }[],

@@ -173,6 +173,8 @@ export interface PerformanceAuditReadinessClock {
 
 export interface WaitForPerformanceAuditReadinessOptions {
   quietWindowMs?: number;
+  /** Count foreground stability already observed while route/data work settled. */
+  creditExistingStableTime?: boolean;
   /** Reuse completed stability evidence only for unchanged mounted surfaces. */
   reuseSettledEvidence?: boolean;
   timeoutMs?: number;
@@ -370,6 +372,7 @@ export class PerformanceAuditReadinessRegistry {
   private capture: PerformanceAuditCaptureHandle | null = null;
   private generation = 0;
   private stabilityEpoch = 0;
+  private stabilityResetAtMs = 0;
   private nextInstance = 1;
   private readonly surfaces = new Map<string, MutableSurface>();
   /** Action proof keyed by surface ID; remounts must not erase completed-step evidence. */
@@ -405,6 +408,7 @@ export class PerformanceAuditReadinessRegistry {
   invalidateSettledReadiness(): void {
     this.settledEvidence.clear();
     this.stabilityEpoch += 1;
+    this.stabilityResetAtMs = this.clock.now();
     this.emit();
   }
 
@@ -797,6 +801,7 @@ export class PerformanceAuditReadinessRegistry {
       let stableFingerprint: string | null = null;
       let stableEpoch = this.stabilityEpoch;
       let stableSinceMs = 0;
+      let firstEvaluation = true;
       let quietTimer: unknown = null;
       let timeoutTimer: unknown = null;
       let paused = options.pauseState?.getPaused() ?? false;
@@ -844,6 +849,8 @@ export class PerformanceAuditReadinessRegistry {
       const evaluate = () => {
         if (settled) return;
         const at = this.clock.now();
+        const mayCreditExisting = firstEvaluation && options.creditExistingStableTime && !resumed;
+        firstEvaluation = false;
         if (!paused) foregroundElapsedMs += at - lastElapsedAt;
         lastElapsedAt = at;
         const nextPaused = options.pauseState?.getPaused() ?? false;
@@ -923,7 +930,9 @@ export class PerformanceAuditReadinessRegistry {
         }
         if (stableFingerprint !== snapshot.fingerprint) {
           stableFingerprint = snapshot.fingerprint;
-          stableSinceMs = this.clock.now();
+          stableSinceMs = mayCreditExisting && !snapshot.surfaces.some(surface => this.activeActions.has(surface.id))
+            ? Math.max(this.stabilityResetAtMs, ...snapshot.surfaces.map(surface => surface.updatedAtMs))
+            : this.clock.now();
         }
         const stableForMs = this.clock.now() - stableSinceMs;
         if (stableForMs >= quietWindowMs) {
