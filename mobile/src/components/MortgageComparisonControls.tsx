@@ -40,7 +40,15 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
       useMortgageComparison.setState(draft);
       dirty.current = false;
     }, TYPING_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      // Section switches unmount these controls; flush so the committed store
+      // keeps the last typed amount/LVR instead of the pre-keystroke values.
+      if (dirty.current) {
+        useMortgageComparison.setState(draft);
+        dirty.current = false;
+      }
+    };
   }, [draft, storeValue.loanAmount, storeValue.lvr]);
   const groups = useMemo(() => [
     { key: 'loanPurposes' as const, field: 'loan_purpose' as const, condition: 'purpose', canonical: canonicalPurpose },

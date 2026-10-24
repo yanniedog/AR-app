@@ -282,7 +282,7 @@ function sampleMortgageScope(rows: readonly RateRow[], random: () => number): De
   const purposes = new Set<string>();
   const repayments = new Set<string>();
   for (const row of rows) {
-    const purpose = canonicalPurpose(row.loan_purpose);
+    const purpose = canonicalPurpose(row.loan_purpose ?? row.security_purpose);
     if (purpose?.trim()) purposes.add(purpose);
     const repayment = canonicalRepayment(row.ribbon_repayment_type ?? row.repayment_type);
     if (repayment?.trim()) repayments.add(repayment);
@@ -396,7 +396,17 @@ export function deriveDeepAuditInputs(
     options.includeNonStandard ?? false, options.detailsProducts,
   )[0] : null;
   const sampledProducts = sections.flatMap(section => samples.get(section)!);
-  const mortgageRows = core?.sections.Mortgage?.rates ?? [];
+  // Same suitability/mandatory gate as product sampling — never seed scope
+  // facets from excluded Mortgage rows or generic fallbacks they would invent.
+  const mortgageRows = filterReady && core
+    ? filterRows(
+      core.sections.Mortgage?.rates ?? [],
+      { ...EMPTY_FILTERS, includeNonStandard: options.includeNonStandard ?? false },
+      options.detailsProducts,
+      null,
+      'Mortgage',
+    )
+    : [];
   const mortgageScopePrimary = mortgageRows.length ? sampleMortgageScope(mortgageRows, random) : null;
   const mortgageScopeAlternate = mortgageRows.length ? sampleMortgageScope(mortgageRows, random) : null;
   return {

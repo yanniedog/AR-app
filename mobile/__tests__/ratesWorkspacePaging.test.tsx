@@ -185,6 +185,7 @@ test('comparison uncertainty counts the complete filtered result set, not the pr
 
 test('audit mortgage scope apply and clear update comparison inputs and temporary facets', () => {
   install();
+  updateRatesSection('Mortgage', { page: 3, scrollOffset: 420 });
   const tree = mount();
   const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
   try {
@@ -205,6 +206,7 @@ test('audit mortgage scope apply and clear update comparison inputs and temporar
       repaymentTypes: ['PRINCIPAL_AND_INTEREST'],
     });
     expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
+    expect(useRatesSession.getState().sections.Mortgage.scrollOffset).toBe(0);
     act(() => {
       surface().actions!['search.mortgage.scope.apply.1']!({
         loanAmount: '410000',

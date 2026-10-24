@@ -11,7 +11,7 @@ import {
   type PublicRankingResolution,
 } from '../data/publicRateIntegration';
 import type { RateScenario } from '../data/publicRateModel';
-import { scheduleAfterInteractions, scheduleAfterNavigation } from '../lib/yieldToUi';
+import { scheduleAfterInteractions, scheduleAfterNavigation, yieldToUi } from '../lib/yieldToUi';
 import type { RateRow, SectionKey } from '../types';
 
 /** Pricing is heavier than filter/sort; keep the sync path for tiny fixtures only. */
@@ -90,6 +90,10 @@ export function useResolvedPublicRankingRows(options: {
     const cancelNavigation = schedule(() => {
       const control = { cancelled: () => cancelled };
       void (async () => {
+        // Yield once before candidate assembly; recommendation can still scan a
+        // full section, but it must not share the same turn as navigation paint.
+        await yieldToUi(0);
+        if (cancelled) return;
         const candidates = buildCandidates(request);
         if (cancelled) return;
         const resolution = await resolvedPublicRankingRowsCooperatively(

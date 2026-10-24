@@ -190,12 +190,14 @@ export default function RatesWorkspace() {
   useEffect(() => {
     const previous = previousMortgageInputs.current;
     previousMortgageInputs.current = mortgageInputs;
-    if (section !== 'Mortgage') return;
     if (previous.loanAmount === mortgageInputs.loanAmount
       && previous.lvr === mortgageInputs.lvr) return;
-    if (useRatesSession.getState().sections.Mortgage.page === 1) return;
-    updateRatesSection('Mortgage', { page: 1 }, true);
-  }, [mortgageInputs, section]);
+    // Always reset Mortgage paging/scroll for a committed amount/LVR change,
+    // including when the user is temporarily on another section.
+    const mortgage = useRatesSession.getState().sections.Mortgage;
+    if (mortgage.page === 1 && mortgage.scrollOffset === 0) return;
+    updateRatesSection('Mortgage', { page: 1, scrollOffset: 0 }, true);
+  }, [mortgageInputs]);
   useReadyNavigationEffect(useCallback(() => {
     if (!hydrated || !isFocused) return;
     initializeRatesSession(prefs, activeSection);
@@ -836,7 +838,11 @@ export default function RatesWorkspace() {
           ListHeaderComponent={availability === 'listed' ? <View style={{ gap: 8 }}>
             <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows} />
             {catalogue.status !== 'unavailable' ? <><PublicPricingCoverage section={section} rows={pricingCandidates} scenario={scenario} scenarioForRow={rowScenario} compact
-              pricingSummary={publicPricing.ready ? publicPricing.resolution : null} />
+              pricingSummary={publicPricing.ready ? {
+                priced: baseRows.length,
+                unresolved: Math.max(0, pricingCandidates.length - baseRows.length),
+                complete: publicPricing.resolution.complete,
+              } : null} />
               <PublicProductDiscovery section={section} rateScenario={scenarioFor(section)} pricingOrigin="rates-comparison" rows={baseRows} query={debouncedQuery} /></> : null}
             {section === 'Mortgage' ? <MortgageComparisonControls catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={filters}
               unverified={unverifiedResultCount} invalid={mortgageScope.invalid} /> : null}
