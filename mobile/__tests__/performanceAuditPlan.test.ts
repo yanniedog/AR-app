@@ -657,7 +657,7 @@ describe('scenario re-entry gate', () => {
   const routeEntry = (step: DeepAuditStep) =>
     step.depth === 0 || step.semanticActionId.startsWith('redirect.');
 
-  test('skips the rest of a scenario once recovery has unmounted its screen', () => {
+  test('restores dependents once recovery has unmounted its screen', () => {
     const steps = searchSteps();
     const filtersOpen = steps.findIndex(
       (step) => step.semanticActionId === 'search.filters.open',
@@ -667,19 +667,18 @@ describe('scenario re-entry gate', () => {
 
     // Everything up to the interruption runs normally.
     for (const step of steps.slice(0, filtersOpen + 1)) {
-      expect(gate.shouldSkip(step, routeEntry(step))).toBe(false);
+      expect(gate.takeRestore(step, routeEntry(step))).toBe(false);
     }
 
     gate.markRecovered(steps[filtersOpen]);
 
-    // The provider filter and the apply that depends on it would otherwise run
-    // against a freshly mounted screen with no sheet open.
+    // Provider filter / apply remount expectedPath then execute (mass-skip removed).
     const dependents = steps.slice(filtersOpen + 1);
     expect(dependents.map((step) => step.semanticActionId)).toEqual(
       expect.arrayContaining(['search.filter.provider.first', 'search.filters.apply']),
     );
     for (const step of dependents) {
-      expect(gate.shouldSkip(step, routeEntry(step))).toBe(true);
+      expect(gate.takeRestore(step, routeEntry(step))).toBe(true);
     }
   });
 
@@ -693,7 +692,7 @@ describe('scenario re-entry gate', () => {
 
     const next = steps.slice(searchIndex + 1).find((step) => step.scenarioId !== 'route.rates');
     expect(next).toBeDefined();
-    expect(gate.shouldSkip(next!, routeEntry(next!))).toBe(false);
+    expect(gate.takeRestore(next!, routeEntry(next!))).toBe(false);
   });
 
   test('a step that navigates to its own route clears the gate', () => {
@@ -704,13 +703,13 @@ describe('scenario re-entry gate', () => {
     const open = steps.find((step) => step.semanticActionId === 'search.open');
     expect(open).toBeDefined();
     // search.open enters the canonical /browse results, so it re-establishes the screen.
-    expect(gate.shouldSkip(open!, true)).toBe(false);
+    expect(gate.takeRestore(open!, true)).toBe(false);
   });
 
   test('does nothing when no recovery has happened', () => {
     const gate = new ScenarioReentryGate();
     for (const step of searchSteps()) {
-      expect(gate.shouldSkip(step, routeEntry(step))).toBe(false);
+      expect(gate.takeRestore(step, routeEntry(step))).toBe(false);
     }
   });
 });

@@ -1035,7 +1035,10 @@ async function runDeepAuditStepBody(
         ? { changedRender: { surfaceId: actionSource, previousRevision: renderRevisionBefore } }
         : {}),
       quietWindowMs: READINESS_QUIET_WINDOW_MS,
-        creditExistingStableTime: true,
+      // After invoke, never credit pre-action quiet time — mortgage.scope.apply
+      // and other list mutations must observe post-mutation probe settle
+      // (including ready-empty) instead of reusing the prior listed fingerprint.
+      creditExistingStableTime: false,
       timeoutMs: readinessTimeoutMs(watchdog),
       signal: readinessAbort.signal,
     });
@@ -3377,11 +3380,21 @@ export function PerformanceAuditRunner() {
               expectedSurface: step.expectedSurface,
             });
             await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Deep-step marker flush');
-            if (reentryGate.shouldSkip(step, routeEntryHref(step) != null)) {
-              await record(skippedAfterScenarioRecovery(step));
-              continue;
+            const entersRouteDirectly = routeEntryHref(step) != null;
+            // After scenario recovery, remount the expected surface before
+            // dependent mounted actions (do not silently skip the remainder).
+            if (reentryGate.takeRestore(step, entersRouteDirectly)) {
+              await waitWhilePaused(watchdog);
+              assertSessionActive(watchdog);
+              await ensureMountedActionRoute(
+                step.semanticActionId,
+                () => pathnameRef.current,
+                watchdog,
+                label,
+              );
+              assertSessionActive(watchdog);
             }
-            if (!step.skipReason && routeEntryHref(step)) {
+            if (!step.skipReason && entersRouteDirectly) {
               // Independent entries must not retain the prior scenario's
               // product/bank drill stack. Preparation is outside step timings.
               await waitWhilePaused(watchdog);

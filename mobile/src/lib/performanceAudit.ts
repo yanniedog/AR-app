@@ -501,7 +501,14 @@ export function enforcePerformanceAuditStepLimit(check: AuditCheck, elapsedMs = 
     ...check,
     status: 'fail',
     durationMs: roundMetric(elapsedMs),
-    metrics: { ...check.metrics, stepLimitExceeded: true, stepLimitMs: PERFORMANCE_AUDIT_STEP_LIMIT_MS },
+    metrics: {
+      ...check.metrics,
+      stepLimitExceeded: true,
+      stepLimitMs: PERFORMANCE_AUDIT_STEP_LIMIT_MS,
+      // Timing-only overruns are not route corruption. Preserve an existing
+      // routeStateInvalidated:true so recovery still runs for genuine failures.
+      routeStateInvalidated: check.metrics.routeStateInvalidated === true,
+    },
     error: [check.error, `Step exceeded the 10-second limit (${Math.round(elapsedMs)}ms)`].filter(Boolean).join('\n'),
   };
 }
@@ -1199,13 +1206,19 @@ export function requiresPerformanceAuditRouteRecovery(check: AuditCheck): boolea
   if (check.kind !== 'journey') return false;
   if (check.metrics.interruptedByBackground === true) return true;
   if (check.status !== 'fail') return false;
+  // Explicit corruption / non-timing failure always recovers, including when
+  // enforcePerformanceAuditStepLimit also annotated a timing overrun (and may
+  // have forced routeStateInvalidated:false for the timing-only case).
+  if (check.metrics.routeStateInvalidated === true) return true;
+  if (check.metrics.nonTimingFailure === true) return true;
   // A mounted optional control can prove that it is absent without corrupting
   // the route. Keep the screen mounted so independent controls in that
   // scenario can still be exercised.
   if (check.metrics.routeStateInvalidated === false) return false;
-  return check.metrics.routeStateInvalidated === true ||
-    check.metrics.nonTimingFailure === true ||
-    Boolean(check.error);
+  // Timing-only overruns leave the screen mounted — recovering would discard
+  // local state. The step-limit error string alone is not a functional failure.
+  if (check.metrics.stepLimitExceeded === true) return false;
+  return Boolean(check.error);
 }
 
 /**

@@ -1,7 +1,9 @@
 type AuditActionParameters = Readonly<Record<string, unknown>>;
 
 /** Each scenario enters the same listed search task as a new consumer search.
- * Rates task state survives navigation, including the first audit pass. */
+ * Rates task state survives navigation, including the first audit pass.
+ * Mortgage still uses reset=1 so leftover provider/path filters cannot hide
+ * seeded scope.apply targets; apply.0 re-establishes LVR + purpose + repayment. */
 export function auditSearchEntryParams(section: string | null, request: string): Record<string, string> {
   return { ...(section ? { section } : {}), request, query: '', path: '', scope: '',
     availability: 'listed', compare: '0', reset: '1' };

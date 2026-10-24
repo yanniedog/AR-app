@@ -53,6 +53,16 @@ jest.mock('../src/data/historyDaily', () => {
   };
 });
 
+jest.mock('../src/lib/yieldToUi', () => ({
+  yieldToUi: async () => {},
+  yieldToPaintFrames: async () => {},
+}));
+
+jest.mock('../src/data/storeBankRateHistory', () => ({
+  prepareBankRateHistoryAfterPaint: jest.fn(async () => {}),
+  waitForBankRateHistoryPreparation: jest.fn(async () => {}),
+}));
+
 // eslint-disable-next-line import/first -- store import must follow jest mocks
 import { useStore } from '../src/data/store';
 // eslint-disable-next-line import/first -- suitability modules share the mocked cache
@@ -266,6 +276,9 @@ describe('store error recovery', () => {
     });
 
     await useStore.getState().bootstrap({ skipRefresh: true });
+    // Cold-start defers ensureDetails past first paint; flush the queued warm.
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(getSuitabilityAllowed()).toEqual(new Set());
     expect(ensureDetails).toHaveBeenCalledWith({ force: true });
@@ -304,6 +317,8 @@ describe('store error recovery', () => {
     });
 
     await useStore.getState().bootstrap({ skipRefresh: true });
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(useStore.getState().core).toBe(remoteCore);
     if (rebuild) {

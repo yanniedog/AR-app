@@ -1,7 +1,7 @@
 import { SECTION_KEYS, type CorePayload, type DetailsPayload, type Manifest } from '../types';
 import { backgroundPayloadWork, type BackgroundWorkOutcome } from '../lib/backgroundPayloadWork';
 import { debugLog } from '../lib/debugLog';
-import { yieldToPaintFrames } from '../lib/yieldToUi';
+import { yieldToPaintFrames, yieldToUi } from '../lib/yieldToUi';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import type { DatesIndex } from './datesIndex';
 import { prepareReadyBankRateHistory } from './historicalBankRateReadySync';
@@ -53,6 +53,33 @@ export async function prepareBankRateHistoryAfterPaint(
   try {
     await yieldToPaintFrames(2);
     if (!isCurrent()) return;
+    // Foreground warm only: optional history must not fight product-details
+    // validation on the Hermes thread after cold open / GitHub payload refresh
+    // (audit paste: both 50s+). Bounded OS-scheduled refresh keeps warm:false.
+    if (options.warm !== false) {
+      work.stage('Waiting for product details before history');
+      // Wait for *this* core's details (not a stale prior payload). Give deferred
+      // ensureDetails a few yields to claim loading; never burn wall-clock seconds
+      // when details never start (tests and warm:false-adjacent paths). Cap an
+      // in-flight load so a stuck detailsLoading flag cannot hang history forever.
+      const detailsReadyForCore = () => {
+        const live = get();
+        return !!live.details
+          && live.details.run_date === core.run_date
+          && (live.manifest?.files.details.sha256 ?? '') === (manifest.files.details.sha256 ?? '');
+      };
+      for (let i = 0; i < 8 && !detailsReadyForCore() && !get().detailsLoading; i += 1) {
+        await yieldToUi(0);
+        if (!isCurrent()) return;
+      }
+      const detailsLoadStarted = Date.now();
+      const DETAILS_LOAD_MS = 60_000;
+      while (get().detailsLoading && !detailsReadyForCore()
+          && Date.now() - detailsLoadStarted < DETAILS_LOAD_MS) {
+        await yieldToUi(0);
+        if (!isCurrent()) return;
+      }
+    }
     // Resolve only after first paint; a literal require also works in the
     // repository's Jest runtime without enabling experimental VM modules.
     // eslint-disable-next-line @typescript-eslint/no-require-imports

@@ -197,8 +197,9 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     prefs: { ...DEFAULT_PREFS, includeNonStandard: true }, subscriptions: [], searchIndexStatus: 'idle',
     setActiveSection: jest.fn(), ensureSearchIndex: jest.fn(), subscribeSearch: jest.fn(), unsubscribeSearch: jest.fn() }, true);
   initializeRatesSession(store.getState().prefs, 'Mortgage');
-  if (useOr) updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
-    loanPurposes: ['OO', 'INV'], repaymentTypes: ['PI', 'IO'] } }));
+  updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
+    loanPurposes: useOr ? ['OO', 'INV'] : ['OO'],
+    repaymentTypes: useOr ? ['PI', 'IO'] : ['PI'] } }));
   installMandatoryEligibility(selectMandatoryEligibility(store.getState().core, DEFAULT_PREFS.profileFilters, null));
   clearMortgageComparison();
   let rates!: InspectableRenderer, detail!: InspectableRenderer;
@@ -210,7 +211,7 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
       rates.root.findAllByProps({ accessibilityLabel: 'Loan amount' })[0].props.onChangeText('600000');
       rates.root.findAllByProps({ accessibilityLabel: 'LVR' })[0].props.onChangeText('75');
     });
-    act(() => { jest.advanceTimersByTime(200); });
+    act(() => { jest.advanceTimersByTime(500); });
     const card = rates.root.findAllByType('ProductCard')[0];
     expect(card.props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.75' });
     act(() => card.props.onPress());
@@ -295,6 +296,8 @@ test('Rates 75% offer does not show the saved 90% LVR contradiction; ordinary Pr
     subscriptions: [], searchIndexStatus: 'idle', setActiveSection: jest.fn(), ensureSearchIndex: jest.fn(),
     subscribeSearch: jest.fn(), unsubscribeSearch: jest.fn() }, true);
   initializeRatesSession(store.getState().prefs, 'Mortgage'); clearMortgageComparison();
+  updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
+    loanPurposes: ['OO'], repaymentTypes: ['PI'] } }));
   installMandatoryEligibility(selectMandatoryEligibility(store.getState().core, DEFAULT_PREFS.profileFilters, null));
   let rates!: InspectableRenderer, detail!: InspectableRenderer;
   try {
@@ -304,7 +307,7 @@ test('Rates 75% offer does not show the saved 90% LVR contradiction; ordinary Pr
       rates.root.findAllByProps({ accessibilityLabel: 'Loan amount' })[0].props.onChangeText('600000');
       rates.root.findAllByProps({ accessibilityLabel: 'LVR' })[0].props.onChangeText('75');
     });
-    act(() => { jest.advanceTimersByTime(200); });
+    act(() => { jest.advanceTimersByTime(500); });
     const card = rates.root.findAllByType('ProductCard')[0];
     expect(card.props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.75' });
     act(() => card.props.onPress());

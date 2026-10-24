@@ -1218,6 +1218,11 @@ export interface DebugLogUploadResult extends PasteRsUploadResult {
   provider: 'paste.rs' | 'paste.c-net.org';
   /** Present only for paste.c-net.org and persisted in SecureStore for deletion. */
   deleteKey?: string;
+  /**
+   * Optional paste.rs shortener whose body is only the content-host URL.
+   * Clipboard/UI prefer this when present; `url` remains the deletable content host.
+   */
+  shareUrl?: string;
 }
 
 export interface DebugLogUploadReceipt {
@@ -1225,11 +1230,20 @@ export interface DebugLogUploadReceipt {
   url: string;
   provider: DebugLogUploadResult['provider'];
   deleteKey?: string;
+  /** paste.rs pointer to `url`; preferred for Copy link when present. */
+  shareUrl?: string;
   createdAt: string;
   /** Persisted only after an exact full-body read-back succeeds. */
   verified?: boolean;
   /** Local-only identity of an allowlisted report; never sent to the host. */
   contentSha256?: string;
+}
+
+/** User-facing paste link: shortener when available, otherwise the content host. */
+export function debugLogUploadShareUrl(
+  receipt: Pick<DebugLogUploadReceipt, 'url' | 'shareUrl'>,
+): string {
+  return receipt.shareUrl ?? receipt.url;
 }
 
 // Serialize read/modify/write so a completed upload cannot erase another
@@ -1267,6 +1281,27 @@ function validateDebugLogUploadReceipt(value: unknown): DebugLogUploadReceipt {
     : parsed.origin === new URL(PASTE_CNET_URL).origin
       ? 'paste.c-net.org'
       : null;
+  let shareUrl: string | undefined;
+  if (receipt.shareUrl != null) {
+    if (typeof receipt.shareUrl !== 'string') {
+      throw new Error('The saved upload deletion receipt is invalid.');
+    }
+    let shareParsed: URL;
+    try {
+      shareParsed = new URL(receipt.shareUrl);
+    } catch {
+      throw new Error('The saved upload deletion receipt is invalid.');
+    }
+    if (
+      shareParsed.protocol !== 'https:' ||
+      shareParsed.hostname !== 'paste.rs' ||
+      shareParsed.username !== '' ||
+      shareParsed.password !== ''
+    ) {
+      throw new Error('The saved upload deletion receipt is invalid.');
+    }
+    shareUrl = shareParsed.toString();
+  }
   if (
     receipt.schemaVersion !== 1 ||
     expectedProvider == null ||
@@ -1289,6 +1324,7 @@ function validateDebugLogUploadReceipt(value: unknown): DebugLogUploadReceipt {
     url: parsed.toString(),
     provider: expectedProvider,
     ...(receipt.deleteKey ? { deleteKey: receipt.deleteKey } : {}),
+    ...(shareUrl ? { shareUrl } : {}),
     createdAt: receipt.createdAt,
     ...(receipt.verified ? { verified: true } : {}),
     ...(receipt.contentSha256 ? { contentSha256: receipt.contentSha256 } : {}),
@@ -1296,7 +1332,7 @@ function validateDebugLogUploadReceipt(value: unknown): DebugLogUploadReceipt {
 }
 
 export async function saveDebugLogUploadReceipt(
-  result: Pick<DebugLogUploadResult, 'url' | 'provider' | 'deleteKey'>,
+  result: Pick<DebugLogUploadResult, 'url' | 'provider' | 'deleteKey' | 'shareUrl'>,
   createdAt = new Date().toISOString(),
   contentSha256?: string,
 ): Promise<DebugLogUploadReceipt> {
@@ -1305,6 +1341,7 @@ export async function saveDebugLogUploadReceipt(
     url: result.url,
     provider: result.provider,
     ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
+    ...(result.shareUrl ? { shareUrl: result.shareUrl } : {}),
     createdAt,
     ...(contentSha256 ? { contentSha256 } : {}),
   });
@@ -1402,6 +1439,12 @@ export interface PasteRsUploadOptions {
   attemptTimeoutMs?: number;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  /**
+   * Fired after paste.c-net.org accepts the full body and before the optional
+   * paste.rs shortener runs, so a deletion receipt can be persisted without
+   * waiting up to 60s for the shortener.
+   */
+  onContentHosted?: (result: DebugLogUploadResult) => void | Promise<void>;
 }
 
 type PasteRsFailureKind =
@@ -1683,7 +1726,10 @@ async function runPasteCnetAttempt(
   }
 }
 
-/** Upload the complete log, using c-net directly when paste.rs cannot hold it whole. */
+/**
+ * Upload the complete log to paste.c-net.org, then optionally shorten via paste.rs.
+ * paste.rs receives only the content-host URL text — never the full log body.
+ */
 export async function uploadDebugLog(
   body: string,
   fetchImpl: typeof fetch = fetch,
@@ -1693,95 +1739,62 @@ export async function uploadDebugLog(
   const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
   const originalBytes = textEncoder.encode(body).length;
   let attempts = 0;
-  let triedPrimary = false;
 
-  // A maximum-size app export is much larger than paste.rs' live full-paste
-  // limit. Sending it there creates a public 206 paste that contains only the
-  // beginning of the log, so route known-oversized bodies straight to c-net.
-  if (originalBytes <= PASTE_RS_MAX_FULL_UPLOAD_BYTES) {
-    triedPrimary = true;
-    attempts += 1;
-    try {
-      const result = await runPasteRsAttempt(body, fetchImpl, timeoutMs);
-      if (!result.truncated) {
-        return {
-          ...result,
-          provider: 'paste.rs',
-          clientTruncated: false,
-          attempts,
-          originalBytes,
-          uploadedBytes: originalBytes,
-        };
-      }
-
-      // paste.rs has already made the partial body public. Remove it before
-      // creating the complete backup copy; otherwise a failed upload silently
-      // leaves an inaccessible public paste behind.
-      let cleanupError: unknown = null;
-      for (let cleanupAttempt = 0; cleanupAttempt < 2; cleanupAttempt += 1) {
-        try {
-          await deleteDebugLogUpload(result.url, undefined, fetchImpl, timeoutMs);
-          cleanupError = null;
-          break;
-        } catch (error) {
-          cleanupError = error;
-          if (cleanupAttempt === 0) await sleep(PASTE_RS_RETRY_BACKOFF_MS);
-        }
-      }
-      if (cleanupError) {
-        throw new PasteRsUploadError(
-          `paste.rs accepted only part of the log, and the app could not remove ` +
-          `the partial public copy at ${result.url}. No second copy was created.`,
-          attempts,
-          true,
-        );
-      }
-    } catch (error) {
-      if (error instanceof PasteRsUploadError) throw error;
-      const primaryFailure = error as PasteRsAttemptError;
-      if (['timeout', 'network', 'invalid-response'].includes(primaryFailure.kind)) {
-        throw new PasteRsUploadError(
-          'The public upload result was not confirmed. It may have been accepted, so the app ' +
-          'will not create a second copy automatically. Do not retry unless you accept that risk.',
-          attempts,
-          true,
-        );
-      }
-      if (!primaryFailure.transient) {
-        throw new PasteRsUploadError(friendlyPasteRsError(primaryFailure), attempts);
-      }
-    }
-  }
-
-  let backupFailure: PasteRsAttemptError;
+  // Primary: full body on paste.c-net.org (canonical content + delete key).
   attempts += 1;
+  let content: { url: string; deleteKey?: string };
   try {
-    const result = await runPasteCnetAttempt(body, fetchImpl, timeoutMs);
-    return {
-      url: result.url,
-      provider: 'paste.c-net.org',
-      ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
-      truncated: false,
-      clientTruncated: false,
-      attempts,
-      originalBytes,
-      // c-net returned success for the exact original body; never report a
-      // tail or a provider-side partial as the completed full-log upload.
-      uploadedBytes: originalBytes,
-    };
+    content = await runPasteCnetAttempt(body, fetchImpl, timeoutMs);
   } catch (error) {
     // A timeout or lost response may occur after c-net accepted the POST. A
     // blind retry could create another public copy whose delete key is lost.
-    backupFailure = error as PasteRsAttemptError;
+    const primaryFailure = error as PasteRsAttemptError;
+    const detail = friendlyPasteRsError(primaryFailure)
+      .replaceAll('paste.rs', 'paste.c-net.org');
+    throw new PasteRsUploadError(
+      `The complete debug-log upload failed. ${detail}`,
+      attempts,
+      ['timeout', 'network', 'invalid-response'].includes(primaryFailure.kind),
+    );
   }
 
-  const detail = friendlyPasteRsError(backupFailure)
-    .replaceAll('paste.rs', 'the full-capacity upload service');
-  throw new PasteRsUploadError(
-    `${triedPrimary ? 'The complete debug-log upload failed.' : 'The log was too large for paste.rs.'} ${detail}`,
+  const baseResult: DebugLogUploadResult = {
+    url: content.url,
+    provider: 'paste.c-net.org',
+    ...(content.deleteKey ? { deleteKey: content.deleteKey } : {}),
+    truncated: false,
+    clientTruncated: false,
     attempts,
-    ['timeout', 'network', 'invalid-response'].includes(backupFailure.kind),
-  );
+    originalBytes,
+    uploadedBytes: originalBytes,
+  };
+  // Persist the deletable content receipt before optional shortening so a
+  // process exit during paste.rs cannot strand a public c-net paste.
+  if (options.onContentHosted) await options.onContentHosted(baseResult);
+
+  // Secondary: paste.rs holds only the content URL for a shorter share link.
+  // Bound independently so a slow shortener cannot block verification/copy of
+  // the already-persisted c-net content URL for the full attemptTimeoutMs.
+  const shortenerTimeoutMs = Math.min(timeoutMs, 8_000);
+  attempts += 1;
+  try {
+    const shortened = await runPasteRsAttempt(content.url, fetchImpl, shortenerTimeoutMs);
+    if (shortened.truncated) {
+      for (let cleanupAttempt = 0; cleanupAttempt < 2; cleanupAttempt += 1) {
+        try {
+          await deleteDebugLogUpload(shortened.url, undefined, fetchImpl, timeoutMs);
+          break;
+        } catch {
+          if (cleanupAttempt === 0) await sleep(PASTE_RS_RETRY_BACKOFF_MS);
+        }
+      }
+      return { ...baseResult, attempts };
+    }
+    return { ...baseResult, shareUrl: shortened.url, attempts };
+  } catch {
+    // Shortener failure must not strand the user: the content URL remains usable.
+    return { ...baseResult, attempts };
+  }
 }
 
 /** Delete an allowlisted public upload without sending a deletion key to another host. */
@@ -1846,6 +1859,13 @@ export async function deleteDebugLogUploadAndReceipt(
 ): Promise<void> {
   const validated = validateDebugLogUploadReceipt(receipt);
   await deleteDebugLogUpload(validated.url, validated.deleteKey, fetchImpl, timeoutMs);
+  if (validated.shareUrl) {
+    try {
+      await deleteDebugLogUpload(validated.shareUrl, undefined, fetchImpl, timeoutMs);
+    } catch {
+      // Content host is already gone; an orphaned shortener pointer is non-blocking.
+    }
+  }
   if (validated.contentSha256) await recordPublicReportUploadAttempt(validated.contentSha256, null);
   await mutateUploadReceipts(async () => {
     const receipts = await loadDebugLogUploadReceipts();

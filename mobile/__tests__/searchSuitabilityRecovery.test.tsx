@@ -52,7 +52,11 @@ jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => jest.requireActual('../src/theme/theme').lightTheme,
 }));
-jest.mock('../src/lib/yieldToUi', () => ({ scheduleAfterInteractions: () => () => undefined }));
+jest.mock('../src/lib/yieldToUi', () => ({
+  scheduleAfterInteractions: () => () => undefined,
+  // Keep deferred: sync invocation would force ensureSearchIndex on mount.
+  scheduleAfterNavigation: () => () => undefined,
+}));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({
   usePerformanceAuditSurface: (surface: any) => mockSurfaces.set(surface.id, surface),
 }));

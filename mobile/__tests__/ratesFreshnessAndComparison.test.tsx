@@ -47,7 +47,8 @@ test('comparison keeps unknown bounds explicit, rejects known outside limits and
   expect(mortgageComparisonMatch(row, { loanAmount: '600000', lvr: '80' })).toBe('outside');
   expect(mortgageComparisonMatch(row, { loanAmount: '300000', lvr: '70' })).toBe('outside');
   expect(mortgageComparisonMatch(row, { loanAmount: '-100', lvr: '101' })).toBe('invalid');
-  expect(mortgageComparisonMatch({ ...row, lvr_tier: undefined }, { loanAmount: '', lvr: '80' })).toBe('unverified');
+  // Missing listed LVR tier with a user LVR is conclusive outside (not unverified keep).
+  expect(mortgageComparisonMatch({ ...row, lvr_tier: undefined }, { loanAmount: '', lvr: '80' })).toBe('outside');
   const source = [row, { ...row, product_key: 'unknown', balance_min: undefined, balance_max: undefined }];
   expect(mortgageComparisonRows(source, { loanAmount: '300000', lvr: '' })).toMatchObject({ rows: source, unverified: 1, invalid: false });
   expect(mortgageComparisonRows(source, { loanAmount: 'bad', lvr: '' }).rows).toEqual([]);

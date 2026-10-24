@@ -260,7 +260,7 @@ function DebugLogScreenInner() {
   const onCopyUrl = useCallback(async (uploadReceipt: DebugLogUploadReceipt) => {
     if (!uploadReceipt.verified) return;
     try {
-      if (await Clipboard.setStringAsync(uploadReceipt.url) === false) {
+      if (await Clipboard.setStringAsync(uploadReceipt.shareUrl ?? uploadReceipt.url) === false) {
         throw new Error('Clipboard access was unavailable.');
       }
       Alert.alert(uiLabel('Copied'));
@@ -407,7 +407,7 @@ function DebugLogScreenInner() {
                 selectable
                 style={{ fontFamily: 'monospace' }}
               >
-                {uiIdentifier(uploadReceipt.url)}
+                {uiIdentifier(uploadReceipt.shareUrl ?? uploadReceipt.url)}
               </AppText>
               <Button
                 title="Copy link"

@@ -5,6 +5,7 @@ import { publicReportUploadAttempt, publicReportUploadUncertain, recordPublicRep
 
 import {
   debugLog,
+  debugLogUploadShareUrl,
   deleteDebugLogUpload,
   formatVersionedLogExport,
   loadDebugLogUploadReceipts,
@@ -94,7 +95,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
       const recovery = await loadDebugLogUploadRecoveryReceipt();
       if (recovery) {
         pendingReceipt = recovery;
-        publish({ url: recovery.url, recoveryReceipt: recovery });
+        publish({ url: debugLogUploadShareUrl(recovery), recoveryReceipt: recovery });
         throw new Error('Delete the earlier upload from Debug log before creating another public copy.');
       }
       const receipts = await loadDebugLogUploadReceipts();
@@ -108,7 +109,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
       const hash = request.publicReport?.contentSha256;
       pendingReceipt = hash ? receipts.find(receipt => receipt.contentSha256 === hash) ?? null : null;
       if (pendingReceipt) {
-        publish({ url: pendingReceipt.url, verified: pendingReceipt.verified === true });
+        publish({ url: debugLogUploadShareUrl(pendingReceipt), verified: pendingReceipt.verified === true });
       } else {
         if (hash) {
           if (!duplicateRiskAccepted && await publicReportUploadUncertain(hash)) {
@@ -121,8 +122,24 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
         if (flightEpoch !== uploadFlightEpoch) { preparedBody = null; return snapshot; }
         publish({ phase: 'uploading' });
         let result: Awaited<ReturnType<typeof uploadDebugLog>>;
-        try { result = await uploadDebugLog(preparedBody); }
-        catch (error) {
+        // Callback-assigned; keep a typed local so the else-narrowed pendingReceipt
+        // (null at branch entry) does not erase the early hosted createdAt.
+        let hostedCreatedAt: string | undefined;
+        try {
+          result = await uploadDebugLog(preparedBody, fetch, {
+            onContentHosted: async (partial) => {
+              // Best-effort early persist; final save below still owns failure recovery.
+              try {
+                const early = hash
+                  ? await saveDebugLogUploadReceipt(partial, undefined, hash)
+                  : await saveDebugLogUploadReceipt(partial);
+                pendingReceipt = early;
+                hostedCreatedAt = early.createdAt;
+                publish({ url: debugLogUploadShareUrl(early) });
+              } catch { /* SecureStore may be unavailable until the final save path. */ }
+            },
+          });
+        } catch (error) {
           const uncertain = error instanceof Error && 'mayHaveUploaded' in error && error.mayHaveUploaded === true;
           if (hash && !uncertain) await recordPublicReportUploadAttempt(hash, 'failed', attemptEpoch);
           throw error;
@@ -130,13 +147,15 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
         const receipt: DebugLogUploadReceipt = {
           schemaVersion: 1, url: result.url, provider: result.provider,
           ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
-          createdAt: new Date().toISOString(),
+          ...(result.shareUrl ? { shareUrl: result.shareUrl } : {}),
+          createdAt: hostedCreatedAt ?? new Date().toISOString(),
           ...(hash ? { contentSha256: hash } : {}),
         };
         try {
+          // Refresh the receipt with shareUrl when the shortener succeeded.
           pendingReceipt = hash
-            ? await saveDebugLogUploadReceipt(result, undefined, hash)
-            : await saveDebugLogUploadReceipt(result);
+            ? await saveDebugLogUploadReceipt(result, receipt.createdAt, hash)
+            : await saveDebugLogUploadReceipt(result, receipt.createdAt);
         } catch {
           let recoverySaved = false;
           try { await saveDebugLogUploadRecoveryReceipt(receipt); recoverySaved = true; } catch { /* SecureStore may be unavailable. Never persist a plain fallback. */ }
@@ -144,11 +163,14 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
           // this new copy if its deletion capability cannot be stored.
           try {
             await deleteDebugLogUpload(receipt.url, receipt.deleteKey);
+            if (receipt.shareUrl) {
+              try { await deleteDebugLogUpload(receipt.shareUrl); } catch { /* orphan shortener is non-blocking */ }
+            }
             if (recoverySaved) await removeDebugLogUploadRecoveryReceipt(receipt.url);
             if (hash) await recordPublicReportUploadAttempt(hash, 'failed', attemptEpoch);
           } catch {
             pendingReceipt = receipt;
-            publish({ url: receipt.url, recoveryReceipt: receipt });
+            publish({ url: debugLogUploadShareUrl(receipt), recoveryReceipt: receipt });
             throw new Error(recoverySaved
               ? 'The upload needs deletion. Its recovery deletion receipt is saved securely; use Delete uploaded log in Debug log.'
               : 'Secure deletion recovery is unavailable. Keep this app open and use Delete uploaded log in Debug log before restarting.');
@@ -156,7 +178,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
           throw new Error('The new paste was removed because its deletion receipt could not be saved. The full log is still available locally.');
         }
         if (hash) await recordPublicReportUploadAttempt(hash, null, attemptEpoch);
-        publish({ url: pendingReceipt.url });
+        publish({ url: debugLogUploadShareUrl(pendingReceipt) });
         if (result.truncated || result.clientTruncated) {
           throw new Error('The paste service did not accept the complete log.');
         }
@@ -179,7 +201,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
       return snapshot;
     }
     publish({ phase: 'copying', error: null });
-    const copied = await Clipboard.setStringAsync(pendingReceipt.url);
+    const copied = await Clipboard.setStringAsync(debugLogUploadShareUrl(pendingReceipt));
     if (copied === false) throw new Error('Clipboard write was refused.');
     publish({ phase: 'copied' });
     preparedBody = null;
@@ -264,7 +286,7 @@ export async function restorePublicReportUpload(request: UploadRequest): Promise
   const initial = snapshot;
   const recovery = await loadDebugLogUploadRecoveryReceipt();
   if (recovery) {
-    if (snapshot === initial && !inFlight) update({ sessionId: request.sessionId, phase: 'failed', url: recovery.url, recoveryReceipt: recovery,
+    if (snapshot === initial && !inFlight) update({ sessionId: request.sessionId, phase: 'failed', url: debugLogUploadShareUrl(recovery), recoveryReceipt: recovery,
       error: 'Delete the upload using the securely saved recovery receipt in Debug log.' });
     return;
   }
@@ -278,7 +300,7 @@ export async function restorePublicReportUpload(request: UploadRequest): Promise
   lastAuditSession = request.sessionId;
   preparedBody = request.publicReport.body;
   pendingReceipt = receipt ?? null;
-  update({ sessionId: request.sessionId, phase: 'failed', url: receipt?.url ?? null,
+  update({ sessionId: request.sessionId, phase: 'failed', url: receipt ? debugLogUploadShareUrl(receipt) : null,
     preparationFailed: false,
     verified: receipt?.verified === true, mayHaveUploaded: uncertain,
     error: receipt?.verified ? null : receipt ? 'The saved upload needs verification before it can be shared.'
@@ -286,7 +308,12 @@ export async function restorePublicReportUpload(request: UploadRequest): Promise
 }
 
 export function forgetDeletedDebugLogUpload(url: string): void {
-  if (snapshot.url !== url) return;
+  const matches =
+    snapshot.url === url ||
+    pendingReceipt?.url === url ||
+    pendingReceipt?.shareUrl === url ||
+    snapshot.recoveryReceipt?.url === url;
+  if (!matches) return;
   pendingReceipt = null;
   preparedBody = null;
   if (blockedRequest) {

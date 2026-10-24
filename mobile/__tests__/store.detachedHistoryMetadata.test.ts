@@ -29,6 +29,7 @@ jest.mock('../src/data/storeBankRateHistory', () => ({
 }));
 jest.mock('../src/lib/yieldToUi', () => ({
   yieldToUi: async () => {},
+  yieldToPaintFrames: async () => {},
   parseJsonHeavy: async (text: string) => JSON.parse(text),
 }));
 

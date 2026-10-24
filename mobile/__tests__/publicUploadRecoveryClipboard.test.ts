@@ -9,6 +9,7 @@ jest.mock('expo-secure-store', () => ({
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(async () => true) }));
 jest.mock('../src/lib/debugLog', () => ({
   debugLog: { readCompleteText: jest.fn(), warn: jest.fn() },
+  debugLogUploadShareUrl: (receipt: { url: string; shareUrl?: string }) => receipt.shareUrl ?? receipt.url,
   deleteDebugLogUpload: jest.fn(), formatVersionedLogExport: jest.fn(), loadDebugLogUploadReceipts: jest.fn(),
   markDebugLogUploadReceiptVerified: jest.fn(), saveDebugLogUploadReceipt: jest.fn(), uploadDebugLog: jest.fn(), verifyDebugLogUpload: jest.fn(),
 }));
@@ -101,7 +102,9 @@ it('Clear forgets a completed public report retry and suppresses a late verified
   modules.sharing.resetClearedPublicReportUpload();
   await finishClear();
   finishPost(result); await upload;
-  expect(modules.log.saveDebugLogUploadReceipt).toHaveBeenCalledWith(result, undefined, expect.any(String));
+  // Final save keeps the hosted createdAt (or a fresh ISO when onContentHosted
+  // never ran because uploadDebugLog was mocked without invoking the callback).
+  expect(modules.log.saveDebugLogUploadReceipt).toHaveBeenCalledWith(result, expect.any(String), expect.any(String));
   expect(modules.sharing.getDebugLogUploadSnapshot()).toMatchObject({ phase: 'idle', sessionId: null });
   await modules.sharing.retryDebugLogUpload();
   expect(modules.clipboard.setStringAsync).not.toHaveBeenCalled();

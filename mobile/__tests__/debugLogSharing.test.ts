@@ -1,6 +1,7 @@
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
 jest.mock('../src/lib/debugLog', () => ({
   debugLog: { readCompleteText: jest.fn(), warn: jest.fn() },
+  debugLogUploadShareUrl: (receipt: { url: string; shareUrl?: string }) => receipt.shareUrl ?? receipt.url,
   deleteDebugLogUpload: jest.fn(),
   formatVersionedLogExport: jest.fn((text: string) => `versioned\n${text}`),
   loadDebugLogUploadReceipts: jest.fn(),
@@ -12,7 +13,10 @@ jest.mock('../src/lib/debugLog', () => ({
 
 describe('automatic audit log sharing', () => {
   const result = {
-    url: 'https://paste.c-net.org/test', provider: 'paste.c-net.org', deleteKey: 'test-key',
+    url: 'https://paste.c-net.org/test',
+    shareUrl: 'https://paste.rs/short-test',
+    provider: 'paste.c-net.org',
+    deleteKey: 'test-key',
     truncated: false, clientTruncated: false, originalBytes: 500_000, uploadedBytes: 500_000,
   };
   const receipt = { ...result, schemaVersion: 1, createdAt: '2026-09-26T00:00:00Z' };
@@ -44,9 +48,14 @@ describe('automatic audit log sharing', () => {
     const unsubscribe = sharing.subscribeDebugLogUpload(() => phases.push(sharing.getDebugLogUploadSnapshot().phase));
     const state = await sharing.startDebugLogUpload(request);
     expect(log.debugLog.readCompleteText).toHaveBeenCalledWith(request.audit);
-    expect(log.uploadDebugLog).toHaveBeenCalledWith('versioned\nfull-log-with-complete-report');
+    expect(log.uploadDebugLog).toHaveBeenCalledWith(
+      'versioned\nfull-log-with-complete-report',
+      expect.any(Function),
+      expect.objectContaining({ onContentHosted: expect.any(Function) }),
+    );
     expect(log.verifyDebugLogUpload).toHaveBeenCalledWith(receipt, 'versioned\nfull-log-with-complete-report');
-    expect(clipboard.setStringAsync).toHaveBeenCalledWith(result.url);
+    expect(clipboard.setStringAsync).toHaveBeenCalledWith(result.shareUrl);
+    expect(clipboard.setStringAsync).not.toHaveBeenCalledWith(result.url);
     expect(phases).toEqual(expect.arrayContaining(['preparing', 'uploading', 'verifying', 'copying', 'copied']));
     expect((log.saveDebugLogUploadReceipt as jest.Mock).mock.invocationCallOrder[0])
       .toBeLessThan((log.verifyDebugLogUpload as jest.Mock).mock.invocationCallOrder[0]);
@@ -54,8 +63,28 @@ describe('automatic audit log sharing', () => {
       .toBeLessThan((log.markDebugLogUploadReceiptVerified as jest.Mock).mock.invocationCallOrder[0]);
     expect((log.markDebugLogUploadReceiptVerified as jest.Mock).mock.invocationCallOrder[0])
       .toBeLessThan((clipboard.setStringAsync as jest.Mock).mock.invocationCallOrder[0]);
-    expect(state).toMatchObject({ phase: 'copied', verified: true, sessionId: 'audit-1' });
+    expect(state).toMatchObject({
+      phase: 'copied', verified: true, sessionId: 'audit-1', url: result.shareUrl,
+    });
     unsubscribe();
+  });
+
+  it('copies the c-net content URL when the paste.rs shortener is absent', async () => {
+    const contentOnly = {
+      url: 'https://paste.c-net.org/content-only',
+      provider: 'paste.c-net.org' as const,
+      deleteKey: 'content-key',
+      truncated: false, clientTruncated: false, originalBytes: 100, uploadedBytes: 100,
+    };
+    const contentReceipt = { ...contentOnly, schemaVersion: 1 as const, createdAt: '2026-09-26T00:00:00Z' };
+    (log.uploadDebugLog as jest.Mock).mockResolvedValueOnce(contentOnly);
+    (log.saveDebugLogUploadReceipt as jest.Mock).mockResolvedValueOnce(contentReceipt);
+    (log.markDebugLogUploadReceiptVerified as jest.Mock).mockResolvedValueOnce({ ...contentReceipt, verified: true });
+
+    const state = await sharing.startDebugLogUpload(request);
+
+    expect(clipboard.setStringAsync).toHaveBeenCalledWith(contentOnly.url);
+    expect(state).toMatchObject({ phase: 'copied', url: contentOnly.url });
   });
 
   it('deduplicates active and completed runs while allowing the next audit to upload', async () => {

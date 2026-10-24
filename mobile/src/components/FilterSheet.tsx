@@ -44,6 +44,7 @@ export function FilterSheet({
   children,
   controlledDraft,
   onDraftChange,
+  preserveOnReset,
 }: {
   children?: UiChild;
   controlledDraft?: Filters;
@@ -56,6 +57,8 @@ export function FilterSheet({
   onRetryOptions?: () => void;
   filters: Filters;
   onApply: (f: Filters) => void;
+  /** Facets kept across "Reset temporary filters" (e.g. Mortgage purpose/repayment). */
+  preserveOnReset?: Partial<Filters>;
   /** Products the list would show for a draft; labels the apply action. */
   resultCount?: (draft: Filters, cancelled?: () => boolean) => number | null | Promise<number | null>;
   resultNoun?: 'rates' | 'products';
@@ -181,7 +184,7 @@ export function FilterSheet({
         <>
           <Divider />
           <Row gap={12} style={{ paddingHorizontal: 16, paddingTop: 12 }}>
-            <Button title="Reset temporary filters" variant="ghost" style={{ flex: 1 }} onPress={() => setDraft({ ...filters, ...resetFilters() })} />
+            <Button title="Reset temporary filters" variant="ghost" style={{ flex: 1 }} onPress={() => setDraft({ ...filters, ...resetFilters(), ...preserveOnReset })} />
             <Button title={applyTitle} style={{ flex: 2 }} onPress={() => { onApply(draft); onClose(); }} />
           </Row>
         </>
