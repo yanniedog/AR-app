@@ -656,6 +656,12 @@ describe('performance audit scoring', () => {
     slowAndCorrupt.kind = 'journey';
     expect(slowAndCorrupt.metrics.routeStateInvalidated).toBe(true);
     expect(requiresPerformanceAuditRouteRecovery(slowAndCorrupt)).toBe(true);
+
+    const slowNonTiming = enforcePerformanceAuditStepLimit(check('slow-non-timing', 'fail', 15_000, {
+      nonTimingFailure: true,
+    }));
+    slowNonTiming.kind = 'journey';
+    expect(requiresPerformanceAuditRouteRecovery(slowNonTiming)).toBe(true);
   });
 
   it('aggregates paired cold and warm route timings', () => {

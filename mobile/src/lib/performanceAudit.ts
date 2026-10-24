@@ -1207,9 +1207,12 @@ export function requiresPerformanceAuditRouteRecovery(check: AuditCheck): boolea
   if (check.metrics.interruptedByBackground === true) return true;
   if (check.status !== 'fail') return false;
   // Timing-only overruns leave the screen mounted — recovering would discard
-  // local state. Genuine route corruption still recovers even when the step
-  // also blew the timing budget.
-  if (check.metrics.stepLimitExceeded === true && check.metrics.routeStateInvalidated !== true) {
+  // local state. Genuine route corruption or non-timing failures still recover
+  // even when the step also blew the timing budget.
+  if (check.metrics.stepLimitExceeded === true
+      && check.metrics.routeStateInvalidated !== true
+      && check.metrics.nonTimingFailure !== true
+      && !check.error) {
     return false;
   }
   // A mounted optional control can prove that it is absent without corrupting
