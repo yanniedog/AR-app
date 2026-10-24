@@ -32,8 +32,9 @@ export function buildCalculationRoute(row: RateRow, section: SectionKey, mode: '
   } };
 }
 
-/** A malformed or missing requested tier never silently chooses a sibling. */
-export function resolveCalculationTarget(core: CorePayload | null, section: SectionKey, params: CalculationTargetParams): CalculationTarget {
+/** A malformed or missing requested tier never silently chooses a sibling.
+ * Defer expensive semantic catalogue preparation until a valid target needs it. */
+export function resolveCalculationTarget(core: CorePayload | null | (() => CorePayload | null), section: SectionKey, params: CalculationTargetParams): CalculationTarget {
   if (params.target === undefined || params.target === '') return { status: 'none' };
   const key = single(params.target);
   if (key === '') return { status: 'none' };
@@ -42,8 +43,9 @@ export function resolveCalculationTarget(core: CorePayload | null, section: Sect
   if (params.programme !== undefined && (!programme || programme.length > 2048)) return { status: 'unavailable' };
   const index = single(params.ri);
   if (params.ri !== undefined && (index === undefined || (index !== '' && (!/^\d+$/.test(index) || !Number.isSafeInteger(Number(index)))))) return { status: 'unavailable' };
-  if (!core) return { status: 'pending' };
-  const found = findEligibleByKey(core.sections, key);
+  const preparedCore = typeof core === 'function' ? core() : core;
+  if (!preparedCore) return { status: 'pending' };
+  const found = findEligibleByKey(preparedCore.sections, key);
   if (!found && !isMandatoryEligibilityReady()) return { status: 'pending' };
   if (!found || found.section !== section) return { status: 'unavailable' };
   const row = programme ? found.siblings.find(item => item.public_programme_id === programme)

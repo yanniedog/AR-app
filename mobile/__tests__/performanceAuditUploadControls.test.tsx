@@ -9,8 +9,15 @@ import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditRepo
 import { restorePerformanceAuditUpload, uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
 import { loadCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
 import type { DebugLogUploadSnapshot } from '../src/lib/debugLogSharing';
+import { performanceAuditReference } from '../src/lib/performanceAuditCompletion';
+import { finalizeAppHealthReport } from '../src/lib/appHealth';
+import { combineAppHealthPerformanceSummary } from '../src/lib/performanceAuditHealth';
+import { BackgroundWorkDiagnosis } from '../src/components/BackgroundWorkDiagnosis';
+import { AuditCatalogueCoverage } from '../src/components/AuditCatalogueCoverage';
+import { captureAuditPayloadWork } from '../src/lib/performanceAuditPayloadWork';
 
-type Node = { props: Record<string, any>; findByProps: (props: Record<string, unknown>) => Node };
+type Node = { props: Record<string, any>; findByProps: (props: Record<string, unknown>) => Node;
+  findAllByType: (type: unknown) => Node[]; findAllByProps: (props: Record<string, unknown>) => Node[] };
 type Renderer = ReactTestRenderer & { root: Node };
 const mockHydratedDownload = jest.fn();
 const mockDownload = { phase: 'idle' };
@@ -18,6 +25,7 @@ let mockUpload: Partial<DebugLogUploadSnapshot> & Pick<DebugLogUploadSnapshot, '
 const mockRetry = jest.fn(async (_options: unknown) => {});
 const mockPassive = { completed: 0, total: 0, linksCompleted: 0, linksTotal: 0, nativeStatus: 'unavailable' };
 let mockUploadBusy = false;
+let mockMountedDisclosure = false;
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined) }));
 jest.mock('../src/lib/appUpdate', () => ({
   getApkDownloadSnapshot: () => mockDownload, getHydratedApkDownloadSnapshot: () => mockHydratedDownload(), subscribeApkDownload: () => () => undefined,
@@ -35,16 +43,20 @@ jest.mock('../src/lib/passiveAudit', () => ({ getPassiveAuditStatus: () => mockP
 // own tests and must not start asynchronous persistence in this UI fixture.
 jest.mock('../src/data/store', () => ({ useStore: (selector: (state: { details: null }) => unknown) => selector({ details: null }) }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
-jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: { textMuted: '#777', success: '#070', warning: '#a60', danger: '#c00', border: '#ddd', surfaceAlt: '#eee', text: '#111' }, radius: { md: 12 }, font: { body: 16 } }) }));
+jest.mock('../src/hooks/useReducedMotion', () => ({ useReducedMotion: () => true }));
+jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => jest.requireActual('../src/theme/theme').lightTheme }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
-jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Card: 'Card', Disclosure: 'Disclosure', Row: 'Row' }));
+jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Card: 'Card', Row: 'Row',
+  Disclosure: (props: Record<string, unknown>) => jest.requireActual('react').createElement(
+    mockMountedDisclosure ? jest.requireActual('../src/components/ui').Disclosure : 'Disclosure', props),
+}));
 jest.mock('../src/components/settings/settingsUi', () => ({ InfoRow: 'InfoRow', ToggleRow: 'ToggleRow' }));
 
 let tree: Renderer | undefined;
 const toggle = () => tree!.root.findByProps({ label: 'Public upload' });
 async function mount() { await act(async () => { tree = TestRenderer.create(<PerformanceAuditScreen />) as Renderer; }); }
 async function press(title: string) { await act(async () => { tree!.root.findByProps({ title }).props.onPress(); }); }
-beforeEach(() => { resetPerformanceAuditForTests(); jest.clearAllMocks(); mockUpload = { sessionId: null, phase: 'idle' }; mockUploadBusy = false; mockHydratedDownload.mockResolvedValue(mockDownload); });
+beforeEach(() => { resetPerformanceAuditForTests(); jest.clearAllMocks(); mockUpload = { sessionId: null, phase: 'idle' }; mockUploadBusy = false; mockMountedDisclosure = false; mockHydratedDownload.mockResolvedValue(mockDownload); });
 afterEach(() => { if (tree) act(() => tree!.unmount()); tree = undefined; resetPerformanceAuditForTests(); });
 
 test.each([['Run audit', 'local'], ['Live audit', 'live-source']] as const)('%s automatically publishes the sanitized report by default', async (title, mode) => {
@@ -319,4 +331,116 @@ test('diagnostic Clear retains the active run identity and progress', async () =
   act(() => clearCompletedPerformanceAuditState());
   expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', sessionId: active.sessionId,
     startedAt: active.startedAt, progress: active.progress, report: null });
+});
+
+test('the completed result ties its finish instant and audit reference to its verified link', async () => {
+  await mount(); await press('Run audit');
+  const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
+  mockUpload = { sessionId: report.sessionId, phase: 'copied', verified: true, url: 'https://paste.c-net.org/current-audit' };
+  act(() => completePerformanceAudit(report));
+  expect(tree!.root.findByProps({ label: 'Finished' }).props.value).toBe('2026-10-15T18:01:00.000Z');
+  expect(tree!.root.findByProps({ label: 'Audit ID' }).props.value).toBe(performanceAuditReference(report.sessionId));
+  expect(tree!.root.findByProps({ children: 'https://paste.c-net.org/current-audit' })).toBeDefined();
+  expect(tree!.root.findByProps({ title: 'Audit details' }).props.open).toBe(false);
+  expect(tree!.root.findByProps({ title: 'Run another audit' }).props.open).toBe(false);
+});
+
+test('a completed audit cannot present the verified link of a different report', async () => {
+  await mount(); await press('Run audit');
+  const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
+  mockUpload = { sessionId: 'earlier-audit', phase: 'copied', verified: true, url: 'https://paste.c-net.org/earlier-audit' };
+  act(() => completePerformanceAudit(report));
+  expect(() => tree!.root.findByProps({ children: 'https://paste.c-net.org/earlier-audit' })).toThrow();
+  expect(tree!.root.findByProps({ title: 'Upload report' }).props.disabled).toBe(false);
+  expect(tree!.root.findByProps({ label: 'Finished' }).props.value).toBe('2026-10-15T18:01:00.000Z');
+});
+
+test('failed checks expose numbered positions without expanding the verbose audit results', async () => {
+  await mount(); await press('Run audit');
+  const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!, [
+    { id: 'first-check', label: 'First check', kind: 'runtime', status: 'pass', durationMs: 1, metrics: {} },
+    { id: 'failed-check', label: 'Failed check', kind: 'runtime', status: 'fail', durationMs: null, metrics: { nonTimingFailure: true } },
+  ]);
+  act(() => completePerformanceAudit(report));
+  expect(tree!.root.findByProps({ label: 'Failures' }).props.value).toBe('1');
+  expect(tree!.root.findByProps({ label: 'First failure' }).props.value).toBe('Check results · 2 · failed-check');
+  expect(tree!.root.findByProps({ label: 'Position' }).props.value).toBe('2');
+  expect(tree!.root.findByProps({ title: 'Failure positions' }).props.open).toBe(false);
+  await act(async () => { tree!.root.findByProps({ title: 'Failure positions' }).props.onToggle(); });
+  expect(tree!.root.findByProps({ title: 'Failure positions' }).props.open).toBe(true);
+  expect(tree!.root.findByProps({ title: 'Audit details' }).props.open).toBe(false);
+});
+
+test('deidentified sharing discloses audit timestamps and reference before opening the share sheet', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  try {
+    await mount(); await press('Run audit');
+    act(() => completePerformanceAudit(makePerformanceAuditReport(getPerformanceAuditState().sessionId!)));
+    await press('Share deidentified report');
+    expect(alert).toHaveBeenCalledWith('Share deidentified report?',
+      expect.stringContaining('Included: App / publication / aggregate counts / timing / fixed checks / Audit timestamps / Audit ID'),
+      expect.any(Array));
+    const message = alert.mock.calls[0][1]!;
+    expect(message).toContain('Excluded: Raw logs / tracebacks / routes / product keys / device IDs');
+    expect(message.split('Excluded:')[1]).not.toContain('timestamps');
+  } finally { alert.mockRestore(); }
+});
+
+test('combined health totals use the complete denominator without counting warnings twice', async () => {
+  await mount(); await press('Run audit');
+  const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!, [
+    { id: 'runtime', label: 'Runtime', kind: 'runtime', status: 'pass', durationMs: 1, metrics: { executionAttempted: true } },
+  ]);
+  report.appHealth = finalizeAppHealthReport({ sessionId: report.sessionId, mode: 'local',
+    startedAt: report.startedAt, finishedAt: report.finishedAt,
+    checks: [{ id: 'core-schema', code: 'core-schema', label: 'Core schema', domain: 'data-integrity', status: 'warn', metrics: {} }],
+    plannedCheckIds: ['core-schema'] });
+  report.summary = combineAppHealthPerformanceSummary(report.summary, report.appHealth, report.checks.length);
+  act(() => completePerformanceAudit(report));
+  const allPlanned = report.checks.length + report.appHealth.coverage.plannedChecks;
+  expect(tree!.root.findByProps({ label: 'Executed', value: `${report.summary.executed} / ${allPlanned}` })).toBeDefined();
+  expect(tree!.root.findByProps({ label: 'Warnings' }).props.value).toBe(String(report.summary.warn));
+});
+
+test('an older saved report with malformed optional coverage remains reviewable as incomplete', async () => {
+  const report = makePerformanceAuditReport('older-diagnosis');
+  report.coverage = {} as never;
+  report.appHealth = {} as never;
+  jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(report);
+  await mount();
+  expect(tree!.root.findByProps({ label: 'Details', value: 'Incomplete' })).toBeDefined();
+  expect(tree!.root.findByProps({ label: 'Coverage', value: 'Incomplete' })).toBeDefined();
+  expect(tree!.root.findByProps({ title: 'Upload report' })).toBeDefined();
+  expect(report.coverage).toEqual({});
+  expect(report.appHealth).toEqual({});
+});
+
+test('the real disclosure mounts every diagnostic section only while audit details are open', async () => {
+  mockMountedDisclosure = true;
+  await mount(); await press('Run audit');
+  const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!, [
+    { id: 'runtime-detail', label: 'Runtime', kind: 'runtime', status: 'pass', durationMs: 1, metrics: { executionAttempted: true } },
+  ]);
+  report.appHealth = finalizeAppHealthReport({ sessionId: report.sessionId, mode: 'local',
+    startedAt: report.startedAt, finishedAt: report.finishedAt, plannedCheckIds: ['core-schema'],
+    checks: [{ id: 'core-schema', code: 'core-schema', label: 'Core schema', domain: 'data-integrity', status: 'pass', metrics: {} }] });
+  report.backgroundWorkWait = { startedAt: report.startedAt, capturedAt: report.startedAt, elapsedMs: 1,
+    status: 'settled', jobs: [], payloadWork: captureAuditPayloadWork({ core: null, manifest: null,
+      refreshing: false, postRefreshWarming: false, bankRateHistoryLoading: false, detailsLoading: false }) };
+  report.routeAggregates = [{ journeyId: 'rates', label: 'Rates', coldStatus: 'pass', warmStatus: 'pass',
+    coldForwardMs: 1, warmForwardMs: 1, coldBackMs: 1, warmBackMs: 1, forwardChangeMs: 0, backChangeMs: 0 }];
+  act(() => completePerformanceAudit(report));
+  const expectDiagnostics = (mounted: boolean) => {
+    expect(tree!.root.findAllByType(BackgroundWorkDiagnosis)).toHaveLength(mounted ? 1 : 0);
+    expect(tree!.root.findAllByType(AuditCatalogueCoverage)).toHaveLength(mounted ? 1 : 0);
+    for (const heading of ['Data and display health', 'First / repeat', 'Check results', 'runtime-detail']) {
+      expect(tree!.root.findAllByProps({ children: heading }).length > 0).toBe(mounted);
+    }
+    expect(tree!.root.findByProps({ label: 'Finished' }).props.value).toBe('2026-10-15T18:01:00.000Z');
+  };
+  expectDiagnostics(false);
+  act(() => tree!.root.findByProps({ title: 'Audit details' }).props.onToggle());
+  expectDiagnostics(true);
+  act(() => tree!.root.findByProps({ title: 'Audit details' }).props.onToggle());
+  expectDiagnostics(false);
 });

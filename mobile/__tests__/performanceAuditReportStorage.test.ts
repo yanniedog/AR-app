@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { clearCompletedPerformanceAudit, loadCompletedPerformanceAudit, saveCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
+import { buildPerformanceAuditCompletion } from '../src/lib/performanceAuditCompletion';
 
 const files = new Map<string, string>();
 const path = 'file:///docs/logs/ar-performance-audit-completed.json';
@@ -23,6 +24,17 @@ test('the completed diagnosis is restored from local storage and never replaced 
   await saveCompletedPerformanceAudit(report);
   files.set('file:///docs/logs/ar-performance-audit-latest.json', JSON.stringify({ summaryMarker: 'partial=true', reportJson: '{}' }));
   expect(await loadCompletedPerformanceAudit()).toEqual(report);
+});
+
+test('legacy recovered optional evidence remains retained and reviewable as incomplete', async () => {
+  const report = { ...makePerformanceAuditReport(), coverage: {}, appHealth: {} };
+  files.set(path, JSON.stringify(report));
+  const recovered = await loadCompletedPerformanceAudit();
+  expect(recovered).toEqual(report);
+  expect(buildPerformanceAuditCompletion(recovered!)).toMatchObject({ outcome: 'incomplete',
+    collectionComplete: false, coverageComplete: false, detailsComplete: false,
+    gaps: { invalidCoverageReports: 1, invalidHealthReports: 1 } });
+  expect(JSON.parse(files.get(path)!)).toEqual(report);
 });
 
 test('upgrades can recover the existing complete sidecar without an upload or new audit', async () => {

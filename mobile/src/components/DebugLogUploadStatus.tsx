@@ -35,7 +35,7 @@ export function DebugLogUploadStatus({ sessionId }: { sessionId?: string | null 
       <AppText variant="small" weight="700" accessibilityLiveRegion="polite">
         {state.phase === 'failed' ? uiLabel(state.verified ? state.error ? 'Copy failed' : 'Uploaded' : state.url || state.mayHaveUploaded ? 'Upload uncertain' : 'Upload failed') : LABELS[state.phase]}
       </AppText>
-      {state.url ? <AppText variant="small" selectable>{uiIdentifier(state.url)}</AppText> : null}
+      {state.url && (sessionId === undefined || state.verified && !state.recoveryReceipt) ? <AppText variant="small" selectable>{uiIdentifier(state.url)}</AppText> : null}
       {state.error ? <AppText variant="small" color="danger">{uiLabel(state.verified ? 'Copy failed' : state.mayHaveUploaded || state.url ? 'Upload uncertain' : 'Upload failed')}</AppText> : null}
       {state.mayHaveUploaded && !state.verified ? <AppText variant="small">{uiJoin('Public copy', ': ', 'Unverified', ' · ', 'Duplicate public copy possible')}</AppText> : null}
       {state.recoveryReceipt ? <>

@@ -64,6 +64,25 @@ test('automatic dispatch alone uploads and verifies only the complete sanitized 
   expect(log.verifyDebugLogUpload).toHaveBeenCalledWith(expect.any(Object), body);
 });
 
+test('a recovered malformed health report uploads its incomplete evidence instead of failing preparation', async () => {
+  const malformed = { checks: [{ id: 'private-health-id', metrics: { account: 'private-health-value' } }] };
+  const recovered = { ...report, appHealth: malformed } as unknown as typeof report;
+  await delivery.uploadCompletedPerformanceAudit(recovered);
+  expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
+  const body = jest.mocked(log.uploadDebugLog).mock.calls[0][0];
+  const decoded = decodeCompactDiagnosticJson(body) as any;
+  expect(decoded.completion).toMatchObject({ detailsComplete: false,
+    gaps: { invalidHealthReports: 1, missingHealthReports: 1 } });
+  expect(decoded.appHealth).toBeNull();
+  expect(decoded.diagnosticLog.appHealth).toMatchObject({ checks: [
+    { id: expect.stringMatching(/^~private/), metrics: { account: expect.stringMatching(/^~private/) } },
+  ] });
+  expect(body).not.toContain('private-health-id');
+  expect(body).not.toContain('private-health-value');
+  expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ verified: true, url: result.url });
+  expect(recovered.appHealth).toBe(malformed);
+});
+
 test('concurrent manual post-completion requests share one upload', async () => {
   await Promise.all([delivery.uploadCompletedPerformanceAudit(report), delivery.uploadCompletedPerformanceAudit(report)]);
   expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
