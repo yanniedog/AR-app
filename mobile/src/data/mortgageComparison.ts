@@ -14,10 +14,12 @@ export const clearMortgageComparison = () => useMortgageComparison.setState({ lo
 
 function inputs(value: MortgageComparisonInputs) {
   const amount = value.loanAmount.trim() ? calculatorAmount(value.loanAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT) : null;
-  const lvr = value.lvr.trim() && /^(?:\d+(?:\.\d+)?|\.\d+)\s*%?$/.test(value.lvr.trim())
-    ? Number(value.lvr.replace(/\s*%$/, '')) : null;
+  // Trim before stripping % so pasted values like "71% " parse instead of becoming NaN.
+  const lvrText = value.lvr.trim();
+  const lvr = lvrText && /^(?:\d+(?:\.\d+)?|\.\d+)\s*%?$/.test(lvrText)
+    ? Number(lvrText.replace(/\s*%$/, '')) : null;
   return { amount, lvr, invalid: !!value.loanAmount.trim() && (amount === null || amount <= 0)
-    || !!value.lvr.trim() && (lvr === null || lvr <= 0 || lvr > 100) };
+    || !!lvrText && (lvr === null || !Number.isFinite(lvr) || lvr <= 0 || lvr > 100) };
 }
 
 /** Rates Mortgage search runs only after LVR + purpose + repayment are set. Loan amount stays optional. */
@@ -107,9 +109,10 @@ function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateCo
       if (source.unresolved.length) unverified = true;
       // Admitted LVR alternatives must still clear a parseable listed tier so a
       // stray second published band cannot rescue e.g. 71% onto an lvr_<60% row.
+      // Missing/unparseable listed tier is outside (same as matchListedTier).
       if (!fallthroughLvr && parsed.lvr !== null) {
         const range = parseLvrRange(row.lvr_tier);
-        if (range && !lvrRangeContains(range, parsed.lvr)) return 'outside';
+        if (!range || !lvrRangeContains(range, parsed.lvr)) return 'outside';
       }
       if (!unverified && !fallthroughLvr && !fallthroughAmount) return 'listed';
       if (!fallthroughLvr && !fallthroughAmount) return unverified ? 'unverified' : 'listed';

@@ -879,9 +879,23 @@ test.each([false, true])('public-only facet chips reveal an offer with saved leg
     expect({ labels, found: Boolean(purpose) }).toMatchObject({ found: true });
     const repayment = chips().find((chip: any) => chip.props.label === 'Principal & interest');
     expect({ labels, found: Boolean(repayment) }).toMatchObject({ found: true });
-    // Seeded beforeEach criteria already selects these chips; pressing again would deselect and gate the list.
     expect(purpose!.props.selected).toBe(true);
     expect(repayment!.props.selected).toBe(true);
+    expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
+    // Deselect then reselect so chip onPress handlers are exercised under the criteria gate.
+    // Re-query chips after each press — criteria-gate remounts replace the instances.
+    const purposeChip = () => chips().find((chip: any) => chip.props.label === 'Owner occupied')!;
+    const repaymentChip = () => chips().find((chip: any) => chip.props.label === 'Principal & interest')!;
+    act(() => purposeChip().props.onPress());
+    expect(purposeChip().props.selected).toBe(false);
+    expect(list().data.map((row: any) => row.public_offer_id)).toEqual([]);
+    act(() => purposeChip().props.onPress());
+    expect(purposeChip().props.selected).toBe(true);
+    act(() => repaymentChip().props.onPress());
+    expect(repaymentChip().props.selected).toBe(false);
+    expect(list().data.map((row: any) => row.public_offer_id)).toEqual([]);
+    act(() => repaymentChip().props.onPress());
+    expect(repaymentChip().props.selected).toBe(true);
     expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
     act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
       loanPurposes: ['OWNER_OCCUPIED'], repaymentTypes: ['PRINCIPAL_AND_INTEREST'] } })));

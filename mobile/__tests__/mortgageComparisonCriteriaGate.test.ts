@@ -95,4 +95,10 @@ test('Rates mortgage criteria require LVR, purpose, and repayment; amount stays 
     { loanAmount: '', lvr: '0' },
     { loanPurposes: ['OO'], repaymentTypes: ['PI'] },
   )).toBe(false);
+  // Trailing whitespace after % must still parse (pasted "71% ").
+  expect(mortgageComparisonCriteriaReady(
+    { loanAmount: '', lvr: '71% ' },
+    { loanPurposes: ['OO'], repaymentTypes: ['PI'] },
+  )).toBe(true);
+  expect(mortgageComparisonMatch(midBand, { loanAmount: '', lvr: '71% ' })).toBe('listed');
 });

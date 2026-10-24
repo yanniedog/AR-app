@@ -38,7 +38,10 @@ jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true, useNavi
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => jest.requireActual('../src/theme/theme').lightTheme }));
 jest.mock('../src/hooks/useReducedMotion', () => ({ useReducedMotion: () => true }));
-jest.mock('../src/lib/yieldToUi', () => ({ scheduleAfterInteractions: () => () => undefined }));
+jest.mock('../src/lib/yieldToUi', () => ({
+  scheduleAfterInteractions: () => () => undefined,
+  scheduleAfterNavigation: (work: () => void) => { work(); return () => undefined; },
+}));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: () => undefined }));
 jest.mock('../src/hooks/useLogoReadiness', () => ({ useLogoReadiness: () => ({ ready: true }) }));
 jest.mock('../src/hooks/useSearchFilterOptions', () => ({ useSearchFilterOptions: () => ({ ready: true, options: {} }) }));

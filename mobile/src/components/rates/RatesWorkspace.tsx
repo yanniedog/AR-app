@@ -343,7 +343,8 @@ export default function RatesWorkspace() {
   const mortgageContext = useMemo(() => ({ core, details, manifest, coreIntegrity }),
     [core, details, manifest, coreIntegrity]);
   const sourceRates = core?.sections[section]?.rates ?? EMPTY_RATE_ROWS;
-  const mortgageSearchActive = section !== 'Mortgage' || mortgageCriteriaReady;
+  // Unlisted Mortgage browse has no comparison controls; do not gate it behind LVR/purpose/repayment.
+  const mortgageSearchActive = section !== 'Mortgage' || availability === 'unlisted' || mortgageCriteriaReady;
   const publicPricing = useResolvedPublicRankingRows({
     sourceRows: task.intentError || !mortgageSearchActive ? EMPTY_RATE_ROWS : sourceRates,
     catalogue,
@@ -958,7 +959,7 @@ export default function RatesWorkspace() {
                 <EmptyState title="Products unavailable"  />
                 <Button title="Retry" variant="secondary" onPress={preparedResults.retry} />
               </View>
-            ) : section === 'Mortgage' && !mortgageCriteriaReady ? (
+            ) : section === 'Mortgage' && availability === 'listed' && !mortgageCriteriaReady ? (
               <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
                 <EmptyState title="Inputs incomplete" />
               </View>
@@ -1000,6 +1001,10 @@ export default function RatesWorkspace() {
         controlledDraft={draftFilters}
         onDraftChange={setDraftFilters}
         onApply={applyFilters}
+        preserveOnReset={section === 'Mortgage' ? {
+          loanPurposes: effectiveFilters.loanPurposes,
+          repaymentTypes: effectiveFilters.repaymentTypes,
+        } : undefined}
         resultNoun={draftAvailability === 'listed' ? 'rates' : 'products'}
         resultCount={draftAvailability === 'listed' ? draftResultCount : unlistedResultCount}
       >

@@ -509,6 +509,9 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     ? null
     : 'Fewer than two distinct exact products are available in one section';
   const missingProvider = inputs.provider ? null : 'No observed provider is available';
+  const missingMortgageScope = inputs.mortgageScopePrimary && inputs.mortgageScopeAlternate
+    ? null
+    : 'No Mortgage rates are available for comparison-scope latency';
   const missingTaxonomy = inputs.taxonomyPath.length
     ? null
     : 'The selected exact product has no valid hierarchy path';
@@ -572,6 +575,15 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     },
     { depth: 2, semanticActionId: 'search.filters.apply', stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'search.filters.clear', stateImpact: 'local-only' },
+    // Mortgage criteria gate: seed LVR + purpose + repayment before compare targets.
+    {
+      depth: 2,
+      semanticActionId: 'search.mortgage.scope.apply.0',
+      parameters: mortgageScopeParameters(inputs.mortgageScopePrimary),
+      stateImpact: 'local-only',
+      optional: true,
+      skipReason: missingMortgageScope,
+    },
     {
       depth: 2,
       semanticActionId: 'search.compare.mode',
@@ -637,9 +649,6 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 1, semanticActionId: 'search.section.next', stateImpact: 'local-only' },
   ]);
 
-  const missingMortgageScope = inputs.mortgageScopePrimary && inputs.mortgageScopeAlternate
-    ? null
-    : 'No Mortgage rates are available for comparison-scope latency';
   scenario(templates, 'route.rates-mortgage-scope', {
     expectedPath: '/browse',
     expectedSurface: 'rates.results',

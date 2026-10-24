@@ -58,11 +58,23 @@ export async function prepareBankRateHistoryAfterPaint(
     // (audit paste: both 50s+). Bounded OS-scheduled refresh keeps warm:false.
     if (options.warm !== false) {
       work.stage('Waiting for product details before history');
-      for (let i = 0; i < 8 && !get().detailsLoading && !get().details; i += 1) {
+      // Wait for *this* core's details (not a stale prior payload). Cap both the
+      // deferred-start poll and the in-flight wait so a stuck detailsLoading flag
+      // cannot leave bankRateHistoryLoading pending forever.
+      const detailsReadyForCore = () => {
+        const live = get();
+        return !!live.details
+          && live.details.run_date === core.run_date
+          && (live.manifest?.files.details.sha256 ?? '') === (manifest.files.details.sha256 ?? '');
+      };
+      const detailsWaitStarted = Date.now();
+      const DETAILS_START_MS = 8_000;
+      const DETAILS_LOAD_MS = 60_000;
+      while (!detailsReadyForCore() && !get().detailsLoading && Date.now() - detailsWaitStarted < DETAILS_START_MS) {
         await yieldToUi(0);
         if (!isCurrent()) return;
       }
-      while (get().detailsLoading) {
+      while (get().detailsLoading && Date.now() - detailsWaitStarted < DETAILS_LOAD_MS) {
         await yieldToUi(0);
         if (!isCurrent()) return;
       }

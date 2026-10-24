@@ -182,19 +182,31 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             await yieldToUi();
             // Serialize optional history assets — parallel Promise.all previously
             // competed with details on the same Hermes thread after every refresh.
+            // Isolate failures so one rejected ensure cannot skip the rest.
+            const warmOptionalHistory = async (
+              label: string,
+              action: () => Promise<void>,
+              error: () => string | null | undefined,
+            ) => {
+              try {
+                await warmAsset(label, action, error);
+              } catch (caught) {
+                debugLog.warn('store', `optional ${label} warm failed: ${String((caught as Error)?.message ?? caught)}`);
+              }
+            };
             if (optionalWork.historyBanks) {
               work.stage('Warming bank summary history');
-              await warmAsset('Bank summary history', () => get().ensureHistoryBanks(), () => get().historyBanksError);
+              await warmOptionalHistory('Bank summary history', () => get().ensureHistoryBanks(), () => get().historyBanksError);
               await yieldToUi();
             }
             if (optionalWork.bankInsights) {
               work.stage('Warming bank insights');
-              await warmAsset('Bank insights', () => get().ensureBankInsights(), () => get().bankInsightsError);
+              await warmOptionalHistory('Bank insights', () => get().ensureBankInsights(), () => get().bankInsightsError);
               await yieldToUi();
             }
             if (optionalWork.bankSpreadHistory) {
               work.stage('Warming bank spread history');
-              await warmAsset('Bank spread history', () => get().ensureBankSpreadHistory(), () => get().bankSpreadHistoryError);
+              await warmOptionalHistory('Bank spread history', () => get().ensureBankSpreadHistory(), () => get().bankSpreadHistoryError);
             }
           }
           if (notifyCtx && notifyCtx.previousSource === 'remote') {
