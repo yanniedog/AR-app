@@ -103,10 +103,13 @@ test('untargeted calculator edits skip full-catalogue target pricing and targete
       mockScenario = normalizeUserRateScenario({ ...mockScenario, mortgage: { ...mockScenario.mortgage, mode } });
       act(() => tree.update(<RateCheckWorkspace />));
     }
+    // Calculator pricing is section-scoped and cooperative; never expand every
+    // section through publicComparisonCore on mode edits or targeted routes.
     expect(prepareCore).not.toHaveBeenCalled();
     Object.assign(mockParams, { target: loan.product_key, ri: '4' });
     act(() => tree.update(<RateCheckWorkspace />));
-    expect(prepareCore).toHaveBeenCalled();
+    expect(prepareCore).not.toHaveBeenCalled();
+    expect(texts(tree).some(text => /LVR|target|Selected|constraint/i.test(text))).toBe(true);
   } finally { act(() => tree.unmount()); prepareCore.mockRestore(); }
 });
 

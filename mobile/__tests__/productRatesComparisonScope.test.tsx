@@ -91,7 +91,12 @@ jest.mock('../src/components/BankAvatar', () => ({ BankAvatar: 'BankAvatar' }));
 jest.mock('../src/components/AppNavigationMenu', () => ({ NavigationMenuButton: 'NavigationMenuButton' }));
 jest.mock('../src/components/BankHistoryChart', () => ({ BankHistoryChart: 'BankHistoryChart' }));
 jest.mock('../src/components/ChartErrorBoundary', () => ({ ChartErrorBoundary: 'ChartErrorBoundary' }));
-jest.mock('../src/components/feedback', () => ({ EmptyState: 'EmptyState' }));
+jest.mock('../src/components/feedback', () => ({
+  EmptyState: 'EmptyState',
+  IndeterminateProgressBar: 'IndeterminateProgressBar',
+  LoadingRows: 'LoadingRows',
+  ScreenSkeleton: 'ScreenSkeleton',
+}));
 jest.mock('../src/components/product/ProductRateChangeLine', () => ({ ProductRateChangeLine: 'ProductRateChangeLine' }));
 jest.mock('../src/components/product/ProductTermsDisclosure', () => ({ ProductTermsDisclosure: 'ProductTermsDisclosure' }));
 jest.mock('../src/components/product/ProductDetailParts', () => ({
@@ -198,12 +203,14 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
   clearMortgageComparison();
   let rates!: InspectableRenderer, detail!: InspectableRenderer;
   try {
+    jest.useFakeTimers();
     act(() => { rates = TestRenderer.create(<RatesWorkspace />) as InspectableRenderer; });
     expect(rates.root.findAllByType('ProductCard')).toHaveLength(0);
     act(() => {
       rates.root.findAllByProps({ accessibilityLabel: 'Loan amount' })[0].props.onChangeText('600000');
       rates.root.findAllByProps({ accessibilityLabel: 'LVR' })[0].props.onChangeText('75');
     });
+    act(() => { jest.advanceTimersByTime(200); });
     const card = rates.root.findAllByType('ProductCard')[0];
     expect(card.props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.75' });
     act(() => card.props.onPress());
@@ -211,6 +218,7 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     expect(destination.params).toEqual({ key: product.productKey, programme: p.programmeId, origin: 'rates-comparison' });
     Object.assign(mockRoute, destination.params);
     act(() => rates.unmount());
+    jest.useRealTimers();
     await act(async () => { detail = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
     expect(detail.root.findAllByType('DetailsOnlyProduct')).toHaveLength(0);
     expect(buildStaySwitchProjection).not.toHaveBeenCalled();
@@ -263,6 +271,7 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     expect(normalTexts).not.toContain('$600,000');
     expect(JSON.stringify(mockScenario)).toBe(saved);
   } finally {
+    jest.useRealTimers();
     act(() => { detail?.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });
     installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));
   }
@@ -289,16 +298,19 @@ test('Rates 75% offer does not show the saved 90% LVR contradiction; ordinary Pr
   installMandatoryEligibility(selectMandatoryEligibility(store.getState().core, DEFAULT_PREFS.profileFilters, null));
   let rates!: InspectableRenderer, detail!: InspectableRenderer;
   try {
+    jest.useFakeTimers();
     act(() => { rates = TestRenderer.create(<RatesWorkspace />) as InspectableRenderer; });
     act(() => {
       rates.root.findAllByProps({ accessibilityLabel: 'Loan amount' })[0].props.onChangeText('600000');
       rates.root.findAllByProps({ accessibilityLabel: 'LVR' })[0].props.onChangeText('75');
     });
+    act(() => { jest.advanceTimersByTime(200); });
     const card = rates.root.findAllByType('ProductCard')[0];
     expect(card.props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.75' });
     act(() => card.props.onPress());
     Object.assign(mockRoute, (jest.mocked(router.push).mock.calls.at(-1)![0] as unknown as { params: typeof mockRoute }).params);
     act(() => rates.unmount());
+    jest.useRealTimers();
     await act(async () => { detail = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
     expect(detail.root.findAllByType('PublicRateEvidence')[0].props.scenario).toMatchObject({ amount: '600000', lvr: '0.75' });
     const scopedTexts = detail.root.findAllByType('AppText').map(node => node.props.children);
@@ -314,6 +326,7 @@ test('Rates 75% offer does not show the saved 90% LVR contradiction; ordinary Pr
     expect(detail.root.findAllByType('AppText').map(node => node.props.children)).toContain('Outside listed LVR tier');
     expect(mockScenario.mortgage.loanBalance).toBe('450000');
   } finally {
+    jest.useRealTimers();
     act(() => { detail?.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });
     Object.assign(mockScenario.mortgage, savedMortgage);
     delete mockRoute.origin; delete mockRoute.programme;
