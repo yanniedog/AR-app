@@ -122,8 +122,19 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
         if (flightEpoch !== uploadFlightEpoch) { preparedBody = null; return snapshot; }
         publish({ phase: 'uploading' });
         let result: Awaited<ReturnType<typeof uploadDebugLog>>;
-        try { result = await uploadDebugLog(preparedBody); }
-        catch (error) {
+        try {
+          result = await uploadDebugLog(preparedBody, fetch, {
+            onContentHosted: async (partial) => {
+              // Best-effort early persist; final save below still owns failure recovery.
+              try {
+                pendingReceipt = hash
+                  ? await saveDebugLogUploadReceipt(partial, undefined, hash)
+                  : await saveDebugLogUploadReceipt(partial);
+                publish({ url: debugLogUploadShareUrl(pendingReceipt) });
+              } catch { /* SecureStore may be unavailable until the final save path. */ }
+            },
+          });
+        } catch (error) {
           const uncertain = error instanceof Error && 'mayHaveUploaded' in error && error.mayHaveUploaded === true;
           if (hash && !uncertain) await recordPublicReportUploadAttempt(hash, 'failed', attemptEpoch);
           throw error;
@@ -132,13 +143,14 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
           schemaVersion: 1, url: result.url, provider: result.provider,
           ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
           ...(result.shareUrl ? { shareUrl: result.shareUrl } : {}),
-          createdAt: new Date().toISOString(),
+          createdAt: pendingReceipt?.createdAt ?? new Date().toISOString(),
           ...(hash ? { contentSha256: hash } : {}),
         };
         try {
+          // Refresh the receipt with shareUrl when the shortener succeeded.
           pendingReceipt = hash
-            ? await saveDebugLogUploadReceipt(result, undefined, hash)
-            : await saveDebugLogUploadReceipt(result);
+            ? await saveDebugLogUploadReceipt(result, receipt.createdAt, hash)
+            : await saveDebugLogUploadReceipt(result, receipt.createdAt);
         } catch {
           let recoverySaved = false;
           try { await saveDebugLogUploadRecoveryReceipt(receipt); recoverySaved = true; } catch { /* SecureStore may be unavailable. Never persist a plain fallback. */ }

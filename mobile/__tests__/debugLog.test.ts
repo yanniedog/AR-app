@@ -227,9 +227,15 @@ describe('uploadDebugLog', () => {
       .fn()
       .mockResolvedValueOnce(cnetSuccess)
       .mockResolvedValueOnce({ status: 201, text: async () => shareUrl }) as unknown as typeof fetch;
+    const hosted: Array<{ url: string; shareUrl?: string }> = [];
 
-    const result = await uploadDebugLog('hello', mockFetch);
+    const result = await uploadDebugLog('hello', mockFetch, {
+      onContentHosted: (partial) => {
+        hosted.push({ url: partial.url, shareUrl: partial.shareUrl });
+      },
+    });
 
+    expect(hosted).toEqual([{ url: contentUrl, shareUrl: undefined }]);
     expect(result).toEqual(expect.objectContaining({
       url: contentUrl,
       shareUrl,

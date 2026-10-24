@@ -21,6 +21,7 @@ import {
   buildPerformanceAuditJourneys,
   completePerformanceAudit,
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
+  enforcePerformanceAuditStepLimit,
   flattenAuditLogText,
   ForegroundElapsed,
   formatAuditError,
@@ -643,6 +644,18 @@ describe('performance audit scoring', () => {
     });
     interrupted.kind = 'journey';
     expect(requiresPerformanceAuditRouteRecovery(interrupted)).toBe(true);
+
+    const slowOnly = enforcePerformanceAuditStepLimit(check('slow-only', 'pass', 15_000));
+    slowOnly.kind = 'journey';
+    expect(slowOnly.metrics.routeStateInvalidated).toBe(false);
+    expect(requiresPerformanceAuditRouteRecovery(slowOnly)).toBe(false);
+
+    const slowAndCorrupt = enforcePerformanceAuditStepLimit(check('slow-corrupt', 'fail', 15_000, {
+      routeStateInvalidated: true,
+    }));
+    slowAndCorrupt.kind = 'journey';
+    expect(slowAndCorrupt.metrics.routeStateInvalidated).toBe(true);
+    expect(requiresPerformanceAuditRouteRecovery(slowAndCorrupt)).toBe(true);
   });
 
   it('aggregates paired cold and warm route timings', () => {

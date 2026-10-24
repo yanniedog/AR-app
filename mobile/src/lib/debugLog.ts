@@ -1439,6 +1439,12 @@ export interface PasteRsUploadOptions {
   attemptTimeoutMs?: number;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  /**
+   * Fired after paste.c-net.org accepts the full body and before the optional
+   * paste.rs shortener runs, so a deletion receipt can be persisted without
+   * waiting up to 60s for the shortener.
+   */
+  onContentHosted?: (result: DebugLogUploadResult) => void | Promise<void>;
 }
 
 type PasteRsFailureKind =
@@ -1762,6 +1768,9 @@ export async function uploadDebugLog(
     originalBytes,
     uploadedBytes: originalBytes,
   };
+  // Persist the deletable content receipt before optional shortening so a
+  // process exit during paste.rs cannot strand a public c-net paste.
+  if (options.onContentHosted) await options.onContentHosted(baseResult);
 
   // Secondary: paste.rs holds only the content URL for a shorter share link.
   attempts += 1;

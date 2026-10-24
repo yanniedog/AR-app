@@ -505,8 +505,9 @@ export function enforcePerformanceAuditStepLimit(check: AuditCheck, elapsedMs = 
       ...check.metrics,
       stepLimitExceeded: true,
       stepLimitMs: PERFORMANCE_AUDIT_STEP_LIMIT_MS,
-      // Timing budget miss is not route corruption — keep dependents runnable.
-      routeStateInvalidated: false,
+      // Timing-only overruns are not route corruption. Preserve an existing
+      // routeStateInvalidated:true so recovery still runs for genuine failures.
+      routeStateInvalidated: check.metrics.routeStateInvalidated === true,
     },
     error: [check.error, `Step exceeded the 10-second limit (${Math.round(elapsedMs)}ms)`].filter(Boolean).join('\n'),
   };
@@ -1205,9 +1206,12 @@ export function requiresPerformanceAuditRouteRecovery(check: AuditCheck): boolea
   if (check.kind !== 'journey') return false;
   if (check.metrics.interruptedByBackground === true) return true;
   if (check.status !== 'fail') return false;
-  // A step-limit / timing miss leaves the screen mounted. Recovering would
-  // discard local state and cascade-skip the rest of the scenario.
-  if (check.metrics.stepLimitExceeded === true) return false;
+  // Timing-only overruns leave the screen mounted — recovering would discard
+  // local state. Genuine route corruption still recovers even when the step
+  // also blew the timing budget.
+  if (check.metrics.stepLimitExceeded === true && check.metrics.routeStateInvalidated !== true) {
+    return false;
+  }
   // A mounted optional control can prove that it is absent without corrupting
   // the route. Keep the screen mounted so independent controls in that
   // scenario can still be exercised.
