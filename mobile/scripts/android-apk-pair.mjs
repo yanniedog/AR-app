@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inspectApkIdentity } from './apk-identity.mjs';
 import { verifyApkPayloadPrivacy } from './apk-payload-privacy.mjs';
 import { verifyApkHeadlessLoader, verifyApkColdBackgroundPatches } from './apk-headless-loader.mjs';
-import { expectedAbisForApkChannel, versionTagForApkChannel } from './app-release-utils.mjs';
+import { expectedAbisForApkChannel, versionTagForApkChannel, fetchReleaseAssets } from './app-release-utils.mjs';
 import { artifactBudgetForChannel, assertApkSizeBudget } from './report-artifact-sizes.mjs';
 import releaseVersion from './android-release-version-pure.cjs';
 
@@ -88,14 +88,9 @@ export async function publishedManifest(repo, tag, token, fetchImpl = fetch) {
   const response = await fetchImpl(`https://github.com/${repo}/releases/download/${tag}/app-apk-latest.json?_=${Date.now()}`,
     { signal: AbortSignal.timeout(30000) });
   if (response.status === 404) {
-    const release = await fetchImpl(`https://api.github.com/repos/${repo}/releases/tags/${tag}`, {
-      headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      signal: AbortSignal.timeout(30000),
-    });
-    if (release.status === 404) return null;
-    if (!release.ok) throw new Error(`Rolling release HTTP ${release.status}`);
-    const metadata = await release.json();
-    const asset = metadata.assets?.find(item => item.name === 'app-preview.apk');
+    const assets = await fetchReleaseAssets(repo, tag, token, fetchImpl);
+    if (!assets) return null;
+    const asset = assets.find(item => item.name === 'app-preview.apk');
     const sha256 = /^sha256:([a-f0-9]{64})$/i.exec(asset?.digest ?? '')?.[1].toLowerCase();
     if (!sha256) throw new Error(`Missing manifest and unverifiable rolling APK: ${tag}`);
     return { rollingApk: { sha256, bytes: asset.size } };
@@ -115,14 +110,9 @@ async function githubAncestor(repo, older, newer, token) {
 }
 
 async function immutableApkMetadata(repo, tag, token) {
-  const response = await fetch(`https://api.github.com/repos/${repo}/releases/tags/${tag}`, {
-    headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    signal: AbortSignal.timeout(30000),
-  });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Immutable release HTTP ${response.status}`);
-  const release = await response.json();
-  const asset = release.assets?.find(item => item.name === 'app-preview.apk');
+  const assets = await fetchReleaseAssets(repo, tag, token);
+  if (!assets) return null;
+  const asset = assets.find(item => item.name === 'app-preview.apk');
   if (!asset) return null;
   const sha256 = /^sha256:([a-f0-9]{64})$/i.exec(asset.digest ?? '')?.[1].toLowerCase();
   if (!sha256) throw new Error('Cannot verify existing immutable APK digest');

@@ -139,7 +139,7 @@ test('a source removed from main during publication setup cannot publish', async
 });
 
 test('missing manifest requires rolling APK evidence or an absent release', async () => {
-  for (const [status, message] of [[200, /unverifiable rolling APK/], [403, /Rolling release HTTP 403/]]) {
+  for (const [status, message] of [[200, /unverifiable rolling APK/], [403, /Release metadata HTTP 403/]]) {
     let reads = 0;
     await assert.rejects(publishedManifest('owner/repo', 'app-apk-latest', undefined, async () => {
       reads += 1;

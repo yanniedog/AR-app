@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { generateInstallAssets, releaseTargetRefForRepository } from './app-release-utils.mjs';
+import { generateInstallAssets, releaseTargetRefForRepository, missingImmutableUploadPaths,
+  mergePublishedChangelogs, readPublishedChangelogs, fetchReleaseAssets } from './app-release-utils.mjs';
 
 async function renderInstaller(t, { tag, manifestTag = tag, downloadUrl, repo = 'yanniedog/AR-app' }) {
   const directory = mkdtempSync(join(tmpdir(), 'ar-installer-'));
@@ -121,4 +122,68 @@ test('the static README QR always resolves to the current ARM download URL', asy
   assert.ok(actual.data.equals(expected.data));
   const readme = await readFile(new URL('../../README.md', import.meta.url), 'utf8');
   assert.match(readme, /docs\/android-install-qr\.png/);
+});
+
+test('immutable publication reuses verified assets and uploads only missing files without clobber', () => {
+  const paths = ['stage/app-preview.apk', 'stage/app-preview-qr.png', 'stage/install.html', 'stage/changelog-summary.json'];
+  const identity = { sha256: 'a'.repeat(64), bytes: 123 };
+  const assets = [{ name: 'app-preview.apk', digest: `sha256:${identity.sha256}`, size: 123 },
+    { name: 'app-preview-qr.png' }];
+  assert.deepEqual(missingImmutableUploadPaths(paths, assets, identity), paths.slice(2));
+  assert.deepEqual(missingImmutableUploadPaths(paths, paths.map(file =>
+    file.endsWith('app-preview.apk') ? assets[0] : { name: file.split('/').at(-1) }), identity), []);
+  assert.throws(() => missingImmutableUploadPaths(paths, [{ ...assets[0], digest: 'sha256:wrong' }], identity), /does not match/);
+  const publisher = readFileSync(new URL('./publish-apk-manifest.mjs', import.meta.url), 'utf8');
+  const versioned = publisher.slice(publisher.indexOf('async function publishVersionedRelease'), publisher.indexOf('async function publishQrOnly'));
+  assert.doesNotMatch(versioned, /--clobber/);
+  assert.match(versioned, /if \(missing.length\) gh\(ghToken, repo, \['release', 'upload', tag, ...missing\]\)/);
+});
+
+const history = versions => ({ schema_version: 1, repo: 'owner/repo', versions: versions.map(version => ({
+  version, summaryBullets: [`Changes in ${version}`], releaseUrl: `https://github.com/owner/repo/releases/tag/app-arm-v${version}`,
+})) });
+
+test('successive build-local allocations preserve intermediate published changelogs', () => {
+  const first = mergePublishedChangelogs(history(['1.0.248', '1.0.249']), [history(['1.0.248'])]);
+  const next = mergePublishedChangelogs(history(['1.0.248', '1.0.250']), [first]);
+  assert.deepEqual(next.versions.map(row => row.version), ['1.0.248', '1.0.249', '1.0.250']);
+  assert.equal(next.versions[1].releaseUrl, first.versions[1].releaseUrl);
+  const published = history(['1.0.248']);
+  published.versions[0].summaryBullets = ['Original published notes'];
+  const preserved = mergePublishedChangelogs(history(['1.0.248', '1.0.249']), [published]);
+  assert.deepEqual(preserved.versions[0], published.versions[0]);
+  assert.throws(() => mergePublishedChangelogs(history([]), [{ ...first, repo: 'other/repo' }]), /Invalid published/);
+  assert.throws(() => mergePublishedChangelogs(history([]), [{ ...first,
+    versions: [{ ...first.versions[0], releaseUrl: 'https://evil.test/release' }] }]), /Invalid published/);
+});
+
+function historyFetch(rows) {
+  return async url => {
+    const path = new URL(url).pathname.split('/download/')[1];
+    const value = rows[path];
+    return value === undefined ? { status: 404 } : { status: 200, ok: true, text: async () => JSON.stringify(value) };
+  };
+}
+
+test('a failed rolling summary upload recovers the complete immutable history', async () => {
+  const prior = history(['1.0.248', '1.0.249']);
+  const candidate = history(['1.0.248', '1.0.249', '1.0.250']);
+  assert.deepEqual(await readPublishedChangelogs('owner/repo', 'app-apk-arm-latest', '1.0.250', historyFetch({
+    'app-arm-v1.0.250/changelog-summary.json': candidate,
+  })), [candidate]);
+  assert.deepEqual(await readPublishedChangelogs('owner/repo', 'app-apk-arm-latest', '1.0.250', historyFetch({
+    'app-apk-arm-latest/app-apk-latest.json': { version: '1.0.249' },
+    'app-arm-v1.0.249/changelog-summary.json': prior,
+  })), [prior]);
+  await assert.rejects(readPublishedChangelogs('owner/repo', 'app-apk-arm-latest', '1.0.250', historyFetch({
+    'app-apk-arm-latest/app-apk-latest.json': { version: '1.0.249' },
+  })), /history is missing/);
+  await assert.rejects(readPublishedChangelogs('owner/repo', 'app-apk-arm-latest', '1.0.250',
+    async () => ({ status: 503 })), /HTTP 503/);
+});
+
+test('asset discovery distinguishes an absent release from API failure', async () => {
+  assert.equal(await fetchReleaseAssets('owner/repo', 'tag', undefined, async () => ({ status: 404 })), null);
+  await assert.rejects(fetchReleaseAssets('owner/repo', 'tag', undefined,
+    async () => ({ status: 403 })), /HTTP 403/);
 });
