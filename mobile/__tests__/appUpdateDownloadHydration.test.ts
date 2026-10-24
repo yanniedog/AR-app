@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createDownloadTask, getExistingDownloadTasks } from '@kesha-antonov/react-native-background-downloader';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Network from 'expo-network';
 import { Platform } from 'react-native';
 
 import {
@@ -12,6 +13,11 @@ import {
 import { apkDestinationPath, apkDownloadTaskId, IDLE_APK_DOWNLOAD } from '../src/lib/appUpdateDownloadLogic';
 import { verifyDownloadedApk } from '../src/lib/appUpdateInstall';
 import { TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256 } from '../src/lib/appUpdateLogic';
+
+jest.mock('expo-network', () => ({
+  NetworkStateType: { WIFI: 'WIFI', NONE: 'NONE' },
+  getNetworkStateAsync: jest.fn(async () => ({ isConnected: true, type: 'WIFI' })),
+}));
 
 jest.mock('../src/lib/appUpdateInstall', () => ({
   installDownloadedApk: jest.fn(async () => {}),
@@ -289,11 +295,11 @@ describe('APK update state hydration', () => {
     expect(createDownloadTask).not.toHaveBeenCalled();
   });
 
-  it('ignores a stopped task callback after a stalled transfer is replaced with the same ID', async () => {
+  it.each(['DOWNLOADING', 'PENDING', 'PAUSED'])('replaces a stalled %s task and ignores its late callback', async (state) => {
     const task = createDownloadTask({
       id: apkDownloadTaskId(remote.build_number, remote.sha256), url: remote.download_url, destination,
     });
-    Object.assign(task, { state: 'DOWNLOADING', bytesDownloaded: 10_100_032, bytesTotal: remote.bytes });
+    Object.assign(task, { state, bytesDownloaded: 10_100_032, bytesTotal: remote.bytes });
     getExistingTasksMock.mockResolvedValue([task]);
     await ensureApkBackgroundDownload(remote);
     const oldError = (task as unknown as {
@@ -308,6 +314,29 @@ describe('APK update state hydration', () => {
       expect(task.stop).toHaveBeenCalled();
       oldError({ error: 'stopped', errorCode: 1 });
       expect(getApkDownloadSnapshot()).toMatchObject({ phase: 'downloading', error: null });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+
+  it('shows waiting for Wi-Fi after a paused task exhausts its attachment grace period', async () => {
+    const task = createDownloadTask({
+      id: apkDownloadTaskId(remote.build_number, remote.sha256), url: remote.download_url, destination,
+      isAllowedOverMetered: false, isAllowedOverRoaming: false,
+    });
+    Object.assign(task, { state: 'PAUSED', bytesDownloaded: 10_100_032, bytesTotal: remote.bytes });
+    getExistingTasksMock.mockResolvedValue([task]);
+    await ensureApkBackgroundDownload(remote, { wifiOnly: true });
+    jest.mocked(Network.getNetworkStateAsync).mockResolvedValueOnce({
+      isConnected: false, type: Network.NetworkStateType.NONE,
+    } as never);
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 180_000);
+    try {
+      await expect(ensureApkBackgroundDownload(remote, { wifiOnly: true })).resolves.toMatchObject({
+        phase: 'waiting', bytesWritten: 10_100_032,
+      });
+      expect(task.stop).not.toHaveBeenCalled();
     } finally {
       clock.mockRestore();
     }

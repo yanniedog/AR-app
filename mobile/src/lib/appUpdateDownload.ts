@@ -549,7 +549,7 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     wifiOnly: taskWifiOnly,
     startedAt: snapshot.startedAt ?? new Date().toISOString(),
     lastProgressAt:
-      newlyAttached || state === 'PENDING' || state === 'PAUSED' || match.bytesDownloaded > snapshot.bytesWritten
+      newlyAttached || match.bytesDownloaded > snapshot.bytesWritten
         ? new Date().toISOString()
         : snapshot.lastProgressAt,
     retryCount: snapshot.retryCount,
