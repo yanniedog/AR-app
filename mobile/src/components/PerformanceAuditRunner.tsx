@@ -8,6 +8,7 @@ import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAu
 import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSelection';
 import { isVerifiedRatesPagePreparation } from '../lib/ratesAuditPage';
 import { assertObservableAuditActionEffect } from '../lib/performanceAuditActionEvidence';
+import { auditSearchEntryParams } from '../lib/performanceAuditActionParams';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { toPublicAppHealthReport } from '../lib/appHealth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -136,7 +137,6 @@ import {
   type ResponsivenessMetrics,
 } from '../lib/performanceAudit';
 import {
-  boundAuditCheckEvidence,
   compactAuditCheckForLog,
   encodePerformanceAuditEvent,
   omitNullishDeep,
@@ -490,7 +490,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
     case 'search.open':
       return {
         pathname: '/browse',
-        params: section ? { section } : {},
+        params: auditSearchEntryParams(section, step.id),
       } as unknown as Href;
     case 'changes.open': return '/market' as Href;
     case 'compare.open':
@@ -1459,6 +1459,17 @@ async function runMaximumCoverageProfileCheck(
       };
     }
   }
+  await awaitAuditWork(useStore.getState().ensureBankSpreadHistory({ cacheOnly: true }),
+    watchdog, 'Preparing authenticated cached bank spread history');
+  if (liveSnapshot) {
+    const prepared = useStore.getState();
+    liveSnapshot.assets ??= {};
+    liveSnapshot.assets.bank_spread_history = {
+      state: prepared.bankSpreadHistory ? 'ready' : prepared.bankSpreadHistoryError ? 'failed' : 'not-requested',
+      runDate: prepared.bankSpreadHistory?.run_date ?? null,
+      itemCount: prepared.bankSpreadHistory ? Object.keys(prepared.bankSpreadHistory.banks).length : null,
+    };
+  }
   assertSessionActive(watchdog);
 
   const state = useStore.getState();
@@ -1468,6 +1479,7 @@ async function runMaximumCoverageProfileCheck(
     searchIndex: state.searchIndex != null,
     bankHistory: state.historyBanks != null,
     bankInsights: state.bankInsights != null,
+    bankSpreadHistory: state.bankSpreadHistory != null,
     rbaCalendar: state.rbaCalendar != null,
     productHistory: state.productHistory != null,
   };
@@ -1477,6 +1489,7 @@ async function runMaximumCoverageProfileCheck(
   const dataErrors = [
     state.historyBanksError,
     state.bankInsightsError,
+    state.bankSpreadHistoryError,
     state.rbaCalendarError,
     state.productHistoryError,
   ].filter((value): value is string => Boolean(value));
@@ -2854,14 +2867,13 @@ export function PerformanceAuditRunner() {
 
       const record = async (rawCheck: AuditCheck) => {
         assertSessionActive(watchdog);
-        // Bound evidence at the one place every check enters the report. ~260
-        // unbounded stacks and readiness dumps are what pushed the finished
-        // report past the megabyte range and exhausted the heap in teardown.
+        // Keep canonical evidence intact. Only the scrolling journal is bounded;
+        // a shared diagnosis must never silently inherit its text limits.
         const diagnostic = rawCheck.diagnostic ?? (rawCheck.kind === 'journey'
           ? captureAuditDiagnostic(performanceAuditReadinessRegistry.snapshot(
             typeof rawCheck.metrics.expectedSurface === 'string' ? [rawCheck.metrics.expectedSurface] : undefined,
           ), 'check') : undefined);
-        const check = boundAuditCheckEvidence(enforcePerformanceAuditStepLimit({ ...rawCheck, diagnostic }));
+        const check = enforcePerformanceAuditStepLimit({ ...rawCheck, diagnostic });
         checks.push(check);
         logAuditCheck(app, sessionId, check);
         // Only durable completed-check progress keeps the hang watchdog alive.
@@ -3908,7 +3920,7 @@ export function PerformanceAuditRunner() {
             ...(rollbackOutcome.result?.error ? [`Rollback failed: ${rollbackOutcome.result.error}`] : []),
           ].join('\n');
           const readinessSnapshot = performanceAuditReadinessRegistry.snapshot();
-          const failedCheck: AuditCheck = boundAuditCheckEvidence({
+          const failedCheck: AuditCheck = {
             id: setupFailure.check?.id ?? `fatal-${completed + 1}`,
             label: setupFailure.check?.label ?? (getPerformanceAuditState().progress.label || 'Performance audit fatal error'),
             kind: setupFailure.check?.kind ?? 'runtime',
@@ -3958,7 +3970,7 @@ export function PerformanceAuditRunner() {
             error,
             trace: captureAuditTrace('performance audit stopped before later steps'),
             diagnostic: captureAuditDiagnostic(readinessSnapshot, 'check'),
-          });
+          };
           checks.push(failedCheck);
           logAuditCheck(app, sessionId, failedCheck);
           debugLog.error(

@@ -4,6 +4,7 @@ import { PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from './performanceAuditSetup';
 import { encodeCompactDiagnosticJson } from './compactDiagnosticJson';
 import { publicAuditDiagnostic, publicAuditError } from './performanceAuditDiagnostic';
 import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
+import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
 
 import { PUBLIC_AUDIT_METRIC_FIELDS as METRIC_ALLOWLIST } from './auditDiagnosticFields';
 
@@ -31,6 +32,7 @@ export const DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES = 256 * 1024;
 export const DEIDENTIFIED_DIAGNOSTICS_DESTINATION =
   'No host selected; the operating-system share sheet chooses the destination';
 export const DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW = [
+  'validated audit start and finish timestamps plus a hashed audit reference',
   'app version, build, platform, OS major version and JavaScript engine',
   'payload source, run date, product/provider counts and optional-asset availability',
   'aggregate outcome/counts and measured responsiveness values',
@@ -140,13 +142,14 @@ function safeDuration(check: AuditCheck): number | null {
 
 /**
  * Build the only performance-audit shape allowed to leave the device.
- * It deliberately excludes timestamps, session IDs, model/manufacturer,
+ * It includes validated audit timestamps and a hashed audit reference, excluding raw session IDs, model/manufacturer,
  * viewport, memory, routes, product keys, messages, traces and raw log text.
  */
 export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport) {
   return {
     schemaVersion: 1,
     kind: 'performance-audit',
+    completion: buildPerformanceAuditCompletion(report, safeCheckId),
     app: {
       version: report.app.appVersion,
       build: report.app.buildVersion,
@@ -225,7 +228,17 @@ export function createDeidentifiedDiagnosticsShare(
 /** Public pastes carry the allowlisted report only. Keep all checks; reject
  * oversize reports instead of silently uploading a partial diagnostic. */
 export function createPublicPerformanceAuditReport(report: PerformanceAuditReport): string {
-  const body = encodeCompactDiagnosticJson({ ...buildDeidentifiedPerformanceAudit(report), diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId) });
+  const publicReport = buildDeidentifiedPerformanceAudit(report);
+  const completion = publicReport.completion;
+  // Keep the run identity and result readable at the top of the hosted file;
+  // dictionary encoding remains lossless for all detailed evidence below it.
+  const body = encodeCompactDiagnosticJson({ ...publicReport, diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId) },
+    { audit: { auditId: completion.auditId, finishedAt: completion.finishedAt,
+    outcome: completion.outcome, collectionComplete: completion.collectionComplete,
+    coverageComplete: completion.coverageComplete, detailsComplete: completion.detailsComplete,
+    performanceCheckCount: completion.performanceCheckCount, healthCheckCount: completion.healthCheckCount,
+    failureCount: completion.failurePositions.length,
+    timingFailureCount: completion.failurePositions.filter(failure => failure.category === 'timing').length } });
   if (new TextEncoder().encode(body).length > 2 * 1024 * 1024) {
     throw new Error('The deidentified report exceeds the public upload limit.');
   }

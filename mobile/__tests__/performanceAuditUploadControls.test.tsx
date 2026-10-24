@@ -9,6 +9,9 @@ import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditRepo
 import { restorePerformanceAuditUpload, uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
 import { loadCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
 import type { DebugLogUploadSnapshot } from '../src/lib/debugLogSharing';
+import { performanceAuditReference } from '../src/lib/performanceAuditCompletion';
+import { finalizeAppHealthReport } from '../src/lib/appHealth';
+import { combineAppHealthPerformanceSummary } from '../src/lib/performanceAuditHealth';
 
 type Node = { props: Record<string, any>; findByProps: (props: Record<string, unknown>) => Node };
 type Renderer = ReactTestRenderer & { root: Node };
@@ -319,4 +322,73 @@ test('diagnostic Clear retains the active run identity and progress', async () =
   act(() => clearCompletedPerformanceAuditState());
   expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', sessionId: active.sessionId,
     startedAt: active.startedAt, progress: active.progress, report: null });
+});
+
+test('the completed result ties its finish instant and audit reference to its verified link', async () => {
+  await mount(); await press('Run audit');
+  const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
+  mockUpload = { sessionId: report.sessionId, phase: 'copied', verified: true, url: 'https://paste.c-net.org/current-audit' };
+  act(() => completePerformanceAudit(report));
+  expect(tree!.root.findByProps({ label: 'Finished' }).props.value).toBe('2026-10-15T18:01:00.000Z');
+  expect(tree!.root.findByProps({ label: 'Audit ID' }).props.value).toBe(performanceAuditReference(report.sessionId));
+  expect(tree!.root.findByProps({ children: 'https://paste.c-net.org/current-audit' })).toBeDefined();
+  expect(tree!.root.findByProps({ title: 'Audit details' }).props.open).toBe(false);
+  expect(tree!.root.findByProps({ title: 'Run another audit' }).props.open).toBe(false);
+});
+
+test('a completed audit cannot present the verified link of a different report', async () => {
+  await mount(); await press('Run audit');
+  const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
+  mockUpload = { sessionId: 'earlier-audit', phase: 'copied', verified: true, url: 'https://paste.c-net.org/earlier-audit' };
+  act(() => completePerformanceAudit(report));
+  expect(() => tree!.root.findByProps({ children: 'https://paste.c-net.org/earlier-audit' })).toThrow();
+  expect(tree!.root.findByProps({ title: 'Upload report' }).props.disabled).toBe(false);
+  expect(tree!.root.findByProps({ label: 'Finished' }).props.value).toBe('2026-10-15T18:01:00.000Z');
+});
+
+test('failed checks expose numbered positions without expanding the verbose audit results', async () => {
+  await mount(); await press('Run audit');
+  const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!, [
+    { id: 'first-check', label: 'First check', kind: 'runtime', status: 'pass', durationMs: 1, metrics: {} },
+    { id: 'failed-check', label: 'Failed check', kind: 'runtime', status: 'fail', durationMs: null, metrics: { nonTimingFailure: true } },
+  ]);
+  act(() => completePerformanceAudit(report));
+  expect(tree!.root.findByProps({ label: 'Failures' }).props.value).toBe('1');
+  expect(tree!.root.findByProps({ label: 'First failure' }).props.value).toBe('Check results · 2 · failed-check');
+  expect(tree!.root.findByProps({ label: 'Position' }).props.value).toBe('2');
+  expect(tree!.root.findByProps({ title: 'Failure positions' }).props.open).toBe(false);
+  await act(async () => { tree!.root.findByProps({ title: 'Failure positions' }).props.onToggle(); });
+  expect(tree!.root.findByProps({ title: 'Failure positions' }).props.open).toBe(true);
+  expect(tree!.root.findByProps({ title: 'Audit details' }).props.open).toBe(false);
+});
+
+test('deidentified sharing discloses audit timestamps and reference before opening the share sheet', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  try {
+    await mount(); await press('Run audit');
+    act(() => completePerformanceAudit(makePerformanceAuditReport(getPerformanceAuditState().sessionId!)));
+    await press('Share deidentified report');
+    expect(alert).toHaveBeenCalledWith('Share deidentified report?',
+      expect.stringContaining('Included: App / publication / aggregate counts / timing / fixed checks / Audit timestamps / Audit ID'),
+      expect.any(Array));
+    const message = alert.mock.calls[0][1]!;
+    expect(message).toContain('Excluded: Raw logs / tracebacks / routes / product keys / device IDs');
+    expect(message.split('Excluded:')[1]).not.toContain('timestamps');
+  } finally { alert.mockRestore(); }
+});
+
+test('combined health totals use the complete denominator without counting warnings twice', async () => {
+  await mount(); await press('Run audit');
+  const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!, [
+    { id: 'runtime', label: 'Runtime', kind: 'runtime', status: 'pass', durationMs: 1, metrics: { executionAttempted: true } },
+  ]);
+  report.appHealth = finalizeAppHealthReport({ sessionId: report.sessionId, mode: 'local',
+    startedAt: report.startedAt, finishedAt: report.finishedAt,
+    checks: [{ id: 'core-schema', code: 'core-schema', label: 'Core schema', domain: 'data-integrity', status: 'warn', metrics: {} }],
+    plannedCheckIds: ['core-schema'] });
+  report.summary = combineAppHealthPerformanceSummary(report.summary, report.appHealth, report.checks.length);
+  act(() => completePerformanceAudit(report));
+  const allPlanned = report.checks.length + report.appHealth.coverage.plannedChecks;
+  expect(tree!.root.findByProps({ label: 'Executed', value: `${report.summary.executed} / ${allPlanned}` })).toBeDefined();
+  expect(tree!.root.findByProps({ label: 'Warnings' }).props.value).toBe(String(report.summary.warn));
 });

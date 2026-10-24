@@ -1,5 +1,12 @@
 type AuditActionParameters = Readonly<Record<string, unknown>>;
 
+/** Each scenario enters the same listed search task as a new consumer search.
+ * Rates task state survives navigation, including the first audit pass. */
+export function auditSearchEntryParams(section: string | null, request: string): Record<string, string> {
+  return { ...(section ? { section } : {}), request, query: '', path: '', scope: '',
+    availability: 'listed', compare: '0' };
+}
+
 function parameters(args: readonly unknown[]): AuditActionParameters {
   const candidate = args[0];
   return candidate != null && typeof candidate === 'object' && !Array.isArray(candidate)

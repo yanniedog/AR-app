@@ -294,7 +294,7 @@ test.each(['2026-10-21', '2024-02-29'])('retains validated source publication da
   const decoded = fullAuditDiagnosticLog(report, id => id) as typeof report;
   expect(decoded.environment.payloadRunDate).toBe(date);
   expect(decoded.backgroundWorkWait).toMatchObject({ payloadWork: { revision: { runDate: date, manifestRunDate: date } }, jobs: [{ runDate: date }] });
-  expect(decoded.startedAt).toMatch(/^~private/);
+  expect(decoded.startedAt).toBe(new Date(report.startedAt).toISOString());
 });
 
 test.each(['2026-02-29', '2026-13-01', 'private-date'])('masks malformed or private publication date %s', date => {

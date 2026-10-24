@@ -4,6 +4,7 @@ import { PUBLIC_AUDIT_ERROR_TYPES, publicAuditDiagnostic, publicAuditError } fro
 import { PUBLIC_AUDIT_METRIC_FIELDS } from './auditDiagnosticFields';
 import { buildDeepPerformanceAuditPlan } from './performanceAuditPlan';
 import { ANDROID_UPDATE_READINESS_AUDIT } from './performanceAuditCheckInventory';
+import { performanceAuditReference, publicAuditTimestamp } from './performanceAuditCompletion';
 import { AUDIT_PRODUCER_ENUMS, AUDIT_PRODUCER_METRIC_FIELDS, AUDIT_PRODUCER_SCALARS, AUDIT_REGISTERED_ACTION_IDS, AUDIT_REQUIRED_ASSET_IDS, AUDIT_WORKER_TEXT } from './auditDiagnosticProducerFields';
 
 let planText: Map<string, Set<string>> | undefined;
@@ -125,6 +126,11 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
   const visit = (value: unknown, key = '', path = ''): unknown => {
     if (value == null) return value;
     const parent = path.slice(0, path.lastIndexOf('.'));
+    if (['.startedAt', '.finishedAt', '.watchdog.lastStoredCheckAt', '.backgroundWorkWait.startedAt', '.backgroundWorkWait.capturedAt',
+      '.backgroundWorkWait.jobs[].startedAt', '.backgroundWorkWait.jobs[].finishedAt', '.backgroundWorkWait.jobs[].stages[].startedAt'].includes(path)) {
+      return publicAuditTimestamp(value) ?? alias(value);
+    }
+    if (path === '.sessionId' && typeof value === 'string') return performanceAuditReference(value);
     if (typeof value === 'string' && ['.backgroundWorkWait.jobs[].label', '.backgroundWorkWait.jobs[].stage', '.backgroundWorkWait.jobs[].stages[].label'].includes(path) && AUDIT_WORKER_TEXT.has(value)) return value;
     if (typeof value === 'string' && PUBLICATION_DATE_PATHS.has(path) && publicationDate(value)) return value;
     if (typeof value === 'string' && publicPlanText(path, value)) return value;

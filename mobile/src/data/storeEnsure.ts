@@ -653,17 +653,17 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       }
     },
 
-    async ensureBankSpreadHistory(opts: { force?: boolean } = {}) {
-      const { force = false } = opts;
+    async ensureBankSpreadHistory(opts: { force?: boolean; cacheOnly?: boolean } = {}) {
+      const { force = false, cacheOnly = false } = opts;
       const { core, manifest, source } = get();
       if (!core) return;
       if (source !== 'remote' || !manifest) {
-        set({ bankSpreadHistory: null, bankSpreadHistoryError: 'Bank spread history needs the latest online dataset.' });
+        set({ bankSpreadHistory: null, bankSpreadHistoryError: cacheOnly ? null : 'Bank spread history needs the latest online dataset.' });
         return;
       }
       const asset = manifest.files.bank_spread_history;
       if (!asset) {
-        set({ bankSpreadHistory: null, bankSpreadHistoryError: 'Mortgage and savings spread history is not available yet.' });
+        set({ bankSpreadHistory: null, bankSpreadHistoryError: cacheOnly ? null : 'Mortgage and savings spread history is not available yet.' });
         return;
       }
       if (force) set({ bankSpreadHistoryError: null });
@@ -691,7 +691,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           spreadSha: liveAsset.sha256,
         };
       };
-      if (!force) {
+      if (!force || cacheOnly) {
         const staged = stagedSpreadFor(manifest);
         if (staged && currentMatches()) {
           retainVerifiedSpread(snapshot, staged);
@@ -706,19 +706,31 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           set({ bankSpreadHistoryError: null });
           return;
         }
+        let cacheError: string | null = null;
         const cached = await cache.readBankSpreadHistoryFor(
           snapshot.coreSha,
           snapshot.spreadSha,
           snapshot.runDate,
           () => currentMatches(snapshot),
         )
-          .catch(() => null);
+          .catch(error => { cacheError = String((error as Error)?.message ?? error); return null; });
         if (!currentMatches()) return;
         if (cached?.run_date === snapshot.runDate) {
           retainVerifiedSpread(snapshot, cached);
           set({ bankSpreadHistory: cached, bankSpreadHistoryError: null });
           return;
         }
+        if (cacheOnly && cacheError) {
+          set({ bankSpreadHistory: null, bankSpreadHistoryError: cacheError });
+          return;
+        }
+      }
+      // An audit may hydrate the authenticated edition already on this device.
+      // A cache miss remains unavailable; it must never initiate transport or
+      // retain an unverified in-memory payload from another edition.
+      if (cacheOnly) {
+        if (currentMatches()) set({ bankSpreadHistory: null, bankSpreadHistoryError: null });
+        return;
       }
       try {
         const { bankSpreadHistory: downloaded, verifiedBytes } = await downloadBankSpreadHistory(

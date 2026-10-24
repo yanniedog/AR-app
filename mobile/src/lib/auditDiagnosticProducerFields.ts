@@ -574,6 +574,7 @@ export const AUDIT_REGISTERED_ACTION_IDS = new Set<string>([
 export const AUDIT_REQUIRED_ASSET_IDS = new Set<string>([
   "bankHistory",
   "bankInsights",
+  "bankSpreadHistory",
   "core",
   "details",
   "productHistory",

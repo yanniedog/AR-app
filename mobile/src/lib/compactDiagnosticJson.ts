@@ -1,5 +1,5 @@
 /** Lossless JSON dictionary encoding. Numbers, false and null retain their meaning. */
-export function encodeCompactDiagnosticJson(value: unknown): string {
+export function encodeCompactDiagnosticJson(value: unknown, header?: Record<string, unknown>): string {
   const strings: string[] = [];
   const indexes = new Map<string, number>();
   const intern = (text: string) => {
@@ -47,7 +47,7 @@ export function encodeCompactDiagnosticJson(value: unknown): string {
     return item.map(child => compact(child));
   };
   const templates = entries.map(([key, item]) => compact(item.value, key));
-  return JSON.stringify({ format: 'ar-audit-dict-v1',
+  return JSON.stringify({ ...header, format: 'ar-audit-dict-v1',
     encoding: '[n]=strings[n]; ["a",...]=array; ["o",keyIndex,value,...]=object; ["r",n]=templates[n]',
     strings, templates, data: compact(encoded) });
 }
