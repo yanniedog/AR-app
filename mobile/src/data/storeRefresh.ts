@@ -122,23 +122,17 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           catch (caught) { asset.finish('failed'); throw caught; }
         };
         try {
-          if (!background) {
-            await yieldToUi();
-            await Promise.all([
-              optionalWork.historyBanks ? warmAsset('Bank summary history', () => get().ensureHistoryBanks(), () => get().historyBanksError) : Promise.resolve(),
-              optionalWork.bankInsights ? warmAsset('Bank insights', () => get().ensureBankInsights(), () => get().bankInsightsError) : Promise.resolve(),
-              optionalWork.bankSpreadHistory ? warmAsset('Bank spread history', () => get().ensureBankSpreadHistory(), () => get().bankSpreadHistoryError) : Promise.resolve(),
-            ]);
-          }
-          // The calendar is tiny and drives decision alerts/countdowns. Keep it
-          // current even in a bounded OS-scheduled refresh; heavy ledgers remain
-          // foreground-only.
+          // refreshing is already false. Yield so post-payload UI can accept
+          // touches before stacking optional history with details validation.
+          if (!background) await yieldToUi();
+          // Tiny calendar first — decision alerts need it; cheap vs history ledgers.
           if (optionalWork.rbaCalendar) {
             work.stage('Loading RBA calendar');
             await warmAsset('RBA calendar', () => get().ensureRbaCalendar(), () => get().rbaCalendarError);
           }
-          // A product screen may have started ensureDetails during the yield;
-          // wait for that in-flight load so we do not race on detailsLoading.
+          // Product details / suitability before optional history banks so a
+          // GitHub payload update does not flood the JS thread with concurrent
+          // full-catalogue validation (audit paste: details + history 50s+).
           if (!background) {
             work.stage('Waiting for in-flight product details');
             while (get().detailsLoading) await yieldToUi();
@@ -183,6 +177,25 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
                   (live.manifest?.files.core.sha256 ?? ''),
               live.manifest?.files.core.sha256 ?? '',
             );
+          }
+          if (!background) {
+            await yieldToUi();
+            // Serialize optional history assets — parallel Promise.all previously
+            // competed with details on the same Hermes thread after every refresh.
+            if (optionalWork.historyBanks) {
+              work.stage('Warming bank summary history');
+              await warmAsset('Bank summary history', () => get().ensureHistoryBanks(), () => get().historyBanksError);
+              await yieldToUi();
+            }
+            if (optionalWork.bankInsights) {
+              work.stage('Warming bank insights');
+              await warmAsset('Bank insights', () => get().ensureBankInsights(), () => get().bankInsightsError);
+              await yieldToUi();
+            }
+            if (optionalWork.bankSpreadHistory) {
+              work.stage('Warming bank spread history');
+              await warmAsset('Bank spread history', () => get().ensureBankSpreadHistory(), () => get().bankSpreadHistoryError);
+            }
           }
           if (notifyCtx && notifyCtx.previousSource === 'remote') {
             if (!background) await yieldToUi();

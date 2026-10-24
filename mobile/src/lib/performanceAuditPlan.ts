@@ -5,6 +5,7 @@ import { isSuitabilityFilterReady } from '../data/suitabilityGate';
 import { savedRateId } from '../data/savedRates';
 import { publicOfferSelectionToken } from '../data/publicOfferIdentity';
 import { canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
+import { parseLvrRange } from '../data/lvrRange';
 import { SECTION_KEYS, type CorePayload, type ProductDetail, type RateRow, type SectionKey } from '../types';
 import { MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID } from './performanceAuditProfile';
 
@@ -277,23 +278,57 @@ function sampleFacetSubset(options: readonly string[], random: () => number): st
   return pool.slice(0, Math.max(1, Math.min(count, pool.length)));
 }
 
-/** Deterministic amount/LVR/facet draws for Rates mortgage comparison latency. */
+/** Midpoint (or nearby interior) of a listed LVR tier so seeded apply can list. */
+function lvrInsideTier(tier: string | undefined, random: () => number): string | null {
+  const range = parseLvrRange(tier);
+  if (!range) return null;
+  const hi = Number.isFinite(range.hi) ? range.hi : 95;
+  const lo = Math.max(0, range.lo);
+  if (!(hi > lo)) return null;
+  const span = hi - lo;
+  const inset = Math.min(span / 4, 5);
+  const low = lo + (range.inclusive ? 0 : Math.min(0.5, span / 2));
+  const high = hi - (range.hiInclusive === false ? Math.min(0.5, span / 2) : 0);
+  if (!(high > low)) return null;
+  const value = low + inset + random() * Math.max(0, (high - low) - 2 * inset);
+  const rounded = Math.round(value * 100) / 100;
+  return rounded > 0 && rounded <= 100 ? String(rounded) : null;
+}
+
+function amountInsideBounds(row: RateRow, random: () => number): string {
+  const bound = (raw: RateRow['balance_min']): number | null => {
+    if (raw == null || String(raw).trim() === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+  const low = bound(row.balance_min) ?? 150_000;
+  const high = bound(row.balance_max) ?? Math.max(low + 50_000, 2_000_000);
+  if (!(high > low)) return String(Math.max(1, Math.round(low)));
+  const value = low + random() * (high - low);
+  return String(Math.max(1, Math.round(value)));
+}
+
+/** Seed amount/LVR/facets from a real Mortgage row so listed results are achievable. */
 function sampleMortgageScope(rows: readonly RateRow[], random: () => number): DeepAuditMortgageScope {
-  const purposes = new Set<string>();
-  const repayments = new Set<string>();
-  for (const row of rows) {
+  const candidates = shuffled(rows.filter(row => {
     const purpose = canonicalPurpose(row.loan_purpose ?? row.security_purpose);
-    if (purpose?.trim()) purposes.add(purpose);
     const repayment = canonicalRepayment(row.ribbon_repayment_type ?? row.repayment_type);
-    if (repayment?.trim()) repayments.add(repayment);
-  }
-  const purposePool = purposes.size ? [...purposes] : ['OWNER_OCCUPIED', 'INVESTMENT'];
-  const repaymentPool = repayments.size ? [...repayments] : ['PRINCIPAL_AND_INTEREST', 'INTEREST_ONLY'];
+    return Boolean(purpose?.trim() && repayment?.trim() && lvrInsideTier(row.lvr_tier, () => 0.5));
+  }), random);
+  const seed = candidates[0] ?? shuffled(rows, random)[0];
+  const purpose = seed
+    ? canonicalPurpose(seed.loan_purpose ?? seed.security_purpose)
+    : null;
+  const repayment = seed
+    ? canonicalRepayment(seed.ribbon_repayment_type ?? seed.repayment_type)
+    : null;
+  const lvr = (seed && lvrInsideTier(seed.lvr_tier, random))
+    ?? String(50 + Math.floor(random() * 46));
   return {
-    loanAmount: String(150_000 + Math.floor(random() * 1_850_001)),
-    lvr: String(50 + Math.floor(random() * 46)),
-    loanPurposes: sampleFacetSubset(purposePool, random),
-    repaymentTypes: sampleFacetSubset(repaymentPool, random),
+    loanAmount: seed ? amountInsideBounds(seed, random) : String(150_000 + Math.floor(random() * 1_850_001)),
+    lvr,
+    loanPurposes: purpose?.trim() ? [purpose] : ['OWNER_OCCUPIED'],
+    repaymentTypes: repayment?.trim() ? [repayment] : ['PRINCIPAL_AND_INTEREST'],
   };
 }
 
@@ -1219,13 +1254,12 @@ export function buildDeepPerformanceAuditPlanFromInputs(inputs: DeepAuditDerived
 }
 
 /**
- * Tracks whether route recovery has invalidated the rest of a scenario.
+ * Tracks whether route recovery discarded local screen state mid-scenario.
  *
- * Recovery replaces the current screen with the audit route, which discards the
- * local state earlier steps established — an open filter sheet, a selected
- * provider, a chosen compare column. Every later step in that scenario would
- * then run on a freshly mounted screen, outside the state a user would be in,
- * so they are skipped until a step re-enters a route on its own.
+ * Recovery replaces the current screen with the audit route. Later steps must
+ * still run real actions after remounting `expectedPath` — mass-skipping the
+ * remainder of a scenario falsely inflates coverage and races the progress UI.
+ * Only declared terminal skips (`skipReason` / optional availability) may omit work.
  */
 export class ScenarioReentryGate {
   private awaitingScenarioId: string | null = null;
@@ -1236,18 +1270,30 @@ export class ScenarioReentryGate {
   }
 
   /**
-   * True when the step depends on a screen recovery unmounted. Call once per
-   * step in plan order: a step that clears the gate also consumes it.
+   * True when the runner should remount the step's expected route before
+   * invoking it. Call once per step in plan order. Route-entry steps clear the
+   * gate themselves; scenario changes clear it without a restore.
    *
-   * `entersRouteDirectly` is the caller's answer to whether the step navigates
-   * to its own route rather than acting on whatever is already mounted.
+   * Never requests a silent skip — dependents remount and execute.
    */
-  shouldSkip(step: DeepAuditStep, entersRouteDirectly: boolean): boolean {
+  takeRestore(step: DeepAuditStep, entersRouteDirectly: boolean): boolean {
     if (this.awaitingScenarioId == null) return false;
-    if (step.scenarioId !== this.awaitingScenarioId || entersRouteDirectly) {
+    if (step.scenarioId !== this.awaitingScenarioId) {
+      this.awaitingScenarioId = null;
+      return false;
+    }
+    if (entersRouteDirectly) {
       this.awaitingScenarioId = null;
       return false;
     }
     return true;
+  }
+
+  /**
+   * @deprecated Mass-skip after recovery was removed. Always returns false so
+   * callers that still branch on shouldSkip keep running real steps.
+   */
+  shouldSkip(_step: DeepAuditStep, _entersRouteDirectly: boolean): boolean {
+    return false;
   }
 }

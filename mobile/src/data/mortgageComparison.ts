@@ -19,6 +19,17 @@ function inputs(value: MortgageComparisonInputs) {
   return { amount, lvr, invalid: !!value.loanAmount.trim() && (amount === null || amount <= 0)
     || !!value.lvr.trim() && (lvr === null || lvr <= 0 || lvr > 100) };
 }
+
+/** Rates Mortgage search runs only after LVR + purpose + repayment are set. Loan amount stays optional. */
+export function mortgageComparisonCriteriaReady(
+  value: MortgageComparisonInputs,
+  facets: { loanPurposes: readonly string[]; repaymentTypes: readonly string[] },
+): boolean {
+  const parsed = inputs(value);
+  return !parsed.invalid && parsed.lvr !== null
+    && facets.loanPurposes.length > 0 && facets.repaymentTypes.length > 0;
+}
+
 export type MortgageComparisonMatch = 'listed' | 'unverified' | 'outside' | 'invalid';
 /** Listed bounds are a comparison scope, never a bank approval or total-cost claim. */
 export function mortgageComparisonMatch(row: RateRow, value: MortgageComparisonInputs, context?: RateConditionContext): MortgageComparisonMatch {
@@ -28,37 +39,38 @@ function within(value: number, lower: NumericConditionBoundary, upper: NumericCo
   return (lower.state === 'unspecified' || (lower.inclusive ? value >= lower.value : value > lower.value))
     && (upper.state === 'unspecified' || (upper.inclusive ? value <= upper.value : value < upper.value));
 }
-function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateConditionContext): MortgageComparisonMatch {
-  if (parsed.invalid) return 'invalid';
-  if (parsed.lvr !== null || parsed.amount !== null) {
-    const source = scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context));
-    if (source.state === 'admitted') {
-      let unknown = source.unresolved.length > 0;
-      const dimensions: readonly [number | null, readonly PublishedNumericConditionFact[]][] = [
-        [parsed.lvr, source.facts.filter(fact => fact.kind === 'published-lvr-range')],
-        [parsed.amount, source.facts.filter(fact => fact.kind === 'published-balance-range'
-          && (fact.subject === 'loan-amount' || fact.subject === 'borrowing-amount'))],
-      ];
-      for (const [value, facts] of dimensions) {
-        if (value === null) continue;
-        if (!facts.length) { unknown = true; continue; }
-        // Independently published ranges can be applicability alternatives.
-        // Unparsed qualifications prevent a conclusive outside verdict.
-        if (facts.every(fact => !within(value, fact.lower, fact.upper))) {
-          if (source.unresolved.length) unknown = true;
-          else return 'outside';
-        }
-      }
-      return unknown ? 'unverified' : 'listed';
-    }
+
+/** Distinct source pointers are explicit alternative bands; same-pointer parses AND. */
+function admitsValue(value: number, facts: readonly PublishedNumericConditionFact[]): boolean {
+  if (!facts.length) return false;
+  const byPointer = new Map<string, PublishedNumericConditionFact[]>();
+  for (const fact of facts) {
+    const key = fact.source.sourcePointer;
+    const group = byPointer.get(key);
+    if (group) group.push(fact);
+    else byPointer.set(key, [fact]);
   }
+  for (const group of byPointer.values()) {
+    if (group.every(fact => within(value, fact.lower, fact.upper))) return true;
+  }
+  return false;
+}
+
+function matchListedTier(
+  row: RateRow,
+  parsed: ReturnType<typeof inputs>,
+  fallthroughLvr: boolean,
+  fallthroughAmount: boolean,
+): MortgageComparisonMatch {
   let unverified = false;
-  if (parsed.lvr !== null) {
+  if (parsed.lvr !== null && fallthroughLvr) {
     const range = parseLvrRange(row.lvr_tier);
-    if (!range) unverified = true;
-    else if (!lvrRangeContains(range, parsed.lvr)) return 'outside';
+    // User LVR is set: missing/unparseable listed tier is outside, never an
+    // unverified keep that resurfaces identity-catalogue rows (e.g. <60% at 71%).
+    if (!range) return 'outside';
+    if (!lvrRangeContains(range, parsed.lvr)) return 'outside';
   }
-  if (parsed.amount !== null) {
+  if (parsed.amount !== null && fallthroughAmount) {
     const bound = (raw: RateRow['balance_min']): number | null => raw != null && String(raw).trim() !== ''
       && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(String(raw).trim()) && Number.isFinite(Number(raw)) ? Number(raw) : null;
     const low = bound(row.balance_min), high = bound(row.balance_max);
@@ -68,6 +80,45 @@ function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateCo
     else if (low === null || high === null) unverified = true;
   }
   return unverified ? 'unverified' : 'listed';
+}
+
+function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateConditionContext): MortgageComparisonMatch {
+  if (parsed.invalid) return 'invalid';
+  let unverified = false;
+  let fallthroughLvr = parsed.lvr !== null;
+  let fallthroughAmount = parsed.amount !== null;
+  if (parsed.lvr !== null || parsed.amount !== null) {
+    const source = scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context));
+    if (source.state === 'admitted') {
+      const dimensions: readonly [number | null, readonly PublishedNumericConditionFact[], 'lvr' | 'amount'][] = [
+        [parsed.lvr, source.facts.filter(fact => fact.kind === 'published-lvr-range'), 'lvr'],
+        [parsed.amount, source.facts.filter(fact => fact.kind === 'published-balance-range'
+          && (fact.subject === 'loan-amount' || fact.subject === 'borrowing-amount')), 'amount'],
+      ];
+      for (const [value, facts, dimension] of dimensions) {
+        if (value === null) continue;
+        if (!facts.length) { unverified = true; continue; }
+        // Admitted facts for this dimension are conclusive — do not fall through
+        // to a looser listed tier/bounds that could rescue an excluded input.
+        if (dimension === 'lvr') fallthroughLvr = false;
+        else fallthroughAmount = false;
+        if (!admitsValue(value, facts)) return 'outside';
+      }
+      if (source.unresolved.length) unverified = true;
+      // Admitted LVR alternatives must still clear a parseable listed tier so a
+      // stray second published band cannot rescue e.g. 71% onto an lvr_<60% row.
+      if (!fallthroughLvr && parsed.lvr !== null) {
+        const range = parseLvrRange(row.lvr_tier);
+        if (range && !lvrRangeContains(range, parsed.lvr)) return 'outside';
+      }
+      if (!unverified && !fallthroughLvr && !fallthroughAmount) return 'listed';
+      if (!fallthroughLvr && !fallthroughAmount) return unverified ? 'unverified' : 'listed';
+      // Missing admitted LVR/amount facts only: fall through to listed tier/bounds.
+    }
+  }
+  const listed = matchListedTier(row, parsed, fallthroughLvr, fallthroughAmount);
+  if (listed === 'outside' || listed === 'invalid') return listed;
+  return listed === 'unverified' || unverified ? 'unverified' : 'listed';
 }
 export function mortgageComparisonRows(rows: RateRow[], value: MortgageComparisonInputs, context?: RateConditionContext) {
   const parsed = inputs(value);

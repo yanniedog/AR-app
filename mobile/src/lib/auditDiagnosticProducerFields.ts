@@ -652,6 +652,10 @@ export const AUDIT_WORKER_TEXT = new Set<string>([
   "Waiting for first paint",
   "Waiting for in-flight product details",
   "Waiting for post-refresh warming",
+  "Waiting for product details before history",
+  "Warming bank insights",
+  "Warming bank spread history",
+  "Warming bank summary history",
   "Warming bank/section/profile history views",
   "Warming product details"
 ]);

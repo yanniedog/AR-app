@@ -11,6 +11,7 @@ import { useStore } from '../../data/store';
 import type { RateRow, SectionKey } from '../../types';
 import { AppText, Button, Card, Disclosure } from '../ui';
 import { openProduct, type ProductPricingOrigin } from '../../lib/nav';
+import { scheduleAfterNavigation } from '../../lib/yieldToUi';
 import { uiCount, uiJoin, uiLabel, uiOpaqueEnum, uiPublicAliasName, uiPublicProductName, uiPublicProviderName, type UiCopy } from '../../lib/uiCopy';
 
 function coverageStatus(value: unknown) {
@@ -35,7 +36,12 @@ export function PublicPricingCoverage({ section, rows, scenario, scenarioForRow,
   const [retrying, setRetrying] = useState(false);
   const { status: catalogueStatus, allLoaded, loadAll } = catalogue;
   useEffect(() => {
-    if (catalogueStatus === 'ready' && !allLoaded) void loadAll().catch(() => undefined);
+    // Shard loadAll competes with cold-start details/history on the JS thread.
+    // Wait for first paint / navigation before pulling the full public catalogue.
+    if (catalogueStatus !== 'ready' || allLoaded) return;
+    return scheduleAfterNavigation(() => {
+      void loadAll().catch(() => undefined);
+    });
   }, [catalogueStatus, allLoaded, loadAll]);
   // Compact Rates header already paid for cooperative pricing; never re-scan.
   const pricing = useMemo(() => {

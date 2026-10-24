@@ -8,7 +8,7 @@ import {
 } from '../lib/proAccess';
 import { debugLog } from '../lib/debugLog';
 import { logRetry, logSuitabilityExclusions } from '../lib/degradationLog';
-import { yieldToUi } from '../lib/yieldToUi';
+import { yieldToPaintFrames, yieldToUi } from '../lib/yieldToUi';
 import { countSuitabilityExclusions } from './access';
 import { noDataErrorMessage, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
@@ -131,10 +131,16 @@ export function createBootstrapActions(
             parseHistoryDatesIndex(bundle.meta.historyDatesIndex, bundle.meta.manifest), null,
             { readCachedDetails: true });
           if (!suitabilityIndex) {
-            // Start with matching cached details when available, independent of
-            // the manifest refresh/network. ensureDetails claims the load
-            // synchronously, so the normal refresh warm safely coalesces.
-            void get().ensureDetails({ force: true });
+            // Defer past first paint so cold open stays interactive. Details
+            // validation previously stacked with history on the JS thread
+            // immediately after status=ready (audit paste: 50s+ each).
+            // ensureDetails still claims the load synchronously once started,
+            // so the normal refresh warm safely coalesces.
+            void (async () => {
+              await yieldToPaintFrames(2);
+              if (get().core?.run_date !== bundle.core.run_date) return;
+              await get().ensureDetails({ force: true });
+            })();
           }
           // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
           deferSuitabilityReport(bundle.core, get);

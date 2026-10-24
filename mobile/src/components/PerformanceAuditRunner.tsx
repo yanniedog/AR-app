@@ -1035,7 +1035,10 @@ async function runDeepAuditStepBody(
         ? { changedRender: { surfaceId: actionSource, previousRevision: renderRevisionBefore } }
         : {}),
       quietWindowMs: READINESS_QUIET_WINDOW_MS,
-        creditExistingStableTime: true,
+      // After invoke, never credit pre-action quiet time — mortgage.scope.apply
+      // and other list mutations must observe post-mutation probe settle
+      // (including ready-empty) instead of reusing the prior listed fingerprint.
+      creditExistingStableTime: false,
       timeoutMs: readinessTimeoutMs(watchdog),
       signal: readinessAbort.signal,
     });

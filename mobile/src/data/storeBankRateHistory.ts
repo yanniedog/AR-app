@@ -1,7 +1,7 @@
 import { SECTION_KEYS, type CorePayload, type DetailsPayload, type Manifest } from '../types';
 import { backgroundPayloadWork, type BackgroundWorkOutcome } from '../lib/backgroundPayloadWork';
 import { debugLog } from '../lib/debugLog';
-import { yieldToPaintFrames } from '../lib/yieldToUi';
+import { yieldToPaintFrames, yieldToUi } from '../lib/yieldToUi';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import type { DatesIndex } from './datesIndex';
 import { prepareReadyBankRateHistory } from './historicalBankRateReadySync';
@@ -53,6 +53,20 @@ export async function prepareBankRateHistoryAfterPaint(
   try {
     await yieldToPaintFrames(2);
     if (!isCurrent()) return;
+    // Foreground warm only: optional history must not fight product-details
+    // validation on the Hermes thread after cold open / GitHub payload refresh
+    // (audit paste: both 50s+). Bounded OS-scheduled refresh keeps warm:false.
+    if (options.warm !== false) {
+      work.stage('Waiting for product details before history');
+      for (let i = 0; i < 8 && !get().detailsLoading && !get().details; i += 1) {
+        await yieldToUi(0);
+        if (!isCurrent()) return;
+      }
+      while (get().detailsLoading) {
+        await yieldToUi(0);
+        if (!isCurrent()) return;
+      }
+    }
     // Resolve only after first paint; a literal require also works in the
     // repository's Jest runtime without enabling experimental VM modules.
     // eslint-disable-next-line @typescript-eslint/no-require-imports

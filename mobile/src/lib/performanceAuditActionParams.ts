@@ -1,10 +1,12 @@
 type AuditActionParameters = Readonly<Record<string, unknown>>;
 
 /** Each scenario enters the same listed search task as a new consumer search.
- * Rates task state survives navigation, including the first audit pass. */
+ * Rates task state survives navigation, including the first audit pass.
+ * Do not reset Mortgage purpose/repayment (or wipe via EMPTY_FILTERS): the
+ * criteria gate needs those facets with LVR before compare targets exist. */
 export function auditSearchEntryParams(section: string | null, request: string): Record<string, string> {
   return { ...(section ? { section } : {}), request, query: '', path: '', scope: '',
-    availability: 'listed', compare: '0', reset: '1' };
+    availability: 'listed', compare: '0', reset: section === 'Mortgage' ? '0' : '1' };
 }
 
 function parameters(args: readonly unknown[]): AuditActionParameters {

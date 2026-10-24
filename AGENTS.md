@@ -5,7 +5,7 @@ This repo owns only the installable Expo app and app-release automation.
 - Do not make Pi, ingest, dashboard, payload-builder, or systemd changes here.
 - Daily CDR payloads are published by `yanniedog/AR-local`; keep app payload URLs pointed there unless a later migration explicitly changes that.
 - APK update releases belong to `yanniedog/AR-app`.
-- Use `cd mobile && npm run ci` as the primary local verification path.
+- Primary local verification is **focused** tests for touched packages (e.g. `cd mobile && npx jest path/to/relevant.test.ts` or `npm run ci:unit` for jest + typecheck only). Full `cd mobile && npm run ci` is heavy (doctor/export/size/benchmarks) — leave it to GitHub Actions `mobile-ci` unless that gate failed and you need a local repro of the exact failing step. Do not run full local `ci` by default.
 - Keep the `mobile/` directory layout until a separate flattening migration is planned.
 
 ## Consumer interface hard rules
@@ -14,7 +14,7 @@ This repo owns only the installable Expo app and app-release automation.
 - Explanatory application prose is prohibited everywhere, including helper/description/subtitle text, tooltips, native dialogs, accessibility hints and dynamically supplied marketing text. Keep concise headings, explicit actions/field labels and necessary financial/status facts. Do not move prose into a collapsed panel or rename its prop.
 - Preserve rate metrics, eligibility, conditions, fees, assumptions, dates and unknown/unverified states as structured facts. Required legal/licence documents have a narrow document boundary, not a general help/diagnostics exemption.
 - Core tasks must be discoverable without instructions: direct results, stable Rates/Saved/Market navigation, contextual actions and preserved input/filter/scroll state. No mandatory onboarding or directory gates.
-- `cd mobile && npm run check:ui-copy` must report zero violations; the canonical `npm run ci` includes this guard. Follow [the copy contract](docs/UI_COPY_CONTRACT.md). No grandfather baseline, route exemption, arbitrary string branding or renamed help prop.
+- `cd mobile && npm run check:ui-copy` must report zero violations; GitHub `mobile-ci` (and full local `npm run ci` when used) includes this guard. Follow [the copy contract](docs/UI_COPY_CONTRACT.md). No grandfather baseline, route exemption, arbitrary string branding or renamed help prop.
 
 ## Global ship bar (canonical)
 

@@ -23,15 +23,15 @@ test('admitted loan amount limits override normalized bounds and preserve open u
   const wider = selectedConstraintFixture('Mortgage', [row], [{ rateIndex: 4, text: 'Borrowing amount up to $1000000.' }]);
   expect(mortgageComparisonMatch(wider.rows[0], { loanAmount: '950000', lvr: '' }, wider)).toBe('listed');
 });
-test('qualified or unresolved source conditions remain visible only as unverified comparison matches', () => {
+test('published LVR exclusion is conclusive even when unrelated conditions stay unresolved', () => {
   const f = selectedConstraintFixture('Mortgage', [row], [{ rateIndex: 4, text: 'LVR up to 70%.' },
     { rateIndex: 4, text: 'LVR up to 90% for eligible staff.', sourcePointer: '/data/lendingRates/3/applicabilityConditions/0/additionalInfo' }]);
   const original = JSON.stringify(f.rows);
-  for (const lvr of ['65', '75']) {
-    expect(mortgageComparisonMatch(f.rows[0], { loanAmount: '', lvr }, f)).toBe('unverified');
-    const result = mortgageComparisonRows(f.rows, { loanAmount: '', lvr }, f);
-    expect(result.rows).toEqual(f.rows); expect(result.unverified).toBe(1); expect(result.unverifiedRows.has(f.rows[0])).toBe(true);
-  }
+  expect(mortgageComparisonMatch(f.rows[0], { loanAmount: '', lvr: '65' }, f)).toBe('unverified');
+  expect(mortgageComparisonRows(f.rows, { loanAmount: '', lvr: '65' }, f).rows).toEqual(f.rows);
+  // 75% is outside the admitted ≤70% band; unresolved staff wording cannot keep it listed.
+  expect(mortgageComparisonMatch(f.rows[0], { loanAmount: '', lvr: '75' }, f)).toBe('outside');
+  expect(mortgageComparisonRows(f.rows, { loanAmount: '', lvr: '75' }, f).rows).toEqual([]);
   expect(JSON.stringify(f.rows)).toBe(original);
 });
 test('independent exact ranges are alternatives and stale or cloned source context cannot supply exact bounds', () => {

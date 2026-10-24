@@ -7,6 +7,13 @@ import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { EMPTY_FILTERS } from '../src/data/selectors';
 import { captureRatesSession, restoreRatesSession, initializeRatesSession, updateRatesSection, recordRatesScroll, useRatesSession } from '../src/data/ratesSession';
 import { clearMortgageComparison, useMortgageComparison } from '../src/data/mortgageComparison';
+
+/** Mortgage catalogue search requires LVR + purpose + repayment; keep facets when wiping other filters. */
+const MORTGAGE_CRITERIA_FILTERS = {
+  ...EMPTY_FILTERS,
+  loanPurposes: ['OWNER_OCCUPIED'],
+  repaymentTypes: ['PRINCIPAL_AND_INTEREST'],
+};
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { buildDeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
@@ -111,7 +118,9 @@ import RatesWorkspace from '../src/components/rates/RatesWorkspace';
 const mockStore = jest.requireMock('../src/data/store').useStore;
 const original = captureRatesSession();
 const rows = Array.from({ length: 45 }, (_, i) => ({ product_key: `p-${i}`, product_name: `Loan ${i}`, provider: i % 2 ? 'B' : 'A',
-  rate: String((500 + i) / 10000), comparison_rate: String((510 + i) / 10000), rate_index: i, rate_type: i % 2 ? 'FIXED' : 'VARIABLE', account_class: 'standard' })).reverse();
+  rate: String((500 + i) / 10000), comparison_rate: String((510 + i) / 10000), rate_index: i, rate_type: i % 2 ? 'FIXED' : 'VARIABLE',
+  account_class: 'standard', loan_purpose: 'OWNER_OCCUPIED', ribbon_repayment_type: 'PRINCIPAL_AND_INTEREST',
+  lvr_tier: 'lvr_70-90%' })).reverse();
 function install(profile = DEFAULT_PREFS.profileFilters) { installMandatoryEligibility(selectMandatoryEligibility(mockStore.getState().core, profile, null)); }
 beforeEach(() => {
   jest.clearAllMocks();
@@ -128,6 +137,9 @@ beforeEach(() => {
     setPref: jest.fn((key: string, value: unknown) => { mockStore.setState((state: any) => ({ prefs: { ...state.prefs, [key]: value } })); install(mockStore.getState().prefs.profileFilters); }),
   }, true);
   initializeRatesSession(mockStore.getState().prefs, 'Mortgage'); install();
+  // Mortgage Rates gates the catalogue until LVR + purpose + repayment are set.
+  useMortgageComparison.setState({ loanAmount: '', lvr: '80' });
+  updateRatesSection('Mortgage', { filters: { ...MORTGAGE_CRITERIA_FILTERS, includeNonStandard: true } });
 });
 afterEach(() => { jest.restoreAllMocks(); restoreRatesSession(original); clearMortgageComparison(); installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null)); });
 function mount() { let tree: any; act(() => { tree = TestRenderer.create(<RatesWorkspace />); }); return tree; }
@@ -165,7 +177,7 @@ test('temporary filters reset paging and never erase the saved profile; clearing
   try {
     expect(list().data.every((row: any) => row.rate_type === 'VARIABLE')).toBe(true);
     act(() => updateRatesSection('Mortgage', { page: 2 })); expect(list().data).toHaveLength(3);
-    act(() => updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS, includeNonStandard: true, providers: ['B'] } }));
+    act(() => updateRatesSection('Mortgage', { filters: { ...MORTGAGE_CRITERIA_FILTERS, includeNonStandard: true, providers: ['B'] } }));
     expect(useRatesSession.getState().sections.Mortgage.page).toBe(1); expect(list().data).toHaveLength(0);
     expect(mockStore.getState().prefs.profileFilters).toEqual(profile);
     act(() => tree.root.findAllByType('Button').find((node: any) => node.props.title === 'Clear Home loans requirements').props.onPress());
@@ -176,8 +188,8 @@ test('temporary filters reset paging and never erase the saved profile; clearing
 test('comparison uncertainty counts the complete filtered result set, not the pre-filter catalogue or current page', () => {
   const tree = mount();
   try {
-    act(() => useMortgageComparison.setState({ loanAmount: '300000' }));
-    act(() => updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS, includeNonStandard: true, providers: ['B'] } }));
+    act(() => useMortgageComparison.setState({ loanAmount: '300000', lvr: '80' }));
+    act(() => updateRatesSection('Mortgage', { filters: { ...MORTGAGE_CRITERIA_FILTERS, includeNonStandard: true, providers: ['B'] } }));
     expect(tree.root.findByType('FlashList').props.data).toHaveLength(20);
     expect(tree.root.findAllByType('AppText').some((node: any) => node.props.children === 'Eligibility unverified · 22')).toBe(true);
   } finally { act(() => tree.unmount()); }
@@ -232,12 +244,13 @@ test('audit mortgage scope apply and clear update comparison inputs and temporar
 test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seeded audit reaches exact later-page targets and restores the mounted %s-row session with initial comparison mode %s', async (pageSize, initialMode) => {
   const catalogue = Array.from({ length: 45 }, (_, i) => ({ product_key: `p-${String(i).padStart(2, '0')}`,
     product_name: `Loan ${String(i).padStart(2, '0')}`, provider: 'Bank', rate_index: i,
-    rate: String((500 + i) / 10000), comparison_rate: String((510 + i) / 10000), account_class: 'standard' }));
+    rate: String((500 + i) / 10000), comparison_rate: String((510 + i) / 10000), account_class: 'standard',
+    loan_purpose: 'OWNER_OCCUPIED', ribbon_repayment_type: 'PRINCIPAL_AND_INTEREST', lvr_tier: 'lvr_70-90%' }));
   mockStore.setState((state: any) => ({ prefs: { ...state.prefs, ratesPageSize: pageSize },
     core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: catalogue } } } }));
   install();
   updateRatesSection('Mortgage', { query: 'Loan', selected: ['1#p-01'], selectMode: initialMode,
-    sort: 'bank', filters: { ...EMPTY_FILTERS, providers: ['Missing Bank'], rateTypes: ['FIXED'] }, includeNonStandardOverride: false });
+    sort: 'bank', filters: { ...MORTGAGE_CRITERIA_FILTERS, providers: ['Missing Bank'], rateTypes: ['FIXED'] }, includeNonStandardOverride: false });
   updateRatesSection('Mortgage', { page: 1 }); recordRatesScroll('Mortgage', 137);
   useMortgageComparison.setState({ loanAmount: '123456', lvr: '78' });
   const before = captureRatesSession(), preferences = JSON.parse(JSON.stringify(mockStore.getState().prefs));
@@ -340,7 +353,7 @@ test('same-page preparation activates visible controls before selection without 
 
 test.each([10, 20] as const)('target pages use the sorted filtered results with %s rows per page', async pageSize => {
   mockStore.setState((state: any) => ({ prefs: { ...state.prefs, ratesPageSize: pageSize } }));
-  updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS, includeNonStandard: true, providers: ['B'] } });
+  updateRatesSection('Mortgage', { filters: { ...MORTGAGE_CRITERIA_FILTERS, includeNonStandard: true, providers: ['B'] } });
   const tree = mount();
   const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
   try {
@@ -373,7 +386,7 @@ test('cancelled page preparation restores page, selection and scroll; absent or 
     const prepared = captureRatesSession();
     expect(surface().actions!['search.compare.page.1']({ selectionToken: '35#missing' })).toHaveProperty('unavailableReason');
     expect(captureRatesSession()).toEqual(prepared);
-    act(() => updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS, includeNonStandard: true, providers: ['A'] } }));
+    act(() => updateRatesSection('Mortgage', { filters: { ...MORTGAGE_CRITERIA_FILTERS, includeNonStandard: true, providers: ['A'] } }));
     const filtered = captureRatesSession();
     // p-35 exists in core but is outside these actual results.
     expect(surface().actions!['search.compare.page.0']({ selectionToken: '35#p-35' })).toHaveProperty('unavailableReason');
@@ -788,10 +801,13 @@ test('temporary purpose and repayment chips resolve public offers before filteri
   const p = publicProgramme({ sourceBindings: [], conditions: [
     { conditionId: 'purpose', field: 'purpose', operator: 'eq', value: 'INVESTMENT', evidenceIds: [] },
     { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: 'INTEREST_ONLY', evidenceIds: [] },
+    { conditionId: 'lvr', field: 'lvr', operator: 'bounds', minimum: '0.7', maximum: '0.9', evidenceIds: [] },
   ] });
   mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([{ ...p,
     freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() } }], [publicProduct], []), generationId: 'temporary-facets' };
   mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [] } } } }));
+  clearMortgageComparison();
+  updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: [], repaymentTypes: [] } }));
   install();
   const saved = JSON.stringify(mockStore.getState().prefs.profileFilters);
   const tree = mount(), list = () => tree.root.findByType('FlashList').props;
@@ -800,6 +816,8 @@ test('temporary purpose and repayment chips resolve public offers before filteri
     act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: ['INVESTMENT'] } })));
     expect(list().data).toEqual([]);
     act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, repaymentTypes: ['INTEREST_ONLY'] } })));
+    expect(list().data).toEqual([]);
+    act(() => useMortgageComparison.setState({ loanAmount: '', lvr: '75' }));
     expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
     expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ purpose: 'INVESTMENT', repayment: 'INTEREST_ONLY' });
     expect(JSON.stringify(mockStore.getState().prefs.profileFilters)).toBe(saved);
@@ -837,10 +855,11 @@ test('a selected deduplicated source occurrence survives catalogue binding and s
 });
 
 test.each([false, true])('public-only facet chips reveal an offer with saved legacy aliases: %s', (bound) => {
-  const source = { ...publicRow, rate_index: 0, loan_purpose: 'OO', repayment_type: 'PI', ribbon_repayment_type: 'PI' };
+  const source = { ...publicRow, rate_index: 0, loan_purpose: 'OO', repayment_type: 'PI', ribbon_repayment_type: 'PI', lvr_tier: 'lvr_70-90%' };
   const p = publicProgramme({ sourceBindings: bound ? [{ rateIndex: source.rate_index, pointer: `/lendingRates/${source.rate_index}` }] : [], conditions: [
     { conditionId: 'purpose', field: 'purpose', operator: 'in', values: ['OWNER_OCCUPIED', 'INVESTMENT'], evidenceIds: [] },
     { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: 'PRINCIPAL_AND_INTEREST', evidenceIds: [] },
+    { conditionId: 'lvr', field: 'lvr', operator: 'bounds', minimum: '0.7', maximum: '0.9', evidenceIds: [] },
   ] });
   mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture([{ ...p,
     freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() } }], [publicProduct], []), generationId: 'public-facet-chips' };
@@ -860,8 +879,9 @@ test.each([false, true])('public-only facet chips reveal an offer with saved leg
     expect({ labels, found: Boolean(purpose) }).toMatchObject({ found: true });
     const repayment = chips().find((chip: any) => chip.props.label === 'Principal & interest');
     expect({ labels, found: Boolean(repayment) }).toMatchObject({ found: true });
-    act(() => purpose!.props.onPress());
-    act(() => repayment!.props.onPress());
+    // Seeded beforeEach criteria already selects these chips; pressing again would deselect and gate the list.
+    expect(purpose!.props.selected).toBe(true);
+    expect(repayment!.props.selected).toBe(true);
     expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
     act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
       loanPurposes: ['OWNER_OCCUPIED'], repaymentTypes: ['PRINCIPAL_AND_INTEREST'] } })));
@@ -877,12 +897,16 @@ test('multiple mortgage chips retain both public-only offers with exact row pric
     const p = publicProgramme({ programmeId: id, offerId: id, sourceBindings: [], conditions: [
       { conditionId: id + '-purpose', field: 'purpose', operator: 'eq', value: purpose, evidenceIds: [] },
       { conditionId: id + '-repayment', field: 'repayment', operator: 'eq', value: repayment, evidenceIds: [] },
+      { conditionId: id + '-lvr', field: 'lvr', operator: 'bounds', minimum: '0.7', maximum: '0.9', evidenceIds: [] },
     ] });
     return { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() }, components: [{ ...p.components[0], value, scopeId: id }] };
   });
   mockPublicCatalogue = { ...mockUnavailableCatalogue, ...publicCatalogueFixture(programmes,
     [{ ...publicProduct, programmeIds: programmes.map(p => p.programmeId) }], []), generationId: 'or-facets' };
   mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: [] } } } }));
+  clearMortgageComparison();
+  useMortgageComparison.setState({ loanAmount: '', lvr: '75' });
+  updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: [], repaymentTypes: [] } }));
   install();
   const tree = mount();
   try {
