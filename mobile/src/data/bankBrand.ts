@@ -1,4 +1,6 @@
-import { BUNDLED_BANK_LOGOS } from './bankLogoAssets';
+import { BUNDLED_BANK_LOGOS, type BundledBankLogoSource } from './bankLogoAssets';
+
+export type BankLogoSource = string | BundledBankLogoSource;
 
 const MAX_EMBEDDED_LOGO_LENGTH = 256 * 1024;
 const MAX_REMOTE_LOGO_URI_LENGTH = 2_048;
@@ -76,6 +78,7 @@ const BRAND_MAP: Record<string, BrandEntry> = {
   'bank first': { short: 'BFirst', aliases: [] },
   'bank of china': { short: 'BoC', aliases: [] },
   'bank of sydney': { short: 'BoSyd', aliases: [] },
+  'queensland country bank': { short: 'QCB', aliases: ['queensland country'] },
   'bank of us': { short: 'BoUs', aliases: [] },
   'border bank': { short: 'Border', aliases: [] },
   'cairns bank': { short: 'Cairns', aliases: [] },
@@ -122,13 +125,16 @@ function normalize(value: string): string {
 /** Align CDR provider labels with dashboard `local-brand.js` canonical keys. */
 export function lookupProvider(value: string): string {
   const raw = normalize(value);
+  const withoutLegalSuffix = raw.replace(/(?:\s+(?:pty\.?|proprietary))?\s+(?:limited|ltd\.?)$/, '');
+  const exact = ALIAS_TO_KEY.get(raw) ?? ALIAS_TO_KEY.get(withoutLegalSuffix);
+  if (exact) return exact;
   if (/great southern bank business/i.test(raw)) return 'great southern bank business+';
   if (raw.includes('great southern')) return 'great southern bank';
   if (raw.includes('86400') || raw.includes('86 400')) return 'ubank';
   if (raw.includes('amp bank go') || raw === 'amp go') return 'amp bank go';
-  if (raw.includes('amp')) return 'amp bank';
+  if (/\bamp\b/.test(raw)) return 'amp bank';
   if (raw.includes('anz plus')) return 'anz plus';
-  if (raw.includes('anz')) return 'anz';
+  if (/\banz\b/.test(raw)) return 'anz';
   if (raw.includes('unloan')) return 'unloan';
   if (raw.includes('commonwealth') || raw.includes('commbank') || raw === 'cba') {
     return 'commonwealth bank of australia';
@@ -149,7 +155,7 @@ export function lookupProvider(value: string): string {
   if (/st\s*\.?\s*george/i.test(raw)) return 'st. george bank';
   if (raw.includes('bendigo')) return 'bendigo and adelaide bank';
   if (raw.includes('boq specialist')) return 'boq specialist';
-  if (raw.includes('queensland') || /\bboq\b/.test(raw)) return 'bank of queensland';
+  if (raw.includes('bank of queensland') || /\bboq\b/.test(raw)) return 'bank of queensland';
   if (raw.includes('melbourne') && raw.includes('bank')) return 'bank of melbourne';
   if (raw.includes('alex')) return 'alex bank';
   if (raw.includes('arab bank')) return 'arab bank australia';
@@ -219,24 +225,11 @@ function slugFromIcon(icon: string): string {
   return icon.replace(/\.png$/i, '');
 }
 
-function pushUnique(out: (string | number)[], seen: Set<string>, value: string | number) {
-  const key = typeof value === 'number' ? `n:${value}` : value;
-  if (seen.has(key)) return;
-  seen.add(key);
-  out.push(value);
-}
-
-function pushIconFile(out: (string | number)[], seen: Set<string>, iconFile: string) {
-  const slug = slugFromIcon(iconFile);
-  const bundled = BUNDLED_BANK_LOGOS[slug];
-  if (bundled != null) pushUnique(out, seen, bundled);
-}
-
 function safeEmbeddedLogo(value: string): boolean {
   return value.length <= MAX_EMBEDDED_LOGO_LENGTH && SAFE_EMBEDDED_RASTER_RE.test(value);
 }
 
-export function isSvgLogoSource(value: string | number | null | undefined): boolean {
+export function isSvgLogoSource(value: BankLogoSource | null | undefined): boolean {
   if (typeof value !== 'string' || value.startsWith('data:')) return false;
   try {
     return new URL(value).pathname.toLowerCase().endsWith('.svg');
@@ -276,39 +269,37 @@ export function safePayloadLogoUri(value: string): boolean {
 }
 
 /**
- * Ordered logo sources: bounded embedded artwork, the bundled pack, then a
- * validated public HTTPS URI carried by the integrity-checked payload.
+ * Prefer bank-supplied bundled artwork over stale payload artwork. Unknown
+ * brands can still use bounded embedded artwork and validated public HTTPS.
  */
 export function resolveBankLogoSources(
   provider: string,
   embeddedLogo?: string,
   registerLogoUri?: string,
-): (string | number)[] {
-  const out: (string | number)[] = [];
-  const seen = new Set<string>();
+): BankLogoSource[] {
+  const out: BankLogoSource[] = [];
+  const bundled = resolveBundledBankLogoSource(provider);
+  // A known bank must never fall through to stale artwork for another brand.
+  if (bundled != null) return [bundled];
   const embedded = String(embeddedLogo ?? '').trim();
-  if (embedded && safeEmbeddedLogo(embedded)) pushUnique(out, seen, embedded);
-
-  const key = resolveBrandKey(provider);
-  const icon = key ? BRAND_MAP[key]?.icon : undefined;
-  if (icon) {
-    pushIconFile(out, seen, icon);
-  } else {
-    const bundled = BUNDLED_BANK_LOGOS[slugify(lookupProvider(provider))];
-    if (bundled != null) pushUnique(out, seen, bundled);
-  }
+  if (embedded && safeEmbeddedLogo(embedded)) out.push(embedded);
 
   const remote = String(registerLogoUri ?? '').trim();
-  if (safePayloadLogoUri(remote)) pushUnique(out, seen, remote);
+  if (safePayloadLogoUri(remote)) out.push(remote);
   return out;
 }
 
 /** Local bundle only; used while an audit owns the process network boundary. */
-export function resolveBundledBankLogoSource(provider: string): number | null {
+export function resolveBundledBankLogoSource(provider: string): BundledBankLogoSource | null {
   const key = resolveBrandKey(provider);
   const icon = key ? BRAND_MAP[key]?.icon : undefined;
-  const slug = icon ? slugFromIcon(icon) : slugify(lookupProvider(provider));
-  return BUNDLED_BANK_LOGOS[slug] ?? null;
+  const candidates = [slugify(provider), slugify(lookupProvider(provider)), icon ? slugFromIcon(icon) : ''];
+  for (const slug of candidates) {
+    if (!Object.hasOwn(BUNDLED_BANK_LOGOS, slug)) continue;
+    const bundled = BUNDLED_BANK_LOGOS[slug];
+    if (bundled != null) return bundled;
+  }
+  return null;
 }
 
 export function resolveBankLogoSourcesForRuntime(
@@ -316,7 +307,7 @@ export function resolveBankLogoSourcesForRuntime(
   embeddedLogo: string | undefined,
   registerLogoUri: string | undefined,
   auditOwnsNetwork: boolean,
-): (string | number)[] {
+): BankLogoSource[] {
   return resolveBankLogoSources(
     provider,
     embeddedLogo,
