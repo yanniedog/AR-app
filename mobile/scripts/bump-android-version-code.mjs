@@ -2,7 +2,10 @@
 /**
  * Unique version iteration and monotonic android.versionCode for APK builds.
  * Reads version/build_number from the selected rolling manifest (if present),
- * then always advances the visible patch version and android.versionCode.
+ * then advances the visible patch version and android.versionCode. Paired
+ * releases require their checked-in version to remain ahead of publication.
+ * --use-checked-in-version enables that explicit paired-release mode; it also
+ * permits the ARM partner to reuse that version with its allocated build code.
  * A fallback repo keeps the first AR-app build monotonic with the legacy AR-local
  * update channel.
  *
@@ -60,13 +63,14 @@ const reusedReleaseVersion = releaseVersionArgIdx >= 0 ? process.argv[releaseVer
 const reusedReleaseVersionCode = releaseVersionCodeArgIdx >= 0
   ? process.argv[releaseVersionCodeArgIdx + 1]
   : null;
+const useCheckedInVersion = process.argv.includes('--use-checked-in-version');
 
 const appJsonPath = join(mobileDir, 'app.json');
 const appJson = JSON.parse(readFileSync(appJsonPath, 'utf8'));
 const currentVersion = String(appJson.expo?.version ?? '1.0.0');
 const currentCode = Number(appJson.expo?.android?.versionCode ?? 1) || 1;
 
-export function validateReusedReleaseIdentity({ version, versionCode, baseVersion, baseVersionCode }) {
+export function validateReusedReleaseIdentity({ version, versionCode, baseVersion, baseVersionCode, allowCheckedInVersion = false }) {
   const suppliedVersion = String(version ?? '').trim();
   const suppliedCode = String(versionCode ?? '').trim();
   if (!suppliedVersion && !suppliedCode) return null;
@@ -80,13 +84,30 @@ export function validateReusedReleaseIdentity({ version, versionCode, baseVersio
   }
   const versionComparison = compareVersions(suppliedVersion, baseVersion);
   const exactRecovery = versionComparison === 0 && numericCode === baseVersionCode;
-  const pairedAdvance = versionComparison > 0 && numericCode > baseVersionCode;
+  const pairedAdvance = (versionComparison > 0 || (allowCheckedInVersion && versionComparison === 0))
+    && numericCode > baseVersionCode;
   if (!exactRecovery && !pairedAdvance) {
     throw new Error(
       'Reused release identity must exactly match the checked-in identity or advance version and versionCode together',
     );
   }
   return { version: suppliedVersion, versionCode: numericCode };
+}
+
+export function allocateApkBuildIdentity({ version, versionCode, remoteVersion, remoteCode, runFloor = 0, useCheckedInVersion = false }) {
+  const checkedInVersion = String(version).trim();
+  if (useCheckedInVersion) {
+    compareVersions(checkedInVersion, checkedInVersion);
+    if (remoteVersion != null && compareVersions(checkedInVersion, remoteVersion) <= 0) {
+      throw new Error('Checked-in paired release version must be newer than the published release floor');
+    }
+  }
+  return {
+    version: useCheckedInVersion
+      ? checkedInVersion
+      : nextApkBuildVersion(version, remoteVersion),
+    versionCode: nextVersionCode(versionCode, remoteCode, runFloor),
+  };
 }
 
 export async function fetchRemoteManifest(
@@ -144,6 +165,7 @@ async function main() {
     versionCode: reusedReleaseVersionCode,
     baseVersion: currentVersion,
     baseVersionCode: currentCode,
+    allowCheckedInVersion: useCheckedInVersion,
   });
   let nextVersion;
   let nextCode;
@@ -160,8 +182,10 @@ async function main() {
         : null;
     const remote = mergeReleaseFloors([primaryRemote, otherChannelFloor, fallbackRemote]);
     const runFloor = Number(process.env.GITHUB_RUN_NUMBER ?? 0) || 0;
-    nextVersion = nextApkBuildVersion(currentVersion, remote?.version);
-    nextCode = nextVersionCode(currentCode, remote?.buildNumber, runFloor);
+    const allocated = allocateApkBuildIdentity({ version: currentVersion, versionCode: currentCode,
+      remoteVersion: remote?.version, remoteCode: remote?.buildNumber, runFloor, useCheckedInVersion });
+    nextVersion = allocated.version;
+    nextCode = allocated.versionCode;
   }
 
   if (githubEnvPath) {

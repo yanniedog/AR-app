@@ -4,6 +4,7 @@ import {
   selectCumulativeChangelogs,
   type ChangelogManifestVersion,
 } from '../src/lib/changelog';
+import shippedManifest from '../changelog/manifest.json';
 
 const versions: ChangelogManifestVersion[] = [
   {
@@ -27,6 +28,11 @@ const versions: ChangelogManifestVersion[] = [
 ];
 
 describe('changelog', () => {
+  it('retains every published update when upgrading from 1.0.243 to 1.0.247', () => {
+    const picked = selectCumulativeChangelogs(shippedManifest, '1.0.243', '1.0.247');
+    expect(picked.map(row => row.version)).toEqual(['1.0.244', '1.0.245', '1.0.246', '1.0.247']);
+    expect(picked.every(row => row.summaryBullets.length > 0)).toBe(true);
+  });
   it('changelogSummaryUrl points at rolling release asset', () => {
     expect(changelogSummaryUrl('yanniedog/AR-app', 'app-apk-latest')).toBe(
       'https://github.com/yanniedog/AR-app/releases/download/app-apk-latest/changelog-summary.json',

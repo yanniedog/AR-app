@@ -1,0 +1,44 @@
+{
+  "version": "1.0.247",
+  "releaseTag": "app-arm-v1.0.247",
+  "date": "2026-10-23",
+  "summaryBullets": [
+    "Fix historical rate charts and native archive adoption (#433)",
+    "build(deps): bump eas-cli from 24.12.0 to 24.14.0 in /mobile/tools/eas-cli (#420)",
+    "Protect full audit diagnostics and keep journal writes bounded (#432)",
+    "Fix audit timeouts and include compact complete diagnostics (#431)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Fix historical rate charts and native archive adoption (#433)"
+        },
+        {
+          "text": "build(deps): bump eas-cli from 24.12.0 to 24.14.0 in /mobile/tools/eas-cli (#420)"
+        },
+        {
+          "text": "Protect full audit diagnostics and keep journal writes bounded (#432)"
+        },
+        {
+          "text": "Fix audit timeouts and include compact complete diagnostics (#431)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.247"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.246"
+        }
+      ]
+    }
+  ]
+}

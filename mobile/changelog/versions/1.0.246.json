@@ -1,0 +1,18 @@
+{
+  "version": "1.0.246",
+  "releaseTag": "app-arm-v1.0.246",
+  "date": "2026-10-18",
+  "summaryBullets": [
+    "Restore recent product graphs from published legacy history (#427)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Restore recent product graphs from published legacy history (#427)"
+        }
+      ]
+    }
+  ]
+}

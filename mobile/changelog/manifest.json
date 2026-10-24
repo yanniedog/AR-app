@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-10-18T16:04:18.105Z",
+  "generated_at": "2026-10-23T22:22:46.793Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -1023,6 +1023,41 @@
         "Retain audit reports and automatically upload sanitized results (#408)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.243"
+    },
+    {
+      "version": "1.0.244",
+      "date": "2026-10-18",
+      "summaryBullets": [
+        "chore(mobile): auto-release bump to v1.0.243 (after 26cb2b1) (#418)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.244"
+    },
+    {
+      "version": "1.0.245",
+      "date": "2026-10-18",
+      "summaryBullets": [
+        "Fix local audit completion and safe diagnostic evidence (#424)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.245"
+    },
+    {
+      "version": "1.0.246",
+      "date": "2026-10-18",
+      "summaryBullets": [
+        "Restore recent product graphs from published legacy history (#427)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.246"
+    },
+    {
+      "version": "1.0.247",
+      "date": "2026-10-23",
+      "summaryBullets": [
+        "Fix historical rate charts and native archive adoption (#433)",
+        "build(deps): bump eas-cli from 24.12.0 to 24.14.0 in /mobile/tools/eas-cli (#420)",
+        "Protect full audit diagnostics and keep journal writes bounded (#432)",
+        "Fix audit timeouts and include compact complete diagnostics (#431)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.247"
     }
   ]
 }

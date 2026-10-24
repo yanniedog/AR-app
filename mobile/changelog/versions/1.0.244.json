@@ -1,0 +1,18 @@
+{
+  "version": "1.0.244",
+  "releaseTag": "app-arm-v1.0.244",
+  "date": "2026-10-18",
+  "summaryBullets": [
+    "chore(mobile): auto-release bump to v1.0.243 (after 26cb2b1) (#418)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "chore(mobile): auto-release bump to v1.0.243 (after 26cb2b1) (#418)"
+        }
+      ]
+    }
+  ]
+}
