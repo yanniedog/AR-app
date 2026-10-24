@@ -28,6 +28,10 @@ import {
   expectedAbisForApkChannel,
   generateInstallAssets,
   generateReleaseNotes,
+  fetchReleaseAssets,
+  missingImmutableUploadPaths,
+  mergePublishedChangelogs,
+  readPublishedChangelogs,
   gh,
   installReleaseUrl,
   manifestReleaseUrl,
@@ -215,14 +219,15 @@ function ensureRollingReleaseExists() {
   }
 }
 
-function writeChangelogSummaryArtifact({ version, outDir }) {
+async function writeChangelogSummaryArtifact({ version, outDir }) {
   ensureVersionEntry({
     version,
     mobileRoot,
     repo,
     releaseTag: versionTagForApkChannel(version, rollingTag),
   });
-  const manifest = buildChangelogManifest({ repo, mobileRoot });
+  const manifest = mergePublishedChangelogs(buildChangelogManifest({ repo, mobileRoot }),
+    await readPublishedChangelogs(repo, rollingTag, version));
   const summaryPath = join(outDir, CHANGELOG_SUMMARY_ASSET);
   writeFileSync(summaryPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
   return summaryPath;
@@ -280,13 +285,15 @@ async function publishVersionedRelease({ apkBuf, version, buildNumber, outDir, c
     rollingTag,
   );
 
-  const targetRef = releaseTargetRefForRepository(repo);
-  const action = ensureGitHubRelease(ghToken, repo, tag, title, notes, targetRef);
   const uploadPaths = [apkPath, qrPath, installPath];
   if (changelogSummaryPath) {
     uploadPaths.push(changelogSummaryPath);
   }
-  gh(ghToken, repo, ['release', 'upload', tag, ...uploadPaths, '--clobber']);
+  const missing = missingImmutableUploadPaths(uploadPaths,
+    await fetchReleaseAssets(repo, tag, ghToken) ?? [], { sha256: sha256File(apkPath), bytes: apkBuf.length });
+  const targetRef = releaseTargetRefForRepository(repo);
+  const action = ensureGitHubRelease(ghToken, repo, tag, title, notes, targetRef);
+  if (missing.length) gh(ghToken, repo, ['release', 'upload', tag, ...missing]);
 
   console.log(`Versioned release ${tag} (${action}): https://github.com/${repo}/releases/tag/${tag}`);
   console.log(`  QR PNG: ${qrUrl}`);
@@ -424,7 +431,7 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
   const manifestPath = join(outDir, MANIFEST_ASSET);
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 
-  const changelogSummaryPath = writeChangelogSummaryArtifact({ version, outDir });
+  const changelogSummaryPath = await writeChangelogSummaryArtifact({ version, outDir });
 
   // Publish the versioned APK first so the rolling manifest never points at a
   // download_url that is not yet uploaded.

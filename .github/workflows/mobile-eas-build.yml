@@ -48,6 +48,7 @@ concurrency:
   # Shared with mobile-android-apk so preview APK publication is globally serial.
   group: mobile-apk-release
   cancel-in-progress: false
+  queue: max
 
 jobs:
   eas-build:

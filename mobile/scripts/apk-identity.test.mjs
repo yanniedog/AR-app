@@ -239,13 +239,12 @@ test('keeps universal trust while scoping preview APK builds to ARM', () => {
     new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
     'utf8',
   );
-  assert.match(workflow, /default: arm/);
-  assert.match(workflow, /if \[ "\$APK_CHANNEL" = "arm" \]; then/);
-  assert.match(workflow, /-PreactNativeArchitectures=armeabi-v7a,arm64-v8a/);
-  assert.match(workflow, /--rolling-tag "\$rolling_tag"/);
-  assert.match(workflow, /inputs\.apk_channel == 'universal'/);
+  const pair = readFileSync(new URL('./android-apk-pair.mjs', import.meta.url), 'utf8');
+  assert.match(pair, /channel === 'arm' \? 'armeabi-v7a,arm64-v8a' : 'armeabi-v7a,arm64-v8a,x86,x86_64'/);
+  assert.match(workflow, /android-apk-pair\.mjs build/);
+  assert.match(workflow, /android-apk-pair\.mjs publish/);
   assert.doesNotMatch(workflow, /bridge_legacy_ar_local|AR_LOCAL_RELEASE_TOKEN|--repo yanniedog\/AR-local/);
-  assert.match(workflow, /Publish README Android install QR section/);
+  assert.doesNotMatch(workflow, /Publish README Android install QR section/);
 
   const easWorkflow = readFileSync(
     new URL('../../.github/workflows/mobile-eas-build.yml', import.meta.url),

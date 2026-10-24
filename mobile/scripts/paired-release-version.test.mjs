@@ -33,9 +33,20 @@ test('explicit checked-in pairing cannot roll back either identity field or omit
     baseVersion: '1.0.247', baseVersionCode: 192 }));
 });
 
-test('the existing paired dispatch and recovery inputs activate checked-in identity handling', () => {
+test('both APKs share one allocation and publication restores that exact identity', () => {
   const workflow = yaml.load(readFileSync(new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url), 'utf8'));
-  const step = workflow.jobs['android-apk'].steps.find(row => row.id === 'release');
-  assert.equal(step.env.USE_CHECKED_IN_VERSION, "${{ inputs.follow_with_arm || inputs.release_version != '' }}");
-  assert.match(step.run, /if \[ "\$USE_CHECKED_IN_VERSION" = "true" \]; then\s+reuse_args\+=\(--use-checked-in-version\)/);
+  const step = workflow.jobs.build.steps.find(row => row.id === 'release');
+  assert.equal(step.run.match(/bump-android-version-code\.mjs/g).length, 1);
+  assert.equal(workflow.jobs.publish.needs, 'build');
+  const restore = workflow.jobs.publish.steps.find(row => row.env?.RELEASE_VERSION);
+  assert.equal(restore.env.RELEASE_VERSION, '${{ needs.build.outputs.version }}');
+  assert.equal(restore.env.RELEASE_CODE, '${{ needs.build.outputs.version_code }}');
+  assert.match(restore.run, /--release-version "\$RELEASE_VERSION" --release-version-code "\$RELEASE_CODE"/);
+  assert.match(step.run, /--fallback-repo yanniedog\/AR-local/);
+  const eas = yaml.load(readFileSync(new URL('../../.github/workflows/mobile-eas-build.yml', import.meta.url), 'utf8'));
+  assert.equal(workflow.concurrency.group, eas.concurrency.group);
+  assert.equal(workflow.concurrency['cancel-in-progress'], false);
+  assert.equal(eas.concurrency['cancel-in-progress'], false);
+  assert.equal(workflow.concurrency.queue, 'max');
+  assert.equal(eas.concurrency.queue, 'max');
 });

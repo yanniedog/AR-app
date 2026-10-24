@@ -1,83 +1,34 @@
-# Free unlimited Android preview APK builds on GitHub Actions (no EAS cloud quota).
-# Produces a signed release APK for one explicitly selected channel:
-#   arm (default): app-apk-arm-latest / app-arm-v{semver}, ARM ABIs only
-#   universal:     app-apk-latest / app-v{semver}, all legacy ABIs
-# The universal channel remains available as the legacy/x86 fallback.
-# Both releases ship app-preview.apk, app-preview-qr.png, and install.html.
-#
-# Secrets (Settings - Secrets and variables - Actions):
-#   GOOGLE_SERVICES_JSON - optional; materialized via ensure-firebase-config.mjs
-#   GOOGLE_SERVICE_INFO_PLIST - optional
-#   EXPO_TOKEN - optional; used to download EAS Android keystore when ANDROID_KEYSTORE_B64 unset
-#   ANDROID_KEYSTORE_B64 - optional override; base64 .jks/.keystore
-#   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD - with B64 override
-#
-# Signing: prefers ANDROID_KEYSTORE_* secrets; else fetches default keystore from EAS credentials.
-
 name: mobile-android-apk
-run-name: mobile-android-apk (${{ github.event_name == 'push' && 'workflow-check' || inputs.apk_channel || 'arm' }}${{ inputs.follow_with_arm && '+arm' || '' }})
-
-# Queue-drain automation dispatches ordinary app releases after the final
-# patch-version PR merges. A change to this workflow builds an artifact only
-# so pipeline repairs can be verified without publishing ahead of the queue.
+run-name: Android APK release
 on:
   push:
     branches: [main]
     paths:
+      - 'mobile/**'
       - '.github/workflows/mobile-android-apk.yml'
   workflow_dispatch:
-    inputs:
-      apk_channel:
-        description: APK compatibility channel to build and publish
-        required: true
-        default: arm
-        type: choice
-        options:
-          - arm
-          - universal
-      follow_with_arm:
-        description: After universal publishes, queue the ARM channel before any README mutation
-        required: false
-        default: false
-        type: boolean
-      release_version:
-        description: Exact version allocated by a preceding universal build
-        required: false
-        default: ''
-        type: string
-      release_version_code:
-        description: Exact versionCode allocated by a preceding universal build
-        required: false
-        default: ''
-        type: string
-      release_source_sha:
-        description: Immutable main source shared by a preceding universal build
-        required: false
-        default: ''
-        type: string
-
 permissions:
-  actions: write
+  contents: read
+  pull-requests: read
   checks: read
-  contents: write
-  pull-requests: write
-
+# Serialize all publishers without dropping pending manual build requests.
 concurrency:
-  # Shared with mobile-eas-build so two APK publishers cannot select the same
-  # next version from the rolling manifest.
-  group: ${{ github.event_name == 'push' && 'mobile-apk-workflow-check' || 'mobile-apk-release' }}
+  group: mobile-apk-release
   cancel-in-progress: false
-
+  queue: max
 jobs:
-  android-apk:
-    name: android ${{ inputs.apk_channel || 'arm' }} preview apk (GHA)
+  build:
+    name: Build and verify both APKs
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: mobile-release
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      version_code: ${{ steps.release.outputs.version_code }}
+      artifact_name: signed-apk-pair-${{ github.run_attempt }}
     env:
       NODE_ENV: production
-      APK_CHANNEL: ${{ inputs.apk_channel || 'arm' }}
       AR_APP_DISTRIBUTION_CHANNEL: sideload
     defaults:
       run:
@@ -86,265 +37,114 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ inputs.release_source_sha || github.sha }}
-
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
-        with:
-          distribution: temurin
-          java-version: 17
-
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: mobile/package-lock.json
-
-      - name: Verify protected release source
+      - name: Verify reviewed main source
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
-        run: node scripts/verify-github-release-source.mjs
-
+        run: node scripts/verify-github-release-source.mjs --allow-reviewed-ancestor
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
-
-      - name: Install APK identity tools
-        run: sdkmanager "build-tools;35.0.0"
-
-      - name: Install dependencies
+      - run: sdkmanager "build-tools;35.0.0"
+      - name: Install production build dependencies
         env:
           NODE_ENV: development
         run: npm ci --omit=optional --no-audit --no-fund
-
-      - name: Verify Cloudflare payload delivery before release build
-        if: github.event_name == 'workflow_dispatch'
-        run: node scripts/verify-public-delivery.cjs
-
-      - name: Materialize Firebase config
+      - name: Allocate one version for both APKs
+        id: release
+        run: |
+          node scripts/bump-android-version-code.mjs --repo "$GITHUB_REPOSITORY" --fallback-repo yanniedog/AR-local --rolling-tag app-apk-arm-latest
+          node -e "const app=require('./app.json').expo; console.log('version='+app.version); console.log('version_code='+app.android.versionCode)" >> "$GITHUB_OUTPUT"
+      - name: Prepare Firebase and signing key
+        id: keystore
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
           GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
-        run: |
-          node scripts/ensure-firebase-config.mjs
-          node scripts/validate-firebase-package.mjs
-
-      - name: Advance APK version iteration from rolling manifest
-        id: release
-        env:
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          REUSED_RELEASE_VERSION: ${{ inputs.release_version }}
-          REUSED_RELEASE_VERSION_CODE: ${{ inputs.release_version_code }}
-          USE_CHECKED_IN_VERSION: ${{ inputs.follow_with_arm || inputs.release_version != '' }}
-        run: |
-          rolling_tag="app-apk-arm-latest"
-          if [ "$APK_CHANNEL" = "universal" ]; then
-            rolling_tag="app-apk-latest"
-          fi
-          reuse_args=()
-          if [ "$USE_CHECKED_IN_VERSION" = "true" ]; then
-            reuse_args+=(--use-checked-in-version)
-          fi
-          if [ -n "$REUSED_RELEASE_VERSION" ] || [ -n "$REUSED_RELEASE_VERSION_CODE" ]; then
-            reuse_args+=(--release-version "$REUSED_RELEASE_VERSION")
-            reuse_args+=(--release-version-code "$REUSED_RELEASE_VERSION_CODE")
-          fi
-          node scripts/bump-android-version-code.mjs \
-            --repo "${{ github.repository }}" \
-            --fallback-repo yanniedog/AR-local \
-            --rolling-tag "$rolling_tag" \
-            "${reuse_args[@]}"
-          node -e "const app=require('./app.json').expo; console.log('version='+app.version); console.log('version_code='+app.android.versionCode)" >> "$GITHUB_OUTPUT"
-
-      - name: Materialize Android release keystore
-        id: keystore
-        env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: node scripts/materialize-android-keystore.mjs
-
-      - name: Validate JS bundle (typecheck + export)
         run: |
-          npm run typecheck
-          npm run export:android
-
-      - name: Expo prebuild (android)
-        run: npx expo prebuild --platform android --no-install
-
-      - name: Set up Gradle build cache
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+          node scripts/ensure-firebase-config.mjs
+          node scripts/validate-firebase-package.mjs
+          node scripts/materialize-android-keystore.mjs
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           cache-provider: basic
-
-      - name: Gradle assembleRelease
+      - name: Build both APKs with shared native outputs
         env:
           KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
           KEYSTORE_PASSWORD: ${{ steps.keystore.outputs.store_password }}
           KEY_ALIAS: ${{ steps.keystore.outputs.key_alias }}
           KEY_PASSWORD: ${{ steps.keystore.outputs.key_password }}
-        run: |
-          set -euo pipefail
-          cd android
-          chmod +x gradlew
-          architecture_args=()
-          if [ "$APK_CHANNEL" = "arm" ]; then
-            architecture_args+=("-PreactNativeArchitectures=armeabi-v7a,arm64-v8a")
-          fi
-          ./gradlew assembleRelease --no-daemon --build-cache "${architecture_args[@]}" \
-            -Pandroid.injected.signing.store.file="$KEYSTORE_PATH" \
-            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
-
-      - name: Locate release APK
-        id: apk
-        run: |
-          set -euo pipefail
-          apk=$(find android/app/build/outputs/apk -name '*-release.apk' -type f | head -1)
-          if [ -z "$apk" ]; then
-            echo "::error::No release APK found under android/app/build/outputs/apk"
-            exit 1
-          fi
-          echo "path=$apk" >> "$GITHUB_OUTPUT"
-          ls -lh "$apk"
-
-      - name: Enforce APK size budget
-        id: size
-        env:
-          AR_APP_APK_PATH: ${{ steps.apk.outputs.path }}
-          AR_APP_APK_CHANNEL: ${{ inputs.apk_channel || 'arm' }}
-        run: npm run size:report
-
-      - name: Verify built APK identity and payload privacy
-        id: validated_apk
-        env:
-          APK_PATH: ${{ steps.apk.outputs.path }}
-        run: |
-          node --input-type=module <<'NODE'
-          import { readFileSync } from 'node:fs';
-          import { inspectApkIdentity } from './scripts/apk-identity.mjs';
-          import { verifyNativeApkPrivacy } from './scripts/apk-payload-privacy.mjs';
-          import { verifyApkHeadlessLoader, verifyApkColdBackgroundPatches } from './scripts/apk-headless-loader.mjs';
-          import { expectedAbisForApkChannel } from './scripts/app-release-utils.mjs';
-          const app = JSON.parse(readFileSync('app.json', 'utf8')).expo;
-          const identity = JSON.parse(readFileSync('release-identity.json', 'utf8'));
-          const tag = process.env.APK_CHANNEL === 'arm' ? 'app-apk-arm-latest' : 'app-apk-latest';
-          inspectApkIdentity(process.env.APK_PATH, {
-            packageName: identity.android_package,
-            versionName: app.version,
-            versionCode: app.android.versionCode,
-            certificateSha256: identity.signing_certificate_sha256,
-            supportedAbis: expectedAbisForApkChannel(tag, identity.android_release_abis),
-          });
-          verifyApkHeadlessLoader(readFileSync(process.env.APK_PATH));
-          verifyApkColdBackgroundPatches(readFileSync(process.env.APK_PATH));
-          verifyNativeApkPrivacy(readFileSync(process.env.APK_PATH), process.cwd());
-          NODE
-
-      - name: Publish preview APK manifest (GitHub release)
-        id: publish
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
-        run: |
-          # Build work can take tens of minutes. Fail closed if main advanced
-          # after the initial gate instead of replacing a rolling release from
-          # an older checkout.
-          node scripts/verify-github-release-source.mjs
-          rolling_tag="app-apk-arm-latest"
-          if [ "$APK_CHANNEL" = "universal" ]; then
-            rolling_tag="app-apk-latest"
-          fi
-          # The managed payload route must remain verified at publication time.
-          node scripts/verify-public-delivery.cjs
-          node scripts/publish-apk-manifest.mjs --apk "${{ steps.apk.outputs.path }}" \
-            --repo "${{ github.repository }}" \
-            --rolling-tag "$rolling_tag"
-
-      - name: Queue ARM channel after universal publish
-        if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'universal' && inputs.follow_with_arm == true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
-        run: |
-          # Close the post-publication race as well: if main moved, leave the
-          # universal artifact alone and let queue-drain recovery rebuild a
-          # matched pair from the new head.
-          node scripts/verify-github-release-source.mjs
-          gh workflow run mobile-android-apk.yml \
-            --ref main \
-            --repo "${{ github.repository }}" \
-            -f apk_channel=arm \
-            -f follow_with_arm=false \
-            -f release_version="${{ steps.release.outputs.version }}" \
-            -f release_version_code="${{ steps.release.outputs.version_code }}" \
-            -f release_source_sha="${{ inputs.release_source_sha || github.sha }}"
-
-      - name: Publish README Android install QR section
-        if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'arm'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          node scripts/publish-readme-app-install.mjs \
-            --repo "${{ github.repository }}" \
-            --manifest build/apk-publish/app-apk-latest.json
-
-      - name: Reconcile the PR queue after ARM publication
-        if: success() && github.ref == 'refs/heads/main' && inputs.apk_channel == 'arm'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # GITHUB_TOKEN-dispatched builds do not reliably emit workflow_run.
-          # The README publisher above waits for its generated PR to merge.
-          # Re-enter the trusted-main queue check; it skips published content.
-          gh workflow run mobile-auto-release-on-queue-drain.yml \
-            --ref main \
-            --repo "${{ github.repository }}"
-
-      # The freshness gate can reject publication after a successful build.
-      # Keep the signed Gradle output available even when no publish folder
-      # exists; never include an unpublished manifest in the fallback artifact.
-      - name: Upload built APK when publication fails
-        if: always() && steps.size.outcome == 'success' && steps.validated_apk.outcome == 'success' && steps.publish.outcome != 'success'
+        run: node scripts/android-apk-pair.mjs build
+      - name: Save signed APKs and private verification evidence
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: app-${{ inputs.apk_channel || 'arm' }}-preview-apk
-          path: mobile/${{ steps.apk.outputs.path }}
+          name: signed-apk-pair-${{ github.run_attempt }}
+          path: mobile/build/apk-pair
           compression-level: 0
+          retention-days: 3
           if-no-files-found: error
-
-      - name: Upload workflow artifact
-        if: always() && steps.publish.outcome == 'success'
+  publish:
+    name: Publish verified APK pair
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: mobile-release
+    permissions:
+      contents: write
+      actions: read
+      pull-requests: read
+      checks: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AR_APP_DISTRIBUTION_CHANNEL: sideload
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools
+      - run: sdkmanager "build-tools;35.0.0"
+      - run: npm ci --omit=optional --no-audit --no-fund
+      - name: Restore this run's verified APK pair
+        env:
+          ARTIFACT_NAME: ${{ needs.build.outputs.artifact_name }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_CODE: ${{ needs.build.outputs.version_code }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT_NAME" --dir build/apk-pair
+          node scripts/bump-android-version-code.mjs --release-version "$RELEASE_VERSION" --release-version-code "$RELEASE_CODE"
+      - name: Verify delivery and publish both channels
+        run: node scripts/android-apk-pair.mjs publish
+      - name: Save public release receipts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: app-${{ inputs.apk_channel || 'arm' }}-preview-apk
-          path: |
-            mobile/build/apk-publish/app-preview.apk
-            mobile/build/apk-publish/app-apk-latest.json
-            mobile/build/apk-publish/app-preview-qr.png
-            mobile/build/apk-publish/install.html
-          if-no-files-found: error
+          name: published-apk-pair-${{ github.run_attempt }}
+          path: mobile/build/apk-published
           compression-level: 0
-
-      - name: Reconcile superseded failed APK build
-        if: failure() && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
-        run: |
-          set -euo pipefail
-          main_sha=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq '.object.sha')
-          if [ "$main_sha" != "$RELEASE_SOURCE_SHA" ]; then
-            # Token-dispatched runs may not emit workflow_run. Use the actual
-            # pinned checkout, which can differ from the dispatch ref SHA.
-            gh workflow run mobile-auto-release-on-queue-drain.yml \
-              --ref main \
-              --repo "${{ github.repository }}" \
-                -f failed_apk_run_id="$GITHUB_RUN_ID"
-          else
-            echo "Failed APK source is still main; leaving the failure for investigation."
-          fi
+          retention-days: 3
+          if-no-files-found: error

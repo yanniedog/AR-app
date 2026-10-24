@@ -4,19 +4,95 @@
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import QRCode from 'qrcode';
 import {
   ARM_ROLLING_TAG,
+  APK_ASSET,
+  CHANGELOG_SUMMARY_ASSET,
   INSTALL_HTML,
   QR_ASSET,
   ROLLING_TAG,
   installReleaseUrl,
   manifestReleaseUrl,
   qrReleaseUrl,
+  versionTagForApkChannel,
 } from './app-release-meta.mjs';
+import releaseVersion from './android-release-version-pure.cjs';
 
 export * from './app-release-meta.mjs';
+
+export async function fetchReleaseAssets(repo, tag, token, fetchImpl = fetch) {
+  const response = await fetchImpl(`https://api.github.com/repos/${repo}/releases/tags/${tag}?_=${Date.now()}`, {
+    headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    signal: AbortSignal.timeout(30000),
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Release metadata HTTP ${response.status}`);
+  const release = await response.json();
+  if (!Array.isArray(release.assets)) throw new Error('Release asset metadata is missing');
+  return release.assets;
+}
+
+/** Never delete an already-published immutable asset during a retry. */
+export function missingImmutableUploadPaths(paths, assets, apkIdentity) {
+  return paths.filter(file => {
+    const existing = assets.find(asset => asset.name === basename(file));
+    if (!existing) return true;
+    if (existing.name === APK_ASSET && (existing.digest !== `sha256:${apkIdentity.sha256}`
+        || existing.size !== apkIdentity.bytes)) {
+      throw new Error('Existing immutable APK does not match the verified artifact');
+    }
+    return false;
+  });
+}
+
+export function mergePublishedChangelogs(local, published) {
+  const versions = new Map();
+  // Published entries retain their channel-specific links and original notes;
+  // a checkout can contain older generic metadata for the same versions.
+  for (const manifest of [local, ...published]) {
+    if (manifest.schema_version !== 1 || manifest.repo?.toLowerCase() !== local.repo.toLowerCase()
+        || !Array.isArray(manifest.versions)) throw new Error('Invalid published changelog manifest');
+    for (const entry of manifest.versions) {
+      releaseVersion.compareVersions(entry.version, entry.version);
+      const prefix = `https://github.com/${local.repo}/releases/tag/`;
+      const tag = String(entry.releaseUrl ?? '').slice(prefix.length);
+      if (!String(entry.releaseUrl ?? '').startsWith(prefix) || !/^app(?:-arm)?-v\d+\.\d+\.\d+$/.test(tag)
+          || !tag.endsWith(`-v${entry.version}`) || !Array.isArray(entry.summaryBullets)
+          || !entry.summaryBullets.every(bullet => typeof bullet === 'string')) {
+        throw new Error('Invalid published changelog entry');
+      }
+      versions.set(entry.version, entry);
+    }
+  }
+  return { ...local, versions: [...versions.values()].sort((a, b) => releaseVersion.compareVersions(a.version, b.version)) };
+}
+
+export async function readPublishedChangelogs(repo, tag, version, fetchImpl = fetch) {
+  const read = async (releaseTag, asset) => {
+    const response = await fetchImpl(`https://github.com/${repo}/releases/download/${releaseTag}/${asset}?_=${Date.now()}`,
+      { signal: AbortSignal.timeout(30000) });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Published changelog HTTP ${response.status}`);
+    const text = await response.text();
+    if (Buffer.byteLength(text) > 2 * 1024 * 1024) throw new Error('Published changelog exceeds byte limit');
+    const data = JSON.parse(text);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid published changelog JSON');
+    return data;
+  };
+  const published = (await Promise.all([tag, versionTagForApkChannel(version, tag)]
+    .map(releaseTag => read(releaseTag, CHANGELOG_SUMMARY_ASSET)))).filter(Boolean);
+  if (published.length) return published;
+  // A failed rolling upload can remove the summary. Its prior immutable copy
+  // remains authoritative, even though that version is absent from the checkout.
+  const manifest = await read(tag, 'app-apk-latest.json');
+  if (!manifest) return [];
+  releaseVersion.compareVersions(manifest.version, manifest.version);
+  const previous = await read(versionTagForApkChannel(manifest.version, tag), CHANGELOG_SUMMARY_ASSET);
+  if (!previous) throw new Error('Published changelog history is missing');
+  return [previous];
+}
 
 function htmlAttribute(value) {
   return String(value).replace(/[&<>"']/g, character => ({

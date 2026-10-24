@@ -142,14 +142,15 @@ test('the installed Expo prebuild plugin writes the narrow reflected-class keep 
 test('both built-APK validation and every publication path enforce the DEX contract', async () => {
   const workflow = await readFile(new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url), 'utf8');
   const publisher = await readFile(new URL('./publish-apk-manifest.mjs', import.meta.url), 'utf8');
-  assert.match(workflow, /verifyApkHeadlessLoader\(readFileSync\(process\.env\.APK_PATH\)\)/);
-  const validation = workflow.indexOf('verifyApkHeadlessLoader(readFileSync');
-  assert.ok(validation < workflow.indexOf('id: publish'));
+  const pair = await readFile(new URL('./android-apk-pair.mjs', import.meta.url), 'utf8');
+  assert.match(workflow, /android-apk-pair\.mjs build/);
+  assert.match(workflow, /android-apk-pair\.mjs publish/);
+  assert.match(pair, /verifyApkHeadlessLoader\(apk\)/);
+  assert.ok(pair.indexOf('verifyApkHeadlessLoader(apk)') < pair.indexOf('export async function publishApkPair'));
   const publishBody = publisher.slice(publisher.indexOf('async function publishRelease('));
   const guard = publishBody.indexOf('verifyApkHeadlessLoader(apkBuf)');
   assert.ok(guard > 0 && guard < publishBody.indexOf('await publishVersionedRelease('));
-  const coldBuild = workflow.indexOf('verifyApkColdBackgroundPatches(readFileSync');
-  assert.ok(coldBuild > 0 && coldBuild < workflow.indexOf('id: publish'));
+  assert.match(pair, /verifyApkColdBackgroundPatches\(apk\)/);
   const coldPublish = publishBody.indexOf('verifyApkColdBackgroundPatches(apkBuf)');
   assert.ok(coldPublish > 0 && coldPublish < publishBody.indexOf('await publishVersionedRelease('));
 });

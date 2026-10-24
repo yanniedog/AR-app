@@ -18,7 +18,7 @@ const pull = {
   head: { sha: headSha },
 };
 
-test('accepts only current main from a merged PR with both required PR gates', () => {
+test('accepts reviewed main from a merged PR with both required PR gates', () => {
   const result = validateReleaseSourceSnapshot({
     mainSha: sha,
     requestedSha: sha,
@@ -38,7 +38,7 @@ test('rejects a selected branch and reports incomplete PR gates', () => {
     requestedSha: 'c'.repeat(40),
     pulls: [pull],
     checkRuns: [],
-  }), /not the current main/i);
+  }), /not a reviewed commit in main/i);
   const result = validateReleaseSourceSnapshot({
     mainSha: sha,
     requestedSha: sha,
@@ -117,20 +117,46 @@ function expectLatest(runs, name, id) {
   assert.equal(latestCheckRunsByName(runs).get(name)?.id, id);
 }
 
-test('fails immediately when main advances instead of retrying stale source', async () => {
+test('rejects a source removed from main before reading PR checks', async () => {
   let reads = 0;
   await assert.rejects(
     () => verifyGithubReleaseSource({
       repo: 'owner/repo',
       requestedSha: sha,
       attempts: 3,
+      allowAncestor: true,
       sleep: async () => {},
-      readJson: async () => {
+      readJson: async (_repo, path) => {
         reads += 1;
-        return { object: { sha: 'c'.repeat(40) } };
+        if (path === '/git/ref/heads/main') return { object: { sha: 'c'.repeat(40) } };
+        return { status: 'diverged', merge_base_commit: { sha: 'd'.repeat(40) } };
       },
     }),
-    /not the current main/i,
+    /not a reviewed commit in main/i,
   );
-  assert.equal(reads, 1);
+  assert.equal(reads, 2);
+});
+
+test('later main merges do not discard a reviewed build', async () => {
+  const mainSha = 'c'.repeat(40);
+  const result = await verifyGithubReleaseSource({ repo: 'owner/repo', requestedSha: sha, attempts: 1, allowAncestor: true,
+    readJson: async (_repo, path) => {
+      if (path === '/git/ref/heads/main') return { object: { sha: mainSha } };
+      if (path === `/compare/${sha}...${mainSha}`) return { status: 'ahead', merge_base_commit: { sha } };
+      if (path === `/commits/${sha}/pulls`) return [pull];
+      if (path.includes('/check-runs?')) return { check_runs: [
+        { name: 'mobile-ci', status: 'completed', conclusion: 'success' },
+        { name: 'bot-feedback-gate', status: 'completed', conclusion: 'success' },
+      ] };
+      throw new Error(`Unexpected path ${path}`);
+    } });
+  assert.equal(result.pull.number, 42);
+});
+
+test('EAS and other callers retain strict current-main verification by default', async () => {
+  await assert.rejects(verifyGithubReleaseSource({ repo: 'owner/repo', requestedSha: sha, attempts: 1,
+    readJson: async (_repo, path) => {
+      assert.equal(path, '/git/ref/heads/main');
+      return { object: { sha: 'c'.repeat(40) } };
+    } }), /not the current main/);
 });

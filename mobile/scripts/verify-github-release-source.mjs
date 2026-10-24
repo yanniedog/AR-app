@@ -36,9 +36,10 @@ export function latestCheckRunsByName(checkRuns) {
   return latest;
 }
 
-export function validateReleaseSourceSnapshot({ mainSha, requestedSha, pulls, checkRuns }) {
-  if (!/^[a-f0-9]{40}$/i.test(requestedSha ?? '') || mainSha !== requestedSha) {
-    throw new Error('Release checkout is not the current main commit');
+export function validateReleaseSourceSnapshot({ mainSha, requestedSha, sourceIsAncestor = false, pulls, checkRuns }) {
+  if (!/^[a-f0-9]{40}$/i.test(requestedSha ?? '') || !/^[a-f0-9]{40}$/i.test(mainSha ?? '')
+      || (mainSha !== requestedSha && !sourceIsAncestor)) {
+    throw new Error('Release checkout is not a reviewed commit in main');
   }
   const pull = pulls.find((candidate) =>
     candidate?.merged_at &&
@@ -46,7 +47,7 @@ export function validateReleaseSourceSnapshot({ mainSha, requestedSha, pulls, ch
     candidate?.merge_commit_sha === requestedSha,
   );
   if (!pull?.head?.sha) {
-    throw new Error('Current main commit is not backed by a merged pull request');
+    throw new Error('Release commit is not backed by a merged pull request');
   }
   const latestChecks = latestCheckRunsByName(checkRuns);
   const missingChecks = REQUIRED_PR_CHECKS.filter((name) => {
@@ -81,17 +82,24 @@ export async function verifyGithubReleaseSource({
   readJson = githubJson,
   sleep = delay,
   attempts = 60,
+  allowAncestor = false,
 } = {}) {
   if (!repo || !requestedSha) throw new Error('GITHUB_REPOSITORY and GITHUB_SHA are required');
 
   let lastMissing = REQUIRED_PR_CHECKS;
   let lastAssociationError = null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    // Re-read main on every attempt so a queued publisher cannot proceed after
-    // a newer pull request lands while it waits for the selected head's gates.
+    // Later merges do not invalidate this reviewed source. A force-reset that
+    // removes it from main still fails closed.
     const ref = await readJson(repo, '/git/ref/heads/main');
-    if (ref?.object?.sha !== requestedSha) {
-      throw new Error('Release checkout is not the current main commit');
+    const mainSha = ref?.object?.sha;
+    let sourceIsAncestor = false;
+    if (mainSha !== requestedSha) {
+      if (!allowAncestor) throw new Error('Release checkout is not the current main commit');
+      const comparison = await readJson(repo, `/compare/${requestedSha}...${mainSha}`);
+      sourceIsAncestor = comparison?.merge_base_commit?.sha === requestedSha
+        && ['ahead', 'identical'].includes(comparison?.status);
+      if (!sourceIsAncestor) throw new Error('Release checkout is not a reviewed commit in main');
     }
     // GitHub's commit-to-PR association can lag immediately after a squash
     // merge. Fetch and validate it inside the same retry window as check runs.
@@ -101,6 +109,7 @@ export async function verifyGithubReleaseSource({
       preliminary = validateReleaseSourceSnapshot({
         mainSha: ref?.object?.sha,
         requestedSha,
+        sourceIsAncestor,
         pulls,
         checkRuns: [],
       });
@@ -120,13 +129,14 @@ export async function verifyGithubReleaseSource({
     const validated = validateReleaseSourceSnapshot({
       mainSha: ref?.object?.sha,
       requestedSha,
+      sourceIsAncestor,
       pulls,
       checkRuns: result?.check_runs ?? [],
     });
     lastMissing = validated.missingChecks;
     if (!lastMissing.length) {
       console.log(
-        `verify-github-release-source: main ${requestedSha.slice(0, 12)} from merged PR #${validated.pull.number}; required PR checks passed`,
+        `verify-github-release-source: reviewed main source ${requestedSha.slice(0, 12)} from merged PR #${validated.pull.number}; required PR checks passed`,
       );
       return validated;
     }
@@ -142,7 +152,8 @@ async function main() {
     process.env.RELEASE_SOURCE_SHA?.trim()
     || process.env.GITHUB_SHA?.trim()
   );
-  await verifyGithubReleaseSource({ repo, requestedSha });
+  await verifyGithubReleaseSource({ repo, requestedSha,
+    allowAncestor: process.argv.includes('--allow-reviewed-ancestor') });
 }
 
 if (process.argv[1]?.replace(/\\/g, '/').endsWith('verify-github-release-source.mjs')) {

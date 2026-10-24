@@ -60,7 +60,8 @@ test('GHA and EAS production APK paths omit optional development tooling', async
 
   assert.match(workflow, /npm ci --omit=optional --no-audit --no-fund/);
   assert.match(workflow, /setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6/);
-  assert.match(workflow, /assembleRelease --no-daemon --build-cache/);
+  const pair = await readFile(new URL('./android-apk-pair.mjs', import.meta.url), 'utf8');
+  assert.match(pair, /'assembleRelease', '--no-daemon', '--build-cache'/);
   assert.equal(eas.build.development.env?.NPM_CONFIG_OMIT, undefined);
   assert.equal(eas.build.preview.env.NPM_CONFIG_OMIT, 'optional');
   assert.equal(eas.build.production.env.NPM_CONFIG_OMIT, 'optional');
@@ -91,7 +92,7 @@ test('EAS release jobs can verify the merged pull request for their main commit'
   assert.match(submitWorkflow, /pull-requests:\s+read/);
   for (const workflow of [buildWorkflow, submitWorkflow, apkWorkflow]) {
     assert.match(workflow, /checks:\s+read/);
-    const expectedSourceChecks = workflow === apkWorkflow ? 3 : 2;
+    const expectedSourceChecks = workflow === apkWorkflow ? 1 : 2;
     assert.equal(
       workflow.match(/node scripts\/verify-github-release-source\.mjs/g)?.length,
       expectedSourceChecks,
@@ -100,60 +101,18 @@ test('EAS release jobs can verify the merged pull request for their main commit'
   }
 });
 
-test('APK publication serializes universal before ARM and delays README mutation', async () => {
-  const workflow = await readFile(
-    new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
-    'utf8',
-  );
-  assert.match(workflow, /inputs\.apk_channel == 'universal' && inputs\.follow_with_arm == true/);
-  assert.match(workflow, /run-name: mobile-android-apk \(\$\{\{ github\.event_name == 'push' && 'workflow-check' \|\| inputs\.apk_channel \|\| 'arm' \}\}\$\{\{ inputs\.follow_with_arm && '\+arm' \|\| '' \}\}\)/);
-  assert.match(workflow, /-f apk_channel=arm/);
-  assert.match(workflow, /-f follow_with_arm=false/);
-  assert.match(workflow, /-f release_version="\$\{\{ steps\.release\.outputs\.version \}\}"/);
-  assert.match(workflow, /-f release_version_code="\$\{\{ steps\.release\.outputs\.version_code \}\}"/);
-  assert.match(workflow, /release_source_sha:[\s\S]*description: Immutable main source/);
-  assert.match(workflow, /ref: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/);
-  assert.equal(
-    workflow.match(/RELEASE_SOURCE_SHA: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/g)?.length,
-    4,
-  );
-  assert.match(workflow, /Queue ARM channel after universal publish[\s\S]*verify-github-release-source\.mjs/);
-  assert.match(workflow, /-f release_source_sha="\$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}"/);
-  assert.match(workflow, /inputs\.apk_channel == 'arm'[\s\S]*publish-readme-app-install\.mjs/);
-});
-
-test('a rejected publication still uploads the signed Gradle APK without an unpublished manifest', async () => {
-  const workflow = await readFile(
-    new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
-    'utf8',
-  );
-  assert.match(workflow, /Publish preview APK manifest \(GitHub release\)\n\s+id: publish/);
-  const fallback = workflow.split('- name: Upload built APK when publication fails')[1]
-    .split('- name: Upload workflow artifact')[0];
-  assert.match(fallback, /if: always\(\) && steps\.size\.outcome == 'success' && steps\.validated_apk\.outcome == 'success' && steps\.publish\.outcome != 'success'/);
-  const validationIndex = workflow.indexOf('id: validated_apk');
-  assert.ok(validationIndex > 0 && validationIndex < workflow.indexOf('id: publish'));
-  const validation = workflow.slice(validationIndex, workflow.indexOf('id: publish'));
-  assert.match(validation, /inspectApkIdentity\(process\.env\.APK_PATH/);
-  assert.match(validation, /certificateSha256: identity\.signing_certificate_sha256/);
-  assert.match(validation, /verifyNativeApkPrivacy\(readFileSync\(process\.env\.APK_PATH\), process\.cwd\(\)\)/);
-  assert.match(fallback, /path: mobile\/\$\{\{ steps\.apk\.outputs\.path \}\}/);
-  assert.doesNotMatch(fallback, /apk-publish|app-apk-latest\.json/);
-  assert.match(workflow, /Upload workflow artifact\n\s+if: always\(\) && steps\.publish\.outcome == 'success'/);
-});
-
-test('workflow repairs build on main and superseded failures recheck the release queue', async () => {
-  const apkWorkflow = await readFile(
-    new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
-    'utf8',
-  );
-  assert.match(apkWorkflow, /push:\n\s+branches: \[main\]\n\s+paths:\n\s+- '\.github\/workflows\/mobile-android-apk\.yml'/);
-  assert.match(apkWorkflow, /id: publish\n\s+if: github\.event_name == 'workflow_dispatch'/);
-  assert.match(apkWorkflow, /github\.event_name == 'push' && 'workflow-check'/);
-  const recovery = apkWorkflow.split('- name: Reconcile superseded failed APK build')[1];
-  assert.match(recovery, /if: failure\(\) && github\.ref == 'refs\/heads\/main'/);
-  assert.match(recovery, /RELEASE_SOURCE_SHA: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/);
-  assert.match(recovery, /if \[ "\$main_sha" != "\$RELEASE_SOURCE_SHA" \]; then[\s\S]*gh workflow run mobile-auto-release-on-queue-drain\.yml/);
+test('one release workflow builds both artifacts then publishes without generated PRs', async () => {
+  const workflow = await readFile(new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /Build both APKs with shared native outputs/);
+  assert.match(workflow, /needs: build/);
+  assert.match(workflow, /android-apk-pair\.mjs build/);
+  assert.match(workflow, /android-apk-pair\.mjs publish/);
+  assert.match(workflow, /gh run download "\$GITHUB_RUN_ID"/);
+  assert.match(workflow, /name: signed-apk-pair-\$\{\{ github\.run_attempt \}\}/);
+  assert.doesNotMatch(workflow, /gh workflow run|publish-readme|follow_with_arm|pull-requests: write|actions: write/);
+  assert.match(workflow, /paths:[\s\S]*'mobile\/\*\*'/);
+  assert.match(workflow, /cancel-in-progress: false/);
+  await assert.rejects(access(new URL('../../.github/workflows/mobile-auto-release-on-queue-drain.yml', import.meta.url)), { code: 'ENOENT' });
 });
 
 test('EAS submission validates an environment-delivered build UUID', async () => {
