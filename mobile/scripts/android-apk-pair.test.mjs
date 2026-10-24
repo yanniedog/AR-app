@@ -115,7 +115,7 @@ test('delivery failure leaves verified artifacts available for publication-only 
 
 test('partial publication can recover only the identical APK/source identity', async t => {
   const options = publication(t, { async readPublished(_repo, tag) {
-    return tag === 'app-apk-latest' ? { ...identity, source_sha: source } : null;
+    return tag === 'app-apk-latest' ? { manifest: { ...identity, source_sha: source } } : null;
   } });
   await publishApkPair(options);
   assert.equal(options.events.filter(event => event === 'publish-apk-manifest.mjs').length, 2);
@@ -123,7 +123,7 @@ test('partial publication can recover only the identical APK/source identity', a
 
 test('a newer published source blocks an old rebuild even with a higher version number', async t => {
   const options = publication(t, { async readPublished() {
-    return { version: '1.0.248', build_number: '304', source_sha: 'c'.repeat(40) };
+    return { manifest: { version: '1.0.248', build_number: '304', source_sha: 'c'.repeat(40) } };
   }, async isAncestor() { return false; } });
   await assert.rejects(publishApkPair(options), /source older/);
   assert.ok(!options.events.includes('publish-apk-manifest.mjs'));
@@ -138,17 +138,36 @@ test('a source removed from main during publication setup cannot publish', async
   await assert.rejects(publishApkPair(options), /Source removed from main/);
 });
 
-test('missing manifest is a new channel only when the rolling release is absent', async () => {
-  for (const [status, message] of [[200, /manifest is missing/], [403, /Rolling release HTTP 403/]]) {
+test('missing manifest requires rolling APK evidence or an absent release', async () => {
+  for (const [status, message] of [[200, /unverifiable rolling APK/], [403, /Rolling release HTTP 403/]]) {
     let reads = 0;
     await assert.rejects(publishedManifest('owner/repo', 'app-apk-latest', undefined, async () => {
       reads += 1;
-      return reads === 1 ? { status: 404 } : { status, ok: status === 200 };
+      return reads === 1 ? { status: 404 } : { status, ok: status === 200, json: async () => ({ assets: [] }) };
     }), message);
     assert.equal(reads, 2);
   }
   assert.equal(await publishedManifest('owner/repo', 'app-apk-latest', undefined,
     async () => ({ status: 404 })), null);
+});
+
+test('a lost rolling manifest recovers only the exact immutable and rolling APK bytes', async t => {
+  const options = publication(t, { async readPublished() { return { rollingApk: identity }; },
+    async readImmutable() { return identity; } });
+  await publishApkPair(options);
+  assert.equal(options.events.filter(event => event === 'publish-apk-manifest.mjs').length, 2);
+  for (const immutable of [null, { ...identity, sha256: 'c'.repeat(64) }, { ...identity, bytes: 999 }]) {
+    await assert.rejects(publishApkPair({ ...options, readImmutable: async () => immutable }), /recovery requires matching/);
+  }
+  await assert.rejects(publishApkPair({ ...options,
+    readPublished: async () => ({ rollingApk: { ...identity, sha256: 'd'.repeat(64) } }) }), /recovery requires matching/);
+});
+
+test('manifest JSON cannot impersonate missing-manifest recovery evidence', async () => {
+  const data = { rollingApk: identity };
+  const result = await publishedManifest('owner/repo', 'app-apk-latest', undefined,
+    async () => ({ status: 200, ok: true, json: async () => data }));
+  assert.deepEqual(result, { manifest: data });
 });
 
 test('a versioned APK left by partial publication cannot be replaced by a rebuilt binary', async t => {

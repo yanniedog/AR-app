@@ -94,10 +94,14 @@ export async function publishedManifest(repo, tag, token, fetchImpl = fetch) {
     });
     if (release.status === 404) return null;
     if (!release.ok) throw new Error(`Rolling release HTTP ${release.status}`);
-    throw new Error(`Published manifest is missing from existing release ${tag}`);
+    const metadata = await release.json();
+    const asset = metadata.assets?.find(item => item.name === 'app-preview.apk');
+    const sha256 = /^sha256:([a-f0-9]{64})$/i.exec(asset?.digest ?? '')?.[1].toLowerCase();
+    if (!sha256) throw new Error(`Missing manifest and unverifiable rolling APK: ${tag}`);
+    return { rollingApk: { sha256, bytes: asset.size } };
   }
   if (!response.ok) throw new Error(`Published manifest HTTP ${response.status}`);
-  return response.json();
+  return { manifest: await response.json() };
 }
 
 async function githubAncestor(repo, older, newer, token) {
@@ -133,14 +137,25 @@ export async function publishApkPair({ root = mobileRoot, env = process.env, run
   if (!repo || !/^[a-f0-9]{40}$/i.test(sourceSha ?? '')) throw new Error('Missing protected release source');
   // Check both artifacts and both rolling floors before the first mutation.
   for (const channel of channels) {
-    const remote = await readPublished(repo, rollingTag(channel), env.GH_TOKEN);
+    const local = verify(root, channel);
+    const published = await readPublished(repo, rollingTag(channel), env.GH_TOKEN);
+    const immutable = await readImmutable(repo, versionTagForApkChannel(local.version, rollingTag(channel)), env.GH_TOKEN);
+    let remote = published?.manifest;
+    if (published?.rollingApk) {
+      // A lost manifest can be restored only for the exact APK already present
+      // in both releases. APK inspection above binds its version/build/signer.
+      if (!immutable || [published.rollingApk, immutable].some(asset =>
+        asset.sha256 !== local.sha256 || asset.bytes !== local.bytes)) {
+        throw new Error('Missing manifest recovery requires matching rolling and immutable APK bytes');
+      }
+      remote = { ...local, source_sha: sourceSha };
+    }
+    if (published && !remote) throw new Error('Invalid published manifest');
     if (remote && (!/^[a-f0-9]{40}$/i.test(remote.source_sha ?? '')
         || (remote.source_sha !== sourceSha && !await isAncestor(repo, remote.source_sha, sourceSha, env.GH_TOKEN)))) {
       throw new Error('Refusing to publish source older than a published APK');
     }
-    const local = verify(root, channel);
     assertPublicationAdvance(local, remote, sourceSha);
-    const immutable = await readImmutable(repo, versionTagForApkChannel(local.version, rollingTag(channel)), env.GH_TOKEN);
     if (immutable && (immutable.sha256 !== local.sha256 || immutable.bytes !== local.bytes)) {
       throw new Error('Refusing to replace different bytes at an immutable APK version');
     }
