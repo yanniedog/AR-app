@@ -52,7 +52,11 @@ test.each([false, true])('an audit never borrows a retained recovery URL even wh
   try {
     expect(tree.root.findAllByType('AppText').some(node => node.props.children === mockSnapshot.url)).toBe(false);
     expect(tree.root.findAllByType('Button').find(node => node.props.title === 'Debug log')).toBeDefined();
-    expect(tree.root.findAllByType('Button').filter(node => node.props.title !== 'Debug log').every(node => node.props.disabled === true)).toBe(true);
+    const retry = tree.root.findAllByType('Button').filter(node => node.props.title === (verified ? 'Copy link' : 'Retry verification'));
+    expect(retry).toHaveLength(1);
+    expect(retry[0].props.disabled).toBe(true);
+    const recovery = tree.root.findAllByType('Button').find(node => node.props.title === 'Debug log')!;
+    expect(recovery.props.disabled).not.toBe(true);
   } finally { act(() => tree.unmount()); }
 });
 

@@ -4,7 +4,7 @@ type AuditActionParameters = Readonly<Record<string, unknown>>;
  * Rates task state survives navigation, including the first audit pass. */
 export function auditSearchEntryParams(section: string | null, request: string): Record<string, string> {
   return { ...(section ? { section } : {}), request, query: '', path: '', scope: '',
-    availability: 'listed', compare: '0' };
+    availability: 'listed', compare: '0', reset: '1' };
 }
 
 function parameters(args: readonly unknown[]): AuditActionParameters {

@@ -681,6 +681,9 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           live.manifest?.files.bank_spread_history?.sha256 === expected.spreadSha
         );
       };
+      const hasVerifiedCurrentSpread = () => !!verifiedSpread && currentMatches() &&
+        verifiedSpread.coreSha === snapshot.coreSha && verifiedSpread.spreadSha === snapshot.spreadSha &&
+        verifiedSpread.runDate === snapshot.runDate && verifiedSpread.payload === get().bankSpreadHistory;
       const liveSnapshot = () => {
         const live = get();
         const liveAsset = live.manifest?.files.bank_spread_history;
@@ -698,11 +701,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           set({ bankSpreadHistory: staged, bankSpreadHistoryError: null });
           return;
         }
-        if (verifiedSpread &&
-            verifiedSpread.coreSha === snapshot.coreSha &&
-            verifiedSpread.spreadSha === snapshot.spreadSha &&
-            verifiedSpread.runDate === snapshot.runDate &&
-            verifiedSpread.payload === get().bankSpreadHistory) {
+        if (hasVerifiedCurrentSpread()) {
           set({ bankSpreadHistoryError: null });
           return;
         }
@@ -715,6 +714,9 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         )
           .catch(error => { cacheError = String((error as Error)?.message ?? error); return null; });
         if (!currentMatches()) return;
+        // A normal ensure may have installed this same authenticated edition
+        // while disk I/O was pending. Its verified value wins over stale reads.
+        if (cacheOnly && hasVerifiedCurrentSpread()) return;
         if (cached?.run_date === snapshot.runDate) {
           retainVerifiedSpread(snapshot, cached);
           set({ bankSpreadHistory: cached, bankSpreadHistoryError: null });

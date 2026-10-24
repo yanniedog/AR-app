@@ -164,3 +164,55 @@ test('health with valid check accounting but missing display schema remains inva
   delete (report.appHealth as unknown as Record<string, unknown>).domains;
   expect(buildPerformanceAuditCompletion(report).gaps.invalidHealthReports).toBe(1);
 });
+
+test('health evidence truncation prevents complete details without publishing private text', () => {
+  const report = completeReport();
+  report.appHealth!.checks[0].metrics.privateText = 'Private health evidence…[truncated 77 chars]';
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as any;
+  expect(decoded.completion).toMatchObject({ detailsComplete: false, outcome: 'incomplete',
+    gaps: { truncatedEvidenceFields: 1, omittedEvidenceChars: 77 } });
+  expect(body).not.toContain('Private health evidence');
+});
+
+test.each([{}, { httpReachability: 'pass' }, { browserHandler: 'pass' },
+  { httpReachability: 'invalid', browserHandler: 'pass' }])('missing or unknown link verification evidence remains incomplete: %j', evidence => {
+  const report = completeReport();
+  const metrics: Record<string, string | boolean> = { httpAttempted: true };
+  for (const [key, value] of Object.entries(evidence)) if (value !== undefined) metrics[key] = value;
+  report.checks[0] = { id: 'external-link-1', label: 'Link', kind: 'network', status: 'pass', durationMs: 1,
+    metrics };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: false, outcome: 'incomplete', gaps: { unverifiedLinks: 1 } });
+  report.checks[0].metrics = { httpAttempted: true, httpReachability: 'pass', browserHandler: 'pass' };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'successful', gaps: { unverifiedLinks: 0 } });
+});
+
+test('all duplicate, unexpected, pending and missing-readiness gaps identify their source positions', () => {
+  const report = completeReport();
+  report.checks.push({ ...report.checks[0] });
+  report.coverage!.storedChecks = 2;
+  report.coverage!.plannedChecks = 2;
+  report.coverage!.unexpectedStoredCheckIds = ['journey-rates-cold'];
+  report.checks[0].diagnostic = { stage: 'readiness', readiness: { ready: false, capturing: true, blockers: [],
+    surfaces: [{ id: 'rates', probes: [{ id: 'rates.data', required: true, status: 'pending' }] }] } } as never;
+  delete report.checks[1].diagnostic;
+  const result = buildPerformanceAuditCompletion(report);
+  expect(result.gapPositions).toEqual(expect.arrayContaining([
+    { source: 'performance', position: 1, checkId: 'journey-rates-cold', reason: 'duplicate' },
+    { source: 'performance', position: 2, checkId: 'journey-rates-cold', reason: 'duplicate' },
+    { source: 'performance', position: 1, checkId: 'journey-rates-cold', reason: 'unexpected' },
+    { source: 'performance', position: 2, checkId: 'journey-rates-cold', reason: 'unexpected' },
+    { source: 'performance', position: 1, checkId: 'journey-rates-cold', reason: 'pending-probe' },
+    { source: 'performance', position: 2, checkId: 'journey-rates-cold', reason: 'missing-readiness' },
+  ]));
+  expect(result.duplicateStoredChecks).toEqual([{ source: 'performance', checkId: 'journey-rates-cold', positions: [1, 2] }]);
+  expect(result.unexpectedStoredChecks).toEqual(result.duplicateStoredChecks);
+});
+
+test('capacity failures cannot claim complete diagnostic evidence even when all result slots exist', () => {
+  const report = completeReport();
+  report.checks[0].status = 'fail';
+  report.checks[0].metrics.evidenceCapacityExceeded = true;
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ outcome: 'failed', detailsComplete: false,
+    gaps: { evidenceCapacityFailures: 1 } });
+});

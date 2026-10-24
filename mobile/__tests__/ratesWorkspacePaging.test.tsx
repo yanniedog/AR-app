@@ -190,8 +190,9 @@ test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seed
   mockStore.setState((state: any) => ({ prefs: { ...state.prefs, ratesPageSize: pageSize },
     core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: catalogue } } } }));
   install();
-  updateRatesSection('Mortgage', { query: 'Loan', selected: ['1#p-01'], selectMode: initialMode });
-  updateRatesSection('Mortgage', { page: 2 }); recordRatesScroll('Mortgage', 137);
+  updateRatesSection('Mortgage', { query: 'Loan', selected: ['1#p-01'], selectMode: initialMode,
+    sort: 'bank', filters: { ...EMPTY_FILTERS, providers: ['Missing Bank'], rateTypes: ['FIXED'] }, includeNonStandardOverride: false });
+  updateRatesSection('Mortgage', { page: 1 }); recordRatesScroll('Mortgage', 137);
   useMortgageComparison.setState({ loanAmount: '123456', lvr: '78' });
   const before = captureRatesSession(), preferences = JSON.parse(JSON.stringify(mockStore.getState().prefs));
   const comparison = { ...useMortgageComparison.getState() };
@@ -253,7 +254,7 @@ test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seed
     expect(captureRatesSession()).toEqual(before);
     expect(useMortgageComparison.getState()).toEqual(comparison);
     expect(mockStore.getState().prefs).toEqual(preferences);
-    expect(list().data[0].rate_index).toBe(pageSize);
+    expect(list().data).toHaveLength(0); // Original missing-bank/FIXED scope is restored too.
     act(() => tree.unmount());
   }
 });

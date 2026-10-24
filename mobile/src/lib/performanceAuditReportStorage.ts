@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { PERFORMANCE_AUDIT_SCHEMA_VERSION } from './performanceAuditSchema';
 import type { PerformanceAuditReport } from './performanceAudit';
+import { measureAuditEvidence } from './auditEvidenceCapacity';
 
 const FILE = `${FileSystem.documentDirectory ?? ''}logs/ar-performance-audit-completed.json`;
 const TEMP_FILE = `${FILE}.tmp`;
@@ -17,6 +18,7 @@ export function saveCompletedPerformanceAudit(report: PerformanceAuditReport): P
     if (!FileSystem.documentDirectory || startedEpoch !== epoch) return;
     await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}logs`, { intermediates: true });
     if (startedEpoch !== epoch) return;
+    measureAuditEvidence(report);
     await FileSystem.writeAsStringAsync(TEMP_FILE, JSON.stringify(report));
     if (startedEpoch !== epoch) return;
     // Android renames within the same directory. Keep the complete staged copy

@@ -9,6 +9,7 @@ import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSele
 import { isVerifiedRatesPagePreparation } from '../lib/ratesAuditPage';
 import { assertObservableAuditActionEffect } from '../lib/performanceAuditActionEvidence';
 import { auditSearchEntryParams } from '../lib/performanceAuditActionParams';
+import { AuditEvidenceBudget, AuditEvidenceCapacityError } from '../lib/auditEvidenceCapacity';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { toPublicAppHealthReport } from '../lib/appHealth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -477,7 +478,7 @@ function stringArrayParameter(step: DeepAuditStep, name: string): string[] {
 /** Resolve only route-entry and compatibility actions here. Every in-page
  * action must be registered by the mounted UI so the audit exercises the same
  * callback as a real press, selection, search, scroll, or chart gesture. */
-function routeEntryHref(step: DeepAuditStep): Href | null {
+export function routeEntryHref(step: DeepAuditStep): Href | null {
   const section = stringParameter(step, 'section');
   const productKey = stringParameter(step, 'productKey');
   const rateIndex = numberParameter(step, 'rateIndex');
@@ -2779,6 +2780,7 @@ export function PerformanceAuditRunner() {
       let lastBackgroundLogMs = -Infinity;
       let lastBackgroundStage = '';
       const checks: AuditCheck[] = [];
+      const evidenceBudget = new AuditEvidenceBudget();
       let finalizationStartedMs: number | null = null;
       const refreshEstimate = () => {
         const elapsedMs = activeDurationMs();
@@ -2874,6 +2876,7 @@ export function PerformanceAuditRunner() {
             typeof rawCheck.metrics.expectedSurface === 'string' ? [rawCheck.metrics.expectedSurface] : undefined,
           ), 'check') : undefined);
         const check = enforcePerformanceAuditStepLimit({ ...rawCheck, diagnostic });
+        evidenceBudget.retain(check);
         checks.push(check);
         logAuditCheck(app, sessionId, check);
         // Only durable completed-check progress keeps the hang watchdog alive.
@@ -3933,6 +3936,9 @@ export function PerformanceAuditRunner() {
               ...setupFailure.check?.metrics,
               ...auditDatasetFailureMetrics(caught),
               completedBeforeFailure: completed,
+              ...(caught instanceof AuditEvidenceCapacityError ? {
+                evidenceCapacityExceeded: true, evidenceCapacityLimitBytes: caught.limitBytes,
+              } : {}),
               recoveryRequired: mutationRecoveryRequired,
               rollbackRestored: rollbackOutcome.restored,
               rollbackStatus: rollbackOutcome.status,
@@ -3969,7 +3975,7 @@ export function PerformanceAuditRunner() {
             },
             error,
             trace: captureAuditTrace('performance audit stopped before later steps'),
-            diagnostic: captureAuditDiagnostic(readinessSnapshot, 'check'),
+            diagnostic: caught instanceof AuditEvidenceCapacityError ? undefined : captureAuditDiagnostic(readinessSnapshot, 'check'),
           };
           checks.push(failedCheck);
           logAuditCheck(app, sessionId, failedCheck);

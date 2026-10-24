@@ -34,6 +34,12 @@ reported as invalid evidence, without deleting or rewriting the original report.
 Unknown private check identities remain null while their positions survive.
 Counts describe different overlapping facts and must not be added together.
 
+Evidence processing has conservative capacity guards before retaining checks or
+serializing reports. These guards do not truncate evidence. A capacity stop
+records a failed position and explicitly incomplete detail; report preparation
+rejects oversized input before creating encoded copies. A successful full report
+therefore retains all of its evidence within these resource limits.
+
 This is the complete retained application audit within its stated privacy and
 instrumentation boundary. It does not claim native CPU/GPU profiler coverage,
 include the general application journal, or publish raw private strings. The

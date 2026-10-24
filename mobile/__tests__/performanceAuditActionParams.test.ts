@@ -5,6 +5,7 @@ import {
   auditSearchEntryParams,
 } from '../src/lib/performanceAuditActionParams';
 import { resolveRatesIntent, ratesIntentKey } from '../src/lib/ratesIntent';
+import { EMPTY_FILTERS } from '../src/data/selectors';
 
 describe('performance audit action parameters', () => {
   test('each search pass resets persisted comparison and result scope before its toggle', () => {
@@ -16,11 +17,13 @@ describe('performance audit action parameters', () => {
       // The preceding pass or another consumer task can leave comparison on,
       // unlisted results selected and a search/taxonomy restriction in place.
       const task = { selectMode: true, selected: ['previous-rate'], availability: 'unlisted',
-        query: 'previous query', path: ['previous-category'], hierarchyScoped: true, ...intent.patch };
+        query: 'previous query', path: ['previous-category'], hierarchyScoped: true,
+        sort: 'bank', filters: { ...EMPTY_FILTERS, providers: ['Previous Bank'], rateTypes: ['FIXED'] },
+        includeNonStandardOverride: false, page: 3, ...intent.patch };
       expect(intent.section).toBe('Mortgage');
       expect(task).toMatchObject({ selectMode: false, selected: [], availability: 'listed',
-        query: '', path: [], hierarchyScoped: false });
-      expect(!task.selectMode).toBe(true);
+        query: '', path: [], hierarchyScoped: false, sort: 'rate', filters: EMPTY_FILTERS,
+        includeNonStandardOverride: null, page: 1 });
     }
   });
   test('reads the planner parameter object passed to a semantic action', () => {

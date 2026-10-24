@@ -173,6 +173,24 @@ describe('Bank spread store integrity', () => {
     expect(mockDownloadBankSpreadHistory).not.toHaveBeenCalled();
   });
 
+  it.each(['miss', 'error'] as const)('preserves a concurrent verified same-edition download after a deferred audit cache %s', async outcome => {
+    const read = deferred<BankSpreadHistoryPayload | null>();
+    mockReadBankSpreadHistoryFor.mockReturnValueOnce(read.promise);
+    mockDownloadBankSpreadHistory.mockResolvedValue({ bankSpreadHistory: spreadA, verifiedBytes: new Uint8Array([1]) });
+    const { state, actions } = harness();
+    const audit = actions.ensureBankSpreadHistory({ cacheOnly: true });
+    await waitForCall(mockReadBankSpreadHistoryFor);
+    await actions.ensureBankSpreadHistory({ force: true });
+    const verified = state.bankSpreadHistory;
+    expect(verified).toEqual(spreadA);
+    if (outcome === 'miss') read.resolve(null);
+    else read.reject(new Error('stale audit cache failure'));
+    await audit;
+    expect(state.bankSpreadHistory).toBe(verified);
+    expect(state.bankSpreadHistoryError).toBeNull();
+    expect(mockDownloadBankSpreadHistory).toHaveBeenCalledTimes(1);
+  });
+
   it('does not replace a newer edition while its audit cache read is pending', async () => {
     const readA = deferred<BankSpreadHistoryPayload | null>();
     mockReadBankSpreadHistoryFor.mockReturnValue(readA.promise);

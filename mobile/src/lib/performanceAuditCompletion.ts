@@ -59,12 +59,14 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     else if (value && typeof value === 'object') Object.values(value).forEach(countTruncation);
   };
   report.checks.forEach(countTruncation);
+  if (report.appHealth) countTruncation(report.appHealth);
   const actualIds = new Set(report.checks.map(check => check.id));
   const healthActualIds = new Set(healthChecks.map(check => check.id));
   const missingPerformanceIds = [...new Set([...(coverage?.missingPlannedCheckIds ?? []),
     ...(report.plan?.passes.flatMap(pass => pass.steps.map(step => `deep-${step.id}`)) ?? []).filter(id => !actualIds.has(id))])];
   const unverifiedLink = (check: PerformanceAuditReport['checks'][number]) => /^external-link-[0-9]+$/.test(check.id)
-    && (check.metrics.httpAttempted !== true || check.metrics.httpReachability === 'unknown' || check.metrics.browserHandler === 'unknown');
+    && (check.metrics.httpAttempted !== true || !['pass', 'fail'].includes(String(check.metrics.httpReachability))
+      || !['pass', 'fail'].includes(String(check.metrics.browserHandler)));
   const structuredReadiness = (check: PerformanceAuditReport['checks'][number]) => {
     const readiness = check.diagnostic?.readiness;
     return readiness != null && typeof readiness.ready === 'boolean' && typeof readiness.capturing === 'boolean'
@@ -92,6 +94,7 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     missingHealthReports: report.schemaVersion >= 7 && !health ? 1 : 0,
     invalidCoverageReports: report.coverage != null && !coverageValid ? 1 : 0,
     invalidHealthReports: report.appHealth != null && !healthValid ? 1 : 0,
+    evidenceCapacityFailures: report.checks.filter(check => check.metrics.evidenceCapacityExceeded === true).length,
     truncatedEvidenceFields, omittedEvidenceChars,
   };
   const collectionComplete = coverage != null && coverage.storedChecks === report.checks.length
@@ -105,7 +108,7 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   const finishedAt = publicAuditTimestamp(report.finishedAt);
   const timestampsValid = startedAt != null && finishedAt != null && startedAt <= finishedAt;
   const detailsComplete = collectionComplete && timestampsValid && truncatedEvidenceFields === 0
-    && gaps.missingReadinessChecks === 0 && gaps.missingHealthReports === 0;
+    && gaps.missingReadinessChecks === 0 && gaps.missingHealthReports === 0 && gaps.evidenceCapacityFailures === 0;
   const failurePositions: { source: 'performance' | 'health'; position: number; checkId: string | null;
     stage: string | null; category: 'failure' | 'timing' }[] = [];
   report.checks.forEach((check, index) => {
@@ -128,7 +131,9 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     ...missingPerformanceIds.map(id => ({ source: 'performance' as const, checkId: safeCheckId(id) })),
     ...(health?.coverage.missingPlannedCheckIds ?? []).map(id => ({ source: 'health' as const, checkId: healthId(id) })),
   ];
-  const gapPositions = [
+  type GapPosition = { source: 'performance' | 'health'; position: number; checkId: string | null;
+    reason: 'unavailable' | 'skipped' | 'unverified-link' | 'not-run' | 'pending-probe' | 'missing-readiness' | 'duplicate' | 'unexpected' };
+  const gapPositions: GapPosition[] = [
     ...report.checks.flatMap((check, index) => check.status === 'skipped' || check.metrics.availabilityFailure === true || check.metrics.executionAttempted === false || unverifiedLink(check)
       ? [{ source: 'performance' as const, position: index + 1, checkId: safeCheckId(check.id),
         reason: check.metrics.availabilityFailure === true || check.metrics.executionAttempted === false ? 'unavailable' as const
@@ -136,9 +141,35 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     ...healthChecks.flatMap((check, index) => check.status === 'unavailable' || check.status === 'not-run'
       ? [{ source: 'health' as const, position: index + 1, checkId: healthId(check.code), reason: check.status }] : []),
   ];
+  const duplicateStoredChecks: { source: 'performance' | 'health'; checkId: string | null; positions: number[] }[] = [];
+  const unexpectedStoredChecks: typeof duplicateStoredChecks = [];
+  const addIdentityGaps = (source: 'performance' | 'health', checks: readonly { id: string }[],
+    declaredDuplicates: string[], declaredUnexpected: string[], publicId: (id: string) => string | null) => {
+    const positions = new Map<string, number[]>();
+    checks.forEach((check, index) => positions.set(check.id, [...(positions.get(check.id) ?? []), index + 1]));
+    for (const [id, indices] of positions) {
+      for (const reason of ['duplicate', 'unexpected'] as const) {
+        if (reason === 'duplicate' ? indices.length < 2 && !declaredDuplicates.includes(id) : !declaredUnexpected.includes(id)) continue;
+        const checkId = publicId(id);
+        (reason === 'duplicate' ? duplicateStoredChecks : unexpectedStoredChecks).push({ source, checkId, positions: indices });
+        indices.forEach(position => gapPositions.push({ source, position, checkId, reason }));
+      }
+    }
+  };
+  addIdentityGaps('performance', report.checks, coverage?.duplicateStoredCheckIds ?? [], coverage?.unexpectedStoredCheckIds ?? [], safeCheckId);
+  addIdentityGaps('health', healthChecks, health?.coverage.duplicateStoredCheckIds ?? [], health?.coverage.unexpectedStoredCheckIds ?? [], healthId);
+  report.checks.forEach((check, index) => {
+    const hasPending = Array.isArray(check.diagnostic?.readiness?.surfaces) && check.diagnostic.readiness.surfaces.some(surface =>
+      Array.isArray(surface?.probes) && surface.probes.some(probe => probe?.required && probe.status === 'pending'));
+    if (hasPending) gapPositions.push({ source: 'performance', position: index + 1, checkId: safeCheckId(check.id), reason: 'pending-probe' });
+    if (check.kind === 'journey' && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true
+      && check.status !== 'skipped' && !structuredReadiness(check)) {
+      gapPositions.push({ source: 'performance', position: index + 1, checkId: safeCheckId(check.id), reason: 'missing-readiness' });
+    }
+  });
   return { auditId: performanceAuditReference(report.sessionId), startedAt, finishedAt,
     outcome, collectionComplete, coverageComplete, detailsComplete, timestampsValid,
     performanceCheckCount: report.checks.length, healthCheckCount: healthChecks.length,
-    gaps, failurePositions, gapPositions, missingPlannedChecks,
+    gaps, failurePositions, gapPositions, missingPlannedChecks, duplicateStoredChecks, unexpectedStoredChecks,
     privacyBoundary: { privateValues: 'opaque-aliases', generalApplicationJournal: 'excluded', nativeProfiler: 'not-captured' } as const };
 }

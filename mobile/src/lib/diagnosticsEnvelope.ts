@@ -5,6 +5,7 @@ import { encodeCompactDiagnosticJson } from './compactDiagnosticJson';
 import { publicAuditDiagnostic, publicAuditError } from './performanceAuditDiagnostic';
 import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
 import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
+import { measureAuditEvidence } from './auditEvidenceCapacity';
 
 import { PUBLIC_AUDIT_METRIC_FIELDS as METRIC_ALLOWLIST } from './auditDiagnosticFields';
 
@@ -146,6 +147,7 @@ function safeDuration(check: AuditCheck): number | null {
  * viewport, memory, routes, product keys, messages, traces and raw log text.
  */
 export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport) {
+  measureAuditEvidence(report);
   return {
     schemaVersion: 1,
     kind: 'performance-audit',
