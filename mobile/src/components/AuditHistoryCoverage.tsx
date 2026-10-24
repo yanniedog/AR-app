@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { AppText, Button, Row } from './ui';
 import { uiCount, uiDate, uiIdentifier, uiJoin, uiLabel } from '../lib/uiCopy';
 import type { PerformanceAuditReport } from '../lib/performanceAudit';
+import { isValidCalendarDate } from '../lib/calendarDate';
 
 /** Daily facts are bound to the retained report, never the mutable store. */
 export function AuditHistoryCoverage({ report }: { report: PerformanceAuditReport }) {
@@ -17,7 +18,7 @@ export function AuditHistoryCoverage({ report }: { report: PerformanceAuditRepor
     if (Array.isArray(value)) {
       gaps = value.filter((gap): gap is [string, string, string | null, number, string?] =>
       Array.isArray(gap) && (gap.length === 4 || gap.length === 5) && typeof gap[0] === 'string' &&
-      /^\d{4}-\d{2}-\d{2}$/.test(gap[0]) && Number.isFinite(Date.parse(gap[0])) && typeof gap[1] === 'string' &&
+      isValidCalendarDate(gap[0]) && typeof gap[1] === 'string' &&
       (gap[2] === null || ['Mortgage', 'Savings', 'TD'].includes(gap[2])) && typeof gap[3] === 'number' && Number.isFinite(gap[3]) &&
       (gap.length === 4 || typeof gap[4] === 'string'));
       readable = readable && gaps.length === value.length;

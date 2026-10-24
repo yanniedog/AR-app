@@ -35,6 +35,7 @@ function render(metrics: Record<string, AppHealthMetricValue>) {
 
 const invalidEvidence: Record<string, AppHealthMetricValue>[] = [
   {}, { historyGaps: '{}' }, { historyGaps: '[null]' }, { historyGaps: 'invalid' },
+  { historyGaps: '[["2026-02-31","processed-day-missing",null,1]]' },
 ];
 test.each(invalidEvidence)(
   'missing or malformed daily evidence cannot report zero gaps: %j', metrics => {
