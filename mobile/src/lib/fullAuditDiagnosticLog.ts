@@ -113,13 +113,22 @@ function missingAssetList(value: string, separator: string): boolean {
 }
 
 /** Keep the canonical diagnostic report, replacing private inputs rather than
- * replacing the report with a summary. Opaque aliases retain equality evidence. */
+ * replacing the report with a summary. Aliases retain primitive-value equality
+ * and repeated object identity without copying private object graphs. */
 export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheckId: (value: string) => string | null): unknown {
-  const aliases = new Map<string, string>();
+  const domains = new Map<string, { primitives: Map<unknown, string>; objects: WeakMap<object, string> }>();
+  let nextAlias = 0;
   const alias = (value: unknown, domain = 'value') => {
-    const key = JSON.stringify([domain, value]);
-    let name = aliases.get(key);
-    if (name === undefined) { name = `~private${aliases.size}`; aliases.set(key, name); }
+    let identities = domains.get(domain);
+    if (!identities) { identities = { primitives: new Map(), objects: new WeakMap() }; domains.set(domain, identities); }
+    // Reuse original primitive values and object identities. Serializing private
+    // evidence merely to name it duplicates long traces/graphs in the JS heap.
+    const object = value !== null && typeof value === 'object';
+    let name = object ? identities.objects.get(value) : identities.primitives.get(value);
+    if (name === undefined) {
+      name = `~private${nextAlias++}`;
+      if (object) identities.objects.set(value, name); else identities.primitives.set(value, name);
+    }
     return name;
   };
   const privateField = /^(?:sessionId|startedAt|finishedAt|lastStoredCheckAt|manufacturer|brand|model|networkType|label|journeyLabel|slowestCheckLabel|query|searchQuery|parameters|inputs|profile|profileFilters|scenario|accountBalance|balance|loanBalance|loanAmount|propertyValue|currentRate|lvr|productKey|product_key|provider|selectionTokens?|actionResultEvidence|readinessEvidence|graphicEvidence|readinessActionEvidence|limitations|generationId|bundleSha|coreSha|payloadRevision|privateText)$/i;

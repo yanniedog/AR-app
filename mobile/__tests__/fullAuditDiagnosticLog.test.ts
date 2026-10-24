@@ -103,6 +103,24 @@ test('source strings matching generated alias names remain distinct values', () 
   expect(second.checks[0].trace).not.toBe(second.checks[0].error);
 });
 
+test('private aliases reuse original values without serializing their evidence', () => {
+  const report = makePerformanceAuditReport();
+  const evidence = { toJSON() { throw new Error('Private evidence must not be serialized for an alias'); },
+    largeText: 'private evidence'.repeat(100_000) };
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 1,
+    error: evidence.largeText, trace: evidence.largeText,
+    metrics: { actionResultEvidence: evidence, readinessEvidence: evidence, graphicEvidence: { ...evidence } } as never }];
+  const stringify = jest.spyOn(JSON, 'stringify');
+  let diagnostic: typeof report;
+  try { diagnostic = fullAuditDiagnosticLog(report, id => id) as typeof report;
+    expect(stringify.mock.calls.some(([value]) => Array.isArray(value)
+      && value.length === 2 && (value[1] === evidence || value[1] === evidence.largeText))).toBe(false);
+  } finally { stringify.mockRestore(); }
+  expect(diagnostic!.checks[0].error).toBe(diagnostic!.checks[0].trace);
+  expect(diagnostic!.checks[0].metrics.actionResultEvidence).toBe(diagnostic!.checks[0].metrics.readinessEvidence);
+  expect(diagnostic!.checks[0].metrics.actionResultEvidence).not.toBe(diagnostic!.checks[0].metrics.graphicEvidence);
+});
+
 test.each(['healthy', 'attention', 'bottleneck'] as const)('retains source-authored %s outcome and diagnostic modes', overall => {
   const report = makePerformanceAuditReport();
   report.summary.overall = overall;
