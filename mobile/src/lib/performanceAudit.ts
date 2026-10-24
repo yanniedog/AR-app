@@ -1206,22 +1206,19 @@ export function requiresPerformanceAuditRouteRecovery(check: AuditCheck): boolea
   if (check.kind !== 'journey') return false;
   if (check.metrics.interruptedByBackground === true) return true;
   if (check.status !== 'fail') return false;
-  // Timing-only overruns leave the screen mounted — recovering would discard
-  // local state. Genuine route corruption or non-timing failures still recover
-  // even when the step also blew the timing budget.
-  if (check.metrics.stepLimitExceeded === true
-      && check.metrics.routeStateInvalidated !== true
-      && check.metrics.nonTimingFailure !== true
-      && !check.error) {
-    return false;
-  }
+  // Explicit corruption / non-timing failure always recovers, including when
+  // enforcePerformanceAuditStepLimit also annotated a timing overrun (and may
+  // have forced routeStateInvalidated:false for the timing-only case).
+  if (check.metrics.routeStateInvalidated === true) return true;
+  if (check.metrics.nonTimingFailure === true) return true;
   // A mounted optional control can prove that it is absent without corrupting
   // the route. Keep the screen mounted so independent controls in that
   // scenario can still be exercised.
   if (check.metrics.routeStateInvalidated === false) return false;
-  return check.metrics.routeStateInvalidated === true ||
-    check.metrics.nonTimingFailure === true ||
-    Boolean(check.error);
+  // Timing-only overruns leave the screen mounted — recovering would discard
+  // local state. The step-limit error string alone is not a functional failure.
+  if (check.metrics.stepLimitExceeded === true) return false;
+  return Boolean(check.error);
 }
 
 /**
