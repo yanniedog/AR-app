@@ -136,7 +136,7 @@ export function BankAvatar({
         ) : (
           <Image
             accessible={false}
-            source={typeof activeSource === 'number' ? activeSource : { uri: activeSource }}
+            source={typeof activeSource === 'string' ? { uri: activeSource } : activeSource}
             resizeMode="contain"
             style={{ width: imageWidth, height: imageHeight }}
             onLoad={() => {
