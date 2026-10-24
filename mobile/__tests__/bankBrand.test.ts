@@ -1,5 +1,6 @@
 import core from '../assets/sample/core.json';
 import logoSources from '../assets/banks/sources.json';
+import { BUNDLED_BANK_LOGOS } from '../src/data/bankLogoAssets';
 import {
   lookupProvider,
   isSvgLogoSource,
@@ -60,8 +61,7 @@ describe('bankBrand', () => {
     const embedded = 'data:image/png;base64,abc';
     const sources = resolveBankLogoSources('ANZ', embedded);
     expect(sources[0]).toBe(resolveBundledBankLogoSource('ANZ'));
-    expect(sources[1]).toBe(embedded);
-    expect(sources.length).toBeGreaterThan(1);
+    expect(sources).toEqual([resolveBundledBankLogoSource('ANZ')]);
   });
 
   it('covers every logo-pack lender in the sample export', () => {
@@ -97,11 +97,11 @@ describe('bankBrand', () => {
     expect(resolveBrandShort('Some New Bank')).toBe('SNB');
   });
 
-  it('uses validated payload artwork after local sources', () => {
+  it('uses remote artwork only for providers without a curated bundle', () => {
     const uri = 'https://mystate.com.au/wp-content/uploads/MyState_Logo_s.png';
-    expect(resolveBankLogoSources('MyState Bank', undefined, uri)).toEqual([resolveBundledBankLogoSource('MyState Bank'), uri]);
+    expect(resolveBankLogoSources('MyState Bank', undefined, uri)).toEqual([resolveBundledBankLogoSource('MyState Bank')]);
     const anz = resolveBankLogoSources('ANZ', undefined, uri);
-    expect(anz).toEqual([resolveBundledBankLogoSource('ANZ'), uri]);
+    expect(anz).toEqual([resolveBundledBankLogoSource('ANZ')]);
     expect(resolveBankLogoSources('Totally Unknown Bank')).toEqual([]);
   });
 
@@ -157,6 +157,30 @@ describe('bankBrand', () => {
   it('retains safe embedded artwork for an unknown provider', () => {
     expect(resolveBankLogoSources('Unknown', 'data:image/png;base64,abc'))
       .toEqual(['data:image/png;base64,abc']);
+  });
+
+
+  it('resolves each registered provider to its own recorded asset identity', () => {
+    for (const brand of logoSources.brands) {
+      expect(resolveBundledBankLogoSource(brand.provider)).toBe(BUNDLED_BANK_LOGOS[brand.key]);
+    }
+    for (const [provider, key] of [
+      ['Queensland Country Bank Limited', 'queensland-country-bank'],
+      ['Queensland Country Bank Ltd.', 'queensland-country-bank'],
+      ['Bank of Queensland Limited', 'bank-of-queensland-limited'],
+      ['Greater Bank Limited', 'greater-bank'],
+      ['MOVE Bank', 'movebank'],
+      ['Newcastle Permanent Building Society', 'newcastle-permanent'],
+      ['Qantas Money Home Loans', 'qantas-money-basic-offset-home-loans'],
+    ]) {
+      expect(resolveBundledBankLogoSource(provider)).toBe(BUNDLED_BANK_LOGOS[key]);
+    }
+  });
+
+  it('never offers stale payload artwork as a known bank fallback', () => {
+    expect(resolveBankLogoSources('Queensland Country Bank',
+      'data:image/png;base64,wrong-bank', 'https://another-bank.test/logo.png'))
+      .toEqual([BUNDLED_BANK_LOGOS['queensland-country-bank']]);
   });
 
 });

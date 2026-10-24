@@ -42,3 +42,14 @@ test('passes bundled native IDs and web image objects directly to Image', () => 
     finally { act(() => tree.unmount()); }
   }
 });
+
+
+test('a failed curated image ends at initials', () => {
+  mockSources = [7]; let tree: any;
+  act(() => { tree = TestRenderer.create(<BankAvatar provider="Bank" />); });
+  try {
+    act(() => tree.root.findByType(Image).props.onError());
+    expect(tree.root.findAllByType(Image)).toHaveLength(0);
+    expect(tree.root.findByType(Text).props.children).toBe('BK');
+  } finally { act(() => tree.unmount()); }
+});

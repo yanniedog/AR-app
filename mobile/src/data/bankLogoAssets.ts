@@ -1,5 +1,9 @@
 /** Bank-supplied artwork bundled for offline use; provenance: assets/banks/sources.json. */
-export const BUNDLED_BANK_LOGOS: Record<string, number> = {
+import type { ImageURISource } from 'react-native';
+
+export type BundledBankLogoSource = number | ImageURISource;
+
+export const BUNDLED_BANK_LOGOS: Record<string, BundledBankLogoSource> = {
   'afg-home-loans-alpha': require('../../assets/banks/afg-home-loans-alpha.png'),
   'alex-bank': require('../../assets/banks/alex-bank.png'),
   'amp-bank': require('../../assets/banks/amp-my-amp.png'),
