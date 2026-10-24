@@ -5,6 +5,7 @@ import { calculatorAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
 import { lvrRangeContains, parseLvrRange } from './lvrRange';
 import { scopedRateConditions, type RateConditionContext } from './rateConditions';
 import { scopedFinancialConditionFacts, type PublishedNumericConditionFact, type NumericConditionBoundary } from './scopedFinancialConditionFacts';
+import { yieldToUi } from '../lib/yieldToUi';
 
 export interface MortgageComparisonInputs { loanAmount: string; lvr: string }
 /** Private exploratory inputs stay in memory, separate from saved searches and reports. */
@@ -78,4 +79,39 @@ export function mortgageComparisonRows(rows: RateRow[], value: MortgageCompariso
     return state === 'listed' || state === 'unverified';
   });
   return { rows: selected, unverified, unverifiedRows, invalid: parsed.invalid };
+}
+
+export type MortgageComparisonScope = ReturnType<typeof mortgageComparisonRows>;
+
+/** Amount/LVR matching against published conditions stays off the render path. */
+export async function mortgageComparisonRowsCooperatively(
+  rows: RateRow[], value: MortgageComparisonInputs, context?: RateConditionContext,
+  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
+): Promise<MortgageComparisonScope | null> {
+  const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
+  const now = control.now ?? (() => performance.now());
+  const cancelled = control.cancelled ?? (() => false);
+  await yieldControl();
+  if (cancelled()) return null;
+  const parsed = inputs(value);
+  // Empty scope is a cheap identity pass; keep it synchronous after the yield.
+  if (parsed.amount === null && parsed.lvr === null && !parsed.invalid) {
+    return { rows: [...rows], unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
+  }
+  let unverified = 0;
+  const unverifiedRows = new WeakSet<RateRow>();
+  const selected: RateRow[] = [];
+  let sliceStarted = now();
+  for (let offset = 0; offset < rows.length; offset += 1) {
+    const row = rows[offset];
+    const state = match(row, parsed, context);
+    if (state === 'unverified') { unverified += 1; unverifiedRows.add(row); }
+    if (state === 'listed' || state === 'unverified') selected.push(row);
+    if ((offset + 1) % 16 === 0 && now() - sliceStarted >= 6) {
+      await yieldControl();
+      sliceStarted = now();
+      if (cancelled()) return null;
+    }
+  }
+  return cancelled() ? null : { rows: selected, unverified, unverifiedRows, invalid: parsed.invalid };
 }

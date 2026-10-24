@@ -8,6 +8,7 @@ import { resolvePublicRate } from './publicRateResolver';
 import { estimateEnteredRate, estimateReferenceAdjustment, selectPublicReference } from './publicRateLocal';
 import { Decimal, decimalText, rateDecimal } from './publicRateDecimal';
 import type { UserRateScenario } from './userRateScenario';
+import { yieldToUi } from '../lib/yieldToUi';
 
 
 // Preserve occurrence identity only through transformations authored here.
@@ -311,6 +312,45 @@ export function resolvedPublicRankingRows(
     resolved.push(rowWithPublicResolution(bindCurrentPublicRow(row, catalogue), result));
   }
   return { rows: resolved, priced: resolved.length, unresolved, complete: catalogue.status === 'ready' && catalogue.allLoaded };
+}
+
+export type PublicRankingResolution = ReturnType<typeof resolvedPublicRankingRows>;
+
+/** Same ranking contract without a full-catalogue render-time CPU burst. */
+export async function resolvedPublicRankingRowsCooperatively(
+  rows: readonly RateRow[], catalogue: PublicCatalogueView,
+  scenarioFor: (row: RateRow) => RateScenario = () => ({}),
+  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
+): Promise<PublicRankingResolution | null> {
+  const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
+  const now = control.now ?? (() => performance.now());
+  const cancelled = control.cancelled ?? (() => false);
+  await yieldControl();
+  if (cancelled()) return null;
+  if (catalogue.status === 'unavailable') {
+    return { rows: [...rows], priced: rows.length, unresolved: 0, complete: false };
+  }
+  const resolved: RateRow[] = [];
+  let unresolved = 0;
+  let sliceStarted = now();
+  for (let offset = 0; offset < rows.length; offset += 1) {
+    const row = rows[offset];
+    const result = resolveRowPublicRate(row, catalogue, scenarioFor(row));
+    const payable = payableRateForRow(row, result);
+    if (payable == null) unresolved += 1;
+    else resolved.push(rowWithPublicResolution(bindCurrentPublicRow(row, catalogue), result));
+    if ((offset + 1) % 8 === 0 && now() - sliceStarted >= 6) {
+      await yieldControl();
+      sliceStarted = now();
+      if (cancelled()) return null;
+    }
+  }
+  return cancelled() ? null : {
+    rows: resolved,
+    priced: resolved.length,
+    unresolved,
+    complete: catalogue.status === 'ready' && catalogue.allLoaded,
+  };
 }
 
 /** Retain the exact offer's local facet scope for evidence and cost calculations. */
