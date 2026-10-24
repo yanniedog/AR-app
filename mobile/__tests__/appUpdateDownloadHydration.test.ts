@@ -160,7 +160,7 @@ describe('APK update state hydration', () => {
   };
   const destination = apkDestinationPath('file:///docs/', remote.build_number, remote.sha256);
 
-  it.each(['PENDING', 'DOWNLOADING', 'PAUSED'])(
+  it.each(['PENDING', 'DOWNLOADING', 'PAUSED', 'DOWNLOADING_AFTER_SUSPEND'])(
     'preserves the partial destination of a restored %s native task',
     async (state) => {
       const task = createDownloadTask({
@@ -168,7 +168,16 @@ describe('APK update state hydration', () => {
         url: remote.download_url,
         destination,
       });
-      Object.assign(task, { state, bytesDownloaded: 10_100_032, bytesTotal: remote.bytes });
+      if (state === 'DOWNLOADING_AFTER_SUSPEND') {
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
+          ...IDLE_APK_DOWNLOAD, phase: 'downloading', buildNumber: remote.build_number,
+          bytesWritten: 1_000_000, lastProgressAt: new Date(Date.now() - 180_000).toISOString(),
+        }));
+      }
+      Object.assign(task, {
+        state: state === 'DOWNLOADING_AFTER_SUSPEND' ? 'DOWNLOADING' : state,
+        bytesDownloaded: 10_100_032, bytesTotal: remote.bytes,
+      });
       getExistingTasksMock.mockResolvedValue([task]);
       jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({
         exists: true, isDirectory: false, size: 10_100_032, uri: destination,
@@ -192,7 +201,11 @@ describe('APK update state hydration', () => {
     },
   );
 
-  it('verifies a completed native task before marking the APK ready', async () => {
+  it('verifies a completed native task after JavaScript was suspended', async () => {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...IDLE_APK_DOWNLOAD, phase: 'downloading', buildNumber: remote.build_number,
+      bytesWritten: 10_100_032, lastProgressAt: new Date(Date.now() - 180_000).toISOString(),
+    }));
     const task = createDownloadTask({
       id: apkDownloadTaskId(remote.build_number, remote.sha256),
       url: remote.download_url,

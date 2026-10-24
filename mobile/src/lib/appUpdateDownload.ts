@@ -678,7 +678,40 @@ export async function ensureApkBackgroundDownload(
       await maybePromptUpgrade(manifest);
       return snapshot;
     }
+  }
 
+  if (!force && !shouldEnsureBackgroundDownload(snapshot, manifest.build_number)) {
+    // A notification action is an explicit user cancellation. Do not turn the
+    // app's periodic reconciliation into an automatic restart; only Retry
+    // calls this function with force=true.
+    if (snapshot.phase === 'cancelled') return snapshot;
+    if (snapshot.phase === 'verifying') {
+      if (currentProcessVerificationTaskId === apkDownloadTaskId(manifest.build_number, manifest.sha256)) {
+        return snapshot;
+      }
+      const verificationStarted = Date.parse(snapshot.lastProgressAt ?? snapshot.startedAt ?? '');
+      if (
+        Number.isFinite(verificationStarted) &&
+        Date.now() - verificationStarted < APK_VERIFICATION_STALL_MS
+      ) {
+        return snapshot;
+      }
+      await persist({
+        ...snapshot,
+        phase: 'error',
+        error: 'Downloaded update verification did not finish. Tap Retry to download it again.',
+      });
+      return snapshot;
+    }
+  }
+
+  if (!force) {
+    // The destination exists as soon as Android starts writing. Reconcile the
+    // native task before treating that path as a completed cached installer.
+    // This also recovers transfers whose JS receipt was lost on process death.
+    const reattached = await reattachExisting(manifest);
+    // Native progress may have continued while JavaScript was suspended.
+    // Refresh it before deciding that the transfer has stalled.
     if (isApkDownloadStalled(snapshot)) {
       const network = await Network.getNetworkStateAsync().catch(() => null);
       const waitingForWifi =
@@ -722,39 +755,10 @@ export async function ensureApkBackgroundDownload(
         return snapshot;
       }
     }
-  }
-
-  if (!force && !shouldEnsureBackgroundDownload(snapshot, manifest.build_number)) {
-    // A notification action is an explicit user cancellation. Do not turn the
-    // app's periodic reconciliation into an automatic restart; only Retry
-    // calls this function with force=true.
-    if (snapshot.phase === 'cancelled') return snapshot;
-    if (snapshot.phase === 'verifying') {
-      if (currentProcessVerificationTaskId === apkDownloadTaskId(manifest.build_number, manifest.sha256)) {
-        return snapshot;
-      }
-      const verificationStarted = Date.parse(snapshot.lastProgressAt ?? snapshot.startedAt ?? '');
-      if (
-        Number.isFinite(verificationStarted) &&
-        Date.now() - verificationStarted < APK_VERIFICATION_STALL_MS
-      ) {
-        return snapshot;
-      }
-      await persist({
-        ...snapshot,
-        phase: 'error',
-        error: 'Downloaded update verification did not finish. Tap Retry to download it again.',
-      });
-      return snapshot;
-    }
+    if (reattached && !force) return snapshot;
   }
 
   if (!force) {
-    // The destination exists as soon as Android starts writing. Reconcile the
-    // native task before treating that path as a completed cached installer.
-    // This also recovers transfers whose JS receipt was lost on process death.
-    if (await reattachExisting(manifest)) return snapshot;
-
     const dest = apkDestinationPath(directories.documents, manifest.build_number, manifest.sha256);
     if (await fileExists(dest)) {
       const verificationTaskId = apkDownloadTaskId(manifest.build_number, manifest.sha256);
