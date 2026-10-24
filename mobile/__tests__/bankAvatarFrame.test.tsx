@@ -3,10 +3,10 @@ import TestRenderer, { act } from 'react-test-renderer';
 import { Image, Text, View } from 'react-native';
 import { BankAvatar } from '../src/components/BankAvatar';
 
-let mockSources: string[] = [];
+let mockSources: (string | number | { uri: string; width: number; height: number })[] = [];
 jest.mock('../src/data/store', () => ({ useStore: (select: (state: unknown) => unknown) => select({ core: { brands: { Bank: { short: 'BK', color: '#123456' } } } }) }));
 jest.mock('../src/data/bankBrand', () => ({ ...jest.requireActual('../src/data/bankBrand'), resolveBankLogoSourcesForRuntime: () => mockSources,
-  isSvgLogoSource: (source: string) => source.endsWith('.svg') }));
+  isSvgLogoSource: (source: unknown) => typeof source === 'string' && source.endsWith('.svg') }));
 jest.mock('react-native-svg', () => ({ SvgUri: 'SvgUri' }));
 jest.mock('../src/lib/performanceAudit', () => ({ isPerformanceAuditActive: () => false, subscribePerformanceAudit: () => () => {} }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: { chipText: '#123456' } }) }));
@@ -31,4 +31,14 @@ test('fallback monograms stay inside the same frame and keep the provider access
     expect(tree.root.findByType(Text).props).toMatchObject({ children: 'BK', accessible: false, allowFontScaling: false });
     expect(tree.root.findByType(Text).props.style.fontSize).toBeLessThan(50);
   } finally { act(() => tree.unmount()); }
+});
+
+
+test('passes bundled native IDs and web image objects directly to Image', () => {
+  for (const bundled of [7, { uri: '/assets/bank.png', width: 256, height: 128 }]) {
+    mockSources = [bundled]; let tree: any;
+    act(() => { tree = TestRenderer.create(<BankAvatar provider="Bank" />); });
+    try { expect(tree.root.findByType(Image).props.source).toBe(bundled); }
+    finally { act(() => tree.unmount()); }
+  }
 });

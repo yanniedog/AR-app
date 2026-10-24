@@ -1,4 +1,5 @@
 import core from '../assets/sample/core.json';
+import logoSources from '../assets/banks/sources.json';
 import {
   lookupProvider,
   isSvgLogoSource,
@@ -20,6 +21,8 @@ describe('bankBrand', () => {
     expect(lookupProvider('Queensland Country Bank')).toBe('queensland country bank');
     expect(lookupProvider('Bank of Queensland Limited')).toBe('bank of queensland');
     expect(lookupProvider('Example Bank')).toBe('Example Bank');
+    expect(lookupProvider('Stanza Credit Union')).toBe('Stanza Credit Union');
+    expect(resolveBundledBankLogoSource('Queensland Country Bank')).not.toEqual(resolveBundledBankLogoSource('Bank of Queensland Limited'));
   });
 
   it('resolves bundled logo sources for major lenders', () => {
@@ -53,10 +56,11 @@ describe('bankBrand', () => {
     )).toEqual([]);
   });
 
-  it('prefers payload-embedded logos before bundled fallbacks', () => {
+  it('prefers verified bundled logos over stale payload artwork', () => {
     const embedded = 'data:image/png;base64,abc';
     const sources = resolveBankLogoSources('ANZ', embedded);
-    expect(sources[0]).toBe(embedded);
+    expect(sources[0]).toBe(resolveBundledBankLogoSource('ANZ'));
+    expect(sources[1]).toBe(embedded);
     expect(sources.length).toBeGreaterThan(1);
   });
 
@@ -95,7 +99,7 @@ describe('bankBrand', () => {
 
   it('uses validated payload artwork after local sources', () => {
     const uri = 'https://mystate.com.au/wp-content/uploads/MyState_Logo_s.png';
-    expect(resolveBankLogoSources('MyState Bank', undefined, uri)).toEqual([uri]);
+    expect(resolveBankLogoSources('MyState Bank', undefined, uri)).toEqual([resolveBundledBankLogoSource('MyState Bank'), uri]);
     const anz = resolveBankLogoSources('ANZ', undefined, uri);
     expect(anz).toEqual([resolveBundledBankLogoSource('ANZ'), uri]);
     expect(resolveBankLogoSources('Totally Unknown Bank')).toEqual([]);
@@ -135,4 +139,24 @@ describe('bankBrand', () => {
       ).not.toHaveLength(0);
     }
   });
+
+  it('has offline artwork for every registered brand and supported historical provider label', () => {
+    expect(logoSources.brands).toHaveLength(116);
+    // Family First has left the register; retain initials rather than assign
+    // Beyond Bank's successor logo to historical Family First records.
+    const historicalProviders = Object.keys(sample.brands ?? {}).filter(provider => provider !== 'Family First');
+    for (const provider of [...logoSources.brands.map(brand => brand.provider), ...historicalProviders]) {
+      expect({ provider, source: resolveBundledBankLogoSource(provider) }).toEqual({
+        provider, source: expect.anything(),
+      });
+      expect(resolveBankLogoSourcesForRuntime(provider, undefined, 'https://bank.test/logo.png', true))
+        .toEqual([resolveBundledBankLogoSource(provider)]);
+    }
+  });
+
+  it('retains safe embedded artwork for an unknown provider', () => {
+    expect(resolveBankLogoSources('Unknown', 'data:image/png;base64,abc'))
+      .toEqual(['data:image/png;base64,abc']);
+  });
+
 });

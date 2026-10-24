@@ -229,11 +229,6 @@ function pushUnique(out: (string | number)[], seen: Set<string>, value: string |
   out.push(value);
 }
 
-function pushIconFile(out: (string | number)[], seen: Set<string>, iconFile: string) {
-  const slug = slugFromIcon(iconFile);
-  const bundled = BUNDLED_BANK_LOGOS[slug];
-  if (bundled != null) pushUnique(out, seen, bundled);
-}
 
 function safeEmbeddedLogo(value: string): boolean {
   return value.length <= MAX_EMBEDDED_LOGO_LENGTH && SAFE_EMBEDDED_RASTER_RE.test(value);
@@ -279,8 +274,8 @@ export function safePayloadLogoUri(value: string): boolean {
 }
 
 /**
- * Ordered logo sources: bounded embedded artwork, the bundled pack, then a
- * validated public HTTPS URI carried by the integrity-checked payload.
+ * Prefer bank-supplied bundled artwork over stale payload artwork. Unknown
+ * brands can still use bounded embedded artwork and validated public HTTPS.
  */
 export function resolveBankLogoSources(
   provider: string,
@@ -289,17 +284,10 @@ export function resolveBankLogoSources(
 ): (string | number)[] {
   const out: (string | number)[] = [];
   const seen = new Set<string>();
+  const bundled = resolveBundledBankLogoSource(provider);
+  if (bundled != null) pushUnique(out, seen, bundled);
   const embedded = String(embeddedLogo ?? '').trim();
   if (embedded && safeEmbeddedLogo(embedded)) pushUnique(out, seen, embedded);
-
-  const key = resolveBrandKey(provider);
-  const icon = key ? BRAND_MAP[key]?.icon : undefined;
-  if (icon) {
-    pushIconFile(out, seen, icon);
-  } else {
-    const bundled = BUNDLED_BANK_LOGOS[slugify(lookupProvider(provider))];
-    if (bundled != null) pushUnique(out, seen, bundled);
-  }
 
   const remote = String(registerLogoUri ?? '').trim();
   if (safePayloadLogoUri(remote)) pushUnique(out, seen, remote);
@@ -310,8 +298,13 @@ export function resolveBankLogoSources(
 export function resolveBundledBankLogoSource(provider: string): number | null {
   const key = resolveBrandKey(provider);
   const icon = key ? BRAND_MAP[key]?.icon : undefined;
-  const slug = icon ? slugFromIcon(icon) : slugify(lookupProvider(provider));
-  return BUNDLED_BANK_LOGOS[slug] ?? null;
+  const candidates = [slugify(provider), slugify(lookupProvider(provider)), icon ? slugFromIcon(icon) : ''];
+  for (const slug of candidates) {
+    if (!Object.hasOwn(BUNDLED_BANK_LOGOS, slug)) continue;
+    const bundled = BUNDLED_BANK_LOGOS[slug];
+    if (bundled != null) return bundled;
+  }
+  return null;
 }
 
 export function resolveBankLogoSourcesForRuntime(
