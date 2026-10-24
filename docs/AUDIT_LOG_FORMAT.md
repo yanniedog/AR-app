@@ -60,8 +60,11 @@ remain explicit; a verified upload proves byte integrity, not successful checks.
 New uploads use `ar-audit-gzip-v1`. The readable `audit` header precedes a
 `gzip_base64` archive containing the full deidentified UTF-8 JSON report. `bytes`
 declares the decoded byte length and `sha256` verifies every decoded byte before
-the decoder returns evidence. Inflation is bounded by the declared length and
-the existing codec capacity limit. Gzip uses a fixed timestamp so retries and
+the decoder returns evidence. Audit archives reject decoded lengths above 32 MiB
+and complete UTF-8 envelopes above 2 MiB before invoking the shared decoder or
+allocating its declared output buffer. Encoding enforces the same limits and
+never shortens evidence to fit. Historical catalogues retain their separate
+128 MiB capacity. Gzip uses a fixed timestamp so retries and
 restored reports have the same content hash and reuse their saved upload receipt.
 Compression happens after deidentification; compressed private text is never a
 substitute for redaction. Exact full-text GET read-back must still succeed before

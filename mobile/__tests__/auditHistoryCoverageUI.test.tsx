@@ -64,3 +64,19 @@ test('daily gaps expand completely and loaded data does not certify screen rende
     expect(facts).toContain('Processing gaps');
   } finally { act(() => tree.unmount()); }
 });
+
+test('stale publications and unknown ledger observations retain their source classification', () => {
+  const tree = render({ historyGaps: JSON.stringify([
+    ['2026-10-24', 'current-product-observation-missing', 'Mortgage', 1, 'product'],
+    ['2026-10-25', 'current-payload-stale', null, 1],
+    ['2026-10-23', 'product-history-date-unavailable', null, 1],
+  ]) });
+  try {
+    act(() => tree.root.findByProps({ title: 'Show' }).props.onPress());
+    const facts = JSON.stringify(tree.toJSON());
+    expect(facts).toContain('Stale');
+    expect(facts).toContain('Source unavailable');
+    expect(facts).toContain('Unverified');
+    expect(facts).not.toContain('Processing gaps');
+  } finally { act(() => tree.unmount()); }
+});

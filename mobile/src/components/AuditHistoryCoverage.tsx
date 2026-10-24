@@ -33,7 +33,13 @@ export function AuditHistoryCoverage({ report }: { report: PerformanceAuditRepor
     {gaps.length > 0 && <Button variant="secondary" title={uiLabel(expanded ? 'Hide' : 'Show')} onPress={() => setExpanded(value => !value)} />}
     {expanded && gaps.map(([day, reason, section, count, provider], index) => <AppText key={index} selectable variant="small">
       {uiJoin(uiDate(day), ' / ', uiIdentifier(section), ' / ', uiIdentifier(provider), ' / ',
-        uiLabel(reason === 'historical-detail-evidence-unknown' ? 'Unverified details' : reason === 'historical-quarantined-tiers' ? 'Quarantined tiers' : reason.includes('chart') ? 'Chart gaps' : reason.includes('source') && !reason.includes('model') ? 'Source unavailable' : 'Processing gaps'),
+        uiLabel(reason === 'current-payload-stale' ? 'Stale'
+          : reason === 'historical-detail-evidence-unknown' ? 'Unverified details'
+            : reason === 'historical-quarantined-tiers' ? 'Quarantined tiers'
+              : reason.includes('chart') ? 'Chart gaps'
+                : ['historical-source-not-loaded', 'historical-source-unavailable', 'product-history-not-loaded',
+                  'product-history-date-unavailable', 'product-source-reconciliation-unavailable'].includes(reason) ? 'Source unavailable'
+                  : ['date-axis-unverifiable', 'current-product-observation-missing'].includes(reason) ? 'Unverified' : 'Processing gaps'),
         ' / ', uiCount(count))}
     </AppText>)}
   </View>;

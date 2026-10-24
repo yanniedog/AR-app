@@ -71,3 +71,17 @@ test('malformed nested strings fail closed while preserving each invalid record 
     gaps: { invalidHistoryEvidenceChecks: 1 }, gapPositions: [{ source: 'health', position: 1,
       checkId: APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE, reason: 'invalid-history-evidence' }] });
 });
+
+test.each<Record<string, AppHealthMetricValue>>([{}, { historyGaps: '[]' }, { historySourceGapDays: '[]' }])(
+  'omitted daily gap lists invalidate retained audit completeness: %j', metrics => {
+    const report = makePerformanceAuditReport('missing-history');
+    report.appHealth = healthReport(metrics);
+    expect(buildPerformanceAuditCompletion(report)).toMatchObject({ detailsComplete: false, coverageComplete: false,
+      gaps: { invalidHistoryEvidenceChecks: 1 }, gapPositions: [{ source: 'health', position: 1,
+        checkId: APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE, reason: 'invalid-history-evidence' }] });
+    const publicMetrics = toPublicAppHealthReport(report.appHealth).checks[0].metrics;
+    expect(publicMetrics.historyGapEvidenceInvalid).toBe(true);
+    for (const key of ['historyGaps', 'historySourceGapDays']) if (!Object.hasOwn(metrics, key))
+      expect(JSON.parse(String(publicMetrics[key]))).toEqual({ invalidEvidence: true, missingEvidence: true });
+  },
+);

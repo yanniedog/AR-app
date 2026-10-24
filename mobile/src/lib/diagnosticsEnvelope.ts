@@ -1,7 +1,7 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { toPublicAppHealthReport } from './appHealth';
 import { PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from './performanceAuditSetup';
-import { encodeCompressedDiagnosticJson } from './compactDiagnosticJson';
+import { encodeCompressedDiagnosticJson, MAX_COMPRESSED_DIAGNOSTIC_BYTES } from './compactDiagnosticJson';
 import { publicAuditDiagnostic, publicAuditError } from './performanceAuditDiagnostic';
 import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
 import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
@@ -244,7 +244,7 @@ export function createPublicPerformanceAuditReport(report: PerformanceAuditRepor
     performanceCheckCount: completion.performanceCheckCount, healthCheckCount: completion.healthCheckCount,
     failureCount: completion.failurePositions.length,
     timingFailureCount: completion.failurePositions.filter(failure => failure.category === 'timing').length } });
-  if (new TextEncoder().encode(body).length > 2 * 1024 * 1024) {
+  if (new TextEncoder().encode(body).length > MAX_COMPRESSED_DIAGNOSTIC_BYTES) {
     throw new Error('The deidentified report exceeds the public upload limit.');
   }
   return body;

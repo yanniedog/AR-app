@@ -7,7 +7,7 @@ const REASONS = new Set([
   'historical-detail-evidence-unknown', 'historical-quarantined-tiers',
   'current-payload-stale',
   'product-history-not-loaded', 'product-history-date-unavailable', 'product-source-to-model-mismatch',
-  'product-model-to-chart-mismatch', 'current-product-rate-mismatch', 'product-source-reconciliation-unavailable',
+  'product-model-to-chart-mismatch', 'current-product-rate-mismatch', 'current-product-observation-missing', 'product-source-reconciliation-unavailable',
   ...['min', 'mean', 'median', 'max'].flatMap(statistic => [
     `source-to-model-${statistic}-mismatch`, `model-to-chart-${statistic}-mismatch`,
     `unexpected-chart-${statistic}-point`,
@@ -30,8 +30,13 @@ export function publicHistoryCoverageSanitizer() {
     const output: Record<string, AppHealthMetricValue> = {};
     let invalid = false;
     for (const key of ['historyGaps', 'historySourceGapDays'] as const) {
-      if (!Object.hasOwn(metrics, key)) continue;
       const countKey = key === 'historyGaps' ? 'historyInvalidGapRecords' : 'historyInvalidSourceGapDates';
+      if (!Object.hasOwn(metrics, key)) {
+        output[key] = JSON.stringify({ invalidEvidence: true, missingEvidence: true });
+        output[countKey] = null;
+        invalid = true;
+        continue;
+      }
       let values: unknown;
       try { values = typeof metrics[key] === 'string' ? JSON.parse(metrics[key]) : null; }
       catch { values = null; }

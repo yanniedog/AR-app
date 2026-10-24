@@ -179,8 +179,13 @@ function auditProductHistory(core: CorePayload, history: ProductHistoryPayload |
     for (const day of axis) {
       const index = dates.get(day);
       const retained = index === undefined ? null : raw?.[index] ?? null;
-      const expected = retained ?? (day === core.run_date ? selected?.rate ?? null : null);
-      if (chart[day] !== expected) {
+      const expected = retained;
+      const currentObservationMissing = day === core.run_date && selected != null && retained == null;
+      if (currentObservationMissing) result.gaps.push([day, 'current-product-observation-missing', selected.section, 1, key]);
+      // The chart may deliberately fall back to the independently known current
+      // headline. That does not fill or certify a missing history observation.
+      const knownHeadlineFallback = currentObservationMissing && chart[day] === selected.rate;
+      if (chart[day] !== expected && !knownHeadlineFallback) {
         result.gaps.push([day, 'product-model-to-chart-mismatch', selected?.section ?? null, 1, key]); result.chartProjectionMismatches++;
       }
       if (day === core.run_date && selected && retained != null && Math.abs(retained - selected.rate) > 1e-9) {
@@ -240,6 +245,14 @@ function auditProductSource(core: CorePayload, history: ProductHistoryPayload,
 const retained = new WeakMap<CorePayload, { prepared: PreparedHistoricalBankRateCatalogue | null;
   revision: string; productHistory: ProductHistoryPayload | null; result: HistoryCoverageEvidence }>();
 
+function freezeHistoryEvidence(result: HistoryCoverageEvidence): HistoryCoverageEvidence {
+  result.sourceGapDays = [...new Set(result.sourceGapDays)].sort();
+  for (const gap of result.gaps) Object.freeze(gap);
+  Object.freeze(result.gaps);
+  Object.freeze(result.sourceGapDays);
+  return Object.freeze(result);
+}
+
 /** Check every loaded historical date and all four bank-chart statistics.
  * This proves model projection, while foreground probes prove sampled pixels.
  * No fetch, raw archive preparation, profile changes or cache writes occur here.
@@ -262,6 +275,7 @@ export function historyCoverageEvidence(core: CorePayload, productHistory: Produ
   auditProductHistory(core, productHistory, prepared, result);
   if (!prepared) {
     result.gaps.push([core.run_date, 'historical-source-not-loaded', null, 1]);
+    freezeHistoryEvidence(result);
     retained.set(core, { prepared, revision, productHistory, result });
     return result;
   }
@@ -274,6 +288,7 @@ export function historyCoverageEvidence(core: CorePayload, productHistory: Produ
   if (prepared.quarantinedTierCount) result.gaps.push([core.run_date, 'historical-quarantined-tiers', null, prepared.quarantinedTierCount]);
   reconcileHistoryCoverage(result, catalogue.dates, catalogue.sources, catalogue.unavailable,
     sourceSnapshots(prepared), snapshots);
+  freezeHistoryEvidence(result);
   retained.set(core, { prepared, revision, productHistory, result });
   return result;
 }
@@ -298,8 +313,10 @@ export function reconcileHistoryCoverage(result: HistoryCoverageEvidence, dates:
       result.gaps.push([day, 'historical-source-unavailable', null, 1]);
     }
     if (!snapshots[day]) {
-      result.gaps.push([day, 'processed-day-missing', null, 1]);
-      if (day === result.runDate || (sources[day] && !unavailable[day])) result.processingMismatches++;
+      if (day === result.runDate || (sources[day] && !unavailable[day])) {
+        result.gaps.push([day, 'processed-day-missing', null, 1]);
+        result.processingMismatches++;
+      }
       continue;
     }
     if (day !== result.runDate && sources[day] && !unavailable[day]) for (const section of SECTION_KEYS) {

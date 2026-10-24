@@ -1,4 +1,6 @@
-import { decodeCompactDiagnosticJson, encodeCompactDiagnosticJson, encodeCompressedDiagnosticJson } from '../src/lib/compactDiagnosticJson';
+import { decodeCompactDiagnosticJson, encodeCompactDiagnosticJson, encodeCompressedDiagnosticJson,
+  MAX_COMPRESSED_DIAGNOSTIC_BYTES, MAX_DECODED_DIAGNOSTIC_BYTES } from '../src/lib/compactDiagnosticJson';
+import * as catalogueCodec from '../src/data/historicalBankRateCatalogueCompression';
 
 test('dictionary encoding round-trips every JSON value, repeated names, Unicode, null and measured zero', () => {
   const source = { checks: [{ id: '中文', durationMs: 0, diagnostic: { ready: false, actual: null } },
@@ -59,3 +61,38 @@ test.each(['digest', 'length', 'truncation', 'base64', 'oversize'])(
     expect(() => decodeCompactDiagnosticJson(JSON.stringify(envelope))).toThrow('Invalid compressed diagnostic report');
   },
 );
+
+test('rejects forged near-128MiB decoded lengths before entering the historical allocator', () => {
+  const envelope = JSON.parse(encodeCompressedDiagnosticJson({ checks: [] }));
+  const archive = Buffer.from(envelope.gzip_base64, 'base64');
+  envelope.bytes = 128 * 1024 * 1024;
+  // The shared decoder checks this footer before allocating; forge both values
+  // so this regression exercises the additional audit-specific boundary.
+  archive.writeUInt32LE(envelope.bytes, archive.length - 4);
+  envelope.gzip_base64 = archive.toString('base64');
+  const decode = jest.spyOn(catalogueCodec, 'decompressCatalogue');
+  try {
+    expect(() => decodeCompactDiagnosticJson(JSON.stringify(envelope))).toThrow('Invalid compressed diagnostic report');
+    expect(decode).not.toHaveBeenCalled();
+  } finally { decode.mockRestore(); }
+});
+
+test('enforces decoded and UTF-8 wire budgets symmetrically without truncation', () => {
+  const envelope = JSON.parse(encodeCompressedDiagnosticJson({ checks: [] }));
+  const decode = jest.spyOn(catalogueCodec, 'decompressCatalogue');
+  const compress = jest.spyOn(catalogueCodec, 'compressCatalogue');
+  try {
+    envelope.bytes = MAX_DECODED_DIAGNOSTIC_BYTES + 1;
+    expect(() => decodeCompactDiagnosticJson(JSON.stringify(envelope))).toThrow('Invalid compressed diagnostic report');
+    envelope.bytes = 13;
+    envelope.padding = '界'.repeat(Math.floor(MAX_COMPRESSED_DIAGNOSTIC_BYTES / 3));
+    const text = JSON.stringify(envelope);
+    expect(text.length).toBeLessThan(MAX_COMPRESSED_DIAGNOSTIC_BYTES);
+    expect(() => decodeCompactDiagnosticJson(text)).toThrow('Invalid compressed diagnostic report');
+    expect(decode).not.toHaveBeenCalled();
+    compress.mockReturnValueOnce({ bytes: MAX_DECODED_DIAGNOSTIC_BYTES + 1, sha256: 'a'.repeat(64), gzip_base64: 'small' });
+    expect(() => encodeCompressedDiagnosticJson({ checks: [] })).toThrow('decoded audit budget');
+    expect(() => encodeCompressedDiagnosticJson({ checks: [] }, { padding: '界'.repeat(MAX_COMPRESSED_DIAGNOSTIC_BYTES / 2) }))
+      .toThrow('public upload limit');
+  } finally { decode.mockRestore(); compress.mockRestore(); }
+});

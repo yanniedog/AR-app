@@ -25,6 +25,9 @@ function fixture() {
   const { snapshot } = makeHealthyDataFixture();
   const state = stateFor(snapshot.core!);
   snapshot.catalogue = appHealthCatalogueSnapshot(state);
+  snapshot.historyCoverage = { available: true, runDate: snapshot.core!.run_date,
+    observedDay: snapshot.core!.run_date, days: 1, sourceGapDays: [], gaps: [],
+    processingMismatches: 0, chartProjectionMismatches: 0, historicalPixelsVerified: false };
   return { snapshot, state };
 }
 
@@ -135,6 +138,9 @@ test('independently detects a Banks selector returning a different tier at equal
       ({ ...row, rate_index: (row.rate_index ?? 0) + 100 })) })));
   try {
     snapshot.catalogue = appHealthCatalogueSnapshot(state);
+  snapshot.historyCoverage = { available: true, runDate: snapshot.core!.run_date,
+    observedDay: snapshot.core!.run_date, days: 1, sourceGapDays: [], gaps: [],
+    processingMismatches: 0, chartProjectionMismatches: 0, historicalPixelsVerified: false };
     expect(snapshot.catalogue!.sections[0].directory).toEqual(snapshot.catalogue!.sections[0].eligible);
     expect(evaluateAppHealthCatalogueCoverage(snapshot)).toMatchObject({ status: 'fail', metrics: { identityMismatches: 6 } });
   } finally { spy.mockRestore(); }
@@ -157,6 +163,9 @@ test('accounts separately for mandatory profile, suitability and token-rate excl
   state.prefs.includeNonStandard = false;
   state.prefs.interests = ['Mortgage'];
   snapshot.catalogue = appHealthCatalogueSnapshot(state);
+  snapshot.historyCoverage = { available: true, runDate: snapshot.core!.run_date,
+    observedDay: snapshot.core!.run_date, days: 1, sourceGapDays: [], gaps: [],
+    processingMismatches: 0, chartProjectionMismatches: 0, historicalPixelsVerified: false };
   expect(snapshot.catalogue!.sections[1]).toMatchObject({ selectedInterest: false,
     published: { products: 4 }, eligible: { products: 1 },
     excluded: { mandatoryProfile: 1, suitability: 1, tokenRate: 1 },
@@ -171,6 +180,9 @@ test('keeps blocked eligibility unknown even with full-catalogue opt-in', () => 
   const { snapshot, state } = fixture();
   installMandatoryEligibility({ active: true, loading: true, rows: new WeakSet(), productKeys: new Set() });
   snapshot.catalogue = appHealthCatalogueSnapshot(state);
+  snapshot.historyCoverage = { available: true, runDate: snapshot.core!.run_date,
+    observedDay: snapshot.core!.run_date, days: 1, sourceGapDays: [], gaps: [],
+    processingMismatches: 0, chartProjectionMismatches: 0, historicalPixelsVerified: false };
   expect(snapshot.catalogue!.sections[0]).toMatchObject({ eligible: null, search: null, directory: null,
     excluded: { mandatoryProfile: null, suitability: null, tokenRate: null } });
   expect(evaluateAppHealthCatalogueCoverage(snapshot)).toMatchObject({ status: 'unavailable', metrics: {
@@ -185,6 +197,9 @@ test('compares detail and search product identities, not matching record counts'
   delete state.searchIndex!.products[removed];
   state.searchIndex!.products['unrelated-search'] = '';
   snapshot.catalogue = appHealthCatalogueSnapshot(state);
+  snapshot.historyCoverage = { available: true, runDate: snapshot.core!.run_date,
+    observedDay: snapshot.core!.run_date, days: 1, sourceGapDays: [], gaps: [],
+    processingMismatches: 0, chartProjectionMismatches: 0, historicalPixelsVerified: false };
   expect(evaluateAppHealthCatalogueCoverage(snapshot)).toMatchObject({ status: 'warn', metrics: {
     missingDetails: 1, missingSearchIndex: 1 } });
   expect(snapshot.catalogue!.sections[0].missingDetails).toEqual([removed]);
@@ -196,6 +211,9 @@ test('missing assets and absent catalogue evidence do not become zero missing pr
   state.details = null;
   state.searchIndex = null;
   snapshot.catalogue = appHealthCatalogueSnapshot(state);
+  snapshot.historyCoverage = { available: true, runDate: snapshot.core!.run_date,
+    observedDay: snapshot.core!.run_date, days: 1, sourceGapDays: [], gaps: [],
+    processingMismatches: 0, chartProjectionMismatches: 0, historicalPixelsVerified: false };
   expect(evaluateAppHealthCatalogueCoverage(snapshot)).toMatchObject({ status: 'unavailable', metrics: {
     missingDetails: null, missingSearchIndex: null, searchIndexRunMatches: null } });
   snapshot.catalogue = null;
@@ -206,6 +224,9 @@ test('rejects a search index from another publication even when all keys match',
   const { snapshot, state } = fixture();
   state.searchIndex!.run_date = '2020-01-01';
   snapshot.catalogue = appHealthCatalogueSnapshot(state);
+  snapshot.historyCoverage = { available: true, runDate: snapshot.core!.run_date,
+    observedDay: snapshot.core!.run_date, days: 1, sourceGapDays: [], gaps: [],
+    processingMismatches: 0, chartProjectionMismatches: 0, historicalPixelsVerified: false };
   expect(evaluateAppHealthCatalogueCoverage(snapshot)).toMatchObject({ status: 'fail', metrics: { searchIndexRunMatches: false } });
 });
 
@@ -216,4 +237,12 @@ test('keeps provider and exact product evidence out of public diagnostics', () =
     startedAt: '2026-10-12T00:00:00Z', finishedAt: '2026-10-12T00:00:01Z', checks: [check], plannedCheckIds: [check.id] });
   expect(JSON.stringify(toPublicAppHealthReport(report))).not.toContain('Provider 1');
   expect(JSON.stringify(toPublicAppHealthReport(report))).not.toContain('mortgage-1');
+});
+
+test('healthy catalogue without historical evidence remains unavailable with unknown gap metrics', () => {
+  const { snapshot } = fixture();
+  delete snapshot.historyCoverage;
+  const check = evaluateAppHealthCatalogueCoverage(snapshot);
+  expect(check).toMatchObject({ status: 'unavailable', metrics: { historyAvailable: null,
+    historyDaysChecked: null, historyGaps: null, historySourceGapDays: null } });
 });

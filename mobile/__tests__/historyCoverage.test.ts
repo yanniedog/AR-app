@@ -26,7 +26,7 @@ it('retains every unavailable and unprocessed day, even when current data works'
     });
   expect(result.days).toBe(4);
   expect(result.sourceGapDays).toEqual(['2026-10-22']);
-  expect(result.gaps).toContainEqual(['2026-10-22', 'processed-day-missing', null, 1]);
+  expect(result.gaps).not.toContainEqual(['2026-10-22', 'processed-day-missing', null, 1]);
   expect(result.gaps).toContainEqual(['2026-10-23', 'source-to-model-count-mismatch', 'Mortgage', 1, 'Bank']);
   expect(result).toMatchObject({ processingMismatches: 1, chartProjectionMismatches: 0, historicalPixelsVerified: false });
 });
@@ -200,4 +200,39 @@ it('retains earlier selected fallback dates, source statistics and unknown metad
   expect(result.gaps).toContainEqual(['2026-10-22', 'historical-detail-evidence-unknown', 'Mortgage', 2]);
   expect(result.gaps).toContainEqual(['2026-10-23', 'historical-detail-evidence-unknown', 'Mortgage', 1]);
   expect(result.gaps.some(([, reason]) => reason.startsWith('unexpected-chart'))).toBe(false);
+});
+
+it.each(['null', 'missing-product', 'missing-date'])(
+  'keeps a missing current product-history observation explicit despite headline fallback: %s', kind => {
+    const core = makeHealthyCore(); core.run_date = '2026-10-24';
+    const key = core.sections.Mortgage.rates[0].product_key;
+    const history: productProjection.ProductHistoryPayload = { schema_version: 3, run_date: core.run_date,
+      run_dates: kind === 'missing-date' ? ['2026-10-23'] : ['2026-10-23', core.run_date],
+      products: kind === 'missing-product' ? {} : { [key]: [0.061, null] } };
+    const baseline = JSON.stringify(history);
+    const result = historyCoverageEvidence(core, history, Date.parse('2026-10-24T01:00:00Z'));
+    expect(result.gaps).toContainEqual(['2026-10-24', 'current-product-observation-missing', 'Mortgage', 1, key]);
+    expect(result.gaps).not.toContainEqual(['2026-10-24', 'product-model-to-chart-mismatch', 'Mortgage', 1, key]);
+    expect(result.chartProjectionMismatches).toBe(0);
+    expect(JSON.stringify(history)).toBe(baseline);
+  },
+);
+
+it('unavailable input and future stale days never create app processing gaps', () => {
+  const result = reconcileHistoryCoverage({ ...evidence(), observedDay: '2026-10-26' },
+    ['2026-10-23', '2026-10-24'], {}, { '2026-10-23': 'Not available' }, {}, { '2026-10-24': {} });
+  expect(result.processingMismatches).toBe(0);
+  expect(result.gaps.filter(([, reason]) => reason === 'processed-day-missing')).toEqual([]);
+  expect(result.gaps).toContainEqual(['2026-10-23', 'historical-source-unavailable', null, 1]);
+});
+
+it('returned cached evidence cannot be corrupted through exposed arrays, tuples or counters', () => {
+  const core = makeHealthyCore(); core.run_date = '2026-10-24';
+  const now = Date.parse('2026-10-25T01:00:00Z');
+  const first = historyCoverageEvidence(core, null, now), expected = JSON.stringify(first);
+  expect(() => { first.gaps.push(['2026-10-25', 'processed-day-missing', null, 99]); }).toThrow(TypeError);
+  expect(Reflect.set(first.gaps[0], '1', 'mutated')).toBe(false);
+  expect(() => { first.sourceGapDays.push('2099-01-01'); }).toThrow(TypeError);
+  expect(Reflect.set(first, 'processingMismatches', 99)).toBe(false);
+  expect(JSON.stringify(historyCoverageEvidence(core, null, now))).toBe(expected);
 });

@@ -49,10 +49,10 @@ export function evaluateAppHealthCatalogueCoverage(snapshot: AppHealthDataSnapsh
   const catalogue = snapshot.catalogue;
   const history = snapshot.historyCoverage;
   const historyMetrics: AppHealthCheck['metrics'] = {
-    historyAvailable: history?.available ?? false,
-    historyDaysChecked: history?.days ?? 0,
-    historySourceGapDays: JSON.stringify(history?.sourceGapDays ?? []),
-    historyGaps: JSON.stringify(history?.gaps ?? []),
+    historyAvailable: history?.available ?? null,
+    historyDaysChecked: history?.days ?? null,
+    historySourceGapDays: history ? JSON.stringify(history.sourceGapDays) : null,
+    historyGaps: history ? JSON.stringify(history.gaps) : null,
     historyProcessingMismatches: history?.processingMismatches ?? null,
     historyChartProjectionMismatches: history?.chartProjectionMismatches ?? null,
     historicalPixelsVerified: false,
@@ -74,6 +74,7 @@ export function evaluateAppHealthCatalogueCoverage(snapshot: AppHealthDataSnapsh
     (section.directoryUnexpected?.length ?? 0)) : null;
   const unavailable = !ready || !catalogue.detailsAvailable || !catalogue.searchIndexAvailable;
   const status = identityMismatches || catalogue.searchIndexRunMatches === false || (history?.processingMismatches ?? 0) > 0 || (history?.chartProjectionMismatches ?? 0) > 0 ? 'fail'
+    : !history ? 'unavailable'
     : (missingDetails ?? 0) > 0 || (missingSearchIndex ?? 0) > 0 || (history?.gaps.length ?? 0) > 0 ? 'warn'
       : unavailable ? 'unavailable' : 'pass';
   const allRows = SECTION_KEYS.flatMap(section => snapshot.core!.sections[section]?.rates ?? []);
@@ -111,6 +112,7 @@ export function evaluateAppHealthCatalogueCoverage(snapshot: AppHealthDataSnapsh
     summary: !ready ? 'Visibility is blocked while eligibility or suitability is preparing; eligible coverage remains unknown.'
       : identityMismatches ? 'Exact product/tier identities differ between the eligible catalogue and Search or Banks.'
         : catalogue.searchIndexRunMatches === false ? 'Search index identities belong to a different publication run.'
+        : !history ? 'Daily historical audit evidence is unavailable; previous-day processing and chart coverage are unknown.'
         : `${metrics.publishedProducts} published products across ${metrics.publishedProviders} banks were reconciled by identity. ` +
           `${metrics.eligibleProducts} products remain after profile, suitability and token-rate exclusions. ` +
           `Missing details: ${missingDetails ?? 'unknown'}; missing search index entries: ${missingSearchIndex ?? 'unknown'}. ` +
