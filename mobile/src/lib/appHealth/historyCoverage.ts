@@ -39,7 +39,12 @@ function independentStats(values: Map<number, number>): RateSummary | null {
     mean: entries.reduce((total, [value, n]) => total + value * n, 0) / count };
 }
 
+const retainedSourceSnapshots = new WeakMap<PreparedHistoricalBankRateCatalogue, Record<string, BankRateSnapshot>>();
+const retainedUnknownMetadata = new WeakMap<PreparedHistoricalBankRateCatalogue, Record<string, Record<SectionKey, number>>>();
+
 function sourceSnapshots(prepared: PreparedHistoricalBankRateCatalogue): Record<string, BankRateSnapshot> {
+  const cached = retainedSourceSnapshots.get(prepared);
+  if (cached) return cached;
   const result: Record<string, BankRateSnapshot> = Object.fromEntries(prepared.catalogue.run_dates.map(day => [day, {}]));
   const reduce = (dates: readonly string[], section: SectionKey,
     add: (emit: (date: number, provider: string, rate: number, delta: number) => void) => void,
@@ -83,12 +88,15 @@ function sourceSnapshots(prepared: PreparedHistoricalBankRateCatalogue): Record<
   const selection = historicalCatalogueSelection(prepared);
   if (selection?.fallback) {
     const fallback = sourceSnapshots(selection.fallback);
-    for (const day of Object.keys(result)) if (!selection.dates.has(day) && fallback[day]) result[day] = fallback[day];
+    for (const day of Object.keys(fallback)) if (!selection.dates.has(day)) result[day] = fallback[day];
   }
+  retainedSourceSnapshots.set(prepared, result);
   return result;
 }
 
 function unknownMetadata(prepared: PreparedHistoricalBankRateCatalogue): Record<string, Record<SectionKey, number>> {
+  const cached = retainedUnknownMetadata.get(prepared);
+  if (cached) return cached;
   const result = Object.fromEntries(prepared.catalogue.run_dates.map(day => [day, { Mortgage: 0, Savings: 0, TD: 0 }]));
   const ready = preparedReadySources(prepared);
   if (ready) for (const source of ready) {
@@ -110,8 +118,41 @@ function unknownMetadata(prepared: PreparedHistoricalBankRateCatalogue): Record<
   const selection = historicalCatalogueSelection(prepared);
   if (selection?.fallback) {
     const fallback = unknownMetadata(selection.fallback);
-    for (const day of Object.keys(result)) if (!selection.dates.has(day) && fallback[day]) result[day] = fallback[day];
+    for (const day of Object.keys(fallback)) if (!selection.dates.has(day)) result[day] = fallback[day];
   }
+  retainedUnknownMetadata.set(prepared, result);
+  return result;
+}
+
+interface EffectiveHistoricalSource {
+  dates: readonly string[];
+  sources: Readonly<Record<string, unknown>>;
+  unavailable: Readonly<Record<string, string>>;
+}
+const retainedEffectiveSources = new WeakMap<PreparedHistoricalBankRateCatalogue, EffectiveHistoricalSource>();
+
+/** A selection wrapper deliberately shares the primary catalogue; its older
+ * fallback owns additional dates that are present in the actual chart model. */
+function effectiveHistoricalSource(prepared: PreparedHistoricalBankRateCatalogue): EffectiveHistoricalSource {
+  const cached = retainedEffectiveSources.get(prepared);
+  if (cached) return cached;
+  const catalogue = prepared.catalogue, selection = historicalCatalogueSelection(prepared);
+  if (!selection) {
+    const result = { dates: catalogue.run_dates, sources: catalogue.sources, unavailable: catalogue.unavailable_dates };
+    retainedEffectiveSources.set(prepared, result);
+    return result;
+  }
+  const fallback = selection.fallback ? effectiveHistoricalSource(selection.fallback) : null;
+  const dates = [...new Set([...catalogue.run_dates, ...(fallback?.dates ?? []), ...(selection.index?.dates ?? [])])].sort();
+  const sources: Record<string, unknown> = {}, unavailable: Record<string, string> = {};
+  for (const day of dates) {
+    const chosenSource = selection.dates.has(day) ? catalogue.sources[day] : fallback?.sources[day];
+    const chosenUnavailable = selection.dates.has(day) ? catalogue.unavailable_dates[day] : fallback?.unavailable[day];
+    if (!selection.conflicts.has(day) && chosenSource && !chosenUnavailable) sources[day] = chosenSource;
+    else unavailable[day] = 'No accepted historical source';
+  }
+  const result = { dates, sources, unavailable };
+  retainedEffectiveSources.set(prepared, result);
   return result;
 }
 
@@ -147,6 +188,29 @@ function auditProductHistory(core: CorePayload, history: ProductHistoryPayload |
       }
     }
   }
+  if (prepared) {
+    const cached = retainedProductSource.get(core);
+    if (cached?.history === history && cached.prepared === prepared) {
+      for (const gap of cached.gaps) result.gaps.push([...gap]);
+      result.processingMismatches += cached.processingMismatches;
+    } else {
+      const firstGap = result.gaps.length, firstMismatch = result.processingMismatches;
+      auditProductSource(core, history, prepared, result);
+      retainedProductSource.set(core, { history, prepared,
+        gaps: result.gaps.slice(firstGap).map(gap => [...gap] as HistoryCoverageEvidence['gaps'][number]),
+        processingMismatches: result.processingMismatches - firstMismatch });
+    }
+  }
+}
+
+// Source inputs are immutable and independent of eligibility/profile revisions.
+// Keep one product source result per installed core; actual chart checks above
+// still execute whenever the outer revision changes.
+const retainedProductSource = new WeakMap<CorePayload, { history: ProductHistoryPayload;
+  prepared: PreparedHistoricalBankRateCatalogue; gaps: HistoryCoverageEvidence['gaps']; processingMismatches: number }>();
+function auditProductSource(core: CorePayload, history: ProductHistoryPayload,
+  prepared: PreparedHistoricalBankRateCatalogue, result: HistoryCoverageEvidence): void {
+  const dates = new Map(history.run_dates.map((day, index) => [day, index]));
   const compareSource = (source: PreparedHistoricalBankRateCatalogue, selectedDates?: ReadonlySet<string>) => {
     const ready = preparedReadySources(source);
     const selection = historicalCatalogueSelection(source);
@@ -201,14 +265,14 @@ export function historyCoverageEvidence(core: CorePayload, productHistory: Produ
     retained.set(core, { prepared, revision, productHistory, result });
     return result;
   }
-  const catalogue = prepared.catalogue;
+  const catalogue = effectiveHistoricalSource(prepared);
   const scope = bankRateScope(Object.fromEntries(SECTION_KEYS.map(section => [section, core.sections[section].rates])) as Record<SectionKey, typeof core.sections.Mortgage.rates>);
   const snapshots = historicalBankRateSnapshots(prepared, core, scope,
     { profileFilters: EMPTY_PROFILE, interests: SECTION_KEYS, includeNonStandard: true });
-  for (const [day, sections] of Object.entries(unknownMetadata(prepared))) if (day < core.run_date && catalogue.sources[day] && !catalogue.unavailable_dates[day])
+  for (const [day, sections] of Object.entries(unknownMetadata(prepared))) if (day < core.run_date && catalogue.sources[day] && !catalogue.unavailable[day])
     for (const section of SECTION_KEYS) if (sections[section]) result.gaps.push([day, 'historical-detail-evidence-unknown', section, sections[section]]);
   if (prepared.quarantinedTierCount) result.gaps.push([core.run_date, 'historical-quarantined-tiers', null, prepared.quarantinedTierCount]);
-  reconcileHistoryCoverage(result, catalogue.run_dates, catalogue.sources, catalogue.unavailable_dates,
+  reconcileHistoryCoverage(result, catalogue.dates, catalogue.sources, catalogue.unavailable,
     sourceSnapshots(prepared), snapshots);
   retained.set(core, { prepared, revision, productHistory, result });
   return result;

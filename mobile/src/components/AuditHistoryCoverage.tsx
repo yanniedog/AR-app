@@ -7,8 +7,9 @@ import type { PerformanceAuditReport } from '../lib/performanceAudit';
 /** Daily facts are bound to the retained report, never the mutable store. */
 export function AuditHistoryCoverage({ report }: { report: PerformanceAuditReport }) {
   const [expanded, setExpanded] = useState(false);
-  const check = report.appHealth?.checks.find(item => item.code === 'catalogue-identity-coverage');
-  if (!check) return null;
+  const checks = report.appHealth?.checks;
+  const check = Array.isArray(checks) ? checks.find(item => item?.code === 'catalogue-identity-coverage') : undefined;
+  if (!check || !check.metrics || typeof check.metrics !== 'object' || Array.isArray(check.metrics)) return null;
   let readable = typeof check.metrics.historyGaps === 'string';
   let gaps: [string, string, string | null, number, string?][] = [];
   try {

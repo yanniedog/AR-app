@@ -11,6 +11,16 @@ type TestNode = { props: Record<string, any>; parent: TestNode | null;
   findByProps: (props: Record<string, unknown>) => TestNode };
 type Renderer = ReactTestRenderer & { root: TestNode; toJSON: () => unknown };
 
+test.each([null, {}, [null], [{ code: 'catalogue-identity-coverage' }]])(
+  'malformed retained health checks cannot crash the audit screen: %j', checks => {
+    const report = makePerformanceAuditReport();
+    report.appHealth = { checks } as unknown as NonNullable<typeof report.appHealth>;
+    let tree!: Renderer;
+    act(() => { tree = TestRenderer.create(<AuditHistoryCoverage report={report} />) as Renderer; });
+    try { expect(tree.toJSON()).toBeNull(); } finally { act(() => tree.unmount()); }
+  },
+);
+
 function render(metrics: Record<string, AppHealthMetricValue>) {
   const report = makePerformanceAuditReport();
   report.appHealth = finalizeAppHealthReport({ sessionId: report.sessionId, mode: 'local',
