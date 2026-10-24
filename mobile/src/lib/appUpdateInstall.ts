@@ -13,6 +13,7 @@ import {
   type ApkManifest,
 } from './appUpdateLogic';
 
+const APK_FILE_INFO_TIMEOUT_MS = 30_000;
 const APK_SHA256_TIMEOUT_MS = 2 * 60 * 1000;
 const APK_IDENTITY_TIMEOUT_MS = 2 * 60 * 1000;
 
@@ -23,7 +24,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
       promise,
       new Promise<T>((_resolve, reject) => {
         timeout = setTimeout(
-          () => reject(new Error(`APK sha256 verification timed out after ${timeoutMs}ms`)),
+          () => reject(new Error(`APK verification timed out after ${timeoutMs}ms`)),
           timeoutMs,
         );
       }),
@@ -42,7 +43,7 @@ export async function verifyDownloadedApk(
   path: string,
   manifest: Pick<ApkManifest, 'bytes' | 'sha256' | 'version' | 'build_number'>,
 ): Promise<{ size: number; verifiedSha256: boolean }> {
-  const info = await FileSystem.getInfoAsync(path);
+  const info = await withTimeout(FileSystem.getInfoAsync(path), APK_FILE_INFO_TIMEOUT_MS);
   const size = info.exists && 'size' in info ? (info.size ?? 0) : 0;
   assertDownloadedApkMatchesManifest(size, manifest);
 
