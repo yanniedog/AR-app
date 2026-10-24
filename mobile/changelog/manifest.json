@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-10-23T22:22:46.793Z",
+  "generated_at": "2026-10-24T02:15:04.520Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -1058,6 +1058,14 @@
         "Fix audit timeouts and include compact complete diagnostics (#431)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.247"
+    },
+    {
+      "version": "1.0.248",
+      "date": "2026-10-24",
+      "summaryBullets": [
+        "Fix updater restarting partially downloaded APKs (#436)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.248"
     }
   ]
 }
