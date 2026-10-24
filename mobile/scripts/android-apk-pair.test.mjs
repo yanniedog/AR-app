@@ -62,6 +62,7 @@ function publication(t, overrides = {}) {
   return { root, env, events,
     verify(_root, channel) { events.push(`verify:${channel}`); return identity; },
     async readPublished(_repo, tag) { events.push(`read:${tag}`); return null; },
+    async readImmutable() { return null; },
     run(_executable, args, options) {
       const script = basename(args[0]);
       events.push(script);
@@ -124,6 +125,20 @@ test('a newer published source blocks an old rebuild even with a higher version 
   }, async isAncestor() { return false; } });
   await assert.rejects(publishApkPair(options), /source older/);
   assert.ok(!options.events.includes('publish-apk-manifest.mjs'));
+});
+
+test('a versioned APK left by partial publication cannot be replaced by a rebuilt binary', async t => {
+  const options = publication(t, { async readImmutable() {
+    return { bytes: identity.bytes, sha256: 'f'.repeat(64) };
+  } });
+  await assert.rejects(publishApkPair(options), /immutable APK version/);
+  assert.ok(!options.events.includes('publish-apk-manifest.mjs'));
+});
+
+test('partial immutable upload recovers when the retained artifact bytes match', async t => {
+  const options = publication(t, { async readImmutable() { return identity; } });
+  await publishApkPair(options);
+  assert.equal(options.events.filter(event => event === 'publish-apk-manifest.mjs').length, 2);
 });
 
 test('publication cannot downgrade either identity field or replace immutable version bytes', () => {

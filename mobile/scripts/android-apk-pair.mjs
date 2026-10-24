@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inspectApkIdentity } from './apk-identity.mjs';
 import { verifyApkPayloadPrivacy } from './apk-payload-privacy.mjs';
 import { verifyApkHeadlessLoader, verifyApkColdBackgroundPatches } from './apk-headless-loader.mjs';
-import { expectedAbisForApkChannel } from './app-release-utils.mjs';
+import { expectedAbisForApkChannel, versionTagForApkChannel } from './app-release-utils.mjs';
 import { artifactBudgetForChannel, assertApkSizeBudget } from './report-artifact-sizes.mjs';
 import releaseVersion from './android-release-version-pure.cjs';
 
@@ -102,8 +102,24 @@ async function githubAncestor(repo, older, newer, token) {
   return comparison.merge_base_commit?.sha === older && ['ahead', 'identical'].includes(comparison.status);
 }
 
+async function immutableApkMetadata(repo, tag, token) {
+  const response = await fetch(`https://api.github.com/repos/${repo}/releases/tags/${tag}`, {
+    headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    signal: AbortSignal.timeout(30000),
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Immutable release HTTP ${response.status}`);
+  const release = await response.json();
+  const asset = release.assets?.find(item => item.name === 'app-preview.apk');
+  if (!asset) return null;
+  const sha256 = /^sha256:([a-f0-9]{64})$/i.exec(asset.digest ?? '')?.[1].toLowerCase();
+  if (!sha256) throw new Error('Cannot verify existing immutable APK digest');
+  return { sha256, bytes: asset.size };
+}
+
 export async function publishApkPair({ root = mobileRoot, env = process.env, run = command,
-  verify = verifyBuiltApk, readPublished = publishedManifest, isAncestor = githubAncestor } = {}) {
+  verify = verifyBuiltApk, readPublished = publishedManifest, isAncestor = githubAncestor,
+  readImmutable = immutableApkMetadata } = {}) {
   const repo = env.GITHUB_REPOSITORY;
   const sourceSha = env.RELEASE_SOURCE_SHA || env.GITHUB_SHA;
   if (!repo || !/^[a-f0-9]{40}$/i.test(sourceSha ?? '')) throw new Error('Missing protected release source');
@@ -114,7 +130,12 @@ export async function publishApkPair({ root = mobileRoot, env = process.env, run
         || (remote.source_sha !== sourceSha && !await isAncestor(repo, remote.source_sha, sourceSha, env.GH_TOKEN)))) {
       throw new Error('Refusing to publish source older than a published APK');
     }
-    assertPublicationAdvance(verify(root, channel), remote, sourceSha);
+    const local = verify(root, channel);
+    assertPublicationAdvance(local, remote, sourceSha);
+    const immutable = await readImmutable(repo, versionTagForApkChannel(local.version, rollingTag(channel)), env.GH_TOKEN);
+    if (immutable && (immutable.sha256 !== local.sha256 || immutable.bytes !== local.bytes)) {
+      throw new Error('Refusing to replace different bytes at an immutable APK version');
+    }
   }
   run(process.execPath, [join(root, 'scripts/verify-public-delivery.cjs')], { cwd: root, env });
   for (const channel of channels) {

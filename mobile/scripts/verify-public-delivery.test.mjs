@@ -121,16 +121,12 @@ test('an oversized metadata stream is bounded before JSON parsing', async t => {
   await assert.rejects(verifyPublicDelivery(), /byte limit/);
 });
 
-test('public APK dispatch is checked before build and immediately before publication, artifact-only push is unaffected', async () => {
+test('public delivery gates publication in the separately retryable publish job', async () => {
   const workflow = await readFile(new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url), 'utf8');
-  const early = workflow.indexOf('- name: Verify Cloudflare payload delivery before release build');
-  assert.ok(early > workflow.indexOf('- name: Install dependencies'));
-  assert.ok(early < workflow.indexOf('- name: Materialize Firebase config'));
-  assert.match(workflow.slice(early, workflow.indexOf('- name: Materialize Firebase config')),
-    /if: github.event_name == 'workflow_dispatch'\s+run: node scripts\/verify-public-delivery.cjs/);
-  const publication = workflow.split('- name: Publish preview APK manifest (GitHub release)')[1]
-    .split('- name: Queue ARM channel')[0];
-  assert.match(publication, /if: github.event_name == 'workflow_dispatch'/);
-  assert.ok(publication.indexOf('verify-public-delivery.cjs') < publication.indexOf('publish-apk-manifest.mjs'));
-  assert.equal(workflow.match(/node scripts\/verify-public-delivery.cjs/g)?.length, 2);
+  assert.match(workflow, /needs: build/);
+  assert.match(workflow, /run: node scripts\/android-apk-pair\.mjs publish/);
+  const pair = await readFile(new URL('./android-apk-pair.mjs', import.meta.url), 'utf8');
+  const publication = pair.slice(pair.indexOf('export async function publishApkPair'));
+  assert.ok(publication.indexOf('verify-public-delivery.cjs') < publication.indexOf('scripts/publish-apk-manifest.mjs'));
+  assert.match(publication, /run\(process.execPath, \[join\(root, 'scripts\/verify-public-delivery.cjs'\)\]/);
 });
