@@ -18,6 +18,7 @@ import {
   PASTE_RS_MAX_FULL_UPLOAD_BYTES,
   PASTE_RS_TAIL_MAX_BYTES,
   PASTE_CNET_URL,
+  PASTE_RS_URL,
   RingBuffer,
   debugLog,
   deleteDebugLogUpload,
@@ -214,42 +215,32 @@ describe('formatLogUploadBody', () => {
 });
 
 describe('uploadDebugLog', () => {
-  it('uses paste.rs without contacting the backup when the primary succeeds', async () => {
-    const mockFetch = jest.fn(async () => ({
-      status: 201,
-      text: async () => 'https://paste.rs/primary',
-    })) as unknown as typeof fetch;
+  const contentUrl = 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555';
+  const shareUrl = 'https://paste.rs/short';
+  const cnetSuccess = {
+    status: 201,
+    text: async () => JSON.stringify({ url: contentUrl, delete_key: 'delete-secret' }),
+  };
 
-    const result = await uploadDebugLog('hello', mockFetch);
-
-    expect(result).toEqual(expect.objectContaining({ provider: 'paste.rs', attempts: 1 }));
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('fails over once to an unguessable c-net paste after a transient outage', async () => {
+  it('uploads the full body to c-net then shortens only that URL via paste.rs', async () => {
     const mockFetch = jest
       .fn()
-      .mockResolvedValueOnce({ status: 500, text: async () => 'unavailable' })
-      .mockResolvedValueOnce({
-        status: 201,
-        text: async () =>
-          JSON.stringify({
-            url: 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555',
-            delete_key: 'delete-secret',
-          }),
-      }) as unknown as typeof fetch;
+      .mockResolvedValueOnce(cnetSuccess)
+      .mockResolvedValueOnce({ status: 201, text: async () => shareUrl }) as unknown as typeof fetch;
 
     const result = await uploadDebugLog('hello', mockFetch);
 
-    expect(result).toEqual(
-      expect.objectContaining({
-        provider: 'paste.c-net.org',
-        attempts: 2,
-        deleteKey: 'delete-secret',
-      }),
-    );
+    expect(result).toEqual(expect.objectContaining({
+      url: contentUrl,
+      shareUrl,
+      provider: 'paste.c-net.org',
+      deleteKey: 'delete-secret',
+      attempts: 2,
+      truncated: false,
+      clientTruncated: false,
+    }));
     expect(mockFetch).toHaveBeenNthCalledWith(
-      2,
+      1,
       PASTE_CNET_URL,
       expect.objectContaining({
         method: 'POST',
@@ -261,184 +252,140 @@ describe('uploadDebugLog', () => {
         signal: expect.any(AbortSignal),
       }),
     );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      PASTE_RS_URL,
+      expect.objectContaining({
+        method: 'POST',
+        body: contentUrl,
+        signal: expect.any(AbortSignal),
+      }),
+    );
   });
 
-  it('routes a known-oversized canonical log directly to the full-capacity provider', async () => {
+  it('never posts the full log body to paste.rs', async () => {
     const body = `full-log-${'x'.repeat(PASTE_RS_MAX_FULL_UPLOAD_BYTES)}`;
-    const mockFetch = jest.fn(async () => ({
-      status: 200,
-      text: async () => JSON.stringify({
-        url: 'https://paste.c-net.org/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-        delete_key: 'delete-large',
-      }),
-    })) as unknown as typeof fetch;
+    const largeContent = 'https://paste.c-net.org/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () => JSON.stringify({ url: largeContent, delete_key: 'delete-large' }),
+      })
+      .mockResolvedValueOnce({ status: 201, text: async () => 'https://paste.rs/large-short' }) as unknown as typeof fetch;
 
     const result = await uploadDebugLog(body, mockFetch);
     const exactBytes = new TextEncoder().encode(body).length;
 
     expect(result).toEqual(expect.objectContaining({
+      url: largeContent,
+      shareUrl: 'https://paste.rs/large-short',
       provider: 'paste.c-net.org',
-      attempts: 1,
       originalBytes: exactBytes,
       uploadedBytes: exactBytes,
-      truncated: false,
-      clientTruncated: false,
     }));
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(mockFetch).toHaveBeenCalledWith(
-      PASTE_CNET_URL,
-      expect.objectContaining({ body }),
-    );
+    expect(mockFetch).toHaveBeenNthCalledWith(1, PASTE_CNET_URL, expect.objectContaining({ body }));
+    expect(mockFetch).toHaveBeenNthCalledWith(2, PASTE_RS_URL, expect.objectContaining({ body: largeContent }));
+    expect((mockFetch as jest.Mock).mock.calls.filter(([url]) => url === PASTE_RS_URL)
+      .every(([, init]) => init.body === largeContent)).toBe(true);
   });
 
-  it('deletes an unexpected paste.rs partial before uploading the complete body to c-net', async () => {
-    const body = 'complete-log-body';
-    const partialUrl = 'https://paste.rs/partial';
-    const backupUrl = 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555';
+  it('surfaces the c-net URL when paste.rs shortener fails', async () => {
     const mockFetch = jest
       .fn()
-      .mockResolvedValueOnce({ status: 206, text: async () => partialUrl })
-      .mockResolvedValueOnce({ status: 200 })
-      .mockResolvedValueOnce({
-        status: 200,
-        text: async () => JSON.stringify({ url: backupUrl, delete_key: 'delete-secret' }),
-      }) as unknown as typeof fetch;
+      .mockResolvedValueOnce(cnetSuccess)
+      .mockResolvedValueOnce({ status: 503, text: async () => 'shortener down' }) as unknown as typeof fetch;
 
-    const result = await uploadDebugLog(body, mockFetch);
+    const result = await uploadDebugLog('hello', mockFetch);
 
     expect(result).toEqual(expect.objectContaining({
-      url: backupUrl,
+      url: contentUrl,
+      provider: 'paste.c-net.org',
+      deleteKey: 'delete-secret',
+      attempts: 2,
+    }));
+    expect(result.shareUrl).toBeUndefined();
+  });
+
+  it('surfaces the c-net URL after an ambiguous paste.rs shortener failure', async () => {
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce(cnetSuccess)
+      .mockRejectedValueOnce(new Error('response lost after shortener submission')) as unknown as typeof fetch;
+
+    const result = await uploadDebugLog('hello', mockFetch);
+
+    expect(result).toEqual(expect.objectContaining({
+      url: contentUrl,
+      deleteKey: 'delete-secret',
+      attempts: 2,
+    }));
+    expect(result.shareUrl).toBeUndefined();
+  });
+
+  it('deletes a truncated paste.rs shortener and keeps the c-net content URL', async () => {
+    const partialUrl = 'https://paste.rs/partial-short';
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce(cnetSuccess)
+      .mockResolvedValueOnce({ status: 206, text: async () => partialUrl })
+      .mockResolvedValueOnce({ status: 200 }) as unknown as typeof fetch;
+
+    const result = await uploadDebugLog('hello', mockFetch);
+
+    expect(result).toEqual(expect.objectContaining({
+      url: contentUrl,
       provider: 'paste.c-net.org',
       attempts: 2,
-      originalBytes: new TextEncoder().encode(body).length,
-      uploadedBytes: new TextEncoder().encode(body).length,
     }));
+    expect(result.shareUrl).toBeUndefined();
     expect(mockFetch).toHaveBeenNthCalledWith(
-      2,
+      3,
       partialUrl,
       expect.objectContaining({ method: 'DELETE', signal: expect.any(AbortSignal) }),
     );
-    expect((mockFetch as jest.Mock).mock.calls[1][1]).not.toHaveProperty('headers');
-    expect(mockFetch).toHaveBeenNthCalledWith(
-      3,
-      PASTE_CNET_URL,
-      expect.objectContaining({ method: 'POST', body }),
-    );
+    expect((mockFetch as jest.Mock).mock.calls[2][1]).not.toHaveProperty('headers');
   });
 
-  it('cleans up a paste.rs partial even when the complete backup upload fails', async () => {
-    const partialUrl = 'https://paste.rs/partial-failed-backup';
+  it('fails clearly when the primary c-net upload fails', async () => {
     const mockFetch = jest
       .fn()
-      .mockResolvedValueOnce({ status: 206, text: async () => partialUrl })
-      .mockResolvedValueOnce({ status: 200 })
-      .mockResolvedValueOnce({ status: 503, text: async () => 'down' }) as unknown as typeof fetch;
+      .mockResolvedValueOnce({ status: 503, text: async () => 'primary down' }) as unknown as typeof fetch;
 
-    await expect(uploadDebugLog('complete-log-body', mockFetch)).rejects.toMatchObject({
-      attempts: 2,
+    await expect(uploadDebugLog('hello', mockFetch)).rejects.toMatchObject({
+      attempts: 1,
+      message: expect.stringContaining('The complete debug-log upload failed'),
     });
-
-    expect(mockFetch).toHaveBeenNthCalledWith(
-      2,
-      partialUrl,
-      expect.objectContaining({ method: 'DELETE' }),
-    );
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect((mockFetch as jest.Mock).mock.calls.every(([url]) => url !== PASTE_RS_URL)).toBe(true);
   });
 
-  it('does not create a second public copy when partial cleanup fails', async () => {
-    const sleep = jest.fn(async () => {});
-    const partialUrl = 'https://paste.rs/partial-not-deleted';
-    const mockFetch = jest
-      .fn()
-      .mockResolvedValueOnce({ status: 206, text: async () => partialUrl })
-      .mockResolvedValueOnce({ status: 500 })
-      .mockResolvedValueOnce({ status: 500 }) as unknown as typeof fetch;
-
-    await expect(uploadDebugLog('complete-log-body', mockFetch, { sleep })).rejects.toThrow(
-      `could not remove the partial public copy at ${partialUrl}`,
-    );
-    expect(mockFetch).toHaveBeenCalledTimes(3);
-    expect(sleep).toHaveBeenCalledWith(1_000);
-    expect((mockFetch as jest.Mock).mock.calls.every(([url]) => url !== PASTE_CNET_URL)).toBe(true);
-  });
-
-  it('does not retry the full-capacity POST after a failed response', async () => {
-    const sleep = jest.fn(async () => {});
-    const mockFetch = jest
-      .fn()
-      .mockResolvedValueOnce({ status: 503, text: async () => 'primary down' })
-      .mockResolvedValueOnce({ status: 503, text: async () => 'backup down' }) as unknown as typeof fetch;
-
-    await expect(uploadDebugLog('hello', mockFetch, { sleep })).rejects.toMatchObject({
-      attempts: 2,
-    });
-
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(sleep).not.toHaveBeenCalled();
-  });
-
-  it('does not retry an ambiguous full-capacity network failure', async () => {
-    const body = `full-log-${'x'.repeat(PASTE_RS_MAX_FULL_UPLOAD_BYTES)}`;
+  it('does not retry an ambiguous primary c-net network failure', async () => {
     const mockFetch = jest
       .fn()
       .mockRejectedValueOnce(new Error('response lost after submission'))
-      .mockResolvedValueOnce({
-        status: 200,
-        text: async () => JSON.stringify({
-          url: 'https://paste.c-net.org/orphaned-second-copy',
-          delete_key: 'unreachable-delete-key',
-        }),
-      }) as unknown as typeof fetch;
+      .mockResolvedValueOnce(cnetSuccess) as unknown as typeof fetch;
 
-    await expect(uploadDebugLog(body, mockFetch)).rejects.toMatchObject({ attempts: 1, mayHaveUploaded: true });
+    await expect(uploadDebugLog('hello', mockFetch)).rejects.toMatchObject({
+      attempts: 1,
+      mayHaveUploaded: true,
+    });
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('does not create a backup copy after an ambiguous small paste.rs POST', async () => {
-    const mockFetch = jest
-      .fn()
-      .mockRejectedValueOnce(new Error('response lost after submission'))
-      .mockResolvedValueOnce({
-        status: 200,
-        text: async () => JSON.stringify({
-          url: 'https://paste.c-net.org/orphaned-second-copy',
-          delete_key: 'unreachable-delete-key',
-        }),
-      }) as unknown as typeof fetch;
-
-    await expect(uploadDebugLog('small log', mockFetch)).rejects.toMatchObject({ mayHaveUploaded: true });
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not duplicate a client-rejected upload to the backup', async () => {
+  it('rejects a primary response outside the exact HTTPS allowlist', async () => {
     const mockFetch = jest.fn(async () => ({
-      status: 400,
-      text: async () => 'bad request',
+      status: 200,
+      text: async () => JSON.stringify({ url: 'https://example.com/not-allowed', delete_key: 'x' }),
     })) as unknown as typeof fetch;
-
-    await expect(uploadDebugLog('hello', mockFetch)).rejects.toThrow(
-      'paste.rs rejected the upload',
-    );
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects a backup response outside the exact HTTPS allowlist', async () => {
-    const mockFetch = jest
-      .fn()
-      .mockResolvedValueOnce({ status: 503, text: async () => 'unavailable' })
-      .mockResolvedValueOnce({
-        status: 200,
-        text: async () => JSON.stringify({ url: 'https://example.com/not-allowed' }),
-      }) as unknown as typeof fetch;
 
     await expect(uploadDebugLog('hello', mockFetch)).rejects.toThrow(
       'The complete debug-log upload failed',
     );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a c-net success response that cannot be deleted', async () => {
-    const body = `full-log-${'x'.repeat(PASTE_RS_MAX_FULL_UPLOAD_BYTES)}`;
     const mockFetch = jest.fn(async () => ({
       status: 201,
       text: async () => JSON.stringify({
@@ -446,9 +393,19 @@ describe('uploadDebugLog', () => {
       }),
     })) as unknown as typeof fetch;
 
-    await expect(uploadDebugLog(body, mockFetch)).rejects.toThrow(
-      'full-capacity upload service returned an invalid upload link',
+    await expect(uploadDebugLog('hello', mockFetch)).rejects.toThrow(
+      'paste.c-net.org returned an invalid upload link',
     );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a non-transient primary client error without contacting paste.rs', async () => {
+    const mockFetch = jest.fn(async () => ({
+      status: 400,
+      text: async () => 'bad request',
+    })) as unknown as typeof fetch;
+
+    await expect(uploadDebugLog('hello', mockFetch)).rejects.toThrow('paste.c-net.org rejected the upload');
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });
@@ -571,6 +528,47 @@ describe('durable debug-log upload deletion receipt', () => {
       receipt,
       jest.fn(async () => ({ status: 404 })) as unknown as typeof fetch,
     );
+    await expect(loadDebugLogUploadReceipt()).resolves.toBeNull();
+  });
+
+  it('persists the paste.rs shareUrl beside the c-net content receipt', async () => {
+    const receipt = await saveDebugLogUploadReceipt({
+      url: 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555',
+      provider: 'paste.c-net.org',
+      deleteKey: 'delete-secret',
+      shareUrl: 'https://paste.rs/short',
+    });
+    await expect(loadDebugLogUploadReceipt()).resolves.toEqual(receipt);
+    expect(receipt.shareUrl).toBe('https://paste.rs/short');
+  });
+
+  it('deletes the content host then best-effort deletes the shortener', async () => {
+    const contentUrl = 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555';
+    const shareUrl = 'https://paste.rs/short';
+    const receipt = await saveDebugLogUploadReceipt({
+      url: contentUrl,
+      provider: 'paste.c-net.org',
+      deleteKey: 'delete-secret',
+      shareUrl,
+    });
+    const mockFetch = jest.fn(async () => ({ status: 204 })) as unknown as typeof fetch;
+
+    await deleteDebugLogUploadAndReceipt(receipt, mockFetch);
+
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      contentUrl,
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: { 'X-Delete-Key': 'delete-secret' },
+      }),
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      shareUrl,
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+    expect((mockFetch as jest.Mock).mock.calls[1][1]).not.toHaveProperty('headers');
     await expect(loadDebugLogUploadReceipt()).resolves.toBeNull();
   });
 });

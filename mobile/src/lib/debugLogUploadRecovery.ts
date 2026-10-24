@@ -14,13 +14,25 @@ export async function loadDebugLogUploadRecoveryReceipt(): Promise<DebugLogUploa
   if (raw == null) return null;
   const receipt = JSON.parse(raw) as DebugLogUploadReceipt;
   const url = new URL(receipt.url);
+  let shareOk = receipt.shareUrl == null;
+  if (typeof receipt.shareUrl === 'string') {
+    try {
+      const share = new URL(receipt.shareUrl);
+      shareOk = share.protocol === 'https:' && share.hostname === 'paste.rs' && !share.username && !share.password;
+    } catch {
+      shareOk = false;
+    }
+  } else if (receipt.shareUrl != null) {
+    shareOk = false;
+  }
   if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt) || receipt.schemaVersion !== 1 || url.protocol !== 'https:' || url.username || url.password ||
     !['https://paste.rs', 'https://paste.c-net.org'].includes(url.origin) || receipt.provider !== url.hostname ||
     (typeof receipt.createdAt !== 'string' || !Number.isFinite(Date.parse(receipt.createdAt))) ||
     (receipt.provider === 'paste.c-net.org' && (typeof receipt.deleteKey !== 'string' || !receipt.deleteKey)) ||
     (receipt.deleteKey != null && typeof receipt.deleteKey !== 'string') ||
     (receipt.verified != null && typeof receipt.verified !== 'boolean') ||
-    (receipt.contentSha256 != null && !/^[a-f0-9]{64}$/.test(receipt.contentSha256))) {
+    (receipt.contentSha256 != null && !/^[a-f0-9]{64}$/.test(receipt.contentSha256)) ||
+    !shareOk) {
     throw new Error('The saved recovery deletion receipt is invalid.');
   }
   return receipt;

@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
 jest.mock('../src/lib/debugLog', () => ({
   debugLog: { readCompleteText: jest.fn(), warn: jest.fn() },
+  debugLogUploadShareUrl: (receipt: { url: string; shareUrl?: string }) => receipt.shareUrl ?? receipt.url,
   deleteDebugLogUpload: jest.fn(), formatVersionedLogExport: jest.fn((value: string) => value),
   loadDebugLogUploadReceipts: jest.fn(), markDebugLogUploadReceiptVerified: jest.fn(),
   saveDebugLogUploadReceipt: jest.fn(), uploadDebugLog: jest.fn(), verifyDebugLogUpload: jest.fn(),
