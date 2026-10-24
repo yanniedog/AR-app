@@ -58,3 +58,10 @@ export class AuditEvidenceBudget {
     }
   }
 }
+
+/** Canonical semantic results are lossless; only journal copies may be cut. */
+export function auditActionResultEvidence(value: unknown, limitBytes = MAX_RETAINED_AUDIT_EVIDENCE_BYTES): string | null {
+  if (value == null) return null;
+  measureAuditEvidence(value, limitBytes);
+  return JSON.stringify(value) ?? null;
+}

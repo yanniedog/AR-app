@@ -9,7 +9,7 @@ import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSele
 import { isVerifiedRatesPagePreparation } from '../lib/ratesAuditPage';
 import { assertObservableAuditActionEffect } from '../lib/performanceAuditActionEvidence';
 import { auditSearchEntryParams } from '../lib/performanceAuditActionParams';
-import { AuditEvidenceBudget, AuditEvidenceCapacityError } from '../lib/auditEvidenceCapacity';
+import { AuditEvidenceBudget, AuditEvidenceCapacityError, auditActionResultEvidence } from '../lib/auditEvidenceCapacity';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { toPublicAppHealthReport } from '../lib/appHealth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -264,6 +264,7 @@ async function waitWhilePaused(watchdog: PerformanceAuditInactivityWatchdog): Pr
 }
 
 function rethrowAuditControl(error: unknown): void {
+  if (error instanceof AuditEvidenceCapacityError) throw error;
   if (error instanceof PerformanceAuditPendingMutationError) throw error;
   if (error instanceof AuditCancelledError || getPerformanceAuditState().cancelRequested) {
     throw error instanceof AuditCancelledError ? error : new AuditCancelledError();
@@ -690,8 +691,7 @@ async function runDeepAuditStep(
       const reason = readiness.blockers
         .map((blocker) => blocker.message)
         .filter(Boolean)
-        .join('; ')
-        .slice(0, 512) || 'The optional surface reported a terminal readiness error';
+        .join('; ') || 'The optional surface reported a terminal readiness error';
       return {
         id: `deep-${step.id}`,
         label,
@@ -1129,9 +1129,7 @@ async function runDeepAuditStepBody(
       actionRevisionAfter,
       renderRevisionBefore,
       renderRevisionAfter,
-      actionResultEvidence: measuredAction.result == null
-        ? null
-        : JSON.stringify(measuredAction.result).slice(0, 512),
+      actionResultEvidence: auditActionResultEvidence(measuredAction.result),
       actionMs: roundMetric(actionMs),
       ...(actionSource === 'router' ? {} : {
         preActionWaitMs: roundMetric(preActionWaitMs),
