@@ -1,5 +1,5 @@
 import React from 'react';
-import TestRenderer, { act } from 'react-test-renderer';
+import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
@@ -41,7 +41,7 @@ test('a large public catalogue does not expand during the Rates render', () => {
     count = result.candidates.length;
     return null;
   }
-  let tree!: TestRenderer.ReactTestRenderer;
+  let tree!: ReactTestRenderer;
   act(() => { tree = TestRenderer.create(<Probe />); });
   expect(ready).toBe(false);
   expect(count).toBe(0);
@@ -65,7 +65,7 @@ test('a small public catalogue still resolves during render', () => {
     ready = result.ready;
     return null;
   }
-  let tree!: TestRenderer.ReactTestRenderer;
+  let tree!: ReactTestRenderer;
   act(() => { tree = TestRenderer.create(<Probe />); });
   expect(ready).toBe(true);
   act(() => { tree.unmount(); });

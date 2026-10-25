@@ -376,8 +376,8 @@ export async function filterBankInsightsForSuitabilityCooperatively(
   let started = now();
   const chunk = 24;
   for (const section of SECTION_KEYS) {
-    const rows = args.core.sections[section]?.rates ?? [];
-    const visible: typeof rows = [];
+    const rows: CorePayload['sections'][SectionKey]['rates'] = args.core.sections[section]?.rates ?? [];
+    const visible: CorePayload['sections'][SectionKey]['rates'] = [];
     for (let offset = 0; offset < rows.length; offset += chunk) {
       if (cancelled()) return null;
       visible.push(...visibleSectionRows(rows.slice(offset, offset + chunk), args.includeNonStandard, args.detailsProducts));

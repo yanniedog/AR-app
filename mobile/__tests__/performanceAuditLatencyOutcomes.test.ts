@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { runStorageCheck, runFileSystemCheck, runLogIoCheck } from '../src/components/PerformanceAuditRunner';
 import { auditOutcome } from '../src/lib/auditPresentation';
-import { PerformanceAuditInactivityWatchdog, ResponsivenessMonitor } from '../src/lib/performanceAudit';
+import { PerformanceAuditInactivityWatchdog, ResponsivenessMonitor, type AuditCheck } from '../src/lib/performanceAudit';
 import { debugLog } from '../src/lib/debugLog';
 
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
@@ -31,8 +31,8 @@ jest.mock('expo-file-system/legacy', () => ({ documentDirectory: 'file://test/',
 afterEach(() => jest.restoreAllMocks());
 
 test('an unfinished journey and a settle-only miss stay failures', () => {
-  const journey = (metrics: Record<string, unknown>) => ({
-    id: 'journey-rates-cold', label: 'Rates', kind: 'journey' as const, status: 'fail' as const, durationMs: 835, metrics,
+  const journey = (metrics: AuditCheck['metrics']): AuditCheck => ({
+    id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 835, metrics,
   });
   expect(auditOutcome(journey({ actionCompleted: false, nonTimingFailure: false }))).toBe('failure');
   expect(auditOutcome(journey({
