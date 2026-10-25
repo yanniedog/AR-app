@@ -287,8 +287,12 @@ export function ProjectionWorkspace() {
     [section, deferredScenario, profile],
   );
   // Mounted section only — never expand all three sections via publicComparisonCore.
+  // Untargeted projections never call resolveCalculationTarget's core factory, so
+  // skip catalogue pricing entirely (explicit empty candidates stay sync-empty).
+  const needsTargetResolution = params.target != null && params.target !== '';
   const pricedCatalogue = useResolvedPublicRankingRows({
     sourceRows: core?.sections?.[section]?.rates ?? [],
+    candidates: needsTargetResolution ? null : [],
     catalogue,
     section,
     sectionScenario: projectionSectionScenario,
