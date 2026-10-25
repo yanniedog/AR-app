@@ -47,10 +47,10 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useBankRateHistory } from '../../src/hooks/useBankRateHistory';
+import { useDeferredHistorySurface } from '../../src/hooks/useDeferredHistorySurface';
 import { moveTone } from '../../src/lib/moveSemantics';
 import { effectiveBankInsights } from '../../src/lib/proAccess';
 import { yieldToUi } from '../../src/lib/yieldToUi';
-import { isPerformanceAuditActive } from '../../src/lib/performanceAudit';
 import {
   isCurrentHistoryGraphicEvidence,
   isMeasuredEmptyHistoryGraphic,
@@ -59,13 +59,10 @@ import {
 import type { RateRow, SectionKey } from '../../src/types';
 import { SECTION_KEYS } from '../../src/types';
 import { useTheme } from '../../src/theme/ThemeProvider';
-import type { LogoRenderState } from '../../src/lib/logoReadiness';
-
 interface LenderProductItem { row: RateRow; section: SectionKey; firstInSection: boolean }
 
-const LenderProductRow = React.memo(function LenderProductRow({ item, onLogoRenderStateChange }: {
+const LenderProductRow = React.memo(function LenderProductRow({ item }: {
   item: LenderProductItem;
-  onLogoRenderStateChange: (id: string, state: LogoRenderState) => void;
 }) {
   const onPress = useCallback(() => openProduct(item.row.product_key, item.row.rate_index), [item.row]);
   return <View>
@@ -76,8 +73,6 @@ const LenderProductRow = React.memo(function LenderProductRow({ item, onLogoRend
       row={item.row}
       section={item.section}
       showLenderAction={false}
-      logoRenderStateId={`lender:${item.section}:${item.row.rate_index ?? 'default'}#${item.row.product_key}`}
-      onLogoRenderStateChange={onLogoRenderStateChange}
       onPress={onPress}
     />
   </View>;
@@ -171,7 +166,10 @@ export default function BankDetail() {
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const showBankInsights = effectiveBankInsights();
-  const rateHistory = useBankRateHistory(showBankInsights);
+  // Keep rich history prep + BankHistoryChart off the synchronous lender mount
+  // that product.lender.open measures as actionMs / event-loop lag.
+  const historySurfaceReady = useDeferredHistorySurface(provider);
+  const rateHistory = useBankRateHistory(showBankInsights && historySurfaceReady);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const suitabilityRevision = useSuitabilityRevision();
   const bankInsights = useStore((s) => s.bankInsights);
@@ -202,18 +200,21 @@ export default function BankDetail() {
   );
 
   useEffect(() => {
-    const key = showBankInsights ? core?.run_date ?? null : null;
+    if (!showBankInsights || !historySurfaceReady) return;
+    const key = core?.run_date ?? null;
     if (!key || insightsRequestKey.current === key) return;
     insightsRequestKey.current = key;
     void ensureBankInsights();
-  }, [core?.run_date, ensureBankInsights, showBankInsights]);
+  }, [core?.run_date, ensureBankInsights, historySurfaceReady, showBankInsights]);
 
   useEffect(() => {
     // Product-level move drill-down needs the on-device product history ledger.
     // Do NOT pull history_banks here — bank trend charts use bankInsights only.
-    // Subscribe to an existing cache after paint, but only warm the multi-day
-    // ledger after the user explicitly opens a dated move drill-down.
-    if (!showBankInsights) {
+    // Subscribe only after the deferred history surface is allowed, and only warm
+    // the multi-day ledger after the user opens a dated move drill-down.
+    // Never eager-subscribe during audit on ordinary lender.open — that pulled a
+    // multi-MB ledger onto the measured open path.
+    if (!showBankInsights || !historySurfaceReady) {
       historyRequestKey.current = null;
       setProductHistoryReady(false);
       return;
@@ -221,13 +222,10 @@ export default function BankDetail() {
     const key = core?.run_date ?? null;
     if (!key) return;
     const shouldFetch = !!(focusDate && focusSection);
-    if (!shouldFetch) historyRequestKey.current = null;
-    if (isPerformanceAuditActive()) {
-      setProductHistoryReady(true);
-      if (shouldFetch && historyRequestKey.current !== key) {
-        historyRequestKey.current = key;
-        void ensureProductHistory({ purpose: 'bank_move' });
-      }
+    if (!shouldFetch) {
+      historyRequestKey.current = null;
+      // Moves list is optional; keep the ledger unsubscribed until drill-down.
+      setProductHistoryReady(false);
       return;
     }
     let cancelled = false;
@@ -235,7 +233,7 @@ export default function BankDetail() {
       void yieldToUi().then(() => {
         if (cancelled) return;
         setProductHistoryReady(true);
-        if (!shouldFetch || historyRequestKey.current === key) return;
+        if (historyRequestKey.current === key) return;
         historyRequestKey.current = key;
         void ensureProductHistory({ purpose: 'bank_move' });
       });
@@ -249,6 +247,7 @@ export default function BankDetail() {
     ensureProductHistory,
     focusDate,
     focusSection,
+    historySurfaceReady,
     showBankInsights,
   ]);
 
@@ -288,15 +287,25 @@ export default function BankDetail() {
 
   const visibleBankInsights = useMemo(
     () =>
-      filterBankInsightsForSuitability(
-        bankInsights,
-        core,
-        includeNonStandard,
-        detailsProducts,
-        suitabilityRevision,
-        coreIntegrity,
-      ),
-    [bankInsights, core, coreIntegrity, detailsProducts, includeNonStandard, suitabilityRevision],
+      !historySurfaceReady
+        ? null
+        : filterBankInsightsForSuitability(
+            bankInsights,
+            core,
+            includeNonStandard,
+            detailsProducts,
+            suitabilityRevision,
+            coreIntegrity,
+          ),
+    [
+      bankInsights,
+      core,
+      coreIntegrity,
+      detailsProducts,
+      historySurfaceReady,
+      includeNonStandard,
+      suitabilityRevision,
+    ],
   );
 
   const visibleBankEvents = useMemo(
@@ -304,12 +313,23 @@ export default function BankDetail() {
     [provider, visibleBankInsights],
   );
 
-  const chartModels = useMemo(() => Object.fromEntries(SECTION_ORDER.map(section => [section,
-    rateHistory.updating || rateHistory.failed ? null
-      : rateHistory.historyAvailable ? rateHistoryChartModel(rateHistory.snapshots, section, provider)
-        : bankTrendChartModel(visibleBankInsights, provider, section),
-  ])), [provider, rateHistory.snapshots, rateHistory.updating, rateHistory.failed, rateHistory.historyAvailable, visibleBankInsights]);
-  const chartSections = SECTION_ORDER.filter(section => !!chartModels[section]);
+  const chartSections = useMemo(() => {
+    if (!historySurfaceReady || rateHistory.updating || rateHistory.failed) return [] as SectionKey[];
+    return SECTION_ORDER.filter((section) => {
+      if (rateHistory.historyAvailable) {
+        return !!rateHistoryChartModel(rateHistory.snapshots, section, provider);
+      }
+      return !!bankTrendChartModel(visibleBankInsights, provider, section);
+    });
+  }, [
+    historySurfaceReady,
+    provider,
+    rateHistory.failed,
+    rateHistory.historyAvailable,
+    rateHistory.snapshots,
+    rateHistory.updating,
+    visibleBankInsights,
+  ]);
   const [chartSection, setChartSection] = useState<SectionKey | null>(null);
   const activeChartSection =
     chartSection && chartSections.includes(chartSection)
@@ -318,7 +338,23 @@ export default function BankDetail() {
         ? focusSection
         : chartSections[0] ?? null;
 
-  const chartModel = activeChartSection ? chartModels[activeChartSection] : null;
+  const chartModel = useMemo(() => {
+    if (!historySurfaceReady || !activeChartSection || rateHistory.updating || rateHistory.failed) {
+      return null;
+    }
+    return rateHistory.historyAvailable
+      ? rateHistoryChartModel(rateHistory.snapshots, activeChartSection, provider)
+      : bankTrendChartModel(visibleBankInsights, provider, activeChartSection);
+  }, [
+    activeChartSection,
+    historySurfaceReady,
+    provider,
+    rateHistory.failed,
+    rateHistory.historyAvailable,
+    rateHistory.snapshots,
+    rateHistory.updating,
+    visibleBankInsights,
+  ]);
   const historyContentRevision = [
     rateHistory.revision,
     bankInsightsSha ?? 'no-bank-history-sha',
@@ -499,11 +535,14 @@ export default function BankDetail() {
     () => provider ? [`lender:header:${provider}`] : [],
     [provider],
   );
+  // Only the header avatar participates in lender.logo readiness. Wiring every
+  // product-card avatar into the probe made expectedCount track the viewport
+  // (audit saw 25+) and kept open settle waiting on recycled list logos.
   const logoReadiness = useLogoReadiness(listRevision, lenderLogoIds);
   const renderProductItem = useCallback(({ item }: { item: LenderProductItem }) => (
-    <LenderProductRow item={item} onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange} />
-  ), [logoReadiness.onLogoRenderStateChange]);
-  const moveHistoryRequired = showBankInsights && !!(focusDate && focusSection);
+    <LenderProductRow item={item} />
+  ), []);
+  const moveHistoryRequired = showBankInsights && historySurfaceReady && !!(focusDate && focusSection);
   const currentHistoryGraphicEvidence = isCurrentHistoryGraphicEvidence(
     historyGraphicEvidence,
     historyContentRevision,
@@ -512,7 +551,11 @@ export default function BankDetail() {
     id: 'lender.details',
     routeKey: '/bank/[provider]',
     datasetRevision: coreSha ?? core?.run_date ?? null,
-    renderRevision: `${provider}:${productCount}:${historyContentRevision}:${currentHistoryGraphicEvidence?.graphicRevision ?? 'graphic-pending'}:${focusHistoryState}:${productHistory ? `moves-${bankEvents.length}` : 'moves-on-demand'}`,
+    // Omit deferred history/chart identity until the surface is allowed so open
+    // readiness can quiet without waiting on graphic work.
+    renderRevision: historySurfaceReady
+      ? `${provider}:${productCount}:${historyContentRevision}:${currentHistoryGraphicEvidence?.graphicRevision ?? 'graphic-pending'}:${focusHistoryState}:${productHistory ? `moves-${bankEvents.length}` : 'moves-on-demand'}`
+      : `${provider}:${productCount}:history-deferred`,
     actions: auditActions,
     probes: [
       {
@@ -547,7 +590,13 @@ export default function BankDetail() {
         id: 'lender.history-data',
         kind: 'data',
         required: false,
-        status: rateHistory.failed ? 'error' : rateHistory.updating || (showBankInsights && !rateHistory.historyAvailable && !bankInsights) ? 'pending' : 'ready',
+        status: !historySurfaceReady
+          ? 'ready'
+          : rateHistory.failed
+            ? 'error'
+            : rateHistory.updating || (showBankInsights && !rateHistory.historyAvailable && !bankInsights)
+              ? 'pending'
+              : 'ready',
         error: rateHistory.failed ? 'Historical rates could not be prepared' : null,
         actualCount: chartModel?.dates.length ?? 0,
       },
@@ -555,14 +604,20 @@ export default function BankDetail() {
         id: 'lender.history-graphic',
         kind: 'graphic',
         required: false,
-        status: rateHistory.failed ? 'error' : rateHistory.updating ? 'pending' : !chartModel
+        status: !historySurfaceReady
           ? 'ready'
-          : !currentHistoryGraphicEvidence
-            ? 'pending'
-            : currentHistoryGraphicEvidence.availability === 'rendered' ||
-              isMeasuredEmptyHistoryGraphic(currentHistoryGraphicEvidence)
-              ? 'ready'
-              : 'error',
+          : rateHistory.failed
+            ? 'error'
+            : rateHistory.updating
+              ? 'pending'
+              : !chartModel
+                ? 'ready'
+                : !currentHistoryGraphicEvidence
+                  ? 'pending'
+                  : currentHistoryGraphicEvidence.availability === 'rendered' ||
+                    isMeasuredEmptyHistoryGraphic(currentHistoryGraphicEvidence)
+                    ? 'ready'
+                    : 'error',
         error: rateHistory.failed ? 'Historical rates could not be prepared'
           : currentHistoryGraphicEvidence?.availability === 'unavailable' &&
             !isMeasuredEmptyHistoryGraphic(currentHistoryGraphicEvidence)
@@ -632,7 +687,7 @@ export default function BankDetail() {
           </View>
         </Row>
 
-        {showBankInsights && displayBankEvents[0] ? (
+        {showBankInsights && historySurfaceReady && displayBankEvents[0] ? (
           <Card variant="outlined" style={{ marginBottom: 16, gap: 4 }}>
             <AppText variant="small" color="textMuted">{uiLabel("Latest observed move")}</AppText>
             <AppText variant="body" weight="700">
@@ -647,7 +702,7 @@ export default function BankDetail() {
           ListFooterComponent={<View>
 
 
-        {showBankInsights && focusEvent && focusSection ? (
+        {showBankInsights && historySurfaceReady && focusEvent && focusSection ? (
           <Card
             style={{ marginBottom: 16 }}
             accessibilityLiveRegion="polite"
@@ -690,7 +745,7 @@ export default function BankDetail() {
           </Card>
         ) : null}
 
-        {showBankInsights && focusSourceEvent && focusSection && !focusEvent ? (
+        {showBankInsights && historySurfaceReady && focusSourceEvent && focusSection && !focusEvent ? (
           <Card style={{ marginBottom: 16 }} accessibilityLiveRegion="polite">
             <AppText variant="h3" style={{ marginBottom: 6 }}>{uiLabel("Move detail")}</AppText>
             <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
@@ -702,7 +757,7 @@ export default function BankDetail() {
           </Card>
         ) : null}
 
-        {showBankInsights && recentMoveBreakdowns.length ? (
+        {showBankInsights && historySurfaceReady && recentMoveBreakdowns.length ? (
           <Card style={{ marginBottom: 16 }}>
             <AppText variant="h3" style={{ marginBottom: 4 }}>{uiLabel("Products that changed")}</AppText>
             <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
@@ -731,7 +786,7 @@ export default function BankDetail() {
           </Card>
         ) : null}
 
-        {showBankInsights && (rateHistory.updating || rateHistory.failed) ? (
+        {showBankInsights && historySurfaceReady && (rateHistory.updating || rateHistory.failed) ? (
           <Card style={{ marginBottom: 16 }}>
             <AppText variant="h3">{uiLabel("Rate history")}</AppText>
             <AppText variant="small" color="textMuted" accessibilityRole="alert">
@@ -739,7 +794,7 @@ export default function BankDetail() {
             </AppText>
           </Card>
         ) : null}
-        {showBankInsights ? (
+        {showBankInsights && historySurfaceReady ? (
           chartModel && activeChartSection ? (
             <Card style={{ marginBottom: 16 }}>
               <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>

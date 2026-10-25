@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FLASH_LIST_DRAW_DISTANCE, FLASH_LIST_VIEWABILITY_CONFIG } from '../lib/flashListDefaults';
 import { SECTIONS } from '../constants';
 import { visibleAccountRows } from '../data/format';
 import { resolveSectionRibbonStats } from '../data/ribbonStats';
@@ -326,13 +327,14 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
       <FlashList
       ref={listRef}
       key={`browse:${listRevision}`}
+      drawDistance={FLASH_LIST_DRAW_DISTANCE}
       data={items}
       extraData={listRevision}
       onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
       onLoad={listReadiness.onLoad}
       onContentSizeChange={listReadiness.onContentSizeChange}
       onViewableItemsChanged={listReadiness.onViewableItemsChanged}
-      viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
+      viewabilityConfig={FLASH_LIST_VIEWABILITY_CONFIG}
       keyExtractor={(it, i) =>
         it.kind === 'node'
           ? `${section}-n-${it.node.seg}`

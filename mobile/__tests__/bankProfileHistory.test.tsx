@@ -20,7 +20,7 @@ type TestNode = {
 type Renderer = ReactTestRenderer & { root: TestNode };
 
 const [row] = fixture.rates as RateRow[];
-const mockParams = { provider: row.provider };
+const mockParams: { provider: string; date?: string; section?: string } = { provider: row.provider };
 const emptyRibbon = {
   counts: { rates: 0, products: 0, providers: 0 },
   range: { min: null, max: null, mean: null, median: null },
@@ -96,6 +96,7 @@ jest.mock('../src/data/bankInsights', () => ({
   filterBankInsightsForSuitability: () => mockTodayInsights,
 }));
 jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: () => mockRateHistory }));
+jest.mock('../src/hooks/useDeferredHistorySurface', () => ({ useDeferredHistorySurface: () => true }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/hooks/useLogoReadiness', () => ({
   useLogoReadiness: () => ({ ready: true, expectedCount: 1, terminalCount: 1, onLogoRenderStateChange: jest.fn() }),
@@ -182,15 +183,15 @@ describe('bank detail profile-filtered history', () => {
     } finally { act(() => tree.unmount()); }
   });
 
-  it('prepares product move attribution only after a ledger exists', () => {
+  it('withholds product move attribution until a dated move drill-down warms the ledger', () => {
     const represents = jest.spyOn(productHistory, 'productHistoryRepresentsRateRow');
+    // Store may already hold productHistory from a prior visit; ordinary lender
+    // open still gates catalogs behind productHistoryReady (move drill-down).
+    mockState.productHistory = { schema_version: 1, run_date: core.run_date,
+      run_dates: [core.run_date], products: { [row.product_key]: [0.05] } };
     const tree = mount();
     try {
       expect(represents).not.toHaveBeenCalled();
-      mockState.productHistory = { schema_version: 1, run_date: core.run_date,
-        run_dates: [core.run_date], products: { [row.product_key]: [0.05] } };
-      act(() => tree.update(<BankDetail />));
-      expect(represents).toHaveBeenCalledWith(core, row);
     } finally { act(() => tree.unmount()); represents.mockRestore(); }
   });
 

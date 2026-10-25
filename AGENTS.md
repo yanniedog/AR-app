@@ -7,6 +7,7 @@ This repo owns only the installable Expo app and app-release automation.
 - APK update releases belong to `yanniedog/AR-app`.
 - Primary local verification is **focused** tests for touched packages (e.g. `cd mobile && npx jest path/to/relevant.test.ts` or `npm run ci:unit` for jest + typecheck only). Full `cd mobile && npm run ci` is heavy (doctor/export/size/benchmarks) — leave it to GitHub Actions `mobile-ci` unless that gate failed and you need a local repro of the exact failing step. Do not run full local `ci` by default.
 - Keep the `mobile/` directory layout until a separate flattening migration is planned.
+- After substantive code fixes in this repo: commit, push, open a PR, and babysit to squash-merge **without asking**. Never pause to confirm commit/PR preference.
 
 ## Consumer interface hard rules
 

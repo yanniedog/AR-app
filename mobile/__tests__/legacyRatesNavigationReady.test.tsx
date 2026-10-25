@@ -8,6 +8,14 @@ import Changes from '../app/passthrough';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { captureRatesSession, initializeRatesSession, restoreRatesSession, updateRatesSection, useRatesSession } from '../src/data/ratesSession';
 import { resolveRatesIntent } from '../src/lib/ratesIntent';
+
+jest.mock('../src/lib/yieldToUi', () => ({
+  scheduleAfterInteractions: (work: () => void) => {
+    work();
+    return () => undefined;
+  },
+}));
+
 const originalSession = captureRatesSession();
 afterEach(() => restoreRatesSession(originalSession));
 
@@ -121,6 +129,34 @@ test('Strict Mode effect replay cannot duplicate an already-ready Tools handoff'
     expect(mockDismissTo).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledTimes(1);
   } finally { act(() => tree.unmount()); }
+});
+
+test('Strict Mode async schedule still delivers Tools handoff after cancelled first setup', () => {
+  const pending: Array<() => void> = [];
+  const scheduleMock = jest.requireMock('../src/lib/yieldToUi') as {
+    scheduleAfterInteractions: (work: () => void) => () => void;
+  };
+  const previous = scheduleMock.scheduleAfterInteractions;
+  scheduleMock.scheduleAfterInteractions = (work: () => void) => {
+    pending.push(work);
+    return () => {
+      const index = pending.indexOf(work);
+      if (index >= 0) pending.splice(index, 1);
+    };
+  };
+  mockReady = true; mockParams = { section: 'TD', target: 'exact', ri: '8' };
+  let tree!: ReactTestRenderer;
+  try {
+    act(() => { tree = TestRenderer.create(<React.StrictMode><Tools /></React.StrictMode>); });
+    expect(mockDismissTo).not.toHaveBeenCalled();
+    expect(pending.length).toBeGreaterThan(0);
+    act(() => { pending.splice(0).forEach((work) => work()); });
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledTimes(1);
+  } finally {
+    scheduleMock.scheduleAfterInteractions = previous;
+    act(() => tree.unmount());
+  }
 });
 
 

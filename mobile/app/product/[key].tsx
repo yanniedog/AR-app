@@ -69,6 +69,7 @@ import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditR
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useBankRateHistory } from '../../src/hooks/useBankRateHistory';
+import { useDeferredHistorySurface } from '../../src/hooks/useDeferredHistorySurface';
 import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
 import { StaySwitchChart } from '../../src/components/scenario/StaySwitchChart';
 import { buildStaySwitchProjection } from '../../src/data/staySwitchProjection';
@@ -88,7 +89,7 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { ratePresentation } from '../../src/data/ratePresentation';
 import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
-import { bindCurrentPublicRow, publicRateScenario, publicScenarioForRow, publicRecommendationRows, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
+import { bindCurrentPublicRow, publicOfferDedupKey, publicProductOfferRows, publicRateScenario, publicScenarioForRow, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
 import { publicRateOriginLabel, publicRateText } from '../../src/data/publicRatePresentation';
 import { PublicRateEvidence } from '../../src/components/scenario/PublicRateEvidence';
 import { PublicCostComparison } from '../../src/components/scenario/PublicCostComparison';
@@ -141,12 +142,44 @@ export default function ProductDetail() {
     () => {
       void suitabilityRevision;
       if (!core) return null;
-      const sections = publicProduct ? { ...core.sections, [publicProduct.section]: { ...core.sections[publicProduct.section],
-        rates: publicRecommendationRows(core.sections[publicProduct.section].rates, publicCatalogue, publicProduct.section,
-          scenarioFor(publicProduct.section)) } } : core.sections;
-      return findEligibleByKey(sections, productKey);
+      // Prefer core identity. Never call section-wide publicRecommendationRows on
+      // product.open — that sync-expanded the whole day catalogue. Expand only
+      // this product's programmes, and merge them with core rows so a selected
+      // public programme id still resolves when the product also has core rates.
+      const fromCore = findEligibleByKey(core.sections, productKey);
+      if (!publicProduct) return fromCore;
+      const offers = publicProductOfferRows(
+        publicProduct,
+        publicCatalogue,
+        scenarioFor(publicProduct.section),
+      );
+      if (!offers.length) return fromCore;
+      const section = publicProduct.section;
+      const sectionRates = core.sections[section].rates;
+      const otherRates = sectionRates.filter((row) => row.product_key !== productKey);
+      const coreProductRates = sectionRates
+        .filter((row) => row.product_key === productKey)
+        .map((row) => bindCurrentPublicRow(row, publicCatalogue));
+      const seen = new Set<string>();
+      const mergedProductRates = [...coreProductRates, ...offers].filter((row) => {
+        if (!row.public_offer_id) return true;
+        const dedupeKey = publicOfferDedupKey(row.product_key, row.public_offer_id);
+        if (seen.has(dedupeKey)) return false;
+        seen.add(dedupeKey);
+        return true;
+      });
+      return findEligibleByKey(
+        {
+          ...core.sections,
+          [section]: {
+            ...core.sections[section],
+            rates: [...otherRates, ...mergedProductRates],
+          },
+        },
+        productKey,
+      );
     },
-    [core, productKey, suitabilityRevision, publicCatalogue, publicProduct, scenarioFor],
+    [core, productKey, publicCatalogue, publicProduct, scenarioFor, suitabilityRevision],
   );
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const rateConditionManifest = useStore(s => s.manifest);
@@ -172,12 +205,18 @@ export default function ProductDetail() {
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const historyEnabled = useStore((s) => effectiveHistoryRibbon(s.prefs));
-  const rateHistory = useBankRateHistory(historyEnabled && !!found);
+  // Keep rich history prep + BankHistoryChart off the first product paint so
+  // catalogue product.open / product.lender.open chains stay under lag limits.
+  const historySurfaceReady = useDeferredHistorySurface(productKey || null);
+  const rateHistory = useBankRateHistory(historyEnabled && !!found && historySurfaceReady);
   const showBankInsights = effectiveBankInsights();
-  const historyBanks = useStore((s) => s.historyBanks);
-  const bankInsights = useStore((s) => s.bankInsights);
+  const historyBanks = useStore((s) => (historySurfaceReady ? s.historyBanks : null));
+  const bankInsights = useStore((s) => (historySurfaceReady ? s.bankInsights : null));
   const bankInsightsError = useStore((s) => s.bankInsightsError);
-  const productHistory = useStore((s) => s.productHistory);
+  // Gate the multi-MB productHistory subscription until the deferred surface is
+  // allowed — eager subscription re-rendered the whole product tree on open.
+  const [productHistoryReady, setProductHistoryReady] = useState(false);
+  const productHistory = useStore((s) => (productHistoryReady ? s.productHistory : null));
   const ledgerRevision = useRef({ payload: productHistory, version: 0 });
   if (ledgerRevision.current.payload !== productHistory) {
     ledgerRevision.current = { payload: productHistory, version: ledgerRevision.current.version + 1 };
@@ -205,7 +244,7 @@ export default function ProductDetail() {
   }, [ensureDetails, detailsRequestIdentity]);
 
   useEffect(() => {
-    if (!showBankInsights || !found) {
+    if (!showBankInsights || !found || !historySurfaceReady) {
       insightsRequestKey.current = null;
       return;
     }
@@ -213,17 +252,20 @@ export default function ProductDetail() {
     if (!key || insightsRequestKey.current === key) return;
     insightsRequestKey.current = key;
     void ensureBankInsights();
-  }, [core?.run_date, ensureBankInsights, showBankInsights, found]);
+  }, [core?.run_date, ensureBankInsights, found, historySurfaceReady, showBankInsights]);
 
   useEffect(() => {
-    if (!historyEnabled || !found) return;
-    // Product-history dated-core fan-out is expensive; wait until the product
-    // screen transition finishes so navigation stays instant (including during
-    // performance audit — eager sync was starving browse/search journeys).
+    if (!historyEnabled || !found || !historySurfaceReady) {
+      setProductHistoryReady(false);
+      return;
+    }
+    // Product-history dated-core fan-out is expensive; wait until the deferred
+    // history surface is allowed so open checks never subscribe to the ledger.
     let cancelled = false;
     const handle = InteractionManager.runAfterInteractions(() => {
       void yieldToUi().then(() => {
         if (cancelled) return;
+        setProductHistoryReady(true);
         void ensureHistoryBanks().then(() => {
           if (cancelled) return;
           if (showBankInsights) void ensureBankInsights();
@@ -239,6 +281,7 @@ export default function ProductDetail() {
     core?.run_date,
     coreSha,
     historyEnabled,
+    historySurfaceReady,
     showBankInsights,
     ensureHistoryBanks,
     ensureBankInsights,
@@ -303,6 +346,7 @@ export default function ProductDetail() {
 
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
+    if (!historySurfaceReady) return null;
     return filterBankInsightsForSuitability(
       bankInsights,
       core,
@@ -311,11 +355,19 @@ export default function ProductDetail() {
       suitabilityRevision,
       coreIntegrity,
     );
-  }, [bankInsights, core, coreIntegrity, detailsProducts, includeNonStandard, suitabilityRevision]);
+  }, [
+    bankInsights,
+    core,
+    coreIntegrity,
+    detailsProducts,
+    historySurfaceReady,
+    includeNonStandard,
+    suitabilityRevision,
+  ]);
 
   const marketHistoryModel = useMemo(() => {
     void suitabilityRevision;
-    if (!historyEnabled || !core || !found) return null;
+    if (!historySurfaceReady || !historyEnabled || !core || !found) return null;
     if (rateHistory.updating || rateHistory.failed) return null;
     const detailed = rateHistory.historyAvailable ? rateHistoryChartModel(rateHistory.snapshots, found.section) : null;
     if (rateHistory.historyAvailable || rateHistory.richHistory) return detailed;
@@ -339,6 +391,7 @@ export default function ProductDetail() {
     found,
     historyBanks,
     historyEnabled,
+    historySurfaceReady,
     includeNonStandard,
     suitabilityRevision,
     rateHistory.snapshots,
@@ -347,12 +400,18 @@ export default function ProductDetail() {
     rateHistory.updating,
     rateHistory.failed,
   ]);
-  const historyModel = useMemo(() => !historyEnabled || !found ? null : mergeProductHistoryTimeline(
-    marketHistoryModel, found.section, productHistory?.run_dates, core?.run_date,
-  ), [marketHistoryModel, found, historyEnabled, productHistory, core?.run_date]);
-  const seededProductValues = useMemo(() => productSeriesRecordWithCurrent(
-    productHistory, productKey, core?.run_date, currentBest,
-  ), [productHistory, productKey, core?.run_date, currentBest]);
+  const historyModel = useMemo(() => (
+    !historySurfaceReady || !historyEnabled || !found
+      ? null
+      : mergeProductHistoryTimeline(
+          marketHistoryModel, found.section, productHistory?.run_dates, core?.run_date,
+        )
+  ), [marketHistoryModel, found, historyEnabled, historySurfaceReady, productHistory, core?.run_date]);
+  const seededProductValues = useMemo(() => (
+    !historySurfaceReady
+      ? {}
+      : productSeriesRecordWithCurrent(productHistory, productKey, core?.run_date, currentBest)
+  ), [historySurfaceReady, productHistory, productKey, core?.run_date, currentBest]);
   const productSeries = useMemo(() => ({
     values: productSeriesRecordForChart(productHistory, productKey,
       historyModel?.allDates ?? historyModel?.dates ?? [], core?.run_date, currentBest),
@@ -365,6 +424,7 @@ export default function ProductDetail() {
   // when Standard-only mode is relying on bank insights that have not arrived yet.
   // Stop waiting once insights fail so the empty/collecting copy can show.
   const historyWaitingForInsights =
+    historySurfaceReady &&
     historyEnabled &&
     !rateHistory.historyAvailable &&
     !rateHistory.updating &&
@@ -431,7 +491,9 @@ export default function ProductDetail() {
     historyGraphicEvidence,
     historyContentRevision,
   ) ? historyGraphicEvidence : null;
-  const productRenderRevision = `${productKey}:${row?.rate_index ?? 'none'}:${detailsLoading ? 'loading' : 'settled'}:${historyContentRevision}:${currentHistoryGraphicEvidence?.graphicRevision ?? 'graphic-pending'}`;
+  const productRenderRevision = historySurfaceReady
+    ? `${productKey}:${row?.rate_index ?? 'none'}:${detailsLoading ? 'loading' : 'settled'}:${historyContentRevision}:${currentHistoryGraphicEvidence?.graphicRevision ?? 'graphic-pending'}`
+    : `${productKey}:${row?.rate_index ?? 'none'}:${detailsLoading ? 'loading' : 'settled'}:history-deferred`;
   const detailsRequestSettled = settledDetailsRequest === detailsRequestIdentity && !detailsLoading;
   const auditDetailsError = !detailsRequestSettled ? null
     : !core || !detailsSha || detailsPayload?.run_date !== core.run_date ||
@@ -498,15 +560,19 @@ export default function ProductDetail() {
         id: 'product.history-graphic',
         kind: 'graphic',
         required: false,
-        status: rateHistory.failed ? 'error' : historyWaitingForInsights || rateHistory.updating
-          ? 'pending'
-          : !historyModel
-            ? 'ready'
-            : !currentHistoryGraphicEvidence
+        status: !historySurfaceReady
+          ? 'ready'
+          : rateHistory.failed
+            ? 'error'
+            : historyWaitingForInsights || rateHistory.updating
               ? 'pending'
-              : currentHistoryGraphicEvidence.availability === 'rendered'
+              : !historyModel
                 ? 'ready'
-                : 'error',
+                : !currentHistoryGraphicEvidence
+                  ? 'pending'
+                  : currentHistoryGraphicEvidence.availability === 'rendered'
+                    ? 'ready'
+                    : 'error',
         error: rateHistory.failed ? 'Market history could not be prepared'
           : !historyWaitingForInsights && currentHistoryGraphicEvidence?.availability === 'unavailable'
           ? 'Product history has no finite values to plot'
@@ -522,12 +588,12 @@ export default function ProductDetail() {
         kind: 'data',
         // History sync is deferred after paint; do not block product readiness on it.
         required: false,
-        status: !historyEnabled || productHistory
+        status: !historyEnabled || !historySurfaceReady || productHistory
           ? 'ready'
           : productHistoryError
             ? 'error'
             : 'pending',
-        error: historyEnabled ? productHistoryError : null,
+        error: historyEnabled && historySurfaceReady ? productHistoryError : null,
         expectedCount: historyEnabled ? 1 : 0,
         actualCount: historyEnabled && productHistory ? 1 : 0,
       },
@@ -760,7 +826,7 @@ export default function ProductDetail() {
             </AppText>
           ) : null}
           {historyEnabled ? (
-            !rateHistory.failed && (historyWaitingForInsights || rateHistory.updating) && (!historyModel || historyModel.dates.length < 2) ? (
+            !historySurfaceReady || (!rateHistory.failed && (historyWaitingForInsights || rateHistory.updating) && (!historyModel || historyModel.dates.length < 2)) ? (
               <AppText variant="small" color="textMuted">
                 {uiLabel("Loading")}</AppText>
             ) : historyModel && historyModel.dates.length >= 2 ? (

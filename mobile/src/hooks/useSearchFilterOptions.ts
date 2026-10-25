@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   EMPTY_SEARCH_FILTER_OPTIONS,
   prepareSearchFilterOptions,
   type SearchFilterOptions,
 } from '../data/searchFilterOptions';
-import { scheduleAfterNavigation } from '../lib/yieldToUi';
+import { scheduleAfterInteractions, scheduleAfterNavigation } from '../lib/yieldToUi';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import { uiJoin, type UiCopy } from '../lib/uiCopy';
 import { debugLog } from '../lib/debugLog';
 
-/** Warm search facets after navigation, never on the synchronous route render.
+/** Warm search facets after paint, never on the synchronous route render.
  * Replaced payloads/profile gates immediately invalidate the visible model. */
 export function useSearchFilterOptions(
   rows: RateRow[],
@@ -20,6 +20,7 @@ export function useSearchFilterOptions(
 ) {
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt(value => value + 1), []);
+  const warmed = useRef(false);
   const [snapshot, setSnapshot] = useState<{
     rows: RateRow[];
     details: typeof details;
@@ -31,9 +32,15 @@ export function useSearchFilterOptions(
   } | null>(null);
   useEffect(() => {
     let cancelled = false;
-    const cancelNavigation = scheduleAfterNavigation(() => {
+    // First Rates entry: short paint deferral. Later filter/scope rebuilds must
+    // not re-add a 300ms navigation wait on top of cooperative pricing.
+    const schedule = warmed.current ? scheduleAfterInteractions : ((work: () => void) => scheduleAfterNavigation(work, 100));
+    const cancelNavigation = schedule(() => {
       void prepareSearchFilterOptions(rows, details, section, { cancelled: () => cancelled }).then(options => {
-        if (!cancelled && options) setSnapshot({ rows, details, section, revision, attempt, options, error: null });
+        if (!cancelled && options) {
+          warmed.current = true;
+          setSnapshot({ rows, details, section, revision, attempt, options, error: null });
+        }
       }).catch(error => {
         if (!cancelled) {
           debugLog.error('searchFilterOptions', error instanceof Error ? error.message : String(error));

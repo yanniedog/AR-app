@@ -73,8 +73,10 @@ export function PublicPricingCoverage({ section, rows, scenario, scenarioForRow,
 }
 
 /** Discovery identities never become synthetic zero-price rows. */
-export function PublicProductDiscovery({ section, query = '', rows = [], rateScenario, pricingOrigin }: {
+export function PublicProductDiscovery({ section, query = '', rows = [], rateScenario, pricingOrigin, eligibleProductKeys = null }: {
   section: SectionKey; query?: string; rows?: readonly RateRow[]; rateScenario?: RateScenario; pricingOrigin?: ProductPricingOrigin;
+  /** Prefer parent-priced candidate keys so Rates does not re-expand the catalogue. */
+  eligibleProductKeys?: ReadonlySet<string> | null;
 }) {
   const manifest = useStore(state => state.manifest);
   const catalogue = usePublicRateCatalogue(manifest);
@@ -82,7 +84,7 @@ export function PublicProductDiscovery({ section, query = '', rows = [], rateSce
   useSuitabilityRevision();
   const profile = useStore(state => state.prefs?.profileFilters);
   const { scenario } = useUserRateScenario();
-  const eligible = eligiblePublicProductKeys(catalogue, section, rateScenario ?? publicRateScenario(section, scenario, profile));
+  const eligible = eligibleProductKeys ?? eligiblePublicProductKeys(catalogue, section, rateScenario ?? publicRateScenario(section, scenario, profile));
   const represented = new Set(rows.map(row => row.product_key));
   const needle = query.trim().toLocaleLowerCase('en-AU');
   const products = catalogue.products.filter(product => product.section === section && eligible.has(product.productKey) && !represented.has(product.productKey)

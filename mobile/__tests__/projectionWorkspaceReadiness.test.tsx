@@ -18,6 +18,15 @@ jest.mock('../src/data/publicRateIntegration', () => ({
   resolveLocalCurrentRate: () => ({ status: 'exact', payableRate: '0.064' }),
   publicComparisonCore: jest.fn(() => mockCore),
 }));
+const mockUseResolvedPublicRankingRows = jest.fn((_options?: unknown) => ({
+  ready: true,
+  candidates: [],
+  resolution: { rows: [], priced: 0, unresolved: 0, complete: true },
+  mortgageScope: { rows: [], unverified: 0, unverifiedRows: new WeakSet(), invalid: false },
+}));
+jest.mock('../src/hooks/useResolvedPublicRankingRows', () => ({
+  useResolvedPublicRankingRows: (options: unknown) => mockUseResolvedPublicRankingRows(options),
+}));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {}, radius: { md: 8 }, font: { body: 16 }, spacing: (value: number) => value }) }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
@@ -41,6 +50,9 @@ test('a settled calculation copy does not block the next mounted projection acti
   let tree!: ReactTestRenderer;
   await act(async () => { tree = TestRenderer.create(<ProjectionWorkspace />); });
   try {
+    expect(mockUseResolvedPublicRankingRows).toHaveBeenCalledWith(
+      expect.objectContaining({ candidates: [] }),
+    );
     const calls = jest.mocked(usePerformanceAuditSurface).mock.calls;
     const surface = calls.filter(([definition]) => definition.id === 'projections.lifecycle-chart').at(-1)![0];
     expect(surface.probes!.find(probe => probe.id === 'projections.model')).toMatchObject({ status: 'ready', error: null });

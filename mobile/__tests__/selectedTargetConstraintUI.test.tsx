@@ -30,7 +30,10 @@ const mockUpdate = jest.fn((update: (current: UserRateScenario) => UserRateScena
   return true;
 });
 jest.mock('expo-router', () => ({ router: { setParams: jest.fn(), push: jest.fn() }, useLocalSearchParams: () => mockParams }));
-jest.mock('@react-navigation/native', () => ({ useScrollToTop: jest.fn() }));
+jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true, useScrollToTop: jest.fn() }));
+jest.mock('../src/hooks/useNavigationContentReady', () => ({
+  useNavigationContentReady: () => true,
+}));
 jest.mock('../src/data/store', () => ({ useStore: Object.assign((select: (state: typeof mockState) => unknown) => select(mockState), { getState: () => mockState }) }));
 jest.mock('../src/hooks/useUserRateScenario', () => ({ useUserRateScenario: () => ({ scenario: mockScenario,
   storageStatus: 'ready', saveStatus: 'idle', error: null, update: mockUpdate, flush: mockSave, retryLoad: jest.fn() }) }));

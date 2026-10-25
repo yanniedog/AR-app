@@ -6,7 +6,7 @@ import { ratesResultRowKey } from '../../data/ratesResultRowKey';
 import { publicOfferSelectionToken } from '../../data/publicOfferIdentity';
 import { PublicPricingCoverage, PublicProductDiscovery } from '../scenario/PublicPricingCoverage';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
-import { publicRateScenario, publicRecommendationRows, resolvedPublicRankingRows } from '../../data/publicRateIntegration';
+import { publicRateScenario, resolvedPublicRankingRows } from '../../data/publicRateIntegration';
 import { useUserRateScenario } from '../../hooks/useUserRateScenario';
 import { useResolvedPublicRankingRows } from '../../hooks/useResolvedPublicRankingRows';
 import { uiCount,uiJoin,uiLabel,uiRatesQuery,uiProductName,uiProviderName,type UiCopy } from '../../lib/uiCopy';
@@ -30,6 +30,7 @@ import { SearchReportExport } from '../../components/SearchReportExport';
 import { isSuitabilityFilterReady } from '../../data/suitabilityGate';
 import Ionicons from '../../components/icons/AppIcon';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { FLASH_LIST_DRAW_DISTANCE, FLASH_LIST_VIEWABILITY_CONFIG } from '../../lib/flashListDefaults';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -113,7 +114,7 @@ const SearchProductRow = React.memo(function SearchProductRow({ row, section, se
   onLogoRenderStateChange, comparisonUnverified, rateScenario, auditCell, auditRevision, onAuditCellCommit }: {
   row: RateRow; section: SectionKey; selectMode: boolean; selected: boolean; selectionToken: string;
   onToggleSelect: (token: string) => void;
-  onLogoRenderStateChange: (id: string, state: LogoRenderState) => void;
+  onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
   comparisonUnverified: boolean; rateScenario: RateScenario;
   auditCell: boolean; auditRevision: string;
   onAuditCellCommit: (row: RateRow, revision: string) => () => void;
@@ -181,23 +182,6 @@ export default function RatesWorkspace() {
   const scenarioFor = useCallback((selected: SectionKey, row?: RateRow) => publicScenarioForRow(row, catalogue, mortgageComparisonScenario(selected,
     publicRateScenario(selected, scenario, prefs.profileFilters, row), mortgageInputs, mortgageFilters)), [catalogue, scenario, prefs.profileFilters, mortgageInputs, mortgageFilters]);
   const rowScenario = useCallback((row: RateRow) => scenarioFor(section, row), [scenarioFor, section]);
-  // Compare selection only needs the mounted section's public offers. Expanding
-  // Savings/TD on every Mortgage amount/LVR settle was a multi-section stall.
-  const comparisonCore = useMemo((): CorePayload | null => {
-    if (!core) return null;
-    if (catalogue.status === 'unavailable') return core;
-    if (section === 'Mortgage' && !mortgageCriteriaReady) return core;
-    return {
-      ...core,
-      sections: {
-        ...core.sections,
-        [section]: {
-          ...core.sections[section],
-          rates: publicRecommendationRows(core.sections[section].rates, catalogue, section, scenarioFor(section)),
-        },
-      },
-    };
-  }, [core, catalogue, section, scenarioFor, mortgageCriteriaReady]);
   const previousMortgageInputs = useRef(mortgageInputs);
   const previousMortgageFacets = useRef({
     loanPurposes: mortgageFilters.loanPurposes.join('\0'),
@@ -290,28 +274,6 @@ export default function RatesWorkspace() {
     // settle. This does not associate it with the first loaded public offer.
     return !catalogue.allLoaded && row.rate_index != null && selected.includes(legacy) ? legacy : rowToken(row);
   }, [catalogue.allLoaded, selected]);
-  useEffect(() => {
-    void suitabilityRevision;
-    if (!comparisonCore || !selected.length || !isMandatoryEligibilityReady() ||
-        (catalogue.status !== 'unavailable' && (catalogue.status !== 'ready' || !catalogue.allLoaded))) return;
-    // A layout reconciliation may already have upgraded legacy aliases. Do
-    // not overwrite that newer selection from this render's passive effect.
-    if (useRatesSession.getState().sections[section].selected !== selected) return;
-    const canonical = core ? reconcilePublicCompareSelectionTokens(core, catalogue, selected) : selected;
-    const applicable = canonical.filter(token => {
-      const entry = resolveCompareSelections(comparisonCore, [token])[0];
-      if (!entry) return false;
-      // Keep Mortgage compare selections while criteria are incomplete so
-      // clearing LVR/purpose/repayment does not wipe the tray.
-      if (entry.section === 'Mortgage' && !mortgageCriteriaReady) return true;
-      const priced = resolvedPublicRankingRows([entry.row], catalogue,
-        row => scenarioFor(entry.section, row)).rows;
-      return entry.section === 'Mortgage'
-        ? mortgageComparisonRows(priced, mortgageInputs, { core, details, manifest, coreIntegrity }).rows.length > 0
-        : priced.length > 0;
-    });
-    if (applicable.length !== selected.length || applicable.some((token, index) => token !== selected[index])) setSelected(applicable);
-  }, [comparisonCore, selected, catalogue, scenarioFor, mortgageInputs, mortgageCriteriaReady, core, details, manifest, coreIntegrity, suitabilityRevision, setSelected, section]);
   const debouncedQuery = useDebouncedValue(query, 120);
   const sortOptions = useMemo(() => availableSortOptions(section, mortgageRateMetric, depositRankMetric),
     [depositRankMetric, mortgageRateMetric, section]);
@@ -352,6 +314,10 @@ export default function RatesWorkspace() {
   const mortgageSearchActive = section !== 'Mortgage' || availability === 'unlisted' || mortgageCriteriaReady;
   const publicPricing = useResolvedPublicRankingRows({
     sourceRows: task.intentError || !mortgageSearchActive ? EMPTY_RATE_ROWS : sourceRates,
+    // Empty sourceRows alone still expands catalogue offers. Pass an explicit
+    // empty candidate set while Mortgage criteria are incomplete so Rates does
+    // not sync-scan the full-day book on every render.
+    candidates: task.intentError || !mortgageSearchActive ? EMPTY_RATE_ROWS : null,
     catalogue,
     section,
     sectionScenario,
@@ -360,10 +326,28 @@ export default function RatesWorkspace() {
     mortgageContext,
     applyMortgageScope: section === 'Mortgage' && mortgageCriteriaReady,
     focused: isFocused && mortgageSearchActive,
+    interactive: isFocused,
     revision: suitabilityRevision,
   });
   const fullPricingCandidates = publicPricing.candidates;
   const resolvedCatalogueRows = publicPricing.resolution.rows;
+  // Reuse cooperative candidates for compare selection — never re-expand the
+  // full-day catalogue on the render path (that stalled search.data readiness).
+  const comparisonCore = useMemo((): CorePayload | null => {
+    if (!core) return null;
+    if (catalogue.status === 'unavailable' || !publicPricing.ready) return core;
+    if (section === 'Mortgage' && !mortgageCriteriaReady) return core;
+    return {
+      ...core,
+      sections: {
+        ...core.sections,
+        [section]: {
+          ...core.sections[section],
+          rates: fullPricingCandidates,
+        },
+      },
+    };
+  }, [core, catalogue.status, section, fullPricingCandidates, publicPricing.ready, mortgageCriteriaReady]);
   const pricingCandidates = useMemo(() => {
     void suitabilityRevision;
     return task.intentError || !mortgageSearchActive ? []
@@ -377,6 +361,8 @@ export default function RatesWorkspace() {
   // Saved-requirements matching uses the profile scenario, not exploratory
   // amount/LVR. Reuse list pricing when those inputs are empty; otherwise resolve
   // the profile catalogue cooperatively so Rates open stays off the sync path.
+  // Wait until list pricing settles so mortgage.scope.apply does not run two
+  // full-day catalogue passes on the same event-loop budget.
   const exploratoryMortgageActive = section === 'Mortgage' && mortgageCriteriaReady;
   const profileSectionScenario = useMemo(
     () => publicRateScenario(section, scenario, prefs.profileFilters),
@@ -392,9 +378,33 @@ export default function RatesWorkspace() {
     section,
     sectionScenario: profileSectionScenario,
     rowScenario: profileRowScenario,
-    focused: isFocused && exploratoryMortgageActive,
+    focused: isFocused && exploratoryMortgageActive && publicPricing.ready,
+    interactive: isFocused,
     revision: suitabilityRevision,
   });
+  useEffect(() => {
+    void suitabilityRevision;
+    // Wait for cooperative list pricing so tray pruning cannot race scope apply.
+    if (!publicPricing.ready || !comparisonCore || !selected.length || !isMandatoryEligibilityReady() ||
+        (catalogue.status !== 'unavailable' && (catalogue.status !== 'ready' || !catalogue.allLoaded))) return;
+    // A layout reconciliation may already have upgraded legacy aliases. Do
+    // not overwrite that newer selection from this render's passive effect.
+    if (useRatesSession.getState().sections[section].selected !== selected) return;
+    const canonical = core ? reconcilePublicCompareSelectionTokens(core, catalogue, selected) : selected;
+    const applicable = canonical.filter(token => {
+      const entry = resolveCompareSelections(comparisonCore, [token])[0];
+      if (!entry) return false;
+      // Keep Mortgage compare selections while criteria are incomplete so
+      // clearing LVR/purpose/repayment does not wipe the tray.
+      if (entry.section === 'Mortgage' && !mortgageCriteriaReady) return true;
+      const priced = resolvedPublicRankingRows([entry.row], catalogue,
+        row => scenarioFor(entry.section, row)).rows;
+      return entry.section === 'Mortgage'
+        ? mortgageComparisonRows(priced, mortgageInputs, { core, details, manifest, coreIntegrity }).rows.length > 0
+        : priced.length > 0;
+    });
+    if (applicable.length !== selected.length || applicable.some((token, index) => token !== selected[index])) setSelected(applicable);
+  }, [comparisonCore, selected, catalogue, scenarioFor, mortgageInputs, mortgageCriteriaReady, core, details, manifest, coreIntegrity, suitabilityRevision, setSelected, section, publicPricing.ready]);
   const summaryCatalogueRows = catalogue.status === 'unavailable' || (catalogue.status === 'ready' && catalogue.allLoaded)
     ? (exploratoryMortgageActive
       ? (profilePricing.ready ? profilePricing.resolution.rows : null)
@@ -781,8 +791,12 @@ export default function RatesWorkspace() {
       if (tokens.length >= 2) openCompare(tokens, 'rates-comparison');
     },
   }), [applyFilters, applyMortgageScope, availability, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
+  // Logo decode callbacks can churn during mortgage.scope.apply settle; the
+  // logos probe is optional, so wait until search.data/list are no longer pending.
+  const logoCallbacksActive = !searchPending && listReadiness.visiblyCommitted;
   const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => 'product_key' in item ? (
-    <SearchProductRow row={item} section={section} onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
+    <SearchProductRow row={item} section={section}
+      onLogoRenderStateChange={logoCallbacksActive ? logoReadiness.onLogoRenderStateChange : undefined}
       rateScenario={rowScenario(item)} comparisonUnverified={section === 'Mortgage' && mortgageScope.unverifiedRows.has(item)}
       auditCell={target === 'Cell'} auditRevision={listRevision} onAuditCellCommit={auditTarget.onCellCommit}
       selectMode={selectMode} selectionToken={selectionTokenFor(item)} selected={selected.includes(selectionTokenFor(item))} onToggleSelect={toggleSelect} />
@@ -791,7 +805,7 @@ export default function RatesWorkspace() {
       <AppText variant="body" weight="600">{uiProductName({product_name:item.name??''})}</AppText>
       <AppText variant="small" color="textMuted">{uiJoin(uiProviderName({provider:item.provider??''}),' · ',humanizeEnum(item.productCategory??''))}</AppText>
       <AppText variant="small" color="textMuted">{uiLabel("No listed rate")}</AppText>
-    </TouchTarget>, [auditTarget.onCellCommit, listRevision, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, mortgageScope.unverifiedRows, rowScenario]);
+    </TouchTarget>, [auditTarget.onCellCommit, listRevision, logoCallbacksActive, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, mortgageScope.unverifiedRows, rowScenario]);
   usePerformanceAuditSurface({
     id: 'rates.results',
     routeKey: '/browse',
@@ -803,9 +817,11 @@ export default function RatesWorkspace() {
       {
         id: 'search.data',
         kind: 'data',
+        // datasetRevision tracks settled prep, not merely payload identity —
+        // otherwise diagnostics show datasetMatches=true while status=pending.
         status: task.intentError || preparedResults.error ? 'error' : !searchPending && core ? 'ready' : 'pending',
         error: task.intentError ?? preparedResults.error,
-        datasetRevision: coreSha ?? core?.run_date ?? null,
+        datasetRevision: !searchPending && core ? (coreSha ?? core.run_date ?? null) : null,
       },
       {
         id: 'search.list',
@@ -893,7 +909,7 @@ export default function RatesWorkspace() {
         <View style={{ flex: 1 }}>
         <FlashList
           ref={attachList}
-          drawDistance={120}
+          drawDistance={FLASH_LIST_DRAW_DISTANCE}
           // Keep the list mounted while the fixed task controls change results.
           // Session state owns offsets; automatic item anchoring would compete.
           maintainVisibleContentPosition={{ disabled: true }}
@@ -910,7 +926,8 @@ export default function RatesWorkspace() {
                 unresolved: Math.max(0, pricingCandidates.length - baseRows.length),
                 complete: publicPricing.resolution.complete,
               } : null} />
-              <PublicProductDiscovery section={section} rateScenario={scenarioFor(section)} pricingOrigin="rates-comparison" rows={baseRows} query={debouncedQuery} /></> : null}
+              {/* Mount after pricing so catalogue re-expansion cannot stall search.data. */}
+              {publicPricing.ready ? <PublicProductDiscovery section={section} rateScenario={scenarioFor(section)} pricingOrigin="rates-comparison" rows={baseRows} query={debouncedQuery} /> : null}</> : null}
           </View> : null}
           ListFooterComponent={<RatesPagination total={resultRows.length} page={pagination.page} size={pageSize}
             noun={availability === 'listed' ? 'rates' : 'products'} pending={searchPending}
@@ -920,7 +937,7 @@ export default function RatesWorkspace() {
           onLoad={onListLoad}
           onContentSizeChange={listReadiness.onContentSizeChange}
           onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
+          viewabilityConfig={FLASH_LIST_VIEWABILITY_CONFIG}
           extraData={listRevision}
           keyExtractor={resultRowKey}
           getItemType={item => 'product_key' in item ? 'rate' : 'unlisted'}

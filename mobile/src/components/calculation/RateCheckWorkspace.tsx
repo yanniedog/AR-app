@@ -3,13 +3,13 @@ import { PublicPricingCoverage } from '../scenario/PublicPricingCoverage';
 import { PublicCostComparison } from '../scenario/PublicCostComparison';
 import { SavingsQualificationEditor } from '../scenario/SavingsQualificationEditor';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
-import { publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, scenarioWithLocalCurrentRate, resolveRowPublicRate, payableRateForRow } from '../../data/publicRateIntegration';
+import { publicRateScenario, resolveLocalCurrentRate, scenarioWithLocalCurrentRate, resolveRowPublicRate, payableRateForRow } from '../../data/publicRateIntegration';
 import { useResolvedPublicRankingRows } from '../../hooks/useResolvedPublicRankingRows';
 import { uiCount, uiDuration, uiInputNumber, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../lib/uiCopy";
 import { uiAccessBadge, uiListedLvr, uiTargetConstraint } from "../../lib/financialUiCopy";
 import { fontStyle } from '../../theme/fonts';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, TextInput, useWindowDimensions, View } from 'react-native';
 
 import { IndeterminateProgressBar, ScreenSkeleton } from '../../components/feedback';
@@ -142,50 +142,10 @@ export function RateCheckWorkspace() {
     flush: flushScenario,
     retryLoad: retryScenarioLoad,
   } = useUserRateScenario();
-  const target = useMemo(() => {
-    void suitabilityRevision;
-    return resolveCalculationTarget(() => {
-      if (!core) return null;
-      if (publicCatalogue.status === 'unavailable') return core;
-      // Only expand the mounted calculator section — full three-section
-      // publicComparisonCore stalled section switches past the lag budget.
-      return {
-        ...core,
-        sections: {
-          ...core.sections,
-          [section]: {
-            ...core.sections[section],
-            rates: publicRecommendationRows(
-              core.sections[section].rates, publicCatalogue, section,
-              publicRateScenario(section, scenario, profileFilters)),
-          },
-        },
-      };
-    }, section, { target: params.target, ri: params.ri, programme: params.programme });
-  }, [core, section, params.target, params.ri, params.programme, suitabilityRevision, publicCatalogue, profileFilters, scenario]);
   const suitabilityReady = useMemo(() => {
     void suitabilityRevision;
     return isSuitabilityFilterReady(includeNonStandard);
   }, [includeNonStandard, suitabilityRevision]);
-  const targetDetailsKey=JSON.stringify([coreSha,manifest?.files.details.sha256,
-    target.status==='available'?target.row.product_key:null,target.status==='available'?target.row.rate_index:null]);
-  const targetDetailsRetryCount=targetDetailsRetry?.key===targetDetailsKey?targetDetailsRetry.count:0;
-  const targetDetailsVerified=target.status==='available' && verifiedSelectedDetails(target.row,section,{core,details,manifest,coreIntegrity});
-  const targetDetailsMissing=target.status==='available' && !targetDetailsVerified;
-  const targetDetailsFailed=targetDetailsMissing && targetDetailsTerminalKey===targetDetailsKey;
-  useEffect(()=>{
-    if(target.status!=='available' || targetDetailsVerified) return;
-    let active=true;
-    setTargetDetailsTerminalKey(null);
-    void (async()=>{
-      try {
-        await ensureDetails({forProductView:true,...(targetDetailsRetryCount>0?{force:true,abandonInFlight:true}:{})});
-      } catch { /* The closed error state retains the exact selected rate. */ }
-      const current=useStore.getState();
-      if(active && !verifiedSelectedDetails(target.row,section,current)) setTargetDetailsTerminalKey(targetDetailsKey);
-    })();
-    return()=>{active=false;};
-  },[ensureDetails,section,target,targetDetailsKey,targetDetailsRetryCount,targetDetailsVerified]);
 
   const profileFeaturesPending =
     profileFeaturesForSection(profileFilters, section).length > 0 && !details?.products;
@@ -263,23 +223,6 @@ export function RateCheckWorkspace() {
   );
   const lvrBand = lvr !== null ? lvrTierForValue(lvr, availableLvrTiers) : null;
 
-  // Profile-matched comparable rows. A calculated LVR applies only to this
-  // scenario and never silently rewrites the saved browsing profile.
-  const unpricedRows = useMemo(() => {
-    void suitabilityRevision;
-    const all = publicRecommendationRows(core?.sections?.[section]?.rates ?? [], publicCatalogue, section, publicRateScenario(section, scenario, profileFilters));
-    return visibleAccountRows(
-      scenarioProfileFilterRows(
-        rowsUnder(all, section, []),
-        profileFilters,
-        section,
-        lvr,
-        details?.products,
-      ),
-      includeNonStandard,
-      details?.products,
-    );
-  }, [core, section, profileFilters, includeNonStandard, details, lvr, suitabilityRevision, publicCatalogue, scenario]);
   const calculatorSectionScenario = useMemo(
     () => publicRateScenario(section, scenario, profileFilters),
     [section, scenario, profileFilters],
@@ -288,8 +231,10 @@ export function RateCheckWorkspace() {
     (row: RateRow) => publicRateScenario(section, scenario, profileFilters, row),
     [section, scenario, profileFilters],
   );
+  // Expand + price cooperatively. Sync publicRecommendationRows here previously
+  // monopolised Hermes on every calculator section/scenario change.
   const pricedCatalogue = useResolvedPublicRankingRows({
-    candidates: unpricedRows,
+    sourceRows: core?.sections?.[section]?.rates ?? [],
     catalogue: publicCatalogue,
     section,
     sectionScenario: calculatorSectionScenario,
@@ -300,7 +245,75 @@ export function RateCheckWorkspace() {
   const publicPricing = pricedCatalogue.resolution;
   const comparisonsReady = publicCatalogue.status === 'unavailable'
     || (pricedCatalogue.ready && publicPricing.complete);
-  const rows = pricedCatalogue.ready ? publicPricing.rows : [];
+  const unpricedRows = useMemo(() => {
+    void suitabilityRevision;
+    if (!pricedCatalogue.ready) return [];
+    return visibleAccountRows(
+      scenarioProfileFilterRows(
+        rowsUnder(pricedCatalogue.candidates, section, []),
+        profileFilters,
+        section,
+        lvr,
+        details?.products,
+      ),
+      includeNonStandard,
+      details?.products,
+    );
+  }, [pricedCatalogue.ready, pricedCatalogue.candidates, section, profileFilters, includeNonStandard, details, lvr, suitabilityRevision]);
+  const rows = useMemo(() => {
+    void suitabilityRevision;
+    if (!pricedCatalogue.ready) return [];
+    return visibleAccountRows(
+      scenarioProfileFilterRows(
+        rowsUnder(publicPricing.rows, section, []),
+        profileFilters,
+        section,
+        lvr,
+        details?.products,
+      ),
+      includeNonStandard,
+      details?.products,
+    );
+  }, [pricedCatalogue.ready, publicPricing.rows, section, profileFilters, includeNonStandard, details, lvr, suitabilityRevision]);
+  const target = useMemo(() => {
+    void suitabilityRevision;
+    return resolveCalculationTarget(() => {
+      if (!core) return null;
+      // Raw core lacks public programme bindings. While cooperative pricing is
+      // outstanding, stay pending so audit readiness waits instead of erroring.
+      if (publicCatalogue.status === 'unavailable') return core;
+      if (!pricedCatalogue.ready) return null;
+      return {
+        ...core,
+        sections: {
+          ...core.sections,
+          [section]: {
+            ...core.sections[section],
+            rates: pricedCatalogue.candidates,
+          },
+        },
+      };
+    }, section, { target: params.target, ri: params.ri, programme: params.programme });
+  }, [core, section, params.target, params.ri, params.programme, suitabilityRevision, publicCatalogue.status, pricedCatalogue.ready, pricedCatalogue.candidates]);
+  const targetDetailsKey=JSON.stringify([coreSha,manifest?.files.details.sha256,
+    target.status==='available'?target.row.product_key:null,target.status==='available'?target.row.rate_index:null]);
+  const targetDetailsRetryCount=targetDetailsRetry?.key===targetDetailsKey?targetDetailsRetry.count:0;
+  const targetDetailsVerified=target.status==='available' && verifiedSelectedDetails(target.row,section,{core,details,manifest,coreIntegrity});
+  const targetDetailsMissing=target.status==='available' && !targetDetailsVerified;
+  const targetDetailsFailed=targetDetailsMissing && targetDetailsTerminalKey===targetDetailsKey;
+  useEffect(()=>{
+    if(target.status!=='available' || targetDetailsVerified) return;
+    let active=true;
+    setTargetDetailsTerminalKey(null);
+    void (async()=>{
+      try {
+        await ensureDetails({forProductView:true,...(targetDetailsRetryCount>0?{force:true,abandonInFlight:true}:{})});
+      } catch { /* The closed error state retains the exact selected rate. */ }
+      const current=useStore.getState();
+      if(active && !verifiedSelectedDetails(target.row,section,current)) setTargetDetailsTerminalKey(targetDetailsKey);
+    })();
+    return()=>{active=false;};
+  },[ensureDetails,section,target,targetDetailsKey,targetDetailsRetryCount,targetDetailsVerified]);
 
   // ---- LVR (mortgage): a real calculation from several inputs ----
   // Deposit needed to drop into the next lower LVR band (better rates).
@@ -494,7 +507,9 @@ export function RateCheckWorkspace() {
         : inputs.mode === 'buy'
           ? 'refi'
           : 'buy';
-    updateScenario((prev) => ({ ...prev, mortgage: { ...prev.mortgage, mode } }));
+    startTransition(() => {
+      updateScenario((prev) => ({ ...prev, mortgage: { ...prev.mortgage, mode } }));
+    });
     return { mode };
   }, [inputs.mode, isMortgage, scenarioStorageStatus, updateScenario]);
   const auditApplyScenario = useCallback((...args: unknown[]) => {

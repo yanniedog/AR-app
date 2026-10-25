@@ -19,6 +19,7 @@ import {
 import { resolveInterestSection, sectionSegmentOptions } from '../../data/interests';
 import { useStore } from '../../data/store';
 import { isSuitabilityFilterReady } from '../../data/suitabilityGate';
+import { useNavigationContentReady } from '../../hooks/useNavigationContentReady';
 import { useSuitabilityRevision } from '../../hooks/useSuitabilityRevision';
 import { usePerformanceAuditSurface } from '../../hooks/usePerformanceAuditReadiness';
 import { scalarRouteParam } from '../../lib/nav';
@@ -33,6 +34,8 @@ import {
 
 export default function MarketOverview() {
   const focused = useIsFocused();
+  // Latch so blur does not clear payload / unmount feeds and clamp scroll offset.
+  const contentReady = useNavigationContentReady(focused, { latchAfterReady: true });
   const [now, setNow] = useState(Date.now);
   const [calendarAttempted, setCalendarAttempted] = useState(false);
   const [factsLayout, setFactsLayout] = useState<string | null>(null);
@@ -72,13 +75,13 @@ export default function MarketOverview() {
   }, [interests]);
 
   useEffect(() => {
-    if (!core || !focused) return;
+    if (!core || !focused || !contentReady) return;
     void ensureBankInsights();
     let current = true;
     setCalendarAttempted(false);
     void ensureRbaCalendar().catch(() => undefined).finally(() => { if (current) setCalendarAttempted(true); });
     return () => { current = false; };
-  }, [core, focused, calendarSha, ensureBankInsights, ensureRbaCalendar]);
+  }, [contentReady, core, focused, calendarSha, ensureBankInsights, ensureRbaCalendar]);
   useEffect(() => {
     if (!focused) return;
     setNow(Date.now());
@@ -103,6 +106,7 @@ export default function MarketOverview() {
   }, [core, ensureDetails, includeNonStandard]);
 
   const payload = useMemo(() => {
+    if (!contentReady) return null;
     void suitabilityRevision;
     return filterBankInsightsForSuitability(
       rawPayload,
@@ -112,10 +116,10 @@ export default function MarketOverview() {
       suitabilityRevision,
       coreIntegrity,
     );
-  }, [core, coreIntegrity, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
+  }, [contentReady, core, coreIntegrity, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
   const pulse = useMemo(() => marketPulse(payload, 7, [activeSection]), [activeSection, payload]);
-  const suitabilityWarming = rawPayload !== null && payload === null && !error && !suitabilityReady;
-  const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady;
+  const suitabilityWarming = rawPayload !== null && payload === null && !error && (!suitabilityReady || !contentReady);
+  const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady && contentReady;
   const feedExpectedCount = useMemo(
     () => payload ? recentBankEvents(payload, { sections: [activeSection], limit: 14 }).length : 0,
     [activeSection, payload],

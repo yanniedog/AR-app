@@ -1,7 +1,9 @@
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import {
+  publicCataloguePricingKey,
   publicRecommendationRows,
+  publicRecommendationRowsCooperatively,
   resolvedPublicRankingRows,
   resolvedPublicRankingRowsCooperatively,
 } from '../src/data/publicRateIntegration';
@@ -14,6 +16,38 @@ beforeEach(() => {
   installMandatoryEligibility(selectMandatoryEligibility(null, null, null));
 });
 afterEach(() => jest.useRealTimers());
+
+test('cooperative recommendation assembly matches the synchronous contract', async () => {
+  const products = Array.from({ length: 16 }, (_, index) => ({
+    ...product,
+    productId: `p-${index}`,
+    productKey: `p-${index}`,
+    programmeIds: [`prog-${index}`],
+    section: 'Savings' as const,
+  }));
+  const base = programme().components[0];
+  const programmes = products.map((value, index) => programme({
+    productId: value.productId,
+    programmeId: `prog-${index}`,
+    offerId: `offer-${index}`,
+    section: 'Savings',
+    components: [{ ...base, scopeId: value.productId, componentId: `base-${index}`, value: `0.0${(index % 9) + 1}` }],
+  }));
+  const view = catalogue(programmes, products);
+  const source = products.map((value, index) => ({
+    ...row, product_key: value.productKey, rate: `0.0${(index % 9) + 1}`, comparison_rate: undefined,
+  }));
+  const sync = publicRecommendationRows(source, view, 'Savings', {});
+  const yields: number[] = [];
+  const cooperative = await publicRecommendationRowsCooperatively(source, view, 'Savings', {}, {
+    yieldControl: async () => { yields.push(1); },
+    now: () => yields.length * 10,
+  });
+  expect(cooperative?.map(item => [item.product_key, item.public_offer_id, item.rate]))
+    .toEqual(sync.map(item => [item.product_key, item.public_offer_id, item.rate]));
+  expect(yields.length).toBeGreaterThan(1);
+  expect(publicCataloguePricingKey(view)).toContain(`:${view.products.length}`);
+});
 
 test('cooperative public ranking matches the synchronous contract', async () => {
   const products = [product, { ...product, productId: 'other', productKey: 'other', programmeIds: ['other'] }];

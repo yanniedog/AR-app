@@ -4,6 +4,7 @@ import { FlashList } from '@shopify/flash-list';
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 
+import { FLASH_LIST_DRAW_DISTANCE, FLASH_LIST_VIEWABILITY_CONFIG } from '../../lib/flashListDefaults';
 import type { BankInsightsPayload } from '../../data/bankInsights';
 import { buildCompactBankResponseWindows, type CompactBankResponseRow } from '../../data/bankResponseModel';
 import type { BankRateChartModel } from '../../data/bankRateOverview';
@@ -213,6 +214,8 @@ export function BankResponseDashboard({
   </View>;
   return <View style={{ ...responsiveScreenContentStyle(width), flex: 1 }}><FlashList
     data={active.rows}
+    drawDistance={FLASH_LIST_DRAW_DISTANCE}
+    viewabilityConfig={FLASH_LIST_VIEWABILITY_CONFIG}
     extraData={renderRevision}
     keyExtractor={(row) => row.provider}
     renderItem={({ item }) => <CompactRow row={item} />}

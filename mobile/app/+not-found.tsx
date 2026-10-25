@@ -10,7 +10,15 @@ import { useTheme } from '../src/theme/ThemeProvider';
 export default function NotFound() {
   const theme = useTheme();
   const [layoutReady, setLayoutReady] = useState(false);
-  const goHome = useCallback(() => router.replace('/(tabs)/browse'), []);
+  const goHome = useCallback(() => {
+    // Prefer dismissTo so an existing Rates tab can reuse frozen state instead of
+    // rebuilding the destination under a full stack replace.
+    if (typeof router.dismissTo === 'function') {
+      router.dismissTo('/(tabs)/browse');
+      return;
+    }
+    router.replace('/(tabs)/browse');
+  }, []);
   const auditActions = useMemo(() => ({
     'not-found.open': () => undefined,
     'not-found.home': goHome,

@@ -233,16 +233,29 @@ export default function Settings() {
       products: new Set(rows.map(row => row.product_key)).size, rates: rows.length };
   }, [core, dataDetailsOpen, suitabilityRevision]);
 
-  const settingsRenderRevision = JSON.stringify([
+  const settingsRenderRevision = [
     hydrated ? 'hydrated' : 'loading',
-    prefs,
-    notificationsPending,
-    crashChoicePending,
+    prefs.themeMode,
+    prefs.depositRankMetric,
+    prefs.mortgageRateMetric,
+    prefs.includeNonStandard,
+    prefs.enableDeepSearch,
+    prefs.showHistoryRibbon,
+    prefs.wifiOnly,
+    prefs.apkUpdatesWifiOnly,
+    prefs.rateMoveThresholdBps,
+    prefs.notificationsEnabled,
+    prefs.crashReportsEnabled,
+    prefs.privacyChoiceVersion,
+    prefs.interests.join(','),
+    prefs.defaultSection,
+    notificationsPending ? '1' : '0',
+    crashChoicePending ? '1' : '0',
     homeSectionsOpen ? 'home-open' : 'home-closed',
     dataDetailsOpen ? 'data-open' : 'data-closed',
     diagnosticsOpen ? 'diagnostics-open' : 'diagnostics-closed',
     updateStatus.status,
-  ]);
+  ].join(':');
   const auditActions = useMemo(() => ({
     'settings.open': () => undefined,
     'settings.home-sections.toggle': toggleHomeSections,

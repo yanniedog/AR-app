@@ -1,7 +1,7 @@
 import { buildPerformanceAuditSetupPlans } from '../src/lib/performanceAuditSetup';
 import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
 import { matchesLvrTier, parseLvrRange, lvrRangeContains } from '../src/data/lvrRange';
-import { publicComparisonCore, bindCurrentPublicRow, payableRateForRow, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate,
+import { publicComparisonCore, bindCurrentPublicRow, payableRateForRow, publicProductOfferRows, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate,
   resolveProductPublicRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import type { UserRateScenario } from '../src/data/userRateScenario';
@@ -118,6 +118,14 @@ it('keeps semantic saved selections and subscriptions stable when source arrays 
   expect(isProductSubscribed([subscription], product.productKey, null, 'unrelated-offer')).toBe(false);
   expect(resolveCompareSelections(core([synthetic]), [`offer:unit-offer#${product.productKey}`])[0].row.public_offer_id).toBe('unit-offer');
   expect(resolveCompareSelections(core([synthetic]), [`offer:unrelated-offer#${product.productKey}`])).toEqual([]);
+});
+
+it('expands only the requested public product for product-detail identity', () => {
+  const view = catalogue();
+  const offers = publicProductOfferRows(product, view, {});
+  expect(offers).toHaveLength(1);
+  expect(offers[0]).toMatchObject({ product_key: product.productKey, rate: '0.06', public_offer_id: 'unit-offer' });
+  expect(publicProductOfferRows({ ...product, status: 'legacy' }, view, {})).toEqual([]);
 });
 
 it('includes newly resolved offers while preserving mandatory feature gates and excluding unresolved rankings', () => {
