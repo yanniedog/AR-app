@@ -10,6 +10,7 @@ import type { RateRow } from '../types';
 import { useStore } from '../data/store';
 import { updateRatesSection } from '../data/ratesSession';
 import { uiCount, uiJoin, uiLabel, uiMortgageComparisonInput } from '../lib/uiCopy';
+import { yieldToUi } from '../lib/yieldToUi';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Chip, Row } from './ui';
 import { SegmentedControl } from './controls';
@@ -139,16 +140,36 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     commitDraft(draftRef.current);
   }, []);
   const rowOptions = useMemo(() => rowFacetOptions(rows, filters), [rows, filters]);
-  const catalogueKey = catalogue ? publicCataloguePricingKey(catalogue) : '';
+  const catalogueKey = useMemo(() => catalogue ? publicCataloguePricingKey(catalogue) : '', [catalogue]);
   const catalogueRef = useRef(catalogue);
   catalogueRef.current = catalogue;
   // Snapshot object identity changes on every shard tick; key on content so
   // mortgage.scope.apply does not re-walk the full programme book each render.
+  // Large books leave the header render and yield before the scan.
   const catalogueOptions = useMemo(() => {
     const view = catalogueRef.current;
-    if (!view || view.status !== 'ready') return { loanPurposes: [] as string[], repaymentTypes: [] as string[] };
+    if (!view || view.status !== 'ready' || view.products.length > 48) {
+      return { loanPurposes: [] as string[], repaymentTypes: [] as string[] };
+    }
     return catalogueFacetOptions(view);
   }, [catalogueKey]);
+  const [deferredCatalogueOptions, setDeferredCatalogueOptions] = useState<Record<FacetKey, string[]> | null>(null);
+  useEffect(() => {
+    const view = catalogueRef.current;
+    if (!view || view.status !== 'ready' || view.products.length <= 48) {
+      setDeferredCatalogueOptions(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      await yieldToUi(0);
+      if (cancelled) return;
+      const options = catalogueFacetOptions(view);
+      if (!cancelled) setDeferredCatalogueOptions(options);
+    })();
+    return () => { cancelled = true; };
+  }, [catalogueKey]);
+  const facetCatalogueOptions = deferredCatalogueOptions ?? catalogueOptions;
   const groups = useMemo(() => ([
     { key: 'loanPurposes' as const, label: 'Loan purpose' as const, canonicalize: canonicalPurpose },
     { key: 'repaymentTypes' as const, label: 'Repayment' as const, canonicalize: canonicalRepayment },
@@ -158,11 +179,11 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     canonicalize: group.canonicalize,
     options: mergeFacetOptions(
       rowOptions[group.key],
-      catalogueOptions[group.key],
+      facetCatalogueOptions[group.key],
       filters[group.key],
       group.canonicalize,
     ),
-  })), [rowOptions, catalogueOptions, filters]);
+  })), [rowOptions, facetCatalogueOptions, filters]);
   const change = (field: 'loanAmount' | 'lvr', text: string) => {
     dirty.current = true;
     setDraft(current => ({ ...current, [field]: text }));

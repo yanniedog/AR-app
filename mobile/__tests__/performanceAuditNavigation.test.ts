@@ -57,6 +57,25 @@ test('retains the measured second Back for the legacy root tab alias', async () 
   expect(f.back).toHaveBeenCalledTimes(2);
 });
 
+test('path commit is the measured Back and the following settle is bookkeeping', async () => {
+  let clock = 0;
+  const paths = ['/browse', '/browse', '/performance-audit'];
+  let index = 0;
+  const result = await measureAuditBackNavigation({
+    currentPath: () => paths[Math.min(index, paths.length - 1)],
+    back: () => { index += 1; },
+    awaitCommit: async () => { clock += 40; index = 2; },
+    settle: async () => { clock += 650; },
+    now: () => clock,
+    matchesPath: (actual, expected) => actual === expected,
+    tabJourney: false,
+    recordFirst: () => {},
+  });
+  expect(result.durationMs).toBe(40);
+  expect(result.settleMs).toBe(650);
+  expect(result.returnedToAudit).toBe(true);
+});
+
 test('Rates returns directly to the saved audit origin with one measured Back', async () => {
   const f = tabBackFixture('browse');
   const result = await f.measure();

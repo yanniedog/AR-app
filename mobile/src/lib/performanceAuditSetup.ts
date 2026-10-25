@@ -8,9 +8,11 @@ import { awaitPerformanceAuditWork } from './performanceAuditWork';
 import { buildDeepPerformanceAuditPlanFromInputs, deriveDeepAuditInputs, type DeepAuditSelectionOptions } from './performanceAuditPlan';
 import type { CorePayload, SectionKey } from '../types';
 import { auditDatasetFailureMetrics } from './performanceAuditDataset';
+import { capturePreAuditApplicationJournal } from './auditApplicationJournal';
 
 export function buildPerformanceAuditSetupPlans(core: CorePayload | null,
   options: DeepAuditSelectionOptions = {}, interests?: SectionKey[]) {
+  capturePreAuditApplicationJournal(options.seed);
   const inputs = deriveDeepAuditInputs(core, options);
   return { plan: buildDeepPerformanceAuditPlanFromInputs(inputs),
     journeys: buildPerformanceAuditJourneysFromInputs(inputs, interests) };
@@ -39,6 +41,7 @@ export async function measurePerformanceAuditSetupStage<T>(
     clock?: () => number;
   },
 ): Promise<{ value: T; check: AuditCheck }> {
+  capturePreAuditApplicationJournal();
   const watchdog = new PerformanceAuditStepWatchdog(stage.label, options.clock);
   const metrics = { setupStage: true, executionAttempted: true, stepLimitMs: PERFORMANCE_AUDIT_STEP_LIMIT_MS };
   try {

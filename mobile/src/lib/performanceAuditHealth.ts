@@ -177,10 +177,16 @@ export function appHealthDisplayObservations(
       // Preparing optional work is not completed model evidence. A contract
       // requiring that model still fails when its evidence is absent.
       if (probe.kind === 'data' && !probe.required && probe.pending) continue;
+      // A list that is still loading has not produced empty-state or row evidence.
+      // Scoring it as a finished render poisons later settled visits.
+      if (probe.kind === 'list' && probe.pending) continue;
       if (probe.kind === 'graphic') {
         // Ordinary navigation may finish while an optional chart is preparing.
         // Its transient state is not a completed chart check. Explicit chart
         // actions serialize effective required=true and retain failures below.
+        // An unmeasured pending chart, including one a step temporarily required,
+        // is the same incomplete capture. A measured pending chart still fails.
+        if (probe.pending && probe.layoutMeasured !== true) continue;
         if (!probe.required && probe.pending) continue;
         // A closed optional chart is not a graph the journey expected to show.
         if (!probe.required && probe.expected === 0 && probe.actual === 0 &&

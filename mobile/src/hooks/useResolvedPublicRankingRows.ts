@@ -59,8 +59,9 @@ export function useResolvedPublicRankingRows(options: {
     mortgageInputs, mortgageContext, applyMortgageScope = false, focused, interactive = false, revision,
   } = options;
   // Catalogue clients republish a new object on every shard tick. Key on content
-  // identity so in-flight cooperative work is not cancelled mid-pass.
-  const catalogueKey = publicCataloguePricingKey(catalogue);
+  // identity so in-flight cooperative work is not cancelled mid-pass, and key
+  // once per snapshot so Rates renders do not re-walk every programme.
+  const catalogueKey = useMemo(() => publicCataloguePricingKey(catalogue), [catalogue]);
   const catalogueRef = useRef(catalogue);
   catalogueRef.current = catalogue;
   const rowScenarioRef = useRef(rowScenario);
@@ -74,6 +75,9 @@ export function useResolvedPublicRankingRows(options: {
   }), [sourceRows, providedCandidates, catalogueKey, section, sectionScenarioKey, mortgageInputs, mortgageContext, applyMortgageScope, revision]);
   const [attempt, setAttempt] = useState(0);
   const preparedWhileFocused = useRef(false);
+  const requestRef = useRef(request);
+  requestRef.current = request;
+  const flightRef = useRef(0);
   const [snapshot, setSnapshot] = useState<{
     request: typeof request;
     attempt: number;
@@ -95,9 +99,14 @@ export function useResolvedPublicRankingRows(options: {
         mortgage: EMPTY_MORTGAGE,
       };
     }
-    const inputCount = request.providedCandidates?.length ?? request.sourceRows.length;
-    if (inputCount > SYNCHRONOUS_PUBLIC_PRICING_ROW_LIMIT) return null;
     const view = catalogueRef.current;
+    const inputCount = request.providedCandidates?.length ?? request.sourceRows.length;
+    // publicRecommendationRows walks the whole programme book. A short core
+    // section must not do that walk inside render; cooperative pricing yields.
+    const expandsCatalogue = request.providedCandidates == null
+      && view.status === 'ready'
+      && view.products.length > SYNCHRONOUS_PUBLIC_PRICING_ROW_LIMIT;
+    if (expandsCatalogue || inputCount > SYNCHRONOUS_PUBLIC_PRICING_ROW_LIMIT) return null;
     const candidates = buildCandidatesSync(request, view, sectionScenarioRef.current);
     if (candidates.length > SYNCHRONOUS_PUBLIC_PRICING_ROW_LIMIT) return null;
     const resolution = resolvedPublicRankingRows(candidates, view, row => rowScenarioRef.current(row));
@@ -111,28 +120,49 @@ export function useResolvedPublicRankingRows(options: {
     else if (synchronous || current) preparedWhileFocused.current = true;
   }, [focused, synchronous, current]);
   useEffect(() => {
-    if (synchronous || !focused || current) return;
+    if (!focused) {
+      flightRef.current += 1;
+      return;
+    }
+    if (synchronous || current) return;
+    const flight = ++flightRef.current;
     let cancelled = false;
     const run = () => {
-      const control = { cancelled: () => cancelled };
       void (async () => {
-        await yieldToUi(0);
-        if (cancelled) return;
-        const view = catalogueRef.current;
-        const candidates = request.providedCandidates
-          ? [...request.providedCandidates]
-          : await publicRecommendationRowsCooperatively(
-            request.sourceRows, view, request.section, sectionScenarioRef.current, control);
-        if (cancelled || !candidates) return;
-        const resolution = await resolvedPublicRankingRowsCooperatively(
-          candidates, view, row => rowScenarioRef.current(row), control);
-        if (cancelled || !resolution) return;
-        const mortgage = request.applyMortgageScope && request.mortgageInputs
-          ? await mortgageComparisonRowsCooperatively(
-            resolution.rows, request.mortgageInputs, request.mortgageContext, control)
-          : { rows: resolution.rows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
-        if (cancelled || !mortgage) return;
-        setSnapshot({ request, attempt, candidates, resolution, mortgage });
+        // Keep one pass alive across scope/catalogue updates. Cancelling on
+        // every request identity change starved mortgage.scope.apply so
+        // search.data never left pending.
+        while (!cancelled && flightRef.current === flight) {
+          const req = requestRef.current;
+          const control = {
+            cancelled: () => cancelled || flightRef.current !== flight || requestRef.current !== req,
+          };
+          await yieldToUi(0);
+          if (cancelled || flightRef.current !== flight) return;
+          if (requestRef.current !== req) continue;
+          const view = catalogueRef.current;
+          const candidates = req.providedCandidates
+            ? [...req.providedCandidates]
+            : await publicRecommendationRowsCooperatively(
+              req.sourceRows, view, req.section, sectionScenarioRef.current, control);
+          if (cancelled || flightRef.current !== flight) return;
+          if (requestRef.current !== req) continue;
+          if (!candidates) return;
+          const resolution = await resolvedPublicRankingRowsCooperatively(
+            candidates, view, row => rowScenarioRef.current(row), control);
+          if (cancelled || flightRef.current !== flight) return;
+          if (requestRef.current !== req) continue;
+          if (!resolution) return;
+          const mortgage = req.applyMortgageScope && req.mortgageInputs
+            ? await mortgageComparisonRowsCooperatively(
+              resolution.rows, req.mortgageInputs, req.mortgageContext, control)
+            : { rows: resolution.rows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
+          if (cancelled || flightRef.current !== flight) return;
+          if (requestRef.current !== req) continue;
+          if (!mortgage) return;
+          setSnapshot({ request: req, attempt, candidates, resolution, mortgage });
+          return;
+        }
       })();
     };
     // Cold tab entry keeps a short paint deferral; mortgage.scope.apply on an
@@ -141,7 +171,7 @@ export function useResolvedPublicRankingRows(options: {
       ? scheduleAfterInteractions(run)
       : scheduleAfterNavigation(run, 100);
     return () => { cancelled = true; cancelNavigation(); };
-  }, [request, synchronous, focused, interactive, attempt, current]);
+  }, [synchronous, focused, interactive, attempt, current]);
   return {
     candidates: synchronous?.candidates ?? (current ? snapshot!.candidates : []),
     resolution: synchronous?.resolution ?? (current ? snapshot!.resolution : EMPTY_RESOLUTION),

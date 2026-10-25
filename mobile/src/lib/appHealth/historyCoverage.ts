@@ -6,6 +6,7 @@ import { productSeriesRecordForChart, type ProductHistoryPayload } from '../../d
 import { toFraction } from '../../data/rateNumbers';
 import { EMPTY_PROFILE } from '../../data/profile';
 import { bankRateScope, buildBankRateChart, type BankRateSnapshot, type RateSummary } from '../../data/bankRateOverview';
+import { isExplicitTermDepositProduct } from '../../data/sectionIntegrity';
 import { cachedHistoricalBankRateCatalogue } from '../../data/historicalBankRateCatalogueStore';
 import { historicalBankRateSnapshots, historicalCatalogueSelection, preparedReadySources,
   type PreparedHistoricalBankRateCatalogue } from '../../data/historicalBankRateCatalogue';
@@ -82,8 +83,13 @@ function sourceSnapshots(prepared: PreparedHistoricalBankRateCatalogue): Record<
         for (const [rate, delta] of changes) emit(date, cohort[0], rate, delta);
     }, new Set(source.acceptedDates));
   } else for (const section of SECTION_KEYS) reduce(prepared.catalogue.run_dates, section, emit => {
-    for (const tier of prepared.catalogue.sections[section]) for (const [start, count, rates] of tier.spans)
-      for (const rate of rates) { emit(start, tier.row.provider, rate, 1); emit(start + count, tier.row.provider, rate, -1); }
+    for (const tier of prepared.catalogue.sections[section]) {
+      // The chart model quarantines explicit term deposits filed under Savings.
+      // Counting them here would report that quarantine as a model defect.
+      if (section === 'Savings' && isExplicitTermDepositProduct(tier.row)) continue;
+      for (const [start, count, rates] of tier.spans)
+        for (const rate of rates) { emit(start, tier.row.provider, rate, 1); emit(start + count, tier.row.provider, rate, -1); }
+    }
   }, new Set(prepared.catalogue.run_dates));
   const selection = historicalCatalogueSelection(prepared);
   if (selection?.fallback) {
@@ -110,8 +116,11 @@ function unknownMetadata(prepared: PreparedHistoricalBankRateCatalogue): Record<
     }
   } else for (const section of SECTION_KEYS) {
     const deltas = new Float64Array(prepared.catalogue.run_dates.length + 1);
-    for (const tier of prepared.catalogue.sections[section]) for (const [start, count, rates, evidenceId] of tier.spans)
-      if (prepared.catalogue.evidence[evidenceId]?.status !== 'known') { deltas[start] += rates.length; deltas[start + count] -= rates.length; }
+    for (const tier of prepared.catalogue.sections[section]) {
+      if (section === 'Savings' && isExplicitTermDepositProduct(tier.row)) continue;
+      for (const [start, count, rates, evidenceId] of tier.spans)
+        if (prepared.catalogue.evidence[evidenceId]?.status !== 'known') { deltas[start] += rates.length; deltas[start + count] -= rates.length; }
+    }
     let count = 0;
     prepared.catalogue.run_dates.forEach((day, index) => { count += deltas[index]; result[day][section] = count; });
   }
@@ -257,9 +266,18 @@ function freezeHistoryEvidence(result: HistoryCoverageEvidence): HistoryCoverage
  * This proves model projection, while foreground probes prove sampled pixels.
  * No fetch, raw archive preparation, profile changes or cache writes occur here.
  */
+/** Last publication day the payload can be missing. Hobart can already be the
+ * next calendar day while UTC is still the previous publication day; that
+ * Hobart date is not a stale payload. */
+export function historyCoverageHorizon(nowMs: number): string {
+  const hobartDay = hobartCalendarDate(nowMs);
+  const utcDay = new Date(nowMs).toISOString().slice(0, 10);
+  return hobartDay > utcDay ? utcDay : hobartDay;
+}
+
 export function historyCoverageEvidence(core: CorePayload, productHistory: ProductHistoryPayload | null = null, nowMs = Date.now()): HistoryCoverageEvidence {
   const prepared = cachedHistoricalBankRateCatalogue(core);
-  const observedDay = hobartCalendarDate(nowMs);
+  const observedDay = historyCoverageHorizon(nowMs);
   const revision = `${getMandatoryEligibilityRevision()}:${getSuitabilityRevision()}:${observedDay}`;
   const cached = retained.get(core);
   if (cached?.prepared === prepared && cached.revision === revision && cached.productHistory === productHistory) return cached.result;
@@ -306,6 +324,9 @@ export function reconcileHistoryCoverage(result: HistoryCoverageEvidence, dates:
   }
   const allDates = Array.from({ length }, (_, index) => new Date(Date.parse(first) + index * 86_400_000).toISOString().slice(0, 10));
   result.days = allDates.length;
+  const productSourceUnreconciled = new Set(result.gaps
+    .filter(gap => gap[1] === 'product-source-reconciliation-unavailable')
+    .map(gap => gap[0]));
   for (const day of allDates) {
     // Today's source is the pinned core, independently reconciled by catalogue coverage.
     if (day < result.runDate && (!sources[day] || unavailable[day])) {
@@ -319,6 +340,9 @@ export function reconcileHistoryCoverage(result: HistoryCoverageEvidence, dates:
       }
       continue;
     }
+    // Without a reconciled product source, a count difference is the same producer
+    // gap already recorded. It is not proof the app dropped identities.
+    if (productSourceUnreconciled.has(day)) continue;
     if (day !== result.runDate && sources[day] && !unavailable[day]) for (const section of SECTION_KEYS) {
       const raw = expected[day]?.[section] ?? {}, processed = snapshots[day][section] ?? {};
       for (const provider of new Set([...Object.keys(raw), ...Object.keys(processed)])) {

@@ -81,7 +81,7 @@ import {
   auditActionStrings,
 } from '../../lib/performanceAuditActionParams';
 import { effectiveDeepSearch } from '../../lib/proAccess';
-import { scheduleAfterNavigation } from '../../lib/yieldToUi';
+import { scheduleAfterInteractions, scheduleAfterNavigation } from '../../lib/yieldToUi';
 import type { CorePayload, RateRow, SectionKey } from '../../types';
 import type { LogoRenderState } from '../../lib/logoReadiness';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -234,20 +234,23 @@ export default function RatesWorkspace() {
   const detailsKey = details?.run_date ?? null;
   useEffect(() => {
     if (!isFocused) return;
-    // Incomplete listed Mortgage criteria must not kick multi-megabyte details /
-    // suitability / search-index work — audit paste showed details+history
-    // already competing for 50s+ on the JS thread during payload settle.
-    // Unlisted browsing still needs details for the catalogue gate.
-    if (section === 'Mortgage' && task.availability !== 'unlisted' && !mortgageCriteriaReady) return;
-    // Defer past first paint / navigation so cold open and post-refresh stays
-    // interactive while heavy details work catches up.
-    return scheduleAfterNavigation(() => {
-      // Suitability filtering needs product details even when Pro deep-search
-      // warming is off; force bypasses shouldWarmDetails for default prefs.
+    // Claim details on the next idle turn for every section, including Mortgage
+    // before LVR is set. The list does not wait on this load while comparison
+    // criteria are incomplete. A navigation-sized delay left cold Rates with
+    // details neither loaded nor loading.
+    return scheduleAfterInteractions(() => {
       void ensureDetails({ force: true });
-      if (deepSearchActive) void ensureSearchIndex();
     });
-  }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey, searchIndexSha, isFocused, section, mortgageCriteriaReady, task.availability]);
+  }, [ensureDetails, coreKey, detailsKey, isFocused]);
+  useEffect(() => {
+    if (!isFocused || !deepSearchActive) return;
+    // Index warming stays on the navigation deferral. Running it on the idle
+    // turn forced a search-index pass during the first results paint.
+    if (section === 'Mortgage' && task.availability !== 'unlisted' && !mortgageCriteriaReady) return;
+    return scheduleAfterNavigation(() => {
+      void ensureSearchIndex();
+    });
+  }, [deepSearchActive, ensureSearchIndex, coreKey, detailsKey, searchIndexSha, isFocused, section, mortgageCriteriaReady, task.availability]);
   // A cached core reports deep search unavailable until a refresh confirms the
   // same edition is live; that promotion changes only `source`, so retry on the
   // transition itself. Status is read, not depended on: other unavailable
@@ -829,6 +832,9 @@ export default function RatesWorkspace() {
         // Settled 0 listed (criteria complete, pricing done) is ready empty —
         // FlashList often skips viewability for ListEmptyComponent and must
         // not leave search.list pending forever after mortgage.scope.apply.
+        // A non-empty page stays pending until a real viewport count. Layout
+        // seeding alone is not that count: a hidden or pre-restore list can
+        // already be committed.
         status: (() => {
           const settledEmpty = pageRows.length === 0 && !searchPending;
           if (settledEmpty) return 'ready';

@@ -98,3 +98,106 @@ export function formatPerformanceAuditEstimate(
     ? `ETA paused · ${remaining} of foreground work remains`
     : `ETA: ${remaining} remaining${estimate.basis === 'initial' ? ' · initial estimate' : ''}`;
 }
+
+/** Work the user waits for. These are the existing score thresholds. */
+export const AUDIT_ACTION_WARN_MS = 900;
+export const AUDIT_ACTION_FAIL_MS = 2_500;
+export const AUDIT_FORWARD_WARN_MS = 900;
+export const AUDIT_FORWARD_FAIL_MS = 2_500;
+export const AUDIT_BACK_WARN_MS = 800;
+export const AUDIT_BACK_FAIL_MS = 2_000;
+export const AUDIT_EVENT_LOOP_WARN_MS = 100;
+export const AUDIT_EVENT_LOOP_FAIL_MS = 300;
+export const AUDIT_FRAME_WARN_MS = 80;
+export const AUDIT_FRAME_FAIL_MS = 250;
+
+export type UserVisibleLatencyStatus = 'pass' | 'warn' | 'fail';
+
+function finiteMs(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+export function scoreAuditLatency(
+  valueMs: number,
+  warnAboveMs: number,
+  failAboveMs: number,
+): UserVisibleLatencyStatus {
+  if (valueMs > failAboveMs) return 'fail';
+  if (valueMs > warnAboveMs) return 'warn';
+  return 'pass';
+}
+
+export function worstUserVisibleLatency(
+  ...statuses: UserVisibleLatencyStatus[]
+): UserVisibleLatencyStatus {
+  const rank: Record<UserVisibleLatencyStatus, number> = { pass: 0, warn: 1, fail: 2 };
+  return statuses.reduce(
+    (worst, status) => (rank[status] > rank[worst] ? status : worst),
+    'pass',
+  );
+}
+
+/** Navigation commit plus the first ready frame. Quiet-window padding is excluded. */
+export function userVisibleForwardMs(input: {
+  navigationCommitMs?: number | null;
+  firstReadyFrameMs?: number | null;
+}): number {
+  return Math.max(0, (finiteMs(input.navigationCommitMs) ?? 0) + (finiteMs(input.firstReadyFrameMs) ?? 0));
+}
+
+export interface UserVisibleJourneyScoreInput {
+  actionMs?: number | null;
+  navigationCommitMs?: number | null;
+  firstReadyFrameMs?: number | null;
+  backMs?: number | null;
+  maxEventLoopLagMs?: number | null;
+  maxFrameGapMs?: number | null;
+}
+
+/**
+ * Score the tap, the navigation commit, the first ready frame, the return,
+ * and stalls inside that window. Background settle is not an input.
+ */
+export function scoreUserVisibleJourney(
+  input: UserVisibleJourneyScoreInput,
+): UserVisibleLatencyStatus {
+  const statuses: UserVisibleLatencyStatus[] = [];
+  const action = finiteMs(input.actionMs);
+  if (action != null) statuses.push(scoreAuditLatency(action, AUDIT_ACTION_WARN_MS, AUDIT_ACTION_FAIL_MS));
+  if (finiteMs(input.navigationCommitMs) != null || finiteMs(input.firstReadyFrameMs) != null) {
+    statuses.push(scoreAuditLatency(
+      userVisibleForwardMs(input),
+      AUDIT_FORWARD_WARN_MS,
+      AUDIT_FORWARD_FAIL_MS,
+    ));
+  }
+  const back = finiteMs(input.backMs);
+  if (back != null) statuses.push(scoreAuditLatency(back, AUDIT_BACK_WARN_MS, AUDIT_BACK_FAIL_MS));
+  const lag = finiteMs(input.maxEventLoopLagMs);
+  if (lag != null) statuses.push(scoreAuditLatency(lag, AUDIT_EVENT_LOOP_WARN_MS, AUDIT_EVENT_LOOP_FAIL_MS));
+  const frame = finiteMs(input.maxFrameGapMs);
+  if (frame != null) statuses.push(scoreAuditLatency(frame, AUDIT_FRAME_WARN_MS, AUDIT_FRAME_FAIL_MS));
+  return statuses.length ? worstUserVisibleLatency(...statuses) : 'pass';
+}
+
+export function userVisibleLatencyOverBudget(metrics: {
+  actionMs?: unknown;
+  forwardMs?: unknown;
+  forwardWorkMs?: unknown;
+  backMs?: unknown;
+  maxEventLoopLagMs?: unknown;
+  maxFrameGapMs?: unknown;
+}): boolean {
+  const number = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : null;
+  const action = number(metrics.actionMs);
+  if (action != null && action > AUDIT_ACTION_FAIL_MS) return true;
+  const forward = number(metrics.forwardWorkMs) ?? number(metrics.forwardMs);
+  if (forward != null && forward > AUDIT_FORWARD_FAIL_MS) return true;
+  const back = number(metrics.backMs);
+  if (back != null && back > AUDIT_BACK_FAIL_MS) return true;
+  const lag = number(metrics.maxEventLoopLagMs);
+  if (lag != null && lag > AUDIT_EVENT_LOOP_FAIL_MS) return true;
+  const frame = number(metrics.maxFrameGapMs);
+  if (frame != null && frame > AUDIT_FRAME_FAIL_MS) return true;
+  return false;
+}

@@ -1,6 +1,6 @@
 import type { PerformanceAuditReport } from './performanceAudit';
 import { toPublicAppHealthReport } from './appHealth';
-import { PUBLIC_AUDIT_ERROR_TYPES, publicAuditDiagnostic, publicAuditError } from './performanceAuditDiagnostic';
+import { PUBLIC_AUDIT_ERROR_TYPES, publicAuditDiagnostic, publicAuditError, publicAuditFailureReason, publicHealthFailureReason, stallTimeoutFields } from './performanceAuditDiagnostic';
 import { PUBLIC_AUDIT_METRIC_FIELDS } from './auditDiagnosticFields';
 import { buildDeepPerformanceAuditPlan } from './performanceAuditPlan';
 import { ANDROID_UPDATE_READINESS_AUDIT } from './performanceAuditCheckInventory';
@@ -180,9 +180,26 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
     errorDetails: publicAuditError(check.error, check.trace) })),
     environment: { ...report.environment, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion },
     appHealth: null }) as Record<string, unknown>;
+  const stallTimeout = stallTimeoutFields(report.watchdog.hangTimeoutMs);
+  if (retained.watchdog && typeof retained.watchdog === 'object' && !Array.isArray(retained.watchdog)) {
+    Object.assign(retained.watchdog, stallTimeout);
+  }
+  if (Array.isArray(retained.checks)) {
+    retained.checks = retained.checks.map((check, index) => {
+      const reason = publicAuditFailureReason(report.checks[index], report.watchdog.hangTimeoutMs);
+      return reason && check && typeof check === 'object' ? { ...check, failureReason: reason } : check;
+    });
+  }
+  const health = report.appHealth != null
+    ? hasValidPerformanceAuditHealth(report) ? toPublicAppHealthReport(report.appHealth) : visit(report.appHealth, 'appHealth', '.appHealth')
+    : null;
+  const annotatedHealth = health && typeof health === 'object' && !Array.isArray(health) && Array.isArray((health as { checks?: unknown }).checks)
+    ? { ...health, checks: (health as { checks: unknown[] }).checks.map((check, index) => {
+      const reason = publicHealthFailureReason(report.appHealth!.checks[index] ?? {});
+      return reason && check && typeof check === 'object' ? { ...check, failureReason: reason } : check;
+    }) }
+    : health;
   // This dedicated sanitizer owns a complete public schema; do not obscure its
   // quality counts or findings through a second, unrelated schema boundary.
-  return { ...retained, appHealth: report.appHealth != null
-    ? hasValidPerformanceAuditHealth(report) ? toPublicAppHealthReport(report.appHealth) : visit(report.appHealth, 'appHealth', '.appHealth')
-    : null };
+  return { ...retained, appHealth: annotatedHealth };
 }

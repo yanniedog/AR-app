@@ -1,6 +1,7 @@
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { fullAuditDiagnosticLog } from '../src/lib/fullAuditDiagnosticLog';
 import { createPublicPerformanceAuditReport } from '../src/lib/diagnosticsEnvelope';
+import { publicHealthFailureReason } from '../src/lib/performanceAuditDiagnostic';
 import { decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 import { APP_HEALTH_CHECK_CODES, finalizeAppHealthReport, toPublicAppHealthReport } from '../src/lib/appHealth';
 import { buildDeepPerformanceAuditPlan, buildDeepPerformanceAuditPlanFromInputs } from '../src/lib/performanceAuditPlan';
@@ -195,7 +196,7 @@ test('retains emitter-defined capacity, model, restoration and log-stall evidenc
   const metrics = { chunks: 5, cpuMs: 12.3, maxSliceMs: 4.5, firstFilterMs: 3, repeatFilterMs: 1,
     rows: 80, visibleRows: 12, logQueuedLines: 100, logFlushStageMs: 8, logFlushStage: 'rewrite',
     logFlushLastFailedStage: 'append', rollbackStatus: 'restored', navigationKind: 'stack', passId: 'first-pass',
-    reason: 'No active payload is loaded', unknownPrivateMetric: 987654321,
+    reason: 'No active payload is loaded', httpSelected: false, handlerResolution: 'unresolved', unknownPrivateMetric: 987654321,
     deepSearchEnabled: true, mortgageRateMetric: 'comparison' };
   report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 1, metrics }];
   const decoded = fullAuditDiagnosticLog(report, id => id) as typeof report;
@@ -378,8 +379,15 @@ test('preserves the complete dedicated public app-health schema', () => {
       label: 'Source state', domain: 'data-integrity', status: 'fail', metrics: { source: 'cache', coreAvailable: false },
       localEvidence: { providerNames: ['Private Bank'] } }] });
   const body = createPublicPerformanceAuditReport(report);
-  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: { appHealth: unknown } };
-  expect(decoded.diagnosticLog.appHealth).toEqual(toPublicAppHealthReport(report.appHealth));
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: { appHealth: { checks: { status: string; failureReason?: string }[] } } };
+  const health = toPublicAppHealthReport(report.appHealth!);
+  expect(decoded.diagnosticLog.appHealth).toEqual({
+    ...health,
+    checks: health.checks.map((check, index) => {
+      const failureReason = publicHealthFailureReason(report.appHealth!.checks[index]);
+      return failureReason ? { ...check, failureReason } : check;
+    }),
+  });
   expect(JSON.stringify(decoded.diagnosticLog.appHealth)).toContain('coreAvailable');
   expect(body).not.toMatch(/Private Bank|private-health-session/);
 });

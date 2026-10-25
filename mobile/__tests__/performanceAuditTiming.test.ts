@@ -15,6 +15,8 @@ import {
   formatPerformanceAuditEstimate,
   PerformanceAuditStepTimeoutError,
   PerformanceAuditMutationBarrier,
+  scoreUserVisibleJourney,
+  userVisibleForwardMs,
 } from '../src/lib/performanceAuditTiming';
 
 const result = (durationMs: number): AuditCheck => ({
@@ -23,6 +25,16 @@ const result = (durationMs: number): AuditCheck => ({
 });
 
 beforeEach(resetPerformanceAuditForTests);
+
+it('scores the tap, navigation commit and first ready frame, not background settle', () => {
+  expect(userVisibleForwardMs({ navigationCommitMs: 180, firstReadyFrameMs: 420 })).toBe(600);
+  expect(scoreUserVisibleJourney({
+    actionMs: 444, navigationCommitMs: 180, firstReadyFrameMs: 420, maxEventLoopLagMs: 40, maxFrameGapMs: 20,
+  })).toBe('pass');
+  expect(scoreUserVisibleJourney({ actionMs: 2_600, navigationCommitMs: 100, firstReadyFrameMs: 100 })).toBe('fail');
+  expect(scoreUserVisibleJourney({ navigationCommitMs: 2_000, firstReadyFrameMs: 600, backMs: 100 })).toBe('fail');
+  expect(scoreUserVisibleJourney({ navigationCommitMs: 200, firstReadyFrameMs: 200, maxFrameGapMs: 400 })).toBe('fail');
+});
 
 it('shares ten seconds across sub-waits, irrespective of progress events', () => {
   let now = 0;
@@ -71,6 +83,28 @@ it('latches an ended scope closed so late work cannot pass a checkpoint', () => 
   const next = new PerformanceAuditStepWatchdog('Next step', () => 0);
   expect(next.remainingMs()).toBe(10_000);
   next.close();
+});
+
+it('keeps background settle off the step budget and out of the slowest user-visible sample', () => {
+  let now = 0;
+  const budget = new PerformanceAuditStepWatchdog('Rates', () => now);
+  try {
+    now = 400;
+    budget.suspendBudget();
+    now = 8_400;
+    expect(budget.remainingMs()).toBe(9_600);
+    expect(budget.isExpired()).toBe(false);
+    budget.resumeBudget();
+    now = 9_000;
+    expect(budget.remainingMs()).toBe(9_000);
+  } finally { budget.close(); }
+  const settled = summarizePerformanceAudit([
+    { ...result(10_903), id: 'scope-apply', status: 'fail', metrics: {
+      executionAttempted: true, actionCompleted: true, forwardMs: 480, backgroundSettleMs: 10_000 } },
+    { ...result(1_200), id: 'navigation', metrics: { forwardMs: 1_000, executionAttempted: true } },
+  ]);
+  expect(settled.slowestCheckId).toBe('navigation');
+  expect(settled.slowestCheckMs).toBe(1_000);
 });
 
 it('includes a failed readiness wait without forward/back samples in slowest results', () => {

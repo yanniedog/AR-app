@@ -47,7 +47,7 @@ test('hosted header and decoded full report identify the same exact completed au
 test('retained failed measurements remain complete, with timing and functional failure positions', () => {
   const report = completeReport();
   report.checks[0].status = 'fail';
-  report.checks[0].metrics = { executionAttempted: true, actionCompleted: true, actionMs: 980, nonTimingFailure: false };
+  report.checks[0].metrics = { executionAttempted: true, actionCompleted: true, actionMs: 2_600, nonTimingFailure: false };
   report.checks[0].diagnostic!.stage = 'action';
   expect(buildPerformanceAuditCompletion(report)).toMatchObject({ outcome: 'failed', collectionComplete: true,
     coverageComplete: true, detailsComplete: true, failurePositions: [{ position: 1, source: 'performance',
@@ -212,7 +212,7 @@ test('all duplicate, unexpected, pending and missing-readiness gaps identify the
     { source: 'performance', position: 2, checkId: 'journey-rates-cold', reason: 'duplicate' },
     { source: 'performance', position: 1, checkId: 'journey-rates-cold', reason: 'unexpected' },
     { source: 'performance', position: 2, checkId: 'journey-rates-cold', reason: 'unexpected' },
-    { source: 'performance', position: 1, checkId: 'journey-rates-cold', reason: 'pending-probe' },
+    { source: 'performance', position: 1, checkId: 'journey-rates-cold', reason: 'pending-probe', surfaceId: 'rates', probeId: 'rates.data' },
     { source: 'performance', position: 2, checkId: 'journey-rates-cold', reason: 'missing-readiness' },
   ]));
   expect(result.duplicateStoredChecks).toEqual([{ source: 'performance', checkId: 'journey-rates-cold', positions: [1, 2] }]);
@@ -236,7 +236,11 @@ test.each([{}, { coverage: {}, domains: 'private-domains', checks: [{ id: 'priva
     const decoded = decodeCompactDiagnosticJson(body) as any;
     expect(share).toMatchObject({ appHealth: null, completion: { outcome: 'incomplete', detailsComplete: false,
       gaps: { invalidHealthReports: 1, missingHealthReports: 1 } } });
-    expect(decoded.completion).toEqual(share.completion);
+    const { privacyBoundary: decodedBoundary, ...decodedRest } = decoded.completion;
+    const { privacyBoundary: shareBoundary, ...shareRest } = share.completion;
+    expect(decodedRest).toEqual(shareRest);
+    expect(shareBoundary.generalApplicationJournal).toBe('omitted');
+    expect(decodedBoundary.generalApplicationJournal).toBe('included-deidentified');
     expect(decoded.diagnosticLog.appHealth).not.toBeNull();
     expect(Object.keys(decoded.diagnosticLog.appHealth)).toHaveLength(Object.keys(malformed).length);
     if ('checks' in malformed) expect(decoded.diagnosticLog.appHealth.checks).toMatchObject([
@@ -248,3 +252,120 @@ test.each([{}, { coverage: {}, domains: 'private-domains', checks: [{ id: 'priva
     }
     expect(report.appHealth).toBe(malformed);
   });
+
+test('destinations left out of the HTTP sample are not unverified coverage holes', () => {
+  const report = completeReport();
+  report.checks[0] = { id: 'external-link-1', label: 'Link', kind: 'network', status: 'warn', durationMs: 1,
+    metrics: { executionAttempted: true, httpSelected: false, httpAttempted: false, httpReachability: 'unknown',
+      browserHandler: 'pass', handlerAttempted: true, handlerResolution: 'pass' } };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'warning',
+    gaps: { unverifiedLinks: 0 } });
+  const hosted = decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report)) as {
+    checks: { metrics: { httpSelected?: boolean; handlerResolution?: string } }[];
+  };
+  expect(hosted.checks[0].metrics.httpSelected).toBe(false);
+  expect(hosted.checks[0].metrics.handlerResolution).toBe('pass');
+  report.checks[0].metrics = { executionAttempted: true, httpSelected: false, httpAttempted: false, httpReachability: 'unknown',
+    browserHandler: 'unknown', handlerAttempted: false, handlerResolution: 'not-attempted' };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'warning',
+    gaps: { unverifiedLinks: 0 } });
+});
+
+test('an HTTP sample member without a pass or fail stays unverified', () => {
+  const report = completeReport();
+  report.checks[0] = { id: 'external-link-2', label: 'Link', kind: 'network', status: 'warn', durationMs: 1,
+    metrics: { httpSelected: true, httpAttempted: true, httpReachability: 'unknown', browserHandler: 'pass', handlerResolution: 'pass' } };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: false, outcome: 'incomplete',
+    gaps: { unverifiedLinks: 1 }, gapPositions: [{ source: 'performance', position: 1, checkId: 'external-link-2', reason: 'unverified-link' }] });
+  report.checks[0].metrics = { httpSelected: true, httpAttempted: false, httpReachability: 'unknown', urlValidation: 'pass',
+    browserHandler: 'pass', handlerResolution: 'pass' };
+  expect(buildPerformanceAuditCompletion(report).gaps.unverifiedLinks).toBe(1);
+});
+
+test('a handler the platform could not resolve does not fail coverage, and a missing handler does', () => {
+  const report = completeReport();
+  report.checks[0] = { id: 'external-link-4', label: 'Link', kind: 'network', status: 'warn', durationMs: 1,
+    metrics: { httpSelected: true, httpAttempted: true, httpReachability: 'pass', browserHandler: 'unknown',
+      handlerAttempted: true, handlerResolution: 'unresolved' } };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'warning', gaps: { unverifiedLinks: 0 } });
+  report.checks[0].status = 'fail';
+  report.checks[0].metrics = { httpSelected: true, httpAttempted: true, httpReachability: 'pass', browserHandler: 'fail',
+    handlerAttempted: true, handlerResolution: 'fail', nonTimingFailure: true, executionAttempted: true };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'failed', gaps: { unverifiedLinks: 0 } });
+  report.checks[0].status = 'fail';
+  report.checks[0].metrics = { urlValidation: 'fail', httpSelected: true, httpAttempted: false, httpReachability: 'unknown',
+    browserHandler: 'unknown', handlerResolution: 'not-attempted', nonTimingFailure: true, executionAttempted: true };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'failed', gaps: { unverifiedLinks: 0 } });
+});
+
+test('optional and contract availability skips do not force coverage incomplete', () => {
+  const report = completeReport();
+  report.coverage!.complete = false;
+  report.checks[0] = { id: 'manifest-network', label: 'Manifest', kind: 'network', status: 'skipped', durationMs: null,
+    metrics: { executionAttempted: false, skipClassification: 'terminal-availability', availabilityFailure: true,
+      availabilityEvidence: 'local app-health mode blocks fetch and XMLHttpRequest before transport',
+      reason: 'Not run: local mode has a zero-network contract' } };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'successful',
+    gaps: { skippedChecks: 0, unavailableChecks: 0, justifiedAvailabilitySkips: 1 } });
+  report.checks[0] = { id: 'deep-first-pass.route.rba.rba.forecast.next', label: 'Forecast', kind: 'journey', status: 'skipped', durationMs: null,
+    metrics: { executionAttempted: false, availabilityFailure: true, skipClassification: 'terminal-availability',
+      availabilityEvidence: 'the planned action had no reachable safe target in the pinned dataset' } };
+  report.plan = { passes: [{ steps: [{ id: 'first-pass.route.rba.rba.forecast.next', optional: true, expectedSurface: 'rba.dashboard' }] }] } as never;
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true,
+    gaps: { skippedChecks: 0, justifiedAvailabilitySkips: 1 } });
+  report.checks[0].metrics.skipClassification = 'scenario-recovery';
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: false,
+    gaps: { skippedChecks: 1, unavailableChecks: 1, justifiedAvailabilitySkips: 0 } });
+});
+
+test('a required skip stays a coverage gap', () => {
+  const report = completeReport();
+  report.checks[0] = { id: 'deep-first-pass.route.rates.search.open', label: 'Search', kind: 'journey', status: 'skipped', durationMs: null,
+    metrics: { executionAttempted: false, availabilityFailure: true, skipClassification: 'terminal-availability',
+      availabilityEvidence: 'the planned action had no reachable safe target in the pinned dataset' } };
+  report.plan = { passes: [{ steps: [{ id: 'first-pass.route.rates.search.open', optional: false, expectedSurface: 'rates.results' }] }] } as never;
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: false,
+    gaps: { skippedChecks: 1, unavailableChecks: 1, justifiedAvailabilitySkips: 0 },
+    gapPositions: [expect.objectContaining({ checkId: 'deep-first-pass.route.rates.search.open', reason: 'unavailable' })] });
+});
+
+test('optional assets that were not exercised do not make health unavailable a coverage hole', () => {
+  const report = completeReport();
+  const health = report.appHealth!;
+  health.checks.push({ id: APP_HEALTH_CHECK_CODES.ASSET_AVAILABILITY, code: APP_HEALTH_CHECK_CODES.ASSET_AVAILABILITY,
+    domain: 'asset-availability', label: 'Assets', status: 'unavailable',
+    metrics: { requiredUnavailable: 0, requiredEmpty: 0, mismatchedRunDates: 0, optionalUnavailable: 0, optionalEmpty: 0, optionalNotObserved: 1 } });
+  health.coverage.plannedChecks += 1;
+  health.coverage.storedChecks += 1;
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, gaps: { unavailableChecks: 0 } });
+  health.checks[health.checks.length - 1].metrics.requiredUnavailable = 1;
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: false, gaps: { unavailableChecks: 1 },
+    gapPositions: [expect.objectContaining({ source: 'health', reason: 'unavailable', checkId: APP_HEALTH_CHECK_CODES.ASSET_AVAILABILITY })] });
+});
+
+test('a pending required probe is a gap only for the check surface and for audit-owned probes', () => {
+  const report = completeReport();
+  report.plan = { passes: [{ steps: [{ id: 'first-pass.route.rba.rba.forecast.next', optional: true, expectedSurface: 'rba.dashboard' }] }] } as never;
+  report.checks[0] = { id: 'deep-first-pass.route.rba.rba.forecast.next', label: 'Forecast', kind: 'journey', status: 'pass', durationMs: 1,
+    metrics: { executionAttempted: true, actionCompleted: true, expectedSurface: 'rba.dashboard' },
+    diagnostic: { stage: 'complete', readiness: { ready: false, capturing: true, blockers: [], surfaces: [
+      { id: 'outlook.dashboard', probes: [{ id: 'bank-insights', required: true, status: 'pending' }] },
+      { id: 'rba.dashboard', probes: [{ id: 'rba.data', required: true, status: 'ready' }] },
+      { id: 'audit.progress', probes: [{ id: 'audit.state', required: true, status: 'pending' }] },
+    ] } } as never };
+  const result = buildPerformanceAuditCompletion(report);
+  expect(result.gaps.pendingProbes).toBe(1);
+  expect(result.coverageComplete).toBe(false);
+  expect(result.gapPositions).toEqual([expect.objectContaining({
+    source: 'performance', position: 1, checkId: 'deep-first-pass.route.rba.rba.forecast.next', reason: 'pending-probe',
+    surfaceId: 'audit.progress', probeId: 'audit.state',
+  })]);
+});
+
+test('a measured journey failure remains covered when the stored aggregate flag is incomplete', () => {
+  const report = completeReport();
+  report.coverage!.complete = false;
+  report.checks[0].status = 'fail';
+  report.checks[0].metrics = { executionAttempted: true, actionInvoked: true, actionCompleted: false, nonTimingFailure: true };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ outcome: 'failed', collectionComplete: true, coverageComplete: true });
+});

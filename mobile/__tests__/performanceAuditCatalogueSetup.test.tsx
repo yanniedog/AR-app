@@ -37,7 +37,9 @@ jest.mock('../src/components/PerformanceAuditOverlay', () => ({ PerformanceAudit
 jest.mock('../src/lib/debugLogSharing', () => ({ isDebugLogUploadBusy: () => false, subscribeDebugLogUpload: () => () => {}, startDebugLogUpload: jest.fn() }));
 jest.mock('../src/lib/yieldToUi', () => ({ yieldToUi: async () => {}, parseJsonHeavy: async (text: string) => JSON.parse(text) }));
 jest.mock('../src/lib/debugLog', () => ({
-  debugLog: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), storePerformanceAudit: jest.fn(async () => {}), flushToFile: jest.fn(async () => {}) },
+  debugLog: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), getEntries: () => [],
+    storePerformanceAudit: jest.fn(async () => {}), flushToFile: jest.fn(async () => {}) },
+  subscribeApplicationJournal: () => () => {},
   getDebugLogFlushDiagnostics: () => ({ stage: 'idle', stageMs: 0, activeMs: 0, lastFlushMs: 0, lastFailedStage: null }),
 }));
 jest.mock('../src/data/publicRateCatalogue', () => ({

@@ -4,6 +4,8 @@ import Svg, { Path } from 'react-native-svg';
 
 import { uiProductName } from '../src/lib/uiCopy';
 import { BankHistoryChart } from '../src/components/BankHistoryChart';
+
+jest.mock('../src/lib/yieldToUi', () => ({ yieldToUi: jest.fn(async () => undefined) }));
 import type { BankHistoryPoint } from '../src/types';
 import captured from './fixtures/public_rates/broken-hill-history-20261022.json';
 
@@ -196,4 +198,27 @@ test.each(['Mortgage', 'Savings', 'TD'] as const)('%s product gaps cannot borrow
     expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('4.60%');
     expect(tree.root.findAllByType('ChartSliceControls')[0].props.facts).toHaveLength(2);
   } finally { act(() => tree.unmount()); }
+});
+
+test('a long timeline does not publish a graphic until the slice has yielded', async () => {
+  const { yieldToUi } = jest.requireMock('../src/lib/yieldToUi') as { yieldToUi: jest.Mock };
+  let release!: () => void;
+  yieldToUi.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+  const dates = Array.from({ length: 400 }, (_, index) => new Date(Date.UTC(2024, 0, 1 + index)).toISOString().slice(0, 10));
+  const points = dates.map(date => ({ date, min: 0.04, max: 0.06, mean: 0.05, median: 0.05, count: 2 }));
+  const onGraphicReady = jest.fn();
+  let tree!: Renderer;
+  act(() => {
+    tree = TestRenderer.create(<BankHistoryChart section="Savings" dates={dates} points={points} allDates={dates} onGraphicReady={onGraphicReady} />) as Renderer;
+  });
+  try {
+    expect(tree.root.findAllByProps({ accessibilityRole: 'image' })).toHaveLength(0);
+    expect(onGraphicReady).not.toHaveBeenCalled();
+    await act(async () => { release(); });
+    expect(tree.root.findByProps({ accessibilityRole: 'image' }).props.accessibilityLabel).toContain('Observed');
+    expect(onGraphicReady).not.toHaveBeenCalled();
+  } finally {
+    yieldToUi.mockImplementation(async () => undefined);
+    act(() => tree.unmount());
+  }
 });

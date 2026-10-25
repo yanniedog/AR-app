@@ -312,6 +312,28 @@ describe('integrated app-health display evidence', () => {
       .toEqual([]);
   });
 
+  it('does not score an in-progress list or unmeasured chart as a completed display failure', () => {
+    const contracts = [
+      { id: 'rates.results', requiredRoles: ['list', 'empty-state'] as const, allowsIntentionalEmpty: true },
+      { id: 'moves.response-chart', requiredRoles: ['list', 'chart'] as const, chartRequired: true },
+      { id: 'outlook.dashboard', requiredRoles: ['chart'] as const, chartRequired: true },
+    ];
+    const result = evaluateAppHealthDisplayQuality(contracts, appHealthDisplayObservations([
+      check('rates.results:search.list:list:pending:0/0:empty=0'),
+      check('rates.results:search.list:list:ready:0/0:visible=0:empty=1'),
+      check('moves.response-chart:bank-response-list:list:pending:0/95:empty=0'),
+      check('moves.response-chart:bank-response-list:list:ready:90/90:empty=0'),
+      check('moves.response-chart:bank-rates-chart:graphic:pending:0/13296:required=1:empty=0:measured=0:summary=0'),
+      check('moves.response-chart:bank-rates-chart:graphic:ready:12517/12517:required=0:empty=0:measured=1:summary=1'),
+      check('outlook.dashboard:history-graphic:graphic:pending:0/0:required=1:empty=0:measured=0:summary=0'),
+      check('outlook.dashboard:history-graphic:graphic:ready:85/85:required=1:empty=0:measured=1:summary=1'),
+    ]));
+    for (const code of [APP_HEALTH_CHECK_CODES.DISPLAY_LIST, APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE,
+      APP_HEALTH_CHECK_CODES.DISPLAY_CHART]) {
+      expect(result.find(entry => entry.code === code)).toMatchObject({ status: 'pass', metrics: { failed: 0 } });
+    }
+  });
+
   it.each([
     'pending:15/15:required=1:measured=1:summary=1',
     'ready:15/15:required=0:measured=1:summary=0',
@@ -332,16 +354,21 @@ describe('integrated app-health display evidence', () => {
     const contracts = [{ id: 'screen', requiredRoles: ['chart' as const], chartRequired: true }];
     expect(evaluateAppHealthDisplayQuality(contracts, appHealthDisplayObservations([
       check('screen:plot:graphic:ready:0/0:required=0:measured=1:empty=1:summary=1'),
-    ])).find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)?.status).toBe('unavailable');
+    ])).find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)?.status).toBe('pass');
   });
 
-  it('retains a no-data lens even when another visit to the same graph has data', () => {
+  it('retains a measured no-data lens even when another visit to the same graph has data', () => {
     const contracts = [{ id: 'screen', requiredRoles: ['chart' as const], chartRequired: true }];
-    expect(evaluateAppHealthDisplayQuality(contracts, appHealthDisplayObservations([
+    const observations = appHealthDisplayObservations([
       check('screen:plot:graphic:ready:2/2:measured=1:summary=1'),
       check('screen:plot:graphic:ready:0/0:required=1:measured=1:empty=1'),
       check('screen:plot:graphic:ready:3/3:measured=1:summary=1'),
-    ])).find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)?.status).toBe('unavailable');
+    ]);
+    expect(observations[0]?.evidence).toContainEqual(expect.objectContaining({
+      role: 'chart', modelPointCount: 0, renderedPointCount: 0, emptyStateRendered: true, layoutMeasured: true,
+    }));
+    expect(evaluateAppHealthDisplayQuality(contracts, observations)
+      .find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)?.status).toBe('pass');
   });
 
   it('records an explicitly rendered empty state for an empty settled list', () => {

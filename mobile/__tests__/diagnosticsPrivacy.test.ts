@@ -102,8 +102,14 @@ describe('deidentified diagnostics privacy boundary', () => {
     const report = reportFixture([failed]);
     const publicBody = createPublicPerformanceAuditReport(report);
     const shared = JSON.parse(createDeidentifiedDiagnosticsShare(report).body);
-    const { diagnosticLog, ...publicSummary } = decodeCompactDiagnosticJson(publicBody) as any;
-    expect(publicSummary).toEqual(shared);
+    const { diagnosticLog, applicationJournal, completion, ...publicSummary } = decodeCompactDiagnosticJson(publicBody) as any;
+    const { completion: sharedCompletion, ...sharedSummary } = shared;
+    expect(publicSummary).toEqual(sharedSummary);
+    expect(shared.applicationJournal).toBeUndefined();
+    expect(completion.privacyBoundary.generalApplicationJournal).toBe('included-deidentified');
+    expect(sharedCompletion.privacyBoundary.generalApplicationJournal).toBe('omitted');
+    expect(applicationJournal.beforeAudit.entries).toEqual(expect.any(Array));
+    expect(applicationJournal.duringAndAfterAudit.entries).toEqual(expect.any(Array));
     expect(diagnosticLog.checks).toHaveLength(report.checks.length);
     expect(shared.checks[0]).toMatchObject({ id: 'setup-pinned-inputs', status: 'fail',
       failureCode: 'public-catalogue-changed', metrics: {
@@ -226,7 +232,13 @@ describe('deidentified diagnostics privacy boundary', () => {
     const prepared = createDeidentifiedDiagnosticsShare(report);
     const parsed = JSON.parse(prepared.body);
 
-    expect(envelope).toEqual(parsed);
+    expect({
+      ...envelope,
+      completion: {
+        ...envelope.completion,
+        privacyBoundary: { ...envelope.completion.privacyBoundary, generalApplicationJournal: 'omitted' },
+      },
+    }).toEqual(parsed);
     expect(parsed.checks[0]).toMatchObject({
       id: 'active-data',
       durationMs: 0,

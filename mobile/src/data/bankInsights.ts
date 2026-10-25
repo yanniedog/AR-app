@@ -7,6 +7,7 @@ import type {
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, parseYmd } from './bankHistoryTransform';
 import { toFraction, visibleAccountRows } from './format';
+import { yieldToUi } from '../lib/yieldToUi';
 import { getSuitabilityAllowed, getSuitabilityRevision } from './suitabilityGate';
 import {
   bankHistoryPairKey,
@@ -173,78 +174,105 @@ function filterBankInsightsForSectionIntegrity(
   };
 }
 
-export function filterBankInsightsForSuitability(
+type SuitabilityPairIndex = {
+  historicalPairs: Set<string>;
+  visibleByPair: Map<string, CorePayload['sections'][SectionKey]['rates']>;
+};
+
+type SuitabilityFilterArgs = {
+  payload: BankInsightsPayload;
+  core: CorePayload;
+  includeNonStandard: boolean;
+  detailsProducts?: Record<string, ProductDetail> | null;
+  suitabilityRevision: number;
+  integrity?: CoreIntegrityContext | null;
+};
+
+function suitabilityFilterArguments(
   payload: BankInsightsPayload | null | undefined,
   core: CorePayload | null | undefined,
   includeNonStandard: boolean,
-  detailsProducts?: Record<string, ProductDetail> | null,
-  suitabilityRevision = getSuitabilityRevision(),
-  integrity?: CoreIntegrityContext | null,
-): BankInsightsPayload | null {
-  if (!payload) return null;
-  if (!core) return null;
-  // Product and bank screens share this immutable projection. Profile changes
-  // install a new mandatory-gate revision; bypassing reuse for every active
-  // profile rescanned the complete catalogue on each screen mount.
+  detailsProducts: Record<string, ProductDetail> | null | undefined,
+  suitabilityRevision: number,
+  integrity: CoreIntegrityContext | null | undefined,
+): SuitabilityFilterArgs | null {
+  if (!payload || !core) return null;
+  return { payload, core, includeNonStandard, detailsProducts, suitabilityRevision, integrity };
+}
+
+function readSuitabilityFilterCache(args: SuitabilityFilterArgs): BankInsightsPayload | null | undefined {
   const mandatoryRevision = getMandatoryEligibilityRevision();
   if (
-    suitabilityFilterCache?.payload === payload &&
-    suitabilityFilterCache.core === core &&
-    suitabilityFilterCache.detailsProducts === detailsProducts &&
-    suitabilityFilterCache.integrity === integrity &&
-    suitabilityFilterCache.revision === suitabilityRevision &&
+    suitabilityFilterCache?.payload === args.payload &&
+    suitabilityFilterCache.core === args.core &&
+    suitabilityFilterCache.detailsProducts === args.detailsProducts &&
+    suitabilityFilterCache.integrity === args.integrity &&
+    suitabilityFilterCache.revision === args.suitabilityRevision &&
     suitabilityFilterCache.mandatoryRevision === mandatoryRevision &&
-    suitabilityFilterCache.includeNonStandard === includeNonStandard
+    suitabilityFilterCache.includeNonStandard === args.includeNonStandard
   ) return suitabilityFilterCache.result;
-  const remember = (result: BankInsightsPayload | null) => {
-    suitabilityFilterCache = {
-      payload, core, detailsProducts, integrity, revision: suitabilityRevision,
-      mandatoryRevision, includeNonStandard, result,
-    };
-    return result;
+  return undefined;
+}
+
+function rememberSuitabilityFilter(args: SuitabilityFilterArgs, result: BankInsightsPayload | null): BankInsightsPayload | null {
+  suitabilityFilterCache = {
+    payload: args.payload,
+    core: args.core,
+    detailsProducts: args.detailsProducts,
+    integrity: args.integrity,
+    revision: args.suitabilityRevision,
+    mandatoryRevision: getMandatoryEligibilityRevision(),
+    includeNonStandard: args.includeNonStandard,
+    result,
   };
-  const integrityPayload = filterBankInsightsForSectionIntegrity(payload, integrity);
-  if (includeNonStandard && !hasMandatoryRequirements()) return remember(integrityPayload);
-  if (getSuitabilityAllowed()?.size === 0) {
-    return remember(null);
+  return result;
+}
+
+function visibleSectionRows(
+  rows: CorePayload['sections'][SectionKey]['rates'],
+  includeNonStandard: boolean,
+  detailsProducts?: Record<string, ProductDetail> | null,
+) {
+  return includeNonStandard ? visibleAccountRows(rows, true, detailsProducts) : explorerVisibleRows(rows, detailsProducts);
+}
+
+function collectSectionPairs(
+  index: SuitabilityPairIndex,
+  section: SectionKey,
+  rows: CorePayload['sections'][SectionKey]['rates'],
+  visibleRows: CorePayload['sections'][SectionKey]['rates'],
+): void {
+  const visibleKeys = new Set(visibleRows.map((row) => row.product_key));
+  const byProvider = new Map<string, typeof rows>();
+  const visibleByProvider = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const providerRows = byProvider.get(row.provider);
+    if (providerRows) providerRows.push(row);
+    else byProvider.set(row.provider, [row]);
   }
-
-  const historicalPairs = new Set<string>();
-  const pairKey = bankHistoryPairKey;
-  const visibleByPair = new Map<
-    string,
-    CorePayload['sections'][SectionKey]['rates']
-  >();
-
-  for (const section of SECTION_KEYS) {
-    const rows = core.sections[section]?.rates ?? [];
-    const visibleRows = includeNonStandard ? visibleAccountRows(rows, true, detailsProducts) : explorerVisibleRows(rows, detailsProducts);
-    const visibleKeys = new Set(visibleRows.map((row) => row.product_key));
-    const byProvider = new Map<string, typeof rows>();
-    const visibleByProvider = new Map<string, typeof rows>();
-    for (const row of rows) {
-      const providerRows = byProvider.get(row.provider);
-      if (providerRows) providerRows.push(row);
-      else byProvider.set(row.provider, [row]);
-    }
-    for (const row of visibleRows) {
-      const providerRows = visibleByProvider.get(row.provider);
-      if (providerRows) providerRows.push(row);
-      else visibleByProvider.set(row.provider, [row]);
-    }
-    for (const [provider, providerRows] of byProvider) {
-      const key = pairKey(provider, section);
-      const visibleProviderRows = visibleByProvider.get(provider) ?? [];
-      if (visibleProviderRows.length) visibleByPair.set(key, visibleProviderRows);
-      if (
-        !hasMandatoryRequirements() && providerRows.length > 0 &&
-        providerRows.every((row) => visibleKeys.has(row.product_key))
-      ) {
-        historicalPairs.add(key);
-      }
+  for (const row of visibleRows) {
+    const providerRows = visibleByProvider.get(row.provider);
+    if (providerRows) providerRows.push(row);
+    else visibleByProvider.set(row.provider, [row]);
+  }
+  for (const [provider, providerRows] of byProvider) {
+    const key = bankHistoryPairKey(provider, section);
+    const visibleProviderRows = visibleByProvider.get(provider) ?? [];
+    if (visibleProviderRows.length) index.visibleByPair.set(key, visibleProviderRows);
+    if (
+      !hasMandatoryRequirements() && providerRows.length > 0 &&
+      providerRows.every((row) => visibleKeys.has(row.product_key))
+    ) {
+      index.historicalPairs.add(key);
     }
   }
+}
 
+function projectFilteredBankInsights(
+  integrityPayload: BankInsightsPayload,
+  core: CorePayload,
+  index: SuitabilityPairIndex,
+): BankInsightsPayload {
   const banks: BankInsightsPayload['banks'] = {};
   const currentIndex = integrityPayload.run_dates.indexOf(core.run_date);
   for (const [provider, sections] of Object.entries(integrityPayload.banks)) {
@@ -252,20 +280,18 @@ export function filterBankInsightsForSuitability(
     for (const section of SECTION_KEYS) {
       const series = sections[section];
       if (!series) continue;
-      const key = pairKey(provider, section);
-      if (historicalPairs.has(key)) {
+      const key = bankHistoryPairKey(provider, section);
+      if (index.historicalPairs.has(key)) {
         filteredSections[section] = series;
         continue;
       }
       const current = currentStandardSeries(
-        visibleByPair.get(key) ?? [],
+        index.visibleByPair.get(key) ?? [],
         section,
         integrityPayload.run_dates.length,
         currentIndex,
       );
-      if (current) {
-        filteredSections[section] = current;
-      }
+      if (current) filteredSections[section] = current;
     }
     if (Object.keys(filteredSections).length) banks[provider] = filteredSections;
   }
@@ -276,23 +302,104 @@ export function filterBankInsightsForSuitability(
     if (!summary) continue;
     const providers = Object.fromEntries(
       Object.entries(summary.providers).filter(([provider]) =>
-        historicalPairs.has(pairKey(provider, section)),
+        index.historicalPairs.has(bankHistoryPairKey(provider, section)),
       ),
     );
-    if (Object.keys(providers).length) {
-      behaviour[section] = { ...summary, providers };
-    }
+    if (Object.keys(providers).length) behaviour[section] = { ...summary, providers };
   }
 
-  const result: BankInsightsPayload = {
+  return {
     ...integrityPayload,
     banks,
     events: integrityPayload.events.filter((event) =>
-      historicalPairs.has(pairKey(event.provider, event.section)),
+      index.historicalPairs.has(bankHistoryPairKey(event.provider, event.section)),
     ),
     behaviour: Object.keys(behaviour).length ? behaviour : undefined,
   };
-  return remember(result);
+}
+
+function beginSuitabilityFilter(args: SuitabilityFilterArgs):
+  { done: BankInsightsPayload | null } | { integrityPayload: BankInsightsPayload } {
+  const integrityPayload = filterBankInsightsForSectionIntegrity(args.payload, args.integrity);
+  if (args.includeNonStandard && !hasMandatoryRequirements()) return { done: rememberSuitabilityFilter(args, integrityPayload) };
+  if (getSuitabilityAllowed()?.size === 0) return { done: rememberSuitabilityFilter(args, null) };
+  return { integrityPayload };
+}
+
+export function filterBankInsightsForSuitability(
+  payload: BankInsightsPayload | null | undefined,
+  core: CorePayload | null | undefined,
+  includeNonStandard: boolean,
+  detailsProducts?: Record<string, ProductDetail> | null,
+  suitabilityRevision = getSuitabilityRevision(),
+  integrity?: CoreIntegrityContext | null,
+): BankInsightsPayload | null {
+  const args = suitabilityFilterArguments(payload, core, includeNonStandard, detailsProducts, suitabilityRevision, integrity);
+  if (!args) return null;
+  // Product and bank screens share this immutable projection. Profile changes
+  // install a new mandatory-gate revision; bypassing reuse for every active
+  // profile rescanned the complete catalogue on each screen mount.
+  const cached = readSuitabilityFilterCache(args);
+  if (cached !== undefined) return cached;
+  const began = beginSuitabilityFilter(args);
+  if ('done' in began) return began.done;
+  const index: SuitabilityPairIndex = { historicalPairs: new Set(), visibleByPair: new Map() };
+  for (const section of SECTION_KEYS) {
+    const rows = args.core.sections[section]?.rates ?? [];
+    collectSectionPairs(index, section, rows, visibleSectionRows(rows, args.includeNonStandard, args.detailsProducts));
+  }
+  return rememberSuitabilityFilter(args, projectFilteredBankInsights(began.integrityPayload, args.core, index));
+}
+
+/** Same projection as {@link filterBankInsightsForSuitability}, yielding through a full catalogue scan. */
+export async function filterBankInsightsForSuitabilityCooperatively(
+  payload: BankInsightsPayload | null | undefined,
+  core: CorePayload | null | undefined,
+  includeNonStandard: boolean,
+  detailsProducts?: Record<string, ProductDetail> | null,
+  suitabilityRevision = getSuitabilityRevision(),
+  integrity?: CoreIntegrityContext | null,
+  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
+): Promise<BankInsightsPayload | null> {
+  const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
+  const now = control.now ?? (() => performance.now());
+  const cancelled = control.cancelled ?? (() => false);
+  const args = suitabilityFilterArguments(payload, core, includeNonStandard, detailsProducts, suitabilityRevision, integrity);
+  if (!args) return null;
+  const cached = readSuitabilityFilterCache(args);
+  if (cached !== undefined) return cached;
+  await yieldControl();
+  if (cancelled()) return null;
+  const began = beginSuitabilityFilter(args);
+  if ('done' in began) return began.done;
+  const mandatoryAtStart = getMandatoryEligibilityRevision();
+  const index: SuitabilityPairIndex = { historicalPairs: new Set(), visibleByPair: new Map() };
+  let started = now();
+  const chunk = 24;
+  const eligibilityMoved = () => getMandatoryEligibilityRevision() !== mandatoryAtStart;
+  for (const section of SECTION_KEYS) {
+    const rows: CorePayload['sections'][SectionKey]['rates'] = args.core.sections[section]?.rates ?? [];
+    const visible: CorePayload['sections'][SectionKey]['rates'] = [];
+    for (let offset = 0; offset < rows.length; offset += chunk) {
+      if (cancelled()) return null;
+      visible.push(...visibleSectionRows(rows.slice(offset, offset + chunk), args.includeNonStandard, args.detailsProducts));
+      if (now() - started >= 8) {
+        await yieldControl();
+        started = now();
+        if (cancelled() || eligibilityMoved()) return null;
+      }
+    }
+    collectSectionPairs(index, section, rows, visible);
+    if (now() - started >= 8) {
+      await yieldControl();
+      started = now();
+      if (cancelled() || eligibilityMoved()) return null;
+    }
+  }
+  if (cancelled() || eligibilityMoved()) return null;
+  await yieldControl();
+  if (cancelled() || eligibilityMoved()) return null;
+  return rememberSuitabilityFilter(args, projectFilteredBankInsights(began.integrityPayload, args.core, index));
 }
 
 function numberOrNull(value: unknown): number | null {

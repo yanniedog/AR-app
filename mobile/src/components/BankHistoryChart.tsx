@@ -22,6 +22,7 @@ import { SECTIONS } from '../constants';
 import { uiLabel,  uiCount, uiDate, uiJoin, uiRate, type UiCopy } from '../lib/uiCopy';
 import { uiChartBps, uiChartDate, uiChartSection, uiChartWindow } from '../lib/chartUiCopy';
 import { buildBandPath, buildLinePath } from '../lib/chartSvgPaths';
+import { yieldToUi } from '../lib/yieldToUi';
 import { debugLog } from '../lib/debugLog';
 import { hasFiniteChartDate, hasPositiveChartLayout } from '../lib/chartRenderEvidence';
 import {
@@ -44,6 +45,8 @@ const WINDOW_OPTIONS: { value: HistoryWindow; label: string }[] = [
 
 const DRAW_MS = 850;
 const TOUCH_DECIDE_PX = 8;
+/** Small windows stay on the render path. A multi-year ribbon does not. */
+const SYNCHRONOUS_PLOT_POINTS = 256;
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -118,6 +121,80 @@ function stepPath(
   return d || null;
 }
 
+type HistoryChartPaths = {
+  mins: (number | null)[];
+  maxs: (number | null)[];
+  means: (number | null)[];
+  medians: (number | null)[];
+  band: string | null;
+  meanLine: string | null;
+  medianLine: string | null;
+  minLine: string | null;
+  maxLine: string | null;
+  rbaLine: string | null;
+  highlightLine: string | null;
+};
+
+const EMPTY_HISTORY_PATHS: HistoryChartPaths = {
+  mins: [], maxs: [], means: [], medians: [],
+  band: null, meanLine: null, medianLine: null, minLine: null, maxLine: null, rbaLine: null, highlightLine: null,
+};
+
+function sliceHistoryTimeline(
+  dates: string[],
+  points: BankHistoryPoint[],
+  timeline: string[],
+  window: HistoryWindow,
+): { dates: string[]; points: BankHistoryPoint[]; issue: string | null } {
+  if (!Array.isArray(dates) || !Array.isArray(points) || !Array.isArray(timeline) || !dates.length || !points.length) {
+    return { dates: [], points: [], issue: 'invalid chart inputs' };
+  }
+  try {
+    return { ...sliceChartTimeline(timeline, points, window), issue: null };
+  } catch (err) {
+    return {
+      dates: [],
+      points: [],
+      issue: `sliceChartTimeline failed: ${String((err as Error)?.message ?? err)}`,
+    };
+  }
+}
+
+function buildHistoryChartPaths(
+  plotDates: string[],
+  plotPoints: BankHistoryPoint[],
+  highlightValues: (number | null)[] | null,
+  rbaSteps: (number | null)[],
+  showRba: boolean,
+  width: number,
+  padL: number,
+  padT: number,
+  innerW: number,
+  innerH: number,
+  span: number,
+  yMin: number,
+): HistoryChartPaths {
+  const mins = plotPoints.map((point) => point.min);
+  const maxs = plotPoints.map((point) => point.max);
+  const means = plotPoints.map((point) => point.mean);
+  const medians = plotPoints.map((point) => point.median);
+  if (width <= 0 || !plotDates.length || !plotPoints.length) {
+    return { mins, maxs, means, medians, band: null, meanLine: null, medianLine: null, minLine: null, maxLine: null, rbaLine: null, highlightLine: null };
+  }
+  const x = (index: number) => padL + (plotDates.length === 1 ? innerW / 2 : (index / (plotDates.length - 1)) * innerW);
+  const y = (value: number) => padT + innerH - ((value - yMin) / span) * innerH;
+  return {
+    mins, maxs, means, medians,
+    band: buildBandPath(plotDates, mins, maxs, x, y, true),
+    meanLine: buildLinePath(means, x, y, true),
+    medianLine: buildLinePath(medians, x, y, true),
+    minLine: buildLinePath(mins, x, y, true),
+    maxLine: buildLinePath(maxs, x, y, true),
+    rbaLine: showRba ? stepPath(rbaSteps, x, y) : null,
+    highlightLine: highlightValues ? buildLinePath(highlightValues, x, y, true) : null,
+  };
+}
+
 /** Time-slice ribbon chart: min/max band, mean + median lines, optional RBA + highlight series. */
 function BankHistoryChartView({
   dates,
@@ -151,24 +228,29 @@ function BankHistoryChartView({
   }));
 
   const timeline = allDates ?? dates;
-  const sliced = useMemo(() => {
-    if (!Array.isArray(dates) || !Array.isArray(points) || !Array.isArray(timeline) || !dates.length || !points.length) {
-      return {
-        dates: [] as string[],
-        points: [] as BankHistoryPoint[],
-        issue: 'invalid chart inputs' as string | null,
-      };
+  const timelineIsLarge = timeline.length > SYNCHRONOUS_PLOT_POINTS;
+  const synchronousSlice = useMemo(
+    () => timelineIsLarge ? null : sliceHistoryTimeline(dates, points, timeline, window),
+    [dates, points, timeline, timelineIsLarge, window],
+  );
+  const [deferredSlice, setDeferredSlice] = useState<ReturnType<typeof sliceHistoryTimeline> | null>(null);
+  useEffect(() => {
+    if (!timelineIsLarge) {
+      setDeferredSlice(null);
+      return;
     }
-    try {
-      return { ...sliceChartTimeline(timeline, points, window), issue: null };
-    } catch (err) {
-      return {
-        dates: [] as string[],
-        points: [] as BankHistoryPoint[],
-        issue: `sliceChartTimeline failed: ${String((err as Error)?.message ?? err)}`,
-      };
-    }
-  }, [timeline, dates, points, window]);
+    let cancelled = false;
+    setDeferredSlice(null);
+    void (async () => {
+      await yieldToUi(0);
+      if (cancelled) return;
+      const next = sliceHistoryTimeline(dates, points, timeline, window);
+      if (!cancelled) setDeferredSlice(next);
+    })();
+    return () => { cancelled = true; };
+  }, [dates, points, timeline, timelineIsLarge, window]);
+  const sliced = synchronousSlice ?? deferredSlice ?? { dates: [] as string[], points: [] as BankHistoryPoint[], issue: null as string | null };
+  const slicePending = timelineIsLarge && deferredSlice == null;
 
   useEffect(() => {
     if (sliced.issue) debugLog.warn('BankHistoryChart', sliced.issue);
@@ -278,57 +360,55 @@ function BankHistoryChartView({
 
   // Skip path construction until layout width is known — the first paint after
   // deferred mount otherwise builds full SVG paths twice (width 0, then measured).
-  // Must stay above any early return so hooks order is stable.
-  const chartPaths = useMemo(() => {
-    const mins = plotPoints.map((p) => p.min);
-    const maxs = plotPoints.map((p) => p.max);
-    const means = plotPoints.map((p) => p.mean);
-    const medians = plotPoints.map((p) => p.median);
-    if (width <= 0 || !plotDates.length || !plotPoints.length) {
-      return {
-        mins,
-        maxs,
-        means,
-        medians,
-        band: null as string | null,
-        meanLine: null as string | null,
-        medianLine: null as string | null,
-        minLine: null as string | null,
-        maxLine: null as string | null,
-        rbaLine: null as string | null,
-        highlightLine: null as string | null,
-      };
+  // A long plotted window yields between series so the opening frames stay free.
+  const plotIsLarge = plotDates.length > SYNCHRONOUS_PLOT_POINTS;
+  const synchronousPaths = useMemo(
+    () => plotIsLarge ? null : buildHistoryChartPaths(
+      plotDates, plotPoints, highlightValues, rbaSteps, showRba, width, padL, padT, innerW, innerH, span, yDomain.min,
+    ),
+    [highlightValues, innerH, innerW, padL, padT, plotDates, plotIsLarge, plotPoints, rbaSteps, showRba, span, width, yDomain.min],
+  );
+  const pathIdentity = `${width}:${plotDates[0] ?? ''}:${plotDates.at(-1) ?? ''}:${plotDates.length}:${plotPoints.length}:${span}:${yDomain.min}:${showRba}:${highlightValues?.length ?? 0}:${innerW}:${innerH}`;
+  const [deferredPaths, setDeferredPaths] = useState<{ identity: string; paths: HistoryChartPaths } | null>(null);
+  useEffect(() => {
+    if (!plotIsLarge || width <= 0) {
+      setDeferredPaths(null);
+      return;
     }
-    const x = (i: number) =>
-      padL + (plotDates.length === 1 ? innerW / 2 : (i / (plotDates.length - 1)) * innerW);
-    const y = (v: number) => padT + innerH - ((v - yDomain.min) / span) * innerH;
-    return {
-      mins,
-      maxs,
-      means,
-      medians,
-      band: buildBandPath(plotDates, mins, maxs, x, y, true),
-      meanLine: buildLinePath(means, x, y, true),
-      medianLine: buildLinePath(medians, x, y, true),
-      minLine: buildLinePath(mins, x, y, true),
-      maxLine: buildLinePath(maxs, x, y, true),
-      rbaLine: showRba ? stepPath(rbaSteps, x, y) : null,
-      highlightLine: highlightValues ? buildLinePath(highlightValues, x, y, true) : null,
-    };
-  }, [
-    highlightValues,
-    innerH,
-    innerW,
-    padT,
-    plotDates,
-    plotPoints,
-    rbaSteps,
-    showRba,
-    span,
-    width,
-    yDomain.max,
-    yDomain.min,
-  ]);
+    let cancelled = false;
+    const identity = pathIdentity;
+    const x = (index: number) => padL + (plotDates.length === 1 ? innerW / 2 : (index / (plotDates.length - 1)) * innerW);
+    const y = (value: number) => padT + innerH - ((value - yDomain.min) / span) * innerH;
+    void (async () => {
+      await yieldToUi(0);
+      if (cancelled) return;
+      const mins = plotPoints.map((point) => point.min);
+      const maxs = plotPoints.map((point) => point.max);
+      const means = plotPoints.map((point) => point.mean);
+      const medians = plotPoints.map((point) => point.median);
+      const band = buildBandPath(plotDates, mins, maxs, x, y, true);
+      await yieldToUi(0);
+      if (cancelled) return;
+      const meanLine = buildLinePath(means, x, y, true);
+      const medianLine = buildLinePath(medians, x, y, true);
+      await yieldToUi(0);
+      if (cancelled) return;
+      const minLine = buildLinePath(mins, x, y, true);
+      const maxLine = buildLinePath(maxs, x, y, true);
+      await yieldToUi(0);
+      if (cancelled) return;
+      const rbaLine = showRba ? stepPath(rbaSteps, x, y) : null;
+      const highlightLine = highlightValues ? buildLinePath(highlightValues, x, y, true) : null;
+      if (!cancelled) setDeferredPaths({
+        identity,
+        paths: { mins, maxs, means, medians, band, meanLine, medianLine, minLine, maxLine, rbaLine, highlightLine },
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [highlightValues, innerH, innerW, padL, padT, pathIdentity, plotDates, plotIsLarge, plotPoints, rbaSteps, showRba, span, width, yDomain.min]);
+  const matchedPaths = deferredPaths?.identity === pathIdentity ? deferredPaths.paths : null;
+  const chartPaths = synchronousPaths ?? matchedPaths ?? EMPTY_HISTORY_PATHS;
+  const pathsReady = plotIsLarge ? matchedPaths != null : width > 0;
   const {
     mins,
     maxs,
@@ -342,6 +422,10 @@ function BankHistoryChartView({
     rbaLine,
     highlightLine,
   } = chartPaths;
+
+  if (slicePending) {
+    return <View style={{ height }}><AppText variant="small" color="textMuted">{uiLabel("Loading")}</AppText></View>;
+  }
 
   if (!plotDates.length || !plotPoints.length || !hasPlottableValues) {
     return <View><AppText key={graphicRevision} variant="small" color="textMuted" onLayout={(event) => {
@@ -473,7 +557,7 @@ function BankHistoryChartView({
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         style={{ width: '100%', height }}
       >
-        {width > 0 ? (
+        {pathsReady ? (
           <Svg key={graphicRevision} width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
             onLayout={(event) => onGraphicReady?.({
               contentRevision: sourceRevision, graphicRevision, window, availability: 'rendered',

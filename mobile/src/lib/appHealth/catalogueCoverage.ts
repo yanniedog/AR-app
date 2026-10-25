@@ -44,6 +44,18 @@ export interface AppHealthCatalogueObservation {
   publishedProvidersWithoutBrand: string[];
 }
 
+/** Producer history facts. They stay in the gap list and do not fail the app. */
+const PRODUCER_HISTORY_GAPS = new Set([
+  'current-payload-stale',
+  'historical-source-unavailable',
+  'historical-source-not-loaded',
+  'historical-detail-evidence-unknown',
+  'historical-quarantined-tiers',
+  'product-source-reconciliation-unavailable',
+  'product-history-not-loaded',
+  'product-history-date-unavailable',
+]);
+
 /** Full loaded-catalogue identity check. It does not certify upstream or visual coverage. */
 export function evaluateAppHealthCatalogueCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
   const catalogue = snapshot.catalogue;
@@ -73,9 +85,10 @@ export function evaluateAppHealthCatalogueCoverage(snapshot: AppHealthDataSnapsh
     (section.searchUnexpected?.length ?? 0) + (section.directoryMissing?.length ?? 0) +
     (section.directoryUnexpected?.length ?? 0)) : null;
   const unavailable = !ready || !catalogue.detailsAvailable || !catalogue.searchIndexAvailable;
-  const status = identityMismatches || catalogue.searchIndexRunMatches === false || (history?.processingMismatches ?? 0) > 0 || (history?.chartProjectionMismatches ?? 0) > 0 ? 'fail'
+  const appHistoryGaps = history?.gaps.filter(gap => !PRODUCER_HISTORY_GAPS.has(gap[1])).length ?? 0;
+  const status = identityMismatches || catalogue.searchIndexRunMatches === false || (history?.processingMismatches ?? 0) > 0 || (history?.chartProjectionMismatches ?? 0) > 0 || appHistoryGaps > 0 ? 'fail'
     : !history ? 'unavailable'
-    : (missingDetails ?? 0) > 0 || (missingSearchIndex ?? 0) > 0 || (history?.gaps.length ?? 0) > 0 ? 'warn'
+    : (missingDetails ?? 0) > 0 || (missingSearchIndex ?? 0) > 0 ? 'warn'
       : unavailable ? 'unavailable' : 'pass';
   const allRows = SECTION_KEYS.flatMap(section => snapshot.core!.sections[section]?.rates ?? []);
   const metrics: AppHealthCheck['metrics'] = {

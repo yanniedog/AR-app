@@ -200,7 +200,7 @@ test('closed economics does not register graphic readiness and reopening require
   } finally { act(() => tree.unmount()); }
 });
 
-test('missing economics keeps its optional data error while a measured empty graphic is unavailable', () => {
+test('missing economics keeps its optional data error while a measured empty graphic passes', () => {
   mockCore = makeHealthyCore();
   let tree!: InspectableRenderer;
   act(() => { tree = TestRenderer.create(<Research />) as InspectableRenderer; });
@@ -234,7 +234,14 @@ test('missing economics keeps its optional data error while a measured empty gra
     const chart = evaluateAppHealthDisplayQuality([
       { id: economyStep.expectedSurface, requiredRoles: ['critical-layout', 'chart'] },
     ], observations).find(check => check.id === 'display-chart');
-    expect(chart).toMatchObject({ status: 'unavailable', metrics: { failed: 0, unavailable: 1 } });
+    expect(chart).toMatchObject({ status: 'pass', metrics: { checked: 1, failed: 0, unavailable: 0 } });
+    const pendingChart = evaluateAppHealthDisplayQuality([
+      { id: economyStep.expectedSurface, requiredRoles: ['chart'] },
+    ], appHealthDisplayObservations([{
+      id: 'economy-pending', kind: 'journey', label: 'Economy', status: 'skipped', durationMs: null,
+      metrics: { readinessEvidence: `${economyStep.expectedSurface}:economic-graphics:graphic:pending:0/0:required=1:measured=0:empty=0:summary=0` },
+    }])).find(check => check.id === 'display-chart');
+    expect(pendingChart).toMatchObject({ status: 'fail', metrics: { failed: 0, missing: 1 } });
     expect(evaluateAppHealthDisplayQuality([
       { id: economyStep.expectedSurface, requiredRoles: ['critical-layout', 'chart'] },
     ], observations).find(check => check.id === 'display-layout')?.status).toBe('pass');

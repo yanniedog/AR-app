@@ -70,11 +70,82 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   if (report.appHealth) countTruncation(report.appHealth);
   const actualIds = new Set(report.checks.map(check => check.id));
   const healthActualIds = new Set(healthChecks.map(check => check.id));
+  const planSteps = new Map<string, { optional: boolean; expectedSurface: string }>();
+  for (const pass of report.plan?.passes ?? []) {
+    for (const step of pass.steps) planSteps.set(`deep-${step.id}`, { optional: step.optional === true, expectedSurface: step.expectedSurface });
+  }
   const missingPerformanceIds = [...new Set([...(coverage?.missingPlannedCheckIds ?? []),
-    ...(report.plan?.passes.flatMap(pass => pass.steps.map(step => `deep-${step.id}`)) ?? []).filter(id => !actualIds.has(id))])];
-  const unverifiedLink = (check: PerformanceAuditReport['checks'][number]) => /^external-link-[0-9]+$/.test(check.id)
-    && (check.metrics.httpAttempted !== true || !['pass', 'fail'].includes(String(check.metrics.httpReachability))
-      || !['pass', 'fail'].includes(String(check.metrics.browserHandler)));
+    ...[...planSteps.keys()].filter(id => !actualIds.has(id))])];
+  const contractAvailabilityEvidence = new Set([
+    'local app-health mode blocks fetch and XMLHttpRequest before transport',
+    'the local download state was observed without checking the remote manifest',
+    'the update mechanism is Android-only',
+  ]);
+  const contractAvailabilityReasons = new Set([
+    'Not run: local mode has a zero-network contract',
+    'Not run: remote update checks are outside the local audit contract',
+    'Not run: Android-only',
+    'Maximum coverage is unavailable because optional assets are not cached',
+  ]);
+  const justifiedAvailabilitySkip = (check: PerformanceAuditReport['checks'][number]) => {
+    if (check.status !== 'skipped' || check.metrics.skipClassification === 'scenario-recovery') return false;
+    const evidence = typeof check.metrics.availabilityEvidence === 'string' ? check.metrics.availabilityEvidence : '';
+    if (evidence === 'mounted action terminal-unavailable result'
+      || evidence === 'an optional required probe reported a terminal error'
+      || evidence.startsWith('Optional assets are not cached')
+      || contractAvailabilityEvidence.has(evidence)) return true;
+    if (typeof check.metrics.reason === 'string' && contractAvailabilityReasons.has(check.metrics.reason)) return true;
+    return planSteps.get(check.id)?.optional === true && check.metrics.skipClassification === 'terminal-availability';
+  };
+  const justifiedHealthUnavailable = (check: NonNullable<PerformanceAuditReport['appHealth']>['checks'][number]) => {
+    if (check.status !== 'unavailable' || check.code !== APP_HEALTH_CHECK_CODES.ASSET_AVAILABILITY) return false;
+    const metric = (name: string) => typeof check.metrics[name] === 'number' ? check.metrics[name] as number : null;
+    const requiredUnavailable = metric('requiredUnavailable');
+    const requiredEmpty = metric('requiredEmpty');
+    const mismatchedRunDates = metric('mismatchedRunDates');
+    const optionalUnavailable = metric('optionalUnavailable');
+    const optionalEmpty = metric('optionalEmpty');
+    const optionalNotObserved = metric('optionalNotObserved');
+    return requiredUnavailable === 0 && requiredEmpty === 0 && mismatchedRunDates === 0
+      && optionalUnavailable === 0 && optionalEmpty === 0 && (optionalNotObserved ?? 0) > 0;
+  };
+  const blockingUnavailable = (check: PerformanceAuditReport['checks'][number]) =>
+    !justifiedAvailabilitySkip(check)
+    && (check.metrics.availabilityFailure === true || check.metrics.executionAttempted === false);
+  const safeProbeToken = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/.test(value) ? value : null;
+  const pendingRequiredProbes = (check: PerformanceAuditReport['checks'][number]) => {
+    const surfaces = check.diagnostic?.readiness?.surfaces;
+    if (!Array.isArray(surfaces)) return [] as { surfaceId: string | null; probeId: string | null }[];
+    const target = safeProbeToken(check.metrics.expectedSurface) ?? planSteps.get(check.id)?.expectedSurface ?? null;
+    const found: { surfaceId: string | null; probeId: string | null }[] = [];
+    for (const surface of surfaces) {
+      if (!surface || typeof surface !== 'object') continue;
+      const surfaceId = safeProbeToken(surface.id);
+      const auditOwned = surfaceId?.startsWith('audit.') === true;
+      if (target && surfaceId !== target && !auditOwned) continue;
+      if (!Array.isArray(surface.probes)) continue;
+      for (const probe of surface.probes) {
+        if (probe?.required && probe.status === 'pending') found.push({ surfaceId, probeId: safeProbeToken(probe.id) });
+      }
+    }
+    return found;
+  };
+  const unverifiedLink = (check: PerformanceAuditReport['checks'][number]) => {
+    if (!/^external-link-[0-9]+$/.test(check.id)) return false;
+    const httpKnown = ['pass', 'fail'].includes(String(check.metrics.httpReachability));
+    const handlerKnown = ['pass', 'fail'].includes(String(check.metrics.browserHandler));
+    const classified = typeof check.metrics.httpSelected === 'boolean' || typeof check.metrics.handlerResolution === 'string';
+    if (!classified) return check.metrics.httpAttempted !== true || !httpKnown || !handlerKnown;
+    const validationFailed = check.metrics.urlValidation === 'fail';
+    const httpHole = validationFailed ? false
+      : typeof check.metrics.httpSelected === 'boolean'
+        ? check.metrics.httpSelected === true && (check.metrics.httpAttempted !== true || !httpKnown)
+        : check.metrics.httpAttempted !== true || !httpKnown;
+    const resolution = check.metrics.handlerResolution;
+    const handlerClassified = resolution === 'pass' || resolution === 'fail' || resolution === 'not-attempted' || resolution === 'unresolved';
+    const handlerHole = !validationFailed && !handlerClassified && !handlerKnown;
+    return httpHole || handlerHole;
+  };
   const structuredReadiness = (check: PerformanceAuditReport['checks'][number]) => {
     const readiness = check.diagnostic?.readiness;
     return readiness != null && typeof readiness.ready === 'boolean' && typeof readiness.capturing === 'boolean'
@@ -87,15 +158,12 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     duplicateChecks: Math.max(coverage?.duplicateStoredCheckIds.length ?? 0, report.checks.length - actualIds.size)
       + Math.max(health?.coverage.duplicateStoredCheckIds.length ?? 0, healthChecks.length - healthActualIds.size),
     unexpectedChecks: (coverage?.unexpectedStoredCheckIds.length ?? 0) + (health?.coverage.unexpectedStoredCheckIds.length ?? 0),
-    skippedChecks: report.checks.filter(check => check.status === 'skipped').length,
-    unavailableChecks: report.checks.filter(check => check.metrics.availabilityFailure === true || check.metrics.executionAttempted === false).length
-      + healthChecks.filter(check => check.status === 'unavailable').length,
+    skippedChecks: report.checks.filter(check => check.status === 'skipped' && !justifiedAvailabilitySkip(check)).length,
+    justifiedAvailabilitySkips: report.checks.filter(justifiedAvailabilitySkip).length,
+    unavailableChecks: report.checks.filter(blockingUnavailable).length
+      + healthChecks.filter(check => check.status === 'unavailable' && !justifiedHealthUnavailable(check)).length,
     notRunChecks: healthChecks.filter(check => check.status === 'not-run').length,
-    pendingProbes: report.checks.reduce((count, check) => {
-      const surfaces = check.diagnostic?.readiness?.surfaces;
-      return count + (Array.isArray(surfaces) ? surfaces.reduce((sum, surface) => sum
-        + (Array.isArray(surface?.probes) ? surface.probes.filter(probe => probe?.required && probe.status === 'pending').length : 0), 0) : 0);
-    }, 0),
+    pendingProbes: report.checks.reduce((count, check) => count + pendingRequiredProbes(check).length, 0),
     missingReadinessChecks: report.checks.filter(check => check.kind === 'journey' && check.metrics.executionAttempted !== false
       && check.metrics.availabilityFailure !== true && check.status !== 'skipped' && !structuredReadiness(check)).length,
     unverifiedLinks: report.checks.filter(unverifiedLink).length,
@@ -110,7 +178,7 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     && coverage.plannedChecks === report.checks.length
     && gaps.missingChecks === 0 && gaps.duplicateChecks === 0 && gaps.unexpectedChecks === 0
     && (!health || health.coverage.storedChecks === healthChecks.length && health.coverage.plannedChecks === healthChecks.length);
-  const coverageComplete = collectionComplete && coverage.complete && health?.coverage.complete !== false
+  const coverageComplete = collectionComplete && health?.coverage.complete !== false
     && gaps.skippedChecks === 0 && gaps.unavailableChecks === 0 && gaps.notRunChecks === 0 && gaps.pendingProbes === 0
     && gaps.unverifiedLinks === 0 && gaps.missingHealthReports === 0 && gaps.invalidHistoryEvidenceChecks === 0;
   const startedAt = publicAuditTimestamp(report.startedAt);
@@ -142,13 +210,17 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     ...(health?.coverage.missingPlannedCheckIds ?? []).map(id => ({ source: 'health' as const, checkId: healthId(id) })),
   ];
   type GapPosition = { source: 'performance' | 'health'; position: number; checkId: string | null;
-    reason: 'unavailable' | 'skipped' | 'unverified-link' | 'not-run' | 'pending-probe' | 'missing-readiness' | 'duplicate' | 'unexpected' | 'invalid-history-evidence' };
+    reason: 'unavailable' | 'skipped' | 'unverified-link' | 'not-run' | 'pending-probe' | 'missing-readiness' | 'duplicate' | 'unexpected' | 'invalid-history-evidence';
+    surfaceId?: string; probeId?: string };
   const gapPositions: GapPosition[] = [
-    ...report.checks.flatMap((check, index) => check.status === 'skipped' || check.metrics.availabilityFailure === true || check.metrics.executionAttempted === false || unverifiedLink(check)
-      ? [{ source: 'performance' as const, position: index + 1, checkId: safeCheckId(check.id),
-        reason: check.metrics.availabilityFailure === true || check.metrics.executionAttempted === false ? 'unavailable' as const
-          : check.status === 'skipped' ? 'skipped' as const : 'unverified-link' as const }] : []),
-    ...healthChecks.flatMap((check, index) => check.status === 'unavailable' || check.status === 'not-run'
+    ...report.checks.flatMap((check, index) => {
+      const reason = unverifiedLink(check) ? 'unverified-link' as const
+        : blockingUnavailable(check) ? 'unavailable' as const
+          : check.status === 'skipped' && !justifiedAvailabilitySkip(check) ? 'skipped' as const
+            : null;
+      return reason ? [{ source: 'performance' as const, position: index + 1, checkId: safeCheckId(check.id), reason }] : [];
+    }),
+    ...healthChecks.flatMap((check, index) => (check.status === 'unavailable' && !justifiedHealthUnavailable(check)) || check.status === 'not-run'
       ? [{ source: 'health' as const, position: index + 1, checkId: healthId(check.code), reason: check.status }] : []),
   ];
   healthChecks.forEach((check, index) => {
@@ -173,9 +245,10 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   addIdentityGaps('performance', report.checks, coverage?.duplicateStoredCheckIds ?? [], coverage?.unexpectedStoredCheckIds ?? [], safeCheckId);
   addIdentityGaps('health', healthChecks, health?.coverage.duplicateStoredCheckIds ?? [], health?.coverage.unexpectedStoredCheckIds ?? [], healthId);
   report.checks.forEach((check, index) => {
-    const hasPending = Array.isArray(check.diagnostic?.readiness?.surfaces) && check.diagnostic.readiness.surfaces.some(surface =>
-      Array.isArray(surface?.probes) && surface.probes.some(probe => probe?.required && probe.status === 'pending'));
-    if (hasPending) gapPositions.push({ source: 'performance', position: index + 1, checkId: safeCheckId(check.id), reason: 'pending-probe' });
+    for (const probe of pendingRequiredProbes(check)) {
+      gapPositions.push({ source: 'performance', position: index + 1, checkId: safeCheckId(check.id), reason: 'pending-probe',
+        ...(probe.surfaceId ? { surfaceId: probe.surfaceId } : {}), ...(probe.probeId ? { probeId: probe.probeId } : {}) });
+    }
     if (check.kind === 'journey' && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true
       && check.status !== 'skipped' && !structuredReadiness(check)) {
       gapPositions.push({ source: 'performance', position: index + 1, checkId: safeCheckId(check.id), reason: 'missing-readiness' });
@@ -185,5 +258,5 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     outcome, collectionComplete, coverageComplete, detailsComplete, timestampsValid,
     performanceCheckCount: report.checks.length, healthCheckCount: healthChecks.length,
     gaps, failurePositions, gapPositions, missingPlannedChecks, duplicateStoredChecks, unexpectedStoredChecks,
-    privacyBoundary: { privateValues: 'opaque-aliases', generalApplicationJournal: 'excluded', nativeProfiler: 'not-captured' } as const };
+    privacyBoundary: { privateValues: 'opaque-aliases', generalApplicationJournal: 'included-deidentified', nativeProfiler: 'not-captured' } as const };
 }
