@@ -279,7 +279,10 @@ export function RateCheckWorkspace() {
     void suitabilityRevision;
     return resolveCalculationTarget(() => {
       if (!core) return null;
-      if (publicCatalogue.status === 'unavailable' || !pricedCatalogue.ready) return core;
+      // Raw core lacks public programme bindings. While cooperative pricing is
+      // outstanding, stay pending so audit readiness waits instead of erroring.
+      if (publicCatalogue.status === 'unavailable') return core;
+      if (!pricedCatalogue.ready) return null;
       return {
         ...core,
         sections: {
