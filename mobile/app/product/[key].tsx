@@ -89,7 +89,7 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { ratePresentation } from '../../src/data/ratePresentation';
 import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
-import { bindCurrentPublicRow, publicProductOfferRows, publicRateScenario, publicScenarioForRow, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
+import { bindCurrentPublicRow, publicOfferDedupKey, publicProductOfferRows, publicRateScenario, publicScenarioForRow, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../src/data/publicRateIntegration';
 import { publicRateOriginLabel, publicRateText } from '../../src/data/publicRatePresentation';
 import { PublicRateEvidence } from '../../src/components/scenario/PublicRateEvidence';
 import { PublicCostComparison } from '../../src/components/scenario/PublicCostComparison';
@@ -143,23 +143,37 @@ export default function ProductDetail() {
       void suitabilityRevision;
       if (!core) return null;
       // Prefer core identity. Never call section-wide publicRecommendationRows on
-      // product.open — that sync-expanded the whole day catalogue. Public-only
-      // products expand just this product's programmes.
+      // product.open — that sync-expanded the whole day catalogue. Expand only
+      // this product's programmes, and merge them with core rows so a selected
+      // public programme id still resolves when the product also has core rates.
       const fromCore = findEligibleByKey(core.sections, productKey);
-      if (fromCore) return fromCore;
-      if (!publicProduct) return null;
+      if (!publicProduct) return fromCore;
       const offers = publicProductOfferRows(
         publicProduct,
         publicCatalogue,
         scenarioFor(publicProduct.section),
       );
-      if (!offers.length) return null;
+      if (!offers.length) return fromCore;
+      const section = publicProduct.section;
+      const sectionRates = core.sections[section].rates;
+      const otherRates = sectionRates.filter((row) => row.product_key !== productKey);
+      const coreProductRates = sectionRates
+        .filter((row) => row.product_key === productKey)
+        .map((row) => bindCurrentPublicRow(row, publicCatalogue));
+      const seen = new Set<string>();
+      const mergedProductRates = [...coreProductRates, ...offers].filter((row) => {
+        if (!row.public_offer_id) return true;
+        const dedupeKey = publicOfferDedupKey(row.product_key, row.public_offer_id);
+        if (seen.has(dedupeKey)) return false;
+        seen.add(dedupeKey);
+        return true;
+      });
       return findEligibleByKey(
         {
           ...core.sections,
-          [publicProduct.section]: {
-            ...core.sections[publicProduct.section],
-            rates: offers,
+          [section]: {
+            ...core.sections[section],
+            rates: [...otherRates, ...mergedProductRates],
           },
         },
         productKey,

@@ -131,6 +131,34 @@ test('Strict Mode effect replay cannot duplicate an already-ready Tools handoff'
   } finally { act(() => tree.unmount()); }
 });
 
+test('Strict Mode async schedule still delivers Tools handoff after cancelled first setup', () => {
+  const pending: Array<() => void> = [];
+  const scheduleMock = jest.requireMock('../src/lib/yieldToUi') as {
+    scheduleAfterInteractions: (work: () => void) => () => void;
+  };
+  const previous = scheduleMock.scheduleAfterInteractions;
+  scheduleMock.scheduleAfterInteractions = (work: () => void) => {
+    pending.push(work);
+    return () => {
+      const index = pending.indexOf(work);
+      if (index >= 0) pending.splice(index, 1);
+    };
+  };
+  mockReady = true; mockParams = { section: 'TD', target: 'exact', ri: '8' };
+  let tree!: ReactTestRenderer;
+  try {
+    act(() => { tree = TestRenderer.create(<React.StrictMode><Tools /></React.StrictMode>); });
+    expect(mockDismissTo).not.toHaveBeenCalled();
+    expect(pending.length).toBeGreaterThan(0);
+    act(() => { pending.splice(0).forEach((work) => work()); });
+    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledTimes(1);
+  } finally {
+    scheduleMock.scheduleAfterInteractions = previous;
+    act(() => tree.unmount());
+  }
+});
+
 
 test('legacy categories restores listed hierarchy after an unlisted catalogue session', () => {
   initializeRatesSession(DEFAULT_PREFS, 'Mortgage');

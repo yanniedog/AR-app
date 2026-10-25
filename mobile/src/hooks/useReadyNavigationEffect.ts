@@ -9,15 +9,21 @@ export function useReadyNavigationEffect(effect: () => void): void {
   const deliveredEffect = useRef<(() => void) | null>(null);
   useEffect(() => {
     let active = true;
+    let scheduled = false;
     let cancelDeferred: (() => void) | null = null;
     const run = () => {
-      if (!active || deliveredEffect.current === effect || !navigation.isReady()) return;
-      deliveredEffect.current = effect;
+      if (!active || deliveredEffect.current === effect || scheduled || !navigation.isReady()) return;
       // Yield so the inbound route can commit/paint before the replace nests
       // destination mount work into the same JS turn as router.push.
+      // Mark delivered only when the deferred callback runs — Strict Mode
+      // cleanup must be able to reschedule the same effect after cancel.
+      scheduled = true;
       cancelDeferred?.();
       cancelDeferred = scheduleAfterInteractions(() => {
-        if (active) effect();
+        scheduled = false;
+        if (!active || deliveredEffect.current === effect) return;
+        deliveredEffect.current = effect;
+        effect();
       });
     };
     const stopReady = navigation.addListener('ready', run);
@@ -25,6 +31,7 @@ export function useReadyNavigationEffect(effect: () => void): void {
     run();
     return () => {
       active = false;
+      scheduled = false;
       cancelDeferred?.();
       stopReady();
       stopState();
