@@ -2538,7 +2538,6 @@ export async function runJourney(
       { watchdog },
     );
     const navigationCommitMs = now() - at;
-    await outsideStepBudget(watchdog, () => settleUi());
     assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
     if (
@@ -2576,6 +2575,7 @@ export async function runJourney(
     forwardResponsiveness = monitor.metricsSince(forwardResponsivenessAt);
     const backgroundResponsivenessAt = monitor.snapshot();
     if (!visibleReady.stepExpired) {
+      await outsideStepBudget(watchdog, () => settleUi());
       journeyStage = 'data';
       const background = await outsideStepBudget(watchdog, () => waitForJourneyData(
         journey,
