@@ -239,7 +239,7 @@ test.each([{}, { coverage: {}, domains: 'private-domains', checks: [{ id: 'priva
     const { privacyBoundary: decodedBoundary, ...decodedRest } = decoded.completion;
     const { privacyBoundary: shareBoundary, ...shareRest } = share.completion;
     expect(decodedRest).toEqual(shareRest);
-    expect(shareBoundary.generalApplicationJournal).toBe('included-deidentified');
+    expect(shareBoundary.generalApplicationJournal).toBe('omitted');
     expect(decodedBoundary.generalApplicationJournal).toBe('included-deidentified');
     expect(decoded.diagnosticLog.appHealth).not.toBeNull();
     expect(Object.keys(decoded.diagnosticLog.appHealth)).toHaveLength(Object.keys(malformed).length);

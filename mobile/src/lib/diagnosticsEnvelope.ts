@@ -153,7 +153,7 @@ function safeDuration(check: AuditCheck): number | null {
 /**
  * Build the only performance-audit shape allowed to leave the device.
  * It includes validated audit timestamps, the configured stall timeout, and a deidentified failure reason for each failed check.
- * Secrets, account numbers, tokens and routes stay opaque. The deidentified application journal is included.
+ * Secrets, account numbers, tokens and routes stay opaque. The operating-system share omits the application journal.
  */
 export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport) {
   measureAuditEvidence(report);
@@ -224,7 +224,6 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
         return failureReason ? { ...check, failureReason } : check;
       }),
     },
-    applicationJournal: auditApplicationJournal(report.startedAt, report.finishedAt),
   };
 }
 
@@ -299,7 +298,14 @@ export function encodeHostedPerformanceAudit(
 export function createDeidentifiedDiagnosticsShare(
   report: PerformanceAuditReport,
 ): DeidentifiedDiagnosticsShare {
-  const body = JSON.stringify(buildDeidentifiedPerformanceAudit(report), null, 2);
+  const built = buildDeidentifiedPerformanceAudit(report);
+  const body = JSON.stringify({
+    ...built,
+    completion: {
+      ...built.completion,
+      privacyBoundary: { ...built.completion.privacyBoundary, generalApplicationJournal: 'omitted' as const },
+    },
+  }, null, 2);
   const byteLength = new TextEncoder().encode(body).length;
   if (byteLength > DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES) {
     throw new Error(
