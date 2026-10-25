@@ -150,10 +150,12 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     return catalogueFacetOptions(view);
   }, [catalogueKey]);
   const groups = useMemo(() => ([
-    { key: 'loanPurposes' as const, label: uiLabel('Loan purpose'), canonicalize: canonicalPurpose },
-    { key: 'repaymentTypes' as const, label: uiLabel('Repayment'), canonicalize: canonicalRepayment },
+    { key: 'loanPurposes' as const, label: 'Loan purpose' as const, canonicalize: canonicalPurpose },
+    { key: 'repaymentTypes' as const, label: 'Repayment' as const, canonicalize: canonicalRepayment },
   ]).map(group => ({
-    ...group,
+    key: group.key,
+    label: group.label,
+    canonicalize: group.canonicalize,
     options: mergeFacetOptions(
       rowOptions[group.key],
       catalogueOptions[group.key],
@@ -174,7 +176,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
         style={{ minHeight: 48, minWidth: 0, color: theme.colors.text, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 6, padding: 8, fontSize: theme.font.body }} />
     </View>)}</Row>
     {groups.map(group => <View key={group.key} style={{ gap: 4 }}>
-      <AppText variant="small">{group.label}</AppText>
+      <AppText variant="small">{uiLabel(group.label)}</AppText>
       <Row gap={6} style={{ flexWrap: 'wrap' }}>{group.options.map(option => {
         const meaningOf = (value: string) => group.canonicalize(value) ?? value;
         const selected = filters[group.key].some(item => meaningOf(item) === option);
