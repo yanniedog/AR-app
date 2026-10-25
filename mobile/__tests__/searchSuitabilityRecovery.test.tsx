@@ -53,8 +53,12 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => jest.requireActual('../src/theme/theme').lightTheme,
 }));
 jest.mock('../src/lib/yieldToUi', () => ({
-  scheduleAfterInteractions: () => () => undefined,
-  // Keep deferred: sync invocation would force ensureSearchIndex on mount.
+  // Session init / intent consumption must run; navigation-deferred details
+  // warming stays cancelled so ensureSearchIndex is not forced on mount.
+  scheduleAfterInteractions: (work: () => void) => {
+    work();
+    return () => undefined;
+  },
   scheduleAfterNavigation: () => () => undefined,
 }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({

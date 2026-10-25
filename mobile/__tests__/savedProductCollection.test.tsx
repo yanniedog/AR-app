@@ -29,7 +29,10 @@ const mockScenario = normalizeUserRateScenario(undefined);
 jest.mock('../src/data/store', () => ({ useStore: Object.assign((selector: (state: typeof mockState) => unknown) => selector(mockState),
   { getState: () => mockState }) }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
-jest.mock('@react-navigation/native', () => ({ useScrollToTop: jest.fn() }));
+jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true, useScrollToTop: jest.fn() }));
+jest.mock('../src/hooks/useNavigationContentReady', () => ({
+  useNavigationContentReady: () => true,
+}));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => jest.requireActual('../src/theme/theme').lightTheme }));
 jest.mock('../src/hooks/useReducedMotion', () => ({ useReducedMotion: () => true }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 0 }));

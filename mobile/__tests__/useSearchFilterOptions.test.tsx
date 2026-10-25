@@ -13,6 +13,11 @@ jest.mock('../src/data/searchFilterOptions', () => ({
   prepareSearchFilterOptions: (...args: unknown[]) => mockPrepare(...args),
 }));
 jest.mock('../src/lib/yieldToUi', () => ({
+  scheduleAfterInteractions: (run: () => void) => {
+    const job = { run, cancelled: false };
+    mockNavigationJobs.push(job);
+    return () => { job.cancelled = true; };
+  },
   scheduleAfterNavigation: (run: () => void) => {
     const job = { run, cancelled: false };
     mockNavigationJobs.push(job);

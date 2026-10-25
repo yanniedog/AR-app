@@ -11,6 +11,12 @@ let mockParams: Record<string, string | string[]> = {};
 const mockDismissTo = jest.fn();
 const mockPush = jest.fn();
 const mockNavigation = { isReady: () => true, addListener: () => () => undefined };
+jest.mock('../src/lib/yieldToUi', () => ({
+  scheduleAfterInteractions: (work: () => void) => {
+    work();
+    return () => undefined;
+  },
+}));
 jest.mock('../src/components/rates/RatesWorkspace', () => ({ __esModule: true, default: () => null }));
 jest.mock('expo-router', () => ({ router: { dismissTo: (...args: unknown[]) => mockDismissTo(...args), push: (...args: unknown[]) => mockPush(...args) },
   useLocalSearchParams: () => mockParams, useNavigationContainerRef: () => mockNavigation, Redirect: 'Redirect' }));
