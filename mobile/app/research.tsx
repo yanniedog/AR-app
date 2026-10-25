@@ -45,6 +45,7 @@ export default function Market() {
   useScrollToTop(scrollRef);
 
   const core = useStore((s) => s.core);
+  const source = useStore((s) => s.source);
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const calendar = useStore((s) => s.rbaCalendar);
   const calendarError = useStore((s) => s.rbaCalendarError);
@@ -118,7 +119,7 @@ export default function Market() {
     if (prebuiltHistoryEnabled) void ensureHistoryBanks();
   }, [contentReady, core, ensureBankInsights, ensureHistoryBanks, ensureRbaCalendar, isFocused, prebuiltHistoryEnabled, showBankInsights]);
 
-  const historyInputsReady = !prebuiltHistoryEnabled || historyBanks != null || historyBanksError != null;
+  const historyInputsReady = !prebuiltHistoryEnabled || source !== 'remote' || historyBanks != null || historyBanksError != null;
   useEffect(() => {
     if (!isFocused || !contentReady || !core?.run_date || !historyInputsReady) return;
     let active = true;

@@ -3037,7 +3037,11 @@ export function PerformanceAuditRunner() {
           ? captureAuditDiagnostic(performanceAuditReadinessRegistry.snapshot(
             typeof rawCheck.metrics.expectedSurface === 'string' ? [rawCheck.metrics.expectedSurface] : undefined,
           ), 'check') : undefined);
-        const check = enforcePerformanceAuditStepLimit({ ...rawCheck, diagnostic });
+        const outsideBudget = typeof rawCheck.metrics.stepBudgetOmittedMs === 'number'
+          ? rawCheck.metrics.stepBudgetOmittedMs
+          : typeof rawCheck.metrics.backgroundSettleMs === 'number' ? rawCheck.metrics.backgroundSettleMs : 0;
+        const foregroundMs = typeof rawCheck.durationMs === 'number' ? Math.max(0, rawCheck.durationMs - outsideBudget) : rawCheck.durationMs;
+        const check = enforcePerformanceAuditStepLimit({ ...rawCheck, diagnostic }, foregroundMs);
         evidenceBudget.retain(check);
         checks.push(check);
         logAuditCheck(app, sessionId, check);

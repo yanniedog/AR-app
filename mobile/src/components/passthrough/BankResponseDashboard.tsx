@@ -95,7 +95,7 @@ export function BankResponseDashboard({
   // Provider changes belong to the chart. Folding them into the list revision
   // sent search/list probes back to pending after the table had already painted.
   const listRevision = `${payload.run_date}:${section}:${active?.decision.date ?? 'none'}`;
-  const renderRevision = listRevision;
+  const renderRevision = `${listRevision}:${selectedProvider || 'none'}`;
   const [chartMounted, setChartMounted] = useState(false);
   useEffect(() => {
     if (active && !listMounted) return;

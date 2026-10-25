@@ -157,6 +157,12 @@ test('pre-audit and post-audit log sections survive compressed upload', () => {
   expect(decoded.stallTimeout.stallTimeoutMs).toBe(10_000);
 });
 
+test('a recovered journal omits lines after the saved finish', () => {
+  debugLog.info('app', 'today-line');
+  const recovered = auditApplicationJournal('2020-01-01T00:00:00.000Z', '2020-01-02T00:00:00.000Z');
+  expect(recovered.duringAndAfterAudit.entries.some(entry => entry.message === 'today-line')).toBe(false);
+});
+
 test('journal materialization drops lines after the report finish and stops listening', () => {
   capturePreAuditApplicationJournal('finish-bound');
   debugLog.info('app', 'kept-line');

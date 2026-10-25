@@ -91,7 +91,7 @@ export function auditApplicationJournal(startedAt?: string | null, finishedAt?: 
   const entries = debugLog.getEntries().map(toPublicApplicationLogEntry);
   const start = startedAt ? Date.parse(startedAt) : Number.NaN;
   if (!Number.isFinite(start)) {
-    return { beforeAudit: section([], null), duringAndAfterAudit: section(entries, capturedAt) };
+    return { beforeAudit: section([], null), duringAndAfterAudit: section(through(entries, finishedAt), capturedAt) };
   }
   const prior: PublicApplicationLogEntry[] = [];
   const later: PublicApplicationLogEntry[] = [];
@@ -100,5 +100,5 @@ export function auditApplicationJournal(startedAt?: string | null, finishedAt?: 
     if (Number.isFinite(at) && at < start) prior.push(entry);
     else later.push(entry);
   }
-  return { beforeAudit: section(prior, startedAt ?? null), duringAndAfterAudit: section(later, capturedAt) };
+  return { beforeAudit: section(prior, startedAt ?? null), duringAndAfterAudit: section(through(later, finishedAt), capturedAt) };
 }
