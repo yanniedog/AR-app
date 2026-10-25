@@ -315,11 +315,20 @@ describe('filterBankInsightsForSuitability', () => {
     };
     let yields = 0;
     let clock = 0;
+    const baselinePayload = { ...payloadCopy, banks: { ...payloadCopy.banks }, events: [...payloadCopy.events] };
+    const baselineCore = {
+      ...coreCopy,
+      sections: {
+        ...coreCopy.sections,
+        Mortgage: { ...coreCopy.sections.Mortgage, rates: [...coreCopy.sections.Mortgage.rates] },
+      },
+    };
+    const synchronous = filterBankInsightsForSuitability(baselinePayload, baselineCore, false);
     const cooperative = await filterBankInsightsForSuitabilityCooperatively(
       payloadCopy, coreCopy, false, null, undefined, null,
       { yieldControl: async () => { yields += 1; }, now: () => (clock += 10) },
     );
-    expect(cooperative).toEqual(filterBankInsightsForSuitability(payloadCopy, coreCopy, false));
+    expect(cooperative).toEqual(synchronous);
     expect(yields).toBeGreaterThan(0);
   });
 });

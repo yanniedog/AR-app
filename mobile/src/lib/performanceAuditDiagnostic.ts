@@ -50,7 +50,6 @@ const REDACTED = '[REDACTED]';
 const LATENCY_FAIL_MS: Record<string, number> = {
   forwardWorkMs: 2_500,
   actionMs: 2_500,
-  backgroundSettleMs: 10_000,
   backMs: 2_000,
   maxEventLoopLagMs: 300,
   maxFrameGapMs: 250,
@@ -78,15 +77,24 @@ export function auditErrorProse(error?: string): { type: string | null; message:
   return { type, message };
 }
 
+function redactGroupedDigits(value: string): string {
+  return value.replace(/\b\d{1,6}(?:[\s.-]\d{1,6})+\b/g, (match) => (
+    match.replace(/\D/g, '').length >= 6 ? REDACTED : match
+  ));
+}
+
 /** Secrets, account numbers, tokens, URLs and paths stay opaque. Ordinary diagnostic words remain. */
 export function deidentifyAuditText(text: string): string | null {
   let value = text.replace(/\s+/g, ' ').trim();
   if (!value) return null;
   value = value.replace(/https?:\/\/\S+/gi, REDACTED);
   value = value.replace(/\b[A-Za-z]:\\[^\s]+/g, REDACTED);
-  value = value.replace(/(?:^|\s)\/[\w.~+-]+(?:\/[\w.~+-]+)+/g, ` ${REDACTED}`);
+  value = value.replace(/(?:^|[\s"'=:])\/[\w.~+-]+(?:\/[\w.~+-]+)+/g, (match) => `${/[\s"'=:]/.test(match[0]) ? match[0] : ''}${REDACTED}`);
+  value = value.replace(/(?:^|[\s"'=:])(?:\.\.?\/)?[\w.-]+(?:\/[\w.-]+){2,}/g, (match) => `${/[\s"'=:]/.test(match[0]) ? match[0] : ''}${REDACTED}`);
+  value = value.replace(/"(sessionId|manufacturer|model|brand|expectedPath|product_key|account)"\s*:\s*"(?:[^"\\]|\\.)*"/gi, `"$1":"${REDACTED}"`);
   value = redactSecrets(value);
   value = value.replace(/\bprivate\b/gi, REDACTED);
+  value = redactGroupedDigits(value);
   value = value.replace(/\b\d{6,}\b/g, REDACTED);
   value = value.replace(/\s+/g, ' ').trim();
   const readable = value.replaceAll(REDACTED, '').replace(/[^A-Za-z0-9]+/g, '');

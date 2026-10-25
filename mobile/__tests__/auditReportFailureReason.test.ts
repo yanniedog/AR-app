@@ -1,6 +1,6 @@
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { APP_HEALTH_CHECK_CODES, finalizeAppHealthReport } from '../src/lib/appHealth';
-import { capturePreAuditApplicationJournal, resetAuditApplicationJournalForTests } from '../src/lib/auditApplicationJournal';
+import { auditApplicationJournal, capturePreAuditApplicationJournal, resetAuditApplicationJournalForTests } from '../src/lib/auditApplicationJournal';
 import { decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 import * as diagnosticCodec from '../src/lib/compactDiagnosticJson';
 import { debugLog } from '../src/lib/debugLog';
@@ -118,10 +118,13 @@ test('pre-audit and post-audit log sections survive compressed upload', () => {
   capturePreAuditApplicationJournal('journal-session');
   debugLog.info('app', 'during-audit-marker');
   debugLog.info('app', 'account 12345678 token=sekret');
+  debugLog.info('app', 'see src/private/account.js and 04 1234 5678');
+  debugLog.info('app', '{"expectedPath":"/product/lender-product-key","sessionId":"abc-session"}');
   const report = makePerformanceAuditReport('journal-session', [{
     id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'pass', durationMs: 20,
     metrics: { executionAttempted: true, actionCompleted: true },
   }]);
+  report.finishedAt = new Date(Date.now() + 5_000).toISOString();
   const body = createPublicPerformanceAuditReport(report);
   expect(JSON.parse(body).format).toBe('ar-audit-gzip-v1');
   const decoded = decodeCompactDiagnosticJson(body) as {
@@ -137,12 +140,32 @@ test('pre-audit and post-audit log sections survive compressed upload', () => {
   expect(after.entryCount).toBe(after.entries.length);
   expect(before.entries.some(entry => entry.message === 'before-audit-marker' && entry.ts.length > 0)).toBe(true);
   expect(before.entries.some(entry => entry.message === 'during-audit-marker')).toBe(false);
-  expect(after.entries.map(entry => entry.message)).toEqual(['during-audit-marker', '[REDACTED]']);
+  expect(after.entries.map(entry => entry.message)).toEqual([
+    'during-audit-marker',
+    '[REDACTED]',
+    'see [REDACTED] and [REDACTED]',
+    '{"expectedPath":"[REDACTED]","sessionId":"[REDACTED]"}',
+  ]);
+  expect(JSON.stringify(after)).not.toContain('src/private/account.js');
+  expect(JSON.stringify(after)).not.toContain('04 1234 5678');
+  expect(JSON.stringify(after)).not.toContain('/product/lender-product-key');
+  expect(JSON.stringify(after)).not.toContain('abc-session');
   expect(after.entries.every(entry => entry.ts.length > 0)).toBe(true);
   const text = JSON.stringify(decoded);
   expect(text).not.toContain('12345678');
   expect(text).not.toContain('sekret');
   expect(decoded.stallTimeout.stallTimeoutMs).toBe(10_000);
+});
+
+test('journal materialization drops lines after the report finish and stops listening', () => {
+  capturePreAuditApplicationJournal('finish-bound');
+  debugLog.info('app', 'kept-line');
+  const early = auditApplicationJournal('2026-10-15T18:00:00.000Z', '2020-01-01T00:00:00.000Z');
+  expect(early.duringAndAfterAudit.entries).toEqual([]);
+  debugLog.info('app', 'after-close');
+  const again = auditApplicationJournal('2026-10-15T18:00:00.000Z', '2099-01-01T00:00:00.000Z');
+  expect(again.duringAndAfterAudit.entries.some(entry => entry.message === 'after-close')).toBe(false);
+  expect(again.duringAndAfterAudit.entries.some(entry => entry.message === 'kept-line')).toBe(false);
 });
 
 test('an over-budget upload drops repeated frames and still decodes reasons and both logs', () => {

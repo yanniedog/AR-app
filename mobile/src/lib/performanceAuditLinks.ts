@@ -17,7 +17,7 @@ function recordedHandlerResolution(handler: ExternalLinkAuditCheck): 'pass' | 'f
   if (handler.status === 'fail') return 'fail';
   if (handler.selection === 'not-selected') return 'not-attempted';
   if (!handler.attempted && handler.selection !== 'selected') return undefined;
-  if (!handler.attempted) return 'not-attempted';
+  if (!handler.attempted) return 'unresolved';
   return handler.status === 'unknown' ? 'unresolved' : undefined;
 }
 

@@ -103,12 +103,14 @@ describe('deidentified diagnostics privacy boundary', () => {
     const publicBody = createPublicPerformanceAuditReport(report);
     const shared = JSON.parse(createDeidentifiedDiagnosticsShare(report).body);
     const { diagnosticLog, applicationJournal, completion, ...publicSummary } = decodeCompactDiagnosticJson(publicBody) as any;
-    const { completion: sharedCompletion, ...sharedSummary } = shared;
+    const { applicationJournal: sharedJournal, completion: sharedCompletion, ...sharedSummary } = shared;
     expect(publicSummary).toEqual(sharedSummary);
     expect(completion.privacyBoundary.generalApplicationJournal).toBe('included-deidentified');
     expect(sharedCompletion.privacyBoundary.generalApplicationJournal).toBe('included-deidentified');
     expect(applicationJournal.beforeAudit.entries).toEqual(expect.any(Array));
     expect(applicationJournal.duringAndAfterAudit.entries).toEqual(expect.any(Array));
+    expect(sharedJournal.beforeAudit.entries).toEqual(expect.any(Array));
+    expect(sharedJournal.duringAndAfterAudit.entries).toEqual(expect.any(Array));
     expect(diagnosticLog.checks).toHaveLength(report.checks.length);
     expect(shared.checks[0]).toMatchObject({ id: 'setup-pinned-inputs', status: 'fail',
       failureCode: 'public-catalogue-changed', metrics: {

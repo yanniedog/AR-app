@@ -1216,7 +1216,7 @@ async function runDeepAuditStepBody(
     maxEventLoopLagMs: responsiveness.maxEventLoopLagMs,
     maxFrameGapMs: responsiveness.maxFrameGapMs,
   });
-  const status = errors.journey.length ? 'fail' : latency;
+  const status = visibleReady.stepExpired || errors.journey.length ? 'fail' : latency;
   return {
     id: `deep-${step.id}`,
     label,
@@ -1257,6 +1257,7 @@ async function runDeepAuditStepBody(
       firstReadyFrameMs: roundMetric(firstReadyFrameMs),
       backgroundSettleMs: roundMetric(backgroundSettleMs),
       backgroundUnsettled: visibleReady.settled ? null : true,
+      ...(visibleReady.stepExpired ? { stepLimitExceeded: true, stepLimitMs: PERFORMANCE_AUDIT_STEP_LIMIT_MS } : {}),
       readinessQuietWindowMs: READINESS_QUIET_WINDOW_MS,
       stepBudgetOmittedMs: roundMetric(backgroundSettleMs + preActionWaitMs),
       runtimeErrors: errors.journey.length,
@@ -2493,6 +2494,8 @@ export async function runJourney(
   const logCursor = debugLog.getCursor();
   let forwardMs: number | null = null;
   let backgroundSettleMs: number | null = null;
+  let readinessStepExpired = false;
+  let backgroundUnsettled = false;
   let destinationReadinessMs: number | null = null;
   let backgroundTasks: string[] = [];
   let backMs: number | null = null;
@@ -2560,6 +2563,8 @@ export async function runJourney(
         signal: destinationReadinessAbort.signal,
       });
       destinationDiagnostic = captureAuditDiagnostic(visibleReady.snapshot, 'complete');
+      readinessStepExpired = visibleReady.stepExpired;
+      backgroundUnsettled = visibleReady.settled === false;
     } finally {
       clearInterval(destinationReadinessGuard);
     }
@@ -2701,7 +2706,7 @@ export async function runJourney(
     maxEventLoopLagMs: visibleResponsiveness.maxEventLoopLagMs,
     maxFrameGapMs: visibleResponsiveness.maxFrameGapMs,
   });
-  const status = routeError || errors.journey.length || !backContractMet
+  const status = routeError || errors.journey.length || !backContractMet || readinessStepExpired
     ? 'fail'
     : latency;
   return {
@@ -2731,6 +2736,8 @@ export async function runJourney(
       navigationKind: journey.navigationKind,
       forwardMs: forwardMs == null ? null : roundMetric(forwardMs),
       backgroundSettleMs: backgroundSettleMs == null ? null : roundMetric(backgroundSettleMs),
+      backgroundUnsettled: backgroundUnsettled ? true : null,
+      ...(readinessStepExpired ? { stepLimitExceeded: true, stepLimitMs: PERFORMANCE_AUDIT_STEP_LIMIT_MS } : {}),
       destinationReadinessMs:
         destinationReadinessMs == null ? null : roundMetric(destinationReadinessMs),
       backgroundTasks: backgroundTasks.join(', ') || null,

@@ -372,9 +372,11 @@ export async function filterBankInsightsForSuitabilityCooperatively(
   if (cancelled()) return null;
   const began = beginSuitabilityFilter(args);
   if ('done' in began) return began.done;
+  const mandatoryAtStart = getMandatoryEligibilityRevision();
   const index: SuitabilityPairIndex = { historicalPairs: new Set(), visibleByPair: new Map() };
   let started = now();
   const chunk = 24;
+  const eligibilityMoved = () => getMandatoryEligibilityRevision() !== mandatoryAtStart;
   for (const section of SECTION_KEYS) {
     const rows: CorePayload['sections'][SectionKey]['rates'] = args.core.sections[section]?.rates ?? [];
     const visible: CorePayload['sections'][SectionKey]['rates'] = [];
@@ -384,19 +386,19 @@ export async function filterBankInsightsForSuitabilityCooperatively(
       if (now() - started >= 8) {
         await yieldControl();
         started = now();
-        if (cancelled()) return null;
+        if (cancelled() || eligibilityMoved()) return null;
       }
     }
     collectSectionPairs(index, section, rows, visible);
     if (now() - started >= 8) {
       await yieldControl();
       started = now();
-      if (cancelled()) return null;
+      if (cancelled() || eligibilityMoved()) return null;
     }
   }
-  if (cancelled()) return null;
+  if (cancelled() || eligibilityMoved()) return null;
   await yieldControl();
-  if (cancelled()) return null;
+  if (cancelled() || eligibilityMoved()) return null;
   return rememberSuitabilityFilter(args, projectFilteredBankInsights(began.integrityPayload, args.core, index));
 }
 

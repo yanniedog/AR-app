@@ -351,9 +351,17 @@ export default function ProductDetail() {
     || (core?.sections.TD.rates.length ?? 0) > HEAVY_OPEN_ROW_LIMIT
     || publicCatalogue.products.length > HEAVY_OPEN_ROW_LIMIT;
   const [deferredHistory, setDeferredHistory] = useState<{
+    core: NonNullable<typeof core>;
+    bankInsights: typeof bankInsights;
+    suitabilityRevision: number;
     insights: ReturnType<typeof filterBankInsightsForSuitability>;
     market: ReturnType<typeof selectBankHistoryChartModel>;
   } | null>(null);
+  const currentDeferredHistory = deferredHistory
+    && deferredHistory.core === core
+    && deferredHistory.bankInsights === bankInsights
+    && deferredHistory.suitabilityRevision === suitabilityRevision
+    ? deferredHistory : null;
   useEffect(() => {
     if (!heavyHistory || !historySurfaceReady || !historyEnabled || !core || !found || rateHistory.failed || rateHistory.updating) {
       setDeferredHistory(null);
@@ -378,7 +386,7 @@ export default function ProductDetail() {
           : await selectBankHistoryChartModelCooperatively({
             core, coreIntegrity, historyBanks, bankInsights: insights, includeNonStandard, detailsProducts,
           }, found.section, 'All', control);
-      if (!cancelled) setDeferredHistory({ insights, market });
+      if (!cancelled && core) setDeferredHistory({ core, bankInsights, suitabilityRevision, insights, market });
     })();
     return () => { cancelled = true; };
   }, [
@@ -390,7 +398,7 @@ export default function ProductDetail() {
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
     if (!historySurfaceReady) return null;
-    if (heavyHistory) return deferredHistory?.insights ?? null;
+    if (heavyHistory) return currentDeferredHistory?.insights ?? null;
     return filterBankInsightsForSuitability(
       bankInsights,
       core,
@@ -403,7 +411,7 @@ export default function ProductDetail() {
     bankInsights,
     core,
     coreIntegrity,
-    deferredHistory,
+    currentDeferredHistory,
     detailsProducts,
     heavyHistory,
     historySurfaceReady,
@@ -415,7 +423,7 @@ export default function ProductDetail() {
     void suitabilityRevision;
     if (!historySurfaceReady || !historyEnabled || !core || !found) return null;
     if (rateHistory.updating || rateHistory.failed) return null;
-    if (heavyHistory) return deferredHistory?.market ?? null;
+    if (heavyHistory) return currentDeferredHistory?.market ?? null;
     const detailed = rateHistory.historyAvailable ? rateHistoryChartModel(rateHistory.snapshots, found.section) : null;
     if (rateHistory.historyAvailable || rateHistory.richHistory) return detailed;
     return selectBankHistoryChartModel(
@@ -433,7 +441,7 @@ export default function ProductDetail() {
   }, [
     core,
     coreIntegrity,
-    deferredHistory,
+    currentDeferredHistory,
     detailsProducts,
     explorerInsights,
     found,
@@ -484,7 +492,7 @@ export default function ProductDetail() {
     !bankInsightsError &&
     (!historyModel || historyModel.dates.length < 2);
   const historyPreparing = heavyHistory && historySurfaceReady && historyEnabled && !!found
-    && !deferredHistory && !rateHistory.failed;
+    && !currentDeferredHistory && !rateHistory.failed;
   const historyContentRevision = [
     rateHistory.revision,
     ledgerRevision.current.version,

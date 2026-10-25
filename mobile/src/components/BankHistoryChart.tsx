@@ -368,14 +368,15 @@ function BankHistoryChartView({
     ),
     [highlightValues, innerH, innerW, padL, padT, plotDates, plotIsLarge, plotPoints, rbaSteps, showRba, span, width, yDomain.min],
   );
-  const [deferredPaths, setDeferredPaths] = useState<HistoryChartPaths | null>(null);
+  const pathIdentity = `${width}:${plotDates[0] ?? ''}:${plotDates.at(-1) ?? ''}:${plotDates.length}:${plotPoints.length}:${span}:${yDomain.min}:${showRba}:${highlightValues?.length ?? 0}:${innerW}:${innerH}`;
+  const [deferredPaths, setDeferredPaths] = useState<{ identity: string; paths: HistoryChartPaths } | null>(null);
   useEffect(() => {
     if (!plotIsLarge || width <= 0) {
       setDeferredPaths(null);
       return;
     }
     let cancelled = false;
-    setDeferredPaths(null);
+    const identity = pathIdentity;
     const x = (index: number) => padL + (plotDates.length === 1 ? innerW / 2 : (index / (plotDates.length - 1)) * innerW);
     const y = (value: number) => padT + innerH - ((value - yDomain.min) / span) * innerH;
     void (async () => {
@@ -399,13 +400,15 @@ function BankHistoryChartView({
       const rbaLine = showRba ? stepPath(rbaSteps, x, y) : null;
       const highlightLine = highlightValues ? buildLinePath(highlightValues, x, y, true) : null;
       if (!cancelled) setDeferredPaths({
-        mins, maxs, means, medians, band, meanLine, medianLine, minLine, maxLine, rbaLine, highlightLine,
+        identity,
+        paths: { mins, maxs, means, medians, band, meanLine, medianLine, minLine, maxLine, rbaLine, highlightLine },
       });
     })();
     return () => { cancelled = true; };
-  }, [highlightValues, innerH, innerW, padL, padT, plotDates, plotIsLarge, plotPoints, rbaSteps, showRba, span, width, yDomain.min]);
-  const chartPaths = synchronousPaths ?? deferredPaths ?? EMPTY_HISTORY_PATHS;
-  const pathsReady = plotIsLarge ? deferredPaths != null : width > 0;
+  }, [highlightValues, innerH, innerW, padL, padT, pathIdentity, plotDates, plotIsLarge, plotPoints, rbaSteps, showRba, span, width, yDomain.min]);
+  const matchedPaths = deferredPaths?.identity === pathIdentity ? deferredPaths.paths : null;
+  const chartPaths = synchronousPaths ?? matchedPaths ?? EMPTY_HISTORY_PATHS;
+  const pathsReady = plotIsLarge ? matchedPaths != null : width > 0;
   const {
     mins,
     maxs,

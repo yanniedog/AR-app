@@ -299,7 +299,7 @@ function PerformanceAuditScreenInner() {
   const controls = <Card style={{ gap: 10 }}>
         <AppText variant="h2">{uiLabel('App health audit')}</AppText>
         <InfoRow label={uiLabel(running ? 'Audit upload' : 'Next audit upload')} value={uiLabel(running ? state.uploadLog ? 'Public' : 'Local' : publicUpload ? 'Public' : 'Local')} />
-        <InfoRow label="Included" value="Checks / errors / traces / readiness / timing" />
+        <InfoRow label="Included" value="Checks / errors / traces / readiness / timing / deidentified log" />
         <InfoRow label="Excluded" value="Private inputs / identifiers / credentials" />
         <InfoRow label={uiLabel(running ? 'Destination' : 'Next destination')} value={uiLabel((running ? state.uploadLog : publicUpload) ? 'Public hosting' : 'Debug log')} />
         <InfoRow label="Public hosting" value={uiJoin(uiIdentifier('paste.rs'), ' / ', uiIdentifier('paste.c-net.org'))} />

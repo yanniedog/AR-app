@@ -210,7 +210,7 @@ export const UI_LABELS = [
   'Deletion irreversible', 'Public copy', 'Delete not confirmed', 'Share failed',
   'Upload diagnostic log?', 'Clear debug log?', 'Delete uploaded log?', 'Debug log cleared',
   'Uploaded log deleted', 'Destination', 'Audit upload', 'Deidentified',
-  'Checks / errors / traces / readiness / timing', 'Private inputs / identifiers / credentials',
+  'Checks / errors / traces / readiness / timing / deidentified log', 'Private inputs / identifiers / credentials',
   'Raw logs / tracebacks / routes / product keys / device IDs', 'Temporary report retained',
   'App update active', 'Update state unconfirmed', 'Report unavailable', 'Performance',
   'Data integrity', 'Data completeness', 'Asset availability', 'Display completeness',

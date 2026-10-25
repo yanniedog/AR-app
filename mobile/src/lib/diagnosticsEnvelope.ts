@@ -145,7 +145,7 @@ function safeDuration(check: AuditCheck): number | null {
 /**
  * Build the only performance-audit shape allowed to leave the device.
  * It includes validated audit timestamps, the configured stall timeout, and a deidentified failure reason for each failed check.
- * Secrets, account numbers, tokens, routes and the general application journal stay out of this share shape.
+ * Secrets, account numbers, tokens and routes stay opaque. The deidentified application journal is included.
  */
 export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport) {
   measureAuditEvidence(report);
@@ -216,6 +216,7 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
         return failureReason ? { ...check, failureReason } : check;
       }),
     },
+    applicationJournal: auditApplicationJournal(report.startedAt, report.finishedAt),
   };
 }
 

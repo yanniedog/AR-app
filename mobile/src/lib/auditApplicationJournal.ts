@@ -67,10 +67,22 @@ export function resetAuditApplicationJournalForTests(): void {
   during = [];
 }
 
-/** Before-audit lines stay in their snapshot. Later lines run through report finalization. */
+function through(entries: PublicApplicationLogEntry[], finishedAt?: string | null): PublicApplicationLogEntry[] {
+  const finishMs = finishedAt ? Date.parse(finishedAt) : Number.NaN;
+  if (!Number.isFinite(finishMs)) return entries;
+  return entries.filter(entry => {
+    const at = Date.parse(entry.ts);
+    return !Number.isFinite(at) || at <= finishMs;
+  });
+}
+
+/** Before-audit lines stay in their snapshot. Materializing the report stops later capture. */
 export function auditApplicationJournal(startedAt?: string | null, finishedAt?: string | null): AuditApplicationJournal {
   const capturedAt = finishedAt ?? null;
   if (before) {
+    unsubscribe?.();
+    unsubscribe = null;
+    during = through(during, finishedAt);
     return {
       beforeAudit: section(before, beforeCapturedAt),
       duringAndAfterAudit: section(during.slice(), capturedAt),

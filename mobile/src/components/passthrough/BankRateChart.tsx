@@ -64,7 +64,7 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap, a
     () => pointCount <= SYNCHRONOUS_CHART_POINTS ? buildChartPaths(model) : null,
     [model, pointCount],
   );
-  const [deferredPaths, setDeferredPaths] = useState<ChartPaths | null>(null);
+  const [deferredPaths, setDeferredPaths] = useState<{ model: BankRateChartModel; paths: ChartPaths } | null>(null);
   useEffect(() => {
     if (pointCount <= SYNCHRONOUS_CHART_POINTS) {
       setDeferredPaths(null);
@@ -82,11 +82,12 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap, a
           lines: model.lines.slice(offset, offset + banksPerSlice),
         }));
       }
-      if (!cancelled) setDeferredPaths(built);
+      if (!cancelled) setDeferredPaths({ model, paths: built });
     })();
     return () => { cancelled = true; };
   }, [model, pointCount]);
-  const paths = synchronousPaths ?? deferredPaths;
+  const paths = synchronousPaths ?? (deferredPaths?.model === model ? deferredPaths.paths : null);
+  const selectedPath = paths?.[index];
   // Only the selected bank draws all observation markers. Keep coordinates for
   // other banks so selection never rescans history, without formatting and
   // retaining a large unused marker string for every bank during navigation.
@@ -138,7 +139,7 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap, a
           <ChartText x={x(decision.date)} y={H - B + 12} textAnchor="middle" fontSize={9} fill={theme.colors.textMuted}>{uiLabel(decision.outcome === 'hike' ? '↑' : decision.outcome === 'cut' ? '↓' : '·')}</ChartText>
         </React.Fragment>)}
         {background}
-        <Path testID="bank-rate-selected-line" d={paths[index].path} fill="none" stroke={theme.colors.primary} strokeWidth={2.6} />
+        {selectedPath ? <Path testID="bank-rate-selected-line" d={selectedPath.path} fill="none" stroke={theme.colors.primary} strokeWidth={2.6} /> : null}
         <Path testID="bank-rate-selected-observations" d={selectedMarkers} fill={theme.colors.primary} />
         <ChartText x={L} y={H - 5} fontSize={10} fill={theme.colors.textMuted}>{uiChartDate(model.dates[0])}</ChartText>
         {model.dates.length > 1 ? <ChartText x={W - R} y={H - 5} textAnchor="end" fontSize={10} fill={theme.colors.textMuted}>{uiChartDate(model.dates.at(-1))}</ChartText> : null}
