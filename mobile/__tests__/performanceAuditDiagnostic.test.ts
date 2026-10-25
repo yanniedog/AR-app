@@ -38,9 +38,11 @@ test('all fixed production role identifiers survive deidentified diagnostic seri
 test.each(['path', 'data', 'readiness', 'back', 'recovery', 'origin-readiness'])('the %s failure stage is retained verbatim', stage => {
   expect(publicAuditDiagnostic({ stage })).toEqual({ stage });
 });
-test('retains safe source locations and error types without raw messages, paths, URL or identity', () => {
+test('retains safe source locations, error type and a deidentified message without paths, URL or identity', () => {
   expect(publicAuditError('TypeError: account 123456\n at calculate (/private/account.js:12:34)',
-    'model@https://private.example/app.js:1:567')).toEqual({ present: true, type: 'TypeError', frames: [['frame', 12, 34], ['frame', 1, 567]] });
+    'model@https://private.example/app.js:1:567')).toEqual({
+    present: true, type: 'TypeError', message: 'account [REDACTED]', frames: [['frame', 12, 34], ['frame', 1, 567]],
+  });
   const body = JSON.stringify(publicAuditDiagnostic({ stage: 'pre-action', readiness: { surfaces: [{ id: 'private-account', secret: 'token' }] }, raw: 'password' }));
   expect(body).not.toMatch(/private|secret|token|password/);
 });

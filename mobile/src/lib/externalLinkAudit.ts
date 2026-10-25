@@ -3,10 +3,15 @@ import { Linking } from 'react-native';
 import { StandardUrl } from './standardUrl';
 import { trustedExternalUrl, type TrustedExternalUrlPurpose, type TrustedExternalUrlRequest } from './trustedExternalUrl';
 
+/** Selected facets are in this run's bounded sample. Not-selected facets were
+ * inventoried and intentionally left out of that sample. */
+export type ExternalLinkSelection = 'selected' | 'not-selected';
+
 export interface ExternalLinkAuditCheck {
   status: 'pass' | 'fail' | 'unknown';
   detail: string;
   attempted: boolean;
+  selection?: ExternalLinkSelection;
 }
 
 export interface ExternalLinkAuditResult {
@@ -32,7 +37,17 @@ export interface ExternalLinkAuditOptions {
   fetch?: typeof globalThis.fetch;
 }
 
-const check = (status: ExternalLinkAuditCheck['status'], detail: string, attempted = true): ExternalLinkAuditCheck => ({ status, detail, attempted });
+const check = (
+  status: ExternalLinkAuditCheck['status'],
+  detail: string,
+  attempted = true,
+  selection?: ExternalLinkSelection,
+): ExternalLinkAuditCheck => ({
+  status,
+  detail,
+  attempted,
+  ...(selection ? { selection } : attempted ? { selection: 'selected' as const } : {}),
+});
 
 /** A race is necessary because some native APIs do not settle after abort. */
 async function bounded<T>(action: (signal: AbortSignal) => Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {
@@ -75,8 +90,8 @@ export async function auditExternalLink(
     host: null,
     path: null,
     validation: check('unknown', 'Destination validation has not completed.', false),
-    handler: check('unknown', 'Browser handling was not checked.', false),
-    reachability: check('unknown', options.reachability ? 'The website has not been checked.' : 'HTTP reachability was not tested in this audit mode or within its time budget.', false),
+    handler: check('unknown', 'Browser handling was not checked.', false, options.handler === false ? 'not-selected' : 'selected'),
+    reachability: check('unknown', options.reachability ? 'The website has not been checked.' : 'HTTP reachability was not tested in this audit mode or within its time budget.', false, options.reachability ? 'selected' : 'not-selected'),
     httpStatus: null,
   };
   let trusted: ReturnType<typeof trustedExternalUrl>;
@@ -97,13 +112,13 @@ export async function auditExternalLink(
   const timeoutMs = Math.min(15_000, Math.max(1, options.timeoutMs ?? 5_000));
   const handler = options.handler === false
     ? Promise.resolve().then(() => {
-      result.handler = check('unknown', 'The installed browser handler was not checked within the audit time budget.', false);
+      result.handler = check('unknown', 'The installed browser handler was not checked within the audit time budget.', false, 'not-selected');
     })
     : options.platform === 'web'
     ? Promise.resolve().then(() => {
       // RN-web's canOpenURL unconditionally returns true; it is not evidence
       // that a browser will allow a popup or an external application.
-      result.handler = check('unknown', 'Browser handling requires an explicit user tap on web.', false);
+      result.handler = check('unknown', 'Browser handling requires an explicit user tap on web.', false, 'not-selected');
     })
     : bounded(() => (options.canOpenUrl ?? ((url: string) => Linking.canOpenURL(url)))(trusted.url), timeoutMs, options.signal)
       .then((available) => {
@@ -111,7 +126,12 @@ export async function auditExternalLink(
           ? check('pass', 'The operating system reports an installed handler for this destination.')
           : check('fail', 'The operating system could not find a handler for this destination.');
       })
-      .catch(() => { result.handler = check('unknown', 'The installed browser handler could not be verified.'); });
+      .catch((error: unknown) => {
+        const cancelled = error instanceof Error && error.message === 'cancelled';
+        // Cancellation never started a resolution. A timeout or platform error
+        // did, and an unknown result is not a missing-handler defect.
+        result.handler = check('unknown', 'The installed browser handler could not be verified.', !cancelled, 'selected');
+      });
   const network = !options.reachability
     ? Promise.resolve()
     : bounded((signal) => (options.fetch ?? globalThis.fetch)(trusted.url, {
@@ -149,7 +169,7 @@ export async function auditExternalLink(
           result.reachability = check('unknown', `HTTP ${response.status}: reachability was not confirmed.`);
         }
       })
-      .catch(() => { result.reachability = check('unknown', 'HTTP reachability could not be verified (offline, blocked, cancelled or timed out).'); });
+      .catch(() => { result.reachability = check('unknown', 'HTTP reachability could not be verified (offline, blocked, cancelled or timed out).', true, 'selected'); });
   await Promise.all([handler, network]);
   return result;
 }

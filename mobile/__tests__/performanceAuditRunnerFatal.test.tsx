@@ -25,7 +25,9 @@ jest.mock('../src/lib/debugLogSharing', () => ({
   isDebugLogUploadBusy: () => false, subscribeDebugLogUpload: () => () => {}, startDebugLogUpload: jest.fn(),
 }));
 jest.mock('../src/lib/debugLog', () => ({
-  debugLog: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), storePerformanceAudit: jest.fn(async () => {}), flushToFile: jest.fn(async () => {}) },
+  debugLog: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), getEntries: () => [], getCursor: () => 0,
+    storePerformanceAudit: jest.fn(async () => {}), flushToFile: jest.fn(async () => {}) },
+  subscribeApplicationJournal: () => () => {},
   getDebugLogFlushDiagnostics: () => ({ stage: 'idle', stageMs: 0, activeMs: 0, lastFlushMs: 0, lastFailedStage: null,
     nativeAppendAvailable: false, appendAttempts: 0, appendBytes: 0, rewriteAttempts: 0, rewriteBytes: 0, fileBytes: 0, queuedLines: 0 }),
 }));

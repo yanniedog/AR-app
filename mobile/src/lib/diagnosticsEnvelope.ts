@@ -2,8 +2,9 @@ import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { toPublicAppHealthReport } from './appHealth';
 import { PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from './performanceAuditSetup';
 import { encodeCompressedDiagnosticJson, MAX_COMPRESSED_DIAGNOSTIC_BYTES } from './compactDiagnosticJson';
-import { publicAuditDiagnostic, publicAuditError } from './performanceAuditDiagnostic';
+import { publicAuditDiagnostic, publicAuditError, publicAuditFailureReason, publicHealthFailureReason, stallTimeoutFields } from './performanceAuditDiagnostic';
 import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
+import { auditApplicationJournal } from './auditApplicationJournal';
 import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
 import { measureAuditEvidence } from './auditEvidenceCapacity';
 
@@ -143,12 +144,14 @@ function safeDuration(check: AuditCheck): number | null {
 
 /**
  * Build the only performance-audit shape allowed to leave the device.
- * It includes validated audit timestamps and a hashed audit reference, excluding raw session IDs, model/manufacturer,
- * viewport, memory, routes, product keys, messages, traces and raw log text.
+ * It includes validated audit timestamps, the configured stall timeout, and a deidentified failure reason for each failed check.
+ * Secrets, account numbers, tokens, routes and the general application journal stay out of this share shape.
  */
 export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport) {
   measureAuditEvidence(report);
   const completion = buildPerformanceAuditCompletion(report, safeCheckId);
+  const stallTimeout = stallTimeoutFields(report.watchdog.hangTimeoutMs);
+  const appHealth = report.appHealth && completion.gaps.invalidHealthReports === 0 ? toPublicAppHealthReport(report.appHealth) : null;
   return {
     schemaVersion: 1,
     kind: 'performance-audit',
@@ -185,11 +188,12 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
       maxEventLoopLagMs: report.summary.maxEventLoopLagMs,
       maxFrameGapMs: report.summary.maxFrameGapMs,
     },
+    stallTimeout,
     diagnostics: {
       schemaVersion: 1,
       durationMs: report.durationMs,
       wallClockMs: report.wallClockMs ?? null,
-      watchdog: { hangTimeoutMs: report.watchdog.hangTimeoutMs, storedCheckCount: report.watchdog.storedCheckCount },
+      watchdog: { hangTimeoutMs: stallTimeout.stallTimeoutMs, ...stallTimeout, storedCheckCount: report.watchdog.storedCheckCount },
       plannedChecks: report.coverage?.plannedChecks ?? report.checks.length,
       storedChecks: report.checks.length,
       readinessCapturedChecks: report.checks.filter(check => check.diagnostic?.readiness != null).length,
@@ -203,9 +207,83 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
       metrics: allowlistedMetrics(check),
       diagnostic: publicAuditDiagnostic(check.diagnostic),
       error: publicAuditError(check.error, check.trace),
+      ...(check.status === 'fail' ? { failureReason: publicAuditFailureReason(check, report.watchdog.hangTimeoutMs) } : {}),
     })),
-    appHealth: report.appHealth && completion.gaps.invalidHealthReports === 0 ? toPublicAppHealthReport(report.appHealth) : null,
+    appHealth: appHealth && {
+      ...appHealth,
+      checks: appHealth.checks.map(check => {
+        const failureReason = publicHealthFailureReason(check);
+        return failureReason ? { ...check, failureReason } : check;
+      }),
+    },
   };
+}
+
+function isFrameTuple(value: unknown): value is [string, number, number] {
+  return Array.isArray(value) && value.length === 3 && value[0] === 'frame'
+    && typeof value[1] === 'number' && typeof value[2] === 'number';
+}
+
+/** Drop duplicate line:column frames. Failure reasons and both log sections stay intact. */
+export function collapseRepeatedFrames(value: unknown): { value: unknown; removed: number } {
+  let removed = 0;
+  const visit = (item: unknown, key = ''): unknown => {
+    if (Array.isArray(item)) {
+      if (key === 'frames' && item.length > 1 && item.every(isFrameTuple)) {
+        const seen = new Set<string>();
+        const next: [string, number, number][] = [];
+        for (const frame of item) {
+          const id = `${frame[1]}:${frame[2]}`;
+          if (seen.has(id)) { removed += 1; continue; }
+          seen.add(id);
+          next.push(frame);
+        }
+        return next;
+      }
+      return item.map(child => visit(child));
+    }
+    if (!item || typeof item !== 'object') return item;
+    return Object.fromEntries(Object.entries(item).map(([name, child]) => [name, visit(child, name)]));
+  };
+  return { value: visit(value), removed };
+}
+
+function auditUploadBytes(body: string): number {
+  return new TextEncoder().encode(body).length;
+}
+
+function encodedWithinBudget(value: Record<string, unknown>, header: Record<string, unknown>, maxBytes: number): string | null {
+  try {
+    const body = encodeCompressedDiagnosticJson(value, header);
+    return auditUploadBytes(body) > maxBytes ? null : body;
+  } catch (error) {
+    if (error instanceof Error && /exceeds the (?:decoded audit budget|public upload limit)/.test(error.message)) return null;
+    throw error;
+  }
+}
+
+/** Gzip the hosted report. If the compressed body exceeds the budget, drop only repeated frames. */
+export function encodeHostedPerformanceAudit(
+  value: Record<string, unknown>,
+  header: Record<string, unknown>,
+  maxCompressedBytes = MAX_COMPRESSED_DIAGNOSTIC_BYTES,
+): string {
+  const encoded = encodedWithinBudget(value, header, maxCompressedBytes);
+  if (encoded) return encoded;
+  const collapsed = collapseRepeatedFrames(value);
+  if (collapsed.removed === 0 || !collapsed.value || typeof collapsed.value !== 'object' || Array.isArray(collapsed.value)) {
+    throw new Error('The deidentified report exceeds the public upload limit.');
+  }
+  const trimmed = {
+    ...(collapsed.value as Record<string, unknown>),
+    truncation: {
+      repeatedFramesRemoved: collapsed.removed,
+      preserved: ['failureReason', 'applicationJournal.beforeAudit', 'applicationJournal.duringAndAfterAudit'],
+    },
+  };
+  const retry = encodedWithinBudget(trimmed, header, maxCompressedBytes);
+  if (!retry) throw new Error('The deidentified report exceeds the public upload limit.');
+  return retry;
 }
 
 /** Build the complete, bounded text offered to the OS share sheet. */
@@ -233,19 +311,23 @@ export function createDeidentifiedDiagnosticsShare(
 export function createPublicPerformanceAuditReport(report: PerformanceAuditReport): string {
   const publicReport = buildDeidentifiedPerformanceAudit(report);
   const completion = publicReport.completion;
-  // Keep the run identity and result readable at the top of the hosted file;
-  // Gzip retains every field and occurrence; its digest and byte length verify
-  // the complete decoded evidence independently of the exact upload read-back.
-  const body = encodeCompressedDiagnosticJson({ ...publicReport, diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId) },
-    { audit: { auditId: completion.auditId, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
+  const stallTimeout = stallTimeoutFields(report.watchdog.hangTimeoutMs);
+  // Keep the run identity and result readable at the top of the hosted file.
+  // Gzip retains every field. Compression runs before the paste host sees the body.
+  return encodeHostedPerformanceAudit({
+    ...publicReport,
+    completion: {
+      ...completion,
+      privacyBoundary: { ...completion.privacyBoundary, generalApplicationJournal: 'included-deidentified' as const },
+    },
+    applicationJournal: auditApplicationJournal(report.startedAt, report.finishedAt),
+    diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId),
+  }, { audit: { auditId: completion.auditId, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
     finishedAt: completion.finishedAt,
     outcome: completion.outcome, collectionComplete: completion.collectionComplete,
     coverageComplete: completion.coverageComplete, detailsComplete: completion.detailsComplete,
     performanceCheckCount: completion.performanceCheckCount, healthCheckCount: completion.healthCheckCount,
     failureCount: completion.failurePositions.length,
-    timingFailureCount: completion.failurePositions.filter(failure => failure.category === 'timing').length } });
-  if (new TextEncoder().encode(body).length > MAX_COMPRESSED_DIAGNOSTIC_BYTES) {
-    throw new Error('The deidentified report exceeds the public upload limit.');
-  }
-  return body;
+    timingFailureCount: completion.failurePositions.filter(failure => failure.category === 'timing').length,
+    stallTimeoutMs: stallTimeout.stallTimeoutMs, stallTimeoutSeconds: stallTimeout.stallTimeoutSeconds } });
 }

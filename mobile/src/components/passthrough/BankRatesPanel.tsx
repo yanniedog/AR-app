@@ -73,7 +73,14 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
     };
   }, [chartRevision, core, failed, gapUnavailable, graphic, model, renderedEmptyRevision, updating]);
   const recordGraphic = useCallback((evidence: ChartRenderEvidence) => {
-    setGraphic(evidence);
+    setGraphic(current => current
+      && current.revision === evidence.revision
+      && current.pointCount === evidence.pointCount
+      && current.expectedCount === evidence.expectedCount
+      && current.layoutMeasured === evidence.layoutMeasured
+      && current.accessibleSummary === evidence.accessibleSummary
+      && current.emptyStateRendered === evidence.emptyStateRendered
+      ? current : evidence);
     onChartReady?.(evidence.layoutMeasured && evidence.pointCount > 0 && evidence.pointCount === evidence.expectedCount);
   }, [onChartReady]);
   useEffect(() => { onAuditStateChange?.(auditState); }, [auditState, onAuditStateChange]);

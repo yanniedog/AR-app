@@ -157,11 +157,13 @@ export function preloadedPassiveLink(request: TrustedExternalUrlRequest, appBuil
   return { checkedAt: entry[1], durationMs: entry[2], result: {
     label: request.label, purpose: request.purpose, host: trusted.host, path: new StandardUrl(trusted.url).pathname,
     validation: { status: 'pass', attempted: true, detail: 'Approved, credential-free HTTPS destination.' },
-    handler: { status: entry[0], attempted: entry[3] === true, detail: entry[0] === 'pass'
+    handler: { status: entry[0], attempted: entry[3] === true,
+      selection: entry[3] === true ? 'selected' as const : 'not-selected' as const,
+      detail: entry[0] === 'pass'
       ? 'The operating system reported an installed handler for this destination during passive preloading.'
       : entry[0] === 'fail' ? 'The operating system could not find a handler for this destination.'
       : 'The installed browser handler could not be verified during passive preloading.' },
-    reachability: { status: 'unknown', attempted: false, detail: 'HTTP reachability is not tested by passive background checks.' },
+    reachability: { status: 'unknown', attempted: false, selection: 'not-selected', detail: 'HTTP reachability is not tested by passive background checks.' },
     httpStatus: null,
   } };
 }

@@ -3,6 +3,7 @@ import {
   buildAggregateRibbonFromHistory,
   chartModelFromBankInsights,
   selectBankHistoryChartModel,
+  selectBankHistoryChartModelCooperatively,
   shouldEnsurePrebuiltBankHistory,
 } from '../src/data/historySelectors';
 import type { BankInsightsPayload } from '../src/data/bankInsights';
@@ -202,5 +203,16 @@ describe('historySelectors', () => {
     expect(model?.dates).toEqual(['2026-08-04', normalized.core.run_date]);
     expect(model?.points[0].min).toBeCloseTo(0.04, 8);
     expect(model?.points[1].max).toBeCloseTo(0.043, 8);
+  });
+
+  it('cooperative ribbon matches the sync model and yields through the section scan', async () => {
+    let yields = 0;
+    let clock = 0;
+    const control = { yieldControl: async () => { yields += 1; }, now: () => (clock += 10) };
+    const cooperative = await selectBankHistoryChartModelCooperatively(
+      { core: sample, includeNonStandard: true }, 'Mortgage', 'All', control,
+    );
+    expect(cooperative).toEqual(selectBankHistoryChartModel({ core: sample, includeNonStandard: true }, 'Mortgage', 'All'));
+    expect(yields).toBeGreaterThan(0);
   });
 });

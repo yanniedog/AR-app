@@ -31,7 +31,7 @@ import { runStoreRetry } from '../src/lib/degradationLog';
 import { openBrowse, scalarRouteParam } from '../src/lib/nav';
 import { auditActionString } from '../src/lib/performanceAuditActionParams';
 import { effectiveBankInsights, effectiveHistoryRibbon } from '../src/lib/proAccess';
-import { yieldToPaintFrames } from '../src/lib/yieldToUi';
+import { yieldToPaintFrames, yieldToUi } from '../src/lib/yieldToUi';
 import { useTheme } from '../src/theme/ThemeProvider';
 import type { HistoryWindow } from '../src/types';
 
@@ -76,6 +76,7 @@ export default function Market() {
   const [rbaOpen, setRbaOpen] = useState(focus === 'rba');
   const [economyOpen, setEconomyOpen] = useState(false);
   const [historyReady, setHistoryReady] = useState(false);
+  const [insightsPainted, setInsightsPainted] = useState(false);
   const [retryingHistory, setRetryingHistory] = useState(false);
   const [explorerMode, setExplorerMode] = useState<HistoryViewMode>('edge');
   const [explorerWindow, setExplorerWindow] = useState<HistoryWindow>('90D');
@@ -117,8 +118,9 @@ export default function Market() {
     if (prebuiltHistoryEnabled) void ensureHistoryBanks();
   }, [contentReady, core, ensureBankInsights, ensureHistoryBanks, ensureRbaCalendar, isFocused, prebuiltHistoryEnabled, showBankInsights]);
 
+  const historyInputsReady = !prebuiltHistoryEnabled || historyBanks != null || historyBanksError != null;
   useEffect(() => {
-    if (!isFocused || !contentReady || !core?.run_date) return;
+    if (!isFocused || !contentReady || !core?.run_date || !historyInputsReady) return;
     let active = true;
     setHistoryReady(false);
     void (async () => {
@@ -126,7 +128,16 @@ export default function Market() {
       if (active) setHistoryReady(true);
     })();
     return () => { active = false; };
-  }, [contentReady, core?.run_date, isFocused]);
+  }, [contentReady, core?.run_date, historyInputsReady, isFocused]);
+  useEffect(() => {
+    if (!isFocused || !contentReady || !bankInsights) return;
+    let active = true;
+    void (async () => {
+      await yieldToUi(0);
+      if (active) setInsightsPainted(true);
+    })();
+    return () => { active = false; };
+  }, [bankInsights, contentReady, isFocused]);
 
   useEffect(() => {
     if (isFocused && contentReady && historyOpen && explorerMode === 'pulse') void ensureProductHistory();
@@ -170,10 +181,10 @@ export default function Market() {
   }, []);
 
   const explorerInsights = useMemo(() => {
-    if (!contentReady) return null;
+    if (!contentReady || !insightsPainted) return null;
     void suitabilityRevision;
     return filterBankInsightsForSuitability(bankInsights, core, includeNonStandard, detailsProducts, suitabilityRevision, coreIntegrity);
-  }, [bankInsights, contentReady, core, coreIntegrity, detailsProducts, includeNonStandard, suitabilityRevision]);
+  }, [bankInsights, contentReady, core, coreIntegrity, detailsProducts, includeNonStandard, insightsPainted, suitabilityRevision]);
 
   const historyModel = useMemo(() => {
     void suitabilityRevision;

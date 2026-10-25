@@ -30,6 +30,20 @@ jest.mock('expo-file-system/legacy', () => ({ documentDirectory: 'file://test/',
 
 afterEach(() => jest.restoreAllMocks());
 
+test('an unfinished journey and a settle-only miss stay failures', () => {
+  const journey = (metrics: Record<string, unknown>) => ({
+    id: 'journey-rates-cold', label: 'Rates', kind: 'journey' as const, status: 'fail' as const, durationMs: 835, metrics,
+  });
+  expect(auditOutcome(journey({ actionCompleted: false, nonTimingFailure: false }))).toBe('failure');
+  expect(auditOutcome(journey({
+    actionCompleted: false, stepLimitExceeded: true, nonTimingFailure: false, backgroundSettleMs: 8_444,
+  }))).toBe('failure');
+  expect(auditOutcome(journey({
+    actionCompleted: true, nonTimingFailure: false, actionMs: 444, forwardMs: 700, backgroundSettleMs: 5_004,
+    measurementMode: 'semantic-action',
+  }))).toBe('failure');
+});
+
 test('actual storage producers distinguish slow completed measurements from validation/runtime errors', async () => {
   const monitor = new ResponsivenessMonitor();
   jest.spyOn(monitor, 'metricsSince').mockReturnValue({ eventLoopSamples: 1, eventLoopP95Ms: 400, maxEventLoopLagMs: 400, stallsOver100Ms: 1,

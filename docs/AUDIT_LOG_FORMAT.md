@@ -7,12 +7,23 @@ watchdog context and captured readiness evidence. Private inputs, identities,
 routes and credentials are replaced with stable aliases or redaction markers;
 all arbitrary runtime strings default to aliases, including errors and traces.
 Structured error types and anonymous source-coordinate tuples remain readable.
-Local-only network violation records remain local. The application journal and
-private input values are not needed to reconstruct the audit's check results.
+Local-only network violation records remain local. Private input values stay
+opaque. The hosted report also includes the general application journal in two
+sections, `applicationJournal.beforeAudit` and
+`applicationJournal.duringAndAfterAudit`, each with `capturedAt`, `entries` and
+`entryCount`. Entries keep their original order and timestamps. Messages are
+deidentified: secrets, tokens, account numbers, email addresses, URLs and paths
+become `[REDACTED]`. Lines are not dropped to fit the upload; a ring-buffer line
+captured at audit start stays in the before section even if the live buffer
+later rotates.
 
 Each hosted file starts with a readable `audit` header containing the audit's
 hashed reference, app version/build, UTC finish timestamp, outcome, check counts and failure count
-(including a separate timing-failure count). The decoded report's `completion`
+(including a separate timing-failure count), plus `stallTimeoutMs` and
+`stallTimeoutSeconds`. Those stall-timeout fields are also first-class on the
+decoded report as `stallTimeout` and on `diagnostics.watchdog`, including when
+no stall occurred. `hangTimeoutMs` remains the same configured period in
+milliseconds. The decoded report's `completion`
 contains the same identity and timestamp plus every failure's one-based result
 position, source (`performance` or `health`), fixed check identity, diagnostic
 stage and timing/functional classification. Positions are relative to each
@@ -52,18 +63,32 @@ rejects oversized input before creating encoded copies. A successful full report
 therefore retains all of its evidence within these resource limits.
 
 This is the complete retained application audit within its stated privacy and
-instrumentation boundary. It does not claim native CPU/GPU profiler coverage,
-include the general application journal, or publish raw private strings. The
-`privacyBoundary` records these limits. Missing evidence and incomplete coverage
-remain explicit; a verified upload proves byte integrity, not successful checks.
+instrumentation boundary. It does not claim native CPU/GPU profiler coverage or
+publish raw private strings. The hosted report includes the deidentified
+general application journal. `privacyBoundary.generalApplicationJournal` is
+`included-deidentified` on that hosted report. The narrower operating-system
+share omits the journal. Missing evidence and incomplete coverage remain
+explicit; a verified upload proves byte integrity, not successful checks.
+
+Every failed performance check carries `failureReason`. A timeout says it timed
+out and names the limit that fired (`step limit of <ms>ms` or
+`stall timeout of <ms>ms (<seconds>s)`). Any other failure states the stage,
+whether the action completed, the error type, the deidentified message when one
+exists, and the latency limit a measured value exceeded. Frame indexes stay on
+`error.frames` and do not replace that reason. Failed health checks carry the
+same `failureReason` field, naming the check code and the failing public counts.
 
 New uploads use `ar-audit-gzip-v1`. The readable `audit` header precedes a
 `gzip_base64` archive containing the full deidentified UTF-8 JSON report. `bytes`
 declares the decoded byte length and `sha256` verifies every decoded byte before
 the decoder returns evidence. Audit archives reject decoded lengths above 32 MiB
 and complete UTF-8 envelopes above 2 MiB before invoking the shared decoder or
-allocating its declared output buffer. Encoding enforces the same limits and
-never shortens evidence to fit. Historical catalogues retain their separate
+allocating its declared output buffer. Encoding enforces the same limits. The paste body is the `ar-audit-gzip-v1`
+envelope, not raw JSON. If that compressed envelope would exceed 2 MiB, repeated
+identical stack frames are removed and `truncation.repeatedFramesRemoved`
+records how many. `truncation.preserved` lists `failureReason` and both journal
+sections, which are not shortened to fit. A report that still exceeds the budget
+is rejected. Historical catalogues retain their separate
 128 MiB capacity. Gzip uses a fixed timestamp so retries and
 restored reports have the same content hash and reuse their saved upload receipt.
 Compression happens after deidentification; compressed private text is never a

@@ -30,6 +30,52 @@ export function describeAuditBackgroundWork(wait: AuditBackgroundWorkWait): stri
     (wait.payloadWork.activeWork.length ? `${wait.payloadWork.activeWork.join(', ')} (stage unavailable)` : 'Work settled')}`;
 }
 
+export type JourneyBackgroundRequirementState = 'pending' | 'ready' | 'failed';
+
+/**
+ * A destination that has not claimed its load yet is still pending.
+ * Failure is an explicit finished load that does not match, not the first look.
+ */
+export function journeyDetailsRequirementState(input: {
+  loading: boolean;
+  matches: boolean;
+  claimed: boolean;
+}): JourneyBackgroundRequirementState {
+  if (!input.loading && input.matches) return 'ready';
+  if (input.loading) return 'pending';
+  return input.claimed ? 'failed' : 'pending';
+}
+
+export type JourneyBackgroundObservation = 'continue' | 'settled' | 'unsettled' | 'failed';
+
+/**
+ * A settle deadline records unsettled background work. It does not fail the journey.
+ * Requirements that never claim their load stop after the claim window.
+ */
+export function classifyJourneyBackgroundObservation(input: {
+  states: readonly JourneyBackgroundRequirementState[];
+  elapsedMs: number;
+  deadlineMs: number;
+  /** True when every still-pending requirement has not claimed its load. */
+  unclaimedPending?: boolean;
+  claimWindowMs?: number;
+}): JourneyBackgroundObservation {
+  if (input.states.includes('failed')) return 'failed';
+  if (input.states.length > 0 && input.states.every((state) => state === 'ready')) return 'settled';
+  const claimWindowMs = input.claimWindowMs ?? 1_000;
+  if (input.unclaimedPending && input.elapsedMs >= claimWindowMs) return 'unsettled';
+  if (input.elapsedMs >= input.deadlineMs) return 'unsettled';
+  return 'continue';
+}
+
+/** Explicit product-data failure. A quiet timeout is not one of these. */
+export class JourneyBackgroundDataError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'JourneyBackgroundDataError';
+  }
+}
+
 /** Observe setup independently of executed-check coverage and the hang watchdog.
  * Finally captures the exact interruption-time worker state before recovery. */
 export async function waitForAuditBackgroundWork(options: {

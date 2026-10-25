@@ -46,17 +46,18 @@ import {
 import { ScreenScrollView } from '../../src/components/Screen';
 import { AppText, Button, Card, IconButton, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
-import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
+import { filterBankInsightsForSuitability, filterBankInsightsForSuitabilityCooperatively } from '../../src/data/bankInsights';
 import { uiDate, uiJoin, uiLabel, uiProductName, uiProviderName, uiSectionName } from '../../src/lib/uiCopy';
 import { selectedTargetConstraint, targetConstraintContradicted } from '../../src/lib/selectedTargetConstraints';
 import { uiTargetConstraint } from '../../src/lib/financialUiCopy';
 import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
 import { normalizedProductFacts } from '../../src/data/productFacts';
 import { verifiedDetailsSha } from '../../src/data/detailsIdentity';
-import { eligiblePublicProductKeys } from '../../src/data/publicProductEligibility';
+import { isPublicProductEligible } from '../../src/data/publicProductEligibility';
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
 import { sortRows, findEligibleByKey } from '../../src/data/selectors';
-import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
+import { rowsForProductKey } from '../../src/data/rateRowIndex';
+import { selectBankHistoryChartModel, selectBankHistoryChartModelCooperatively } from '../../src/data/historySelectors';
 import { mergeProductHistoryTimeline, rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
 import {
   countFiniteSeriesPoints,
@@ -83,7 +84,7 @@ import {
   effectiveBankInsights,
   effectiveHistoryRibbon,
 } from '../../src/lib/proAccess';
-import { yieldToUi } from '../../src/lib/yieldToUi';
+import { yieldToPaintFrames, yieldToUi } from '../../src/lib/yieldToUi';
 import {
   auditActionString,
 } from '../../src/lib/performanceAuditActionParams';
@@ -104,6 +105,8 @@ import {
 const HEADER_BACK_RESERVE = 72;
 /** Below this width the labelled Menu button leaves too little room for the title. */
 const COMPACT_HEADER_WIDTH = 400;
+/** Above this, insight filtering and ribbon assembly leave the opening frames. */
+const HEAVY_OPEN_ROW_LIMIT = 400;
 
 const MemoProductSpecs = React.memo(ProductSpecs);
 const MemoProductFacts = React.memo(ProductFacts);
@@ -155,10 +158,7 @@ export default function ProductDetail() {
       );
       if (!offers.length) return fromCore;
       const section = publicProduct.section;
-      const sectionRates = core.sections[section].rates;
-      const otherRates = sectionRates.filter((row) => row.product_key !== productKey);
-      const coreProductRates = sectionRates
-        .filter((row) => row.product_key === productKey)
+      const coreProductRates = rowsForProductKey(core.sections[section].rates, productKey)
         .map((row) => bindCurrentPublicRow(row, publicCatalogue));
       const seen = new Set<string>();
       const mergedProductRates = [...coreProductRates, ...offers].filter((row) => {
@@ -168,12 +168,14 @@ export default function ProductDetail() {
         seen.add(dedupeKey);
         return true;
       });
+      // Lookup only this product. Copying the rest of the section rebuilt a
+      // full-catalogue index on every product open.
       return findEligibleByKey(
         {
           ...core.sections,
           [section]: {
             ...core.sections[section],
-            rates: [...otherRates, ...mergedProductRates],
+            rates: mergedProductRates,
           },
         },
         productKey,
@@ -344,9 +346,51 @@ export default function ProductDetail() {
     ? scenario.currentProducts.mortgage.provider
     : 'Current bank';
 
+  const heavyHistory = (core?.sections.Mortgage.rates.length ?? 0) > HEAVY_OPEN_ROW_LIMIT
+    || (core?.sections.Savings.rates.length ?? 0) > HEAVY_OPEN_ROW_LIMIT
+    || (core?.sections.TD.rates.length ?? 0) > HEAVY_OPEN_ROW_LIMIT
+    || publicCatalogue.products.length > HEAVY_OPEN_ROW_LIMIT;
+  const [deferredHistory, setDeferredHistory] = useState<{
+    insights: ReturnType<typeof filterBankInsightsForSuitability>;
+    market: ReturnType<typeof selectBankHistoryChartModel>;
+  } | null>(null);
+  useEffect(() => {
+    if (!heavyHistory || !historySurfaceReady || !historyEnabled || !core || !found || rateHistory.failed || rateHistory.updating) {
+      setDeferredHistory(null);
+      return;
+    }
+    let cancelled = false;
+    setDeferredHistory(null);
+    const control = { cancelled: () => cancelled, yieldControl: () => yieldToUi(0) };
+    void (async () => {
+      await yieldToPaintFrames(2);
+      if (cancelled) return;
+      const insights = rateHistory.historyAvailable || rateHistory.richHistory
+        ? null
+        : await filterBankInsightsForSuitabilityCooperatively(
+          bankInsights, core, includeNonStandard, detailsProducts, suitabilityRevision, coreIntegrity, control,
+        );
+      if (cancelled) return;
+      const market = rateHistory.historyAvailable
+        ? rateHistoryChartModel(rateHistory.snapshots, found.section)
+        : rateHistory.richHistory
+          ? null
+          : await selectBankHistoryChartModelCooperatively({
+            core, coreIntegrity, historyBanks, bankInsights: insights, includeNonStandard, detailsProducts,
+          }, found.section, 'All', control);
+      if (!cancelled) setDeferredHistory({ insights, market });
+    })();
+    return () => { cancelled = true; };
+  }, [
+    bankInsights, core, coreIntegrity, detailsProducts, found, heavyHistory, historyBanks, historyEnabled,
+    historySurfaceReady, includeNonStandard, suitabilityRevision, rateHistory.failed, rateHistory.historyAvailable,
+    rateHistory.richHistory, rateHistory.snapshots, rateHistory.updating,
+  ]);
+
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
     if (!historySurfaceReady) return null;
+    if (heavyHistory) return deferredHistory?.insights ?? null;
     return filterBankInsightsForSuitability(
       bankInsights,
       core,
@@ -359,7 +403,9 @@ export default function ProductDetail() {
     bankInsights,
     core,
     coreIntegrity,
+    deferredHistory,
     detailsProducts,
+    heavyHistory,
     historySurfaceReady,
     includeNonStandard,
     suitabilityRevision,
@@ -369,6 +415,7 @@ export default function ProductDetail() {
     void suitabilityRevision;
     if (!historySurfaceReady || !historyEnabled || !core || !found) return null;
     if (rateHistory.updating || rateHistory.failed) return null;
+    if (heavyHistory) return deferredHistory?.market ?? null;
     const detailed = rateHistory.historyAvailable ? rateHistoryChartModel(rateHistory.snapshots, found.section) : null;
     if (rateHistory.historyAvailable || rateHistory.richHistory) return detailed;
     return selectBankHistoryChartModel(
@@ -386,9 +433,11 @@ export default function ProductDetail() {
   }, [
     core,
     coreIntegrity,
+    deferredHistory,
     detailsProducts,
     explorerInsights,
     found,
+    heavyHistory,
     historyBanks,
     historyEnabled,
     historySurfaceReady,
@@ -434,6 +483,8 @@ export default function ProductDetail() {
     !explorerInsights &&
     !bankInsightsError &&
     (!historyModel || historyModel.dates.length < 2);
+  const historyPreparing = heavyHistory && historySurfaceReady && historyEnabled && !!found
+    && !deferredHistory && !rateHistory.failed;
   const historyContentRevision = [
     rateHistory.revision,
     ledgerRevision.current.version,
@@ -564,7 +615,7 @@ export default function ProductDetail() {
           ? 'ready'
           : rateHistory.failed
             ? 'error'
-            : historyWaitingForInsights || rateHistory.updating
+            : historyPreparing || historyWaitingForInsights || rateHistory.updating
               ? 'pending'
               : !historyModel
                 ? 'ready'
@@ -600,8 +651,9 @@ export default function ProductDetail() {
     ],
   });
 
-  const publicProductAllowed = publicProduct && eligiblePublicProductKeys(publicCatalogue, publicProduct.section,
-    scenarioFor(publicProduct.section)).has(productKey);
+  const publicProductAllowed = !!publicProduct && isPublicProductEligible(
+    publicCatalogue, publicProduct, scenarioFor(publicProduct.section),
+  );
   if (!isMandatoryEligibilityReady() || (!mandatoryProductAllowed(productKey) && !publicProductAllowed)) {
     return <><Stack.Screen options={{ title: 'Product unavailable' }} /><EmptyState icon="alert-circle-outline" title={!isMandatoryEligibilityReady() ? 'Loading' : 'Unavailable'} /></>;
   }
@@ -826,7 +878,7 @@ export default function ProductDetail() {
             </AppText>
           ) : null}
           {historyEnabled ? (
-            !historySurfaceReady || (!rateHistory.failed && (historyWaitingForInsights || rateHistory.updating) && (!historyModel || historyModel.dates.length < 2)) ? (
+            !historySurfaceReady || historyPreparing || (!rateHistory.failed && (historyWaitingForInsights || rateHistory.updating) && (!historyModel || historyModel.dates.length < 2)) ? (
               <AppText variant="small" color="textMuted">
                 {uiLabel("Loading")}</AppText>
             ) : historyModel && historyModel.dates.length >= 2 ? (

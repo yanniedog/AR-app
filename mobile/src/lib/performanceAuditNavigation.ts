@@ -17,34 +17,44 @@ export async function measureAuditBackNavigation(options: {
   currentPath(): string;
   back(): void;
   settle(): Promise<void>;
+  /** Path commit. When set, settle() is bookkeeping and is not part of durationMs. */
+  awaitCommit?(): Promise<void>;
   now(): number;
   matchesPath(actual: string, expected: string, format?: 'href' | 'pathname'): boolean;
   tabJourney: boolean;
   recordFirst(transition: AuditBackTransition): void;
   recordSecondStart?(): void;
-}): Promise<AuditBackTransition & { first: AuditBackTransition; secondBackMs: number | null }> {
+}): Promise<AuditBackTransition & { first: AuditBackTransition; secondBackMs: number | null; settleMs: number }> {
   const pathBeforeBack = options.currentPath();
-  const measure = async (): Promise<AuditBackTransition> => {
+  const measure = async (): Promise<AuditBackTransition & { settleMs: number }> => {
     const before = options.currentPath();
     const started = options.now();
     options.back();
+    if (options.awaitCommit) await options.awaitCommit();
+    const committedAt = options.now();
     await options.settle();
     const destination = options.currentPath();
-    return { destination, durationMs: options.now() - started,
+    const settledAt = options.now();
+    return { destination,
+      durationMs: options.awaitCommit ? committedAt - started : settledAt - started,
+      settleMs: settledAt - committedAt,
       changedPath: !options.matchesPath(destination, before, 'pathname'),
       returnedToAudit: options.matchesPath(destination, '/performance-audit') };
   };
+  const withoutSettle = ({ settleMs: _settleMs, ...transition }: AuditBackTransition & { settleMs: number }): AuditBackTransition => transition;
   const first = await measure();
-  options.recordFirst(first);
+  options.recordFirst(withoutSettle(first));
   const atTabOrigin = options.matchesPath(first.destination, '/browse') || options.matchesPath(first.destination, '/');
   if (!first.returnedToAudit && options.tabJourney && atTabOrigin) {
     options.recordSecondStart?.();
     const second = await measure();
-    return { ...second, first, durationMs: first.durationMs + second.durationMs,
+    return { ...withoutSettle(second), first: withoutSettle(first),
+      settleMs: first.settleMs + second.settleMs,
+      durationMs: first.durationMs + second.durationMs,
       changedPath: !options.matchesPath(first.destination, pathBeforeBack, 'pathname'),
       secondBackMs: second.durationMs };
   }
-  return { ...first, first, secondBackMs: null };
+  return { ...withoutSettle(first), first: withoutSettle(first), settleMs: first.settleMs, secondBackMs: null };
 }
 
 function activeNavigationPath(

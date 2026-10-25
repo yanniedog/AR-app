@@ -9,14 +9,14 @@ function byCode(checks: readonly AppHealthCheck[], code: AppHealthCheck['code'])
 }
 
 describe('app-health display quality', () => {
-  it('reports a measured empty chart as unavailable and still rejects missing expected points', () => {
+  it('accepts a measured empty chart and still rejects missing expected points', () => {
     const { contracts, observations } = makeCompleteDisplayFixture();
     observations[0].evidence = observations[0].evidence.map((evidence) => evidence.role === 'chart'
       ? { ...evidence, modelPointCount: 0, renderedPointCount: 0, accessibleSummary: false,
         layoutMeasured: true, emptyStateRendered: true, unavailableCount: 1 }
       : evidence);
     expect(byCode(evaluateAppHealthDisplayQuality(contracts, observations),
-      APP_HEALTH_CHECK_CODES.DISPLAY_CHART).status).toBe('unavailable');
+      APP_HEALTH_CHECK_CODES.DISPLAY_CHART).status).toBe('pass');
     observations[0].evidence = observations[0].evidence.map((evidence) => evidence.role === 'chart'
       ? { ...evidence, modelPointCount: 1 }
       : evidence);

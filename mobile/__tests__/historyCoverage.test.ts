@@ -58,6 +58,34 @@ it('detects entirely missing intermediate calendar days and equal-count wrong va
   expect(result.days).toBe(4);
 });
 
+it('does not call the payload stale for a Hobart date that is still the previous UTC day', () => {
+  const core = makeHealthyCore();
+  core.run_date = '2026-10-25';
+  const result = historyCoverageEvidence(core, null, Date.parse('2026-10-25T13:44:48.359Z'));
+  expect(result.observedDay).toBe('2026-10-25');
+  expect(result.sourceGapDays).not.toContain('2026-10-26');
+  expect(result.gaps.filter(gap => gap[1] === 'current-payload-stale')).toEqual([]);
+});
+
+it('does not report explicit savings term deposits as source-to-model count mismatches', () => {
+  const core = makeHealthyCore();
+  core.run_date = '2026-10-24';
+  const catalogue = { schema_version: 2, run_dates: ['2026-10-22', '2026-10-23', '2026-10-24'],
+    sources: Object.fromEntries(['2026-10-22', '2026-10-23'].map(day => [day,
+      { kind: 'retained_legacy_export', banks_sha256: 'a'.repeat(64), bytes: 100 }])),
+    unavailable_dates: { '2026-10-24': 'Current core owns today' }, evidence: [{ status: 'unknown' }],
+    sections: { Mortgage: [], Savings: [
+      { row: { provider: 'Bank', product_key: 'saver', product_name: 'Online saver' }, spans: [[0, 2, [5], 0]] },
+      { row: { provider: 'Bank', product_key: 'td', product_name: 'Term Deposit 6 month' }, spans: [[0, 2, [4], 0]] },
+    ], TD: [] } };
+  expect(installHistoricalBankRateCatalogue(core, catalogue)).toBe(true);
+  const result = historyCoverageEvidence(core, null, Date.parse('2026-10-24T01:00:00Z'));
+  expect(result.gaps.filter(gap => gap[1] === 'source-to-model-count-mismatch')).toEqual([]);
+  expect(result.processingMismatches).toBe(0);
+  expect(result.gaps).toContainEqual(['2026-10-24', 'historical-quarantined-tiers', null, 1]);
+  expect(result.gaps).toContainEqual(['2026-10-22', 'historical-detail-evidence-unknown', 'Savings', 1]);
+});
+
 it('reconciles original source spans and detects a wrong reducer value with unchanged counts', () => {
   const core = makeHealthyCore();
   core.run_date = '2026-10-24';
@@ -100,7 +128,9 @@ it('checks product source rates, preserves unknown nulls and reports stale curre
   const result = historyCoverageEvidence(core, history, Date.parse('2026-10-25T14:30:00Z'));
   expect(result.gaps).toContainEqual(['2026-10-23', 'product-source-to-model-mismatch', 'Mortgage', 1, 'mortgage']);
   expect(result.gaps).toContainEqual(['2026-10-25', 'current-payload-stale', null, 1]);
-  expect(result.gaps).toContainEqual(['2026-10-26', 'current-payload-stale', null, 1]);
+  expect(result.gaps).not.toContainEqual(['2026-10-26', 'current-payload-stale', null, 1]);
+  expect(historyCoverageEvidence(core, history, Date.parse('2026-10-26T02:00:00Z')).gaps)
+    .toContainEqual(['2026-10-26', 'current-payload-stale', null, 1]);
   expect(JSON.stringify(history)).toBe(before);
   const another = { ...core }; installPreparedHistoricalBankRateCatalogue(another, prepared);
   const original = productProjection.productSeriesRecordForChart;

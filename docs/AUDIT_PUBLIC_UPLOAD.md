@@ -12,11 +12,15 @@ can be reopened after an upgrade; partial sidecars are not promoted to completio
 **Upload report** is available after completion even if Public upload was off
 before starting. The existing `paste.rs` / `paste.c-net.org` transport and exact
 body verification remain in use. Public report bodies use
-`buildDeidentifiedPerformanceAudit`, followed by a 2 MiB fail-closed limit.
-They contain app/build/platform, coarse OS version, payload publication/counts,
-aggregate outcomes, fixed check identities, and allowlisted numeric/boolean
-measurements. They exclude raw logs, errors, traces, free-form messages, routes,
-product keys, device identifiers/model, audit session IDs and audit timestamps.
+`createPublicPerformanceAuditReport`, which sends an `ar-audit-gzip-v1` body,
+followed by a 2 MiB fail-closed compressed limit. They contain app/build/platform,
+coarse OS version, payload publication/counts, aggregate outcomes, fixed check
+identities, allowlisted numeric/boolean measurements, the configured stall
+timeout, a `failureReason` on every failed check, and the deidentified general
+application journal in before-audit and during-audit sections. They exclude
+secrets, tokens, account numbers, routes, product keys, device identifiers/model
+and audit session IDs. The operating-system share keeps its stricter allowlist
+and does not include the journal.
 The raw Debug log uploader remains a separate explicit action.
 
 SecureStore keeps the returned URL, deletion capability, verification state and

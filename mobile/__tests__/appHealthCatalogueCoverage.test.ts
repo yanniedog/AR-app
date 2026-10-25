@@ -189,6 +189,25 @@ test('keeps blocked eligibility unknown even with full-catalogue opt-in', () => 
     filterReady: false, eligibleProducts: null, eligibleProviders: null, identityMismatches: null } });
 });
 
+test('keeps a reported producer history gap without failing catalogue identity', () => {
+  const { snapshot } = fixture();
+  snapshot.historyCoverage = { ...snapshot.historyCoverage!, sourceGapDays: ['2026-05-13', '2026-10-07'], gaps: [
+    ['2026-05-13', 'product-source-reconciliation-unavailable', null, 1],
+    ['2026-10-07', 'historical-source-unavailable', null, 1],
+    ['2026-10-25', 'historical-quarantined-tiers', null, 58],
+  ], processingMismatches: 0, chartProjectionMismatches: 0 };
+  expect(evaluateAppHealthCatalogueCoverage(snapshot)).toMatchObject({ status: 'pass', metrics: {
+    historyProcessingMismatches: 0, identityMismatches: 0 } });
+});
+
+test('fails when the loaded model does not match a reconciled history source', () => {
+  const { snapshot } = fixture();
+  snapshot.historyCoverage = { ...snapshot.historyCoverage!, processingMismatches: 1, gaps: [
+    ['2026-10-22', 'source-to-model-count-mismatch', 'Savings', 1, 'Bank'],
+  ] };
+  expect(evaluateAppHealthCatalogueCoverage(snapshot).status).toBe('fail');
+});
+
 test('compares detail and search product identities, not matching record counts', () => {
   const { snapshot, state } = fixture();
   const removed = state.core!.sections.Mortgage.rates[0].product_key;

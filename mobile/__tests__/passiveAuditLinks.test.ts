@@ -27,7 +27,8 @@ describe('passive external link preloading', () => {
     expect(handler).toHaveBeenCalledWith(request.url);
     expect(network).not.toHaveBeenCalled();
     expect(module.preloadedPassiveLink(request, inputs.appBuild, inputs.revision)?.result).toMatchObject({
-      validation: { status: 'pass' }, handler: { status: 'pass' }, reachability: { attempted: false },
+      validation: { status: 'pass' }, handler: { status: 'pass', selection: 'selected' },
+      reachability: { attempted: false, selection: 'not-selected' },
     });
     expect(module.preloadedPassiveLink(request, inputs.appBuild, 'publication-b')).toBeNull();
     expect(module.preloadedPassiveLink(request, 'new-build', inputs.revision)).toBeNull();
