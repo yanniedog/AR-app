@@ -260,6 +260,11 @@ test('destinations left out of the HTTP sample are not unverified coverage holes
       browserHandler: 'pass', handlerAttempted: true, handlerResolution: 'pass' } };
   expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'warning',
     gaps: { unverifiedLinks: 0 } });
+  const hosted = decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report)) as {
+    checks: { metrics: { httpSelected?: boolean; handlerResolution?: string } }[];
+  };
+  expect(hosted.checks[0].metrics.httpSelected).toBe(false);
+  expect(hosted.checks[0].metrics.handlerResolution).toBe('pass');
   report.checks[0].metrics = { executionAttempted: true, httpSelected: false, httpAttempted: false, httpReachability: 'unknown',
     browserHandler: 'unknown', handlerAttempted: false, handlerResolution: 'not-attempted' };
   expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'warning',

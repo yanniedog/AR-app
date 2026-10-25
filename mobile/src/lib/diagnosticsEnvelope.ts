@@ -65,11 +65,19 @@ const OBSERVED_COUNT_KEYS = new Set([
   'expectedCatalogueProducts', 'actualCatalogueProducts', 'completedBeforeFailure', 'plannedChecks',
 ]);
 
+const PUBLIC_METRIC_ENUMS: Record<string, ReadonlySet<string>> = {
+  handlerResolution: new Set(['pass', 'fail', 'not-attempted', 'unresolved']),
+};
+
 function allowlistedMetrics(check: AuditCheck): Record<string, string | number | boolean | null> {
   const metrics = check.metrics;
   const result: Record<string, string | number | boolean | null> = {};
   for (const [key, value] of Object.entries(metrics)) {
     if (!METRIC_ALLOWLIST.has(key)) continue;
+    if (typeof value === 'string' && PUBLIC_METRIC_ENUMS[key]?.has(value)) {
+      result[key] = value;
+      continue;
+    }
     const prefix = ['forward', 'background', 'back'].find(candidate => key.startsWith(candidate) && /[A-Z]/.test(key[candidate.length] ?? ''));
     const baseKey = prefix ? key[prefix.length].toLowerCase() + key.slice(prefix.length + 1) : key;
     if (typeof value === 'number' && value === 0) {
