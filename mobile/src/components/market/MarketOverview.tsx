@@ -34,7 +34,8 @@ import {
 
 export default function MarketOverview() {
   const focused = useIsFocused();
-  const contentReady = useNavigationContentReady(focused);
+  // Latch so blur does not clear payload / unmount feeds and clamp scroll offset.
+  const contentReady = useNavigationContentReady(focused, { latchAfterReady: true });
   const [now, setNow] = useState(Date.now);
   const [calendarAttempted, setCalendarAttempted] = useState(false);
   const [factsLayout, setFactsLayout] = useState<string | null>(null);

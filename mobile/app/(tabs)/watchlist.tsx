@@ -82,14 +82,9 @@ let auditSavedFixtureSnapshot: {
 export default function MyRates() {
   const theme = useTheme();
   const focused = useIsFocused();
-  const deferredContentReady = useNavigationContentReady(focused);
   // Latch after first preparation so blur (web continues rendering inactive
   // tabs) does not unmount ScreenScrollView and reset scroll offset.
-  const [contentPrepared, setContentPrepared] = useState(false);
-  useEffect(() => {
-    if (deferredContentReady) setContentPrepared(true);
-  }, [deferredContentReady]);
-  const contentReady = contentPrepared || deferredContentReady;
+  const contentReady = useNavigationContentReady(focused, { latchAfterReady: true });
   const [positionsOpen, setPositionsOpen] = useState(false);
   const core = useStore((s) => s.core);
   const manifest = useStore((s) => s.manifest);

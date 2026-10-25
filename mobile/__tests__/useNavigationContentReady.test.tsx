@@ -69,4 +69,36 @@ describe('useNavigationContentReady', () => {
       act(() => tree.unmount());
     }
   });
+
+  it('latches ready across deactivation when requested', () => {
+    function LatchProbe({
+      active,
+      onReady,
+    }: {
+      active: boolean;
+      onReady: (ready: boolean) => void;
+    }) {
+      const ready = useNavigationContentReady(active, { latchAfterReady: true });
+      useEffect(() => {
+        onReady(ready);
+      }, [onReady, ready]);
+      return null;
+    }
+    const seen: boolean[] = [];
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <LatchProbe active onReady={(ready) => { seen.push(ready); }} />,
+      );
+    });
+    try {
+      expect(seen.at(-1)).toBe(true);
+      act(() => {
+        tree.update(<LatchProbe active={false} onReady={(ready) => { seen.push(ready); }} />);
+      });
+      expect(seen.at(-1)).toBe(true);
+    } finally {
+      act(() => tree.unmount());
+    }
+  });
 });

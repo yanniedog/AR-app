@@ -74,19 +74,23 @@ function catalogueFacetOptions(catalogue: PublicCatalogueView): Record<FacetKey,
   return { loanPurposes, repaymentTypes };
 }
 
-function mergeFacetOptions(base: string[], extra: string[], selected: readonly string[]): string[] {
-  const meanings = new Set(base.map(option => option));
-  const merged = [...base];
-  for (const option of extra) {
-    if (meanings.has(option)) continue;
-    meanings.add(option);
-    merged.push(option);
-  }
-  for (const option of selected) {
-    if (meanings.has(option)) continue;
-    meanings.add(option);
-    merged.push(option);
-  }
+function mergeFacetOptions(
+  base: string[],
+  extra: string[],
+  selected: readonly string[],
+  canonicalize: (value: string) => string | undefined,
+): string[] {
+  const meanings = new Set<string>();
+  const merged: string[] = [];
+  const add = (option: string) => {
+    const meaning = canonicalize(option) ?? option;
+    if (meanings.has(meaning)) return;
+    meanings.add(meaning);
+    merged.push(meaning);
+  };
+  for (const option of base) add(option);
+  for (const option of extra) add(option);
+  for (const option of selected) add(option);
   return merged;
 }
 
@@ -146,14 +150,15 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     return catalogueFacetOptions(view);
   }, [catalogueKey]);
   const groups = useMemo(() => ([
-    { key: 'loanPurposes' as const, label: uiLabel('Loan purpose') },
-    { key: 'repaymentTypes' as const, label: uiLabel('Repayment') },
+    { key: 'loanPurposes' as const, label: uiLabel('Loan purpose'), canonicalize: canonicalPurpose },
+    { key: 'repaymentTypes' as const, label: uiLabel('Repayment'), canonicalize: canonicalRepayment },
   ]).map(group => ({
     ...group,
     options: mergeFacetOptions(
       rowOptions[group.key],
       catalogueOptions[group.key],
       filters[group.key],
+      group.canonicalize,
     ),
   })), [rowOptions, catalogueOptions, filters]);
   const change = (field: 'loanAmount' | 'lvr', text: string) => {
@@ -170,9 +175,15 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     </View>)}</Row>
     {groups.map(group => <View key={group.key} style={{ gap: 4 }}>
       <AppText variant="small">{group.label}</AppText>
-      <Row gap={6} style={{ flexWrap: 'wrap' }}>{group.options.map(option => <Chip key={option} label={humanizeEnum(option)} selected={filters[group.key].includes(option)}
-        onPress={() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
-          [group.key]: current.filters[group.key].includes(option) ? current.filters[group.key].filter(item => item !== option) : [...current.filters[group.key], option] } }), true)} />)}</Row>
+      <Row gap={6} style={{ flexWrap: 'wrap' }}>{group.options.map(option => {
+        const meaningOf = (value: string) => group.canonicalize(value) ?? value;
+        const selected = filters[group.key].some(item => meaningOf(item) === option);
+        return <Chip key={option} label={humanizeEnum(option)} selected={selected}
+          onPress={() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
+            [group.key]: selected
+              ? current.filters[group.key].filter(item => meaningOf(item) !== option)
+              : [...current.filters[group.key], option] } }), true)} />;
+      })}</Row>
     </View>)}
     <SegmentedControl value={metric} options={[{ value: 'headline', label: uiLabel('Advertised rate') }, { value: 'comparison', label: uiLabel('Comparison rate') }]}
       onChange={next => useStore.getState().setPref('mortgageRateMetric', next)} />

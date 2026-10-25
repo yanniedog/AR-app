@@ -38,7 +38,7 @@ import type { HistoryWindow } from '../src/types';
 export default function Market() {
   const theme = useTheme();
   const isFocused = useIsFocused();
-  const contentReady = useNavigationContentReady(isFocused);
+  const contentReady = useNavigationContentReady(isFocused, { latchAfterReady: true });
   const scrollRef = useRef<ScrollView>(null);
   const { focus: focusRaw } = useLocalSearchParams<{ focus?: string | string[] }>();
   const focus = scalarRouteParam(focusRaw);

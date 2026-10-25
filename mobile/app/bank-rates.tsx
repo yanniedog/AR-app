@@ -1,5 +1,5 @@
 import { useIsFocused } from '@react-navigation/native';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { BankRatesPanel, type BankRatesAuditState } from '../src/components/passthrough/BankRatesPanel';
 import { ScreenSkeleton } from '../src/components/feedback';
@@ -11,14 +11,9 @@ import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditRead
 
 export default function BankRates() {
   const focused = useIsFocused();
-  const deferredContentReady = useNavigationContentReady(focused);
   // Latch after first preparation so blur does not remount BankRatesPanel and
   // wipe its Rates/Gap, statistic, and provider selection.
-  const [contentPrepared, setContentPrepared] = useState(false);
-  useEffect(() => {
-    if (deferredContentReady) setContentPrepared(true);
-  }, [deferredContentReady]);
-  const contentReady = contentPrepared || deferredContentReady;
+  const contentReady = useNavigationContentReady(focused, { latchAfterReady: true });
   const interests = useStore(s => s.prefs.interests);
   const activeSection = useStore(s => s.activeSection);
   const core = useStore(s => s.core);

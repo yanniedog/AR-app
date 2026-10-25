@@ -18,14 +18,14 @@ jest.mock('../src/data/publicRateIntegration', () => ({
   resolveLocalCurrentRate: () => ({ status: 'exact', payableRate: '0.064' }),
   publicComparisonCore: jest.fn(() => mockCore),
 }));
-const mockUseResolvedPublicRankingRows = jest.fn(() => ({
+const mockUseResolvedPublicRankingRows = jest.fn((_options?: unknown) => ({
   ready: true,
   candidates: [],
   resolution: { rows: [], priced: 0, unresolved: 0, complete: true },
   mortgageScope: { rows: [], unverified: 0, unverifiedRows: new WeakSet(), invalid: false },
 }));
 jest.mock('../src/hooks/useResolvedPublicRankingRows', () => ({
-  useResolvedPublicRankingRows: (...args: unknown[]) => mockUseResolvedPublicRankingRows(...args),
+  useResolvedPublicRankingRows: (options: unknown) => mockUseResolvedPublicRankingRows(options),
 }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {}, radius: { md: 8 }, font: { body: 16 }, spacing: (value: number) => value }) }));
