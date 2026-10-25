@@ -264,18 +264,6 @@ function BankHistoryChartView({
   // A market ribbon supplies context, never a missing product observation.
   const observedPointCount = highlightValues ? highlightValues.filter(isFiniteNumber).length : finitePointCount;
   const missingPointCount = plotDates.length - observedPointCount;
-  if (!plotDates.length || !plotPoints.length || !hasPlottableValues) {
-    return <View><AppText key={graphicRevision} variant="small" color="textMuted" onLayout={(event) => {
-      onGraphicReady?.({ contentRevision: sourceRevision, graphicRevision, window,
-        availability: 'unavailable', expectedCount: expectedPointCount, pointCount: 0,
-        accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
-    }}>{uiLabel("No observations")}</AppText>
-      {missingPointCount > 0 ? <AppText variant="tiny" color="textMuted">
-        {uiJoin('Missing observations', ': ', uiCount(missingPointCount), ' · ', 'Unknown')}
-      </AppText> : null}
-    </View>;
-  }
-
   const padL = 44;
   const padR = 8;
   const padT = rbaMarks.length ? 28 : 14;
@@ -283,7 +271,6 @@ function BankHistoryChartView({
   const innerW = Math.max(1, width - padL - padR);
   const innerH = height - padT - padB;
   const span = yDomain.max - yDomain.min || 0.001;
-
   const xAt = (i: number) =>
     padL + (plotDates.length === 1 ? innerW / 2 : (i / (plotDates.length - 1)) * innerW);
   const yAt = (v: number) => padT + innerH - ((v - yDomain.min) / span) * innerH;
@@ -291,12 +278,13 @@ function BankHistoryChartView({
 
   // Skip path construction until layout width is known — the first paint after
   // deferred mount otherwise builds full SVG paths twice (width 0, then measured).
+  // Must stay above any early return so hooks order is stable.
   const chartPaths = useMemo(() => {
     const mins = plotPoints.map((p) => p.min);
     const maxs = plotPoints.map((p) => p.max);
     const means = plotPoints.map((p) => p.mean);
     const medians = plotPoints.map((p) => p.median);
-    if (width <= 0) {
+    if (width <= 0 || !plotDates.length || !plotPoints.length) {
       return {
         mins,
         maxs,
@@ -311,23 +299,27 @@ function BankHistoryChartView({
         highlightLine: null as string | null,
       };
     }
+    const x = (i: number) =>
+      padL + (plotDates.length === 1 ? innerW / 2 : (i / (plotDates.length - 1)) * innerW);
+    const y = (v: number) => padT + innerH - ((v - yDomain.min) / span) * innerH;
     return {
       mins,
       maxs,
       means,
       medians,
-      band: buildBandPath(plotDates, mins, maxs, xAt, yAt, true),
-      meanLine: buildLinePath(means, xAt, yAt, true),
-      medianLine: buildLinePath(medians, xAt, yAt, true),
-      minLine: buildLinePath(mins, xAt, yAt, true),
-      maxLine: buildLinePath(maxs, xAt, yAt, true),
-      rbaLine: showRba ? stepPath(rbaSteps, xAt, yAt) : null,
-      highlightLine: highlightValues ? buildLinePath(highlightValues, xAt, yAt, true) : null,
+      band: buildBandPath(plotDates, mins, maxs, x, y, true),
+      meanLine: buildLinePath(means, x, y, true),
+      medianLine: buildLinePath(medians, x, y, true),
+      minLine: buildLinePath(mins, x, y, true),
+      maxLine: buildLinePath(maxs, x, y, true),
+      rbaLine: showRba ? stepPath(rbaSteps, x, y) : null,
+      highlightLine: highlightValues ? buildLinePath(highlightValues, x, y, true) : null,
     };
   }, [
     highlightValues,
     innerH,
     innerW,
+    padT,
     plotDates,
     plotPoints,
     rbaSteps,
@@ -350,6 +342,18 @@ function BankHistoryChartView({
     rbaLine,
     highlightLine,
   } = chartPaths;
+
+  if (!plotDates.length || !plotPoints.length || !hasPlottableValues) {
+    return <View><AppText key={graphicRevision} variant="small" color="textMuted" onLayout={(event) => {
+      onGraphicReady?.({ contentRevision: sourceRevision, graphicRevision, window,
+        availability: 'unavailable', expectedCount: expectedPointCount, pointCount: 0,
+        accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+    }}>{uiLabel("No observations")}</AppText>
+      {missingPointCount > 0 ? <AppText variant="tiny" color="textMuted">
+        {uiJoin('Missing observations', ': ', uiCount(missingPointCount), ' · ', 'Unknown')}
+      </AppText> : null}
+    </View>;
+  }
 
   const rateInk = SECTIONS[section].lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   const ribbonColor = rateInk;
