@@ -1,5 +1,5 @@
 import { canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
-import type { PublicCatalogueView } from '../data/publicRateIntegration';
+import { publicCataloguePricingKey, type PublicCatalogueView } from '../data/publicRateIntegration';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { TextInput, useWindowDimensions, View } from 'react-native';
 import { useMortgageComparison, clearMortgageComparison } from '../data/mortgageComparison';
@@ -15,6 +15,80 @@ import { AppText, Button, Chip, Row } from './ui';
 import { SegmentedControl } from './controls';
 
 const TYPING_DEBOUNCE_MS = 200;
+
+type FacetKey = 'loanPurposes' | 'repaymentTypes';
+
+function rowFacetOptions(
+  rows: RateRow[],
+  filters: Filters,
+): Record<FacetKey, string[]> {
+  return {
+    loanPurposes: (() => {
+      const meanings = new Set<string | undefined>();
+      return profileAttributeOptions(rows, 'loan_purpose', filters.loanPurposes).filter(option => {
+        const meaning = canonicalPurpose(option);
+        const duplicate = meanings.has(meaning);
+        meanings.add(meaning);
+        return filters.loanPurposes.includes(option) || !duplicate;
+      });
+    })(),
+    repaymentTypes: (() => {
+      const meanings = new Set<string | undefined>();
+      return profileAttributeOptions(rows, 'ribbon_repayment_type', filters.repaymentTypes).filter(option => {
+        const meaning = canonicalRepayment(option);
+        const duplicate = meanings.has(meaning);
+        meanings.add(meaning);
+        return filters.repaymentTypes.includes(option) || !duplicate;
+      });
+    })(),
+  };
+}
+
+/** Catalogue condition scan — keyed by content identity, not snapshot object identity. */
+function catalogueFacetOptions(catalogue: PublicCatalogueView): Record<FacetKey, string[]> {
+  const loanPurposes: string[] = [];
+  const repaymentTypes: string[] = [];
+  const seenPurpose = new Set<string>();
+  const seenRepayment = new Set<string>();
+  for (const product of catalogue.products) {
+    if (product.section !== 'Mortgage' || product.status === 'legacy') continue;
+    for (const programme of catalogue.getProgrammes(product.productId)) {
+      if (programme.section !== 'Mortgage') continue;
+      for (const condition of programme.conditions) {
+        if (condition.field !== 'purpose' && condition.field !== 'repayment') continue;
+        const values = condition.operator === 'eq' ? [condition.value]
+          : condition.operator === 'in' ? condition.values ?? [] : [];
+        for (const value of values) {
+          if (typeof value !== 'string' || !value.trim()) continue;
+          if (condition.field === 'purpose') {
+            const option = canonicalPurpose(value)!;
+            if (!seenPurpose.has(option)) { loanPurposes.push(option); seenPurpose.add(option); }
+          } else {
+            const option = canonicalRepayment(value)!;
+            if (!seenRepayment.has(option)) { repaymentTypes.push(option); seenRepayment.add(option); }
+          }
+        }
+      }
+    }
+  }
+  return { loanPurposes, repaymentTypes };
+}
+
+function mergeFacetOptions(base: string[], extra: string[], selected: readonly string[]): string[] {
+  const meanings = new Set(base.map(option => option));
+  const merged = [...base];
+  for (const option of extra) {
+    if (meanings.has(option)) continue;
+    meanings.add(option);
+    merged.push(option);
+  }
+  for (const option of selected) {
+    if (meanings.has(option)) continue;
+    meanings.add(option);
+    merged.push(option);
+  }
+  return merged;
+}
 
 export function MortgageComparisonControls({ rows, catalogue, filters, unverified, invalid }: {
   rows: RateRow[]; catalogue?: PublicCatalogueView; filters: Filters; unverified: number; invalid: boolean;
@@ -60,34 +134,28 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     if (!dirty.current) return;
     commitDraft(draftRef.current);
   }, []);
-  const groups = useMemo(() => [
-    { key: 'loanPurposes' as const, field: 'loan_purpose' as const, condition: 'purpose', canonical: canonicalPurpose },
-    { key: 'repaymentTypes' as const, field: 'ribbon_repayment_type' as const, condition: 'repayment', canonical: canonicalRepayment },
-  ].map(group => {
-    // Discover options before scenario resolution, including loaded offers whose conditions are not yet met.
-    const meanings = new Set<string | undefined>();
-    const options = profileAttributeOptions(rows, group.field, filters[group.key]).filter(option => {
-      const meaning = group.canonical(option), duplicate = meanings.has(meaning);
-      meanings.add(meaning);
-      return filters[group.key].includes(option) || !duplicate;
-    });
-    for (const product of catalogue?.products ?? []) {
-      if (product.section !== 'Mortgage' || product.status === 'legacy') continue;
-      for (const programme of catalogue!.getProgrammes(product.productId)) {
-        if (programme.section !== 'Mortgage') continue;
-        for (const condition of programme.conditions) {
-          if (condition.field !== group.condition) continue;
-          const values = condition.operator === 'eq' ? [condition.value] : condition.operator === 'in' ? condition.values ?? [] : [];
-          for (const value of values) {
-            if (typeof value !== 'string' || !value.trim()) continue;
-            const option = group.canonical(value)!;
-            if (!meanings.has(option)) { options.push(option); meanings.add(option); }
-          }
-        }
-      }
-    }
-    return { ...group, options };
-  }), [catalogue, filters, rows]);
+  const rowOptions = useMemo(() => rowFacetOptions(rows, filters), [rows, filters]);
+  const catalogueKey = catalogue ? publicCataloguePricingKey(catalogue) : '';
+  const catalogueRef = useRef(catalogue);
+  catalogueRef.current = catalogue;
+  // Snapshot object identity changes on every shard tick; key on content so
+  // mortgage.scope.apply does not re-walk the full programme book each render.
+  const catalogueOptions = useMemo(() => {
+    const view = catalogueRef.current;
+    if (!view || view.status !== 'ready') return { loanPurposes: [] as string[], repaymentTypes: [] as string[] };
+    return catalogueFacetOptions(view);
+  }, [catalogueKey]);
+  const groups = useMemo(() => ([
+    { key: 'loanPurposes' as const, label: uiLabel('Loan purpose') },
+    { key: 'repaymentTypes' as const, label: uiLabel('Repayment') },
+  ]).map(group => ({
+    ...group,
+    options: mergeFacetOptions(
+      rowOptions[group.key],
+      catalogueOptions[group.key],
+      filters[group.key],
+    ),
+  })), [rowOptions, catalogueOptions, filters]);
   const change = (field: 'loanAmount' | 'lvr', text: string) => {
     dirty.current = true;
     setDraft(current => ({ ...current, [field]: text }));
@@ -101,7 +169,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
         style={{ minHeight: 48, minWidth: 0, color: theme.colors.text, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 6, padding: 8, fontSize: theme.font.body }} />
     </View>)}</Row>
     {groups.map(group => <View key={group.key} style={{ gap: 4 }}>
-      <AppText variant="small">{uiLabel(group.key === 'loanPurposes' ? 'Loan purpose' : 'Repayment')}</AppText>
+      <AppText variant="small">{group.label}</AppText>
       <Row gap={6} style={{ flexWrap: 'wrap' }}>{group.options.map(option => <Chip key={option} label={humanizeEnum(option)} selected={filters[group.key].includes(option)}
         onPress={() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
           [group.key]: current.filters[group.key].includes(option) ? current.filters[group.key].filter(item => item !== option) : [...current.filters[group.key], option] } }), true)} />)}</Row>

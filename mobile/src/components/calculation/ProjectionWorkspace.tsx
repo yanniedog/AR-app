@@ -3,13 +3,14 @@ import { PublicRateEvidence } from '../scenario/PublicRateEvidence';
 import { PublicCostComparison } from '../scenario/PublicCostComparison';
 import { SavingsQualificationEditor } from '../scenario/SavingsQualificationEditor';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
-import { publicComparisonCore, publicRateScenario, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../data/publicRateIntegration';
+import { publicRateScenario, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../../data/publicRateIntegration';
 import { uiDate, uiDuration, uiInputNumber, uiJoin, uiLabel, uiMoney, uiSectionName, type UiCopy, type UiText } from "../../lib/uiCopy";
 import { fontStyle } from '../../theme/fonts';
 import { prepareProjectionAuditScenario } from '../../lib/performanceAuditScenario';
 import { mandatoryProductAllowed } from '../../data/eligibilityGate';
 import Ionicons from '../../components/icons/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useResolvedPublicRankingRows } from '../../hooks/useResolvedPublicRankingRows';
 import { useSuitabilityRevision } from '../../hooks/useSuitabilityRevision';
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, TextInput, useWindowDimensions, View } from 'react-native';
@@ -41,7 +42,7 @@ import { useUserRateScenario } from '../../hooks/useUserRateScenario';
 import { useScenarioSection } from '../../hooks/useScenarioSection';
 import { usePerformanceAuditSurface } from '../../hooks/usePerformanceAuditReadiness';
 import { useStore } from '../../data/store';
-import type { SectionKey } from '../../types';
+import type { RateRow, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { openBrowse } from '../../lib/nav';
 import { buildStaySwitchProjection } from '../../data/staySwitchProjection';
@@ -277,12 +278,44 @@ export function ProjectionWorkspace() {
     () => buildLifecycleProjection(section, deferredScenario),
     [deferredScenario, section],
   );
+  const projectionSectionScenario = useMemo(
+    () => publicRateScenario(section, deferredScenario, profile),
+    [section, deferredScenario, profile],
+  );
+  const projectionRowScenario = useCallback(
+    (row: RateRow) => publicRateScenario(section, deferredScenario, profile, row),
+    [section, deferredScenario, profile],
+  );
+  // Mounted section only — never expand all three sections via publicComparisonCore.
+  const pricedCatalogue = useResolvedPublicRankingRows({
+    sourceRows: core?.sections?.[section]?.rates ?? [],
+    catalogue,
+    section,
+    sectionScenario: projectionSectionScenario,
+    rowScenario: projectionRowScenario,
+    focused: true,
+    revision: suitabilityRevision,
+  });
   const target = useMemo(() => {
     void suitabilityRevision;
-    return resolveCalculationTarget(() => core ? publicComparisonCore(core, catalogue,
-      s => publicRateScenario(s, deferredScenario, profile)) : null,
-    section, { target: params.target, ri: params.ri, programme: params.programme });
-  }, [core, params.ri, params.target, params.programme, section, suitabilityRevision, catalogue, deferredScenario, profile]);
+    return resolveCalculationTarget(() => {
+      if (!core) return null;
+      if (catalogue.status === 'unavailable' || !pricedCatalogue.ready) return core;
+      return {
+        ...core,
+        sections: {
+          ...core.sections,
+          [section]: {
+            ...core.sections[section],
+            rates: pricedCatalogue.candidates,
+          },
+        },
+      };
+    }, section, { target: params.target, ri: params.ri, programme: params.programme });
+  }, [
+    core, params.ri, params.target, params.programme, section, suitabilityRevision,
+    catalogue.status, pricedCatalogue.ready, pricedCatalogue.candidates,
+  ]);
   const targetRow = target.status === 'available' && target.section === 'Mortgage' ? target.row : null;
   const rateConditionContext = useMemo(() => ({ core, details, manifest, coreIntegrity }), [core, details, manifest, coreIntegrity]);
   const targetConstraint = useMemo(() => target.status === 'available'

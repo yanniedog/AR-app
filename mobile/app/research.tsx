@@ -24,6 +24,7 @@ import { recentDecisions } from '../src/data/rbaCalendar';
 import { resolveSectionRibbonStats } from '../src/data/ribbonStats';
 import { useStore } from '../src/data/store';
 import { getSuitabilityAllowed } from '../src/data/suitabilityGate';
+import { useNavigationContentReady } from '../src/hooks/useNavigationContentReady';
 import { usePerformanceAuditProbe, usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { runStoreRetry } from '../src/lib/degradationLog';
@@ -37,6 +38,7 @@ import type { HistoryWindow } from '../src/types';
 export default function Market() {
   const theme = useTheme();
   const isFocused = useIsFocused();
+  const contentReady = useNavigationContentReady(isFocused);
   const scrollRef = useRef<ScrollView>(null);
   const { focus: focusRaw } = useLocalSearchParams<{ focus?: string | string[] }>();
   const focus = scalarRouteParam(focusRaw);
@@ -109,14 +111,14 @@ export default function Market() {
   }, [interests]);
 
   useEffect(() => {
-    if (!isFocused || !core) return;
+    if (!isFocused || !contentReady || !core) return;
     void ensureRbaCalendar();
     if (showBankInsights) void ensureBankInsights();
     if (prebuiltHistoryEnabled) void ensureHistoryBanks();
-  }, [core, ensureBankInsights, ensureHistoryBanks, ensureRbaCalendar, isFocused, prebuiltHistoryEnabled, showBankInsights]);
+  }, [contentReady, core, ensureBankInsights, ensureHistoryBanks, ensureRbaCalendar, isFocused, prebuiltHistoryEnabled, showBankInsights]);
 
   useEffect(() => {
-    if (!isFocused || !core?.run_date) return;
+    if (!isFocused || !contentReady || !core?.run_date) return;
     let active = true;
     setHistoryReady(false);
     void (async () => {
@@ -124,11 +126,11 @@ export default function Market() {
       if (active) setHistoryReady(true);
     })();
     return () => { active = false; };
-  }, [core?.run_date, isFocused]);
+  }, [contentReady, core?.run_date, isFocused]);
 
   useEffect(() => {
-    if (isFocused && historyOpen && explorerMode === 'pulse') void ensureProductHistory();
-  }, [ensureProductHistory, explorerMode, historyOpen, isFocused]);
+    if (isFocused && contentReady && historyOpen && explorerMode === 'pulse') void ensureProductHistory();
+  }, [contentReady, ensureProductHistory, explorerMode, historyOpen, isFocused]);
 
   useEffect(() => setRewindDate(null), [activeSection]);
 
@@ -168,19 +170,20 @@ export default function Market() {
   }, []);
 
   const explorerInsights = useMemo(() => {
+    if (!contentReady) return null;
     void suitabilityRevision;
     return filterBankInsightsForSuitability(bankInsights, core, includeNonStandard, detailsProducts, suitabilityRevision, coreIntegrity);
-  }, [bankInsights, core, coreIntegrity, detailsProducts, includeNonStandard, suitabilityRevision]);
+  }, [bankInsights, contentReady, core, coreIntegrity, detailsProducts, includeNonStandard, suitabilityRevision]);
 
   const historyModel = useMemo(() => {
     void suitabilityRevision;
-    if (!core || !historyReady) return null;
+    if (!core || !historyReady || !contentReady) return null;
     return selectBankHistoryChartModel(
       { core, coreIntegrity, historyBanks, bankInsights: explorerInsights, includeNonStandard, detailsProducts },
       activeSection,
       'All',
     );
-  }, [activeSection, core, coreIntegrity, detailsProducts, explorerInsights, historyBanks, historyReady, includeNonStandard, suitabilityRevision]);
+  }, [activeSection, contentReady, core, coreIntegrity, detailsProducts, explorerInsights, historyBanks, historyReady, includeNonStandard, suitabilityRevision]);
 
   const standardFilterWarming = useMemo(() => {
     void suitabilityRevision;
@@ -189,7 +192,7 @@ export default function Market() {
 
   const marketSnapshots = useMemo(() => {
     void suitabilityRevision;
-    if (!core) return [];
+    if (!core || !contentReady) return [];
     return interestSections.flatMap((key) => {
       const data = core.sections[key];
       if (!data) return [];
@@ -205,7 +208,7 @@ export default function Market() {
       if (stats.min === null) return [];
       return [{ key, stats }];
     });
-  }, [core, depositRankMetric, detailsProducts, includeNonStandard, interestSections, mortgageRateMetric, suitabilityRevision]);
+  }, [contentReady, core, depositRankMetric, detailsProducts, includeNonStandard, interestSections, mortgageRateMetric, suitabilityRevision]);
 
   const activeSnapshot = marketSnapshots.find((snapshot) => snapshot.key === activeSection) ?? null;
   const decisions = useMemo(() => recentDecisions(calendar, 5), [calendar]);

@@ -90,6 +90,53 @@ function programmePublicRow(row: RateRow, programme: PublicProgramme): RateRow {
   });
 }
 
+function appendCatalogueOfferRow(
+  rows: RateRow[],
+  product: PublicProduct,
+  programme: PublicProgramme,
+  section: SectionKey,
+  scenario: RateScenario,
+  asOfForProgramme: (programme: PublicProgramme) => string,
+): void {
+  const asOf = asOfForProgramme(programme);
+  const selectedScenario = scenarioForPublicProgramme(programme, scenario, asOf);
+  if (!selectedScenario) return;
+  const resolution = resolvePublicRate(programme, selectedScenario, asOf);
+  if (resolution.status !== 'exact' || !resolution.verifiedCurrent || resolution.payableRate == null) return;
+  const condition = (field: string) => programme.conditions.find(item => item.field === field && item.operator === 'eq')?.value;
+  const lvr = programme.conditions.filter(item => item.field === 'lvr' && item.operator === 'bounds');
+  const lower = lvr.map(item => item.minimum).filter((value): value is string => value != null).sort((a, b) => Decimal.parse(b).compare(Decimal.parse(a)))[0];
+  const upper = lvr.map(item => item.maximum).filter((value): value is string => value != null).sort((a, b) => Decimal.parse(a).compare(Decimal.parse(b)))[0];
+  const lowerInclusive = lvr.filter(item => item.minimum != null && lower != null && Decimal.parse(item.minimum).compare(Decimal.parse(lower)) === 0)
+    .every(item => item.minimumInclusive !== false);
+  const upperInclusive = lvr.filter(item => item.maximum != null && upper != null && Decimal.parse(item.maximum).compare(Decimal.parse(upper)) === 0)
+    .every(item => item.maximumInclusive !== false);
+  const percent = (value: string) => decimalText(Decimal.parse(value).mul(Decimal.parse('100')));
+  const purpose = String(condition('purpose') ?? selectedScenario.purpose ?? '');
+  const repayment = String(condition('repayment') ?? selectedScenario.repayment ?? '');
+  const profilePurpose = typeof scenario.profileLoanPurpose === 'string' ? scenario.profileLoanPurpose : undefined;
+  const profileRepayment = typeof scenario.profileRepayment === 'string' ? scenario.profileRepayment : undefined;
+  rows.push(programmePublicRow({
+    provider: product.providerName, product_key: product.productKey, product_name: product.name, rate: resolution.payableRate,
+    category: section === 'Mortgage' ? 'RESIDENTIAL_MORTGAGES' : section === 'TD' ? 'TERM_DEPOSITS' : 'TRANS_AND_SAVINGS_ACCOUNTS',
+    taxonomy_path: section === 'Mortgage' ? 'HOME_LOAN' : section === 'TD' ? 'TERM_DEPOSIT' : 'SAVINGS',
+    loan_purpose: canonicalPurpose(profilePurpose) === purpose ? profilePurpose : purpose,
+    repayment_type: repayment,
+    ribbon_repayment_type: canonicalRepayment(profileRepayment) === repayment ? profileRepayment : repayment,
+    rate_type: programme.metadata?.rateStructure === 'fixed' ? 'FIXED' : 'VARIABLE',
+    ...(lower && upper ? { lvr_tier: 'lvr_' + (lowerInclusive ? '>=' : '>') + percent(lower) + '-' + (upperInclusive ? '' : '<') + percent(upper) + '%' }
+      : lower ? { lvr_tier: 'lvr_' + (lowerInclusive ? '>=' : '>') + percent(lower) + '%' }
+      : upper ? { lvr_tier: 'lvr_' + (upperInclusive ? '=' : '<') + percent(upper) + '%' } : {}),
+    ...(resolution.comparisonRate ? { comparison_rate: resolution.comparisonRate } : {}),
+    exact_alert_eligible: true,
+  }, programme));
+}
+
+/** Stable offer identity without JSON.stringify on the hot catalogue path. */
+export function publicOfferDedupKey(productKey: string, publicOfferId: string): string {
+  return `${productKey}\0${publicOfferId}`;
+}
+
 /** Newly resolved programmes enter app comparisons even when no legacy absolute row exists. */
 export function publicCatalogueOfferRows(catalogue: PublicCatalogueView, section: SectionKey, scenario: RateScenario,
   asOfForProgramme: (programme: PublicProgramme) => string = () => new Date().toISOString()): RateRow[] {
@@ -98,41 +145,68 @@ export function publicCatalogueOfferRows(catalogue: PublicCatalogueView, section
   for (const product of catalogue.products) {
     if (product.section !== section || product.status === 'legacy') continue;
     for (const programme of catalogue.getProgrammes(product.productId)) {
-      const asOf = asOfForProgramme(programme);
-      const selectedScenario = scenarioForPublicProgramme(programme, scenario, asOf);
-      if (!selectedScenario) continue;
-      const resolution = resolvePublicRate(programme, selectedScenario, asOf);
-      if (resolution.status !== 'exact' || !resolution.verifiedCurrent || resolution.payableRate == null) continue;
-      const condition = (field: string) => programme.conditions.find(item => item.field === field && item.operator === 'eq')?.value;
-      const lvr = programme.conditions.filter(item => item.field === 'lvr' && item.operator === 'bounds');
-      const lower = lvr.map(item => item.minimum).filter((value): value is string => value != null).sort((a, b) => Decimal.parse(b).compare(Decimal.parse(a)))[0];
-      const upper = lvr.map(item => item.maximum).filter((value): value is string => value != null).sort((a, b) => Decimal.parse(a).compare(Decimal.parse(b)))[0];
-      const lowerInclusive = lvr.filter(item => item.minimum != null && lower != null && Decimal.parse(item.minimum).compare(Decimal.parse(lower)) === 0)
-        .every(item => item.minimumInclusive !== false);
-      const upperInclusive = lvr.filter(item => item.maximum != null && upper != null && Decimal.parse(item.maximum).compare(Decimal.parse(upper)) === 0)
-        .every(item => item.maximumInclusive !== false);
-      const percent = (value: string) => decimalText(Decimal.parse(value).mul(Decimal.parse('100')));
-      const purpose = String(condition('purpose') ?? selectedScenario.purpose ?? '');
-      const repayment = String(condition('repayment') ?? selectedScenario.repayment ?? '');
-      const profilePurpose = typeof scenario.profileLoanPurpose === 'string' ? scenario.profileLoanPurpose : undefined;
-      const profileRepayment = typeof scenario.profileRepayment === 'string' ? scenario.profileRepayment : undefined;
-      rows.push(programmePublicRow({
-        provider: product.providerName, product_key: product.productKey, product_name: product.name, rate: resolution.payableRate,
-        category: section === 'Mortgage' ? 'RESIDENTIAL_MORTGAGES' : section === 'TD' ? 'TERM_DEPOSITS' : 'TRANS_AND_SAVINGS_ACCOUNTS',
-        taxonomy_path: section === 'Mortgage' ? 'HOME_LOAN' : section === 'TD' ? 'TERM_DEPOSIT' : 'SAVINGS',
-        loan_purpose: canonicalPurpose(profilePurpose) === purpose ? profilePurpose : purpose,
-        repayment_type: repayment,
-        ribbon_repayment_type: canonicalRepayment(profileRepayment) === repayment ? profileRepayment : repayment,
-        rate_type: programme.metadata?.rateStructure === 'fixed' ? 'FIXED' : 'VARIABLE',
-        ...(lower && upper ? { lvr_tier: 'lvr_' + (lowerInclusive ? '>=' : '>') + percent(lower) + '-' + (upperInclusive ? '' : '<') + percent(upper) + '%' }
-          : lower ? { lvr_tier: 'lvr_' + (lowerInclusive ? '>=' : '>') + percent(lower) + '%' }
-          : upper ? { lvr_tier: 'lvr_' + (upperInclusive ? '=' : '<') + percent(upper) + '%' } : {}),
-        ...(resolution.comparisonRate ? { comparison_rate: resolution.comparisonRate } : {}),
-        exact_alert_eligible: true,
-      }, programme));
+      appendCatalogueOfferRow(rows, product, programme, section, scenario, asOfForProgramme);
     }
   }
   return rows;
+}
+
+/** Product-detail identity for one public product — never expands the whole section. */
+export function publicProductOfferRows(
+  product: PublicProduct,
+  catalogue: PublicCatalogueView,
+  scenario: RateScenario,
+  asOfForProgramme: (programme: PublicProgramme) => string = () => new Date().toISOString(),
+): RateRow[] {
+  if (catalogue.status !== 'ready' || product.status === 'legacy') return [];
+  const rows: RateRow[] = [];
+  for (const programme of catalogue.getProgrammes(product.productId)) {
+    appendCatalogueOfferRow(rows, product, programme, product.section, scenario, asOfForProgramme);
+  }
+  return dedupeRecommendationRows(rows);
+}
+
+/** Same catalogue expansion as {@link publicCatalogueOfferRows}, yielding between products. */
+export async function publicCatalogueOfferRowsCooperatively(
+  catalogue: PublicCatalogueView, section: SectionKey, scenario: RateScenario,
+  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
+  asOfForProgramme: (programme: PublicProgramme) => string = () => new Date().toISOString(),
+): Promise<RateRow[] | null> {
+  const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
+  const now = control.now ?? (() => performance.now());
+  const cancelled = control.cancelled ?? (() => false);
+  await yieldControl();
+  if (cancelled()) return null;
+  if (catalogue.status !== 'ready') return [];
+  const rows: RateRow[] = [];
+  let sliceStarted = now();
+  let visited = 0;
+  for (const product of catalogue.products) {
+    if (product.section !== section || product.status === 'legacy') continue;
+    for (const programme of catalogue.getProgrammes(product.productId)) {
+      appendCatalogueOfferRow(rows, product, programme, section, scenario, asOfForProgramme);
+    }
+    visited += 1;
+    if (visited % 4 === 0 && now() - sliceStarted >= 6) {
+      await yieldControl();
+      sliceStarted = now();
+      if (cancelled()) return null;
+    }
+  }
+  return cancelled() ? null : rows;
+}
+
+function dedupeRecommendationRows(rows: readonly RateRow[]): RateRow[] {
+  const seen = new Set<string>();
+  // Multiple source occurrences can legally bind to one semantic offer. Keep
+  // provenance in the immutable source/catalogue; expose one selectable offer.
+  return rows.filter(row => {
+    if (!row.public_offer_id) return true;
+    const key = publicOfferDedupKey(row.product_key, row.public_offer_id);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /** One candidate set for every consumer. Source positions never form the deduplication key. */
@@ -141,15 +215,50 @@ export function publicRecommendationRows(rows: readonly RateRow[], catalogue: Pu
   if (catalogue.status === 'unavailable') return [...rows];
   const current = rows.filter(row => includeExistingLegacy || catalogue.getProduct(row.product_key)?.status !== 'legacy')
     .map(row => bindCurrentPublicRow(row, catalogue));
-  const seen = new Set<string>();
-  // Multiple source occurrences can legally bind to one semantic offer. Keep
-  // provenance in the immutable source/catalogue; expose one selectable offer.
-  return [...current, ...publicCatalogueOfferRows(catalogue, section, scenario, asOfForProgramme)].filter(row => {
-    if (!row.public_offer_id) return true;
-    const key = JSON.stringify([row.product_key, row.public_offer_id]);
-    if (seen.has(key)) return false;
-    seen.add(key); return true;
-  });
+  return dedupeRecommendationRows([...current, ...publicCatalogueOfferRows(catalogue, section, scenario, asOfForProgramme)]);
+}
+
+/** Full-day recommendation assembly without a single-turn catalogue CPU burst. */
+export async function publicRecommendationRowsCooperatively(
+  rows: readonly RateRow[], catalogue: PublicCatalogueView, section: SectionKey, scenario: RateScenario,
+  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
+  includeExistingLegacy = false,
+  asOfForProgramme?: (programme: PublicProgramme) => string,
+): Promise<RateRow[] | null> {
+  const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
+  const now = control.now ?? (() => performance.now());
+  const cancelled = control.cancelled ?? (() => false);
+  await yieldControl();
+  if (cancelled()) return null;
+  if (catalogue.status === 'unavailable') return [...rows];
+  const current: RateRow[] = [];
+  let sliceStarted = now();
+  for (let offset = 0; offset < rows.length; offset += 1) {
+    const row = rows[offset];
+    if (includeExistingLegacy || catalogue.getProduct(row.product_key)?.status !== 'legacy') {
+      current.push(bindCurrentPublicRow(row, catalogue));
+    }
+    if ((offset + 1) % 24 === 0 && now() - sliceStarted >= 6) {
+      await yieldControl();
+      sliceStarted = now();
+      if (cancelled()) return null;
+    }
+  }
+  const offers = await publicCatalogueOfferRowsCooperatively(
+    catalogue, section, scenario, control, asOfForProgramme ?? (() => new Date().toISOString()));
+  if (cancelled() || !offers) return null;
+  return dedupeRecommendationRows([...current, ...offers]);
+}
+
+/** Identity used by Rates pricing hooks so catalogue snapshot republishes do not cancel work. */
+export function publicCataloguePricingKey(catalogue: PublicCatalogueView): string {
+  let programmes = 0;
+  for (const product of catalogue.products) {
+    programmes += catalogue.getProgrammes(product.productId).length;
+  }
+  // Include programme cardinality so shard hydration restarts pricing while
+  // status stays ready/allLoaded false — without depending on object identity.
+  return `${catalogue.generationId ?? ''}:${catalogue.status}:${catalogue.allLoaded ? '1' : '0'}:${catalogue.products.length}:${programmes}`;
 }
 
 /** Ephemeral view for semantic selections; original core assets stay immutable. */

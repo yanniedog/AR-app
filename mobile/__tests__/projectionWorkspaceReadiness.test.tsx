@@ -18,6 +18,14 @@ jest.mock('../src/data/publicRateIntegration', () => ({
   resolveLocalCurrentRate: () => ({ status: 'exact', payableRate: '0.064' }),
   publicComparisonCore: jest.fn(() => mockCore),
 }));
+jest.mock('../src/hooks/useResolvedPublicRankingRows', () => ({
+  useResolvedPublicRankingRows: () => ({
+    ready: true,
+    candidates: [],
+    resolution: { rows: [], priced: 0, unresolved: 0, complete: true },
+    mortgage: { rows: [], unverified: 0, unverifiedRows: new WeakSet(), invalid: false },
+  }),
+}));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {}, radius: { md: 8 }, font: { body: 16 }, spacing: (value: number) => value }) }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));

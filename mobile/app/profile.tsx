@@ -17,6 +17,7 @@ import {
   type ProfileFilters,
 } from '../src/data/profile';
 import { useStore } from '../src/data/store';
+import { useNavigationContentReady } from '../src/hooks/useNavigationContentReady';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -28,6 +29,7 @@ export default function Profile() {
   const setPref = useStore((s) => s.setPref);
   const count = profileSelectionCount(profileFilters);
   const [layoutReady, setLayoutReady] = useState(false);
+  const contentReady = useNavigationContentReady(true);
   const auditSnapshot = useRef<ProfileFilters | null>(null);
   const firstFeature = interests
     .flatMap((section) => PROFILE_FEATURE_OPTIONS[section] ?? [])
@@ -105,11 +107,15 @@ export default function Profile() {
       <Card>
         <AppText variant="h2">{uiLabel('Saved requirements')}</AppText>
         <AppText variant="small" color="textMuted">{uiJoin('Scope', ' · ', 'All screens')}</AppText>
-        <ProfileEditor
-          sections={SECTION_ORDER}
-          value={profileFilters}
-          onChange={updateProfile}
-        />
+        {contentReady ? (
+          <ProfileEditor
+            sections={SECTION_ORDER}
+            value={profileFilters}
+            onChange={updateProfile}
+          />
+        ) : (
+          <AppText variant="small">{uiLabel('Loading')}</AppText>
+        )}
       </Card>
       {count > 0 ? (
         <View style={{ marginTop: theme.spacing(4) }}>
@@ -120,7 +126,7 @@ export default function Profile() {
           />
         </View>
       ) : null}
-      <CustomerProfilePanel />
+      {contentReady ? <CustomerProfilePanel /> : null}
     </ScreenScrollView>
   );
 }

@@ -620,14 +620,41 @@ export function uiPublicReferenceName(reference: PublicReferenceRate): UiText { 
 export function uiPublicProviderName(item: PublicProduct | PublicCoverage): UiText { return identity(item.providerName); }
 export function uiPublicEvidenceLocator(evidence: PublicEvidence): UiText { return uiIdentifier(evidence.locator); }
 /** Rebind navigator titles to reviewed labels or current catalogue identities. */
+let navigationTitleIndex: {
+  core: CorePayload;
+  byProvider: Map<string, RateRow>;
+  byProduct: Map<string, RateRow>;
+} | null = null;
+
+function navigationTitleRow(
+  core: CorePayload | null | undefined,
+  value: string,
+): { row: RateRow; asProvider: boolean } | null {
+  if (!core) return null;
+  if (navigationTitleIndex?.core !== core) {
+    const byProvider = new Map<string, RateRow>();
+    const byProduct = new Map<string, RateRow>();
+    for (const section of Object.values(core.sections)) {
+      for (const row of section.rates ?? []) {
+        if (!byProvider.has(row.provider)) byProvider.set(row.provider, row);
+        if (!byProduct.has(row.product_name)) byProduct.set(row.product_name, row);
+      }
+    }
+    navigationTitleIndex = { core, byProvider, byProduct };
+  }
+  const asProvider = navigationTitleIndex.byProvider.get(value);
+  if (asProvider) return { row: asProvider, asProvider: true };
+  const asProduct = navigationTitleIndex.byProduct.get(value);
+  return asProduct ? { row: asProduct, asProvider: false } : null;
+}
+
 export function uiNavigationTitle(value: string | undefined, core: CorePayload | null | undefined, fallback: UiCopy): UiCopy {
   const label = UI_LABELS.find(approved => approved === value);
   if (label !== undefined) return uiLabel(label);
-  for (const section of Object.values(core?.sections ?? {})) {
-    const row = section.rates.find(candidate => candidate.provider === value || candidate.product_name === value);
-    if (row) return row.provider === value ? uiProviderName(row) : uiProductName(row);
-  }
-  return fallback;
+  if (!value) return fallback;
+  const match = navigationTitleRow(core, value);
+  if (!match) return fallback;
+  return match.asProvider ? uiProviderName(match.row) : uiProductName(match.row);
 }
 export function uiBankInitials(row: Pick<RateRow, 'provider'>, brand?: { short?: string }): UiText {
   return identity(resolveBrandShort(row.provider, brand?.short).toUpperCase().slice(0, 5));

@@ -11,10 +11,12 @@ import { AppText, Button, Card } from '../src/components/ui';
 import { filterBankInsightsForSuitability } from '../src/data/bankInsights';
 import { useStore } from '../src/data/store';
 import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
+import { useNavigationContentReady } from '../src/hooks/useNavigationContentReady';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { scalarRouteParam } from '../src/lib/nav';
 
 export default function RbaResponseScreen() {
+  const contentReady = useNavigationContentReady(true);
   const core = useStore((state) => state.core);
   const coreIntegrity = useStore((state) => state.coreIntegrity);
   const calendar = useStore((state) => state.rbaCalendar);
@@ -39,9 +41,9 @@ export default function RbaResponseScreen() {
     : activeSection;
 
   useEffect(() => {
-    if (!core) return;
+    if (!core || !contentReady) return;
     void ensureBankInsights();
-  }, [core, ensureBankInsights]);
+  }, [contentReady, core, ensureBankInsights]);
 
   const suitabilityReady = useMemo(() => {
     void suitabilityRevision;
@@ -49,20 +51,21 @@ export default function RbaResponseScreen() {
   }, [includeNonStandard, suitabilityRevision]);
 
   useEffect(() => {
-    if (!core || includeNonStandard || isSuitabilityFilterReady(includeNonStandard)) return;
+    if (!contentReady || !core || includeNonStandard || isSuitabilityFilterReady(includeNonStandard)) return;
     void ensureDetails({ force: true });
-  }, [core, ensureDetails, includeNonStandard]);
+  }, [contentReady, core, ensureDetails, includeNonStandard]);
 
   const payload = useMemo(() => {
+    if (!contentReady) return null;
     void suitabilityRevision;
     return filterBankInsightsForSuitability(rawPayload, core, includeNonStandard, detailsProducts, suitabilityRevision, coreIntegrity);
-  }, [core, coreIntegrity, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
+  }, [contentReady, core, coreIntegrity, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
   const retryInsights = () => {
     setRetrying(true);
     void retryBankInsights().finally(() => setRetrying(false));
   };
 
-  if (!core) {
+  if (!core || !contentReady) {
     return (
       <Screen>
         <ScreenSkeleton />
@@ -75,7 +78,7 @@ export default function RbaResponseScreen() {
     return (
       <Screen>
         <ScrollView><ScreenContent>
-        <BankRatesPanel section={initialSection} />
+        {suitabilityWarming ? null : <BankRatesPanel section={initialSection} />}
         <Card variant="outlined" style={{ gap: 12 }}>
           <AppText variant="h3">
             {suitabilityWarming

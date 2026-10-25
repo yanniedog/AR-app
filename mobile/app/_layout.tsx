@@ -236,7 +236,7 @@ function RootNavigator() {
   }
 
   return (
-      <WordBubbleProvider scopeKey={`${pathname}:${performanceAuditActive}`}>
+      <WordBubbleProvider scopeKey={performanceAuditActive ? 'audit' : 'app'}>
       <AppUpdateBannerLayoutProvider visible={showUpdateBanner}>
         <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
           {showUpdateBanner ? (
@@ -291,40 +291,40 @@ function RootNavigator() {
               <Stack.Screen name="categories" options={{ title: 'Rates' }} />
               <Stack.Screen name="matches" options={{ title: 'Rates' }} />
               <Stack.Screen name="catalogue" options={{ title: 'Rates' }} />
-              <Stack.Screen name="bank-rates" options={{ title: 'Bank rates' }} />
+              <Stack.Screen name="bank-rates" options={{ title: 'Bank rates', animation: 'fade' }} />
               <Stack.Screen name="passthrough" options={{ title: 'Market' }} />
               <Stack.Screen name="search" options={{ title: 'Search' }} />
-              <Stack.Screen name="product/[key]" options={{ title: 'Product', headerBackTitle: 'Back' }} />
-              <Stack.Screen name="bank/[provider]" options={{ title: 'Bank' }} />
+              <Stack.Screen name="product/[key]" options={{ title: 'Product', headerBackTitle: 'Back', animation: 'fade' }} />
+              <Stack.Screen name="bank/[provider]" options={{ title: 'Bank', animation: 'fade' }} />
               <Stack.Screen name="banks" options={{ title: 'Banks' }} />
               <Stack.Screen name="compare" options={{ title: 'Compare', presentation: 'modal' }} />
-              <Stack.Screen name="calculator" options={{ title: 'Calculate' }} />
-              <Stack.Screen name="calculation-receipt" options={{ title: 'Open calculation receipt' }} />
+              <Stack.Screen name="calculator" options={{ title: 'Calculate', animation: 'fade' }} />
+              <Stack.Screen name="calculation-receipt" options={{ title: 'Open calculation receipt', animation: 'fade' }} />
               <Stack.Screen name="projections" options={{ title: 'Calculate' }} />
-              <Stack.Screen name="rba-response" options={{ title: 'Bank response' }} />
+              <Stack.Screen name="rba-response" options={{ title: 'Bank response', animation: 'fade' }} />
               <Stack.Screen
                 name="rate-receipt"
-                options={{ title: 'Bank-call brief' }}
+                options={{ title: 'Bank-call brief', animation: 'fade' }}
               />
               <Stack.Screen
                 name="rba"
                 options={{ title: 'RBA', animation: 'none' }}
               />
-              <Stack.Screen name="profile" options={{ title: 'Profile' }} />
-              <Stack.Screen name="settings" options={{ title: 'Settings' }} />
-              <Stack.Screen name="research" options={{ title: 'Market research' }} />
+              <Stack.Screen name="profile" options={{ title: 'Profile', animation: 'fade' }} />
+              <Stack.Screen name="settings" options={{ title: 'Settings', animation: 'fade' }} />
+              <Stack.Screen name="research" options={{ title: 'Market research', animation: 'fade' }} />
               <Stack.Screen name="trends" options={{ headerShown: false }} />
-              <Stack.Screen name="about" options={{ title: 'About' }} />
+              <Stack.Screen name="about" options={{ title: 'About', animation: 'fade' }} />
               <Stack.Screen
                 name="third-party-notices"
-                options={{ title: 'Open-source notices' }}
+                options={{ title: 'Open-source notices', animation: 'fade' }}
               />
               <Stack.Screen
                 name="performance-audit"
                 options={{ title: 'App health audit' }}
               />
-              <Stack.Screen name="debug-log" options={{ title: 'Debug log' }} />
-              <Stack.Screen name="terms" options={{ title: 'Terms' }} />
+              <Stack.Screen name="debug-log" options={{ title: 'Debug log', animation: 'fade' }} />
+              <Stack.Screen name="terms" options={{ title: 'Terms', animation: 'fade' }} />
               </Stack>
             </View>
             </NavigatorSafeArea>

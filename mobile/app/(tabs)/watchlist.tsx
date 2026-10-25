@@ -1,9 +1,9 @@
 import { usePublicRateCatalogue } from '../../src/data/publicRateCatalogue';
 import { publicOfferSelectionToken } from '../../src/data/publicOfferIdentity';
-import { publicComparisonCore, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate, resolvedPublicRankingRows } from '../../src/data/publicRateIntegration';
+import { publicComparisonCore, publicRateScenario, resolveLocalCurrentRate } from '../../src/data/publicRateIntegration';
 import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiSectionName, type UiCopy } from "../../src/lib/uiCopy";
 import { mandatoryEligibleRows } from '../../src/data/eligibilityGate';
-import { useScrollToTop } from '@react-navigation/native';
+import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
@@ -37,7 +37,9 @@ import {
   type TrackedRate,
 } from '../../src/data/trackedRates';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
+import { useNavigationContentReady } from '../../src/hooks/useNavigationContentReady';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
+import { useResolvedPublicRankingRows } from '../../src/hooks/useResolvedPublicRankingRows';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useUndoSnackbar } from '../../src/hooks/useUndoSnackbar';
 import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
@@ -79,6 +81,8 @@ let auditSavedFixtureSnapshot: {
 
 export default function MyRates() {
   const theme = useTheme();
+  const focused = useIsFocused();
+  const contentReady = useNavigationContentReady(focused);
   const [positionsOpen, setPositionsOpen] = useState(false);
   const core = useStore((s) => s.core);
   const manifest = useStore((s) => s.manifest);
@@ -109,9 +113,10 @@ export default function MyRates() {
   useScrollToTop(scrollRef);
 
   const items = useMemo(() => {
+    if (!contentReady) return [];
     void suitabilityRevision;
     return core ? resolveSavedRates(core, savedRates, publicCatalogue, section => publicRateScenario(section, scenario, profileFilters)).filter(item => mandatoryEligibleRows([item.row]).length > 0) : [];
-  }, [core, savedRates, suitabilityRevision, publicCatalogue, scenario, profileFilters]);
+  }, [contentReady, core, savedRates, suitabilityRevision, publicCatalogue, scenario, profileFilters]);
   const unavailableRefs = useMemo(
     () => unresolvedSavedRateRefs(savedRates, items),
     [items, savedRates],
@@ -125,22 +130,86 @@ export default function MyRates() {
     (section) => profileFeaturesForSection(profileFilters, section).length > 0 && !detailsProducts,
   );
   useEffect(() => {
-    if (profileDetailsPending) void ensureDetails();
-  }, [ensureDetails, profileDetailsPending]);
+    if (!contentReady || !profileDetailsPending) return;
+    void ensureDetails();
+  }, [contentReady, ensureDetails, profileDetailsPending]);
+
+  const positionsFocused = focused && contentReady && scenarioStatus === 'ready';
+  const mortgageLvr = computeLvr(scenario.mortgage).lvr;
+  const mortgageSectionScenario = useMemo(
+    () => publicRateScenario('Mortgage', scenario, profileFilters),
+    [scenario, profileFilters],
+  );
+  const savingsSectionScenario = useMemo(
+    () => publicRateScenario('Savings', scenario, profileFilters),
+    [scenario, profileFilters],
+  );
+  const tdSectionScenario = useMemo(
+    () => publicRateScenario('TD', scenario, profileFilters),
+    [scenario, profileFilters],
+  );
+  const mortgageRowScenario = useCallback(
+    (row: RateRow) => publicRateScenario('Mortgage', scenario, profileFilters, row),
+    [scenario, profileFilters],
+  );
+  const savingsRowScenario = useCallback(
+    (row: RateRow) => publicRateScenario('Savings', scenario, profileFilters, row),
+    [scenario, profileFilters],
+  );
+  const tdRowScenario = useCallback(
+    (row: RateRow) => publicRateScenario('TD', scenario, profileFilters, row),
+    [scenario, profileFilters],
+  );
+  // One cooperative expand+price pass per section — never sync publicComparisonCore
+  // across Mortgage/Savings/TD on Saved mount.
+  const mortgagePricing = useResolvedPublicRankingRows({
+    sourceRows: core?.sections.Mortgage?.rates ?? [],
+    catalogue: publicCatalogue,
+    section: 'Mortgage',
+    sectionScenario: mortgageSectionScenario,
+    rowScenario: mortgageRowScenario,
+    focused: positionsFocused,
+    revision: suitabilityRevision,
+  });
+  const savingsPricing = useResolvedPublicRankingRows({
+    sourceRows: core?.sections.Savings?.rates ?? [],
+    catalogue: publicCatalogue,
+    section: 'Savings',
+    sectionScenario: savingsSectionScenario,
+    rowScenario: savingsRowScenario,
+    focused: positionsFocused,
+    revision: suitabilityRevision,
+  });
+  const tdPricing = useResolvedPublicRankingRows({
+    sourceRows: core?.sections.TD?.rates ?? [],
+    catalogue: publicCatalogue,
+    section: 'TD',
+    sectionScenario: tdSectionScenario,
+    rowScenario: tdRowScenario,
+    focused: positionsFocused,
+    revision: suitabilityRevision,
+  });
+  const sectionPricing = useMemo(() => ({
+    Mortgage: mortgagePricing,
+    Savings: savingsPricing,
+    TD: tdPricing,
+  }), [mortgagePricing, savingsPricing, tdPricing]);
 
   const positions = useMemo<RatePosition[]>(() => {
+    if (!contentReady) return [];
     void suitabilityRevision;
     if (!core || scenarioStatus !== 'ready') return [];
-    const mortgage = computeLvr(scenario.mortgage);
     return SECTION_ORDER.flatMap((section): RatePosition[] => {
       const local = resolveLocalCurrentRate(section, scenario, publicCatalogue.references, undefined, publicCatalogue, profileFilters);
       const currentRate = local.status === 'exact' && local.payableRate != null ? Number(local.payableRate) : null;
       if (currentRate == null) return [];
-      const rows = core.sections[section]?.rates ?? [];
-      const ready = isSuitabilityFilterReady(includeNonStandard)
+      const catalogueReady = publicCatalogue.status === 'unavailable'
+        || (publicCatalogue.status === 'ready' && publicCatalogue.allLoaded);
+      const gateReady = isSuitabilityFilterReady(includeNonStandard)
         && !(profileFeaturesForSection(profileFilters, section).length > 0 && !detailsProducts)
-        && (publicCatalogue.status === 'unavailable' || publicCatalogue.status === 'ready' && publicCatalogue.allLoaded);
-      if (!ready) {
+        && catalogueReady;
+      const priced = sectionPricing[section];
+      if (!gateReady || !priced.ready) {
         return [{
           section,
           currentRate,
@@ -149,11 +218,15 @@ export default function MyRates() {
           ready: false,
         }];
       }
-      const candidates = publicRecommendationRows(rows, publicCatalogue, section, publicRateScenario(section, scenario, profileFilters));
-      const pricing = resolvedPublicRankingRows(scenarioProfileFilterRows(candidates, profileFilters, section, mortgage.lvr, detailsProducts), publicCatalogue,
-        row => publicRateScenario(section, scenario, profileFilters, row));
+      const ranked = scenarioProfileFilterRows(
+        priced.resolution.rows,
+        profileFilters,
+        section,
+        section === 'Mortgage' ? mortgageLvr : null,
+        detailsProducts,
+      );
       const match = bestRow(
-        pricing.rows,
+        ranked,
         section,
         includeNonStandard,
         depositRankMetric,
@@ -175,16 +248,19 @@ export default function MyRates() {
       }];
     });
   }, [
+    contentReady,
     core,
     depositRankMetric,
     detailsProducts,
     includeNonStandard,
+    mortgageLvr,
     mortgageRateMetric,
     profileFilters,
+    publicCatalogue,
     scenario,
     scenarioStatus,
+    sectionPricing,
     suitabilityRevision,
-    publicCatalogue,
   ]);
 
   const openRateEditor = useCallback((section: SectionKey) => {
@@ -318,7 +394,7 @@ export default function MyRates() {
       {
         id: 'saved.items',
         kind: 'list',
-        status: core ? 'ready' : 'pending',
+        status: core && contentReady ? 'ready' : 'pending',
         expectedCount: items.length,
         actualCount: items.length,
       },
@@ -353,6 +429,13 @@ export default function MyRates() {
   }, [items, removeSavedRate, restoreSavedRate, showUndo, trackedById]);
 
   if (!core) return <ScreenSkeleton />;
+  if (!contentReady) {
+    return (
+      <Screen onLayout={() => setLayoutReady(true)}>
+        <ScreenSkeleton />
+      </Screen>
+    );
+  }
 
   const hasAnyPrivateRate = positions.length > 0;
   if (!items.length && !hasAnyPrivateRate && scenarioStatus === 'ready') {

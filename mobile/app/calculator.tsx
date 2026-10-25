@@ -1,5 +1,5 @@
 import { uiLabel } from "../src/lib/uiCopy";
-import React from 'react';
+import React, { startTransition, useCallback } from 'react';
 import { View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 
@@ -18,6 +18,11 @@ export default function Calculate() {
   const mode = calculationMode(params.mode);
   const activeSection = useStore(state => state.activeSection);
   const section = destinationSectionFromParam(params.section) ?? activeSection;
+  const changeMode = useCallback((next: string) => {
+    startTransition(() => {
+      router.setParams({ mode: next, section });
+    });
+  }, [section]);
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <Stack.Screen options={{ title: 'Calculate' }} />
@@ -25,7 +30,7 @@ export default function Calculate() {
         <SegmentedControl
           options={[{ label: uiLabel("Rate check"), value: 'check' }, { label: uiLabel("Projection"), value: 'project' }]}
           value={mode}
-          onChange={(next) => router.setParams({ mode: next, section })}
+          onChange={changeMode}
         />
       </View>
       {mode === 'project' ? <ProjectionWorkspace /> : <RateCheckWorkspace />}

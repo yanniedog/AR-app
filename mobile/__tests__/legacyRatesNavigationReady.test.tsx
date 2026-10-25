@@ -8,6 +8,14 @@ import Changes from '../app/passthrough';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { captureRatesSession, initializeRatesSession, restoreRatesSession, updateRatesSection, useRatesSession } from '../src/data/ratesSession';
 import { resolveRatesIntent } from '../src/lib/ratesIntent';
+
+jest.mock('../src/lib/yieldToUi', () => ({
+  scheduleAfterInteractions: (work: () => void) => {
+    work();
+    return () => undefined;
+  },
+}));
+
 const originalSession = captureRatesSession();
 afterEach(() => restoreRatesSession(originalSession));
 

@@ -107,6 +107,9 @@ jest.mock('../src/hooks/useLogoReadiness', () => ({
 }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 1 }));
 jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: () => mockRateHistory }));
+jest.mock('../src/hooks/useDeferredHistorySurface', () => ({
+  useDeferredHistorySurface: () => true,
+}));
 jest.mock('../src/hooks/useUserRateScenario', () => ({
   useUserRateScenario: () => ({
     scenario: jest.requireActual('../src/data/userRateScenario').normalizeUserRateScenario(undefined),
@@ -114,7 +117,14 @@ jest.mock('../src/hooks/useUserRateScenario', () => ({
   }),
 }));
 jest.mock('../src/lib/nav', () => ({ openBank: jest.fn(), openRateReceipt: jest.fn() }));
-jest.mock('../src/lib/yieldToUi', () => ({ yieldToUi: async () => undefined }));
+jest.mock('../src/lib/yieldToUi', () => ({
+  yieldToUi: async () => undefined,
+  yieldToPaintFrames: async () => undefined,
+  scheduleAfterInteractions: (work: () => void) => {
+    const handle = setTimeout(work, 0);
+    return () => clearTimeout(handle);
+  },
+}));
 jest.mock('../src/lib/proAccess', () => ({ effectiveBankInsights: () => false, effectiveHistoryRibbon: (prefs: { showHistoryRibbon?: boolean }) => Boolean(prefs.showHistoryRibbon) }));
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({

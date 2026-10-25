@@ -289,17 +289,67 @@ function BankHistoryChartView({
   const yAt = (v: number) => padT + innerH - ((v - yDomain.min) / span) * innerH;
   const pct = (v: number) => uiRate(v);
 
-  const mins = plotPoints.map((p) => p.min);
-  const maxs = plotPoints.map((p) => p.max);
-  const means = plotPoints.map((p) => p.mean);
-  const medians = plotPoints.map((p) => p.median);
-  const band = buildBandPath(plotDates, mins, maxs, xAt, yAt, true);
-  const meanLine = buildLinePath(means, xAt, yAt, true);
-  const medianLine = buildLinePath(medians, xAt, yAt, true);
-  const minLine = buildLinePath(mins, xAt, yAt, true);
-  const maxLine = buildLinePath(maxs, xAt, yAt, true);
-  const rbaLine = showRba ? stepPath(rbaSteps, xAt, yAt) : null;
-  const highlightLine = highlightValues ? buildLinePath(highlightValues, xAt, yAt, true) : null;
+  // Skip path construction until layout width is known — the first paint after
+  // deferred mount otherwise builds full SVG paths twice (width 0, then measured).
+  const chartPaths = useMemo(() => {
+    const mins = plotPoints.map((p) => p.min);
+    const maxs = plotPoints.map((p) => p.max);
+    const means = plotPoints.map((p) => p.mean);
+    const medians = plotPoints.map((p) => p.median);
+    if (width <= 0) {
+      return {
+        mins,
+        maxs,
+        means,
+        medians,
+        band: null as string | null,
+        meanLine: null as string | null,
+        medianLine: null as string | null,
+        minLine: null as string | null,
+        maxLine: null as string | null,
+        rbaLine: null as string | null,
+        highlightLine: null as string | null,
+      };
+    }
+    return {
+      mins,
+      maxs,
+      means,
+      medians,
+      band: buildBandPath(plotDates, mins, maxs, xAt, yAt, true),
+      meanLine: buildLinePath(means, xAt, yAt, true),
+      medianLine: buildLinePath(medians, xAt, yAt, true),
+      minLine: buildLinePath(mins, xAt, yAt, true),
+      maxLine: buildLinePath(maxs, xAt, yAt, true),
+      rbaLine: showRba ? stepPath(rbaSteps, xAt, yAt) : null,
+      highlightLine: highlightValues ? buildLinePath(highlightValues, xAt, yAt, true) : null,
+    };
+  }, [
+    highlightValues,
+    innerH,
+    innerW,
+    plotDates,
+    plotPoints,
+    rbaSteps,
+    showRba,
+    span,
+    width,
+    yDomain.max,
+    yDomain.min,
+  ]);
+  const {
+    mins,
+    maxs,
+    means,
+    medians,
+    band,
+    meanLine,
+    medianLine,
+    minLine,
+    maxLine,
+    rbaLine,
+    highlightLine,
+  } = chartPaths;
 
   const rateInk = SECTIONS[section].lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   const ribbonColor = rateInk;
