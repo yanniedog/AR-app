@@ -1,5 +1,5 @@
 import { PerformanceAuditReadinessRegistry } from '../src/lib/performanceAuditReadiness';
-import { captureAuditDiagnostic, deidentifyAuditText, publicAuditDiagnostic, publicAuditError } from '../src/lib/performanceAuditDiagnostic';
+import { captureAuditDiagnostic, scoreAuditTargetProbeEvidence, deidentifyAuditText, publicAuditDiagnostic, publicAuditError } from '../src/lib/performanceAuditDiagnostic';
 import { encodeCompactDiagnosticJson, decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -65,4 +65,37 @@ test('work diagnostics retain bounded stage/loading facts without financial inpu
   expect(diagnostic.readiness.surfaces[0].work).toMatchObject({ pricingStage: 'scope', sourceRowCount: 8119,
     catalogueStatus: 'ready', mortgageCriteriaReady: true, detailsLoading: false });
   expect(JSON.stringify(diagnostic)).not.toMatch(/loanAmount|123456|secret account|generationId|private-id/);
+});
+
+
+test('old ready Response chart cannot pass a newly committed provider surface', () => {
+  const registry = new PerformanceAuditReadinessRegistry(); registry.beginCapture('mismatch');
+  registry.registerSurface({ id: 'moves.response-chart', datasetRevision: 'same-data', renderRevision: 'new-provider', probes: [
+    { id: 'response.data', kind: 'data', status: 'ready', required: true, expectedCount: 1, actualCount: 1 },
+    { id: 'response.list', kind: 'list', status: 'ready', required: true, expectedCount: 95, actualCount: 95 },
+    { id: 'bank-rates-chart', kind: 'graphic', status: 'ready', required: false,
+      datasetRevision: 'same-data', renderRevision: 'old-provider', expectedCount: 14596, actualCount: 14596,
+      layoutMeasured: true, accessibleSummary: true },
+  ] });
+  const captured = captureAuditDiagnostic(registry.snapshot(), 'complete');
+  expect(captured.readiness!.surfaces[0].probes.find(probe => probe.id === 'bank-rates-chart')).toMatchObject({ datasetMatches: true, renderMatches: false });
+  expect(scoreAuditTargetProbeEvidence(captured, 'moves.response-chart')).toBe('warn');
+});
+
+test('projection diagnostics classify incomplete inputs without publishing missing input text', () => {
+  const registry = new PerformanceAuditReadinessRegistry(); registry.beginCapture('projection');
+  registry.registerSurface({ id: 'projections.lifecycle-chart', probes: [
+    { id: 'projections.model', kind: 'data', status: 'error', required: false,
+      error: 'Incomplete scenario: private balance 123456, unknown private field' },
+  ] });
+  const captured = captureAuditDiagnostic(registry.snapshot(), 'complete');
+  const body = JSON.stringify(publicAuditDiagnostic(captured));
+  expect(body).toContain('incomplete-scenario');
+  expect(body).not.toMatch(/123456|private balance|unknown private/);
+  expect(scoreAuditTargetProbeEvidence(captured, 'projections.lifecycle-chart')).toBe('warn');
+});
+
+
+test.each([true, false, 'private scenario text', 123])('malformed classification %p is not exported', errorClass => {
+  expect(publicAuditDiagnostic({ errorClass })).toEqual({ errorClass: null });
 });

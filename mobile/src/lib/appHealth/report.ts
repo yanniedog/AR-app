@@ -387,6 +387,17 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
   ],
 };
 
+// Source-authored display roles only. Never publish arbitrary contract IDs.
+const PUBLIC_DISPLAY_SURFACES = new Set([
+  'rates.results', 'browse.hierarchy', 'search.results', 'lenders.list',
+  'market.overview', 'bank-rates.dashboard', 'moves.response-chart',
+  'outlook.dashboard', 'outlook.rba-response', 'outlook.economy', 'rba.dashboard', 'saved.list', 'settings.sections',
+  'calculator.results', 'projections.lifecycle-chart', 'profile.filters',
+  'product.details', 'receipt.evidence', 'lender.details', 'compare.table',
+  'terms.notices', 'debug-log.entries', 'projections.inputs', 'settings.app-update',
+  'not-found.recovery', 'audit.progress',
+]);
+
 function publicMetrics(check: AppHealthCheck, sanitizeHistory: ReturnType<typeof publicHistoryCoverageSanitizer>): Record<string, AppHealthMetricValue> {
   const allowed = new Set(APP_HEALTH_PUBLIC_METRIC_ALLOWLIST[check.code] ?? []);
   const metrics = Object.fromEntries(
@@ -399,6 +410,15 @@ function publicMetrics(check: AppHealthCheck, sanitizeHistory: ReturnType<typeof
           (typeof value === 'number' && Number.isFinite(value))),
     ),
   );
+  if (check.domain === 'display-completeness' && Array.isArray(check.localEvidence?.failedSurfaceIds)) {
+    const ids = check.localEvidence.failedSurfaceIds;
+    const known = [...new Set(ids.filter((id): id is string =>
+      typeof id === 'string' && PUBLIC_DISPLAY_SURFACES.has(id)))].sort();
+    // Fixed-size role vocabulary bounds this export, even for malformed local evidence.
+    metrics.failedSurfaceRoles = JSON.stringify(known);
+    metrics.unclassifiedFailedSurfaces = ids.filter(id =>
+      typeof id !== 'string' || !PUBLIC_DISPLAY_SURFACES.has(id)).length;
+  }
   return check.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE
     ? { ...metrics, ...sanitizeHistory(check.metrics) } : metrics;
 }

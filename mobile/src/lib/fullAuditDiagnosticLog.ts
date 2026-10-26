@@ -43,6 +43,7 @@ const FIXED_TEXT: Record<string, ReadonlySet<string>> = Object.fromEntries(Objec
   iteration: 'cold warm deep-first-pass deep-repeat',
   stage: 'start route pre-action action path data readiness settle back recovery origin-readiness complete check',
   type: PUBLIC_AUDIT_ERROR_TYPES.join(' '),
+  errorClass: 'incomplete-scenario unclassified',
   checkStatus: 'current available incompatible', downloadPhase: 'idle waiting downloading retrying verifying ready cancelled error',
   ownerCheckId: ANDROID_UPDATE_READINESS_AUDIT.checkId,
   semanticActionId: ANDROID_UPDATE_READINESS_AUDIT.semanticActionId,
@@ -88,6 +89,7 @@ function enumContext(key: string, parent: string): boolean {
   if (key === 'stage' || key === 'returnStage') return parent === '.checks[].diagnostic';
   if (key === 'type' || key === 'frames') return parent === '.checks[].errorDetails';
   if (key === 'stateImpact') return /^\.plan(?:\.passes\[\]\.steps\[\])?\.safety$/.test(parent);
+  if (key === 'errorClass') return parent === PROBE_PATH;
   if (key === 'kind') return parent === '.checks[]' || parent === PROBE_PATH;
   if (key === 'status') return parent === '.checks[]' || parent === PROBE_PATH || parent === '.backgroundWorkWait';
   if (key === 'coldStatus' || key === 'warmStatus') return parent === '.routeAggregates[]';

@@ -20,7 +20,7 @@ function role(value: string | undefined): string | null {
 }
 
 const STAGES = new Set<AuditDiagnosticStage>(['start', 'route', 'pre-action', 'action', 'path', 'data', 'readiness', 'settle', 'back', 'recovery', 'origin-readiness', 'complete', 'check']);
-const KEYS = new Set('returnReadiness returnStage work stage readiness ready capturing blockers code surface probe surfaces id actionRevision probes kind required status expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent coveredBySheet'.split(' '));
+const KEYS = new Set('returnReadiness returnStage work stage readiness ready capturing blockers code surface probe surfaces id actionRevision probes kind required status expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent errorClass coveredBySheet'.split(' '));
 const CODES = new Set('capture-inactive no-surfaces no-probes probe-pending probe-error dataset-revision-mismatch render-revision-mismatch count-incomplete graphic-evidence-missing required-kind-missing'.split(' '));
 const NUMERIC = new Set('actionRevision expected actual visible fallback'.split(' '));
 const BOOLEAN = new Set('ready capturing required empty layout accessible datasetMatches renderMatches errorPresent coveredBySheet'.split(' '));
@@ -34,6 +34,7 @@ export function publicAuditDiagnostic(value: unknown): unknown {
       if (['id', 'surface', 'probe'].includes(key)) return role(item);
       if ((key === 'stage' || key === 'returnStage') && STAGES.has(item as AuditDiagnosticStage) || key === 'code' && CODES.has(item) ||
         key === 'kind' && ['data', 'list', 'logo', 'graphic', 'layout'].includes(item) ||
+        key === 'errorClass' && ['incomplete-scenario', 'unclassified'].includes(item) ||
         key === 'status' && ['pending', 'ready', 'error'].includes(item)) return item;
       return null;
     }
@@ -257,6 +258,8 @@ function diagnosticReadiness(snapshot: PerformanceAuditReadinessSnapshot) {
         datasetMatches: probe.datasetRevision == null || surface.datasetRevision == null ? null : probe.datasetRevision === surface.datasetRevision,
         renderMatches: probe.renderRevision == null || surface.renderRevision == null ? null : probe.renderRevision === surface.renderRevision,
         errorPresent: probe.error !== null,
+        errorClass: probe.error == null ? null : probe.id === 'projections.model' &&
+          probe.error.startsWith('Incomplete scenario: ') ? 'incomplete-scenario' : 'unclassified',
         error: probe.error, datasetRevision: probe.datasetRevision, renderRevision: probe.renderRevision, updatedAtMs: probe.updatedAtMs,
       })),
     })),
