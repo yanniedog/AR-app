@@ -1,3 +1,4 @@
+import { publicAuditWorkDiagnostic } from './performanceAuditWorkDiagnostic';
 import type { PerformanceAuditReport } from './performanceAudit';
 import { toPublicAppHealthReport } from './appHealth';
 import { PUBLIC_AUDIT_ERROR_TYPES, publicAuditDiagnostic, publicAuditError, publicAuditFailureReason, publicHealthFailureReason, stallTimeoutFields } from './performanceAuditDiagnostic';
@@ -52,6 +53,7 @@ const FIXED_TEXT: Record<string, ReadonlySet<string>> = Object.fromEntries(Objec
   outcome: 'completed failed fallback superseded unavailable',
   activeWork: 'refreshing postRefreshWarming bankRateHistoryLoading detailsLoading',
 }).map(([key, values]) => [key, new Set(values.split(' '))]));
+FIXED_TEXT.returnStage = FIXED_TEXT.stage;
 for (const [key, values] of Object.entries(AUDIT_PRODUCER_ENUMS)) FIXED_TEXT[key] = new Set([...(FIXED_TEXT[key] ?? []), ...values]);
 
 const SCALARS = new Set(('schemaVersion durationMs wallClockMs hangTimeoutMs storedCheckCount developmentBuild viewportWidth viewportHeight fontScale payloadProducts payloadProviders detailsLoaded historyLoaded productHistoryLoaded diagnosticsUploadEnabled networkConnected networkInternetReachable maximumSafeFeaturesEnabled pass warn fail skipped unavailable executed justifiedSkipped unexpectedSkipped coveragePercent slowestCheckMs plannedChecks storedChecks plannedJourneyChecks executedJourneyChecks justifiedSkippedJourneyChecks unexpectedSkippedJourneyChecks unavailableJourneyChecks attemptedPercent excludedUnsafeFacetCount complete partial coldForwardMs warmForwardMs coldBackMs warmBackMs forwardChangeMs backChangeMs ready capturing actionRevision registeredAtMs updatedAtMs coveredBySheet required expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent present frames elapsedMs stageElapsedMs lastCheckpointAgeMs processingCheckpoints').split(' '));
@@ -83,7 +85,7 @@ function enumContext(key: string, parent: string): boolean {
   if (key === 'overall') return parent === '.summary';
   if (['measurementMode', 'returnNavigationKind', 'iteration'].includes(key)) return parent === '.checks[].metrics';
   if (['checkStatus', 'downloadPhase', 'ownerCheckId', 'semanticActionId', 'executionPhase', 'transportScope', 'actionSource', 'expectedSurface'].includes(key)) return parent === '.checks[].metrics';
-  if (key === 'stage') return parent === '.checks[].diagnostic';
+  if (key === 'stage' || key === 'returnStage') return parent === '.checks[].diagnostic';
   if (key === 'type' || key === 'frames') return parent === '.checks[].errorDetails';
   if (key === 'stateImpact') return /^\.plan(?:\.passes\[\]\.steps\[\])?\.safety$/.test(parent);
   if (key === 'kind') return parent === '.checks[]' || parent === PROBE_PATH;
@@ -94,7 +96,7 @@ function enumContext(key: string, parent: string): boolean {
   return false;
 }
 const FIELDS = new Set([...PUBLIC_AUDIT_METRIC_FIELDS, ...AUDIT_PRODUCER_METRIC_FIELDS, ...SCALARS, ...Object.keys(FIXED_TEXT),
-  ...('app environment watchdog plan inputs passes steps coverage summary checks routeAggregates limitations backgroundWorkWait payloadWork jobs diagnostic readiness blockers code surface probe surfaces id actions lastCompletedAction probes error errorDetails trace metrics appHealth appVersion buildVersion platformVersion osVersion payloadRunDate datasetRevision renderRevision sessionId startedAt finishedAt lastStoredCheckAt label journeyLabel slowestCheckLabel slowestCheckId missingPlannedCheckIds duplicateStoredCheckIds unexpectedStoredCheckIds journeyId manufacturer brand model totalMemoryBytes networkType phaseDetail capturedAt outcome stage reason').split(' ')]);
+  ...('app environment watchdog plan inputs passes steps coverage summary checks routeAggregates limitations backgroundWorkWait payloadWork jobs diagnostic readiness returnReadiness returnStage work blockers code surface probe surfaces id actions lastCompletedAction probes error errorDetails trace metrics appHealth appVersion buildVersion platformVersion osVersion payloadRunDate datasetRevision renderRevision sessionId startedAt finishedAt lastStoredCheckAt label journeyLabel slowestCheckLabel slowestCheckId missingPlannedCheckIds duplicateStoredCheckIds unexpectedStoredCheckIds journeyId manufacturer brand model totalMemoryBytes networkType phaseDetail capturedAt outcome stage reason').split(' ')]);
 for (const field of ('message safety renderRevisionBefore renderRevisionAfter actionResultEvidence readinessEvidence graphicEvidence readinessActionEvidence account accountBalance balance loanBalance loanAmount propertyValue currentRate lvr productKey product_key provider query searchQuery parameters profile profileFilters scenario selectionToken selectionTokens generationId bundleSha coreSha payloadRevision privateText').split(' ')) FIELDS.add(field);
 for (const names of Object.values(SCALAR_PATHS)) for (const name of names) FIELDS.add(name);
 for (const field of ('coverageProfile passId scenarioId semanticActionId expectedPath expectedSurface skipReason skipSafety when reason unsafeActionsExcluded excludedUnsafeActions stages runDate manifestRunDate revision coreSha detailsSha activeWork').split(' ')) FIELDS.add(field);
@@ -134,6 +136,9 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
   const privateField = /^(?:sessionId|startedAt|finishedAt|lastStoredCheckAt|manufacturer|brand|model|networkType|label|journeyLabel|slowestCheckLabel|query|searchQuery|parameters|inputs|profile|profileFilters|scenario|accountBalance|balance|loanBalance|loanAmount|propertyValue|currentRate|lvr|productKey|product_key|provider|selectionTokens?|actionResultEvidence|readinessEvidence|graphicEvidence|readinessActionEvidence|limitations|generationId|bundleSha|coreSha|payloadRevision|privateText)$/i;
   const visit = (value: unknown, key = '', path = ''): unknown => {
     if (value == null) return value;
+    // Reuse the same strict schema for destination and return evidence.
+    path = path.replace(/^\.checks\[\]\.diagnostic\.returnReadiness(?=\.|$)/, '.checks[].diagnostic.readiness');
+    if (path === '.checks[].diagnostic.readiness.surfaces[].work') return publicAuditWorkDiagnostic(value) ?? {};
     const parent = path.slice(0, path.lastIndexOf('.'));
     if (['.startedAt', '.finishedAt', '.watchdog.lastStoredCheckAt', '.backgroundWorkWait.startedAt', '.backgroundWorkWait.capturedAt',
       '.backgroundWorkWait.jobs[].startedAt', '.backgroundWorkWait.jobs[].finishedAt', '.backgroundWorkWait.jobs[].stages[].startedAt'].includes(path)) {
