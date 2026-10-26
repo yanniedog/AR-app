@@ -12,7 +12,7 @@ import {
 } from '../data/productFacts';
 import { matchingLenders, visibleFilterOptions } from '../lib/filterOptions';
 import { SearchBar } from './controls';
-import { SheetSurface } from './SheetSurface';
+import { SheetSurface, type SheetAuditState } from './SheetSurface';
 import { AppText, Button, Chip, Disclosure, Divider, Row } from './ui';
 import { uiCount, uiJoin, uiLabel, uiProviderName, useProviderSearchInput, type UiCopy, type UiChild } from '../lib/uiCopy';
 
@@ -32,6 +32,7 @@ function filterGroupTitle(field: string): UiCopy {
 // under Reanimated 4, leaving the filter button dead.
 export function FilterSheet({
   visible,
+  onAuditStateChange,
   onClose,
   options,
   optionsPending = false,
@@ -49,6 +50,7 @@ export function FilterSheet({
   children?: UiChild;
   controlledDraft?: Filters;
   onDraftChange?: React.Dispatch<React.SetStateAction<Filters>>;
+  onAuditStateChange?: (state: SheetAuditState) => void;
   visible: boolean;
   onClose: () => void;
   options: SearchFilterOptions;
@@ -177,6 +179,7 @@ export function FilterSheet({
 
   return (
     <SheetSurface
+      onAuditStateChange={onAuditStateChange}
       visible={visible}
       title="Temporary filters"
       onClose={onClose}

@@ -1,3 +1,4 @@
+import { publicAuditWorkDiagnostic, type AuditWorkDiagnostic } from './performanceAuditWorkDiagnostic';
 export type PerformanceAuditReadinessKind =
   | 'data'
   | 'list'
@@ -12,6 +13,8 @@ export type PerformanceAuditSemanticAction = (...args: unknown[]) => unknown | P
 export interface PerformanceAuditProbeDefinition {
   id: string;
   kind: PerformanceAuditReadinessKind;
+  /** The underlying row surface is deliberately occluded by its own sheet. */
+  coveredBySheet?: boolean;
   required?: boolean;
   status?: PerformanceAuditProbeStatus;
   datasetRevision?: string | null;
@@ -33,6 +36,8 @@ export interface PerformanceAuditProbeDefinition {
 
 export interface PerformanceAuditProbePatch {
   kind?: PerformanceAuditReadinessKind;
+  /** The underlying row surface is deliberately occluded by its own sheet. */
+  coveredBySheet?: boolean;
   required?: boolean;
   status?: PerformanceAuditProbeStatus;
   datasetRevision?: string | null;
@@ -48,6 +53,7 @@ export interface PerformanceAuditProbePatch {
 }
 
 export interface PerformanceAuditSurfaceDefinition {
+  work?: AuditWorkDiagnostic;
   id: string;
   routeKey?: string | null;
   datasetRevision?: string | null;
@@ -57,6 +63,7 @@ export interface PerformanceAuditSurfaceDefinition {
 }
 
 export interface PerformanceAuditSurfacePatch {
+  work?: AuditWorkDiagnostic;
   routeKey?: string | null;
   datasetRevision?: string | null;
   renderRevision?: string | null;
@@ -96,6 +103,7 @@ export interface PerformanceAuditReadinessBlocker {
 export interface PerformanceAuditProbeSnapshot {
   id: string;
   kind: PerformanceAuditReadinessKind;
+  coveredBySheet?: boolean;
   required: boolean;
   status: PerformanceAuditProbeStatus;
   datasetRevision: string | null;
@@ -112,6 +120,7 @@ export interface PerformanceAuditProbeSnapshot {
 }
 
 export interface PerformanceAuditSurfaceSnapshot {
+  work?: AuditWorkDiagnostic;
   id: string;
   routeKey: string | null;
   datasetRevision: string | null;
@@ -199,6 +208,7 @@ export interface WaitForPerformanceAuditReadinessOptions {
 type MutableProbe = PerformanceAuditProbeSnapshot;
 
 interface MutableSurface {
+  work?: AuditWorkDiagnostic;
   id: string;
   routeKey: string | null;
   datasetRevision: string | null;
@@ -298,6 +308,7 @@ function probeFingerprint(surfaceId: string, probe: PerformanceAuditProbeSnapsho
     probe.id,
     probe.kind,
     probe.required ? '1' : '0',
+    probe.coveredBySheet ? 'covered' : '',
     probe.status,
     probe.datasetRevision ?? '',
     probe.renderRevision ?? '',
@@ -326,6 +337,7 @@ function readinessFingerprint(
       surface.renderRevision ?? '',
       String(surface.actionRevision),
       surface.lastCompletedAction ?? '',
+      JSON.stringify(surface.work ?? null),
     ].join('\u001f'));
     for (const probe of surface.probes) values.push(probeFingerprint(surface.id, probe));
   }
@@ -446,6 +458,7 @@ export class PerformanceAuditReadinessRegistry {
     const priorCompletion = this.actionCompletions.get(id);
     const surface: MutableSurface = {
       id,
+      work: publicAuditWorkDiagnostic(definition.work),
       routeKey: nullable(definition.routeKey),
       datasetRevision: nullable(definition.datasetRevision),
       renderRevision: nullable(definition.renderRevision),
@@ -472,6 +485,7 @@ export class PerformanceAuditReadinessRegistry {
     const nextDatasetRevision = patch.datasetRevision === undefined
       ? surface.datasetRevision
       : nullable(patch.datasetRevision);
+    const nextWork = patch.work === undefined ? surface.work : publicAuditWorkDiagnostic(patch.work);
     const nextRenderRevision = patch.renderRevision === undefined
       ? surface.renderRevision
       : nullable(patch.renderRevision);
@@ -480,11 +494,13 @@ export class PerformanceAuditReadinessRegistry {
       nextRouteKey === surface.routeKey &&
       nextDatasetRevision === surface.datasetRevision &&
       nextRenderRevision === surface.renderRevision &&
+      JSON.stringify(nextWork) === JSON.stringify(surface.work) &&
       mapsHaveSameActions(nextActions, surface.actions)
     ) return true;
     surface.routeKey = nextRouteKey;
     surface.datasetRevision = nextDatasetRevision;
     surface.renderRevision = nextRenderRevision;
+    surface.work = nextWork;
     surface.actions = nextActions;
     surface.updatedAtMs = this.clock.now();
     this.emit(false, surface.id);
@@ -526,6 +542,7 @@ export class PerformanceAuditReadinessRegistry {
     if (!surface || !probe) return false;
     const status = patch.status ?? probe.status;
     const next: Omit<MutableProbe, 'id' | 'updatedAtMs'> = {
+      coveredBySheet: patch.coveredBySheet ?? probe.coveredBySheet,
       kind: patch.kind ?? probe.kind,
       required: patch.required ?? probe.required,
       status,
@@ -561,6 +578,7 @@ export class PerformanceAuditReadinessRegistry {
         : normalizeError(status, patch.error),
     };
     if (
+      next.coveredBySheet === probe.coveredBySheet &&
       next.kind === probe.kind &&
       next.required === probe.required &&
       next.status === probe.status &&
@@ -654,6 +672,7 @@ export class PerformanceAuditReadinessRegistry {
       .sort((left, right) => left.id.localeCompare(right.id))
       .map<PerformanceAuditSurfaceSnapshot>((surface) => ({
         id: surface.id,
+        work: surface.work ? { ...surface.work } : undefined,
         routeKey: surface.routeKey,
         datasetRevision: surface.datasetRevision,
         renderRevision: surface.renderRevision,
@@ -687,6 +706,7 @@ export class PerformanceAuditReadinessRegistry {
         });
       }
       for (const probe of surface.probes) {
+        if (probe.coveredBySheet === true) continue;
         if (limitedKinds && !limitedKinds.has(probe.kind)) continue;
         if (!limitedKinds && !probe.required && !selectedKinds?.has(probe.kind)) continue;
         if (probe.kind === 'graphic' && !probe.required && !selectedKinds?.has('graphic') &&
@@ -768,6 +788,7 @@ export class PerformanceAuditReadinessRegistry {
     }
     const probes = surfaces.flatMap((surface) => surface.probes);
     const required = probes.filter((probe) => {
+      if (probe.coveredBySheet === true) return false;
       if (limitedKinds) return limitedKinds.has(probe.kind);
       return probe.required || selectedKinds?.has(probe.kind);
     });
@@ -961,6 +982,7 @@ export class PerformanceAuditReadinessRegistry {
     const status = definition.status ?? 'pending';
     return {
       id,
+      ...(definition.coveredBySheet === undefined ? {} : { coveredBySheet: definition.coveredBySheet }),
       kind: definition.kind,
       required: definition.required ?? true,
       status,

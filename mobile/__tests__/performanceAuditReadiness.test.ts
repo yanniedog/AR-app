@@ -935,3 +935,15 @@ describe('PerformanceAuditReadinessRegistry', () => {
     });
   });
 });
+
+test('a sheet-covered list retains pending visibility evidence without blocking the sheet, then requires fresh proof after dismissal', () => {
+  const registry = new PerformanceAuditReadinessRegistry(); registry.beginCapture('sheet');
+  const handle = registry.registerSurface({ id: 'rates.results', probes: [
+    { id: 'search.list', kind: 'list', status: 'pending', coveredBySheet: true, visibleCount: 0 },
+    { id: 'search.layout', kind: 'layout', status: 'ready', layoutMeasured: true },
+  ] })!;
+  expect(registry.snapshot(['rates.results']).ready).toBe(true);
+  expect(registry.snapshot(['rates.results']).surfaces[0].probes.find(p => p.id === 'search.list')).toMatchObject({ status: 'pending', coveredBySheet: true, visibleCount: 0 });
+  registry.updateProbe(handle, 'search.list', { coveredBySheet: false });
+  expect(registry.snapshot(['rates.results']).ready).toBe(false);
+});

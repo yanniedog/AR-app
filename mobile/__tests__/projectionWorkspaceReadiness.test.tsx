@@ -1,3 +1,5 @@
+import { captureAuditDiagnostic, scoreAuditTargetProbeEvidence } from '../src/lib/performanceAuditDiagnostic';
+import { PerformanceAuditReadinessRegistry } from '../src/lib/performanceAuditReadiness';
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
@@ -63,4 +65,22 @@ test('a settled calculation copy does not block the next mounted projection acti
     expect(changed.renderRevision).not.toBe(surface.renderRevision);
     expect(publicComparisonCore).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
+});
+
+
+test('a rendered projection input screen with an incomplete model cannot score a passing model journey', async () => {
+  const balance = mockScenario.mortgage.loanBalance;
+  mockScenario.mortgage.loanBalance = '';
+  let tree!: ReactTestRenderer;
+  try {
+    await act(async () => { tree = TestRenderer.create(<ProjectionWorkspace />); });
+    act(() => (tree as ReactTestRenderer & { root: { findByType(type: string): { props: { onContentSizeChange(): void } } } }).root.findByType('ScreenScrollView').props.onContentSizeChange());
+    const surface = jest.mocked(usePerformanceAuditSurface).mock.calls
+      .filter(([definition]) => definition.id === 'projections.lifecycle-chart').at(-1)![0];
+    expect(surface.probes!.find(probe => probe.id === 'projections.model')).toMatchObject({ status: 'error', required: false });
+    const registry = new PerformanceAuditReadinessRegistry();
+    registry.beginCapture('projection-rendered-test');
+    registry.registerSurface(surface);
+    expect(scoreAuditTargetProbeEvidence(captureAuditDiagnostic(registry.snapshot(), 'complete'), surface.id)).toBe('warn');
+  } finally { mockScenario.mortgage.loanBalance = balance; if (tree) act(() => tree.unmount()); }
 });

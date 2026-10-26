@@ -1,3 +1,5 @@
+import { profileSectionCount } from '../../data/profile';
+import { checkDrillOutcome } from '../../lib/degradationLog';
 import { reconcilePublicCompareSelectionTokens } from '../../data/publicCompareSelectionTokens';
 import { publicScenarioForRow } from '../../data/publicRateIntegration';
 import { mortgageComparisonScenario } from '../../data/mortgageComparisonScenario';
@@ -13,7 +15,7 @@ import { uiCount,uiJoin,uiLabel,uiRatesQuery,uiProductName,uiProviderName,type U
 import { humanizeEnum } from '../../data/format';
 import { useReadyNavigationEffect } from '../../hooks/useReadyNavigationEffect';
 import { useBackOwnedSheetState } from '../../hooks/useBackOwnedSheetState';
-import { SheetSurface } from '../SheetSurface';
+import { SheetSurface, type SheetAuditState } from '../SheetSurface';
 import { TouchTarget } from '../TouchTarget';
 import { SegmentedControl } from '../controls';
 import { sectionSegmentOptions } from '../../data/interests';
@@ -24,6 +26,7 @@ import { normalizeRatesPageSize, ratesPageWindow } from '../../data/ratesPaginat
 import { ratesIntentKey, resolveRatesIntent, RATES_INTENT_KEYS, type RatesRouteParams } from '../../lib/ratesIntent';
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
 import { useRatesAuditTarget } from '../../hooks/useRatesAuditTarget';
+import { usePhysicalListVisibility } from '../../hooks/usePhysicalListVisibility';
 import { measuredRatesViewport } from '../../lib/ratesViewport';
 import { countItemsCooperatively } from '../../lib/cooperativeCount';
 import { SearchReportExport } from '../../components/SearchReportExport';
@@ -375,13 +378,15 @@ export default function RatesWorkspace() {
     (row: RateRow) => publicRateScenario(section, scenario, prefs.profileFilters, row),
     [section, scenario, prefs.profileFilters],
   );
+  const needsProfilePricing = exploratoryMortgageActive && profileSectionCount(prefs.profileFilters, section) > 0 && !task.intentError;
   const profilePricing = useResolvedPublicRankingRows({
-    sourceRows: exploratoryMortgageActive && !task.intentError ? sourceRates : EMPTY_RATE_ROWS,
+    sourceRows: needsProfilePricing ? sourceRates : EMPTY_RATE_ROWS,
+    candidates: needsProfilePricing ? null : EMPTY_RATE_ROWS,
     catalogue,
     section,
     sectionScenario: profileSectionScenario,
     rowScenario: profileRowScenario,
-    focused: isFocused && exploratoryMortgageActive && publicPricing.ready,
+    focused: isFocused && needsProfilePricing && publicPricing.ready,
     interactive: isFocused,
     revision: suitabilityRevision,
   });
@@ -618,6 +623,7 @@ export default function RatesWorkspace() {
   // Selection and disclosure changes need a fresh committed render, but keep
   // the same list and decoded logos while its result identities are unchanged.
   const listRevision = uiTracker.current.update([listDataRevision, filterOpen, draftFilters, draftAvailability, sortOpen, toolsOpen, selectMode, selected]);
+  const [emptyCommit, setEmptyCommit] = useState<string | null>(null);
   const listReadiness = useVirtualizedListReadiness(listRevision, pageRows.length);
   const measuredVisibility = useRef(listReadiness.measuredVisibleCount);
   measuredVisibility.current = listReadiness.measuredVisibleCount;
@@ -625,12 +631,28 @@ export default function RatesWorkspace() {
   const listRef = useRef<FlashListRef<ResultRow>>(null);
   const listLoaded = useRef(false);
   const [restoredDataRevision, setRestoredDataRevision] = useState<string | null>(null);
-  type ViewabilityInfo = { viewableItems: { isViewable?: boolean | null; item: ResultRow; index?: number | null; key?: string }[] };
+  type ViewabilityToken = { isViewable?: boolean | null; item: ResultRow; index?: number | null; key?: string };
+  type ViewabilityInfo = { viewableItems: ViewabilityToken[]; changed?: ViewabilityToken[] };
   const auditViewability = useRef<(info: ViewabilityInfo) => void>(() => {});
+  const restorationKey = JSON.stringify([listDataRevision, getRatesSessionRestoreRevision()]);
+  const [sheetEvidence, setSheetEvidence] = useState<Record<'filter' | 'sort' | 'tools', SheetAuditState>>({ filter: 'hidden', sort: 'hidden', tools: 'hidden' });
+  const filterEvidence = useCallback((state: SheetAuditState) => setSheetEvidence(previous => previous.filter === state ? previous : { ...previous, filter: state }), []);
+  const sortEvidence = useCallback((state: SheetAuditState) => setSheetEvidence(previous => previous.sort === state ? previous : { ...previous, sort: state }), []);
+  const toolsEvidence = useCallback((state: SheetAuditState) => setSheetEvidence(previous => previous.tools === state ? previous : { ...previous, tools: state }), []);
+  const sheetCovered = filterOpen || sortOpen || toolsOpen || Object.values(sheetEvidence).some(state => state !== 'hidden');
+  const sheetsReady = (filterOpen ? sheetEvidence.filter === 'presented' : sheetEvidence.filter === 'hidden') &&
+    (sortOpen ? sheetEvidence.sort === 'presented' : sheetEvidence.sort === 'hidden') &&
+    (toolsOpen ? sheetEvidence.tools === 'presented' : sheetEvidence.tools === 'hidden');
+  const physicalVisibility = usePhysicalListVisibility(listRevision, pageRows,
+    isFocused && restoredDataRevision === restorationKey && !sheetCovered, resultRowKey,
+    info => auditViewability.current(info));
+  const requestPhysicalVisibility = useRef(physicalVisibility.measure);
+  requestPhysicalVisibility.current = physicalVisibility.measure;
+  const physicalCapture = useRef(physicalVisibility.active);
+  physicalCapture.current = physicalVisibility.active;
   const viewabilityEvents = useRef(0);
   const currentRows = useRef(pageRows);
   currentRows.current = pageRows;
-  const restorationKey = JSON.stringify([listDataRevision, getRatesSessionRestoreRevision()]);
   // Initial native zero-offset events must not erase this list's requested restore.
   const restoration = useRef({ revision: restorationKey, section, offset: task.scrollOffset, scheduled: false, applied: false });
   if (restoration.current.revision !== restorationKey) {
@@ -671,12 +693,32 @@ export default function RatesWorkspace() {
     markListLoad();
     restoreCommittedScroll();
   }, [markListLoad, restoreCommittedScroll]);
+  // Rates preserves its native list across query/disclosure revisions. Keep
+  // FlashList's callback stable; validate row identity before forwarding to the
+  // current revision-bound readiness callback.
+  const currentListRevision = useRef(listRevision);
+  currentListRevision.current = listRevision;
+  const currentListViewability = useRef(markListViewability);
+  currentListViewability.current = markListViewability;
   const onViewableItemsChanged = useCallback((info: ViewabilityInfo) => {
     if (!restoration.current.applied || info.viewableItems.some(token => token.isViewable === true && !currentRows.current.includes(token.item))) return;
+    let measured = info;
+    if (!info.viewableItems.some(token => token.isViewable === true)) {
+      // Empty events carry no positive row identity. A delayed event from an
+      // older scope must not be stamped as the current viewport. FlashList's
+      // changed tokens reject old rows; current geometry establishes visibility.
+      if (info.changed?.some(token => !currentRows.current.includes(token.item))) return;
+      // Membership can survive disclosure and overlapping query revisions.
+      // Even changed tokens therefore need current physical viewport evidence.
+      const viewport = measuredRatesViewport(listRef.current, currentRows.current, currentListRevision.current);
+      if (!viewport) return;
+      measured = viewport;
+    }
     viewabilityEvents.current++;
-    markListViewability(info);
-    auditViewability.current(info);
-  }, [markListViewability]);
+    currentListViewability.current(measured);
+    if (physicalCapture.current) requestPhysicalVisibility.current();
+    else auditViewability.current(measured);
+  }, []);
   useEffect(() => {
     // In-place selection/disclosure changes do not change visible indices, so
     // FlashList may omit its usual viewability callback. Request a fresh native
@@ -705,8 +747,13 @@ export default function RatesWorkspace() {
       if (retry !== undefined) clearTimeout(retry);
     };
   }, [isFocused, listRevision, listReadiness.ready, restoredDataRevision, restorationKey, onViewableItemsChanged]);
+  useEffect(() => {
+    if (isFocused && !intentPending && !searchPending && listReadiness.visiblyCommitted) {
+      checkDrillOutcome(section, path);
+    }
+  });
   const logoReadiness = useLogoReadiness(listDataRevision);
-  const auditTarget = useRatesAuditTarget({ rows: pageRows, results: resultRows, page: pagination.page, size: pageSize,
+  const auditTarget = useRatesAuditTarget({ physicalViewport: physicalVisibility.active, rows: pageRows, results: resultRows, page: pagination.page, size: pageSize,
     revision: listRevision, context: JSON.stringify([coreSha ?? core?.run_date, manifest?.files.details.sha256, catalogue.generationId, catalogue.status, scenario,
       section, path, hierarchyScoped, debouncedQuery, sortKey, effectiveFilters, availability, pageSize, mortgageInputs, getRatesSessionRestoreRevision()]),
     selectMode, canScroll: restoredDataRevision === restorationKey && listReadiness.ready, list: listRef,
@@ -797,7 +844,10 @@ export default function RatesWorkspace() {
   // Logo decode callbacks can churn during mortgage.scope.apply settle; the
   // logos probe is optional, so wait until search.data/list are no longer pending.
   const logoCallbacksActive = !searchPending && listReadiness.visiblyCommitted;
-  const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => 'product_key' in item ? (
+  const { refFor: physicalCellRef, measure: measurePhysicalCells } = physicalVisibility;
+  const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => <View collapsable={false}
+    ref={target === 'Cell' ? physicalCellRef(item) : undefined}
+    onLayout={measurePhysicalCells}>{'product_key' in item ? (
     <SearchProductRow row={item} section={section}
       onLogoRenderStateChange={logoCallbacksActive ? logoReadiness.onLogoRenderStateChange : undefined}
       rateScenario={rowScenario(item)} comparisonUnverified={section === 'Mortgage' && mortgageScope.unverifiedRows.has(item)}
@@ -808,27 +858,32 @@ export default function RatesWorkspace() {
       <AppText variant="body" weight="600">{uiProductName({product_name:item.name??''})}</AppText>
       <AppText variant="small" color="textMuted">{uiJoin(uiProviderName({provider:item.provider??''}),' · ',humanizeEnum(item.productCategory??''))}</AppText>
       <AppText variant="small" color="textMuted">{uiLabel("No listed rate")}</AppText>
-    </TouchTarget>, [auditTarget.onCellCommit, listRevision, logoCallbacksActive, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, mortgageScope.unverifiedRows, rowScenario]);
+    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, auditTarget.onCellCommit, listRevision, logoCallbacksActive, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, mortgageScope.unverifiedRows, rowScenario]);
   usePerformanceAuditSurface({
     id: 'rates.results',
+    work: { ...publicPricing.work, mortgageCriteriaReady, mortgageInputsInvalid,
+      suitabilityReady: isSuitabilityFilterReady(effectiveFilters.includeNonStandard), detailsLoading, searchIndexLoading,
+      intentPending, filterReady: preparedResults.ready, focused: isFocused },
     routeKey: '/browse',
     datasetRevision: coreSha ?? core?.run_date ?? null,
     renderRevision: surfaceRevision,
     actions: auditActions,
     probes: [
       auditTarget.targetProbe,
+      { id: 'search.sheet', kind: 'layout', status: sheetsReady ? 'ready' : 'pending', layoutMeasured: sheetsReady },
       {
         id: 'search.data',
         kind: 'data',
         // datasetRevision tracks settled prep, not merely payload identity —
         // otherwise diagnostics show datasetMatches=true while status=pending.
-        status: task.intentError || preparedResults.error ? 'error' : !searchPending && core ? 'ready' : 'pending',
-        error: task.intentError ?? preparedResults.error,
+        status: task.intentError || preparedResults.error || publicPricing.error ? 'error' : !searchPending && core ? 'ready' : 'pending',
+        error: task.intentError ?? preparedResults.error ?? publicPricing.error,
         datasetRevision: !searchPending && core ? (coreSha ?? core.run_date ?? null) : null,
       },
       {
         id: 'search.list',
         kind: 'list',
+        coveredBySheet: sheetCovered,
         // Settled 0 listed (criteria complete, pricing done) is ready empty —
         // FlashList often skips viewability for ListEmptyComponent and must
         // not leave search.list pending forever after mortgage.scope.apply.
@@ -836,15 +891,16 @@ export default function RatesWorkspace() {
         // seeding alone is not that count: a hidden or pre-restore list can
         // already be committed.
         status: (() => {
-          const settledEmpty = pageRows.length === 0 && !searchPending;
+          const settledEmpty = pageRows.length === 0 && !searchPending && emptyCommit === listRevision;
           if (settledEmpty) return 'ready';
-          return searchPending || !listReadiness.visiblyCommitted ||
-            (listReadiness.measuredVisibleCount ?? 0) === 0 ? 'pending' : 'ready';
+          return searchPending || (physicalVisibility.active
+            ? (physicalVisibility.visibleCount ?? 0) === 0
+            : !listReadiness.visiblyCommitted || (listReadiness.measuredVisibleCount ?? 0) === 0) ? 'pending' : 'ready';
         })(),
         expectedCount: pageRows.length,
         actualCount: pageRows.length === 0 && !searchPending ? 0 : listReadiness.committedItemCount,
-        visibleCount: pageRows.length === 0 && !searchPending ? 0 : listReadiness.measuredVisibleCount,
-        emptyStateRendered: pageRows.length === 0 && !searchPending,
+        visibleCount: pageRows.length === 0 && !searchPending ? 0 : physicalVisibility.active ? physicalVisibility.visibleCount : listReadiness.measuredVisibleCount,
+        emptyStateRendered: pageRows.length === 0 && !searchPending && emptyCommit === listRevision,
       },
       {
         id: 'search.layout',
@@ -912,7 +968,7 @@ export default function RatesWorkspace() {
         </View>
         {/* Keep the recycler's native measurement origin at zero beneath the
             fixed controls; a sibling offset otherwise corrupts its visible range. */}
-        <View style={{ flex: 1 }}>
+        <View ref={physicalVisibility.viewport} collapsable={false} style={{ flex: 1 }} onLayout={physicalVisibility.measure}>
         <FlashList
           ref={attachList}
           drawDistance={FLASH_LIST_DRAW_DISTANCE}
@@ -948,6 +1004,7 @@ export default function RatesWorkspace() {
           keyExtractor={resultRowKey}
           getItemType={item => 'product_key' in item ? 'rate' : 'unlisted'}
           onScroll={event => {
+            physicalVisibility.measure();
             if (restoration.current.applied && restoration.current.revision === restorationKey
               && useRatesSession.getState().section === section) recordRatesScroll(section, event.nativeEvent.contentOffset.y);
           }}
@@ -960,7 +1017,12 @@ export default function RatesWorkspace() {
             paddingBottom: theme.spacing(6),
           }}
           renderItem={renderProduct}
-          ListEmptyComponent={
+          ListEmptyComponent={<View key={`empty:${listRevision}:${searchPending}`} onLayout={event => {
+            const { width: emptyWidth, height: emptyHeight } = event.nativeEvent.layout;
+            if (!searchPending && pageRows.length === 0 && Number.isFinite(emptyWidth) && Number.isFinite(emptyHeight) && emptyWidth > 0 && emptyHeight > 0) {
+              setEmptyCommit(previous => currentListRevision.current === listRevision ? listRevision : previous);
+            }
+          }}>{
             task.intentError ? <EmptyState title="Scope unavailable" /> : availability === 'unlisted' && !catalogueDetails ? (
               <View style={{ paddingTop: 16, gap: 12 }}><EmptyState title={uiLabel(detailsLoading ? 'Loading' : 'Catalogue unavailable')} />
                 {!detailsLoading ? <Button title="Retry" onPress={() => void ensureDetails({ forProductView: true, force: true, abandonInFlight: true })} /> : null}</View>
@@ -987,10 +1049,10 @@ export default function RatesWorkspace() {
                   </View>
                 )}
               </View>
-            ) : preparedResults.error ? (
+            ) : preparedResults.error || publicPricing.error ? (
               <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
                 <EmptyState title="Products unavailable"  />
-                <Button title="Retry" variant="secondary" onPress={preparedResults.retry} />
+                <Button title="Retry" variant="secondary" onPress={publicPricing.error ? publicPricing.retry : preparedResults.retry} />
               </View>
             ) : section === 'Mortgage' && availability === 'listed' && !mortgageCriteriaReady ? (
               <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
@@ -1011,7 +1073,7 @@ export default function RatesWorkspace() {
                 <Button title="Edit saved requirements" variant="ghost" onPress={() => router.push('/profile')} />
               </View>
             )
-          }
+          }</View>}
         />
         </View>
       </View>
@@ -1024,6 +1086,7 @@ export default function RatesWorkspace() {
       ) : null}
 
       <FilterSheet
+        onAuditStateChange={physicalVisibility.active ? filterEvidence : undefined}
         visible={filterOpen}
         onClose={cancelFilters}
         options={activeFilterOptions}
@@ -1047,7 +1110,7 @@ export default function RatesWorkspace() {
           <SegmentedControl value={draftAvailability} options={[{ value: 'listed', label: uiLabel("Listed rate") }, { value: 'unlisted', label: uiLabel("No listed rate") }]} onChange={setDraftAvailability} />
         </View>
       </FilterSheet>
-      <SheetSurface visible={sortOpen} title="Sort" onClose={() => setSortOpen(false)}>
+      <SheetSurface onAuditStateChange={physicalVisibility.active ? sortEvidence : undefined} visible={sortOpen} title="Sort" onClose={() => setSortOpen(false)}>
         <ScrollView contentContainerStyle={{ padding: 16, gap: 8 }}>
           {(section === 'Mortgage' ? [{ label: uiLabel("Advertised rate"), metric: 'headline' }, { label: uiLabel("Comparison rate"), metric: 'comparison' }]
             : section === 'Savings' ? [{ label: uiLabel("Ongoing rate"), metric: 'base' }, { label: uiLabel("Headline rate"), metric: 'max' }]
@@ -1060,7 +1123,7 @@ export default function RatesWorkspace() {
           <Button title="Cancel" variant="ghost" onPress={() => setSortOpen(false)} />
         </ScrollView>
       </SheetSurface>
-      <SheetSurface visible={toolsOpen} title="Search" onClose={() => setToolsOpen(false)}>
+      <SheetSurface onAuditStateChange={physicalVisibility.active ? toolsEvidence : undefined} visible={toolsOpen} title="Search" onClose={() => setToolsOpen(false)}>
         <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: theme.spacing(4) }}>
           <Button
             icon={searchSub ? 'notifications' : 'notifications-outline'}

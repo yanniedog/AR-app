@@ -325,7 +325,19 @@ export function createDeidentifiedDiagnosticsShare(
  * oversize reports instead of silently uploading a partial diagnostic. */
 export function createPublicPerformanceAuditReport(report: PerformanceAuditReport): string {
   const publicReport = buildDeidentifiedPerformanceAudit(report);
-  const completion = publicReport.completion;
+  const applicationJournal = auditApplicationJournal(report.startedAt, report.finishedAt);
+  const journalSections = [applicationJournal.beforeAudit, applicationJournal.duringAndAfterAudit];
+  const journalComplete = journalSections.every(section => section.complete);
+  const completion = { ...publicReport.completion,
+    detailsComplete: publicReport.completion.detailsComplete && journalComplete,
+    outcome: !journalComplete && publicReport.completion.outcome !== 'failed' ? 'incomplete' as const : publicReport.completion.outcome,
+    gaps: { ...publicReport.completion.gaps,
+      ...(journalComplete ? {} : { truncatedJournalEntries: journalSections.reduce((sum, section) => sum + section.truncatedEntryCount, 0),
+      omittedJournalEntries: journalSections.reduce((sum, section) => sum + section.omittedEntryCount, 0),
+      omittedJournalChars: journalSections.reduce((sum, section) => sum + section.omittedChars, 0),
+      uncertainJournalOmissions: journalSections.reduce((sum, section) => sum + section.uncertainOmittedEntryCount, 0) }),
+    },
+  };
   const stallTimeout = stallTimeoutFields(report.watchdog.hangTimeoutMs);
   // Keep the run identity and result readable at the top of the hosted file.
   // Gzip retains every field. Compression runs before the paste host sees the body.
@@ -335,7 +347,7 @@ export function createPublicPerformanceAuditReport(report: PerformanceAuditRepor
       ...completion,
       privacyBoundary: { ...completion.privacyBoundary, generalApplicationJournal: 'included-deidentified' as const },
     },
-    applicationJournal: auditApplicationJournal(report.startedAt, report.finishedAt),
+    applicationJournal,
     diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId),
   }, { audit: { auditId: completion.auditId, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
     finishedAt: completion.finishedAt,

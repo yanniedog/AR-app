@@ -21,7 +21,7 @@ export const PUBLIC_AUDIT_METRIC_FIELDS = new Set([
   'backgroundSettleMs',
   'backgroundUnsettled',
   'navigationCommitMs',
-  'firstReadyFrameMs',
+  'firstReadyFrameMs', 'firstReadyFrameObserved',
   'stepBudgetOmittedMs',
   'httpSelected',
   'handlerResolution',

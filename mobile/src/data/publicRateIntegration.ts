@@ -45,6 +45,33 @@ export function unresolvedPublicRate(reason: string): RateResolution {
   };
 }
 
+// Catalogue publication replaces these arrays on hydration/correction. Reuse
+// occurrence/offer lookup across all rows of the same immutable product book.
+const programmeLookups = new WeakMap<PublicProgramme[], {
+  offers: Map<string, Map<string, PublicProgramme[]>>;
+  occurrences: Map<number, PublicProgramme[]>;
+}>();
+function matchingPublicProgrammes(row: RateRow, programmes: PublicProgramme[]): PublicProgramme[] {
+  let lookup = programmeLookups.get(programmes);
+  if (!lookup) {
+    lookup = { offers: new Map(), occurrences: new Map() };
+    for (const programme of programmes) {
+      let offers = lookup.offers.get(programme.programmeId);
+      if (!offers) { offers = new Map(); lookup.offers.set(programme.programmeId, offers); }
+      const candidates = offers.get(programme.offerId) ?? [];
+      candidates.push(programme); offers.set(programme.offerId, candidates);
+      for (const index of new Set(programme.sourceBindings?.map(binding => binding.rateIndex) ?? [])) {
+        const bound = lookup.occurrences.get(index) ?? [];
+        bound.push(programme); lookup.occurrences.set(index, bound);
+      }
+    }
+    programmeLookups.set(programmes, lookup);
+  }
+  return row.public_programme_id && row.public_offer_id
+    ? lookup.offers.get(row.public_programme_id)?.get(row.public_offer_id) ?? []
+    : row.rate_index == null ? [] : lookup.occurrences.get(row.rate_index) ?? [];
+}
+
 /** Only the producer's semantic binding can attach a current programme to a row. */
 export function resolveRowPublicRate(
   row: RateRow, catalogue: PublicCatalogueView, scenario: RateScenario = {}, asOf = new Date().toISOString(),
@@ -55,11 +82,7 @@ export function resolveRowPublicRate(
   if (!product) return unresolvedPublicRate('product_pricing_not_available');
   const programmes = catalogue.getProgrammes(product.productId);
   if (!programmes.length) return unresolvedPublicRate('programme_not_loaded');
-  const matching = programmes.filter(item => item.productId === product.productId && (
-    row.public_programme_id && row.public_offer_id
-      ? item.programmeId === row.public_programme_id && item.offerId === row.public_offer_id
-      : item.sourceBindings?.some(binding => binding.rateIndex === row.rate_index)
-  ));
+  const matching = matchingPublicProgrammes(row, programmes).filter(item => item.productId === product.productId);
   if (matching.length !== 1) return unresolvedPublicRate('semantic_offer_binding_missing');
   const selected = scenarioForPublicProgramme(matching[0], scenario, asOf);
   return selected ? resolvePublicRate(matching[0], selected, asOf) : unresolvedPublicRate('ambiguous_comparison_facets');
@@ -69,10 +92,7 @@ export function resolveRowPublicRate(
 export function bindCurrentPublicRow(row: RateRow, catalogue: PublicCatalogueView): RateRow {
   if (catalogue.status !== 'ready') return row;
   const product = catalogue.getProduct(row.product_key);
-  const candidates = product ? catalogue.getProgrammes(product.productId).filter(programme =>
-    row.public_programme_id && row.public_offer_id
-      ? programme.programmeId === row.public_programme_id && programme.offerId === row.public_offer_id
-      : programme.sourceBindings?.some(binding => binding.rateIndex === row.rate_index)) : [];
+  const candidates = product ? matchingPublicProgrammes(row, catalogue.getProgrammes(product.productId)) : [];
   return candidates.length === 1 ? programmePublicRow(row, candidates[0]) : row;
 }
 
@@ -166,7 +186,7 @@ export function publicProductOfferRows(
   return dedupeRecommendationRows(rows);
 }
 
-/** Same catalogue expansion as {@link publicCatalogueOfferRows}, yielding between products. */
+/** Same catalogue expansion as {@link publicCatalogueOfferRows}, yielding between programmes. */
 export async function publicCatalogueOfferRowsCooperatively(
   catalogue: PublicCatalogueView, section: SectionKey, scenario: RateScenario,
   control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
@@ -180,17 +200,17 @@ export async function publicCatalogueOfferRowsCooperatively(
   if (catalogue.status !== 'ready') return [];
   const rows: RateRow[] = [];
   let sliceStarted = now();
-  let visited = 0;
   for (const product of catalogue.products) {
     if (product.section !== section || product.status === 'legacy') continue;
     for (const programme of catalogue.getProgrammes(product.productId)) {
       appendCatalogueOfferRow(rows, product, programme, section, scenario, asOfForProgramme);
-    }
-    visited += 1;
-    if (visited % 4 === 0 && now() - sliceStarted >= 6) {
-      await yieldControl();
-      sliceStarted = now();
-      if (cancelled()) return null;
+      // A single product can contain hundreds of programmes. Check the time
+      // budget here so a large lender cannot monopolise the JS thread.
+      if (now() - sliceStarted >= 6) {
+        await yieldControl();
+        sliceStarted = now();
+        if (cancelled()) return null;
+      }
     }
   }
   return cancelled() ? null : rows;
@@ -238,7 +258,7 @@ export async function publicRecommendationRowsCooperatively(
     if (includeExistingLegacy || catalogue.getProduct(row.product_key)?.status !== 'legacy') {
       current.push(bindCurrentPublicRow(row, catalogue));
     }
-    if ((offset + 1) % 24 === 0 && now() - sliceStarted >= 6) {
+    if (now() - sliceStarted >= 6) {
       await yieldControl();
       sliceStarted = now();
       if (cancelled()) return null;
@@ -448,7 +468,7 @@ export async function resolvedPublicRankingRowsCooperatively(
     const payable = payableRateForRow(row, result);
     if (payable == null) unresolved += 1;
     else resolved.push(rowWithPublicResolution(bindCurrentPublicRow(row, catalogue), result));
-    if ((offset + 1) % 8 === 0 && now() - sliceStarted >= 6) {
+    if (now() - sliceStarted >= 6) {
       await yieldControl();
       sliceStarted = now();
       if (cancelled()) return null;
@@ -466,10 +486,7 @@ export async function resolvedPublicRankingRowsCooperatively(
 export function publicScenarioForRow(row: RateRow | undefined, catalogue: PublicCatalogueView, scenario: RateScenario): RateScenario {
   if (!row || catalogue.status !== 'ready') return scenario;
   const product = catalogue.getProduct(row.product_key);
-  const matching = product ? catalogue.getProgrammes(product.productId).filter(item =>
-    row.public_programme_id && row.public_offer_id
-      ? item.programmeId === row.public_programme_id && item.offerId === row.public_offer_id
-      : item.sourceBindings?.some(binding => binding.rateIndex === row.rate_index)) : [];
+  const matching = product ? matchingPublicProgrammes(row, catalogue.getProgrammes(product.productId)) : [];
   return matching.length === 1
     ? scenarioForPublicProgramme(matching[0], scenario, new Date().toISOString()) ?? scenario : scenario;
 }

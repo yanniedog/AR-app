@@ -54,7 +54,7 @@ const FIXED_TEXT: Record<string, ReadonlySet<string>> = Object.fromEntries(Objec
 }).map(([key, values]) => [key, new Set(values.split(' '))]));
 for (const [key, values] of Object.entries(AUDIT_PRODUCER_ENUMS)) FIXED_TEXT[key] = new Set([...(FIXED_TEXT[key] ?? []), ...values]);
 
-const SCALARS = new Set(('schemaVersion durationMs wallClockMs hangTimeoutMs storedCheckCount developmentBuild viewportWidth viewportHeight fontScale payloadProducts payloadProviders detailsLoaded historyLoaded productHistoryLoaded diagnosticsUploadEnabled networkConnected networkInternetReachable maximumSafeFeaturesEnabled pass warn fail skipped unavailable executed justifiedSkipped unexpectedSkipped coveragePercent slowestCheckMs plannedChecks storedChecks plannedJourneyChecks executedJourneyChecks justifiedSkippedJourneyChecks unexpectedSkippedJourneyChecks unavailableJourneyChecks attemptedPercent excludedUnsafeFacetCount complete partial coldForwardMs warmForwardMs coldBackMs warmBackMs forwardChangeMs backChangeMs ready capturing actionRevision registeredAtMs updatedAtMs required expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent present frames elapsedMs stageElapsedMs lastCheckpointAgeMs processingCheckpoints').split(' '));
+const SCALARS = new Set(('schemaVersion durationMs wallClockMs hangTimeoutMs storedCheckCount developmentBuild viewportWidth viewportHeight fontScale payloadProducts payloadProviders detailsLoaded historyLoaded productHistoryLoaded diagnosticsUploadEnabled networkConnected networkInternetReachable maximumSafeFeaturesEnabled pass warn fail skipped unavailable executed justifiedSkipped unexpectedSkipped coveragePercent slowestCheckMs plannedChecks storedChecks plannedJourneyChecks executedJourneyChecks justifiedSkippedJourneyChecks unexpectedSkippedJourneyChecks unavailableJourneyChecks attemptedPercent excludedUnsafeFacetCount complete partial coldForwardMs warmForwardMs coldBackMs warmBackMs forwardChangeMs backChangeMs ready capturing actionRevision registeredAtMs updatedAtMs coveredBySheet required expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent present frames elapsedMs stageElapsedMs lastCheckpointAgeMs processingCheckpoints').split(' '));
 const PROBE_PATH = '.checks[].diagnostic.readiness.surfaces[].probes[]';
 const SCALAR_PATHS: Record<string, ReadonlySet<string>> = Object.fromEntries(Object.entries({
   '': 'schemaVersion durationMs wallClockMs partial',
@@ -65,7 +65,7 @@ const SCALAR_PATHS: Record<string, ReadonlySet<string>> = Object.fromEntries(Obj
   '.checks[]': 'durationMs',
   '.checks[].diagnostic.readiness': 'ready capturing',
   '.checks[].diagnostic.readiness.surfaces[]': 'actionRevision registeredAtMs updatedAtMs',
-  [PROBE_PATH]: 'required expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent updatedAtMs',
+  [PROBE_PATH]: 'coveredBySheet required expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent updatedAtMs',
   '.checks[].errorDetails': 'present frames',
   '.routeAggregates[]': 'coldForwardMs warmForwardMs coldBackMs warmBackMs forwardChangeMs backChangeMs',
   '.backgroundWorkWait': 'elapsedMs',

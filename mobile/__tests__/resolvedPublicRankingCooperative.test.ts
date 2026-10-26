@@ -1,6 +1,8 @@
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import {
+  publicCatalogueOfferRowsCooperatively,
+  publicCatalogueOfferRows,
   publicCataloguePricingKey,
   publicRecommendationRows,
   publicRecommendationRowsCooperatively,
@@ -94,4 +96,30 @@ test('cooperative mortgage scope matches the synchronous contract and yields und
   expect(cooperative?.unverified).toBe(sync.unverified);
   expect(cooperative?.invalid).toBe(sync.invalid);
   expect(yields.length).toBeGreaterThan(0);
+});
+
+
+test('a single high-fanout product yields between programmes and cancels before the next one', async () => {
+  const programmes = Array.from({ length: 1200 }, (_, i) => programme({
+    section: 'Savings', programmeId: `programme-${i}`, offerId: `offer-${i}`,
+    components: programme().components.map(component => ({ ...component, scopeId: `offer-${i}` })),
+  }));
+  const view = catalogue(programmes, [{ ...product, section: 'Savings' }]);
+  let clock = 0;
+  let yields = 0;
+  const result = await publicCatalogueOfferRowsCooperatively(view, 'Savings', {}, {
+    now: () => ++clock * 7,
+    yieldControl: async () => { yields += 1; },
+  }, () => AS_OF);
+  expect(result).toHaveLength(1200);
+  expect(result).toEqual(publicCatalogueOfferRows(view, 'Savings', {}, () => AS_OF));
+  expect(yields).toBe(1201);
+  yields = 0;
+  const cancelled = await publicCatalogueOfferRowsCooperatively(view, 'Savings', {}, {
+    now: () => ++clock * 7,
+    yieldControl: async () => { yields += 1; },
+    cancelled: () => yields > 1,
+  }, () => AS_OF);
+  expect(cancelled).toBeNull();
+  expect(yields).toBe(2);
 });

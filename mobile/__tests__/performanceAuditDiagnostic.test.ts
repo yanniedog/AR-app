@@ -1,5 +1,5 @@
 import { PerformanceAuditReadinessRegistry } from '../src/lib/performanceAuditReadiness';
-import { captureAuditDiagnostic, publicAuditDiagnostic, publicAuditError } from '../src/lib/performanceAuditDiagnostic';
+import { captureAuditDiagnostic, deidentifyAuditText, publicAuditDiagnostic, publicAuditError } from '../src/lib/performanceAuditDiagnostic';
 import { encodeCompactDiagnosticJson, decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -45,4 +45,24 @@ test('retains safe source locations, error type and a deidentified message witho
   });
   const body = JSON.stringify(publicAuditDiagnostic({ stage: 'pre-action', readiness: { surfaces: [{ id: 'private-account', secret: 'token' }] }, raw: 'password' }));
   expect(body).not.toMatch(/private|secret|token|password/);
+});
+
+
+test('deidentification marks bounded diagnostic text with explicit omitted-character counts', () => {
+  const text = 'Pricing state remained pending. '.repeat(40) + 'Terminal probe outcome was error.';
+  expect(deidentifyAuditText(text)).toBe(`${text.slice(0, 400)}…[truncated ${text.length - 400} chars]`);
+  expect(deidentifyAuditText(text, 16_384)).toBe(text);
+});
+
+test('work diagnostics retain bounded stage/loading facts without financial inputs or identifiers', () => {
+  const registry = new PerformanceAuditReadinessRegistry(); registry.beginCapture('work-test');
+  registry.registerSurface({ id: 'rates.results', work: { pricingStage: 'scope', pricingRequestRevision: 3,
+    workerStarts: 1, sourceRowCount: 8119, candidateCount: null, catalogueStatus: 'ready', catalogueAllLoaded: true,
+    mortgageCriteriaReady: true, mortgageInputsInvalid: false, suitabilityReady: true, detailsLoading: false,
+    loanAmount: 123456, query: 'secret account', generationId: 'private-id' } as never,
+    probes: [{ id: 'search.data', kind: 'data', status: 'pending' }] });
+  const diagnostic = publicAuditDiagnostic(captureAuditDiagnostic(registry.snapshot(), 'readiness')) as any;
+  expect(diagnostic.readiness.surfaces[0].work).toMatchObject({ pricingStage: 'scope', sourceRowCount: 8119,
+    catalogueStatus: 'ready', mortgageCriteriaReady: true, detailsLoading: false });
+  expect(JSON.stringify(diagnostic)).not.toMatch(/loanAmount|123456|secret account|generationId|private-id/);
 });

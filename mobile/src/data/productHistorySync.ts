@@ -110,7 +110,6 @@ export async function syncProductHistoryFromDailyPayloads(
     targetRunDate,
   ]);
 
-  const keys = productKeysForCore(opts.currentCore);
   const sameDerivation = opts.existing?.derivation_version === HISTORY_DERIVATION_VERSION;
   const publications = !preparedOnly && selectedIndex && networkAvailable ? await resolveLegacyPublications(selectedIndex, indexedDates.filter(d => d !== targetRunDate), opts.isCurrent) : new Map();
   const selectedIdentity = (date: string): string | undefined => {
@@ -146,7 +145,7 @@ export async function syncProductHistoryFromDailyPayloads(
   // product/date cells merely to return and persist the same ledger.
   if (
     opts.existing &&
-    !!selectedIndex &&
+    !publicIndexRejected &&
     opts.existing.schema_version === 3 &&
     sameDerivation &&
     !!opts.coreSha &&
@@ -160,6 +159,7 @@ export async function syncProductHistoryFromDailyPayloads(
   ) {
     return opts.existing;
   }
+  const keys = productKeysForCore(opts.currentCore);
   const bestByDate = opts.catalogue && (selectedIndex || preparedDates.size) && toFetch.length
     ? await productRatesFromHistoricalCatalogue(opts.catalogue, selectedIndex ?? null, toFetch, opts.isCurrent)
     : new Map<string, Map<string, number>>();

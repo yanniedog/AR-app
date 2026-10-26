@@ -125,10 +125,27 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
       if (target && surfaceId !== target && !auditOwned) continue;
       if (!Array.isArray(surface.probes)) continue;
       for (const probe of surface.probes) {
-        if (probe?.required && probe.status === 'pending') found.push({ surfaceId, probeId: safeProbeToken(probe.id) });
+        if (probe.coveredBySheet === true) continue;
+        if ((probe?.required || target != null && surfaceId === target) && probe.status === 'pending') found.push({ surfaceId, probeId: safeProbeToken(probe.id) });
       }
     }
     return found;
+  };
+  const targetProbeDefects = (check: PerformanceAuditReport['checks'][number]) => {
+    const target = safeProbeToken(check.metrics.expectedSurface) ?? planSteps.get(check.id)?.expectedSurface ?? null;
+    if (!target) return [] as { surfaceId: string; probeId: string | null; reason: 'probe-error' | 'probe-revision-mismatch' }[];
+    const surfaces = check.diagnostic?.readiness?.surfaces;
+    if (!Array.isArray(surfaces)) return [];
+    return surfaces.filter(surface => surface?.id === target).flatMap(surface =>
+      (Array.isArray(surface.probes) ? surface.probes : []).flatMap(probe => {
+        if (probe?.coveredBySheet === true) return [];
+        const identity = { surfaceId: target, probeId: safeProbeToken(probe?.id) };
+        return [
+          ...(probe?.status === 'error' ? [{ ...identity, reason: 'probe-error' as const }] : []),
+          ...(probe?.renderMatches === false || probe?.datasetMatches === false
+            ? [{ ...identity, reason: 'probe-revision-mismatch' as const }] : []),
+        ];
+      }));
   };
   const unverifiedLink = (check: PerformanceAuditReport['checks'][number]) => {
     if (!/^external-link-[0-9]+$/.test(check.id)) return false;
@@ -137,15 +154,17 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     const classified = typeof check.metrics.httpSelected === 'boolean' || typeof check.metrics.handlerResolution === 'string';
     if (!classified) return check.metrics.httpAttempted !== true || !httpKnown || !handlerKnown;
     const validationFailed = check.metrics.urlValidation === 'fail';
-    const httpHole = validationFailed ? false
-      : typeof check.metrics.httpSelected === 'boolean'
-        ? check.metrics.httpSelected === true && (check.metrics.httpAttempted !== true || !httpKnown)
-        : check.metrics.httpAttempted !== true || !httpKnown;
+    // Handler availability and sample exclusion do not verify a destination.
+    // Local zero-network audits retain an explicit destination coverage gap.
+    const httpHole = !validationFailed && (check.metrics.httpAttempted !== true || !httpKnown);
     const resolution = check.metrics.handlerResolution;
     const handlerClassified = resolution === 'pass' || resolution === 'fail' || resolution === 'not-attempted' || resolution === 'unresolved';
     const handlerHole = !validationFailed && !handlerClassified && !handlerKnown;
     return httpHole || handlerHole;
   };
+  const missingResponsiveness = (check: PerformanceAuditReport['checks'][number]) =>
+    check.kind === 'journey' && check.status !== 'skipped' &&
+    (check.metrics.eventLoopMeasurementAvailable === false || check.metrics.frameMeasurementAvailable === false);
   const structuredReadiness = (check: PerformanceAuditReport['checks'][number]) => {
     const readiness = check.diagnostic?.readiness;
     return readiness != null && typeof readiness.ready === 'boolean' && typeof readiness.capturing === 'boolean'
@@ -167,6 +186,8 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     missingReadinessChecks: report.checks.filter(check => check.kind === 'journey' && check.metrics.executionAttempted !== false
       && check.metrics.availabilityFailure !== true && check.status !== 'skipped' && !structuredReadiness(check)).length,
     unverifiedLinks: report.checks.filter(unverifiedLink).length,
+    unavailableResponsivenessChecks: report.checks.filter(missingResponsiveness).length,
+    targetProbeDefects: report.checks.reduce((count, check) => count + targetProbeDefects(check).length, 0),
     missingHealthReports: report.schemaVersion >= 7 && !health ? 1 : 0,
     invalidCoverageReports: report.coverage != null && !coverageValid ? 1 : 0,
     invalidHealthReports: report.appHealth != null && !healthValid ? 1 : 0,
@@ -180,7 +201,7 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     && (!health || health.coverage.storedChecks === healthChecks.length && health.coverage.plannedChecks === healthChecks.length);
   const coverageComplete = collectionComplete && health?.coverage.complete !== false
     && gaps.skippedChecks === 0 && gaps.unavailableChecks === 0 && gaps.notRunChecks === 0 && gaps.pendingProbes === 0
-    && gaps.unverifiedLinks === 0 && gaps.missingHealthReports === 0 && gaps.invalidHistoryEvidenceChecks === 0;
+    && gaps.targetProbeDefects === 0 && gaps.unverifiedLinks === 0 && gaps.unavailableResponsivenessChecks === 0 && gaps.missingHealthReports === 0 && gaps.invalidHistoryEvidenceChecks === 0;
   const startedAt = publicAuditTimestamp(report.startedAt);
   const finishedAt = publicAuditTimestamp(report.finishedAt);
   const timestampsValid = startedAt != null && finishedAt != null && startedAt <= finishedAt;
@@ -210,7 +231,7 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     ...(health?.coverage.missingPlannedCheckIds ?? []).map(id => ({ source: 'health' as const, checkId: healthId(id) })),
   ];
   type GapPosition = { source: 'performance' | 'health'; position: number; checkId: string | null;
-    reason: 'unavailable' | 'skipped' | 'unverified-link' | 'not-run' | 'pending-probe' | 'missing-readiness' | 'duplicate' | 'unexpected' | 'invalid-history-evidence';
+    reason: 'unavailable' | 'skipped' | 'unverified-link' | 'not-run' | 'pending-probe' | 'missing-readiness' | 'duplicate' | 'unexpected' | 'invalid-history-evidence' | 'missing-responsiveness' | 'probe-error' | 'probe-revision-mismatch';
     surfaceId?: string; probeId?: string };
   const gapPositions: GapPosition[] = [
     ...report.checks.flatMap((check, index) => {
@@ -245,6 +266,11 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   addIdentityGaps('performance', report.checks, coverage?.duplicateStoredCheckIds ?? [], coverage?.unexpectedStoredCheckIds ?? [], safeCheckId);
   addIdentityGaps('health', healthChecks, health?.coverage.duplicateStoredCheckIds ?? [], health?.coverage.unexpectedStoredCheckIds ?? [], healthId);
   report.checks.forEach((check, index) => {
+    for (const defect of targetProbeDefects(check)) gapPositions.push({ source: 'performance', position: index + 1,
+      checkId: safeCheckId(check.id), reason: defect.reason, surfaceId: defect.surfaceId,
+      ...(defect.probeId ? { probeId: defect.probeId } : {}) });
+    if (missingResponsiveness(check)) gapPositions.push({ source: 'performance', position: index + 1,
+      checkId: safeCheckId(check.id), reason: 'missing-responsiveness' });
     for (const probe of pendingRequiredProbes(check)) {
       gapPositions.push({ source: 'performance', position: index + 1, checkId: safeCheckId(check.id), reason: 'pending-probe',
         ...(probe.surfaceId ? { surfaceId: probe.surfaceId } : {}), ...(probe.probeId ? { probeId: probe.probeId } : {}) });

@@ -253,13 +253,13 @@ test.each([{}, { coverage: {}, domains: 'private-domains', checks: [{ id: 'priva
     expect(report.appHealth).toBe(malformed);
   });
 
-test('destinations left out of the HTTP sample are not unverified coverage holes', () => {
+test('handler-only destinations retain an explicit destination verification gap', () => {
   const report = completeReport();
   report.checks[0] = { id: 'external-link-1', label: 'Link', kind: 'network', status: 'warn', durationMs: 1,
     metrics: { executionAttempted: true, httpSelected: false, httpAttempted: false, httpReachability: 'unknown',
       browserHandler: 'pass', handlerAttempted: true, handlerResolution: 'pass' } };
-  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'warning',
-    gaps: { unverifiedLinks: 0 } });
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: false, outcome: 'incomplete',
+    gaps: { unverifiedLinks: 1 } });
   const hosted = decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report)) as {
     checks: { metrics: { httpSelected?: boolean; handlerResolution?: string } }[];
   };
@@ -267,8 +267,8 @@ test('destinations left out of the HTTP sample are not unverified coverage holes
   expect(hosted.checks[0].metrics.handlerResolution).toBe('pass');
   report.checks[0].metrics = { executionAttempted: true, httpSelected: false, httpAttempted: false, httpReachability: 'unknown',
     browserHandler: 'unknown', handlerAttempted: false, handlerResolution: 'not-attempted' };
-  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'warning',
-    gaps: { unverifiedLinks: 0 } });
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: false, outcome: 'incomplete',
+    gaps: { unverifiedLinks: 1 } });
 });
 
 test('an HTTP sample member without a pass or fail stays unverified', () => {
@@ -368,4 +368,39 @@ test('a measured journey failure remains covered when the stored aggregate flag 
   report.checks[0].status = 'fail';
   report.checks[0].metrics = { executionAttempted: true, actionInvoked: true, actionCompleted: false, nonTimingFailure: true };
   expect(buildPerformanceAuditCompletion(report)).toMatchObject({ outcome: 'failed', collectionComplete: true, coverageComplete: true });
+});
+
+
+test('a passing journey with unavailable responsiveness samples is incomplete evidence', () => {
+  const report = completeReport();
+  report.checks[0] = { ...report.checks[0], kind: 'journey', status: 'pass',
+    metrics: { eventLoopMeasurementAvailable: false, frameMeasurementAvailable: false } };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: false,
+    gaps: { unavailableResponsivenessChecks: 1 }, gapPositions: expect.arrayContaining([
+      expect.objectContaining({ position: 1, reason: 'missing-responsiveness' }),
+    ]) });
+});
+
+test('optional pending probes on the exercised target remain coverage gaps', () => {
+  const report = completeReport();
+  report.checks[0] = { ...report.checks[0], metrics: { expectedSurface: 'product.details' },
+    diagnostic: { readiness: { surfaces: [{ id: 'product.details', probes: [
+      { id: 'product.history-graphic', required: false, status: 'pending' },
+    ] }] } } as never };
+  expect(buildPerformanceAuditCompletion(report).gaps.pendingProbes).toBe(1);
+});
+
+
+test('optional errors and stale ready graphics on the target cannot claim complete coverage', () => {
+  const report = completeReport();
+  report.checks[0] = { ...report.checks[0], metrics: { expectedSurface: 'projections.workspace' },
+    diagnostic: { readiness: { surfaces: [{ id: 'projections.workspace', probes: [
+      { id: 'projections.model', required: false, status: 'error' },
+      { id: 'projections.graphic', required: false, status: 'ready', renderMatches: false },
+    ] }] } } as never };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: false,
+    gaps: { targetProbeDefects: 2 }, gapPositions: expect.arrayContaining([
+      expect.objectContaining({ probeId: 'projections.model', reason: 'probe-error' }),
+      expect.objectContaining({ probeId: 'projections.graphic', reason: 'probe-revision-mismatch' }),
+    ]) });
 });
