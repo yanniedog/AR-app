@@ -130,7 +130,10 @@ export async function syncProductHistoryFromDailyPayloads(
     if ([previous, readyIdentity].some(value => value?.startsWith('prepared:') || value?.startsWith('catalogue:'))) return previous === readyIdentity;
     if (productCatalogueIndexConflicts(candidateIndex, date)) return false;
     if (!selectedIndex) {
-      return !publicIndexRejected && (!revisionHighWater[date] || previous === revisionHighWater[date]);
+      // Rejecting a stale index must not erase an exact, already verified
+      // corrected slice. It also must not bless an older/equivocating slice
+      // when a stronger identity survived separately in the high-water ledger.
+      return !revisionHighWater[date] || previous === revisionHighWater[date];
     }
     return preparedDates.has(date) ? previous === selectedIdentity(date) :
       !indexedDates.includes(date) || (opts.existing?.schema_version === 3 &&
