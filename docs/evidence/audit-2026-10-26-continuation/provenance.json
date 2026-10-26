@@ -1,0 +1,53 @@
+{
+  "releaseCandidateBase": "a3aec54625f6cb036aaa89863008bf8cf1bc3163",
+  "renderedBeforeArchive": "51192c92f26385c32af8310f3e0a05c81b5a9692",
+  "targetedSourceByteIdenticalBeforeVsRelease": {
+    "mobile/app/rate-receipt.tsx": "fb4a81e694c8c7f3b0bb1ad38a03614b83aae614dc58cb45de29966cf43947e2",
+    "mobile/app/(tabs)/watchlist.tsx": "0226e45a3c70c55cb1510a705bc4f1608757f1e56721bdd4e073c617cc717c66",
+    "mobile/src/data/savedRates.ts": "c20b45721e358c6e9bb7a79266e594eeb30e3914cc0d475f57c894e1efc46fab",
+    "mobile/src/data/publicRateIntegration.ts": "2431770f2f3a04616fc789a93022a7df35efeae4332933c2fdd9ab1146aa0dca",
+    "mobile/src/hooks/useResolvedPublicRankingRows.ts": "e4719800e5ad7063f21060c2b7101c6e27883f3da7b968697ca2f0e3bacd60e3"
+  },
+  "reports": {
+    "receipt-saved-before.json": {
+      "sha256": "c6dc10cd464e2a3eb28b8f07f792de66ffb70401bcd43c7d364331361b188119",
+      "startedAt": "2026-10-26T12:50:16.685Z",
+      "finishedAt": "2026-10-26T12:51:15.728Z",
+      "scenarioSha256": "853c8d59e7ae4074ff09df13b7296b7497fd4620158ae5767571e18393f13172",
+      "bundleHashes": [
+        "c7b829d9724ffc93560817d662053c34b67fa684464acaf98ee6ed5d1eec9dfc"
+      ]
+    },
+    "receipt-saved-after.json": {
+      "sha256": "2abb27a7e942e5ecf8a2ea788532e2597f35b0d7852881d9fda3b8c0c4cefef8",
+      "startedAt": "2026-10-26T12:55:09.076Z",
+      "finishedAt": "2026-10-26T12:55:51.706Z",
+      "scenarioSha256": "853c8d59e7ae4074ff09df13b7296b7497fd4620158ae5767571e18393f13172",
+      "bundleHashes": [
+        "5abe047b7606f9f94267426b3488bab2366edbaa6aeb52a61b2f707293aaab8a"
+      ]
+    }
+  },
+  "configurationDefaults": {
+    "version": "1.0.248",
+    "androidVersionCode": 192
+  },
+  "releaseOverridesUsed": false,
+  "artifact": "Expo development web, no APK",
+  "fixture": {
+    "rates": 16788,
+    "products": 2813,
+    "providers": 103,
+    "mortgageRows": 8119,
+    "source": "authored deterministic fixture; not the original audit payload",
+    "scenario": "synthetic qualified refinance and profile; no original redacted values inferred"
+  },
+  "exclusions": [
+    "Android/Hermes",
+    "physical phone",
+    "network latency",
+    "original audit inputs",
+    "cold app boot"
+  ],
+  "earlierRuns": "unqualified receipt and worktree route failures, contended timing and weaker outgoing-screen title checks excluded from final comparison"
+}

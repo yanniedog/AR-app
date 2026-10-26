@@ -1,5 +1,5 @@
 import type { AuditWorkDiagnostic } from '../lib/performanceAuditWorkDiagnostic';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { MortgageComparisonInputs } from '../data/mortgageComparison';
 import { mortgageComparisonRows, mortgageComparisonRowsCooperatively } from '../data/mortgageComparison';
@@ -13,6 +13,8 @@ import {
   type PublicCatalogueView,
   type PublicRankingResolution,
 } from '../data/publicRateIntegration';
+import { nextPublicPricingBoundary } from '../data/publicRateResolver';
+import type { PublicProgramme } from '../data/publicRateModel';
 import type { RateScenario } from '../data/publicRateModel';
 import { scheduleAfterInteractions, scheduleAfterNavigation, yieldToUi } from '../lib/yieldToUi';
 import type { RateRow, SectionKey } from '../types';
@@ -59,6 +61,13 @@ export function useResolvedPublicRankingRows(options: {
     sourceRows = EMPTY_RESOLUTION.rows, candidates: providedCandidates = null, catalogue, section, sectionScenario, rowScenario,
     mortgageInputs, mortgageContext, applyMortgageScope = false, focused, interactive = false, revision,
   } = options;
+  const [, wakeClock] = useState(0);
+  const clock = useRef({ until: Infinity, observedAt: Date.now(), revision: 0 });
+  const observedAt = Date.now();
+  if (observedAt >= clock.current.until || observedAt < clock.current.observedAt) {
+    clock.current = { until: Infinity, observedAt, revision: clock.current.revision + 1 };
+  } else clock.current.observedAt = observedAt;
+  const clockRevision = clock.current.revision;
   // Catalogue clients republish a new object on every shard tick. Key on content
   // identity so in-flight cooperative work is not cancelled mid-pass, and key
   // once per snapshot so Rates renders do not re-walk every programme.
@@ -72,8 +81,8 @@ export function useResolvedPublicRankingRows(options: {
   const sectionScenarioKey = useMemo(() => JSON.stringify(sectionScenario), [sectionScenario]);
   const request = useMemo(() => ({
     sourceRows, providedCandidates, catalogueKey, section, sectionScenarioKey,
-    mortgageInputs, mortgageContext, applyMortgageScope, revision,
-  }), [sourceRows, providedCandidates, catalogueKey, section, sectionScenarioKey, mortgageInputs, mortgageContext, applyMortgageScope, revision]);
+    mortgageInputs, mortgageContext, applyMortgageScope, revision, clockRevision,
+  }), [sourceRows, providedCandidates, catalogueKey, section, sectionScenarioKey, mortgageInputs, mortgageContext, applyMortgageScope, revision, clockRevision]);
   const [attempt, setAttempt] = useState(0);
   const requestVersion = useRef({ request, attempt, version: 1 });
   if (requestVersion.current.request !== request || requestVersion.current.attempt !== attempt) requestVersion.current = { request, attempt, version: requestVersion.current.version + 1 };
@@ -92,13 +101,28 @@ export function useResolvedPublicRankingRows(options: {
     error: string | null;
   } | null>(null);
   const current = snapshot?.request === request && snapshot.attempt === attempt;
-  const buildCandidatesSync = (value: typeof request, view: PublicCatalogueView, scenario: RateScenario): RateRow[] => value.providedCandidates
+  const collectValidity = useCallback((view: PublicCatalogueView) => {
+    const started = Date.now(), seen = new Set<string>(), asOf = new Date(started).toISOString();
+    let until = Infinity;
+    const programme = (value: PublicProgramme) => { until = Math.min(until, nextPublicPricingBoundary(value, started)); };
+    const rowScenario = (row: RateRow) => {
+      const product = view.getProduct(row.product_key);
+      if (product && !seen.has(product.productId)) {
+        seen.add(product.productId);
+        for (const value of view.getProgrammes(product.productId)) programme(value);
+      }
+      return rowScenarioRef.current(row);
+    };
+    return { rowScenario, asOf: (value: PublicProgramme) => { seen.add(value.productId); programme(value); return asOf; }, until: () => until };
+  }, []);
+  const buildCandidatesSync = useCallback((value: typeof request, view: PublicCatalogueView, scenario: RateScenario, asOf: (programme: PublicProgramme) => string): RateRow[] => value.providedCandidates
     ? [...value.providedCandidates]
-    : publicRecommendationRows(value.sourceRows, view, value.section, scenario);
+    : publicRecommendationRows(value.sourceRows, view, value.section, scenario, false, asOf), []);
   const synchronous = useMemo(() => {
     // Explicit empty candidates (Mortgage criteria gate) must stay sync-empty
     // without expanding publicCatalogueOfferRows on the render path.
     if (request.providedCandidates && request.providedCandidates.length === 0) {
+      clock.current.until = Infinity;
       return {
         candidates: [] as RateRow[],
         resolution: { ...EMPTY_RESOLUTION, complete: catalogueRef.current.status === 'ready' && catalogueRef.current.allLoaded },
@@ -114,14 +138,17 @@ export function useResolvedPublicRankingRows(options: {
       && (view.products.length > SYNCHRONOUS_PUBLIC_PRICING_ROW_LIMIT
         || view.products.reduce((count, product) => count + product.programmeIds.length, 0) > SYNCHRONOUS_PUBLIC_PRICING_ROW_LIMIT);
     if (expandsCatalogue || inputCount > SYNCHRONOUS_PUBLIC_PRICING_ROW_LIMIT) return null;
-    const candidates = buildCandidatesSync(request, view, sectionScenarioRef.current);
+    const validity = collectValidity(view);
+    const candidates = buildCandidatesSync(request, view, sectionScenarioRef.current, validity.asOf);
     if (candidates.length > SYNCHRONOUS_PUBLIC_PRICING_ROW_LIMIT) return null;
-    const resolution = resolvedPublicRankingRows(candidates, view, row => rowScenarioRef.current(row));
+    const resolution = resolvedPublicRankingRows(candidates, view, validity.rowScenario);
     const mortgage = request.applyMortgageScope && request.mortgageInputs
       ? mortgageComparisonRows(resolution.rows, request.mortgageInputs, request.mortgageContext)
       : { rows: resolution.rows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
+    if (Date.now() >= validity.until()) return null;
+    clock.current.until = validity.until();
     return { candidates, resolution, mortgage };
-  }, [request]);
+  }, [request, collectValidity, buildCandidatesSync]);
   useEffect(() => {
     if (!focused) preparedWhileFocused.current = false;
     else if (synchronous || current) preparedWhileFocused.current = true;
@@ -153,16 +180,17 @@ export function useResolvedPublicRankingRows(options: {
           if (cancelled || flightRef.current !== flight) return;
           if (requestRef.current !== req) { stats.restarts++; continue; }
           const view = catalogueRef.current;
+          const validity = collectValidity(view);
           const candidates = req.providedCandidates
             ? [...req.providedCandidates]
             : await publicRecommendationRowsCooperatively(
-              req.sourceRows, view, req.section, sectionScenarioRef.current, control);
+              req.sourceRows, view, req.section, sectionScenarioRef.current, control, false, validity.asOf);
           if (cancelled || flightRef.current !== flight) return;
           if (requestRef.current !== req) { stats.restarts++; continue; }
           if (!candidates) return;
           setProgress({ request: req, attempt, stage: 'resolution' });
           const resolution = await resolvedPublicRankingRowsCooperatively(
-            candidates, view, row => rowScenarioRef.current(row), control);
+            candidates, view, validity.rowScenario, control);
           if (cancelled || flightRef.current !== flight) return;
           if (requestRef.current !== req) { stats.restarts++; continue; }
           if (!resolution) return;
@@ -174,6 +202,8 @@ export function useResolvedPublicRankingRows(options: {
           if (cancelled || flightRef.current !== flight) return;
           if (requestRef.current !== req) { stats.restarts++; continue; }
           if (!mortgage) return;
+          if (Date.now() >= validity.until()) { stats.restarts++; continue; }
+          clock.current.until = validity.until();
           finished = true;
           setSnapshot({ request: req, attempt, candidates, resolution, mortgage, error: null });
           return;
@@ -194,8 +224,15 @@ export function useResolvedPublicRankingRows(options: {
       ? scheduleAfterInteractions(run)
       : scheduleAfterNavigation(run, 100);
     return () => { if (!finished) stats.cancellations++; cancelled = true; cancelNavigation(); };
-  }, [synchronous, focused, interactive, attempt, current]);
+  }, [synchronous, focused, interactive, attempt, current, clockRevision, collectValidity]);
   const ready = synchronous != null || current && snapshot!.error === null;
+  const nextBoundary = clock.current.until;
+  useEffect(() => {
+    if (!focused || !Number.isFinite(nextBoundary)) return;
+    const timer = setTimeout(() => wakeClock(value => value + 1), Math.max(1, nextBoundary - Date.now()));
+    (timer as ReturnType<typeof setTimeout> & { unref?: () => void }).unref?.();
+    return () => clearTimeout(timer);
+  }, [focused, nextBoundary, clockRevision]);
   const work: AuditWorkDiagnostic = {
     pricingStage: ready ? 'ready' : current && snapshot!.error ? 'error' : progress?.request === request && progress.attempt === attempt ? progress.stage : 'queued',
     ...(current && snapshot!.error && progress?.request === request && progress.attempt === attempt ? { pricingErrorStage: progress.stage } : {}),

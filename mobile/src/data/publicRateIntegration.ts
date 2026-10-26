@@ -8,6 +8,7 @@ import { resolvePublicRate } from './publicRateResolver';
 import { estimateEnteredRate, estimateReferenceAdjustment, selectPublicReference } from './publicRateLocal';
 import { Decimal, decimalText, rateDecimal } from './publicRateDecimal';
 import type { UserRateScenario } from './userRateScenario';
+import { rowsForProductKey } from './rateRowIndex';
 import { yieldToUi } from '../lib/yieldToUi';
 
 
@@ -236,6 +237,21 @@ export function publicRecommendationRows(rows: readonly RateRow[], catalogue: Pu
   const current = rows.filter(row => includeExistingLegacy || catalogue.getProduct(row.product_key)?.status !== 'legacy')
     .map(row => bindCurrentPublicRow(row, catalogue));
   return dedupeRecommendationRows([...current, ...publicCatalogueOfferRows(catalogue, section, scenario, asOfForProgramme)]);
+}
+
+/** Same candidates as full-section assembly filtered to one product, without
+ * expanding unrelated programme books on Saved/receipt render paths. */
+export function publicRecommendationRowsForProduct(
+  rows: RateRow[], catalogue: PublicCatalogueView, section: SectionKey, scenario: RateScenario,
+  productKey: string, includeExistingLegacy = false,
+  asOfForProgramme?: (programme: PublicProgramme) => string,
+): RateRow[] {
+  const selected = rowsForProductKey(rows, productKey);
+  if (catalogue.status === 'unavailable') return [...selected];
+  const product = catalogue.getProduct(productKey);
+  return publicRecommendationRows(selected, { ...catalogue,
+    products: product?.section === section ? [product] : [],
+  }, section, scenario, includeExistingLegacy, asOfForProgramme);
 }
 
 /** Full-day recommendation assembly without a single-turn catalogue CPU burst. */

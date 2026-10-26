@@ -166,6 +166,22 @@ export function publicRateFreshness(freshness: PublicFreshness, asOf: string): P
   return { ...freshness, reasonCodes: [...freshness.reasonCodes] };
 }
 
+/** Earliest wall-clock boundary that can change a current programme result.
+ * Consumers may reuse resolved values only until this boundary, not a UTC-day
+ * approximation of the rolling source-freshness window. */
+export function nextPublicPricingBoundary(programme: PublicProgramme, atMs: number): number {
+  const last = Date.parse(programme.freshness.lastSuccessAt ?? '');
+  if (!Number.isFinite(atMs) || !Number.isFinite(last) || programme.freshness.state !== 'current') return Infinity;
+  const expiry = last + STALE_MS + 1; // Freshness is stale strictly after 48h.
+  if (atMs >= expiry) return Infinity;
+  const from = programme.effectiveFrom == null ? -Infinity : Date.parse(programme.effectiveFrom);
+  const to = programme.effectiveTo == null ? Infinity : Date.parse(programme.effectiveTo);
+  if (Number.isNaN(from) || Number.isNaN(to) || atMs >= to) return Infinity;
+  // effectiveDate conditions can use the UTC date when no date was entered.
+  const nextDay = (Math.floor(atMs / 86_400_000) + 1) * 86_400_000;
+  return Math.min(expiry, nextDay, last > atMs ? last : Infinity, from > atMs ? from : Infinity, to);
+}
+
 function validPeriod(programme: PublicProgramme, asOf: string): boolean {
   const now = Date.parse(asOf);
   if (!Number.isFinite(now)) fail('invalid_resolution_date');
