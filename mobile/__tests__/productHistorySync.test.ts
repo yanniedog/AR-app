@@ -435,7 +435,7 @@ test('migrates old catalog-restricted caches and discovers historic-only product
   expect(result.products['Q|historic']).toEqual([0.07, null]);
 });
 
-test('a stale dates index cannot downgrade a previously verified corrected date', async () => {
+test('a rejected stale dates index invalidates cached revision slices without lowering the high-water mark', async () => {
   mockedHistoryDates.mockReturnValue(['2026-06-10', '2026-06-11']);
   const result = await syncProductHistoryFromDailyPayloads({
     targetRunDate: '2026-06-11',
@@ -445,8 +445,9 @@ test('a stale dates index cannot downgrade a previously verified corrected date'
       run_dates: ['2026-06-10', '2026-06-11'], products: { 'P|1': [0.06, 0.055] } },
   });
   expect(mockedDownload).not.toHaveBeenCalled();
-  expect(result.products['P|1']).toEqual([0.06, 0.055]);
-  expect(result.source_identities?.['2026-06-10']).toBe('revision:2:verified:verified');
+  expect(result.products['P|1']).toEqual([null, 0.055]);
+  expect(result.source_identities?.['2026-06-10']).toBeUndefined();
+  expect(result.revision_high_water?.['2026-06-10']).toBe('revision:2:verified:verified');
 });
 
 
@@ -527,7 +528,11 @@ test.each(['changed-core', 'removed-prepared', 'rejected-receipt'] as const)('no
     expect(result.date_status?.[old]).toBe('unavailable');
     expect(result.source_identities?.[old]).toBeUndefined();
   }
-  if (reason === 'rejected-receipt') expect(result.products['P|1'][0]).toBe(0.06);
+  if (reason === 'rejected-receipt') {
+    expect(result.products['P|1'][0]).toBeNull();
+    expect(result.date_status?.[old]).toBe('unavailable');
+    expect(result.source_identities?.[old]).toBeUndefined();
+  }
 });
 
 test.each([

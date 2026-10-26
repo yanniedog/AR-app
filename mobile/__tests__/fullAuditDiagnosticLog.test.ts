@@ -93,6 +93,26 @@ test('readiness IDs cannot use the check-ID exception', () => {
   expect(decoded.diagnosticLog.checks[0].id).toBe(report.checks[0].id);
 });
 
+test('retains bounded work evidence in the hosted full diagnostic log', () => {
+  const report = makePerformanceAuditReport();
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'pass', durationMs: 1,
+    metrics: {}, diagnostic: {
+      stage: 'readiness',
+      readiness: { surfaces: [{ id: 'rates.results', work: {
+        pricingStage: 'resolution', sourceRowCount: 42, candidateCount: 3, pricedRowCount: 2,
+        schedulerNativeScheduleAttempts: 4, schedulerNativeCompleted: 3, schedulerNativeFallbacks: 1,
+        privateText: 'private work detail',
+      } }] },
+    } as never }];
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.checks[0].diagnostic!.readiness).toMatchObject({ surfaces: [{
+    work: { pricingStage: 'resolution', sourceRowCount: 42, candidateCount: 3, pricedRowCount: 2,
+      schedulerNativeScheduleAttempts: 4, schedulerNativeCompleted: 3, schedulerNativeFallbacks: 1 },
+  }] });
+  expect(body).not.toContain('private work detail');
+});
+
 test('source strings matching generated alias names remain distinct values', () => {
   const report = makePerformanceAuditReport();
   report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 1,
