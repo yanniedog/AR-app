@@ -1,3 +1,4 @@
+import { PreparedProductCard } from './PreparedProductCard';
 import { useMortgageResultsIndex } from '../../hooks/useMortgageResultsIndex';
 import { profileSectionCount } from '../../data/profile';
 import { checkDrillOutcome } from '../../lib/degradationLog';
@@ -52,7 +53,6 @@ import {
   clearMortgageComparison,
 } from '../../data/mortgageComparison';
 import { EmptyState, IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../../components/feedback';
-import { ProductCard } from '../../components/ProductCard';
 import { IconAction } from '../../components/IconAction';
 import { Screen, screenScrollContentStyle } from '../../components/Screen';
 import { SearchBar } from '../../components/controls';
@@ -115,11 +115,11 @@ const rowToken = (r: RateRow) => r.public_offer_id ? publicOfferSelectionToken(r
   r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
 
 const SearchProductRow = React.memo(function SearchProductRow({ row, section, selectMode, selected, selectionToken, onToggleSelect,
-  onLogoRenderStateChange, comparisonUnverified, rateScenario, auditCell, auditRevision, onAuditCellCommit }: {
+  onLogoRenderStateChange, comparisonUnverified, rateScenario, quoteOwner, auditCell, auditRevision, onAuditCellCommit }: {
   row: RateRow; section: SectionKey; selectMode: boolean; selected: boolean; selectionToken: string;
   onToggleSelect: (token: string) => void;
   onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
-  comparisonUnverified: boolean; rateScenario: RateScenario;
+  comparisonUnverified: boolean; rateScenario: RateScenario; quoteOwner?: object | null;
   auditCell: boolean; auditRevision: string;
   onAuditCellCommit: (row: RateRow, revision: string) => () => void;
 }) {
@@ -127,7 +127,7 @@ const SearchProductRow = React.memo(function SearchProductRow({ row, section, se
     [auditCell, auditRevision, onAuditCellCommit, row]);
   const onPress = useCallback(() => selectMode ? onToggleSelect(selectionToken) : openProduct(row.product_key, row.rate_index, row.public_programme_id, 'rates-comparison'),
     [selectMode, onToggleSelect, row, selectionToken]);
-  return <ProductCard row={row} section={section} comparisonUnverified={comparisonUnverified} rateScenario={rateScenario}
+  return <PreparedProductCard quoteOwner={quoteOwner} row={row} section={section} comparisonUnverified={comparisonUnverified} rateScenario={rateScenario}
     logoRenderStateId={`search:${row.rate_index ?? 'default'}#${row.product_key}`}
     onLogoRenderStateChange={onLogoRenderStateChange} selectMode={selectMode} selected={selected} onPress={onPress} />;
 });
@@ -674,10 +674,13 @@ export default function RatesWorkspace() {
   const presented = useRef<{ rows: typeof pageRows; section: SectionKey; availability: RateAvailability;
     core: typeof core; catalogue: typeof catalogue; revision: number; scenarioFor: typeof rowScenario;
     unverified: WeakSet<RateRow> } | null>(null);
-  if (!searchPending && !task.intentError && !publicPricing.error && !preparedResults.error) {
-    presented.current = { rows: pageRows, section, availability, core, catalogue, revision: suitabilityRevision,
-      scenarioFor: rowScenario, unverified: mortgageScope.unverifiedRows };
-  }
+  useLayoutEffect(() => {
+    if (!searchPending && !task.intentError && !publicPricing.error && !preparedResults.error) {
+      presented.current = { rows: pageRows, section, availability, core, catalogue, revision: suitabilityRevision,
+        scenarioFor: rowScenario, unverified: mortgageScope.unverifiedRows };
+    }
+  }, [searchPending, task.intentError, publicPricing.error, preparedResults.error, pageRows, section, availability,
+    core, catalogue, suitabilityRevision, rowScenario, mortgageScope.unverifiedRows]);
   const previous = presented.current;
   const retainingPrevious = section === 'Mortgage' && searchPending && mortgageCriteriaReady && previous != null && previous.rows.length > 0 &&
     previous.section === section && previous.availability === availability && previous.core === core &&
@@ -916,13 +919,14 @@ export default function RatesWorkspace() {
   }), [applyFilters, applyMortgageScope, availability, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
   // Logo decode callbacks can churn during mortgage.scope.apply settle; the
   // logos probe is optional, so wait until search.data/list are no longer pending.
-  const logoCallbacksActive = !searchPending && listReadiness.visiblyCommitted;
+  const logoCallbacksActive = physicalVisibility.active && !searchPending && listReadiness.visiblyCommitted;
   const { refFor: physicalCellRef, measure: measurePhysicalCells } = physicalVisibility;
   const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => <View collapsable={false}
     ref={target === 'Cell' ? physicalCellRef(item) : undefined}
     onLayout={measurePhysicalCells}>{'product_key' in item ? (
     <SearchProductRow row={item} section={section}
       onLogoRenderStateChange={logoCallbacksActive ? logoReadiness.onLogoRenderStateChange : undefined}
+      quoteOwner={indexedPricing && !searchPending && !retainingPrevious ? mortgageIndex.index : null}
       rateScenario={displayedScenario(item)} comparisonUnverified={section === 'Mortgage' && displayedUnverified.has(item)}
       auditCell={target === 'Cell' && !retainingPrevious} auditRevision={listRevision} onAuditCellCommit={auditTarget.onCellCommit}
       selectMode={selectMode} selectionToken={selectionTokenFor(item)} selected={selected.includes(selectionTokenFor(item))} onToggleSelect={toggleSelect} />
@@ -931,7 +935,7 @@ export default function RatesWorkspace() {
       <AppText variant="body" weight="600">{uiProductName({product_name:item.name??''})}</AppText>
       <AppText variant="small" color="textMuted">{uiJoin(uiProviderName({provider:item.provider??''}),' · ',humanizeEnum(item.productCategory??''))}</AppText>
       <AppText variant="small" color="textMuted">{uiLabel("No listed rate")}</AppText>
-    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, auditTarget.onCellCommit, listRevision, logoCallbacksActive, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, displayedUnverified, displayedScenario, retainingPrevious]);
+    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, auditTarget.onCellCommit, listRevision, logoCallbacksActive, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, displayedUnverified, displayedScenario, retainingPrevious, indexedPricing, searchPending, mortgageIndex.index]);
   usePerformanceAuditSurface({
     id: 'rates.results',
     work: { ...publicPricing.work, mortgageCriteriaReady, mortgageInputsInvalid, preparingMortgageDefaults,
