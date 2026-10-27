@@ -1,3 +1,4 @@
+import { createPublicRateResolverIndex } from '../data/publicRateResolverIndex';
 import type { AuditWorkDiagnostic } from '../lib/performanceAuditWorkDiagnostic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -56,10 +57,13 @@ export function useResolvedPublicRankingRows(options: {
    */
   interactive?: boolean;
   revision: number;
+  prepareMortgageIndex?: boolean;
+  /** Complete caller-owned semantics of rowScenario, beyond the section scenario. */
+  resolutionContextKey?: string;
 }) {
   const {
     sourceRows = EMPTY_RESOLUTION.rows, candidates: providedCandidates = null, catalogue, section, sectionScenario, rowScenario,
-    mortgageInputs, mortgageContext, applyMortgageScope = false, focused, interactive = false, revision,
+    mortgageInputs, mortgageContext, applyMortgageScope = false, focused, interactive = false, revision, prepareMortgageIndex = false, resolutionContextKey,
   } = options;
   const [, wakeClock] = useState(0);
   const clock = useRef({ until: Infinity, observedAt: Date.now(), revision: 0 });
@@ -72,6 +76,9 @@ export function useResolvedPublicRankingRows(options: {
   // identity so in-flight cooperative work is not cancelled mid-pass, and key
   // once per snapshot so Rates renders do not re-walk every programme.
   const catalogueKey = useMemo(() => publicCataloguePricingKey(catalogue), [catalogue]);
+  const resolverIndex = useMemo(() => { void catalogueKey; return createPublicRateResolverIndex(); }, [catalogueKey]);
+  const resolverIndexRef = useRef(resolverIndex);
+  resolverIndexRef.current = resolverIndex;
   const catalogueRef = useRef(catalogue);
   catalogueRef.current = catalogue;
   const rowScenarioRef = useRef(rowScenario);
@@ -81,8 +88,8 @@ export function useResolvedPublicRankingRows(options: {
   const sectionScenarioKey = useMemo(() => JSON.stringify(sectionScenario), [sectionScenario]);
   const request = useMemo(() => ({
     sourceRows, providedCandidates, catalogueKey, section, sectionScenarioKey,
-    mortgageInputs, mortgageContext, applyMortgageScope, revision, clockRevision,
-  }), [sourceRows, providedCandidates, catalogueKey, section, sectionScenarioKey, mortgageInputs, mortgageContext, applyMortgageScope, revision, clockRevision]);
+    mortgageInputs, mortgageContext, applyMortgageScope, revision, clockRevision, resolutionContextKey,
+  }), [sourceRows, providedCandidates, catalogueKey, section, sectionScenarioKey, mortgageInputs, mortgageContext, applyMortgageScope, revision, clockRevision, resolutionContextKey]);
   const [attempt, setAttempt] = useState(0);
   const requestVersion = useRef({ request, attempt, version: 1 });
   if (requestVersion.current.request !== request || requestVersion.current.attempt !== attempt) requestVersion.current = { request, attempt, version: requestVersion.current.version + 1 };
@@ -92,15 +99,26 @@ export function useResolvedPublicRankingRows(options: {
   const requestRef = useRef(request);
   requestRef.current = request;
   const flightRef = useRef(0);
-  const [snapshot, setSnapshot] = useState<{
+  type Snapshot = {
     request: typeof request;
     attempt: number;
     candidates: RateRow[];
     resolution: PublicRankingResolution;
     mortgage: typeof EMPTY_MORTGAGE;
     error: string | null;
-  } | null>(null);
+  };
+  const [storedSnapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const completed = useRef<{ key: string; request: typeof request; catalogue: PublicCatalogueView;
+    from: number; until: number; snapshot: Snapshot }[]>([]);
+  const requestKey = JSON.stringify([request.section, request.sectionScenarioKey, request.mortgageInputs,
+    request.applyMortgageScope, request.revision, request.clockRevision, request.resolutionContextKey, attempt]);
+  const cached = resolutionContextKey === undefined ? undefined : completed.current.find(item => item.key === requestKey && item.catalogue === catalogue &&
+    item.request.sourceRows === request.sourceRows && item.request.providedCandidates === request.providedCandidates &&
+    item.request.mortgageContext === request.mortgageContext && observedAt >= item.from && observedAt < item.until);
+  const snapshot = storedSnapshot?.request === request && storedSnapshot.attempt === attempt ? storedSnapshot
+    : cached ? { ...cached.snapshot, request, attempt } : storedSnapshot;
   const current = snapshot?.request === request && snapshot.attempt === attempt;
+  if (cached) clock.current.until = cached.until;
   const collectValidity = useCallback((view: PublicCatalogueView) => {
     const started = Date.now(), seen = new Set<string>(), asOf = new Date(started).toISOString();
     let until = Infinity;
@@ -181,16 +199,17 @@ export function useResolvedPublicRankingRows(options: {
           if (requestRef.current !== req) { stats.restarts++; continue; }
           const view = catalogueRef.current;
           const validity = collectValidity(view);
+          const resolve = resolverIndexRef.current.resolve;
           const candidates = req.providedCandidates
             ? [...req.providedCandidates]
             : await publicRecommendationRowsCooperatively(
-              req.sourceRows, view, req.section, sectionScenarioRef.current, control, false, validity.asOf);
+              req.sourceRows, view, req.section, sectionScenarioRef.current, control, false, validity.asOf, resolve);
           if (cancelled || flightRef.current !== flight) return;
           if (requestRef.current !== req) { stats.restarts++; continue; }
           if (!candidates) return;
           setProgress({ request: req, attempt, stage: 'resolution' });
           const resolution = await resolvedPublicRankingRowsCooperatively(
-            candidates, view, validity.rowScenario, control);
+            candidates, view, validity.rowScenario, control, resolve);
           if (cancelled || flightRef.current !== flight) return;
           if (requestRef.current !== req) { stats.restarts++; continue; }
           if (!resolution) return;
@@ -205,7 +224,15 @@ export function useResolvedPublicRankingRows(options: {
           if (Date.now() >= validity.until()) { stats.restarts++; continue; }
           clock.current.until = validity.until();
           finished = true;
-          setSnapshot({ request: req, attempt, candidates, resolution, mortgage, error: null });
+          const value = { request: req, attempt, candidates, resolution, mortgage, error: null };
+          const key = JSON.stringify([req.section, req.sectionScenarioKey, req.mortgageInputs,
+            req.applyMortgageScope, req.revision, req.clockRevision, req.resolutionContextKey, attempt]);
+          if (req.resolutionContextKey !== undefined) {
+            completed.current = completed.current.filter(item => item.key !== key);
+            if (completed.current.length >= 4) completed.current.shift();
+            completed.current.push({ key, request: req, catalogue: view, from: Date.now(), until: validity.until(), snapshot: value });
+          }
+          setSnapshot(value);
           return;
           } catch (error) {
             if (cancelled || flightRef.current !== flight) return;
@@ -226,6 +253,14 @@ export function useResolvedPublicRankingRows(options: {
     return () => { if (!finished) stats.cancellations++; cancelled = true; cancelNavigation(); };
   }, [synchronous, focused, interactive, attempt, current, clockRevision, collectValidity]);
   const ready = synchronous != null || current && snapshot!.error === null;
+  useEffect(() => {
+    if (!prepareMortgageIndex || catalogue.status !== 'ready' || !catalogue.allLoaded) return;
+    let cancelled = false;
+    const cancel = scheduleAfterInteractions(() => {
+      void resolverIndex.prepareMortgage(catalogue, () => cancelled).catch(() => undefined);
+    });
+    return () => { cancelled = true; cancel(); };
+  }, [prepareMortgageIndex, catalogue, resolverIndex]);
   const nextBoundary = clock.current.until;
   useEffect(() => {
     if (!focused || !Number.isFinite(nextBoundary)) return;
@@ -236,6 +271,8 @@ export function useResolvedPublicRankingRows(options: {
   const work: AuditWorkDiagnostic = {
     pricingStage: ready ? 'ready' : current && snapshot!.error ? 'error' : progress?.request === request && progress.attempt === attempt ? progress.stage : 'queued',
     ...(current && snapshot!.error && progress?.request === request && progress.attempt === attempt ? { pricingErrorStage: progress.stage } : {}),
+    pricingIndexHits: resolverIndex.stats.hits, pricingIndexMisses: resolverIndex.stats.misses,
+    pricingIndexPrepared: resolverIndex.stats.warmed, pricingSnapshotReused: cached != null && storedSnapshot?.request !== request,
     pricingRequestRevision: requestVersion.current.version, workerStarts: workerStats.current.starts,
     workerRestarts: workerStats.current.restarts, workerCancellations: workerStats.current.cancellations,
     sourceRowCount: sourceRows.length,

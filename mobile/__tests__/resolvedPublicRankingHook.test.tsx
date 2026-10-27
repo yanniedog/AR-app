@@ -228,3 +228,42 @@ test('a large suspended pricing pass cannot publish stale rows across its freshn
     expect(observed.filter(value => value.at >= expiry && value.ready).every(value => value.rows === 0)).toBe(true);
   } finally { act(() => tree.unmount()); if (previousScheduler) host.nativeRuntimeScheduler = previousScheduler; else delete host.nativeRuntimeScheduler; }
 });
+
+test('exact completed 650000/72 request is immediate, but changed callback context and catalogue owner invalidate it', async () => {
+  const products = Array.from({ length: 96 }, (_, n) => ({ ...product, productId: `cache-p-${n}`, productKey: `cache-k-${n}`, programmeIds: [`cache-prog-${n}`] }));
+  const programmes = products.map((p, n) => programme({ productId: p.productId, programmeId: `cache-prog-${n}`, offerId: `cache-offer-${n}`,
+    conditions: [{ conditionId: 'amount', field: 'amount', operator: 'eq', value: '650000', evidenceIds: [] },
+      { conditionId: 'lvr', field: 'lvr', operator: 'bounds', maximum: '0.8', evidenceIds: [] }],
+    components: programme().components.map(c => ({ ...c, scopeId: `cache-offer-${n}` })) }));
+  const source = products.map(p => ({ ...row, product_key: p.productKey }));
+  const view = catalogue(programmes, products), sectionScenario = {};
+  let latest!: ReturnType<typeof useResolvedPublicRankingRows>;
+  function Probe({ amount, lvr = '0.72', selected = view }: { amount: string; lvr?: string; selected?: typeof view }) {
+    latest = useResolvedPublicRankingRows({ sourceRows: source, catalogue: selected, section: 'Mortgage', sectionScenario,
+      rowScenario: () => ({ amount, lvr }), resolutionContextKey: JSON.stringify([amount, lvr]), focused: true, interactive: true, revision: 1 });
+    return null;
+  }
+  let tree!: ReactTestRenderer;
+  try {
+    act(() => { tree = TestRenderer.create(<Probe amount="650000" />); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(latest.ready).toBe(true); expect(latest.resolution.rows).toHaveLength(96);
+    const originalRows = latest.resolution.rows;
+    act(() => tree.update(<Probe amount="650001" />));
+    expect(latest.ready).toBe(false);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(latest.resolution.rows).toHaveLength(0);
+    act(() => tree.update(<Probe amount="650000" />));
+    expect(latest.ready).toBe(true); expect(latest.resolution.rows).toBe(originalRows);
+    expect(latest.work.pricingSnapshotReused).toBe(true);
+    act(() => tree.update(<Probe amount="650000" lvr="0.9" />));
+    expect(latest.ready).toBe(false);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(latest.resolution.rows).toHaveLength(0);
+    const corrected = catalogue(programmes.map(p => ({ ...p, components: p.components.map(c => ({ ...c, value: '0.02' })) })), products);
+    act(() => tree.update(<Probe amount="650000" selected={corrected} />));
+    expect(latest.ready).toBe(false);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(latest.resolution.rows.every(r => r.rate === '0.02')).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});

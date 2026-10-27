@@ -81,3 +81,26 @@ test('external store clear discards a pending typed draft instead of restoring i
     clearMortgageComparison();
   }
 });
+
+test('selecting the final facet flushes the latest amount and LVR before the debounce and clear cannot resurrect them', () => {
+  jest.useFakeTimers();
+  const original = captureRatesSession(); initializeRatesSession(DEFAULT_PREFS, 'Mortgage'); clearMortgageComparison();
+  const filters = { ...EMPTY_FILTERS, loanPurposes: ['OWNER_OCCUPIED'] };
+  updateRatesSection('Mortgage', { filters });
+  const rows = [{ product_key: 'loan', provider: 'Bank', product_name: 'Loan', rate: '0.06',
+    loan_purpose: 'OWNER_OCCUPIED', ribbon_repayment_type: 'PRINCIPAL_AND_INTEREST' }];
+  let tree!: ReactTestRenderer;
+  act(() => { tree = TestRenderer.create(<MortgageComparisonControls rows={rows} filters={filters} unverified={0} invalid={false} />); });
+  try {
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Loan amount' }).props.onChangeText('650000'));
+    act(() => tree.root.findByProps({ accessibilityLabel: 'LVR' }).props.onChangeText('72'));
+    expect(useMortgageComparison.getState().loanAmount).toBe('');
+    const chip = tree.root.findAllByType('Chip' as any).find(item => /principal/i.test(String(item.props.label)))!;
+    act(() => chip.props.onPress());
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '650000', lvr: '72' });
+    expect(useRatesSession.getState().sections.Mortgage.filters.repaymentTypes).toEqual(['PRINCIPAL_AND_INTEREST']);
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
+    act(() => jest.advanceTimersByTime(250));
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '', lvr: '' });
+  } finally { act(() => tree.unmount()); jest.useRealTimers(); restoreRatesSession(original); clearMortgageComparison(); }
+});
