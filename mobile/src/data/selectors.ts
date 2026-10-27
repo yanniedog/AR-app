@@ -467,7 +467,7 @@ export function filterRows(
   return visibleRows.filter(prepareRowFilter(filters, detailsProducts, searchIndex, section));
 }
 
-function prepareRowFilter(
+export function prepareRowFilter(
   filters: Filters,
   detailsProducts?: Record<string, ProductDetail> | null,
   searchIndex?: SearchIndexPayload | null,

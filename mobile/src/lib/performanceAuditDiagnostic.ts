@@ -14,13 +14,13 @@ export interface AuditCheckDiagnostic {
 }
 
 // Probe IDs are source-authored roles. Reject arbitrary route/account content.
-const WORDS = new Set(('1 2 a about account active actual advance age all app assessment async audit august b back bank bankrates base bonus bound browse buffer calculations calculator calendar candidates chart check collision columns compare content contribution core coverage criterion dashboard data debug deposit details different discount due duplicate economic economy eligible empty entries environment evidence excess execution external facet facts fake features fee file filters first flat forecast found frame future graphic graphics group growth hierarchy history id inputs insights interest inventory io items later layout leader lender lifecycle link linked list local log logo logos maintenance manifest market maturity maximum metric minimum model modeled movements moves name network new not notices observed one ongoing optional options outlook overview package pagination participation payload payment payments pi pinned preceding preferences prepared primary product products profile progress projection projections providers purchases rate rates rba readiness receipt recovery remaining render repay repayment response responsiveness restoration result results reversal root rule runtime safety saved scenario search secondary sections self september settings settle setup sheet snapshot source state status stop storage successor suitability system table target td terms there tier tiers transfer two unemployment unknown update visible wages waiver watchlist whole window zero').split(' '));
+const WORDS = new Set(('1 2 a about account active actual advance age all app assessment async audit august b back bank bankrates base bonus bound browse buffer calculations calculator calendar candidates chart check collision columns compare comparisons content contribution core coverage criterion dashboard data debug deposit details different discount due duplicate economic economy eligible empty entries environment evidence excess execution external facet facts fake features fee file filters first flat forecast found frame future graphic graphics group growth hierarchy history id inputs insights interest inventory io items later layout leader lender lifecycle link linked list local log logo logos maintenance manifest market maturity maximum metric minimum model modeled movements moves name network new not notices observed one ongoing optional options outlook overview package pagination participation payload payment payments pi pinned preceding preferences prepared primary product products profile progress projection projections providers purchases rate rates rba readiness receipt recovery remaining render repay repayment response responsiveness restoration result results reversal root rule runtime safety saved scenario search secondary sections self september settings settle setup sheet snapshot source state status stop storage successor suitability system table target td terms there tier tiers transfer two unemployment unknown update visible wages waiver watchlist whole window zero').split(' '));
 function role(value: string | undefined): string | null {
   return value && value.length <= 100 && value.split(/[.-]/).every(word => WORDS.has(word)) ? value : null;
 }
 
 const STAGES = new Set<AuditDiagnosticStage>(['start', 'route', 'pre-action', 'action', 'path', 'data', 'readiness', 'settle', 'back', 'recovery', 'origin-readiness', 'complete', 'check']);
-const KEYS = new Set('returnReadiness returnStage work stage readiness ready capturing blockers code surface probe surfaces id actionRevision probes kind required status expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent coveredBySheet'.split(' '));
+const KEYS = new Set('returnReadiness returnStage work stage readiness ready capturing blockers code surface probe surfaces id actionRevision probes kind required status expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent errorClass coveredBySheet'.split(' '));
 const CODES = new Set('capture-inactive no-surfaces no-probes probe-pending probe-error dataset-revision-mismatch render-revision-mismatch count-incomplete graphic-evidence-missing required-kind-missing'.split(' '));
 const NUMERIC = new Set('actionRevision expected actual visible fallback'.split(' '));
 const BOOLEAN = new Set('ready capturing required empty layout accessible datasetMatches renderMatches errorPresent coveredBySheet'.split(' '));
@@ -34,6 +34,7 @@ export function publicAuditDiagnostic(value: unknown): unknown {
       if (['id', 'surface', 'probe'].includes(key)) return role(item);
       if ((key === 'stage' || key === 'returnStage') && STAGES.has(item as AuditDiagnosticStage) || key === 'code' && CODES.has(item) ||
         key === 'kind' && ['data', 'list', 'logo', 'graphic', 'layout'].includes(item) ||
+        key === 'errorClass' && ['incomplete-scenario', 'unclassified'].includes(item) ||
         key === 'status' && ['pending', 'ready', 'error'].includes(item)) return item;
       return null;
     }
@@ -257,6 +258,8 @@ function diagnosticReadiness(snapshot: PerformanceAuditReadinessSnapshot) {
         datasetMatches: probe.datasetRevision == null || surface.datasetRevision == null ? null : probe.datasetRevision === surface.datasetRevision,
         renderMatches: probe.renderRevision == null || surface.renderRevision == null ? null : probe.renderRevision === surface.renderRevision,
         errorPresent: probe.error !== null,
+        errorClass: probe.error == null ? null : probe.id === 'projections.model' &&
+          probe.error.startsWith('Incomplete scenario: ') ? 'incomplete-scenario' : 'unclassified',
         error: probe.error, datasetRevision: probe.datasetRevision, renderRevision: probe.renderRevision, updatedAtMs: probe.updatedAtMs,
       })),
     })),

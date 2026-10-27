@@ -123,3 +123,9 @@ test('a single high-fanout product yields between programmes and cancels before 
   expect(cancelled).toBeNull();
   expect(yields).toBe(2);
 });
+
+test('same-cardinality catalogue replacement has a distinct source identity, wrapper republish does not', () => {
+  const view = catalogue();
+  expect(publicCataloguePricingKey({ ...view })).toBe(publicCataloguePricingKey(view));
+  expect(publicCataloguePricingKey(catalogue())).not.toBe(publicCataloguePricingKey(view));
+});

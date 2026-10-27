@@ -433,3 +433,19 @@ test('hosted diagnostic logs retain bounded work facts and separate return evide
   expect(decoded.diagnosticLog.checks[0].diagnostic?.returnStage).toBe('back');
   expect(JSON.stringify(decoded)).not.toMatch(/loanAmount|987654321|PRIVATEQUERY|PRIVATEBANK|arbitraryCount|123456789/);
 });
+
+
+test('hosted probe errors retain only a fixed causal classification', () => {
+  const report = makePerformanceAuditReport();
+  report.checks = [{ id: 'journey-projections-warm', label: 'Projections', kind: 'journey', status: 'warn',
+    durationMs: 1, metrics: {}, diagnostic: { stage: 'complete', readiness: { surfaces: [{
+      id: 'projections.lifecycle-chart', probes: [{ id: 'projections.model', kind: 'data', required: false,
+        status: 'error', errorPresent: true, errorClass: 'incomplete-scenario',
+        error: 'Incomplete scenario: private account 123456' }],
+    }] } } as never }];
+  const log = fullAuditDiagnosticLog(report, id => id) as typeof report;
+  expect(log.checks[0].diagnostic!.readiness!.surfaces[0].probes[0]).toMatchObject({
+    errorClass: 'incomplete-scenario', errorPresent: true,
+  });
+  expect(JSON.stringify(log)).not.toMatch(/private account|123456/);
+});

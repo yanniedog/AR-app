@@ -17,6 +17,7 @@ export function useSearchFilterOptions(
   details: Record<string, ProductDetail> | null | undefined,
   section: SectionKey,
   revision: number,
+  enabled = true,
 ) {
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt(value => value + 1), []);
@@ -31,6 +32,7 @@ export function useSearchFilterOptions(
     error: UiCopy | null;
   } | null>(null);
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     // First Rates entry: short paint deferral. Later filter/scope rebuilds must
     // not re-add a 300ms navigation wait on top of cooperative pricing.
@@ -49,7 +51,7 @@ export function useSearchFilterOptions(
       });
     });
     return () => { cancelled = true; cancelNavigation(); };
-  }, [rows, details, section, revision, attempt]);
+  }, [rows, details, section, revision, attempt, enabled]);
   const current = snapshot?.rows === rows && snapshot.details === details &&
     snapshot.section === section && snapshot.revision === revision && snapshot.attempt === attempt;
   const ready = current && snapshot.options !== null;

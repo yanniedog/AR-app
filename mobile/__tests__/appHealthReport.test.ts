@@ -1,3 +1,7 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { makeCompleteDisplayFixture } from '../__fixtures__/appHealth';
+import { evaluateAppHealthDisplayQuality } from '../src/lib/appHealth/displayQuality';
 import {
   APP_HEALTH_CHECK_CODES,
   APP_HEALTH_EXPECTED_CHECK_IDS,
@@ -145,4 +149,47 @@ describe('app-health report finalization', () => {
     });
     expect(readCompatibleAppHealthReport({ ...legacy, schemaVersion: 5 })).toBeNull();
   });
+});
+
+
+test('public chart failure names only fixed source roles and counts rejected private identities', () => {
+  const check: AppHealthCheck = { ...passingCheck(APP_HEALTH_CHECK_CODES.DISPLAY_CHART),
+    domain: 'display-completeness', status: 'fail', metrics: { checked: 8, missing: 1 },
+    localEvidence: { failedSurfaceIds: ['product.details', 'projections.lifecycle-chart',
+      'private-account-123456', 'product.details'] } };
+  const report = finalizeAppHealthReport({ ...baseInput, plannedCheckIds: [check.id], checks: [check] });
+  const exported = toPublicAppHealthReport(report);
+  const metrics = exported.checks.find(item => item.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)!.metrics;
+  expect(metrics).toMatchObject({ failedSurfaceRoles: '["product.details","projections.lifecycle-chart"]',
+    unclassifiedFailedSurfaces: 1, checked: 8, missing: 1 });
+  expect(JSON.stringify(exported)).not.toMatch(/private-account|123456/);
+});
+
+
+test('a missing required chart is attributable after public report serialization', () => {
+  const { contracts, observations } = makeCompleteDisplayFixture();
+  contracts[0] = { ...contracts[0], id: 'product.details' };
+  observations[0] = { ...observations[0], surfaceId: 'product.details',
+    evidence: observations[0].evidence.filter(item => item.role !== 'chart') };
+  const checks = evaluateAppHealthDisplayQuality(contracts, observations);
+  const report = finalizeAppHealthReport({ ...baseInput, plannedCheckIds: checks.map(item => item.id), checks });
+  const chart = toPublicAppHealthReport(report).checks.find(item => item.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)!;
+  expect(chart.status).toBe('fail');
+  expect(chart.metrics).toMatchObject({ missing: 1, failedSurfaceRoles: '["product.details"]',
+    unclassifiedFailedSurfaces: 0 });
+});
+
+
+test('every literal audit-plan display surface has fixed public attribution', () => {
+  const sources = ['performanceAudit.ts', 'performanceAuditPlan.ts'].map(file =>
+    readFileSync(path.resolve(__dirname, '../src/lib', file), 'utf8'));
+  const ids = [...new Set(sources.flatMap(source => [...source.matchAll(/expectedSurface: '([a-z.-]+)'/g)]
+    .map(match => match[1])))].sort();
+  expect(ids.length).toBeGreaterThan(20);
+  const check: AppHealthCheck = { ...passingCheck(APP_HEALTH_CHECK_CODES.DISPLAY_CHART),
+    domain: 'display-completeness', localEvidence: { failedSurfaceIds: ids } };
+  const report = finalizeAppHealthReport({ ...baseInput, plannedCheckIds: [check.id], checks: [check] });
+  const metrics = toPublicAppHealthReport(report).checks.find(item => item.code === check.code)!.metrics;
+  expect(metrics.failedSurfaceRoles).toBe(JSON.stringify(ids));
+  expect(metrics.unclassifiedFailedSurfaces).toBe(0);
 });

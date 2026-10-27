@@ -1,5 +1,8 @@
 import { isProductSubscribed, makeProductSubscription, productSubscriptionId } from '../src/data/subscriptions';
 import React from 'react';
+import { catalogue, product, reference } from '../testUtils/publicRateJourney';
+import * as pricing from '../src/data/publicRateIntegration';
+import type { PublicCatalogueView } from '../src/data/publicRateIntegration';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { Alert, Modal, StyleSheet, TextInput } from 'react-native';
 import MyRates from '../app/(tabs)/watchlist';
@@ -24,10 +27,15 @@ import { rateConditionFixture } from '../testUtils/rateConditions';
 type Node = { props: Record<string, any>; parent: Node | null; children: unknown[];
   findAllByType(type: unknown): Node[]; findByType(type: unknown): Node; findAllByProps(props: Record<string, unknown>): Node[] };
 type Tree = ReactTestRenderer & { root: Node };
+let mockCatalogueOverride: PublicCatalogueView | undefined;
 let mockState: Record<string, any>;
-const mockScenario = normalizeUserRateScenario(undefined);
+let mockScenario = normalizeUserRateScenario(undefined);
 jest.mock('../src/data/store', () => ({ useStore: Object.assign((selector: (state: typeof mockState) => unknown) => selector(mockState),
   { getState: () => mockState }) }));
+jest.mock('../src/data/publicRateCatalogue', () => {
+  const unavailable = { status: 'unavailable', allLoaded: true, products: [], references: [], getProduct: () => undefined, getProgrammes: () => [], loadAll: async () => {} };
+  return { usePublicRateCatalogue: () => mockCatalogueOverride ?? unavailable };
+});
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true, useScrollToTop: jest.fn() }));
 jest.mock('../src/hooks/useNavigationContentReady', () => ({
@@ -55,6 +63,7 @@ jest.mock('../src/lib/nav', () => ({ openProduct: jest.fn(), openCompare: jest.f
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockScenario = normalizeUserRateScenario(undefined);
   setSuitabilityAllowed(null);
   installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() });
   const fixture = rateConditionFixture();
@@ -67,7 +76,7 @@ beforeEach(() => {
     setPref: jest.fn(), setTrackedRateRelevantDate: jest.fn(async () => undefined) };
   jest.mocked(ensurePermissions).mockResolvedValue(true);
 });
-afterEach(() => { setSuitabilityAllowed(null); installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() }); });
+afterEach(() => { mockCatalogueOverride = undefined; jest.useRealTimers(); setSuitabilityAllowed(null); installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() }); });
 function mount(child: React.ReactElement): Tree {
   let tree!: Tree;
   act(() => { tree = TestRenderer.create(<WordBubbleProvider>{child}</WordBubbleProvider>) as Tree; });
@@ -215,5 +224,38 @@ test('catalogue-only saved offers retain their own alert state and can unsubscri
     act(() => tree.root.findByType(TextInput).props.onChangeText('2027-03-04'));
     await act(async () => { button(tree, 'Save date').props.onPress(); });
     expect(mockState.setTrackedRateRelevantDate).toHaveBeenCalledWith(refs[1].id, '2027-03-04', 'term-maturity');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('empty Saved with no entered rate does not expand unused position catalogue books', async () => {
+  jest.useFakeTimers(); mockState.savedRates = []; mockState.trackedRates = [];
+  const products = Array.from({ length: 1000 }, (_, index) => ({ ...product, productId: `p-${index}`, productKey: `k-${index}` }));
+  const books = jest.fn(() => []);
+  const synchronousExpansion = jest.spyOn(pricing, 'publicRecommendationRows');
+  const cooperativeExpansion = jest.spyOn(pricing, 'publicRecommendationRowsCooperatively');
+  mockCatalogueOverride = { ...catalogue([], products), getProgrammes: books };
+  const tree = mount(<MyRates />);
+  try {
+    await act(async () => { await jest.advanceTimersByTimeAsync(2000); });
+    expect(tree.root.findAllByType(ProductCard)).toHaveLength(0);
+    // Pricing identity may read programme cardinality; no offer expansion or
+    // resolution job is needed when there is no entered rate to compare.
+    expect(synchronousExpansion).not.toHaveBeenCalled();
+    expect(cooperativeExpansion).not.toHaveBeenCalled();
+  } finally { act(() => tree.unmount()); synchronousExpansion.mockRestore(); cooperativeExpansion.mockRestore(); }
+});
+
+test('a same-day reference freshness expiry removes the unverified current-rate position', () => {
+  jest.useFakeTimers(); jest.setSystemTime(new Date('2026-10-26T11:59:00Z'));
+  mockState.savedRates = []; mockState.trackedRates = [];
+  mockCatalogueOverride = catalogue([], [product], [reference({ freshness: { state: 'current', checkedAt: '2026-10-24T12:00:00Z', lastSuccessAt: '2026-10-24T12:00:00Z', reasonCodes: [] } })]);
+  mockScenario = { ...mockScenario, localRates: { ...mockScenario.localRates, mortgage: { ...mockScenario.localRates.mortgage, mode: 'reference', referenceId: 'unit-reference', totalAdjustment: '0' } },
+    currentProducts: { ...mockScenario.currentProducts, mortgage: { ...mockScenario.currentProducts.mortgage, productKey: product.productKey } } };
+  const tree = mount(<MyRates />);
+  try {
+    expect(copy(tree)).toContain('Current entered rate');
+    jest.setSystemTime(new Date('2026-10-26T12:00:00.001Z'));
+    act(() => tree.update(<WordBubbleProvider><MyRates /></WordBubbleProvider>));
+    expect(copy(tree)).not.toContain('Current entered rate');
   } finally { act(() => tree.unmount()); }
 });

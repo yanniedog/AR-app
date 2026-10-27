@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { SECTION_KEYS, type SectionKey } from '../../types';
 import { buildBankRateChart, type BankRateChartModel, type RateStatistic } from '../../data/bankRateOverview';
@@ -56,10 +56,12 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
   const model = useMemo(() => buildBankRateChart(snapshots ?? {}, section, statistic, gap, calendar), [calendar, gap, section, snapshots, statistic]);
   const chartSourceRevision = `${revision}:${section}:${statistic}:${tab}:${model.decisions.map(item => `${item.date}:${item.outcome}`).join(',')}`;
   const chartRevision = `${chartSourceRevision}:${model.lines.find((line) => line.provider === (selectedProvider ?? provider))?.provider ?? model.lines[0]?.provider ?? 'none'}`;
+  const activeChartRevision = useRef(chartRevision); activeChartRevision.current = chartRevision;
   const gapUnavailable = tab === 'gap' && !gapAllowed;
+  const modelPointCount = useMemo(() => gapUnavailable ? 0 : model.lines.reduce((count, line) => count + line.points.length, 0), [gapUnavailable, model]);
+  const activeChartPointCount = useRef(modelPointCount); activeChartPointCount.current = modelPointCount;
   const auditState = useMemo<BankRatesAuditState>(() => {
-    const modelPointCount = gapUnavailable ? 0 : model.lines.reduce((count, line) => count + line.points.length, 0);
-    const chartRendered = graphic?.revision === chartRevision && graphic.layoutMeasured && graphic.pointCount > 0;
+    const chartRendered = graphic?.revision === chartRevision && graphic.layoutMeasured && graphic.pointCount === modelPointCount && graphic.expectedCount === modelPointCount && modelPointCount > 0 && graphic.accessibleSummary;
     const emptyStateRendered = renderedEmptyRevision === chartRevision && modelPointCount === 0;
     return {
       revision: chartRevision,
@@ -71,8 +73,9 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
       accessibleSummary: chartRendered && graphic.accessibleSummary,
       layoutMeasured: chartRendered || emptyStateRendered,
     };
-  }, [chartRevision, core, failed, gapUnavailable, graphic, model, renderedEmptyRevision, updating]);
+  }, [chartRevision, core, failed, graphic, modelPointCount, renderedEmptyRevision, updating]);
   const recordGraphic = useCallback((evidence: ChartRenderEvidence) => {
+    if (evidence.revision !== activeChartRevision.current) return;
     setGraphic(current => current
       && current.revision === evidence.revision
       && current.pointCount === evidence.pointCount
@@ -81,7 +84,7 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
       && current.accessibleSummary === evidence.accessibleSummary
       && current.emptyStateRendered === evidence.emptyStateRendered
       ? current : evidence);
-    onChartReady?.(evidence.layoutMeasured && evidence.pointCount > 0 && evidence.pointCount === evidence.expectedCount);
+    onChartReady?.(evidence.layoutMeasured && evidence.accessibleSummary && evidence.pointCount > 0 && evidence.pointCount === evidence.expectedCount && evidence.pointCount === activeChartPointCount.current);
   }, [onChartReady]);
   useEffect(() => { onAuditStateChange?.(auditState); }, [auditState, onAuditStateChange]);
   useEffect(() => { onModelChange?.(updating || (tab === 'gap' && !gapAllowed) ? null : model); }, [gapAllowed, model, onModelChange, tab, updating]);
@@ -91,13 +94,13 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
       <AppText variant="h2" accessibilityRole="header">{uiLabel("Bank rates")}</AppText>
     </View>
     <SegmentedControl options={[{ value: 'rates' as const, label: 'Rates' }, { value: 'gap' as const, label: 'Gap' }]} value={tab} onChange={setTab} />
-    {gapUnavailable ? <View key={chartRevision} onLayout={(event) => { if (hasPositiveChartLayout(event)) setRenderedEmptyRevision(chartRevision); }}><AppText variant="small">{uiJoin('Gap', ' · ', 'Unavailable')}</AppText></View> : <>
+    {gapUnavailable ? <View key={chartRevision} onLayout={(event) => { if (hasPositiveChartLayout(event) && activeChartRevision.current === chartRevision) setRenderedEmptyRevision(chartRevision); }}><AppText variant="small">{uiJoin('Gap', ' · ', 'Unavailable')}</AppText></View> : <>
       {showSections && !gap ? <SegmentedControl options={options} value={section} onChange={next => { setChosenSection(next); onSectionChange?.(next); }} /> : null}
       {!gap ? <SegmentedControl options={STATISTICS} value={statistic} onChange={setStatistic} /> : null}
       <AppText variant="small" color="textMuted">{uiJoin(personalized ? 'Profile' : 'Products', ' · ', gap ? uiJoin('Home loans', ' ', 'Mean', ' ', '−', ' ', 'Savings', ' ', 'Mean') : uiLabel('Advertised rate'))}</AppText>
       {core && !historyAvailable && !historyLoading ? <AppText variant="small" color="textMuted" accessibilityRole="alert">{uiJoin('History', ' · ', 'Unavailable', ' · ', 'Current rate')}</AppText> : null}
       {!historyLoading && missingDates.length > 0 ? <AppText variant="small" color="textMuted" accessibilityRole="alert">{uiJoin('Missing observations', ' · ', uiCount(missingDates.length))}</AppText> : null}
-      {updating ? <AppText variant="small" accessibilityRole="alert">{uiLabel(failed ? 'Unavailable' : 'Loading')}</AppText> : model.lines.length ? <View key={chartSourceRevision} testID="bank-rates-chart-layout"><BankRateChart model={model} provider={selectedProvider ?? provider} onProviderChange={onProviderChange ?? setProvider} label={gap ? 'Gap' : STATISTICS.find(s => s.value === statistic)!.label} gap={gap} auditRevision={chartRevision} onGraphicReady={recordGraphic} /></View> : <View key={chartRevision} testID="bank-rates-empty-layout" onLayout={(event) => { if (hasPositiveChartLayout(event)) setRenderedEmptyRevision(chartRevision); }}><AppText variant="small">{uiLabel("No results")}</AppText></View>}
+      {updating ? <AppText variant="small" accessibilityRole="alert">{uiLabel(failed ? 'Unavailable' : 'Loading')}</AppText> : model.lines.length ? <View key={chartSourceRevision} testID="bank-rates-chart-layout"><BankRateChart model={model} provider={selectedProvider ?? provider} onProviderChange={onProviderChange ?? setProvider} label={gap ? 'Gap' : STATISTICS.find(s => s.value === statistic)!.label} gap={gap} auditRevision={chartRevision} onGraphicReady={recordGraphic} /></View> : <View key={chartRevision} testID="bank-rates-empty-layout" onLayout={(event) => { if (hasPositiveChartLayout(event) && activeChartRevision.current === chartRevision) setRenderedEmptyRevision(chartRevision); }}><AppText variant="small">{uiLabel("No results")}</AppText></View>}
       {gap ? <AppText variant="small" color="textMuted">{uiJoin('Bank margin', ' · ', 'Excluded')}</AppText> : null}
       <Disclosure title="Basis" open={methodOpen} onToggle={() => setMethodOpen(open => !open)}>
         <AppText variant="small" color="textMuted">{uiJoin('Equal tier weights', ' · ', cataloguePrepared ? 'Historical matches' : 'Current matching tiers', ' · ', 'Withdrawn products', ' · ', cataloguePrepared ? 'Included' : 'Unknown', ' · ', 'Missing observations', ' · ', 'Unknown')}</AppText>

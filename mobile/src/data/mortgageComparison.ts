@@ -68,10 +68,10 @@ function matchListedTier(
   parsed: ReturnType<typeof inputs>,
   fallthroughLvr: boolean,
   fallthroughAmount: boolean,
+  range = parseLvrRange(row.lvr_tier),
 ): MortgageComparisonMatch {
   let unverified = false;
   if (parsed.lvr !== null && fallthroughLvr) {
-    const range = parseLvrRange(row.lvr_tier);
     // User LVR is set: missing/unparseable listed tier is outside, never an
     // unverified keep that resurfaces identity-catalogue rows (e.g. <60% at 71%).
     if (!range) return 'outside';
@@ -89,13 +89,19 @@ function matchListedTier(
   return unverified ? 'unverified' : 'listed';
 }
 
-function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateConditionContext): MortgageComparisonMatch {
+export function prepareMortgageComparisonRow(row: RateRow, context?: RateConditionContext) {
+  return { source: scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context)),
+    range: parseLvrRange(row.lvr_tier) };
+}
+export type PreparedMortgageComparisonRow = ReturnType<typeof prepareMortgageComparisonRow>;
+function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateConditionContext,
+  prepared?: PreparedMortgageComparisonRow): MortgageComparisonMatch {
   if (parsed.invalid) return 'invalid';
   let unverified = false;
   let fallthroughLvr = parsed.lvr !== null;
   let fallthroughAmount = parsed.amount !== null;
   if (parsed.lvr !== null || parsed.amount !== null) {
-    const source = scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context));
+    const source = prepared?.source ?? scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context));
     if (source.state === 'admitted') {
       const dimensions: readonly [number | null, readonly PublishedNumericConditionFact[], 'lvr' | 'amount'][] = [
         [parsed.lvr, source.facts.filter(fact => fact.kind === 'published-lvr-range'), 'lvr'],
@@ -116,7 +122,7 @@ function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateCo
       // stray second published band cannot rescue e.g. 71% onto an lvr_<60% row.
       // Missing/unparseable listed tier is outside (same as matchListedTier).
       if (!fallthroughLvr && parsed.lvr !== null) {
-        const range = parseLvrRange(row.lvr_tier);
+        const range = prepared ? prepared.range : parseLvrRange(row.lvr_tier);
         if (!range || !lvrRangeContains(range, parsed.lvr)) return 'outside';
       }
       if (!unverified && !fallthroughLvr && !fallthroughAmount) return 'listed';
@@ -124,7 +130,7 @@ function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateCo
       // Missing admitted LVR/amount facts only: fall through to listed tier/bounds.
     }
   }
-  const listed = matchListedTier(row, parsed, fallthroughLvr, fallthroughAmount);
+  const listed = matchListedTier(row, parsed, fallthroughLvr, fallthroughAmount, prepared ? prepared.range : parseLvrRange(row.lvr_tier));
   if (listed === 'outside' || listed === 'invalid') return listed;
   return listed === 'unverified' || unverified ? 'unverified' : 'listed';
 }
@@ -134,6 +140,21 @@ export function mortgageComparisonRows(rows: RateRow[], value: MortgageCompariso
   const unverifiedRows = new WeakSet<RateRow>();
   const selected = rows.filter(row => {
     const state = match(row, parsed, context);
+    if (state === 'unverified') { unverified++; unverifiedRows.add(row); }
+    return state === 'listed' || state === 'unverified';
+  });
+  return { rows: selected, unverified, unverifiedRows, invalid: parsed.invalid };
+}
+
+/** Reuses source-verified wording and parsed tiers from the same immutable context. */
+export function indexedMortgageComparisonRows(rows: RateRow[], value: MortgageComparisonInputs,
+  prepared: WeakMap<RateRow, PreparedMortgageComparisonRow>) {
+  const parsed = inputs(value), unverifiedRows = new WeakSet<RateRow>();
+  let unverified = 0;
+  const selected = rows.filter(row => {
+    const metadata = prepared.get(row);
+    if (!metadata) throw new Error('Unprepared mortgage row');
+    const state = match(row, parsed, undefined, metadata);
     if (state === 'unverified') { unverified++; unverifiedRows.add(row); }
     return state === 'listed' || state === 'unverified';
   });

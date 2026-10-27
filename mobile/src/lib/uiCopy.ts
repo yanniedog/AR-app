@@ -25,6 +25,7 @@ export const UI_LABELS = [
   'Saved requirements', 'Temporary filters', 'After saved requirements', 'All screens', 'Catalogue',
   'Edit saved requirements', 'Clear Home loans requirements', 'Clear all saved requirements',
   'Reset temporary filters', 'Reset Rates view', 'Other saved selections',
+  'Updating', 'Previous results',
   'Rates per page', 'Products per page', 'Page', 'First', 'Previous', 'Next', 'Last',
   'First page', 'Previous page', 'Next page', 'Last page',
   'Freshness', 'Overdue', 'Stale',

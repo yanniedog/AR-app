@@ -303,3 +303,23 @@ test('uncached filters hide stale history immediately, ignore superseded complet
   expect(JSON.stringify(tree.toJSON())).not.toContain('Loading');
   act(() => tree.unmount());
 });
+
+test('partial paths cannot certify a complete chart and late old bank layouts cannot erase current proof', () => {
+  const onAuditStateChange = jest.fn(), onChartReady = jest.fn();
+  const panel = (selectedProvider: string) => <BankRatesPanel selectedProvider={selectedProvider} onAuditStateChange={onAuditStateChange} onChartReady={onChartReady} />;
+  let tree!: Renderer; act(() => { tree = TestRenderer.create(panel('Alpha')) as Renderer; });
+  const chart = () => tree.root.find(node => node.type === ('BankRateChart' as unknown));
+  const report = (revision: string, pointCount = 4) => ({ revision, expectedCount: 4, pointCount, layoutMeasured: true, accessibleSummary: true, emptyStateRendered: false });
+  try {
+    const old = chart().props.auditRevision;
+    act(() => chart().props.onGraphicReady!(report(old, 2)));
+    expect(onAuditStateChange.mock.calls.at(-1)![0]).toMatchObject({ status: 'pending', renderedPointCount: 2 });
+    expect(onChartReady).toHaveBeenLastCalledWith(false);
+    act(() => tree.update(panel('Beta')));
+    const current = chart().props.auditRevision;
+    act(() => chart().props.onGraphicReady!(report(current)));
+    expect(onAuditStateChange.mock.calls.at(-1)![0]).toMatchObject({ status: 'ready', revision: current });
+    act(() => chart().props.onGraphicReady!(report(old)));
+    expect(onAuditStateChange.mock.calls.at(-1)![0]).toMatchObject({ status: 'ready', revision: current, renderedPointCount: 4 });
+  } finally { act(() => tree.unmount()); }
+});
