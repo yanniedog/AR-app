@@ -18,7 +18,7 @@ export async function measureAuditBackNavigation(options: {
   back(): void;
   settle(): Promise<void>;
   /** Path commit. When set, settle() is bookkeeping and is not part of durationMs. */
-  awaitCommit?(): Promise<void>;
+  awaitCommit?(previousPath: string): Promise<void>;
   now(): number;
   matchesPath(actual: string, expected: string, format?: 'href' | 'pathname'): boolean;
   tabJourney: boolean;
@@ -30,7 +30,7 @@ export async function measureAuditBackNavigation(options: {
     const before = options.currentPath();
     const started = options.now();
     options.back();
-    if (options.awaitCommit) await options.awaitCommit();
+    if (options.awaitCommit) await options.awaitCommit(before);
     const committedAt = options.now();
     await options.settle();
     const destination = options.currentPath();

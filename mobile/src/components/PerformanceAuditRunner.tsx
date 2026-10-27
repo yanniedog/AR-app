@@ -1,3 +1,4 @@
+import { closeAuditApplicationJournal } from '../lib/auditApplicationJournal';
 import { captureUserRateScenarioForAudit } from '../hooks/useUserRateScenario';
 import { AuditDatasetChangedError, auditDatasetFailureMetrics, prepareAuditPublicCore, assertAuditPublicCataloguePinned } from '../lib/performanceAuditDataset';
 import type { PublicCatalogueView } from '../data/publicRateIntegration';
@@ -144,7 +145,7 @@ import {
   omitNullishDeep,
 } from '../lib/performanceAuditLog';
 import { yieldToUi } from '../lib/yieldToUi';
-import { captureAuditDiagnostic, type AuditDiagnosticStage } from '../lib/performanceAuditDiagnostic';
+import { appendAuditReturnDiagnostic, captureAuditDiagnostic, scoreAuditTargetProbeEvidence, type AuditDiagnosticStage } from '../lib/performanceAuditDiagnostic';
 import { setPassiveAuditPaused } from '../lib/passiveAudit';
 import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAuditFinalization';
 import { awaitPerformanceAuditWork } from '../lib/performanceAuditWork';
@@ -1143,7 +1144,7 @@ async function runDeepAuditStepBody(
     clearInterval(readinessGuard);
   }
   const readiness = visibleReady.snapshot;
-  const firstReadyFrameMs = visibleReady.elapsedMs;
+  const firstReadyFrameMs = visibleReady.settled ? visibleReady.elapsedMs : null;
   if (actionSource === step.expectedSurface) {
     const completedAction = readiness.surfaces.find((surface) => surface.id === actionSource)
       ?.lastCompletedAction;
@@ -1208,7 +1209,7 @@ async function runDeepAuditStepBody(
     assertDatasetRevision(datasetRevision);
   }
   const errors = routeErrorMessages(logCursor);
-  const forwardMs = userVisibleForwardMs({ navigationCommitMs, firstReadyFrameMs });
+  const forwardMs = firstReadyFrameMs == null ? null : userVisibleForwardMs({ navigationCommitMs, firstReadyFrameMs });
   const latency = scoreUserVisibleJourney({
     actionMs,
     navigationCommitMs,
@@ -1216,13 +1217,15 @@ async function runDeepAuditStepBody(
     maxEventLoopLagMs: responsiveness.maxEventLoopLagMs,
     maxFrameGapMs: responsiveness.maxFrameGapMs,
   });
-  const status = visibleReady.stepExpired || errors.journey.length ? 'fail' : latency;
+  const diagnostic = captureAuditDiagnostic(visibleReady.stepExpired ? readiness : performanceAuditReadinessRegistry.snapshot(), 'complete');
+  const status = visibleReady.stepExpired || errors.journey.length ? 'fail'
+    : worstStatus(latency, scoreAuditTargetProbeEvidence(diagnostic, step.expectedSurface));
   return {
     id: `deep-${step.id}`,
     label,
     kind: 'journey',
     status,
-    diagnostic: captureAuditDiagnostic(readiness, 'complete'),
+    diagnostic,
     durationMs: roundMetric(now() - started),
     metrics: {
       journeyId: `${step.scenarioId}.${step.semanticActionId}`,
@@ -1251,10 +1254,12 @@ async function runDeepAuditStepBody(
         preActionQuietWindowReused,
         preActionQuietWindowAvoidedMs: preActionQuietWindowReused ? READINESS_QUIET_WINDOW_MS : 0,
       }),
-      forwardMs: roundMetric(forwardMs),
-      forwardWorkMs: roundMetric(forwardMs),
+      forwardMs: forwardMs == null ? null : roundMetric(forwardMs),
+      forwardWorkMs: forwardMs == null ? null : roundMetric(forwardMs),
       navigationCommitMs: roundMetric(navigationCommitMs),
-      firstReadyFrameMs: roundMetric(firstReadyFrameMs),
+      firstReadyFrameMs: firstReadyFrameMs == null ? null : roundMetric(firstReadyFrameMs),
+      firstReadyFrameObserved: visibleReady.settled,
+      readinessMs: roundMetric(visibleReady.elapsedMs),
       backgroundSettleMs: roundMetric(backgroundSettleMs),
       backgroundUnsettled: visibleReady.settled ? null : true,
       ...(visibleReady.stepExpired ? { stepLimitExceeded: true, stepLimitMs: PERFORMANCE_AUDIT_STEP_LIMIT_MS } : {}),
@@ -2497,6 +2502,7 @@ export async function runJourney(
   let readinessStepExpired = false;
   let backgroundUnsettled = false;
   let destinationReadinessMs: number | null = null;
+  let firstReadyFrameObserved = false;
   let backgroundTasks: string[] = [];
   let backMs: number | null = null;
   let firstBackMs: number | null = null;
@@ -2568,10 +2574,11 @@ export async function runJourney(
       clearInterval(destinationReadinessGuard);
     }
     destinationReadinessMs = visibleReady.elapsedMs;
-    forwardMs = userVisibleForwardMs({
+    firstReadyFrameObserved = visibleReady.settled;
+    forwardMs = visibleReady.settled ? userVisibleForwardMs({
       navigationCommitMs,
       firstReadyFrameMs: visibleReady.elapsedMs,
-    });
+    }) : null;
     forwardResponsiveness = monitor.metricsSince(forwardResponsivenessAt);
     const backgroundResponsivenessAt = monitor.snapshot();
     if (!visibleReady.stepExpired) {
@@ -2593,6 +2600,11 @@ export async function runJourney(
       await outsideStepBudget(watchdog, () => delay(ROUTE_DWELL_MS));
       assertDatasetRevision(datasetRevision);
     }
+    if (!visibleReady.stepExpired) {
+      // First-ready timing stays fixed; terminal evidence includes work that
+      // completed (or failed) during the separately measured background settle.
+      destinationDiagnostic = captureAuditDiagnostic(performanceAuditReadinessRegistry.snapshot(), 'complete');
+    }
     backgroundResponsiveness = monitor.metricsSince(backgroundResponsivenessAt);
 
     const backResponsivenessAt = monitor.snapshot();
@@ -2602,8 +2614,7 @@ export async function runJourney(
     const measuredBack = await measureAuditBackNavigation({
       currentPath, back: () => router.back(), now, matchesPath: pathMatches,
       tabJourney: journey.navigationKind === 'tab',
-      awaitCommit: async () => {
-        const before = currentPath();
+      awaitCommit: async (before) => {
         const deadline = now() + ROUTE_TIMEOUT_MS;
         while (pathMatches(currentPath(), before, 'pathname')) {
           assertSessionActive(watchdog);
@@ -2656,9 +2667,11 @@ export async function runJourney(
     rethrowAuditControl(caught);
     productDataFailure = caught instanceof JourneyBackgroundDataError;
     routeError = formatAuditError(caught);
-    destinationDiagnostic = captureAuditDiagnostic(
-      caught instanceof PerformanceAuditReadinessTimeoutError || caught instanceof PerformanceAuditReadinessProbeError
-        ? caught.snapshot : performanceAuditReadinessRegistry.snapshot(), journeyStage);
+    const failureSnapshot = caught instanceof PerformanceAuditReadinessTimeoutError || caught instanceof PerformanceAuditReadinessProbeError
+      ? caught.snapshot : performanceAuditReadinessRegistry.snapshot();
+    destinationDiagnostic = journeyStage === 'back' || journeyStage === 'recovery'
+      ? appendAuditReturnDiagnostic(destinationDiagnostic, failureSnapshot, journeyStage)
+      : captureAuditDiagnostic(failureSnapshot, journeyStage);
     if (!pathMatches(currentPath(), AUDIT_HOME_PATH)) {
       try {
         await recoverAuditRoute(currentPath, navigationAnchor);
@@ -2680,7 +2693,7 @@ export async function runJourney(
       rethrowAuditControl(caught);
       if (caught instanceof PerformanceAuditReadinessProbeError) {
         routeError = `Audit origin did not become ready after back navigation: ${formatAuditError(caught)}`;
-        destinationDiagnostic = captureAuditDiagnostic(caught.snapshot, journeyStage);
+        destinationDiagnostic = appendAuditReturnDiagnostic(destinationDiagnostic, caught.snapshot, journeyStage);
       }
     }
   }
@@ -2698,7 +2711,7 @@ export async function runJourney(
     framesOver50Ms: (forwardResponsiveness.framesOver50Ms ?? 0) + (backResponsiveness.framesOver50Ms ?? 0),
   };
   const errors = routeErrorMessages(logCursor);
-  const backContractMet = backReturnedToAudit && backChangedPath && backMs != null && backMs > 0;
+  const backContractMet = backReturnedToAudit && backChangedPath && backMs != null && Number.isFinite(backMs) && backMs >= 0;
   const forwardWorkMs = forwardMs;
   const latency = scoreUserVisibleJourney({
     navigationCommitMs: forwardMs,
@@ -2708,7 +2721,7 @@ export async function runJourney(
   });
   const status = routeError || errors.journey.length || !backContractMet || readinessStepExpired
     ? 'fail'
-    : latency;
+    : worstStatus(latency, scoreAuditTargetProbeEvidence(destinationDiagnostic, journey.expectedSurface));
   return {
     id: `journey-${journey.id}-${iteration}`,
     label: `${journey.label} (${iteration})`,
@@ -2735,6 +2748,8 @@ export async function runJourney(
       expectedSurface: journey.expectedSurface,
       navigationKind: journey.navigationKind,
       forwardMs: forwardMs == null ? null : roundMetric(forwardMs),
+      firstReadyFrameObserved,
+      firstReadyFrameMs: firstReadyFrameObserved ? destinationReadinessMs : null,
       backgroundSettleMs: backgroundSettleMs == null ? null : roundMetric(backgroundSettleMs),
       backgroundUnsettled: backgroundUnsettled ? true : null,
       ...(readinessStepExpired ? { stepLimitExceeded: true, stepLimitMs: PERFORMANCE_AUDIT_STEP_LIMIT_MS } : {}),
@@ -2830,6 +2845,7 @@ export function PerformanceAuditRunner() {
       };
       logAuditCheck(app, state.sessionId, check);
       const finishedAt = new Date().toISOString();
+        closeAuditApplicationJournal();
       const summaryMarker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=${state.sessionId} partial=true admissionRejected=true`;
       const report: PerformanceAuditReport = {
         schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION, sessionId: state.sessionId,
@@ -3748,6 +3764,7 @@ export function PerformanceAuditRunner() {
         auditEnvironment = environment;
 
         const finishedAt = new Date().toISOString();
+        closeAuditApplicationJournal();
         const performanceSummary = summarizePerformanceAudit(checks);
         const journeyChecks = checks.filter((check) => check.kind === 'journey');
         const justifiedSkippedJourneyChecks = journeyChecks.filter((check) =>
@@ -4211,6 +4228,7 @@ export function PerformanceAuditRunner() {
               })),
           }, 'error');
           const finishedAt = new Date().toISOString();
+        closeAuditApplicationJournal();
           const partialHealth = buildPartialAppHealthReport({
             sessionId, mode: auditMode, startedAt, finishedAt,
             capturedData: capturedHealthData,

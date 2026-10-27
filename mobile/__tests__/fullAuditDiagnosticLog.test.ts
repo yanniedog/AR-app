@@ -93,6 +93,26 @@ test('readiness IDs cannot use the check-ID exception', () => {
   expect(decoded.diagnosticLog.checks[0].id).toBe(report.checks[0].id);
 });
 
+test('retains bounded work evidence in the hosted full diagnostic log', () => {
+  const report = makePerformanceAuditReport();
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'pass', durationMs: 1,
+    metrics: {}, diagnostic: {
+      stage: 'readiness',
+      readiness: { surfaces: [{ id: 'rates.results', work: {
+        pricingStage: 'resolution', sourceRowCount: 42, candidateCount: 3, pricedRowCount: 2,
+        schedulerNativeScheduleAttempts: 4, schedulerNativeCompleted: 3, schedulerNativeFallbacks: 1,
+        privateText: 'private work detail',
+      } }] },
+    } as never }];
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.checks[0].diagnostic!.readiness).toMatchObject({ surfaces: [{
+    work: { pricingStage: 'resolution', sourceRowCount: 42, candidateCount: 3, pricedRowCount: 2,
+      schedulerNativeScheduleAttempts: 4, schedulerNativeCompleted: 3, schedulerNativeFallbacks: 1 },
+  }] });
+  expect(body).not.toContain('private work detail');
+});
+
 test('source strings matching generated alias names remain distinct values', () => {
   const report = makePerformanceAuditReport();
   report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 1,
@@ -390,4 +410,26 @@ test('preserves the complete dedicated public app-health schema', () => {
   });
   expect(JSON.stringify(decoded.diagnosticLog.appHealth)).toContain('coreAvailable');
   expect(body).not.toMatch(/Private Bank|private-health-session/);
+});
+
+test('hosted diagnostic logs retain bounded work facts and separate return evidence without exposing private fields', () => {
+  const report = makePerformanceAuditReport();
+  const surface = { id: 'rates.results', work: { pricingStage: 'scope', pricingErrorStage: 'resolution', catalogueStatus: 'ready',
+    pricingRequestRevision: 3, workerStarts: 2, workerRestarts: 1, workerCancellations: 0,
+    sourceRowCount: 8119, candidateCount: null, pricedRowCount: 42, catalogueProductCount: 2813, catalogueProgrammeCount: 16788,
+    schedulerNativeScheduleAttempts: 10, schedulerNativeCompleted: 8, schedulerNativeFallbacks: 2,
+    catalogueAllLoaded: true, mortgageCriteriaReady: true, mortgageInputsInvalid: false,
+    suitabilityReady: true, detailsLoading: false, searchIndexLoading: false, intentPending: false, filterReady: true, focused: true,
+    loanAmount: 987654321, query: 'PRIVATEQUERY', provider: 'PRIVATEBANK', arbitraryCount: 123456789,
+  }, probes: [] };
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 10,
+    metrics: {}, diagnostic: { stage: 'readiness', readiness: { ready: false, capturing: true, surfaces: [surface], blockers: [] },
+      returnStage: 'back', returnReadiness: { ready: true, capturing: true, surfaces: [surface], blockers: [] } } as never }];
+  const expected = { ...surface.work }; delete (expected as Partial<typeof expected>).loanAmount; delete (expected as Partial<typeof expected>).query;
+  delete (expected as Partial<typeof expected>).provider; delete (expected as Partial<typeof expected>).arbitraryCount;
+  const decoded = decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report)) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.checks[0].diagnostic?.readiness?.surfaces[0].work).toEqual(expected);
+  expect(decoded.diagnosticLog.checks[0].diagnostic?.returnReadiness?.surfaces[0].work).toEqual(expected);
+  expect(decoded.diagnosticLog.checks[0].diagnostic?.returnStage).toBe('back');
+  expect(JSON.stringify(decoded)).not.toMatch(/loanAmount|987654321|PRIVATEQUERY|PRIVATEBANK|arbitraryCount|123456789/);
 });

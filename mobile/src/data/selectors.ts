@@ -338,6 +338,9 @@ export function sortRows(
     .map(({ row }) => row);
 }
 
+const lenderProductCache = new WeakMap<RateRow[], WeakMap<object, Map<string, RateRow[]>>>();
+const NO_LENDER_DETAILS = {};
+
 /** The actual lender cards: one visible ranked tier per product, in display order. */
 export function lenderProductRows(
   rows: RateRow[],
@@ -347,14 +350,32 @@ export function lenderProductRows(
   includeNonStandard = false,
   detailsProducts?: Record<string, ProductDetail> | null,
 ): RateRow[] {
-  const visible = excludeTokenDepositRates(
+  let byDetails = lenderProductCache.get(rows);
+  if (!byDetails) { byDetails = new WeakMap(); lenderProductCache.set(rows, byDetails); }
+  const detailKey = detailsProducts ?? NO_LENDER_DETAILS;
+  let cached = byDetails.get(detailKey);
+  if (!cached) { cached = new Map(); byDetails.set(detailKey, cached); }
+  const key = `${section}:${metric}:${mortgageMetric}:${includeNonStandard}:${getMandatoryEligibilityRevision()}:${getSuitabilityRevision()}`;
+  const previous = cached.get(key);
+  if (previous) return previous;
+  const visible = mandatoryEligibleRows(excludeTokenDepositRates(
     visibleAccountRows(rows, includeNonStandard, detailsProducts), section,
-  );
-  const products = new Map<string, RateRow>();
-  for (const row of sortRows(visible, 'rate', section, metric, mortgageMetric)) {
-    if (!products.has(row.product_key)) products.set(row.product_key, row);
-  }
-  return [...products.values()];
+  ));
+  const compare = (a: PreparedSortRow, b: PreparedSortRow) =>
+    comparePreparedRows(a, b, 'rate', section, SECTIONS[section].lowerIsBetter, mortgageMetric);
+  // Choose the best tier in one pass, then sort only the product winners.
+  // Sorting every tier first repeated needless comparisons on large banks.
+  const products = new Map<string, PreparedSortRow>();
+  visible.forEach((row, index) => {
+    const prepared = prepareSortRow(row, index, 'rate', section, metric, mortgageMetric);
+    const prior = products.get(row.product_key);
+    if (!prior || compare(prepared, prior) < 0) products.set(row.product_key, prepared);
+  });
+  const result = [...products.values()].sort(compare).map(item => item.row);
+  // Bound preference/gate variants while the immutable source book remains live.
+  if (cached.size >= 8) cached.delete(cached.keys().next().value!);
+  cached.set(key, result);
+  return result;
 }
 
 /** Same ranking as sortRows, with bounded preparation and merge slices. */

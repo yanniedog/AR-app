@@ -567,7 +567,7 @@ export default function BankDetail() {
       {
         id: 'lender.products',
         kind: 'list',
-        status: core && listReadiness.ready ? 'ready' : 'pending',
+        status: core && listReadiness.visiblyCommitted ? 'ready' : 'pending',
         expectedCount: productCount,
         actualCount: listReadiness.committedItemCount,
         visibleCount: listReadiness.measuredVisibleCount,

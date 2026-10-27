@@ -1,0 +1,589 @@
+{
+  "version": "final-sheet-source",
+  "address": "http://localhost:8081",
+  "scenarioSha256": "bd8cead0f2f1c2489425a19848ba646ea7ff44b9f85f7e2ca40f0c0ec4f556d6",
+  "kind": "Expo-development-web",
+  "startedAt": "2026-10-26T11:25:25.858Z",
+  "contexts": [
+    {
+      "round": 0,
+      "fixture": {
+        "products": 2813,
+        "providers": 103,
+        "rates": 16788,
+        "mortgageRates": 8119,
+        "savingsRates": 8669,
+        "selectedBankProducts": 700,
+        "programmes": 16788,
+        "checkedAt": "2026-10-26T09:00:00.000Z"
+      },
+      "installToVisibleMs": 2162.2000000001863,
+      "samples": [
+        {
+          "iteration": 0,
+          "kind": "cold",
+          "at": "2026-10-26T11:25:31.078Z",
+          "clickToVisibleUsableDomMs": 769.7999999998137,
+          "clickToTwoFramesMs": 784.2000000001863,
+          "visibleRows": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "path": "/bank/Benchmark%20Bank"
+        },
+        {
+          "iteration": 1,
+          "kind": "warm",
+          "at": "2026-10-26T11:25:31.911Z",
+          "clickToVisibleUsableDomMs": 638.7000000001863,
+          "clickToTwoFramesMs": 657.7999999998137,
+          "visibleRows": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "path": "/bank/Benchmark%20Bank"
+        },
+        {
+          "iteration": 2,
+          "kind": "warm",
+          "at": "2026-10-26T11:25:32.728Z",
+          "clickToVisibleUsableDomMs": 576.8000000007451,
+          "clickToTwoFramesMs": 588.4000000003725,
+          "visibleRows": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "path": "/bank/Benchmark%20Bank"
+        },
+        {
+          "iteration": 3,
+          "kind": "warm",
+          "at": "2026-10-26T11:25:33.494Z",
+          "clickToVisibleUsableDomMs": 542.7000000001863,
+          "clickToTwoFramesMs": 556.6000000005588,
+          "visibleRows": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "path": "/bank/Benchmark%20Bank"
+        }
+      ],
+      "extra": {
+        "scroll": {
+          "available": true,
+          "elapsedMs": 24.199999999254942,
+          "before": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "after": [
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0302, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0003, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0103, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0203, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0303, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0004, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0104, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0204, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0304, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0005, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.11% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ]
+        },
+        "backForward": true,
+        "interruptedNavigationRecovered": true,
+        "mortgageScope": {
+          "converged": true,
+          "elapsedMs": 1748.4000000003725
+        },
+        "repeatedScopes": [
+          {
+            "lvr": "80",
+            "elapsedMs": 1709.1000000005588
+          },
+          {
+            "lvr": "70",
+            "elapsedMs": 1632.8999999994412
+          },
+          {
+            "lvr": "75",
+            "elapsedMs": 1550
+          }
+        ],
+        "forcedReadinessTimeout": {
+          "timedOut": true,
+          "name": "PerformanceAuditReadinessTimeoutError",
+          "elapsedMs": 10006.600000000559,
+          "blockers": [
+            "probe-pending",
+            "probe-pending"
+          ]
+        },
+        "compareAfterTimeout": {
+          "selectMode": true,
+          "visibleRows": 3,
+          "selected": 2
+        },
+        "terminal": {
+          "id": "rates.results",
+          "work": {
+            "catalogueAllLoaded": true,
+            "mortgageCriteriaReady": true,
+            "mortgageInputsInvalid": false,
+            "suitabilityReady": true,
+            "detailsLoading": false,
+            "searchIndexLoading": false,
+            "intentPending": false,
+            "filterReady": true,
+            "focused": true,
+            "pricingRequestRevision": 8,
+            "workerStarts": 7,
+            "workerRestarts": 0,
+            "workerCancellations": 0,
+            "sourceRowCount": 8119,
+            "candidateCount": 8119,
+            "pricedRowCount": 8119,
+            "catalogueProductCount": 2813,
+            "catalogueProgrammeCount": 16788,
+            "pricingStage": "ready",
+            "catalogueStatus": "ready"
+          },
+          "routeKey": "/browse",
+          "datasetRevision": "2026-10-26",
+          "renderRevision": "state-58",
+          "registeredAtMs": 11918.599999999627,
+          "updatedAtMs": 31496.39999999944,
+          "probes": [
+            {
+              "id": "search.audit-target",
+              "kind": "list",
+              "required": false,
+              "status": "ready",
+              "datasetRevision": null,
+              "renderRevision": null,
+              "expectedCount": null,
+              "actualCount": null,
+              "fallbackCount": null,
+              "visibleCount": null,
+              "emptyStateRendered": null,
+              "layoutMeasured": null,
+              "accessibleSummary": null,
+              "error": null,
+              "updatedAtMs": 11918.599999999627
+            },
+            {
+              "id": "search.data",
+              "kind": "data",
+              "required": true,
+              "status": "ready",
+              "datasetRevision": "2026-10-26",
+              "renderRevision": null,
+              "expectedCount": null,
+              "actualCount": null,
+              "fallbackCount": null,
+              "visibleCount": null,
+              "emptyStateRendered": null,
+              "layoutMeasured": null,
+              "accessibleSummary": null,
+              "error": null,
+              "updatedAtMs": 30440.099999999627
+            },
+            {
+              "id": "search.filters",
+              "kind": "data",
+              "required": true,
+              "status": "ready",
+              "datasetRevision": null,
+              "renderRevision": null,
+              "expectedCount": null,
+              "actualCount": null,
+              "fallbackCount": null,
+              "visibleCount": null,
+              "emptyStateRendered": null,
+              "layoutMeasured": null,
+              "accessibleSummary": null,
+              "error": null,
+              "updatedAtMs": 11918.599999999627
+            },
+            {
+              "id": "search.layout",
+              "kind": "layout",
+              "required": true,
+              "status": "ready",
+              "datasetRevision": null,
+              "renderRevision": "state-58",
+              "expectedCount": null,
+              "actualCount": null,
+              "fallbackCount": null,
+              "visibleCount": null,
+              "emptyStateRendered": null,
+              "layoutMeasured": true,
+              "accessibleSummary": null,
+              "error": null,
+              "updatedAtMs": 31496.39999999944
+            },
+            {
+              "id": "search.list",
+              "coveredBySheet": false,
+              "kind": "list",
+              "required": true,
+              "status": "ready",
+              "datasetRevision": null,
+              "renderRevision": null,
+              "expectedCount": 20,
+              "actualCount": 20,
+              "fallbackCount": null,
+              "visibleCount": 1,
+              "emptyStateRendered": false,
+              "layoutMeasured": null,
+              "accessibleSummary": null,
+              "error": null,
+              "updatedAtMs": 31496.39999999944
+            },
+            {
+              "id": "search.logos",
+              "kind": "logo",
+              "required": false,
+              "status": "ready",
+              "datasetRevision": null,
+              "renderRevision": null,
+              "expectedCount": 0,
+              "actualCount": 0,
+              "fallbackCount": 0,
+              "visibleCount": null,
+              "emptyStateRendered": null,
+              "layoutMeasured": null,
+              "accessibleSummary": null,
+              "error": null,
+              "updatedAtMs": 18908.099999999627
+            },
+            {
+              "id": "search.sheet",
+              "kind": "layout",
+              "required": true,
+              "status": "ready",
+              "datasetRevision": null,
+              "renderRevision": null,
+              "expectedCount": null,
+              "actualCount": null,
+              "fallbackCount": null,
+              "visibleCount": null,
+              "emptyStateRendered": null,
+              "layoutMeasured": true,
+              "accessibleSummary": null,
+              "error": null,
+              "updatedAtMs": 11918.599999999627
+            }
+          ],
+          "actions": [
+            "search.compare.mode",
+            "search.compare.open",
+            "search.compare.page.0",
+            "search.compare.page.1",
+            "search.compare.select.0",
+            "search.compare.select.1",
+            "search.filter.provider.first",
+            "search.filters.apply",
+            "search.filters.cancel",
+            "search.filters.clear",
+            "search.filters.open",
+            "search.mortgage.scope.apply.0",
+            "search.mortgage.scope.apply.1",
+            "search.mortgage.scope.clear",
+            "search.open",
+            "search.query.clear",
+            "search.query.product",
+            "search.section.next",
+            "search.sort.cancel",
+            "search.sort.next",
+            "search.sort.open"
+          ],
+          "actionRevision": 5,
+          "lastCompletedAction": "search.compare.mode"
+        }
+      },
+      "errors": [],
+      "bundles": [
+        {
+          "url": "http://localhost:8081/index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable",
+          "bytes": 14692821,
+          "sha256": "bdbfd3c6fbe03912a7152a5e28c4aca85a3a554f021d36ccc9bb906a0405dc66"
+        }
+      ]
+    },
+    {
+      "round": 1,
+      "fixture": {
+        "products": 2813,
+        "providers": 103,
+        "rates": 16788,
+        "mortgageRates": 8119,
+        "savingsRates": 8669,
+        "selectedBankProducts": 700,
+        "programmes": 16788,
+        "checkedAt": "2026-10-26T09:00:00.000Z"
+      },
+      "installToVisibleMs": 2004.3999999994412,
+      "samples": [
+        {
+          "iteration": 0,
+          "kind": "cold",
+          "at": "2026-10-26T11:26:02.260Z",
+          "clickToVisibleUsableDomMs": 661.7000000001863,
+          "clickToTwoFramesMs": 669.1000000005588,
+          "visibleRows": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "path": "/bank/Benchmark%20Bank"
+        },
+        {
+          "iteration": 1,
+          "kind": "warm",
+          "at": "2026-10-26T11:26:03.188Z",
+          "clickToVisibleUsableDomMs": 627.3000000007451,
+          "clickToTwoFramesMs": 667.2000000001863,
+          "visibleRows": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "path": "/bank/Benchmark%20Bank"
+        },
+        {
+          "iteration": 2,
+          "kind": "warm",
+          "at": "2026-10-26T11:26:04.077Z",
+          "clickToVisibleUsableDomMs": 603.1999999992549,
+          "clickToTwoFramesMs": 639.7999999998137,
+          "visibleRows": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "path": "/bank/Benchmark%20Bank"
+        },
+        {
+          "iteration": 3,
+          "kind": "warm",
+          "at": "2026-10-26T11:26:04.977Z",
+          "clickToVisibleUsableDomMs": 653,
+          "clickToTwoFramesMs": 671.5,
+          "visibleRows": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "path": "/bank/Benchmark%20Bank"
+        }
+      ],
+      "extra": null,
+      "errors": [],
+      "bundles": [
+        {
+          "url": "http://localhost:8081/index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable",
+          "bytes": 14692821,
+          "sha256": "bdbfd3c6fbe03912a7152a5e28c4aca85a3a554f021d36ccc9bb906a0405dc66"
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "fixture": {
+        "products": 2813,
+        "providers": 103,
+        "rates": 16788,
+        "mortgageRates": 8119,
+        "savingsRates": 8669,
+        "selectedBankProducts": 700,
+        "programmes": 16788,
+        "checkedAt": "2026-10-26T09:00:00.000Z"
+      },
+      "installToVisibleMs": 2022.2999999998137,
+      "samples": [
+        {
+          "iteration": 0,
+          "kind": "cold",
+          "at": "2026-10-26T11:26:10.027Z",
+          "clickToVisibleUsableDomMs": 880,
+          "clickToTwoFramesMs": 909.7999999998137,
+          "visibleRows": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "path": "/bank/Benchmark%20Bank"
+        },
+        {
+          "iteration": 1,
+          "kind": "warm",
+          "at": "2026-10-26T11:26:11.073Z",
+          "clickToVisibleUsableDomMs": 781.7999999998137,
+          "clickToTwoFramesMs": 817.2999999998137,
+          "visibleRows": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "path": "/bank/Benchmark%20Bank"
+        },
+        {
+          "iteration": 2,
+          "kind": "warm",
+          "at": "2026-10-26T11:26:12.060Z",
+          "clickToVisibleUsableDomMs": 769.7000000001863,
+          "clickToTwoFramesMs": 791.0999999996275,
+          "visibleRows": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "path": "/bank/Benchmark%20Bank"
+        },
+        {
+          "iteration": 3,
+          "kind": "warm",
+          "at": "2026-10-26T11:26:13.126Z",
+          "clickToVisibleUsableDomMs": 867.7999999998137,
+          "clickToTwoFramesMs": 875.5999999996275,
+          "visibleRows": [
+            "Synthetic Mortgage 0000, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0100, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0200, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0300, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0001, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0101, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0201, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0301, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0002, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0102, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown",
+            "Synthetic Mortgage 0202, Benchmark Bank, Pricing unresolved Pricing unresolved, Comparison rate 4.10% · Principal & interest · Owner occupied · Listed LVR ≤80%, Freshness · Unknown"
+          ],
+          "path": "/bank/Benchmark%20Bank"
+        }
+      ],
+      "extra": null,
+      "errors": [],
+      "bundles": [
+        {
+          "url": "http://localhost:8081/index.ts.bundle?platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable",
+          "bytes": 14692821,
+          "sha256": "bdbfd3c6fbe03912a7152a5e28c4aca85a3a554f021d36ccc9bb906a0405dc66"
+        }
+      ]
+    }
+  ],
+  "transport": "all external browser requests blocked; deterministic in-memory core/details/catalogue; I/O stubbed; bank insights disabled",
+  "exclusions": [
+    "user payload",
+    "Android/Hermes",
+    "physical phone",
+    "release bundle"
+  ],
+  "finishedAt": "2026-10-26T11:26:13.135Z"
+}

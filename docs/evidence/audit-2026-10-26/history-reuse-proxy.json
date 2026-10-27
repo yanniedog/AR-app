@@ -1,0 +1,36 @@
+{
+  "fixture": {
+    "products": 3200,
+    "dates": 167
+  },
+  "runtime": "v24.19.0",
+  "exclusions": [
+    "React rendering",
+    "native scrolling",
+    "Android/Hermes",
+    "physical phone",
+    "network"
+  ],
+  "before": {
+    "samplesMs": [
+      51.27429099999972,
+      28.174802999999883,
+      27.871428999999807,
+      31.714602999999443,
+      27.244533000000047
+    ],
+    "medianMs": 28.174802999999883,
+    "reusedIdentity": 0
+  },
+  "after": {
+    "samplesMs": [
+      1.477110000000721,
+      0.7220600000000559,
+      0.9683430000004591,
+      1.2353650000004563,
+      0.6789550000003146
+    ],
+    "medianMs": 0.9683430000004591,
+    "reusedIdentity": 5
+  }
+}

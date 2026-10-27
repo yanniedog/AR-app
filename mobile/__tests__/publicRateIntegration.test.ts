@@ -2,7 +2,7 @@ import { buildPerformanceAuditSetupPlans } from '../src/lib/performanceAuditSetu
 import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
 import { matchesLvrTier, parseLvrRange, lvrRangeContains } from '../src/data/lvrRange';
 import { publicComparisonCore, bindCurrentPublicRow, payableRateForRow, publicProductOfferRows, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate,
-  resolveProductPublicRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
+  resolveRowPublicRate, resolveProductPublicRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import type { UserRateScenario } from '../src/data/userRateScenario';
 import { normalizeProfileFilters } from '../src/data/profile';
@@ -217,4 +217,29 @@ it('distinct semantic pairs containing colons remain distinct selectable offers'
   const effective = publicComparisonCore(source, catalogue(programmes, products), () => ({}));
   expect(effective.sections.Mortgage.rates).toHaveLength(2);
   expect(resolveCompareSelections(effective, ['offer:two#UNIT:ONE', 'offer:ONE:two#UNIT'])).toHaveLength(2);
+});
+
+
+it('indexes high-fanout product bindings once and invalidates on replacement without weakening ambiguity', () => {
+  let reads = 0;
+  const programmes = Array.from({ length: 1200 }, (_, index) => {
+    const value = programme({ programmeId: `p-${index}`, offerId: `o-${index}`,
+      components: programme().components.map(component => ({ ...component, scopeId: `o-${index}` })) });
+    Object.defineProperty(value, 'sourceBindings', { get: () => { reads++; return [{ rateIndex: index, pointer: `/rates/${index}` }]; } });
+    return value;
+  });
+  let book = programmes;
+  const view = { ...catalogue(), getProgrammes: () => book };
+  for (let index = 0; index < programmes.length; index++) {
+    expect(bindCurrentPublicRow({ ...row, rate_index: index }, view).public_offer_id).toBe(`o-${index}`);
+  }
+  expect(reads).toBe(1200);
+  expect(resolveRowPublicRate({ ...row, rate_index: 900 }, view, {}, AS_OF)?.payableRate).toBe('0.06');
+  expect(reads).toBe(1200);
+  book = [programme({ sourceBindings: [{ rateIndex: 900, pointer: '/rates/900' }],
+    components: programme().components.map(component => ({ ...component, value: '0.07' })) })];
+  expect(resolveRowPublicRate({ ...row, rate_index: 900 }, view, {}, AS_OF)?.payableRate).toBe('0.07');
+  book = [book[0], { ...book[0], programmeId: 'ambiguous' }];
+  expect(bindCurrentPublicRow({ ...row, rate_index: 900 }, view).public_offer_id).toBeUndefined();
+  expect(resolveRowPublicRate({ ...row, rate_index: 900 }, view, {}, AS_OF)?.status).toBe('unresolved');
 });

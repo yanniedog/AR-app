@@ -26,13 +26,14 @@ export function SavedRequirementsSummary({ section, onEdit, catalogueRows }: {
   const manifest = useStore(state => state.manifest);
   const products = verifiedCatalogueDetails(core, integrity, manifest, details)?.products ?? null;
   const count = profileSectionCount(profile, section);
-  const impact = useMemo(() => profileRequirementImpact(core, profile, section, products, catalogueRows), [core, profile, products, section, catalogueRows]);
+  const impact = useMemo(() => count > 0 ? profileRequirementImpact(core, profile, section, products, catalogueRows) : null, [count, core, profile, products, section, catalogueRows]);
+  if (count === 0) return null;
   return <View style={{ gap: 6, paddingVertical: 8 }} testID="saved-requirements-summary">
     <AppText variant="small" weight="700">{uiJoin('Saved requirements', ' · ', uiCount(count))}</AppText>
     {count > 0 ? <>
       <AppText variant="tiny" color="textMuted">{uiJoin('Scope', ': ', 'All screens')}</AppText>
-      <AppText variant="tiny" color="textMuted">{countFacts('Catalogue', impact.catalogue)}</AppText>
-      <AppText variant="tiny" color="textMuted">{countFacts('After saved requirements', impact.matching)}</AppText>
+      <AppText variant="tiny" color="textMuted">{countFacts('Catalogue', impact?.catalogue ?? null)}</AppText>
+      <AppText variant="tiny" color="textMuted">{countFacts('After saved requirements', impact?.matching ?? null)}</AppText>
     </> : null}
     <Row gap={8} style={{ flexWrap: 'wrap' }}>
       <Button title="Edit saved requirements" variant="ghost" onPress={onEdit ?? (() => router.push('/profile'))} />

@@ -14,19 +14,16 @@ type ViewableItemsChangedInfo = {
 /**
  * Tracks whether a FlashList (or similar) has painted the active data revision.
  *
- * Callback identities stay stable across revision changes — FlashList drops
- * viewability updates when `onViewableItemsChanged` is replaced. Layout/load
- * signals seed visibility for non-empty lists so query/filter revisions cannot
- * hang readiness when viewability is not re-emitted after an in-place data swap.
+ * Callbacks belong to one revision. Lists remount on that revision, so a late
+ * callback from an unmounted list cannot certify its replacement. Layout/load
+ * signals establish layout only; non-empty lists require observed viewability.
  *
  * Callers should remount the list on the full readiness revision so recycled
  * FlashList instances cannot deliver layout/viewability for a prior identity.
  */
 export function useVirtualizedListReadiness(revision: string, itemCount: number) {
   const revisionRef = useRef(revision);
-  const itemCountRef = useRef(itemCount);
   revisionRef.current = revision;
-  itemCountRef.current = itemCount;
 
   const [commit, setCommit] = useState(() => initialVirtualizedListCommitState(revision));
   const [viewability, setViewability] = useState<{ revision: string; count: number } | null>(null);
@@ -47,8 +44,8 @@ export function useVirtualizedListReadiness(revision: string, itemCount: number)
     // Capture the revision/count the signal was for. setState may flush later,
     // after a newer revision is active — commitVirtualizedListRevision rejects
     // when callbackRevision !== activeRevision at apply time.
-    const callbackRevision = revisionRef.current;
-    const callbackCount = itemCountRef.current;
+    const callbackRevision = revision;
+    const callbackCount = itemCount;
     setCommit((current) => commitVirtualizedListRevision(
       current,
       callbackRevision,
@@ -56,41 +53,23 @@ export function useVirtualizedListReadiness(revision: string, itemCount: number)
       callbackCount,
       visibleCount,
     ));
-  }, []);
+  }, [revision, itemCount]);
 
   const markLayoutCommitted = useCallback(() => {
-    const activeCount = itemCountRef.current;
-    // Non-empty lists that finished layout are visibly committed even when
-    // FlashList skips a fresh onViewableItemsChanged after filtering.
-    markCommitted(activeCount > 0 ? 1 : 0);
+    markCommitted();
   }, [markCommitted]);
 
-  const markCommittedRef = useRef(markCommitted);
-  markCommittedRef.current = markCommitted;
-  const markLayoutCommittedRef = useRef(markLayoutCommitted);
-  markLayoutCommittedRef.current = markLayoutCommitted;
-
-  const onCommitLayoutEffect = useCallback(() => {
-    markLayoutCommittedRef.current();
-  }, []);
-
-  const onRevisionLayout = useCallback(() => {
-    markLayoutCommittedRef.current();
-  }, []);
-
-  const onLoad = useCallback(() => {
-    markLayoutCommittedRef.current();
-  }, []);
-
-  const onContentSizeChange = useCallback(() => {
-    markLayoutCommittedRef.current();
-  }, []);
+  const onCommitLayoutEffect = markLayoutCommitted;
+  const onRevisionLayout = markLayoutCommitted;
+  const onLoad = markLayoutCommitted;
+  const onContentSizeChange = markLayoutCommitted;
 
   const onViewableItemsChanged = useCallback((info: ViewableItemsChangedInfo) => {
+    if (revisionRef.current !== revision) return;
     const count = info.viewableItems.filter((item) => item.isViewable === true).length;
-    setViewability({ revision: revisionRef.current, count });
-    markCommittedRef.current(count);
-  }, []);
+    setViewability({ revision, count });
+    markCommitted(count);
+  }, [revision, markCommitted]);
 
   return {
     ready: isVirtualizedListRevisionReady(commit, revision, itemCount),

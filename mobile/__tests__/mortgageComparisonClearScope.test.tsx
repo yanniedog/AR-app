@@ -8,6 +8,7 @@ import { EMPTY_FILTERS } from '../src/data/selectors';
 
 jest.mock('../src/data/store', () => ({ useStore: (selector: any) => selector({ prefs: { mortgageRateMetric: 'comparison' } }) }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {}, font: { body: 14 } }) }));
+jest.mock('../src/components/IconAction', () => ({ IconAction: 'IconAction' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Chip: 'Chip', Row: 'Row' }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
 
@@ -20,7 +21,7 @@ test('clearing numerical comparison inputs preserves selected purpose, repayment
   let tree!: ReactTestRenderer & { root: { findByProps: (props: any) => { props: { onPress: () => void } } } };
   act(() => { tree = TestRenderer.create(<MortgageComparisonControls rows={[]} filters={filters} unverified={0} invalid={false} />) as typeof tree; });
   try {
-    act(() => tree.root.findByProps({ title: 'Clear comparison inputs' }).props.onPress());
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
     expect(useMortgageComparison.getState()).toEqual({ loanAmount: '', lvr: '' });
     expect(useRatesSession.getState().sections.Mortgage).toMatchObject({ filters, page: 1, scrollOffset: 0 });
   } finally { act(() => tree.unmount()); restoreRatesSession(original); clearMortgageComparison(); }

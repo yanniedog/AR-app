@@ -14,7 +14,7 @@ export function commitVirtualizedListRevision(
   callbackRevision: string,
   activeRevision: string,
   itemCount: number,
-  visibleCount = current.visibleCount,
+  visibleCount = current.revision === callbackRevision ? current.visibleCount : 0,
 ): VirtualizedListCommitState {
   if (callbackRevision !== activeRevision) return current;
   const next = {

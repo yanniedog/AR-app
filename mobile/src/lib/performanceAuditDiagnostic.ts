@@ -1,3 +1,5 @@
+import { getProcessingYieldDiagnostics } from './yieldToUi';
+import { publicAuditWorkDiagnostic } from './performanceAuditWorkDiagnostic';
 import type { PerformanceAuditReadinessSnapshot } from './performanceAuditReadiness';
 import type { AuditCheck } from './performanceAudit';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS } from './performanceAuditTiming';
@@ -7,19 +9,21 @@ export type AuditDiagnosticStage = 'start' | 'route' | 'pre-action' | 'action' |
 export interface AuditCheckDiagnostic {
   stage: AuditDiagnosticStage;
   readiness: ReturnType<typeof diagnosticReadiness> | null;
+  returnReadiness?: ReturnType<typeof diagnosticReadiness>;
+  returnStage?: AuditDiagnosticStage;
 }
 
 // Probe IDs are source-authored roles. Reject arbitrary route/account content.
-const WORDS = new Set(('1 2 a about account active actual advance age all app assessment async audit august b back bank bankrates base bonus bound browse buffer calculations calculator calendar candidates chart check collision columns compare content contribution core coverage criterion dashboard data debug deposit details different discount due duplicate economic economy eligible empty entries environment evidence excess execution external facet facts fake features fee file filters first flat forecast found frame future graphic graphics group growth hierarchy history id inputs insights interest inventory io items later layout leader lender lifecycle link linked list local log logo logos maintenance manifest market maturity maximum metric minimum model modeled movements moves name network new not notices observed one ongoing optional options outlook overview package pagination participation payload payment payments pi pinned preceding preferences prepared primary product products profile progress projection projections providers purchases rate rates rba readiness receipt recovery remaining render repay repayment response responsiveness restoration result results reversal root rule runtime safety saved scenario search secondary sections self september settings settle setup snapshot source state status stop storage successor suitability system table target td terms there tier tiers transfer two unemployment unknown update visible wages waiver watchlist whole window zero').split(' '));
+const WORDS = new Set(('1 2 a about account active actual advance age all app assessment async audit august b back bank bankrates base bonus bound browse buffer calculations calculator calendar candidates chart check collision columns compare content contribution core coverage criterion dashboard data debug deposit details different discount due duplicate economic economy eligible empty entries environment evidence excess execution external facet facts fake features fee file filters first flat forecast found frame future graphic graphics group growth hierarchy history id inputs insights interest inventory io items later layout leader lender lifecycle link linked list local log logo logos maintenance manifest market maturity maximum metric minimum model modeled movements moves name network new not notices observed one ongoing optional options outlook overview package pagination participation payload payment payments pi pinned preceding preferences prepared primary product products profile progress projection projections providers purchases rate rates rba readiness receipt recovery remaining render repay repayment response responsiveness restoration result results reversal root rule runtime safety saved scenario search secondary sections self september settings settle setup sheet snapshot source state status stop storage successor suitability system table target td terms there tier tiers transfer two unemployment unknown update visible wages waiver watchlist whole window zero').split(' '));
 function role(value: string | undefined): string | null {
   return value && value.length <= 100 && value.split(/[.-]/).every(word => WORDS.has(word)) ? value : null;
 }
 
 const STAGES = new Set<AuditDiagnosticStage>(['start', 'route', 'pre-action', 'action', 'path', 'data', 'readiness', 'settle', 'back', 'recovery', 'origin-readiness', 'complete', 'check']);
-const KEYS = new Set('stage readiness ready capturing blockers code surface probe surfaces id actionRevision probes kind required status expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent'.split(' '));
+const KEYS = new Set('returnReadiness returnStage work stage readiness ready capturing blockers code surface probe surfaces id actionRevision probes kind required status expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent coveredBySheet'.split(' '));
 const CODES = new Set('capture-inactive no-surfaces no-probes probe-pending probe-error dataset-revision-mismatch render-revision-mismatch count-incomplete graphic-evidence-missing required-kind-missing'.split(' '));
 const NUMERIC = new Set('actionRevision expected actual visible fallback'.split(' '));
-const BOOLEAN = new Set('ready capturing required empty layout accessible datasetMatches renderMatches errorPresent'.split(' '));
+const BOOLEAN = new Set('ready capturing required empty layout accessible datasetMatches renderMatches errorPresent coveredBySheet'.split(' '));
 /** Repeat the field boundary for saved reports; arbitrary strings never become public evidence. */
 export function publicAuditDiagnostic(value: unknown): unknown {
   const visit = (item: unknown, key = ''): unknown => {
@@ -28,13 +32,14 @@ export function publicAuditDiagnostic(value: unknown): unknown {
     if (typeof item === 'number') return NUMERIC.has(key) && Number.isFinite(item) ? item : null;
     if (typeof item === 'string') {
       if (['id', 'surface', 'probe'].includes(key)) return role(item);
-      if (key === 'stage' && STAGES.has(item as AuditDiagnosticStage) || key === 'code' && CODES.has(item) ||
+      if ((key === 'stage' || key === 'returnStage') && STAGES.has(item as AuditDiagnosticStage) || key === 'code' && CODES.has(item) ||
         key === 'kind' && ['data', 'list', 'logo', 'graphic', 'layout'].includes(item) ||
         key === 'status' && ['pending', 'ready', 'error'].includes(item)) return item;
       return null;
     }
     if (Array.isArray(item)) return item.map(child => visit(child, key));
     if (typeof item !== 'object') return null;
+    if (key === 'work') return publicAuditWorkDiagnostic(item);
     return Object.fromEntries(Object.entries(item).filter(([name]) => KEYS.has(name)).map(([name, child]) => [name, visit(child, name)]));
   };
   return value ? visit(value) : null;
@@ -84,7 +89,7 @@ function redactGroupedDigits(value: string): string {
 }
 
 /** Secrets, account numbers, tokens, URLs and paths stay opaque. Ordinary diagnostic words remain. */
-export function deidentifyAuditText(text: string): string | null {
+export function deidentifyAuditText(text: string, maxChars = 400): string | null {
   let value = text.replace(/\s+/g, ' ').trim();
   if (!value) return null;
   value = value.replace(/https?:\/\/\S+/gi, REDACTED);
@@ -100,7 +105,8 @@ export function deidentifyAuditText(text: string): string | null {
   const readable = value.replaceAll(REDACTED, '').replace(/[^A-Za-z0-9]+/g, '');
   if (!readable) return null;
   if (/secret|password|\btoken\b|@[a-z0-9.-]+\.[a-z]{2,}/i.test(value)) return null;
-  return value.length > 400 ? `${value.slice(0, 400)}…` : value;
+  const limit = Math.min(16_384, Math.max(1, Number.isFinite(maxChars) ? Math.floor(maxChars) : 400));
+  return value.length > limit ? `${value.slice(0, limit)}…[truncated ${value.length - limit} chars]` : value;
 }
 
 /** Keep actionable code locations and a deidentified message. Frames never replace the message. */
@@ -235,11 +241,17 @@ function diagnosticReadiness(snapshot: PerformanceAuditReadinessSnapshot) {
     capturing: snapshot.capturing,
     blockers: snapshot.blockers.map(blocker => ({ code: blocker.code, surface: blocker.surfaceId ?? null, probe: blocker.probeId ?? null, message: blocker.message })),
     surfaces: snapshot.surfaces.map(surface => ({
-      id: surface.id, actionRevision: surface.actionRevision,
+      id: surface.id, work: publicAuditWorkDiagnostic(surface.work ? { ...surface.work,
+        ...(typeof getProcessingYieldDiagnostics === 'function' ? {
+          schedulerNativeScheduleAttempts: getProcessingYieldDiagnostics().nativeScheduleAttempts,
+          schedulerNativeCompleted: getProcessingYieldDiagnostics().nativeCompleted,
+          schedulerNativeFallbacks: getProcessingYieldDiagnostics().nativeFallbacks,
+        } : {}),
+      } : undefined), actionRevision: surface.actionRevision,
       actions: surface.actions, lastCompletedAction: surface.lastCompletedAction,
       datasetRevision: surface.datasetRevision, renderRevision: surface.renderRevision,
       registeredAtMs: surface.registeredAtMs, updatedAtMs: surface.updatedAtMs,
-      probes: surface.probes.map(probe => ({ id: probe.id, kind: probe.kind, required: probe.required, status: probe.status,
+      probes: surface.probes.map(probe => ({ id: probe.id, kind: probe.kind, required: probe.required, coveredBySheet: probe.coveredBySheet, status: probe.status,
         expected: probe.expectedCount, actual: probe.actualCount, visible: probe.visibleCount, fallback: probe.fallbackCount,
         empty: probe.emptyStateRendered, layout: probe.layoutMeasured, accessible: probe.accessibleSummary,
         datasetMatches: probe.datasetRevision == null || surface.datasetRevision == null ? null : probe.datasetRevision === surface.datasetRevision,
@@ -252,4 +264,31 @@ function diagnosticReadiness(snapshot: PerformanceAuditReadinessSnapshot) {
 }
 export function captureAuditDiagnostic(snapshot: PerformanceAuditReadinessSnapshot, stage: AuditDiagnosticStage): AuditCheckDiagnostic {
   return { stage, readiness: diagnosticReadiness(snapshot) };
+}
+
+
+/** Optional visual/model evidence may be unavailable, but cannot produce a
+ * fully passing journey. Required defects remain functional failures. */
+export function scoreAuditTargetProbeEvidence(diagnostic: AuditCheckDiagnostic | undefined, surfaceId: string): 'pass' | 'warn' | 'fail' {
+  let outcome: 'pass' | 'warn' | 'fail' = 'pass';
+  for (const surface of diagnostic?.readiness?.surfaces ?? []) {
+    if (surface.id !== surfaceId) continue;
+    for (const probe of surface.probes) {
+      if (probe.coveredBySheet === true) continue;
+      const defective = probe.status !== 'ready' || probe.errorPresent ||
+        probe.renderMatches === false || probe.datasetMatches === false;
+      if (!defective) continue;
+      if (probe.required) return 'fail';
+      outcome = 'warn';
+    }
+  }
+  return outcome;
+}
+
+
+/** Keep the failed destination as primary evidence when return/recovery fails. */
+export function appendAuditReturnDiagnostic(destination: AuditCheckDiagnostic | undefined,
+  snapshot: PerformanceAuditReadinessSnapshot, stage: AuditDiagnosticStage): AuditCheckDiagnostic {
+  return destination ? { ...destination, returnReadiness: diagnosticReadiness(snapshot), returnStage: stage }
+    : captureAuditDiagnostic(snapshot, stage);
 }
