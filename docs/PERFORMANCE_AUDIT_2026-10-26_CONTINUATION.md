@@ -1,6 +1,6 @@
 # Audit 310 — separate local continuation
 
-Status: reviewed and locally validated follow-up, **not published or included in PR #457**. The release candidate remains `a3aec54625f6cb036aaa89863008bf8cf1bc3163`. Preserve that separation when releasing or evaluating this follow-up. This report supersedes earlier generic descriptions that left every remaining class at a native gate.
+Status: separate follow-up based on merged `main` **12e6a90270a065d838047ad3712b1c209af93170**. PR #457 was squash-merged and APK 1.0.255/build 311 was published and independently verified. This follow-up is **not included in build 311**. The original local changes were cherry-picked without conflicts or duplicate #457 changes: `870a0ee` → `a3943ff`, `a92023e` → `5352f66`. The resulting tree was byte-identical to the reviewed continuation before this documentation update. This report supersedes earlier generic descriptions that left every remaining class at a native gate.
 
 ## Evidence and classification matrix
 
@@ -45,13 +45,15 @@ Shared final Rates/sheet/navigation acceptance also passed on the continuation: 
 
 Final production code: **458 suites / 5,129 tests**, including typecheck, passed; all403script tests passed with the isolated matching JDK; lint0errors/45warnings; copy0violations; diagnostic schema and whitespace checks pass. The suspended-expiry test was subsequently strengthened with an explicitly held native callback; its12-test file passed again, with no production-code change. Independent read-only review found no remaining material source blocker after its same-day freshness finding was repaired. Source, exact test/evidence hashes and rollback patch are preserved in the local continuation manifest.
 
-No Android/Hermes/physical phone or APK was tested for this continuation. Original-audit cases still require their exact privacy-safe terminal evidence and representative device acceptance. Source defaults remain1.0.248/Android192 with no release override; the user's audit artifact was1.0.254/build310. No APK has been produced here.
+No Android/Hermes/physical phone or APK was tested for this continuation. Original-audit cases still require their exact privacy-safe terminal evidence and representative device acceptance. Source defaults remain1.0.248/Android192 with no release override; the user's audit artifact was1.0.254/build310. No APK of this follow-up has been produced. The independently verified build 311 contains only merged PR #457.
 
-PR #457 is authorized, pushed and reviewed at a3aec54, and parent independently verified all current server gates/review/thread resolution. The remaining merge blocker is an unchanged canonical ship-bar execution environment: only `gh pr checks 457 --required` was attempted and failed with `Post "https://api.github.com/graphql": Forbidden`, exit1. It was a status read, not a denied merge. The error lacks a GitHub JSON permission body, so token authorization versus transport/proxy cause cannot be distinguished. Check-status REST fallback is partial; complete PR metadata/thread/merge guards still require CLI GraphQL, and no existing hosted workflow runs the full bar. No guard was bypassed, modified or forged. Parent is coordinating an already-authorized owner laptop/environment with working gh POST access and the existing scripts, then the existing signed main-branch APK workflow. No new consent/credentials/security changes are requested.
+PR #457 was merged by the parent through the authenticated GitHub connector after the user explicitly authorized method substitution while retaining exact-head checks, substantive review disposition, branch protection and squash semantics. The unchanged CLI reads remained inaccessible; no blocked CLI route was retried. The automatic signed workflow 40497395807 successfully published APK 1.0.255/build 311 from merged source 12e6a90. Both public binaries, metadata, ABI inventories, production signing certificate and modern signatures were independently verified. Actual phone installation and the original pricing-pending stall remain unverified.
+
+This branch contains only the continuation delta on the actual squash merge. It targets protected main, follows the same exact-head CI/review safeguards, and must merge before any subsequent APK is requested. No release, signing or protection configuration is changed.
 
 Library delivery was attempted through the required ordered prepared-upload helper for the reviewed patch and report. It failed before preparation with `library upload failed: hosted apps tools/list request failed: network`; no IDs/results were returned. No direct-write fallback, alternate transfer route or blind retry was used. Original audit materialization remains separately exhausted. Files remain preserved, but are not falsely described as delivered Library artifacts.
 
-This follow-up is local-only. Do not push it or mix it into a3aec54 without preserving the release boundary and rerunning the appropriate exact-head CI/review. A later branch should be rebased/cherry-picked onto the actual squashed main after PR #457, not opened against a feature branch.
+The user authorized pushing this separate follow-up PR. Its source boundary is preserved against merged main; it is not a feature-base or duplicate #457 PR. Original branches, patches, checksums and browser evidence remain retained for rollback. No second APK is started by this branch preparation.
 
 
 ## Exact-evidence follow-up (after local 870a0ee)
@@ -62,3 +64,8 @@ This narrow follow-up adds regression coverage for the exact old ready chart/new
 
 
 Follow-up validation: full `ci:unit` passed 458 suites / 5,139 tests plus typecheck; focused diagnostic/health run passed 124 tests, followed by final three-suite 80-test run including malformed enum and static-plan coverage cases. Full lint has 0 errors / 45 existing warnings; diagnostic schema check passed. Independent read-only review found an enum type boundary and omitted static roles in the first draft; both were fixed with regressions before packaging. No timing scenario, broad network scan or Android acceptance was rerun for this diagnostic-only follow-up.
+
+
+## Protected-main follow-up validation
+
+The new branch is `fix/audit-310-receipt-saved-followup` on actual squash merge 12e6a90. Existing browser measurements retain their original source/artifact identities; transplanting identical source does not create a new native measurement. Final source validation and independent review are rerun before publication. Script tests are unchanged; the restored execution environment lacks javac/ct.sym, so Java fixture execution requires the existing CI JDK or restored matching toolchain rather than changed fixture expectations.
