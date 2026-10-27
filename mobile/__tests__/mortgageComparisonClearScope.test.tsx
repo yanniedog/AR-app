@@ -89,8 +89,8 @@ test('selecting the final facet flushes the latest amount and LVR before the deb
   updateRatesSection('Mortgage', { filters });
   const rows = [{ product_key: 'loan', provider: 'Bank', product_name: 'Loan', rate: '0.06',
     loan_purpose: 'OWNER_OCCUPIED', ribbon_repayment_type: 'PRINCIPAL_AND_INTEREST' }];
-  let tree!: ReactTestRenderer;
-  act(() => { tree = TestRenderer.create(<MortgageComparisonControls rows={rows} filters={filters} unverified={0} invalid={false} />); });
+  let tree!: ReactTestRenderer & { root: { findByProps(props: object): { props: { onChangeText(text: string): void; onPress(): void } }; findAllByType(type: any): { props: { label: string; onPress(): void } }[] } };
+  act(() => { tree = TestRenderer.create(<MortgageComparisonControls rows={rows} filters={filters} unverified={0} invalid={false} />) as typeof tree; });
   try {
     act(() => tree.root.findByProps({ accessibilityLabel: 'Loan amount' }).props.onChangeText('650000'));
     act(() => tree.root.findByProps({ accessibilityLabel: 'LVR' }).props.onChangeText('72'));
