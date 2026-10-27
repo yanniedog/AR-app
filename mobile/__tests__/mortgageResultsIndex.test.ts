@@ -82,3 +82,27 @@ test('ambiguous generated semantic bindings never bypass the canonical unique-ow
   const pending = prepareMortgageResultsIndex({ source: [], catalogue: catalogue([first, duplicate]), context, includeNonStandard: false, cancelled: () => false });
   await jest.runAllTimersAsync(); expect(await pending).toBeNull();
 });
+
+
+test.each(['component', 'phase', 'unknown-field'])('scenario-dependent %s books retain full canonical fallback', async kind => {
+  const source = programme();
+  if (kind === 'component') source.components[0].conditions = [condition('amount', { operator: 'bounds', minimum: '100000' })];
+  if (kind === 'phase') source.phases = [{ phaseId: 'later', startMonth: 12, formula: source.formula!, conditions: [condition('package')], evidenceIds: [] }];
+  if (kind === 'unknown-field') source.conditions = [condition('package')];
+  expect((await prepare(source)).index).toBeNull();
+});
+
+test('an explicitly bound core variant is never replaced by another same-offer programme when its conditions are unmet', async () => {
+  const common = [condition('purpose', { operator: 'eq', value: 'OWNER_OCCUPIED' }), condition('repayment', { operator: 'eq', value: 'PRINCIPAL_AND_INTEREST' })];
+  const low = programme({ programmeId: 'low', conditions: [...common, condition('lvr', { operator: 'bounds', maximum: '0.6' })] });
+  const high = programme({ programmeId: 'high', conditions: [...common, condition('lvr', { operator: 'bounds', maximum: '0.8' })] });
+  const source = [{ ...row, public_programme_id: 'low', public_offer_id: low.offerId }], view = catalogue([low, high]);
+  const pending = prepareMortgageResultsIndex({ source, catalogue: view, context, includeNonStandard: false, cancelled: () => false });
+  await jest.runAllTimersAsync(); const index = await pending; expect(index).not.toBeNull();
+  for (const purpose of ['OWNER_OCCUPIED', 'INVESTMENT']) for (const repayment of ['PRINCIPAL_AND_INTEREST', 'INTEREST_ONLY']) {
+    const scenario = { amount: '650000', lvr: '0.72', purpose, repayment };
+    const expected = resolvedPublicRankingRows(publicRecommendationRows(source, view, 'Mortgage', scenario), view, () => scenario);
+    expect(index!.select(scenario, { loanAmount: '650000', lvr: '72' })!.priced).toEqual(expected.rows);
+    expect(expected.rows).toEqual([]);
+  }
+});
