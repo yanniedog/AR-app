@@ -924,14 +924,14 @@ export default function RatesWorkspace() {
     <SearchProductRow row={item} section={section}
       onLogoRenderStateChange={logoCallbacksActive ? logoReadiness.onLogoRenderStateChange : undefined}
       rateScenario={displayedScenario(item)} comparisonUnverified={section === 'Mortgage' && displayedUnverified.has(item)}
-      auditCell={physicalVisibility.active && target === 'Cell' && !retainingPrevious} auditRevision={physicalVisibility.active ? listRevision : ''} onAuditCellCommit={auditTarget.onCellCommit}
+      auditCell={target === 'Cell' && !retainingPrevious} auditRevision={listRevision} onAuditCellCommit={auditTarget.onCellCommit}
       selectMode={selectMode} selectionToken={selectionTokenFor(item)} selected={selected.includes(selectionTokenFor(item))} onToggleSelect={toggleSelect} />
   ) : <TouchTarget fill onPress={() => openProduct(item.key)} accessibilityRole="button"
       accessibilityLabel={uiProductName({product_name:item.name??''})} style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
       <AppText variant="body" weight="600">{uiProductName({product_name:item.name??''})}</AppText>
       <AppText variant="small" color="textMuted">{uiJoin(uiProviderName({provider:item.provider??''}),' · ',humanizeEnum(item.productCategory??''))}</AppText>
       <AppText variant="small" color="textMuted">{uiLabel("No listed rate")}</AppText>
-    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, physicalVisibility.active, auditTarget.onCellCommit, listRevision, logoCallbacksActive, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, displayedUnverified, displayedScenario, retainingPrevious]);
+    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, auditTarget.onCellCommit, listRevision, logoCallbacksActive, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, displayedUnverified, displayedScenario, retainingPrevious]);
   usePerformanceAuditSurface({
     id: 'rates.results',
     work: { ...publicPricing.work, mortgageCriteriaReady, mortgageInputsInvalid, preparingMortgageDefaults,
