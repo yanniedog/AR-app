@@ -76,7 +76,7 @@ export function useResolvedPublicRankingRows(options: {
   // identity so in-flight cooperative work is not cancelled mid-pass, and key
   // once per snapshot so Rates renders do not re-walk every programme.
   const catalogueKey = useMemo(() => publicCataloguePricingKey(catalogue), [catalogue]);
-  const resolverIndex = useMemo(() => { void catalogueKey; return createPublicRateResolverIndex(); }, [catalogueKey]);
+  const [resolverIndex] = useState(createPublicRateResolverIndex);
   const resolverIndexRef = useRef(resolverIndex);
   resolverIndexRef.current = resolverIndex;
   const catalogueRef = useRef(catalogue);
@@ -131,7 +131,7 @@ export function useResolvedPublicRankingRows(options: {
       }
       return rowScenarioRef.current(row);
     };
-    return { rowScenario, asOf: (value: PublicProgramme) => { seen.add(value.productId); programme(value); return asOf; }, until: () => until };
+    return { rowScenario, asOf: (value: PublicProgramme) => { programme(value); return asOf; }, until: () => until };
   }, []);
   const buildCandidatesSync = useCallback((value: typeof request, view: PublicCatalogueView, scenario: RateScenario, asOf: (programme: PublicProgramme) => string): RateRow[] => value.providedCandidates
     ? [...value.providedCandidates]
@@ -199,7 +199,7 @@ export function useResolvedPublicRankingRows(options: {
           if (requestRef.current !== req) { stats.restarts++; continue; }
           const view = catalogueRef.current;
           const validity = collectValidity(view);
-          const resolve = resolverIndexRef.current.resolve;
+          const resolve = resolverIndexRef.current.resolveForPublication(view);
           const candidates = req.providedCandidates
             ? [...req.providedCandidates]
             : await publicRecommendationRowsCooperatively(

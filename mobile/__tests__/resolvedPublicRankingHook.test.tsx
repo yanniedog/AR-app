@@ -267,3 +267,47 @@ test('exact completed 650000/72 request is immediate, but changed callback conte
     expect(latest.resolution.rows.every(r => r.rate === '0.02')).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
+
+test.each([1, 32])('a generated sibling cannot hide the expiry of a source-bound programme (%i source rows)', async count => {
+  jest.setSystemTime(new Date('2026-10-26T11:59:00Z'));
+  const freshness = { state: 'current' as const, checkedAt: '2026-10-26T11:00:00Z', lastSuccessAt: '2026-10-26T11:00:00Z', reasonCodes: [] };
+  const base = programme({ freshness, effectiveTo: '2026-10-26T12:00:00Z' });
+  const sibling = programme({ freshness, programmeId: 'sibling', offerId: 'sibling', effectiveTo: '2026-10-26T12:30:00Z',
+    sourceBindings: [{ rateIndex: 1, pointer: '/lendingRates/1' }], components: [{ ...base.components[0], value: '0.07', scopeId: 'sibling' }] });
+  const view = catalogue([base, sibling], [{ ...product, programmeIds: [base.programmeId, sibling.programmeId] }]);
+  const rows = Array.from({ length: count }, () => ({ ...row })), scenario = {};
+  let latest!: ReturnType<typeof useResolvedPublicRankingRows>;
+  function Probe() { latest = useResolvedPublicRankingRows({ sourceRows: rows, catalogue: view, section: 'Mortgage', sectionScenario: scenario,
+    rowScenario: () => scenario, focused: true, revision: 1 }); return null; }
+  let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Probe />); });
+  try {
+    await act(async () => { await jest.advanceTimersByTimeAsync(2000); });
+    expect(latest.ready).toBe(true); expect(latest.resolution.rows).toHaveLength(2);
+    await act(async () => { await jest.advanceTimersByTimeAsync(61_002); });
+    expect(latest.ready).toBe(true); expect(latest.resolution.rows.map(value => value.public_offer_id)).toEqual(['sibling']);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('shard hydration retains warm programme quotes and revalidates corrected content in the new snapshot', async () => {
+  const products = Array.from({ length: 96 }, (_, n) => ({ ...product, productId: `warm-p-${n}`, productKey: `warm-k-${n}`, programmeIds: [`warm-prog-${n}`] }));
+  const programmes = products.map((p, n) => programme({ productId: p.productId, programmeId: `warm-prog-${n}`, offerId: `warm-offer-${n}`,
+    components: programme().components.map(c => ({ ...c, source: { ...c.source }, scopeId: `warm-offer-${n}` })) }));
+  const source = products.map(p => ({ ...row, product_key: p.productKey })), scenario = {};
+  let loaded = programmes.slice(0, 48);
+  const initial = { ...catalogue(programmes, products), allLoaded: false, getProgrammes: (id: string) => loaded.filter(p => p.productId === id) };
+  let latest!: ReturnType<typeof useResolvedPublicRankingRows>;
+  function Probe({ view = initial }: { view?: typeof initial }) { latest = useResolvedPublicRankingRows({ sourceRows: source, catalogue: view,
+    section: 'Mortgage', sectionScenario: scenario, rowScenario: () => scenario, focused: true, revision: 1 }); return null; }
+  let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Probe />); });
+  try {
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(latest.resolution.rows).toHaveLength(48);
+    programmes[0].components[0].value = '0.03'; programmes[0].components[0].source.rawValue = '0.03';
+    loaded = programmes;
+    act(() => tree.update(<Probe view={{ ...initial, allLoaded: true }} />));
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(latest.ready).toBe(true); expect(latest.resolution.rows).toHaveLength(96);
+    expect(latest.resolution.rows.find(value => value.product_key === products[0].productKey)?.rate).toBe('0.03');
+    expect(latest.work.pricingIndexHits).toBeGreaterThanOrEqual(47);
+  } finally { act(() => tree.unmount()); }
+});

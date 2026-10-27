@@ -74,3 +74,19 @@ test('numeric atoms are bounded immutable exact values; cached strings cannot ad
   expect(() => rateDecimal(0.1 as never, 'fraction_per_annum')).toThrow();
   expect(() => publicDecimal('NaN')).toThrow();
 });
+
+test('immutable publication ownership amortizes fingerprints but replacement and unowned mutation still revalidate', () => {
+  const source = programme(), index = createPublicRateResolverIndex();
+  const fingerprint = jest.spyOn(JSON, 'stringify');
+  const checks = () => fingerprint.mock.calls.filter(args => args[0] === source).length;
+  try {
+    const resolve = index.resolveForPublication({});
+    for (const lvr of ['0.72', '0.73', '0.72']) expect(resolve(source, { lvr }, PUBLIC_AS_OF)).toEqual(resolvePublicRate(source, { lvr }, PUBLIC_AS_OF));
+    expect(checks()).toBe(1);
+    source.components[0].value = '0.03';
+    const replacement = index.resolveForPublication({});
+    expect(replacement(source, {}, PUBLIC_AS_OF).payableRate).toBe('0.03'); expect(checks()).toBe(2);
+    source.components[0].value = '0.04';
+    expect(index.resolve(source, {}, PUBLIC_AS_OF).payableRate).toBe('0.04'); expect(checks()).toBe(3);
+  } finally { fingerprint.mockRestore(); }
+});

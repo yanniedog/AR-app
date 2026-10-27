@@ -7,15 +7,20 @@ import type { PublicCondition, PublicProgramme, RateResolution, RateScenario } f
 /** Edition-owned predicate index. Inputs are partitioned by canonical condition
  * truth, never rounded amount/LVR buckets. Tier arithmetic keeps exact inputs. */
 export function createPublicRateResolverIndex() {
-  const compiled = new WeakMap<PublicProgramme, { fingerprint: string; conditions: PublicCondition[]; fields: string[];
+  const compiled = new WeakMap<PublicProgramme, { fingerprint: string; publication?: object; conditions: PublicCondition[]; fields: string[];
     values: Map<string, { from: number; until: number; value: RateResolution }> }>();
   const stats = { hits: 0, misses: 0, warmed: 0 };
-  const resolve = (programme: PublicProgramme, scenario: RateScenario, asOf: string): RateResolution => {
+  const resolve = (programme: PublicProgramme, scenario: RateScenario, asOf: string, immutablePublication?: object): RateResolution => {
     const at = Date.parse(asOf);
     if (!Number.isFinite(at)) return resolvePublicRate(programme, scenario, asOf);
-    let fingerprint: string;
-    try { fingerprint = JSON.stringify(programme); } catch { return resolvePublicRate(programme, scenario, asOf); }
     let index = compiled.get(programme);
+    let fingerprint: string;
+    // Canonical catalogue snapshots publish immutable programme values. Check
+    // each object once within that explicit publication owner, rather than
+    // serialising the book on every cache hit. Unowned/mutable callers retain
+    // per-call validation; a replacement publication revalidates content too.
+    try { fingerprint = immutablePublication && index?.publication === immutablePublication
+      ? index.fingerprint : JSON.stringify(programme); } catch { return resolvePublicRate(programme, scenario, asOf); }
     if (!index || index.fingerprint !== fingerprint) {
       const conditions: PublicCondition[] = [], fields = new Set<string>(), visited = new Set<object>();
       let nodes = 0, supported = true;
@@ -34,9 +39,10 @@ export function createPublicRateResolverIndex() {
       };
       visit(programme);
       if (!supported) return resolvePublicRate(programme, scenario, asOf);
-      index = { fingerprint, conditions, fields: [...fields], values: new Map() };
+      index = { fingerprint, publication: immutablePublication, conditions, fields: [...fields], values: new Map() };
       compiled.set(programme, index);
     }
+    index.publication = immutablePublication;
     const key = JSON.stringify([scenario.allowHistorical === true,
       index.conditions.map(condition => evaluatePublicCondition(condition, scenario, asOf)),
       index.fields.map(field => scenario[field]), asOf.slice(0, 10)]);
@@ -65,7 +71,7 @@ export function createPublicRateResolverIndex() {
       for (const programme of view.getProgrammes(product.productId)) {
         if (cancelled()) return;
         const sample = representativePublicScenario(programme.conditions);
-        if (sample) { resolve(programme, sample, asOf); stats.warmed++; }
+        if (sample) { resolve(programme, sample, asOf, view); stats.warmed++; }
         if (performance.now() - checkpoint >= 4) {
           await yieldToUi(0);
           checkpoint = performance.now();
@@ -73,7 +79,12 @@ export function createPublicRateResolverIndex() {
       }
     }
   };
-  return { resolve, stats, prepareMortgage };
+  return { resolve, stats, prepareMortgage,
+    /** Existing programme objects must not change under the same owner; new
+     * objects validate independently. Unowned resolve remains defensive. */
+    resolveForPublication: (owner: object): typeof resolvePublicRate =>
+      (programme, scenario, asOf) => resolve(programme, scenario, asOf, owner),
+  };
 }
 
 // Callers own their result arrays; cached financial evidence is never mutable
