@@ -1,0 +1,75 @@
+{
+  "source": "5b04ef45a4cf4ee325a785aff3899b7b3df29c83",
+  "kind": "Development web; cold derived preparation, catalogue/core already constructed, no Android claim",
+  "scenarioSha256": "1c8d84f66c5f5072ab258e2168c7b9a1e2254a38bf514b589d3705dd1db2f9f1",
+  "startedAt": "2026-10-27T14:17:23.203Z",
+  "fixture": {
+    "products": 2813,
+    "providers": 103,
+    "rates": 16788,
+    "mortgageRates": 8119,
+    "savingsRates": 8669,
+    "selectedBankProducts": 700,
+    "programmes": 16788,
+    "checkedAt": "2026-10-26T09:00:00.000Z"
+  },
+  "outcome": {
+    "catalogueReadyToCurrentMatchingFrameMs": 1719.9000000003725,
+    "rows": [
+      {
+        "label": "Synthetic Mortgage 0000, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+        "rect": {
+          "x": 118,
+          "y": 650.5,
+          "width": 572,
+          "height": 48,
+          "top": 650.5,
+          "right": 690,
+          "bottom": 698.5,
+          "left": 118
+        }
+      },
+      {
+        "label": "Synthetic Mortgage 0100, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+        "rect": {
+          "x": 118,
+          "y": 706.5,
+          "width": 590,
+          "height": 48,
+          "top": 706.5,
+          "right": 708,
+          "bottom": 754.5,
+          "left": 118
+        }
+      },
+      {
+        "label": "Synthetic Mortgage 0200, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+        "rect": {
+          "x": 118,
+          "y": 762.5,
+          "width": 603,
+          "height": 48,
+          "top": 762.5,
+          "right": 721,
+          "bottom": 810.5,
+          "left": 118
+        }
+      },
+      {
+        "label": "Synthetic Mortgage 0300, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+        "rect": {
+          "x": 118,
+          "y": 818.5,
+          "width": 603,
+          "height": 48,
+          "top": 818.5,
+          "right": 721,
+          "bottom": 866.5,
+          "left": 118
+        }
+      }
+    ]
+  },
+  "errors": [],
+  "finishedAt": "2026-10-27T14:17:26.204Z"
+}

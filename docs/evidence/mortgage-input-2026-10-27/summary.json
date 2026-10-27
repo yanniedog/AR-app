@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 1,
+  "baseline": "12e6a90270a065d838047ad3712b1c209af93170",
+  "measuredAfterProductionSource": "5b04ef45a4cf4ee325a785aff3899b7b3df29c83",
+  "validatedSourceHead": "a051de801913dfb32c66e8f0243c41e5e6543754",
+  "platform": "Chromium / Expo development web, 412x915; synthetic catalogue; no physical Android measurement",
+  "externalIO": "All browser requests outside localhost/data/blob aborted; app acquisition/history methods stubbed; no destination scans",
+  "acceptance": "Current actual 650000/72 Owner occupied P&I Advertised criteria, correct 8119-row count, hit-testable visible Mortgage rows; collected first-row labels and prices postvalidated. Previous results/Updating cannot satisfy outcome. Cold data preparation reported separately.",
+  "metrics": {
+    "before": {
+      "firstFinalFacetToCurrentFrame": {
+        "n": 3,
+        "medianMs": 1605.4,
+        "minMs": 1581.5,
+        "maxMs": 1878,
+        "samplesMs": [
+          1605.4,
+          1878,
+          1581.5
+        ]
+      },
+      "repeatedFinalFacetToCurrentFrame": {
+        "n": 9,
+        "medianMs": 1625.4,
+        "minMs": 1420.2,
+        "maxMs": 1899.4,
+        "samplesMs": [
+          1714.2,
+          1485.8,
+          1420.2,
+          1899.4,
+          1849.2,
+          1480.5,
+          1769.2,
+          1625.4,
+          1542.1
+        ]
+      },
+      "inputEventToFrame": {
+        "n": 24,
+        "medianMs": 8.65,
+        "minMs": 4.2,
+        "maxMs": 17.9,
+        "samplesMs": [
+          14,
+          6.1,
+          5.1,
+          17.9,
+          4.2,
+          14.1,
+          8.6,
+          6.6,
+          5,
+          4.3,
+          6.6,
+          10.3,
+          12.3,
+          12.7,
+          6.6,
+          12.5,
+          8.1,
+          12.5,
+          15.2,
+          13,
+          8.7,
+          6.8,
+          9.2,
+          8.5
+        ]
+      },
+      "coldDerivedPreparationToCurrentFrame": {
+        "n": 3,
+        "medianMs": 2587.2,
+        "minMs": 2520.8,
+        "maxMs": 2625.4,
+        "samplesMs": [
+          2625.4,
+          2587.2,
+          2520.8
+        ]
+      },
+      "lvrBoundaryOutcomes": [
+        {
+          "input": "81",
+          "expected": 0,
+          "ms": 969.9
+        },
+        {
+          "input": "72",
+          "expected": 8119,
+          "ms": 1748.8
+        },
+        {
+          "input": "81",
+          "expected": 0,
+          "ms": 975.8
+        },
+        {
+          "input": "72",
+          "expected": 8119,
+          "ms": 1726
+        },
+        {
+          "input": "81",
+          "expected": 0,
+          "ms": 1172.5
+        },
+        {
+          "input": "72",
+          "expected": 8119,
+          "ms": 1805.3
+        }
+      ],
+      "startedAt": "2026-10-27T14:10:56.238Z",
+      "finishedAt": "2026-10-27T14:19:19.825Z"
+    },
+    "after": {
+      "firstFinalFacetToCurrentFrame": {
+        "n": 3,
+        "medianMs": 184.3,
+        "minMs": 178.1,
+        "maxMs": 245.6,
+        "samplesMs": [
+          245.6,
+          184.3,
+          178.1
+        ]
+      },
+      "repeatedFinalFacetToCurrentFrame": {
+        "n": 9,
+        "medianMs": 157.8,
+        "minMs": 108.8,
+        "maxMs": 238.4,
+        "samplesMs": [
+          184.3,
+          122.5,
+          238.4,
+          124.2,
+          215,
+          121.4,
+          235.2,
+          157.8,
+          108.8
+        ]
+      },
+      "inputEventToFrame": {
+        "n": 24,
+        "medianMs": 9.85,
+        "minMs": 6.4,
+        "maxMs": 19.4,
+        "samplesMs": [
+          8.7,
+          15.2,
+          6.4,
+          16.2,
+          18.3,
+          10.8,
+          8.9,
+          9.8,
+          9.2,
+          9.9,
+          10.7,
+          6.9,
+          9.2,
+          19.4,
+          9.5,
+          7,
+          11.3,
+          7.2,
+          11,
+          10,
+          16.4,
+          9.9,
+          7.3,
+          8.5
+        ]
+      },
+      "coldDerivedPreparationToCurrentFrame": {
+        "n": 3,
+        "medianMs": 1719.9,
+        "minMs": 1704,
+        "maxMs": 1755,
+        "samplesMs": [
+          1755,
+          1704,
+          1719.9
+        ]
+      },
+      "lvrBoundaryOutcomes": [
+        {
+          "input": "81",
+          "expected": 0,
+          "ms": 366.3
+        },
+        {
+          "input": "72",
+          "expected": 8119,
+          "ms": 425.1
+        },
+        {
+          "input": "81",
+          "expected": 0,
+          "ms": 331.4
+        },
+        {
+          "input": "72",
+          "expected": 8119,
+          "ms": 377.7
+        },
+        {
+          "input": "81",
+          "expected": 0,
+          "ms": 398.3
+        },
+        {
+          "input": "72",
+          "expected": 8119,
+          "ms": 482.8
+        }
+      ],
+      "startedAt": "2026-10-27T14:12:47.674Z",
+      "finishedAt": "2026-10-27T14:17:26.204Z"
+    }
+  },
+  "fixture": {
+    "products": 2813,
+    "providers": 103,
+    "rates": 16788,
+    "mortgageRates": 8119,
+    "savingsRates": 8669,
+    "selectedBankProducts": 700,
+    "programmes": 16788,
+    "checkedAt": "2026-10-26T09:00:00.000Z"
+  },
+  "limits": [
+    "Not instant: first/repeated visible matching rows still exceed a 16ms frame in development web.",
+    "Cold derived preparation remains about 1.7 seconds; no hidden loading success.",
+    "Typing retains 200ms debounce; input echo preserved. Last facet press flushes latest typed draft immediately.",
+    "Static fixed-formula index is conservative; unsupported dynamic/tiered/conditional-component books use canonical cooperative resolution. Whole original publication not locally available for capability coverage measurement.",
+    "Original Android audit stall and actual phone latency unverified; no adb or physical device.",
+    "No claim that original timing failures have one common proven CPU cause."
+  ]
+}
