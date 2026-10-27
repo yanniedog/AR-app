@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "baseline": "12e6a90270a065d838047ad3712b1c209af93170",
+  "after": "a65956fb44f29bc4dcc6372885ebc48fc411fe2b",
+  "previousMeasuredAfter": "5b04ef45a4cf4ee325a785aff3899b7b3df29c83",
+  "kind": "Synthetic large catalogue, Chromium Expo development web; no Android proof",
+  "fixture": {
+    "products": 2813,
+    "providers": 103,
+    "rates": 16788,
+    "mortgageRates": 8119,
+    "savingsRates": 8669,
+    "selectedBankProducts": 700,
+    "programmes": 16788,
+    "checkedAt": "2026-10-26T09:00:00.000Z"
+  },
+  "baselineSamples": "../mortgage-input-2026-10-27/final-before-{1,2,3}.json and cold-before-{1,2,3}.json; unchanged baseline source and identical fixture/harness",
+  "afterMetrics": {
+    "firstCurrentMatchingFrame": {
+      "n": 3,
+      "medianMs": 212.4,
+      "minMs": 129.1,
+      "maxMs": 223.7,
+      "samplesMs": [
+        212.4,
+        223.7,
+        129.1
+      ]
+    },
+    "repeatCurrentMatchingFrame": {
+      "n": 9,
+      "medianMs": 163.1,
+      "minMs": 113.4,
+      "maxMs": 321.3,
+      "samplesMs": [
+        146.2,
+        281.4,
+        321.3,
+        130.2,
+        282,
+        163.1,
+        123.4,
+        184.7,
+        113.4
+      ]
+    },
+    "inputEventToFrame": {
+      "n": 24,
+      "medianMs": 12.7,
+      "minMs": 7.2,
+      "maxMs": 19.8,
+      "samplesMs": [
+        14.9,
+        14.2,
+        19.2,
+        12.8,
+        7.8,
+        12.8,
+        14.2,
+        12.6,
+        7.6,
+        9.8,
+        9.4,
+        18.8,
+        14.7,
+        18.9,
+        9.1,
+        19.8,
+        7.2,
+        7.6,
+        9.7,
+        10.9,
+        17.5,
+        14.2,
+        7.7,
+        8.8
+      ]
+    },
+    "coldDerivedPreparation": {
+      "n": 3,
+      "medianMs": 1941.9,
+      "minMs": 1816.3,
+      "maxMs": 1955.4,
+      "samplesMs": [
+        1816.3,
+        1955.4,
+        1941.9
+      ]
+    },
+    "lvrOutcomes": {
+      "n": 6,
+      "medianMs": 400.3,
+      "minMs": 335.2,
+      "maxMs": 458.1,
+      "samplesMs": [
+        368.9,
+        457.3,
+        396.8,
+        458.1,
+        335.2,
+        403.8
+      ]
+    }
+  },
+  "allChecksPassed": [
+    "correct visible advertised Mortgage row and count",
+    "LVR81 zero and72 current membership",
+    "busy typing convergence",
+    "interrupted product navigation recovery",
+    "clear hides old rows",
+    "no page errors"
+  ],
+  "startedAt": "2026-10-27T15:09:00.701Z",
+  "finishedAt": "2026-10-27T15:10:13.549Z",
+  "limits": "Not instant;200ms input debounce and cold derived work remain. Small-n shared host results, not controlled device distributions. No full tests/builds ran during these samples; baseline measured earlier same day. Real publication capability and original native stall remain unverified."
+}

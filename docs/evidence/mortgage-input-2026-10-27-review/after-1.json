@@ -1,0 +1,561 @@
+{
+  "scenarioSha256": "964dc1952ddc789624a752e69f5894d794eb289b7ced9097614d0c4a9dc7e334",
+  "source": "a65956fb44f29bc4dcc6372885ebc48fc411fe2b",
+  "startedAt": "2026-10-27T15:09:00.701Z",
+  "kind": "Expo development web; audit capture OFF; synthetic exact membership+price DOM proof, no Android claim",
+  "fixture": {
+    "products": 2813,
+    "providers": 103,
+    "rates": 16788,
+    "mortgageRates": 8119,
+    "savingsRates": 8669,
+    "selectedBankProducts": 700,
+    "programmes": 16788,
+    "checkedAt": "2026-10-26T09:00:00.000Z"
+  },
+  "controls": [
+    {
+      "label": "Owner occupied",
+      "text": "Owner occupied"
+    },
+    {
+      "label": "Principal & interest",
+      "text": "Principal & interest"
+    }
+  ],
+  "lastFilterToVisible": {
+    "eventToCurrentMatchingFrameMs": 212.39999999850988,
+    "rows": [
+      {
+        "label": "Synthetic Mortgage 0000, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+        "rect": {
+          "x": 118,
+          "y": 650.5,
+          "width": 572,
+          "height": 48,
+          "top": 650.5,
+          "right": 690,
+          "bottom": 698.5,
+          "left": 118
+        }
+      },
+      {
+        "label": "Synthetic Mortgage 0100, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+        "rect": {
+          "x": 118,
+          "y": 706.5,
+          "width": 590,
+          "height": 48,
+          "top": 706.5,
+          "right": 708,
+          "bottom": 754.5,
+          "left": 118
+        }
+      },
+      {
+        "label": "Synthetic Mortgage 0200, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+        "rect": {
+          "x": 118,
+          "y": 762.5,
+          "width": 603,
+          "height": 48,
+          "top": 762.5,
+          "right": 721,
+          "bottom": 810.5,
+          "left": 118
+        }
+      },
+      {
+        "label": "Synthetic Mortgage 0300, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+        "rect": {
+          "x": 118,
+          "y": 818.5,
+          "width": 603,
+          "height": 48,
+          "top": 818.5,
+          "right": 721,
+          "bottom": 866.5,
+          "left": 118
+        }
+      }
+    ],
+    "eventToTwoFramesMs": 275.3999999985099,
+    "emptyFrames": 0
+  },
+  "ready": {
+    "elapsedMs": 604.1999999992549
+  },
+  "warm": [
+    {
+      "eventToCurrentMatchingFrameMs": 146.19999999925494,
+      "rows": [
+        {
+          "label": "Synthetic Mortgage 0000, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 650.5,
+            "width": 572,
+            "height": 48,
+            "top": 650.5,
+            "right": 690,
+            "bottom": 698.5,
+            "left": 118
+          }
+        },
+        {
+          "label": "Synthetic Mortgage 0100, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 706.5,
+            "width": 590,
+            "height": 48,
+            "top": 706.5,
+            "right": 708,
+            "bottom": 754.5,
+            "left": 118
+          }
+        },
+        {
+          "label": "Synthetic Mortgage 0200, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 762.5,
+            "width": 603,
+            "height": 48,
+            "top": 762.5,
+            "right": 721,
+            "bottom": 810.5,
+            "left": 118
+          }
+        },
+        {
+          "label": "Synthetic Mortgage 0300, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 818.5,
+            "width": 603,
+            "height": 48,
+            "top": 818.5,
+            "right": 721,
+            "bottom": 866.5,
+            "left": 118
+          }
+        }
+      ],
+      "eventToTwoFramesMs": 209.59999999962747
+    },
+    {
+      "eventToCurrentMatchingFrameMs": 281.40000000037253,
+      "rows": [
+        {
+          "label": "Synthetic Mortgage 0000, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 650.5,
+            "width": 572,
+            "height": 48,
+            "top": 650.5,
+            "right": 690,
+            "bottom": 698.5,
+            "left": 118
+          }
+        },
+        {
+          "label": "Synthetic Mortgage 0100, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 706.5,
+            "width": 590,
+            "height": 48,
+            "top": 706.5,
+            "right": 708,
+            "bottom": 754.5,
+            "left": 118
+          }
+        },
+        {
+          "label": "Synthetic Mortgage 0200, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 762.5,
+            "width": 603,
+            "height": 48,
+            "top": 762.5,
+            "right": 721,
+            "bottom": 810.5,
+            "left": 118
+          }
+        },
+        {
+          "label": "Synthetic Mortgage 0300, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 818.5,
+            "width": 603,
+            "height": 48,
+            "top": 818.5,
+            "right": 721,
+            "bottom": 866.5,
+            "left": 118
+          }
+        }
+      ],
+      "eventToTwoFramesMs": 346
+    },
+    {
+      "eventToCurrentMatchingFrameMs": 321.2999999988824,
+      "rows": [
+        {
+          "label": "Synthetic Mortgage 0000, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 650.5,
+            "width": 572,
+            "height": 48,
+            "top": 650.5,
+            "right": 690,
+            "bottom": 698.5,
+            "left": 118
+          }
+        },
+        {
+          "label": "Synthetic Mortgage 0100, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 706.5,
+            "width": 590,
+            "height": 48,
+            "top": 706.5,
+            "right": 708,
+            "bottom": 754.5,
+            "left": 118
+          }
+        },
+        {
+          "label": "Synthetic Mortgage 0200, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 762.5,
+            "width": 603,
+            "height": 48,
+            "top": 762.5,
+            "right": 721,
+            "bottom": 810.5,
+            "left": 118
+          }
+        },
+        {
+          "label": "Synthetic Mortgage 0300, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 818.5,
+            "width": 603,
+            "height": 48,
+            "top": 818.5,
+            "right": 721,
+            "bottom": 866.5,
+            "left": 118
+          }
+        }
+      ],
+      "eventToTwoFramesMs": 399.09999999962747
+    }
+  ],
+  "typing": [
+    {
+      "value": "6",
+      "actual": "6",
+      "frameMs": 2.900000000372529,
+      "visibleCount": 3
+    },
+    {
+      "value": "65",
+      "actual": "65",
+      "frameMs": 0.5,
+      "visibleCount": 3
+    },
+    {
+      "value": "650",
+      "actual": "650",
+      "frameMs": 0.7999999988824129,
+      "visibleCount": 3
+    },
+    {
+      "value": "6500",
+      "actual": "6500",
+      "frameMs": 0.40000000037252903,
+      "visibleCount": 3
+    },
+    {
+      "value": "65000",
+      "actual": "65000",
+      "frameMs": 0.5,
+      "visibleCount": 3
+    },
+    {
+      "value": "650000",
+      "actual": "650000",
+      "frameMs": 1.700000001117587,
+      "visibleCount": 3
+    }
+  ],
+  "indexTimings": [
+    {
+      "stage": "prepare",
+      "ms": 2438.5999999996275,
+      "endedAt": 19207.700000001118,
+      "count": 8119
+    },
+    {
+      "stage": "select",
+      "ms": 12.599999999627471,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 4.599999999627471,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 3.400000000372529,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 3.400000000372529,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 2.199999999254942,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 2.400000000372529,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 4.300000000745058,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 3,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 4.200000001117587,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 5.100000001490116,
+      "count": 8119
+    },
+    {
+      "stage": "select",
+      "ms": 11.299999998882413,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 3.800000000745058,
+      "count": 8119
+    },
+    {
+      "stage": "select",
+      "ms": 8.900000000372529,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 1.699999999254942,
+      "count": 8119
+    },
+    {
+      "stage": "select",
+      "ms": 7.199999999254942,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 1.400000000372529,
+      "count": 8119
+    },
+    {
+      "stage": "select",
+      "ms": 8.299999998882413,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 2.5,
+      "count": 8119
+    },
+    {
+      "stage": "select",
+      "ms": 6.299999998882413,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 1.300000000745058,
+      "count": 8119
+    },
+    {
+      "stage": "select",
+      "ms": 8.099999999627471,
+      "count": 8119
+    },
+    {
+      "stage": "filter",
+      "ms": 2.200000001117587,
+      "count": 8119
+    }
+  ],
+  "inputPaint": [
+    {
+      "label": "Loan amount",
+      "value": "650000",
+      "echo": "650000",
+      "eventToAnimationFrameMs": 14.900000000372529,
+      "visibleRows": 0,
+      "eventToTwoFramesMs": 25
+    },
+    {
+      "label": "LVR",
+      "value": "72",
+      "echo": "72",
+      "eventToAnimationFrameMs": 14.199999999254942,
+      "visibleRows": 0,
+      "eventToTwoFramesMs": 32.19999999925494
+    },
+    {
+      "label": "Loan amount",
+      "value": "6",
+      "echo": "6",
+      "eventToAnimationFrameMs": 19.199999999254942,
+      "visibleRows": 3,
+      "eventToTwoFramesMs": 30.299999998882413
+    },
+    {
+      "label": "Loan amount",
+      "value": "65",
+      "echo": "65",
+      "eventToAnimationFrameMs": 12.799999998882413,
+      "visibleRows": 3,
+      "eventToTwoFramesMs": 22.09999999962747
+    },
+    {
+      "label": "Loan amount",
+      "value": "650",
+      "echo": "650",
+      "eventToAnimationFrameMs": 7.800000000745058,
+      "visibleRows": 3,
+      "eventToTwoFramesMs": 15.5
+    },
+    {
+      "label": "Loan amount",
+      "value": "6500",
+      "echo": "6500",
+      "eventToAnimationFrameMs": 12.800000000745058,
+      "visibleRows": 3,
+      "eventToTwoFramesMs": 22.300000000745058
+    },
+    {
+      "label": "Loan amount",
+      "value": "65000",
+      "echo": "65000",
+      "eventToAnimationFrameMs": 14.199999999254942,
+      "visibleRows": 3,
+      "eventToTwoFramesMs": 42.5
+    },
+    {
+      "label": "Loan amount",
+      "value": "650000",
+      "echo": "650000",
+      "eventToAnimationFrameMs": 12.599999999627471,
+      "visibleRows": 3,
+      "eventToTwoFramesMs": 21.300000000745058
+    }
+  ],
+  "stages": [],
+  "boundaries": [
+    {
+      "input": "81",
+      "eventToCorrectVisibleOutcomeMs": 368.8999999985099,
+      "expected": 0,
+      "rows": []
+    },
+    {
+      "input": "72",
+      "eventToCorrectVisibleOutcomeMs": 457.30000000074506,
+      "expected": 8119,
+      "rows": [
+        {
+          "label": "Synthetic Mortgage 0000, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 650.5,
+            "width": 572,
+            "height": 48,
+            "top": 650.5,
+            "right": 690,
+            "bottom": 698.5,
+            "left": 118
+          }
+        },
+        {
+          "label": "Synthetic Mortgage 0100, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 706.5,
+            "width": 590,
+            "height": 48,
+            "top": 706.5,
+            "right": 708,
+            "bottom": 754.5,
+            "left": 118
+          }
+        },
+        {
+          "label": "Synthetic Mortgage 0200, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 762.5,
+            "width": 603,
+            "height": 48,
+            "top": 762.5,
+            "right": 721,
+            "bottom": 810.5,
+            "left": 118
+          }
+        },
+        {
+          "label": "Synthetic Mortgage 0300, Benchmark Bank, Public payable rate 4.0000%, Comparison rate 4.10% · Variable · Principal & interest · Owner occupied · Listed LVR ≤80%, Eligibility unverified, Freshness · Unknown",
+          "rect": {
+            "x": 118,
+            "y": 818.5,
+            "width": 603,
+            "height": 48,
+            "top": 818.5,
+            "right": 721,
+            "bottom": 866.5,
+            "left": 118
+          }
+        }
+      ]
+    }
+  ],
+  "rapidBurst": {
+    "converged": true
+  },
+  "interruptedProductNavigationRecovered": true,
+  "clearRetainsNoOldRows": true,
+  "errors": [],
+  "finishedAt": "2026-10-27T15:09:31.965Z"
+}
