@@ -1,3 +1,5 @@
+import * as resolver from '../src/data/publicRateResolver';
+import * as selectors from '../src/data/selectors';
 import { prepareMortgageResultsIndex } from '../src/data/mortgageResultsIndex';
 import { publicRecommendationRows, resolvedPublicRankingRows } from '../src/data/publicRateIntegration';
 import { mortgageComparisonRows } from '../src/data/mortgageComparison';
@@ -105,4 +107,18 @@ test('an explicitly bound core variant is never replaced by another same-offer p
     expect(index!.select(scenario, { loanAmount: '650000', lvr: '72' })!.priced).toEqual(expected.rows);
     expect(expected.rows).toEqual([]);
   }
+});
+
+
+test('filter selection on a prepared book neither reprices programmes nor sorts the catalogue again', async () => {
+  const pricing = jest.spyOn(resolver, 'resolvePublicRate'), sorting = jest.spyOn(selectors, 'sortRowsCooperatively');
+  try {
+    const { index } = await prepare(); expect(index).not.toBeNull(); expect(pricing).toHaveBeenCalled(); expect(sorting).toHaveBeenCalled();
+    pricing.mockClear(); sorting.mockClear();
+    for (const amount of ['650000', '650001', '1000000', '650000']) {
+      const selected = index!.select({ amount, lvr: '0.72', purpose: 'OWNER_OCCUPIED', repayment: 'PRINCIPAL_AND_INTEREST' }, { loanAmount: amount, lvr: '72' });
+      expect(selected!.filtered(EMPTY_FILTERS, 'rate', 'headline')).toHaveLength(1);
+    }
+    expect(pricing).not.toHaveBeenCalled(); expect(sorting).not.toHaveBeenCalled();
+  } finally { pricing.mockRestore(); sorting.mockRestore(); }
 });
