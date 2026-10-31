@@ -1,10 +1,11 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
-import { clearCompletedPerformanceAudit, loadCompletedPerformanceAudit, saveCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
+import { clearCompletedPerformanceAudit, loadCompletedPerformanceAudit, saveCompletedPerformanceAudit, loadPerformanceAuditHistory } from '../src/lib/performanceAuditReportStorage';
 import { buildPerformanceAuditCompletion } from '../src/lib/performanceAuditCompletion';
 
 const files = new Map<string, string>();
 const path = 'file:///docs/logs/ar-performance-audit-completed.json';
+const historyPath = 'file:///docs/logs/ar-audit-metric-history.json';
 beforeEach(() => {
   files.clear(); jest.clearAllMocks();
   jest.mocked(FileSystem.getInfoAsync).mockImplementation(async file => ({ exists: files.has(file) }) as any);
@@ -17,6 +18,41 @@ beforeEach(() => {
     if (!files.has(from)) throw new Error('missing staged report');
     files.set(to, files.get(from)!); files.delete(from);
   });
+});
+
+test('history retains both completed runs, deduplicates rerender recovery and clears with diagnostics', async () => {
+  const first = makePerformanceAuditReport('first');
+  const second = { ...first, sessionId: 'second', finishedAt: '2026-10-31T10:34:28.796Z' };
+  await saveCompletedPerformanceAudit(first);
+  await saveCompletedPerformanceAudit(second);
+  await saveCompletedPerformanceAudit(second);
+  expect((await loadPerformanceAuditHistory()).map(run => run.sessionId)).toEqual(['first', 'second']);
+  await clearCompletedPerformanceAudit();
+  expect(files.has(historyPath)).toBe(false);
+  expect(await loadPerformanceAuditHistory()).toEqual([]);
+});
+
+test('pre-upgrade latest report supplies one honest history point and survives the next save', async () => {
+  const old = makePerformanceAuditReport('pre-upgrade');
+  files.set(path, JSON.stringify(old));
+  expect((await loadPerformanceAuditHistory()).map(run => run.sessionId)).toEqual(['pre-upgrade']);
+  await saveCompletedPerformanceAudit({ ...old, sessionId: 'new', finishedAt: '2026-10-31T10:34:28.796Z' });
+  expect((await loadPerformanceAuditHistory()).map(run => run.sessionId)).toEqual(['pre-upgrade', 'new']);
+});
+
+test('a corrupt history surfaces an error and is not overwritten by a new run', async () => {
+  files.set(historyPath, '{broken');
+  await expect(saveCompletedPerformanceAudit(makePerformanceAuditReport())).rejects.toThrow();
+  expect(files.get(historyPath)).toBe('{broken');
+  await expect(loadPerformanceAuditHistory()).rejects.toThrow();
+  expect(await loadCompletedPerformanceAudit()).not.toBeNull();
+});
+
+test('a complete staged history is recovered after an interrupted rename', async () => {
+  await saveCompletedPerformanceAudit(makePerformanceAuditReport('retained'));
+  files.set(`${historyPath}.tmp`, files.get(historyPath)!);
+  files.set(historyPath, '{broken');
+  expect((await loadPerformanceAuditHistory())[0].sessionId).toBe('retained');
 });
 
 test('the completed diagnosis is restored from local storage and never replaced by a later partial sidecar', async () => {

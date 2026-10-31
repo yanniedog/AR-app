@@ -332,7 +332,9 @@ test('the RBA action opens and verifies its own chart rather than the ready mark
     expect(step.readiness).toContain('graphics');
     // The runner chooses an action on the planned surface when several surfaces
     // on the current route expose the same action name.
-    await act(async () => { await mockSurfaces.get(step.expectedSurface)!.actions![step.semanticActionId](); });
+    let completion: unknown;
+    act(() => { completion = mockSurfaces.get(step.expectedSurface)!.actions![step.semanticActionId](); });
+    await completion;
     expect(graphic()).toMatchObject({ required: true, status: 'pending', layoutMeasured: false });
     const rbaSurface = registry.registerSurface({ id: step.expectedSurface, probes: [graphic()] })!;
     expect(registry.snapshot(['outlook.dashboard'], ['graphic']).ready).toBe(true);
@@ -343,8 +345,57 @@ test('the RBA action opens and verifies its own chart rather than the ready mark
     }); });
     registry.upsertProbe(rbaSurface, graphic());
     expect(registry.snapshot([step.expectedSurface], ['graphic']).ready).toBe(true);
-    await act(async () => { await mockSurfaces.get(step.expectedSurface)!.actions![step.semanticActionId](); });
+    act(() => { completion = mockSurfaces.get(step.expectedSurface)!.actions![step.semanticActionId](); });
+    await completion;
     registry.upsertProbe(rbaSurface, graphic());
     expect(registry.snapshot([step.expectedSurface], ['graphic']).ready).toBe(false);
   } finally { act(() => tree.unmount()); }
+});
+
+test('RBA actions commit the required chart probe before readiness sampling on initial and repeated runs', async () => {
+  mockCore = makeHealthyCore();
+  mockUseLiveReadiness = true;
+  const registry = new PerformanceAuditReadinessRegistry();
+  registry.beginCapture('rba-commit-boundary');
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<PerformanceAuditReadinessProvider registry={registry}>
+    <Research />
+  </PerformanceAuditReadinessProvider>) as InspectableRenderer; });
+  const snapshot = () => registry.snapshot(['outlook.rba-response'], ['graphic']);
+  try {
+    expect(snapshot().surfaces[0].probes.some(probe => probe.kind === 'graphic')).toBe(false);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let completion!: Promise<unknown>;
+      act(() => { completion = registry.invokeAction('outlook.rba-response', 'outlook.rba-response.decision.previous'); });
+      await completion;
+      expect(snapshot().surfaces[0].probes).toContainEqual(expect.objectContaining({
+        id: 'rba-graphic', required: true, status: 'pending', layoutMeasured: false,
+      }));
+      act(() => { tree.root.findAll(node => node.type === 'RbaChart')[0].props.onGraphicReady({
+        revision: `${mockCore!.rba.at(-1)!.date}:0:measured`, expectedCount: 1, pointCount: 1,
+        layoutMeasured: true, accessibleSummary: true, emptyStateRendered: false,
+      }); });
+      const observations = appHealthDisplayObservations([{
+        id: 'rba', kind: 'journey', label: 'RBA', status: 'pass', durationMs: 1,
+        metrics: { readinessEvidence: compactPerformanceAuditReadinessEvidence(snapshot()) },
+      }]);
+      expect(evaluateAppHealthDisplayQuality([{ id: 'outlook.rba-response', requiredRoles: ['chart'] }], observations)
+        .find(check => check.id === 'display-chart')).toMatchObject({ status: 'pass', metrics: { missing: 0 } });
+    }
+  } finally { act(() => tree.unmount()); }
+});
+
+test('unmount rejects an RBA action before its new probe commits', async () => {
+  mockCore = makeHealthyCore(); mockUseLiveReadiness = true;
+  const registry = new PerformanceAuditReadinessRegistry(); registry.beginCapture('rba-unmount');
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<PerformanceAuditReadinessProvider registry={registry}>
+    <Research />
+  </PerformanceAuditReadinessProvider>) as InspectableRenderer; });
+  let completion!: Promise<unknown>;
+  act(() => {
+    completion = registry.invokeAction('outlook.rba-response', 'outlook.rba-response.decision.previous');
+    tree.unmount();
+  });
+  await expect(completion).rejects.toThrow('RBA audit panel unmounted before applying its control');
 });

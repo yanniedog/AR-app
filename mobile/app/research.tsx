@@ -86,6 +86,7 @@ export default function Market() {
   const [dashboardLayoutRevision, setDashboardLayoutRevision] = useState<string | null>(null);
   const [historyGraphicState, setHistoryGraphicState] = useState<ChartRenderEvidence | null>(null);
   const [rbaGraphicState, setRbaGraphicState] = useState<ChartRenderEvidence | null>(null);
+  const [rbaEvidenceRequest, setRbaEvidenceRequest] = useState(0);
   const [leaderLogoState, setLeaderLogoState] = useState<{
     revision: string;
     expectedCount: number;
@@ -98,6 +99,10 @@ export default function Market() {
     fail: (error: Error) => void;
   } | null>(null);
   const pendingEconomyAuditActionRef = useRef<typeof pendingEconomyAuditAction>(null);
+  const [pendingRbaAuditAction, setPendingRbaAuditAction] = useState<{
+    complete: () => void; fail: (error: Error) => void;
+  } | null>(null);
+  const pendingRbaAuditActionRef = useRef<typeof pendingRbaAuditAction>(null);
   const [rbaLayoutY, setRbaLayoutY] = useState<number | null>(null);
   const [rbaLayoutReady, setRbaLayoutReady] = useState(false);
   const rbaOutlookRef = useRef<RbaOutlookAuditHandle>(null);
@@ -153,6 +158,7 @@ export default function Market() {
     }
     setRbaGraphicState(null);
     setRbaOpen(true);
+    setRbaEvidenceRequest(request => request + 1);
   }, [focus, core?.run_date, isFocused]);
 
   useEffect(() => {
@@ -238,6 +244,7 @@ export default function Market() {
   }, [core?.rba, core?.rba_holds]);
   const openRba = useCallback(() => {
     setRbaGraphicState(null);
+    setRbaEvidenceRequest(request => request + 1);
     setRbaOpen(true);
   }, []);
   const queueEconomyAuditAction = useCallback((action: 'lens' | 'window' | 'date') => {
@@ -279,6 +286,16 @@ export default function Market() {
     const index = rbaSelectedDate ? dates.indexOf(rbaSelectedDate) : dates.length - 1;
     setRbaSelectedDate(dates[Math.max(0, index - 1)] ?? null);
   }, [core?.rba, rbaSelectedDate]);
+  const queueRbaAuditAction = useCallback(() => {
+    if (pendingRbaAuditActionRef.current) return Promise.reject(new Error('RBA audit action already pending'));
+    openRba();
+    previousRbaDate();
+    return new Promise<void>((complete, fail) => {
+      const pending = { complete, fail };
+      pendingRbaAuditActionRef.current = pending;
+      setPendingRbaAuditAction(pending);
+    });
+  }, [openRba, previousRbaDate]);
 
   const surface = usePerformanceAuditSurface({
     id: 'outlook.dashboard',
@@ -295,7 +312,7 @@ export default function Market() {
       'outlook.history.window.30d': () => setExplorerWindow('30D'),
       'outlook.history.window.all': () => setExplorerWindow('All'),
       'outlook.history.date.previous': previousHistoryDate,
-      'outlook.rba-response.decision.previous': () => { openRba(); previousRbaDate(); },
+      'outlook.rba-response.decision.previous': queueRbaAuditAction,
       'outlook.snapshot.browse.first': (...args: unknown[]) => {
         const planned = auditActionString(args, 'section');
         const target = SECTION_ORDER.find(section => section === planned) ?? activeSection;
@@ -405,7 +422,7 @@ export default function Market() {
     id: 'outlook.rba-response', routeKey: '/research', datasetRevision,
     renderRevision: `${datasetRevision ?? 'none'}:${rbaSelectedDate ?? 'latest'}`,
     actions: {
-      'outlook.rba-response.decision.previous': () => { openRba(); previousRbaDate(); },
+      'outlook.rba-response.decision.previous': queueRbaAuditAction,
     },
   });
   usePerformanceAuditProbe(rbaSurface, {
@@ -420,13 +437,25 @@ export default function Market() {
     layoutMeasured: rbaOpen ? rbaGraphicState?.layoutMeasured ?? false : false,
     emptyStateRendered: rbaOpen ? rbaGraphicState?.emptyStateRendered ?? false : false,
     accessibleSummary: rbaOpen ? rbaGraphicState?.accessibleSummary ?? false : false,
-  });
+  }, rbaOpen);
   usePerformanceAuditProbe(rbaSurface, {
     id: 'rba-layout', kind: 'layout',
     status: rbaLayoutReady ? 'ready' : 'pending',
     layoutMeasured: rbaLayoutReady,
     datasetRevision,
   });
+  useEffect(() => {
+    if (!rbaOpen || !pendingRbaAuditAction) return;
+    // The runner must sample the newly required graphic after its probe commits,
+    // then wait for actual rendered evidence instead of accepting a closed panel.
+    pendingRbaAuditAction.complete();
+    pendingRbaAuditActionRef.current = null;
+    setPendingRbaAuditAction(null);
+  }, [pendingRbaAuditAction, rbaOpen]);
+  useEffect(() => () => {
+    pendingRbaAuditActionRef.current?.fail(new Error('RBA audit panel unmounted before applying its control'));
+    pendingRbaAuditActionRef.current = null;
+  }, []);
 
   const handleRetryHistory = async () => {
     setRetryingHistory(true);
@@ -558,6 +587,7 @@ export default function Market() {
             selectedDate={rbaSelectedDate}
             onDateSelect={setRbaSelectedDate}
             onGraphicReady={setRbaGraphicState}
+            evidenceRequest={rbaEvidenceRequest}
           />
           <RbaCountdownCard expandable={false} />
           {decisions.length ? <Divider /> : null}

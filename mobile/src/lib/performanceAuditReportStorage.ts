@@ -2,6 +2,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { PERFORMANCE_AUDIT_SCHEMA_VERSION } from './performanceAuditSchema';
 import type { PerformanceAuditReport } from './performanceAudit';
 import { measureAuditEvidence } from './auditEvidenceCapacity';
+import { auditMetricRun, mergeAuditMetricRuns, type AuditMetricRun } from './auditMetricHistory';
+import { appendAuditMetricHistory, deleteAuditMetricHistory, readAuditMetricHistory } from './auditMetricHistoryStorage';
 
 const FILE = `${FileSystem.documentDirectory ?? ''}logs/ar-performance-audit-completed.json`;
 const TEMP_FILE = `${FILE}.tmp`;
@@ -19,11 +21,19 @@ export function saveCompletedPerformanceAudit(report: PerformanceAuditReport): P
     await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}logs`, { intermediates: true });
     if (startedEpoch !== epoch) return;
     measureAuditEvidence(report);
+    // Preserve the pre-upgrade completed run before replacing the latest copy.
+    const additions = [auditMetricRun(report)];
+    try {
+      if ((await FileSystem.getInfoAsync(FILE)).exists) {
+        additions.unshift(auditMetricRun(validateCompletedReport(JSON.parse(await FileSystem.readAsStringAsync(FILE)))));
+      }
+    } catch { /* A corrupt previous report cannot block a new completed report. */ }
     await FileSystem.writeAsStringAsync(TEMP_FILE, JSON.stringify(report));
     if (startedEpoch !== epoch) return;
     // Android renames within the same directory. Keep the complete staged copy
     // recoverable on platforms whose move replaces a destination in two steps.
     await FileSystem.moveAsync({ from: TEMP_FILE, to: FILE });
+    if (startedEpoch === epoch) await appendAuditMetricHistory(additions);
   });
   writes = write;
   return write;
@@ -37,11 +47,21 @@ export function clearCompletedPerformanceAudit(clearOtherDiagnostics?: () => Pro
     if (FileSystem.documentDirectory) {
       await FileSystem.deleteAsync(FILE, { idempotent: true });
       await FileSystem.deleteAsync(TEMP_FILE, { idempotent: true });
+      await deleteAuditMetricHistory();
     }
     await clearOtherDiagnostics?.();
   }).finally(() => { clearing -= 1; });
   writes = clear;
   return clear;
+}
+
+export async function loadPerformanceAuditHistory(): Promise<AuditMetricRun[]> {
+  const startedEpoch = epoch;
+  const latest = await loadCompletedPerformanceAudit();
+  await writes.catch(() => {});
+  const rows = await readAuditMetricHistory();
+  if (startedEpoch !== epoch || clearing) return [];
+  return mergeAuditMetricRuns(rows, latest ? [auditMetricRun(latest)] : []);
 }
 
 export async function loadCompletedPerformanceAudit(): Promise<PerformanceAuditReport | null> {

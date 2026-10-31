@@ -72,7 +72,9 @@ it.each([false, true])('keeps original raster/SVG artwork on a white plate in da
     });
     expect(raster.props.source).toBe(123);
     expect(raster.props.resizeMode).toBe('contain');
-    expect(raster.props.style).toEqual({ width: 32 * 0.88, height: 32 * 0.88 });
+    expect(raster.props.style).toEqual({ width: 32 * 0.8, height: 32 * 0.8 });
+    expect(raster.props.fadeDuration).toBe(0);
+    expect(tree.root.findByType(View).props.style).toMatchObject({ flexShrink: 0, borderWidth: 1 });
     expect(raster.props.style.tintColor).toBeUndefined();
     expect(onAssetPending).toHaveBeenLastCalledWith('Example Bank');
     expect(onRenderStateChange).toHaveBeenLastCalledWith('rate:42', 'pending');
@@ -82,8 +84,8 @@ it.each([false, true])('keeps original raster/SVG artwork on a white plate in da
     act(() => raster.props.onError());
     const vector = tree.root.findByType('SvgUri' as never);
     expect(vector.props.uri).toBe(svg);
-    expect(vector.props.width).toBe(32 * 0.88);
-    expect(vector.props.height).toBe(32 * 0.88);
+    expect(vector.props.width).toBe(32 * 0.8);
+    expect(vector.props.height).toBe(32 * 0.8);
     expect(tree.root.findByType(View).props.style.backgroundColor).toBe('#ffffff');
     act(() => vector.props.onError());
     expect(tree.root.findAllByType(Image)).toHaveLength(0);

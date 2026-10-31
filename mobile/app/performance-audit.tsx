@@ -14,6 +14,7 @@ import { DebugLogUploadStatus } from '../src/components/DebugLogUploadStatus';
 import { BackgroundWorkDiagnosis } from '../src/components/BackgroundWorkDiagnosis';
 import { AuditCatalogueCoverage } from '../src/components/AuditCatalogueCoverage';
 import { AuditHistoryCoverage } from '../src/components/AuditHistoryCoverage';
+import { AuditMetricHistory } from '../src/components/AuditMetricHistory';
 import { AuditCheckSymbol, AuditOutcomeSymbols } from '../src/components/AuditOutcomeSymbols';
 import {
   getDebugLogUploadSnapshot,
@@ -107,7 +108,7 @@ function PerformanceAuditScreenInner() {
   const [backgroundOpen, setBackgroundOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [failuresOpen, setFailuresOpen] = useState(false);
-  const [controlsOpen, setControlsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const auditPreflightLocked = useRef(false);
   const mounted = useRef(true);
   const [auditPreflightMode, setAuditPreflightMode] = useState<'local' | 'live-source' | null>(null);
@@ -127,7 +128,6 @@ function PerformanceAuditScreenInner() {
     setDetailsOpen(false);
     setFailuresOpen(false);
     setRawReportOpen(false);
-    setControlsOpen(false);
   }, [report?.sessionId]);
   useEffect(() => {
     let active = true;
@@ -298,12 +298,15 @@ function PerformanceAuditScreenInner() {
   const outcome = (value: 'healthy'|'attention'|'bottleneck'): UiCopy => value === 'healthy' ? 'Healthy' : value === 'attention' ? 'Needs review' : 'Failures found';
   const controls = <Card style={{ gap: 10 }}>
         <AppText variant="h2">{uiLabel('App health audit')}</AppText>
+        <Button title="Run audit" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
+        <Button title="Live audit" icon="cloud-download-outline" variant="secondary" loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'} disabled={auditDisabled} onPress={() => void runAudit('live-source')} />
         <InfoRow label={uiLabel(running ? 'Audit upload' : 'Next audit upload')} value={uiLabel(running ? state.uploadLog ? 'Public' : 'Local' : publicUpload ? 'Public' : 'Local')} />
         <InfoRow label="Included" value="Checks / errors / traces / readiness / timing / deidentified log" />
         <InfoRow label="Excluded" value="Private inputs / identifiers / credentials" />
         <InfoRow label={uiLabel(running ? 'Destination' : 'Next destination')} value={uiLabel((running ? state.uploadLog : publicUpload) ? 'Public hosting' : 'Debug log')} />
         <InfoRow label="Public hosting" value={uiJoin(uiIdentifier('paste.rs'), ' / ', uiIdentifier('paste.c-net.org'))} />
         <ToggleRow icon="cloud-upload-outline" label="Public upload" value={running ? state.uploadLog : publicUpload} onChange={setPublicUpload} disabled={auditDisabled} />
+        <Disclosure title="Audit settings" open={settingsOpen} onToggle={() => setSettingsOpen(!settingsOpen)}>
         <InfoRow label="Step limit" value={measuredMs(10_000)} />
         <View style={{ gap: 6 }}>
           <AppText variant="small" weight="700">{uiLabel('Stall timeout')}</AppText>
@@ -319,11 +322,10 @@ function PerformanceAuditScreenInner() {
             {uiJoin(hangTimeoutSeconds == null ? 'Invalid timeout' : 'Range', ': ', uiCount(MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS),'–',uiCount(MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS),' ','seconds')}
           </AppText>
         </View>
-        <Button title="Run audit" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
-        <Button title="Live audit" icon="cloud-download-outline" variant="secondary" loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'} disabled={auditDisabled} onPress={() => void runAudit('live-source')} />
         <InfoRow label="Local checks" value="Addresses / browser handlers / loaded data" />
         <InfoRow label="Live checks" value="Approved websites" />
         <InfoRow label="Off screen" value="Paused" />
+        </Disclosure>
         {updateBlocksAudit ? <AppText color="danger" accessibilityLiveRegion="polite">{uiLabel('App update active')}</AppText>:null}
         <Disclosure title="Background checks" open={backgroundOpen} onToggle={() => setBackgroundOpen(!backgroundOpen)}>
           <InfoRow label="Data" value={countPair(passive.completed,passive.total)} />
@@ -337,7 +339,8 @@ function PerformanceAuditScreenInner() {
       </Card>;
   return (
     <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }} onLayout={() => setLayoutReady(true)}>
-      {!report ? controls : null}
+      {controls}
+      {!running && !report ? <AuditMetricHistory report={null} /> : null}
       {!running && (!report || state.sessionId !== report.sessionId) ? <DebugLogUploadStatus sessionId={state.sessionId} /> : null}
       {state.status === 'cancelled' ? <Card><AppText>{uiLabel('Audit cancelled')}</AppText><InfoRow label="Results" value="Debug log" /></Card>:null}
       {state.status === 'failed' ? <Card style={{gap:8,borderColor:theme.colors.danger}}>
@@ -371,6 +374,7 @@ function PerformanceAuditScreenInner() {
             void uploadCompletedPerformanceAudit(report).catch(() => Alert.alert(uiLabel('Report unavailable')));
           }} /> : null}
         </Card>
+        <AuditMetricHistory report={report} />
         <AuditHistoryCoverage report={report} />
         {completion.failurePositions.length ? <Disclosure title="Failure positions" open={failuresOpen} onToggle={() => setFailuresOpen(!failuresOpen)}>
           {completion.failurePositions.map((failure, index) => <Card key={`${failure.source}:${failure.position}:${index}`} style={{gap:4}}>
@@ -454,7 +458,6 @@ function PerformanceAuditScreenInner() {
           {reportedChecks.length < orderedChecks.length ? <Button title={uiJoin('Show', ' ', uiCount(Math.min(MAX_REPORTED_AUDIT_CHECKS,orderedChecks.length-reportedChecks.length)), ' ', 'Checks')} icon="chevron-down-outline" variant="ghost" onPress={() => setVisibleCheckLimit(current => Math.min(orderedChecks.length,current+MAX_REPORTED_AUDIT_CHECKS))}/>:null}
         </View>
         </Disclosure>
-        <Disclosure title="Run another audit" open={controlsOpen} onToggle={() => setControlsOpen(!controlsOpen)}>{controls}</Disclosure>
       </>:null}
     </ScreenScrollView>
   );
