@@ -7,6 +7,7 @@ import { AS_OF, catalogue, core, programme, row } from '../testUtils/publicRateJ
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { EMPTY_FILTERS } from '../src/data/selectors';
+import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 
 beforeEach(() => { jest.useFakeTimers(); jest.setSystemTime(new Date(AS_OF)); installMandatoryEligibility(selectMandatoryEligibility(null, null, null)); });
 afterEach(() => jest.useRealTimers());
@@ -49,9 +50,9 @@ test.each(['mandatory', 'suitability'])('%s revision during preparation rebuilds
 });
 
 test('legacy warm input edits are synchronous and reuse preparation; source replacement immediately revokes old results', async () => {
-  const source = [{ ...row, lvr_tier: 'lvr_=80%', balance_min: 100000, balance_max: 900000 }];
+  const context = selectedConstraintFixture('Mortgage', [{ ...row, lvr_tier: 'lvr_=80%', balance_min: 100000, balance_max: 900000 }], []);
+  const source = context.rows;
   const view = { ...catalogue(), status: 'unavailable' as const, allLoaded: false, products: [], getProgrammes: () => [] };
-  const context = { core: core(), details: null, manifest: null, coreIntegrity: null };
   const prepare = jest.spyOn(preparation, 'prepareMortgageResultsIndex');
   let result!: ReturnType<typeof useMortgageResultsIndex>, matches: typeof source | null = null;
   function Probe({ amount, lvr, rows = source }: { amount: string; lvr: string; rows?: typeof source }) {
@@ -80,9 +81,9 @@ test('legacy warm input edits are synchronous and reuse preparation; source repl
 });
 
 test('a delayed obsolete legacy preparation cannot replace the new source index', async () => {
-  const first = [{ ...row, rate: '0.09' }], second = [{ ...row, rate: '0.03' }];
+  const context = selectedConstraintFixture('Mortgage', [{ ...row, rate: '0.09' }], []);
+  const first = context.rows, second = [{ ...row, rate: '0.03' }];
   const view = { ...catalogue(), status: 'unavailable' as const, allLoaded: false, products: [], getProgrammes: () => [] };
-  const context = { core: core(), details: null, manifest: null, coreIntegrity: null };
   const oldPending = preparation.prepareMortgageResultsIndex({ source: first, catalogue: view, context, includeNonStandard: true, cancelled: () => false });
   await jest.advanceTimersByTimeAsync(100); const old = await oldPending;
   let release!: () => void;

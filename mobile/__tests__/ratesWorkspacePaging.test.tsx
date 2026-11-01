@@ -966,7 +966,8 @@ test('loaded legacy mortgage edits settle in the same render without reloading d
   jest.useFakeTimers();
   const loaded = Array.from({ length: 96 }, (_, i) => ({ ...rows[i % rows.length], product_key: `loaded-${i}`,
     rate_index: i + 1, lvr_tier: 'lvr_=80%', balance_min: 100000, balance_max: 900000 }));
-  mockStore.setState((state: any) => ({ source: 'cache', core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: loaded } } } }));
+  const fixture = selectedConstraintFixture('Mortgage', loaded, []);
+  mockStore.setState({ source: 'cache', core: fixture.core, manifest: fixture.manifest, details: fixture.details, coreIntegrity: fixture.coreIntegrity });
   useMortgageComparison.setState({ loanAmount: '650000', lvr: '72' });
   install();
   const tree = mount(), list = () => tree.root.findByType('FlashList').props;
@@ -985,7 +986,8 @@ test('loaded legacy mortgage edits settle in the same render without reloading d
     act(() => mockStore.setState({ detailsLoading: true }));
     expect(list().data).toEqual(visible); expect(updating()).toBe(false);
     const replacement = loaded.map(row => ({ ...row, rate: '0.03' }));
-    act(() => mockStore.setState((state: any) => ({ core: { ...state.core, sections: { ...state.core.sections, Mortgage: { rates: replacement } } } })));
+    const next = selectedConstraintFixture('Mortgage', replacement, []);
+    act(() => mockStore.setState({ core: next.core, manifest: next.manifest, details: next.details, coreIntegrity: next.coreIntegrity }));
     expect(list().data).toEqual([]); expect(updating()).toBe(true);
     await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
     expect(list().data.length).toBeGreaterThan(0);

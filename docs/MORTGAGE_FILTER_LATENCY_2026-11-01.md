@@ -17,7 +17,9 @@ envelope, including all source-pointer SHA-256 identities.
 The index now also prepares fixed legacy core rows before filter selection.
 Current amount/LVR predicates, source bounds, uncertainty, facets and sorting
 still determine membership. A declared catalogue that is unavailable, loading,
-failed or missing from an audit cache cannot use this legacy path. Source,
+failed or missing from an audit cache cannot use this legacy path. The path also
+requires a present manifest, matching core integrity and an absent capability;
+explicit malformed values (including null/false/zero/empty string) are rejected. Source,
 context and eligibility replacement revoke the index immediately.
 
 Cooperative preparation validates a product envelope once within a synchronous

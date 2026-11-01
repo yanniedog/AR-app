@@ -35,7 +35,11 @@ export async function prepareMortgageResultsIndex(options: {
   includeNonStandard: boolean; cancelled: () => boolean;
 }) {
   const { source, catalogue, context, includeNonStandard, cancelled } = options;
-  const legacy = catalogue.status === 'unavailable' && !catalogue.auditUnavailableReason && !context.manifest?.public_rate_catalogue;
+  const { core, manifest, coreIntegrity } = context;
+  const legacy = catalogue.status === 'unavailable' && !catalogue.auditUnavailableReason && !!core && !!manifest &&
+    !!coreIntegrity && coreIntegrity.core === core && coreIntegrity.runDate === core.run_date && manifest.run_date === core.run_date &&
+    coreIntegrity.coreSha256 === manifest.files.core.sha256 && /^[a-f0-9]{64}$/.test(manifest.files.core.sha256) &&
+    manifest.public_rate_catalogue === undefined;
   const products = legacy ? [] : catalogue.products;
   const mandatory = getMandatoryEligibilityRevision(), suitability = getSuitabilityRevision();
   const stale = () => cancelled() || mandatory !== getMandatoryEligibilityRevision() || suitability !== getSuitabilityRevision();

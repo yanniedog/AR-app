@@ -1,4 +1,4 @@
-import { scopedRateConditions, scopedRateConditionsForRows } from '../src/data/rateConditions';
+import { scopedRateConditions, scopedRateConditionsForRows, type RateConditionContext } from '../src/data/rateConditions';
 import { mortgageComparisonRows, mortgageComparisonRowsCooperatively } from '../src/data/mortgageComparison';
 import { prepareMortgageResultsIndex } from '../src/data/mortgageResultsIndex';
 import { EMPTY_FILTERS, filterRows, sortRows } from '../src/data/selectors';
@@ -73,6 +73,20 @@ test('cooperative preparation cancels before publication and stale detail identi
   const stalePending = mortgageComparisonRowsCooperatively(f.rows, inputs, stale);
   await jest.runAllTimersAsync();
   expect(await stalePending).toEqual(mortgageComparisonRows(f.rows, inputs, stale));
+});
+
+test.each(['missing manifest', 'missing integrity', 'wrong core', 'wrong hash', 'wrong date', 'null', 'false', 'zero', 'empty string'])
+('does not infer a legacy publication from %s', async kind => {
+  const f = fixture();
+  const context: RateConditionContext = { ...f };
+  if (kind === 'missing manifest') context.manifest = null;
+  else if (kind === 'missing integrity') context.coreIntegrity = null;
+  else if (kind === 'wrong core') context.coreIntegrity = { ...f.coreIntegrity, core: { ...f.core } };
+  else if (kind === 'wrong hash') context.coreIntegrity = { ...f.coreIntegrity, coreSha256: 'f'.repeat(64) };
+  else if (kind === 'wrong date') context.manifest = { ...f.manifest, run_date: '2000-01-01' };
+  else context.manifest = { ...f.manifest, public_rate_catalogue: ({ null: null, false: false, zero: 0, 'empty string': '' } as Record<string, unknown>)[kind] as never };
+  const pending = prepareMortgageResultsIndex({ source: f.rows, catalogue: unavailable, context, includeNonStandard: false, cancelled: () => false });
+  await jest.runAllTimersAsync(); expect(await pending).toBeNull();
 });
 
 test('mandatory or suitability changes revoke a prepared legacy index and its retained filter closure', async () => {
