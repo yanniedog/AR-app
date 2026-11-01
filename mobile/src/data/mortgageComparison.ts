@@ -3,7 +3,7 @@ import { sourceRowForPublicRow } from './publicRateIntegration';
 import type { RateRow } from '../types';
 import { calculatorAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
 import { lvrRangeContains, parseLvrRange } from './lvrRange';
-import { scopedRateConditions, type RateConditionContext } from './rateConditions';
+import { scopedRateConditions, scopedRateConditionsForRows, type RateConditionContext } from './rateConditions';
 import { scopedFinancialConditionFacts, type PublishedNumericConditionFact, type NumericConditionBoundary } from './scopedFinancialConditionFacts';
 import { yieldToUi } from '../lib/yieldToUi';
 
@@ -94,6 +94,33 @@ export function prepareMortgageComparisonRow(row: RateRow, context?: RateConditi
     range: parseLvrRange(row.lvr_tier) };
 }
 export type PreparedMortgageComparisonRow = ReturnType<typeof prepareMortgageComparisonRow>;
+
+/** Validate each product envelope once per synchronous batch, then yield before
+ * the next product. A cancelled source owner never publishes prepared facts. */
+export async function prepareMortgageComparisonRowsCooperatively(rows: readonly RateRow[], context?: RateConditionContext,
+  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {}) {
+  const cancelled = control.cancelled ?? (() => false);
+  const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
+  const now = control.now ?? (() => performance.now());
+  const groups = new Map<string, RateRow[]>();
+  for (const row of rows) {
+    const group = groups.get(row.product_key);
+    if (group) group.push(row); else groups.set(row.product_key, [row]);
+  }
+  const prepared = new WeakMap<RateRow, PreparedMortgageComparisonRow>();
+  await yieldControl();
+  let checkpoint = now();
+  for (const group of groups.values()) {
+    if (cancelled()) return null;
+    const scopes = scopedRateConditionsForRows(group.map(sourceRowForPublicRow), 'Mortgage', context);
+    for (let index = 0; index < group.length; index++) {
+      const row = group[index];
+      prepared.set(row, { source: scopedFinancialConditionFacts(scopes[index]), range: parseLvrRange(row.lvr_tier) });
+    }
+    if (now() - checkpoint >= 4) { await yieldControl(); checkpoint = now(); }
+  }
+  return cancelled() ? null : prepared;
+}
 function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateConditionContext,
   prepared?: PreparedMortgageComparisonRow): MortgageComparisonMatch {
   if (parsed.invalid) return 'invalid';
@@ -178,13 +205,15 @@ export async function mortgageComparisonRowsCooperatively(
   if (parsed.amount === null && parsed.lvr === null && !parsed.invalid) {
     return { rows: [...rows], unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
   }
+  const prepared = await prepareMortgageComparisonRowsCooperatively(rows, context, control);
+  if (!prepared || cancelled()) return null;
   let unverified = 0;
   const unverifiedRows = new WeakSet<RateRow>();
   const selected: RateRow[] = [];
   let sliceStarted = now();
   for (let offset = 0; offset < rows.length; offset += 1) {
     const row = rows[offset];
-    const state = match(row, parsed, context);
+    const state = match(row, parsed, context, prepared.get(row));
     if (state === 'unverified') { unverified += 1; unverifiedRows.add(row); }
     if (state === 'listed' || state === 'unverified') selected.push(row);
     if ((offset + 1) % 16 === 0 && now() - sliceStarted >= 6) {

@@ -961,3 +961,36 @@ test('partial pricing keeps an existing legacy occurrence checked and removable 
     expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
   } finally { act(() => tree.unmount()); }
 });
+
+test('loaded legacy mortgage edits settle in the same render without reloading data; refresh and replacement keep source truth', async () => {
+  jest.useFakeTimers();
+  const loaded = Array.from({ length: 96 }, (_, i) => ({ ...rows[i % rows.length], product_key: `loaded-${i}`,
+    rate_index: i + 1, lvr_tier: 'lvr_=80%', balance_min: 100000, balance_max: 900000 }));
+  const fixture = selectedConstraintFixture('Mortgage', loaded, []);
+  mockStore.setState({ source: 'cache', core: fixture.core, manifest: fixture.manifest, details: fixture.details, coreIntegrity: fixture.coreIntegrity });
+  useMortgageComparison.setState({ loanAmount: '650000', lvr: '72' });
+  install();
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  const updating = () => tree.root.findAllByType('AppText').some((node: any) => String(node.props.children).includes('Updating'));
+  try {
+    expect(list().data).toEqual([]); expect(updating()).toBe(true);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(list().data.length).toBeGreaterThan(0); expect(updating()).toBe(false);
+    const loads = mockStore.getState().ensureDetails.mock.calls.length;
+    for (const [loanAmount, lvr, matches] of [['650001', '72', true], ['650002', '81', false], ['900001', '72', false], ['650000', '72', true]] as const) {
+      act(() => useMortgageComparison.setState({ loanAmount, lvr }));
+      expect(list().data.length > 0).toBe(matches); expect(updating()).toBe(false);
+    }
+    expect(mockStore.getState().ensureDetails).toHaveBeenCalledTimes(loads);
+    const visible = list().data;
+    act(() => mockStore.setState({ detailsLoading: true }));
+    expect(list().data).toEqual(visible); expect(updating()).toBe(false);
+    const replacement = loaded.map(row => ({ ...row, rate: '0.03' }));
+    const next = selectedConstraintFixture('Mortgage', replacement, []);
+    act(() => mockStore.setState({ core: next.core, manifest: next.manifest, details: next.details, coreIntegrity: next.coreIntegrity }));
+    expect(list().data).toEqual([]); expect(updating()).toBe(true);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(list().data.length).toBeGreaterThan(0);
+    expect(list().data.every((row: any) => row.rate === '0.03')).toBe(true); expect(updating()).toBe(false);
+  } finally { act(() => tree.unmount()); jest.useRealTimers(); }
+});

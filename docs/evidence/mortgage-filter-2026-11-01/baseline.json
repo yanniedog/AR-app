@@ -1,0 +1,11 @@
+{
+  "sourceRows": 8113,
+  "catalogue": "unavailable",
+  "scopeMs": 19012.031300000002,
+  "filterMs": 421.4225000000006,
+  "totalMs": 19433.453800000003,
+  "matchingRows": 686,
+  "preparationMs": 14.392999999996391,
+  "indexAvailable": false,
+  "indexedSelectionMs": 0.0014000000010128133
+}

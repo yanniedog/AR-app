@@ -452,13 +452,16 @@ export const cache = {
     return (await cache.readBundle())?.core ?? null;
   },
 
-  async readDetails(): Promise<DetailsPayload | null> {
+  async readDetails(progress?: { stage: (stage: 'read' | 'parse' | 'verify') => void; checkpoint: () => void }): Promise<DetailsPayload | null> {
     const meta = await cache.readMeta();
     if (meta?.manifest.payload_revision && !meta.detailsSha) return null;
     const file = versionedAsset(DETAILS, meta?.manifest.payload_revision ? meta.detailsSha ?? undefined : undefined);
     try {
-      const text = await readDetailsCacheText(file, readText);
+      progress?.stage('read');
+      const text = await readDetailsCacheText(file, readText, progress?.checkpoint);
+      progress?.stage('parse');
       const details = await parseJsonHeavy<DetailsPayload>(text);
+      progress?.stage('verify');
       await bindCachedDetails(details, text, await readJson(`${file}.verified`), meta?.detailsSha);
       // A same-size replacement can span chunk reads. Only the assembled text's
       // verified receipt may satisfy a known publication, including legacy paths.

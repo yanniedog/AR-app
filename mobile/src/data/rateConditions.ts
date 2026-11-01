@@ -48,7 +48,8 @@ export function validRateConditions(value: unknown): value is RateConditions {
   return true;
 }
 
-export function scopedRateConditions(row: RateRow, section: SectionKey, context?: RateConditionContext): ScopedRateConditions {
+function readScopedRateConditions(row: RateRow, section: SectionKey, context: RateConditionContext | undefined,
+  validate: typeof validRateConditions): ScopedRateConditions {
   const unavailable = (reason: string): ScopedRateConditions => ({ status: 'unavailable', reason, entries: [], sourceSha256: null, generationId: null, coreSha256: null, detailsSha256: null });
   if (!Number.isSafeInteger(row.rate_index) || row.rate_index! < 1) return unavailable('Rate conditions unavailable: an exact published rate index is required.');
   const { core, details, manifest, coreIntegrity } = context ?? {};
@@ -58,11 +59,29 @@ export function scopedRateConditions(row: RateRow, section: SectionKey, context?
       !rowsForProductKey(core.sections[section].rates, row.product_key).includes(row)) return unavailable('Rate conditions unavailable: this rate and details are not verified from the same publication.');
   const value = details.products[row.product_key]?.rateConditions;
   if (value === undefined) return unavailable('Rate conditions unavailable in this publication. This does not mean the rate is unconditional.');
-  if (!validRateConditions(value)) return unavailable('Rate conditions unavailable: the published condition record is invalid.');
+  if (!validate(value)) return unavailable('Rate conditions unavailable: the published condition record is invalid.');
   const family = section === 'Mortgage' ? 'lending' : 'deposit';
   const entries = value.entries.filter(entry => entry.rateFamily === family && entry.rateIndex === row.rate_index);
   if (!entries.length) return unavailable('No rate-condition wording was supplied for this exact row. Eligibility remains unassessed.');
   return { status: 'available', reason: 'Published wording for this exact rate row. This is not an eligibility decision.', entries,
     sourceSha256: value.sourceSha256, generationId: manifest.payload_revision?.generation_id ?? null,
     coreSha256: manifest.files.core.sha256, detailsSha256: manifest.files.details.sha256 };
+}
+
+export function scopedRateConditions(row: RateRow, section: SectionKey, context?: RateConditionContext): ScopedRateConditions {
+  return readScopedRateConditions(row, section, context, validRateConditions);
+}
+
+/** One synchronous product batch shares envelope validation, never provenance
+ * admission. No cache survives the call: subsequent mutations/replacements must
+ * pass validation again, and every row still proves its exact source identity. */
+export function scopedRateConditionsForRows(rows: readonly RateRow[], section: SectionKey,
+  context?: RateConditionContext): ScopedRateConditions[] {
+  const validated = new Map<unknown, boolean>();
+  const validate = (value: unknown): value is RateConditions => {
+    let result = validated.get(value);
+    if (result === undefined) { result = validRateConditions(value); validated.set(value, result); }
+    return result;
+  };
+  return rows.map(row => readScopedRateConditions(row, section, context, validate));
 }

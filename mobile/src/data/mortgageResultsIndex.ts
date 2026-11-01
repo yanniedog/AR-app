@@ -4,8 +4,7 @@ import { boundPublicProgramme, bindCurrentPublicRow, publicOfferDedupKey, public
   rowWithPublicResolution, type PublicCatalogueView } from './publicRateIntegration';
 import { representativePublicScenario } from './publicRateResolverIndex';
 import { evaluatePublicCondition, nextPublicPricingBoundary, resolvePublicRate } from './publicRateResolver';
-import { prepareMortgageComparisonRow, indexedMortgageComparisonRows, type MortgageComparisonInputs,
-  type PreparedMortgageComparisonRow } from './mortgageComparison';
+import { prepareMortgageComparisonRowsCooperatively, indexedMortgageComparisonRows, type MortgageComparisonInputs } from './mortgageComparison';
 import type { RateConditionContext } from './rateConditions';
 import { EMPTY_FILTERS, filterRowsCooperatively, prepareRowFilter, sortRowsCooperatively,
   type Filters, type MortgageRateMetric, type SortKey } from './selectors';
@@ -25,16 +24,23 @@ function supported(programme: PublicProgramme): boolean {
     programme.components.every(component => component.conditions.length === 0) &&
     (programme.phases ?? []).every(phase => phase.conditions.length === 0 && fixedFormula(phase.formula));
 }
-interface Entry { programme: PublicProgramme; candidate: RateRow; quote: RateRow; generated: boolean; key: string }
+interface Entry { programme: PublicProgramme | null; candidate: RateRow; quote: RateRow; generated: boolean; key: string }
 
 /** Exact fast lane for fixed public quotes with the four Mortgage input
- * predicates. Dynamic/tiered/conditional-component books use the existing
+ * predicates, and the already-published fixed rows in legacy core payloads.
+ * Dynamic/tiered/conditional-component books use the existing
  * cooperative resolver; unsupported is never an empty or passing result. */
 export async function prepareMortgageResultsIndex(options: {
   source: readonly RateRow[]; catalogue: PublicCatalogueView; context: RateConditionContext;
   includeNonStandard: boolean; cancelled: () => boolean;
 }) {
   const { source, catalogue, context, includeNonStandard, cancelled } = options;
+  const { core, manifest, coreIntegrity } = context;
+  const legacy = catalogue.status === 'unavailable' && !catalogue.auditUnavailableReason && !!core && !!manifest &&
+    !!coreIntegrity && coreIntegrity.core === core && coreIntegrity.runDate === core.run_date && manifest.run_date === core.run_date &&
+    coreIntegrity.coreSha256 === manifest.files.core.sha256 && /^[a-f0-9]{64}$/.test(manifest.files.core.sha256) &&
+    manifest.public_rate_catalogue === undefined;
+  const products = legacy ? [] : catalogue.products;
   const mandatory = getMandatoryEligibilityRevision(), suitability = getSuitabilityRevision();
   const stale = () => cancelled() || mandatory !== getMandatoryEligibilityRevision() || suitability !== getSuitabilityRevision();
   const asOf = new Date().toISOString(), at = Date.parse(asOf);
@@ -44,7 +50,7 @@ export async function prepareMortgageResultsIndex(options: {
     return stale();
   };
   await yieldToUi(0);
-  if (stale() || catalogue.status !== 'ready' || !catalogue.allLoaded) return null;
+  if (stale() || !legacy && (catalogue.status !== 'ready' || !catalogue.allLoaded)) return null;
   const coreKeys = new Set<string>(), entries: Entry[] = [], candidates: RateRow[] = [];
   const quote = (programme: PublicProgramme) => {
     const sample = representativePublicScenario(programme.conditions);
@@ -55,7 +61,7 @@ export async function prepareMortgageResultsIndex(options: {
     return resolution.status === 'exact' && resolution.verifiedCurrent && resolution.payableRate != null ? { resolution, sample } : null;
   };
   // Prove the entire relevant book is supported before publishing any index.
-  for (const product of catalogue.products) {
+  for (const product of products) {
     if (product.section !== 'Mortgage' || product.status === 'legacy') continue;
     for (const programme of catalogue.getProgrammes(product.productId)) {
       if (!supported(programme)) return null;
@@ -64,6 +70,12 @@ export async function prepareMortgageResultsIndex(options: {
     }
   }
   for (const original of source) {
+    if (legacy) {
+      candidates.push(original);
+      entries.push({ programme: null, candidate: original, quote: original, generated: false, key: '' });
+      if (await pause()) return null;
+      continue;
+    }
     if (catalogue.getProduct(original.product_key)?.status === 'legacy') continue;
     const row = bindCurrentPublicRow(original, catalogue);
     const key = row.public_offer_id ? publicOfferDedupKey(row.product_key, row.public_offer_id) : null;
@@ -78,7 +90,7 @@ export async function prepareMortgageResultsIndex(options: {
     }
     if (await pause()) return null;
   }
-  for (const product of catalogue.products) {
+  for (const product of products) {
     if (product.section !== 'Mortgage' || product.status === 'legacy') continue;
     for (const programme of catalogue.getProgrammes(product.productId)) {
       const key = publicOfferDedupKey(product.productKey, programme.offerId);
@@ -100,8 +112,8 @@ export async function prepareMortgageResultsIndex(options: {
   const eligible = await filterRowsCooperatively(allQuotes, { ...EMPTY_FILTERS, includeNonStandard }, context.details?.products, null, 'Mortgage', { cancelled: stale });
   if (!eligible || stale()) return null;
   const visible = new Set(eligible), mandatoryCandidates = new Set(mandatoryEligibleRows(candidates)), mandatoryQuotes = new Set(mandatoryEligibleRows(allQuotes));
-  const scoped = new WeakMap<RateRow, PreparedMortgageComparisonRow>();
-  for (const row of allQuotes) { scoped.set(row, prepareMortgageComparisonRow(row, context)); if (await pause()) return null; }
+  const scoped = await prepareMortgageComparisonRowsCooperatively(allQuotes, context, { cancelled: stale });
+  if (!scoped) return null;
   const orders = new Map<string, RateRow[]>();
   for (const [sort, metric] of [['rate', 'headline'], ['rate', 'comparison'], ['comparison', 'comparison'], ['bank', 'headline']] as const) {
     const rows = await sortRowsCooperatively(eligible, sort, 'Mortgage', 'max', metric, { cancelled: stale });
@@ -117,7 +129,7 @@ export async function prepareMortgageResultsIndex(options: {
       const queryAsOf = new Date().toISOString();
       const currentCandidates = [...candidates], currentMandatoryCandidates = candidates.filter(row => mandatoryCandidates.has(row)), currentMandatoryQuotes: RateRow[] = [];
       for (const entry of entries) {
-        if (!entry.programme.conditions.every(condition => evaluatePublicCondition(condition, scenario, queryAsOf) === 'met')) continue;
+        if (entry.programme && !entry.programme.conditions.every(condition => evaluatePublicCondition(condition, scenario, queryAsOf) === 'met')) continue;
         if (entry.generated && chosen.has(entry.key)) continue;
         if (entry.generated) { chosen.add(entry.key); currentCandidates.push(entry.candidate); if (mandatoryQuotes.has(entry.quote)) currentMandatoryCandidates.push(entry.candidate); }
         priced.push(entry.quote); if (mandatoryQuotes.has(entry.quote)) currentMandatoryQuotes.push(entry.quote);
