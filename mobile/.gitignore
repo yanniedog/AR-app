@@ -27,6 +27,7 @@ google-services.json
 GoogleService-Info.plist
 
 # Logs / OS
+.jest-cache/
 npm-debug.*
 yarn-debug.*
 yarn-error.*

@@ -28,7 +28,7 @@ export function BankAvatar({
   size = 42,
   width = size,
   height = size,
-  inset = size * 0.06,
+  inset,
   onAssetPending,
   onAssetTerminal,
   renderStateId,
@@ -76,8 +76,12 @@ export function BankAvatar({
   const color = brand?.color ?? theme.colors.chipText;
   const short = uiBankInitials({ provider }, brand);
   const markSize = Math.min(width, height);
-  const fontSize = short.length <= 3 ? markSize * 0.34 : markSize * 0.26;
-  const imageWidth = Math.max(0, width - 2 * inset), imageHeight = Math.max(0, height - 2 * inset);
+  const padding = Math.min(markSize / 2, Math.max(0, inset ?? markSize * 0.1));
+  const imageWidth = Math.max(0, width - 2 * padding), imageHeight = Math.max(0, height - 2 * padding);
+  const fontSize = Math.min(markSize * 0.34, imageWidth / Math.max(1, short.length) * 1.5);
+  const frame = { width, height, flexShrink: 0, borderRadius: markSize / 4,
+    borderWidth: 1, borderColor: theme.dark ? '#64748b' : '#dbe2ea',
+    alignItems: 'center' as const, justifyContent: 'center' as const };
   const activeSource = sources[sourceIdx];
   const terminalState = decoded
     ? 'decoded' as const
@@ -111,9 +115,7 @@ export function BankAvatar({
     return (
       <View
         style={{
-          width,
-          height,
-          borderRadius: markSize / 4,
+          ...frame,
           backgroundColor: '#ffffff',
           alignItems: 'center',
           justifyContent: 'center',
@@ -138,6 +140,7 @@ export function BankAvatar({
             accessible={false}
             source={typeof activeSource === 'string' ? { uri: activeSource } : activeSource}
             resizeMode="contain"
+            fadeDuration={0}
             style={{ width: imageWidth, height: imageHeight }}
             onLoad={() => {
               setDecoded(true);
@@ -153,9 +156,7 @@ export function BankAvatar({
   return (
     <View
       style={{
-        width,
-        height,
-        borderRadius: markSize / 4,
+        ...frame,
         backgroundColor: color,
         alignItems: 'center',
         justifyContent: 'center',

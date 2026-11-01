@@ -37,7 +37,7 @@ jest.mock('../src/lib/debugLogSharing', () => ({
 jest.mock('../src/lib/performanceAuditSharing', () => ({
   restorePerformanceAuditUpload: jest.fn(async () => {}), uploadCompletedPerformanceAudit: jest.fn(async () => {}),
 }));
-jest.mock('../src/lib/performanceAuditReportStorage', () => ({ loadCompletedPerformanceAudit: jest.fn(async () => null) }));
+jest.mock('../src/lib/performanceAuditReportStorage', () => ({ loadCompletedPerformanceAudit: jest.fn(async () => null), loadPerformanceAuditHistory: jest.fn(async () => []) }));
 jest.mock('../src/lib/passiveAudit', () => ({ getPassiveAuditStatus: () => mockPassive, subscribePassiveAudit: () => () => undefined, configurePassiveAuditState: jest.fn() }));
 // Request controls use the real audit lifecycle; catalogue hydration has its
 // own tests and must not start asynchronous persistence in this UI fixture.
@@ -46,6 +46,7 @@ jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAu
 jest.mock('../src/hooks/useReducedMotion', () => ({ useReducedMotion: () => true }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => jest.requireActual('../src/theme/theme').lightTheme }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
+jest.mock('../src/components/AuditMetricHistory', () => ({ AuditMetricHistory: 'AuditMetricHistory' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Card: 'Card', Row: 'Row',
   Disclosure: (props: Record<string, unknown>) => jest.requireActual('react').createElement(
     mockMountedDisclosure ? jest.requireActual('../src/components/ui').Disclosure : 'Disclosure', props),
@@ -81,6 +82,22 @@ test('the current publication choice remains visible after cancellation', async 
   await press('Live audit');
   expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', auditMode: 'live-source', uploadLog: false });
   expect(jest.mocked(AsyncStorage.setItem).mock.calls.every(([key]) => key === PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY)).toBe(true);
+});
+
+test.each(['cancelled', 'failed', 'completed'])('a local-only audit keeps that choice after the screen remounts following %s', async (terminal) => {
+  await mount(); act(() => toggle().props.onChange(false));
+  await press('Run audit');
+  act(() => {
+    if (terminal === 'cancelled') markPerformanceAuditCancelled();
+    else if (terminal === 'failed') failPerformanceAudit('test failure');
+    else completePerformanceAudit(makePerformanceAuditReport(getPerformanceAuditState().sessionId!));
+  });
+  act(() => tree!.unmount()); tree = undefined;
+  await mount();
+  expect(toggle().props.value).toBe(false);
+  expect(tree!.root.findByProps({ label: 'Next audit upload' }).props.value).toBe('Local');
+  await press('Run audit');
+  expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', uploadLog: false });
 });
 
 test('preflight disables publication controls and retains the choice captured by the pressed run', async () => {
@@ -345,7 +362,8 @@ test('the completed result ties its finish instant and audit reference to its ve
   expect(tree!.root.findByProps({ label: 'Audit ID' }).props.value).toBe(performanceAuditReference(report.sessionId));
   expect(tree!.root.findByProps({ children: 'https://paste.c-net.org/current-audit' })).toBeDefined();
   expect(tree!.root.findByProps({ title: 'Audit details' }).props.open).toBe(false);
-  expect(tree!.root.findByProps({ title: 'Run another audit' }).props.open).toBe(false);
+  expect(tree!.root.findByProps({ title: 'Run audit' }).props.disabled).toBe(false);
+  expect(tree!.root.findByProps({ title: 'Audit settings' }).props.open).toBe(false);
 });
 
 test('a completed audit cannot present the verified link of a different report', async () => {

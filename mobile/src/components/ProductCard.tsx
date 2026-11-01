@@ -304,12 +304,12 @@ function ProductCardView({
             style={{ width: logoWidth, flex: 1, minHeight: 48, justifyContent: 'center', alignItems: 'center', borderRadius: theme.radius.sm }}>
             <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ flexDirection: 'row', alignItems: 'center' }}>
               {selectMode ? <Ionicons name={selected ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
-                : <><BankAvatar width={Math.max(0, logoFrame.width - 16)} height={logoFrame.height} inset={0} provider={row.provider} renderStateId={logoRenderStateId} onRenderStateChange={onLogoRenderStateChange} /><RateFreshnessSymbol row={row} palette={theme.colors} /></>}
+                : <><BankAvatar width={Math.max(0, logoFrame.width - 16)} height={logoFrame.height} inset={3} provider={row.provider} renderStateId={logoRenderStateId} onRenderStateChange={onLogoRenderStateChange} /><RateFreshnessSymbol row={row} palette={theme.colors} /></>}
             </View>
           </PressFeedback>
         ) : <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: logoWidth, flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
           {selectMode ? <Ionicons name={selected ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
-            : <><BankAvatar width={Math.max(0, logoFrame.width - 16)} height={logoFrame.height} inset={0} provider={row.provider} renderStateId={logoRenderStateId} onRenderStateChange={onLogoRenderStateChange} /><RateFreshnessSymbol row={row} palette={theme.colors} /></>}
+            : <><BankAvatar width={Math.max(0, logoFrame.width - 16)} height={logoFrame.height} inset={3} provider={row.provider} renderStateId={logoRenderStateId} onRenderStateChange={onLogoRenderStateChange} /><RateFreshnessSymbol row={row} palette={theme.colors} /></>}
         </View>}
       </View>
       <View ref={detailsBubble.anchorRef} collapsable={false} style={{ flex: 1, minWidth: 0 }}>

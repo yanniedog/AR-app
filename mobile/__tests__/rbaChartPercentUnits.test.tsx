@@ -70,3 +70,25 @@ test('percent-label correction retains genuine measured SVG render readiness', (
     expect(plot(tree).props.accessibilityLabel).toContain('4.35%');
   } finally { if (tree) act(() => tree.unmount()); jest.useRealTimers(); }
 });
+
+test('a rerun re-observes the unchanged chart without inventing layout evidence', () => {
+  jest.useFakeTimers();
+  const onGraphicReady = jest.fn(), data = sampleCore.rba.slice(-3);
+  let tree: any;
+  try {
+    act(() => { tree = TestRenderer.create(<RbaChart data={data} evidenceRequest={1} onGraphicReady={onGraphicReady} />); });
+    layout(tree);
+    act(() => tree.update(<RbaChart data={data} evidenceRequest={2} onGraphicReady={onGraphicReady} />));
+    act(() => jest.runOnlyPendingTimers());
+    expect(onGraphicReady).not.toHaveBeenCalled();
+    act(() => tree.root.findByType(Svg).props.onLayout({ nativeEvent: { layout: { width: 360, height: 160 } } }));
+    act(() => jest.runOnlyPendingTimers());
+    expect(onGraphicReady).toHaveBeenCalledTimes(1);
+    const measured = onGraphicReady.mock.calls[0][0];
+    act(() => tree.update(<RbaChart data={data} evidenceRequest={3} onGraphicReady={onGraphicReady} />));
+    act(() => jest.runOnlyPendingTimers());
+    expect(onGraphicReady).toHaveBeenCalledTimes(2);
+    expect(onGraphicReady).toHaveBeenLastCalledWith(measured);
+    expect(measured).toMatchObject({ pointCount: 3, layoutMeasured: true });
+  } finally { if (tree) act(() => tree.unmount()); jest.useRealTimers(); }
+});
