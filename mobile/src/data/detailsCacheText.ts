@@ -47,19 +47,36 @@ function completeUtf8Prefix(bytes: Uint8Array): number {
 
 /** Android's legacy UTF-8 file reader grows a whole Java StringBuilder. Reading
  * the 35 MB details cache can request a 128 MB expansion before returning to JS.
- * Base64 position/length reads bound that native buffer; join text once in Hermes.
+ * Native chunk reads bound that buffer; older APKs use bounded Base64 reads.
+ * Join text once in Hermes.
  * Unsupported platforms retain their existing cache reader, never an Android
  * error fallback to the unbounded reader. Receipt validation remains the caller's. */
-export async function readDetailsCacheText(path: string, fallback: (path: string) => Promise<string>): Promise<string> {
+export async function readDetailsCacheText(path: string, fallback: (path: string) => Promise<string>, checkpoint?: () => void): Promise<string> {
   if (Platform.OS !== 'android') return fallback(path);
   const info = await FileSystem.getInfoAsync(path);
   if (!info.exists || info.isDirectory || !Number.isSafeInteger(info.size) || info.size < 0 ||
       info.size > MAX_PAYLOAD_INFLATED_BYTES) throw new Error('Invalid details cache file size');
   const size = info.size;
+  // New APKs decode directly on the background native queue. Older APKs keep
+  // the bounded base64 path; native failures never retry an unbounded reader.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getNativeHistoryCodec } = require('../../modules/history-codec') as typeof import('../../modules/history-codec');
+  const native = getNativeHistoryCodec();
   const parts: string[] = [];
   let position = 0, carry: Uint8Array = new Uint8Array(0);
   while (position < size) {
     const length = Math.min(DETAILS_CACHE_READ_CHUNK_BYTES, size - position);
+    if (native?.readDetailsChunkAsync) {
+      const chunk = await native.readDetailsChunkAsync(path, position, Math.max(4, length));
+      if (!Number.isSafeInteger(chunk.bytes) || chunk.bytes <= 0 || chunk.bytes > length || typeof chunk.text !== 'string') {
+        throw new Error('Invalid native details chunk');
+      }
+      position += chunk.bytes;
+      parts.push(chunk.text);
+      checkpoint?.();
+      await yieldToUi(0);
+      continue;
+    }
     const encoded = await FileSystem.readAsStringAsync(path, { encoding: 'base64', position, length });
     const bytes = decodeChunk(encoded, length);
     if (!bytes.length) throw new Error('Truncated details cache file');
@@ -69,6 +86,7 @@ export async function readDetailsCacheText(path: string, fallback: (path: string
     const end = completeUtf8Prefix(combined);
     parts.push(decodePayloadUtf8(combined.subarray(0, end)));
     carry = combined.slice(end);
+    checkpoint?.();
     await yieldToUi(0);
   }
   // An incomplete code point at EOF is invalid, even when the byte count matches.

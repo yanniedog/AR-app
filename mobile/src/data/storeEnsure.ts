@@ -190,7 +190,10 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           // already proves it cannot satisfy this core, so do not parse it merely
           // to throw it away before downloading the current asset.
           work.stage('Reading and validating cached product details');
-          const cached = shaOk ? await cache.readDetails() : null;
+          const cached = shaOk ? await cache.readDetails({
+            stage: stage => work.stage(({ read: 'Details cache read', parse: 'Details JSON parse', verify: 'Details integrity check' } as const)[stage]),
+            checkpoint: work.checkpoint,
+          }) : null;
           if (cached && cached.run_date === core.run_date && (!wantSha || verifiedDetailsSha(cached) === wantSha)) {
             if (datasetUnchanged()) {
               workOutcome = 'completed';

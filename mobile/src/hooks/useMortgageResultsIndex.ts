@@ -23,7 +23,7 @@ export function useMortgageResultsIndex(source: readonly RateRow[], catalogue: P
   const expired = !!(current && snapshot?.index && (Date.now() < snapshot.index.from || Date.now() >= snapshot.index.until));
   const index = current && snapshot.index && Date.now() >= snapshot.index.from && Date.now() < snapshot.index.until ? snapshot.index : null;
   useEffect(() => {
-    if (!enabled || catalogue.status !== 'ready' || !catalogue.allLoaded || current) return;
+    if (!enabled || catalogue.status !== 'unavailable' && (catalogue.status !== 'ready' || !catalogue.allLoaded) || current) return;
     let cancelled = false;
     const cancel = scheduleAfterInteractions(() => {
       void prepareMortgageResultsIndex({ source, catalogue, context, includeNonStandard, cancelled: () => cancelled })

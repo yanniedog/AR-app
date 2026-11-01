@@ -1,0 +1,45 @@
+{
+  "sourceRows": 8113,
+  "catalogue": "unavailable",
+  "scopeMs": 915.0668999999998,
+  "filterMs": 412.8764999999985,
+  "totalMs": 1327.9433999999983,
+  "matchingRows": 686,
+  "preparationMs": 1793.7894000000015,
+  "indexAvailable": true,
+  "indexedSelectionMs": 13.583200000000943,
+  "indexedRows": 686,
+  "repeatedSelectionMs": [
+    27.963400000000547,
+    21.58810000000085,
+    24.937900000004447,
+    17.815300000002026,
+    25.417900000000373,
+    18.45010000000184,
+    17.493600000001607,
+    20.54670000000624,
+    27.03820000000269,
+    20.94220000000496,
+    23.688300000001618,
+    22.417900000000373
+  ],
+  "orderedResultSha256": "2c16ce7acfc55dbe3a8130c75067541847c68b5189ed3d16d808782b00d43f01",
+  "canonicalUnchangedOracleMatched": true,
+  "payload": {
+    "runDate": "2026-10-31",
+    "coreSha256": "ba9acbbabfb98bdecbf1043a39809207597aa4891770d77e97803c44063b5b99",
+    "detailsSha256": "19ca33b84f50c9d71d237fd7b52b58205cbc060c93540f72dc683689eca13c63"
+  },
+  "runtime": {
+    "node": "v24.12.0",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "measured": "Jest/Node application data pipeline; verified payloads loaded in memory; no Android/Hermes, network, input debounce or graphical frame measurement",
+  "sourceHashes": {
+    "data/mortgageComparison.ts": "9b2a72886314ef6b0a3b51a0c14cbfbe86e6bf45da38b2ffaae817e0e6118194",
+    "data/mortgageResultsIndex.ts": "95964454a73426582749a651db8f3c2785858c10a58a6b7d474706a839c057be",
+    "data/rateConditions.ts": "71f1188985334889e7d9fac4d5c799e7416e4864633f2502143c643860827275",
+    "hooks/useMortgageResultsIndex.ts": "a5ada21125b141a6a613309699c8dc118ab16cc695f95d526097d522e0cf5aef"
+  }
+}
