@@ -309,7 +309,8 @@ describe('deidentified diagnostics privacy boundary', () => {
     expect(screen).toContain('const requestedUpload = publicUpload');
     expect(screen).toContain('uploadLog: requestedUpload');
     expect(screen.indexOf('const requestedUpload = publicUpload')).toBeLessThan(screen.indexOf('await getHydratedApkDownloadSnapshot()'));
-    expect(screen).toContain('const [publicUpload, setPublicUpload] = useState(true)');
+    // Initial defaults and retained choices are exercised by the rendered
+    // performanceAuditUploadControls tests, including local-only remounts.
     expect(screen).toContain('title="Upload report"');
     expect(screen).toContain('Public upload');
     const completion = runner.indexOf('await publishPerformanceAuditAfterFinalization(report');
