@@ -6,6 +6,8 @@ after completion. **Audit settings** contains the timeout and step options.
 The existing **Public upload** choice still applies to the next run; turn it
 off for a local-only run. Active audits, uploads and app updates continue to
 block overlapping measurement runs.
+The last run's upload choice is retained when the audit screen remounts within
+the same app session, including after cancellation, failure and completion.
 
 After a completed run, **Audit history** shows its recorded aggregate metrics.
 Choose the audit mode and metric. **Recorded results** exposes the exact UTC

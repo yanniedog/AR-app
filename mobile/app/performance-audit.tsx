@@ -103,7 +103,7 @@ function PerformanceAuditScreenInner() {
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
   const [sharingReport, setSharingReport] = useState(false);
-  const [publicUpload, setPublicUpload] = useState(true);
+  const [publicUpload, setPublicUpload] = useState(() => state.sessionId ? state.uploadLog : true);
   const [rawReportOpen, setRawReportOpen] = useState(false);
   const [backgroundOpen, setBackgroundOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);

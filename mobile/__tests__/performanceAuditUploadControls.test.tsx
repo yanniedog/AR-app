@@ -84,6 +84,22 @@ test('the current publication choice remains visible after cancellation', async 
   expect(jest.mocked(AsyncStorage.setItem).mock.calls.every(([key]) => key === PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY)).toBe(true);
 });
 
+test.each(['cancelled', 'failed', 'completed'])('a local-only audit keeps that choice after the screen remounts following %s', async (terminal) => {
+  await mount(); act(() => toggle().props.onChange(false));
+  await press('Run audit');
+  act(() => {
+    if (terminal === 'cancelled') markPerformanceAuditCancelled();
+    else if (terminal === 'failed') failPerformanceAudit('test failure');
+    else completePerformanceAudit(makePerformanceAuditReport(getPerformanceAuditState().sessionId!));
+  });
+  act(() => tree!.unmount()); tree = undefined;
+  await mount();
+  expect(toggle().props.value).toBe(false);
+  expect(tree!.root.findByProps({ label: 'Next audit upload' }).props.value).toBe('Local');
+  await press('Run audit');
+  expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', uploadLog: false });
+});
+
 test('preflight disables publication controls and retains the choice captured by the pressed run', async () => {
   await mount(); act(() => toggle().props.onChange(true));
   let finish!: (value: typeof mockDownload) => void;
