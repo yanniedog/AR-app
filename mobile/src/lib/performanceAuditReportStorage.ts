@@ -21,19 +21,24 @@ export function saveCompletedPerformanceAudit(report: PerformanceAuditReport): P
     await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}logs`, { intermediates: true });
     if (startedEpoch !== epoch) return;
     measureAuditEvidence(report);
-    // Preserve the pre-upgrade completed run before replacing the latest copy.
-    const additions = [auditMetricRun(report)];
-    try {
-      if ((await FileSystem.getInfoAsync(FILE)).exists) {
-        additions.unshift(auditMetricRun(validateCompletedReport(JSON.parse(await FileSystem.readAsStringAsync(FILE)))));
-      }
-    } catch { /* A corrupt previous report cannot block a new completed report. */ }
+    // Preserve both pre-upgrade and interrupted completed runs before replacing
+    // either recovery file. A failed read/write must leave those copies intact.
+    const additions: AuditMetricRun[] = [];
+    for (const file of [FILE, TEMP_FILE]) {
+      if (!(await FileSystem.getInfoAsync(file)).exists) continue;
+      const text = await FileSystem.readAsStringAsync(file);
+      try { additions.push(auditMetricRun(validateCompletedReport(JSON.parse(text)))); }
+      catch { /* Malformed bytes cannot supply a measured run; valid recovery can still repair them. */ }
+    }
+    additions.push(auditMetricRun(report));
+    if (startedEpoch !== epoch) return;
+    await appendAuditMetricHistory(additions);
+    if (startedEpoch !== epoch) return;
     await FileSystem.writeAsStringAsync(TEMP_FILE, JSON.stringify(report));
     if (startedEpoch !== epoch) return;
     // Android renames within the same directory. Keep the complete staged copy
     // recoverable on platforms whose move replaces a destination in two steps.
     await FileSystem.moveAsync({ from: TEMP_FILE, to: FILE });
-    if (startedEpoch === epoch) await appendAuditMetricHistory(additions);
   });
   writes = write;
   return write;
@@ -57,7 +62,7 @@ export function clearCompletedPerformanceAudit(clearOtherDiagnostics?: () => Pro
 
 export async function loadPerformanceAuditHistory(): Promise<AuditMetricRun[]> {
   const startedEpoch = epoch;
-  const latest = await loadCompletedPerformanceAudit();
+  const latest = await loadCompletedPerformanceAudit().catch(() => null);
   await writes.catch(() => {});
   const rows = await readAuditMetricHistory();
   if (startedEpoch !== epoch || clearing) return [];

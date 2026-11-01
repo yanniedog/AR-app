@@ -48,3 +48,14 @@ test('the completed in-memory report appears immediately and deduplicates its pe
   act(() => tree.root.findByProps({ title: 'Failures' }).props.onPress());
   expect(tree.root.findAllByType('Circle')).toHaveLength(1);
 });
+
+test('retention removing the selected mode falls back to the newest retained mode', () => {
+  const local = { ...auditMetricRun(makePerformanceAuditReport('local')), mode: 'local' as const };
+  const live = { ...local, sessionId: 'live', mode: 'live-source' as const };
+  act(() => { tree = TestRenderer.create(<AuditMetricHistoryChart runs={[local, live]} />); });
+  act(() => tree.root.findByProps({ title: 'Local checks' }).props.onPress());
+  act(() => tree.update(<AuditMetricHistoryChart runs={[live]} />));
+  act(() => tree.root.findByProps({ title: 'Failures' }).props.onPress());
+  expect(tree.root.findByProps({ title: 'Live checks' }).props.accessibilityState.selected).toBe(true);
+  expect(tree.root.findAllByType('Circle')).toHaveLength(1);
+});

@@ -54,7 +54,8 @@ export function AuditMetricHistoryChart({ runs }: { runs: AuditMetricRun[] }) {
   const [metric, setMetric] = useState<AuditMetric>('slowestCheckMs');
   const [chosenMode, setChosenMode] = useState<AuditMetricRun['mode'] | null>(null);
   const [showRuns, setShowRuns] = useState(false);
-  const mode = chosenMode ?? runs[runs.length - 1]?.mode ?? 'local';
+  const mode = chosenMode && runs.some(run => run.mode === chosenMode)
+    ? chosenMode : runs[runs.length - 1]?.mode ?? 'local';
   const visibleRuns = useMemo(() => runs.filter(run => run.mode === mode), [mode, runs]);
   const plot = useMemo(() => auditMetricPlot(visibleRuns, metric), [visibleRuns, metric]);
   const points = plot.points.filter(point => point !== null);

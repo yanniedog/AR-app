@@ -366,8 +366,17 @@ test('RBA actions commit the required chart probe before readiness sampling on i
     expect(snapshot().surfaces[0].probes.some(probe => probe.kind === 'graphic')).toBe(false);
     for (let attempt = 0; attempt < 2; attempt += 1) {
       let completion!: Promise<unknown>;
-      act(() => { completion = registry.invokeAction('outlook.rba-response', 'outlook.rba-response.decision.previous'); });
+      let actionFinished = false;
+      await act(async () => {
+        completion = registry.invokeAction('outlook.rba-response', 'outlook.rba-response.decision.previous');
+        void completion.then(() => { actionFinished = true; });
+        // Keep React's queued update inside this act boundary while allowing
+        // an incorrectly immediate action and its promise continuations to run.
+        await Promise.resolve(); await Promise.resolve();
+        expect(actionFinished).toBe(false);
+      });
       await completion;
+      expect(actionFinished).toBe(true);
       expect(snapshot().surfaces[0].probes).toContainEqual(expect.objectContaining({
         id: 'rba-graphic', required: true, status: 'pending', layoutMeasured: false,
       }));

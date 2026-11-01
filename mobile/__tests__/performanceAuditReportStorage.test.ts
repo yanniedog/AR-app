@@ -26,6 +26,7 @@ test('history retains both completed runs, deduplicates rerender recovery and cl
   await saveCompletedPerformanceAudit(first);
   await saveCompletedPerformanceAudit(second);
   await saveCompletedPerformanceAudit(second);
+  files.delete(path);
   expect((await loadPerformanceAuditHistory()).map(run => run.sessionId)).toEqual(['first', 'second']);
   await clearCompletedPerformanceAudit();
   expect(files.has(historyPath)).toBe(false);
@@ -41,18 +42,62 @@ test('pre-upgrade latest report supplies one honest history point and survives t
 });
 
 test('a corrupt history surfaces an error and is not overwritten by a new run', async () => {
+  const previous = makePerformanceAuditReport('previous');
+  files.set(path, JSON.stringify(previous));
   files.set(historyPath, '{broken');
   await expect(saveCompletedPerformanceAudit(makePerformanceAuditReport())).rejects.toThrow();
   expect(files.get(historyPath)).toBe('{broken');
   await expect(loadPerformanceAuditHistory()).rejects.toThrow();
-  expect(await loadCompletedPerformanceAudit()).not.toBeNull();
+  expect(await loadCompletedPerformanceAudit()).toEqual(previous);
+  expect(files.has(`${path}.tmp`)).toBe(false);
 });
 
 test('a complete staged history is recovered after an interrupted rename', async () => {
   await saveCompletedPerformanceAudit(makePerformanceAuditReport('retained'));
   files.set(`${historyPath}.tmp`, files.get(historyPath)!);
   files.set(historyPath, '{broken');
+  files.delete(path);
   expect((await loadPerformanceAuditHistory())[0].sessionId).toBe('retained');
+});
+
+test('valid metric history remains available when the optional completed copy is corrupt', async () => {
+  await saveCompletedPerformanceAudit(makePerformanceAuditReport('retained'));
+  files.set(path, '{broken');
+  expect((await loadPerformanceAuditHistory()).map(run => run.sessionId)).toEqual(['retained']);
+});
+
+test('saving migrates canonical and staged reports before replacing either copy', async () => {
+  const first = makePerformanceAuditReport('canonical');
+  const staged = { ...first, sessionId: 'staged', finishedAt: '2026-10-31T10:34:28.796Z' };
+  const next = { ...first, sessionId: 'next', finishedAt: '2026-10-31T10:35:28.796Z' };
+  files.set(path, JSON.stringify(first));
+  files.set(`${path}.tmp`, JSON.stringify(staged));
+  const write = jest.mocked(FileSystem.writeAsStringAsync).getMockImplementation()!;
+  jest.mocked(FileSystem.writeAsStringAsync).mockImplementation(async (file, body, options) => {
+    if (file === `${path}.tmp`) {
+      expect(JSON.parse(files.get(historyPath)!).runs.map((run: { sessionId: string }) => run.sessionId))
+        .toEqual(['canonical', 'staged', 'next']);
+      throw new Error('process stopped before report replacement');
+    }
+    return write(file, body, options);
+  });
+  await expect(saveCompletedPerformanceAudit(next)).rejects.toThrow('process stopped');
+  expect(JSON.parse(files.get(path)!).sessionId).toBe('canonical');
+  expect(JSON.parse(files.get(`${path}.tmp`)!).sessionId).toBe('staged');
+  files.delete(path); files.delete(`${path}.tmp`);
+  expect((await loadPerformanceAuditHistory()).map(run => run.sessionId)).toEqual(['canonical', 'staged', 'next']);
+});
+
+test.each(['read', 'history write'] as const)('a failed %s preserves both completed-report recovery files', async failure => {
+  const first = makePerformanceAuditReport('canonical');
+  const staged = { ...first, sessionId: 'staged' };
+  const original = JSON.stringify(first), temporary = JSON.stringify(staged);
+  files.set(path, original); files.set(`${path}.tmp`, temporary);
+  if (failure === 'read') jest.mocked(FileSystem.readAsStringAsync).mockRejectedValueOnce(new Error('storage unavailable'));
+  else jest.mocked(FileSystem.writeAsStringAsync).mockRejectedValueOnce(new Error('storage unavailable'));
+  await expect(saveCompletedPerformanceAudit({ ...first, sessionId: 'next' })).rejects.toThrow('storage unavailable');
+  expect(files.get(path)).toBe(original);
+  expect(files.get(`${path}.tmp`)).toBe(temporary);
 });
 
 test('the completed diagnosis is restored from local storage and never replaced by a later partial sidecar', async () => {
