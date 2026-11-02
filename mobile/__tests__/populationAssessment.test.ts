@@ -76,6 +76,44 @@ test('coverage observation alias must retain the actual publication day', () => 
   core.coverage!.observed_at = '2026-01-01T12:00:00Z';
   expect(() => validatePopulationAssessment(core)).toThrow();
 });
+
+test.each([
+  ['2026-11-03', '2026-11-02T14:00:00Z'], // Authentic producer fixture: AEDT, previous UTC day.
+  ['2026-11-03', '2026-11-03T01:00:00+11:00'],
+  ['2026-11-03', '2026-11-02T09:00:00-05:00'],
+  ['2026-11-03', '2026-11-02T14:00:00.006178+00:00'],
+  ['2026-07-03', '2026-07-02T14:00:00Z'], // AEST midnight, not a fixed +11 offset.
+  ['2026-07-02', '2026-07-02T13:59:59Z'],
+  ['2026-04-05', '2026-04-04T15:59:59Z'], // DST ends: 02:59:59 -> 02:00:00.
+  ['2026-04-05', '2026-04-04T16:00:00Z'],
+  ['2026-04-05', '2026-04-05T13:59:59Z'],
+  ['2026-04-06', '2026-04-05T14:00:00Z'],
+  ['2026-10-04', '2026-10-03T15:59:59Z'], // DST begins: 01:59:59 -> 03:00:00.
+  ['2026-10-04', '2026-10-03T16:00:00Z'],
+  ['2026-10-04', '2026-10-04T12:59:59Z'],
+  ['2026-10-05', '2026-10-04T13:00:00Z'],
+  ['2026-11-03', '2026-11-03'], // Existing date-only alias remains a civil day.
+])('observation %s preserves its Hobart day for %s', (day, timestamp) => {
+  const core = fixture(); core.run_date = day;
+  core.coverage!.observed_on = day;
+  core.coverage!.observed_at = timestamp;
+  core.coverage!.population_assessment = assessmentFor(core);
+  expect(() => validatePopulationAssessment(core)).not.toThrow();
+  expect(core.coverage!.observed_at).toBe(timestamp);
+});
+
+test.each([
+  '2026-11-02T12:59:59Z', '2026-11-03T13:00:00Z', // Adjacent Hobart days.
+  '2026-11-03T01:00:00', '2026-11-03 01:00:00', // Missing timezone.
+  '2026-11-03T24:00:00Z', '2026-11-03T12:60:00Z', '2026-11-03T12:00:60Z',
+  '2026-11-03T01:00:00+24:00', '2026-11-03T01:00:00+11:60',
+  '2026-11-03T01:00:00Zjunk', '2026-02-30T01:00:00Z', null, 0,
+])('rejects ambiguous, invalid or wrong Hobart-day observation %j', timestamp => {
+  const core = fixture(); core.run_date = '2026-11-03';
+  core.coverage!.population_assessment = assessmentFor(core);
+  core.coverage!.observed_at = timestamp as string;
+  expect(() => validatePopulationAssessment(core)).toThrow('Invalid observed population');
+});
 test.each(['wise', 'Wise', ' WISE '])('rejects carried-forward current rows for unknown provider %s', provider => {
   const core = fixture(); const rows = Object.values(core.sections).flatMap(section => section.rates);
   rows[0].provider = provider;

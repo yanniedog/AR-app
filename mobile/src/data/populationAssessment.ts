@@ -45,13 +45,34 @@ function count(value: unknown): number {
 }
 const providerKey = (value: string) => value.normalize('NFKC').trim().toLowerCase();
 
+function calendarDay(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value))
+    && new Date(value).toISOString().slice(0, 10) === value;
+}
+
+/** Producer editions use Hobart civil days; observed_at retains its original instant. */
+function observationDay(value: unknown): string {
+  if (typeof value !== 'string') return fail();
+  // Keep the legacy date-only alias, but never interpret a zone-less clock in device time.
+  if (calendarDay(value)) return value;
+  const timestamp = /^(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,9})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+  const match = timestamp.exec(value);
+  if (!match || !calendarDay(match[1]) || !Number.isFinite(Date.parse(value))) return fail();
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Australia/Hobart', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date(value));
+    const day = ['year', 'month', 'day'].map(type => parts.find(part => part.type === type)?.value).join('-');
+    return calendarDay(day) ? day : fail();
+  } catch { return fail(); }
+}
+
 /** Absence is legacy; null, unknown versions/keys and numeric substitutes for unknown fail closed. */
 export function parsePopulationAssessment(value: unknown): PopulationAssessmentV1 | undefined {
   if (value === undefined) return undefined;
   const a = record(value, ['schema_version', 'scope', 'observed_on', 'total_population', 'missing_product_count', 'observed_counts', 'affected_providers']);
   if (a.schema_version !== 1 || a.scope !== 'observed-products' || a.total_population !== null || a.missing_product_count !== null
-    || typeof a.observed_on !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(a.observed_on)
-    || !Number.isFinite(Date.parse(a.observed_on)) || new Date(a.observed_on).toISOString().slice(0, 10) !== a.observed_on) return fail();
+    || typeof a.observed_on !== 'string' || !calendarDay(a.observed_on)) return fail();
   const counts = record(a.observed_counts, ['products', 'rates', 'providers']);
   if (!Array.isArray(a.affected_providers) || a.affected_providers.length < 1 || a.affected_providers.length > 1000) return fail();
   const ids = new Set<string>(), names = new Set<string>();
@@ -75,7 +96,7 @@ export function validatePopulationAssessment(core: CorePayload): PopulationAsses
   if (!a) return undefined;
   if (a.observed_on !== core.run_date || (core.coverage?.observed_on !== undefined && core.coverage.observed_on !== a.observed_on)) return fail();
   const alias = core.coverage?.observed_at;
-  if (alias !== undefined && (typeof alias !== 'string' || alias.slice(0, 10) !== a.observed_on || !Number.isFinite(Date.parse(alias)))) return fail();
+  if (alias !== undefined && observationDay(alias) !== a.observed_on) return fail();
   const rows = Object.values(core.sections).flatMap(section => section.rates);
   const affected = new Set(a.affected_providers.flatMap(p => [providerKey(p.provider_id), providerKey(p.provider_name)]));
   if (rows.some(row => typeof row.provider !== 'string' || !row.provider.trim() || !row.product_key || affected.has(providerKey(row.provider)))) return fail();

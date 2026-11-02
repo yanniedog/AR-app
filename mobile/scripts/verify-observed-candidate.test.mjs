@@ -15,7 +15,7 @@ test('private fixture verifier binds actual asset bytes without network or insta
   try {
     const day = '2026-11-02', tag = `app-payload-observed-v1-${day}-r000001`;
     const core = { schema_version: 1, run_date: day, sections: { Mortgage: { rates: [] }, Savings: { rates: [] }, TD: { rates: [] } },
-      coverage: { population_assessment: { schema_version: 1, scope: 'observed-products', observed_on: day,
+      coverage: { observed_on: day, observed_at: '2026-11-01T14:00:00Z', population_assessment: { schema_version: 1, scope: 'observed-products', observed_on: day,
         total_population: null, missing_product_count: null, observed_counts: { products: 0, rates: 0, providers: 0 },
         affected_providers: [{ provider_id: 'wise', provider_name: 'Wise', register_status: 'registered', membership_status: 'unknown',
           reason: 'register-endpoint-conflict', missing_product_count: null, register_url: 'https://register.example/', endpoint_url: 'https://wise.example/' }] } } };
