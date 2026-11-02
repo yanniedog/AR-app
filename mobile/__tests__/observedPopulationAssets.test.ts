@@ -57,7 +57,7 @@ test('late older request cannot roll back a newer commit, including across cache
   await expect(assets.restore(candidateFixture(3).manifest)).rejects.toThrow('stale');
 });
 
-test.each(['download', 'hash', 'date', 'missing-details', 'accounting', 'wise', 'cancelled', 'owner'])('rejects %s without changing committed edition', async mode => {
+test.each(['download', 'hash', 'date', 'missing-details', 'accounting', 'wise', 'invalid-name', 'invalid-rate', 'invalid-comparison', 'cancelled', 'owner'])('rejects %s without changing committed edition', async mode => {
   const { storage, files } = memoryStorage(), assets = createObservedPopulationAssets(capability, storage, codec, '1.0.258');
   await assets.refresh(candidateFixture().transport); const head = files.get('head-1.json')!.slice();
   const f = candidateFixture(2, (core, details) => {
@@ -65,6 +65,9 @@ test.each(['download', 'hash', 'date', 'missing-details', 'accounting', 'wise', 
     if (mode === 'missing-details') delete details.products[Object.keys(details.products)[0]];
     if (mode === 'accounting') (core.coverage!.payload_accounting as { source_rates: number }).source_rates++;
     if (mode === 'wise') core.sections.Mortgage.rates[0].provider = 'Wise';
+    if (mode === 'invalid-name') core.sections.Mortgage.rates[0].product_name = {} as never;
+    if (mode === 'invalid-rate') core.sections.Mortgage.rates[0].rate = 'Infinity';
+    if (mode === 'invalid-comparison') core.sections.Mortgage.rates[0].comparison_rate = 'not-a-rate';
   });
   if (mode === 'download') f.transport.readBytes = async () => { throw Error('offline'); };
   if (mode === 'hash') f.wire.core[12] ^= 1;

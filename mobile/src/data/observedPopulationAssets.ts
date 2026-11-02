@@ -100,6 +100,12 @@ async function validateAssets(selection: ObservedPopulationSelection, wire: Reco
     !Array.isArray(core.sections[key].rates)) ||
     Object.values(core.sections).some(section => !object(section) || !Array.isArray(section.rates) || section.rates.some(row => !object(row))) ||
     !object(details.products) || Object.values(details.products).some(product => !object(product))) failed('invalid core/details structure');
+  for (const row of Object.values(core.sections).flatMap(section => section.rates)) {
+    if ([row.provider, row.product_key, row.product_name].some(value => typeof value !== 'string' || !value.trim()) ||
+      typeof row.rate !== 'string' || !row.rate.trim() || !Number.isFinite(Number(row.rate)) ||
+      [row.ongoing_rate, row.comparison_rate].some(value => value != null && value !== '' &&
+        (typeof value !== 'string' || !Number.isFinite(Number(value))))) failed('invalid rate row');
+  }
   if (!validatePopulationAssessment(core)) failed('missing population assessment');
   validatePopulationEdition(core, selection.manifest);
   await sealCoreHistoryAsync(core, codec.yieldWork);

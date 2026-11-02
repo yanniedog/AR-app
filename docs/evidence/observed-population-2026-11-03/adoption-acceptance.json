@@ -9,7 +9,7 @@
   "rejection_before_asset_download_or_cache_write": true,
   "original_observation_instant": "2026-11-02T14:00:00Z",
   "original_observation_day": "2026-11-03",
-  "focused_tests": {"passed": 167, "suites": 7, "authentic_fixture_test_included": true},
+  "focused_tests": {"passed": 170, "suites": 7, "authentic_fixture_test_included": true},
   "tested_consumer_paths": [
     "valid synthetic core/details acquisition and exact-byte persistence",
     "offline restoration and revalidation",
