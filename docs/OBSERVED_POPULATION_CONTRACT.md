@@ -74,6 +74,8 @@ Candidate manifests additionally require `consumer_contract: "observed-populatio
 
 The app-side compatibility matrix is executable in `observedPopulationChannel.test.ts`. It covers default legacy rejection, absent/version-only/unknown capabilities, exact URLs, index reconciliation, altered manifest bytes, cross-edition assets, consumer marker, bundle digest, offline receipt isolation, rollback, cancellation and no legacy fallback. These tests prove the consumer boundary; they do not prove a service route that has not yet been implemented or exercised.
 
+For the producer's private fixture, run `cd mobile && node scripts/verify-observed-candidate.cjs <directory>`. The directory must contain `dates-index.json`, exact `manifest.json` bytes and every `manifest.files` asset using its declared filename. Supply service-opened domain bytes, not encrypted release transport; the verifier never reads credentials, decrypts, fetches, installs or publishes. It checks hashes/lengths, decoded dates, population assessment, affected-provider exclusion and details coverage. Its JSON receipt explicitly leaves publication, service isolation and runtime verification false. Detached optional capabilities still require their existing specialised validators before activation; this utility's success covers only the listed manifest files and candidate-discovery boundary.
+
 ## Remaining limits
 
 This contract does not resolve Wise's contradictory source evidence or certify source membership. It does not fix the producer's publication by itself. There is no candidate producer fixture or demonstrated channel isolation yet. Android/Hermes runtime validation remains separate from focused tests; prior local ADB socket error 10013 has not been bypassed.
