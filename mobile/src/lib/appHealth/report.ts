@@ -298,6 +298,8 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
     'quarantineProviderImpact',
   ],
   [APP_HEALTH_CHECK_CODES.COVERAGE]: [
+    'populationScope', 'totalPopulation', 'missingProducts', 'affectedRegisteredProviders',
+    'observedProducts', 'observedRates', 'observedProviders', 'invalidPopulationAssessment',
     'coverageAvailable',
     'totalsAvailable',
     'providersAttempted',

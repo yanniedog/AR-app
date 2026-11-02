@@ -7,8 +7,10 @@ import { getMandatoryEligibilityRevision, isMandatoryEligibilityReady, mandatory
 import type { SearchIndexPayload } from './detailSearch';
 import type { CoreIntegrityContext } from './sectionIntegrity';
 import { scopedRateConditions, type ScopedRateConditions } from './rateConditions';
+import { parsePopulationAssessment, type PopulationAssessmentV1 } from './populationAssessment';
 
 export type SearchCoverageFact =
+  | { kind: 'population'; assessment: PopulationAssessmentV1 }
   | { kind: 'matching-set'; state: 'complete'; variants: 'matching'; ranking: 'selected' }
   | { kind: 'specifications'; absent: 'unavailable'; emptyArrays: 'explicit' }
   | { kind: 'sources'; references: 'included'; documentBodies: 'excluded'; independentReview: 'unverified' }
@@ -64,6 +66,7 @@ export function captureFilteredSearchSnapshot(input: {
     products: keys.map((productKey, index) => ({ productKey, rank: index + 1, detail: details.products[productKey] ?? null })),
     rateConditions: rows.map(row => scopedRateConditions(row, request.section, { core, manifest, details, coreIntegrity: input.coreIntegrity ?? null })),
     coverage: [
+      ...populationFacts(core),
       { kind: 'matching-set', state: 'complete', variants: 'matching', ranking: 'selected' },
       { kind: 'specifications', absent: 'unavailable', emptyArrays: 'explicit' },
       { kind: 'sources', references: 'included', documentBodies: 'excluded', independentReview: 'unverified' },
@@ -73,4 +76,9 @@ export function captureFilteredSearchSnapshot(input: {
     ],
   };
   return freezeDeep(JSON.parse(JSON.stringify(snapshot)) as FilteredSearchSnapshot);
+}
+
+function populationFacts(core: CorePayload): SearchCoverageFact[] {
+  const assessment = parsePopulationAssessment(core.coverage?.population_assessment);
+  return assessment ? [{ kind: 'population', assessment }] : [];
 }

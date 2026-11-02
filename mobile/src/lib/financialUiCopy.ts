@@ -49,6 +49,7 @@ export function uiEvidenceStatus(model: EvidencePresentation): UiText {
 }
 export function uiEvidenceFact(fact: EvidenceFact): FinancialFactRow {
   switch (fact.kind) {
+    case 'population': return { label: 'Total population', value: uiLabel('Unknown') };
     case 'source': return { label: 'Source', value: uiLabel(fact.value === 'remote' ? 'Verified' : fact.value === 'cache' ? 'Cached' : 'Sample data') };
     case 'observed': return { label: 'Observed', value: fact.state === 'known' ? uiDate(fact.day) : uiLabel('Unknown') };
     case 'coverage': return { label: 'Coverage', value: uiLabel(fact.value === 'complete' ? 'Complete' : fact.value === 'partial' ? 'Partial' : 'Unknown') };

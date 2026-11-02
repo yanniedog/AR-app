@@ -1,5 +1,6 @@
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from './storeTypes';
 import { cache } from './cache';
+import { cachedAssetStateForProviderCoverage } from './assetState';
 import { prepareBankRateHistoryAfterPaint } from './storeBankRateHistory';
 import { parseHistoryDatesIndex } from './historyDatesIndex';
 import {
@@ -114,7 +115,7 @@ export function createBootstrapActions(
             coreIntegrity: bundle.integrity,
             coreAssetState: bundle.meta.source === 'sample'
               ? { status: 'sample', data: bundle.integrity }
-              : { status: 'cached', data: bundle.integrity },
+              : cachedAssetStateForProviderCoverage(bundle.integrity, bundle.core.coverage),
             manifest: bundle.meta.manifest,
             source: bundle.meta.source,
             status: 'ready',
@@ -205,7 +206,7 @@ export function createBootstrapActions(
         set({
           core: bundle.core,
           coreIntegrity: bundle.integrity,
-          coreAssetState: { status: 'cached', data: bundle.integrity },
+          coreAssetState: cachedAssetStateForProviderCoverage(bundle.integrity, bundle.core.coverage),
           manifest: bundle.meta.manifest,
           source: bundle.meta.source,
         });
