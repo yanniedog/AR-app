@@ -74,6 +74,8 @@ export function validatePopulationAssessment(core: CorePayload): PopulationAsses
   const a = parsePopulationAssessment(core.coverage?.population_assessment);
   if (!a) return undefined;
   if (a.observed_on !== core.run_date || (core.coverage?.observed_on !== undefined && core.coverage.observed_on !== a.observed_on)) return fail();
+  const alias = core.coverage?.observed_at;
+  if (alias !== undefined && (typeof alias !== 'string' || alias.slice(0, 10) !== a.observed_on || !Number.isFinite(Date.parse(alias)))) return fail();
   const rows = Object.values(core.sections).flatMap(section => section.rates);
   const affected = new Set(a.affected_providers.flatMap(p => [providerKey(p.provider_id), providerKey(p.provider_name)]));
   if (rows.some(row => typeof row.provider !== 'string' || !row.provider.trim() || !row.product_key || affected.has(providerKey(row.provider)))) return fail();

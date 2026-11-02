@@ -41,9 +41,38 @@ The shared core-normalization boundary validates downloaded and cached candidate
 
 Existing versionless and installed clients ignore unknown coverage fields and can label successful-provider counts Complete. `app_min_version` alone is insufficient. Do not put observed-subset bytes, head pointers or dates-index entries on any legacy URL, rolling tag, cache key or immutable tag that those clients can discover.
 
-Proposed rollout: producer publishes a separately named candidate channel, isolated head/index/manifest/assets and matching transport/cache namespace, gated on the explicit capability `observed-population-v1`. New consumer opt-in must select this channel explicitly and validate the same revision/hash/date bundle invariants. Missing, unrecognized or version-only capability requests use the unchanged legacy channel. No redirect or fallback may cross from legacy to subset. Every optional asset and historical-index lookup must stay within its admitted edition; an HTTP cache must never share capability variants. A version header without a partitioned cache and complete route isolation is not sufficient.
+The candidate mechanism is implemented in `mobile/src/data/observedPopulationChannel.ts`. Its discovery function requires the exact capability `observed-population-v1`; absent, unknown and version-only values fail before issuing a request. The existing default app still uses the unchanged legacy channel. Candidate errors never retry a legacy URL. No redirect or fallback may cross from legacy to subset. Every optional asset and historical-index lookup must stay within its admitted edition; an HTTP cache must never share capability variants. A version header without a partitioned cache and complete route isolation is not sufficient.
 
 This PR deliberately does not enable the capability or change any URL. Before activation, producer and consumer owners must agree exact URLs/negotiation and exchange one immutable candidate with verified manifest/core/details/hash evidence. Test versionless, old-version, unknown-capability, new-capability, offline cached, rollback, interrupted-download and mixed-edition cases. Confirm the old requests still resolve only the last verified complete legacy edition, while capable requests display the partial disclosure and exclude Wise from current rows. Preserve the original observation date of the legacy edition. Only then coordinate app release and feed activation; absent proof, publication remains blocked rather than manufacturing completeness.
+
+## Concrete candidate discovery boundary
+
+| Purpose | Exact identity |
+| --- | --- |
+| Repository | `yanniedog/AR-local` |
+| Candidate index | `https://github.com/yanniedog/AR-local/releases/download/app-payload-observed-v1-candidate/dates-index.json` |
+| Immutable edition tag | `app-payload-observed-v1-YYYY-MM-DD-rNNNNNN` |
+| Immutable manifest/assets | `https://github.com/yanniedog/AR-local/releases/download/<immutable edition tag>/<asset name>` |
+| Opened transport | `https://ar-app-data.jkokavec.workers.dev/v1/capabilities/observed-population-v1/release/<candidate or immutable tag>/<asset name>` |
+| Candidate metadata cache key | `ar-rates:observed-population-v1/<immutable edition tag>/<raw manifest SHA256>` |
+
+The mutable candidate tag serves only `dates-index.json`; there is no mutable candidate manifest alias. Immutable asset names use the existing JSON/gzip/encrypted-JSON naming grammar, no path traversal, query strings, fragments or credentials. The injected transport must enforce the supplied streaming byte ceiling, reject non-2xx and reject redirects. Discovery caps the index at 1 MiB and manifest at 4 MiB and checks the returned UTF-8 byte size too. It never decrypts using an app/device secret or writes to the legacy payload store.
+
+The candidate index has exactly `schema_version: 1`, `channel: "observed-population-v1"`, `revision_protocol: 1`, sorted unique `dates`, accurate `count`, `min_date`, `latest_date`, and `revision_heads`. Every listed day requires a head. Head fields retain the existing exact names: `revision`, `generation_id`, `manifest_url`, `manifest_sha256`, `bundle_sha256`; manifest URLs must use the candidate immutable namespace. Revisions are 1–999999. Legacy `parseDatesIndex`, default revision validation and `trustedPayloadReleaseUrl` reject these heads/tags without any app-version check.
+
+Candidate manifests additionally require `consumer_contract: "observed-population-v1"`. Generate the existing canonical bundle digest after adding that field and rebasing all asset URLs; then bind the exact manifest bytes with the head SHA256. Admission recomputes the bundle digest, validates the raw manifest hash, date, revision, generation, required files, immutable asset URLs and detached history URL. Optional URL-free descriptors remain bound by the manifest hash/bundle digest. Existing legacy validator callers default to the legacy namespace; only the explicit candidate client supplies the candidate channel argument.
+
+`observedPopulationCacheReceipt` / `restoreObservedPopulationSelection` preserve a separately keyed metadata receipt and revalidate hashes, marker, namespace and rollback on offline read. This is a discovery receipt, not permission to install unverified core/details bytes. Interrupted discovery has no storage mutation and leaves the installed selection untouched. A later installation step must validate every staged required asset and core population assessment before atomically switching an equally isolated candidate data-store pointer. Current app startup/config/store does not call candidate discovery; activation and its full asset cache remain held until the producer fixture is agreed.
+
+### Producer-owned changes and proof
+
+1. Build the candidate in the immutable namespace above; include the population assessment and consumer marker, omit affected-provider current rows, and recompute counts and both digests. Preserve source failures and accounting facts.
+2. Add the dedicated capability transport path. Its allowlist accepts only candidate tags; the existing `/v1/release/` route must reject them. Unknown capability paths reject. Cache by the full capability path plus immutable tag/asset; do not select bytes by an app-version header or share a cache key with legacy routes.
+3. Stage the immutable edition first and publish its candidate index last. If using GitHub releases, mark candidate releases as prereleases and do not mark them latest. Do not place candidate pointers in legacy manifest/index assets, immutable legacy tags, optional descriptors, redirects or generic latest aliases.
+4. Supply raw manifest/core/details bytes, their exact digests, the candidate index and evidence of official register/provider identity mapping. Consumer tests then validate real bytes in addition to the synthetic protocol fixture.
+5. Before activation, produce HTTP receipts for legacy/versionless requests, version-only requests, unknown capability requests and explicit candidate paths. Record final URL, status, redirect behavior, cache identity and body hash. Legacy requests must retain their old edition/hash/date; candidate requests must bind the new subset. Test a cold cache and an already populated shared proxy cache in both request orders.
+
+The app-side compatibility matrix is executable in `observedPopulationChannel.test.ts`. It covers default legacy rejection, absent/version-only/unknown capabilities, exact URLs, index reconciliation, altered manifest bytes, cross-edition assets, consumer marker, bundle digest, offline receipt isolation, rollback, cancellation and no legacy fallback. These tests prove the consumer boundary; they do not prove a service route that has not yet been implemented or exercised.
 
 ## Remaining limits
 

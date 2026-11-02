@@ -32,6 +32,9 @@ export interface EvidenceInput {
 
 export type EvidenceFact =
   | { readonly kind: 'population'; readonly assessment: PopulationAssessmentV1 }
+  | { readonly kind: 'population-scope' | 'missing-products' }
+  | { readonly kind: 'published-products' | 'published-rates' | 'published-providers'; readonly count: number }
+  | { readonly kind: 'registered-provider'; readonly provider: string }
   | { readonly kind: 'source'; readonly value: EvidenceSource }
   | { readonly kind: 'observed'; readonly state: 'known'; readonly day: string }
   | { readonly kind: 'observed'; readonly state: 'unknown' }
@@ -95,7 +98,11 @@ export function displayEvidenceFacts(input: EvidenceInput): EvidencePresentation
   const facts: EvidenceFact[] = [{ kind: 'source', value: input.source },
     observedOn === null ? { kind: 'observed', state: 'unknown' } : { kind: 'observed', state: 'known', day: observedOn },
     { kind: 'coverage', value: state }, { kind: 'connection', value: input.offline ? 'offline' : 'online' }];
-  if (population) facts.push({ kind: 'population', assessment: population });
+  if (population) facts.push({ kind: 'population', assessment: population }, { kind: 'population-scope' }, { kind: 'missing-products' },
+    { kind: 'published-products', count: population.observed_counts.products },
+    { kind: 'published-rates', count: population.observed_counts.rates },
+    { kind: 'published-providers', count: population.observed_counts.providers },
+    ...population.affected_providers.map(provider => ({ kind: 'registered-provider' as const, provider: provider.provider_name })));
   for (const [kind, count] of [
     ['providers-attempted', attempted], ['providers-succeeded', succeeded],
     ['providers-partial', partial], ['providers-failed', failed],

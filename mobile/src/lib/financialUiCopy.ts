@@ -50,6 +50,12 @@ export function uiEvidenceStatus(model: EvidencePresentation): UiText {
 export function uiEvidenceFact(fact: EvidenceFact): FinancialFactRow {
   switch (fact.kind) {
     case 'population': return { label: 'Total population', value: uiLabel('Unknown') };
+    case 'population-scope': return { label: 'Scope', value: uiLabel('Observed products') };
+    case 'missing-products': return { label: 'Missing products', value: uiLabel('Unknown') };
+    case 'published-products': return { label: 'Published products', value: uiCount(fact.count) };
+    case 'published-rates': return { label: 'Published rates', value: uiCount(fact.count) };
+    case 'published-providers': return { label: 'Published providers', value: uiCount(fact.count) };
+    case 'registered-provider': return { label: 'Bank', value: uiJoin(uiProviderName({ provider: fact.provider }), ' / ', 'Registered', ' / ', 'Membership', ': ', 'Unknown') };
     case 'source': return { label: 'Source', value: uiLabel(fact.value === 'remote' ? 'Verified' : fact.value === 'cache' ? 'Cached' : 'Sample data') };
     case 'observed': return { label: 'Observed', value: fact.state === 'known' ? uiDate(fact.day) : uiLabel('Unknown') };
     case 'coverage': return { label: 'Coverage', value: uiLabel(fact.value === 'complete' ? 'Complete' : fact.value === 'partial' ? 'Partial' : 'Unknown') };

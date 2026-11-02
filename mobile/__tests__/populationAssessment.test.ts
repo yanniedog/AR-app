@@ -70,6 +70,12 @@ test('rejects assessment from another publication date', () => {
   const core = fixture(); core.coverage!.population_assessment!.observed_on = '2026-01-01';
   expect(() => validatePopulationAssessment(core)).toThrow();
 });
+test('coverage observation alias must retain the actual publication day', () => {
+  const core = fixture(); core.coverage!.observed_at = `${core.run_date}T12:00:00Z`;
+  expect(() => validatePopulationAssessment(core)).not.toThrow();
+  core.coverage!.observed_at = '2026-01-01T12:00:00Z';
+  expect(() => validatePopulationAssessment(core)).toThrow();
+});
 test.each(['wise', 'Wise', ' WISE '])('rejects carried-forward current rows for unknown provider %s', provider => {
   const core = fixture(); const rows = Object.values(core.sections).flatMap(section => section.rates);
   rows[0].provider = provider;
@@ -88,4 +94,16 @@ test('audit retains unknown population and provider evidence even when all attem
   const exported = toPublicAppHealthReport(report);
   expect(exported.checks.find(c => c.code === result.code)?.metrics).toMatchObject({ populationScope: 'observed-products', totalPopulation: null, missingProducts: null });
   expect(JSON.stringify(exported)).not.toContain('wise.example');
+});
+test('audit retains observed subset counts when provider totals are unavailable', () => {
+  const { snapshot, contract } = makeHealthyDataFixture();
+  const assessment = assessmentFor(snapshot.core!);
+  snapshot.core!.coverage = { population_assessment: assessment };
+  const result = evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS).find(c => c.code === APP_HEALTH_CHECK_CODES.COVERAGE)!;
+  expect(result.metrics).toMatchObject({ totalsAvailable: false, observedProducts: assessment.observed_counts.products,
+    observedRates: assessment.observed_counts.rates, observedProviders: assessment.observed_counts.providers, totalPopulation: null });
+  const report = finalizeAppHealthReport({ checks: [result], plannedCheckIds: [result.id], mode: 'local',
+    sessionId: 'missing-counters', startedAt: '2026-11-02T00:00:00Z', finishedAt: '2026-11-02T00:00:01Z' });
+  expect(toPublicAppHealthReport(report).checks.find(c => c.code === result.code)?.metrics).toMatchObject({
+    observedProducts: assessment.observed_counts.products, observedRates: assessment.observed_counts.rates, observedProviders: assessment.observed_counts.providers });
 });
