@@ -32,7 +32,8 @@ test('private fixture verifier binds actual asset bytes without network or insta
         manifest_sha256: digest(text), bundle_sha256: manifest.payload_revision.bundle_sha256 } } };
     writeFileSync(path.join(dir, 'dates-index.json'), JSON.stringify(index));
     const report = verify(dir);
-    assert.equal(report.candidate_bytes_verified, true); assert.equal(report.service_isolation_verified, false);
+    assert.equal(report.listed_asset_bytes_verified, true); assert.equal(report.service_isolation_verified, false);
+    assert.equal(report.detached_capabilities_verified, false);
     assert.equal(report.publication_verified, false); assert.equal(report.runtime_verified, false);
     assert.deepEqual(report.affected_provider_ids, ['wise']);
     writeFileSync(path.join(dir, 'details.json.gz'), gzipSync('{"run_date":"2026-10-31"}'));

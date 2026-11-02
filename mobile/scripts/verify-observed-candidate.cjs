@@ -54,8 +54,8 @@ function verify(directory) {
   if (!documents.details?.products || typeof documents.details.products !== 'object' || Array.isArray(documents.details.products)) throw Error('Candidate product details missing');
   const rows = Object.values(documents.core.sections).flatMap(section => section.rates);
   if (rows.some(row => !Object.hasOwn(documents.details.products, row.product_key))) throw Error('Candidate details omit an observed product');
-  return { schema_version: 1, candidate_bytes_verified: true, publication_verified: false,
-    service_isolation_verified: false, runtime_verified: false,
+  return { schema_version: 1, listed_asset_bytes_verified: true, publication_verified: false,
+    detached_capabilities_verified: false, service_isolation_verified: false, runtime_verified: false,
     channel: OBSERVED_POPULATION_CAPABILITY, run_date: selected.manifest.run_date, tag: selected.manifest.tag,
     manifest_sha256: selected.manifestSha256, bundle_sha256: selected.manifest.payload_revision.bundle_sha256,
     cache_key: selected.cacheKey, population_scope: assessment.scope, total_population: null, missing_product_count: null,
