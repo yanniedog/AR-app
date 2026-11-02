@@ -165,11 +165,14 @@ function evaluateManifest(
     );
   }
 
-  const expectedTag =
+  const revisionMatches = manifest.payload_revision?.schema_version === 1 && Number.isSafeInteger(manifest.payload_revision.revision) &&
+    manifest.payload_revision.revision > 0 && manifest.tag === revisionTag(manifest.run_date, manifest.payload_revision.revision, contract.payloadChannel ?? 'legacy');
+  const expectedTag = contract.payloadChannel === 'observed-population-v1'
+    ? revisionMatches && (manifest as unknown as { consumer_contract?: unknown }).consumer_contract === contract.payloadChannel
+    :
     manifest.tag === contract.rollingTag ||
     manifest.tag === `${contract.datedTagPrefix}${manifest.run_date}` ||
-    (manifest.payload_revision?.schema_version === 1 && Number.isSafeInteger(manifest.payload_revision.revision) &&
-      manifest.payload_revision.revision > 0 && manifest.tag === revisionTag(manifest.run_date, manifest.payload_revision.revision)) ||
+    revisionMatches ||
     (snapshot.source === 'sample' && manifest.tag === 'bundled-sample');
   const schemaSupported = contract.supportedManifestSchemas.includes(manifest.schema_version);
   const appCompatible = Boolean(

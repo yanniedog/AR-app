@@ -27,6 +27,7 @@ export interface ObservedPopulationIndex {
 }
 export interface ObservedPopulationSelection {
   readonly channel: typeof OBSERVED_POPULATION_CAPABILITY;
+  readonly index: ObservedPopulationIndex;
   readonly manifest: Manifest;
   readonly manifestText: string;
   readonly manifestSha256: string;
@@ -94,7 +95,7 @@ export function admitObservedPopulationManifest(text: string, index: ObservedPop
     observedPopulationTransportUrl(detached.file.url, OBSERVED_POPULATION_CAPABILITY);
   }
   assertNoRevisionRollback(installed, manifest);
-  return freezeDeep({ channel: OBSERVED_POPULATION_CAPABILITY, manifest, manifestText: text,
+  return freezeDeep({ channel: OBSERVED_POPULATION_CAPABILITY, index: validated, manifest, manifestText: text,
     manifestSha256: head.manifest_sha256,
     cacheKey: `${CACHE_PREFIX}${revisionTag(day, head.revision, OBSERVED_POPULATION_CAPABILITY)}/${head.manifest_sha256}` });
 }

@@ -1,0 +1,26 @@
+{
+  "compiler": "installed React Native hermesc.exe",
+  "modules": [
+    "observedPopulationChannel",
+    "observedPopulationAssets",
+    "observedPopulationAdoption",
+    "observedPopulationNative",
+    "observedPopulationAudit"
+  ],
+  "syntax_compilation_verified": true,
+  "transform": "existing babel-preset-expo / Android Hermes caller, CommonJS module wrappers; no runtime execution",
+  "module_source_sha256": {
+    "observedPopulationChannel": "698e6fadae5b5d4541b7b6d29c6d9cc5fda6dd0cad811e7bd975c4f5d371b28a",
+    "observedPopulationAssets": "bb713bb60989d4337fa131cb416334d7fdb8d4853d157a9cd0a535b9b2c58275",
+    "observedPopulationAdoption": "f73b7021f91c675f79762629eea5f74f9fcc7a7aba339554a9eaca70db49028d",
+    "observedPopulationNative": "dff32b50c2be2ee1f77702cc8be88680de0c8e08fedd197fc9865c3a304ff6d4",
+    "observedPopulationAudit": "9b08e6333acdc5b1897e30c22c659a2bdfc178fb532a4a69b0f77430584fd976"
+  },
+  "compiler_sha256": "e27ed700e2b4025497eb802a604c41a96f0979f5300275c3a6fdbfdff15c6521",
+  "binary_bytes": 41737,
+  "binary_sha256": "191e0da3ce8ba50a9b8162772e4ab01cbdbff28dbbb275b2d0de697a5a3796a1",
+  "executable_runtime_verified": false,
+  "android_runtime_verified": false,
+  "execution_probe_result": "hermesc does not support -exec",
+  "fixture_or_feed_modified": false
+}
