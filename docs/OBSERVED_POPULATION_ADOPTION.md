@@ -15,7 +15,7 @@ The dormant `createNativeObservedPopulationAdoption(capability, set, get)` facto
 - Suitability is rebuilt from the exact validated core/details pair before one synchronous store update. Details provenance is bound to its descriptor hash. Legacy optional assets are cleared, user input/preferences/saved state are preserved, and partial/unknown coverage persists. Failed refresh leaves the usable edition intact.
 - `auditSnapshot()` supplies the current candidate snapshot and explicit candidate source contract. `readLiveAudit()` acquires and validates without cache or store mutation. The default legacy audit contract continues to reject candidate tags; no default source is broadened.
 
-## Authentic fixture: a second producer defect
+## Authentic fixtures: r1 rejection and corrected r2 adoption
 
 Archive SHA256: `ed218cc09de20ea09b5950c5d890d58093eb0c5949cf355003829f2533c07bd1`.
 
@@ -23,14 +23,18 @@ The Hobart timestamp fix and private listed-asset verification still pass unchan
 
 Full adoption now additionally checks the ordinary app manifest contract. The authentic `r000001` manifest has **no `generated_at` and no `schedule`**. The initial verifier deliberately covered listed-asset bytes and population facts, not complete installed-app readiness. The integration test now asserts rejection before asset downloads/cache writes or visible-state changes. Do not rewrite the original archive or invent its timestamps.
 
-Producer action: supply a new immutable revision/index receipt with source-backed manifest generation time and actual schedule metadata, retaining the original rejected fixture and its hashes. Recompute exact manifest/head/bundle hashes as required. Any later prepared-history capability must use the current compiler pin and receive an explicit candidate validator before adoption supports it.
+The producer supplied immutable `r000002`, archive SHA256 `e7053a1e8901b111888423ff37b01b4fe07592bfc683af915dfe62848a958435`, with `generated_at: 2026-11-02T23:25:24.644291Z` and schedule `01:00 Australia/Hobart daily`, next due `2026-11-03T14:00:00Z`. Independent consumer checks against runtime source at `f6fab1c8` now pass full domain adoption, exact compressed-byte persistence, fresh-owner offline restoration, suitability identity, preserved user state, partial/unknown facts, read-only live audit, and failure/corruption rejection. Manifest SHA256 is `1e171689f3e0a3492ed748ffcd41b31fe79c3f33c94051120190cf6aa8767281`. Core/details financial bytes and the original observation instant are identical to r1; neither archive was modified.
+
+The test uses real consumer validators/adoption code with injected local transport, in-memory storage and the test codec. It does not establish durable Android storage, native transport/inflation, rendered disclosure or hosted isolation. Receipt: [r2 consumer acceptance](evidence/observed-population-2026-11-03/r2-consumer-acceptance.json). Keep r1 as a rejection regression. Any later prepared-history capability must use the current compiler pin and receive an explicit candidate validator before adoption supports it.
+
+For repeatable private acceptance, set `AR_OBSERVED_FIXTURE_DIR` to the unchanged extracted r1 directory and `AR_OBSERVED_COMPLETE_FIXTURE_DIR` to the unchanged extracted r2 directory, then run `cd mobile && npx jest __tests__/observedPopulationAdoption.test.ts --runInBand --cacheDirectory ../tmp/jest-cache`. Without these private paths, CI skips only those two archive-specific tests; synthetic cases remain enabled.
 
 ## Precisely required hosted proof
 
 The producer owns route deployment and HTTP receipts. Its separately denied PR1060 correction push is not retried or worked around by this consumer task.
 
 1. Candidate discovery endpoint: `https://ar-app-data.jkokavec.workers.dev/v1/capabilities/observed-population-v1/release/app-payload-observed-v1-candidate/dates-index.json`.
-2. Candidate immutable endpoint pattern: `https://ar-app-data.jkokavec.workers.dev/v1/capabilities/observed-population-v1/release/app-payload-observed-v1-YYYY-MM-DD-rNNNNNN/<asset>`. Verify the new candidate's exact index, manifest, core and details bytes and hashes. Never mutate the already supplied immutable revision to fix metadata.
+2. Candidate immutable endpoint pattern: `https://ar-app-data.jkokavec.workers.dev/v1/capabilities/observed-population-v1/release/app-payload-observed-v1-YYYY-MM-DD-rNNNNNN/<asset>`. The verified private revision is `app-payload-observed-v1-2026-11-03-r000002`; its remote revision is not yet reserved. Verify the published candidate's exact index, manifest, core and details bytes and hashes. Never mutate the already supplied immutable revision to fix metadata.
 3. Legacy control endpoints: existing `/v1/release/app-payload-latest/manifest.json` and `/v1/release/app-payload-latest/dates-index.json`, plus selected legacy immutable assets. Versionless, old-version and version-header-only requests must retain the verified complete edition's exact body hash and original observation date.
 4. Cross-channel/unknown-capability requests must reject: candidate tag through `/v1/release/`, legacy tag through the candidate capability route, and `/v1/capabilities/observed-population-v2/...`. No redirect may cross the boundary.
 5. Required artifact: a producer-owned JSON HTTP receipt with deployed worker commit, UTC request time, request/final URL, status, redirect chain, capability/version headers, cache key or equivalent verifiable cache identity, response hash and edition date for every case. Exercise cold caches and warmed caches in both legacy-first and candidate-first order. Include the exact canonical legacy feed hashes before/after; those must be unchanged.
