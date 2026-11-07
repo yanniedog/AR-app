@@ -614,6 +614,9 @@ function BankHistoryChartView({
               // band when a start-aligned label would run past the chart edge.
               const labelStart = Math.max(padL + 2, x - half + 2);
               const labelFitsRight = labelStart + chartLabelWidth(bpsLabel, 9) <= width - padR;
+              // Right-aligned fallback never starts left of the plot either.
+              const labelEnd = Math.min(width - padR - 2,
+                Math.max(x + half - 2, padL + 2 + chartLabelWidth(bpsLabel, 9)));
               return (
                 <React.Fragment key={`${mark.date}-${mark.snap}`}>
                   <Rect
@@ -624,7 +627,7 @@ function BankHistoryChartView({
                     fill={rbaBand}
                   />
                   <SvgText
-                    x={labelFitsRight ? labelStart : Math.min(width - padR - 2, x + half - 2)}
+                    x={labelFitsRight ? labelStart : labelEnd}
                     y={padT + 10}
                     fontSize={9}
                     fill={rbaInk}
@@ -747,7 +750,7 @@ function BankHistoryChartView({
               const isTooCloseToLast = !isLast && (plotDates.length - 1 - i) < (labelEvery + 1) * 0.7;
               if (isLast || (isScheduled && !isTooCloseToLast)) {
                 const label = uiChartDate(date);
-                const placed = edgeLabelAnchor(xAt(i), label, 10, 0, width);
+                const placed = edgeLabelAnchor(xAt(i), label, 10, padL, width - padR);
                 return (
                   <SvgText
                     key={date}

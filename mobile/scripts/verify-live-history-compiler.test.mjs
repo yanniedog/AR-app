@@ -1,33 +1,55 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import zlib from 'node:zlib';
-import { appDataOrigin, compareCompiler, pinnedCompilerSha, readyAssetName, readyCompilerSha } from './verify-live-history-compiler.mjs';
+import { Readable } from 'node:stream';
+import { appDataOrigin, compareCompiler, pinnedCompilerSha, readBounded, readyCompilerSha, readyDescriptor,
+  verifyLiveHistoryCompiler } from './verify-live-history-compiler.mjs';
 
-const A = 'a'.repeat(64), B = 'b'.repeat(64);
+const A = 'a'.repeat(64), B = 'b'.repeat(64), CORE = 'c'.repeat(64), DAY = '2026-11-07';
 const gz = (value) => zlib.gzipSync(Buffer.from(JSON.stringify(value)));
-const asset = (compiler) => gz({ schema_version: 1, run_date: '2026-11-07', core_sha256: A,
-  catalogue: { sha256: B, bytes: 10, gzip_base64: gz({ compiler_sha256: compiler, run_dates: [] }).toString('base64') } });
+const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+const asset = (compiler, overrides = {}) => gz({ schema_version: 1, run_date: DAY, core_sha256: CORE,
+  catalogue: { sha256: B, bytes: 10, gzip_base64: gz({ compiler_sha256: compiler, run_dates: [] }).toString('base64') }, ...overrides });
+const manifest = (bytes, extra = {}) => gz({ run_date: DAY, files: { core: { sha256: CORE } },
+  bank_rate_history_ready: { schema_version: 1, file: { name: `bank-rate-history-ready-${DAY}-${sha(bytes).slice(0, 12)}.json.gz`,
+    bytes: bytes.length, sha256: sha(bytes), ...extra } } });
 
 test('reads the pinned compiler and delivery origin from checked-in sources', () => {
   assert.match(pinnedCompilerSha(fs.readFileSync(new URL('../contracts/history-ready/compiler-manifest.json', import.meta.url), 'utf8')), /^[a-f0-9]{64}$/);
   assert.match(appDataOrigin(fs.readFileSync(new URL('../src/lib/automaticDataAccess.ts', import.meta.url), 'utf8')), /^https:\/\//);
 });
 
-test('extracts the live asset name and its compiler digest', () => {
-  const name = `bank-rate-history-ready-2026-11-07-${B.slice(0, 12)}.json.gz`;
-  assert.deepEqual(readyAssetName(gz({ run_date: '2026-11-07', bank_rate_history_ready: { schema_version: 1, file: { name } } })),
-    { runDate: '2026-11-07', name });
-  assert.deepEqual(readyAssetName(gz({ run_date: '2026-11-07' })), { runDate: '2026-11-07', name: null });
-  assert.throws(() => readyAssetName(gz({ run_date: '2026-11-07', bank_rate_history_ready: { file: { name: '../x' } } })));
-  assert.equal(readyCompilerSha(asset(A)), A);
-  assert.throws(() => readyCompilerSha(asset('nope')));
+test('a missing, encrypted or malformed prepared-history descriptor blocks the release', () => {
+  assert.throws(() => readyDescriptor(gz({ run_date: DAY, files: { core: { sha256: CORE } } })), /no prepared history/);
+  const bytes = asset(A);
+  assert.throws(() => readyDescriptor(manifest(bytes, { enc: { alg: 'aes-256-gcm', key_id: 'abcd1234' } })), /inner-encrypted/);
+  assert.throws(() => readyDescriptor(manifest(bytes, { name: '../x' })), /invalid/);
+  assert.equal(readyDescriptor(manifest(bytes)).sha256, sha(bytes));
 });
 
-test('fails only when the live compiler differs from the pin', () => {
+test('asset bytes and envelope must bind to the live manifest before the compiler is read', () => {
+  const bytes = asset(A);
+  const descriptor = readyDescriptor(manifest(bytes));
+  assert.equal(readyCompilerSha(bytes, descriptor), A);
+  assert.throws(() => readyCompilerSha(asset(B), descriptor), /do not match/);
+  const unbound = asset(A, { core_sha256: B });
+  assert.throws(() => readyCompilerSha(unbound, readyDescriptor(manifest(unbound))), /not bound/);
+});
+
+test('fails only when the live compiler differs from the pin', async () => {
   assert.equal(compareCompiler({ pinned: A, live: A, runDate: 'd' }).ok, true);
-  assert.equal(compareCompiler({ pinned: A, live: null, runDate: 'd' }).ok, true);
   const mismatch = compareCompiler({ pinned: A, live: B, runDate: 'd' });
   assert.equal(mismatch.ok, false);
   assert.match(mismatch.message, /bbbbbbbbbbbb.*aaaaaaaaaaaa/);
+  const bytes = asset(B);
+  const get = async (url) => url.endsWith('/manifest.json') ? manifest(bytes) : bytes;
+  assert.equal((await verifyLiveHistoryCompiler({ pinned: A, origin: 'https://x.test', get })).ok, false);
+  assert.equal((await verifyLiveHistoryCompiler({ pinned: B, origin: 'https://x.test', get })).ok, true);
+});
+
+test('bounded reads stop at the byte ceiling', async () => {
+  assert.equal((await readBounded(Readable.from([Buffer.alloc(4), Buffer.alloc(4)]), 8)).length, 8);
+  await assert.rejects(readBounded(Readable.from([Buffer.alloc(6), Buffer.alloc(6)]), 8), /exceeds 8 bytes/);
 });

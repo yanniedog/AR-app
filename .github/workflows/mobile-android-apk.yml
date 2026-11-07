@@ -147,6 +147,10 @@ jobs:
         run: |
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT_NAME" --dir build/apk-pair
           node scripts/bump-android-version-code.mjs --release-version "$RELEASE_VERSION" --release-version-code "$RELEASE_CODE"
+      - name: Recheck live prepared history before publication
+        env:
+          ALLOW_HISTORY_COMPILER_MISMATCH: ${{ inputs.allow_history_compiler_mismatch && 'true' || 'false' }}
+        run: node scripts/verify-live-history-compiler.mjs
       - name: Verify delivery and publish both channels
         run: node scripts/android-apk-pair.mjs publish
       - name: Save public release receipts
