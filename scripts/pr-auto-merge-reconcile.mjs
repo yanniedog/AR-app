@@ -67,9 +67,27 @@ function reconcilePull(number) {
       console.log(`#${number}: behind main; branch update needs BOT_GATE_TOKEN, left for the author`);
     }
   }
-  if (!enabled) {
-    gh(['pr', 'merge', String(number), '--repo', REPO, '--auto', '--squash', '--delete-branch'], { json: false });
-    console.log(`#${number}: auto-merge enabled`);
+  if (process.env.OWNER_TOKEN_CONFIGURED === 'true') {
+    if (!enabled) {
+      gh(['pr', 'merge', String(number), '--repo', REPO, '--auto', '--squash', '--delete-branch'], { json: false });
+      console.log(`#${number}: auto-merge enabled`);
+    }
+    return;
+  }
+  // Workflow token only: a merge made with it fires no push workflows, so
+  // auto-merge would land without a release. Merge directly once GitHub reports
+  // every required gate satisfied, then dispatch the release ourselves.
+  if (enabled) { console.log(`#${number}: owner auto-merge already enabled; GitHub merges it`); return; }
+  if (pr.mergeable_state !== 'clean') { console.log(`#${number}: waiting for required gates (${pr.mergeable_state})`); return; }
+  const merged = gh(['api', '-X', 'PUT', `repos/${REPO}/pulls/${number}/merge`, '-f', 'merge_method=squash',
+    '-f', `sha=${pr.head.sha}`], { allowFail: true });
+  if (!merged?.merged) { console.log(`#${number}: merge refused (head moved or gates changed); retrying on the next run`); return; }
+  console.log(`#${number}: merged as ${merged.sha.slice(0, 7)}`);
+  gh(['api', '-X', 'DELETE', `repos/${REPO}/git/refs/heads/${encodeURIComponent(pr.head.ref)}`], { json: false, allowFail: true });
+  const files = paginate(`repos/${REPO}/pulls/${number}/files?per_page=100`).map(file => file.filename);
+  if (files.some(isReleasePath)) {
+    gh(['workflow', 'run', 'mobile-android-apk.yml', '--repo', REPO, '--ref', 'main'], { json: false });
+    console.log(`#${number}: APK release dispatched`);
   }
 }
 
