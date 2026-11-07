@@ -4,6 +4,7 @@ import { versionLt } from '../versionCompare';
 import { isValidCalendarDate } from '../calendarDate';
 import { validatePayloadAccounting } from './payloadAccounting';
 import { revisionTag } from '../../data/payloadRevision';
+import { parsePopulationAssessment } from '../../data/populationAssessment';
 import {
   APP_HEALTH_ASSET_KEYS,
   APP_HEALTH_CHECK_CODES,
@@ -164,11 +165,14 @@ function evaluateManifest(
     );
   }
 
-  const expectedTag =
+  const revisionMatches = manifest.payload_revision?.schema_version === 1 && Number.isSafeInteger(manifest.payload_revision.revision) &&
+    manifest.payload_revision.revision > 0 && manifest.tag === revisionTag(manifest.run_date, manifest.payload_revision.revision, contract.payloadChannel ?? 'legacy');
+  const expectedTag = contract.payloadChannel === 'observed-population-v1'
+    ? revisionMatches && (manifest as unknown as { consumer_contract?: unknown }).consumer_contract === contract.payloadChannel
+    :
     manifest.tag === contract.rollingTag ||
     manifest.tag === `${contract.datedTagPrefix}${manifest.run_date}` ||
-    (manifest.payload_revision?.schema_version === 1 && Number.isSafeInteger(manifest.payload_revision.revision) &&
-      manifest.payload_revision.revision > 0 && manifest.tag === revisionTag(manifest.run_date, manifest.payload_revision.revision)) ||
+    revisionMatches ||
     (snapshot.source === 'sample' && manifest.tag === 'bundled-sample');
   const schemaSupported = contract.supportedManifestSchemas.includes(manifest.schema_version);
   const appCompatible = Boolean(
@@ -670,6 +674,12 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
   }
 
   const attempted = coverage.providers_attempted;
+  let population;
+  try { population = parsePopulationAssessment(coverage.population_assessment); }
+  catch {
+    return check(APP_HEALTH_CHECK_CODES.COVERAGE, 'Producer coverage', 'data-completeness', 'fail',
+      { coverageAvailable: true, invalidPopulationAssessment: true }, 'Invalid observed population assessment.');
+  }
   const succeeded = coverage.providers_succeeded;
   const failures = coverage.provider_failures ?? coverage.failures ?? [];
   const failedCount = coverage.counts?.providers_failed ?? failures.length;
@@ -690,8 +700,12 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
         providersPartial: partialCount,
         limitations: coverage.limitations?.length ?? 0,
         invalidCounts: false,
+        ...(population ? { populationScope: population.scope, totalPopulation: null, missingProducts: null,
+          affectedRegisteredProviders: population.affected_providers.length, observedProducts: population.observed_counts.products,
+          observedRates: population.observed_counts.rates, observedProviders: population.observed_counts.providers } : {}),
       },
       'Provider coverage totals are incomplete, so complete coverage cannot be established.',
+      population ? { populationAssessment: population } : undefined,
     );
   }
   const invalidCounts =
@@ -706,7 +720,7 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
   const unaccountedProviders = Math.max(0, attempted - succeeded - failedCount - partialCount);
   // Partial observations that the producer already counted are a data fact.
   // Failed, unaccounted, or internally inconsistent coverage is an app defect.
-  const degraded = failedCount > 0 || unaccountedProviders > 0 || (coverage.limitations?.length ?? 0) > 0;
+  const degraded = Boolean(population) || failedCount > 0 || unaccountedProviders > 0 || (coverage.limitations?.length ?? 0) > 0;
   const status: AppHealthStatus = invalidCounts ? 'fail' : degraded ? 'warn' : 'pass';
   return check(
     APP_HEALTH_CHECK_CODES.COVERAGE,
@@ -722,12 +736,18 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
       unaccountedProviders,
       limitations: coverage.limitations?.length ?? 0,
       invalidCounts,
+      ...(population ? { populationScope: population.scope, totalPopulation: null, missingProducts: null,
+        affectedRegisteredProviders: population.affected_providers.length, observedProducts: population.observed_counts.products,
+        observedRates: population.observed_counts.rates, observedProviders: population.observed_counts.providers } : {}),
     },
     invalidCounts
       ? 'Producer coverage counts do not reconcile.'
+      : population
+        ? 'Observed products only; registered-provider membership and missing-product count are unknown.'
       : degraded
         ? 'Provider coverage has a failed or unaccounted outcome.'
         : undefined,
+    population ? { populationAssessment: population } : undefined,
   );
 }
 

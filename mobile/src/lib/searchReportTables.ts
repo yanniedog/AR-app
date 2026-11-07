@@ -83,6 +83,22 @@ function detailItems(sheet: ReportSheet, prefix: readonly UiCopy[], group: 'Fees
 function coverage(sheet: ReportSheet, facts: readonly SearchCoverageFact[]): void {
   facts.forEach(fact => {
     switch (fact.kind) {
+        case 'population': {
+          record(sheet, [], 'Coverage', 'Partial'); record(sheet, [], 'Scope', 'Observed products');
+          record(sheet, [], 'Total population', 'Unknown'); record(sheet, [], 'Missing products', 'Unknown');
+          record(sheet, [], 'Observed', uiDate(fact.assessment.observed_on));
+          record(sheet, [], 'Products', uiCount(fact.assessment.observed_counts.products));
+          record(sheet, [], 'Rates', uiCount(fact.assessment.observed_counts.rates));
+          record(sheet, [], 'Banks', uiCount(fact.assessment.observed_counts.providers));
+          fact.assessment.affected_providers.forEach(provider => {
+            const prefix = [uiIdentifier(provider.provider_id)];
+            record(sheet, prefix, 'Bank', uiProviderName({ provider: provider.provider_name }));
+            record(sheet, prefix, 'Registered', 'Yes'); record(sheet, prefix, 'Membership', 'Unknown');
+            record(sheet, prefix, 'Missing products', 'Unknown');
+            record(sheet, prefix, 'Source', uiIdentifier(provider.register_url));
+            record(sheet, prefix, 'Source', uiIdentifier(provider.endpoint_url));
+          }); break;
+        }
       case 'matching-set': record(sheet, [], 'Result set', 'Complete'); record(sheet, [], 'Rate variants', 'Matching'); record(sheet, [], 'Ranking', 'Selected'); break;
       case 'specifications': record(sheet, [], 'Absent specifications', 'Unavailable'); record(sheet, [], 'Empty arrays', 'Empty'); break;
       case 'sources': record(sheet, [], 'Source links', 'Included'); record(sheet, [], 'Document bodies', 'Excluded'); record(sheet, [], 'Independent review', 'Unverified'); break;
@@ -137,5 +153,6 @@ export function searchReportTables(snapshot: FilteredSearchSnapshot): ReportShee
     record(rates, prefix, 'Eligibility', 'Unverified');
   });
   coverage(coverageSheet, snapshot.coverage);
+  coverage(summary, snapshot.coverage.filter(fact => fact.kind === 'population'));
   return sheets;
 }
