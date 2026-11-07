@@ -8,7 +8,7 @@
  * Never checks out or executes PR code. Required gates stay with branch protection.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { decidePullRequest, decideReleaseCatchUp, isReleasePath, needsBranchUpdate } from './lib/pr-auto-merge-policy.mjs';
+import { decidePullRequest, decideReleaseCatchUp, isBaseSyncCommit, isReleasePath, needsBranchUpdate } from './lib/pr-auto-merge-policy.mjs';
 
 const REPO = process.env.GITHUB_REPOSITORY || 'yanniedog/AR-app';
 const OWNER = process.env.GITHUB_REPOSITORY_OWNER || REPO.split('/')[0];
@@ -26,6 +26,12 @@ function gh(args, { json = true, allowFail = false } = {}) {
 const api = (path, extra = []) => gh(['api', ...extra, path]);
 const paginate = path => gh(['api', '--paginate', '--slurp', path]).flat();
 
+/** True when sha is an ancestor of (or equal to) main. */
+function onMain(sha) {
+  const status = gh(['api', `repos/${REPO}/compare/${sha}...main`, '--jq', '.status'], { json: false, allowFail: true });
+  return status === 'ahead' || status === 'identical';
+}
+
 function autoMergeEnabled(number) {
   return gh(['pr', 'view', String(number), '--repo', REPO, '--json', 'autoMergeRequest']).autoMergeRequest != null;
 }
@@ -33,8 +39,11 @@ function autoMergeEnabled(number) {
 function reconcilePull(number) {
   const pr = api(`repos/${REPO}/pulls/${number}`);
   const commits = paginate(`repos/${REPO}/pulls/${number}/commits?per_page=100`);
+  const authored = commits.filter(commit => !isBaseSyncCommit({ parentCount: commit.parents?.length ?? 0,
+    message: commit.commit?.message, authorLogin: commit.author?.login ?? null, owner: OWNER,
+    parentOnMain: (commit.parents?.length ?? 0) === 2 && commit.parents.some(parent => onMain(parent.sha)) }));
   const decision = decidePullRequest(pr, { owner: OWNER, repo: REPO, trustedAuthors: TRUSTED_AUTHORS,
-    commitAuthors: commits.map(commit => commit.author?.login ?? null) });
+    commitAuthors: authored.map(commit => commit.author?.login ?? null) });
   const enabled = pr.state === 'open' ? autoMergeEnabled(number) : false;
   console.log(`#${number}: ${decision.action} (${decision.reason}); auto-merge ${enabled ? 'on' : 'off'}; state ${pr.mergeable_state}`);
   if (decision.action === 'disable' && enabled) {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decidePullRequest, decideReleaseCatchUp, isReleasePath, needsBranchUpdate, RELEASE_SETTLE_MS } from './pr-auto-merge-policy.mjs';
+import { decidePullRequest, isBaseSyncCommit, decideReleaseCatchUp, isReleasePath, needsBranchUpdate, RELEASE_SETTLE_MS } from './pr-auto-merge-policy.mjs';
 
 const ctx = (commitAuthors = ['yanniedog', 'claude']) => ({ owner: 'yanniedog', repo: 'yanniedog/AR-app',
   trustedAuthors: ['yanniedog', 'claude'], commitAuthors });
@@ -49,4 +49,14 @@ test('release paths cover the app and its release workflow only', () => {
   assert.equal(isReleasePath('mobile/src/x.ts'), true);
   assert.equal(isReleasePath('.github/workflows/mobile-android-apk.yml'), true);
   assert.equal(isReleasePath('scripts/pr-merge.mjs'), false);
+});
+
+test('only genuine update-branch merges from main are recognised as sync commits', () => {
+  const sync = { parentCount: 2, message: "Merge branch 'main' into ci/x", authorLogin: 'github-actions[bot]', owner: 'yanniedog', parentOnMain: true };
+  assert.equal(isBaseSyncCommit(sync), true);
+  assert.equal(isBaseSyncCommit({ ...sync, authorLogin: 'yanniedog' }), true);
+  assert.equal(isBaseSyncCommit({ ...sync, parentOnMain: false }), false);
+  assert.equal(isBaseSyncCommit({ ...sync, parentCount: 1 }), false);
+  assert.equal(isBaseSyncCommit({ ...sync, message: 'Add feature' }), false);
+  assert.equal(isBaseSyncCommit({ ...sync, authorLogin: 'someone-else' }), false);
 });

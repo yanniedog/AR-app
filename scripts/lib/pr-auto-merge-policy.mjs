@@ -29,6 +29,20 @@ export function decidePullRequest(pr, ctx) {
   return { action: 'enable', reason: 'owner PR to main with trusted commits' };
 }
 
+/** GitHub "Update branch" merges from main carry no PR authorship of their own. */
+export const SYNC_COMMIT_AUTHORS = ['github-actions[bot]', 'web-flow'];
+
+/**
+ * A base-sync merge commit: two parents, the standard update-branch message,
+ * made by the owner, the workflow token or GitHub, with one parent already on main.
+ * Such commits are excluded from the trusted-author check; anything else counts.
+ */
+export function isBaseSyncCommit({ parentCount, message, authorLogin, owner, parentOnMain }) {
+  return parentCount === 2 && parentOnMain === true &&
+    typeof message === 'string' && message.startsWith(`Merge branch '${PROTECTED_BASE}' into `) &&
+    (authorLogin === owner || SYNC_COMMIT_AUTHORS.includes(authorLogin));
+}
+
 /** Behind main and mergeable: update the branch so strict checks can pass. */
 export function needsBranchUpdate(pr) {
   return pr.mergeable_state === 'behind';
