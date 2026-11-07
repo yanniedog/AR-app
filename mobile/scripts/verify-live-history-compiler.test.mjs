@@ -10,8 +10,12 @@ import { appDataOrigin, compareCompiler, compatibleCompilerShas, pinnedCompilerS
 const A = 'a'.repeat(64), B = 'b'.repeat(64), CORE = 'c'.repeat(64), DAY = '2026-11-07';
 const gz = (value) => zlib.gzipSync(Buffer.from(JSON.stringify(value)));
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+const archive = (compiler) => {
+  const inner = Buffer.from(JSON.stringify({ compiler_sha256: compiler, run_dates: [] }));
+  return { sha256: sha(inner), bytes: inner.length, gzip_base64: zlib.gzipSync(inner).toString('base64') };
+};
 const asset = (compiler, overrides = {}) => gz({ schema_version: 1, run_date: DAY, core_sha256: CORE,
-  catalogue: { sha256: B, bytes: 10, gzip_base64: gz({ compiler_sha256: compiler, run_dates: [] }).toString('base64') }, ...overrides });
+  catalogue: archive(compiler), ...overrides });
 const manifest = (bytes, extra = {}) => gz({ run_date: DAY, files: { core: { sha256: CORE } },
   bank_rate_history_ready: { schema_version: 1, file: { name: `bank-rate-history-ready-${DAY}-${sha(bytes).slice(0, 12)}.json.gz`,
     bytes: bytes.length, sha256: sha(bytes), ...extra } } });
@@ -36,6 +40,10 @@ test('asset bytes and envelope must bind to the live manifest before the compile
   assert.throws(() => readyCompilerSha(asset(B), descriptor), /do not match/);
   const unbound = asset(A, { core_sha256: B });
   assert.throws(() => readyCompilerSha(unbound, readyDescriptor(manifest(unbound))), /not bound/);
+  for (const corrupt of [{ ...archive(A), sha256: B }, { ...archive(A), bytes: 5 }]) {
+    const bytes = asset(A, { catalogue: corrupt });
+    assert.throws(() => readyCompilerSha(bytes, readyDescriptor(manifest(bytes))), /declared size and digest/);
+  }
 });
 
 test('fails only when the live compiler differs from the pin', async () => {

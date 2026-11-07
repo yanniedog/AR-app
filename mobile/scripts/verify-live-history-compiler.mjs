@@ -72,7 +72,15 @@ export function readyCompilerSha(assetBytes, descriptor) {
       typeof archive?.gzip_base64 !== 'string' || !archive.gzip_base64.length || !SHA.test(archive.sha256 ?? '')) {
     throw new Error('Live prepared-history envelope is not bound to the live manifest');
   }
-  const inner = JSON.parse(zlib.gunzipSync(Buffer.from(archive.gzip_base64, 'base64'), { maxOutputLength: MAX_INNER }).toString('utf8'));
+  if (!Number.isSafeInteger(archive.bytes) || archive.bytes < 1 || archive.bytes > MAX_INNER) {
+    throw new Error('Prepared-history archive declares an invalid decoded size');
+  }
+  // Same receipt the app checks before adopting the archive.
+  const innerBytes = zlib.gunzipSync(Buffer.from(archive.gzip_base64, 'base64'), { maxOutputLength: MAX_INNER });
+  if (innerBytes.length !== archive.bytes || crypto.createHash('sha256').update(innerBytes).digest('hex') !== archive.sha256) {
+    throw new Error('Prepared-history archive bytes do not match their declared size and digest');
+  }
+  const inner = JSON.parse(innerBytes.toString('utf8'));
   const sha = inner?.compiler_sha256;
   if (!SHA.test(sha ?? '')) throw new Error('Prepared-history archive has no valid compiler_sha256');
   return sha;
