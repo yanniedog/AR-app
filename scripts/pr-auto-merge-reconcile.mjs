@@ -14,6 +14,9 @@ const REPO = process.env.GITHUB_REPOSITORY || 'yanniedog/AR-app';
 const OWNER = process.env.GITHUB_REPOSITORY_OWNER || REPO.split('/')[0];
 // Agent commits are attributed to these accounts; anything else needs a human.
 const WORKFLOW_ACTOR = 'github-actions[bot]';
+// clean: all checks green. unstable: required gates green, an advisory check failed.
+// Branch protection still enforces the required gates on the merge call itself.
+const MERGEABLE_STATES = new Set(['clean', 'unstable']);
 const TRUSTED_AUTHORS = [OWNER, 'claude', ...(process.env.AUTO_MERGE_TRUSTED_AUTHORS || '').split(',').filter(Boolean)];
 
 function gh(args, { json = true, allowFail = false } = {}) {
@@ -81,11 +84,11 @@ function reconcilePull(number) {
     gh(['pr', 'merge', String(number), '--repo', REPO, '--disable-auto'], { json: false });
     console.log(`#${number}: workflow-token auto-merge replaced by direct merge`);
   }
-  if (pr.mergeable_state !== 'clean') { console.log(`#${number}: waiting for required gates (${pr.mergeable_state})`); return; }
+  if (!MERGEABLE_STATES.has(pr.mergeable_state)) { console.log(`#${number}: waiting for required gates (${pr.mergeable_state})`); return; }
   // Re-read just before merging so a hold, draft or new push since the decision wins.
   const fresh = api(`repos/${REPO}/pulls/${number}`);
   if (fresh.head.sha !== pr.head.sha || decidePullRequest(fresh, { owner: OWNER, repo: REPO, trustedAuthors: TRUSTED_AUTHORS,
-    commitAuthors: authored.map(commit => commit.author?.login ?? null) }).action !== 'enable' || fresh.mergeable_state !== 'clean') {
+    commitAuthors: authored.map(commit => commit.author?.login ?? null) }).action !== 'enable' || !MERGEABLE_STATES.has(fresh.mergeable_state)) {
     console.log(`#${number}: changed since evaluation; retrying on the next run`);
     return;
   }
