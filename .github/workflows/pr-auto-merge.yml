@@ -1,0 +1,111 @@
+name: pr-auto-merge
+
+# Owner PRs (including agent PRs opened with the owner's token) merge by
+# themselves: auto-merge is enabled as soon as the PR is ready, and GitHub
+# squash-merges once the required gates (mobile-ci, bot-feedback-gate, thread
+# resolution) pass. Nothing here bypasses a gate.
+#
+# Opt out per PR with the `hold` label or by keeping it a draft.
+#
+# Merges done with the workflow token do not fire push workflows, so the
+# release catch-up job dispatches the APK release when main has unreleased
+# mobile changes. With BOT_GATE_TOKEN (owner PAT) the merge push triggers the
+# release directly and catch-up finds nothing to do.
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled, converted_to_draft]
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-auto-merge-${{ github.event.pull_request.number || 'release-catch-up' }}
+  cancel-in-progress: false
+
+jobs:
+  enable-auto-merge:
+    name: Enable auto-merge for owner PRs
+    if: >-
+      github.event_name == 'pull_request_target'
+      && github.event.pull_request.state == 'open'
+      && !github.event.pull_request.draft
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login == github.repository_owner
+      && !contains(github.event.pull_request.labels.*.name, 'hold')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Enable squash auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.BOT_GATE_TOKEN || github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        # Never checks out or runs PR code: pull_request_target holds write scope.
+        run: |
+          if gh pr view "$PR" --repo "$REPO" --json autoMergeRequest --jq '.autoMergeRequest != null' | grep -qx true; then
+            echo "Auto-merge already enabled for #$PR"
+            exit 0
+          fi
+          gh pr merge "$PR" --repo "$REPO" --auto --squash --delete-branch
+          echo "Auto-merge enabled for #$PR; GitHub merges once required checks pass."
+
+  disable-auto-merge:
+    name: Disable auto-merge for held or draft PRs
+    if: >-
+      github.event_name == 'pull_request_target'
+      && github.event.pull_request.state == 'open'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && (github.event.pull_request.draft || contains(github.event.pull_request.labels.*.name, 'hold'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Disable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.BOT_GATE_TOKEN || github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh pr view "$PR" --repo "$REPO" --json autoMergeRequest --jq '.autoMergeRequest != null' | grep -qx true; then
+            gh pr merge "$PR" --repo "$REPO" --disable-auto
+            echo "Auto-merge disabled for #$PR"
+          else
+            echo "Auto-merge not enabled for #$PR"
+          fi
+
+  release-catch-up:
+    name: Dispatch APK release for unreleased main
+    if: github.event_name != 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Release main when it has unreleased mobile changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          head=$(gh api "repos/$REPO/commits/main" --jq .sha)
+          released=$(gh api "repos/$REPO/releases?per_page=20" \
+            --jq '[.[] | select(.tag_name | startswith("app-arm-v")) | .target_commitish][0] // ""')
+          if [ -z "$released" ]; then echo "No previous APK release found; skipping."; exit 0; fi
+          if [ "$released" = "$head" ]; then echo "main ($head) is already released."; exit 0; fi
+          changed=$(gh api "repos/$REPO/compare/$released...$head" \
+            --jq '[.files[].filename | select(startswith("mobile/") or . == ".github/workflows/mobile-android-apk.yml")] | length')
+          if [ "$changed" = "0" ]; then echo "No mobile changes since $released."; exit 0; fi
+          active=$(gh api "repos/$REPO/actions/workflows/mobile-android-apk.yml/runs?per_page=20" \
+            --jq "[.workflow_runs[] | select(.head_sha == \"$head\" and (.status != \"completed\" or .conclusion == \"success\" or .conclusion == \"failure\"))] | length")
+          if [ "$active" != "0" ]; then echo "A release run for $head already exists; not dispatching again."; exit 0; fi
+          gh workflow run mobile-android-apk.yml --repo "$REPO" --ref main
+          echo "Dispatched APK release for $head ($changed mobile files changed since $released)."
