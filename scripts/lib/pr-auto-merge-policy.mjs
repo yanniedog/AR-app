@@ -23,7 +23,8 @@ export function decidePullRequest(pr, ctx) {
   const trusted = new Set(ctx.trustedAuthors);
   const foreign = ctx.commitAuthors.filter(login => !login || !trusted.has(login));
   if (!ctx.commitAuthors.length || foreign.length) {
-    return { action: 'skip', reason: `commits not all from trusted authors (${[...new Set(foreign.map(l => l ?? 'unattributed'))].join(', ') || 'none'})` };
+    // Revoke any earlier enablement: the PR no longer meets the trust policy.
+    return { action: 'disable', reason: `commits not all from trusted authors (${[...new Set(foreign.map(l => l ?? 'unattributed'))].join(', ') || 'none'})` };
   }
   return { action: 'enable', reason: 'owner PR to main with trusted commits' };
 }

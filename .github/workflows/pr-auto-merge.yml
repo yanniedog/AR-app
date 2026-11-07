@@ -33,6 +33,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,6 +42,7 @@ jobs:
       - name: Reconcile owner PRs
         env:
           GH_TOKEN: ${{ secrets.BOT_GATE_TOKEN || github.token }}
+          OWNER_TOKEN_CONFIGURED: ${{ secrets.BOT_GATE_TOKEN != '' }}
           PR: ${{ github.event.pull_request.number }}
         run: |
           if [ -n "$PR" ]; then node scripts/pr-auto-merge-reconcile.mjs prs --pr "$PR"

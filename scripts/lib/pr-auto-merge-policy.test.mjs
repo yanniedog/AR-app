@@ -20,9 +20,10 @@ test('forks, other authors, other bases and foreign commits are skipped', () => 
   assert.equal(decidePullRequest(pr({ head: { repo: { full_name: 'x/AR-app' } } }), ctx()).action, 'skip');
   assert.equal(decidePullRequest(pr({ user: { login: 'dependabot[bot]' } }), ctx()).action, 'skip');
   assert.equal(decidePullRequest(pr({ base: { ref: 'release' } }), ctx()).action, 'skip');
-  assert.equal(decidePullRequest(pr(), ctx(['yanniedog', 'someone-else'])).action, 'skip');
-  assert.equal(decidePullRequest(pr(), ctx(['yanniedog', null])).action, 'skip');
-  assert.equal(decidePullRequest(pr(), ctx([])).action, 'skip');
+  // Owner PRs that gain foreign or unattributed commits lose auto-merge.
+  assert.equal(decidePullRequest(pr(), ctx(['yanniedog', 'someone-else'])).action, 'disable');
+  assert.equal(decidePullRequest(pr(), ctx(['yanniedog', null])).action, 'disable');
+  assert.equal(decidePullRequest(pr(), ctx([])).action, 'disable');
   // A held non-owner PR is never touched.
   assert.equal(decidePullRequest(pr({ draft: true, user: { login: 'other' } }), ctx()).action, 'skip');
 });

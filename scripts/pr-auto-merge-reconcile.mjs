@@ -47,11 +47,24 @@ function reconcilePull(number) {
     const updated = gh(['api', '-X', 'PUT', `repos/${REPO}/pulls/${number}/update-branch`,
       '-f', `expected_head_sha=${pr.head.sha}`], { allowFail: true });
     console.log(`#${number}: ${updated ? 'branch updated from main' : 'branch update not possible (conflict or race); left for the author'}`);
+    // Pushes made with the workflow token fire no pull_request workflows, so
+    // dispatch the required checks against the updated head ourselves.
+    if (updated && process.env.OWNER_TOKEN_CONFIGURED !== 'true') dispatchRequiredChecks(number, pr.head.ref, pr.head.sha);
   }
   if (!enabled) {
     gh(['pr', 'merge', String(number), '--repo', REPO, '--auto', '--squash', '--delete-branch'], { json: false });
     console.log(`#${number}: auto-merge enabled`);
   }
+}
+
+function dispatchRequiredChecks(number, ref, previousSha) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    if (api(`repos/${REPO}/pulls/${number}`).head.sha !== previousSha) break;
+    spawnSync('sleep', ['5']);
+  }
+  gh(['workflow', 'run', 'app-ci.yml', '--repo', REPO, '--ref', ref], { json: false });
+  gh(['workflow', 'run', 'pr-bot-feedback-check.yml', '--repo', REPO, '--ref', ref, '-f', `pr_number=${number}`], { json: false });
+  console.log(`#${number}: required checks dispatched for the updated head`);
 }
 
 function reconcilePulls(only) {
