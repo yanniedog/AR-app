@@ -54,6 +54,21 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+/** Conservative SVG text width estimate; react-native-svg cannot measure text. */
+export function chartLabelWidth(text: string, fontSize: number): number {
+  return text.length * fontSize * 0.62;
+}
+
+/** Axis labels at the plot edges grow inwards so they are never clipped. */
+export function edgeLabelAnchor(x: number, text: string, fontSize: number, left: number, right: number): {
+  x: number; anchor: 'start' | 'middle' | 'end';
+} {
+  const half = chartLabelWidth(text, fontSize) / 2;
+  if (x + half > right) return { x: Math.min(x, right), anchor: 'end' };
+  if (x - half < left) return { x: Math.max(x, left), anchor: 'start' };
+  return { x, anchor: 'middle' };
+}
+
 function finiteCoord(value: number): number | null {
   return Number.isFinite(value) ? value : null;
 }
@@ -594,6 +609,11 @@ function BankHistoryChartView({
               const sliceW =
                 plotDates.length > 1 ? innerW / (plotDates.length - 1) : Math.min(innerW, 36);
               const half = Math.max(4, Math.min(sliceW * 0.45, 22));
+              const bpsLabel = uiChartBps(mark.bp);
+              // Keep the move label inside the plot: right-align it against the
+              // band when a start-aligned label would run past the chart edge.
+              const labelStart = Math.max(padL + 2, x - half + 2);
+              const labelFitsRight = labelStart + chartLabelWidth(bpsLabel, 9) <= width - padR;
               return (
                 <React.Fragment key={`${mark.date}-${mark.snap}`}>
                   <Rect
@@ -604,13 +624,14 @@ function BankHistoryChartView({
                     fill={rbaBand}
                   />
                   <SvgText
-                    x={Math.max(padL + 2, x - half + 2)}
+                    x={labelFitsRight ? labelStart : Math.min(width - padR - 2, x + half - 2)}
                     y={padT + 10}
                     fontSize={9}
                     fill={rbaInk}
                     fontWeight="600"
+                    textAnchor={labelFitsRight ? 'start' : 'end'}
                   >
-                    {uiChartBps(mark.bp)}
+                    {bpsLabel}
                   </SvgText>
                 </React.Fragment>
               );
@@ -725,16 +746,18 @@ function BankHistoryChartView({
               const isScheduled = labelEvery === 0 || i % (labelEvery + 1) === 0;
               const isTooCloseToLast = !isLast && (plotDates.length - 1 - i) < (labelEvery + 1) * 0.7;
               if (isLast || (isScheduled && !isTooCloseToLast)) {
+                const label = uiChartDate(date);
+                const placed = edgeLabelAnchor(xAt(i), label, 10, 0, width);
                 return (
                   <SvgText
                     key={date}
-                    x={xAt(i)}
+                    x={placed.x}
                     y={height - 4}
                     fontSize={10}
                     fill={theme.colors.textFaint}
-                    textAnchor="middle"
+                    textAnchor={placed.anchor}
                   >
-                    {uiChartDate(date)}
+                    {label}
                   </SvgText>
                 );
               }

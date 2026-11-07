@@ -7,6 +7,11 @@ on:
       - 'mobile/**'
       - '.github/workflows/mobile-android-apk.yml'
   workflow_dispatch:
+    inputs:
+      allow_history_compiler_mismatch:
+        description: Release even if live prepared history uses a different compiler
+        type: boolean
+        default: false
 permissions:
   contents: read
   pull-requests: read
@@ -46,6 +51,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/verify-github-release-source.mjs --allow-reviewed-ancestor
+      - name: Verify live prepared history matches the pinned compiler
+        env:
+          ALLOW_HISTORY_COMPILER_MISMATCH: ${{ inputs.allow_history_compiler_mismatch && 'true' || 'false' }}
+        run: node scripts/verify-live-history-compiler.mjs
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin

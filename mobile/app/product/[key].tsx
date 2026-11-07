@@ -910,9 +910,11 @@ export default function ProductDetail() {
                   />
                 </ChartErrorBoundary>
                 <HistoryLegend productColor={productInk} sectionColor={sectionInk} />
-                {rateHistory.updating || rateHistory.failed || rateHistory.missingDates.length ? (
+                {/* Missing dates are already counted by the chart's own
+                    "Missing observations" fact; only surface load state here. */}
+                {rateHistory.updating || rateHistory.failed ? (
                   <AppText variant="tiny" color="textMuted" style={{ marginTop: 6 }}>
-                    {uiLabel(rateHistory.failed ? 'Unavailable' : rateHistory.updating ? 'Loading' : 'Missing details')}
+                    {uiLabel(rateHistory.failed ? 'Unavailable' : 'Loading')}
                   </AppText>
                 ) : null}
                 {productHistoryError && observedProductPoints < 2 ? (
