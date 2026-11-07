@@ -38,7 +38,9 @@ function autoMergeEnabled(number) {
 
 function reconcilePull(number) {
   const pr = api(`repos/${REPO}/pulls/${number}`);
-  const commits = paginate(`repos/${REPO}/pulls/${number}/commits?per_page=100`);
+  const listed = paginate(`repos/${REPO}/pulls/${number}/commits?per_page=100`);
+  // The endpoint stops at 250 commits; an incomplete list cannot establish trust.
+  const commits = listed.length === pr.commits ? listed : [];
   const authored = commits.filter(commit => !isBaseSyncCommit({ parentCount: commit.parents?.length ?? 0,
     message: commit.commit?.message, authorLogin: commit.author?.login ?? null, owner: OWNER,
     parentOnMain: (commit.parents?.length ?? 0) === 2 && commit.parents.some(parent => onMain(parent.sha)) }));
@@ -53,27 +55,22 @@ function reconcilePull(number) {
   }
   if (decision.action !== 'enable') return;
   if (needsBranchUpdate(pr)) {
-    const updated = gh(['api', '-X', 'PUT', `repos/${REPO}/pulls/${number}/update-branch`,
-      '-f', `expected_head_sha=${pr.head.sha}`], { allowFail: true });
-    console.log(`#${number}: ${updated ? 'branch updated from main' : 'branch update not possible (conflict or race); left for the author'}`);
-    // Pushes made with the workflow token fire no pull_request workflows, so
-    // dispatch the required checks against the updated head ourselves.
-    if (updated && process.env.OWNER_TOKEN_CONFIGURED !== 'true') dispatchRequiredChecks(number, pr.head.ref, pr.head.sha);
+    if (process.env.OWNER_TOKEN_CONFIGURED === 'true') {
+      // An owner-token push fires the normal pull_request workflows, so every
+      // required check (including dependency review) reruns on the new head.
+      const updated = gh(['api', '-X', 'PUT', `repos/${REPO}/pulls/${number}/update-branch`,
+        '-f', `expected_head_sha=${pr.head.sha}`], { allowFail: true });
+      console.log(`#${number}: ${updated ? 'branch updated from main' : 'branch update not possible (conflict or race); left for the author'}`);
+    } else {
+      // A workflow-token push fires no pull_request workflows; never substitute
+      // reduced dispatched checks for the real ones. Leave the update to the agent.
+      console.log(`#${number}: behind main; branch update needs BOT_GATE_TOKEN, left for the author`);
+    }
   }
   if (!enabled) {
     gh(['pr', 'merge', String(number), '--repo', REPO, '--auto', '--squash', '--delete-branch'], { json: false });
     console.log(`#${number}: auto-merge enabled`);
   }
-}
-
-function dispatchRequiredChecks(number, ref, previousSha) {
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    if (api(`repos/${REPO}/pulls/${number}`).head.sha !== previousSha) break;
-    spawnSync('sleep', ['5']);
-  }
-  gh(['workflow', 'run', 'app-ci.yml', '--repo', REPO, '--ref', ref], { json: false });
-  gh(['workflow', 'run', 'pr-bot-feedback-check.yml', '--repo', REPO, '--ref', ref, '-f', `pr_number=${number}`], { json: false });
-  console.log(`#${number}: required checks dispatched for the updated head`);
 }
 
 function reconcilePulls(only) {
