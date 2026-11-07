@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 import { Readable } from 'node:stream';
-import { appDataOrigin, compareCompiler, pinnedCompilerSha, readBounded, readyCompilerSha, readyDescriptor,
+import { appDataOrigin, compareCompiler, compatibleCompilerShas, pinnedCompilerSha, readBounded, readyCompilerSha, readyDescriptor,
   verifyLiveHistoryCompiler } from './verify-live-history-compiler.mjs';
 
 const A = 'a'.repeat(64), B = 'b'.repeat(64), CORE = 'c'.repeat(64), DAY = '2026-11-07';
@@ -52,4 +52,12 @@ test('fails only when the live compiler differs from the pin', async () => {
 test('bounded reads stop at the byte ceiling', async () => {
   assert.equal((await readBounded(Readable.from([Buffer.alloc(4), Buffer.alloc(4)]), 8)).length, 8);
   await assert.rejects(readBounded(Readable.from([Buffer.alloc(6), Buffer.alloc(6)]), 8), /exceeds 8 bytes/);
+});
+
+test('listed compatible compilers pass; unlisted ones still fail', () => {
+  assert.equal(compareCompiler({ pinned: A, compatible: [B], live: B, runDate: 'd' }).ok, true);
+  assert.equal(compareCompiler({ pinned: A, compatible: [B], live: 'c'.repeat(64), runDate: 'd' }).ok, false);
+  const listed = compatibleCompilerShas(fs.readFileSync(new URL('../contracts/history-ready/compatible-compilers.json', import.meta.url), 'utf8'));
+  assert.ok(listed.every(sha => /^[a-f0-9]{64}$/.test(sha)) && listed.length > 0);
+  assert.deepEqual(compatibleCompilerShas(JSON.stringify({ semantic_revision: 'other', compatible: [{ sha256: A }] })), []);
 });

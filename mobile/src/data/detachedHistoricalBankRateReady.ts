@@ -5,7 +5,7 @@ import { cache } from './cache';
 import { downloadInflate, gunzipCooperatively } from './payload';
 import { decodeReadyHistoryArchive } from './historicalBankRateReadyRetention';
 import type { HistoricalBankRateReady } from './historicalBankRateReadyWire';
-import { validateHistoricalBankRateReadyForApp } from './historicalBankRateReady';
+import { validateAcceptedHistoricalBankRateReady as validateHistoricalBankRateReadyForApp } from './historicalBankRateReadyAcceptance';
 import { validateReadyHistoricalDescriptor, validateDetachedHistoricalCatalogueEnvelope } from './detachedHistoricalBankRateCatalogueWire';
 import { decodeDetachedHistoryBytes, encodeDetachedHistoryBytes } from './detachedHistoricalCatalogueBytes';
 import { parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';

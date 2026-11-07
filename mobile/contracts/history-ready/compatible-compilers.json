@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "semantic_revision": "ar-history-ready-v1",
+  "compatible": [
+    {
+      "sha256": "7d717bdf3a86289876a1c5dee238df1d0e79df0634feaa0a499b2199246ab5d7",
+      "pinned_by": "65cfb60",
+      "note": "Same compiler and cohort wire; later pins changed only consumer-side LVR bound parsing and mortgage facet aliases. Remove once the producer publishes with the current pin."
+    }
+  ]
+}

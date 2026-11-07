@@ -24,6 +24,13 @@ export function pinnedCompilerSha(manifestText) {
   return sha;
 }
 
+/** Earlier pins the app explicitly still adopts (contracts/history-ready/compatible-compilers.json). */
+export function compatibleCompilerShas(text) {
+  const value = JSON.parse(text);
+  if (value?.semantic_revision !== 'ar-history-ready-v1' || !Array.isArray(value.compatible)) return [];
+  return value.compatible.map(entry => entry?.sha256).filter(sha => SHA.test(sha ?? ''));
+}
+
 export function appDataOrigin(sourceText) {
   const match = /export const APP_DATA_ORIGIN = '(https:\/\/[A-Za-z0-9.-]+)';/.exec(sourceText);
   if (!match) throw new Error('APP_DATA_ORIGIN not found');
@@ -71,11 +78,14 @@ export function readyCompilerSha(assetBytes, descriptor) {
   return sha;
 }
 
-export function compareCompiler({ pinned, live, runDate }) {
+export function compareCompiler({ pinned, live, runDate, compatible = [] }) {
   if (live === pinned) return { ok: true, message: `Live prepared history (${runDate}) matches pinned compiler ${pinned.slice(0, 12)}.` };
+  if (compatible.includes(live)) {
+    return { ok: true, message: `Live prepared history (${runDate}) uses listed compatible compiler ${live.slice(0, 12)} (pin ${pinned.slice(0, 12)}).` };
+  }
   return {
     ok: false,
-    message: `Live prepared history (${runDate}) was compiled by ${live.slice(0, 12)}, but this app pins ${pinned.slice(0, 12)}. ` +
+    message: `Live prepared history (${runDate}) was compiled by ${live.slice(0, 12)}, but this app accepts ${[pinned, ...compatible].map(sha => sha.slice(0, 12)).join(', ')}. ` +
       'Installed apps will reject it and fall back to bundled history. Deploy the matching AR-local compiler to the Pi ' +
       '(contracts/history_ready) and let it republish before releasing this APK.',
   };
@@ -101,18 +111,19 @@ async function fetchBytes(url, limit) {
   return readBounded(response.body, limit);
 }
 
-export async function verifyLiveHistoryCompiler({ pinned, origin, get = fetchBytes }) {
+export async function verifyLiveHistoryCompiler({ pinned, compatible = [], origin, get = fetchBytes }) {
   const base = `${origin}/v1/release/app-payload-latest`;
   const descriptor = readyDescriptor(await get(`${base}/manifest.json`, MAX_MANIFEST));
   const live = readyCompilerSha(await get(`${base}/${descriptor.name}`, MAX_ASSET), descriptor);
-  return compareCompiler({ pinned, live, runDate: descriptor.runDate });
+  return compareCompiler({ pinned, compatible, live, runDate: descriptor.runDate });
 }
 
 async function main() {
   const pinned = pinnedCompilerSha(fs.readFileSync(path.join(root, 'contracts/history-ready/compiler-manifest.json'), 'utf8'));
+  const compatible = compatibleCompilerShas(fs.readFileSync(path.join(root, 'contracts/history-ready/compatible-compilers.json'), 'utf8'));
   const origin = appDataOrigin(fs.readFileSync(path.join(root, 'src/lib/automaticDataAccess.ts'), 'utf8'));
   let result;
-  try { result = await verifyLiveHistoryCompiler({ pinned, origin }); }
+  try { result = await verifyLiveHistoryCompiler({ pinned, compatible, origin }); }
   catch (error) { result = { ok: false, message: String(error?.message ?? error) }; }
   console[result.ok ? 'log' : 'error'](result.message);
   if (!result.ok) {
