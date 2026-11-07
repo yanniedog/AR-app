@@ -16,7 +16,7 @@ const OWNER = process.env.GITHUB_REPOSITORY_OWNER || REPO.split('/')[0];
 const TRUSTED_AUTHORS = [OWNER, 'claude', ...(process.env.AUTO_MERGE_TRUSTED_AUTHORS || '').split(',').filter(Boolean)];
 
 function gh(args, { json = true, allowFail = false } = {}) {
-  const r = spawnSync('gh', args, { encoding: 'utf8', timeout: 120_000 });
+  const r = spawnSync('gh', args, { encoding: 'utf8', timeout: 120_000, maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0) {
     if (allowFail) return null;
     throw new Error(`gh ${args.join(' ')} failed: ${(r.stderr || r.error?.message || '').trim()}`);
@@ -83,7 +83,10 @@ function reconcilePulls(only) {
 }
 
 function releasedSha() {
-  const release = paginate(`repos/${REPO}/releases?per_page=100`)
+  // Project only the fields used, so history size cannot exhaust the buffer.
+  const release = gh(['api', '--paginate', `repos/${REPO}/releases?per_page=100`, '--jq',
+    '.[] | {tag_name, draft, published_at, created_at}'], { json: false })
+    .split('\n').filter(Boolean).map(line => JSON.parse(line))
     .filter(item => !item.draft && item.tag_name.startsWith('app-arm-v'))
     .sort((a, b) => Date.parse(b.published_at ?? b.created_at) - Date.parse(a.published_at ?? a.created_at))[0];
   // The tag, not target_commitish (which can be a branch name), identifies the packaged commit.
