@@ -13,6 +13,7 @@ import { decidePullRequest, decideReleaseCatchUp, isBaseSyncCommit, isReleasePat
 const REPO = process.env.GITHUB_REPOSITORY || 'yanniedog/AR-app';
 const OWNER = process.env.GITHUB_REPOSITORY_OWNER || REPO.split('/')[0];
 // Agent commits are attributed to these accounts; anything else needs a human.
+const WORKFLOW_ACTOR = 'github-actions[bot]';
 const TRUSTED_AUTHORS = [OWNER, 'claude', ...(process.env.AUTO_MERGE_TRUSTED_AUTHORS || '').split(',').filter(Boolean)];
 
 function gh(args, { json = true, allowFail = false } = {}) {
@@ -32,10 +33,6 @@ function onMain(sha) {
   return status === 'ahead' || status === 'identical';
 }
 
-function autoMergeEnabled(number) {
-  return gh(['pr', 'view', String(number), '--repo', REPO, '--json', 'autoMergeRequest']).autoMergeRequest != null;
-}
-
 function reconcilePull(number) {
   const pr = api(`repos/${REPO}/pulls/${number}`);
   const listed = paginate(`repos/${REPO}/pulls/${number}/commits?per_page=100`);
@@ -46,7 +43,8 @@ function reconcilePull(number) {
     parentOnMain: (commit.parents?.length ?? 0) === 2 && commit.parents.some(parent => onMain(parent.sha)) }));
   const decision = decidePullRequest(pr, { owner: OWNER, repo: REPO, trustedAuthors: TRUSTED_AUTHORS,
     commitAuthors: authored.map(commit => commit.author?.login ?? null) });
-  const enabled = pr.state === 'open' ? autoMergeEnabled(number) : false;
+  const enabled = pr.state === 'open' && pr.auto_merge != null;
+  const enabledBy = pr.auto_merge?.enabled_by?.login ?? null;
   console.log(`#${number}: ${decision.action} (${decision.reason}); auto-merge ${enabled ? 'on' : 'off'}; state ${pr.mergeable_state}`);
   if (decision.action === 'disable' && enabled) {
     gh(['pr', 'merge', String(number), '--repo', REPO, '--disable-auto'], { json: false });
@@ -77,15 +75,28 @@ function reconcilePull(number) {
   // Workflow token only: a merge made with it fires no push workflows, so
   // auto-merge would land without a release. Merge directly once GitHub reports
   // every required gate satisfied, then dispatch the release ourselves.
-  if (enabled) { console.log(`#${number}: owner auto-merge already enabled; GitHub merges it`); return; }
+  if (enabled && enabledBy !== WORKFLOW_ACTOR) { console.log(`#${number}: auto-merge enabled by ${enabledBy}; GitHub merges it`); return; }
+  if (enabled) {
+    // Left by an earlier workflow-token run; it would merge without a release.
+    gh(['pr', 'merge', String(number), '--repo', REPO, '--disable-auto'], { json: false });
+    console.log(`#${number}: workflow-token auto-merge replaced by direct merge`);
+  }
   if (pr.mergeable_state !== 'clean') { console.log(`#${number}: waiting for required gates (${pr.mergeable_state})`); return; }
+  // Re-read just before merging so a hold, draft or new push since the decision wins.
+  const fresh = api(`repos/${REPO}/pulls/${number}`);
+  if (fresh.head.sha !== pr.head.sha || decidePullRequest(fresh, { owner: OWNER, repo: REPO, trustedAuthors: TRUSTED_AUTHORS,
+    commitAuthors: authored.map(commit => commit.author?.login ?? null) }).action !== 'enable' || fresh.mergeable_state !== 'clean') {
+    console.log(`#${number}: changed since evaluation; retrying on the next run`);
+    return;
+  }
   const merged = gh(['api', '-X', 'PUT', `repos/${REPO}/pulls/${number}/merge`, '-f', 'merge_method=squash',
     '-f', `sha=${pr.head.sha}`], { allowFail: true });
   if (!merged?.merged) { console.log(`#${number}: merge refused (head moved or gates changed); retrying on the next run`); return; }
+  // The repository deletes merged head branches itself (delete_branch_on_merge).
   console.log(`#${number}: merged as ${merged.sha.slice(0, 7)}`);
-  gh(['api', '-X', 'DELETE', `repos/${REPO}/git/refs/heads/${encodeURIComponent(pr.head.ref)}`], { json: false, allowFail: true });
   const files = paginate(`repos/${REPO}/pulls/${number}/files?per_page=100`).map(file => file.filename);
-  if (files.some(isReleasePath)) {
+  const runs = api(`repos/${REPO}/actions/workflows/mobile-android-apk.yml/runs?head_sha=${merged.sha}&per_page=1`).total_count;
+  if (files.some(isReleasePath) && runs === 0) {
     gh(['workflow', 'run', 'mobile-android-apk.yml', '--repo', REPO, '--ref', 'main'], { json: false });
     console.log(`#${number}: APK release dispatched`);
   }
