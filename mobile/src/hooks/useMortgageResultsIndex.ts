@@ -15,8 +15,14 @@ const completed: { key: ReuseKey; index: MortgageResultsIndex }[] = [];
 const sameKey = (a: ReuseKey, b: ReuseKey) => a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
 function reusableIndex(key: ReuseKey): MortgageResultsIndex | null {
   const now = Date.now();
-  const hit = completed.find(item => sameKey(item.key, key));
-  return hit && now >= hit.index.from && now < hit.index.until ? hit.index : null;
+  const at = completed.findIndex(item => sameKey(item.key, key));
+  if (at < 0) return null;
+  const { index } = completed[at];
+  if (now >= index.from && now < index.until) return index;
+  // Expiry and clock rollback are irreversible for a retained entry: a later
+  // clock change back into the window must not revive expired quotes.
+  completed.splice(at, 1);
+  return null;
 }
 function retainIndex(key: ReuseKey, index: MortgageResultsIndex) {
   const at = completed.findIndex(item => sameKey(item.key, key));

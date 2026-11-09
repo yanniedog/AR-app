@@ -97,9 +97,13 @@ it('gates the breadcrumb bar by width in both layouts', () => {
   for (const file of ['app/_layout.tsx', 'app/(tabs)/_layout.tsx']) {
     const source = fs.readFileSync(path.join(root, file), 'utf8');
     const line = source.split('\n').find((l) => l.includes('breadcrumbVisible =')) ?? '';
-    expect(line).toContain('breadcrumbRoute');
-    expect(line).toContain('breadcrumbsFitWidth(');
+    expect(line).toMatch(/breadcrumbVisible = breadcrumbRoute && breadcrumbsFitWidth\((width|shellWidth)\);/);
     expect(source).toContain('<BreadcrumbRouteProbe hydrated={hydrated} onChange={setBreadcrumbRoute} />');
-    expect(source).not.toMatch(/\busePathname\(\)[^\n]*breadcrumb/);
+    // The navigator component itself must not subscribe to route changes.
+    const navigator = file === 'app/_layout.tsx'
+      ? source.slice(source.indexOf('function RootNavigator()'), source.indexOf('export default function RootLayout'))
+      : source;
+    expect(navigator.length).toBeGreaterThan(0);
+    expect(navigator).not.toContain('usePathname');
   }
 });

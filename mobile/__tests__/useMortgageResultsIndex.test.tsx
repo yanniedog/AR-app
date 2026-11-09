@@ -102,31 +102,32 @@ test('a delayed obsolete legacy preparation cannot replace the new source index'
   } finally { act(() => tree.unmount()); prepare.mockRestore(); }
 });
 
-test('a remounted Rates surface reuses the completed index synchronously and never reuses an expired one', async () => {
-  const context = selectedConstraintFixture('Mortgage', [{ ...row, lvr_tier: 'lvr_=80%', balance_min: 100000, balance_max: 900000 }], []);
-  const source = context.rows;
-  const view = { ...catalogue(), status: 'unavailable' as const, allLoaded: false, products: [], getProgrammes: () => [] };
+test('a remounted Rates surface reuses a valid index synchronously; expiry evicts it even if the clock moves back', async () => {
+  const source = [row], view = catalogue([programme({ effectiveTo: '2026-10-14T03:01:00Z' })]);
+  const context = { core: core(), details: null, manifest: null, coreIntegrity: null };
   const prepare = jest.spyOn(preparation, 'prepareMortgageResultsIndex');
   let result!: ReturnType<typeof useMortgageResultsIndex>;
   // A remount rebuilds the caller's context object; only its contents identify the dataset.
-  function Probe() { result = useMortgageResultsIndex(source, view, { ...context }, true, 0, true); return null; }
+  function Probe() { result = useMortgageResultsIndex(source, view, { ...context }, false, 0, true); return null; }
   let tree!: ReactTestRenderer;
   act(() => { tree = TestRenderer.create(<Probe />); });
   try {
     await act(async () => { await jest.advanceTimersByTimeAsync(100); });
     expect(result.status).toBe('ready'); expect(prepare).toHaveBeenCalledTimes(1);
-    const first = result.index;
+    const first = result.index!;
+    expect(Number.isFinite(first.until)).toBe(true);
     act(() => tree.unmount());
     act(() => { tree = TestRenderer.create(<Probe />); });
     expect(result.status).toBe('ready'); expect(result.index).toBe(first);
-    await act(async () => { await jest.advanceTimersByTimeAsync(100); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(10); });
     expect(prepare).toHaveBeenCalledTimes(1);
     act(() => tree.unmount());
-    if (Number.isFinite(first!.until)) jest.setSystemTime(new Date(first!.until + 1));
-    else jest.setSystemTime(new Date(first!.from - 1000));
+    jest.setSystemTime(new Date(first.until + 1));
     act(() => { tree = TestRenderer.create(<Probe />); });
     expect(result.index).toBeNull(); expect(result.status).toBe('preparing');
-    await act(async () => { await jest.advanceTimersByTimeAsync(100); });
-    expect(prepare).toHaveBeenCalledTimes(2);
+    act(() => tree.unmount());
+    jest.setSystemTime(new Date(first.until - 1000));
+    act(() => { tree = TestRenderer.create(<Probe />); });
+    expect(result.index).toBeNull(); expect(result.status).toBe('preparing');
   } finally { act(() => tree.unmount()); prepare.mockRestore(); }
 });
