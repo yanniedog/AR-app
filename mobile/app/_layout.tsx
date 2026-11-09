@@ -73,12 +73,13 @@ function routeTitle(name:string,path:string) {
 }
 
 /** Reads the pathname itself so route changes do not re-render RootNavigator. */
-function RouteFallbackHeader({ options, back, core, routeName }: Pick<NativeStackHeaderProps, 'options' | 'back'> & {
+function RouteFallbackHeader({ navigationOptions, back, core, routeName }: Pick<NativeStackHeaderProps, 'back'> & {
+  navigationOptions: NativeStackHeaderProps['options'];
   core: CorePayload | null | undefined;
   routeName: string;
 }) {
   const pathname = usePathname();
-  return <ConsumedInsetHeader navigationOptions={options} back={back} core={core}
+  return <ConsumedInsetHeader navigationOptions={navigationOptions} back={back} core={core}
     fallbackTitle={routeTitle(routeName, pathname)} />;
 }
 
@@ -292,7 +293,7 @@ function RootNavigator() {
                   // edge-to-edge mode. A JS header respects the consumed inset.
                   header: showUpdateBanner || breadcrumbVisible
                     ? ({ options, route, back }) => (
-                      <RouteFallbackHeader options={options} back={back} core={core} routeName={route.name} />
+                      <RouteFallbackHeader navigationOptions={options} back={back} core={core} routeName={route.name} />
                     )
                     : undefined,
                   headerRight: () => <NavigationMenuButton />,
