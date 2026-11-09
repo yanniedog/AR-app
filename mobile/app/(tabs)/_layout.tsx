@@ -1,5 +1,5 @@
-import { Tabs, usePathname } from 'expo-router';
-import React from 'react';
+import { Tabs } from 'expo-router';
+import React, { useState } from 'react';
 import { Platform, useWindowDimensions } from 'react-native';
 
 import { useAppUpdateBannerVisible } from '../../src/components/AppUpdateBanner';
@@ -8,7 +8,8 @@ import { RefreshOutcomeSnackbar } from '../../src/components/feedback';
 import { useStore } from '../../src/data/store';
 import { primaryTabLabel, TAB_BAR_ORDER } from '../../src/lib/tabRouting';
 import { TAB_LEDGER_ICONS } from '../../src/lib/tabIcons';
-import { breadcrumbsFitWidth, shouldShowBreadcrumbs } from '../../src/lib/breadcrumbs';
+import { breadcrumbsFitWidth } from '../../src/lib/breadcrumbs';
+import { BreadcrumbRouteProbe } from '../../src/components/BreadcrumbRouteProbe';
 import { logTabNoOp } from '../../src/lib/degradationLog';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { HEADER_TYPOGRAPHY } from '../../src/theme/typography';
@@ -24,10 +25,13 @@ export default function TabsLayout() {
   const showUpdateBanner = useAppUpdateBannerVisible();
   const hydrated = useStore((state) => state.hydrated);
   const { width } = useWindowDimensions();
-  const breadcrumbVisible = shouldShowBreadcrumbs(usePathname(), hydrated) && breadcrumbsFitWidth(width);
+  // The probe owns the pathname subscription; see BreadcrumbRouteProbe.
+  const [breadcrumbRoute, setBreadcrumbRoute] = useState(false);
+  const breadcrumbVisible = breadcrumbRoute && breadcrumbsFitWidth(width);
 
   return (
     <>
+      <BreadcrumbRouteProbe hydrated={hydrated} onChange={setBreadcrumbRoute} />
       <Tabs
         initialRouteName="browse"
         backBehavior="initialRoute"
