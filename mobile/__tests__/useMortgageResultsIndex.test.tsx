@@ -2,14 +2,14 @@ import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import * as preparation from '../src/data/mortgageResultsIndex';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
-import { useMortgageResultsIndex } from '../src/hooks/useMortgageResultsIndex';
+import { clearReusableMortgageIndexes, useMortgageResultsIndex } from '../src/hooks/useMortgageResultsIndex';
 import { AS_OF, catalogue, core, programme, row } from '../testUtils/publicRateJourney';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { EMPTY_FILTERS } from '../src/data/selectors';
 import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 
-beforeEach(() => { jest.useFakeTimers(); jest.setSystemTime(new Date(AS_OF)); installMandatoryEligibility(selectMandatoryEligibility(null, null, null)); });
+beforeEach(() => { clearReusableMortgageIndexes(); jest.useFakeTimers(); jest.setSystemTime(new Date(AS_OF)); installMandatoryEligibility(selectMandatoryEligibility(null, null, null)); });
 afterEach(() => jest.useRealTimers());
 test.each(['expiry', 'rollback'])('%s observed before timer delivery rebuilds instead of stranding ready state', async kind => {
   const source = [row], view = catalogue([programme({ effectiveTo: '2026-10-14T03:01:00Z' })]);
@@ -99,5 +99,34 @@ test('a delayed obsolete legacy preparation cannot replace the new source index'
     const current = result.index; expect(current).not.toBeNull(); expect(current).not.toBe(old);
     await act(async () => { release(); });
     expect(result.index).toBe(current); expect(prepare).toHaveBeenCalledTimes(2);
+  } finally { act(() => tree.unmount()); prepare.mockRestore(); }
+});
+
+test('a remounted Rates surface reuses the completed index synchronously and never reuses an expired one', async () => {
+  const context = selectedConstraintFixture('Mortgage', [{ ...row, lvr_tier: 'lvr_=80%', balance_min: 100000, balance_max: 900000 }], []);
+  const source = context.rows;
+  const view = { ...catalogue(), status: 'unavailable' as const, allLoaded: false, products: [], getProgrammes: () => [] };
+  const prepare = jest.spyOn(preparation, 'prepareMortgageResultsIndex');
+  let result!: ReturnType<typeof useMortgageResultsIndex>;
+  // A remount rebuilds the caller's context object; only its contents identify the dataset.
+  function Probe() { result = useMortgageResultsIndex(source, view, { ...context }, true, 0, true); return null; }
+  let tree!: ReactTestRenderer;
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  try {
+    await act(async () => { await jest.advanceTimersByTimeAsync(100); });
+    expect(result.status).toBe('ready'); expect(prepare).toHaveBeenCalledTimes(1);
+    const first = result.index;
+    act(() => tree.unmount());
+    act(() => { tree = TestRenderer.create(<Probe />); });
+    expect(result.status).toBe('ready'); expect(result.index).toBe(first);
+    await act(async () => { await jest.advanceTimersByTimeAsync(100); });
+    expect(prepare).toHaveBeenCalledTimes(1);
+    act(() => tree.unmount());
+    if (Number.isFinite(first!.until)) jest.setSystemTime(new Date(first!.until + 1));
+    else jest.setSystemTime(new Date(first!.from - 1000));
+    act(() => { tree = TestRenderer.create(<Probe />); });
+    expect(result.index).toBeNull(); expect(result.status).toBe('preparing');
+    await act(async () => { await jest.advanceTimersByTimeAsync(100); });
+    expect(prepare).toHaveBeenCalledTimes(2);
   } finally { act(() => tree.unmount()); prepare.mockRestore(); }
 });

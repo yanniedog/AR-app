@@ -7,6 +7,26 @@ import type { RateConditionContext } from '../data/rateConditions';
 import type { RateRow } from '../types';
 import { scheduleAfterInteractions } from '../lib/yieldToUi';
 
+/** Completed indexes outlive a Rates remount. Every identity that a fresh
+ * preparation would read is part of the key; validity is rechecked on reuse. */
+const REUSE_LIMIT = 2;
+type ReuseKey = readonly unknown[];
+const completed: { key: ReuseKey; index: MortgageResultsIndex }[] = [];
+const sameKey = (a: ReuseKey, b: ReuseKey) => a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+function reusableIndex(key: ReuseKey): MortgageResultsIndex | null {
+  const now = Date.now();
+  const hit = completed.find(item => sameKey(item.key, key));
+  return hit && now >= hit.index.from && now < hit.index.until ? hit.index : null;
+}
+function retainIndex(key: ReuseKey, index: MortgageResultsIndex) {
+  const at = completed.findIndex(item => sameKey(item.key, key));
+  if (at >= 0) completed.splice(at, 1);
+  completed.push({ key, index });
+  while (completed.length > REUSE_LIMIT) completed.shift();
+}
+/** Test seam: drop reusable indexes between isolated cases. */
+export function clearReusableMortgageIndexes() { completed.length = 0; }
+
 /** Prepare immutable quotes, source scopes and sort orders before filter taps.
  * Source replacement, gate revision and temporal boundaries fail closed. */
 export function useMortgageResultsIndex(source: readonly RateRow[], catalogue: PublicCatalogueView,
@@ -18,20 +38,29 @@ export function useMortgageResultsIndex(source: readonly RateRow[], catalogue: P
   const [clock, setClock] = useState(0);
   const owner = useMemo(() => ({ source, catalogue, context, includeNonStandard, revision, clock, mandatoryRevision, suitabilityRevision }),
     [source, catalogue, context, includeNonStandard, revision, clock, mandatoryRevision, suitabilityRevision]);
+  const reuseKey = useMemo(() => [source, catalogue, context.core, context.details, context.manifest, context.coreIntegrity,
+    includeNonStandard, revision, mandatoryRevision, suitabilityRevision] as const,
+  [source, catalogue, context.core, context.details, context.manifest, context.coreIntegrity, includeNonStandard, revision, mandatoryRevision, suitabilityRevision]);
   const [snapshot, setSnapshot] = useState<{ owner: typeof owner; index: MortgageResultsIndex | null; error: boolean } | null>(null);
   const current = snapshot?.owner === owner;
   const expired = !!(current && snapshot?.index && (Date.now() < snapshot.index.from || Date.now() >= snapshot.index.until));
-  const index = current && snapshot.index && Date.now() >= snapshot.index.from && Date.now() < snapshot.index.until ? snapshot.index : null;
+  const reused = current ? null : reusableIndex(reuseKey);
+  const index = current && snapshot.index && Date.now() >= snapshot.index.from && Date.now() < snapshot.index.until ? snapshot.index : reused;
+  const hasReuse = reused != null;
   useEffect(() => {
-    if (!enabled || catalogue.status !== 'unavailable' && (catalogue.status !== 'ready' || !catalogue.allLoaded) || current) return;
+    if (!enabled || catalogue.status !== 'unavailable' && (catalogue.status !== 'ready' || !catalogue.allLoaded) || current || hasReuse) return;
     let cancelled = false;
     const cancel = scheduleAfterInteractions(() => {
       void prepareMortgageResultsIndex({ source, catalogue, context, includeNonStandard, cancelled: () => cancelled })
-        .then(index => { if (!cancelled) setSnapshot({ owner, index, error: false }); })
+        .then(index => {
+          if (cancelled) return;
+          if (index) retainIndex(reuseKey, index);
+          setSnapshot({ owner, index, error: false });
+        })
         .catch(() => { if (!cancelled) setSnapshot({ owner, index: null, error: true }); });
     });
     return () => { cancelled = true; cancel(); };
-  }, [enabled, catalogue, source, context, includeNonStandard, owner, current]);
+  }, [enabled, catalogue, source, context, includeNonStandard, owner, current, hasReuse, reuseKey]);
   useEffect(() => {
     if (enabled && expired) setClock(value => value + 1);
   }, [enabled, expired]);

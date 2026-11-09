@@ -4,7 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { Stack, router, usePathname, type Href } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AppState,
   Platform,
@@ -15,7 +15,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppLockGate } from '../src/components/AppLockGate';
+import type { NativeStackHeaderProps } from '@react-navigation/native-stack';
 import { ConsumedInsetHeader } from '../src/components/ConsumedInsetHeader';
+import type { CorePayload } from '../src/types';
 import {
   AppNavigationMenu,
   NavigationMenuButton,
@@ -23,6 +25,7 @@ import {
 } from '../src/components/AppNavigationMenu';
 import { AppTabBar } from '../src/components/AppTabBar';
 import { AppBreadcrumbBar } from '../src/components/AppBreadcrumbBar';
+import { BreadcrumbRouteProbe } from '../src/components/BreadcrumbRouteProbe';
 import { NavigatorSafeArea } from '../src/components/NavigatorSafeArea';
 import { WordBubbleProvider } from '../src/components/WordBubble';
 import {
@@ -45,7 +48,7 @@ import { useStore } from '../src/data/store';
 import { shouldRefreshOnResume } from '../src/data/resumeRefresh';
 import { CURRENT_PRIVACY_CHOICE_VERSION } from '../src/data/storeTypes';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
-import { breadcrumbsFitWidth, shouldShowBreadcrumbs } from '../src/lib/breadcrumbs';
+import { breadcrumbsFitWidth } from '../src/lib/breadcrumbs';
 import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
 import { logSwallowedError } from '../src/lib/degradationLog';
 import {
@@ -67,6 +70,16 @@ const ROUTE_TITLES: readonly (readonly [string,UiLabel])[] = [
 function routeTitle(name:string,path:string) {
   if(name === '(tabs)') return uiLabel(path.includes('watchlist') ? 'Saved':path.includes('market') ? 'Market':'Rates');
   return uiLabel(ROUTE_TITLES.find(([routeName])=>routeName === name)?.[1]??'Rates');
+}
+
+/** Reads the pathname itself so route changes do not re-render RootNavigator. */
+function RouteFallbackHeader({ options, back, core, routeName }: Pick<NativeStackHeaderProps, 'options' | 'back'> & {
+  core: CorePayload | null | undefined;
+  routeName: string;
+}) {
+  const pathname = usePathname();
+  return <ConsumedInsetHeader navigationOptions={options} back={back} core={core}
+    fallbackTitle={routeTitle(routeName, pathname)} />;
 }
 
 // Deep links retain the canonical tab navigator for native Back.
@@ -108,7 +121,6 @@ function RootNavigator() {
   const sessionReplayEnabled = useStore((s) => s.prefs.sessionReplayEnabled);
   const privacyChoiceVersion = useStore((s) => s.prefs.privacyChoiceVersion);
   const setPref = useStore((s) => s.setPref);
-  const pathname = usePathname();
   const bootstrap = useStore((s) => s.bootstrap);
   const performanceAuditActive = usePerformanceAuditActiveState();
   const androidHeader = androidStackScreenOptions(theme);
@@ -123,7 +135,9 @@ function RootNavigator() {
 
   const privacyChoiceCurrent = privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
   // Hydration controls the shell. Privacy choices never control browsing.
-  const breadcrumbVisible = shouldShowBreadcrumbs(pathname, hydrated) && breadcrumbsFitWidth(shellWidth);
+  // The probe owns the pathname subscription; see BreadcrumbRouteProbe.
+  const [breadcrumbRoute, setBreadcrumbRoute] = useState(false);
+  const breadcrumbVisible = breadcrumbRoute && breadcrumbsFitWidth(shellWidth);
 
   useLayoutEffect(() => {
     if (!hydrated) return;
@@ -257,6 +271,7 @@ function RootNavigator() {
           >
             <StatusBar style={theme.dark ? 'light' : 'dark'} />
             <NavigationMenuProvider>
+            <BreadcrumbRouteProbe hydrated={hydrated} onChange={setBreadcrumbRoute} />
             {breadcrumbVisible ? <AppBreadcrumbBar /> : null}
             <NavigatorSafeArea topInsetConsumed={showUpdateBanner || breadcrumbVisible}>
             <View style={{ flex: 1 }}>
@@ -277,8 +292,7 @@ function RootNavigator() {
                   // edge-to-edge mode. A JS header respects the consumed inset.
                   header: showUpdateBanner || breadcrumbVisible
                     ? ({ options, route, back }) => (
-                      <ConsumedInsetHeader navigationOptions={options} back={back} core={core}
-                        fallbackTitle={routeTitle(route.name,pathname)} />
+                      <RouteFallbackHeader options={options} back={back} core={core} routeName={route.name} />
                     )
                     : undefined,
                   headerRight: () => <NavigationMenuButton />,
