@@ -60,16 +60,38 @@ export function clearCompletedPerformanceAudit(clearOtherDiagnostics?: () => Pro
   return clear;
 }
 
-export async function loadPerformanceAuditHistory(): Promise<AuditMetricRun[]> {
+/** A report already in memory is the latest run; reading and parsing the
+ * multi-megabyte completed file again would only block the screen. */
+export async function loadPerformanceAuditHistory(known?: PerformanceAuditReport | null): Promise<AuditMetricRun[]> {
   const startedEpoch = epoch;
-  const latest = await loadCompletedPerformanceAudit().catch(() => null);
+  const latest = known ?? await loadCompletedPerformanceAudit().catch(() => null);
   await writes.catch(() => {});
   const rows = await readAuditMetricHistory();
   if (startedEpoch !== epoch || clearing) return [];
   return mergeAuditMetricRuns(rows, latest ? [auditMetricRun(latest)] : []);
 }
 
-export async function loadCompletedPerformanceAudit(): Promise<PerformanceAuditReport | null> {
+let inFlightLoad: { epoch: number; writes: Promise<void>; result: Promise<PerformanceAuditReport | null> } | null = null;
+
+/** Callers mounting in the same turn (the screen and its history card) share
+ * one read and one parse. Nothing is retained after it settles, so a later
+ * call always observes the files as they are then. */
+export function loadCompletedPerformanceAudit(): Promise<PerformanceAuditReport | null> {
+  const shared = inFlightLoad;
+  if (shared && shared.epoch === epoch && shared.writes === writes) return shared.result;
+  const entry = { epoch, writes, result: readCompletedPerformanceAudit() };
+  inFlightLoad = entry;
+  const release = () => { if (inFlightLoad === entry) inFlightLoad = null; };
+  void entry.result.then(release, release);
+  return entry.result;
+}
+
+const modifiedAt = (info: unknown): number | null => {
+  const value = (info as { modificationTime?: unknown } | null)?.modificationTime;
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+};
+
+async function readCompletedPerformanceAudit(): Promise<PerformanceAuditReport | null> {
   if (!FileSystem.documentDirectory) return null;
   const startedEpoch = epoch;
   const startedWrites = writes;
@@ -79,12 +101,15 @@ export async function loadCompletedPerformanceAudit(): Promise<PerformanceAuditR
   let primaryError: unknown;
   let primary: PerformanceAuditReport | null = null;
   let repairPrimary = false;
+  let primaryModifiedAt: number | null = null;
   for (const file of [FILE, TEMP_FILE]) {
     try {
-      if ((await FileSystem.getInfoAsync(file)).exists) {
+      const info = await FileSystem.getInfoAsync(file);
+      if (info.exists) {
         const candidate = validateCompletedReport(JSON.parse(await FileSystem.readAsStringAsync(file)));
         if (!primary || Date.parse(candidate.finishedAt) > Date.parse(primary.finishedAt)) {
           primary = candidate;
+          primaryModifiedAt = modifiedAt(info);
           repairPrimary = file === TEMP_FILE || candidate.schemaVersion !== PERFORMANCE_AUDIT_SCHEMA_VERSION;
         }
       }
@@ -95,7 +120,14 @@ export async function loadCompletedPerformanceAudit(): Promise<PerformanceAuditR
   const previous = `${FileSystem.documentDirectory}logs/ar-performance-audit-latest.json`;
   let recovered: PerformanceAuditReport | null = null;
   try {
-    if ((await FileSystem.getInfoAsync(previous)).exists) {
+    const previousInfo = await FileSystem.getInfoAsync(previous);
+    const previousModifiedAt = modifiedAt(previousInfo);
+    // The runner writes the sidecar before this completed copy. A sidecar that
+    // is not newer than a valid completed copy cannot hold a later run, so its
+    // two large parses are skipped. Unknown times keep the full comparison.
+    const sidecarCannotBeNewer = primary != null && !repairPrimary && primaryModifiedAt != null &&
+      previousModifiedAt != null && previousModifiedAt <= primaryModifiedAt;
+    if (previousInfo.exists && !sidecarCannotBeNewer) {
       const stored = JSON.parse(await FileSystem.readAsStringAsync(previous));
       if (typeof stored.summaryMarker === 'string' && !stored.summaryMarker.includes('partial=true') &&
           typeof stored.reportJson === 'string') {

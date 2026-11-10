@@ -150,6 +150,7 @@ import { setPassiveAuditPaused } from '../lib/passiveAudit';
 import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAuditFinalization';
 import { awaitPerformanceAuditWork } from '../lib/performanceAuditWork';
 import { buildPerformanceAuditSetupPlans, measurePerformanceAuditSetupStage, PERFORMANCE_AUDIT_SETUP_STAGES, PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from '../lib/performanceAuditSetup';
+import { AUDIT_ENTRY_CHECK_IDS, buildAuditEntryChecks } from '../lib/auditEntryTrace';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, PerformanceAuditStepTimeoutError, estimatePerformanceAuditTime, scoreUserVisibleJourney, userVisibleForwardMs } from '../lib/performanceAuditTiming';
 import {
   buildIntegratedAppHealthReport, buildPartialAppHealthReport,
@@ -168,7 +169,9 @@ const USER_VISIBLE_PROBE_KINDS = new Set<PerformanceAuditReadinessKind>(['data',
 const RUNTIME_SAMPLE_MS = 1_250;
 // Maximum-profile preparation, runtime, storage, filesystem, log I/O, payload,
 // network, and durable audit-state restoration. Dedicated owners add their own checks.
-const FIXED_BENCHMARK_CHECKS = 9;
+// The audit's own entry path (screen open, settings open, start response) is
+// measured from the interaction that started this run.
+const FIXED_BENCHMARK_CHECKS = 9 + AUDIT_ENTRY_CHECK_IDS.length;
 const STORAGE_KEY_PREFIX = '@ar/performance-audit/';
 const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
@@ -3489,6 +3492,17 @@ export function PerformanceAuditRunner() {
           (watchdog) => runRuntimeCheck(monitor, watchdog),
         );
 
+        // Recorded while the audit screen is still the mounted origin. The
+        // builder never throws, so each planned id is stored exactly once.
+        let entryChecks: AuditCheck[] | null = null;
+        for (let entryIndex = 0; entryIndex < AUDIT_ENTRY_CHECK_IDS.length; entryIndex++) {
+          updatePerformanceAuditProgress(completed, total, 'Measuring audit start path');
+          await recordContinuable('Measuring audit start path', async () => {
+            entryChecks ??= await buildAuditEntryChecks();
+            return entryChecks[entryIndex];
+          });
+        }
+
         // Deep semantic callbacks deliberately keep their screen mounted so a
         // scenario can continue. They cannot also be honest forward/back route
         // measurements. Run every steady-state destination as its own cold/warm
@@ -3796,6 +3810,7 @@ export function PerformanceAuditRunner() {
           'external-link-inventory',
           ...externalLinks.map((_, index) => `external-link-${index + 1}`),
           'runtime-responsiveness',
+          ...AUDIT_ENTRY_CHECK_IDS,
           ...navigationJourneys.flatMap((journey) => [
             `journey-${journey.id}-cold`,
             `journey-${journey.id}-warm`,
