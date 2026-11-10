@@ -253,7 +253,8 @@ function PerformanceAuditScreenInner() {
     ).catch(() => {});
   }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
-  const entryReady = layoutReady && hangTimeoutLoaded;
+  // Usable means a start control can be pressed, not only that it is laid out.
+  const entryReady = layoutReady && hangTimeoutLoaded && !state.recoveryRequired && !updateBlocksAudit && !uploadBusy;
   useEffect(() => { if (entryReady) markAuditEntryScreenReady(); }, [entryReady]);
 
   const runAudit = async (mode: 'local' | 'live-source') => {

@@ -1,5 +1,5 @@
 import {
-  AUDIT_ENTRY_CHECK_IDS, buildAuditEntryChecks, markAuditEntryRunning, markAuditEntryScreenMounted,
+  AUDIT_ENTRY_CHECK_IDS, buildAuditEntryChecks, markAuditEntryInterrupted, markAuditEntryRunning, markAuditEntryScreenMounted,
   markAuditEntryScreenReady, markAuditEntrySettingsOpened, markAuditEntryStartPressed, markAuditEntryStartQueued,
   resetAuditEntryTraceForTests, setAuditEntrySettingsProbe,
 } from '../src/lib/auditEntryTrace';
@@ -41,7 +41,8 @@ test('slow phases are scored with the existing latency limits and a failed probe
   markAuditEntryScreenMounted();
   clock = 3_000; markAuditEntryScreenReady();
   markAuditEntrySettingsOpened(400);
-  setAuditEntrySettingsProbe(async () => { throw new Error('unmounted'); });
+  const probe = jest.fn(async () => 42);
+  setAuditEntrySettingsProbe(probe);
   clock = 4_000; markAuditEntryStartPressed();
   clock = 5_000; markAuditEntryStartQueued();
   clock = 5_100; markAuditEntryRunning();
@@ -49,6 +50,24 @@ test('slow phases are scored with the existing latency limits and a failed probe
   expect(screen.status).toBe('fail');
   expect(settings).toMatchObject({ status: 'fail', durationMs: 400 });
   expect(start).toMatchObject({ status: 'warn', metrics: { actionMs: 1_000 } });
+  // The person's own slow open is kept; the warmed probe is not consulted.
+  expect(probe).not.toHaveBeenCalled();
+});
+
+test('press marks belong to one run, survive a remount and are withheld after an interruption', async () => {
+  markAuditEntryScreenMounted();
+  clock = 100; markAuditEntryScreenReady();
+  clock = 200; markAuditEntryStartPressed();
+  clock = 240; markAuditEntryStartQueued();
+  markAuditEntryScreenMounted();
+  clock = 400; markAuditEntryRunning();
+  expect((await buildAuditEntryChecks())[2]).toMatchObject({ status: 'pass', durationMs: 200 });
+  expect((await buildAuditEntryChecks())[2].status).toBe('skipped');
+  clock = 500; markAuditEntryStartPressed();
+  clock = 520; markAuditEntryStartQueued();
+  markAuditEntryInterrupted();
+  clock = 90_000; markAuditEntryRunning();
+  expect((await buildAuditEntryChecks())[2]).toMatchObject({ status: 'skipped', durationMs: null });
 });
 
 test('a lender keeps one row-array identity per edition while copies stay caller-owned', () => {
@@ -59,5 +78,10 @@ test('a lender keeps one row-array identity per edition while copies stay caller
   expect(stableRowsForProvider(rows, 'Bank')).toBe(stableRowsForProvider(rows, 'Bank'));
   expect(stableRowsForProvider(rows, 'Bank')).toEqual([rows[0]]);
   expect(rowsForProvider(rows, 'Bank')).not.toBe(stableRowsForProvider(rows, 'Bank'));
+  const copy = rowsForProvider(rows, 'Bank');
+  expect(rowsForProvider(rows, 'Bank')).not.toBe(copy);
+  copy.pop();
+  expect(rowsForProvider(rows, 'Bank')).toEqual([rows[0]]);
+  expect(stableRowsForProvider(rows, 'Bank')).toEqual([rows[0]]);
   expect(stableRowsForProvider(rows, 'Missing')).toEqual([]);
 });

@@ -123,10 +123,11 @@ async function readCompletedPerformanceAudit(): Promise<PerformanceAuditReport |
     const previousInfo = await FileSystem.getInfoAsync(previous);
     const previousModifiedAt = modifiedAt(previousInfo);
     // The runner writes the sidecar before this completed copy. A sidecar that
-    // is not newer than a valid completed copy cannot hold a later run, so its
-    // two large parses are skipped. Unknown times keep the full comparison.
+    // is strictly older than a valid completed copy cannot hold a later run, so
+    // its two large parses are skipped. Ties and unknown times keep the full
+    // comparison: file times can be coarse.
     const sidecarCannotBeNewer = primary != null && !repairPrimary && primaryModifiedAt != null &&
-      previousModifiedAt != null && previousModifiedAt <= primaryModifiedAt;
+      previousModifiedAt != null && previousModifiedAt < primaryModifiedAt;
     if (previousInfo.exists && !sidecarCannotBeNewer) {
       const stored = JSON.parse(await FileSystem.readAsStringAsync(previous));
       if (typeof stored.summaryMarker === 'string' && !stored.summaryMarker.includes('partial=true') &&

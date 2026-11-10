@@ -1,7 +1,7 @@
 import { getRandomBytes } from 'expo-crypto';
 import type { Href } from 'expo-router';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, type PerformanceAuditEstimate } from './performanceAuditTiming';
-import { markAuditEntryRunning, markAuditEntryStartQueued } from './auditEntryTrace';
+import { markAuditEntryInterrupted, markAuditEntryRunning, markAuditEntryStartQueued } from './auditEntryTrace';
 import type { AuditBackgroundWorkWait } from './performanceAuditBackgroundWork';
 import type { AuditCheckDiagnostic } from './performanceAuditDiagnostic';
 
@@ -622,6 +622,7 @@ export function pausePerformanceAudit(): void {
   if (!pauseTrackingApplies()) return;
   if (auditState.paused || auditState.cancelRequested) return;
   pauseCount += 1;
+  markAuditEntryInterrupted();
   emit({ ...auditState, paused: true });
 }
 

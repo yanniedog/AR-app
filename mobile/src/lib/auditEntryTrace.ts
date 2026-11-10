@@ -33,12 +33,14 @@ interface EntryTrace {
   runningAt: Mark;
   /** Last real Audit settings open in this visit, when the person opened it. */
   settingsOpenMs: Mark;
+  /** The app left the foreground between the press and the running runner. */
+  startInterrupted: boolean;
 }
 
 const SETTINGS_PROBE_TIMEOUT_MS = 2_000;
 const empty = (): EntryTrace => ({
   screenMountedAt: null, screenReadyAt: null, startPressedAt: null, startFeedbackAt: null,
-  startQueuedAt: null, runningAt: null, settingsOpenMs: null,
+  startQueuedAt: null, runningAt: null, settingsOpenMs: null, startInterrupted: false,
 });
 let trace = empty();
 let settingsProbe: (() => Promise<number | null>) | null = null;
@@ -52,9 +54,15 @@ const rounded = (value: number) => Math.round(value * 10) / 10;
 const span = (from: Mark, to: Mark): number | null =>
   from != null && to != null && Number.isFinite(from) && Number.isFinite(to) && to >= from ? rounded(to - from) : null;
 
-/** A remount is a new visit: earlier screen and press marks no longer apply. */
+/** A remount is a new visit for the screen and its settings. Marks of a press
+ * whose run has not yet recorded its entry checks belong to that run and stay. */
 export function markAuditEntryScreenMounted(): void {
-  trace = { ...empty(), screenMountedAt: clock() };
+  trace = { ...trace, screenMountedAt: clock(), screenReadyAt: null, settingsOpenMs: null };
+}
+
+/** A pause between the press and the runner is the person's time, not the app's. */
+export function markAuditEntryInterrupted(): void {
+  if (trace.startPressedAt != null && trace.runningAt == null) trace.startInterrupted = true;
 }
 
 /** First usable layout only; later layout passes are not another open. */
@@ -73,6 +81,7 @@ export function markAuditEntryStartPressed(): void {
   trace.startFeedbackAt = null;
   trace.startQueuedAt = null;
   trace.runningAt = null;
+  trace.startInterrupted = false;
   const frame = (globalThis as { requestAnimationFrame?: (callback: () => void) => unknown }).requestAnimationFrame;
   if (typeof frame !== 'function') return;
   frame(() => {
@@ -121,7 +130,9 @@ function measured(id: string, label: string, durationMs: number, status: AuditCh
 
 async function measureSettingsOpen(): Promise<number | null> {
   const probe = settingsProbe;
-  if (!probe) return trace.settingsOpenMs;
+  // The person's own open is the measurement. A probe reopens an already
+  // rendered panel, so it only fills in when no real open was recorded.
+  if (!probe || trace.settingsOpenMs != null) return trace.settingsOpenMs;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const value = await Promise.race([
@@ -145,6 +156,8 @@ export async function buildAuditEntryChecks(): Promise<AuditCheck[]> {
   const [screenId, settingsId, startId] = AUDIT_ENTRY_CHECK_IDS;
   const screenLabel = 'Audit screen open', settingsLabel = 'Audit settings open', startLabel = 'Audit start response';
   const snapshot = { ...trace };
+  // Press marks belong to exactly one run.
+  trace = { ...trace, startPressedAt: null, startFeedbackAt: null, startQueuedAt: null, runningAt: null, startInterrupted: false };
 
   const openMs = span(snapshot.screenMountedAt, snapshot.screenReadyAt);
   const screen = openMs == null ? unavailable(screenId, screenLabel)
@@ -159,7 +172,7 @@ export async function buildAuditEntryChecks(): Promise<AuditCheck[]> {
   const feedbackMs = span(snapshot.startPressedAt, snapshot.startFeedbackAt);
   const queuedMs = span(snapshot.startPressedAt, snapshot.startQueuedAt);
   const runningMs = span(snapshot.startPressedAt, snapshot.runningAt);
-  const start = queuedMs == null || runningMs == null ? unavailable(startId, startLabel)
+  const start = queuedMs == null || runningMs == null || snapshot.startInterrupted ? unavailable(startId, startLabel)
     : measured(startId, startLabel, runningMs, worstUserVisibleLatency(
       scoreAuditLatency(queuedMs, AUDIT_ACTION_WARN_MS, AUDIT_ACTION_FAIL_MS),
       scoreAuditLatency(runningMs, AUDIT_FORWARD_WARN_MS, AUDIT_FORWARD_FAIL_MS),
