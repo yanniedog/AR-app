@@ -31,7 +31,7 @@ export function AuditMetricHistory({ report }: { report: PerformanceAuditReport 
   useEffect(() => {
     let active = true;
     setStatus('loading');
-    void loadPerformanceAuditHistory().then(rows => {
+    void loadPerformanceAuditHistory(report).then(rows => {
       if (active) {
         setRuns(mergeAuditMetricRuns(rows, report ? [auditMetricRun(report)] : []));
         setStatus('ready');

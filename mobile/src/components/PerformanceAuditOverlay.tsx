@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AuditScreenAwake } from '../../modules/audit-screen-awake';
 import { cancelPerformanceAudit, getPerformanceAuditState } from '../lib/performanceAudit';
-import { uiCount, uiJoin, uiNumber } from '../lib/uiCopy';
+import { uiCount, uiJoin } from '../lib/uiCopy';
+import { performanceAuditEstimateParts } from '../lib/performanceAuditTiming';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from './ui';
 
@@ -20,6 +21,7 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
   const total = Math.max(1, state.progress.total);
   const fraction = Math.max(0, Math.min(1, state.progress.completed / total));
   const percent = Math.round(fraction * 100);
+  const estimate = state.estimate ? performanceAuditEstimateParts(state.estimate.remainingMs) : null;
 
   return (
     <View
@@ -44,7 +46,7 @@ export const PerformanceAuditOverlay = memo(function PerformanceAuditOverlay({ s
           </AppText>
         </Row>
         <AppText variant="small" color="textMuted" accessibilityLiveRegion="polite">
-          {state.paused ? uiLabel('Paused') : state.estimate ? uiJoin('Estimate', ': ', uiNumber(state.estimate.remainingMinMs / 1000), ' – ', uiNumber(state.estimate.remainingMaxMs / 1000), ' ', 'seconds') : uiLabel('Preparing')}
+          {state.paused ? uiLabel('Paused') : estimate ? uiJoin('Estimate', ': ', uiCount(estimate.value), ' ', estimate.unit) : uiLabel('Preparing')}
         </AppText>
         <AppText variant="small" color="textMuted">{uiLabel(state.paused ? 'Paused' : state.progress.label.startsWith('Background work:') ? 'Background checks' : 'Checking')}</AppText>
         <View

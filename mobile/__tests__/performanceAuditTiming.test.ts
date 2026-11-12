@@ -124,13 +124,15 @@ it('keeps interrupted timings out of the limit and report maxima', () => {
 it('provides an initial estimate, adapts to slow checks and covers finalization', () => {
   const initial = estimatePerformanceAuditTime({ total: 200, completed: 0, elapsedMs: 0, finalizing: false });
   expect(initial.basis).toBe('initial');
-  expect(initial.remainingMinMs).toBeGreaterThan(0);
+  expect(initial.remainingMs).toBeGreaterThan(0);
   const fast = estimatePerformanceAuditTime({ total: 200, completed: 20, elapsedMs: 20_000, finalizing: false });
   const slow = estimatePerformanceAuditTime({ total: 200, completed: 20, elapsedMs: 150_000, finalizing: false });
-  expect(slow.remainingMaxMs).toBeGreaterThan(fast.remainingMaxMs);
+  expect(slow.remainingMs).toBeGreaterThan(fast.remainingMs);
+  expect(Object.keys(slow).sort()).toEqual(['basis', 'elapsedMs', 'remainingMs']);
+  expect(formatPerformanceAuditEstimate(slow, false)).toMatch(/^ETA: about \d+ (?:min|sec) remaining$/);
   expect(formatPerformanceAuditEstimate(slow, true)).toContain('ETA paused');
   const finalizing = estimatePerformanceAuditTime({ total: 200, completed: 200, elapsedMs: 300_000, finalizing: true });
-  expect(finalizing.remainingMaxMs).toBeGreaterThan(0);
+  expect(finalizing.remainingMs).toBeGreaterThan(0);
   expect(formatPerformanceAuditEstimate(finalizing, false)).toContain('remaining');
 });
 
@@ -162,17 +164,17 @@ it('does not estimate thousands of preloaded links at the route-check pace', () 
     total: 2_310, completed: 300, elapsedMs: 600_000, finalizing: false,
     links: { total: 2_000, completed: 0, elapsedMs: 0 },
   });
-  expect(startOfLinks.remainingMaxMs).toBeLessThan(450_000);
+  expect(startOfLinks.remainingMs).toBeLessThan(450_000);
   const halfway = estimatePerformanceAuditTime({
     total: 2_310, completed: 1_300, elapsedMs: 650_000, finalizing: false,
     links: { total: 2_000, completed: 1_000, elapsedMs: 50_000 },
   });
-  expect(halfway.remainingMaxMs).toBeLessThan(startOfLinks.remainingMaxMs);
+  expect(halfway.remainingMs).toBeLessThan(startOfLinks.remainingMs);
   // Keep route timing independent: fast cached links cannot make the final
   // foreground work appear instantaneous.
   const finalChecks = estimatePerformanceAuditTime({
     total: 2_310, completed: 2_300, elapsedMs: 700_000, finalizing: false,
     links: { total: 2_000, completed: 2_000, elapsedMs: 100_000 },
   });
-  expect(finalChecks.remainingMinMs).toBeGreaterThan(15_000);
+  expect(finalChecks.remainingMs).toBeGreaterThan(15_000);
 });
