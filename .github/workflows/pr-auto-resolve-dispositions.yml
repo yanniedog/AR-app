@@ -1,7 +1,7 @@
 name: pr-auto-resolve-dispositions
-# A trusted in-thread reply starting "implemented in <sha>", "deferred —" or
-# "declined —" resolves its review thread, then re-runs bot-feedback-gate
-# (GitHub emits no event when a thread is resolved). No owner click needed.
+# Resolves every review thread whose latest comment is a trusted reply in the
+# form "implemented in <sha>", "deferred — <reason>" or "declined — <reason>",
+# then re-runs the head's bot-feedback-gate (GitHub emits no event on resolve).
 on:
   pull_request_review_comment:
     types: [created, edited]
@@ -9,9 +9,6 @@ permissions:
   contents: read
   pull-requests: write
   actions: write
-concurrency:
-  group: pr-auto-resolve-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
 jobs:
   resolve:
     if: >-
@@ -28,15 +25,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
-      - name: Resolve answered thread
-        id: resolve
+      - name: Resolve answered threads and re-run the gate
         env:
           GH_TOKEN: ${{ secrets.BOT_GATE_TOKEN || github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node scripts/pr-auto-resolve-dispositions.mjs
-      - name: Re-run bot-feedback-gate
-        if: steps.resolve.outputs.resolved == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          PR: ${{ github.event.pull_request.number }}
-        run: gh workflow run pr-bot-feedback-check.yml -R "$GITHUB_REPOSITORY" --ref "$HEAD_REF" -f pr_number="$PR"
