@@ -1,0 +1,42 @@
+name: pr-auto-resolve-dispositions
+# A trusted in-thread reply starting "implemented in <sha>", "deferred —" or
+# "declined —" resolves its review thread, then re-runs bot-feedback-gate
+# (GitHub emits no event when a thread is resolved). No owner click needed.
+on:
+  pull_request_review_comment:
+    types: [created, edited]
+permissions:
+  contents: read
+  pull-requests: write
+  actions: write
+concurrency:
+  group: pr-auto-resolve-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  resolve:
+    if: >-
+      github.event.comment.in_reply_to_id != null
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Resolve answered thread
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.BOT_GATE_TOKEN || github.token }}
+        run: node scripts/pr-auto-resolve-dispositions.mjs
+      - name: Re-run bot-feedback-gate
+        if: steps.resolve.outputs.resolved == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh workflow run pr-bot-feedback-check.yml -R "$GITHUB_REPOSITORY" --ref "$HEAD_REF" -f pr_number="$PR"
