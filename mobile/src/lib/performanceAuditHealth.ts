@@ -18,7 +18,7 @@ import {
   type AppHealthSurfaceObservation,
 } from './appHealth';
 import { appHealthNetworkCheck } from './appHealth/networkPolicy';
-import { appHealthDataSnapshot } from './performanceAuditDataSnapshot';
+import { appHealthDataSnapshot, bankResponseAuditSnapshot } from './performanceAuditDataSnapshot';
 import { passiveAuditDataChecks } from './passiveAudit';
 import { preparedAppHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
 import { APP_HEALTH_DATA_CHECKS } from './appHealth/dataQuality';
@@ -341,6 +341,7 @@ function scopedHealthDataSnapshot(input: AppHealthDataInput): AppHealthDataSnaps
       data.manifest.run_date === core.run_date && data.manifest.files.core.sha256 === manifest.files.core.sha256 &&
       samePayloadIdentity(manifest, data.manifest));
     data = { ...data, catalogue: matchesLocal ? preparedAppHealthCatalogueSnapshot(input.state) : null,
+      bankResponseCoverage: matchesLocal ? bankResponseAuditSnapshot(input.state) : null,
       historyCoverage: matchesLocal && core ? historyCoverageEvidence(core, input.state.productHistory) :
         data.historyCoverage ?? (data.core ? historyCoverageEvidence(data.core) : null) };
   }

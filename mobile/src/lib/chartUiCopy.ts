@@ -1,7 +1,21 @@
 import type { EconomicIndicatorId, EconomicPressure } from '../data/economicOutlook';
 import type { BankMoveDir } from '../data/bankInsights';
 import type { SectionKey } from '../types';
+import type { BankResponseReason } from '../data/bankResponseEvidence';
 import { uiDate, uiDuration, uiJoin, uiLabel, uiNumber, type UiText } from './uiCopy';
+
+export function uiBankResponseReason(reason: BankResponseReason): UiText {
+  switch (reason) {
+    case 'recorded-move': return uiLabel('Recorded move');
+    case 'no-recorded-move': return uiLabel('No recorded move');
+    case 'filtered-history': return uiLabel('Filtered history');
+    case 'quarantined-history': return uiLabel('Quarantined history');
+    case 'missing-history': return uiLabel('History unavailable');
+    case 'missing-baseline': return uiLabel('Baseline unavailable');
+    case 'history-gap': return uiLabel('History gaps');
+    case 'no-products': return uiLabel('No products');
+  }
+}
 
 export function uiChartSection(section: SectionKey): UiText {
   switch (section) {

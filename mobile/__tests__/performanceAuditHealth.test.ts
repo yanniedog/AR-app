@@ -469,7 +469,7 @@ describe('fatal app-health evidence', () => {
       details: null, searchIndex: null } as unknown as AppState;
     const capturedData = captureAppHealthDataEvidence({ state, appVersion: '1.0.0' });
     const retainedChecks = JSON.parse(JSON.stringify(capturedData.checks));
-    expect(capturedData.checks).toHaveLength(16);
+    expect(capturedData.checks).toHaveLength(17);
     const catalogue = capturedData.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE)!;
     expect(catalogue).toMatchObject({ metrics: { catalogueAvailable: true, publishedProducts: 3,
       publishedProviders: 3, includeNonStandard: true } });
@@ -490,7 +490,7 @@ describe('fatal app-health evidence', () => {
     expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE))
       .toMatchObject({ ...catalogue, metrics: { ...catalogue.metrics,
         evidenceCapturedAt: capturedData.capturedAt, capturedBeforeAuditMutations: true } });
-    expect(report.coverage).toMatchObject({ complete: false, plannedChecks: 26, storedChecks: 26 });
+    expect(report.coverage).toMatchObject({ complete: false, plannedChecks: 27, storedChecks: 27 });
     expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.AUDIT_PLAN))
       .toMatchObject({ status: 'fail', metrics: { complete: false, interrupted: true } });
     expect(report.limitations.join(' ')).toContain('before audit preference mutations');
@@ -516,7 +516,7 @@ describe('fatal app-health evidence', () => {
     expect(summary.executed).toBe(1 + report.summary.pass + report.summary.warn + report.summary.fail);
     expect(summary.justifiedSkipped).toBe(performanceSummary.justifiedSkipped);
     expect(summary.unexpectedSkipped).toBe(performanceSummary.unexpectedSkipped + report.summary.notRun);
-    expect(summary.coveragePercent).toBe(Math.round(summary.executed / 126 * 1000) / 10);
+    expect(summary.coveragePercent).toBe(Math.round(summary.executed / 127 * 1000) / 10);
     expect(summary.coveragePercent).toBeLessThan(10);
     const completeSummary = combineAppHealthPerformanceSummary(performanceSummary,
       { ...report, coverage: { ...report.coverage, complete: true } }, 100);
@@ -528,7 +528,7 @@ describe('fatal app-health evidence', () => {
     const report = buildPartialAppHealthReport({ ...input, capturedData: null, performanceChecks: [] });
     expect(report.checks.find(entry => entry.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE))
       .toMatchObject({ status: 'not-run', metrics: {} });
-    expect(report.checks.filter(entry => entry.status === 'not-run')).toHaveLength(24);
+    expect(report.checks.filter(entry => entry.status === 'not-run')).toHaveLength(25);
     expect(report.coverage.complete).toBe(false);
     expect(report.summary.coveragePercent).toBeLessThan(10);
   });

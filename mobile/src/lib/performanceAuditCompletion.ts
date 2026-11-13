@@ -5,6 +5,7 @@ import { auditOutcome } from './auditPresentation';
 import { APP_HEALTH_CHECK_CODES, APP_HEALTH_DOMAINS } from './appHealth';
 import { publicAuditDiagnosticStage } from './performanceAuditDiagnostic';
 import { publicHistoryCoverageSanitizer } from './appHealth/publicHistoryCoverage';
+import { publicBankResponseCoverage } from './appHealth/publicBankResponseCoverage';
 
 /** Only machine-authored ISO instants are public; arbitrary saved text is not. */
 export function publicAuditTimestamp(value: unknown): string | null {
@@ -54,6 +55,8 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   const sanitizeHistory = publicHistoryCoverageSanitizer();
   const invalidHistoryChecks = new Set(healthChecks.filter(check => check.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE
     && sanitizeHistory(check.metrics).historyGapEvidenceInvalid === true));
+  const invalidBankResponseChecks = new Set(healthChecks.filter(check => check.code === APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE
+    && publicBankResponseCoverage(check).bankResponseEvidenceInvalid === true));
   let truncatedEvidenceFields = 0;
   let omittedEvidenceChars = 0;
   // Older builds bounded evidence before storage. Preserve that loss explicitly
@@ -193,6 +196,9 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     invalidCoverageReports: report.coverage != null && !coverageValid ? 1 : 0,
     invalidHealthReports: report.appHealth != null && !healthValid ? 1 : 0,
     invalidHistoryEvidenceChecks: invalidHistoryChecks.size,
+    bankResponseCoverageGaps: healthChecks.filter(check => check.code === APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE
+      && (check.metrics.coverageComplete !== true || invalidBankResponseChecks.has(check))).length,
+    invalidBankResponseEvidenceChecks: invalidBankResponseChecks.size,
     evidenceCapacityFailures: report.checks.filter(check => check.metrics.evidenceCapacityExceeded === true).length,
     truncatedEvidenceFields, omittedEvidenceChars,
   };
@@ -202,13 +208,14 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     && (!health || health.coverage.storedChecks === healthChecks.length && health.coverage.plannedChecks === healthChecks.length);
   const coverageComplete = collectionComplete && health?.coverage.complete !== false
     && gaps.skippedChecks === 0 && gaps.unavailableChecks === 0 && gaps.notRunChecks === 0 && gaps.pendingProbes === 0
-    && gaps.targetProbeDefects === 0 && gaps.unverifiedLinks === 0 && gaps.unavailableResponsivenessChecks === 0 && gaps.missingHealthReports === 0 && gaps.invalidHistoryEvidenceChecks === 0;
+    && gaps.targetProbeDefects === 0 && gaps.unverifiedLinks === 0 && gaps.unavailableResponsivenessChecks === 0 && gaps.missingHealthReports === 0 && gaps.invalidHistoryEvidenceChecks === 0
+    && gaps.bankResponseCoverageGaps === 0;
   const startedAt = publicAuditTimestamp(report.startedAt);
   const finishedAt = publicAuditTimestamp(report.finishedAt);
   const timestampsValid = startedAt != null && finishedAt != null && startedAt <= finishedAt;
   const detailsComplete = collectionComplete && timestampsValid && truncatedEvidenceFields === 0
     && gaps.missingReadinessChecks === 0 && gaps.missingHealthReports === 0 && gaps.evidenceCapacityFailures === 0
-    && gaps.invalidHistoryEvidenceChecks === 0;
+    && gaps.invalidHistoryEvidenceChecks === 0 && gaps.invalidBankResponseEvidenceChecks === 0;
   const failurePositions: { source: 'performance' | 'health'; position: number; checkId: string | null;
     stage: string | null; category: 'failure' | 'timing' }[] = [];
   report.checks.forEach((check, index) => {
@@ -231,7 +238,7 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     ...(health?.coverage.missingPlannedCheckIds ?? []).map(id => ({ source: 'health' as const, checkId: healthId(id) })),
   ];
   type GapPosition = { source: 'performance' | 'health'; position: number; checkId: string | null;
-    reason: 'unavailable' | 'skipped' | 'unverified-link' | 'not-run' | 'pending-probe' | 'missing-readiness' | 'duplicate' | 'unexpected' | 'invalid-history-evidence' | 'missing-responsiveness' | 'probe-error' | 'probe-revision-mismatch';
+    reason: 'unavailable' | 'skipped' | 'unverified-link' | 'not-run' | 'pending-probe' | 'missing-readiness' | 'duplicate' | 'unexpected' | 'invalid-history-evidence' | 'missing-responsiveness' | 'probe-error' | 'probe-revision-mismatch' | 'bank-response-coverage-gap';
     surfaceId?: string; probeId?: string };
   const gapPositions: GapPosition[] = [
     ...report.checks.flatMap((check, index) => {
@@ -245,6 +252,10 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
       ? [{ source: 'health' as const, position: index + 1, checkId: healthId(check.code), reason: check.status }] : []),
   ];
   healthChecks.forEach((check, index) => {
+    if (check.code === APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE &&
+      (check.metrics.coverageComplete !== true || invalidBankResponseChecks.has(check))) {
+      gapPositions.push({ source: 'health', position: index + 1, checkId: check.code, reason: 'bank-response-coverage-gap' });
+    }
     if (invalidHistoryChecks.has(check)) gapPositions.push({ source: 'health', position: index + 1,
       checkId: healthId(check.code), reason: 'invalid-history-evidence' });
   });

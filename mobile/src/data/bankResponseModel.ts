@@ -1,6 +1,7 @@
 import type { BankInsightsPayload, BankMoveDir, BankRateEvent } from './bankInsights';
 import type { RbaCalendar, RbaDecisionEntry } from './rbaCalendar';
 import type { SectionKey } from '../types';
+import { bankResponseEvidence, type BankResponseEvidence } from './bankResponseEvidence';
 
 const DAY_MS = 86_400_000;
 
@@ -9,6 +10,7 @@ export interface CompactBankResponseRow {
   movePp: number | null;
   daysAfter: number | null;
   direction: BankMoveDir | null;
+  evidence: BankResponseEvidence;
 }
 
 export interface CompactBankResponseWindow {
@@ -46,6 +48,7 @@ export function buildCompactBankResponseWindows(
   payload: BankInsightsPayload,
   calendar: RbaCalendar | null | undefined,
   section: SectionKey,
+  source?: BankInsightsPayload | null,
 ): CompactBankResponseWindow[] {
   const decisions = (calendar?.decisions ?? [])
     .filter((decision) => decision.date <= payload.run_date)
@@ -90,6 +93,7 @@ export function buildCompactBankResponseWindows(
         movePp: event ? event.avg_bps / 100 : null,
         daysAfter: event ? daysBetween(decision.date, event.date) : null,
         direction: event?.dir ?? null,
+        evidence: bankResponseEvidence(payload, section, provider, decision.date, windowEnd, event?.date ?? null, source),
       };
     });
     return {

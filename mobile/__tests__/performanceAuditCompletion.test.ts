@@ -20,6 +20,18 @@ function completeReport() {
   return report;
 }
 
+test('bank response unknowns keep coverage incomplete even when every list and audit check executed', () => {
+  const report = completeReport();
+  const code = APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE;
+  report.appHealth = finalizeAppHealthReport({ sessionId: report.sessionId, mode: 'local',
+    startedAt: report.startedAt, finishedAt: report.finishedAt, plannedCheckIds: [code],
+    checks: [{ id: code, code, domain: 'data-completeness', label: 'Bank response coverage', status: 'warn',
+      metrics: { coverageAvailable: true, coverageComplete: false, unknownMoves: 40, unknownTiming: 40 } }] });
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ outcome: 'incomplete', collectionComplete: true,
+    coverageComplete: false, gaps: { bankResponseCoverageGaps: 1 },
+    gapPositions: expect.arrayContaining([expect.objectContaining({ checkId: code, reason: 'bank-response-coverage-gap' })]) });
+});
+
 test('an oversized compressed upload fails preparation without returning a partial summary', () => {
   const encode = jest.spyOn(diagnosticCodec, 'encodeCompressedDiagnosticJson')
     .mockReturnValueOnce('x'.repeat(2 * 1024 * 1024 + 1));

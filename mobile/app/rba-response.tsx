@@ -131,6 +131,7 @@ export default function RbaResponseScreen() {
       <View style={{ flex: 1 }}>
         <BankResponseDashboard
           payload={payload}
+          sourcePayload={rawPayload}
           calendar={calendar}
           initialDecisionDate={decisionDate}
           initialSection={initialSection}
