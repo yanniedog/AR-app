@@ -9,11 +9,15 @@ import { shouldShowBreadcrumbs } from '../lib/breadcrumbs';
  * navigator options, tab bar and menu are not rebuilt per navigation. The
  * layout effect commits a flip before the frame paints.
  */
-export function BreadcrumbRouteProbe({ hydrated, onChange }: {
+export function BreadcrumbRouteProbe({ hydrated, enabled = true, onChange }: {
   hydrated: boolean;
+  enabled?: boolean;
   onChange: (visible: boolean) => void;
 }) {
-  const visible = shouldShowBreadcrumbs(usePathname(), hydrated);
+  const routeVisible = shouldShowBreadcrumbs(usePathname(), hydrated);
+  // On a phone the bar never mounts. Do not still flip navigator state on
+  // tab/detail transitions and rebuild every screen descriptor for no UI change.
+  const visible = enabled && routeVisible;
   useLayoutEffect(() => { onChange(visible); }, [onChange, visible]);
   return null;
 }

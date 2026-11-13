@@ -31,7 +31,7 @@ export default function TabsLayout() {
 
   return (
     <>
-      <BreadcrumbRouteProbe hydrated={hydrated} onChange={setBreadcrumbRoute} />
+      <BreadcrumbRouteProbe hydrated={hydrated} enabled={breadcrumbsFitWidth(width)} onChange={setBreadcrumbRoute} />
       <Tabs
         initialRouteName="browse"
         backBehavior="initialRoute"

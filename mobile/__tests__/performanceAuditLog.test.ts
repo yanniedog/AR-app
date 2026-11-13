@@ -1,6 +1,7 @@
 import {
   boundAuditCheckEvidence,
   compactAuditCheckForLog,
+  compactAuditCheckCheckpoint,
   compactAuditLogJson,
   compactPerformanceAuditReportForLog,
   encodePerformanceAuditEvent,
@@ -62,6 +63,39 @@ describe('self-contained audit log identity', () => {
 });
 
 describe('bounded audit evidence', () => {
+  it('references long canonical metrics without truncating their duplicate journal copy', () => {
+    const check = { id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 500,
+      metrics: { renderRevisionBefore: 'r'.repeat(3000), readinessEvidence: 'p'.repeat(4000), maxFrameGapMs: 350 },
+      error: 'Readiness failed' };
+    const checkpoint = compactAuditCheckCheckpoint(check);
+    expect(checkpoint).toMatchObject({ id: check.id, status: 'fail', error: 'Readiness failed',
+      metrics: { maxFrameGapMs: 350 }, canonicalMetricFields: ['renderRevisionBefore', 'readinessEvidence'] });
+    expect(JSON.stringify(checkpoint)).not.toContain('[truncated');
+    expect(check.metrics.renderRevisionBefore).toHaveLength(3000);
+    expect(check.metrics.readinessEvidence).toHaveLength(4000);
+  });
+
+  it('keeps a 2369-link checkpoint inventory small without hiding unverified reachability', () => {
+    const checks = Array.from({ length: 2369 }, (_, index) => compactAuditCheckCheckpoint({
+      id: `external-link-${index + 1}`, label: 'Lender source', kind: 'network', status: 'warn', durationMs: 20,
+      metrics: { executionAttempted: true, nonTimingFailure: false,
+        host: 'lender.example', destinationPath: '/products/home-loan', purpose: 'lender_source',
+        urlValidation: 'pass', browserHandler: 'pass', httpReachability: 'unknown',
+        httpAttempted: false, httpSelected: false, handlerAttempted: true, handlerResolution: 'pass',
+        validationDetail: 'Approved, credential-free HTTPS destination.',
+        handlerDetail: 'The operating system reports an installed handler for this destination.',
+        reachabilityDetail: 'HTTP reachability was not tested in this audit mode or within its time budget.' },
+    }));
+    // Include the wrapper and escaped JSON as stored in the application journal.
+    const entries = checks.map(check => ({ ts: '2026-11-13T07:00:00.000Z', level: 'warn', tag: 'perf-audit',
+      message: JSON.stringify({ kind: 'check', sessionId: '[REDACTED]', check }) }));
+    expect(new TextEncoder().encode(JSON.stringify(entries)).length).toBeLessThan(1_450_000);
+    expect(checks[2368]).toMatchObject({ status: 'warn', metrics: { httpReachability: 'unknown', httpAttempted: false },
+      canonicalMetrics: true });
+    expect(checks[2368]).not.toHaveProperty('label');
+    expect(checks[2368].metrics).not.toHaveProperty('destinationPath');
+  });
+
   it('leaves a check within budget untouched', () => {
     const check = {
       id: 'c1',

@@ -38,6 +38,8 @@ const FIXED_TEXT: Record<string, ReadonlySet<string>> = Object.fromEntries(Objec
   payloadSource: 'remote local bundled cache unknown sample',
   overall: 'healthy attention bottleneck', auditCoverageProfile: 'basic maximum-safe maximum-safe-coverage-v1',
   measurementMode: 'basic deep route-round-trip semantic-action segmented-payload-capacity',
+  // Historical reports still contain this retired producer's classification.
+  skipClassification: 'scenario-recovery',
   returnNavigationKind: 'none back second-back replace anchor-reset replace-recovery second-back+replace-recovery second-back+anchor-reset',
   stateImpact: 'none local-only restorable',
   iteration: 'cold warm deep-first-pass deep-repeat',

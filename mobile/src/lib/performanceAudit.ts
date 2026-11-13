@@ -1023,6 +1023,9 @@ interface TimedSample {
   value: number;
   startsAt: number;
   endsAt: number;
+  // Timer lag starts at its deadline, but the observation covers the whole
+  // scheduled interval. A short action can finish before that deadline.
+  observedFrom?: number;
 }
 
 export interface ResponsivenessMetrics {
@@ -1077,14 +1080,17 @@ export class ResponsivenessMonitor {
     };
   }
 
-  metricsSince(snapshot: ResponsivenessSnapshot): ResponsivenessMetrics {
+  metricsSince(snapshot: ResponsivenessSnapshot, until?: ResponsivenessSnapshot): ResponsivenessMetrics {
+    const endsAt = until?.capturedAt ?? Infinity;
+    if (endsAt <= snapshot.capturedAt) return summarizeResponsiveness([], []);
     const samplesSince = (samples: TimedSample[], index: number): number[] =>
       samples
         .slice(index)
-        .filter((sample) => sample.endsAt > snapshot.capturedAt)
+        .filter((sample) => sample.endsAt > snapshot.capturedAt &&
+          (sample.observedFrom ?? sample.startsAt) < endsAt)
         .map((sample) =>
-          sample.startsAt < snapshot.capturedAt
-            ? sample.endsAt - snapshot.capturedAt
+          until || sample.startsAt < snapshot.capturedAt
+            ? Math.max(0, Math.min(sample.endsAt, endsAt) - Math.max(sample.startsAt, snapshot.capturedAt))
             : sample.value,
         );
     return summarizeResponsiveness(
@@ -1109,6 +1115,7 @@ export class ResponsivenessMonitor {
         value: Math.max(0, now - deadlineAt),
         startsAt: deadlineAt,
         endsAt: now,
+        observedFrom: this.lastTimerAt,
       });
       this.lastTimerAt = now;
       this.scheduleTimer();

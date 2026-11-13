@@ -272,7 +272,7 @@ function RootNavigator() {
           >
             <StatusBar style={theme.dark ? 'light' : 'dark'} />
             <NavigationMenuProvider>
-            <BreadcrumbRouteProbe hydrated={hydrated} onChange={setBreadcrumbRoute} />
+            <BreadcrumbRouteProbe hydrated={hydrated} enabled={breadcrumbsFitWidth(shellWidth)} onChange={setBreadcrumbRoute} />
             {breadcrumbVisible ? <AppBreadcrumbBar /> : null}
             <NavigatorSafeArea topInsetConsumed={showUpdateBanner || breadcrumbVisible}>
             <View style={{ flex: 1 }}>
