@@ -19,6 +19,14 @@ const readyCompiler = require('../contracts/history-ready/compiler-manifest.json
 const sample = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../assets/sample');
 const hash = (body) => createHash('sha256').update(body).digest('hex');
 
+function writeJsonAsset(directory, manifest, key, value) {
+  const name = `${key}.json`, body = Buffer.from(JSON.stringify(value));
+  fs.writeFileSync(path.join(directory, name), body);
+  manifest.files[key] = { name, bytes: body.length, sha256: hash(body),
+    url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}` };
+  fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+}
+
 // Model the URL actually requested, rather than rewriting a Response.url to
 // disguise delivery as GitHub. The response body uses Node's real byte stream.
 function httpResponse(url, bytes = null, status = 200, headers = {}) {
@@ -187,6 +195,11 @@ test('headless audit reconciles retained catalogue identities with explicit defa
   assert.equal(check.status, 'warn');
   assert.equal(check.metrics.catalogueAvailable, true);
   assert.equal(check.metrics.headlessDefaultPreferences, true);
+  const { DEFAULT_PREFS } = require('../src/data/storeTypes.ts');
+  assert.equal(check.metrics.includeNonStandard, DEFAULT_PREFS.includeNonStandard);
+  for (const section of ['Mortgage', 'Savings', 'TD']) {
+    assert.equal(check.metrics[`${section}SelectedInterest`], DEFAULT_PREFS.interests.includes(section));
+  }
   assert.ok(check.metrics.publishedProducts > 0);
   assert.equal(check.metrics.identityMismatches, 0);
   assert.equal(check.metrics.historyAvailable, null);
@@ -197,6 +210,31 @@ test('headless audit reconciles retained catalogue identities with explicit defa
   fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
   const missing = await audit(opts);
   assert.equal(missing.checks.find(row => row.id === 'catalogue-identity-coverage').status, 'unavailable');
+});
+
+for (const products of [undefined, null, [], 'invalid', { retainedKey: null }]) {
+  test(`malformed search products ${JSON.stringify(products)} yield failed evidence without aborting`, async t => {
+    const { directory, manifest, opts } = candidate(t);
+    writeJsonAsset(directory, manifest, 'search_index', { schema_version: 1, run_date: manifest.run_date, products });
+    const report = await audit(opts);
+    assert.equal(report.status, 'FAIL');
+    assert.equal(report.assets.search_index.status, 'FAIL');
+    assert.match(report.assets.search_index.error, /Invalid search-index payload/);
+    assert.equal(report.checks.find(row => row.id === 'catalogue-identity-coverage').status, 'unavailable');
+  });
+}
+
+test('duplicate retained rate identities fail the independent exact-tier check', async t => {
+  const { directory, manifest, opts } = candidate(t);
+  const core = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.core.name)));
+  const rates = core.sections.Mortgage.rates;
+  rates.push({ ...rates[0] });
+  writeJsonAsset(directory, manifest, 'core', core);
+  const report = await audit(opts);
+  const check = report.checks.find(row => row.id === 'exact-tier-identities');
+  assert.equal(check.status, 'fail');
+  assert.ok(check.metrics.duplicateExactTiers > 0 || check.metrics.ambiguousMultiTierProducts > 0);
+  assert.equal(report.status, 'FAIL');
 });
 
 test('private candidates verify local bytes without claiming public publication', async (t) => {

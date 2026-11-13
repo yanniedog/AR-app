@@ -48,6 +48,14 @@ const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const MAX_COMPRESSED = 64 * 1024 * 1024;
 const MAX_DECODED = 192 * 1024 * 1024;
 
+function validateSearchIndex(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || value.schema_version !== 1 ||
+      !isValidCalendarDate(value.run_date) || !value.products || typeof value.products !== 'object' ||
+      Array.isArray(value.products) || Object.entries(value.products).some(([key, text]) => !key || typeof text !== 'string')) {
+    throw new Error('Invalid search-index payload');
+  }
+}
+
 function publicationSource(source, repo) {
   const url = new URL(source);
   const prefix = `/${repo}/releases/download/`;
@@ -194,7 +202,9 @@ async function audit(opts) {
       const digest = hash(bytes);
       if (bytes.length !== file.bytes || digest !== file.sha256) throw new Error('Asset size/hash mismatch');
       const body = bytes[0] === 0x1f && bytes[1] === 0x8b ? zlib.gunzipSync(bytes, { maxOutputLength: MAX_DECODED }) : bytes;
-      decoded[key] = JSON.parse(body.toString('utf8'));
+      const value = JSON.parse(body.toString('utf8'));
+      if (key === 'search_index') validateSearchIndex(value);
+      decoded[key] = value;
       evidence[key] = { status: 'PASS', url: directory ? null : file.url, sha256: digest, bytes: bytes.length,
         decoded_bytes: body.length, acquisition: directory ? 'local_file' : 'public_http' };
       observations[key] = { state: 'ready', runDate: decoded[key].run_date ?? null, itemCount: null };

@@ -31,3 +31,13 @@ publication verification remains false. This development-tree result must be
 repeated from the final clean shipping commit; it is not APK/device acceptance
 or proof of full upstream bank/product coverage. Exact CI, review, automatic
 merge/release and final producer-bound app evidence remain outstanding.
+
+Late review: validate decoded search-index schema/products before selector
+scanning. Malformed but hash-valid JSON now yields failed asset evidence plus an
+unavailable catalogue check, preserving the complete audit report. Default
+visibility/interests are asserted against shipping preferences. Duplicate source
+tier identities already fail the independent exact-tier check; a CLI regression
+confirms this rather than weakening or duplicating that guard. The branch also
+incorporates shipping `94392216` before its final CI cycle.
+After synchronization and review repairs, all 61 CLI tests, 147 focused app tests
+and typecheck passed. Full CI and fresh shipping-commit acceptance remain required.
