@@ -1,6 +1,7 @@
 import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiProductName, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../src/lib/uiCopy";
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { FLASH_LIST_DRAW_DISTANCE } from '../../src/lib/flashListDefaults';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, Pressable, useWindowDimensions, View } from 'react-native';
@@ -35,7 +36,7 @@ import {
 } from '../../src/data/productHistory';
 import { lenderProductRows } from '../../src/data/selectors';
 import { rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
-import { rowsForProvider } from '../../src/data/rateRowIndex';
+import { stableRowsForProvider } from '../../src/data/rateRowIndex';
 import { useStore } from '../../src/data/store';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
@@ -191,7 +192,7 @@ export default function BankDetail() {
   const [historyGraphicEvidence, setHistoryGraphicEvidence] =
     useState<HistoryGraphicEvidence | null>(null);
   const lenderRow = useMemo(() => core ? SECTION_ORDER.map(section =>
-    rowsForProvider(core.sections[section].rates, provider)[0]).find(row => row != null) : undefined,
+    stableRowsForProvider(core.sections[section].rates, provider)[0]).find(row => row != null) : undefined,
   [core, provider]);
 
   const rawBankEvents = useMemo(
@@ -256,8 +257,11 @@ export default function BankDetail() {
     const out: { section: SectionKey; rows: RateRow[] }[] = [];
     if (!core) return out;
     for (const section of SECTION_ORDER) {
+      // Stable input identity: the ranked list is cached per edition and lender,
+      // so reopening a lender does not filter and rank its whole book again.
+      const sectionRates = core.sections[section]?.rates;
       const rows = lenderProductRows(
-        rowsForProvider(core.sections[section]?.rates ?? [], provider),
+        sectionRates ? stableRowsForProvider(sectionRates, provider) : [],
         section, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts,
       );
       if (rows.length) out.push({ section, rows });
@@ -659,6 +663,7 @@ export default function BankDetail() {
         <FlashList
           key={listRevision}
           ref={scrollRef}
+          drawDistance={FLASH_LIST_DRAW_DISTANCE}
           data={productItems}
           onLayout={() => { setLayoutReady(true); listReadiness.onRevisionLayout(); }}
           onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}

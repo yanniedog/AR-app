@@ -530,10 +530,14 @@ export default function RatesWorkspace() {
   );
   const unverifiedResultCount = useMemo(() => rows.reduce((count, row) => count + (mortgageScope.unverifiedRows.has(row) ? 1 : 0), 0), [rows, mortgageScope.unverifiedRows]);
   const catalogueDetails = verifiedCatalogueDetails(core, coreIntegrity, manifest, details);
+  // Only the no-listed-rate view and its filter draft read this inventory.
+  // Building it scans every rate row and detail product, so listed browsing
+  // (the default) no longer pays for it on mount or on each gate revision.
+  const unlistedNeeded = availability === 'unlisted' || draftAvailability === 'unlisted';
   const unlistedEntries = useMemo(() => {
     void suitabilityRevision;
-    return core && catalogueDetails && !task.intentError ? detailsOnlyCatalogue(core, catalogueDetails) : [];
-  }, [catalogueDetails, core, suitabilityRevision, task.intentError]);
+    return unlistedNeeded && core && catalogueDetails && !task.intentError ? detailsOnlyCatalogue(core, catalogueDetails) : [];
+  }, [catalogueDetails, core, suitabilityRevision, task.intentError, unlistedNeeded]);
   const unlistedRows = useMemo(() => {
     const term = debouncedQuery.trim().toLocaleLowerCase();
     return unlistedEntries.filter(item => (!term || [item.key, item.name, item.provider, item.productCategory, item.description]

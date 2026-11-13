@@ -56,7 +56,7 @@ Babysit and PR-fix workers must follow the per-finding disposition rules below f
    - `implemented in <sha>`
    - `deferred — <reason>`
    - `declined — <reason>`
-3. Resolve the thread after the reply (live gate requires resolution). Use ManagePullRequest `post_comment` (`in_reply_to`) and `resolve_comment` when `gh` cannot write.
+3. Resolve the thread after the reply (live gate requires resolution). `pr-auto-resolve-dispositions` does this automatically: on any same-repo reply by the owner or a collaborator it resolves every thread whose latest comment is a trusted reply starting `implemented in <sha>`, `deferred — <reason>` or `declined — <reason>`, then re-runs the head's `bot-feedback-gate`. Nobody needs to click Resolve. Use ManagePullRequest `post_comment` (`in_reply_to`) and `resolve_comment` when `gh` cannot write.
 4. Re-run `npm run pr:bot-feedback-check -- --pr <N>` until exit 0; confirm GitHub `bot-feedback-gate` is green.
 5. After later pushes, re-check for **new** bot threads and handle them the same way before merge.
 

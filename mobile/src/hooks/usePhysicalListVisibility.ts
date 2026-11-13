@@ -11,6 +11,10 @@ export function physicallyVisible(row: WindowRect, viewport: WindowRect, window:
   return row.width >= 48 && row.height >= 48 && width >= 48 && height >= 48;
 }
 
+const PHYSICAL_VISIBILITY_RETRY_MS = 120;
+const PHYSICAL_VISIBILITY_LOST_CALLBACK_MS = 600;
+const PHYSICAL_VISIBILITY_RETRY_LIMIT = 16;
+
 /** Native viewability is only a measurement trigger, never audit visibility proof. */
 export function usePhysicalListVisibility<Row>(revision: string, rows: readonly Row[], unobscured: boolean,
   key: (row: Row, index: number) => string,
@@ -29,16 +33,45 @@ export function usePhysicalListVisibility<Row>(revision: string, rows: readonly 
   const serial = useRef(0);
   const mounted = useRef(true);
   const registrationFrame = useRef<number | null>(null);
-  const measure = useCallback(() => {
+  // A screen returning under a navigation transition can be measured while it
+  // is still detached or offset: the native callback is then lost or reports
+  // nothing on screen, and no later event would ask again. Re-measure a
+  // bounded number of times until a row is physically visible.
+  const retry = useRef<{ timer: ReturnType<typeof setTimeout> | null; attempts: number }>({ timer: null, attempts: 0 });
+  const stopRetry = useCallback(() => {
+    if (retry.current.timer !== null) clearTimeout(retry.current.timer);
+    retry.current.timer = null;
+  }, []);
+  const rerun = useRef<(revoke: boolean) => void>(() => {});
+  const run = useCallback((revoke: boolean) => {
     const snapshot = current.current, measuredIdentity = identityRef.current, id = ++serial.current;
+    stopRetry();
     if (!snapshot.active || !mounted.current) return;
-    // Revoke old proof before any asynchronous native callback can be lost.
-    setResult(previous => previous === null ? previous : null);
-    snapshot.onMeasured({ viewableItems: [] });
+    if (revoke) {
+      retry.current.attempts = 0;
+      // Revoke old proof before any asynchronous native callback can be lost.
+      setResult(previous => previous === null ? previous : null);
+      snapshot.onMeasured({ viewableItems: [] });
+    }
+    // Armed for a lost native callback; an empty result re-arms the short wait.
+    // A measurement still in flight is never superseded by its own retry.
+    const again = (waitMs: number) => {
+      stopRetry();
+      if (!snapshot.unobscured || snapshot.rows.length === 0 || retry.current.attempts >= PHYSICAL_VISIBILITY_RETRY_LIMIT) return;
+      retry.current.timer = setTimeout(() => {
+        retry.current.timer = null;
+        if (!mounted.current || serial.current !== id || identityRef.current !== measuredIdentity) return;
+        retry.current.attempts += 1;
+        rerun.current(false);
+      }, waitMs);
+    };
+    again(PHYSICAL_VISIBILITY_LOST_CALLBACK_MS);
     if (!viewport.current) return;
     const valid = () => mounted.current && identityRef.current === measuredIdentity && serial.current === id && current.current.revision === snapshot.revision && current.current.rows === snapshot.rows;
     const publish = (viewableItems: { item: Row; index: number; key: string; isViewable: true }[]) => {
       if (!valid()) return;
+      // Positive proof ends the retry chain; an empty result asks again soon.
+      if (viewableItems.length > 0) stopRetry(); else again(PHYSICAL_VISIBILITY_RETRY_MS);
       setResult(previous => previous?.identity === measuredIdentity && previous.rows === snapshot.rows && previous.count === viewableItems.length ? previous : { identity: measuredIdentity, rows: snapshot.rows, count: viewableItems.length });
       snapshot.onMeasured({ viewableItems });
     };
@@ -59,7 +92,9 @@ export function usePhysicalListVisibility<Row>(revision: string, rows: readonly 
         if (--pending === 0) publish(visible);
       }));
     });
-  }, []);
+  }, [stopRetry]);
+  rerun.current = run;
+  const measure = useCallback(() => run(true), [run]);
   const register = useCallback((row: Row, node: View | null) => {
     if (cells.current.get(row) === node || (!node && !cells.current.has(row))) return;
     if (node) cells.current.set(row, node); else cells.current.delete(row);
@@ -78,8 +113,8 @@ export function usePhysicalListVisibility<Row>(revision: string, rows: readonly 
     return callback;
   }, [register]);
   useEffect(() => { for (const row of refs.current.keys()) if (!rows.includes(row)) refs.current.delete(row); }, [rows]);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; if (registrationFrame.current !== null) cancelAnimationFrame(registrationFrame.current); }; }, []);
-  const cancel = useCallback(() => { serial.current++; }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; stopRetry(); if (registrationFrame.current !== null) cancelAnimationFrame(registrationFrame.current); }; }, [stopRetry]);
+  const cancel = useCallback(() => { serial.current++; stopRetry(); }, [stopRetry]);
   useEffect(() => {
     if (!active) return;
     const frame = requestAnimationFrame(measure);

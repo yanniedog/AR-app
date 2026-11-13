@@ -50,6 +50,11 @@ import { getPassiveAuditStatus, subscribePassiveAudit } from '../src/lib/passive
 import { restorePerformanceAuditUpload, uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
 import { loadCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
 import { buildPerformanceAuditCompletion } from '../src/lib/performanceAuditCompletion';
+import {
+  auditEntryClock, markAuditEntryScreenMounted, markAuditEntryScreenReady, markAuditEntrySettingsOpened,
+  markAuditEntryStartPressed, setAuditEntrySettingsProbe,
+} from '../src/lib/auditEntryTrace';
+import { PERFORMANCE_AUDIT_TYPICAL_DURATION_MS, performanceAuditEstimateParts } from '../src/lib/performanceAuditTiming';
 
 const DEIDENTIFIED_AUDIT_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-app-health-report.json`;
 
@@ -109,6 +114,48 @@ function PerformanceAuditScreenInner() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [failuresOpen, setFailuresOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  // Entry trace: how long this screen, its settings and its start control take.
+  const entryMounted = useRef(false);
+  if (!entryMounted.current) { entryMounted.current = true; markAuditEntryScreenMounted(); }
+  const settingsOpenRef = useRef(settingsOpen);
+  settingsOpenRef.current = settingsOpen;
+  const settingsOpenStarted = useRef<number | null>(null);
+  const settingsOpenWaiter = useRef<((elapsedMs: number | null) => void) | null>(null);
+  const openSettings = () => { settingsOpenStarted.current = auditEntryClock(); setSettingsOpen(true); };
+  const onSettingsLayout = () => {
+    const started = settingsOpenStarted.current;
+    if (started == null) return;
+    settingsOpenStarted.current = null;
+    // The layout pass precedes the paint; the next frame is what a person sees.
+    requestAnimationFrame(() => {
+      const elapsedMs = auditEntryClock() - started;
+      markAuditEntrySettingsOpened(elapsedMs);
+      settingsOpenWaiter.current?.(elapsedMs);
+    });
+  };
+  useEffect(() => {
+    setAuditEntrySettingsProbe(() => new Promise<number | null>(resolve => {
+      // Already open: the trace keeps the timing of the person's own open.
+      if (settingsOpenRef.current || settingsOpenWaiter.current) { resolve(null); return; }
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const finish = (elapsedMs: number | null) => {
+        if (settingsOpenWaiter.current !== finish) return;
+        settingsOpenWaiter.current = null;
+        if (timer) clearTimeout(timer);
+        settingsOpenStarted.current = null;
+        if (mounted.current) setSettingsOpen(false);
+        resolve(elapsedMs);
+      };
+      settingsOpenWaiter.current = finish;
+      timer = setTimeout(() => finish(null), 1_500);
+      openSettings();
+    }));
+    return () => {
+      setAuditEntrySettingsProbe(null);
+      settingsOpenWaiter.current?.(null);
+    };
+  }, []);
   const auditPreflightLocked = useRef(false);
   const mounted = useRef(true);
   const [auditPreflightMode, setAuditPreflightMode] = useState<'local' | 'live-source' | null>(null);
@@ -132,9 +179,13 @@ function PerformanceAuditScreenInner() {
   useEffect(() => {
     let active = true;
     mounted.current = true;
-    void loadCompletedPerformanceAudit().then(saved => {
-      if (active && saved) restoreCompletedPerformanceAudit(saved);
-    }).catch(() => {});
+    // A diagnosis already in memory wins over the saved copy, so reading and
+    // parsing that multi-megabyte file again would only block this screen.
+    if (!getPerformanceAuditState().report) {
+      void loadCompletedPerformanceAudit().then(saved => {
+        if (active && saved) restoreCompletedPerformanceAudit(saved);
+      }).catch(() => {});
+    }
     return () => { active = false; mounted.current = false; };
   }, []);
   useEffect(() => {
@@ -202,8 +253,13 @@ function PerformanceAuditScreenInner() {
     ).catch(() => {});
   }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
+  // Usable means a start control can be pressed, not only that it is laid out.
+  const entryReady = layoutReady && hangTimeoutLoaded && !state.recoveryRequired && !updateBlocksAudit && !uploadBusy;
+  useEffect(() => { if (entryReady) markAuditEntryScreenReady(); }, [entryReady]);
+
   const runAudit = async (mode: 'local' | 'live-source') => {
     if (!hangTimeoutLoaded || hangTimeoutSeconds == null || auditPreflightLocked.current || running || state.recoveryRequired || isDebugLogUploadBusy()) return;
+    markAuditEntryStartPressed();
     auditPreflightLocked.current = true;
     const requestedUpload = publicUpload;
     setAuditPreflightMode(mode);
@@ -296,17 +352,28 @@ function PerformanceAuditScreenInner() {
 
   const auditDisabled = state.recoveryRequired || running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null;
   const outcome = (value: 'healthy'|'attention'|'bottleneck'): UiCopy => value === 'healthy' ? 'Healthy' : value === 'attention' ? 'Needs review' : 'Failures found';
+  const outcomeLabel = (value: NonNullable<typeof completion>['outcome']): UiLabel =>
+    value === 'successful' ? 'Successful' : value === 'failed' ? 'Failed' : value === 'incomplete' ? 'Incomplete' : 'Needs review';
+  // One value: the last measured run on this device, or the typical duration before a first run.
+  const nextEstimate = performanceAuditEstimateParts(report && report.durationMs > 0 ? report.durationMs : PERFORMANCE_AUDIT_TYPICAL_DURATION_MS);
   const controls = <Card style={{ gap: 10 }}>
         <AppText variant="h2">{uiLabel('App health audit')}</AppText>
+        {!running ? <>
+          <InfoRow label="Last audit" value={completion ? uiJoin(outcomeLabel(completion.outcome), ' · ', uiDate(completion.finishedAt)) : uiLabel('No audit history')} />
+          <InfoRow label="Estimated time" value={uiJoin(uiCount(nextEstimate.value), ' ', nextEstimate.unit)} />
+        </> : null}
         <Button title="Run audit" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
         <Button title="Live audit" icon="cloud-download-outline" variant="secondary" loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'} disabled={auditDisabled} onPress={() => void runAudit('live-source')} />
-        <InfoRow label={uiLabel(running ? 'Audit upload' : 'Next audit upload')} value={uiLabel(running ? state.uploadLog ? 'Public' : 'Local' : publicUpload ? 'Public' : 'Local')} />
-        <InfoRow label="Included" value="Checks / errors / traces / readiness / timing / deidentified log" />
-        <InfoRow label="Excluded" value="Private inputs / identifiers / credentials" />
-        <InfoRow label={uiLabel(running ? 'Destination' : 'Next destination')} value={uiLabel((running ? state.uploadLog : publicUpload) ? 'Public hosting' : 'Debug log')} />
-        <InfoRow label="Public hosting" value={uiJoin(uiIdentifier('paste.rs'), ' / ', uiIdentifier('paste.c-net.org'))} />
         <ToggleRow icon="cloud-upload-outline" label="Public upload" value={running ? state.uploadLog : publicUpload} onChange={setPublicUpload} disabled={auditDisabled} />
-        <Disclosure title="Audit settings" open={settingsOpen} onToggle={() => setSettingsOpen(!settingsOpen)}>
+        <InfoRow label={uiLabel(running ? 'Destination' : 'Next destination')} value={uiLabel((running ? state.uploadLog : publicUpload) ? 'Public hosting' : 'Debug log')} />
+        <Disclosure title="Upload details" open={uploadOpen} onToggle={() => setUploadOpen(!uploadOpen)}>
+          <InfoRow label={uiLabel(running ? 'Audit upload' : 'Next audit upload')} value={uiLabel(running ? state.uploadLog ? 'Public' : 'Local' : publicUpload ? 'Public' : 'Local')} />
+          <InfoRow label="Included" value="Checks / errors / traces / readiness / timing / deidentified log" />
+          <InfoRow label="Excluded" value="Private inputs / identifiers / credentials" />
+          <InfoRow label="Public hosting" value={uiJoin(uiIdentifier('paste.rs'), ' / ', uiIdentifier('paste.c-net.org'))} />
+        </Disclosure>
+        <Disclosure title="Audit settings" open={settingsOpen} onToggle={() => settingsOpen ? setSettingsOpen(false) : openSettings()}>
+        <View onLayout={onSettingsLayout}>
         <InfoRow label="Step limit" value={measuredMs(10_000)} />
         <View style={{ gap: 6 }}>
           <AppText variant="small" weight="700">{uiLabel('Stall timeout')}</AppText>
@@ -325,6 +392,7 @@ function PerformanceAuditScreenInner() {
         <InfoRow label="Local checks" value="Addresses / browser handlers / loaded data" />
         <InfoRow label="Live checks" value="Approved websites" />
         <InfoRow label="Off screen" value="Paused" />
+        </View>
         </Disclosure>
         {updateBlocksAudit ? <AppText color="danger" accessibilityLiveRegion="polite">{uiLabel('App update active')}</AppText>:null}
         <Disclosure title="Background checks" open={backgroundOpen} onToggle={() => setBackgroundOpen(!backgroundOpen)}>
@@ -351,24 +419,24 @@ function PerformanceAuditScreenInner() {
       </Card>:null}
       {report && completion ? <>
         <Card style={{ gap: 8,borderWidth:1,borderColor:summaryColor }}>
-          <Row style={{justifyContent:'space-between', flexWrap:'wrap'}}><AppText variant="h3">{uiLabel('App health audit')}</AppText><AppText style={{color:summaryColor}} accessibilityLiveRegion="polite">{uiLabel(completion.outcome === 'successful' ? 'Successful' : completion.outcome === 'failed' ? 'Failed' : completion.outcome === 'incomplete' ? 'Incomplete' : 'Needs review')}</AppText></Row>
-          <InfoRow label="Report" value={completion.gaps.invalidCoverageReports || completion.gaps.invalidHealthReports
-            ? report.sessionId === state.sessionId ? 'Partial' : 'Saved'
-            : auditReportCompletionLabel(report, state)} />
-          <InfoRow label="Version" value={uiIdentifier(report.app.appVersion)} />
-          <InfoRow label="Build" value={uiIdentifier(report.app.buildVersion)} />
-          <InfoRow label="Finished" value={uiIdentifier(completion.finishedAt)} />
-          <InfoRow label="Audit ID" value={uiIdentifier(completion.auditId)} />
-          <InfoRow label="Details" value={uiLabel(completion.detailsComplete ? 'Complete' : 'Incomplete')} />
-          <InfoRow label="Coverage" value={uiLabel(completion.coverageComplete ? 'Complete' : 'Incomplete')} />
-          <InfoRow label="Executed" value={countPair(report.summary.executed,
-            (reportCoverage?.plannedChecks ?? report.checks.length) + (reportHealth?.coverage.plannedChecks ?? 0))} />
+          <Row style={{justifyContent:'space-between', flexWrap:'wrap'}}><AppText variant="h3">{uiLabel('App health audit')}</AppText><AppText style={{color:summaryColor}} accessibilityLiveRegion="polite">{uiLabel(outcomeLabel(completion.outcome))}</AppText></Row>
           <InfoRow label="Failures" value={uiCount(completion.failurePositions.length)} />
           {completion.failurePositions[0] ? <InfoRow label="First failure" value={uiJoin(
             completion.failurePositions[0].source === 'health' ? 'Data and display health' : 'Check results',
             ' · ', uiCount(completion.failurePositions[0].position), ' · ', uiIdentifier(completion.failurePositions[0].checkId),
           )} /> : null}
           {report.summary.warn > 0 ? <InfoRow label="Warnings" value={uiCount(report.summary.warn)} /> : null}
+          <InfoRow label="Finished" value={uiIdentifier(completion.finishedAt)} />
+          <InfoRow label="Report" value={completion.gaps.invalidCoverageReports || completion.gaps.invalidHealthReports
+            ? report.sessionId === state.sessionId ? 'Partial' : 'Saved'
+            : auditReportCompletionLabel(report, state)} />
+          <InfoRow label="Version" value={uiIdentifier(report.app.appVersion)} />
+          <InfoRow label="Build" value={uiIdentifier(report.app.buildVersion)} />
+          <InfoRow label="Audit ID" value={uiIdentifier(completion.auditId)} />
+          <InfoRow label="Details" value={uiLabel(completion.detailsComplete ? 'Complete' : 'Incomplete')} />
+          <InfoRow label="Coverage" value={uiLabel(completion.coverageComplete ? 'Complete' : 'Incomplete')} />
+          <InfoRow label="Executed" value={countPair(report.summary.executed,
+            (reportCoverage?.plannedChecks ?? report.checks.length) + (reportHealth?.coverage.plannedChecks ?? 0))} />
           <DebugLogUploadStatus sessionId={report.sessionId} />
           {uploadState.sessionId !== report.sessionId || !uploadState.verified ? <Button title="Upload report" icon="cloud-upload-outline" disabled={uploadBusy} onPress={() => {
             void uploadCompletedPerformanceAudit(report).catch(() => Alert.alert(uiLabel('Report unavailable')));
