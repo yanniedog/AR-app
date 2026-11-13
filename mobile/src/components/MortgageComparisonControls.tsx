@@ -1,15 +1,15 @@
 import { canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
 import { publicCataloguePricingKey, type PublicCatalogueView } from '../data/publicRateIntegration';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TextInput, useWindowDimensions, View } from 'react-native';
-import { useMortgageComparison, clearMortgageComparison } from '../data/mortgageComparison';
+import { useMortgageComparison, clearMortgageComparison, mortgageComparisonValues, setMortgageComparisonInputs, type MortgageComparisonInputs } from '../data/mortgageComparison';
 import { profileAttributeOptions } from '../data/profileRequirements';
 import { humanizeEnum } from '../data/format';
 import type { Filters } from '../data/selectors';
 import type { RateRow } from '../types';
 import { useStore } from '../data/store';
 import { updateRatesSection } from '../data/ratesSession';
-import { uiCount, uiJoin, uiLabel, uiMortgageComparisonInput } from '../lib/uiCopy';
+import { uiCount, uiJoin, uiLabel, uiMoney, uiMortgageComparisonInput, uiRate } from '../lib/uiCopy';
 import { yieldToUi } from '../lib/yieldToUi';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Chip, Row } from './ui';
@@ -19,7 +19,16 @@ import { SegmentedControl } from './controls';
 const TYPING_DEBOUNCE_MS = 200;
 const EMPTY_FACETS = { loanPurposes: [], repaymentTypes: [] };
 
+function sameInputs(left: MortgageComparisonInputs, right: MortgageComparisonInputs): boolean {
+  return left.loanAmount === right.loanAmount && left.lvr === right.lvr
+    && (left.lvrMode ?? 'lvr') === (right.lvrMode ?? 'lvr')
+    && (left.fundsAvailable ?? '') === (right.fundsAvailable ?? '')
+    && (left.fundsType ?? 'deposit') === (right.fundsType ?? 'deposit')
+    && (left.propertyValue ?? '') === (right.propertyValue ?? '');
+}
+
 type FacetKey = 'loanPurposes' | 'repaymentTypes';
+type NumericInputField = 'loanAmount' | 'lvr' | 'fundsAvailable' | 'propertyValue';
 
 function rowFacetOptions(
   rows: RateRow[],
@@ -118,12 +127,12 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   const writing = useRef(false);
   const draftRef = useRef(draft);
   draftRef.current = draft;
-  const commitDraft = (next: typeof storeValue) => {
+  const commitDraft = useCallback((next: MortgageComparisonInputs) => {
     writing.current = true;
-    useMortgageComparison.setState(next);
+    setMortgageComparisonInputs(next);
     dirty.current = false;
     writing.current = false;
-  };
+  }, []);
   useEffect(() => useMortgageComparison.subscribe((state) => {
     // External writes (clear / audit apply / Reset Rates view) must win over an
     // in-progress draft, including same-value clears that leave loanAmount/lvr
@@ -134,21 +143,23 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   }), []);
   useEffect(() => {
     if (!dirty.current) return;
-    if (draft.loanAmount === storeValue.loanAmount && draft.lvr === storeValue.lvr) {
+    if (sameInputs(draft, storeValue)) {
       dirty.current = false;
       return;
     }
-    const timer = setTimeout(() => commitDraft(draft), TYPING_DEBOUNCE_MS);
+    const timer = setTimeout(() => {
+      if (dirty.current && draftRef.current === draft) commitDraft(draft);
+    }, TYPING_DEBOUNCE_MS);
     // Dependency-change cleanup must only cancel the timer. Flushing here would
     // commit a stale draft and clear dirty before the next keystroke schedules.
     return () => clearTimeout(timer);
-  }, [draft, storeValue.loanAmount, storeValue.lvr]);
+  }, [draft, storeValue, commitDraft]);
   // Section switches unmount these controls; flush the latest draft so the
-  // committed store keeps the last typed amount/LVR.
+  // committed store keeps the last typed amount, LVR and funds drafts.
   useEffect(() => () => {
     if (!dirty.current) return;
     commitDraft(draftRef.current);
-  }, []);
+  }, [commitDraft]);
   const rowOptions = useMemo(() => cachedRowFacetOptions(rows), [rows]);
   const catalogueKey = useMemo(() => catalogue ? publicCataloguePricingKey(catalogue) : '', [catalogue]);
   const catalogueRef = useRef(catalogue);
@@ -157,6 +168,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   // mortgage.scope.apply does not re-walk the full programme book each render.
   // Large books leave the header render and yield before the scan.
   const catalogueOptions = useMemo(() => {
+    void catalogueKey;
     const view = catalogueRef.current;
     if (!view || view.status !== 'ready' || view.products.length > 48) {
       return { loanPurposes: [] as string[], repaymentTypes: [] as string[] };
@@ -214,7 +226,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
       group.canonicalize,
     ),
   })), [rowOptions, facetCatalogueOptions, filters]);
-  const change = (field: 'loanAmount' | 'lvr', text: string) => {
+  const change = (field: NumericInputField, text: string) => {
     dirty.current = true;
     setDraft(current => ({ ...current, [field]: text }));
   };
@@ -224,15 +236,48 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     clearMortgageComparison();
     updateRatesSection('Mortgage', { page: 1 }, true);
   };
+  const mode = draft.lvrMode ?? 'lvr';
+  const fundsType = draft.fundsType ?? 'deposit';
+  const values = mortgageComparisonValues(draft);
+  const pending = !sameInputs(draft, storeValue);
+  const changeMode = (nextMode: 'lvr' | 'funds') => {
+    if (nextMode === mode) return;
+    const next = { ...draftRef.current, lvrMode: nextMode };
+    setDraft(next);
+    // An explicit mode choice commits the latest typed values together, just
+    // like selecting a purpose/repayment facet, and cancels an older debounce.
+    commitDraft(next);
+  };
+  const changeFundsType = (nextType: 'deposit' | 'offset') => {
+    if (nextType === fundsType) return;
+    const next = { ...draftRef.current, fundsType: nextType };
+    setDraft(next);
+    commitDraft(next);
+  };
+  const fields: NumericInputField[] = mode === 'lvr' ? ['loanAmount', 'lvr']
+    : fundsType === 'offset' ? ['loanAmount', 'fundsAvailable', 'propertyValue'] : ['loanAmount', 'fundsAvailable'];
+  const fieldLabel = (field: NumericInputField) =>
+    uiLabel(field === 'loanAmount' ? 'Loan amount' : field === 'propertyValue' ? 'Property value'
+      : field === 'fundsAvailable' ? fundsType === 'offset' ? 'Offset balance' : 'Deposit' : 'LVR');
   return <View style={{ gap: 8 }} testID="mortgage-comparison-controls">
-    <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>{(['loanAmount', 'lvr'] as const).map(field => <View key={field} style={{ flexBasis: Math.min(220, 120 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0, gap: 4 }}>
-      <AppText variant="small">{uiLabel(field === 'loanAmount' ? 'Loan amount' : 'LVR')}</AppText>
+    <SegmentedControl value={mode} options={[{ value: 'funds', label: uiLabel('Funds available') }, { value: 'lvr', label: uiLabel('LVR') }]}
+      onChange={changeMode} />
+    {mode === 'funds' ? <SegmentedControl value={fundsType} options={[{ value: 'deposit', label: uiLabel('Deposit') }, { value: 'offset', label: uiLabel('Offset account') }]}
+      onChange={changeFundsType} /> : null}
+    <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>{fields.map(field => <View key={field} style={{ flexBasis: Math.min(220, 120 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0, gap: 4 }}>
+      <AppText variant="small">{fieldLabel(field)}</AppText>
       <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)} keyboardType="decimal-pad"
-        accessibilityLabel={uiLabel(field === 'loanAmount' ? 'Loan amount' : 'LVR')}
-        placeholder={uiLabel(field === 'loanAmount' ? '$' : '%')}
+        accessibilityLabel={fieldLabel(field)}
+        placeholder={uiLabel(field === 'lvr' ? '%' : '$')}
         style={{ minHeight: 48, minWidth: 0, color: theme.colors.text, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 6, padding: 8, fontSize: theme.font.body }} />
     </View>)}<IconAction icon="close" word="Clear" accessibilityLabel="Clear comparison inputs" onPress={clearInputs} /></Row>
-    {draft.loanAmount !== storeValue.loanAmount || draft.lvr !== storeValue.lvr
+    {mode === 'funds' ? <Row gap={12} style={{ flexWrap: 'wrap' }}>
+      <AppText variant="small" testID="mortgage-calculated-lvr">{uiJoin('Calculated LVR', ' · ', values.lvr === null ? uiLabel('Unknown') : uiRate(values.lvr / 100))}</AppText>
+      {fundsType === 'deposit'
+        ? <AppText variant="small" testID="mortgage-property-value">{uiJoin('Property value', ' · ', uiMoney(values.propertyValue, Number.isInteger(values.propertyValue) ? 0 : 2))}</AppText>
+        : <AppText variant="small" testID="mortgage-loan-less-offset">{uiJoin('Loan less offset', ' · ', uiMoney(values.interestBearingBalance, Number.isInteger(values.interestBearingBalance) ? 0 : 2))}</AppText>}
+    </Row> : null}
+    {pending
       ? <AppText variant="tiny" color="textMuted">{uiLabel('Updating')}</AppText> : null}
     <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
     {groups.map(group => <View key={group.key} style={{ gap: 4, flexBasis: Math.min(240, 170 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0 }}>
@@ -250,6 +295,6 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     </Row>
     <SegmentedControl value={metric} options={[{ value: 'headline', label: uiLabel('Advertised rate') }, { value: 'comparison', label: uiLabel('Comparison rate') }]}
       onChange={next => useStore.getState().setPref('mortgageRateMetric', next)} />
-    {invalid ? <AppText color="danger">{uiLabel('Invalid comparison inputs')}</AppText> : unverified > 0 ? <AppText variant="small">{uiJoin('Eligibility unverified', ' · ', uiCount(unverified))}</AppText> : null}
+    {(pending ? values.invalid : invalid) ? <AppText color="danger">{uiLabel('Invalid comparison inputs')}</AppText> : unverified > 0 ? <AppText variant="small">{uiJoin('Eligibility unverified', ' · ', uiCount(unverified))}</AppText> : null}
   </View>;
 }

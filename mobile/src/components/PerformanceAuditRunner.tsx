@@ -34,7 +34,7 @@ import { resolveSectionRibbonStats } from '../data/ribbonStats';
 import { excludeTokenDepositRates, rankFraction, sortRows } from '../data/selectors';
 import { useStore } from '../data/store';
 import { captureRatesSession, restoreRatesSession } from '../data/ratesSession';
-import { useMortgageComparison } from '../data/mortgageComparison';
+import { setMortgageComparisonInputs, useMortgageComparison } from '../data/mortgageComparison';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
@@ -2954,7 +2954,7 @@ export function PerformanceAuditRunner() {
           // Restore baseline catalogue data before legacy tokens, but keep UI
           // loads reserved and the policy guard active through measured rollback.
           quiesceAuditCatalogue?.();
-          useMortgageComparison.setState(mortgageComparisonSnapshot);
+          setMortgageComparisonInputs(mortgageComparisonSnapshot);
           restoreRatesSession(ratesSessionSnapshot);
           ratesSessionRestored = true;
         }

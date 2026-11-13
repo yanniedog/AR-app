@@ -33,6 +33,7 @@ import {
   type PerformanceAuditRollbackStore,
 } from '../src/lib/performanceAuditRollback';
 import { PerformanceAuditMutationBarrier } from '../src/lib/performanceAuditTiming';
+import { clearMortgageComparison, setMortgageComparisonInputs, useMortgageComparison } from '../src/data/mortgageComparison';
 
 const originalOs = Platform.OS;
 const secureStore = new Map<string, string>();
@@ -89,6 +90,7 @@ describe('performance audit rollback journal', () => {
   });
 
   afterEach(() => {
+    clearMortgageComparison();
     jest.useRealTimers();
   });
 
@@ -137,6 +139,21 @@ describe('performance audit rollback journal', () => {
       ([key, chunk]) => key.startsWith(`${PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY}.chunk.`) && /6\.25/.test(chunk),
     )).toBe(true);
     expect(secureStore.get(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY)).toMatch(/ar\.secure-value/);
+  });
+
+  it.each(['deposit', 'offset'] as const)('keeps exploratory %s funds and inactive drafts out of every durable rollback store', async fundsType => {
+    const baseline = { loanAmount: '654321.98', lvr: '71.234567', lvrMode: 'funds' as const, fundsAvailable: '123456.79',
+      fundsType, propertyValue: '876543.21' };
+    setMortgageComparisonInputs(baseline);
+    const store = makeStore();
+    await ensureUserRateScenarioLoaded();
+    const snapshot = await beginPerformanceAuditRollback(store);
+    const persisted = await Promise.all((await AsyncStorage.getAllKeys()).map(key => AsyncStorage.getItem(key)));
+    const serialized = JSON.stringify([snapshot, persisted, [...secureStore.values()]]);
+    expect(serialized).not.toMatch(/654321\.98|71\.234567|123456\.79|876543\.21|fundsAvailable|lvrMode|fundsType/);
+    expect(useMortgageComparison.getState()).toEqual(baseline);
+    await expect(restorePerformanceAuditRollback(store, snapshot)).resolves.toBe(true);
+    expect(useMortgageComparison.getState()).toEqual(baseline);
   });
 
   it.each([false, true])('keeps the actual late restoration outcome after timeout/drain (failure=%s)', async (failRestore) => {

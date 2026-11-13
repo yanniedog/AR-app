@@ -47,6 +47,7 @@ import { RatesPagination } from '../RatesPagination';
 import { MortgageComparisonControls } from '../MortgageComparisonControls';
 import {
   useMortgageComparison,
+  setMortgageComparisonInputs,
   mortgageComparisonRows,
   mortgageComparisonCriteriaReady,
   mortgageComparisonInputsInvalid,
@@ -223,11 +224,15 @@ export default function RatesWorkspace() {
     const previousFacets = previousMortgageFacets.current;
     previousMortgageFacets.current = nextFacets;
     const inputsChanged = previous.loanAmount !== mortgageInputs.loanAmount
-      || previous.lvr !== mortgageInputs.lvr;
+      || previous.lvr !== mortgageInputs.lvr
+      || (previous.lvrMode ?? 'lvr') !== (mortgageInputs.lvrMode ?? 'lvr')
+      || (previous.fundsAvailable ?? '') !== (mortgageInputs.fundsAvailable ?? '')
+      || (previous.fundsType ?? 'deposit') !== (mortgageInputs.fundsType ?? 'deposit')
+      || (previous.propertyValue ?? '') !== (mortgageInputs.propertyValue ?? '');
     const facetsChanged = previousFacets.loanPurposes !== nextFacets.loanPurposes
       || previousFacets.repaymentTypes !== nextFacets.repaymentTypes;
     if (!inputsChanged && !facetsChanged) return;
-    // Always reset Mortgage paging/scroll for a committed amount/LVR/facet change,
+    // Reset paging/scroll for committed amount, LVR, funds, mode or facet changes,
     // including when the user is temporarily on another section.
     const mortgage = useRatesSession.getState().sections.Mortgage;
     if (mortgage.page === 1 && mortgage.scrollOffset === 0) return;
@@ -864,7 +869,7 @@ export default function RatesWorkspace() {
   const applyMortgageScope = useCallback((args: readonly unknown[]) => {
     if (section !== 'Mortgage') return { unavailableReason: 'Mortgage comparison scope requires the Mortgage section' };
     if (availability === 'unlisted') return { unavailableReason: 'Mortgage comparison scope requires listed rates' };
-    useMortgageComparison.setState({
+    setMortgageComparisonInputs({
       loanAmount: auditActionString(args, 'loanAmount') ?? '',
       lvr: auditActionString(args, 'lvr') ?? '',
     });
@@ -920,7 +925,7 @@ export default function RatesWorkspace() {
       const tokens = exactTokens.length >= 2 ? exactTokens : selected;
       if (tokens.length >= 2) openCompare(tokens, 'rates-comparison');
     },
-  }), [applyFilters, applyMortgageScope, availability, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
+  }), [applyFilters, applyMortgageScope, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
   // Logo decode callbacks can churn during mortgage.scope.apply settle; the
   // logos probe is optional, so wait until search.data/list are no longer pending.
   const logoCallbacksActive = physicalVisibility.active && !searchPending && listReadiness.visiblyCommitted;
