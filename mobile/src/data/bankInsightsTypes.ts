@@ -53,6 +53,8 @@ export interface BankInsightsPayload {
   run_dates: string[];
   banks: Record<string, Partial<Record<SectionKey, BankSectionSeries>>>;
   events: BankRateEvent[];
+  /** False/absent means absence of a move cannot establish a complete event ledger. */
+  eventLedgerComplete?: boolean;
   /** Optional precomputed pass-through summaries (may be empty early in the ledger). */
   behaviour?: Partial<Record<SectionKey, BehaviourSectionSummary>>;
 }

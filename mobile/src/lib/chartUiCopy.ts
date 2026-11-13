@@ -14,6 +14,7 @@ export function uiBankResponseReason(reason: BankResponseReason): UiText {
     case 'missing-baseline': return uiLabel('Baseline unavailable');
     case 'history-gap': return uiLabel('History gaps');
     case 'no-products': return uiLabel('No products');
+    case 'unverified-events': return uiLabel('Event history unavailable');
   }
 }
 

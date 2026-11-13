@@ -35,7 +35,7 @@ export function bankResponseCoverage(source: BankInsightsPayload | null | undefi
   core: CorePayload | null, quarantinedPairs: ReadonlySet<string> = new Set()): BankResponseCoverage | null {
   if (!source || !calendar || !core) return null;
   const rows: BankResponseCoverageRow[] = [];
-  let windows = 0;
+  const windows = new Set<string>();
   for (const section of SECTION_KEYS) {
     const sourceWindows = buildCompactBankResponseWindows(source, calendar, section);
     const displayWindows = new Map((projected ? buildCompactBankResponseWindows(projected, calendar, section, source) : [])
@@ -43,7 +43,7 @@ export function bankResponseCoverage(source: BankInsightsPayload | null | undefi
     const providers = new Set([...Object.keys(source.banks).filter(provider => source.banks[provider][section]),
       ...source.events.filter(event => event.section === section).map(event => event.provider),
       ...(core.sections[section]?.rates ?? []).map(row => row.provider)]);
-    windows += sourceWindows.length;
+    sourceWindows.forEach(window => windows.add(`${window.decision.date}:${window.windowEnd}`));
     for (const window of sourceWindows) {
       const sourceRows = new Map(window.rows.map(row => [row.provider, row]));
       for (const provider of providers) {
@@ -62,13 +62,13 @@ export function bankResponseCoverage(source: BankInsightsPayload | null | undefi
     }
   }
   return { runDate: source.run_date, runMatches: source.run_date === core.run_date,
-    projectionAvailable: projected != null, windows, rows };
+    projectionAvailable: projected != null, windows: windows.size, rows };
 }
 
 export const BANK_RESPONSE_PUBLIC_METRICS = ['coverageAvailable', 'runMatches', 'projectionAvailable',
   'windows', 'checked', 'displayed', 'knownMoves', 'knownTiming', 'unknownMoves', 'unknownTiming',
   'noRecordedMove', 'noProducts', 'filteredHistory', 'quarantinedHistory', 'missingHistory', 'missingBaseline', 'historyGaps',
-  'unverifiedFirstMoves', 'coverageComplete', 'renderedCoverageVerified'] as const;
+  'unverifiedFirstMoves', 'unverifiedEvents', 'coverageComplete', 'renderedCoverageVerified'] as const;
 
 export function evaluateBankResponseCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
   const evidence = snapshot.bankResponseCoverage;
@@ -89,6 +89,7 @@ export function evaluateBankResponseCoverage(snapshot: AppHealthDataSnapshot): A
     quarantinedHistory: count('quarantined-history'),
     missingHistory: count('missing-history'), missingBaseline: count('missing-baseline'), historyGaps: count('history-gap'),
     unverifiedFirstMoves: evidence.rows.filter(row => row.moveKnown && !row.firstMoveVerified).length,
+    unverifiedEvents: count('unverified-events'),
     coverageComplete: complete, renderedCoverageVerified: false,
   }, localEvidence: { bankResponseCoverage: evidence },
   summary: complete ? 'All bank response model rows have classified evidence; physical rendering remains sampled.'

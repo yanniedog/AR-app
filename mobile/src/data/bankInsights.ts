@@ -487,7 +487,7 @@ function normalizeBehaviour(
 }
 
 /** Drop corrupt bank-history JSON before it reaches insights/chart code. */
-export function normalizeBankInsightsPayload(raw: unknown): BankInsightsPayload | null {
+export function normalizeBankInsightsPayload(raw: unknown, options: { fromCache?: boolean } = {}): BankInsightsPayload | null {
   if (!raw || typeof raw !== 'object') return null;
   const obj = raw as Record<string, unknown>;
   const run_date = typeof obj.run_date === 'string' ? obj.run_date.slice(0, 10) : '';
@@ -561,6 +561,8 @@ export function normalizeBankInsightsPayload(raw: unknown): BankInsightsPayload 
     run_dates,
     banks,
     events,
+    eventLedgerComplete: Array.isArray(obj.events) && events.length === obj.events.length &&
+      obj.eventLedgerComplete !== false && (!options.fromCache || obj.eventLedgerComplete === true),
     behaviour: normalizeBehaviour(obj.behaviour),
   };
 }
