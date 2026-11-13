@@ -47,6 +47,14 @@ function rowFacetOptions(
   };
 }
 
+// The header remounts with the list; the installed row array does not change.
+const rowFacetCache = new WeakMap<RateRow[], Record<FacetKey, string[]>>();
+function cachedRowFacetOptions(rows: RateRow[]): Record<FacetKey, string[]> {
+  let options = rowFacetCache.get(rows);
+  if (!options) { options = rowFacetOptions(rows, EMPTY_FACETS); rowFacetCache.set(rows, options); }
+  return options;
+}
+
 /** Catalogue condition scan — keyed by content identity, not snapshot object identity. */
 function catalogueFacetOptions(catalogue: PublicCatalogueView): Record<FacetKey, string[]> {
   const loanPurposes: string[] = [];
@@ -141,7 +149,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     if (!dirty.current) return;
     commitDraft(draftRef.current);
   }, []);
-  const rowOptions = useMemo(() => rowFacetOptions(rows, EMPTY_FACETS), [rows]);
+  const rowOptions = useMemo(() => cachedRowFacetOptions(rows), [rows]);
   const catalogueKey = useMemo(() => catalogue ? publicCataloguePricingKey(catalogue) : '', [catalogue]);
   const catalogueRef = useRef(catalogue);
   catalogueRef.current = catalogue;

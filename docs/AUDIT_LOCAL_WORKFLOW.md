@@ -51,3 +51,25 @@ For device acceptance, inspect light/dark bank marks, run a local audit twice,
 confirm both points and their exact timestamps, and confirm chart evidence in
 the RBA check. Test empty history and storage failure using the focused tests;
 do not erase real device diagnostics just to produce an empty screenshot.
+
+## Audit entry path and estimate
+
+Each run records three fixed checks from the interaction that started it:
+`audit-entry-screen-open` (screen mounted to usable controls, `forwardWorkMs`),
+`audit-entry-settings-open` (Audit settings toggle to painted content,
+`maxFrameGapMs`) and `audit-entry-start-response` (press to accepted request
+`actionMs`, press to next frame `maxFrameGapMs`, press to running runner
+`forwardWorkMs`). They use the existing latency limits and metric names. A
+phase without marks is declared unavailable, not failed.
+
+The time estimate is one value: before a run, the last measured duration on the
+device (9 min before any run); during a run, the adaptive remaining time.
+
+Source audit `audit-6f8b3a65f8128f4f` (Android/Hermes, build 316, 2026-11-10)
+reported 56 timing failures. Changes made from it: the completed report is read
+and parsed once when the screen opens (it was parsed up to five times); lender
+product ranking is cached per edition and lender; the no-listed-rate inventory
+is built only when that view is used; physical list visibility is re-measured
+after a returning navigation (`not-found.home` stalled for the full step limit
+twice). Rates, Market and lender open stalls need another Android/Hermes run
+before any claim that they are resolved.

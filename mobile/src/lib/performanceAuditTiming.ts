@@ -41,12 +41,19 @@ export class PerformanceAuditMutationBarrier {
 
 export interface PerformanceAuditEstimate {
   elapsedMs: number;
-  remainingMinMs: number;
-  remainingMaxMs: number;
+  /** One adaptive value. It includes storage, setup and finalization overhead. */
+  remainingMs: number;
   basis: 'initial' | 'observed' | 'finalizing';
 }
 
-/** An adaptive range, not a countdown promise. Include storage and setup overhead. */
+/** Shown before a first run, when no earlier duration exists. A full local run
+ * on the reference Android device measured 525 seconds (build 316). */
+export const PERFORMANCE_AUDIT_TYPICAL_DURATION_MS = 9 * 60_000;
+
+/** Overhead outside measured checks: setup, durable storage and the final flush. */
+const ESTIMATE_OVERHEAD_MS = 15_000;
+
+/** A single adaptive estimate, not a countdown promise. */
 export function estimatePerformanceAuditTime(input: {
   elapsedMs: number;
   completed: number;
@@ -59,8 +66,7 @@ export function estimatePerformanceAuditTime(input: {
     const spent = input.finalizationElapsedMs ?? 0;
     return {
       elapsedMs: input.elapsedMs,
-      remainingMinMs: Math.max(0, 5_000 - spent),
-      remainingMaxMs: Math.max(5_000, 30_000 - spent),
+      remainingMs: Math.max(1_000, ESTIMATE_OVERHEAD_MS - spent),
       basis: 'finalizing',
     };
   }
@@ -74,13 +80,19 @@ export function estimatePerformanceAuditTime(input: {
     (Math.max(0, input.elapsedMs - links.elapsedMs) + 10 * 1_500) / (foregroundCompleted + 10));
   const perLink = Math.min(PERFORMANCE_AUDIT_STEP_LIMIT_MS,
     (links.elapsedMs + 20 * 100) / (links.completed + 20));
-  const remainingMs = foregroundRemaining * perForegroundCheck + remainingLinks * perLink;
   return {
     elapsedMs: input.elapsedMs,
-    remainingMinMs: remainingMs * 0.6 + 5_000,
-    remainingMaxMs: remainingMs * 1.6 + 30_000,
+    remainingMs: foregroundRemaining * perForegroundCheck + remainingLinks * perLink + ESTIMATE_OVERHEAD_MS,
     basis: input.completed < 5 ? 'initial' : 'observed',
   };
+}
+
+/** Whole minutes from one minute up; five-second steps below that. */
+export function performanceAuditEstimateParts(remainingMs: number): { value: number; unit: 'min' | 'seconds' } {
+  const ms = Number.isFinite(remainingMs) ? Math.max(0, remainingMs) : 0;
+  return ms >= 60_000
+    ? { value: Math.max(1, Math.round(ms / 60_000)), unit: 'min' }
+    : { value: Math.max(5, Math.ceil(ms / 5_000) * 5), unit: 'seconds' };
 }
 
 export function formatPerformanceAuditEstimate(
@@ -88,12 +100,8 @@ export function formatPerformanceAuditEstimate(
   paused: boolean,
 ): string {
   if (!estimate) return paused ? 'ETA paused until you return' : 'ETA: estimating the audit plan…';
-  const range = (ms: number) => ms >= 60_000
-    ? `${Math.max(1, Math.ceil(ms / 60_000))} min`
-    : `${Math.max(5, Math.ceil(ms / 5_000) * 5)} sec`;
-  const low = range(estimate.remainingMinMs);
-  const high = range(estimate.remainingMaxMs);
-  const remaining = low === high ? `about ${high}` : `about ${low}–${high}`;
+  const { value, unit } = performanceAuditEstimateParts(estimate.remainingMs);
+  const remaining = `about ${value} ${unit === 'min' ? 'min' : 'sec'}`;
   return paused
     ? `ETA paused · ${remaining} of foreground work remains`
     : `ETA: ${remaining} remaining${estimate.basis === 'initial' ? ' · initial estimate' : ''}`;

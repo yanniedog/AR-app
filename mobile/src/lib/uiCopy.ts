@@ -20,6 +20,7 @@ import type { CurrentProductOption } from '../data/scenarioCatalog';
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
   'Audit history', 'No audit history', 'History unavailable', 'Retained runs', 'Audit settings', 'Recorded results',
+  'Estimated time', 'Last audit', 'Upload details', 'min',
   'Unverified details', 'Quarantined tiers', 'History days', 'Daily gaps', 'Rendered coverage', 'Chart gaps', 'Processing gaps', 'Source unavailable',
   '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '#', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
   'Rates', 'Saved', 'Market', 'Account', 'Profile', 'Settings', 'About',

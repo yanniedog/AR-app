@@ -1,6 +1,7 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { toPublicAppHealthReport } from './appHealth';
 import { PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from './performanceAuditSetup';
+import { AUDIT_ENTRY_CHECK_IDS } from './auditEntryTrace';
 import { encodeCompressedDiagnosticJson, MAX_COMPRESSED_DIAGNOSTIC_BYTES } from './compactDiagnosticJson';
 import { publicAuditDiagnostic, publicAuditError, publicAuditFailureReason, publicHealthFailureReason, stallTimeoutFields } from './performanceAuditDiagnostic';
 import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
@@ -12,6 +13,7 @@ import { PUBLIC_AUDIT_METRIC_FIELDS as METRIC_ALLOWLIST } from './auditDiagnosti
 
 const FIXED_CHECK_IDS = new Set([
   ...PERFORMANCE_AUDIT_SETUP_CHECK_IDS,
+  ...AUDIT_ENTRY_CHECK_IDS,
   'runtime-responsiveness',
   'maximum-coverage-profile',
   'async-storage',
