@@ -27,6 +27,9 @@ require.extensions['.ts'] = (module, filename) => {
 };
 const { evaluateAppHealthDataQuality } = require('../src/lib/appHealth/dataQuality.ts');
 const { appHealthCatalogueSnapshot } = require('../src/lib/performanceAuditCatalogueSnapshot.ts');
+const { bankResponseAuditSnapshot } = require('../src/lib/performanceAuditDataSnapshot.ts');
+const { normalizeBankInsightsPayload } = require('../src/data/bankInsights.ts');
+const { normalizeRbaCalendar } = require('../src/data/rbaCalendar.ts');
 const { DEFAULT_PREFS } = require('../src/data/storeTypes.ts');
 const { publishedV1SourceContract } = require('../src/lib/appHealth/v1Contract.ts');
 const { normalizeCoreWithIntegrity } = require('../src/data/sectionIntegrity.ts');
@@ -53,6 +56,23 @@ function validateSearchIndex(value) {
       !isValidCalendarDate(value.run_date) || !value.products || typeof value.products !== 'object' ||
       Array.isArray(value.products) || Object.entries(value.products).some(([key, text]) => !key || typeof text !== 'string')) {
     throw new Error('Invalid search-index payload');
+  }
+}
+
+function normalizeBankAuditAsset(key, decoded, observations, evidence) {
+  if (!Object.hasOwn(decoded, key)) return null;
+  try {
+    const value = key === 'bank_history'
+      ? normalizeBankInsightsPayload(decoded[key]) : normalizeRbaCalendar(decoded[key]);
+    if (!value) throw new Error(`Invalid ${key} payload`);
+    if (key === 'bank_history' && value.run_dates.at(-1) !== value.run_date) {
+      throw new Error('Bank history timeline does not end at its observation date');
+    }
+    return value;
+  } catch {
+    evidence[key] = { ...evidence[key], status: 'FAIL', error: `Invalid ${key} observation` };
+    observations[key] = { state: 'failed' };
+    return null;
   }
 }
 
@@ -307,11 +327,15 @@ async function audit(opts) {
   const normalized = decoded.core ? normalizeCoreWithIntegrity(decoded.core, { coreSha256: manifest.files.core.sha256 }) : null;
   const coreKeys = new Set(Object.values(normalized?.core.sections ?? {}).flatMap((section) => section.rates).map((row) => row.product_key));
   const detailKeys = Object.keys(decoded.details?.products ?? {});
+  const auditState = { core: normalized?.core ?? null, coreIntegrity: normalized?.integrity ?? null,
+    details: decoded.details ?? null, searchIndex: decoded.search_index ?? null, prefs: DEFAULT_PREFS,
+    bankInsights: normalizeBankAuditAsset('bank_history', decoded, observations, evidence),
+    rbaCalendar: normalizeBankAuditAsset('rba_calendar', decoded, observations, evidence) };
   const snapshot = {
     source: 'remote', manifest, core: normalized?.core ?? null, appVersion: '1.0.0',
     catalogueAuditMode: 'headless_default_preferences',
-    catalogue: appHealthCatalogueSnapshot({ core: normalized?.core ?? null,
-      details: decoded.details ?? null, searchIndex: decoded.search_index ?? null, prefs: DEFAULT_PREFS }),
+    catalogue: appHealthCatalogueSnapshot(auditState),
+    bankResponseCoverage: bankResponseAuditSnapshot(auditState),
     datesIndex: index ? { dates: index.dates, latestRunDate: index.latest_date } : undefined,
     assets: observations,
     details: decoded.details ? { runDate: decoded.details.run_date, productCount: detailKeys.length,

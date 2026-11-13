@@ -1,6 +1,5 @@
 import type { BankHistoryPoint, SectionKey } from '../types';
 import { parseYmd } from './bankHistoryTransform';
-import { debugLog } from '../lib/debugLog';
 import {
   DAY_MS,
   type BankInsightsPayload,
@@ -210,6 +209,9 @@ export function bankTrendChartModel(
     if (!points.length) return null;
     return { dates, points, allDates: payload.run_dates };
   } catch (err) {
+    // Pure history normalization/projection also runs in the Node audit. Load
+    // native diagnostic persistence only when this query actually reports an error.
+    const { debugLog } = require('../lib/debugLog') as typeof import('../lib/debugLog');
     debugLog.error(
       'bankInsights',
       `bankTrendChartModel failed provider=${provider} section=${section}: ${String((err as Error)?.message ?? err)}`,
