@@ -28,7 +28,10 @@ navigation and Mortgage-index fixes were already present in this report.
 
 ## Changes and local evidence
 
-Rates retains up to six prepared pricing/results editions across remounts.
+Rates retains up to six prepared pricing/results editions across remounts,
+with a 50,000 retained-row-slot budget per cache. Source owners count toward
+the budget, old entries are evicted, and oversized outputs still display
+without being retained for a later remount.
 Reuse is tied to source, catalogue, scenario, eligibility, suitability,
 financial-context identity and quote validity. Focused tests verify that warm
 remounts start no pricing worker or filter/sort job, and changed evidence or

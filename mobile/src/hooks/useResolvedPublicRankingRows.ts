@@ -39,7 +39,8 @@ const EMPTY_MORTGAGE = {
 type PreparedPricing = {
   candidates: RateRow[]; resolution: PublicRankingResolution; mortgage: typeof EMPTY_MORTGAGE;
 };
-const reusable: { key: readonly unknown[]; from: number; until: number; value: PreparedPricing }[] = [];
+const REUSABLE_ROW_SLOT_LIMIT = 50_000;
+const reusable: { key: readonly unknown[]; from: number; until: number; value: PreparedPricing; rowSlots: number }[] = [];
 const sameKey = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
 export function clearReusablePublicPricing() { reusable.length = 0; }
 function reusablePricing(key: readonly unknown[], now: number) {
@@ -49,6 +50,17 @@ function reusablePricing(key: readonly unknown[], now: number) {
     if (now < reusable[i].from || now >= reusable[i].until) reusable.splice(i, 1);
   }
   return reusable.find(item => sameKey(item.key, key));
+}
+function retainedRowSlots(source: readonly RateRow[], provided: readonly RateRow[] | null,
+  context: RateConditionContext | undefined, value: PreparedPricing) {
+  const arrays = new Set<readonly RateRow[]>([source, value.candidates, value.resolution.rows, value.mortgage.rows]);
+  if (provided) arrays.add(provided);
+  // The key retains the whole source owner, not just this section. Account for
+  // all its section arrays so a small output cannot pin an oversized core.
+  for (const core of [context?.core, context?.coreIntegrity?.core]) {
+    if (core) for (const section of Object.values(core.sections)) arrays.add(section.rates);
+  }
+  return [...arrays].reduce((sum, rows) => sum + rows.length, 0);
 }
 
 /**
@@ -264,8 +276,15 @@ export function useResolvedPublicRankingRows(options: {
             completed.current.push({ key, request: req, catalogue: view, from: Date.now(), until: validity.until(), snapshot: value });
             const previous = reusable.findIndex(item => sameKey(item.key, retainedKey));
             if (previous >= 0) reusable.splice(previous, 1);
-            reusable.push({ key: retainedKey, from: validity.from, until: validity.until(), value });
-            if (reusable.length > 6) reusable.shift();
+            const rowSlots = retainedRowSlots(req.sourceRows, req.providedCandidates, req.mortgageContext, value);
+            if (rowSlots <= REUSABLE_ROW_SLOT_LIMIT) {
+              // Keep only the pricing value here; the mounted snapshot owns
+              // request bookkeeping. Shared arrays across entries are charged
+              // conservatively for each entry to keep the budget cheap.
+              reusable.push({ key: retainedKey, from: validity.from, until: validity.until(),
+                value: { candidates, resolution, mortgage }, rowSlots });
+              while (reusable.length > 6 || reusable.reduce((sum, item) => sum + item.rowSlots, 0) > REUSABLE_ROW_SLOT_LIMIT) reusable.shift();
+            }
           }
           setSnapshot(value);
           return;

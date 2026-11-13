@@ -5,6 +5,9 @@ import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { clearReusablePublicPricing, useResolvedPublicRankingRows } from '../src/hooks/useResolvedPublicRankingRows';
 import { AS_OF, catalogue, product, programme, row } from '../testUtils/publicRateJourney';
+import sample from '../assets/sample/core.json';
+import type { CorePayload } from '../src/types';
+import type { RateConditionContext } from '../src/data/rateConditions';
 
 beforeEach(() => {
   clearReusablePublicPricing();
@@ -102,6 +105,52 @@ test('a gate change while a worker is suspended restarts after the later React r
     act(() => tree.unmount());
     if (previous) host.nativeRuntimeScheduler = previous; else delete host.nativeRuntimeScheduler;
   }
+});
+
+test.each(['outputs', 'source owner'] as const)('oversized pricing %s still displays but is not retained across remounts', async kind => {
+  const source = Array.from({ length: kind === 'outputs' ? 17_000 : 128 }, () => row);
+  const core = { ...sample, sections: { ...sample.sections, Mortgage: { ...sample.sections.Mortgage,
+    rates: Array.from({ length: 50_001 }, () => row) } } } as unknown as CorePayload;
+  const context: RateConditionContext | undefined = kind === 'source owner'
+    ? { core, details: null, manifest: null, coreIntegrity: null } : undefined;
+  const view = { ...catalogue(), status: 'unavailable' as const }, scenario = {};
+  let latest!: ReturnType<typeof useResolvedPublicRankingRows>;
+  function Probe() {
+    latest = useResolvedPublicRankingRows({ candidates: source, catalogue: view, section: 'Mortgage', sectionScenario: scenario,
+      mortgageContext: context, rowScenario: () => scenario, resolutionContextKey: '{}', focused: true, interactive: true, revision: 1 });
+    return null;
+  }
+  let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Probe />); });
+  await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+  expect(latest.ready).toBe(true); expect(latest.resolution.rows).toHaveLength(source.length);
+  act(() => tree.unmount());
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  try { expect(latest.ready).toBe(false); expect(latest.work.pricingSnapshotReused).toBe(false); }
+  finally { act(() => tree.unmount()); }
+});
+
+test('aggregate pricing retention evicts the oldest source and row copies before the entry limit', async () => {
+  const sources = Array.from({ length: 2 }, () => Array.from({ length: 9_000 }, () => row));
+  const view = { ...catalogue(), status: 'unavailable' as const }, scenario = {};
+  let latest!: ReturnType<typeof useResolvedPublicRankingRows>;
+  function Probe({ source }: { source: typeof sources[number] }) {
+    latest = useResolvedPublicRankingRows({ candidates: source, catalogue: view, section: 'Mortgage', sectionScenario: scenario,
+      rowScenario: () => scenario, resolutionContextKey: '{}', focused: true, interactive: true, revision: 1 });
+    return null;
+  }
+  let tree!: ReactTestRenderer;
+  for (const source of sources) {
+    act(() => { tree = TestRenderer.create(<Probe source={source} />); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(latest.ready).toBe(true); expect(latest.resolution.rows).toHaveLength(source.length);
+    act(() => tree.unmount());
+  }
+  act(() => { tree = TestRenderer.create(<Probe source={sources[1]} />); });
+  expect(latest.ready).toBe(true); expect(latest.work.pricingSnapshotReused).toBe(true);
+  act(() => tree.unmount());
+  act(() => { tree = TestRenderer.create(<Probe source={sources[0]} />); });
+  try { expect(latest.ready).toBe(false); expect(latest.work.pricingSnapshotReused).toBe(false); }
+  finally { act(() => tree.unmount()); }
 });
 afterEach(() => {
   jest.useRealTimers();

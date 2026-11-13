@@ -13,7 +13,8 @@ const sameRows = (a: readonly RateRow[], b: readonly RateRow[]) => a === b ||
   a.length === b.length && a.every((row, index) => row === b[index]);
 // A route remount must not discard a completed, immutable result. Keep only a
 // few recent queries and bind every entry to its source and admission owners.
-const reusable: { key: readonly unknown[]; result: RateRow[] }[] = [];
+const REUSABLE_ROW_SLOT_LIMIT = 50_000;
+const reusable: { key: readonly unknown[]; result: RateRow[]; rowSlots: number }[] = [];
 const sameKey = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
 export function clearReusableSearchResults() { reusable.length = 0; }
 
@@ -90,8 +91,14 @@ export function usePreparedSearchRows(
           completed.current.push({ request, attempt, filtersKey, result });
           const previous = reusable.findIndex(item => sameKey(item.key, reuseKey));
           if (previous >= 0) reusable.splice(previous, 1);
-          reusable.push({ key: reuseKey, result });
-          if (reusable.length > 6) reusable.shift();
+          // Include the source owner retained by the key, even when filtering
+          // leaves a tiny result. Oversized results still install for this
+          // mounted screen; only their cross-remount retention is skipped.
+          const rowSlots = rows.length + (result === rows ? 0 : result.length);
+          if (rowSlots <= REUSABLE_ROW_SLOT_LIMIT) {
+            reusable.push({ key: reuseKey, result, rowSlots });
+            while (reusable.length > 6 || reusable.reduce((sum, item) => sum + item.rowSlots, 0) > REUSABLE_ROW_SLOT_LIMIT) reusable.shift();
+          }
           setSnapshot({ request, attempt, rows: result, error: null });
         } })
         .catch(error => { if (!cancelled) setSnapshot({ request, attempt, rows: EMPTY_ROWS,

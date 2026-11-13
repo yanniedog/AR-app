@@ -87,6 +87,44 @@ test('a gate change before completion cannot populate the remount cache', async 
   }
 });
 
+test('an oversized source/result installs normally but is not retained across remounts', async () => {
+  const oversized = Array.from({ length: 26_000 }, () => rows[0]);
+  mockPrepare.mockImplementation((input: RateRow[]) => Promise.resolve(input.slice()));
+  let tree!: ReactTestRenderer;
+  for (const input of [rows, oversized]) {
+    act(() => { tree = TestRenderer.create(<Probe inputRows={input} />); });
+    await act(async () => { mockJobs[mockJobs.length - 1].run(); });
+    expect(latest.ready).toBe(true); expect(latest.rows).toHaveLength(input.length);
+    act(() => tree.unmount());
+  }
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  expect(latest.ready).toBe(true); // Skipping an oversized entry does not evict a useful one.
+  act(() => tree.unmount());
+  act(() => { tree = TestRenderer.create(<Probe inputRows={oversized} />); });
+  try { expect(latest.ready).toBe(false); expect(latest.reused).toBe(false); }
+  finally { act(() => tree.unmount()); }
+});
+
+test('aggregate retained source/result slots evict oldest entries before the entry limit', async () => {
+  const sources = Array.from({ length: 3 }, () => Array.from({ length: 12_000 }, () => rows[0]));
+  mockPrepare.mockImplementation((input: RateRow[]) => Promise.resolve(input.slice()));
+  let tree!: ReactTestRenderer;
+  for (const input of sources) {
+    act(() => { tree = TestRenderer.create(<Probe inputRows={input} />); });
+    await act(async () => { mockJobs[mockJobs.length - 1].run(); });
+    expect(latest.ready).toBe(true);
+    act(() => tree.unmount());
+  }
+  for (const input of sources.slice(1)) {
+    act(() => { tree = TestRenderer.create(<Probe inputRows={input} />); });
+    expect(latest.ready).toBe(true); expect(latest.reused).toBe(true);
+    act(() => tree.unmount());
+  }
+  act(() => { tree = TestRenderer.create(<Probe inputRows={sources[0]} />); });
+  try { expect(latest.ready).toBe(false); expect(latest.reused).toBe(false); }
+  finally { act(() => tree.unmount()); }
+});
+
 test('large results stay pending until the full active request completes', async () => {
   const job = pending(); mockPrepare.mockReturnValue(job.promise);
   let tree!: ReactTestRenderer;
