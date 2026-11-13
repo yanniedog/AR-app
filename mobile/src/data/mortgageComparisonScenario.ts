@@ -6,7 +6,9 @@ import type { Filters } from './selectors';
 import type { SectionKey } from '../types';
 import { calculatorAmount, calculatorRateFraction, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
 import type { MortgageComparisonInputs } from './mortgageComparison';
+import { mortgageComparisonValues } from './mortgageComparison';
 import type { RateScenario } from './publicRateModel';
+import { attachExactPublicLvr, clearExactPublicLvr } from './publicScenarioLvr';
 
 /** Ephemeral comparison inputs override pricing assumptions without saving them. */
 export function mortgageComparisonScenario(section: SectionKey, scenario: RateScenario,
@@ -27,11 +29,24 @@ export function mortgageComparisonScenario(section: SectionKey, scenario: RateSc
       result.repayment = facets.repayment; result.profileRepayment = facets.profileRepayment;
     }
   }
-  if (inputs.loanAmount.trim()) {
+  if (inputs.lvrMode === 'funds') {
+    const values = mortgageComparisonValues(inputs);
+    // Funds mode owns both dimensions, even before all required fields exist.
+    // Missing/invalid values must not inherit a saved property's assumptions.
+    result.amount = values.lvrFraction !== undefined ? String(values.amount) : undefined;
+    result.lvr = values.lvrFraction;
+    result.offsetBalance = values.offsetBalance !== null ? String(values.offsetBalance) : undefined;
+    clearExactPublicLvr(result);
+    if (values.lvrFraction !== undefined) attachExactPublicLvr(result, String(values.amount), String(values.propertyValue));
+  } else if (inputs.loanAmount.trim()) {
     const amount = calculatorAmount(inputs.loanAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT);
     result.amount = amount != null && amount > 0 ? String(amount) : undefined;
   }
-  if (inputs.lvr.trim()) {
+  if (inputs.lvrMode !== 'funds' && (inputs.lvrMode === 'lvr' || inputs.loanAmount.trim() || inputs.lvr.trim())) {
+    clearExactPublicLvr(result);
+    // Once direct comparison is active, a blank LVR is missing, not permission
+    // to borrow the saved property's ratio. An untouched legacy reset retains
+    // the existing saved-scenario behaviour for non-comparison consumers.
     const lvr = calculatorRateFraction(inputs.lvr);
     result.lvr = lvr != null ? String(lvr) : undefined;
   }
