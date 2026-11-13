@@ -498,3 +498,34 @@ test('estimated time retains seconds from the last measured run', async () => {
   await mount();
   expect(tree!.root.findByProps({ label: 'Estimated time' }).props.value).toBe('08:01');
 });
+
+test('an in-memory diagnosis is not traversed before result paint is allowed', async () => {
+  const report = makePerformanceAuditReport('deferred-known-diagnosis');
+  restoreCompletedPerformanceAudit(report);
+  const originalChecks = report.checks;
+  const checks = jest.fn(() => originalChecks);
+  Object.defineProperty(report, 'checks', { configurable: true, get: checks });
+  mockResultsReady = false;
+  await mount();
+  expect(tree!.root.findByProps({ title: 'Run audit' }).props.disabled).toBe(false);
+  expect(tree!.root.findByProps({ label: 'Last audit' }).props.value).toBe('Loading');
+  expect(checks).not.toHaveBeenCalled();
+  Object.defineProperty(report, 'checks', { configurable: true, writable: true, value: originalChecks });
+});
+
+test('a failed native preflight reschedules deferred recovery', async () => {
+  mockDeferRecovery = true;
+  const saved = makePerformanceAuditReport('after-preflight-failure');
+  jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(saved);
+  mockHydratedDownload.mockRejectedValueOnce(new Error('Native update state unavailable'));
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  try {
+    await mount();
+    await press('Run audit');
+    expect(getPerformanceAuditState().status).toBe('idle');
+    expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
+    await act(async () => { mockRecoveryWork?.(); });
+    expect(loadCompletedPerformanceAudit).toHaveBeenCalledTimes(1);
+    expect(getPerformanceAuditState().report).toBe(saved);
+  } finally { alert.mockRestore(); }
+});
