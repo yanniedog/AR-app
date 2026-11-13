@@ -1,0 +1,172 @@
+const {chromium}=require('playwright');
+const fs=require('fs');const crypto=require('crypto');
+const address=process.argv[2],output=process.argv[3],version=process.argv[4];
+if(!address||!output||!version)throw Error('Pass address, output JSON and source label');
+const reqSource=name=>{const entry=[...globalThis.__r.getModules().entries()].find(([,m])=>m.verboseName===name);if(!entry)throw Error('Missing module '+name);return globalThis.__r(entry[0]);};
+async function install(page){
+ return page.evaluate(reqText=>{
+  const req=(0,eval)('('+reqText+')');globalThis.__benchReq=req;
+  const store=req('src/data/store.ts').useStore,session=req('src/data/ratesSession.ts');
+  const mortgage=[],savings=[],products={},publicProducts=[],programmesByProduct=new Map(),productByKey=new Map();const checkedAt='2026-10-26T09:00:00.000Z';
+  let index=0;
+  for(let p=0;p<2813;p++){
+   const section=p<1368?'Mortgage':'Savings',bank=p<350||p>=1368&&p<1718;
+   const provider=bank?'Benchmark Bank':`Bank ${String(p%102).padStart(3,'0')}`,key=`benchmark-${p}`,productId=`product-${p}`;
+   const publicProduct={productId,productKey:key,providerId:provider,providerName:provider,name:`Synthetic ${section} ${String(p).padStart(4,'0')}`,section,status:'current',programmeIds:[],referenceIds:[],aliases:[],reasonCodes:[]};
+   products[key]={product_key:key,description:'',eligibility:[],constraints:[],features:[],fees:[]};
+   const book=[];const tiers=p<89||p===1368?5:6;
+   for(let t=0;t<tiers;t++){
+    const rate=section==='Mortgage'?(bank?0.04:0.07)+(p%100)/100000+t/1000000:(bank?0.05:0.03)+(p%100)/100000+t/1000000;
+    const row={product_key:key,product_name:publicProduct.name,provider,rate:String(rate),rate_index:index++,account_class:'standard',category:section==='Mortgage'?'RESIDENTIAL_MORTGAGES':'TRANS_AND_SAVINGS_ACCOUNTS',taxonomy_path:section==='Mortgage'?'HOME_LOAN':'SAVINGS',ribbon_deposit_kind:'base',loan_purpose:'OWNER_OCCUPIED',repayment_type:'PRINCIPAL_AND_INTEREST',ribbon_repayment_type:'PRINCIPAL_AND_INTEREST',rate_type:'VARIABLE',lvr_tier:'lvr_<=80%',comparison_rate:String(rate+0.001)};
+    (section==='Mortgage'?mortgage:savings).push(row);
+    const id=`programme-${p}-${t}`,offerId=`offer-${p}-${t}`;publicProduct.programmeIds.push(id);
+    book.push({schemaVersion:1,programmeId:id,productId,offerId,section,conditions:section==='Mortgage'?[{conditionId:'purpose',field:'purpose',operator:'eq',value:'OWNER_OCCUPIED'},{conditionId:'repayment',field:'repayment',operator:'eq',value:'PRINCIPAL_AND_INTEREST'},{conditionId:'lvr',field:'lvr',operator:'bounds',maximum:'0.8'}]:[],
+     components:[{componentId:'payable',role:'payable',value:row.rate,unit:'fraction_per_annum',scopeId:offerId,conditions:[],evidenceIds:['synthetic-source'],source:{rawType:section==='Mortgage'?'VARIABLE':'BASE',rawValue:row.rate,pointer:`/rates/${row.rate_index}`}},{componentId:'comparison',role:'comparison',value:row.comparison_rate,unit:'fraction_per_annum',scopeId:offerId,conditions:[],evidenceIds:['synthetic-source'],source:{rawType:'COMPARISON',rawValue:row.comparison_rate,pointer:`/rates/${row.rate_index}`}}],
+     formula:{op:'component',componentId:'payable'},evidenceIds:['synthetic-source'],reasonCodes:[],freshness:{state:'current',checkedAt,lastSuccessAt:checkedAt,reasonCodes:[]},sourceBindings:[{rateIndex:row.rate_index,pointer:`/rates/${row.rate_index}`}],metadata:{rateStructure:section==='Mortgage'?'variable':'base'}});
+   }
+   publicProducts.push(publicProduct);productByKey.set(key,publicProduct);programmesByProduct.set(productId,book);
+  }
+  const view={generationId:'deterministic-rendered-fixture',status:'ready',allLoaded:true,products:publicProducts,references:[],coverage:[],evidence:[],getProduct:key=>productByKey.get(key),getProgrammes:id=>programmesByProduct.get(id)||[],loadAll:async()=>{},loadProduct:async()=>{}};
+  globalThis.__benchCatalogue=view;
+  const catalogueModule=req('src/data/publicRateCatalogue.ts'),original=catalogueModule.usePublicRateCatalogue;
+  const testHook=(...args)=>{original(...args);return view;};
+  catalogueModule.usePublicRateCatalogue=testHook;
+  if(catalogueModule.usePublicRateCatalogue!==testHook)throw Error('Catalogue test provider override was not installed');
+  const ribbon={counts:{rates:0,products:0,providers:0},range:{min:null,max:null,mean:null,median:null},providers:[]};
+  const core={schema_version:1,run_date:checkedAt.slice(0,10),brands:{},rba:[],sections:{Mortgage:{rates:mortgage,ribbon},Savings:{rates:savings,ribbon},TD:{rates:[],ribbon}}};
+  const prefs={...store.getState().prefs,includeNonStandard:true,interests:['Savings','Mortgage','TD'],enableDeepSearch:false,ratesPageSize:50,showBankInsights:false};
+  const noop=async()=>{};
+  store.setState({core,details:{schema_version:1,run_date:core.run_date,products},manifest:null,coreIntegrity:null,hydrated:true,status:'ready',source:'cache',error:null,activeSection:'Savings',prefs,detailsLoading:false,ensureDetails:noop,ensureHistoryBanks:noop,ensureProductHistory:noop,ensureBankInsights:noop});
+  req('src/data/eligibilityGate.ts').installMandatoryEligibility({active:false,loading:false,rows:new WeakSet(),productKeys:new Set()});
+  req('src/data/suitabilityGate.ts').setSuitabilityAllowed(null);
+  session.initializeRatesSession(prefs,'Savings');session.changeRatesSection('Savings');
+  globalThis.__fixtureInstalled=performance.now();
+  globalThis.__visibleRows=mode=>{
+   let scope=document;
+   if(mode==='bank'){
+    const header=[...document.querySelectorAll('*')].find(el=>!el.children.length&&el.textContent==='Current products'&&el.getBoundingClientRect().height>0);
+    if(!header)return[];
+    let parent=header.parentElement;
+    while(parent&&!parent.querySelector('[role="button"][aria-label*="Synthetic"]'))parent=parent.parentElement;
+    if(!parent)return[];scope=parent;
+   }
+   return [...scope.querySelectorAll('[role="button"]')].filter(el=>{
+    const text=el.getAttribute('aria-label')||'',b=el.getBoundingClientRect();
+    if(!/^Synthetic (Mortgage|Savings)/.test(text)||!text.includes('Benchmark Bank')||b.width<=0||b.height<=0||b.top>=innerHeight||b.bottom<=0||el.getAttribute('aria-disabled')==='true')return false;
+    for(let a=el;a;a=a.parentElement){const s=getComputedStyle(a);if(s.display==='none'||s.visibility==='hidden'||Number(s.opacity)===0)return false;}
+    const x=Math.max(1,Math.min(innerWidth-1,b.left+Math.min(b.width/2,100))),y=Math.max(1,Math.min(innerHeight-1,(Math.max(0,b.top)+Math.min(innerHeight,b.bottom))/2));
+    const hit=document.elementFromPoint(x,y);return !!hit&&(el===hit||el.contains(hit));
+   }).map(el=>({label:el.getAttribute('aria-label'),rect:JSON.parse(JSON.stringify(el.getBoundingClientRect()))}));
+  };
+  return{products:publicProducts.length,providers:103,rates:mortgage.length+savings.length,mortgageRates:mortgage.length,savingsRates:savings.length,selectedBankProducts:700,programmes:[...programmesByProduct.values()].reduce((n,book)=>n+book.length,0),checkedAt};
+ },reqSource.toString());
+}
+const rowsReady=(page,mode='rates',timeout=45000)=>page.waitForFunction(mode=>globalThis.__visibleRows?.(mode).length>0,mode,{timeout});
+async function measureBank(page,index){
+ const bank=page.getByRole('button',{name:/View Benchmark Bank/}).first();
+ await bank.evaluate(el=>el.addEventListener('click',()=>{globalThis.__click=performance.now();},{once:true}));await bank.click();
+ await page.waitForFunction(()=>location.pathname.includes('/bank/'));await rowsReady(page,'bank');
+ return page.evaluate(async index=>{const dom=performance.now()-globalThis.__click,visible=globalThis.__visibleRows('bank');await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return{iteration:index,kind:index===0?'cold':'warm',at:new Date().toISOString(),clickToVisibleUsableDomMs:dom,clickToTwoFramesMs:performance.now()-globalThis.__click,visibleRows:visible.map(r=>r.label),path:location.pathname};},index);
+}
+async function extended(page){
+ const results={};
+ // Real scroll, then Back and Forward with retained in-memory source.
+ results.scroll=await page.evaluate(async()=>{const first=globalThis.__visibleRows('bank');let scroll=[...document.querySelectorAll('*')].find(el=>el.scrollHeight>el.clientHeight+200&&['auto','scroll'].includes(getComputedStyle(el).overflowY)&&el.querySelector('[aria-label*="Synthetic"]'));
+  if(!scroll)return{available:false};const start=performance.now();scroll.scrollTop+=600;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return{available:true,elapsedMs:performance.now()-start,before:first.map(r=>r.label),after:globalThis.__visibleRows('bank').map(r=>r.label)};});
+ await page.goBack();await page.waitForFunction(()=>!location.pathname.includes('/bank/'));await rowsReady(page);
+ await page.goForward();await page.waitForFunction(()=>location.pathname.includes('/bank/'));await rowsReady(page,'bank');results.backForward=true;
+ await page.goBack();await page.waitForFunction(()=>!location.pathname.includes('/bank/'));await rowsReady(page);
+ // Interrupt bank navigation with immediate browser Back, then repeat selection.
+ const bank=page.getByRole('button',{name:/View Benchmark Bank/}).first();await bank.click();await page.goBack();await page.waitForFunction(()=>!location.pathname.includes('/bank/'));await rowsReady(page);results.interruptedNavigationRecovered=true;
+ await page.evaluate(()=>globalThis.__benchReq('src/lib/performanceAuditReadiness.ts').performanceAuditReadinessRegistry.beginCapture('browser-scope'));
+ await page.getByText('Home loans',{exact:true}).first().click();
+ await page.waitForFunction(()=>!!document.querySelector('input[aria-label="LVR"]'));
+ const applyScope=async lvr=>{
+  await page.evaluate(async lvr=>{
+   const r=globalThis.__benchReq('src/lib/performanceAuditReadiness.ts').performanceAuditReadinessRegistry;
+   globalThis.__scopePreviousRender=r.snapshot().surfaces.find(s=>s.id==='rates.results')?.renderRevision;
+   globalThis.__scopeStart=performance.now();
+   const result=await r.invokeAction('rates.results','search.mortgage.scope.apply.0',{loanAmount:'500000',lvr,loanPurposes:['OWNER_OCCUPIED'],repaymentTypes:['PRINCIPAL_AND_INTEREST']});
+   if(result?.unavailableReason)throw Error(result.unavailableReason);
+  },lvr);
+ };
+ const scopeReady=()=>page.waitForFunction(()=>{
+  const req=globalThis.__benchReq,s=req('src/lib/performanceAuditReadiness.ts').performanceAuditReadinessRegistry.snapshot().surfaces.find(s=>s.id==='rates.results');
+  return s&&s.renderRevision!==globalThis.__scopePreviousRender&&s.probes.find(p=>p.id==='search.data')?.status==='ready'&&s.probes.find(p=>p.id==='search.list')?.status==='ready'&&globalThis.__visibleRows('rates').some(row=>row.label.startsWith('Synthetic Mortgage'));
+ },{},{timeout:10000});
+ await applyScope('75');
+ try{await scopeReady();results.mortgageScope={converged:true,elapsedMs:await page.evaluate(()=>performance.now()-globalThis.__scopeStart)};}
+ catch(e){
+  await page.screenshot({path:output+'.scope.png'});
+  results.mortgageScope={converged:false,error:e.message,snapshot:await page.evaluate(()=>globalThis.__benchReq('src/lib/performanceAuditReadiness.ts').performanceAuditReadinessRegistry.snapshot().surfaces.find(s=>s.id==='rates.results')),
+   firstRows:await page.evaluate(()=>[...document.querySelectorAll('[role=button]')].filter(el=>(el.getAttribute('aria-label')||'').startsWith('Synthetic Mortgage')).slice(0,3).map(el=>({label:el.getAttribute('aria-label'),rect:JSON.parse(JSON.stringify(el.getBoundingClientRect()))})))};
+ }
+ results.repeatedScopes=[];
+ for(const lvr of results.mortgageScope.converged?['80','70','75']:[]){await applyScope(lvr);await scopeReady();results.repeatedScopes.push({lvr,elapsedMs:await page.evaluate(()=>performance.now()-globalThis.__scopeStart)});}
+ if(!results.mortgageScope.converged){
+  await page.evaluate(()=>{const row=[...document.querySelectorAll('[role=button]')].find(el=>(el.getAttribute('aria-label')||'').startsWith('Synthetic Mortgage'));row?.scrollIntoView({block:'center',inline:'nearest'});});
+  await rowsReady(page);results.scopeRecoveryScrolledToProducts=true;
+ }
+ await page.evaluate(()=>{const req=globalThis.__benchReq;req('src/data/store.ts').useStore.setState(s=>({prefs:{...s.prefs,includeNonStandard:false}}));req('src/data/suitabilityGate.ts').setSuitabilityAllowed(new Set(),{rebuildClosed:true});});
+ await page.waitForTimeout(100);
+ results.forcedReadinessTimeout=await page.evaluate(async()=>{const r=globalThis.__benchReq('src/lib/performanceAuditReadiness.ts').performanceAuditReadinessRegistry,start=performance.now();try{await r.waitForReady({surfaceIds:['rates.results'],requiredKinds:['data','list'],timeoutMs:10000,quietWindowMs:0});return{timedOut:false};}catch(e){return{timedOut:true,name:e.name,elapsedMs:performance.now()-start,blockers:e.snapshot?.blockers?.map(b=>b.code)};}});
+ await page.evaluate(()=>{const req=globalThis.__benchReq;req('src/data/suitabilityGate.ts').setSuitabilityAllowed(null);req('src/data/store.ts').useStore.setState(s=>({prefs:{...s.prefs,includeNonStandard:true}}));});await rowsReady(page);
+ results.compareAfterTimeout=await page.evaluate(async()=>{
+  const req=globalThis.__benchReq,r=req('src/lib/performanceAuditReadiness.ts').performanceAuditReadinessRegistry,s=req('src/data/ratesSession.ts');
+  await r.invokeAction('rates.results','search.compare.mode');
+  return{selectMode:s.useRatesSession.getState().sections[s.useRatesSession.getState().section].selectMode,visibleRows:globalThis.__visibleRows('rates').length};
+ });
+ // Actual row presses use the same production selection handlers as the UI.
+ for(let i=0;i<2;i++){const buttons=page.getByRole('button',{name:/^Synthetic (Mortgage|Savings)/});const count=await buttons.count();if(!count)break;await buttons.nth(i).click({position:{x:20,y:20}});}
+ results.compareAfterTimeout.selected=await page.evaluate(()=>(()=>{const state=globalThis.__benchReq('src/data/ratesSession.ts').useRatesSession.getState();return state.sections[state.section].selected.length;})());
+ results.terminal=await page.evaluate(()=>globalThis.__benchReq('src/lib/performanceAuditReadiness.ts').performanceAuditReadinessRegistry.snapshot().surfaces.find(s=>s.id==='rates.results'));
+ return results;
+}
+(async()=>{
+ const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+ const report={version,address,kind:'synthetic Expo development web continuation',scenarioSha256:crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),startedAt:new Date().toISOString(),contexts:[],externalIO:'blocked and stubbed',exclusions:['original audit payload','Android/Hermes','physical phone','release APK']};
+ try{for(let round=0;round<3;round++){
+  const context=await browser.newContext({viewport:{width:412,height:915}}),page=await context.newPage(),errors=[],bundles=[];
+  page.on('pageerror',e=>errors.push(e.message));page.on('response',res=>{if(res.url().includes('.bundle?'))void res.body().then(b=>bundles.push({sha256:crypto.createHash('sha256').update(b).digest('hex'),bytes:b.length})).catch(()=>{});});
+  await page.route('**/*',r=>{const u=new URL(r.request().url());return['localhost','127.0.0.1'].includes(u.hostname)||['data:','blob:'].includes(u.protocol)?r.continue():r.abort();});
+  await page.goto(address,{waitUntil:'domcontentloaded',timeout:120000});await page.waitForFunction(()=>globalThis.__r?.getModules?.().size>1000,{},{timeout:120000});
+  const fixture=await install(page);
+  await page.evaluate(()=>{
+   const req=globalThis.__benchReq,store=req('src/data/store.ts').useStore;
+   store.setState(state=>({prefs:{...state.prefs,profileFilters:{...state.prefs.profileFilters,loanPurposes:['OWNER_OCCUPIED'],repaymentTypes:['PRINCIPAL_AND_INTEREST']}}}));
+   const scenarios=req('src/hooks/useUserRateScenario.ts'),original=scenarios.useUserRateScenario,empty=req('src/data/userRateScenario.ts').EMPTY_USER_RATE_SCENARIO;
+   const scenario={...empty,mortgage:{...empty.mortgage,mode:'refi',propertyValue:'800000',loanBalance:'600000',currentRate:'7',years:'25'}};
+   scenarios.useUserRateScenario=(...args)=>({...original(...args),scenario,storageStatus:'ready'});
+  });
+  await rowsReady(page);await measureBank(page,0);
+  await page.getByRole('button',{name:/^Synthetic Mortgage 0000/}).first().click({position:{x:100,y:20}});
+  await page.waitForFunction(()=>location.pathname.includes('/product/'));
+  const saved=await page.evaluate(()=>{
+   const req=globalThis.__benchReq,m=req('src/data/savedRates.ts'),core=req('src/data/store.ts').useStore.getState().core,view=globalThis.__benchCatalogue,result={};
+   for(const [label,keys]of [['empty',[]],['one',['benchmark-0']],['three',['benchmark-0','benchmark-100','benchmark-1368']]]){
+    result[label]=[];const refs=keys.map(key=>m.makeLegacySavedRateRef(key,'2026-10-26T09:00:00Z'));
+    for(let n=0;n<5;n++){let books=0;const watched={...view,getProgrammes:id=>{books++;return view.getProgrammes(id);}},start=performance.now();const rows=m.resolveSavedRates(core,refs,watched,()=>({}));result[label].push({elapsedMs:performance.now()-start,programmeBookReads:books,identities:rows.map(item=>({saved:item.ref.id,product:item.row.product_key,programme:item.row.public_programme_id,section:item.section,rateIndex:item.row.rate_index}))});}
+   }return result;
+  });
+  const record={round,fixture,saved,receipt:[],errors,bundles};report.contexts.push(record);fs.writeFileSync(output,JSON.stringify(report,null,2));
+  for(let n=0;n<3;n++){
+   console.log(JSON.stringify({round,phase:'receipt',iteration:n,at:new Date().toISOString()}));
+   await page.evaluate(()=>globalThis.__benchReq('src/lib/performanceAuditReadiness.ts').performanceAuditReadinessRegistry.beginCapture('receipt-rendered'));
+   const open=page.getByRole('button',{name:'Bank-call brief',exact:true}).first();
+   await open.evaluate(el=>el.addEventListener('click',()=>{globalThis.__receiptStart=performance.now();},{once:true}));await open.click();
+   try{await page.waitForFunction(()=>location.pathname==='/rate-receipt'&&globalThis.__benchReq('src/lib/performanceAuditReadiness.ts').performanceAuditReadinessRegistry.snapshot().surfaces.some(s=>s.id==='receipt.evidence')&&[...document.querySelectorAll('[dir=auto]')].some(el=>{if(el.textContent!=='Synthetic Mortgage 0000'||!el.parentElement?.textContent.includes('Tier: 0')||!el.parentElement?.textContent.includes('Observed:'))return false;const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&r.top>=0&&r.bottom<innerHeight;}),{},{timeout:20000});
+   }catch(e){record.failure=await page.evaluate(()=>({path:location.pathname,text:document.body.innerText.slice(0,2500),surfaces:globalThis.__benchReq('src/lib/performanceAuditReadiness.ts').performanceAuditReadinessRegistry.snapshot().surfaces}));throw e;}
+   const headerMs=await page.evaluate(async()=>{await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return performance.now()-globalThis.__receiptStart;});
+   await page.waitForFunction(()=>{const s=globalThis.__benchReq('src/lib/performanceAuditReadiness.ts').performanceAuditReadinessRegistry.snapshot().surfaces.find(s=>s.id==='receipt.evidence');return s?.probes.find(p=>p.id==='receipt.data')?.status==='ready'&&(!s.probes.some(p=>p.id==='receipt.comparisons')||s.probes.find(p=>p.id==='receipt.comparisons')?.status==='ready');},{},{timeout:20000});
+   const readyMs=await page.evaluate(()=>performance.now()-globalThis.__receiptStart);
+   await page.getByText('Comparable observed rates',{exact:true}).scrollIntoViewIfNeeded();
+   const usable=await page.getByRole('button',{name:/^Open Benchmark Bank · Synthetic Mortgage/}).first();await usable.scrollIntoViewIfNeeded();
+   await usable.waitFor({state:'visible',timeout:10000});
+   const comparison=await usable.evaluate(el=>{const r=el.getBoundingClientRect(),x=r.x+Math.min(80,r.width/2),y=r.y+Math.min(24,r.height/2),hit=document.elementFromPoint(x,y);return{label:el.getAttribute('aria-label'),visible:r.width>=48&&r.height>=48&&r.top>=0&&r.bottom<=innerHeight,hitUsable:!!hit&&(hit===el||el.contains(hit))};});
+   if(!comparison.visible||!comparison.hitUsable)throw Error('Comparison row not visibly usable');
+   record.receipt.push({kind:n===0?'cold':'warm',at:new Date().toISOString(),headerVisibleMs:headerMs,comparisonPricingReadyMs:readyMs,comparison,diagnostic:await page.evaluate(()=>globalThis.__benchReq('src/lib/performanceAuditReadiness.ts').performanceAuditReadinessRegistry.snapshot().surfaces.find(s=>s.id==='receipt.evidence'))});
+   fs.writeFileSync(output,JSON.stringify(report,null,2));await page.goBack();await page.waitForFunction(()=>location.pathname.includes('/product/'));
+  }
+  await context.close();
+ }}finally{report.finishedAt=new Date().toISOString();fs.writeFileSync(output,JSON.stringify(report,null,2));await browser.close();}
+})().catch(e=>{fs.writeFileSync(output+'.error',String(e.stack));process.exitCode=1;});

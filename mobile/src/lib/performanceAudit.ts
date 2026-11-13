@@ -1,6 +1,7 @@
 import { getRandomBytes } from 'expo-crypto';
 import type { Href } from 'expo-router';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, type PerformanceAuditEstimate } from './performanceAuditTiming';
+import { markAuditEntryInterrupted, markAuditEntryRunning, markAuditEntryStartQueued } from './auditEntryTrace';
 import type { AuditBackgroundWorkWait } from './performanceAuditBackgroundWork';
 import type { AuditCheckDiagnostic } from './performanceAuditDiagnostic';
 
@@ -11,6 +12,7 @@ import type { AppHealthAuditMode, AppHealthReport } from './appHealth';
 import { buildBrowseRouteParams } from './browseRoute';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from './proAccess';
 import { deriveDeepAuditInputs, type DeepPerformanceAuditPlan, type DeepAuditSelectionOptions, type DeepAuditDerivedInputs } from './performanceAuditPlan';
+import { capturePreAuditApplicationJournal } from './auditApplicationJournal';
 
 export { PERFORMANCE_AUDIT_SCHEMA_VERSION } from './performanceAuditSchema';
 
@@ -368,6 +370,8 @@ export class ForegroundElapsed {
   private elapsedMs = 0;
   private lastAccrualAt: number;
   private paused: boolean;
+  /** Background settle and quiet-window padding are not user-visible step time. */
+  private suspended = false;
 
   // Wall-clock time can jump forward or back under automatic time correction,
   // which would either blow a budget instantly or postpone it indefinitely.
@@ -376,11 +380,25 @@ export class ForegroundElapsed {
     this.paused = getPerformanceAuditState().paused;
   }
 
+  get isSuspended(): boolean { return this.suspended; }
+
+  /** Drop the following span from the step budget. Pair with {@link resume}. */
+  suspend(): void {
+    this.accrue();
+    this.suspended = true;
+  }
+
+  resume(): void {
+    this.lastAccrualAt = this.clock();
+    this.paused = getPerformanceAuditState().paused;
+    this.suspended = false;
+  }
+
   accrue(): void {
     const at = this.clock();
-    if (!this.paused) this.elapsedMs += at - this.lastAccrualAt;
+    if (!this.paused && !this.suspended) this.elapsedMs += at - this.lastAccrualAt;
     this.lastAccrualAt = at;
-    this.paused = getPerformanceAuditState().paused;
+    if (!this.suspended) this.paused = getPerformanceAuditState().paused;
   }
 
   get foregroundMs(): number {
@@ -484,6 +502,11 @@ export class PerformanceAuditStepWatchdog extends PerformanceAuditInactivityWatc
 
   override touchProgress(): void { /* The whole-step deadline is non-renewable. */ }
 
+  /** Omit background settle, quiet-window padding and audit bookkeeping. */
+  suspendBudget(): void { this.elapsed.suspend(); }
+
+  resumeBudget(): void { this.elapsed.resume(); }
+
   assertWithinBudget(): void {
     if (this.isExpired()) throw new PerformanceAuditStepTimeoutError(this.stepLabel, this.elapsedMs);
   }
@@ -524,6 +547,7 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     return auditState.sessionId ?? 'active';
   }
   const sessionId = makeSessionId();
+  capturePreAuditApplicationJournal(sessionId);
   const hangTimeoutMs = resolvePerformanceAuditHangTimeoutMs(options.hangTimeoutMs);
   emit({
     status: 'queued',
@@ -541,10 +565,12 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     report: auditState.report,
     error: null,
   });
+  markAuditEntryStartQueued();
   return sessionId;
 }
 
 export function markPerformanceAuditRunning(total: number): void {
+  markAuditEntryRunning();
   emit({
     ...auditState,
     status: 'running',
@@ -596,6 +622,7 @@ export function pausePerformanceAudit(): void {
   if (!pauseTrackingApplies()) return;
   if (auditState.paused || auditState.cancelRequested) return;
   pauseCount += 1;
+  markAuditEntryInterrupted();
   emit({ ...auditState, paused: true });
 }
 
@@ -1291,9 +1318,12 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
     const maximum = (values: number[]) => values.length ? Math.max(...values) : null;
     if (check.kind === 'journey') {
       const phases = numeric('forwardMs', 'backMs');
-      // Failed readiness waits often have no completed forward/back sample.
-      // Keep their measured total so a 25-second failure cannot disappear.
-      if (check.status === 'fail' && check.durationMs != null && check.durationMs > 0) phases.push(check.durationMs);
+      // A failure that never published forward/back still has to surface.
+      // A published forwardMs is the user-visible sample; duration also
+      // contains background settle and must not replace it.
+      if (phases.length === 0 && check.status === 'fail' && check.durationMs != null && check.durationMs > 0) {
+        phases.push(check.durationMs);
+      }
       return maximum(phases);
     }
     if (check.id === 'runtime-responsiveness') {

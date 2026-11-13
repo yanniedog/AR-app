@@ -1,0 +1,60 @@
+{
+  "source": "a65956fb44f29bc4dcc6372885ebc48fc411fe2b",
+  "harnesses": {
+    "normal": {
+      "path": "../mortgage-input-2026-10-27/rendered-input-normal.cjs",
+      "sha256": "964dc1952ddc789624a752e69f5894d794eb289b7ced9097614d0c4a9dc7e334"
+    },
+    "cold": {
+      "path": "../mortgage-input-2026-10-27/rendered-cold-direct.cjs",
+      "sha256": "1c8d84f66c5f5072ab258e2168c7b9a1e2254a38bf514b589d3705dd1db2f9f1"
+    }
+  },
+  "files": {
+    "after-1.json": {
+      "bytes": 16045,
+      "sha256": "f56e149999308c593dd24a3c668e03b0db2ed015b350d01cbda1fdf70b053446"
+    },
+    "after-2.json": {
+      "bytes": 15948,
+      "sha256": "74215f1c294a6b0c2a081253ac57e9333677a8a0ad0de0c522d4b790b9bb2b84"
+    },
+    "after-3.json": {
+      "bytes": 16101,
+      "sha256": "bd32e28540514d7233a891201f2c7fd83f5c63ce8cd1a23f73a056cabea16c8b"
+    },
+    "cold-1.json": {
+      "bytes": 2562,
+      "sha256": "924113cb43190e9b870af2b9af99ca24c84f489f98d527020d77ec5f86e16769"
+    },
+    "cold-2.json": {
+      "bytes": 2562,
+      "sha256": "36be4ca044d041feb54aaced29b2a3dde787633573c3f26b3cfbab1b911d0ef0"
+    },
+    "cold-3.json": {
+      "bytes": 2562,
+      "sha256": "9c43e8e93825257c5b87d84afaa04cbaa6c7cc217db95aff7b93b2df15bc3c6d"
+    },
+    "summary.json": {
+      "bytes": 2750,
+      "sha256": "6611bce9201c3e8f917227c70ace514186106a9227ad48a1f0d476734c57e37b"
+    }
+  },
+  "validation": {
+    "localUnitSuites": 462,
+    "localUnitTests": 5169,
+    "typecheck": "pass",
+    "lintErrors": 0,
+    "lintExistingWarnings": 45,
+    "copyViolations": 0,
+    "diagnosticSchema": "pass",
+    "hostedPriorHead": {
+      "head": "907086e",
+      "run": 40523192479,
+      "unitTests": 5163,
+      "scriptTests": 403,
+      "allPass": true
+    },
+    "hostedCurrentHead": "required after push; prior green is not clearance"
+  }
+}

@@ -1,0 +1,4 @@
+page.waitForFunction: Timeout 45000ms exceeded.
+    at rowsReady (/workspace/ar-audit-verification/rendered-acceptance.cjs:64:57)
+    at extended (/workspace/ar-audit-verification/rendered-acceptance.cjs:113:225)
+    at async /workspace/ar-audit-verification/rendered-acceptance.cjs:151:25

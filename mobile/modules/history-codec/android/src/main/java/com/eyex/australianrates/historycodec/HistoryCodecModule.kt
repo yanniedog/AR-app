@@ -25,5 +25,10 @@ class HistoryCodecModule : Module() {
     AsyncFunction("inflateCachedPayloadAsync") { encoded: String, compressedBytes: Double, sha256: String, maxBytes: Double ->
       HistoryCodec.inflateCachedPayload(encoded, compressedBytes, sha256, maxBytes)
     }
+    AsyncFunction("readDetailsChunkAsync") { uri: String, position: Double, length: Double ->
+      val context = appContext.reactContext ?: throw IllegalStateException("Missing application context")
+      val chunk = DetailsCacheReader.read(uri, position, length, context.filesDir, context.cacheDir)
+      mapOf("text" to chunk.text, "bytes" to chunk.bytes)
+    }
   }
 }

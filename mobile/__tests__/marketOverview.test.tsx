@@ -1,4 +1,6 @@
 import React from 'react';
+import * as bankData from '../src/data/bankInsights';
+import * as navigationReady from '../src/hooks/useNavigationContentReady';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import Market from '../src/components/market/MarketOverview';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
@@ -47,6 +49,7 @@ function readyCalendarState(coreSha: string | null = 'a'.repeat(64)) {
 type MarketTestNode = { props: {
   onLayout?: (event: { nativeEvent: { layout: { width: number; height: number } } }) => void;
   value?: unknown;
+  onRenderEvidence?: (evidence: { expectedCount: number; actualCount: number; emptyStateRendered: boolean }) => void;
 } };
 // The local renderer declaration omits root; describe only this fixture's API.
 type MarketTestRenderer = ReactTestRenderer & { root: {
@@ -102,4 +105,36 @@ test('a changed calendar asset invalidates facts layout even with unchanged publ
     measureMarket(tree!);
     expect(mockSurfaces.get('market.overview').probes.find((probe: any) => probe.id === 'market.facts.layout').status).toBe('ready');
   } finally { act(() => tree!.unmount()); }
+});
+
+test('late old facts layout cannot erase the current calendar layout', async () => {
+  readyCalendarState(); let tree: MarketTestRenderer;
+  await act(async () => { tree = TestRenderer.create(<Market />) as MarketTestRenderer; });
+  try {
+    const old = tree!.root.findAllByType(View).find(node => typeof node.props.onLayout === 'function')!.props.onLayout!;
+    measureMarket(tree!);
+    mockState.manifest = { files: { ...mockState.manifest.files, rba_calendar: { sha256: 'e'.repeat(64) } } };
+    await act(async () => tree!.update(<Market />)); measureMarket(tree!);
+    act(() => old({ nativeEvent: { layout: { width: 360, height: 500 } } }));
+    expect(mockSurfaces.get('market.overview').probes.find((probe: any) => probe.id === 'market.facts.layout').status).toBe('ready');
+  } finally { act(() => tree!.unmount()); }
+});
+
+test('late old feed callbacks cannot erase current section render evidence', async () => {
+  readyCalendarState();
+  const ready = jest.spyOn(navigationReady, 'useNavigationContentReady').mockReturnValue(true);
+  const projection = jest.spyOn(bankData, 'filterBankInsightsForSuitability').mockImplementation(payload => payload ?? null);
+  let tree!: MarketTestRenderer;
+  await act(async () => { tree = TestRenderer.create(<Market />) as MarketTestRenderer; });
+  const evidence = { expectedCount: 0, actualCount: 0, emptyStateRendered: true };
+  const probe = () => mockSurfaces.get('market.overview').probes.find((item: any) => item.id === 'market.movements.list');
+  try {
+    const old = tree.root.findByType('BankMovesFeed').props.onRenderEvidence!;
+    act(() => old(evidence)); expect(probe().status).toBe('ready');
+    act(() => mockSurfaces.get('market.overview').actions['changes.section.next']());
+    expect(probe().status).toBe('pending');
+    act(() => tree.root.findByType('BankMovesFeed').props.onRenderEvidence!(evidence));
+    expect(probe().status).toBe('ready');
+    act(() => old(evidence)); expect(probe().status).toBe('ready');
+  } finally { act(() => tree.unmount()); ready.mockRestore(); projection.mockRestore(); }
 });

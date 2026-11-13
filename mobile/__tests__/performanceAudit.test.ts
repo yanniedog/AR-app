@@ -55,6 +55,9 @@ import {
   type AuditCheck,
   type AuditEnvironment,
 } from '../src/lib/performanceAudit';
+import { debugLog } from '../src/lib/debugLog';
+import { auditApplicationJournal, resetAuditApplicationJournalForTests } from '../src/lib/auditApplicationJournal';
+import { buildPerformanceAuditSetupPlans } from '../src/lib/performanceAuditSetup';
 
 test.each(['failed', 'cancelled', 'queued', 'running'] as const)('%s current-session reports are partial', status => {
   expect(auditReportCompletionLabel({ sessionId: 'current' }, { sessionId: 'current', status })).toBe('Partial');
@@ -767,6 +770,31 @@ describe('reported audit check selection', () => {
 
 describe('performance audit lifecycle', () => {
   beforeEach(() => resetPerformanceAuditForTests());
+
+  it('freezes the pre-audit journal at request so admission without setup keeps that section', () => {
+    resetAuditApplicationJournalForTests();
+    debugLog.info('app', 'pre-audit-freeze-marker');
+    const sessionId = requestPerformanceAudit();
+    debugLog.info('app', 'after-request-before-setup-marker');
+
+    const frozen = auditApplicationJournal();
+    const beforeMessages = frozen.beforeAudit.entries.map(entry => entry.message);
+    expect(beforeMessages).toContain('pre-audit-freeze-marker');
+    expect(beforeMessages).not.toContain('after-request-before-setup-marker');
+    expect(frozen.beforeAudit.capturedAt).toEqual(expect.any(String));
+    expect(frozen.duringAndAfterAudit.entries.map(entry => entry.message)).toContain('after-request-before-setup-marker');
+
+    const stillFrozen = auditApplicationJournal();
+    expect(stillFrozen.beforeAudit.entries.map(entry => entry.message)).toEqual(beforeMessages);
+    expect(stillFrozen.beforeAudit.capturedAt).toBe(frozen.beforeAudit.capturedAt);
+
+    buildPerformanceAuditSetupPlans(null, { seed: sessionId });
+    const afterSetup = auditApplicationJournal();
+    expect(afterSetup.beforeAudit.entries.map(entry => entry.message)).toEqual(beforeMessages);
+    expect(afterSetup.beforeAudit.capturedAt).toBe(frozen.beforeAudit.capturedAt);
+    expect(afterSetup.beforeAudit.entries.map(entry => entry.message)).not.toContain('after-request-before-setup-marker');
+    cancelPerformanceAudit();
+  });
 
   const reportFixture = (sessionId: string) => ({
     schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,

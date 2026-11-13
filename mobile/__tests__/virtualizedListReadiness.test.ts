@@ -64,7 +64,7 @@ describe('virtualized list readiness', () => {
     expect(isVirtualizedListVisiblyCommitted(empty, 'empty', 0)).toBe(true);
   });
 
-  test('onRevisionLayout through the hook seeds visibility for filtered non-empty lists', () => {
+  test('layout alone cannot certify visible products and stale callbacks cannot certify a replacement', () => {
     type Api = ReturnType<typeof useVirtualizedListReadiness>;
     const latest: { current: Api | null } = { current: null };
 
@@ -90,16 +90,30 @@ describe('virtualized list readiness', () => {
     });
 
     expect(latest.current?.ready).toBe(true);
-    expect(latest.current?.visiblyCommitted).toBe(true);
+    expect(latest.current?.visiblyCommitted).toBe(false);
     expect(latest.current?.committedItemCount).toBe(1);
-    expect(latest.current?.visibleCount).toBe(1);
+    expect(latest.current?.visibleCount).toBe(0);
     expect(latest.current?.measuredVisibleCount).toBeNull();
+    const stale = latest.current!;
+    act(() => { stale.onViewableItemsChanged({ viewableItems: [{ isViewable: true }] }); });
+    expect(latest.current?.ready).toBe(true);
 
     act(() => {
       tree!.update(React.createElement(Probe, { revision: 'query:afg:next', itemCount: 2 }));
     });
     expect(latest.current?.ready).toBe(false);
     expect(latest.current?.visiblyCommitted).toBe(false);
+    act(() => {
+      stale.onLoad();
+      stale.onViewableItemsChanged({ viewableItems: [{ isViewable: true }] });
+    });
+    expect(latest.current?.ready).toBe(false);
+    expect(latest.current?.measuredVisibleCount).toBeNull();
+    act(() => { latest.current?.onLoad(); });
+    expect(latest.current?.visibleCount).toBe(0);
+    expect(latest.current?.visiblyCommitted).toBe(false);
+    act(() => { latest.current?.onViewableItemsChanged({ viewableItems: [{ isViewable: true }] }); });
+    expect(latest.current?.ready).toBe(true);
 
     act(() => {
       tree!.unmount();

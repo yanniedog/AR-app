@@ -2,6 +2,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { PERFORMANCE_AUDIT_SCHEMA_VERSION } from './performanceAuditSchema';
 import type { PerformanceAuditReport } from './performanceAudit';
 import { measureAuditEvidence } from './auditEvidenceCapacity';
+import { auditMetricRun, mergeAuditMetricRuns, type AuditMetricRun } from './auditMetricHistory';
+import { appendAuditMetricHistory, deleteAuditMetricHistory, readAuditMetricHistory } from './auditMetricHistoryStorage';
 
 const FILE = `${FileSystem.documentDirectory ?? ''}logs/ar-performance-audit-completed.json`;
 const TEMP_FILE = `${FILE}.tmp`;
@@ -19,6 +21,19 @@ export function saveCompletedPerformanceAudit(report: PerformanceAuditReport): P
     await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}logs`, { intermediates: true });
     if (startedEpoch !== epoch) return;
     measureAuditEvidence(report);
+    // Preserve both pre-upgrade and interrupted completed runs before replacing
+    // either recovery file. A failed read/write must leave those copies intact.
+    const additions: AuditMetricRun[] = [];
+    for (const file of [FILE, TEMP_FILE]) {
+      if (!(await FileSystem.getInfoAsync(file)).exists) continue;
+      const text = await FileSystem.readAsStringAsync(file);
+      try { additions.push(auditMetricRun(validateCompletedReport(JSON.parse(text)))); }
+      catch { /* Malformed bytes cannot supply a measured run; valid recovery can still repair them. */ }
+    }
+    additions.push(auditMetricRun(report));
+    if (startedEpoch !== epoch) return;
+    await appendAuditMetricHistory(additions);
+    if (startedEpoch !== epoch) return;
     await FileSystem.writeAsStringAsync(TEMP_FILE, JSON.stringify(report));
     if (startedEpoch !== epoch) return;
     // Android renames within the same directory. Keep the complete staged copy
@@ -37,6 +52,7 @@ export function clearCompletedPerformanceAudit(clearOtherDiagnostics?: () => Pro
     if (FileSystem.documentDirectory) {
       await FileSystem.deleteAsync(FILE, { idempotent: true });
       await FileSystem.deleteAsync(TEMP_FILE, { idempotent: true });
+      await deleteAuditMetricHistory();
     }
     await clearOtherDiagnostics?.();
   }).finally(() => { clearing -= 1; });
@@ -44,7 +60,38 @@ export function clearCompletedPerformanceAudit(clearOtherDiagnostics?: () => Pro
   return clear;
 }
 
-export async function loadCompletedPerformanceAudit(): Promise<PerformanceAuditReport | null> {
+/** A report already in memory is the latest run; reading and parsing the
+ * multi-megabyte completed file again would only block the screen. */
+export async function loadPerformanceAuditHistory(known?: PerformanceAuditReport | null): Promise<AuditMetricRun[]> {
+  const startedEpoch = epoch;
+  const latest = known ?? await loadCompletedPerformanceAudit().catch(() => null);
+  await writes.catch(() => {});
+  const rows = await readAuditMetricHistory();
+  if (startedEpoch !== epoch || clearing) return [];
+  return mergeAuditMetricRuns(rows, latest ? [auditMetricRun(latest)] : []);
+}
+
+let inFlightLoad: { epoch: number; writes: Promise<void>; result: Promise<PerformanceAuditReport | null> } | null = null;
+
+/** Callers mounting in the same turn (the screen and its history card) share
+ * one read and one parse. Nothing is retained after it settles, so a later
+ * call always observes the files as they are then. */
+export function loadCompletedPerformanceAudit(): Promise<PerformanceAuditReport | null> {
+  const shared = inFlightLoad;
+  if (shared && shared.epoch === epoch && shared.writes === writes) return shared.result;
+  const entry = { epoch, writes, result: readCompletedPerformanceAudit() };
+  inFlightLoad = entry;
+  const release = () => { if (inFlightLoad === entry) inFlightLoad = null; };
+  void entry.result.then(release, release);
+  return entry.result;
+}
+
+const modifiedAt = (info: unknown): number | null => {
+  const value = (info as { modificationTime?: unknown } | null)?.modificationTime;
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+};
+
+async function readCompletedPerformanceAudit(): Promise<PerformanceAuditReport | null> {
   if (!FileSystem.documentDirectory) return null;
   const startedEpoch = epoch;
   const startedWrites = writes;
@@ -54,12 +101,15 @@ export async function loadCompletedPerformanceAudit(): Promise<PerformanceAuditR
   let primaryError: unknown;
   let primary: PerformanceAuditReport | null = null;
   let repairPrimary = false;
+  let primaryModifiedAt: number | null = null;
   for (const file of [FILE, TEMP_FILE]) {
     try {
-      if ((await FileSystem.getInfoAsync(file)).exists) {
+      const info = await FileSystem.getInfoAsync(file);
+      if (info.exists) {
         const candidate = validateCompletedReport(JSON.parse(await FileSystem.readAsStringAsync(file)));
         if (!primary || Date.parse(candidate.finishedAt) > Date.parse(primary.finishedAt)) {
           primary = candidate;
+          primaryModifiedAt = modifiedAt(info);
           repairPrimary = file === TEMP_FILE || candidate.schemaVersion !== PERFORMANCE_AUDIT_SCHEMA_VERSION;
         }
       }
@@ -70,7 +120,15 @@ export async function loadCompletedPerformanceAudit(): Promise<PerformanceAuditR
   const previous = `${FileSystem.documentDirectory}logs/ar-performance-audit-latest.json`;
   let recovered: PerformanceAuditReport | null = null;
   try {
-    if ((await FileSystem.getInfoAsync(previous)).exists) {
+    const previousInfo = await FileSystem.getInfoAsync(previous);
+    const previousModifiedAt = modifiedAt(previousInfo);
+    // The runner writes the sidecar before this completed copy. A sidecar that
+    // is strictly older than a valid completed copy cannot hold a later run, so
+    // its two large parses are skipped. Ties and unknown times keep the full
+    // comparison: file times can be coarse.
+    const sidecarCannotBeNewer = primary != null && !repairPrimary && primaryModifiedAt != null &&
+      previousModifiedAt != null && previousModifiedAt < primaryModifiedAt;
+    if (previousInfo.exists && !sidecarCannotBeNewer) {
       const stored = JSON.parse(await FileSystem.readAsStringAsync(previous));
       if (typeof stored.summaryMarker === 'string' && !stored.summaryMarker.includes('partial=true') &&
           typeof stored.reportJson === 'string') {

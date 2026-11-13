@@ -4,6 +4,7 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { create } from 'zustand';
 
 import { ProductCard } from '../src/components/ProductCard';
+import { PreparedProductCard } from '../src/components/rates/PreparedProductCard';
 import type { RateRow } from '../src/types';
 import type { MortgageRateMetric } from '../src/data/selectors';
 
@@ -117,5 +118,33 @@ test.each([
     expect(target).toBeDefined();
     expect(String(target.props.accessibilityLabel).includes('Occupation · Eligibility unverified')).toBe(variant.restricted);
     expect(String(target.props.accessibilityLabel).includes('Non-standard')).toBe(variant.nonStandard);
+  } finally { act(() => tree.unmount()); }
+});
+
+
+test('prepared card keeps actual save, theme and metric subscriptions and exact navigation live across equivalent inputs', () => {
+  mockStore.setState({ favorite: false, prefs: { mortgageRateMetric: 'headline' } });
+  mockToggleSavedRate.mockClear();
+  const owner = {}, onPress = jest.fn();
+  const screen = (amount: string, theme = mockTheme, quoteOwner: object | null = owner) => <mockThemeContext.Provider value={theme}>
+    <PreparedProductCard row={row} section="Mortgage" onPress={onPress} quoteOwner={quoteOwner} rateScenario={{ amount }} />
+  </mockThemeContext.Provider>;
+  let tree!: Renderer; act(() => { tree = TestRenderer.create(screen('650000')) as Renderer; });
+  try {
+    const initial = mockCardRender.mock.calls.length;
+    act(() => tree.update(screen('650001'))); expect(mockCardRender).toHaveBeenCalledTimes(initial);
+    act(() => mockStore.setState({ favorite: true })); expect(mockCardRender.mock.calls.length).toBeGreaterThan(initial);
+    expect(tree.root.findAllByProps({ accessibilityRole: 'button' }).some(node => String(node.props.accessibilityLabel).startsWith('Remove, Loan, Bank'))).toBe(true);
+    act(() => mockStore.setState({ prefs: { mortgageRateMetric: 'comparison' } }));
+    expect(tree.root.findAllByProps({ accessibilityRole: 'button' }).some(node => String(node.props.accessibilityLabel).includes('Comparison rate 6.00%'))).toBe(true);
+    const beforeTheme = mockCardRender.mock.calls.length;
+    act(() => tree.update(screen('650001', { ...mockTheme, colors: { ...mockTheme.colors, text: '#fff' } })));
+    expect(mockCardRender.mock.calls.length).toBeGreaterThan(beforeTheme);
+    const beforeOwner = mockCardRender.mock.calls.length;
+    act(() => tree.update(screen('650002', mockTheme, {}))); expect(mockCardRender.mock.calls.length).toBeGreaterThan(beforeOwner);
+    act(() => tree.root.findAllByProps({ testID: 'rate-save:loan:7' })[0].props.onPress());
+    expect(mockToggleSavedRate).toHaveBeenCalledWith(row, 'rate');
+    const target = tree.root.findAllByProps({ accessibilityRole: 'button' }).find(node => String(node.props.accessibilityLabel).startsWith('Loan,'))!;
+    act(() => target.props.onPress()); expect(onPress).toHaveBeenCalledTimes(1);
   } finally { act(() => tree.unmount()); }
 });

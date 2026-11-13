@@ -487,3 +487,62 @@ test('legacy manifest refresh failure leaves old value unavailable instead of en
       source_identities: { [dates[0]]: `legacy:${dates[0]}` }, products: { P: [0.05, 0.06] } } });
   expect(result.products.P).toEqual([null, 0.06]); expect(result.date_status?.[dates[0]]).toBe('unavailable'); expect(mockedDownload).not.toHaveBeenCalled();
 });
+
+
+test('offline unchanged history without an index receipt reuses the exact ledger', async () => {
+  const today = '2026-06-11';
+  const existing: ProductHistoryPayload = {
+    schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION,
+    source_identities: { '2026-06-10': 'legacy:2026-06-10', [today]: 'core:sha-current' },
+    run_date: today, core_sha: 'sha-current', run_dates: ['2026-06-10', today],
+    products: { 'P|1': [0.06, 0.055] },
+  };
+  const onCheckpoint = jest.fn();
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: today,
+    currentCore: core(today, { Mortgage: [rateRow('P|1', '0.055')] }),
+    coreSha: 'sha-current', existing, allowNetwork: false, preparedOnly: true,
+    onCheckpoint,
+  });
+  expect(result).toBe(existing);
+  expect(onCheckpoint).not.toHaveBeenCalled();
+  expect(mockedFetchIndex).not.toHaveBeenCalled();
+  expect(mockedDownload).not.toHaveBeenCalled();
+});
+
+test.each(['changed-core', 'removed-prepared', 'rejected-receipt'] as const)('no-index reuse remains invalidated for %s', async reason => {
+  const old = '2026-06-10', today = '2026-06-11';
+  mockedHistoryDates.mockReturnValue([old, today]);
+  const existing: ProductHistoryPayload = { schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION,
+    run_date: today, core_sha: 'same', run_dates: [old, today], products: { 'P|1': [0.06, 0.055] },
+    source_identities: { [old]: reason === 'removed-prepared' ? 'prepared:retired' : 'revision:2:verified:verified', [today]: 'core:same' } };
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: today,
+    currentCore: core(today, { Mortgage: [rateRow('P|1', '0.07')] }), coreSha: reason === 'changed-core' ? 'new' : 'same',
+    existing, preparedOnly: true, allowNetwork: false,
+    fallbackIndex: reason === 'rejected-receipt' ? { revision_heads: { [old]: { revision: 1, bundle_sha256: 'old', manifest_sha256: 'old' } } } as never : null,
+  });
+  expect(result).not.toBe(existing);
+  expect(result.products['P|1'][1]).toBe(0.07);
+  if (reason === 'removed-prepared') {
+    expect(result.products['P|1'][0]).toBeNull();
+    expect(result.date_status?.[old]).toBe('unavailable');
+    expect(result.source_identities?.[old]).toBeUndefined();
+  }
+  if (reason === 'rejected-receipt') expect(result.products['P|1'][0]).toBe(0.06);
+});
+
+test.each([
+  ['rejected', 'revision:1:older:older'], ['rejected', 'revision:2:equivocated:equivocated'],
+  ['absent', 'revision:1:older:older'], ['absent', 'revision:2:equivocated:equivocated'],
+])('an %s receipt cannot reuse %s below or conflicting with retained high-water proof', async (receipt, staleIdentity) => {
+  const old = '2026-06-10', today = '2026-06-11'; mockedHistoryDates.mockReturnValue([old, today]);
+  const trusted = 'revision:2:verified:verified';
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: today,
+    currentCore: core(today, { Mortgage: [rateRow('P|1', '0.07')] }), coreSha: 'same', preparedOnly: true, allowNetwork: false,
+    existing: { schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION, run_date: today, core_sha: 'same',
+      run_dates: [old, today], products: { 'P|1': [0.06, 0.055] },
+      source_identities: { [old]: staleIdentity, [today]: 'core:same' }, revision_high_water: { [old]: trusted } },
+    fallbackIndex: receipt === 'rejected' ? { revision_heads: { [old]: { revision: 1, bundle_sha256: 'old', manifest_sha256: 'old' } } } as never : null });
+  expect(result.products['P|1']).toEqual([null, 0.07]);
+  expect(result.source_identities?.[old]).toBeUndefined(); expect(result.date_status?.[old]).toBe('unavailable');
+  expect(result.revision_high_water?.[old]).toBe(trusted); expect(mockedDownload).not.toHaveBeenCalled();
+});

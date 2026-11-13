@@ -1,4 +1,4 @@
-import { mortgageComparisonMatch, mortgageComparisonRows } from '../src/data/mortgageComparison';
+import { mortgageComparisonMatch, mortgageComparisonRows, prepareMortgageComparisonRow, indexedMortgageComparisonRows } from '../src/data/mortgageComparison';
 import { catalogue, product, programme } from '../testUtils/publicRateJourney';
 import { publicRecommendationRows, resolvedPublicRankingRows, sourceRowForPublicRow } from '../src/data/publicRateIntegration';
 import { scopedRateConditions } from '../src/data/rateConditions';
@@ -64,4 +64,21 @@ test('real recommendation and resolved-price transformations retain only their a
   expect(scopedRateConditions(sourceRowForPublicRow(synthetic), 'Mortgage', f).status).toBe('unavailable');
   resolved[0].rate_index = 5;
   expect(sourceRowForPublicRow(resolved[0])).toBe(resolved[0]);
+});
+
+
+test('prepared source matching preserves admitted alternatives, unknown wording and stale-context fallbacks exactly', () => {
+  for (const text of ['LVR up to 70%.', 'LVR below 70%.', 'Loan amount below $500000.', 'LVR up to 90% for eligible staff.']) {
+    const fixture = selectedConstraintFixture('Mortgage', [row], [{ rateIndex: 4, text }]);
+    for (const stale of [false, true]) {
+      if (stale) fixture.details.run_date = '2026-10-13';
+      const prepared = new WeakMap(fixture.rows.map(value => [value, prepareMortgageComparisonRow(value, fixture)] as const));
+      for (const loanAmount of ['', '499999.99', '500000', '950000']) for (const lvr of ['', '65', '70', '75', '101']) {
+        const inputs = { loanAmount, lvr }, canonical = mortgageComparisonRows(fixture.rows, inputs, fixture);
+        const indexed = indexedMortgageComparisonRows(fixture.rows, inputs, prepared);
+        expect(indexed.rows).toEqual(canonical.rows); expect(indexed.unverified).toBe(canonical.unverified); expect(indexed.invalid).toBe(canonical.invalid);
+        for (const value of fixture.rows) expect(indexed.unverifiedRows.has(value)).toBe(canonical.unverifiedRows.has(value));
+      }
+    }
+  }
 });

@@ -8,6 +8,7 @@ import { resolvePublicRate } from './publicRateResolver';
 import { estimateEnteredRate, estimateReferenceAdjustment, selectPublicReference } from './publicRateLocal';
 import { Decimal, decimalText, rateDecimal } from './publicRateDecimal';
 import type { UserRateScenario } from './userRateScenario';
+import { rowsForProductKey } from './rateRowIndex';
 import { yieldToUi } from '../lib/yieldToUi';
 
 
@@ -45,9 +46,45 @@ export function unresolvedPublicRate(reason: string): RateResolution {
   };
 }
 
+// Catalogue publication replaces these arrays on hydration/correction. Reuse
+// occurrence/offer lookup across all rows of the same immutable product book.
+const programmeLookups = new WeakMap<PublicProgramme[], {
+  offers: Map<string, Map<string, PublicProgramme[]>>;
+  occurrences: Map<number, PublicProgramme[]>;
+}>();
+function matchingPublicProgrammes(row: RateRow, programmes: PublicProgramme[]): PublicProgramme[] {
+  let lookup = programmeLookups.get(programmes);
+  if (!lookup) {
+    lookup = { offers: new Map(), occurrences: new Map() };
+    for (const programme of programmes) {
+      let offers = lookup.offers.get(programme.programmeId);
+      if (!offers) { offers = new Map(); lookup.offers.set(programme.programmeId, offers); }
+      const candidates = offers.get(programme.offerId) ?? [];
+      candidates.push(programme); offers.set(programme.offerId, candidates);
+      for (const index of new Set(programme.sourceBindings?.map(binding => binding.rateIndex) ?? [])) {
+        const bound = lookup.occurrences.get(index) ?? [];
+        bound.push(programme); lookup.occurrences.set(index, bound);
+      }
+    }
+    programmeLookups.set(programmes, lookup);
+  }
+  return row.public_programme_id && row.public_offer_id
+    ? lookup.offers.get(row.public_programme_id)?.get(row.public_offer_id) ?? []
+    : row.rate_index == null ? [] : lookup.occurrences.get(row.rate_index) ?? [];
+}
+
+/** Exact immutable programme owner for an already bound source occurrence. */
+export function boundPublicProgramme(row: RateRow, catalogue: PublicCatalogueView): PublicProgramme | undefined {
+  const product = catalogue.getProduct(row.product_key);
+  if (!product) return undefined;
+  const matching = matchingPublicProgrammes(row, catalogue.getProgrammes(product.productId)).filter(item => item.productId === product.productId);
+  return matching.length === 1 ? matching[0] : undefined;
+}
+
 /** Only the producer's semantic binding can attach a current programme to a row. */
 export function resolveRowPublicRate(
   row: RateRow, catalogue: PublicCatalogueView, scenario: RateScenario = {}, asOf = new Date().toISOString(),
+  resolve: typeof resolvePublicRate = resolvePublicRate,
 ): RateResolution | undefined {
   if (catalogue.status === 'unavailable') return undefined;
   if (catalogue.status !== 'ready') return unresolvedPublicRate('catalogue_not_ready');
@@ -55,24 +92,17 @@ export function resolveRowPublicRate(
   if (!product) return unresolvedPublicRate('product_pricing_not_available');
   const programmes = catalogue.getProgrammes(product.productId);
   if (!programmes.length) return unresolvedPublicRate('programme_not_loaded');
-  const matching = programmes.filter(item => item.productId === product.productId && (
-    row.public_programme_id && row.public_offer_id
-      ? item.programmeId === row.public_programme_id && item.offerId === row.public_offer_id
-      : item.sourceBindings?.some(binding => binding.rateIndex === row.rate_index)
-  ));
+  const matching = matchingPublicProgrammes(row, programmes).filter(item => item.productId === product.productId);
   if (matching.length !== 1) return unresolvedPublicRate('semantic_offer_binding_missing');
   const selected = scenarioForPublicProgramme(matching[0], scenario, asOf);
-  return selected ? resolvePublicRate(matching[0], selected, asOf) : unresolvedPublicRate('ambiguous_comparison_facets');
+  return selected ? resolve(matching[0], selected, asOf) : unresolvedPublicRate('ambiguous_comparison_facets');
 }
 
 /** Occurrence pointers bind only the current validated generation; saved selections retain semantic ids. */
 export function bindCurrentPublicRow(row: RateRow, catalogue: PublicCatalogueView): RateRow {
   if (catalogue.status !== 'ready') return row;
   const product = catalogue.getProduct(row.product_key);
-  const candidates = product ? catalogue.getProgrammes(product.productId).filter(programme =>
-    row.public_programme_id && row.public_offer_id
-      ? programme.programmeId === row.public_programme_id && programme.offerId === row.public_offer_id
-      : programme.sourceBindings?.some(binding => binding.rateIndex === row.rate_index)) : [];
+  const candidates = product ? matchingPublicProgrammes(row, catalogue.getProgrammes(product.productId)) : [];
   return candidates.length === 1 ? programmePublicRow(row, candidates[0]) : row;
 }
 
@@ -97,11 +127,12 @@ function appendCatalogueOfferRow(
   section: SectionKey,
   scenario: RateScenario,
   asOfForProgramme: (programme: PublicProgramme) => string,
+  resolve: typeof resolvePublicRate = resolvePublicRate,
 ): void {
   const asOf = asOfForProgramme(programme);
   const selectedScenario = scenarioForPublicProgramme(programme, scenario, asOf);
   if (!selectedScenario) return;
-  const resolution = resolvePublicRate(programme, selectedScenario, asOf);
+  const resolution = resolve(programme, selectedScenario, asOf);
   if (resolution.status !== 'exact' || !resolution.verifiedCurrent || resolution.payableRate == null) return;
   const condition = (field: string) => programme.conditions.find(item => item.field === field && item.operator === 'eq')?.value;
   const lvr = programme.conditions.filter(item => item.field === 'lvr' && item.operator === 'bounds');
@@ -139,13 +170,14 @@ export function publicOfferDedupKey(productKey: string, publicOfferId: string): 
 
 /** Newly resolved programmes enter app comparisons even when no legacy absolute row exists. */
 export function publicCatalogueOfferRows(catalogue: PublicCatalogueView, section: SectionKey, scenario: RateScenario,
-  asOfForProgramme: (programme: PublicProgramme) => string = () => new Date().toISOString()): RateRow[] {
+  asOfForProgramme: (programme: PublicProgramme) => string = () => new Date().toISOString(), representedOffers?: ReadonlySet<string>): RateRow[] {
   if (catalogue.status !== 'ready') return [];
   const rows: RateRow[] = [];
   for (const product of catalogue.products) {
     if (product.section !== section || product.status === 'legacy') continue;
     for (const programme of catalogue.getProgrammes(product.productId)) {
-      appendCatalogueOfferRow(rows, product, programme, section, scenario, asOfForProgramme);
+      if (!representedOffers?.has(publicOfferDedupKey(product.productKey, programme.offerId)))
+        appendCatalogueOfferRow(rows, product, programme, section, scenario, asOfForProgramme);
     }
   }
   return rows;
@@ -166,11 +198,13 @@ export function publicProductOfferRows(
   return dedupeRecommendationRows(rows);
 }
 
-/** Same catalogue expansion as {@link publicCatalogueOfferRows}, yielding between products. */
+/** Same catalogue expansion as {@link publicCatalogueOfferRows}, yielding between programmes. */
 export async function publicCatalogueOfferRowsCooperatively(
   catalogue: PublicCatalogueView, section: SectionKey, scenario: RateScenario,
   control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
   asOfForProgramme: (programme: PublicProgramme) => string = () => new Date().toISOString(),
+  representedOffers?: ReadonlySet<string>,
+  resolve: typeof resolvePublicRate = resolvePublicRate,
 ): Promise<RateRow[] | null> {
   const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
   const now = control.now ?? (() => performance.now());
@@ -180,17 +214,18 @@ export async function publicCatalogueOfferRowsCooperatively(
   if (catalogue.status !== 'ready') return [];
   const rows: RateRow[] = [];
   let sliceStarted = now();
-  let visited = 0;
   for (const product of catalogue.products) {
     if (product.section !== section || product.status === 'legacy') continue;
     for (const programme of catalogue.getProgrammes(product.productId)) {
-      appendCatalogueOfferRow(rows, product, programme, section, scenario, asOfForProgramme);
-    }
-    visited += 1;
-    if (visited % 4 === 0 && now() - sliceStarted >= 6) {
-      await yieldControl();
-      sliceStarted = now();
-      if (cancelled()) return null;
+      if (!representedOffers?.has(publicOfferDedupKey(product.productKey, programme.offerId)))
+        appendCatalogueOfferRow(rows, product, programme, section, scenario, asOfForProgramme, resolve);
+      // A single product can contain hundreds of programmes. Check the time
+      // budget here so a large lender cannot monopolise the JS thread.
+      if (now() - sliceStarted >= 6) {
+        await yieldControl();
+        sliceStarted = now();
+        if (cancelled()) return null;
+      }
     }
   }
   return cancelled() ? null : rows;
@@ -215,7 +250,22 @@ export function publicRecommendationRows(rows: readonly RateRow[], catalogue: Pu
   if (catalogue.status === 'unavailable') return [...rows];
   const current = rows.filter(row => includeExistingLegacy || catalogue.getProduct(row.product_key)?.status !== 'legacy')
     .map(row => bindCurrentPublicRow(row, catalogue));
-  return dedupeRecommendationRows([...current, ...publicCatalogueOfferRows(catalogue, section, scenario, asOfForProgramme)]);
+  return dedupeRecommendationRows([...current, ...publicCatalogueOfferRows(catalogue, section, scenario, asOfForProgramme, new Set(current.filter(row => row.public_offer_id).map(row => publicOfferDedupKey(row.product_key, row.public_offer_id!))))]);
+}
+
+/** Same candidates as full-section assembly filtered to one product, without
+ * expanding unrelated programme books on Saved/receipt render paths. */
+export function publicRecommendationRowsForProduct(
+  rows: RateRow[], catalogue: PublicCatalogueView, section: SectionKey, scenario: RateScenario,
+  productKey: string, includeExistingLegacy = false,
+  asOfForProgramme?: (programme: PublicProgramme) => string,
+): RateRow[] {
+  const selected = rowsForProductKey(rows, productKey);
+  if (catalogue.status === 'unavailable') return [...selected];
+  const product = catalogue.getProduct(productKey);
+  return publicRecommendationRows(selected, { ...catalogue,
+    products: product?.section === section ? [product] : [],
+  }, section, scenario, includeExistingLegacy, asOfForProgramme);
 }
 
 /** Full-day recommendation assembly without a single-turn catalogue CPU burst. */
@@ -224,6 +274,7 @@ export async function publicRecommendationRowsCooperatively(
   control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
   includeExistingLegacy = false,
   asOfForProgramme?: (programme: PublicProgramme) => string,
+  resolve: typeof resolvePublicRate = resolvePublicRate,
 ): Promise<RateRow[] | null> {
   const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
   const now = control.now ?? (() => performance.now());
@@ -238,16 +289,25 @@ export async function publicRecommendationRowsCooperatively(
     if (includeExistingLegacy || catalogue.getProduct(row.product_key)?.status !== 'legacy') {
       current.push(bindCurrentPublicRow(row, catalogue));
     }
-    if ((offset + 1) % 24 === 0 && now() - sliceStarted >= 6) {
+    if (now() - sliceStarted >= 6) {
       await yieldControl();
       sliceStarted = now();
       if (cancelled()) return null;
     }
   }
   const offers = await publicCatalogueOfferRowsCooperatively(
-    catalogue, section, scenario, control, asOfForProgramme ?? (() => new Date().toISOString()));
+    catalogue, section, scenario, control, asOfForProgramme ?? (() => new Date().toISOString()),
+    new Set(current.filter(row => row.public_offer_id).map(row => publicOfferDedupKey(row.product_key, row.public_offer_id!))), resolve);
   if (cancelled() || !offers) return null;
   return dedupeRecommendationRows([...current, ...offers]);
+}
+
+const catalogueSources = new WeakMap<object, number>();
+let nextCatalogueSource = 1;
+function catalogueSource(value: object): number {
+  let id = catalogueSources.get(value);
+  if (id == null) { id = nextCatalogueSource++; catalogueSources.set(value, id); }
+  return id;
 }
 
 /** Identity used by Rates pricing hooks so catalogue snapshot republishes do not cancel work. */
@@ -258,7 +318,7 @@ export function publicCataloguePricingKey(catalogue: PublicCatalogueView): strin
   }
   // Include programme cardinality so shard hydration restarts pricing while
   // status stays ready/allLoaded false — without depending on object identity.
-  return `${catalogue.generationId ?? ''}:${catalogue.status}:${catalogue.allLoaded ? '1' : '0'}:${catalogue.products.length}:${programmes}`;
+  return `${catalogue.generationId ?? ''}:${catalogueSource(catalogue.getProduct)}.${catalogueSource(catalogue.getProgrammes)}:${catalogue.status}:${catalogue.allLoaded ? '1' : '0'}:${catalogue.products.length}:${programmes}`;
 }
 
 /** Ephemeral view for semantic selections; original core assets stay immutable. */
@@ -430,6 +490,7 @@ export async function resolvedPublicRankingRowsCooperatively(
   rows: readonly RateRow[], catalogue: PublicCatalogueView,
   scenarioFor: (row: RateRow) => RateScenario = () => ({}),
   control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {},
+  resolve: typeof resolvePublicRate = resolvePublicRate,
 ): Promise<PublicRankingResolution | null> {
   const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
   const now = control.now ?? (() => performance.now());
@@ -444,11 +505,11 @@ export async function resolvedPublicRankingRowsCooperatively(
   let sliceStarted = now();
   for (let offset = 0; offset < rows.length; offset += 1) {
     const row = rows[offset];
-    const result = resolveRowPublicRate(row, catalogue, scenarioFor(row));
+    const result = resolveRowPublicRate(row, catalogue, scenarioFor(row), undefined, resolve);
     const payable = payableRateForRow(row, result);
     if (payable == null) unresolved += 1;
     else resolved.push(rowWithPublicResolution(bindCurrentPublicRow(row, catalogue), result));
-    if ((offset + 1) % 8 === 0 && now() - sliceStarted >= 6) {
+    if (now() - sliceStarted >= 6) {
       await yieldControl();
       sliceStarted = now();
       if (cancelled()) return null;
@@ -466,10 +527,7 @@ export async function resolvedPublicRankingRowsCooperatively(
 export function publicScenarioForRow(row: RateRow | undefined, catalogue: PublicCatalogueView, scenario: RateScenario): RateScenario {
   if (!row || catalogue.status !== 'ready') return scenario;
   const product = catalogue.getProduct(row.product_key);
-  const matching = product ? catalogue.getProgrammes(product.productId).filter(item =>
-    row.public_programme_id && row.public_offer_id
-      ? item.programmeId === row.public_programme_id && item.offerId === row.public_offer_id
-      : item.sourceBindings?.some(binding => binding.rateIndex === row.rate_index)) : [];
+  const matching = product ? matchingPublicProgrammes(row, catalogue.getProgrammes(product.productId)) : [];
   return matching.length === 1
     ? scenarioForPublicProgramme(matching[0], scenario, new Date().toISOString()) ?? scenario : scenario;
 }

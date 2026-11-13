@@ -37,7 +37,7 @@ describe('app-health data quality', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     snapshot.assets!.rba_calendar = { state: 'not-requested' };
     const result = byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS), APP_HEALTH_CHECK_CODES.ASSET_AVAILABILITY);
-    expect(result).toMatchObject({ status: 'unavailable', metrics: { optionalNotObserved: 1, rba_calendarState: 'not-requested' } });
+    expect(result).toMatchObject({ status: 'pass', metrics: { optionalNotObserved: 1, rba_calendarState: 'not-requested', requiredUnavailable: 0 } });
   });
   it.each(retainedNegativeRates.observations)(
     'accepts retained CommBank foreign currency rates from $source',
@@ -97,6 +97,20 @@ describe('app-health data quality', () => {
     expect(byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
       APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS)).toMatchObject({ status: 'unavailable',
       metrics: { matchedProducts: null, coveragePercent: null } });
+  });
+
+  it('records accounted producer partials without treating them as an app defect', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.core!.coverage!.providers_attempted = 116;
+    snapshot.core!.coverage!.providers_succeeded = 116;
+    snapshot.core!.coverage!.counts = { providers_failed: 0, providers_partial: 7 };
+    snapshot.core!.coverage!.provider_failures = [];
+    snapshot.core!.coverage!.limitations = [];
+    expect(byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.COVERAGE)).toMatchObject({
+      status: 'pass',
+      metrics: { providersAttempted: 116, providersSucceeded: 116, providersFailed: 0, providersPartial: 7, unaccountedProviders: 0 },
+    });
   });
 
   it('does not pass when attempted providers have no recorded outcome', () => {

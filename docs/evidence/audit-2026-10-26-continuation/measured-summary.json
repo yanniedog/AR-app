@@ -1,0 +1,80 @@
+{
+  "scenarioSame": true,
+  "before": {
+    "start": "2026-10-26T12:50:16.685Z",
+    "end": "2026-10-26T12:51:15.728Z",
+    "contexts": 3,
+    "errors": [
+      [],
+      [],
+      []
+    ],
+    "receipts": {
+      "cold": {
+        "n": 3,
+        "headerMedianMs": 1842.199999999255,
+        "pricingReadyMedianMs": 1847.199999999255,
+        "actualUsableComparisons": true
+      },
+      "warm": {
+        "n": 6,
+        "headerMedianMs": 1866.9000000003725,
+        "pricingReadyMedianMs": 1871.2999999988824,
+        "actualUsableComparisons": true
+      }
+    }
+  },
+  "after": {
+    "start": "2026-10-26T12:55:09.076Z",
+    "end": "2026-10-26T12:55:51.706Z",
+    "contexts": 3,
+    "errors": [
+      [],
+      [],
+      []
+    ],
+    "receipts": {
+      "cold": {
+        "n": 3,
+        "headerMedianMs": 254.59999999962747,
+        "pricingReadyMedianMs": 1315.800000000745,
+        "actualUsableComparisons": true
+      },
+      "warm": {
+        "n": 6,
+        "headerMedianMs": 234.25,
+        "pricingReadyMedianMs": 1124,
+        "actualUsableComparisons": true
+      }
+    }
+  },
+  "saved": {
+    "empty": {
+      "beforeN": 15,
+      "afterN": 15,
+      "beforeMedianMs": 303.59999999962747,
+      "afterMedianMs": 0,
+      "beforeBookReads": 19601,
+      "afterBookReads": 0,
+      "identicalSelections": true
+    },
+    "one": {
+      "beforeN": 15,
+      "afterN": 15,
+      "beforeMedianMs": 275,
+      "afterMedianMs": 0.09999999962747097,
+      "beforeBookReads": 19606,
+      "afterBookReads": 11,
+      "identicalSelections": true
+    },
+    "three": {
+      "beforeN": 15,
+      "afterN": 15,
+      "beforeMedianMs": 295.59999999962747,
+      "afterMedianMs": 0.5,
+      "beforeBookReads": 19617,
+      "afterBookReads": 35,
+      "identicalSelections": true
+    }
+  }
+}

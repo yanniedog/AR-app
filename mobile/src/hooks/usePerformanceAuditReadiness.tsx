@@ -1,6 +1,5 @@
 import type { UiChild } from '../lib/uiCopy';
 import React, {
-  createContext,
   useContext,
   useEffect,
   useMemo,
@@ -19,9 +18,7 @@ import {
   type PerformanceAuditSurfaceHandle,
 } from '../lib/performanceAuditReadiness';
 
-const PerformanceAuditReadinessContext = createContext<PerformanceAuditReadinessRegistry>(
-  performanceAuditReadinessRegistry,
-);
+import { PerformanceAuditReadinessContext } from './performanceAuditReadinessContext';
 
 export function PerformanceAuditReadinessProvider({
   registry = performanceAuditReadinessRegistry,
@@ -85,12 +82,13 @@ export function usePerformanceAuditSurface(
     if (!enabled || !handle) return;
     registry.updateSurface(handle, {
       routeKey: definition.routeKey,
+      work: definition.work,
       datasetRevision: definition.datasetRevision,
       renderRevision: definition.renderRevision,
       actions: definition.actions,
     });
     for (const probe of definition.probes ?? []) registry.upsertProbe(handle, probe);
-  }, [definition.actions, definition.datasetRevision, definition.probes, definition.renderRevision, definition.routeKey, enabled, handle, registry]);
+  }, [definition.work, definition.actions, definition.datasetRevision, definition.probes, definition.renderRevision, definition.routeKey, enabled, handle, registry]);
 
   return useMemo<PerformanceAuditSurfaceController>(() => ({
     active: enabled && handle != null,

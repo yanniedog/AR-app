@@ -1,0 +1,52 @@
+{
+  "baseline": "bf4eaf8ad5cf55a82286c94a0e6170e201cf1569",
+  "sourceConfigurationDefaults": {
+    "version": "1.0.248",
+    "androidVersionCode": 192
+  },
+  "releaseOverridesUsed": false,
+  "artifact": "Expo development web; no APK built",
+  "auditArtifactReportedByParent": {
+    "version": "1.0.254",
+    "build": 310,
+    "decodedBytes": 6843478,
+    "sha256": "6048699298dca82176350d98c52d18ae618125249ba53ba40264b2d23209d346"
+  },
+  "measurement": "bank click to correct named product DOM visible and hit-test usable; cold means first bank open in fresh browser context after fixture installation; warm means subsequent bank opens",
+  "fixtures": {
+    "rates": 16788,
+    "mortgageRows": 8119,
+    "products": 2813,
+    "providers": 103,
+    "selectedBankProducts": 700
+  },
+  "reports": {
+    "rendered-baseline.json": {
+      "sha256": "02494d60eccd765fbd70f31d9861700907a9bd3d7f730d1c9248fe8cec5e8afd",
+      "startedAt": "2026-10-26T10:49:11.989Z",
+      "finishedAt": "2026-10-26T10:50:04.190Z",
+      "scenarioSha256": "bd8cead0f2f1c2489425a19848ba646ea7ff44b9f85f7e2ca40f0c0ec4f556d6",
+      "bundleHashes": [
+        "395b7436f56d8a8546af8d1825fc3c4fd4cbc92d6121577efbdfdb6410e2e457"
+      ]
+    },
+    "rendered-final.json": {
+      "sha256": "650466dbe8ec551d5d31056974ef7018bb2905c3df0ecb19f6abb612ad3e7597",
+      "startedAt": "2026-10-26T11:25:25.858Z",
+      "finishedAt": "2026-10-26T11:26:13.135Z",
+      "scenarioSha256": "bd8cead0f2f1c2489425a19848ba646ea7ff44b9f85f7e2ca40f0c0ec4f556d6",
+      "bundleHashes": [
+        "bdbfd3c6fbe03912a7152a5e28c4aca85a3a554f021d36ccc9bb906a0405dc66"
+      ]
+    },
+    "rendered-final-acceptance.json": {
+      "sha256": "205de050a59ae54c162267c07ece5bda9d16b523594369930c129b317434aaba",
+      "startedAt": "2026-10-26T11:24:32.184Z",
+      "finishedAt": "2026-10-26T11:25:09.771Z",
+      "scenarioSha256": "a6aa6b8c8998df6872320d25d77ce55d56e2b8d3076575ce8c359ad72286c109",
+      "bundleHashes": [
+        "bdbfd3c6fbe03912a7152a5e28c4aca85a3a554f021d36ccc9bb906a0405dc66"
+      ]
+    }
+  }
+}

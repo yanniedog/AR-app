@@ -19,12 +19,15 @@ import type { CurrentProductOption } from '../data/scenarioCatalog';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
+  'Audit history', 'No audit history', 'History unavailable', 'Retained runs', 'Audit settings', 'Recorded results',
+  'Estimated time', 'Last audit', 'Upload details', 'min',
   'Unverified details', 'Quarantined tiers', 'History days', 'Daily gaps', 'Rendered coverage', 'Chart gaps', 'Processing gaps', 'Source unavailable',
   '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '#', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
   'Rates', 'Saved', 'Market', 'Account', 'Profile', 'Settings', 'About',
   'Saved requirements', 'Temporary filters', 'After saved requirements', 'All screens', 'Catalogue',
   'Edit saved requirements', 'Clear Home loans requirements', 'Clear all saved requirements',
   'Reset temporary filters', 'Reset Rates view', 'Other saved selections',
+  'Updating', 'Previous results',
   'Rates per page', 'Products per page', 'Page', 'First', 'Previous', 'Next', 'Last',
   'First page', 'Previous page', 'Next page', 'Last page',
   'Freshness', 'Overdue', 'Stale',
@@ -210,7 +213,7 @@ export const UI_LABELS = [
   'Deletion irreversible', 'Public copy', 'Delete not confirmed', 'Share failed',
   'Upload diagnostic log?', 'Clear debug log?', 'Delete uploaded log?', 'Debug log cleared',
   'Uploaded log deleted', 'Destination', 'Audit upload', 'Deidentified',
-  'Checks / errors / traces / readiness / timing', 'Private inputs / identifiers / credentials',
+  'Checks / errors / traces / readiness / timing / deidentified log', 'Private inputs / identifiers / credentials',
   'Raw logs / tracebacks / routes / product keys / device IDs', 'Temporary report retained',
   'App update active', 'Update state unconfirmed', 'Report unavailable', 'Performance',
   'Data integrity', 'Data completeness', 'Asset availability', 'Display completeness',

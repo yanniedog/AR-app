@@ -39,9 +39,17 @@ function path(tree: Renderer, id: string): TestNode {
   return tree.root.findAllByType(Path).find(node => node.props.testID === id)!;
 }
 
-test('a full 73-bank, 137-day history uses three data paths and retains every observation', () => {
+async function settleDeferredPaths(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  });
+}
+
+test('a full 73-bank, 137-day history uses three data paths and retains every observation', async () => {
   const model = fixture(73, 137);
   const tree = mount(model);
+  expect(tree.root.findAllByType(Svg)).toHaveLength(0);
+  await settleDeferredPaths();
   try {
     expect(tree.root.findAllByType(Path)).toHaveLength(3);
     expect(tree.root.findAllByType(Circle)).toHaveLength(0);
@@ -52,12 +60,13 @@ test('a full 73-bank, 137-day history uses three data paths and retains every ob
   } finally { act(() => tree.unmount()); }
 });
 
-test('bank switching reuses the model and prepared context without recalculating other history', () => {
+test('bank switching reuses the model and prepared context without recalculating other history', async () => {
   const model = fixture(3, 137);
   let historicalReads = 0;
   const point = model.lines[0].points[1], value = point.value;
   Object.defineProperty(point, 'value', { get: () => { historicalReads++; return value; } });
   const tree = mount(model);
+  await settleDeferredPaths();
   try {
     const background = path(tree, 'bank-rate-background').props;
     const firstLine = path(tree, 'bank-rate-selected-line').props.d;
@@ -81,12 +90,13 @@ test('bank switching reuses the model and prepared context without recalculating
   } finally { act(() => tree.unmount()); }
 });
 
-test('prepares full observation markers only for the selected bank', () => {
+test('prepares full observation markers only for the selected bank', async () => {
   const model = fixture(73, 137);
   const format = jest.spyOn(Number.prototype, 'toFixed');
   let tree!: Renderer;
   try {
     tree = mount(model);
+    await settleDeferredPaths();
     // Two coordinate formats per context point plus the selected bank's
     // marker coordinates, rather than four formats for every bank and day.
     expect(format.mock.calls.length).toBeLessThan(73 * 137 * 3);
@@ -161,5 +171,24 @@ test('audit counts come from the actual SVG and invalid coordinates cannot certi
     measured(225);
     expect(onGraphicReady).toHaveBeenLastCalledWith(expect.objectContaining({ expectedCount: 8, pointCount: 4,
       accessibleSummary: false, emptyStateRendered: false }));
+  } finally { act(() => tree.unmount()); }
+});
+
+test('a full bank-day book does not build SVG paths on the first render', async () => {
+  const model = fixture(3, 200);
+  const onGraphicReady = jest.fn();
+  let tree!: Renderer;
+  act(() => {
+    tree = TestRenderer.create(<BankRateChart model={model} provider="Bank 0" onProviderChange={jest.fn()}
+      label="Mean" gap={false} auditRevision="history" onGraphicReady={onGraphicReady} />) as Renderer;
+  });
+  expect(tree.root.findAllByType(Svg)).toHaveLength(0);
+  expect(onGraphicReady).not.toHaveBeenCalled();
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  });
+  try {
+    expect(tree.root.findAllByType(Svg)).toHaveLength(1);
+    expect(onGraphicReady).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });

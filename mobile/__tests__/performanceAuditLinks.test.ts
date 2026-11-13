@@ -15,6 +15,26 @@ it('passes only when address, browser handler and HTTP all have positive evidenc
   });
 });
 
+it('keeps an unselected HTTP destination warn and records that it was outside the sample', () => {
+  const unselected = externalLinkAuditCheck({
+    ...result,
+    reachability: { status: 'unknown', detail: 'Evidence', attempted: false, selection: 'not-selected' },
+  }, 0, 12);
+  expect(unselected.status).toBe('warn');
+  expect(unselected.metrics).toMatchObject({ httpSelected: false, httpAttempted: false, httpReachability: 'unknown', handlerResolution: 'pass' });
+});
+
+it('records a handler the platform could not resolve separately from a missing handler', () => {
+  const unresolved = externalLinkAuditCheck({
+    ...result,
+    handler: { status: 'unknown', detail: 'Evidence', attempted: true, selection: 'selected' },
+  }, 0, 12);
+  expect(unresolved.status).toBe('warn');
+  expect(unresolved.metrics).toMatchObject({ handlerResolution: 'unresolved', handlerAttempted: true, browserHandler: 'unknown' });
+  expect(externalLinkAuditCheck({ ...result, handler: { status: 'fail', detail: 'Evidence', attempted: true, selection: 'selected' } }, 0, 12).metrics)
+    .toMatchObject({ handlerResolution: 'fail', nonTimingFailure: true });
+});
+
 it('keeps each destination independently addressable and omits URL queries', () => {
   const check = externalLinkAuditCheck(result, 3, 12);
   expect(check.id).toBe('external-link-4');

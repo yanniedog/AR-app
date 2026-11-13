@@ -89,11 +89,21 @@ it('gates the breadcrumb bar by width in both layouts', () => {
   // A unit check of breadcrumbsFitWidth cannot catch a layout that drops the
   // gate, so assert each layout folds width into its breadcrumbVisible value
   // (which controls both the bar's mount and the top-inset accounting).
+  // The route decision comes from BreadcrumbRouteProbe so the layouts do not
+  // re-render on every pathname change.
   const root = path.resolve(__dirname, '..');
+  const probe = fs.readFileSync(path.join(root, 'src/components/BreadcrumbRouteProbe.tsx'), 'utf8');
+  expect(probe).toContain('shouldShowBreadcrumbs(usePathname(), hydrated)');
   for (const file of ['app/_layout.tsx', 'app/(tabs)/_layout.tsx']) {
     const source = fs.readFileSync(path.join(root, file), 'utf8');
     const line = source.split('\n').find((l) => l.includes('breadcrumbVisible =')) ?? '';
-    expect(line).toContain('shouldShowBreadcrumbs(');
-    expect(line).toContain('breadcrumbsFitWidth(');
+    expect(line).toMatch(/breadcrumbVisible = breadcrumbRoute && breadcrumbsFitWidth\((width|shellWidth)\);/);
+    expect(source).toContain('<BreadcrumbRouteProbe hydrated={hydrated} onChange={setBreadcrumbRoute} />');
+    // The navigator component itself must not subscribe to route changes.
+    const navigator = file === 'app/_layout.tsx'
+      ? source.slice(source.indexOf('function RootNavigator()'), source.indexOf('export default function RootLayout'))
+      : source;
+    expect(navigator.length).toBeGreaterThan(0);
+    expect(navigator).not.toContain('usePathname');
   }
 });

@@ -1,0 +1,25 @@
+{
+  "sourceHead": "a051de801913dfb32c66e8f0243c41e5e6543754",
+  "productionEqualTo": "5b04ef45a4cf4ee325a785aff3899b7b3df29c83",
+  "typecheck": "pass",
+  "unit": {
+    "suitesPassed": 462,
+    "testsPassed": 5163,
+    "failed": 0
+  },
+  "lint": {
+    "errors": 0,
+    "warnings": 45
+  },
+  "copyViolations": 0,
+  "diagnosticSchema": "pass",
+  "scripts": {
+    "attempted": 403,
+    "passed": 401,
+    "failed": 2,
+    "reason": "Both unchanged Java fixture tests require javac; spawnSync javac ENOENT",
+    "javaRuntime": "OpenJDK21.0.12.1",
+    "requiredCI": "Existing app-ci/mobile-ci installs Temurin JDK17 and must run all403 before merge"
+  },
+  "review": "Independent read-only reviewer: temporal and generated-binding findings addressed; final retained static quote memo/liveness/visibility review no material blocker. No physical/native acceptance inferred."
+}

@@ -2,7 +2,7 @@ import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter
 import type { CorePayload, RateRow, SectionKey } from '../types';
 import { toFraction } from './format';
 import { rowsForProductKey } from './rateRowIndex';
-import { bindCurrentPublicRow, publicRecommendationRows, type PublicCatalogueView } from './publicRateIntegration';
+import { bindCurrentPublicRow, publicRecommendationRowsForProduct, type PublicCatalogueView } from './publicRateIntegration';
 import type { RateScenario } from './publicRateModel';
 import { publicOfferRefId } from './publicOfferIdentity';
 
@@ -184,12 +184,22 @@ export function toggleSavedRateRefs(
 export function resolveSavedRates(core: CorePayload, refs: readonly SavedRateRef[], catalogue?: PublicCatalogueView,
   scenarioFor: (section: SectionKey) => RateScenario = () => ({})): ResolvedSavedRate[] {
   const resolved: ResolvedSavedRate[] = [];
-  const candidates = new Map((Object.entries(core.sections) as [SectionKey, CorePayload['sections'][SectionKey]][])
-    .map(([section, data]) => [section, catalogue && catalogue.status !== 'unavailable' ? publicRecommendationRows(data?.rates ?? [], catalogue, section, scenarioFor(section), true) : data?.rates ?? []]));
+  if (!refs.length) return resolved;
+  const sections = Object.entries(core.sections) as [SectionKey, CorePayload['sections'][SectionKey]][];
+  const candidates = new Map<SectionKey, Map<string, RateRow[]>>();
   for (const ref of refs) {
     let fallback: ResolvedSavedRate | null = null;
-    for (const [section, rows] of candidates) {
-      for (const original of rowsForProductKey(rows, ref.productKey)) {
+    for (const [section, data] of sections) {
+      let sectionCandidates = candidates.get(section);
+      if (!sectionCandidates) { sectionCandidates = new Map(); candidates.set(section, sectionCandidates); }
+      let rows = sectionCandidates.get(ref.productKey);
+      if (!rows) {
+        rows = catalogue && catalogue.status !== 'unavailable'
+          ? publicRecommendationRowsForProduct(data?.rates ?? [], catalogue, section, scenarioFor(section), ref.productKey, true)
+          : rowsForProductKey(data?.rates ?? [], ref.productKey);
+        sectionCandidates.set(ref.productKey, rows);
+      }
+      for (const original of rows) {
         const row = catalogue ? bindCurrentPublicRow(original, catalogue) : original;
         const candidate = { ref, row, section };
         if (

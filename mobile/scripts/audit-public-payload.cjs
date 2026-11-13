@@ -31,7 +31,7 @@ const { validateLegacyHistoricalCatalogueDescriptor, validatePackedHistoricalCat
   validateDetachedHistoricalCatalogueEnvelope, PACKED_HISTORY_MAX_DECODED } = require('../src/data/detachedHistoricalBankRateCatalogueWire.ts');
 const { validateHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCatalogueWire.ts');
 const { unpackHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCataloguePacked.ts');
-const { validateHistoricalBankRateReadyForApp } = require('../src/data/historicalBankRateReady.ts');
+const { validateAcceptedHistoricalBankRateReady: validateHistoricalBankRateReadyForApp } = require('../src/data/historicalBankRateReadyAcceptance.ts');
 const { validatePublicRateCapability, validatePublicRateDiscovery, validatePublicRateIndex, validatePublicRateShard,
   PUBLIC_RATE_INDEX_DECODED, PUBLIC_RATE_SHARD_DECODED } = require('../src/data/publicRateWire.ts');
 

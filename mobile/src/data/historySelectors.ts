@@ -20,6 +20,7 @@ import {
   sliceChartTimeline,
 } from './bankHistoryTransform';
 import { debugLog } from '../lib/debugLog';
+import { yieldToUi } from '../lib/yieldToUi';
 import { toFraction, visibleAccountRows } from './format';
 import { quarantinedBankHistoryPairs, type CoreIntegrityContext } from './sectionIntegrity';
 import { getSuitabilityAllowed } from './suitabilityGate';
@@ -98,18 +99,12 @@ export function buildAggregateRibbonFromHistory(
   };
 }
 
-function currentRibbonFallback(
+function ribbonFromVisibleRows(
   core: CorePayload,
   section: SectionKey,
-  includeNonStandard: boolean,
-  detailsProducts?: Record<string, ProductDetail> | null,
+  visibleRows: RateRow[],
 ): BankHistoryChartModel | null {
-  const sectionData = core.sections[section];
-  if (!sectionData) return null;
-  const hierRows = rowsUnder(sectionData.rates, section, []);
-  const visibleRows = visibleAccountRows(hierRows, includeNonStandard, detailsProducts);
   if (!visibleRows.length) return null;
-
   const date = String(core.run_date || '').slice(0, 10);
   if (!date) return null;
   const aggregate = buildAggregateRibbonFromHistory(
@@ -120,13 +115,56 @@ function currentRibbonFallback(
   if (!aggregate.points[0]?.count) return null;
   const point = sanitizeRibbonPoint(date, aggregate.points[0]);
   if (point.min == null && point.max == null && point.mean == null) return null;
+  return { section, dates: [date], points: [point], allDates: [date] };
+}
 
-  return {
+function currentRibbonFallback(
+  core: CorePayload,
+  section: SectionKey,
+  includeNonStandard: boolean,
+  detailsProducts?: Record<string, ProductDetail> | null,
+): BankHistoryChartModel | null {
+  const sectionData = core.sections[section];
+  if (!sectionData) return null;
+  return ribbonFromVisibleRows(
+    core,
     section,
-    dates: [date],
-    points: [point],
-    allDates: [date],
-  };
+    visibleAccountRows(rowsUnder(sectionData.rates, section, []), includeNonStandard, detailsProducts),
+  );
+}
+
+type HistoryModelControl = {
+  cancelled?: () => boolean;
+  yieldControl?: () => Promise<void>;
+  now?: () => number;
+};
+
+async function visibleRibbonCooperatively(
+  core: CorePayload,
+  section: SectionKey,
+  includeNonStandard: boolean,
+  detailsProducts: Record<string, ProductDetail> | null | undefined,
+  control: HistoryModelControl,
+): Promise<BankHistoryChartModel | null> {
+  const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
+  const now = control.now ?? (() => performance.now());
+  const cancelled = control.cancelled ?? (() => false);
+  const rows = core.sections[section]?.rates ?? [];
+  const visible: RateRow[] = [];
+  let started = now();
+  for (let offset = 0; offset < rows.length; offset += 24) {
+    if (cancelled()) return null;
+    const slice = rows.slice(offset, offset + 24);
+    visible.push(...visibleAccountRows(rowsUnder(slice, section, []), includeNonStandard, detailsProducts));
+    if (now() - started >= 8) {
+      await yieldControl();
+      started = now();
+    }
+  }
+  if (cancelled()) return null;
+  await yieldControl();
+  if (cancelled()) return null;
+  return ribbonFromVisibleRows(core, section, visible);
 }
 
 export interface HistorySelectorState {
@@ -306,6 +344,62 @@ export function selectBankHistoryChartModel(
     debugLog.error(
       'historySelectors',
       `selectBankHistoryChartModel failed section=${section}: ${String((err as Error)?.message ?? err)}`,
+    );
+    return null;
+  }
+}
+
+/** Same model as {@link selectBankHistoryChartModel}, yielding through a section-wide row scan. */
+export async function selectBankHistoryChartModelCooperatively(
+  state: HistorySelectorState,
+  section: SectionKey,
+  window: HistoryWindow = 'All',
+  control: HistoryModelControl = {},
+): Promise<BankHistoryChartModel | null> {
+  const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
+  const cancelled = control.cancelled ?? (() => false);
+  try {
+    const {
+      core,
+      coreIntegrity,
+      historyBanks,
+      historyCache,
+      bankInsights,
+      includeNonStandard = false,
+      detailsProducts,
+    } = state;
+    if (!core) return null;
+    await yieldControl();
+    if (cancelled()) return null;
+    if (hasMandatoryRequirements()) {
+      return visibleRibbonCooperatively(core, section, includeNonStandard, detailsProducts, control);
+    }
+    if (!includeNonStandard && getSuitabilityAllowed()?.size === 0) return null;
+
+    const sectionHistoryQuarantined = [...quarantinedBankHistoryPairs(coreIntegrity)]
+      .some((key) => key.startsWith(`${section}\u0000`));
+    const prebuilt = includeNonStandard && !sectionHistoryQuarantined
+      ? chartModelFromPrebuiltHistory(historyBanks, section, window)
+      : null;
+    if (prebuilt?.dates.length) {
+      return { section, dates: prebuilt.dates, points: prebuilt.points, allDates: prebuilt.allDates };
+    }
+
+    if (historyCache && historyCache.section === section && historyCache.rates?.length) {
+      await yieldControl();
+      if (cancelled()) return null;
+      return selectBankHistoryChartModel(state, section, window);
+    }
+
+    const fromInsights = chartModelFromBankInsights(bankInsights, section, window);
+    if (fromInsights?.dates.length) {
+      return { section, dates: fromInsights.dates, points: fromInsights.points, allDates: fromInsights.allDates };
+    }
+    return visibleRibbonCooperatively(core, section, includeNonStandard, detailsProducts, control);
+  } catch (err) {
+    debugLog.error(
+      'historySelectors',
+      `selectBankHistoryChartModelCooperatively failed section=${section}: ${String((err as Error)?.message ?? err)}`,
     );
     return null;
   }

@@ -145,3 +145,48 @@ test('duplicate native close events deliver one close and a reopened intent can 
     expect(onClose).toHaveBeenCalledTimes(2);
   } finally { act(() => tree.unmount()); }
 });
+
+test('audit requires native presentation and measured sheet layout, and keeps closing occlusion until removal frames', () => {
+  jest.useFakeTimers();
+  const callbacks: ((result: { finished: boolean }) => void)[] = [];
+  jest.spyOn(Animated, 'timing').mockImplementation(() => ({ start: callback => { if (callback) callbacks.push(callback); }, stop: jest.fn(), reset: jest.fn() }));
+  const evidence = jest.fn();
+  const sheet = (visible: boolean) => <SheetSurface visible={visible} onAuditStateChange={evidence} title="Sort" onClose={() => {}}><Text>Rate</Text></SheetSurface>;
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(sheet(true)) as Renderer; });
+  try {
+    act(() => callbacks.at(-1)!({ finished: true }));
+    expect(evidence.mock.calls.at(-1)?.[0]).toBe('opening');
+    act(() => tree.root.findByType(Modal).props.onShow());
+    expect(evidence.mock.calls.at(-1)?.[0]).toBe('opening');
+    act(() => tree.root.findAllByProps({ accessibilityViewIsModal: true })[0].props.onLayout({ nativeEvent: { layout: { width: 400, height: 500 } } }));
+    expect(evidence.mock.calls.at(-1)?.[0]).toBe('presented');
+    act(() => tree.update(sheet(false)));
+    expect(evidence.mock.calls.at(-1)?.[0]).toBe('closing');
+    expect(tree.root.findByType(Modal).props.visible).toBe(true);
+    act(() => callbacks.at(-1)!({ finished: true }));
+    expect(tree.root.findByType(Modal).props.visible).toBe(false);
+    expect(evidence.mock.calls.at(-1)?.[0]).toBe('closing');
+    act(() => { jest.runOnlyPendingTimers(); });
+    expect(evidence.mock.calls.at(-1)?.[0]).toBe('closing');
+    act(() => { jest.runOnlyPendingTimers(); });
+    expect(evidence.mock.calls.at(-1)?.[0]).toBe('hidden');
+  } finally { act(() => tree.unmount()); jest.useRealTimers(); }
+});
+
+test('reopening a still-mounted audit sheet reuses actual native presentation without requiring duplicate native events', () => {
+  const callbacks: ((result: { finished: boolean }) => void)[] = [];
+  jest.spyOn(Animated, 'timing').mockImplementation(() => ({ start: callback => { if (callback) callbacks.push(callback); }, stop: jest.fn(), reset: jest.fn() }));
+  const evidence = jest.fn();
+  const sheet = (visible: boolean) => <SheetSurface visible={visible} onAuditStateChange={evidence} title="Sort" onClose={() => {}}><Text>Rate</Text></SheetSurface>;
+  let tree!: Renderer; act(() => { tree = TestRenderer.create(sheet(true)) as Renderer; });
+  try {
+    act(() => { tree.root.findByType(Modal).props.onShow(); tree.root.findAllByProps({ accessibilityViewIsModal: true })[0].props.onLayout({ nativeEvent: { layout: { width: 400, height: 500 } } }); callbacks.at(-1)!({ finished: true }); });
+    expect(evidence.mock.calls.at(-1)?.[0]).toBe('presented');
+    act(() => tree.update(sheet(false))); const oldClose = callbacks.at(-1)!;
+    act(() => tree.update(sheet(true)));
+    act(() => { oldClose({ finished: true }); callbacks.at(-1)!({ finished: true }); });
+    expect(evidence.mock.calls.at(-1)?.[0]).toBe('presented');
+    expect(tree.root.findByType(Modal).props.visible).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});

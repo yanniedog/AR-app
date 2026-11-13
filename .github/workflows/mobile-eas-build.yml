@@ -38,6 +38,10 @@ on:
           - android
           - ios
           - all
+      allow_history_compiler_mismatch:
+        description: Build a preview APK even if live prepared history uses a different compiler
+        type: boolean
+        default: false
 
 permissions:
   checks: read
@@ -75,6 +79,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/verify-github-release-source.mjs
+
+      - name: Verify live prepared history matches the pinned compiler
+        if: inputs.profile == 'preview' && (inputs.platform == 'android' || inputs.platform == 'all')
+        env:
+          ALLOW_HISTORY_COMPILER_MISMATCH: ${{ inputs.allow_history_compiler_mismatch && 'true' || 'false' }}
+        run: node scripts/verify-live-history-compiler.mjs
 
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         if: inputs.profile == 'preview' && (inputs.platform == 'android' || inputs.platform == 'all')

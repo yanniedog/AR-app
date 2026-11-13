@@ -102,8 +102,14 @@ describe('deidentified diagnostics privacy boundary', () => {
     const report = reportFixture([failed]);
     const publicBody = createPublicPerformanceAuditReport(report);
     const shared = JSON.parse(createDeidentifiedDiagnosticsShare(report).body);
-    const { diagnosticLog, ...publicSummary } = decodeCompactDiagnosticJson(publicBody) as any;
-    expect(publicSummary).toEqual(shared);
+    const { diagnosticLog, applicationJournal, completion, ...publicSummary } = decodeCompactDiagnosticJson(publicBody) as any;
+    const { completion: sharedCompletion, ...sharedSummary } = shared;
+    expect(publicSummary).toEqual(sharedSummary);
+    expect(shared.applicationJournal).toBeUndefined();
+    expect(completion.privacyBoundary.generalApplicationJournal).toBe('included-deidentified');
+    expect(sharedCompletion.privacyBoundary.generalApplicationJournal).toBe('omitted');
+    expect(applicationJournal.beforeAudit.entries).toEqual(expect.any(Array));
+    expect(applicationJournal.duringAndAfterAudit.entries).toEqual(expect.any(Array));
     expect(diagnosticLog.checks).toHaveLength(report.checks.length);
     expect(shared.checks[0]).toMatchObject({ id: 'setup-pinned-inputs', status: 'fail',
       failureCode: 'public-catalogue-changed', metrics: {
@@ -226,7 +232,13 @@ describe('deidentified diagnostics privacy boundary', () => {
     const prepared = createDeidentifiedDiagnosticsShare(report);
     const parsed = JSON.parse(prepared.body);
 
-    expect(envelope).toEqual(parsed);
+    expect({
+      ...envelope,
+      completion: {
+        ...envelope.completion,
+        privacyBoundary: { ...envelope.completion.privacyBoundary, generalApplicationJournal: 'omitted' },
+      },
+    }).toEqual(parsed);
     expect(parsed.checks[0]).toMatchObject({
       id: 'active-data',
       durationMs: 0,
@@ -297,7 +309,8 @@ describe('deidentified diagnostics privacy boundary', () => {
     expect(screen).toContain('const requestedUpload = publicUpload');
     expect(screen).toContain('uploadLog: requestedUpload');
     expect(screen.indexOf('const requestedUpload = publicUpload')).toBeLessThan(screen.indexOf('await getHydratedApkDownloadSnapshot()'));
-    expect(screen).toContain('const [publicUpload, setPublicUpload] = useState(true)');
+    // Initial defaults and retained choices are exercised by the rendered
+    // performanceAuditUploadControls tests, including local-only remounts.
     expect(screen).toContain('title="Upload report"');
     expect(screen).toContain('Public upload');
     const completion = runner.indexOf('await publishPerformanceAuditAfterFinalization(report');

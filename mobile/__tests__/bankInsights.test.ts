@@ -3,6 +3,7 @@ import {
   bankTrendChartModel,
   comparePassThroughRows,
   filterBankInsightsForSuitability,
+  filterBankInsightsForSuitabilityCooperatively,
   marketPulse,
   normalizeBankInsightsPayload,
   passThroughDaysLabel,
@@ -301,6 +302,34 @@ describe('filterBankInsightsForSuitability', () => {
     const filtered = filterBankInsightsForSuitability(payload, filterCore, false);
 
     expect(filtered).toBeNull();
+  });
+
+  test('cooperative suitability filter matches the sync projection and yields between slices', async () => {
+    const payloadCopy = { ...payload, banks: { ...payload.banks }, events: [...payload.events] };
+    const coreCopy = {
+      ...filterCore,
+      sections: {
+        ...filterCore.sections,
+        Mortgage: { ...filterCore.sections.Mortgage, rates: [...filterCore.sections.Mortgage.rates] },
+      },
+    };
+    let yields = 0;
+    let clock = 0;
+    const baselinePayload = { ...payloadCopy, banks: { ...payloadCopy.banks }, events: [...payloadCopy.events] };
+    const baselineCore = {
+      ...coreCopy,
+      sections: {
+        ...coreCopy.sections,
+        Mortgage: { ...coreCopy.sections.Mortgage, rates: [...coreCopy.sections.Mortgage.rates] },
+      },
+    };
+    const synchronous = filterBankInsightsForSuitability(baselinePayload, baselineCore, false);
+    const cooperative = await filterBankInsightsForSuitabilityCooperatively(
+      payloadCopy, coreCopy, false, null, undefined, null,
+      { yieldControl: async () => { yields += 1; }, now: () => (clock += 10) },
+    );
+    expect(cooperative).toEqual(synchronous);
+    expect(yields).toBeGreaterThan(0);
   });
 });
 

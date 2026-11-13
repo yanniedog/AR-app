@@ -1,6 +1,7 @@
 import { InteractionManager } from 'react-native';
 
 import {
+  getProcessingYieldDiagnostics,
   parseJsonHeavy,
   scheduleAfterInteractions,
   scheduleAfterNavigation,
@@ -69,11 +70,28 @@ describe('yieldToUi', () => {
       const pending = yieldToUi(0).then(() => events.push('processing'));
       expect(events).toEqual([]);
       expect(schedule).toHaveBeenCalledWith(3, expect.any(Function));
-      expect(jest.getTimerCount()).toBe(0);
+      expect(jest.getTimerCount()).toBe(1);
       queue.sort((a, b) => a.priority - b.priority).forEach(task => task.callback());
       await pending;
       expect(events).toEqual(['input', 'processing']);
+      expect(jest.getTimerCount()).toBe(0);
       expect(runSpy).not.toHaveBeenCalled();
+    } finally { jest.useRealTimers(); }
+  });
+
+  it('resumes once if a native queue accepts work but never acknowledges it', async () => {
+    jest.useFakeTimers();
+    try {
+      let late: (() => null) | undefined;
+      installScheduler({ unstable_NormalPriority: 3, unstable_scheduleCallback: (_priority: number, callback: () => null) => { late = callback; } });
+      const before = getProcessingYieldDiagnostics().nativeFallbacks;
+      const completed = jest.fn();
+      const pending = yieldToUi(0).then(completed);
+      await jest.advanceTimersByTimeAsync(47); expect(completed).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(1); await pending;
+      expect(completed).toHaveBeenCalledTimes(1);
+      expect(getProcessingYieldDiagnostics().nativeFallbacks).toBe(before + 1);
+      late?.(); await Promise.resolve(); expect(completed).toHaveBeenCalledTimes(1);
     } finally { jest.useRealTimers(); }
   });
 

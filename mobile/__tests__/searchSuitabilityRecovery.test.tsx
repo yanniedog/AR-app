@@ -1,4 +1,6 @@
+import * as drillDiagnostics from '../src/lib/degradationLog';
 import React from 'react';
+import { EMPTY_FILTERS } from '../src/data/selectors';
 import type { RateRow } from '../src/types';
 import TestRenderer, { act } from 'react-test-renderer';
 
@@ -74,7 +76,8 @@ jest.mock('@shopify/flash-list', () => {
   return { FlashList: React.forwardRef(function MockFlashList(props: any, ref: any) {
     const measure = () => {
       if (mockIsFocused && !mockSuppressViewability) props.onViewableItemsChanged({ viewableItems:
-        props.data.slice(0, mockEmptyCallback ? 0 : mockVisibleCount ?? 3).map((item: unknown, index: number) => ({ isViewable: true, item, index, key: props.keyExtractor(item, index) })) });
+        props.data.slice(0, mockEmptyCallback ? 0 : mockVisibleCount ?? 3).map((item: unknown, index: number) => ({ isViewable: true, item, index, key: props.keyExtractor(item, index) })),
+        changed: mockEmptyCallback || mockVisibleCount === 0 ? props.data.slice(0, 1).map((item: unknown) => ({ item, isViewable: false })) : [] });
     };
     const propsRef = React.useRef(props); propsRef.current = props;
     const measureRef = React.useRef(measure);
@@ -411,7 +414,7 @@ test('an updated native viewport with no visible rows never inherits an earlier 
     mockVisibleCount = 0;
     act(() => mockSurfaces.get('rates.results').actions['search.compare.mode']());
     expect(mockListMount).toHaveBeenCalledTimes(1);
-    expect(listProbe().visibleCount).toBe(0);
+    expect(listProbe().visibleCount).toBeNull();
     expect(listProbe().status).toBe('pending');
   } finally { act(() => tree.unmount()); }
 });
@@ -431,15 +434,15 @@ test('both membership gates replace the count callback even with unchanged draft
   } finally { act(() => tree.unmount()); }
 });
 
-test('an explicit empty callback wins over cached row geometry', () => {
+test('an unversioned empty callback must agree with current viewport geometry', () => {
   mockState.prefs.includeNonStandard = true;
   let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
   try {
     mockEmptyCallback = true;
     act(() => mockSurfaces.get('rates.results').actions['search.compare.mode']());
     const probe = mockSurfaces.get('rates.results').probes.find((item: any) => item.id === 'search.list');
-    expect(probe.visibleCount).toBe(0);
-    expect(probe.status).toBe('pending');
+    expect(probe.visibleCount).toBe(3);
+    expect(probe.status).toBe('ready');
   } finally { act(() => tree.unmount()); }
 });
 
@@ -917,8 +920,8 @@ test('a data swap rejects prior-row visibility and a header-only viewport stays 
     act(() => list.props.onViewableItemsChanged({ viewableItems: [{ isViewable: true, item: previous }] }));
     expect(probe().visibleCount).toBeNull();
     expect(probe().status).toBe('pending');
-    act(() => list.props.onViewableItemsChanged({ viewableItems: [] }));
-    expect(probe().visibleCount).toBe(0);
+    act(() => list.props.onViewableItemsChanged({ viewableItems: [], changed: [{ item: savings, isViewable: false }] }));
+    expect(probe().visibleCount).toBeNull();
     expect(probe().status).toBe('pending');
     act(() => list.props.onViewableItemsChanged({ viewableItems: [{ isViewable: true, item: savings }] }));
     expect(probe().visibleCount).toBe(1);
@@ -941,6 +944,59 @@ test('a measurement before the restore reaches a frame cannot establish list rea
     expect(probe().status).toBe('pending');
     act(() => frames[1](16));
     expect(probe().visibleCount).toBeGreaterThan(0);
+    expect(probe().status).toBe('ready');
+  } finally { act(() => tree.unmount()); }
+});
+
+
+test('a delayed identity-free empty callback after disclosure cannot poison the current visible viewport', () => {
+  mockState.prefs.includeNonStandard = true;
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const staleCallback = tree.root.findByType('FlashList' as any).props.onViewableItemsChanged;
+    mockSuppressViewability = true;
+    act(() => mockSurfaces.get('rates.results').actions['search.compare.mode']());
+    act(() => staleCallback({ viewableItems: [] }));
+    const sameRow = tree.root.findByType('FlashList' as any).props.data[0];
+    act(() => staleCallback({ viewableItems: [], changed: [{ item: sameRow, isViewable: false }] }));
+    const probe = mockSurfaces.get('rates.results').probes.find((item: any) => item.id === 'search.list');
+    expect(probe.status).toBe('ready');
+    expect(probe.visibleCount).toBeGreaterThan(0);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('browse drill confirmation waits for a genuinely visible committed list', () => {
+  mockState.prefs.includeNonStandard = true;
+  mockSuppressViewability = true; mockGeometryAvailable = false;
+  const confirm = jest.spyOn(drillDiagnostics, 'checkDrillOutcome');
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    expect(confirm).not.toHaveBeenCalled();
+    const list = tree.root.findByType('FlashList' as any);
+    act(() => list.props.onViewableItemsChanged({ viewableItems: [{ item: list.props.data[0], isViewable: true }] }));
+    expect(confirm).toHaveBeenLastCalledWith('TD', []);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('empty results require positive current layout and reject a late old empty callback', () => {
+  setSuitabilityAllowed(new Set([mockState.productKey]));
+  initializeRatesSession(mockState.prefs, 'TD');
+  updateRatesSection('TD', { filters: { ...EMPTY_FILTERS, providers: ['Absent synthetic bank'] } });
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  const probe = () => mockSurfaces.get('rates.results').probes.find((item: any) => item.id === 'search.list');
+  try {
+    const empty = () => tree.root.findByType('FlashList' as any).props.ListEmptyComponent;
+    expect(tree.root.findByType('FlashList' as any).props.data).toHaveLength(0);
+    const old = empty().props.onLayout;
+    act(() => old({ nativeEvent: { layout: { width: 0, height: 0 } } }));
+    expect(probe()).toMatchObject({ status: 'pending', emptyStateRendered: false });
+    act(() => old({ nativeEvent: { layout: { width: 320, height: 180 } } }));
+    expect(probe()).toMatchObject({ status: 'ready', emptyStateRendered: true });
+    act(() => updateRatesSection('TD', { sort: 'bank' }));
+    expect(probe().status).toBe('pending');
+    act(() => empty().props.onLayout({ nativeEvent: { layout: { width: 320, height: 180 } } }));
+    expect(probe().status).toBe('ready');
+    act(() => old({ nativeEvent: { layout: { width: 320, height: 180 } } }));
     expect(probe().status).toBe('ready');
   } finally { act(() => tree.unmount()); }
 });

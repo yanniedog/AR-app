@@ -7,6 +7,9 @@ import { verifiedDetailsSha } from '../src/data/detailsIdentity';
 import { MAX_PAYLOAD_INFLATED_BYTES } from '../src/data/payloadInflation';
 import { yieldToUi } from '../src/lib/yieldToUi';
 import { revisionManifest } from '../testUtils/payloadRevision';
+import { getNativeHistoryCodec } from '../modules/history-codec';
+
+jest.mock('../modules/history-codec', () => ({ getNativeHistoryCodec: jest.fn(() => null) }));
 
 jest.mock('../src/lib/yieldToUi', () => ({
   ...jest.requireActual('../src/lib/yieldToUi'),
@@ -29,7 +32,7 @@ function installBytes(bytes: Buffer, maximumRead = Infinity, declaredSize = byte
   });
 }
 
-beforeEach(() => { jest.clearAllMocks(); Object.assign(Platform, { OS: 'android' }); });
+beforeEach(() => { jest.clearAllMocks(); jest.mocked(getNativeHistoryCodec).mockReturnValue(null); Object.assign(Platform, { OS: 'android' }); });
 afterEach(() => { jest.restoreAllMocks(); Object.assign(Platform, { OS: originalPlatform }); });
 
 it.each([
@@ -195,4 +198,56 @@ it('returns the normal cache miss on a truncated Android file', async () => {
   jest.spyOn(cache, 'readMeta').mockResolvedValue(null);
   installBytes(Buffer.from('{}'), Infinity, 3);
   await expect(cache.readDetails()).resolves.toBeNull();
+});
+
+it('uses bounded native UTF-8 chunks without Base64 work and records completed chunks', async () => {
+  installBytes(Buffer.from('a'.repeat(DETAILS_CACHE_READ_CHUNK_BYTES) + 'é'));
+  const read = jest.fn().mockResolvedValueOnce({ text: 'a'.repeat(DETAILS_CACHE_READ_CHUNK_BYTES), bytes: DETAILS_CACHE_READ_CHUNK_BYTES })
+    .mockResolvedValueOnce({ text: 'é', bytes: 2 });
+  jest.mocked(getNativeHistoryCodec).mockReturnValue({ readDetailsChunkAsync: read } as unknown as NonNullable<ReturnType<typeof getNativeHistoryCodec>>);
+  const checkpoint = jest.fn();
+  await expect(readDetailsCacheText(path, fallback, checkpoint)).resolves.toBe('a'.repeat(DETAILS_CACHE_READ_CHUNK_BYTES) + 'é');
+  expect(read.mock.calls).toEqual([[path, 0, DETAILS_CACHE_READ_CHUNK_BYTES], [path, DETAILS_CACHE_READ_CHUNK_BYTES, 4]]);
+  expect(checkpoint).toHaveBeenCalledTimes(2);
+  expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
+  expect(fallback).not.toHaveBeenCalled();
+});
+
+it.each([0, -1, 3, NaN, 1.5])('rejects invalid native consumed-byte count %s without falling back', async bytes => {
+  installBytes(Buffer.from('{}'));
+  jest.mocked(getNativeHistoryCodec).mockReturnValue({ readDetailsChunkAsync: jest.fn(async () => ({ text: '{}', bytes })) } as unknown as NonNullable<ReturnType<typeof getNativeHistoryCodec>>);
+  await expect(readDetailsCacheText(path, fallback)).rejects.toThrow('Invalid native details chunk');
+  expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
+  expect(fallback).not.toHaveBeenCalled();
+});
+
+it('propagates a native decoder rejection without retrying another reader', async () => {
+  installBytes(Buffer.from('{}'));
+  const error = new Error('Malformed UTF-8');
+  jest.mocked(getNativeHistoryCodec).mockReturnValue({ readDetailsChunkAsync: jest.fn(async () => { throw error; }) } as unknown as NonNullable<ReturnType<typeof getNativeHistoryCodec>>);
+  await expect(readDetailsCacheText(path, fallback)).rejects.toBe(error);
+  expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
+});
+
+it('verifies the assembled native text against the current receipt and reports each stage', async () => {
+  const manifest = revisionManifest(1), sha = manifest.files.details.sha256;
+  const hash = (text: string): string => jest.requireActual('node:crypto').createHash('sha256').update(text).digest('hex');
+  jest.spyOn(Crypto, 'digestStringAsync').mockImplementation(async (_algorithm, text) => hash(text));
+  jest.spyOn(cache, 'readMeta').mockResolvedValue({ manifest, coreSha: manifest.files.core.sha256,
+    detailsSha: sha, source: 'remote', savedAt: manifest.generated_at });
+  const original = JSON.stringify({ run_date: manifest.run_date, products: {}, name: 'first' });
+  for (const text of [original, original.replace('first', 'other')]) {
+    installBytes(Buffer.from(text));
+    jest.mocked(getNativeHistoryCodec).mockReturnValue({ readDetailsChunkAsync: jest.fn(async () => ({ text, bytes: Buffer.byteLength(text) })) } as unknown as NonNullable<ReturnType<typeof getNativeHistoryCodec>>);
+    jest.mocked(FileSystem.readAsStringAsync).mockImplementation(async name => {
+      if (!name.endsWith('.verified')) throw new Error('Unexpected fallback read');
+      return JSON.stringify({ schemaVersion: 1, assetSha256: sha, contentSha256: hash(original) });
+    });
+    const stage = jest.fn(), checkpoint = jest.fn();
+    const result = await cache.readDetails({ stage, checkpoint });
+    expect(stage.mock.calls.flat()).toEqual(['read', 'parse', 'verify']);
+    expect(checkpoint).toHaveBeenCalledTimes(1);
+    if (text === original) expect(verifiedDetailsSha(result!)).toBe(sha);
+    else expect(result).toBeNull();
+  }
 });

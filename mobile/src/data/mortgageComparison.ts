@@ -3,7 +3,7 @@ import { sourceRowForPublicRow } from './publicRateIntegration';
 import type { RateRow } from '../types';
 import { calculatorAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
 import { lvrRangeContains, parseLvrRange } from './lvrRange';
-import { scopedRateConditions, type RateConditionContext } from './rateConditions';
+import { scopedRateConditions, scopedRateConditionsForRows, type RateConditionContext } from './rateConditions';
 import { scopedFinancialConditionFacts, type PublishedNumericConditionFact, type NumericConditionBoundary } from './scopedFinancialConditionFacts';
 import { yieldToUi } from '../lib/yieldToUi';
 
@@ -68,10 +68,10 @@ function matchListedTier(
   parsed: ReturnType<typeof inputs>,
   fallthroughLvr: boolean,
   fallthroughAmount: boolean,
+  range = parseLvrRange(row.lvr_tier),
 ): MortgageComparisonMatch {
   let unverified = false;
   if (parsed.lvr !== null && fallthroughLvr) {
-    const range = parseLvrRange(row.lvr_tier);
     // User LVR is set: missing/unparseable listed tier is outside, never an
     // unverified keep that resurfaces identity-catalogue rows (e.g. <60% at 71%).
     if (!range) return 'outside';
@@ -89,13 +89,46 @@ function matchListedTier(
   return unverified ? 'unverified' : 'listed';
 }
 
-function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateConditionContext): MortgageComparisonMatch {
+export function prepareMortgageComparisonRow(row: RateRow, context?: RateConditionContext) {
+  return { source: scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context)),
+    range: parseLvrRange(row.lvr_tier) };
+}
+export type PreparedMortgageComparisonRow = ReturnType<typeof prepareMortgageComparisonRow>;
+
+/** Validate each product envelope once per synchronous batch, then yield before
+ * the next product. A cancelled source owner never publishes prepared facts. */
+export async function prepareMortgageComparisonRowsCooperatively(rows: readonly RateRow[], context?: RateConditionContext,
+  control: { cancelled?: () => boolean; yieldControl?: () => Promise<void>; now?: () => number } = {}) {
+  const cancelled = control.cancelled ?? (() => false);
+  const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
+  const now = control.now ?? (() => performance.now());
+  const groups = new Map<string, RateRow[]>();
+  for (const row of rows) {
+    const group = groups.get(row.product_key);
+    if (group) group.push(row); else groups.set(row.product_key, [row]);
+  }
+  const prepared = new WeakMap<RateRow, PreparedMortgageComparisonRow>();
+  await yieldControl();
+  let checkpoint = now();
+  for (const group of groups.values()) {
+    if (cancelled()) return null;
+    const scopes = scopedRateConditionsForRows(group.map(sourceRowForPublicRow), 'Mortgage', context);
+    for (let index = 0; index < group.length; index++) {
+      const row = group[index];
+      prepared.set(row, { source: scopedFinancialConditionFacts(scopes[index]), range: parseLvrRange(row.lvr_tier) });
+    }
+    if (now() - checkpoint >= 4) { await yieldControl(); checkpoint = now(); }
+  }
+  return cancelled() ? null : prepared;
+}
+function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateConditionContext,
+  prepared?: PreparedMortgageComparisonRow): MortgageComparisonMatch {
   if (parsed.invalid) return 'invalid';
   let unverified = false;
   let fallthroughLvr = parsed.lvr !== null;
   let fallthroughAmount = parsed.amount !== null;
   if (parsed.lvr !== null || parsed.amount !== null) {
-    const source = scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context));
+    const source = prepared?.source ?? scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context));
     if (source.state === 'admitted') {
       const dimensions: readonly [number | null, readonly PublishedNumericConditionFact[], 'lvr' | 'amount'][] = [
         [parsed.lvr, source.facts.filter(fact => fact.kind === 'published-lvr-range'), 'lvr'],
@@ -116,7 +149,7 @@ function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateCo
       // stray second published band cannot rescue e.g. 71% onto an lvr_<60% row.
       // Missing/unparseable listed tier is outside (same as matchListedTier).
       if (!fallthroughLvr && parsed.lvr !== null) {
-        const range = parseLvrRange(row.lvr_tier);
+        const range = prepared ? prepared.range : parseLvrRange(row.lvr_tier);
         if (!range || !lvrRangeContains(range, parsed.lvr)) return 'outside';
       }
       if (!unverified && !fallthroughLvr && !fallthroughAmount) return 'listed';
@@ -124,7 +157,7 @@ function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateCo
       // Missing admitted LVR/amount facts only: fall through to listed tier/bounds.
     }
   }
-  const listed = matchListedTier(row, parsed, fallthroughLvr, fallthroughAmount);
+  const listed = matchListedTier(row, parsed, fallthroughLvr, fallthroughAmount, prepared ? prepared.range : parseLvrRange(row.lvr_tier));
   if (listed === 'outside' || listed === 'invalid') return listed;
   return listed === 'unverified' || unverified ? 'unverified' : 'listed';
 }
@@ -134,6 +167,21 @@ export function mortgageComparisonRows(rows: RateRow[], value: MortgageCompariso
   const unverifiedRows = new WeakSet<RateRow>();
   const selected = rows.filter(row => {
     const state = match(row, parsed, context);
+    if (state === 'unverified') { unverified++; unverifiedRows.add(row); }
+    return state === 'listed' || state === 'unverified';
+  });
+  return { rows: selected, unverified, unverifiedRows, invalid: parsed.invalid };
+}
+
+/** Reuses source-verified wording and parsed tiers from the same immutable context. */
+export function indexedMortgageComparisonRows(rows: RateRow[], value: MortgageComparisonInputs,
+  prepared: WeakMap<RateRow, PreparedMortgageComparisonRow>) {
+  const parsed = inputs(value), unverifiedRows = new WeakSet<RateRow>();
+  let unverified = 0;
+  const selected = rows.filter(row => {
+    const metadata = prepared.get(row);
+    if (!metadata) throw new Error('Unprepared mortgage row');
+    const state = match(row, parsed, undefined, metadata);
     if (state === 'unverified') { unverified++; unverifiedRows.add(row); }
     return state === 'listed' || state === 'unverified';
   });
@@ -157,13 +205,15 @@ export async function mortgageComparisonRowsCooperatively(
   if (parsed.amount === null && parsed.lvr === null && !parsed.invalid) {
     return { rows: [...rows], unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
   }
+  const prepared = await prepareMortgageComparisonRowsCooperatively(rows, context, control);
+  if (!prepared || cancelled()) return null;
   let unverified = 0;
   const unverifiedRows = new WeakSet<RateRow>();
   const selected: RateRow[] = [];
   let sliceStarted = now();
   for (let offset = 0; offset < rows.length; offset += 1) {
     const row = rows[offset];
-    const state = match(row, parsed, context);
+    const state = match(row, parsed, context, prepared.get(row));
     if (state === 'unverified') { unverified += 1; unverifiedRows.add(row); }
     if (state === 'listed' || state === 'unverified') selected.push(row);
     if ((offset + 1) % 16 === 0 && now() - sliceStarted >= 6) {

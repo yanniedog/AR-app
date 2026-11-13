@@ -1,0 +1,69 @@
+{
+  "baseline": "12e6a90270a065d838047ad3712b1c209af93170",
+  "after": "5b04ef45a4cf4ee325a785aff3899b7b3df29c83",
+  "productionDiffAfterMeasurement": "",
+  "files": {
+    "cold-after-1.json": {
+      "bytes": 2548,
+      "sha256": "3133131e23eec8c9881dacc037dcbbdc0c334bbb311ab55040540f20e0378ced"
+    },
+    "cold-after-2.json": {
+      "bytes": 2548,
+      "sha256": "66d23871d057ff120b00538b3d4deb5b575a10c625b7324bc047c969e2ce5334"
+    },
+    "cold-after-3.json": {
+      "bytes": 2562,
+      "sha256": "07496219276eeba597024ab3eaa1d9109ba43849a302737039294e9d7596c06c"
+    },
+    "cold-before-1.json": {
+      "bytes": 2562,
+      "sha256": "c309392bbf953177cdd0da1ab6fa02e59b6269f4a9884b43f23081298e0befe5"
+    },
+    "cold-before-2.json": {
+      "bytes": 2561,
+      "sha256": "d6a3b1c89260a756b8e3915433d96df2fd9847b3b68f8e460c539b3b71ec2a80"
+    },
+    "cold-before-3.json": {
+      "bytes": 2561,
+      "sha256": "c85c0b9408e9e621f56d6e910bc1d0f3538c0ca1298242ba5faf6ca376e0072d"
+    },
+    "final-after-1.json": {
+      "bytes": 16014,
+      "sha256": "5067b8eb7144d9e3ff284fb6cef96abe4c18eede0797719d70e93fa45718b6d8"
+    },
+    "final-after-2.json": {
+      "bytes": 15984,
+      "sha256": "8d93ff01c19c91a7a4c8fba10312d190c055c132dbf14977f97503b772f4a37a"
+    },
+    "final-after-3.json": {
+      "bytes": 15933,
+      "sha256": "2abf6619ad2edf2af9fc7e749d1692aa2913791a32867b42a7a10fef513007b3"
+    },
+    "final-before-1.json": {
+      "bytes": 17719,
+      "sha256": "0ea7999792dee66d3439dfcf0afea6b26e42b489155e26227db3bf22302787e1"
+    },
+    "final-before-2.json": {
+      "bytes": 17735,
+      "sha256": "7eaf1e62bfd89dd0234360a9123d86cab8df221acbc05bd0275b29959a432cb9"
+    },
+    "final-before-3.json": {
+      "bytes": 17631,
+      "sha256": "de65c17441d3395d08cd455ab75325bb330917703b444c33d1f36dda570f7bc6"
+    },
+    "rendered-cold-direct.cjs": {
+      "bytes": 20326,
+      "sha256": "1c8d84f66c5f5072ab258e2168c7b9a1e2254a38bf514b589d3705dd1db2f9f1"
+    },
+    "rendered-input-normal.cjs": {
+      "bytes": 28390,
+      "sha256": "964dc1952ddc789624a752e69f5894d794eb289b7ced9097614d0c4a9dc7e334"
+    },
+    "summary.json": {
+      "bytes": 5839,
+      "sha256": "56fed217e80d0ceaf705495cb39f9b23737d410e93db0bcf106f2bc228e17ce8"
+    }
+  },
+  "excluded": "Earlier exploratory/stalled/incorrect-observer runs and all immediate/deferred experiments are excluded. Rejected patch and original evidence retained privately for rollback. No full tests ran during final timing samples.",
+  "timeSensitivity": "Synthetic source freshness checkedAt 2026-10-26T09:00Z; retained runs Oct27 remain within48h. Future reproductions must deliberately freshen synthetic source metadata or use a controlled pricing clock; do not reinterpret stale source as current."
+}

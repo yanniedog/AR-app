@@ -7,6 +7,7 @@ import type { RatesPageSize } from '../data/ratesPagination';
 type ViewToken<Row> = { item: Row; index?: number | null; key?: string; isViewable?: boolean | null };
 type Unavailable = { unavailableReason: string };
 interface Options<Row> {
+  physicalViewport?: boolean;
   rows: readonly Row[]; results: readonly Row[]; page: number; size: RatesPageSize;
   revision: string; context: string; selectMode: boolean; canScroll: boolean;
   list: { current: FlashListRef<Row> | null };
@@ -52,7 +53,7 @@ export function useRatesAuditTarget<Row>(options: Options<Row>) {
     const active = current.current, index = active.rows.indexOf(row);
     if (request.current?.started && !request.current.nativeDone) return false;
     return index >= 0 && active.canScroll && commits.current.get(row)?.revision === active.revision &&
-      visible.current.revision === active.revision && visible.current.rows.has(row) && inViewport(row, index);
+      visible.current.revision === active.revision && visible.current.rows.has(row) && (active.physicalViewport || inViewport(row, index));
   }, [inViewport]);
   const onCellCommit = useCallback((row: Row, revision: string) => {
     const owner = Symbol('rates-cell');
@@ -74,7 +75,7 @@ export function useRatesAuditTarget<Row>(options: Options<Row>) {
       if (token.isViewable !== true) continue;
       const index = token.index;
       if (index == null || !Number.isSafeInteger(index) || active.rows[index] !== token.item ||
-        token.key !== active.key(token.item, index) || !inViewport(token.item, index)) continue;
+        token.key !== active.key(token.item, index) || (!active.physicalViewport && !inViewport(token.item, index))) continue;
       rows.add(token.item);
     }
     visible.current = { revision: active.revision, rows };

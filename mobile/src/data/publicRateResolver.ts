@@ -1,4 +1,4 @@
-import { Decimal, PUBLIC_ONE, PUBLIC_ZERO, decimalText, finiteDecimal, isRecurringDecimal, rateDecimal } from './publicRateDecimal';
+import { Decimal, publicDecimal, PUBLIC_ONE, PUBLIC_ZERO, decimalText, finiteDecimal, isRecurringDecimal, rateDecimal } from './publicRateDecimal';
 import type { PublicComponent, PublicCondition, PublicFormula, PublicFreshness, PublicProgramme, PublicTier, RateResolution, RateScenario, ResolvedPhase } from './publicRateModel';
 
 const NUMERICAL = new Set(['amount', 'balance', 'lvr', 'termMonths', 'termDays', 'monthlyDeposit', 'withdrawals', 'balanceGrowth', 'cardTransactions']);
@@ -14,11 +14,11 @@ function unique<T>(values: T[]): T[] { return [...new Set(values)]; }
 
 function bound(value: Decimal, minimum?: string, maximum?: string, minInclusive = true, maxInclusive = true): boolean {
   if (minimum !== undefined) {
-    const comparison = value.compare(Decimal.parse(minimum));
+    const comparison = value.compare(publicDecimal(minimum));
     if (comparison < 0 || comparison === 0 && !minInclusive) return false;
   }
   if (maximum !== undefined) {
-    const comparison = value.compare(Decimal.parse(maximum));
+    const comparison = value.compare(publicDecimal(maximum));
     if (comparison > 0 || comparison === 0 && !maxInclusive) return false;
   }
   return true;
@@ -36,18 +36,18 @@ export function evaluatePublicCondition(condition: PublicCondition, scenario: Ra
   if (condition.operator === 'known') return 'met';
   if (condition.operator === 'eq') {
     if (NUMERICAL.has(condition.field)) return finiteDecimal(condition.value) && typeof value === 'string'
-      ? Decimal.parse(value).compare(Decimal.parse(condition.value)) === 0 ? 'met' : 'unmet' : 'unknown';
+      ? publicDecimal(value).compare(publicDecimal(condition.value)) === 0 ? 'met' : 'unmet' : 'unknown';
     return value === condition.value ? 'met' : 'unmet';
   }
   if (condition.operator === 'in') {
     if (NUMERICAL.has(condition.field)) {
       if (!condition.values?.every(finiteDecimal) || typeof value !== 'string') return 'unknown';
-      return condition.values.some(candidate => Decimal.parse(value).compare(Decimal.parse(candidate as string)) === 0) ? 'met' : 'unmet';
+      return condition.values.some(candidate => publicDecimal(value).compare(publicDecimal(candidate as string)) === 0) ? 'met' : 'unmet';
     }
     return condition.values?.includes(value) ? 'met' : 'unmet';
   }
   if (condition.operator === 'bounds' && NUMERICAL.has(condition.field) && typeof value === 'string') {
-    try { return bound(Decimal.parse(value), condition.minimum, condition.maximum, condition.minimumInclusive, condition.maximumInclusive) ? 'met' : 'unmet'; }
+    try { return bound(publicDecimal(value), condition.minimum, condition.maximum, condition.minimumInclusive, condition.maximumInclusive) ? 'met' : 'unmet'; }
     catch { return 'unknown'; }
   }
   return 'unknown';
@@ -85,22 +85,22 @@ function combine(operands: Evaluation[], subtract: boolean): Evaluation {
 function tiered(formula: Extract<PublicFormula, { op: 'tiered' }>, context: Context, depth: number): Evaluation {
   const raw = context.scenario[formula.field];
   if (!NUMERICAL.has(formula.field) || !finiteDecimal(raw)) fail('tier_input_unknown');
-  const value = Decimal.parse(raw);
+  const value = publicDecimal(raw);
   if (formula.method === 'whole_balance') {
     const applicable = formula.tiers.filter(tier => bound(value, tier.minimum, tier.maximum, tier.minimumInclusive, tier.maximumInclusive));
     if (applicable.length !== 1) fail(applicable.length ? 'overlapping_tiers' : 'no_applicable_tier');
     return evaluate(applicable[0].formula, context, depth + 1);
   }
   if (formula.method !== 'per_tier' || value.compare(PUBLIC_ZERO) <= 0) fail('tier_input_invalid');
-  const sorted = [...formula.tiers].sort((a, b) => Decimal.parse(a.minimum ?? '0').compare(Decimal.parse(b.minimum ?? '0')));
+  const sorted = [...formula.tiers].sort((a, b) => publicDecimal(a.minimum ?? '0').compare(publicDecimal(b.minimum ?? '0')));
   let accounted = PUBLIC_ZERO, weightedMinimum = PUBLIC_ZERO, weightedMaximum: Decimal | undefined = PUBLIC_ZERO;
   let kind: Evaluation['kind'] = 'exact';
   const components: PublicComponent[] = [], reasons: string[] = [];
   for (const tier of sorted) {
-    const minimum = Decimal.parse(tier.minimum ?? '0');
+    const minimum = publicDecimal(tier.minimum ?? '0');
     if (minimum.compare(value) >= 0) break;
     if (minimum.compare(accounted) !== 0) fail(minimum.compare(accounted) < 0 ? 'overlapping_tiers' : 'unpriced_balance_gap');
-    const declaredMaximum = tier.maximum === undefined ? value : Decimal.parse(tier.maximum);
+    const declaredMaximum = tier.maximum === undefined ? value : publicDecimal(tier.maximum);
     const maximum = declaredMaximum.compare(value) < 0 ? declaredMaximum : value;
     if (maximum.compare(minimum) <= 0) fail('invalid_tier_bounds');
     const result = evaluate(tier.formula, context, depth + 1), amount = maximum.sub(minimum);
@@ -139,7 +139,7 @@ function evaluate(formula: PublicFormula, context: Context, depth = 0): Evaluati
   }
   if (formula.op === 'tiered') return tiered(formula, context, depth);
   if (formula.op === 'cap') {
-    const result = evaluate(formula.formula, context, depth + 1), cap = Decimal.parse(formula.value);
+    const result = evaluate(formula.formula, context, depth + 1), cap = publicDecimal(formula.value);
     return { ...result, minimum: result.minimum.compare(cap) > 0 ? cap : result.minimum,
       maximum: result.maximum ? (result.maximum.compare(cap) > 0 ? cap : result.maximum) : cap,
       kind: result.minimum.compare(cap) >= 0 ? 'exact' : result.kind === 'from' ? 'range' : result.kind };
@@ -166,6 +166,22 @@ export function publicRateFreshness(freshness: PublicFreshness, asOf: string): P
   return { ...freshness, reasonCodes: [...freshness.reasonCodes] };
 }
 
+/** Earliest wall-clock boundary that can change a current programme result.
+ * Consumers may reuse resolved values only until this boundary, not a UTC-day
+ * approximation of the rolling source-freshness window. */
+export function nextPublicPricingBoundary(programme: PublicProgramme, atMs: number): number {
+  const last = Date.parse(programme.freshness.lastSuccessAt ?? '');
+  if (!Number.isFinite(atMs) || !Number.isFinite(last) || programme.freshness.state !== 'current') return Infinity;
+  const expiry = last + STALE_MS + 1; // Freshness is stale strictly after 48h.
+  if (atMs >= expiry) return Infinity;
+  const from = programme.effectiveFrom == null ? -Infinity : Date.parse(programme.effectiveFrom);
+  const to = programme.effectiveTo == null ? Infinity : Date.parse(programme.effectiveTo);
+  if (Number.isNaN(from) || Number.isNaN(to) || atMs >= to) return Infinity;
+  // effectiveDate conditions can use the UTC date when no date was entered.
+  const nextDay = (Math.floor(atMs / 86_400_000) + 1) * 86_400_000;
+  return Math.min(expiry, nextDay, last > atMs ? last : Infinity, from > atMs ? from : Infinity, to);
+}
+
 function validPeriod(programme: PublicProgramme, asOf: string): boolean {
   const now = Date.parse(asOf);
   if (!Number.isFinite(now)) fail('invalid_resolution_date');
@@ -179,9 +195,9 @@ function validPeriod(programme: PublicProgramme, asOf: string): boolean {
 
 function amounts(result: Evaluation): Pick<RateResolution, 'status' | 'payableRate' | 'minimumRate' | 'maximumRate'> {
   if (result.minimum.compare(PUBLIC_ZERO) < 0 || result.minimum.compare(PUBLIC_ONE) > 0 || result.maximum && (result.maximum.compare(PUBLIC_ONE) > 0 || result.maximum.compare(result.minimum) < 0)) fail('payable_rate_out_of_bounds');
-  const rounded = [result.minimum, ...(result.maximum ? [result.maximum] : [])].some(value => value.compare(Decimal.parse(decimalText(value))) !== 0);
+  const rounded = [result.minimum, ...(result.maximum ? [result.maximum] : [])].some(value => value.compare(publicDecimal(decimalText(value))) !== 0);
   if (rounded) result.reasons = unique([...result.reasons, 'exact_rate_rational_rounded']);
-  if (result.minimum.compare(PUBLIC_ZERO) > 0 && Decimal.parse(decimalText(result.minimum)).compare(PUBLIC_ZERO) === 0) fail('rate_precision_unsupported');
+  if (result.minimum.compare(PUBLIC_ZERO) > 0 && publicDecimal(decimalText(result.minimum)).compare(PUBLIC_ZERO) === 0) fail('rate_precision_unsupported');
   if (result.kind === 'exact') return { status: 'exact', payableRate: decimalText(result.minimum) };
   return { status: result.kind, minimumRate: decimalText(result.minimum), ...(result.maximum ? { maximumRate: decimalText(result.maximum) } : {}) };
 }
@@ -246,5 +262,5 @@ export function resolvePublicRate(programme: PublicProgramme, scenario: RateScen
 
 /** Membership helper keeps open-ended bounds intact; a product MAX_LVR is a separate predicate. */
 export function publicTierMatches(tier: PublicTier, value: string): boolean {
-  return bound(Decimal.parse(value), tier.minimum, tier.maximum, tier.minimumInclusive, tier.maximumInclusive);
+  return bound(publicDecimal(value), tier.minimum, tier.maximum, tier.minimumInclusive, tier.maximumInclusive);
 }

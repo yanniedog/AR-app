@@ -63,9 +63,11 @@ test('large results stay pending until the full active request completes', async
     await act(async () => { mockJobs[1].run(); });
     act(() => tree.update(<Probe focused={false} />));
     act(() => tree.update(<Probe />));
-    expect(mockJobs[2].navigation).toBe(true);
-    expect(latest.ready).toBe(false);
-    await act(async () => { mockJobs[2].run(); });
+    // The exact prior result is already fully prepared for the same source,
+    // filters and gate revision. Returning to it requires no new queue.
+    expect(mockJobs).toHaveLength(2);
+    expect(latest.ready).toBe(true);
+    expect(latest.reused).toBe(true);
     expect(latest.rows).toEqual(rows);
     expect(latest.rows.every((row, index) => row === rows[index])).toBe(true);
   } finally { act(() => tree.unmount()); }

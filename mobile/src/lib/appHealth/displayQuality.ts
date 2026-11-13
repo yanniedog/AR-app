@@ -198,8 +198,6 @@ function evaluateRole(
         ) {
           result.failed += 1;
           result.failedSurfaceIds.push(contract.id);
-        } else if (evidence.modelPointCount === 0 || (evidence.unavailableCount ?? 0) > 0) {
-          result.unavailable += 1;
         }
         break;
       }

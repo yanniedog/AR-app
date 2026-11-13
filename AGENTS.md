@@ -32,7 +32,8 @@ Do not stop after opening a PR. Always monitor each owned open PR (and any still
 - Qwen may publish only validated, line-addressable defects with direct revisions or GitHub suggestion blocks. Never add PR/file/script summaries, walkthroughs, praise, or whole-PR coverage.
 - CodeRabbit, Sourcery, Codex, and Cursor remain visible in the bot matrix and all substantive findings still require disposition. Their quota or service availability must not make merge liveness depend on an external vendor.
 - Run `npm run wait-for-bots -- --pr <N>` (repo root) until exit 0. With no required reviewer configured, this waits only for required CI to settle. Re-run while exit 2.
-- Enable squash auto-merge via the repo wrapper: `npm run pr:merge -- --pr <N>` (auto squash, delete-branch, freshness). Do not use bare `gh pr merge --squash --auto` without `--delete-branch` / the wrapper.
+- Merging is automatic: `.github/workflows/pr-auto-merge.yml` runs `scripts/pr-auto-merge-reconcile.mjs` on PR events, whenever `app-ci` or `pr-bot-feedback-check` completes, and on a best-effort schedule. For non-draft owner PRs to `main` whose commits are all by trusted authors (owner, `claude`), it merges (squash) as soon as GitHub reports every required gate satisfied (`mergeable_state` clean, or unstable when only advisory checks fail; `mobile-ci`, `bot-feedback-gate`, resolved threads, up to date) and dispatches `mobile-android-apk` when mobile paths changed. With a `BOT_GATE_TOKEN` owner token configured it instead enables auto-merge and updates behind branches. Drafts and the `hold` label are never merged. Agents do not merge and the owner should not need to click anything; an agent only keeps its branch up to date and its threads resolved.
+- The same workflow dispatches `mobile-android-apk` when `main` has mobile changes newer than the latest `app-arm-v*` release, no release run exists for that commit, and 20 minutes have passed. An agent's job ends when its PR merges and the release run is green.
 - Do not declare the task done while any owned PR is open and mergeable by you. Never end on “CI green” alone.
 
 ## Bot feedback (mandatory — every finding, every session)
@@ -55,7 +56,7 @@ Babysit and PR-fix workers must follow the per-finding disposition rules below f
    - `implemented in <sha>`
    - `deferred — <reason>`
    - `declined — <reason>`
-3. Resolve the thread after the reply (live gate requires resolution). Use ManagePullRequest `post_comment` (`in_reply_to`) and `resolve_comment` when `gh` cannot write.
+3. Resolve the thread after the reply (live gate requires resolution). `pr-auto-resolve-dispositions` does this automatically: on any same-repo reply by the owner or a collaborator it resolves every thread whose latest comment is a trusted reply starting `implemented in <sha>`, `deferred — <reason>` or `declined — <reason>`, then re-runs the head's `bot-feedback-gate`. Nobody needs to click Resolve. Use ManagePullRequest `post_comment` (`in_reply_to`) and `resolve_comment` when `gh` cannot write.
 4. Re-run `npm run pr:bot-feedback-check -- --pr <N>` until exit 0; confirm GitHub `bot-feedback-gate` is green.
 5. After later pushes, re-check for **new** bot threads and handle them the same way before merge.
 

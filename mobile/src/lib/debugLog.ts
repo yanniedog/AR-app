@@ -17,6 +17,9 @@ import {
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
 } from './performanceAuditSchema';
 import { SECURE_STORE_KEYS } from './secureStoreKey';
+import { redactSecrets } from './redactSecrets';
+
+export { redactSecrets };
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -47,47 +50,7 @@ export const DEBUG_LOG_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-debug-
 const PERFORMANCE_AUDIT_SIDECAR_FILE = `${LOG_DIR}ar-performance-audit-latest.json`;
 export const DEBUG_LOG_UPLOAD_RECEIPT_KEY = SECURE_STORE_KEYS.debugLogUploadReceipt;
 
-const SECRET_VALUE = String.raw`[^\s,;}"']+`;
-const SECRET_SOURCES: string[] = [
-  String.raw`EXPO_TOKEN[=:\s]${SECRET_VALUE}`,
-  String.raw`Bearer\s+${SECRET_VALUE}`,
-  String.raw`Authorization:\s*(?:(?:Bearer|Basic)\s+)?${SECRET_VALUE}`,
-  String.raw`(?:api[_-]?key|secret|password|token)[=:\s]${SECRET_VALUE}`,
-  String.raw`"(?:EXPO_TOKEN|Authorization|api[_-]?key|secret|password|token)"\s*:\s*"[^"]+"`,
-  String.raw`'(?:EXPO_TOKEN|Authorization|api[_-]?key|secret|password|token)'\s*:\s*'[^']+'`,
-];
-/**
- * One alternation rather than six sequential passes. Redaction runs over the
- * whole megabyte-scale audit report and the whole 2MB log on the JS thread, so
- * each avoided pass is a full scan and a full string copy the UI thread no
- * longer waits on.
- */
-const SECRET_PATTERN = new RegExp(SECRET_SOURCES.map((source) => `(?:${source})`).join('|'), 'gi');
-const PRIVATE_IDENTIFIER_PATTERN =
-  /\b(uid|user[_-]?id|subscription[_-]?id|subscriptionId)\s*[=:]\s*[^\s,;}"']+/gi;
-const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-
 const LOG_LINE_RE = /^(\S+)\s+\[(\w+)\s*\]\s+([^:]+):\s(.*)$/;
-
-/** Strip likely secrets before lines are stored or uploaded. */
-export function redactSecrets(text: string): string {
-  // Most audit records contain none of these fields. Avoid expensive value
-  // matching (especially the email pattern) across megabytes of ordinary JSON.
-  let result = text;
-  if (/EXPO_TOKEN|Bearer|Authorization|api[_-]?key|secret|password|token/i.test(result)) {
-    result = result.replace(SECRET_PATTERN, (match) => {
-      // Preserve the quoted header/field shape in the complete audit JSON.
-      const quotedPrefix = match.match(/^((["'])[^"']+\2\s*:\s*)(["'])/);
-      if (quotedPrefix) return `${quotedPrefix[1]}${quotedPrefix[3]}[REDACTED]${quotedPrefix[3]}`;
-      const key = match.split(/[=:\s]/)[0] ?? 'secret';
-      return `${key}=[REDACTED]`;
-    });
-  }
-  if (/uid|user[_-]?id|subscription[_-]?id|subscriptionId/i.test(result)) {
-    result = result.replace(PRIVATE_IDENTIFIER_PATTERN, (_match, key: string) => `${key}=[REDACTED]`);
-  }
-  return result.includes('@') ? result.replace(EMAIL_PATTERN, '[REDACTED_EMAIL]') : result;
-}
 
 const yieldLogExport = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -523,6 +486,13 @@ type Listener = () => void;
 
 const buffer = new RingBuffer();
 const listeners = new Set<Listener>();
+const applicationJournalListeners = new Set<(entry: LogEntry) => void>();
+
+/** Observe each retained log line. Capture must not throw into the logger. */
+export function subscribeApplicationJournal(listener: (entry: LogEntry) => void): () => void {
+  applicationJournalListeners.add(listener);
+  return () => applicationJournalListeners.delete(listener);
+}
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let clearState: 'ready' | 'clearing' | 'failed' = 'ready';
 let clearPromise: Promise<void> | null = null;
@@ -561,6 +531,9 @@ function append(level: LogLevel, tag: string, message: string): void {
     message: messageRedacted,
   };
   buffer.append(entry);
+  for (const listener of applicationJournalListeners) {
+    try { listener(entry); } catch { /* Journal capture must not drop the log line. */ }
+  }
   const line = formatEntry(entry) + '\n';
   pendingFileLines.push(line);
   pendingFileBytes += textEncoder.encode(line).length;

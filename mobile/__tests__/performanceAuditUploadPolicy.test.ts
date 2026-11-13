@@ -4,12 +4,12 @@ import {
 } from '../src/lib/performanceAudit';
 import { publishPerformanceAuditAfterFinalization } from '../src/lib/performanceAuditFinalization';
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
-import { performanceAuditUploadRequest } from '../src/lib/performanceAuditSharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
 jest.mock('../src/lib/debugLog', () => ({
-  debugLog: { readCompleteText: jest.fn(), warn: jest.fn() },
+  debugLog: { readCompleteText: jest.fn(), warn: jest.fn(), getEntries: () => [] },
+  subscribeApplicationJournal: () => () => {},
   debugLogUploadShareUrl: (receipt: { url: string; shareUrl?: string }) => receipt.shareUrl ?? receipt.url,
   deleteDebugLogUpload: jest.fn(), formatVersionedLogExport: jest.fn((value: string) => value),
   loadDebugLogUploadReceipts: jest.fn(), markDebugLogUploadReceiptVerified: jest.fn(),
@@ -26,6 +26,7 @@ let log: typeof import('../src/lib/debugLog');
 let sharing: typeof import('../src/lib/debugLogSharing');
 let clipboard: typeof import('expo-clipboard');
 let dispatch: typeof import('../src/lib/performanceAuditSharing').startPerformanceAuditLogUpload;
+let performanceAuditUploadRequest: typeof import('../src/lib/performanceAuditSharing').performanceAuditUploadRequest;
 
 beforeEach(() => {
   void AsyncStorage.clear();
@@ -34,7 +35,9 @@ beforeEach(() => {
   log = jest.requireMock('../src/lib/debugLog');
   clipboard = jest.requireMock('expo-clipboard');
   sharing = jest.requireActual('../src/lib/debugLogSharing');
-  dispatch = jest.requireActual<typeof import('../src/lib/performanceAuditSharing')>('../src/lib/performanceAuditSharing').startPerformanceAuditLogUpload;
+  const auditSharing = jest.requireActual<typeof import('../src/lib/performanceAuditSharing')>('../src/lib/performanceAuditSharing');
+  dispatch = auditSharing.startPerformanceAuditLogUpload;
+  performanceAuditUploadRequest = auditSharing.performanceAuditUploadRequest;
   (log.debugLog.readCompleteText as jest.Mock).mockResolvedValue('fixture evidence');
   (log.loadDebugLogUploadReceipts as jest.Mock).mockResolvedValue([]);
   (log.uploadDebugLog as jest.Mock).mockResolvedValue(result);

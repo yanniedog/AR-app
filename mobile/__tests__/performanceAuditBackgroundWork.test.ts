@@ -1,10 +1,29 @@
 import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
-import { describeAuditBackgroundWork, waitForAuditBackgroundWork, type AuditBackgroundWorkWait } from '../src/lib/performanceAuditBackgroundWork';
+import { classifyJourneyBackgroundObservation, describeAuditBackgroundWork, journeyDetailsRequirementState, waitForAuditBackgroundWork, type AuditBackgroundWorkWait } from '../src/lib/performanceAuditBackgroundWork';
 import { compactPerformanceAuditReportForLog } from '../src/lib/performanceAuditLog';
 
 const state = () => ({ refreshing: false, postRefreshWarming: false,
   bankRateHistoryLoading: true, detailsLoading: false, core: null, manifest: null });
 afterEach(() => jest.restoreAllMocks());
+
+test('details that have not claimed a load stay pending, and an unclaimed settle does not fail the journey', () => {
+  expect(journeyDetailsRequirementState({ loading: false, matches: false, claimed: false })).toBe('pending');
+  expect(journeyDetailsRequirementState({ loading: true, matches: false, claimed: true })).toBe('pending');
+  expect(journeyDetailsRequirementState({ loading: false, matches: true, claimed: true })).toBe('ready');
+  expect(journeyDetailsRequirementState({ loading: false, matches: false, claimed: true })).toBe('failed');
+  expect(classifyJourneyBackgroundObservation({
+    states: ['pending'], elapsedMs: 1_000, deadlineMs: 10_000, unclaimedPending: true,
+  })).toBe('unsettled');
+  expect(classifyJourneyBackgroundObservation({
+    states: ['pending'], elapsedMs: 10_000, deadlineMs: 10_000,
+  })).toBe('unsettled');
+  expect(classifyJourneyBackgroundObservation({
+    states: ['failed'], elapsedMs: 200, deadlineMs: 10_000,
+  })).toBe('failed');
+  expect(classifyJourneyBackgroundObservation({
+    states: ['ready'], elapsedMs: 200, deadlineMs: 10_000,
+  })).toBe('settled');
+});
 
 test('captures stage and total time at watchdog interruption without completing a check', async () => {
   let now = 1_900_000_000_000;

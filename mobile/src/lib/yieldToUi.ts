@@ -27,24 +27,44 @@ interface NativeRuntimeScheduler {
 
 /** RN timers wait for a frame. Its native task queue can instead let queued
  * input/React work run between CPU slices without adding a frame per slice. */
+const processingYieldCounters = { nativeScheduleAttempts: 0, nativeCompleted: 0, nativeFallbacks: 0 };
+export function getProcessingYieldDiagnostics() { return { ...processingYieldCounters }; }
+
 function nextProcessingTask(): Promise<void> {
   return new Promise(resolve => {
+    let settled = false;
+    let fallback: ReturnType<typeof setTimeout> | null = null;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (fallback) clearTimeout(fallback);
+      resolve();
+    };
     try {
       const scheduler = (globalThis as typeof globalThis & {
         nativeRuntimeScheduler?: NativeRuntimeScheduler;
       }).nativeRuntimeScheduler;
       if (scheduler && typeof scheduler.unstable_scheduleCallback === 'function' &&
           Number.isFinite(scheduler.unstable_NormalPriority)) {
+        processingYieldCounters.nativeScheduleAttempts++;
+        // A successfully queued callback is not an acknowledgement. Required
+        // pricing/history work must also resume if the native queue drops it.
+        fallback = armTimeout(YIELD_TIMEOUT_MS, () => {
+          if (!settled) processingYieldCounters.nativeFallbacks++;
+          finish();
+        });
         scheduler.unstable_scheduleCallback(scheduler.unstable_NormalPriority, () => {
-          resolve();
+          if (!settled) processingYieldCounters.nativeCompleted++;
+          finish();
           return null;
         });
         return;
       }
     } catch {
+      if (fallback) clearTimeout(fallback);
       // Older RN hosts and web retain the ordinary macrotask fallback.
     }
-    armTimeout(0, resolve);
+    armTimeout(0, finish);
   });
 }
 

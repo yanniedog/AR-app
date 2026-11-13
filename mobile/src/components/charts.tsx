@@ -51,6 +51,7 @@ export const RbaChart = React.memo(function RbaChart({
   selectedDate: controlledSelectedDate,
   onDateSelect,
   onGraphicReady,
+  evidenceRequest = 0,
 }: {
   data: RbaEntry[];
   holds?: string[];
@@ -58,6 +59,8 @@ export const RbaChart = React.memo(function RbaChart({
   selectedDate?: string | null;
   onDateSelect?: (date: string | null) => void;
   onGraphicReady?: (result: ChartRenderEvidence) => void;
+  /** Re-observe an unchanged mounted chart after an explicit audit action. */
+  evidenceRequest?: number;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -135,7 +138,7 @@ export const RbaChart = React.memo(function RbaChart({
         accessibleSummary: pointCount > 0, layoutMeasured: measuredGraphic.positive, emptyStateRendered: false });
     }, reducedMotion ? 0 : DRAW_MS);
     return () => clearTimeout(timer);
-  }, [graphicRevision, measuredGraphic, onGraphicReady, pathD, plottedData, reducedMotion]);
+  }, [evidenceRequest, graphicRevision, measuredGraphic, onGraphicReady, pathD, plottedData, reducedMotion]);
 
   const pathAnimatedProps = useAnimatedProps(() => ({
     strokeDashoffset: pathLength * (1 - drawProgress.value),

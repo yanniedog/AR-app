@@ -124,13 +124,15 @@ export default function MarketOverview() {
     () => payload ? recentBankEvents(payload, { sections: [activeSection], limit: 14 }).length : 0,
     [activeSection, payload],
   );
-  const feedRenderRevision = `${payload?.run_date ?? core?.run_date ?? 'none'}:${bankInsightsSha ?? 'no-bank-history'}:${activeSection}`;
+  const feedRenderRevision = `${payload?.run_date ?? core?.run_date ?? 'none'}:${bankInsightsSha ?? 'no-bank-history'}:${activeSection}:${suitabilityRevision}`;
 
+  const activeFeedIdentity = useRef({ revision: feedRenderRevision, count: feedExpectedCount });
+  activeFeedIdentity.current = { revision: feedRenderRevision, count: feedExpectedCount };
   const recordFeedEvidence = useCallback((observed: FeedLayoutEvidence) => {
     // Reconcile the first layout for a new revision atomically. Resetting in an
     // effect can run after the replacement rows have already reported layout,
     // erasing valid evidence and leaving the audit at 0 of N rendered rows.
-    setFeedEvidence((current) => reconcileFeedRenderEvidence(
+    setFeedEvidence((current) => activeFeedIdentity.current.revision !== feedRenderRevision || activeFeedIdentity.current.count !== feedExpectedCount ? current : reconcileFeedRenderEvidence(
       current,
       feedRenderRevision,
       feedExpectedCount,
@@ -186,6 +188,7 @@ export default function MarketOverview() {
   const coverage = rbaCalendarCoverage(calendar, now);
   const meeting = coverage.unresolvedMeeting ?? nextMeeting(calendar, now);
   const factsRevision = [coreSha, calendarSha, cashRate, cashRateDate, source, offline, meeting?.date, coverage.status].join(':');
+  const activeFactsRevision = useRef(factsRevision); activeFactsRevision.current = factsRevision;
   const renderRevision = revisionTracker.current.update([feedRenderRevision, moversOpen, factsRevision]);
   usePerformanceAuditSurface({
     id: 'market.overview',
@@ -234,7 +237,7 @@ export default function MarketOverview() {
   return (
     <ScreenScrollView onLayout={event => { if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) setLayoutReady(true); }} contentContainerStyle={{ gap: 24 }}>
       <View key={factsRevision} onLayout={event => {
-        if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) setFactsLayout(factsRevision);
+        if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) setFactsLayout(current => activeFactsRevision.current === factsRevision ? factsRevision : current);
       }} style={{ gap: 16 }}>
         <AppText variant="small" color="textMuted">{uiLabel(verifiedCalendarRate == null || coverage.unresolvedMeeting ? 'Last confirmed cash rate' : 'Cash rate')}</AppText>
         <AppText variant="rateHero">{cashRate == null ? uiLabel("Unavailable") : uiJoin(uiNumber(cashRate,2),'%')}</AppText>

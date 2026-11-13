@@ -46,6 +46,22 @@ test('the actual step-limit producer marks non-journey overruns as timing unless
 });
 
 
+test('background settle and an unfinished journey are not timing failures', () => {
+  const check = (metrics: AuditCheck['metrics']): AuditCheck => ({
+    id: 'journey-search', kind: 'journey', label: 'Search', status: 'fail', durationMs: 6_189, metrics,
+  });
+  expect(auditOutcome(check({
+    measurementMode: 'semantic-action', actionCompleted: true, actionMs: 444.7, forwardMs: 700,
+    backgroundSettleMs: 5_003.9, nonTimingFailure: false, maxEventLoopLagMs: 40, maxFrameGapMs: 20,
+  }))).toBe('failure');
+  expect(auditOutcome(check({
+    actionCompleted: false, stepLimitExceeded: true, nonTimingFailure: false, backgroundSettleMs: 8_444,
+  }))).toBe('failure');
+  expect(auditOutcome(check({
+    measurementMode: 'semantic-action', actionCompleted: true, actionMs: 3_000, forwardMs: 400, nonTimingFailure: false,
+  }))).toBe('timing');
+});
+
 test('completed route round trips classify latency while navigation and back contract failures remain failures', () => {
   const route: AuditCheck = { id: 'journey-product-1', kind: 'journey', label: 'Product', status: 'fail', durationMs: 3500,
     metrics: { measurementMode: 'route-round-trip', actionCompleted: true, forwardMs: 2800, backMs: 300,

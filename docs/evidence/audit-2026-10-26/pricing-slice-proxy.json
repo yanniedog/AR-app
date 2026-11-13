@@ -1,0 +1,67 @@
+{
+  "fixture": {
+    "products": 1,
+    "programmes": 1200
+  },
+  "runtime": "v24.19.0",
+  "exclusions": [
+    "UI scheduler and real paint",
+    "native scrolling",
+    "Android/Hermes",
+    "physical phone"
+  ],
+  "before": [
+    {
+      "totalMs": 69.10537599999998,
+      "longestSliceMs": 68.91290500000014,
+      "yields": 1
+    },
+    {
+      "totalMs": 56.1669710000001,
+      "longestSliceMs": 56.13847799999985,
+      "yields": 1
+    },
+    {
+      "totalMs": 69.54838599999994,
+      "longestSliceMs": 69.52441899999985,
+      "yields": 1
+    },
+    {
+      "totalMs": 55.35612600000013,
+      "longestSliceMs": 55.296495999999934,
+      "yields": 1
+    },
+    {
+      "totalMs": 52.038710999999694,
+      "longestSliceMs": 51.96074300000009,
+      "yields": 1
+    }
+  ],
+  "after": [
+    {
+      "totalMs": 45.653519999999844,
+      "longestSliceMs": 6.055753000000095,
+      "yields": 8
+    },
+    {
+      "totalMs": 49.12304600000016,
+      "longestSliceMs": 6.070946000000276,
+      "yields": 9
+    },
+    {
+      "totalMs": 34.71451699999989,
+      "longestSliceMs": 6.054951000000074,
+      "yields": 6
+    },
+    {
+      "totalMs": 63.17095599999993,
+      "longestSliceMs": 20.70029599999998,
+      "yields": 8
+    },
+    {
+      "totalMs": 58.141345,
+      "longestSliceMs": 17.454902000000402,
+      "yields": 8
+    }
+  ]
+}

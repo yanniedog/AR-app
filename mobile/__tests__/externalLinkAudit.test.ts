@@ -35,7 +35,7 @@ describe('external link audit', () => {
     const result = await auditExternalLink(request, dependencies);
     expect(result.validation.status).toBe('pass');
     expect(result.handler.status).toBe('pass');
-    expect(result.reachability).toMatchObject({ status: 'unknown', attempted: false });
+    expect(result.reachability).toMatchObject({ status: 'unknown', attempted: false, selection: 'not-selected' });
     expect(dependencies.fetch).not.toHaveBeenCalled();
   });
 
@@ -43,8 +43,8 @@ describe('external link audit', () => {
     const dependencies = options({ reachability: false, handler: false });
     const result = await auditExternalLink(request, dependencies);
     expect(result.validation.status).toBe('pass');
-    expect(result.handler).toMatchObject({ status: 'unknown', attempted: false });
-    expect(result.reachability).toMatchObject({ status: 'unknown', attempted: false });
+    expect(result.handler).toMatchObject({ status: 'unknown', attempted: false, selection: 'not-selected' });
+    expect(result.reachability).toMatchObject({ status: 'unknown', attempted: false, selection: 'not-selected' });
     expect(dependencies.canOpenUrl).not.toHaveBeenCalled();
     expect(dependencies.fetch).not.toHaveBeenCalled();
   });
@@ -52,7 +52,7 @@ describe('external link audit', () => {
   it('does not accept RN-web\'s unconditional canOpenURL answer as browser proof', async () => {
     const dependencies = options({ platform: 'web' });
     const result = await auditExternalLink(request, dependencies);
-    expect(result.handler).toMatchObject({ status: 'unknown', attempted: false });
+    expect(result.handler).toMatchObject({ status: 'unknown', attempted: false, selection: 'not-selected' });
     expect(dependencies.canOpenUrl).not.toHaveBeenCalled();
     expect(result.reachability.status).toBe('pass');
   });
@@ -89,8 +89,8 @@ describe('external link audit', () => {
       }));
       await jest.advanceTimersByTimeAsync(20);
       const result = await task;
-      expect(result.handler.status).toBe('unknown');
-      expect(result.reachability.status).toBe('unknown');
+      expect(result.handler).toMatchObject({ status: 'unknown', attempted: true, selection: 'selected' });
+      expect(result.reachability).toMatchObject({ status: 'unknown', attempted: true, selection: 'selected' });
       expect(jest.getTimerCount()).toBe(0);
     } finally { jest.useRealTimers(); }
   });
@@ -104,7 +104,7 @@ describe('external link audit', () => {
     await Promise.resolve();
     controller.abort();
     const result = await task;
-    expect(result.handler.status).toBe('unknown');
-    expect(result.reachability.status).toBe('unknown');
+    expect(result.handler).toMatchObject({ status: 'unknown', attempted: false, selection: 'selected' });
+    expect(result.reachability).toMatchObject({ status: 'unknown', attempted: true, selection: 'selected' });
   });
 });

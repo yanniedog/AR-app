@@ -1,0 +1,70 @@
+{
+  "kind": "synthetic Expo development web, physically hit-tested product cards",
+  "baseline": "bf4eaf8ad5cf55a82286c94a0e6170e201cf1569",
+  "samples": {
+    "baseline": {
+      "cold": {
+        "n": 3,
+        "medianMs": 980.1000000005588,
+        "samplesMs": [
+          1016.4000000003725,
+          980.1000000005588,
+          850.7999999998137
+        ]
+      },
+      "warm": {
+        "n": 9,
+        "medianMs": 789.2999999998137,
+        "samplesMs": [
+          775.7999999998137,
+          804.7999999998137,
+          799.7000000001863,
+          890,
+          744.5,
+          787.3999999994412,
+          864.7999999998137,
+          782.2999999998137,
+          789.2999999998137
+        ]
+      }
+    },
+    "final": {
+      "cold": {
+        "n": 3,
+        "medianMs": 769.7999999998137,
+        "samplesMs": [
+          769.7999999998137,
+          661.7000000001863,
+          880
+        ]
+      },
+      "warm": {
+        "n": 9,
+        "medianMs": 638.7000000001863,
+        "samplesMs": [
+          638.7000000001863,
+          576.8000000007451,
+          542.7000000001863,
+          627.3000000007451,
+          603.1999999992549,
+          653,
+          781.7999999998137,
+          769.7000000001863,
+          867.7999999998137
+        ]
+      }
+    }
+  },
+  "medianReductionPercent": {
+    "cold": 21.456994184330703,
+    "warm": 19.08019764343887
+  },
+  "limits": [
+    "cold is first bank opening after fixture installation, not boot",
+    "external I/O stubbed and blocked",
+    "not the audited user payload",
+    "not Android/Hermes or a release APK",
+    "small sample/shared-host variability",
+    "pricing unknown facts remain displayed on bank cards when scenario inputs are absent"
+  ]
+}

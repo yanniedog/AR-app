@@ -79,6 +79,8 @@ let auditSavedFixtureSnapshot: {
   favorites: string[];
 } | null = null;
 
+const EMPTY_POSITION_ROWS: RateRow[] = [];
+
 export default function MyRates() {
   const theme = useTheme();
   const focused = useIsFocused();
@@ -137,6 +139,17 @@ export default function MyRates() {
   }, [contentReady, ensureDetails, profileDetailsPending]);
 
   const positionsFocused = focused && contentReady && scenarioStatus === 'ready';
+  // Reference freshness has rolling timestamp boundaries. Resolve these small
+  // inputs each render, retaining equivalent values for expensive position work.
+  const currentRates = SECTION_ORDER.map(section => [section,
+    resolveLocalCurrentRate(section, scenario, publicCatalogue.references, undefined, publicCatalogue, profileFilters)] as const);
+  const currentRatesSignature = JSON.stringify(currentRates);
+  const stableCurrentRates = useRef({ signature: currentRatesSignature, values: new Map(currentRates) });
+  if (stableCurrentRates.current.signature !== currentRatesSignature) stableCurrentRates.current = {
+    signature: currentRatesSignature, values: new Map(currentRates),
+  };
+  const localCurrentRates = stableCurrentRates.current.values;
+  const hasPosition = (section: SectionKey) => { const local = localCurrentRates.get(section); return local?.status === 'exact' && local.payableRate != null; };
   const mortgageLvr = computeLvr(scenario.mortgage).lvr;
   const mortgageSectionScenario = useMemo(
     () => publicRateScenario('Mortgage', scenario, profileFilters),
@@ -168,41 +181,44 @@ export default function MyRates() {
     sourceRows: core?.sections.Mortgage?.rates ?? [],
     catalogue: publicCatalogue,
     section: 'Mortgage',
+    candidates: hasPosition('Mortgage') ? null : EMPTY_POSITION_ROWS,
     sectionScenario: mortgageSectionScenario,
     rowScenario: mortgageRowScenario,
-    focused: positionsFocused,
+    focused: positionsFocused && hasPosition('Mortgage'),
     revision: suitabilityRevision,
   });
   const savingsPricing = useResolvedPublicRankingRows({
     sourceRows: core?.sections.Savings?.rates ?? [],
     catalogue: publicCatalogue,
     section: 'Savings',
+    candidates: hasPosition('Savings') ? null : EMPTY_POSITION_ROWS,
     sectionScenario: savingsSectionScenario,
     rowScenario: savingsRowScenario,
-    focused: positionsFocused,
+    focused: positionsFocused && hasPosition('Savings'),
     revision: suitabilityRevision,
   });
   const tdPricing = useResolvedPublicRankingRows({
     sourceRows: core?.sections.TD?.rates ?? [],
     catalogue: publicCatalogue,
     section: 'TD',
+    candidates: hasPosition('TD') ? null : EMPTY_POSITION_ROWS,
     sectionScenario: tdSectionScenario,
     rowScenario: tdRowScenario,
-    focused: positionsFocused,
+    focused: positionsFocused && hasPosition('TD'),
     revision: suitabilityRevision,
   });
   const sectionPricing = useMemo(() => ({
-    Mortgage: mortgagePricing,
-    Savings: savingsPricing,
-    TD: tdPricing,
-  }), [mortgagePricing, savingsPricing, tdPricing]);
+    Mortgage: { resolution: mortgagePricing.resolution, ready: mortgagePricing.ready },
+    Savings: { resolution: savingsPricing.resolution, ready: savingsPricing.ready },
+    TD: { resolution: tdPricing.resolution, ready: tdPricing.ready },
+  }), [mortgagePricing.resolution, mortgagePricing.ready, savingsPricing.resolution, savingsPricing.ready, tdPricing.resolution, tdPricing.ready]);
 
   const positions = useMemo<RatePosition[]>(() => {
     if (!contentReady) return [];
     void suitabilityRevision;
     if (!core || scenarioStatus !== 'ready') return [];
     return SECTION_ORDER.flatMap((section): RatePosition[] => {
-      const local = resolveLocalCurrentRate(section, scenario, publicCatalogue.references, undefined, publicCatalogue, profileFilters);
+      const local = localCurrentRates.get(section)!;
       const currentRate = local.status === 'exact' && local.payableRate != null ? Number(local.payableRate) : null;
       if (currentRate == null) return [];
       const catalogueReady = publicCatalogue.status === 'unavailable'
@@ -259,8 +275,8 @@ export default function MyRates() {
     mortgageRateMetric,
     profileFilters,
     publicCatalogue,
-    scenario,
     scenarioStatus,
+    localCurrentRates,
     sectionPricing,
     suitabilityRevision,
   ]);

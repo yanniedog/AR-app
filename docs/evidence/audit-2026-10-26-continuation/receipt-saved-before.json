@@ -1,0 +1,1799 @@
+{
+  "version": "51192c92f26385c32af8310f3e0a05c81b5a9692",
+  "address": "http://localhost:8092",
+  "kind": "synthetic Expo development web continuation",
+  "scenarioSha256": "853c8d59e7ae4074ff09df13b7296b7497fd4620158ae5767571e18393f13172",
+  "startedAt": "2026-10-26T12:50:16.685Z",
+  "contexts": [
+    {
+      "round": 0,
+      "fixture": {
+        "products": 2813,
+        "providers": 103,
+        "rates": 16788,
+        "mortgageRates": 8119,
+        "savingsRates": 8669,
+        "selectedBankProducts": 700,
+        "programmes": 16788,
+        "checkedAt": "2026-10-26T09:00:00.000Z"
+      },
+      "saved": {
+        "empty": [
+          {
+            "elapsedMs": 311,
+            "programmeBookReads": 19601,
+            "identities": []
+          },
+          {
+            "elapsedMs": 286,
+            "programmeBookReads": 19601,
+            "identities": []
+          },
+          {
+            "elapsedMs": 273.3999999985099,
+            "programmeBookReads": 19601,
+            "identities": []
+          },
+          {
+            "elapsedMs": 278.59999999962747,
+            "programmeBookReads": 19601,
+            "identities": []
+          },
+          {
+            "elapsedMs": 268.40000000037253,
+            "programmeBookReads": 19601,
+            "identities": []
+          }
+        ],
+        "one": [
+          {
+            "elapsedMs": 249.09999999962747,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          },
+          {
+            "elapsedMs": 275,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          },
+          {
+            "elapsedMs": 257.5,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          },
+          {
+            "elapsedMs": 274.2999999988824,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          },
+          {
+            "elapsedMs": 269.1000000014901,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          }
+        ],
+        "three": [
+          {
+            "elapsedMs": 256.59999999962747,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          },
+          {
+            "elapsedMs": 262.09999999962747,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          },
+          {
+            "elapsedMs": 291.09999999962747,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          },
+          {
+            "elapsedMs": 336.30000000074506,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          },
+          {
+            "elapsedMs": 300.2000000011176,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          }
+        ]
+      },
+      "receipt": [
+        {
+          "kind": "cold",
+          "at": "2026-10-26T12:50:30.833Z",
+          "headerVisibleMs": 1709.300000000745,
+          "comparisonPricingReadyMs": 1713.5999999996275,
+          "comparison": {
+            "label": "Open Benchmark Bank · Synthetic Mortgage 0100",
+            "visible": true,
+            "hitUsable": true
+          },
+          "diagnostic": {
+            "id": "receipt.evidence",
+            "routeKey": "/rate-receipt",
+            "datasetRevision": "2026-10-26",
+            "renderRevision": "benchmark-0:0:8:evidence-closed",
+            "registeredAtMs": 12882.300000000745,
+            "updatedAtMs": 13871.099999999627,
+            "probes": [
+              {
+                "id": "receipt.data",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": "2026-10-26",
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 12882.300000000745
+              },
+              {
+                "id": "receipt.facts",
+                "kind": "list",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 12882.300000000745
+              },
+              {
+                "id": "receipt.layout",
+                "kind": "layout",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": true,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 13871.099999999627
+              },
+              {
+                "id": "receipt.logos",
+                "kind": "logo",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 12882.300000000745
+              },
+              {
+                "id": "receipt.scenario-storage",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 12882.300000000745
+              }
+            ],
+            "actions": [
+              "receipt.back-to-product",
+              "receipt.open",
+              "receipt.scroll.evidence"
+            ],
+            "actionRevision": 0,
+            "lastCompletedAction": null
+          }
+        },
+        {
+          "kind": "warm",
+          "at": "2026-10-26T12:50:33.259Z",
+          "headerVisibleMs": 1743.5999999996275,
+          "comparisonPricingReadyMs": 1747.0999999996275,
+          "comparison": {
+            "label": "Open Benchmark Bank · Synthetic Mortgage 0100",
+            "visible": true,
+            "hitUsable": true
+          },
+          "diagnostic": {
+            "id": "receipt.evidence",
+            "routeKey": "/rate-receipt",
+            "datasetRevision": "2026-10-26",
+            "renderRevision": "benchmark-0:0:8:evidence-closed",
+            "registeredAtMs": 15273.199999999255,
+            "updatedAtMs": 16306.5,
+            "probes": [
+              {
+                "id": "receipt.data",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": "2026-10-26",
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 15273.199999999255
+              },
+              {
+                "id": "receipt.facts",
+                "kind": "list",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 15273.199999999255
+              },
+              {
+                "id": "receipt.layout",
+                "kind": "layout",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": true,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 16306.5
+              },
+              {
+                "id": "receipt.logos",
+                "kind": "logo",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 15273.199999999255
+              },
+              {
+                "id": "receipt.scenario-storage",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 15273.199999999255
+              }
+            ],
+            "actions": [
+              "receipt.back-to-product",
+              "receipt.open",
+              "receipt.scroll.evidence"
+            ],
+            "actionRevision": 0,
+            "lastCompletedAction": null
+          }
+        },
+        {
+          "kind": "warm",
+          "at": "2026-10-26T12:50:35.703Z",
+          "headerVisibleMs": 1793.300000000745,
+          "comparisonPricingReadyMs": 1797.699999999255,
+          "comparison": {
+            "label": "Open Benchmark Bank · Synthetic Mortgage 0100",
+            "visible": true,
+            "hitUsable": true
+          },
+          "diagnostic": {
+            "id": "receipt.evidence",
+            "routeKey": "/rate-receipt",
+            "datasetRevision": "2026-10-26",
+            "renderRevision": "benchmark-0:0:8:evidence-closed",
+            "registeredAtMs": 17645,
+            "updatedAtMs": 18728.900000000373,
+            "probes": [
+              {
+                "id": "receipt.data",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": "2026-10-26",
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 17645
+              },
+              {
+                "id": "receipt.facts",
+                "kind": "list",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 17645
+              },
+              {
+                "id": "receipt.layout",
+                "kind": "layout",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": true,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 18728.900000000373
+              },
+              {
+                "id": "receipt.logos",
+                "kind": "logo",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 17645
+              },
+              {
+                "id": "receipt.scenario-storage",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 17645
+              }
+            ],
+            "actions": [
+              "receipt.back-to-product",
+              "receipt.open",
+              "receipt.scroll.evidence"
+            ],
+            "actionRevision": 0,
+            "lastCompletedAction": null
+          }
+        }
+      ],
+      "errors": [],
+      "bundles": [
+        {
+          "sha256": "c7b829d9724ffc93560817d662053c34b67fa684464acaf98ee6ed5d1eec9dfc",
+          "bytes": 14728927
+        }
+      ]
+    },
+    {
+      "round": 1,
+      "fixture": {
+        "products": 2813,
+        "providers": 103,
+        "rates": 16788,
+        "mortgageRates": 8119,
+        "savingsRates": 8669,
+        "selectedBankProducts": 700,
+        "programmes": 16788,
+        "checkedAt": "2026-10-26T09:00:00.000Z"
+      },
+      "saved": {
+        "empty": [
+          {
+            "elapsedMs": 330.80000000074506,
+            "programmeBookReads": 19601,
+            "identities": []
+          },
+          {
+            "elapsedMs": 320.40000000037253,
+            "programmeBookReads": 19601,
+            "identities": []
+          },
+          {
+            "elapsedMs": 283.19999999925494,
+            "programmeBookReads": 19601,
+            "identities": []
+          },
+          {
+            "elapsedMs": 303.59999999962747,
+            "programmeBookReads": 19601,
+            "identities": []
+          },
+          {
+            "elapsedMs": 274.7000000011176,
+            "programmeBookReads": 19601,
+            "identities": []
+          }
+        ],
+        "one": [
+          {
+            "elapsedMs": 293,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          },
+          {
+            "elapsedMs": 304.6000000014901,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          },
+          {
+            "elapsedMs": 276.09999999962747,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          },
+          {
+            "elapsedMs": 299.2999999988824,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          },
+          {
+            "elapsedMs": 284.1000000014901,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          }
+        ],
+        "three": [
+          {
+            "elapsedMs": 305.69999999925494,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          },
+          {
+            "elapsedMs": 291.5,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          },
+          {
+            "elapsedMs": 300.59999999962747,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          },
+          {
+            "elapsedMs": 334.5,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          },
+          {
+            "elapsedMs": 291.40000000037253,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          }
+        ]
+      },
+      "receipt": [
+        {
+          "kind": "cold",
+          "at": "2026-10-26T12:50:50.336Z",
+          "headerVisibleMs": 1873,
+          "comparisonPricingReadyMs": 1876.7999999988824,
+          "comparison": {
+            "label": "Open Benchmark Bank · Synthetic Mortgage 0100",
+            "visible": true,
+            "hitUsable": true
+          },
+          "diagnostic": {
+            "id": "receipt.evidence",
+            "routeKey": "/rate-receipt",
+            "datasetRevision": "2026-10-26",
+            "renderRevision": "benchmark-0:0:8:evidence-closed",
+            "registeredAtMs": 13209.199999999255,
+            "updatedAtMs": 14271.199999999255,
+            "probes": [
+              {
+                "id": "receipt.data",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": "2026-10-26",
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 13209.199999999255
+              },
+              {
+                "id": "receipt.facts",
+                "kind": "list",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 13209.199999999255
+              },
+              {
+                "id": "receipt.layout",
+                "kind": "layout",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": true,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 14271.199999999255
+              },
+              {
+                "id": "receipt.logos",
+                "kind": "logo",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 13209.199999999255
+              },
+              {
+                "id": "receipt.scenario-storage",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 13209.199999999255
+              }
+            ],
+            "actions": [
+              "receipt.back-to-product",
+              "receipt.open",
+              "receipt.scroll.evidence"
+            ],
+            "actionRevision": 0,
+            "lastCompletedAction": null
+          }
+        },
+        {
+          "kind": "warm",
+          "at": "2026-10-26T12:50:53.045Z",
+          "headerVisibleMs": 1943,
+          "comparisonPricingReadyMs": 1949.7000000011176,
+          "comparison": {
+            "label": "Open Benchmark Bank · Synthetic Mortgage 0100",
+            "visible": true,
+            "hitUsable": true
+          },
+          "diagnostic": {
+            "id": "receipt.evidence",
+            "routeKey": "/rate-receipt",
+            "datasetRevision": "2026-10-26",
+            "renderRevision": "benchmark-0:0:8:evidence-closed",
+            "registeredAtMs": 15853.5,
+            "updatedAtMs": 16985.099999999627,
+            "probes": [
+              {
+                "id": "receipt.data",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": "2026-10-26",
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 15853.5
+              },
+              {
+                "id": "receipt.facts",
+                "kind": "list",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 15853.5
+              },
+              {
+                "id": "receipt.layout",
+                "kind": "layout",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": true,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 16985.099999999627
+              },
+              {
+                "id": "receipt.logos",
+                "kind": "logo",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 15853.5
+              },
+              {
+                "id": "receipt.scenario-storage",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 15853.5
+              }
+            ],
+            "actions": [
+              "receipt.back-to-product",
+              "receipt.open",
+              "receipt.scroll.evidence"
+            ],
+            "actionRevision": 0,
+            "lastCompletedAction": null
+          }
+        },
+        {
+          "kind": "warm",
+          "at": "2026-10-26T12:50:55.968Z",
+          "headerVisibleMs": 2142,
+          "comparisonPricingReadyMs": 2147.5999999996275,
+          "comparison": {
+            "label": "Open Benchmark Bank · Synthetic Mortgage 0100",
+            "visible": true,
+            "hitUsable": true
+          },
+          "diagnostic": {
+            "id": "receipt.evidence",
+            "routeKey": "/rate-receipt",
+            "datasetRevision": "2026-10-26",
+            "renderRevision": "benchmark-0:0:8:evidence-closed",
+            "registeredAtMs": 18556.300000000745,
+            "updatedAtMs": 19885.5,
+            "probes": [
+              {
+                "id": "receipt.data",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": "2026-10-26",
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 18556.300000000745
+              },
+              {
+                "id": "receipt.facts",
+                "kind": "list",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 18556.300000000745
+              },
+              {
+                "id": "receipt.layout",
+                "kind": "layout",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": true,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 19885.5
+              },
+              {
+                "id": "receipt.logos",
+                "kind": "logo",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 18556.300000000745
+              },
+              {
+                "id": "receipt.scenario-storage",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 18556.300000000745
+              }
+            ],
+            "actions": [
+              "receipt.back-to-product",
+              "receipt.open",
+              "receipt.scroll.evidence"
+            ],
+            "actionRevision": 0,
+            "lastCompletedAction": null
+          }
+        }
+      ],
+      "errors": [],
+      "bundles": [
+        {
+          "sha256": "c7b829d9724ffc93560817d662053c34b67fa684464acaf98ee6ed5d1eec9dfc",
+          "bytes": 14728927
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "fixture": {
+        "products": 2813,
+        "providers": 103,
+        "rates": 16788,
+        "mortgageRates": 8119,
+        "savingsRates": 8669,
+        "selectedBankProducts": 700,
+        "programmes": 16788,
+        "checkedAt": "2026-10-26T09:00:00.000Z"
+      },
+      "saved": {
+        "empty": [
+          {
+            "elapsedMs": 316,
+            "programmeBookReads": 19601,
+            "identities": []
+          },
+          {
+            "elapsedMs": 312.40000000037253,
+            "programmeBookReads": 19601,
+            "identities": []
+          },
+          {
+            "elapsedMs": 318.09999999962747,
+            "programmeBookReads": 19601,
+            "identities": []
+          },
+          {
+            "elapsedMs": 305.5,
+            "programmeBookReads": 19601,
+            "identities": []
+          },
+          {
+            "elapsedMs": 276.7000000011176,
+            "programmeBookReads": 19601,
+            "identities": []
+          }
+        ],
+        "one": [
+          {
+            "elapsedMs": 266.5,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          },
+          {
+            "elapsedMs": 301.7000000011176,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          },
+          {
+            "elapsedMs": 269.69999999925494,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          },
+          {
+            "elapsedMs": 262.80000000074506,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          },
+          {
+            "elapsedMs": 337.8999999985099,
+            "programmeBookReads": 19606,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              }
+            ]
+          }
+        ],
+        "three": [
+          {
+            "elapsedMs": 273.6000000014901,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          },
+          {
+            "elapsedMs": 302.5,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          },
+          {
+            "elapsedMs": 295.59999999962747,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          },
+          {
+            "elapsedMs": 376.40000000037253,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          },
+          {
+            "elapsedMs": 294.90000000037253,
+            "programmeBookReads": 19617,
+            "identities": [
+              {
+                "saved": "product:benchmark-0",
+                "product": "benchmark-0",
+                "programme": "programme-0-0",
+                "section": "Mortgage",
+                "rateIndex": 0
+              },
+              {
+                "saved": "product:benchmark-100",
+                "product": "benchmark-100",
+                "programme": "programme-100-0",
+                "section": "Mortgage",
+                "rateIndex": 511
+              },
+              {
+                "saved": "product:benchmark-1368",
+                "product": "benchmark-1368",
+                "programme": "programme-1368-0",
+                "section": "Savings",
+                "rateIndex": 8119
+              }
+            ]
+          }
+        ]
+      },
+      "receipt": [
+        {
+          "kind": "cold",
+          "at": "2026-10-26T12:51:10.561Z",
+          "headerVisibleMs": 1842.199999999255,
+          "comparisonPricingReadyMs": 1847.199999999255,
+          "comparison": {
+            "label": "Open Benchmark Bank · Synthetic Mortgage 0100",
+            "visible": true,
+            "hitUsable": true
+          },
+          "diagnostic": {
+            "id": "receipt.evidence",
+            "routeKey": "/rate-receipt",
+            "datasetRevision": "2026-10-26",
+            "renderRevision": "benchmark-0:0:8:evidence-closed",
+            "registeredAtMs": 13183.5,
+            "updatedAtMs": 14224.400000000373,
+            "probes": [
+              {
+                "id": "receipt.data",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": "2026-10-26",
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 13183.5
+              },
+              {
+                "id": "receipt.facts",
+                "kind": "list",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 13183.5
+              },
+              {
+                "id": "receipt.layout",
+                "kind": "layout",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": true,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 14224.400000000373
+              },
+              {
+                "id": "receipt.logos",
+                "kind": "logo",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 13183.5
+              },
+              {
+                "id": "receipt.scenario-storage",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 13183.5
+              }
+            ],
+            "actions": [
+              "receipt.back-to-product",
+              "receipt.open",
+              "receipt.scroll.evidence"
+            ],
+            "actionRevision": 0,
+            "lastCompletedAction": null
+          }
+        },
+        {
+          "kind": "warm",
+          "at": "2026-10-26T12:51:13.055Z",
+          "headerVisibleMs": 1792.2999999988824,
+          "comparisonPricingReadyMs": 1795.7999999988824,
+          "comparison": {
+            "label": "Open Benchmark Bank · Synthetic Mortgage 0100",
+            "visible": true,
+            "hitUsable": true
+          },
+          "diagnostic": {
+            "id": "receipt.evidence",
+            "routeKey": "/rate-receipt",
+            "datasetRevision": "2026-10-26",
+            "renderRevision": "benchmark-0:0:8:evidence-closed",
+            "registeredAtMs": 15701.900000000373,
+            "updatedAtMs": 16730.10000000149,
+            "probes": [
+              {
+                "id": "receipt.data",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": "2026-10-26",
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 15701.900000000373
+              },
+              {
+                "id": "receipt.facts",
+                "kind": "list",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 15701.900000000373
+              },
+              {
+                "id": "receipt.layout",
+                "kind": "layout",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": true,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 16730.10000000149
+              },
+              {
+                "id": "receipt.logos",
+                "kind": "logo",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 15701.900000000373
+              },
+              {
+                "id": "receipt.scenario-storage",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 15701.900000000373
+              }
+            ],
+            "actions": [
+              "receipt.back-to-product",
+              "receipt.open",
+              "receipt.scroll.evidence"
+            ],
+            "actionRevision": 0,
+            "lastCompletedAction": null
+          }
+        },
+        {
+          "kind": "warm",
+          "at": "2026-10-26T12:51:15.625Z",
+          "headerVisibleMs": 1940.5,
+          "comparisonPricingReadyMs": 1944.8999999985099,
+          "comparison": {
+            "label": "Open Benchmark Bank · Synthetic Mortgage 0100",
+            "visible": true,
+            "hitUsable": true
+          },
+          "diagnostic": {
+            "id": "receipt.evidence",
+            "routeKey": "/rate-receipt",
+            "datasetRevision": "2026-10-26",
+            "renderRevision": "benchmark-0:0:8:evidence-closed",
+            "registeredAtMs": 18127.900000000373,
+            "updatedAtMs": 19297.300000000745,
+            "probes": [
+              {
+                "id": "receipt.data",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": "2026-10-26",
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 18127.900000000373
+              },
+              {
+                "id": "receipt.facts",
+                "kind": "list",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 18127.900000000373
+              },
+              {
+                "id": "receipt.layout",
+                "kind": "layout",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": true,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 19297.300000000745
+              },
+              {
+                "id": "receipt.logos",
+                "kind": "logo",
+                "required": false,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": 0,
+                "actualCount": 0,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 18127.900000000373
+              },
+              {
+                "id": "receipt.scenario-storage",
+                "kind": "data",
+                "required": true,
+                "status": "ready",
+                "datasetRevision": null,
+                "renderRevision": null,
+                "expectedCount": null,
+                "actualCount": null,
+                "fallbackCount": null,
+                "visibleCount": null,
+                "emptyStateRendered": null,
+                "layoutMeasured": null,
+                "accessibleSummary": null,
+                "error": null,
+                "updatedAtMs": 18127.900000000373
+              }
+            ],
+            "actions": [
+              "receipt.back-to-product",
+              "receipt.open",
+              "receipt.scroll.evidence"
+            ],
+            "actionRevision": 0,
+            "lastCompletedAction": null
+          }
+        }
+      ],
+      "errors": [],
+      "bundles": [
+        {
+          "sha256": "c7b829d9724ffc93560817d662053c34b67fa684464acaf98ee6ed5d1eec9dfc",
+          "bytes": 14728927
+        }
+      ]
+    }
+  ],
+  "externalIO": "blocked and stubbed",
+  "exclusions": [
+    "original audit payload",
+    "Android/Hermes",
+    "physical phone",
+    "release APK"
+  ],
+  "finishedAt": "2026-10-26T12:51:15.728Z"
+}

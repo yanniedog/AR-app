@@ -9,6 +9,8 @@ import type { ProductDetail, RateRow, SectionKey } from '../types';
 
 const EMPTY_ROWS: RateRow[] = [];
 const SYNCHRONOUS_ROW_LIMIT = 128;
+const sameRows = (a: readonly RateRow[], b: readonly RateRow[]) => a === b ||
+  a.length === b.length && a.every((row, index) => row === b[index]);
 
 /** Changed membership immediately invalidates results; cancelled work never installs. */
 export function usePreparedSearchRows(
@@ -16,13 +18,28 @@ export function usePreparedSearchRows(
   details: Record<string, ProductDetail> | null | undefined, index: SearchIndexPayload | null,
   metric: RankMetric, mortgageMetric: MortgageRateMetric, revision: number, focused: boolean,
 ) {
-  const membership = useMemo(() => ({ rows, filters, section, details, index, revision }),
-    [rows, filters, section, details, index, revision]);
+  const mandatoryRevision = getMandatoryEligibilityRevision();
+  const suitabilityGateRevision = getSuitabilityRevision();
+  const filtersKey = JSON.stringify(filters);
+  const stableFilters = useMemo(() => JSON.parse(filtersKey) as Filters, [filtersKey]);
+  const membership = useMemo(() => ({ rows, filters: stableFilters, section, details, index, revision, mandatoryRevision, suitabilityGateRevision }),
+    [rows, stableFilters, section, details, index, revision, mandatoryRevision, suitabilityGateRevision]);
   const request = useMemo(() => ({ membership, sortKey, metric, mortgageMetric }),
     [membership, sortKey, metric, mortgageMetric]);
   const [attempt, setAttempt] = useState(0);
   const preparedWhileFocused = useRef(false);
-  const [snapshot, setSnapshot] = useState<{ request: typeof request; attempt: number; rows: RateRow[]; error: string | null } | null>(null);
+  type Snapshot = { request: typeof request; attempt: number; rows: RateRow[]; error: string | null };
+  const [storedSnapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const completed = useRef<{ request: typeof request; attempt: number; filtersKey: string; result: RateRow[] }[]>([]);
+  const cached = completed.current.find(item => item.attempt === attempt && item.filtersKey === filtersKey &&
+    sameRows(item.request.membership.rows, rows) && item.request.membership.mandatoryRevision === mandatoryRevision &&
+    item.request.membership.suitabilityGateRevision === suitabilityGateRevision && item.request.membership.section === section &&
+    item.request.membership.details === details && item.request.membership.index === index &&
+    item.request.membership.revision === revision && item.request.sortKey === sortKey &&
+    item.request.metric === metric && item.request.mortgageMetric === mortgageMetric);
+  const snapshot = useMemo(() => storedSnapshot?.request === request && storedSnapshot.attempt === attempt ? storedSnapshot
+    : cached ? { request, attempt, rows: cached.result, error: null } : storedSnapshot,
+  [storedSnapshot, request, attempt, cached]);
   const current = snapshot?.request === request && snapshot.attempt === attempt;
   const currentMembership = snapshot?.request.membership === membership && snapshot.attempt === attempt && snapshot.error === null;
   const sortInput = useMemo(() => {
@@ -56,17 +73,22 @@ export function usePreparedSearchRows(
         getSuitabilityRevision() !== suitabilityRevision };
       const work = sortInput
         ? sortRowsCooperatively(sortInput, sortKey, section, metric, mortgageMetric, control)
-        : prepareSearchRows(rows, filters, sortKey, section, details, index, metric, mortgageMetric, control);
+        : prepareSearchRows(rows, stableFilters, sortKey, section, details, index, metric, mortgageMetric, control);
       void work
-        .then(result => { if (!cancelled && result) setSnapshot({ request, attempt, rows: result, error: null }); })
+        .then(result => { if (!cancelled && result) {
+          if (completed.current.length >= 4) completed.current.shift();
+          completed.current.push({ request, attempt, filtersKey, result });
+          setSnapshot({ request, attempt, rows: result, error: null });
+        } })
         .catch(error => { if (!cancelled) setSnapshot({ request, attempt, rows: EMPTY_ROWS,
           error: error instanceof Error ? error.message : 'Could not prepare search results' }); });
     });
     return () => { cancelled = true; cancelNavigation(); };
-  }, [request, synchronous, focused, attempt, current, sortInput, rows, filters, sortKey, section, details, index, metric, mortgageMetric]);
+  }, [request, synchronous, focused, attempt, current, sortInput, rows, stableFilters, filtersKey, sortKey, section, details, index, metric, mortgageMetric]);
   // Large reorders keep membership only as input to the worker. Withholding
   // rows preserves the list's new-result commit/measurement lifecycle.
   return { rows: synchronous ?? (current ? snapshot.rows : EMPTY_ROWS),
     ready: synchronous !== null || (current && snapshot.error === null),
+    reused: cached != null && storedSnapshot?.request !== request,
     error: current ? snapshot.error : null, retry: () => setAttempt(value => value + 1) };
 }

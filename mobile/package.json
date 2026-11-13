@@ -8,6 +8,7 @@
   },
   "scripts": {
     "audit:payload": "node scripts/audit-public-payload.cjs",
+    "verify:live-history-compiler": "node scripts/verify-live-history-compiler.mjs",
     "benchmark:history": "node scripts/benchmark-history-preparation.cjs",
     "verify:prepared-history": "node scripts/export-history-ready-compiler.cjs --check && node scripts/bundle-ready-bank-history.cjs --check",
     "start": "expo start",

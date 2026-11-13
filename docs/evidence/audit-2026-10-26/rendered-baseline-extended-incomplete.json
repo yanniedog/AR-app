@@ -1,0 +1,16 @@
+{
+  "version": "bf4eaf8",
+  "address": "http://localhost:8082",
+  "scenarioSha256": "3afa93d6ac88d325f09866d0c3fbf4465f1545ac65b28d12cd384b078e2f8421",
+  "kind": "Expo-development-web",
+  "startedAt": "2026-10-26T11:16:26.644Z",
+  "contexts": [],
+  "transport": "all external browser requests blocked; deterministic in-memory core/details/catalogue; I/O stubbed; bank insights disabled",
+  "exclusions": [
+    "user payload",
+    "Android/Hermes",
+    "physical phone",
+    "release bundle"
+  ],
+  "finishedAt": "2026-10-26T11:17:45.330Z"
+}

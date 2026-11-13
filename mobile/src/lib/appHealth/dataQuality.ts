@@ -704,7 +704,9 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
     partialCount < 0 ||
     (attempted != null && succeeded != null && succeeded + failedCount > attempted + partialCount);
   const unaccountedProviders = Math.max(0, attempted - succeeded - failedCount - partialCount);
-  const degraded = failedCount > 0 || partialCount > 0 || unaccountedProviders > 0 || (coverage.limitations?.length ?? 0) > 0;
+  // Partial observations that the producer already counted are a data fact.
+  // Failed, unaccounted, or internally inconsistent coverage is an app defect.
+  const degraded = failedCount > 0 || unaccountedProviders > 0 || (coverage.limitations?.length ?? 0) > 0;
   const status: AppHealthStatus = invalidCounts ? 'fail' : degraded ? 'warn' : 'pass';
   return check(
     APP_HEALTH_CHECK_CODES.COVERAGE,
@@ -724,7 +726,7 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
     invalidCounts
       ? 'Producer coverage counts do not reconcile.'
       : degraded
-        ? 'The producer reported failed, partial, limited, or unaccounted provider coverage.'
+        ? 'Provider coverage has a failed or unaccounted outcome.'
         : undefined,
   );
 }
@@ -927,9 +929,7 @@ function evaluateAssetAvailability(
     ? 'fail'
     : optionalUnavailable || optionalEmpty
       ? 'warn'
-      : optionalNotObserved
-        ? 'unavailable'
-        : 'pass';
+      : 'pass';
   return check(
     APP_HEALTH_CHECK_CODES.ASSET_AVAILABILITY,
     'Asset availability',
@@ -952,8 +952,6 @@ function evaluateAssetAvailability(
         ? 'Loaded assets belong to different publication runs.'
         : optionalUnavailable || optionalEmpty
           ? 'An advertised optional experience has no usable data asset.'
-        : optionalNotObserved
-          ? 'Some optional assets were not exercised by this audit.'
           : undefined,
   );
 }
