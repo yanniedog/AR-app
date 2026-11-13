@@ -42,7 +42,12 @@ jest.mock('../src/hooks/useLogoReadiness', () => ({ useLogoReadiness: () => ({ r
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/components/Screen', () => ({ Screen: 'Screen', screenScrollContentStyle: () => ({}) }));
 jest.mock('../src/components/SheetSurface', () => ({ SheetSurface: ({ children }: any) => jest.requireActual('react').createElement('SheetSurface', null, children) }));
-jest.mock('../src/components/FilterSheet', () => ({ FilterSheet: 'FilterSheet' }));
+let mockSheetLayoutUpdate: ((props: any) => void) | null = null;
+jest.mock('../src/components/FilterSheet', () => ({ FilterSheet: (props: any) => {
+  const R = jest.requireActual('react');
+  R.useLayoutEffect(() => { const update = mockSheetLayoutUpdate; mockSheetLayoutUpdate = null; update?.(props); });
+  return R.createElement('FilterSheet', props);
+} }));
 jest.mock('../src/components/ProductCard', () => ({ ProductCard: 'ProductCard' }));
 jest.mock('../src/components/SearchReportExport', () => ({ SearchReportExport: 'SearchReportExport' }));
 jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }));
@@ -125,7 +130,7 @@ const rows = Array.from({ length: 45 }, (_, i) => ({ product_key: `p-${i}`, prod
 function install(profile = DEFAULT_PREFS.profileFilters) { installMandatoryEligibility(selectMandatoryEligibility(mockStore.getState().core, profile, null)); }
 beforeEach(() => {
   jest.clearAllMocks();
-  mockPublicCatalogue = null; mockAuditCancelled = false; mockEmitLoad = true; mockCancelListeners.clear();
+  mockPublicCatalogue = null; mockAuditCancelled = false; mockEmitLoad = true; mockCancelListeners.clear(); mockSheetLayoutUpdate = null;
   mockHoldScroll = false; mockRejectScroll = false; mockAutoViewability = true; mockScrollCalls.length = 0; mockScrollResolutions.length = 0;
   jest.spyOn(global, 'requestAnimationFrame').mockImplementation(callback => { callback(0); return 0; });
   restoreRatesSession(original); clearMortgageComparison();
@@ -144,6 +149,67 @@ beforeEach(() => {
 });
 afterEach(() => { jest.restoreAllMocks(); restoreRatesSession(original); clearMortgageComparison(); installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null)); });
 function mount() { let tree: any; act(() => { tree = TestRenderer.create(<RatesWorkspace />); }); return tree; }
+
+test.each([false, true])('cleanup preserves render-to-effect filter updates and live full-catalogue override=%s', override => {
+  mockStore.getState().setPref('includeNonStandard', false);
+  updateRatesSection('Mortgage', { filters: { ...MORTGAGE_CRITERIA_FILTERS, loanPurposes: ['OO', 'OTHER'] } });
+  const latest = { ...MORTGAGE_CRITERIA_FILTERS, providers: ['B'], loanPurposes: ['INV', 'OTHER'], repaymentTypes: ['IO'] };
+  mockSheetLayoutUpdate = props => {
+    updateRatesSection('Mortgage', { filters: latest, includeNonStandardOverride: override });
+    props.onDraftChange(latest);
+  };
+  const tree = mount();
+  try {
+    const expected = { providers: ['B'], loanPurposes: override ? ['INV', 'OTHER'] : ['INV'], repaymentTypes: ['IO'] };
+    expect(useRatesSession.getState().sections.Mortgage.filters).toMatchObject(expected);
+    expect(tree.root.findByType('FilterSheet').props.controlledDraft).toMatchObject(expected);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('widely available mode scopes both control surfaces and clears hidden choices before pricing or applying drafts', () => {
+  const options = jest.requireActual('../src/data/searchFilterOptions');
+  jest.spyOn(jest.requireMock('../src/hooks/useSearchFilterOptions'), 'useSearchFilterOptions').mockReturnValue({
+    options: { ...options.EMPTY_SEARCH_FILTER_OPTIONS, groups: [
+      { g: { title: 'Purpose', field: 'loan_purpose', key: 'loanPurposes' }, options: ['OO', 'INV', 'UNCONSTRAINED', 'UNKNOWN', 'OTHER'] },
+      { g: { title: 'Repayment', field: 'ribbon_repayment_type', key: 'repaymentTypes' }, options: ['PI', 'IO', 'UNKNOWN'] },
+    ] }, ready: true, error: null, retry: jest.fn(),
+  });
+  const allFilters = { ...MORTGAGE_CRITERIA_FILTERS, loanPurposes: ['OO', 'OTHER', 'UNKNOWN'], repaymentTypes: ['PI', 'UNCONSTRAINED'] };
+  updateRatesSection('Mortgage', { filters: allFilters });
+  const tree = mount();
+  const sheet = () => tree.root.findByType('FilterSheet').props;
+  const controls = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' });
+  try {
+    expect(sheet().options.groups[0].options).toContain('UNKNOWN');
+    act(() => sheet().onDraftChange(allFilters));
+    act(() => mockStore.getState().setPref('includeNonStandard', false));
+    expect(sheet().options.groups.map((group: any) => group.options)).toEqual([['OO', 'INV'], ['PI', 'IO']]);
+    expect(controls().findAllByType('Chip').map((node: any) => node.props.label)).not.toContain('OTHER');
+    expect(useRatesSession.getState().sections.Mortgage.filters).toMatchObject({ loanPurposes: ['OO'], repaymentTypes: ['PI'] });
+    expect(sheet().controlledDraft).toMatchObject({ includeNonStandard: false, loanPurposes: ['OO'], repaymentTypes: ['PI'] });
+    act(() => sheet().onApply(allFilters));
+    expect(useRatesSession.getState().sections.Mortgage.filters.loanPurposes).toEqual(['OO']);
+    // An explicit full-catalogue override takes priority over the saved preference.
+    act(() => updateRatesSection('Mortgage', { includeNonStandardOverride: true, filters: allFilters }));
+    expect(sheet().options.groups[0].options).toContain('UNKNOWN');
+    expect(useRatesSession.getState().sections.Mortgage.filters.loanPurposes).toContain('UNKNOWN');
+    act(() => updateRatesSection('Mortgage', { includeNonStandardOverride: null }));
+    expect(useRatesSession.getState().sections.Mortgage.filters.loanPurposes).toEqual(['OO']);
+    act(() => mockStore.getState().setPref('includeNonStandard', true));
+    expect(useRatesSession.getState().sections.Mortgage.filters.loanPurposes).toEqual(['OO']);
+    expect(sheet().controlledDraft).toMatchObject({ loanPurposes: ['OO'], repaymentTypes: ['PI'] });
+  } finally { act(() => tree.unmount()); }
+});
+
+test('unknown-only selections do not make mortgage comparison criteria ready in widely available mode', () => {
+  mockStore.getState().setPref('includeNonStandard', false);
+  updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS, loanPurposes: ['UNCONSTRAINED'], repaymentTypes: ['UNKNOWN'] } });
+  const tree = mount();
+  try {
+    expect(useRatesSession.getState().sections.Mortgage.filters).toMatchObject({ loanPurposes: [], repaymentTypes: [] });
+    expect(tree.root.findByType('FlashList').props.data).toHaveLength(0);
+  } finally { act(() => tree.unmount()); }
+});
 function currentProgramme(row: (typeof rows)[number], programmeId: string, offerId: string) {
   const value = publicProgramme({ productId: row.product_key, programmeId, offerId,
     sourceBindings: [{ rateIndex: row.rate_index, pointer: `/lendingRates/${row.rate_index}` }] });

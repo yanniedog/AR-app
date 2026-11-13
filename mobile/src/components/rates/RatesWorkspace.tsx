@@ -1,4 +1,5 @@
 import { PreparedProductCard } from './PreparedProductCard';
+import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../../data/mortgageFacetScope';
 import { useMortgageResultsIndex } from '../../hooks/useMortgageResultsIndex';
 import { profileSectionCount } from '../../data/profile';
 import { checkDrillOutcome } from '../../lib/degradationLog';
@@ -178,7 +179,18 @@ export default function RatesWorkspace() {
   // store updates. Audit/programmatic applies write the store immediately so
   // readiness waits on cooperative pricing rather than a second 200ms delay.
   const mortgageInputs = useMortgageComparison();
-  const mortgageFilters = session.sections.Mortgage.filters;
+  const mortgageTask = session.sections.Mortgage;
+  const mortgageIncludesNonStandard = mortgageTask.includeNonStandardOverride ?? prefs.includeNonStandard;
+  const mortgageFilters = useMemo(() => scopeMortgageFacets(mortgageTask.filters, mortgageIncludesNonStandard),
+    [mortgageTask.filters, mortgageIncludesNonStandard]);
+  // Scope before criteria/pricing on this render, then remove hidden selections
+  // from the session so returning to the full catalogue cannot resurrect them.
+  useEffect(() => {
+    const current = useRatesSession.getState().sections.Mortgage;
+    const scoped = scopeMortgageFacets(current.filters,
+      current.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard);
+    if (scoped !== current.filters) updateRatesSection('Mortgage', { filters: scoped }, true);
+  }, [mortgageFilters, mortgageTask.filters]);
   // Do not price/filter the full Mortgage catalogue until LVR + purpose + repayment
   // are set. Empty criteria previously ran an identity pass over every row.
   const mortgageCriteriaReady = section !== 'Mortgage'
@@ -296,7 +308,7 @@ export default function RatesWorkspace() {
     }
   }, [deepSearchActive, ensureSearchIndex, isFocused, source]);
 
-  const query = task.query, sortKey = task.sort, filters = task.filters;
+  const query = task.query, sortKey = task.sort, filters = section === 'Mortgage' ? mortgageFilters : task.filters;
   const selectMode = task.selectMode, selected = task.selected, availability = task.availability;
   const setQuery = useCallback((value: string) => updateRatesSection(section, { query: value }, true), [section]);
   const setSortKey = useCallback((value: SortKey | ((current: SortKey) => SortKey)) =>
@@ -322,8 +334,10 @@ export default function RatesWorkspace() {
   const cancelFilters = useCallback(() => setFilterOpen(false), [setFilterOpen]);
   const applyFilters = useCallback((draft: Filters) => {
     const current = useRatesSession.getState().sections[section];
+    const scopedDraft = section === 'Mortgage'
+      ? scopeMortgageFacets(draft, current.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard) : draft;
     const nextFilters = draftAvailability === 'unlisted' ? { ...EMPTY_FILTERS, providers: draft.providers }
-      : { ...draft, includeNonStandard: current.filters.includeNonStandard };
+      : { ...scopedDraft, includeNonStandard: current.filters.includeNonStandard };
     const filtersChanged = JSON.stringify(current.filters) !== JSON.stringify(nextFilters);
     if (filtersChanged || current.availability !== draftAvailability) {
       updateRatesSection(section, { availability: draftAvailability,
@@ -557,7 +571,26 @@ export default function RatesWorkspace() {
   const resultRowKey = useCallback((row: ResultRow, i: number) => ratesResultRowKey(row, pagination.offset + i), [pagination.offset]);
   const catalogueOptions = useMemo(() => ({ ...EMPTY_SEARCH_FILTER_OPTIONS,
     providers: [...new Set(unlistedEntries.map(item => item.provider).filter((value): value is string => Boolean(value)))].sort() }), [unlistedEntries]);
-  const activeFilterOptions = draftAvailability === 'unlisted' ? catalogueOptions : filterOptions.options;
+  const scopedFilterOptions = useMemo(() => section !== 'Mortgage' || effectiveFilters.includeNonStandard
+    ? filterOptions.options : { ...filterOptions.options, groups: filterOptions.options.groups.map(group => ({
+      ...group, options: group.g.key === 'loanPurposes' || group.g.key === 'repaymentTypes'
+        ? group.options.filter(option => isWidelyAvailableMortgageFacet(group.g.key as 'loanPurposes' | 'repaymentTypes', option))
+        : group.options,
+    })) }, [section, effectiveFilters.includeNonStandard, filterOptions.options]);
+  const activeFilterOptions = draftAvailability === 'unlisted' ? catalogueOptions : scopedFilterOptions;
+  const effectiveDraftFilters = useMemo(() => {
+    const draft = { ...draftFilters, includeNonStandard: effectiveFilters.includeNonStandard };
+    return section === 'Mortgage' ? scopeMortgageFacets(draft, draft.includeNonStandard) : draft;
+  }, [draftFilters, effectiveFilters.includeNonStandard, section]);
+  useEffect(() => {
+    if (section !== 'Mortgage') return;
+    setDraftFilters(current => {
+      const session = useRatesSession.getState();
+      if (session.section !== 'Mortgage') return current;
+      return scopeMortgageFacets(current,
+        session.sections.Mortgage.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard);
+    });
+  }, [draftFilters, effectiveFilters.includeNonStandard, section]);
 
   const draftResultCount = useCallback(
     async (draft: Filters, cancelled?: () => boolean) => (
@@ -1071,7 +1104,7 @@ export default function RatesWorkspace() {
           data={displayedPageRows}
           ListHeaderComponent={availability === 'listed' ? <View style={{ gap: 8 }}>
             <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows} />
-            {section === 'Mortgage' ? <MortgageComparisonControls catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={filters}
+            {section === 'Mortgage' ? <MortgageComparisonControls catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={effectiveFilters}
               unverified={mortgageCriteriaReady ? unverifiedResultCount : 0} invalid={mortgageScope.invalid} /> : null}
             {mortgageSearchActive && catalogue.status !== 'unavailable' ? <><PublicPricingCoverage section={section} rows={pricingCandidates} scenario={scenario} scenarioForRow={rowScenario} compact
               pricingSummary={publicPricing.ready ? {
@@ -1185,7 +1218,7 @@ export default function RatesWorkspace() {
         optionsError={filterOptions.error}
         onRetryOptions={filterOptions.retry}
         filters={effectiveFilters}
-        controlledDraft={draftFilters}
+        controlledDraft={effectiveDraftFilters}
         onDraftChange={setDraftFilters}
         onApply={applyFilters}
         preserveOnReset={section === 'Mortgage' ? {
