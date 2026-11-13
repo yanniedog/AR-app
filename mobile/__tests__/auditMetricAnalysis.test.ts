@@ -256,6 +256,27 @@ test.each(['missing', 'public-only'] as const)('legacy completion does not inven
   });
 });
 
+test.each([
+  ['surfaceCoveragePercent', APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT],
+  ['displayModelPassPercent', APP_HEALTH_CHECK_CODES.DISPLAY_MODEL],
+  ['displayListPassPercent', APP_HEALTH_CHECK_CODES.DISPLAY_LIST],
+  ['displayVisiblePassPercent', APP_HEALTH_CHECK_CODES.DISPLAY_VISIBILITY],
+  ['displayLayoutPassPercent', APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT],
+  ['displayChartPassPercent', APP_HEALTH_CHECK_CODES.DISPLAY_CHART],
+  ['displayEmptyPassPercent', APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE],
+  ['displayLogoPassPercent', APP_HEALTH_CHECK_CODES.DISPLAY_LOGO],
+] as const)('unavailable display observations cannot produce %s despite retained counts', (metric, code) => {
+  const report = healthMetricReport(code, { plannedSurfaces: 1, missingSurfaces: 0, duplicateContracts: 0,
+    checked: 1, missing: 0, failed: 0, warned: 0, unavailable: 0 });
+  report.appHealth!.checks[0].status = 'unavailable';
+  expect(auditMetricRun(report).metrics[metric]).toBeNull();
+  const analysis = buildAuditMetricAnalysis(report), evidence = analysis.metrics[metric];
+  expect(evidence).toMatchObject({ value: null, numerator: null, denominator: null,
+    missingEvidence: ['incomplete-health-collection', 'missing-denominator'], applicability: 'not-observed' });
+  expect(evidence.contributors.map(index => analysis.observations[index])).toContainEqual(
+    expect.objectContaining({ field: 'completeDisplayObservation', value: false }));
+});
+
 test('partial display observations cannot become 100 percent design scores', () => {
   const report = makePerformanceAuditReport();
   const code = APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT;

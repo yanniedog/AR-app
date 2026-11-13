@@ -1,7 +1,7 @@
 import type { PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
 import { AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, LEGACY_AUDIT_METRICS, type AuditMetric } from './auditMetricHistoryMetrics';
-import { auditMetricValues, measuredAuditValue as measured } from './auditMetricHistoryValues';
+import { auditMetricValues, measuredAuditValue as measured, measuredAuditCount } from './auditMetricHistoryValues';
 export { AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_GROUPS, type AuditMetric, type AuditMetricGroup } from './auditMetricHistoryMetrics';
 
 export const AUDIT_HISTORY_LIMIT = 120;
@@ -40,6 +40,12 @@ export function mergeAuditMetricRuns(runs: AuditMetricRun[], additions: AuditMet
     || a.sessionId.localeCompare(b.sessionId)).slice(-AUDIT_HISTORY_LIMIT);
 }
 
+function validMetricValue(metric: AuditMetric, value: unknown): boolean {
+  const unit = AUDIT_METRIC_DEFINITIONS[metric].unit;
+  return unit === 'count' ? measuredAuditCount(value) !== null
+    : measured(value) !== null && (unit !== 'percent' || (value as number) <= 100);
+}
+
 export function parseAuditMetricHistory(text: string): AuditMetricRun[] {
   const value = JSON.parse(text);
   const valid = [1, AUDIT_METRIC_HISTORY_VERSION].includes(value?.schemaVersion) && Array.isArray(value.runs) && value.runs.length <= AUDIT_HISTORY_LIMIT
@@ -51,14 +57,12 @@ export function parseAuditMetricHistory(text: string): AuditMetricRun[] {
       && typeof run.collectionComplete === 'boolean' && typeof run.coverageComplete === 'boolean'
       && Number.isSafeInteger(run.executed) && run.executed >= 0 && run.metrics
       && (value.schemaVersion === 1 ? LEGACY_AUDIT_METRICS : AUDIT_METRICS).every(metric =>
-        run.metrics[metric] === null || measured(run.metrics[metric]) !== null
-          && (AUDIT_METRIC_DEFINITIONS[metric].unit !== 'percent' || run.metrics[metric]! <= 100)));
+        run.metrics[metric] === null || validMetricValue(metric, run.metrics[metric])));
   if (!valid) throw new Error('Invalid audit metric history');
   return mergeAuditMetricRuns([], value.runs.map((run: AuditMetricRun) => ({ ...run,
     metrics: Object.fromEntries(AUDIT_METRICS.map(metric => [metric,
       // A v1 file may have been written during migration; validate every retained number.
-      run.metrics[metric] == null ? null : measured(run.metrics[metric]) !== null
-        && (AUDIT_METRIC_DEFINITIONS[metric].unit !== 'percent' || run.metrics[metric]! <= 100) ? run.metrics[metric] : null,
+      run.metrics[metric] == null ? null : validMetricValue(metric, run.metrics[metric]) ? run.metrics[metric] : null,
     ])) as Record<AuditMetric, number | null>,
   })));
 }

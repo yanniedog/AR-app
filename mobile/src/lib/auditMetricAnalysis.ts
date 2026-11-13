@@ -102,7 +102,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   const displayAdmission = (code: string) => {
     const index = health?.checks.findIndex(check => check.code === code) ?? -1;
     const check = index >= 0 ? health!.checks[index] : undefined;
-    const partial = check?.metrics.partial === true || check?.status === 'not-run';
+    const partial = check?.metrics.partial === true || ['not-run', 'unavailable'].includes(check?.status ?? '');
     const refs = check ? [add({ source: 'health', checkId: check.id, position: index + 1,
       field: 'completeDisplayObservation', value: !partial })] : [];
     return { refs, reasons: partial ? ['incomplete-health-collection' as const] : [] };

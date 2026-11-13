@@ -26,11 +26,16 @@ test('hosted and standalone reports contain the same derived metric evidence wit
   }
   const standalone = fullAuditDiagnosticLog(report, id => id) as { metricAnalysis: unknown };
   expect(standalone.metricAnalysis).toEqual(publicReport.metricAnalysis);
+  expect(JSON.parse(JSON.stringify(standalone)).metricAnalysis).toEqual(publicReport.metricAnalysis);
   const hosted = decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report)) as {
     metricAnalysis: typeof publicReport.metricAnalysis; diagnosticLog: { metricAnalysis: unknown };
   };
   expect(hosted.metricAnalysis).toEqual(publicReport.metricAnalysis);
   expect(hosted.diagnosticLog.metricAnalysis).toEqual({ $ref: '$.metricAnalysis' });
+  expect(hosted.diagnosticLog.metricAnalysis).not.toHaveProperty('metrics');
+  // An extracted log becomes self-contained only when its envelope-owned analysis is retained.
+  const extracted = { ...hosted.diagnosticLog, metricAnalysis: hosted.metricAnalysis };
+  expect(JSON.parse(JSON.stringify(extracted)).metricAnalysis).toEqual(standalone.metricAnalysis);
   expect(hosted.metricAnalysis.observations.length).toBeGreaterThan(0);
   const count = hosted.metricAnalysis.observations.length;
   for (const metric of Object.values(hosted.metricAnalysis.metrics)) {

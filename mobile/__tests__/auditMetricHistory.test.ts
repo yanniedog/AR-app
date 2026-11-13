@@ -64,6 +64,22 @@ test('v1 history keeps old facts and introduces unknown metric gaps; v2 requires
   expect(auditMetricPlot([migrated], 'healthPassPercent')).toMatchObject({ ceiling: 100, points: [null] });
 });
 
+test('persisted count metrics reject fractions and unsafe integers while measured durations and percentages retain fractions', () => {
+  const run = auditMetricRun(makePerformanceAuditReport());
+  const encode = (schemaVersion: number, metrics: typeof run.metrics) => JSON.stringify({ schemaVersion, runs: [{ ...run, metrics }] });
+  for (const invalid of [0.5, Number.MAX_SAFE_INTEGER + 1]) {
+    expect(() => parseAuditMetricHistory(encode(2, { ...run.metrics, runtimeErrors: invalid }))).toThrow('Invalid audit');
+    for (const version of [1, 2]) {
+      expect(() => parseAuditMetricHistory(encode(version, { ...run.metrics, failures: invalid }))).toThrow('Invalid audit');
+    }
+    expect(parseAuditMetricHistory(encode(1, { ...run.metrics, runtimeErrors: invalid }))[0].metrics.runtimeErrors).toBeNull();
+  }
+  for (const version of [1, 2]) {
+    expect(parseAuditMetricHistory(encode(version, { ...run.metrics, durationMs: 10.25, coveragePercent: 99.2 }))[0].metrics)
+      .toMatchObject({ durationMs: 10.25, coveragePercent: 99.2 });
+  }
+});
+
 function journey(id: string, metrics: AuditCheck['metrics'] = {}): AuditCheck {
   return { id, kind: 'journey', label: 'Rates', status: 'pass', durationMs: 100,
     metrics: { executionAttempted: true, actionInvoked: true, actionCompleted: true, nonTimingFailure: false,

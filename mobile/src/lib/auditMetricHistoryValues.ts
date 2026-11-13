@@ -60,7 +60,7 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
     return percent(checks.filter(check => check.status === 'pass').length, checks.length);
   };
   const displayPass = (code: string) => {
-    if (healthCheck(code)?.metrics.partial === true || healthCheck(code)?.status === 'not-run') return null;
+    if (healthCheck(code)?.metrics.partial === true || ['not-run', 'unavailable'].includes(healthCheck(code)?.status ?? '')) return null;
     const [checked, missing, failed, warned, unavailable] = ['checked', 'missing', 'failed', 'warned', 'unavailable'].map(key => value(code, key));
     if (checked === null || missing === null || failed === null || warned === null || unavailable === null) return null;
     return percent(checked - failed - warned - unavailable, checked + missing);
@@ -99,7 +99,7 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
   const missingSurfaces = value('display-contract', 'missingSurfaces');
   const surfaceCoverage = plannedSurfaces !== null && missingSurfaces !== null
     && healthCheck('display-contract')?.metrics.partial !== true
-    && healthCheck('display-contract')?.status !== 'not-run'
+    && !['not-run', 'unavailable'].includes(healthCheck('display-contract')?.status ?? '')
     && value('display-contract', 'duplicateContracts') === 0
     ? percent(plannedSurfaces - missingSurfaces, plannedSurfaces) : null;
   return {

@@ -121,7 +121,10 @@ function missingAssetList(value: string, separator: string): boolean {
 
 /** Keep the canonical diagnostic report, replacing private inputs rather than
  * replacing the report with a summary. Aliases retain primitive-value equality
- * and repeated object identity without copying private object graphs. */
+ * and repeated object identity without copying private object graphs.
+ * Standalone output embeds analysis. The `top-level` option is hosted-only:
+ * its reference resolves against the complete envelope's metricAnalysis field,
+ * so callers extracting this log must retain that field or embed its value. */
 export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheckId: (value: string) => string | null,
   options?: { metricAnalysis: 'top-level' }): unknown {
   const domains = new Map<string, { primitives: Map<unknown, string>; objects: WeakMap<object, string> }>();
