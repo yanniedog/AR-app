@@ -9,6 +9,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Disclosure, Row } from './ui';
 import { InfoRow } from './settings/settingsUi';
 import { AuditMetricDetails } from './AuditMetricDetails';
+import { auditCheckResultSummary } from '../lib/auditCheckResultSummary';
 
 const MODES: Record<AuditMetricRun['mode'], UiLabel> = { local: 'Local checks', 'live-source': 'Live checks', unknown: 'Unknown' };
 const OUTCOMES: Record<AuditMetricRun['outcome'], UiLabel> = {
@@ -57,6 +58,13 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
     ? chosenMode : runs[runs.length - 1]?.mode ?? 'local';
   const visibleRuns = useMemo(() => runs.filter(run => run.mode === mode), [mode, runs]);
   const plot = useMemo(() => auditMetricPlot(visibleRuns, metric), [visibleRuns, metric]);
+  const currentReport = report?.sessionId === visibleRuns[visibleRuns.length - 1]?.sessionId ? report : null;
+  const checkGroup = group === 'Check results' || group === 'Rendering checks';
+  const analysis = useMemo(() => currentReport && checkGroup ? auditCheckResultSummary(currentReport) : null,
+    [currentReport, checkGroup]);
+  const evidence = analysis?.metrics[metric];
+  const taskEvidence = analysis?.taskEvidence;
+  const measuredCount = (value: number | null | undefined) => value == null ? uiLabel('Not measured') : uiCount(value);
   const points = plot.points.filter(point => point !== null);
   if (!runs.length) return <AppText>{uiLabel('No audit history')}</AppText>;
   return <View style={{ gap: 12 }}>
@@ -68,13 +76,39 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
     </Row>
     <Row gap={8} style={{ flexWrap: 'wrap' }}>
       {AUDIT_METRIC_GROUPS.map(key => <Button key={key} title={key} variant={key === group ? 'primary' : 'secondary'}
-        accessibilityState={{ selected: key === group }} onPress={() => setMetric(AUDIT_METRICS.find(candidate => AUDIT_METRIC_DEFINITIONS[candidate].group === key)!)} />)}
+        accessibilityState={{ selected: key === group }} onPress={() => setMetric(key === 'Check results' ? 'timingFailures'
+          : AUDIT_METRICS.find(candidate => AUDIT_METRIC_DEFINITIONS[candidate].group === key)!)} />)}
     </Row>
     <Row gap={8} style={{ flexWrap: 'wrap' }}>
       {AUDIT_METRICS.filter(key => AUDIT_METRIC_DEFINITIONS[key].group === group).map(key => <Button key={key} title={AUDIT_METRIC_DEFINITIONS[key].label} variant={key === metric ? 'secondary' : 'ghost'}
         accessibilityState={{ selected: key === metric }} onPress={() => setMetric(key)} />)}
     </Row>
     <InfoRow label={AUDIT_METRIC_DEFINITIONS[metric].label} value={valueLabel(visibleRuns[visibleRuns.length - 1]?.metrics[metric] ?? null, metric)} />
+    {checkGroup ? <View style={{ gap: 4 }}>
+      <InfoRow label="Measurement scope" value={evidence ? uiIdentifier(evidence.unitOfAnalysis) : 'Not measured'} />
+      <InfoRow label="Numerator" value={measuredCount(evidence?.numerator)} />
+      <InfoRow label="Denominator" value={measuredCount(evidence?.denominator)} />
+      <InfoRow label="Missing evidence" value={measuredCount(evidence?.missingCount)} />
+      {evidence?.inventory ? <>
+        <InfoRow label="Observed" value={measuredCount(evidence.inventory.observed)} />
+        <InfoRow label="Eligible" value={measuredCount(evidence.inventory.expected)} />
+        <InfoRow label="Unavailable" value={measuredCount(evidence.inventory.unavailable)} />
+      </> : null}
+      {evidence?.unit === 'percent' && evidence.numerator !== null && evidence.denominator !== null
+        ? <InfoRow label="Not passed" value={uiCount(evidence.denominator - evidence.numerator)} /> : null}
+      {group === 'Check results' ? <>
+        <InfoRow label="Invoked actions" value={measuredCount(taskEvidence?.denominator)} />
+        <InfoRow label="Ready within timing limits" value={measuredCount(taskEvidence?.outcomes?.withinTimingLimits)} />
+        <InfoRow label="Ready with timing failures" value={measuredCount(taskEvidence?.outcomes?.timingFailures)} />
+        <InfoRow label="Ready with warnings" value={measuredCount(taskEvidence?.outcomes?.warnings)} />
+        <InfoRow label="Action failures" value={measuredCount(taskEvidence?.outcomes?.failure)} />
+        <InfoRow label="Indeterminate" value={measuredCount(taskEvidence?.outcomes?.indeterminate)} />
+        <InfoRow label="Human usability" value="Not measured" />
+      </> : <>
+        <InfoRow label="Visual design" value="Not measured" />
+        <InfoRow label="Pixel correctness" value="Not measured" />
+      </>}
+    </View> : null}
     {points.length ? <View>
       <AppText variant="tiny" color="textMuted">{valueLabel(plot.ceiling, metric)}</AppText>
       <Svg width="100%" height={148} viewBox="0 0 320 148" accessible={false}>
@@ -99,6 +133,7 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
         <InfoRow label="Collection" value={run.collectionComplete ? 'Complete' : 'Incomplete'} />
         <InfoRow label="Coverage" value={run.coverageComplete ? 'Complete' : 'Incomplete'} />
         <InfoRow label="Executed" value={uiCount(run.executed)} />
+        <InfoRow label="Method" value={uiCount(run.methodVersions[metric])} />
         <InfoRow label={AUDIT_METRIC_DEFINITIONS[metric].label} value={valueLabel(run.metrics[metric], metric)} />
       </View>) : null}
     </Disclosure>

@@ -15,6 +15,16 @@ import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 
 import type { CorePayload, RateRow } from '../src/types';
 
+// Deferred history paint work must drain before Jest removes the RN environment.
+beforeEach(() => jest.useFakeTimers());
+afterEach(async () => {
+  try {
+    await act(async () => { await jest.runAllTimersAsync(); });
+    jest.runAllTicks();
+    expect(jest.getTimerCount()).toBe(0);
+  } finally { jest.useRealTimers(); }
+});
+
 type TestNode = {
   props: Record<string, any>;
   findAllByProps: (props: Record<string, unknown>) => TestNode[];
@@ -204,7 +214,6 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
   clearMortgageComparison();
   let rates!: InspectableRenderer, detail!: InspectableRenderer;
   try {
-    jest.useFakeTimers();
     act(() => { rates = TestRenderer.create(<RatesWorkspace />) as InspectableRenderer; });
     expect(rates.root.findAllByType('ProductCard')).toHaveLength(0);
     act(() => {
@@ -219,7 +228,6 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     expect(destination.params).toEqual({ key: product.productKey, programme: p.programmeId, origin: 'rates-comparison' });
     Object.assign(mockRoute, destination.params);
     act(() => rates.unmount());
-    jest.useRealTimers();
     await act(async () => { detail = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
     expect(detail.root.findAllByType('DetailsOnlyProduct')).toHaveLength(0);
     expect(buildStaySwitchProjection).not.toHaveBeenCalled();
@@ -272,8 +280,7 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     expect(normalTexts).not.toContain('$600,000');
     expect(JSON.stringify(mockScenario)).toBe(saved);
   } finally {
-    jest.useRealTimers();
-    act(() => { detail?.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });
+    act(() => { rates?.unmount(); detail?.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });
     installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));
   }
 });
@@ -301,7 +308,6 @@ test('Rates 75% offer does not show the saved 90% LVR contradiction; ordinary Pr
   installMandatoryEligibility(selectMandatoryEligibility(store.getState().core, DEFAULT_PREFS.profileFilters, null));
   let rates!: InspectableRenderer, detail!: InspectableRenderer;
   try {
-    jest.useFakeTimers();
     act(() => { rates = TestRenderer.create(<RatesWorkspace />) as InspectableRenderer; });
     act(() => {
       rates.root.findAllByProps({ accessibilityLabel: 'Loan amount' })[0].props.onChangeText('600000');
@@ -313,7 +319,6 @@ test('Rates 75% offer does not show the saved 90% LVR contradiction; ordinary Pr
     act(() => card.props.onPress());
     Object.assign(mockRoute, (jest.mocked(router.push).mock.calls.at(-1)![0] as unknown as { params: typeof mockRoute }).params);
     act(() => rates.unmount());
-    jest.useRealTimers();
     await act(async () => { detail = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
     expect(detail.root.findAllByType('PublicRateEvidence')[0].props.scenario).toMatchObject({ amount: '600000', lvr: '0.75' });
     const scopedTexts = detail.root.findAllByType('AppText').map(node => node.props.children);
@@ -329,8 +334,7 @@ test('Rates 75% offer does not show the saved 90% LVR contradiction; ordinary Pr
     expect(detail.root.findAllByType('AppText').map(node => node.props.children)).toContain('Outside listed LVR tier');
     expect(mockScenario.mortgage.loanBalance).toBe('450000');
   } finally {
-    jest.useRealTimers();
-    act(() => { detail?.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });
+    act(() => { rates?.unmount(); detail?.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });
     Object.assign(mockScenario.mortgage, savedMortgage);
     delete mockRoute.origin; delete mockRoute.programme;
     installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));

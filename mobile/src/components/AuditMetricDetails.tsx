@@ -28,7 +28,7 @@ function MetricEvidence({ report, metric }: { report: PerformanceAuditReport; me
     <InfoRow label="Measurement scope" value={uiIdentifier(evidence.unitOfAnalysis)} />
     <InfoRow label="Sample unit" value={uiIdentifier(evidence.sampleUnit)} />
     <InfoRow label="Unit" value={evidence.unit === 'ms' ? 'ms' : evidence.unit === 'percent' ? '%' : 'Count'} />
-    <InfoRow label="Version" value={count(analysis.schemaVersion)} />
+    <InfoRow label="Version" value={count(evidence.methodVersion)} />
     <InfoRow label="Evidence status" value={evidence.applicability === 'observed' ? 'Observed'
       : evidence.applicability === 'invalid-evidence' ? 'Invalid evidence' : 'Not observed'} />
     <InfoRow label="Numerator" value={count(evidence.numerator)} />

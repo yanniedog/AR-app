@@ -186,13 +186,13 @@ export interface AppHealthDataSnapshot {
 export type AppHealthDisplayEvidence =
   | {
       role: 'model';
-      sourceCount: number;
-      modelCount: number;
+      sourceCount: number | null;
+      modelCount: number | null;
     }
   | {
       role: 'list';
-      modelCount: number;
-      renderedCount: number;
+      modelCount: number | null;
+      renderedCount: number | null;
     }
   | {
       role: 'visible';
@@ -226,10 +226,10 @@ export type AppHealthDisplayEvidence =
     }
   | {
       role: 'logo';
-      expectedCount: number;
-      decodedCount: number;
-      fallbackCount: number;
-      missingCount: number;
+      expectedCount: number | null;
+      decodedCount: number | null;
+      fallbackCount: number | null;
+      missingCount: number | null;
     };
 
 export type AppHealthDisplayRole = AppHealthDisplayEvidence['role'];
@@ -244,6 +244,8 @@ export interface AppHealthSurfaceContract {
 }
 
 export interface AppHealthSurfaceObservation {
+  /** Adverse completed/required observations survive a later successful visit. */
+  adverseEvidence?: AppHealthDisplayEvidence[];
   surfaceId: string;
   evidence: readonly AppHealthDisplayEvidence[];
   /** Keep each distinct list failure with counts from that same visit. */

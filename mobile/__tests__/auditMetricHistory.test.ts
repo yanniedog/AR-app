@@ -1,5 +1,6 @@
 import { finalizeAppHealthReport, APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth';
 import type { AuditCheck } from '../src/lib/performanceAudit';
+import { buildAuditMetricAnalysis } from '../src/lib/auditMetricAnalysis';
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { auditMetricRun, auditMetricPlot, mergeAuditMetricRuns, parseAuditMetricHistory, AUDIT_HISTORY_LIMIT, AUDIT_METRICS, AUDIT_METRIC_HISTORY_VERSION } from '../src/lib/auditMetricHistory';
 
@@ -35,6 +36,36 @@ test('time coordinates preserve spacing and missing measurements break lines', (
   expect(plot.path).not.toContain('L');
   expect(auditMetricPlot([run], 'failures').points[0]?.x).toBe(160);
   expect(auditMetricPlot([], 'failures').points).toEqual([]);
+});
+
+test('schema 2 keeps recorded values with legacy methods and plots break at method changes', () => {
+  const current = auditMetricRun(makePerformanceAuditReport('new'));
+  current.metrics.actionP95Ms = 20;
+  const [old] = parseAuditMetricHistory(JSON.stringify({ schemaVersion: 2,
+    runs: [{ ...current, sessionId: 'old', finishedAt: new Date(Date.parse(current.finishedAt) - 1000).toISOString(),
+      metrics: { ...current.metrics, actionP95Ms: 200 } }] }));
+  expect(old.metrics.actionP95Ms).toBe(200);
+  expect(old.methodVersions.actionP95Ms).toBe(1);
+  expect(current.methodVersions.actionP95Ms).toBe(2);
+  expect(auditMetricPlot([old, current], 'actionP95Ms').path.match(/M/g)).toHaveLength(2);
+  expect(auditMetricPlot([old, current], 'actionP95Ms').path).not.toContain('L');
+  expect(auditMetricPlot([old, current], 'failures').path).toContain('L');
+  expect(parseAuditMetricHistory(JSON.stringify({ schemaVersion: 3, runs: [old, current] }))).toEqual([old, current]);
+  expect(() => parseAuditMetricHistory(JSON.stringify({ schemaVersion: 3, runs: [{ ...current, methodVersions: {} }] }))).toThrow();
+});
+
+test('legacy raw rendering evidence retains method 1 in history and regenerated analysis', () => {
+  const legacy = makePerformanceAuditReport('legacy-rendering');
+  delete legacy.renderingEvidenceVersion;
+  const old = auditMetricRun(legacy);
+  const current = auditMetricRun({ ...legacy, sessionId: 'new-rendering', renderingEvidenceVersion: 2,
+    finishedAt: '2026-10-31T10:34:28.796Z' });
+  expect(old.methodVersions.displayModelPassPercent).toBe(1);
+  expect(current.methodVersions.displayModelPassPercent).toBe(2);
+  expect(buildAuditMetricAnalysis(legacy).metrics.displayModelPassPercent.methodVersion).toBe(1);
+  old.metrics.displayModelPassPercent = 100;
+  current.metrics.displayModelPassPercent = 50;
+  expect(auditMetricPlot([old, current], 'displayModelPassPercent').path).not.toContain('L');
 });
 
 test('invalid history is rejected instead of silently erasing it', () => {

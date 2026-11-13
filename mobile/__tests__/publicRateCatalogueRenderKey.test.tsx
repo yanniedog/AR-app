@@ -25,6 +25,17 @@ test('row rerenders reuse their edition key while replacement and imperative rea
     expect(hashText).not.toHaveBeenCalled();
     expect(snapshot).toBe(original);
 
+    // Virtualized cards and route returns remount new hooks, not just rerender
+    // existing ones. Equal content must not repeat SHA work per mounted card.
+    act(() => tree.unmount());
+    for (let i = 0; i < 20; i++) {
+      await act(async () => { tree = TestRenderer.create(<Probe edition={JSON.parse(JSON.stringify(manifest))} />); });
+      expect(snapshot).toBe(original);
+      act(() => tree.unmount());
+    }
+    expect(hashText).not.toHaveBeenCalled();
+    await act(async () => { tree = TestRenderer.create(<Probe edition={manifest} />); });
+
     const replacement = { ...manifest, public_rate_catalogue: { ...manifest.public_rate_catalogue!,
       index: { ...manifest.public_rate_catalogue!.index, sha256: 'f'.repeat(64) } } };
     await act(async () => { tree.update(<Probe edition={replacement} />); });

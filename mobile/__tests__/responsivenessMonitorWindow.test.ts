@@ -65,6 +65,23 @@ describe('completed action responsiveness windows', () => {
     monitor.stop();
   });
 
+  it('pools action windows without charging intervening settle stalls or taking a maximum of percentiles', () => {
+    const monitor = new ResponsivenessMonitor(); monitor.start(); paint(116);
+    const windows: { start: ReturnType<typeof monitor.snapshot>; end: ReturnType<typeof monitor.snapshot> }[] = [];
+    for (let n = 0; n < 20; n++) {
+      const start = monitor.snapshot(); clockMs += 10; const end = monitor.snapshot();
+      paint(clockMs); jest.advanceTimersByTime(25); windows.push({ start, end });
+    }
+    // This 1-second stall happens only in the explicitly unmeasured settle.
+    paint(clockMs + 1000); jest.advanceTimersByTime(25);
+    const start = monitor.snapshot(); clockMs += 100; const end = monitor.snapshot();
+    // The final blocked observation arrives after the action endpoint.
+    paint(clockMs + 30); jest.advanceTimersByTime(25); windows.push({ start, end });
+    expect(monitor.metricsForWindows(windows)).toMatchObject({ frameSamples: 21, frameP95Ms: 10, maxFrameGapMs: 100 });
+    expect(monitor.metrics().maxFrameGapMs).toBe(1000);
+    monitor.stop();
+  });
+
   it('records an observed short action with no overdue timer as zero lag', () => {
     const monitor = new ResponsivenessMonitor();
     monitor.start();

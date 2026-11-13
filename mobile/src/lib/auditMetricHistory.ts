@@ -1,11 +1,11 @@
 import type { PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
-import { AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, LEGACY_AUDIT_METRICS, type AuditMetric } from './auditMetricHistoryMetrics';
+import { AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, LEGACY_AUDIT_METRICS, auditMetricMethodVersion, auditReportMetricMethodVersion, type AuditMetric } from './auditMetricHistoryMetrics';
 import { auditMetricValues, measuredAuditValue as measured, measuredAuditCount } from './auditMetricHistoryValues';
 export { AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_GROUPS, type AuditMetric, type AuditMetricGroup } from './auditMetricHistoryMetrics';
 
 export const AUDIT_HISTORY_LIMIT = 120;
-export const AUDIT_METRIC_HISTORY_VERSION = 2;
+export const AUDIT_METRIC_HISTORY_VERSION = 3;
 export interface AuditMetricRun {
   sessionId: string;
   finishedAt: string;
@@ -17,6 +17,7 @@ export interface AuditMetricRun {
   coverageComplete: boolean;
   executed: number;
   metrics: Record<AuditMetric, number | null>;
+  methodVersions: Record<AuditMetric, 1 | 2>;
 }
 
 
@@ -30,12 +31,26 @@ export function auditMetricRun(report: PerformanceAuditReport): AuditMetricRun {
     outcome: completion.outcome, collectionComplete: completion.collectionComplete,
     coverageComplete: completion.coverageComplete, executed: report.summary.executed,
     metrics: auditMetricValues(report, completion),
+    methodVersions: Object.fromEntries(AUDIT_METRICS.map(metric => [metric, auditReportMetricMethodVersion(report, metric)])) as AuditMetricRun['methodVersions'],
   };
 }
 
 export function mergeAuditMetricRuns(runs: AuditMetricRun[], additions: AuditMetricRun[]): AuditMetricRun[] {
   const byId = new Map(runs.map(run => [run.sessionId, run]));
-  additions.forEach(run => byId.set(run.sessionId, run));
+  additions.forEach(run => {
+    const prior = byId.get(run.sessionId);
+    if (!prior) { byId.set(run.sessionId, run); return; }
+    const metrics = { ...run.metrics }, methodVersions = { ...run.methodVersions };
+    for (const metric of AUDIT_METRICS) {
+      if (prior.methodVersions[metric] !== run.methodVersions[metric]) {
+        // Recovery of raw evidence must not rewrite an already saved aggregate
+        // using a different method for the same historical run.
+        metrics[metric] = prior.metrics[metric];
+        methodVersions[metric] = prior.methodVersions[metric];
+      }
+    }
+    byId.set(run.sessionId, { ...run, metrics, methodVersions });
+  });
   return [...byId.values()].sort((a, b) => Date.parse(a.finishedAt) - Date.parse(b.finishedAt)
     || a.sessionId.localeCompare(b.sessionId)).slice(-AUDIT_HISTORY_LIMIT);
 }
@@ -48,7 +63,7 @@ function validMetricValue(metric: AuditMetric, value: unknown): boolean {
 
 export function parseAuditMetricHistory(text: string): AuditMetricRun[] {
   const value = JSON.parse(text);
-  const valid = [1, AUDIT_METRIC_HISTORY_VERSION].includes(value?.schemaVersion) && Array.isArray(value.runs) && value.runs.length <= AUDIT_HISTORY_LIMIT
+  const valid = [1, 2, AUDIT_METRIC_HISTORY_VERSION].includes(value?.schemaVersion) && Array.isArray(value.runs) && value.runs.length <= AUDIT_HISTORY_LIMIT
     && value.runs.every((run: AuditMetricRun) => run && typeof run === 'object'
       && ['sessionId', 'appVersion', 'buildVersion'].every(key => typeof run[key as keyof AuditMetricRun] === 'string')
       && run.sessionId && typeof run.finishedAt === 'string' && Number.isFinite(Date.parse(run.finishedAt))
@@ -56,10 +71,15 @@ export function parseAuditMetricHistory(text: string): AuditMetricRun[] {
       && ['successful', 'failed', 'incomplete', 'warning'].includes(run.outcome)
       && typeof run.collectionComplete === 'boolean' && typeof run.coverageComplete === 'boolean'
       && Number.isSafeInteger(run.executed) && run.executed >= 0 && run.metrics
+      && (value.schemaVersion !== 3 || run.methodVersions && AUDIT_METRICS.every(metric =>
+        Number.isInteger(run.methodVersions[metric]) && run.methodVersions[metric] >= 1
+        && run.methodVersions[metric] <= auditMetricMethodVersion(metric)))
       && (value.schemaVersion === 1 ? LEGACY_AUDIT_METRICS : AUDIT_METRICS).every(metric =>
         run.metrics[metric] === null || validMetricValue(metric, run.metrics[metric])));
   if (!valid) throw new Error('Invalid audit metric history');
   return mergeAuditMetricRuns([], value.runs.map((run: AuditMetricRun) => ({ ...run,
+    methodVersions: Object.fromEntries(AUDIT_METRICS.map(metric => [metric,
+      value.schemaVersion < 3 ? 1 : run.methodVersions[metric]])) as AuditMetricRun['methodVersions'],
     metrics: Object.fromEntries(AUDIT_METRICS.map(metric => [metric,
       value.schemaVersion === 1 && !LEGACY_AUDIT_METRICS.includes(metric) ? null : run.metrics[metric],
     ])) as Record<AuditMetric, number | null>,
@@ -75,15 +95,17 @@ export function auditMetricPlot(runs: AuditMetricRun[], metric: AuditMetric) {
     const value = run.metrics[metric];
     return value == null ? null : {
       x: end === start ? 160 : 12 + (Date.parse(run.finishedAt) - start) / (end - start) * 296,
-      y: 128 - value / ceiling * 112, value, sessionId: run.sessionId,
+      y: 128 - value / ceiling * 112, value, sessionId: run.sessionId, methodVersion: run.methodVersions[metric],
     };
   });
   let path = '';
   let connected = false;
+  let previousMethod: number | null = null;
   points.forEach(point => {
     if (!point) { connected = false; return; }
-    path += `${connected ? 'L' : 'M'}${point.x},${point.y} `;
+    path += `${connected && previousMethod === point.methodVersion ? 'L' : 'M'}${point.x},${point.y} `;
     connected = true;
+    previousMethod = point.methodVersion;
   });
   return { points, path, ceiling };
 }

@@ -50,13 +50,28 @@ function reservedSnapshot(client: CatalogueClient): PublicRateCatalogueState {
   return reserved;
 }
 let auditOverlay: { owner: object; key: string; state: PublicRateCatalogueState } | undefined;
+// Content-keyed reuse avoids hashing the same capability for every newly mounted
+// card. Canonicalization still runs on every read, so nested mutations cannot
+// reuse a stale identity. Bound retained text independently of catalogue clients.
+const capabilityDigests = new Map<string, string>();
+function capabilityDigest(manifest: Manifest): string {
+  const text = canonical(manifest.public_rate_catalogue);
+  const cached = capabilityDigests.get(text);
+  if (cached !== undefined) return cached;
+  const digest = hashText(text);
+  if (text.length <= 524_288) {
+    if (capabilityDigests.size >= 2) capabilityDigests.delete(capabilityDigests.keys().next().value!);
+    capabilityDigests.set(text, digest);
+  }
+  return digest;
+}
 const malformedManifestKeys = new WeakMap<Manifest, string>();
 let malformedManifestSequence = 0;
 function manifestKey(manifest: Manifest): string | undefined {
   // Legacy publications have no catalogue capability and require no key.
   if (!manifest.public_rate_catalogue) return undefined;
   try {
-    return `${manifest.payload_revision?.bundle_sha256 ?? ''}:${hashText(canonical(manifest.public_rate_catalogue))}`;
+    return `${manifest.payload_revision?.bundle_sha256 ?? ''}:${capabilityDigest(manifest)}`;
   } catch {
     // Non-JSON capability data must reach the normal failed-client validation
     // view, rather than throwing while a React hook derives its cache identity.
@@ -102,7 +117,7 @@ async function acquire(edition: string, asset: PublicRateAsset, isIndex: boolean
 }
 
 export function createPublicRateCatalogueClient(manifest: Manifest,
-  acquisition: (asset: PublicRateAsset, isIndex: boolean) => Promise<unknown> = (asset, isIndex) => acquire(hashText(canonical(manifest.public_rate_catalogue)), asset, isIndex),
+  acquisition: (asset: PublicRateAsset, isIndex: boolean) => Promise<unknown> = (asset, isIndex) => acquire(capabilityDigest(manifest), asset, isIndex),
   lifecycle: { signal?: AbortSignal; abort?: () => void; normalOwner?: object } = {}): CatalogueClient {
   let workCount = 0;
   const tracked = <T,>(work: () => Promise<T>): Promise<T> => {
@@ -319,7 +334,7 @@ export function beginPublicRateCatalogueAudit() {
     try {
       client = createPublicRateCatalogueClient(manifest,
         (asset, isIndex) => localOnly ? Promise.resolve(retainedValues.get(asset.name))
-          : acquire(hashText(canonical(manifest.public_rate_catalogue)), asset, isIndex, controller.signal),
+          : acquire(capabilityDigest(manifest), asset, isIndex, controller.signal),
         { signal: controller.signal, abort: () => controller.abort() });
     } catch (error) { release(); throw error; }
     // While preparing, mounted hooks retain usable metadata but route their
@@ -336,7 +351,7 @@ export function beginPublicRateCatalogueAudit() {
           // take priority. Keep decoded results for the client's schema checks.
           const capability = validatePublicRateCapability(manifest)!;
           const assets = [capability.index, ...capability.shards];
-          const edition = hashText(canonical(manifest.public_rate_catalogue));
+          const edition = capabilityDigest(manifest);
           let cursor = 0, missing: LocalCatalogueCacheMiss | undefined;
           const inspect = async () => {
             while (cursor < assets.length) {

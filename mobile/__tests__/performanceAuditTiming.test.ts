@@ -11,6 +11,7 @@ import {
   type AuditCheck,
 } from '../src/lib/performanceAudit';
 import {
+  captureAuditRunTiming,
   estimatePerformanceAuditTime,
   formatPerformanceAuditEstimate,
   performanceAuditEstimateParts,
@@ -19,6 +20,16 @@ import {
   scoreUserVisibleJourney,
   userVisibleForwardMs,
 } from '../src/lib/performanceAuditTiming';
+
+test('terminal timing shares one endpoint and excludes subsequent report aggregation', () => {
+  const start = Date.parse('2026-11-13T20:22:06.552Z');
+  let clock = start + 502_364;
+  let active = 500_000;
+  const timing = captureAuditRunTiming(new Date(start).toISOString(), () => active, () => clock);
+  clock += 3_739; active += 3_739;
+  expect(timing).toEqual({ finishedAt: '2026-11-13T20:30:28.916Z', durationMs: 500_000, wallClockMs: 502_364 });
+  expect(Date.parse(timing.finishedAt) - start).toBe(timing.wallClockMs);
+});
 
 const result = (durationMs: number): AuditCheck => ({
   id: 'journey', label: 'Product readiness', kind: 'journey', status: 'pass',

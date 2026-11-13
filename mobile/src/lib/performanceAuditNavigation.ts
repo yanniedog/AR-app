@@ -24,15 +24,21 @@ export async function measureAuditBackNavigation(options: {
   tabJourney: boolean;
   recordFirst(transition: AuditBackTransition): void;
   recordSecondStart?(): void;
+  /** Observe dispatch-to-commit windows without including settle bookkeeping. */
+  measureWindow?(phase: 'start' | 'end' | 'settled'): void;
 }): Promise<AuditBackTransition & { first: AuditBackTransition; secondBackMs: number | null; settleMs: number }> {
   const pathBeforeBack = options.currentPath();
   const measure = async (): Promise<AuditBackTransition & { settleMs: number }> => {
     const before = options.currentPath();
     const started = options.now();
+    options.measureWindow?.('start');
     options.back();
     if (options.awaitCommit) await options.awaitCommit(before);
     const committedAt = options.now();
+    if (options.awaitCommit) options.measureWindow?.('end');
     await options.settle();
+    if (!options.awaitCommit) options.measureWindow?.('end');
+    options.measureWindow?.('settled');
     const destination = options.currentPath();
     const settledAt = options.now();
     return { destination,

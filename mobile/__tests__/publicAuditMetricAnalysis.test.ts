@@ -21,7 +21,11 @@ test('hosted and standalone reports contain the same derived metric evidence wit
   const values = auditMetricRun(report).metrics;
   expect(Object.keys(publicReport.metricAnalysis.metrics).sort()).toEqual([...AUDIT_METRICS].sort());
   for (const metric of AUDIT_METRICS) {
-    expect(publicReport.metricAnalysis.metrics[metric]).toMatchObject({ value: values[metric], methodVersion: 1 });
+    expect(publicReport.metricAnalysis.metrics[metric]).toMatchObject({ value: values[metric],
+      methodVersion: [
+        'actionP50Ms', 'actionP95Ms', 'displayModelPassPercent', 'displayListPassPercent',
+        'displayVisiblePassPercent', 'displayLayoutPassPercent', 'displayEmptyPassPercent', 'displayLogoPassPercent',
+      ].includes(metric) ? 2 : 1 });
     expect(publicReport.metricAnalysis.metrics[metric].formula).toEqual(expect.any(String));
   }
   const standalone = fullAuditDiagnosticLog(report, id => id) as { metricAnalysis: unknown };
@@ -65,7 +69,7 @@ test('budget fallback omits only regenerable analysis and retains complete sourc
     diagnosticLog: fullAuditDiagnosticLog(report, id => id, { metricAnalysis: 'top-level' }),
     applicationJournal: { beforeAudit: { entries: [{ message: 'retained', count: 0 }] },
       duringAndAfterAudit: { entries: [{ failed: false, unknown: null }] } } };
-  const omission = { schemaVersion: 1, methodVersion: 1, status: 'omitted', reason: 'export-budget',
+  const omission = { schemaVersion: 1, methodVersions: [1, 2], status: 'omitted', reason: 'export-budget',
     regenerableFrom: 'retained-local-report' };
   const expected = { ...source, metricAnalysis: omission,
     diagnosticLog: { ...(source.diagnosticLog as Record<string, unknown>), metricAnalysis: omission } };

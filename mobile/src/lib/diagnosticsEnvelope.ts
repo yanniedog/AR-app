@@ -71,6 +71,9 @@ const OBSERVED_COUNT_KEYS = new Set([
 
 const PUBLIC_METRIC_ENUMS: Record<string, ReadonlySet<string>> = {
   handlerResolution: new Set(['pass', 'fail', 'not-attempted', 'unresolved']),
+  urlValidation: new Set(['pass', 'fail', 'unknown']),
+  browserHandler: new Set(['pass', 'fail', 'unknown']),
+  httpReachability: new Set(['pass', 'fail', 'unknown']),
 };
 
 function allowlistedMetrics(check: AuditCheck): Record<string, string | number | boolean | null> {
@@ -78,8 +81,8 @@ function allowlistedMetrics(check: AuditCheck): Record<string, string | number |
   const result: Record<string, string | number | boolean | null> = {};
   for (const [key, value] of Object.entries(metrics)) {
     if (!METRIC_ALLOWLIST.has(key)) continue;
-    if (typeof value === 'string' && PUBLIC_METRIC_ENUMS[key]?.has(value)) {
-      result[key] = value;
+    if (PUBLIC_METRIC_ENUMS[key]) {
+      if (typeof value === 'string' && PUBLIC_METRIC_ENUMS[key].has(value)) result[key] = value;
       continue;
     }
     const prefix = ['forward', 'background', 'back'].find(candidate => key.startsWith(candidate) && /[A-Z]/.test(key[candidate.length] ?? ''));
@@ -176,6 +179,7 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
   return {
     schemaVersion: 1,
     kind: 'performance-audit',
+    renderingEvidenceVersion: report.renderingEvidenceVersion === 2 ? 2 : 1,
     completion,
     metricAnalysis: publicAuditMetricAnalysis(report, safeCheckId),
     app: {
@@ -287,7 +291,7 @@ function encodedWithinBudget(value: Record<string, unknown>, header: Record<stri
 /** Omit regenerable analysis before considering the existing repeated-frame fallback. */
 function omitDerivedMetricAnalysis(value: Record<string, unknown>): Record<string, unknown> | null {
   if (!value.metricAnalysis) return null;
-  const omission = { schemaVersion: 1, methodVersion: 1, status: 'omitted', reason: 'export-budget',
+  const omission = { schemaVersion: 1, methodVersions: [1, 2], status: 'omitted', reason: 'export-budget',
     regenerableFrom: 'retained-local-report' };
   const diagnosticLog = value.diagnosticLog;
   return { ...value, metricAnalysis: omission,

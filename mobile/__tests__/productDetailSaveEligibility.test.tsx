@@ -7,6 +7,16 @@ import { rateConditionFixture } from '../testUtils/rateConditions';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { bindVerifiedDetails } from '../src/data/detailsIdentity';
 
+// Deferred history paint work must drain before Jest removes the RN environment.
+beforeEach(() => jest.useFakeTimers());
+afterEach(async () => {
+  try {
+    await act(async () => { await jest.runAllTimersAsync(); });
+    jest.runAllTicks();
+    expect(jest.getTimerCount()).toBe(0);
+  } finally { jest.useRealTimers(); }
+});
+
 type TestNode = {
   props: Record<string, any>;
   findAllByProps: (props: Record<string, unknown>) => TestNode[];

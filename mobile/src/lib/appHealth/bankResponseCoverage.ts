@@ -36,11 +36,12 @@ export function bankResponseCoverage(source: BankInsightsPayload | null | undefi
   if (!source || !calendar || !core) return null;
   const rows: BankResponseCoverageRow[] = [];
   const sourceEvidence = createBankResponseEvidenceReader(source);
+  const windowKey = (date: string, end: string) => `${date}:${end}`;
   const windows = new Set<string>();
   for (const section of SECTION_KEYS) {
     const sourceWindows = buildCompactBankResponseWindows(source, calendar, section);
     const displayWindows = new Map((projected === source ? sourceWindows : projected ? buildCompactBankResponseWindows(projected, calendar, section, source) : [])
-      .map(window => [window.decision.date, new Map(window.rows.map(row => [row.provider, row]))]));
+      .map(window => [windowKey(window.decision.date, window.windowEnd), new Map(window.rows.map(row => [row.provider, row]))]));
     const providers = new Set([...Object.keys(source.banks).filter(provider => source.banks[provider][section]),
       ...source.events.filter(event => event.section === section).map(event => event.provider),
       ...(core.sections[section]?.rates ?? []).map(row => row.provider)]);
@@ -49,7 +50,7 @@ export function bankResponseCoverage(source: BankInsightsPayload | null | undefi
       const sourceRows = new Map(window.rows.map(row => [row.provider, row]));
       for (const provider of providers) {
         const raw = sourceRows.get(provider);
-        const visible = displayWindows.get(window.decision.date)?.get(provider);
+        const visible = displayWindows.get(windowKey(window.decision.date, window.windowEnd))?.get(provider);
         const evidence = raw?.evidence ?? sourceEvidence(section, provider,
           window.decision.date, window.windowEnd, null);
         rows.push({ provider, section, decisionDate: window.decision.date, windowEnd: window.windowEnd,
@@ -62,7 +63,8 @@ export function bankResponseCoverage(source: BankInsightsPayload | null | undefi
       }
     }
   }
-  return { runDate: source.run_date, runMatches: source.run_date === core.run_date,
+  return { runDate: source.run_date, runMatches: source.run_date === core.run_date &&
+    (projected == null || projected.run_date === source.run_date),
     projectionAvailable: projected != null, windows: windows.size, rows };
 }
 

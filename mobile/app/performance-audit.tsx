@@ -51,6 +51,7 @@ import { getPassiveAuditStatus, subscribePassiveAudit } from '../src/lib/passive
 import { restorePerformanceAuditUpload, uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
 import { loadCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
 import { buildPerformanceAuditCompletion } from '../src/lib/performanceAuditCompletion';
+import { auditHttpCheckSummary } from '../src/lib/auditHttpCheckSummary';
 import {
   auditEntryClock, markAuditEntryScreenMounted, markAuditEntryScreenReady, markAuditEntrySettingsOpened,
   markAuditEntryStartPressed, setAuditEntrySettingsProbe,
@@ -175,6 +176,7 @@ function PerformanceAuditScreenInner() {
   );
   const reportedChecks = orderedChecks.slice(0, visibleCheckLimit);
   const completion = useMemo(() => report ? buildPerformanceAuditCompletion(report) : null, [report]);
+  const httpChecks = useMemo(() => report ? auditHttpCheckSummary(report.checks) : null, [report]);
   const reportCoverage = completion?.gaps.invalidCoverageReports ? undefined : report?.coverage;
   const reportHealth = completion?.gaps.invalidHealthReports ? undefined : report?.appHealth;
   useEffect(() => {
@@ -375,7 +377,7 @@ function PerformanceAuditScreenInner() {
           <InfoRow label="Last audit" value={completion ? uiJoin(outcomeLabel(completion.outcome), ' · ', uiDate(completion.finishedAt)) : uiLabel(state.report ? 'Loading' : recoveryFailed ? 'Report unavailable' : 'No audit history')} />
           <InfoRow label="Estimated time" value={nextEstimate} />
         </> : null}
-        <Button title="Run audit" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
+        <Button title="Local audit" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
         <Button title="Live audit" icon="cloud-download-outline" variant="secondary" loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'} disabled={auditDisabled} onPress={() => void runAudit('live-source')} />
         <ToggleRow icon="cloud-upload-outline" label="Public upload" value={running ? state.uploadLog : publicUpload} onChange={setPublicUpload} disabled={auditDisabled} />
         <InfoRow label={uiLabel(running ? 'Destination' : 'Next destination')} value={uiLabel((running ? state.uploadLog : publicUpload) ? 'Public hosting' : 'Debug log')} />
@@ -450,6 +452,13 @@ function PerformanceAuditScreenInner() {
           <InfoRow label="Audit ID" value={uiIdentifier(completion.auditId)} />
           <InfoRow label="Details" value={uiLabel(completion.detailsComplete ? 'Complete' : 'Incomplete')} />
           <InfoRow label="Coverage" value={uiLabel(completion.coverageComplete ? 'Complete' : 'Incomplete')} />
+          {httpChecks ? <>
+            <InfoRow label="HTTP attempts / destinations" value={httpChecks.total == null
+              ? uiJoin(uiCount(httpChecks.attempted), ' / ', 'Unknown') : countPair(httpChecks.attempted, httpChecks.total)} />
+            <InfoRow label="HTTP not attempted" value={uiCount(httpChecks.notAttempted)} />
+            <InfoRow label="HTTP attempt evidence missing" value={httpChecks.missingEvidence == null ? 'Unknown' : uiCount(httpChecks.missingEvidence)} />
+            <InfoRow label="Unverified links" value={uiCount(completion.gaps.unverifiedLinks)} />
+          </> : null}
           <InfoRow label="Executed" value={countPair(report.summary.executed,
             (reportCoverage?.plannedChecks ?? report.checks.length) + (reportHealth?.coverage.plannedChecks ?? 0))} />
           <DebugLogUploadStatus sessionId={report.sessionId} />
@@ -476,7 +485,6 @@ function PerformanceAuditScreenInner() {
           <InfoRow label="Duplicate checks" value={uiCount(completion.gaps.duplicateChecks)} />
           <InfoRow label="Unexpected checks" value={uiCount(completion.gaps.unexpectedChecks)} />
           <InfoRow label="Missing readiness" value={uiCount(completion.gaps.missingReadinessChecks)} />
-          <InfoRow label="Untested links" value={uiCount(completion.gaps.unverifiedLinks)} />
           {completion.gaps.missingHealthReports > 0 ? <InfoRow label="Data and display health" value="Not run" /> : null}
           <InfoRow label="Truncated fields" value={uiCount(completion.gaps.truncatedEvidenceFields)} />
           <InfoRow label="Omitted characters" value={uiCount(completion.gaps.omittedEvidenceChars)} />

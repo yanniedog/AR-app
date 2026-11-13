@@ -17,6 +17,7 @@ import { makeHealthyDataFixture } from '../__fixtures__/appHealth';
 import { normalizeCoreWithIntegrity } from '../src/data/sectionIntegrity';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { ANDROID_UPDATE_READINESS_AUDIT } from '../src/lib/performanceAuditCheckInventory';
+import { compactPerformanceAuditReadinessEvidence, PerformanceAuditReadinessRegistry } from '../src/lib/performanceAuditReadiness';
 
 function check(readinessEvidence: string): AuditCheck {
   return {
@@ -30,6 +31,117 @@ function check(readinessEvidence: string): AuditCheck {
 }
 
 describe('integrated app-health display evidence', () => {
+  it('retains invalid populations rather than a permitted empty or later successful visit', () => {
+    const observations = appHealthDisplayObservations([
+      check('screen:data:data:ready:0/3'),
+      check('screen:data:data:error:4/3 | screen:logo:logo:error:4/3:fallback=0'),
+      check('screen:data:data:ready:8/8 | screen:logo:logo:ready:8/8:fallback=0'),
+    ]);
+    const results = evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['model', 'logo'], allowsIntentionalEmpty: true }], observations);
+    for (const code of [APP_HEALTH_CHECK_CODES.DISPLAY_MODEL, APP_HEALTH_CHECK_CODES.DISPLAY_LOGO])
+      expect(results.find(result => result.code === code)).toMatchObject({ status: 'fail', metrics: { checked: 1, failed: 1 } });
+  });
+  it('does not retain optional in-progress image or layout work as a completed adverse visit', () => {
+    const registry = new PerformanceAuditReadinessRegistry();
+    registry.beginCapture('optional-display');
+    const surface = registry.registerSurface({ id: 'screen', probes: [
+      { id: 'logo', kind: 'logo', status: 'pending', required: false, actualCount: 0, expectedCount: 3, fallbackCount: 0 },
+      { id: 'layout', kind: 'layout', status: 'pending', required: false, actualCount: 0, expectedCount: 1, layoutMeasured: false },
+    ] })!;
+    const pending = compactPerformanceAuditReadinessEvidence(registry.snapshot());
+    expect(pending.match(/required=0/g)).toHaveLength(2);
+    const required = compactPerformanceAuditReadinessEvidence(registry.snapshot(['screen'], ['logo', 'layout']));
+    expect(required.match(/required=1/g)).toHaveLength(2);
+    registry.updateProbe(surface, 'logo', { status: 'ready', actualCount: 3 });
+    registry.updateProbe(surface, 'layout', { status: 'ready', actualCount: 1, layoutMeasured: true });
+    const ready = compactPerformanceAuditReadinessEvidence(registry.snapshot());
+    const observations = appHealthDisplayObservations([check(pending), check(ready)]);
+    const results = evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['logo', 'critical-layout'], logosRequired: true }], observations);
+    for (const code of [APP_HEALTH_CHECK_CODES.DISPLAY_LOGO, APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT])
+      expect(results.find(result => result.code === code)).toMatchObject({ status: 'pass', metrics: { checked: 1, failed: 0 } });
+  });
+  it.each([
+    { actualCount: 4, expectedCount: null },
+    { actualCount: null, expectedCount: 3 },
+    { actualCount: null, expectedCount: null },
+  ])('preserves unknown registry populations through serialization (%j)', counts => {
+    const registry = new PerformanceAuditReadinessRegistry();
+    registry.beginCapture('unknown-count');
+    registry.registerSurface({ id: 'screen', probes: [{ id: 'data', kind: 'data', status: 'ready', ...counts }] });
+    const observations = appHealthDisplayObservations([check(compactPerformanceAuditReadinessEvidence(registry.snapshot()))]);
+    expect(observations[0].evidence).toEqual([{ role: 'model', sourceCount: counts.expectedCount, modelCount: counts.actualCount }]);
+    expect(evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['model'] }], observations)
+      .find(result => result.code === APP_HEALTH_CHECK_CODES.DISPLAY_MODEL))
+      .toMatchObject({ status: 'unavailable', metrics: { checked: 1, unavailable: 1 } });
+  });
+  it('retains the reported terminal Rates visibility failure after a successful later visit', () => {
+    // audit-f63bbcf8998f77f9: not-found.home reached 10s with 20/20
+    // committed rows, zero physically visible rows and search.list pending.
+    const failed = { ...check('rates.results:search.list:list:pending:20/20:visible=0:empty=0'),
+      status: 'fail' as const, diagnostic: { stage: 'complete' as const, readiness: {
+        ready: false, capturing: true, blockers: [{ code: 'probe-pending' as const, surface: 'rates.results', probe: 'search.list', message: 'Pending' }], surfaces: [],
+      } } };
+    const recovered = check('rates.results:search.list:list:ready:20/20:visible=4:empty=0');
+    const plan = { passes: [{ steps: [{ expectedSurface: 'rates.results', readiness: ['list'] }] }] } as unknown as DeepPerformanceAuditPlan;
+    const contracts = appHealthSurfaceContracts([], plan);
+    expect(contracts[0].requiredRoles).toEqual(expect.arrayContaining(['list', 'visible', 'empty-state']));
+    const results = evaluateAppHealthDisplayQuality(contracts, appHealthDisplayObservations([failed, recovered]));
+    expect(results.find(result => result.code === APP_HEALTH_CHECK_CODES.DISPLAY_VISIBILITY))
+      .toMatchObject({ status: 'fail', metrics: { checked: 1, failed: 1 } });
+    // An unrelated pending snapshot is not a terminal failure of this target.
+    failed.diagnostic.readiness.blockers[0].surface = 'another.screen';
+    expect(evaluateAppHealthDisplayQuality(contracts, appHealthDisplayObservations([failed, recovered]))
+      .find(result => result.code === APP_HEALTH_CHECK_CODES.DISPLAY_VISIBILITY)?.status).toBe('pass');
+  });
+  it('does not infer decoded logos from a ready flag without image counts', () => {
+    const observations = appHealthDisplayObservations([check('screen:logo:logo:ready:')]);
+    expect(observations[0].evidence).toEqual([{ role: 'logo', expectedCount: null, decodedCount: null, fallbackCount: null, missingCount: null }]);
+    expect(evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['logo'] }], observations)
+      .find(result => result.code === APP_HEALTH_CHECK_CODES.DISPLAY_LOGO)).toMatchObject({ status: 'unavailable', metrics: { checked: 1, unavailable: 1 } });
+  });
+  it('does not infer decoded logos when registry fallback evidence is absent', () => {
+    const registry = new PerformanceAuditReadinessRegistry();
+    registry.beginCapture('unknown-fallback');
+    registry.registerSurface({ id: 'screen', probes: [{ id: 'logo', kind: 'logo', status: 'ready', actualCount: 3, expectedCount: 3 }] });
+    const observations = appHealthDisplayObservations([check(compactPerformanceAuditReadinessEvidence(registry.snapshot()))]);
+    expect(observations[0].evidence).toEqual([{ role: 'logo', expectedCount: 3, decodedCount: null, fallbackCount: null, missingCount: 0 }]);
+    expect(evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['logo'] }], observations)
+      .find(result => result.code === APP_HEALTH_CHECK_CODES.DISPLAY_LOGO))
+      .toMatchObject({ status: 'unavailable', metrics: { checked: 1, unavailable: 1 } });
+  });
+  it('does not turn count-free readiness into invented model population evidence', () => {
+    const observations = appHealthDisplayObservations([check('screen:data:data:ready:')]);
+    expect(observations[0].evidence).toEqual([{ role: 'model', sourceCount: null, modelCount: null }]);
+    expect(evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['model'] }], observations)
+      .find(result => result.code === APP_HEALTH_CHECK_CODES.DISPLAY_MODEL)).toMatchObject({ status: 'unavailable', metrics: { checked: 1, unavailable: 1 } });
+  });
+  it('does not turn count-free list readiness into invented rendered rows or an empty state', () => {
+    const observations = appHealthDisplayObservations([check('screen:list:list:ready::visible=1:empty=0')]);
+    expect(observations[0].evidence).toEqual([{ role: 'list', modelCount: null, renderedCount: null }]);
+    expect(evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['list'] }], observations)
+      .find(result => result.code === APP_HEALTH_CHECK_CODES.DISPLAY_LIST)).toMatchObject({ status: 'unavailable', metrics: { checked: 1, unavailable: 1 } });
+  });
+  it.each([false, true])('keeps model/layout/logo defects when another visit recovers (reverse=%s)', reverse => {
+    const bad = check(['screen:data:data:error:0/3', 'screen:layout:layout:error:0/1:measured=0',
+      'screen:logo:logo:error:1/3:fallback=0'].join(' | '));
+    const good = check(['screen:data:data:ready:8/8', 'screen:layout:layout:ready:1/1:measured=1',
+      'screen:logo:logo:ready:8/8:fallback=0'].join(' | '));
+    const observations = appHealthDisplayObservations(reverse ? [good, bad] : [bad, good]);
+    expect(observations).toHaveLength(1);
+    expect(observations[0].evidence).toContainEqual({ role: 'model', sourceCount: 8, modelCount: 8 });
+    const results = evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['model', 'critical-layout', 'logo'], logosRequired: true }], observations);
+    for (const code of [APP_HEALTH_CHECK_CODES.DISPLAY_MODEL, APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT, APP_HEALTH_CHECK_CODES.DISPLAY_LOGO])
+      expect(results.find(result => result.code === code)).toMatchObject({ status: 'fail', metrics: { checked: 1, failed: 1 } });
+  });
+
+  it('retains a logo fallback warning after a later fully decoded visit', () => {
+    const observations = appHealthDisplayObservations([
+      check('screen:logo:logo:ready:3/3:fallback=1'), check('screen:logo:logo:ready:8/8:fallback=0'),
+    ]);
+    expect(evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['logo'], logosRequired: true }], observations)
+      .find(result => result.code === APP_HEALTH_CHECK_CODES.DISPLAY_LOGO)).toMatchObject({ status: 'warn', metrics: { checked: 1, warned: 1 } });
+  });
+
   function updateDisplayReport(readinessEvidence: string, mode: 'local' | 'live-source' = 'live-source') {
     const { snapshot } = makeHealthyDataFixture();
     const owner = ANDROID_UPDATE_READINESS_AUDIT;

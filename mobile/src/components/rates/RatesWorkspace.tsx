@@ -1,4 +1,5 @@
 import { PreparedProductCard } from './PreparedProductCard';
+import { useFocusMeasurement } from '../../hooks/useFocusMeasurement';
 import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../../data/mortgageFacetScope';
 import { useMortgageResultsIndex } from '../../hooks/useMortgageResultsIndex';
 import { profileSectionCount } from '../../data/profile';
@@ -764,6 +765,7 @@ export default function RatesWorkspace() {
   const physicalVisibility = usePhysicalListVisibility(listRevision, pageRows,
     isFocused && restoredDataRevision === restorationKey && !sheetCovered, resultRowKey,
     info => auditViewability.current(info));
+  useFocusMeasurement(sheetNavigation, physicalVisibility.active, physicalVisibility.measure);
   const requestPhysicalVisibility = useRef(physicalVisibility.measure);
   requestPhysicalVisibility.current = physicalVisibility.measure;
   const physicalCapture = useRef(physicalVisibility.active);

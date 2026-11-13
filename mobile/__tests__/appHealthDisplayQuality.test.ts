@@ -9,6 +9,12 @@ function byCode(checks: readonly AppHealthCheck[], code: AppHealthCheck['code'])
 }
 
 describe('app-health display quality', () => {
+  it('rejects unsafe population counts instead of certifying their rounded equality', () => {
+    const { contracts, observations } = makeCompleteDisplayFixture();
+    observations[0].evidence = observations[0].evidence.map(evidence => evidence.role === 'model'
+      ? { ...evidence, sourceCount: Number.MAX_SAFE_INTEGER + 1, modelCount: Number.MAX_SAFE_INTEGER + 1 } : evidence);
+    expect(byCode(evaluateAppHealthDisplayQuality(contracts, observations), APP_HEALTH_CHECK_CODES.DISPLAY_MODEL).status).toBe('fail');
+  });
   it('accepts a measured empty chart and still rejects missing expected points', () => {
     const { contracts, observations } = makeCompleteDisplayFixture();
     observations[0].evidence = observations[0].evidence.map((evidence) => evidence.role === 'chart'

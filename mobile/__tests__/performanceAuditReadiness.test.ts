@@ -464,7 +464,7 @@ describe('PerformanceAuditReadinessRegistry', () => {
     const evidence = compactPerformanceAuditReadinessEvidence(registry.snapshot());
     expect(evidence.length).toBeLessThanOrEqual(512);
     expect(evidence.split(' | ')).toHaveLength(8);
-    expect(evidence).toContain('product.details:probe-7:layout:ready:8/8:measured=1');
+    expect(evidence).toContain('product.details:probe-7:layout:ready:8/8:required=1:measured=1');
     expect(evidence).not.toContain('private-state');
     expect(evidence).not.toContain('a'.repeat(32));
   });

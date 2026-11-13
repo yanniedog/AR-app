@@ -207,14 +207,14 @@ test('keeps blocked eligibility unknown even with full-catalogue opt-in', () => 
     filterReady: false, eligibleProducts: null, eligibleProviders: null, identityMismatches: null } });
 });
 
-test('keeps a reported producer history gap without failing catalogue identity', () => {
+test('warns about incomplete producer history without inventing a catalogue identity failure', () => {
   const { snapshot } = fixture();
   snapshot.historyCoverage = { ...snapshot.historyCoverage!, sourceGapDays: ['2026-05-13', '2026-10-07'], gaps: [
     ['2026-05-13', 'product-source-reconciliation-unavailable', null, 1],
     ['2026-10-07', 'historical-source-unavailable', null, 1],
     ['2026-10-25', 'historical-quarantined-tiers', null, 58],
   ], processingMismatches: 0, chartProjectionMismatches: 0 };
-  expect(evaluateAppHealthCatalogueCoverage(snapshot)).toMatchObject({ status: 'pass', metrics: {
+  expect(evaluateAppHealthCatalogueCoverage(snapshot)).toMatchObject({ status: 'warn', metrics: {
     historyProcessingMismatches: 0, identityMismatches: 0 } });
 });
 

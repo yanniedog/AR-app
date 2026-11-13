@@ -46,7 +46,7 @@ function parseProbe(line: string): ParsedProbe | null {
   if (parts.length < 5) return null;
   const [surfaceId, probeId, kind, status, counts] = parts;
   if (!['data', 'list', 'logo', 'graphic', 'layout'].includes(kind)) return null;
-  const match = /^(\d+)\/(\d+)$/.exec(counts);
+  const match = /^(\d*)\/(\d*)$/.exec(counts);
   const fallback = parts
     .map((part) => /^fallback=(\d+)$/.exec(part)?.[1] ?? null)
     .find((value): value is string => value != null);
@@ -69,8 +69,8 @@ function parseProbe(line: string): ParsedProbe | null {
     kind: kind as ParsedProbe['kind'],
     ready: status === 'ready',
     pending: status === 'pending',
-    actual: match ? Number(match[1]) : null,
-    expected: match ? Number(match[2]) : null,
+    actual: match?.[1] ? Number(match[1]) : null,
+    expected: match?.[2] ? Number(match[2]) : null,
     fallbackCount: fallback == null ? null : Number(fallback),
     visibleCount: visible == null ? null : Number(visible),
     emptyStateRendered: empty == null ? null : empty === '1',
@@ -83,9 +83,11 @@ function evidenceFor(probe: ParsedProbe): AppHealthDisplayEvidence[] {
   const expected = probe.expected ?? (probe.ready ? 1 : 0);
   const actual = probe.actual ?? (probe.ready ? expected : 0);
   if (probe.kind === 'data') {
-    return [{ role: 'model', sourceCount: expected, modelCount: actual }];
+    return [{ role: 'model', sourceCount: probe.expected, modelCount: probe.actual }];
   }
   if (probe.kind === 'list') {
+    if (probe.expected == null || probe.actual == null)
+      return [{ role: 'list', modelCount: probe.expected, renderedCount: probe.actual }];
     return [
       { role: 'list' as const, modelCount: expected, renderedCount: actual },
       ...(probe.visibleCount == null ? [] : [{
@@ -101,11 +103,13 @@ function evidenceFor(probe: ParsedProbe): AppHealthDisplayEvidence[] {
     ];
   }
   if (probe.kind === 'logo') {
-    const fallbackCount = Math.min(actual, probe.fallbackCount ?? 0);
+    if (probe.expected == null || probe.actual == null) return [{ role: 'logo', expectedCount: probe.expected,
+      decodedCount: null, fallbackCount: probe.fallbackCount, missingCount: null }];
+    const fallbackCount = probe.fallbackCount == null ? null : Math.min(actual, probe.fallbackCount);
     return [{
       role: 'logo',
       expectedCount: expected,
-      decodedCount: actual - fallbackCount,
+      decodedCount: fallbackCount == null ? null : actual - fallbackCount,
       fallbackCount,
       missingCount: Math.max(0, expected - actual),
     }];
@@ -131,13 +135,13 @@ function evidenceFor(probe: ParsedProbe): AppHealthDisplayEvidence[] {
 
 function observedEvidenceCount(evidence: AppHealthDisplayEvidence): number {
   switch (evidence.role) {
-    case 'model': return evidence.modelCount;
-    case 'list': return evidence.renderedCount;
+    case 'model': return evidence.modelCount ?? -1;
+    case 'list': return evidence.renderedCount ?? -1;
     case 'visible': return evidence.visibleCount;
     case 'empty-state': return evidence.rendered ? 1 : 0;
     case 'critical-layout': return evidence.measured ? 1 : 0;
     case 'chart': return evidence.renderedPointCount;
-    case 'logo': return evidence.decodedCount + evidence.fallbackCount;
+    case 'logo': return evidence.decodedCount == null || evidence.fallbackCount == null ? -1 : evidence.decodedCount + evidence.fallbackCount;
   }
 }
 
@@ -149,14 +153,34 @@ function observedEvidenceQuality(evidence: AppHealthDisplayEvidence): number {
       !evidence.unverifiedCount ? 1 : 0;
     case 'critical-layout': return evidence.measured ? 1 : 0;
     case 'empty-state': return evidence.rendered === evidence.expected ? 1 : 0;
-    case 'logo': return evidence.decodedCount - evidence.fallbackCount - evidence.missingCount;
-    case 'model': return evidence.modelCount === evidence.sourceCount ? 1 : 0;
+    case 'logo': return evidence.decodedCount == null || evidence.fallbackCount == null || evidence.missingCount == null
+      ? -1 : evidence.decodedCount - evidence.fallbackCount - evidence.missingCount;
+    case 'model': return evidence.modelCount == null || evidence.sourceCount == null ? -1
+      : evidence.modelCount === evidence.sourceCount ? 1 : 0;
     // Virtualized lists may render only part of a non-empty model. This matches
     // the display evaluator: zero rows or more rows than the model is a failure.
-    case 'list': return evidence.renderedCount <= evidence.modelCount &&
+    case 'list': return evidence.renderedCount == null || evidence.modelCount == null ? -1 : evidence.renderedCount <= evidence.modelCount &&
       (evidence.modelCount === 0 || evidence.renderedCount > 0) ? 1 : 0;
     case 'visible': return evidence.visibleCount >= evidence.expectedMinimum ? 1 : 0;
   }
+}
+
+function adverseEvidencePriority(evidence: AppHealthDisplayEvidence): number {
+  const valid = (value: number | null) => value != null && Number.isSafeInteger(value) && value >= 0;
+  if (evidence.role === 'critical-layout') return evidence.measured ? 0 : 1;
+  if (evidence.role === 'model') {
+    if (evidence.modelCount == null || evidence.sourceCount == null) return 0;
+    if (!valid(evidence.modelCount) || !valid(evidence.sourceCount) || evidence.modelCount > evidence.sourceCount) return 3;
+    return evidence.sourceCount > 0 && evidence.modelCount === 0 ? 1 : 0;
+  }
+  if (evidence.role === 'logo') {
+    const { expectedCount, decodedCount, fallbackCount, missingCount } = evidence;
+    if (expectedCount == null || decodedCount == null || fallbackCount == null || missingCount == null) return 0;
+    if (![expectedCount, decodedCount, fallbackCount, missingCount].every(valid) ||
+        decodedCount + fallbackCount + missingCount !== expectedCount) return 3;
+    return missingCount > 0 ? 2 : fallbackCount > 0 ? 1 : 0;
+  }
+  return 0;
 }
 
 /** Convert independently registered screen probes into display-quality evidence. */
@@ -164,6 +188,7 @@ export function appHealthDisplayObservations(
   checks: readonly AuditCheck[],
 ): AppHealthSurfaceObservation[] {
   const bySurface = new Map<string, Map<AppHealthDisplayRole, AppHealthDisplayEvidence>>();
+  const adverseBySurface = new Map<string, Map<AppHealthDisplayRole, AppHealthDisplayEvidence>>();
   const listFailuresBySurface = new Map<string, NonNullable<AppHealthSurfaceObservation['listFailureEvidence']>>();
   const chartsBySurface = new Map<string, Map<string, ParsedProbe>>();
   for (const check of checks) {
@@ -177,9 +202,13 @@ export function appHealthDisplayObservations(
       // Preparing optional work is not completed model evidence. A contract
       // requiring that model still fails when its evidence is absent.
       if (probe.kind === 'data' && !probe.required && probe.pending) continue;
+      if ((probe.kind === 'logo' || probe.kind === 'layout') && !probe.required && probe.pending) continue;
       // A list that is still loading has not produced empty-state or row evidence.
       // Scoring it as a finished render poisons later settled visits.
-      if (probe.kind === 'list' && probe.pending) continue;
+      const terminalRequiredBlocker = check.status === 'fail' && probe.required &&
+        check.diagnostic?.readiness?.blockers.some(blocker =>
+          blocker.surface === probe.surfaceId && blocker.probe === probe.probeId) === true;
+      if (probe.kind === 'list' && probe.pending && !terminalRequiredBlocker) continue;
       if (probe.kind === 'graphic') {
         // Ordinary navigation may finish while an optional chart is preparing.
         // Its transient state is not a completed chart check. Explicit chart
@@ -234,6 +263,18 @@ export function appHealthDisplayObservations(
         continue;
       }
       for (const evidence of evidenceFor(probe)) {
+        // Retain actual defects/fallbacks separately from the representative
+        // strongest visit. A subsequent recovery does not erase what occurred.
+        const adverse = adverseEvidencePriority(evidence);
+        if (adverse) {
+          const observed = adverseBySurface.get(probe.surfaceId) ?? new Map();
+          const prior = observed.get(evidence.role) as AppHealthDisplayEvidence | undefined;
+          // Invalid populations cannot be hidden by intentional empties or
+          // fallbacks that a surface contract may legitimately permit.
+          if (!prior || adverse > adverseEvidencePriority(prior))
+            observed.set(evidence.role, evidence);
+          adverseBySurface.set(probe.surfaceId, observed);
+        }
         const prior = roles.get(evidence.role);
         // Repeated cold/warm probes keep the strongest independently observed
         // count. On a tie, retain the evidence with the stronger quality proof
@@ -265,12 +306,15 @@ export function appHealthDisplayObservations(
       unavailableCount: probes.filter((probe) => probe.expected === 0 && probe.emptyStateRendered === true).length,
     });
   }
-  return [...bySurface].map(([surfaceId, roles]) => ({
-    surfaceId,
-    evidence: [...roles.values()],
-    ...(listFailuresBySurface.has(surfaceId)
-      ? { listFailureEvidence: listFailuresBySurface.get(surfaceId)! } : {}),
-  }));
+  return [...bySurface].map(([surfaceId, roles]) => {
+    const adverseEvidence = [...(adverseBySurface.get(surfaceId)?.values() ?? [])]
+      .filter(evidence => evidence !== roles.get(evidence.role));
+    return { surfaceId, evidence: [...roles.values()],
+      ...(adverseEvidence.length ? { adverseEvidence } : {}),
+      ...(listFailuresBySurface.has(surfaceId)
+        ? { listFailureEvidence: listFailuresBySurface.get(surfaceId)! } : {}),
+    };
+  });
 }
 
 export function appHealthSurfaceContracts(
@@ -283,6 +327,7 @@ export function appHealthSurfaceContracts(
     'browse.hierarchy',
     'lenders.list',
     'search.results',
+    'rates.results',
   ]);
   const include = (surface: string, requested: readonly string[] = [], modelRequired = true) => {
     const next = roles.get(surface) ?? new Set<AppHealthDisplayRole>();
