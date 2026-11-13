@@ -62,6 +62,11 @@ product, and 11 runs per implementation: median 24.02 ms before versus 8.85 ms
 after, with the same 12,000 matching rows. This is a Node compute benchmark,
 not a measurement of phone frame times or total audit duration.
 
+After incorporating main's updated dependency lock and running `npm ci`, the
+combined focused run passed 18 suites / 196 tests. TypeScript, changed-file
+ESLint, the diagnostic-schema check and the UI-copy guard passed (zero copy
+violations). Full mobile CI and release verification are separate remote gates.
+
 ## Acceptance boundaries
 
 The 2,369 link warnings record untested HTTP reachability in local audit mode;
