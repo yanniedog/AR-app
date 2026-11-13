@@ -96,6 +96,20 @@ test('legacy normalized caches cannot prove absent events, while validated sourc
   expect(normalizeBankInsightsPayload(JSON.parse(JSON.stringify(source)), { fromCache: true })!.eventLedgerComplete).toBe(true);
 });
 
+test.each([[null, null], [0, 2], [3, 2], [0.5, 2], [1, 1.5]])('normalization cannot erase invalid event count evidence (%s/%s)', (moved, total) => {
+  const f = fixture();
+  const normalized = normalizeBankInsightsPayload({ ...f.source, events: [{
+    date: '2026-11-04', provider: 'Private Bank', section: 'Savings', dir: 'hike', avg_bps: 25, moved, total,
+  }] })!;
+  expect(normalized.events).toHaveLength(1); // Preserve the old measured event; do not certify its ledger.
+  expect(normalized.eventLedgerComplete).toBe(false);
+  const cached = normalizeBankInsightsPayload(JSON.parse(JSON.stringify(normalized)), { fromCache: true })!;
+  const row = buildCompactBankResponseWindows(cached, f.calendar, 'Savings')[1].rows[0];
+  expect(row).toMatchObject({ movePp: 0.25, evidence: { reason: 'unverified-events', firstMoveVerified: false } });
+  expect(evaluateBankResponseCoverage({ ...f.snapshot,
+    bankResponseCoverage: bankResponseCoverage(cached, cached, f.calendar, f.core) }).metrics.coverageComplete).toBe(false);
+});
+
 test.each([0, 1.5])('contradictory or fractional product counts cannot establish complete daily observations (%s)', count => {
   const f = fixture();
   f.source.banks['Private Bank'].Savings = { median: [0.04, 0.04, 0.04, 0.04], best: [0.04, 0.04, 0.04, 0.04], count: [count, count, count, count] };

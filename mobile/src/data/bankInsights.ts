@@ -525,6 +525,7 @@ export function normalizeBankInsightsPayload(raw: unknown, options: { fromCache?
   if (!Object.keys(banks).length) return null;
 
   const events: BankRateEvent[] = [];
+  let eventCountsComplete = true;
   if (Array.isArray(obj.events)) {
     for (const item of obj.events) {
       if (!item || typeof item !== 'object') continue;
@@ -534,6 +535,10 @@ export function normalizeBankInsightsPayload(raw: unknown, options: { fromCache?
       const section = SECTION_KEYS.find(section => section === e.section);
       const dir = MOVE_DIRS.find(dir => dir === e.dir);
       const avg_bps = numberOrNull(e.avg_bps);
+      if (!Number.isSafeInteger(e.moved) || Number(e.moved) <= 0 ||
+          !Number.isSafeInteger(e.total) || Number(e.total) <= 0 || Number(e.moved) > Number(e.total)) {
+        eventCountsComplete = false;
+      }
       if (
         !parseYmd(date) ||
         !provider ||
@@ -561,7 +566,7 @@ export function normalizeBankInsightsPayload(raw: unknown, options: { fromCache?
     run_dates,
     banks,
     events,
-    eventLedgerComplete: Array.isArray(obj.events) && events.length === obj.events.length &&
+    eventLedgerComplete: eventCountsComplete && Array.isArray(obj.events) && events.length === obj.events.length &&
       obj.eventLedgerComplete !== false && (!options.fromCache || obj.eventLedgerComplete === true),
     behaviour: normalizeBehaviour(obj.behaviour),
   };
