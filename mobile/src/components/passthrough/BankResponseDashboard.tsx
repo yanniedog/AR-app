@@ -23,7 +23,7 @@ import { responsiveScreenContentStyle } from '../Screen';
 import { AppText, Row } from '../ui';
 import { BankRatesPanel, type BankRatesAuditState } from './BankRatesPanel';
 import { uiLabel,  uiDate, uiJoin, uiProviderName } from '../../lib/uiCopy';
-import { uiChartBps, uiChartPercent, uiChartPp, uiResponseDays, uiBankResponseReason } from '../../lib/chartUiCopy';
+import { uiChartBps, uiChartPercent, uiBankResponseMove, uiBankResponseTiming } from '../../lib/chartUiCopy';
 import { yieldToPaintFrames } from '../../lib/yieldToUi';
 
 function DecisionArrow({ newer, disabled, onPress }: { newer: boolean; disabled: boolean; onPress: () => void }) {
@@ -42,9 +42,8 @@ function DecisionArrow({ newer, disabled, onPress }: { newer: boolean; disabled:
 
 const CompactRow = memo(function CompactRow({ row }: { row: CompactBankResponseRow }) {
   const theme = useTheme();
-  const move = row.movePp == null ? uiBankResponseReason(row.evidence.reason) : uiChartPp(row.movePp);
-  const after = row.daysAfter == null && ['no-recorded-move', 'no-products'].includes(row.evidence.reason)
-    ? uiLabel('—') : uiResponseDays(row.daysAfter);
+  const move = uiBankResponseMove(row);
+  const after = uiBankResponseTiming(row);
   return <View
     accessible
     accessibilityLabel={uiJoin(uiProviderName(row), ' · ', 'First move', ' · ', move, ' · ', 'After', ' · ', after)}

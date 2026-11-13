@@ -1,7 +1,7 @@
 import { bankResponseCoverage, evaluateBankResponseCoverage } from '../src/lib/appHealth/bankResponseCoverage';
 import { publicBankResponseCoverage } from '../src/lib/appHealth/publicBankResponseCoverage';
 import { buildCompactBankResponseWindows } from '../src/data/bankResponseModel';
-import { uiBankResponseReason } from '../src/lib/chartUiCopy';
+import { uiBankResponseReason, uiBankResponseMove, uiBankResponseTiming } from '../src/lib/chartUiCopy';
 import { passiveAuditCheckKey } from '../src/lib/passiveAuditCache';
 import { APP_HEALTH_CHECK_CODES, APP_HEALTH_EXPECTED_CHECK_IDS } from '../src/lib/appHealth/types';
 import { toPublicAppHealthReport, finalizeAppHealthReport } from '../src/lib/appHealth/report';
@@ -37,6 +37,8 @@ test('the declared audit includes exhaustive bank response evidence for every se
   const row = buildCompactBankResponseWindows(f.source, f.calendar, 'Savings')[0].rows[0];
   expect(row.movePp).toBeNull(); // Absence of an event is never invented as a zero move.
   expect(uiBankResponseReason(row.evidence.reason)).toBe('No recorded move');
+  expect(uiBankResponseMove(row)).toBe('No recorded move');
+  expect(uiBankResponseTiming(row)).toBe('—');
 });
 
 test('filtered snapshots retain the source cause and warn instead of passing a loaded list', () => {
@@ -151,6 +153,12 @@ test('event-only providers retain the known move without claiming verified first
   f.source.events.push({ date: '2026-11-04', provider: 'Event Only', section: 'Savings', dir: 'hike', moved: 1, total: 1, avg_bps: 25 });
   const row = buildCompactBankResponseWindows(f.source, f.calendar, 'Savings')[1].rows.find(row => row.provider === 'Event Only');
   expect(row).toMatchObject({ movePp: 0.25, daysAfter: 1, evidence: { reason: 'missing-history', firstMoveVerified: false } });
+  expect(uiBankResponseMove(row!)).toContain('Unverified');
+  expect(uiBankResponseMove(row!)).toContain('0.25');
+  expect(uiBankResponseTiming(row!)).toContain('Unverified');
+  const verified = { ...row!, evidence: { ...row!.evidence, firstMoveVerified: true, reason: 'recorded-move' as const } };
+  expect(uiBankResponseMove(verified)).not.toContain('Unverified');
+  expect(uiBankResponseTiming(verified)).not.toContain('Unverified');
   const coverage = bankResponseCoverage(f.source, f.source, f.calendar, f.core)!;
   expect(coverage.rows.find(row => row.provider === 'Event Only' && row.decisionDate === '2026-11-03'))
     .toMatchObject({ moveKnown: true, timingKnown: true, firstMoveVerified: false, displayReason: 'missing-history' });
