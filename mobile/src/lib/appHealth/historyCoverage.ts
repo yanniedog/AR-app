@@ -21,7 +21,14 @@ export interface HistoryCoverageEvidence {
   gaps: [date: string, reason: string, section: SectionKey | null, count: number, provider?: string][];
   processingMismatches: number;
   chartProjectionMismatches: number;
+  /** Actual comparison opportunities evaluated; absent in older retained evidence. */
+  processingComparisons?: number;
+  chartProjectionComparisons?: number;
   historicalPixelsVerified: false;
+}
+
+function compared(result: HistoryCoverageEvidence, field: 'processingComparisons' | 'chartProjectionComparisons'): void {
+  result[field] = (result[field] ?? 0) + 1;
 }
 
 /** Independent weighted statistics from raw source events. No production reducer. */
@@ -194,11 +201,15 @@ function auditProductHistory(core: CorePayload, history: ProductHistoryPayload |
       // The chart may deliberately fall back to the independently known current
       // headline. That does not fill or certify a missing history observation.
       const knownHeadlineFallback = currentObservationMissing && chart[day] === selected.rate;
+      compared(result, 'chartProjectionComparisons');
       if (chart[day] !== expected && !knownHeadlineFallback) {
         result.gaps.push([day, 'product-model-to-chart-mismatch', selected?.section ?? null, 1, key]); result.chartProjectionMismatches++;
       }
-      if (day === core.run_date && selected && retained != null && Math.abs(retained - selected.rate) > 1e-9) {
-        result.gaps.push([day, 'current-product-rate-mismatch', selected.section, 1, key]); result.processingMismatches++;
+      if (day === core.run_date && selected && retained != null) {
+        compared(result, 'processingComparisons');
+        if (Math.abs(retained - selected.rate) > 1e-9) {
+          result.gaps.push([day, 'current-product-rate-mismatch', selected.section, 1, key]); result.processingMismatches++;
+        }
       }
     }
   }
@@ -207,12 +218,15 @@ function auditProductHistory(core: CorePayload, history: ProductHistoryPayload |
     if (cached?.history === history && cached.prepared === prepared) {
       for (const gap of cached.gaps) result.gaps.push([...gap]);
       result.processingMismatches += cached.processingMismatches;
+      result.processingComparisons = (result.processingComparisons ?? 0) + cached.processingComparisons;
     } else {
       const firstGap = result.gaps.length, firstMismatch = result.processingMismatches;
+      const firstComparison = result.processingComparisons ?? 0;
       auditProductSource(core, history, prepared, result);
       retainedProductSource.set(core, { history, prepared,
         gaps: result.gaps.slice(firstGap).map(gap => [...gap] as HistoryCoverageEvidence['gaps'][number]),
-        processingMismatches: result.processingMismatches - firstMismatch });
+        processingMismatches: result.processingMismatches - firstMismatch,
+        processingComparisons: (result.processingComparisons ?? 0) - firstComparison });
     }
   }
 }
@@ -221,7 +235,7 @@ function auditProductHistory(core: CorePayload, history: ProductHistoryPayload |
 // Keep one product source result per installed core; actual chart checks above
 // still execute whenever the outer revision changes.
 const retainedProductSource = new WeakMap<CorePayload, { history: ProductHistoryPayload;
-  prepared: PreparedHistoricalBankRateCatalogue; gaps: HistoryCoverageEvidence['gaps']; processingMismatches: number }>();
+  prepared: PreparedHistoricalBankRateCatalogue; gaps: HistoryCoverageEvidence['gaps']; processingMismatches: number; processingComparisons: number }>();
 function auditProductSource(core: CorePayload, history: ProductHistoryPayload,
   prepared: PreparedHistoricalBankRateCatalogue, result: HistoryCoverageEvidence): void {
   const dates = new Map(history.run_dates.map((day, index) => [day, index]));
@@ -242,6 +256,7 @@ function auditProductSource(core: CorePayload, history: ProductHistoryPayload,
           const day = input.ready.run_dates[index];
           if (!accepted.has(day) || !owns(day)) continue;
           const position = dates.get(day), actual = position === undefined ? null : history.products[key]?.[position] ?? null;
+          compared(result, 'processingComparisons');
           if (actual == null || !Number.isFinite(actual) || Math.abs(actual - rate / 100) > 1e-9) {
             result.gaps.push([day, 'product-source-to-model-mismatch', section, 1, key]); result.processingMismatches++;
           }
@@ -283,6 +298,7 @@ export function historyCoverageEvidence(core: CorePayload, productHistory: Produ
   if (cached?.prepared === prepared && cached.revision === revision && cached.productHistory === productHistory) return cached.result;
   const result: HistoryCoverageEvidence = { available: Boolean(prepared), runDate: core.run_date, observedDay,
     days: 0, sourceGapDays: [], gaps: [], processingMismatches: 0, chartProjectionMismatches: 0,
+    processingComparisons: 0, chartProjectionComparisons: 0,
     historicalPixelsVerified: false };
   const missingCurrentDays = Math.floor((Date.parse(observedDay) - Date.parse(core.run_date)) / 86_400_000);
   if (missingCurrentDays > 5000) result.gaps.push([observedDay, 'date-axis-unverifiable', null, missingCurrentDays]);
@@ -316,6 +332,7 @@ export function reconcileHistoryCoverage(result: HistoryCoverageEvidence, dates:
   expected: Record<string, BankRateSnapshot>, snapshots: Record<string, BankRateSnapshot>): HistoryCoverageEvidence {
   const first = [...dates, result.runDate].sort()[0];
   const length = Math.floor((Date.parse(result.observedDay && result.observedDay > result.runDate ? result.observedDay : result.runDate) - Date.parse(first)) / 86_400_000) + 1;
+  compared(result, 'processingComparisons');
   if (!Number.isSafeInteger(length) || length < 1 || length > 5000) {
     result.available = false;
     result.processingMismatches++;
@@ -333,8 +350,10 @@ export function reconcileHistoryCoverage(result: HistoryCoverageEvidence, dates:
       result.sourceGapDays.push(day);
       result.gaps.push([day, 'historical-source-unavailable', null, 1]);
     }
+    const expectedDay = day === result.runDate || (sources[day] && !unavailable[day]);
+    if (expectedDay) compared(result, 'processingComparisons');
     if (!snapshots[day]) {
-      if (day === result.runDate || (sources[day] && !unavailable[day])) {
+      if (expectedDay) {
         result.gaps.push([day, 'processed-day-missing', null, 1]);
         result.processingMismatches++;
       }
@@ -347,10 +366,12 @@ export function reconcileHistoryCoverage(result: HistoryCoverageEvidence, dates:
       const raw = expected[day]?.[section] ?? {}, processed = snapshots[day][section] ?? {};
       for (const provider of new Set([...Object.keys(raw), ...Object.keys(processed)])) {
         const source = raw[provider], model = processed[provider];
+        compared(result, 'processingComparisons');
         if (!source || !model || source.count !== model.count) {
           result.gaps.push([day, 'source-to-model-count-mismatch', section, (source?.count ?? 0) - (model?.count ?? 0), provider]);
           result.processingMismatches++;
         } else for (const field of ['min', 'mean', 'median', 'max'] as const) {
+          compared(result, 'processingComparisons');
           const tolerance = Math.max(1, Math.abs(source[field])) * 1e-10;
           if (!Number.isFinite(model[field]) || Math.abs(source[field] - model[field]) > tolerance) {
             result.gaps.push([day, `source-to-model-${field}-mismatch`, section, 1, provider]);
@@ -366,12 +387,16 @@ export function reconcileHistoryCoverage(result: HistoryCoverageEvidence, dates:
     for (const day of allDates) for (const [provider, stats] of Object.entries(snapshots[day]?.[section] ?? {})) {
       const key = JSON.stringify([provider, day]);
       const point = points.get(key);
+      compared(result, 'chartProjectionComparisons');
       if (!point || point.count !== stats.count || point.value !== stats[statistic]) {
         result.gaps.push([day, `model-to-chart-${statistic}-mismatch`, section, 1, provider]); result.chartProjectionMismatches++;
       }
       points.delete(key);
     }
-    for (const [key, point] of points) { result.gaps.push([point.date, `unexpected-chart-${statistic}-point`, section, 1, (JSON.parse(key) as string[])[0]]); result.chartProjectionMismatches++; }
+    for (const [key, point] of points) {
+      compared(result, 'chartProjectionComparisons');
+      result.gaps.push([point.date, `unexpected-chart-${statistic}-point`, section, 1, (JSON.parse(key) as string[])[0]]); result.chartProjectionMismatches++;
+    }
   }
   result.sourceGapDays = [...new Set(result.sourceGapDays)].sort();
   return result;

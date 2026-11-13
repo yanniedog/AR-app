@@ -10,7 +10,9 @@ The last run's upload choice is retained when the audit screen remounts within
 the same app session, including after cancellation, failure and completion.
 
 After a completed run, **Audit history** shows its recorded aggregate metrics.
-Choose the audit mode and metric. **Recorded results** exposes the exact UTC
+Choose the audit mode, metric group, and metric. The five groups are Performance,
+Coverage, Task outcomes, App quality, and Display quality; only one chart renders
+at a time. **Recorded results** exposes the exact UTC
 finish time, version/build, collection and coverage status, and measured value.
 Repeated runs have distinct session IDs; saving the same run again does not
 create another point. Missing measurements are gaps, not zeros. A single run
@@ -22,6 +24,17 @@ An existing completed report becomes available on upgrade and is preserved
 when the next report is saved. Staged history writes are recoverable. A corrupt
 history displays **History unavailable** with **Retry**, instead of silently
 replacing the history. Diagnostic **Clear** also removes this history.
+
+History schema 2 preserves the six original metrics and adds measured coverage,
+automated task, app-quality and display-quality trends. Version-1 histories
+migrate with new fields unknown; existing points are not backfilled from guesses.
+See [metric definitions and evidence limits](AUDIT_HISTORY_METRICS.md) for all
+45 metrics, denominators, and the distinction between automated evidence and
+participant usability or standards conformance. **Metric evidence** exposes the
+current report's measurement method, denominator, samples and robust timing
+statistics. Raw reports and shared diagnostic envelopes include the complete
+per-metric analysis and contributor references; old aggregate-only runs remain
+aggregate-only.
 
 ## Source issue
 

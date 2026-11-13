@@ -108,6 +108,10 @@ test.each(['ready', 'error'] as const)('route outcome uses terminal optional mod
     expect(check.diagnostic?.readiness?.surfaces.find(surface => surface.id === 'projections.lifecycle-chart')?.probes
       .find(probe => probe.id === 'projections.model')?.status).toBe(terminal);
     expect(check.metrics.backMs as number).toBeLessThan(1000);
+    // The terminal probe changes at 150ms: preserve the full 650ms quiet
+    // window, then return without an additional fixed 350ms dwell.
+    expect(check.durationMs).toBeGreaterThanOrEqual(800);
+    expect(check.durationMs).toBeLessThan(1100);
   } finally { registry.unregisterSurface(origin!); registry.endCapture(); jest.useRealTimers(); }
 });
 

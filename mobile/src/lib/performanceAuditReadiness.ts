@@ -396,6 +396,7 @@ export class PerformanceAuditReadinessRegistry {
   }>();
   private readonly activeActions = new Map<string, number>();
   private readonly listeners = new Set<Listener>();
+  private readonly readinessListeners = new Map<Listener, ReadonlySet<string> | null>();
   private readonly captureListeners = new Set<Listener>();
 
   constructor(private readonly clock: PerformanceAuditReadinessClock = systemClock) {}
@@ -968,8 +969,14 @@ export class PerformanceAuditReadinessRegistry {
           this.snapshot(options.surfaceIds, options.requiredKinds, options.onlyKinds),
         ));
       };
-      const unsubscribe = this.subscribe(evaluate);
-      unsubscribePause = options.pauseState?.subscribe(evaluate) ?? (() => {});
+      // A persistent audit/progress surface can update many times while a
+      // destination is settling. Only changes to this wait's selected surfaces
+      // require rebuilding and fingerprinting its snapshot.
+      this.readinessListeners.set(evaluate, options.surfaceIds ? new Set(options.surfaceIds) : null);
+      const unsubscribe = () => { this.readinessListeners.delete(evaluate); };
+      unsubscribePause = options.pauseState?.subscribe(() => {
+        if (options.pauseState?.getPaused() !== paused) evaluate();
+      }) ?? (() => {});
       options.signal?.addEventListener('abort', abort, { once: true });
       if (options.signal?.aborted) abort();
       else evaluate();
@@ -1009,6 +1016,9 @@ export class PerformanceAuditReadinessRegistry {
   private emit(captureChanged = false, changedSurfaceId?: string): void {
     if (changedSurfaceId) this.settledEvidence.delete(changedSurfaceId);
     for (const listener of this.listeners) listener();
+    for (const [listener, selectedIds] of this.readinessListeners) {
+      if (!changedSurfaceId || !selectedIds || selectedIds.has(changedSurfaceId)) listener();
+    }
     if (captureChanged) {
       for (const listener of this.captureListeners) listener();
     }

@@ -1,26 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
-import { AUDIT_HISTORY_LIMIT, AUDIT_METRICS, auditMetricPlot, auditMetricRun, mergeAuditMetricRuns, type AuditMetric, type AuditMetricRun } from '../lib/auditMetricHistory';
+import { AUDIT_HISTORY_LIMIT, AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_GROUPS, auditMetricPlot, auditMetricRun, mergeAuditMetricRuns, type AuditMetric, type AuditMetricRun, type AuditMetricGroup } from '../lib/auditMetricHistory';
 import { loadPerformanceAuditHistory } from '../lib/performanceAuditReportStorage';
 import type { PerformanceAuditReport } from '../lib/performanceAudit';
 import { uiCount, uiDate, uiIdentifier, uiJoin, uiLabel, uiNumber, type UiLabel } from '../lib/uiCopy';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Disclosure, Row } from './ui';
 import { InfoRow } from './settings/settingsUi';
+import { AuditMetricDetails } from './AuditMetricDetails';
 
-const LABELS: Record<AuditMetric, UiLabel> = {
-  failures: 'Failures', coveragePercent: 'Check completion', durationMs: 'Duration',
-  slowestCheckMs: 'Slowest check', maxEventLoopLagMs: 'Max JS lag', maxFrameGapMs: 'JS animation gap',
-};
 const MODES: Record<AuditMetricRun['mode'], UiLabel> = { local: 'Local checks', 'live-source': 'Live checks', unknown: 'Unknown' };
 const OUTCOMES: Record<AuditMetricRun['outcome'], UiLabel> = {
   successful: 'Successful', failed: 'Failed', incomplete: 'Incomplete', warning: 'Needs review',
 };
 function valueLabel(value: number | null, metric: AuditMetric) {
   if (value === null) return uiLabel('Not measured');
-  return uiJoin(uiNumber(value, metric === 'coveragePercent' ? 1 : 0),
-    metric === 'failures' ? '' : metric === 'coveragePercent' ? '%' : uiJoin(' ', 'ms'));
+  const unit = AUDIT_METRIC_DEFINITIONS[metric].unit;
+  return uiJoin(uiNumber(value, unit === 'percent' ? 1 : 0),
+    unit === 'count' ? '' : unit === 'percent' ? '%' : uiJoin(' ', 'ms'));
 }
 
 /** Plot aggregate facts from saved runs and the current report without network work. */
@@ -45,13 +43,14 @@ export function AuditMetricHistory({ report }: { report: PerformanceAuditReport 
       : status === 'error' ? <>
         <AppText color="danger">{uiLabel('History unavailable')}</AppText>
         <Button title="Retry" variant="secondary" onPress={() => setRetry(value => value + 1)} />
-      </> : <AuditMetricHistoryChart runs={runs} />}
+      </> : <AuditMetricHistoryChart runs={runs} report={report} />}
   </Card>;
 }
 
-export function AuditMetricHistoryChart({ runs }: { runs: AuditMetricRun[] }) {
+export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun[]; report?: PerformanceAuditReport | null }) {
   const theme = useTheme();
   const [metric, setMetric] = useState<AuditMetric>('slowestCheckMs');
+  const group: AuditMetricGroup = AUDIT_METRIC_DEFINITIONS[metric].group;
   const [chosenMode, setChosenMode] = useState<AuditMetricRun['mode'] | null>(null);
   const [showRuns, setShowRuns] = useState(false);
   const mode = chosenMode && runs.some(run => run.mode === chosenMode)
@@ -68,10 +67,14 @@ export function AuditMetricHistoryChart({ runs }: { runs: AuditMetricRun[] }) {
           accessibilityState={{ selected: key === mode }} onPress={() => setChosenMode(key)} />)}
     </Row>
     <Row gap={8} style={{ flexWrap: 'wrap' }}>
-      {AUDIT_METRICS.map(key => <Button key={key} title={LABELS[key]} variant={key === metric ? 'secondary' : 'ghost'}
+      {AUDIT_METRIC_GROUPS.map(key => <Button key={key} title={key} variant={key === group ? 'primary' : 'secondary'}
+        accessibilityState={{ selected: key === group }} onPress={() => setMetric(AUDIT_METRICS.find(candidate => AUDIT_METRIC_DEFINITIONS[candidate].group === key)!)} />)}
+    </Row>
+    <Row gap={8} style={{ flexWrap: 'wrap' }}>
+      {AUDIT_METRICS.filter(key => AUDIT_METRIC_DEFINITIONS[key].group === group).map(key => <Button key={key} title={AUDIT_METRIC_DEFINITIONS[key].label} variant={key === metric ? 'secondary' : 'ghost'}
         accessibilityState={{ selected: key === metric }} onPress={() => setMetric(key)} />)}
     </Row>
-    <InfoRow label={LABELS[metric]} value={valueLabel(visibleRuns[visibleRuns.length - 1]?.metrics[metric] ?? null, metric)} />
+    <InfoRow label={AUDIT_METRIC_DEFINITIONS[metric].label} value={valueLabel(visibleRuns[visibleRuns.length - 1]?.metrics[metric] ?? null, metric)} />
     {points.length ? <View>
       <AppText variant="tiny" color="textMuted">{valueLabel(plot.ceiling, metric)}</AppText>
       <Svg width="100%" height={148} viewBox="0 0 320 148" accessible={false}>
@@ -86,16 +89,18 @@ export function AuditMetricHistoryChart({ runs }: { runs: AuditMetricRun[] }) {
         {visibleRuns.length > 1 ? <AppText variant="tiny">{uiDate(visibleRuns[visibleRuns.length - 1].finishedAt)}</AppText> : null}
       </Row>
     </View> : <AppText>{uiLabel('Not measured')}</AppText>}
+    {report?.sessionId === visibleRuns[visibleRuns.length - 1]?.sessionId
+      ? <AuditMetricDetails report={report!} metric={metric} /> : null}
     <Disclosure title="Recorded results" open={showRuns} onToggle={() => setShowRuns(!showRuns)}>
-      {[...visibleRuns].reverse().map(run => <View key={run.sessionId} style={{ gap: 4, paddingVertical: 8 }}>
+      {showRuns ? [...visibleRuns].reverse().map(run => <View key={run.sessionId} style={{ gap: 4, paddingVertical: 8 }}>
         <InfoRow label="Finished" value={uiIdentifier(run.finishedAt)} />
         <InfoRow label="Version" value={uiJoin(uiIdentifier(run.appVersion), ' / ', 'Build', ' ', uiIdentifier(run.buildVersion))} />
         <InfoRow label="Status" value={OUTCOMES[run.outcome]} />
         <InfoRow label="Collection" value={run.collectionComplete ? 'Complete' : 'Incomplete'} />
         <InfoRow label="Coverage" value={run.coverageComplete ? 'Complete' : 'Incomplete'} />
         <InfoRow label="Executed" value={uiCount(run.executed)} />
-        <InfoRow label={LABELS[metric]} value={valueLabel(run.metrics[metric], metric)} />
-      </View>)}
+        <InfoRow label={AUDIT_METRIC_DEFINITIONS[metric].label} value={valueLabel(run.metrics[metric], metric)} />
+      </View>) : null}
     </Disclosure>
   </View>;
 }
