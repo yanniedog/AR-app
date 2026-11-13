@@ -28,6 +28,10 @@ that budget at 467,083 bytes. Malformed saved rows and contradictory completenes
 invalidate coverage. Local details preserve provider names; no arbitrary nested
 source text is forwarded publicly.
 
+The local breakdown mounts at most 40 rows per page, with a total result count
+and page controls. A 1,320-row render regression visits every page without
+mounting the full ledger; stored and exported evidence remains exhaustive.
+
 ## Pinned source check
 
 The 2026-11-13 r000001 bank-history and calendar assets were obtained through the
