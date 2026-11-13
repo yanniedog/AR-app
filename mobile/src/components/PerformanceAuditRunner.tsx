@@ -3236,6 +3236,8 @@ export function PerformanceAuditRunner() {
           const auditCore = prepareAuditPublicCore(initialStore.core, publicCatalogue, publicScenario, initialStore.prefs.profileFilters);
           const prepared = buildPerformanceAuditSetupPlans(auditCore,
             { seed: sessionId, includeNonStandard: true, detailsProducts: initialStore.details?.products,
+              sourceConditionContext: { core: initialStore.core, details: initialStore.details,
+                manifest: initialStore.manifest, coreIntegrity: initialStore.coreIntegrity },
               depositRankMetric: auditPrefs.depositRankMetric,
               mortgageRateMetric: auditPrefs.mortgageRateMetric }, SECTION_ORDER);
           plan = prepared.plan;

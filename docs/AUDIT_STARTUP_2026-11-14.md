@@ -20,6 +20,11 @@ eventually complete.
 The 2,521 warnings comprise 148 journey latency/frame warnings and 2,373
 unverified remote destinations. Warning thresholds remain unchanged.
 
+Eight compare page/selection warnings report exact targets excluded from the
+filtered or rendered results. Four further action warnings concern unavailable
+cached forecast/bond alternatives. The retained journals have no independent
+runtime-error category: all 2,562 during-audit warning/error entries are checks.
+
 Entry measurements are 69.2 ms for screen readiness, 52.9 ms for settings,
 65.1 ms for accepting Start, 30 ms for visible Start feedback and 138.8 ms
 from Start to the runner. Setup adds 214.5 ms for safety, 200.3 ms for payload
@@ -30,7 +35,7 @@ settlement, 552.3 ms for pinned inputs, 1,007.4 ms for link inventory and
 
 - Mount saved results and history after navigation paint opportunities. Keep
   controls available first; suppress this work during preflight and active runs.
-- Schedule disk recovery after interactions. Starting before that callback
+- Schedule disk recovery after interactions and two paint frames. Starting before that callback
   prevents recovery work, while already-started recovery still preserves the
   previous diagnosis without replacing a newer result. Retry recovery after a
   failed preflight or terminal run. Reuse a report already in memory.
@@ -45,6 +50,11 @@ settlement, 552.3 ms for pinned inputs, 1,007.4 ms for link inventory and
 - Memoize each mounted catalogue hook's edition key by its installed manifest.
   One hundred layout/selection rerenders perform no capability hashes; manifest
   replacement and imperative audit reads still recompute and verify the key.
+- Select Rates comparison targets from the applied purpose, repayment, LVR and
+  loan-amount scope, including verified source clauses. Preserve independent
+  product/Saved samples. Report fewer than two matching products as availability;
+  never navigate using planned tokens that were not selected in rendered results.
+  Savings/TD comparisons no longer apply a Mortgage scope.
 - Display both the idle estimate and running estimate as minutes and seconds,
   rounded upward once. For example, 480,484 ms displays `08:01`; minutes continue
   beyond an hour. Paused and unknown states retain their explicit labels.

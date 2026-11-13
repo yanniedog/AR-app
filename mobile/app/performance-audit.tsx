@@ -57,7 +57,7 @@ import {
 import { PERFORMANCE_AUDIT_TYPICAL_DURATION_MS } from '../src/lib/performanceAuditTiming';
 
 import { useDeferredHistorySurface } from '../src/hooks/useDeferredHistorySurface';
-import { scheduleAfterInteractions } from '../src/lib/yieldToUi';
+import { scheduleAfterInteractions, yieldToPaintFrames } from '../src/lib/yieldToUi';
 
 const DEIDENTIFIED_AUDIT_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-app-health-report.json`;
 
@@ -118,6 +118,8 @@ function PerformanceAuditScreenInner() {
   const [failuresOpen, setFailuresOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [recoveryFailed, setRecoveryFailed] = useState(false);
+  const [recoveryAttempt, setRecoveryAttempt] = useState(0);
   // Entry trace: how long this screen, its settings and its start control take.
   const entryMounted = useRef(false);
   if (!entryMounted.current) { entryMounted.current = true; markAuditEntryScreenMounted(); }
@@ -187,15 +189,17 @@ function PerformanceAuditScreenInner() {
   useEffect(() => {
     // Paint the controls before restoring a potentially multi-megabyte report.
     // Returning here during a run must not start recovery or history work.
-    const cancelRecovery = scheduleAfterInteractions(() => {
+    let cancelled = false;
+    const cancelRecovery = scheduleAfterInteractions(() => { void (async () => {
+      await yieldToPaintFrames(2);
       const current = getPerformanceAuditState();
-      if (current.report || current.status === 'queued' || current.status === 'running' || auditPreflightLocked.current) return;
-      void loadCompletedPerformanceAudit().then(saved => {
-        if (mounted.current && saved) restoreCompletedPerformanceAudit(saved);
-      }).catch(() => {});
-    });
-    return cancelRecovery;
-  }, [running, auditPreflightMode]);
+      if (cancelled || !mounted.current || current.report || current.status === 'queued' || current.status === 'running' || auditPreflightLocked.current) return;
+      setRecoveryFailed(false);
+      const saved = await loadCompletedPerformanceAudit();
+      if (mounted.current && saved) restoreCompletedPerformanceAudit(saved);
+    })().catch(() => { if (!cancelled && mounted.current) setRecoveryFailed(true); }); });
+    return () => { cancelled = true; cancelRecovery(); };
+  }, [running, auditPreflightMode, recoveryAttempt]);
   useEffect(() => {
     if (report) void restorePerformanceAuditUpload(report).catch(() => {});
   }, [report]);
@@ -367,7 +371,7 @@ function PerformanceAuditScreenInner() {
   const controls = <Card style={{ gap: 10 }}>
         <AppText variant="h2">{uiLabel('App health audit')}</AppText>
         {!running ? <>
-          <InfoRow label="Last audit" value={completion ? uiJoin(outcomeLabel(completion.outcome), ' · ', uiDate(completion.finishedAt)) : uiLabel(state.report ? 'Loading' : 'No audit history')} />
+          <InfoRow label="Last audit" value={completion ? uiJoin(outcomeLabel(completion.outcome), ' · ', uiDate(completion.finishedAt)) : uiLabel(state.report ? 'Loading' : recoveryFailed ? 'Report unavailable' : 'No audit history')} />
           <InfoRow label="Estimated time" value={nextEstimate} />
         </> : null}
         <Button title="Run audit" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
@@ -416,6 +420,8 @@ function PerformanceAuditScreenInner() {
   return (
     <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }} onLayout={() => setLayoutReady(true)}>
       {controls}
+      {!running && !auditPreflightMode && !state.report && recoveryFailed ?
+        <Button title="Retry saved report" onPress={() => setRecoveryAttempt(attempt => attempt + 1)} /> : null}
       {!running && !auditPreflightMode && resultsReady && !report ? <AuditMetricHistory report={null} /> : null}
       {!running && (!report || state.sessionId !== report.sessionId) ? <DebugLogUploadStatus sessionId={state.sessionId} /> : null}
       {state.status === 'cancelled' ? <Card><AppText>{uiLabel('Audit cancelled')}</AppText><InfoRow label="Results" value="Debug log" /></Card>:null}

@@ -9,6 +9,7 @@ import { getPerformanceAuditState, completePerformanceAudit, failPerformanceAudi
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { restorePerformanceAuditUpload, uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
 import { loadCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
+import { yieldToPaintFrames } from '../src/lib/yieldToUi';
 import type { DebugLogUploadSnapshot } from '../src/lib/debugLogSharing';
 import { performanceAuditReference } from '../src/lib/performanceAuditCompletion';
 import { finalizeAppHealthReport } from '../src/lib/appHealth';
@@ -30,11 +31,12 @@ let mockMountedDisclosure = false;
 let mockResultsReady = true;
 let mockRecoveryWork: (() => void) | null = null;
 let mockDeferRecovery = false;
+const mockCancelRecovery = jest.fn();
 jest.mock('../src/hooks/useDeferredHistorySurface', () => ({ useDeferredHistorySurface: (key: string | null) => key != null && mockResultsReady }));
 jest.mock('../src/lib/yieldToUi', () => ({ scheduleAfterInteractions: (work: () => void) => {
   if (mockDeferRecovery) mockRecoveryWork = work; else work();
-  return () => { mockRecoveryWork = null; };
-} }));
+  return () => { mockCancelRecovery(); mockRecoveryWork = null; };
+}, yieldToPaintFrames: jest.fn(async () => {}) }));
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined) }));
 jest.mock('../src/lib/appUpdate', () => ({
   getApkDownloadSnapshot: () => mockDownload, getHydratedApkDownloadSnapshot: () => mockHydratedDownload(), subscribeApkDownload: () => () => undefined,
@@ -485,7 +487,9 @@ test('start controls render before saved-result derivation and deferred recovery
   expect(tree!.root.findByProps({ label: 'Estimated time' }).props.value).toBe('09:00');
   expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
   expect(tree!.root.findAllByType('AuditMetricHistory')).toHaveLength(0);
+  expect(mockCancelRecovery).not.toHaveBeenCalled();
   await press('Run audit');
+  expect(mockCancelRecovery).toHaveBeenCalled();
   await act(async () => { mockRecoveryWork?.(); });
   expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
   expect(getPerformanceAuditState().status).toBe('queued');
@@ -497,6 +501,28 @@ test('estimated time retains seconds from the last measured run', async () => {
   restoreCompletedPerformanceAudit(report);
   await mount();
   expect(tree!.root.findByProps({ label: 'Estimated time' }).props.value).toBe('08:01');
+});
+
+test('a failed saved-report read stays explicit and can be retried', async () => {
+  jest.mocked(loadCompletedPerformanceAudit).mockRejectedValueOnce(new Error('Transient read failure'));
+  await mount();
+  expect(tree!.root.findByProps({ label: 'Last audit' }).props.value).toBe('Report unavailable');
+  const saved = makePerformanceAuditReport('retried-report');
+  jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(saved);
+  await press('Retry saved report');
+  expect(getPerformanceAuditState().report).toBe(saved);
+  expect(tree!.root.findAllByProps({ title: 'Retry saved report' })).toHaveLength(0);
+});
+
+test('recovery waits for paint and cancels before disk access when unmounted', async () => {
+  let finishPaint!: () => void;
+  jest.mocked(yieldToPaintFrames).mockImplementationOnce(() => new Promise(resolve => { finishPaint = resolve; }));
+  await mount();
+  expect(yieldToPaintFrames).toHaveBeenCalledWith(2);
+  expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
+  act(() => tree!.unmount());
+  await act(async () => { finishPaint(); });
+  expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
 });
 
 test('an in-memory diagnosis is not traversed before result paint is allowed', async () => {

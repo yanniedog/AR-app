@@ -130,7 +130,7 @@ it('provides an initial estimate, adapts to slow checks and covers finalization'
   const slow = estimatePerformanceAuditTime({ total: 200, completed: 20, elapsedMs: 150_000, finalizing: false });
   expect(slow.remainingMs).toBeGreaterThan(fast.remainingMs);
   expect(Object.keys(slow).sort()).toEqual(['basis', 'elapsedMs', 'remainingMs']);
-  expect(formatPerformanceAuditEstimate(slow, false)).toMatch(/^ETA: \d{2,}:\d{2} remaining$/);
+  expect(formatPerformanceAuditEstimate(slow, false)).toBe('ETA: 16:45 remaining');
   expect(formatPerformanceAuditEstimate(slow, true)).toContain('ETA paused');
   const finalizing = estimatePerformanceAuditTime({ total: 200, completed: 200, elapsedMs: 300_000, finalizing: true });
   expect(finalizing.remainingMs).toBeGreaterThan(0);
