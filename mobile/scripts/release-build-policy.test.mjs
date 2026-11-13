@@ -59,7 +59,7 @@ test('GHA and EAS production APK paths omit optional development tooling', async
   const eas = await readJson('../eas.json');
 
   assert.match(workflow, /npm ci --omit=optional --no-audit --no-fund/);
-  assert.match(workflow, /setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c/);
+  assert.match(workflow, /uses:\s*gradle\/actions\/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c/);
   const pair = await readFile(new URL('./android-apk-pair.mjs', import.meta.url), 'utf8');
   assert.match(pair, /'assembleRelease', '--no-daemon', '--build-cache'/);
   assert.equal(eas.build.development.env?.NPM_CONFIG_OMIT, undefined);
