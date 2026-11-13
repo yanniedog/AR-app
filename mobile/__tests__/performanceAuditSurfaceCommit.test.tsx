@@ -121,3 +121,28 @@ test('replacing a child probe ID removes only the previously registered probe', 
     expect(registry.snapshot(['screen']).surfaces[0].probes.map(probe => probe.id)).toEqual(['current']);
   } finally { act(() => tree.unmount()); }
 });
+
+test('replaced declarative probes retire without removing independently mounted child probes', () => {
+  const registry = new PerformanceAuditReadinessRegistry();
+  registry.beginCapture('replace-inline-probe');
+  function Screen({ replaced = false, removed = false }) {
+    const surface = usePerformanceAuditSurface({ id: 'screen', probes: removed ? [] : [
+      { id: replaced ? 'current' : 'old', kind: 'data', status: replaced ? 'ready' : 'pending' },
+    ] });
+    usePerformanceAuditProbe(surface, { id: 'child', kind: 'layout', status: 'ready', layoutMeasured: true });
+    return null;
+  }
+  const render = (replaced = false, removed = false) => <PerformanceAuditReadinessProvider registry={registry}><Screen replaced={replaced} removed={removed} /></PerformanceAuditReadinessProvider>;
+  let tree!: ReturnType<typeof TestRenderer.create>;
+  act(() => { tree = TestRenderer.create(render()); });
+  try {
+    expect(registry.snapshot(['screen']).ready).toBe(false);
+    act(() => tree.update(render(true)));
+    expect(registry.snapshot(['screen'])).toMatchObject({ ready: true, totalProbes: 2 });
+    expect(registry.snapshot(['screen']).surfaces[0].probes.map(probe => probe.id).sort()).toEqual(['child', 'current']);
+    act(() => tree.update(render(true, true)));
+    expect(registry.snapshot(['screen']).surfaces[0].probes.map(probe => probe.id)).toEqual(['child']);
+    act(() => { registry.endCapture(); registry.beginCapture('replacement-capture'); });
+    expect(registry.snapshot(['screen'])).toMatchObject({ ready: true, totalProbes: 1 });
+  } finally { act(() => tree.unmount()); }
+});

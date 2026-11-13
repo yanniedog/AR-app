@@ -71,6 +71,7 @@ export function usePerformanceAuditSurface(
   // render of a potentially expensive Rates/lender screen.
   const registration = useMemo(() => ({
     handle: null as PerformanceAuditSurfaceHandle | null,
+    declarativeProbeIds: new Set<string>(),
     captureGeneration, surfaceId: definition.id, enabled, registry,
   }), [captureGeneration, definition.id, enabled, registry]);
 
@@ -78,8 +79,10 @@ export function usePerformanceAuditSurface(
     if (!enabled || !registry.isCapturing()) return;
     const next = registry.registerSurface(definitionRef.current);
     registration.handle = next;
+    registration.declarativeProbeIds = new Set((definitionRef.current.probes ?? []).map(probe => probe.id));
     return () => {
       registration.handle = null;
+      registration.declarativeProbeIds.clear();
       if (next) registry.unregisterSurface(next);
     };
   }, [enabled, registration, registry]);
@@ -94,7 +97,13 @@ export function usePerformanceAuditSurface(
       renderRevision: definition.renderRevision,
       actions: definition.actions,
     });
-    for (const probe of definition.probes ?? []) registry.upsertProbe(handle, probe);
+    const probes = definition.probes ?? [];
+    const nextProbeIds = new Set(probes.map(probe => probe.id));
+    for (const id of registration.declarativeProbeIds) {
+      if (!nextProbeIds.has(id)) registry.removeProbe(handle, id);
+    }
+    for (const probe of probes) registry.upsertProbe(handle, probe);
+    registration.declarativeProbeIds = nextProbeIds;
   }, [definition.work, definition.actions, definition.datasetRevision, definition.probes, definition.renderRevision, definition.routeKey, enabled, registration, registry]);
 
   return useMemo<PerformanceAuditSurfaceController>(() => {

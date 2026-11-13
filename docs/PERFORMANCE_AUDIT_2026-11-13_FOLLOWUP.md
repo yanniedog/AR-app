@@ -35,10 +35,11 @@ and prepares 8,106 rows. Its 3,474.5 ms forward work still exceeds the unchanged
   screen merely to store its registry handle. Registration and revocation remain
   tied to committed owners and capture generations. Replacing a probe ID removes
   the old probe rather than leaking it into subsequent readiness snapshots.
-- Profile feature selection shares evidence evaluation only among tiers with
+- App mandatory-profile selection shares evidence evaluation only among tiers with
   the exact same product key and feature scope during one selection invocation.
   Changed evidence and selections are always re-evaluated on the next call;
-  unknown, conflicting, conditional and missing evidence still fail closed.
+  unknown, conflicting, conditional and missing evidence still fail closed. This
+  app-only selector leaves the pinned history compiler's source and output intact.
 - Profile option metadata is prepared once per catalogue/section identity.
   Selection edits retain absent saved values without rescanning every rate row.
 - Product cards avoid redundant state updates when native width equals the
@@ -58,14 +59,22 @@ remain covered. These are deterministic rendering tests, not device timings.
 
 Focused Profile/eligibility verification: five suites, 24 tests passed. The
 feature-matching benchmark used 12,000 synthetic rows, 500 products, 30 facts per
-product, and 11 runs per implementation: median 24.02 ms before versus 8.85 ms
+product, one warm-up and 11 alternating pairs: median 20.06 ms before versus 7.87 ms
 after, with the same 12,000 matching rows. This is a Node compute benchmark,
 not a measurement of phone frame times or total audit duration.
 
 After incorporating main's updated dependency lock and running `npm ci`, the
-combined focused run passed 18 suites / 196 tests. TypeScript, changed-file
+combined focused run passed 18 suites / 196 tests; after review and compiler
+isolation fixes the same run passed 18 suites / 200 tests. TypeScript, changed-file
 ESLint, the diagnostic-schema check and the UI-copy guard passed (zero copy
 violations). Full mobile CI and release verification are separate remote gates.
+
+The first remote CI run caught the initial optimisation touching the pinned
+history compiler's transitive source files. Moving it to the app-only selection
+module preserves compiler SHA `c6d1ff733a579a5fef1d17105922aee20bf73d96e66adc60aaa637ff2c1cec9b`;
+`npm run verify:prepared-history` passes with the original generated artifacts.
+Review also corrected removed declarative probes and stabilised the Mortgage
+section prop supplied by the calculation workspace.
 
 ## Acceptance boundaries
 
