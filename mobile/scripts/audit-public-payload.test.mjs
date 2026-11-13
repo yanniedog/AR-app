@@ -177,6 +177,74 @@ function candidate(t) {
   return { directory, manifest, opts: options(['--directory', directory]) };
 }
 
+function bankResponseCandidate(t) {
+  const result = candidate(t), { directory, manifest } = result;
+  const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures/bank-response-20261113');
+  const core = JSON.parse(fs.readFileSync(path.join(fixture, 'core-subset.json')));
+  manifest.run_date = core.run_date;
+  manifest.tag = `app-payload-${core.run_date}`;
+  manifest.files = {};
+  for (const [key, name] of Object.entries({ core: 'core-subset.json', details: 'details-subset.json',
+    bank_history: 'bank-history.json', rba_calendar: 'rba-calendar.json' })) {
+    writeJsonAsset(directory, manifest, key, JSON.parse(fs.readFileSync(path.join(fixture, name))));
+  }
+  return result;
+}
+
+test('headless Bank response uses retained source and default projection without inventing historical evidence', async t => {
+  const { opts } = bankResponseCandidate(t);
+  const report = await audit(opts);
+  const check = report.checks.find(row => row.id === 'bank-response-coverage');
+  assert.equal(report.assets.bank_history.status, 'PASS');
+  assert.equal(report.assets.rba_calendar.status, 'PASS');
+  assert.equal(check.status, 'warn');
+  assert.equal(check.metrics.coverageAvailable, true);
+  assert.equal(check.metrics.runMatches, true);
+  assert.equal(check.metrics.projectionAvailable, true);
+  assert.ok(check.metrics.checked > 0);
+  assert.ok(check.metrics.filteredHistory > 0);
+  assert.ok(check.metrics.unknownMoves > 0);
+  assert.equal(check.metrics.coverageComplete, false);
+  assert.equal(check.metrics.renderedCoverageVerified, false);
+  assert.equal(report.historical_coverage_verified, null);
+  assert.equal(report.publication_verified, false);
+});
+
+for (const key of ['bank_history', 'rba_calendar']) {
+  test(`headless Bank response keeps missing ${key} unavailable`, async t => {
+    const { opts, directory, manifest } = bankResponseCandidate(t);
+    delete manifest.files[key];
+    fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+    const check = (await audit(opts)).checks.find(row => row.id === 'bank-response-coverage');
+    assert.equal(check.status, 'unavailable');
+    assert.equal(check.metrics.coverageAvailable, false);
+  });
+  test(`headless Bank response keeps invalid ${key} unavailable`, async t => {
+    const { opts, directory, manifest } = bankResponseCandidate(t);
+    writeJsonAsset(directory, manifest, key, {});
+    const check = (await audit(opts)).checks.find(row => row.id === 'bank-response-coverage');
+    assert.equal(check.status, 'unavailable');
+  });
+}
+
+test('headless Bank response rejects a different source observation date', async t => {
+  const { opts, directory, manifest } = bankResponseCandidate(t);
+  const history = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.bank_history.name)));
+  history.run_date = '2026-11-12'; // Metadata-only negative control, no invented observations.
+  writeJsonAsset(directory, manifest, 'bank_history', history);
+  const check = (await audit(opts)).checks.find(row => row.id === 'bank-response-coverage');
+  assert.equal(check.status, 'fail');
+  assert.equal(check.metrics.runMatches, false);
+});
+
+test('unverified Bank history bytes never become headless coverage evidence', async t => {
+  const { opts, directory, manifest } = bankResponseCandidate(t);
+  fs.appendFileSync(path.join(directory, manifest.files.bank_history.name), ' ');
+  const report = await audit(opts);
+  assert.equal(report.assets.bank_history.status, 'FAIL');
+  assert.equal(report.checks.find(row => row.id === 'bank-response-coverage').status, 'unavailable');
+});
+
 test('headless audit reconciles retained catalogue identities with explicit default-profile scope', async t => {
   const { opts, directory, manifest } = candidate(t);
   // The old bundled capture predates search-index publication. Derive its index

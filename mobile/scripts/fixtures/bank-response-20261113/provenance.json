@@ -1,0 +1,27 @@
+{
+  "observation_date": "2026-11-13",
+  "original_manifest_sha256": "13f7b72237ee82fb0275cb3489e70be1f39a2448bf7e0d1e4c9f25745c9deb73",
+  "source_assets": {
+    "core": {
+      "name": "core-2026-11-13-936a237d6fe2.json.gz",
+      "bytes": 369282,
+      "sha256": "936a237d6fe24457e53c573e63e3c57c6cbda589e052ac80859a827cf4db3dbe"
+    },
+    "details": {
+      "name": "details-2026-11-13-082105246aef.json.gz",
+      "bytes": 2767817,
+      "sha256": "082105246aefa1a4d60e02166c20c12071d550ff12f18849031c6bdd70bb7104"
+    },
+    "bank_history": {
+      "name": "bank-history-2026-11-13-638362c753bf.json.gz",
+      "bytes": 2986,
+      "sha256": "638362c753bffe5d444a00405063a52362c86e87e9be4f1082bcd28340c3507b"
+    },
+    "rba_calendar": {
+      "name": "rba-calendar-2026-11-13-25da284b2588.json.gz",
+      "bytes": 343,
+      "sha256": "25da284b25889ca71a084cae7a3c354b77f282e58348f59c365b42eb0c2a79db"
+    }
+  },
+  "selection": "First original rate row in each category and its original detail, preserving every selected value; corresponding brand metadata only. Full original RBA series, section ribbons and unchanged bank-history/calendar bodies retained. Core coverage claims removed because this fixture is a subset. No rates or historical observations invented."
+}
