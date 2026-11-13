@@ -67,6 +67,8 @@ export function evaluateAppHealthCatalogueCoverage(snapshot: AppHealthDataSnapsh
     historyGaps: history ? JSON.stringify(history.gaps) : null,
     historyProcessingMismatches: history?.processingMismatches ?? null,
     historyChartProjectionMismatches: history?.chartProjectionMismatches ?? null,
+    historyProcessingComparisons: history?.processingComparisons ?? null,
+    historyChartProjectionComparisons: history?.chartProjectionComparisons ?? null,
     historicalPixelsVerified: false,
   };
   const base = { id: APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE, code: APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE,

@@ -314,6 +314,7 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
   [APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE]: [
     'historyAvailable', 'historyDaysChecked', 'historySourceGapDays', 'historyGaps',
     'historyProcessingMismatches', 'historyChartProjectionMismatches', 'historicalPixelsVerified',
+    'historyProcessingComparisons', 'historyChartProjectionComparisons',
     'catalogueAvailable', 'exhaustiveLoadedCatalogueScan', 'sourceIdentityInventoryAvailable',
     'allProductsRendered', 'publishedRates', 'publishedProducts', 'publishedProviders',
     'sourceProducts', 'sourceRates', 'identityMismatches', 'missingDetails', 'missingSearchIndex',

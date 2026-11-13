@@ -80,6 +80,50 @@ class FakeClock implements PerformanceAuditReadinessClock {
 }
 
 describe('PerformanceAuditReadinessRegistry', () => {
+  it('does not rebuild a selected destination snapshot for unrelated surface or progress changes', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('scoped');
+    const target = registry.registerSurface({ id: 'target', probes: [{ id: 'data', kind: 'data', status: 'ready' }] })!;
+    const progress = registry.registerSurface({ id: 'progress', probes: [{ id: 'data', kind: 'data', status: 'ready' }] })!;
+    const pauseListeners = new Set<() => void>();
+    const snapshot = jest.spyOn(registry, 'snapshot');
+    const wait = registry.waitForReady({ surfaceIds: ['target'], quietWindowMs: 650, pauseState: {
+      getPaused: () => false,
+      subscribe: listener => { pauseListeners.add(listener); return () => { pauseListeners.delete(listener); }; },
+    } });
+    expect(snapshot).toHaveBeenCalledTimes(1);
+    for (let index = 0; index < 100; index++) {
+      registry.updateProbe(progress, 'data', { actualCount: index });
+      pauseListeners.forEach(listener => listener());
+    }
+    expect(snapshot).toHaveBeenCalledTimes(1);
+    clock.advanceBy(600);
+    registry.updateProbe(target, 'data', { actualCount: 1 });
+    expect(snapshot).toHaveBeenCalledTimes(2);
+    let ready = false;
+    void wait.then(() => { ready = true; });
+    clock.advanceBy(649);
+    await Promise.resolve();
+    expect(ready).toBe(false);
+    clock.advanceBy(1);
+    expect((await wait).ready).toBe(true);
+    expect(clock.pendingTimers()).toBe(0);
+    snapshot.mockRestore();
+  });
+
+  it('wakes a scoped readiness wait when its initially absent destination mounts', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('mount');
+    const wait = registry.waitForReady({ surfaceIds: ['target'], quietWindowMs: 650 });
+    clock.advanceBy(100);
+    registry.registerSurface({ id: 'target', probes: [{ id: 'data', kind: 'data', status: 'ready' }] });
+    clock.advanceBy(650);
+    expect((await wait).ready).toBe(true);
+    expect(clock.pendingTimers()).toBe(0);
+  });
+
   it('pauses timeout and requires fresh foreground stability after resuming', async () => {
     const clock = new FakeClock();
     const registry = new PerformanceAuditReadinessRegistry(clock);

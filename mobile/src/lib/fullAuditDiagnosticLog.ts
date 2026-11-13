@@ -1,4 +1,5 @@
 import { publicAuditWorkDiagnostic } from './performanceAuditWorkDiagnostic';
+import { publicAuditMetricAnalysis } from './publicAuditMetricAnalysis';
 import type { PerformanceAuditReport } from './performanceAudit';
 import { toPublicAppHealthReport } from './appHealth';
 import { PUBLIC_AUDIT_ERROR_TYPES, publicAuditDiagnostic, publicAuditError, publicAuditFailureReason, publicHealthFailureReason, stallTimeoutFields } from './performanceAuditDiagnostic';
@@ -120,8 +121,12 @@ function missingAssetList(value: string, separator: string): boolean {
 
 /** Keep the canonical diagnostic report, replacing private inputs rather than
  * replacing the report with a summary. Aliases retain primitive-value equality
- * and repeated object identity without copying private object graphs. */
-export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheckId: (value: string) => string | null): unknown {
+ * and repeated object identity without copying private object graphs.
+ * Standalone output embeds analysis. The `top-level` option is hosted-only:
+ * its reference resolves against the complete envelope's metricAnalysis field,
+ * so callers extracting this log must retain that field or embed its value. */
+export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheckId: (value: string) => string | null,
+  options?: { metricAnalysis: 'top-level' }): unknown {
   const domains = new Map<string, { primitives: Map<unknown, string>; objects: WeakMap<object, string> }>();
   let nextAlias = 0;
   const alias = (value: unknown, domain = 'value') => {
@@ -179,7 +184,7 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
     if (parent === '.checks[].metrics' && typeof value === 'object') return alias(value);
     if (Array.isArray(value)) return value.map(item => visit(item, key, `${path}[]`));
     if (typeof value !== 'object') return SCALAR_PATHS[parent]?.has(key) ? value : alias(value);
-    return Object.fromEntries(Object.entries(value).filter(([name]) => name !== 'networkViolations')
+    return Object.fromEntries(Object.entries(value).filter(([name]) => name !== 'networkViolations' && !(path === '' && name === 'metricAnalysis'))
       .map(([name, child]) => FIELDS.has(name)
         ? [name, visit(child, name, `${path}.${name}`)]
         : [alias(name, 'key'), alias(child)]));
@@ -209,5 +214,10 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
     : health;
   // This dedicated sanitizer owns a complete public schema; do not obscure its
   // quality counts or findings through a second, unrelated schema boundary.
-  return { ...retained, appHealth: annotatedHealth };
+  return { ...retained, appHealth: annotatedHealth,
+    // Hosted envelopes already contain this exact analysis. Keep one observation
+    // table, while a standalone log remains self-contained.
+    metricAnalysis: options?.metricAnalysis === 'top-level'
+      ? { $ref: '$.metricAnalysis' } : publicAuditMetricAnalysis(report, safeCheckId),
+  };
 }

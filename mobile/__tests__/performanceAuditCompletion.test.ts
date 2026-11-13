@@ -34,9 +34,10 @@ test('bank response unknowns keep coverage incomplete even when every list and a
 
 test('an oversized compressed upload fails preparation without returning a partial summary', () => {
   const encode = jest.spyOn(diagnosticCodec, 'encodeCompressedDiagnosticJson')
-    .mockReturnValueOnce('x'.repeat(2 * 1024 * 1024 + 1));
+    .mockReturnValue('x'.repeat(diagnosticCodec.MAX_COMPRESSED_DIAGNOSTIC_BYTES + 1));
   try {
     expect(() => createPublicPerformanceAuditReport(completeReport())).toThrow('public upload limit');
+    expect(encode.mock.calls.length).toBeGreaterThan(1);
   } finally { encode.mockRestore(); }
 });
 

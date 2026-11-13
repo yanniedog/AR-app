@@ -45,7 +45,7 @@ test('every upload includes all retained checks, errors, traces, metrics and dia
       metrics: { actionMs: 13, maxFrameGapMs: 23 }, error: 'Different runtime failure' }];
   const body = createPublicPerformanceAuditReport(report);
   const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
-  expect(decoded.diagnosticLog).toEqual(fullAuditDiagnosticLog(report, id => id));
+  expect(decoded.diagnosticLog).toEqual(fullAuditDiagnosticLog(report, id => id, { metricAnalysis: 'top-level' }));
   expect(decoded.diagnosticLog.checks.map(check => check.id)).toEqual(report.checks.map(check => check.id));
   expect(decoded.diagnosticLog.checks[1]).toMatchObject({ status: 'warn', durationMs: 41, metrics: { actionMs: 13, maxFrameGapMs: 23 } });
   expect(decoded.diagnosticLog.checks[1].error).not.toBe(decoded.diagnosticLog.checks[0].error);
