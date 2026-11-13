@@ -1,5 +1,7 @@
+import { finalizeAppHealthReport, APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth';
+import type { AuditCheck } from '../src/lib/performanceAudit';
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
-import { auditMetricRun, auditMetricPlot, mergeAuditMetricRuns, parseAuditMetricHistory, AUDIT_HISTORY_LIMIT } from '../src/lib/auditMetricHistory';
+import { auditMetricRun, auditMetricPlot, mergeAuditMetricRuns, parseAuditMetricHistory, AUDIT_HISTORY_LIMIT, AUDIT_METRICS, AUDIT_METRIC_HISTORY_VERSION } from '../src/lib/auditMetricHistory';
 
 test('unknown measurements and modes remain distinct from measured zero', () => {
   const report = makePerformanceAuditReport();
@@ -43,4 +45,97 @@ test('invalid history is rejected instead of silently erasing it', () => {
     { ...run, metrics: { ...run.metrics, coveragePercent: 101 } }]) {
     expect(() => parseAuditMetricHistory(encode([invalid]))).toThrow('Invalid audit');
   }
+});
+
+
+test('v1 history keeps old facts and introduces unknown metric gaps; v2 requires complete validated fields', () => {
+  const run = auditMetricRun(makePerformanceAuditReport());
+  const legacy = { ...run, metrics: { failures: 0, coveragePercent: 99.2, durationMs: 100,
+    slowestCheckMs: 2, maxEventLoopLagMs: null, maxFrameGapMs: 0 } };
+  const [migrated] = parseAuditMetricHistory(JSON.stringify({ schemaVersion: 1, runs: [legacy] }));
+  expect(migrated.metrics.coveragePercent).toBe(99.2);
+  expect(migrated.metrics.maxFrameGapMs).toBe(0);
+  expect(migrated.metrics.automatedTaskSuccessPercent).toBeNull();
+  expect(Object.keys(migrated.metrics)).toHaveLength(AUDIT_METRICS.length);
+  expect(() => parseAuditMetricHistory(JSON.stringify({ schemaVersion: AUDIT_METRIC_HISTORY_VERSION, runs: [legacy] }))).toThrow();
+  expect(parseAuditMetricHistory(JSON.stringify({ schemaVersion: AUDIT_METRIC_HISTORY_VERSION, runs: [migrated] }))).toEqual([migrated]);
+  expect(() => parseAuditMetricHistory(JSON.stringify({ schemaVersion: AUDIT_METRIC_HISTORY_VERSION,
+    runs: [{ ...run, metrics: { ...run.metrics, healthPassPercent: 101 } }] }))).toThrow();
+  expect(auditMetricPlot([migrated], 'healthPassPercent')).toMatchObject({ ceiling: 100, points: [null] });
+});
+
+function journey(id: string, metrics: AuditCheck['metrics'] = {}): AuditCheck {
+  return { id, kind: 'journey', label: 'Rates', status: 'pass', durationMs: 100,
+    metrics: { executionAttempted: true, actionInvoked: true, actionCompleted: true, nonTimingFailure: false,
+      eventLoopMeasurementAvailable: true, frameMeasurementAvailable: true, eventLoopSamples: 10,
+      stallsOver100Ms: 1, frameSamples: 20, framesOver50Ms: 2, runtimeErrors: 0,
+      actionMs: 100, forwardWorkMs: 150, backMs: 20, ...metrics },
+    diagnostic: { stage: 'complete', readiness: { ready: true, capturing: true, blockers: [], surfaces: [] } } };
+}
+
+test('automated task outcomes stay distinct from timing failures and sample rates use weighted denominators', () => {
+  const first = journey('first'); first.status = 'fail'; first.metrics.actionMs = 3000;
+  const second = journey('second', { eventLoopSamples: 90, stallsOver100Ms: 0, frameSamples: 180,
+    framesOver50Ms: 0, actionMs: 10, forwardWorkMs: 30, backMs: 60, secondBackMs: 15 });
+  const report = makePerformanceAuditReport('tasks', [first, second]);
+  const metrics = auditMetricRun(report).metrics;
+  expect(metrics.automatedTaskSuccessPercent).toBe(100);
+  expect(metrics.checkPassPercent).toBe(50);
+  expect(metrics.timingFailures).toBe(1);
+  expect(metrics.jsStallPercent).toBe(1);
+  expect(metrics.slowFramePercent).toBe(1);
+  expect(metrics.actionP50Ms).toBe(10);
+  expect(metrics.actionP95Ms).toBe(3000);
+  expect(metrics.backP95Ms).toBe(60);
+  expect(metrics.recoveryPercent).toBe(0);
+  second.metrics.replaceRecoveryMs = 15;
+  expect(auditMetricRun(report).metrics.recoveryPercent).toBe(50);
+  expect(metrics.runtimeErrors).toBe(0);
+  second.metrics.frameMeasurementAvailable = false;
+  expect(auditMetricRun(report).metrics.responsivenessCoveragePercent).toBe(50);
+  delete second.metrics.runtimeErrors;
+  expect(auditMetricRun(report).metrics.runtimeErrors).toBeNull();
+});
+
+test('coverage scores retain missing plans, unverified local links and display failures in their denominator', () => {
+  const link: AuditCheck = { id: 'external-link-1', label: 'Link', kind: 'network', status: 'warn', durationMs: 1,
+    metrics: { httpAttempted: false, httpReachability: 'unknown', browserHandler: 'pass' } };
+  const report = makePerformanceAuditReport('coverage', [journey('first'), link]);
+  report.coverage = { plannedChecks: 3, storedChecks: 2, plannedJourneyChecks: 2, executedJourneyChecks: 1,
+    justifiedSkippedJourneyChecks: 0, unexpectedSkippedJourneyChecks: 0, unavailableJourneyChecks: 0,
+    coveragePercent: 50, attemptedPercent: 66.7, missingPlannedCheckIds: ['missing'], duplicateStoredCheckIds: [],
+    unexpectedStoredCheckIds: [], excludedUnsafeFacetCount: 0, complete: false };
+  report.appHealth = finalizeAppHealthReport({ sessionId: report.sessionId, mode: 'local',
+    startedAt: report.startedAt, finishedAt: report.finishedAt, plannedCheckIds: [APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT],
+    checks: [{ id: APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT, code: APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT,
+      domain: 'display-completeness', label: 'Layout', status: 'fail',
+      metrics: { checked: 4, missing: 1, failed: 1, warned: 0, unavailable: 1 } }] });
+  expect(auditMetricRun(report).metrics).toMatchObject({ collectionPercent: 66.7, journeyCoveragePercent: 50,
+    missingChecks: 1, linkVerificationPercent: 0, unverifiedLinks: 1, displayLayoutPassPercent: 40,
+    detailsCoveragePercent: null, providerSuccessPercent: null, historySourceCoveragePercent: null });
+});
+
+test('absent or invalid evidence does not fabricate healthy quality scores', () => {
+  const report = makePerformanceAuditReport();
+  expect(auditMetricRun(report).metrics).toMatchObject({ automatedTaskSuccessPercent: null,
+    runtimeErrors: null, checkPassPercent: null, dataIntegrityPassPercent: null, healthPassPercent: null,
+    displayLayoutPassPercent: null, collectionPercent: null, readinessCoveragePercent: null });
+  const check = journey('invalid', { eventLoopSamples: 1, stallsOver100Ms: 2 });
+  expect(auditMetricRun(makePerformanceAuditReport('invalid', [check])).metrics.jsStallPercent).toBeNull();
+});
+
+
+test('duplicate health results and unexpected surfaces cannot replace missing planned evidence', () => {
+  const report = makePerformanceAuditReport();
+  const layout = { id: APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT, code: APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT,
+    domain: 'display-completeness' as const, label: 'Surfaces', status: 'fail' as const,
+    metrics: { plannedSurfaces: 2, observedSurfaces: 2, missingSurfaces: 1,
+      duplicateContracts: 0, duplicateObservations: 1, unexpectedSurfaces: 0 } };
+  report.appHealth = finalizeAppHealthReport({ sessionId: report.sessionId, mode: 'local',
+    startedAt: report.startedAt, finishedAt: report.finishedAt, plannedCheckIds: [layout.id], checks: [layout] });
+  expect(auditMetricRun(report).metrics.surfaceCoveragePercent).toBe(50);
+  report.appHealth.checks.push(report.appHealth.checks[0]);
+  expect(auditMetricRun(report).metrics.healthCoveragePercent).toBeNull();
+  expect(auditMetricRun(report).metrics.healthPassPercent).toBeNull();
+  expect(auditMetricRun(report).metrics.dataCompletenessPassPercent).toBeNull();
 });

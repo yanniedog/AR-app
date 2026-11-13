@@ -33,6 +33,7 @@ test('a single recorded run is a dot, and mode switches keep unlike audits separ
   act(() => tree.root.findByProps({ title: 'Failures' }).props.onPress());
   expect(tree.root.findAllByType('Circle')).toHaveLength(1);
   expect(tree.root.findByType('Path').props.d).not.toContain('L');
+  act(() => tree.root.findByProps({ title: 'Recorded results' }).props.onToggle());
   expect(tree.root.findByProps({ label: 'Coverage' }).props.value).toBe('Incomplete');
 });
 
@@ -41,6 +42,8 @@ test('the completed in-memory report appears immediately and deduplicates its pe
   await act(async () => { tree = TestRenderer.create(<AuditMetricHistory report={report} />); });
   act(() => tree.root.findByProps({ title: 'Failures' }).props.onPress());
   expect(tree.root.findAllByType('Circle')).toHaveLength(1);
+  expect(tree.root.findAllByProps({ label: 'Finished' })).toHaveLength(0);
+  act(() => tree.root.findByProps({ title: 'Recorded results' }).props.onToggle());
   expect(tree.root.findByProps({ label: 'Finished' }).props.value).toBe(report.finishedAt);
   jest.mocked(loadPerformanceAuditHistory).mockResolvedValueOnce([auditMetricRun(report)]);
   await act(async () => tree.update(<AuditMetricHistory report={{ ...report }} />));
@@ -58,4 +61,21 @@ test('retention removing the selected mode falls back to the newest retained mod
   act(() => tree.root.findByProps({ title: 'Failures' }).props.onPress());
   expect(tree.root.findByProps({ title: 'Live checks' }).props.accessibilityState.selected).toBe(true);
   expect(tree.root.findAllByType('Circle')).toHaveLength(1);
+});
+
+
+test('metric groups show one chart and retain percent versus duration units', () => {
+  const run = auditMetricRun(makePerformanceAuditReport());
+  run.metrics.collectionPercent = 80;
+  run.metrics.displayLayoutPassPercent = 75;
+  act(() => { tree = TestRenderer.create(<AuditMetricHistoryChart runs={[run]} />); });
+  expect(tree.root.findAllByProps({ title: 'Collected checks' })).toHaveLength(0);
+  act(() => tree.root.findByProps({ title: 'Coverage' }).props.onPress());
+  expect(tree.root.findAllByProps({ label: 'Collected checks' })[0].props.value).toBe('80.0%');
+  expect(tree.root.findAllByType('Svg')).toHaveLength(1);
+  expect(tree.root.findAllByProps({ title: 'Slowest check' })).toHaveLength(0);
+  act(() => tree.root.findByProps({ title: 'Display quality' }).props.onPress());
+  act(() => tree.root.findByProps({ title: 'Layout pass rate' }).props.onPress());
+  expect(tree.root.findAllByProps({ label: 'Layout pass rate' })[0].props.value).toBe('75.0%');
+  expect(tree.root.findAllByType('Svg')).toHaveLength(1);
 });

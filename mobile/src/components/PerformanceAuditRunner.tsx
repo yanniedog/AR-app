@@ -164,7 +164,6 @@ const AUDIT_HOME_PATH = '/performance-audit';
 const ROUTE_TIMEOUT_MS = 8_000;
 /** Readiness shares the complete check budget; sub-waits never extend it. */
 const DATA_SETTLE_TIMEOUT_MS = PERFORMANCE_AUDIT_STEP_LIMIT_MS;
-const ROUTE_DWELL_MS = 350;
 const READINESS_QUIET_WINDOW_MS = 650;
 const USER_VISIBLE_PROBE_KINDS = new Set<PerformanceAuditReadinessKind>(['data', 'layout']);
 const RUNTIME_SAMPLE_MS = 1_250;
@@ -1176,12 +1175,14 @@ async function runDeepAuditStepBody(
     backgroundSettleMs = await outsideStepBudget(watchdog, async () => {
       const decorative = requiredProbeKinds(step).filter((kind) => !USER_VISIBLE_PROBE_KINDS.has(kind));
       const settleStarted = now();
+      // Settle mounted effects first; the quiet wait credits this already
+      // observed stable time instead of appending two frames to every step.
+      await settleUi();
       if (decorative.length) {
         await observeBackgroundReadiness([step.expectedSurface], decorative);
       } else {
         await observeBackgroundReadiness([step.expectedSurface], userVisibleProbeKinds(step));
       }
-      await settleUi();
       return now() - settleStarted;
     });
     assertDatasetRevision(datasetRevision);
@@ -2575,7 +2576,7 @@ export async function runJourney(
         undefined,
       ));
       backgroundSettleMs = (backgroundSettleMs ?? 0) + quiet.durationMs;
-      await outsideStepBudget(watchdog, () => delay(ROUTE_DWELL_MS));
+      // The measured 650ms stable window already includes route dwell.
       assertDatasetRevision(datasetRevision);
     }
     if (!visibleReady.stepExpired) {
@@ -3018,8 +3019,11 @@ export function PerformanceAuditRunner() {
             etaLinkElapsedMs += Math.max(0, recordedMs - etaLastRecordedMs);
           }
           etaLastRecordedMs = recordedMs;
-          markPerformanceAuditCheckStored(completed, total, check.label, lastStoredCheckAt);
         }
+        // All members are durable now. One notification publishes the exact
+        // final count without rerendering the audit screen for every link.
+        const lastCheck = pendingStoredChecks[pendingStoredChecks.length - 1];
+        markPerformanceAuditCheckStored(completed, total, lastCheck.label, lastStoredCheckAt!);
         pendingStoredChecks.length = 0;
       };
 
@@ -3602,9 +3606,10 @@ export function PerformanceAuditRunner() {
             timeoutMs: Math.max(1, Math.min(5_000, remaining || 5_000)),
             signal: linkAbort.signal,
           }));
+          updatePerformanceAuditProgress(completed, total,
+            `Checking external links ${offset + 1}-${offset + chunk.length} of ${externalLinks.length}`);
           for (let index = 0; index < pending.length; index += 1) {
             const label = `Checking external link ${offset + index + 1} of ${externalLinks.length}`;
-            updatePerformanceAuditProgress(completed, total, label);
             await recordContinuable(label, () => pending[index], true);
           }
           await flushRecordedChecks();

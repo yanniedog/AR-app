@@ -5,6 +5,7 @@ import { AUDIT_ENTRY_CHECK_IDS } from './auditEntryTrace';
 import { encodeCompressedDiagnosticJson, MAX_COMPRESSED_DIAGNOSTIC_BYTES } from './compactDiagnosticJson';
 import { publicAuditDiagnostic, publicAuditError, publicAuditFailureReason, publicHealthFailureReason, stallTimeoutFields } from './performanceAuditDiagnostic';
 import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
+import { publicAuditMetricAnalysis } from './publicAuditMetricAnalysis';
 import { auditApplicationJournal } from './auditApplicationJournal';
 import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
 import { measureAuditEvidence } from './auditEvidenceCapacity';
@@ -40,6 +41,7 @@ export const DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW = [
   'app version, build, platform, OS major version and JavaScript engine',
   'payload source, run date, product/provider counts and optional-asset availability',
   'aggregate outcome/counts and measured responsiveness values',
+  'derived metric formulas, sample counts, distributions and deidentified evidence references',
   'aggregate data-quality, asset, display and network-policy findings',
   'fixed check IDs, status, enumerated failure codes, measured duration and allowlisted numeric/boolean metrics',
 ] as const;
@@ -159,13 +161,23 @@ function safeDuration(check: AuditCheck): number | null {
  */
 export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport) {
   measureAuditEvidence(report);
-  const completion = buildPerformanceAuditCompletion(report, safeCheckId);
+  const derivedCompletion = buildPerformanceAuditCompletion(report, safeCheckId);
+  const completion = { ...derivedCompletion, gapPositions: derivedCompletion.gapPositions.map(gap => {
+    const roles = publicAuditDiagnostic({ surface: gap.surfaceId, probe: gap.probeId }) as {
+      surface?: string | null; probe?: string | null;
+    };
+    return { ...gap,
+      ...(gap.surfaceId === undefined ? {} : { surfaceId: roles.surface ?? null }),
+      ...(gap.probeId === undefined ? {} : { probeId: roles.probe ?? null }),
+    };
+  }) };
   const stallTimeout = stallTimeoutFields(report.watchdog.hangTimeoutMs);
   const appHealth = report.appHealth && completion.gaps.invalidHealthReports === 0 ? toPublicAppHealthReport(report.appHealth) : null;
   return {
     schemaVersion: 1,
     kind: 'performance-audit',
     completion,
+    metricAnalysis: publicAuditMetricAnalysis(report, safeCheckId),
     app: {
       version: report.app.appVersion,
       build: report.app.buildVersion,
@@ -350,7 +362,7 @@ export function createPublicPerformanceAuditReport(report: PerformanceAuditRepor
       privacyBoundary: { ...completion.privacyBoundary, generalApplicationJournal: 'included-deidentified' as const },
     },
     applicationJournal,
-    diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId),
+    diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId, { metricAnalysis: 'top-level' }),
   }, { audit: { auditId: completion.auditId, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
     finishedAt: completion.finishedAt,
     outcome: completion.outcome, collectionComplete: completion.collectionComplete,

@@ -4,6 +4,7 @@ import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, type
 import { markAuditEntryInterrupted, markAuditEntryRunning, markAuditEntryStartQueued } from './auditEntryTrace';
 import type { AuditBackgroundWorkWait } from './performanceAuditBackgroundWork';
 import type { AuditCheckDiagnostic } from './performanceAuditDiagnostic';
+import type { AuditMetricAnalysis } from './auditMetricAnalysis';
 
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import type { Prefs } from '../data/storeTypes';
@@ -127,6 +128,8 @@ export interface PerformanceAuditReport {
   limitations: string[];
   /** Schema-v7 quality, availability, display and network diagnosis. */
   appHealth?: AppHealthReport;
+  /** Derived evidence, regenerated from canonical checks for local display/export. */
+  metricAnalysis?: AuditMetricAnalysis;
 }
 
 export interface PerformanceAuditCoverage {
