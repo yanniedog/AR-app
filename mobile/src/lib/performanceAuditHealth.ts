@@ -105,11 +105,11 @@ function evidenceFor(probe: ParsedProbe): AppHealthDisplayEvidence[] {
   if (probe.kind === 'logo') {
     if (probe.expected == null || probe.actual == null) return [{ role: 'logo', expectedCount: probe.expected,
       decodedCount: null, fallbackCount: probe.fallbackCount, missingCount: null }];
-    const fallbackCount = Math.min(actual, probe.fallbackCount ?? 0);
+    const fallbackCount = probe.fallbackCount == null ? null : Math.min(actual, probe.fallbackCount);
     return [{
       role: 'logo',
       expectedCount: expected,
-      decodedCount: actual - fallbackCount,
+      decodedCount: fallbackCount == null ? null : actual - fallbackCount,
       fallbackCount,
       missingCount: Math.max(0, expected - actual),
     }];

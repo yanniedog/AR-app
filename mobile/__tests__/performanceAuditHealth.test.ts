@@ -99,6 +99,16 @@ describe('integrated app-health display evidence', () => {
     expect(evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['logo'] }], observations)
       .find(result => result.code === APP_HEALTH_CHECK_CODES.DISPLAY_LOGO)).toMatchObject({ status: 'unavailable', metrics: { checked: 1, unavailable: 1 } });
   });
+  it('does not infer decoded logos when registry fallback evidence is absent', () => {
+    const registry = new PerformanceAuditReadinessRegistry();
+    registry.beginCapture('unknown-fallback');
+    registry.registerSurface({ id: 'screen', probes: [{ id: 'logo', kind: 'logo', status: 'ready', actualCount: 3, expectedCount: 3 }] });
+    const observations = appHealthDisplayObservations([check(compactPerformanceAuditReadinessEvidence(registry.snapshot()))]);
+    expect(observations[0].evidence).toEqual([{ role: 'logo', expectedCount: 3, decodedCount: null, fallbackCount: null, missingCount: 0 }]);
+    expect(evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['logo'] }], observations)
+      .find(result => result.code === APP_HEALTH_CHECK_CODES.DISPLAY_LOGO))
+      .toMatchObject({ status: 'unavailable', metrics: { checked: 1, unavailable: 1 } });
+  });
   it('does not turn count-free readiness into invented model population evidence', () => {
     const observations = appHealthDisplayObservations([check('screen:data:data:ready:')]);
     expect(observations[0].evidence).toEqual([{ role: 'model', sourceCount: null, modelCount: null }]);

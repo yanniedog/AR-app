@@ -4,7 +4,6 @@ import { buildDeidentifiedPerformanceAudit, createPublicPerformanceAuditReport, 
 import { decodeCompactDiagnosticJson, encodeCompressedDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 import { fullAuditDiagnosticLog } from '../src/lib/fullAuditDiagnosticLog';
 import { publicAuditMetricAnalysis } from '../src/lib/publicAuditMetricAnalysis';
-import { auditMetricMethodVersion } from '../src/lib/auditMetricHistoryMetrics';
 
 function reportFixture() {
   return makePerformanceAuditReport('private-analysis-session', [{
@@ -23,7 +22,10 @@ test('hosted and standalone reports contain the same derived metric evidence wit
   expect(Object.keys(publicReport.metricAnalysis.metrics).sort()).toEqual([...AUDIT_METRICS].sort());
   for (const metric of AUDIT_METRICS) {
     expect(publicReport.metricAnalysis.metrics[metric]).toMatchObject({ value: values[metric],
-      methodVersion: auditMetricMethodVersion(metric) });
+      methodVersion: [
+        'actionP50Ms', 'actionP95Ms', 'displayModelPassPercent', 'displayListPassPercent',
+        'displayVisiblePassPercent', 'displayLayoutPassPercent', 'displayEmptyPassPercent', 'displayLogoPassPercent',
+      ].includes(metric) ? 2 : 1 });
     expect(publicReport.metricAnalysis.metrics[metric].formula).toEqual(expect.any(String));
   }
   const standalone = fullAuditDiagnosticLog(report, id => id) as { metricAnalysis: unknown };

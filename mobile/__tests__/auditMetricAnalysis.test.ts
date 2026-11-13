@@ -5,7 +5,6 @@ import { finalizeAppHealthReport, toPublicAppHealthReport, APP_HEALTH_CHECK_CODE
 import type { AuditCheck } from '../src/lib/performanceAudit';
 import type { AppHealthCheck } from '../src/lib/appHealth';
 import { auditCheckResultSummary } from '../src/lib/auditCheckResultSummary';
-import { auditMetricMethodVersion } from '../src/lib/auditMetricHistoryMetrics';
 
 function journey(id: string, duration: number | null): AuditCheck {
   return { id, kind: 'journey', label: 'Rates', status: 'pass', durationMs: duration,
@@ -38,6 +37,12 @@ test('lightweight result summaries retain full-analysis operands across valid, m
       const report = healthMetricReport(code, metrics);
       if (variant === 'unavailable') report.appHealth!.checks[0].status = 'unavailable';
       const full = buildAuditMetricAnalysis(report), summary = auditCheckResultSummary(report);
+      expect(Object.keys(summary.metrics).sort()).toEqual([
+        'checkPassPercent', 'healthPassPercent', 'dataIntegrityPassPercent', 'dataCompletenessPassPercent',
+        'timingFailures', 'historyProcessingMismatches', 'historyProjectionMismatches', 'surfaceCoveragePercent',
+        'displayModelPassPercent', 'displayListPassPercent', 'displayVisiblePassPercent', 'displayLayoutPassPercent',
+        'displayChartPassPercent', 'displayEmptyPassPercent', 'displayLogoPassPercent',
+      ].sort());
       for (const [metric, { inventory: _inventory, ...operands }] of Object.entries(summary.metrics)) {
         const expected = full.metrics[metric as keyof typeof full.metrics];
         expect({ code, variant, metric, ...operands }).toEqual({ code, variant, metric,
@@ -227,7 +232,10 @@ test('all graph values have the same versioned analysis and valid shared evidenc
     const evidence = analysis.metrics[metric];
     expect(evidence.value).toBe(run.metrics[metric]);
     expect(evidence.methodId).toBe(`ar.audit.${metric}`);
-    expect(evidence.methodVersion).toBe(auditMetricMethodVersion(metric));
+    expect(evidence.methodVersion).toBe([
+      'actionP50Ms', 'actionP95Ms', 'displayModelPassPercent', 'displayListPassPercent',
+      'displayVisiblePassPercent', 'displayLayoutPassPercent', 'displayEmptyPassPercent', 'displayLogoPassPercent',
+    ].includes(metric) ? 2 : 1);
     expect(evidence.formula.length).toBeGreaterThan(10);
     expect(evidence.uncertainty.interval).toBeNull();
     expect(evidence.contributors.every(index => Number.isSafeInteger(index) && analysis.observations[index])).toBe(true);
