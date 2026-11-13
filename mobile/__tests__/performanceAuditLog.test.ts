@@ -78,15 +78,22 @@ describe('bounded audit evidence', () => {
   it('keeps a 2369-link checkpoint inventory small without hiding unverified reachability', () => {
     const checks = Array.from({ length: 2369 }, (_, index) => compactAuditCheckCheckpoint({
       id: `external-link-${index + 1}`, label: 'Lender source', kind: 'network', status: 'warn', durationMs: 20,
-      metrics: { urlValidation: 'pass', browserHandler: 'pass', httpReachability: 'unknown',
-        httpAttempted: false, httpSelected: false, handlerAttempted: true,
+      metrics: { executionAttempted: true, nonTimingFailure: false,
+        host: 'lender.example', destinationPath: '/products/home-loan', purpose: 'lender_source',
+        urlValidation: 'pass', browserHandler: 'pass', httpReachability: 'unknown',
+        httpAttempted: false, httpSelected: false, handlerAttempted: true, handlerResolution: 'pass',
         validationDetail: 'Approved, credential-free HTTPS destination.',
         handlerDetail: 'The operating system reports an installed handler for this destination.',
         reachabilityDetail: 'HTTP reachability was not tested in this audit mode or within its time budget.' },
     }));
-    expect(JSON.stringify(checks).length).toBeLessThan(1_100_000);
+    // Include the wrapper and escaped JSON as stored in the application journal.
+    const entries = checks.map(check => ({ ts: '2026-11-13T07:00:00.000Z', level: 'warn', tag: 'perf-audit',
+      message: JSON.stringify({ kind: 'check', sessionId: '[REDACTED]', check }) }));
+    expect(new TextEncoder().encode(JSON.stringify(entries)).length).toBeLessThan(1_450_000);
     expect(checks[2368]).toMatchObject({ status: 'warn', metrics: { httpReachability: 'unknown', httpAttempted: false },
-      canonicalMetricFields: ['validationDetail', 'handlerDetail', 'reachabilityDetail'] });
+      canonicalMetrics: true });
+    expect(checks[2368]).not.toHaveProperty('label');
+    expect(checks[2368].metrics).not.toHaveProperty('destinationPath');
   });
 
   it('leaves a check within budget untouched', () => {

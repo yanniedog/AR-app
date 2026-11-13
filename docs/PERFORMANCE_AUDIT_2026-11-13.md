@@ -61,6 +61,11 @@ blocks, very short actions, missing callbacks and exact interval boundaries.
 There is no added wait and no relaxed threshold. Missing callbacks remain
 unknown. Journal checkpoints reference verbose canonical metric fields rather
 than duplicating and truncating them; full retained checks remain unchanged.
+A checkpoint replay from the public report, with all 2,756 checks and 477
+retained non-check journal entries, occupies 1,920,907 bytes under the
+2,097,152-byte journal limit. This uses the report's privacy-aliased evidence;
+it is not a new device capture. Link checkpoints keep facet/attempt statuses
+and explicitly reference canonical destination metadata.
 
 ## Acceptance boundaries
 
