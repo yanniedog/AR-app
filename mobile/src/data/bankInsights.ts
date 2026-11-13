@@ -487,7 +487,7 @@ function normalizeBehaviour(
 }
 
 /** Drop corrupt bank-history JSON before it reaches insights/chart code. */
-export function normalizeBankInsightsPayload(raw: unknown): BankInsightsPayload | null {
+export function normalizeBankInsightsPayload(raw: unknown, options: { fromCache?: boolean } = {}): BankInsightsPayload | null {
   if (!raw || typeof raw !== 'object') return null;
   const obj = raw as Record<string, unknown>;
   const run_date = typeof obj.run_date === 'string' ? obj.run_date.slice(0, 10) : '';
@@ -513,7 +513,8 @@ export function normalizeBankInsightsPayload(raw: unknown): BankInsightsPayload 
       const median = alignedSeries(series.median, run_dates.length);
       const best = alignedSeries(series.best, run_dates.length);
       const count = alignedSeries(series.count, run_dates.length);
-      if (!median || !best || !median.some((v) => v != null)) continue;
+      if (!median || !best || !median.some((v) => v != null) &&
+          !count?.some((value, index) => value === 0 && median[index] == null && best[index] == null)) continue;
       sections[section] = {
         median,
         best,
@@ -525,6 +526,7 @@ export function normalizeBankInsightsPayload(raw: unknown): BankInsightsPayload 
   if (!Object.keys(banks).length) return null;
 
   const events: BankRateEvent[] = [];
+  let eventCountsComplete = true;
   if (Array.isArray(obj.events)) {
     for (const item of obj.events) {
       if (!item || typeof item !== 'object') continue;
@@ -534,6 +536,10 @@ export function normalizeBankInsightsPayload(raw: unknown): BankInsightsPayload 
       const section = SECTION_KEYS.find(section => section === e.section);
       const dir = MOVE_DIRS.find(dir => dir === e.dir);
       const avg_bps = numberOrNull(e.avg_bps);
+      if (!Number.isSafeInteger(e.moved) || Number(e.moved) <= 0 ||
+          !Number.isSafeInteger(e.total) || Number(e.total) <= 0 || Number(e.moved) > Number(e.total)) {
+        eventCountsComplete = false;
+      }
       if (
         !parseYmd(date) ||
         !provider ||
@@ -561,6 +567,8 @@ export function normalizeBankInsightsPayload(raw: unknown): BankInsightsPayload 
     run_dates,
     banks,
     events,
+    eventLedgerComplete: eventCountsComplete && Array.isArray(obj.events) && events.length === obj.events.length &&
+      (obj.eventLedgerComplete === undefined || obj.eventLedgerComplete === true) && (!options.fromCache || obj.eventLedgerComplete === true),
     behaviour: normalizeBehaviour(obj.behaviour),
   };
 }

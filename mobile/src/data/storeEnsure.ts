@@ -624,7 +624,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         set({ bankInsightsError: null });
         return;
       }
-      const cached = force && !cacheOnly ? null : normalizeBankInsightsPayload(await cache.readBankInsights());
+      const cached = force && !cacheOnly ? null : normalizeBankInsightsPayload(await cache.readBankInsights(), { fromCache: true });
       if (cacheOnly && !cacheEditionStillCurrent()) return;
       if ((!force || cacheOnly) && fresh(cached)) {
         set({ bankInsights: cached, bankInsightsError: null });

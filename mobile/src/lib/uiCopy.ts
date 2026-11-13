@@ -19,6 +19,8 @@ import type { CurrentProductOption } from '../data/scenarioCatalog';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
+  'Recorded move', 'No recorded move', 'Filtered history', 'Quarantined history', 'Baseline unavailable', 'History gaps', 'No products',
+  'Bank response coverage', 'Decision windows', 'Unknown changes', 'Unknown timing', 'Unverified first moves',
   'Metric evidence', 'Method', 'Numerator', 'Denominator', 'Sample size', 'Eligible', 'Missing evidence',
   'Worst observations', 'Median absolute deviation', 'Interquartile range', 'p50', 'p90', 'p95', 'p99',
   'Evidence references', 'Evidence status', 'Not observed', 'Invalid evidence', 'Measurement scope',
@@ -26,7 +28,7 @@ export const UI_LABELS = [
   'Sample unit', 'Contributing journeys', 'Unmeasured journeys',
   'Journey time p50', 'Journey time p95', 'JS stalls over 100 ms', 'JS frames over 50 ms', 'Collected checks', 'Journey execution', 'Health check execution', 'Readiness evidence', 'Responsiveness evidence', 'Verified destinations', 'Provider fetch success', 'Product detail coverage', 'History source coverage', 'Target probe defects', 'Unverified destinations', 'Automated task success', 'Automated task failures', 'Action time p50', 'Action time p95', 'Back time p95', 'Navigation recoveries', 'Runtime errors', 'Check pass rate', 'Health pass rate', 'Data integrity pass rate', 'Data completeness pass rate', 'Timing failures', 'History processing mismatches', 'History projection mismatches', 'Observed surfaces', 'Display model pass rate', 'List rendering pass rate', 'Visible content pass rate', 'Layout pass rate', 'Chart rendering pass rate', 'Empty state pass rate', 'Logo rendering pass rate', 'Task outcomes', 'App quality', 'Display quality',
   'Audit history', 'No audit history', 'History unavailable', 'Retained runs', 'Audit settings', 'Recorded results',
-  'Estimated time', 'Last audit', 'Upload details', 'Retry saved report', 'min',
+  'Estimated time', 'Last audit', 'Upload details', 'Retry saved report', 'Event history unavailable', 'min',
   'Unverified details', 'Quarantined tiers', 'History days', 'Daily gaps', 'Rendered coverage', 'Chart gaps', 'Processing gaps', 'Source unavailable',
   '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '#', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
   'Rates', 'Saved', 'Market', 'Account', 'Profile', 'Settings', 'About',

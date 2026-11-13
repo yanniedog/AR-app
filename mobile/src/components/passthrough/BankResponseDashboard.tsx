@@ -23,7 +23,7 @@ import { responsiveScreenContentStyle } from '../Screen';
 import { AppText, Row } from '../ui';
 import { BankRatesPanel, type BankRatesAuditState } from './BankRatesPanel';
 import { uiLabel,  uiDate, uiJoin, uiProviderName } from '../../lib/uiCopy';
-import { uiChartBps, uiChartPercent, uiChartPp, uiResponseDays } from '../../lib/chartUiCopy';
+import { uiChartBps, uiChartPercent, uiBankResponseMove, uiBankResponseTiming } from '../../lib/chartUiCopy';
 import { yieldToPaintFrames } from '../../lib/yieldToUi';
 
 function DecisionArrow({ newer, disabled, onPress }: { newer: boolean; disabled: boolean; onPress: () => void }) {
@@ -42,8 +42,8 @@ function DecisionArrow({ newer, disabled, onPress }: { newer: boolean; disabled:
 
 const CompactRow = memo(function CompactRow({ row }: { row: CompactBankResponseRow }) {
   const theme = useTheme();
-  const move = uiChartPp(row.movePp);
-  const after = uiResponseDays(row.daysAfter);
+  const move = uiBankResponseMove(row);
+  const after = uiBankResponseTiming(row);
   return <View
     accessible
     accessibilityLabel={uiJoin(uiProviderName(row), ' · ', 'First move', ' · ', move, ' · ', 'After', ' · ', after)}
@@ -59,9 +59,10 @@ const CompactRow = memo(function CompactRow({ row }: { row: CompactBankResponseR
 });
 
 export function BankResponseDashboard({
-  payload, calendar, initialDecisionDate, initialSection = 'Mortgage',
+  payload, sourcePayload, calendar, initialDecisionDate, initialSection = 'Mortgage',
 }: {
   payload: BankInsightsPayload;
+  sourcePayload?: BankInsightsPayload | null;
   calendar: RbaCalendar | null;
   initialDecisionDate?: string | null;
   initialSection?: SectionKey;
@@ -71,7 +72,7 @@ export function BankResponseDashboard({
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [section, setSection] = useState<SectionKey>(initialSection);
   useEffect(() => { if (!sectionOptions.some(option => option.value === section)) setSection(sectionOptions[0].value); }, [section, sectionOptions]);
-  const windows = useMemo(() => buildCompactBankResponseWindows(payload, calendar, section), [calendar, payload, section]);
+  const windows = useMemo(() => buildCompactBankResponseWindows(payload, calendar, section, sourcePayload), [calendar, payload, section, sourcePayload]);
   const initialIndex = Math.max(0, windows.findIndex((window) => window.decision.date === initialDecisionDate));
   const [decisionIndex, setDecisionIndex] = useState(initialIndex);
   const active = windows[Math.min(decisionIndex, Math.max(0, windows.length - 1))];

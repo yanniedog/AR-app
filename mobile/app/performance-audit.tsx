@@ -13,6 +13,7 @@ import type { AppHealthDomain } from '../src/lib/appHealth/types';
 import { DebugLogUploadStatus } from '../src/components/DebugLogUploadStatus';
 import { BackgroundWorkDiagnosis } from '../src/components/BackgroundWorkDiagnosis';
 import { AuditCatalogueCoverage } from '../src/components/AuditCatalogueCoverage';
+import { AuditBankResponseCoverage } from '../src/components/AuditBankResponseCoverage';
 import { AuditHistoryCoverage } from '../src/components/AuditHistoryCoverage';
 import { AuditMetricHistory } from '../src/components/AuditMetricHistory';
 import { AuditCheckSymbol, AuditOutcomeSymbols } from '../src/components/AuditOutcomeSymbols';
@@ -508,6 +509,7 @@ function PerformanceAuditScreenInner() {
         </Card>
         {report.backgroundWorkWait ? <BackgroundWorkDiagnosis wait={report.backgroundWorkWait}/>:null}
         <AuditCatalogueCoverage check={reportHealth?.checks.find(check => check.code === 'catalogue-identity-coverage')} sampling={report.plan?.inputs.sampling}/>
+        <AuditBankResponseCoverage check={reportHealth?.checks.find(check => check.code === 'bank-response-coverage')} />
         {reportHealth ? <Card style={{gap:8}}>
           <AppText variant="h3">{uiLabel('Data and display health')}</AppText>
           <InfoRow label="Mode" value={uiLabel(reportHealth.mode === 'local' ? 'Local checks':'Live checks')} />

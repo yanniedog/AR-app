@@ -92,7 +92,7 @@ describe('compact bank response windows', () => {
     const windows = buildCompactBankResponseWindows({ ...payload, banks }, calendar, 'Mortgage');
     expect(windows.every(window => window.rows.every(row => row.provider !== 'Empty'))).toBe(true);
     expect(windows.find(window => window.decision.date === '2026-05-10')?.rows)
-      .toContainEqual({ provider: 'Zero', movePp: null, daysAfter: null, direction: null });
+      .toContainEqual(expect.objectContaining({ provider: 'Zero', movePp: null, daysAfter: null, direction: null }));
     expect(windows.find(window => window.decision.date === '2026-05-05')?.rows.some(row => row.provider === 'Zero')).toBe(false);
   });
 });

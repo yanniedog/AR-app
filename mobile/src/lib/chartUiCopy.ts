@@ -1,7 +1,35 @@
 import type { EconomicIndicatorId, EconomicPressure } from '../data/economicOutlook';
 import type { BankMoveDir } from '../data/bankInsights';
 import type { SectionKey } from '../types';
+import type { BankResponseReason } from '../data/bankResponseEvidence';
+import type { CompactBankResponseRow } from '../data/bankResponseModel';
 import { uiDate, uiDuration, uiJoin, uiLabel, uiNumber, type UiText } from './uiCopy';
+
+export function uiBankResponseReason(reason: BankResponseReason): UiText {
+  switch (reason) {
+    case 'recorded-move': return uiLabel('Recorded move');
+    case 'no-recorded-move': return uiLabel('No recorded move');
+    case 'filtered-history': return uiLabel('Filtered history');
+    case 'quarantined-history': return uiLabel('Quarantined history');
+    case 'missing-history': return uiLabel('History unavailable');
+    case 'missing-baseline': return uiLabel('Baseline unavailable');
+    case 'history-gap': return uiLabel('History gaps');
+    case 'no-products': return uiLabel('No products');
+    case 'unverified-events': return uiLabel('Event history unavailable');
+  }
+}
+
+export function uiBankResponseMove(row: CompactBankResponseRow): UiText {
+  if (row.movePp == null) return uiBankResponseReason(row.evidence.reason);
+  const move = uiChartPp(row.movePp);
+  return row.evidence.firstMoveVerified ? move : uiJoin(move, ' · ', 'Unverified');
+}
+
+export function uiBankResponseTiming(row: CompactBankResponseRow): UiText {
+  if (row.daysAfter == null && ['no-recorded-move', 'no-products'].includes(row.evidence.reason)) return uiLabel('—');
+  const timing = uiResponseDays(row.daysAfter);
+  return row.daysAfter == null || row.evidence.firstMoveVerified ? timing : uiJoin(timing, ' · ', 'Unverified');
+}
 
 export function uiChartSection(section: SectionKey): UiText {
   switch (section) {

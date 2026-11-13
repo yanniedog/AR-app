@@ -5,6 +5,7 @@ import type { AppState } from '../src/data/storeTypes';
 import '../src/background/tasks';
 import { FIXTURE_NOW_MS, makeHealthyDataFixture } from '../__fixtures__/appHealth';
 import { newPassiveAuditRecord, serializePassiveAuditRecord } from '../src/lib/passiveAuditCache';
+import { APP_HEALTH_DATA_CHECKS } from '../src/lib/appHealth/dataQuality';
 import {
   PASSIVE_AUDIT_TASK, getPassiveAuditStatus, passiveAuditAppBuild,
   registerPassiveAuditBackground, setPassiveAuditPaused,
@@ -165,7 +166,9 @@ it('rebuilds a cleared snapshot after busy native work even when live data refer
     expect(JSON.parse(mockStorage.get('ar-passive-audit-v1')!).entries['rate-values'].check.status).toBe('pass');
     expect(prepare).toHaveBeenCalledTimes(2);
     // This fixture supplies all row data but no catalogue projection.
-    expect(runtime.getPassiveAuditStatus().completed).toBe(15);
+    expect(runtime.getPassiveAuditStatus().completed).toBe(
+      APP_HEALTH_DATA_CHECKS.filter(check => check.code !== 'catalogue-identity-coverage').length,
+    );
     expect(network).not.toHaveBeenCalled();
   } finally { now.mockRestore(); network.mockRestore(); handler.mockRestore(); prepare.mockRestore(); }
 });

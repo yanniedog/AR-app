@@ -1,4 +1,6 @@
 import { publicHistoryCoverageSanitizer } from './publicHistoryCoverage';
+import { BANK_RESPONSE_PUBLIC_METRICS } from './bankResponseCoverage';
+import { publicBankResponseCoverage } from './publicBankResponseCoverage';
 import {
   APP_HEALTH_CHECK_CODES,
   APP_HEALTH_DOMAINS,
@@ -240,6 +242,7 @@ export function readCompatibleAppHealthReport(value: unknown): ReadableAppHealth
 export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
   Partial<Record<AppHealthCheckCode, readonly string[]>>
 > = {
+  [APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE]: BANK_RESPONSE_PUBLIC_METRICS,
   [APP_HEALTH_CHECK_CODES.SOURCE_STATE]: ['source', 'coreAvailable'],
   [APP_HEALTH_CHECK_CODES.MANIFEST_CONTRACT]: [
     'manifestAvailable',
@@ -420,6 +423,10 @@ function publicMetrics(check: AppHealthCheck, sanitizeHistory: ReturnType<typeof
     metrics.unclassifiedFailedSurfaces = ids.filter(id =>
       typeof id !== 'string' || !PUBLIC_DISPLAY_SURFACES.has(id)).length;
   }
+  if (check.code === APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE) return {
+    ...Object.fromEntries(Object.entries(metrics).filter(([, value]) => value == null || typeof value === 'number' || typeof value === 'boolean')),
+    ...publicBankResponseCoverage(check),
+  };
   return check.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE
     ? { ...metrics, ...sanitizeHistory(check.metrics) } : metrics;
 }

@@ -12,6 +12,10 @@ import type { RbaMarketOutlook } from '../src/data/rbaMarketOutlookTypes';
 import type { DatesIndex } from '../src/data/datesIndex';
 import { revisionTag } from '../src/data/payloadRevision';
 import type { Manifest } from '../src/types';
+import { normalizeBankInsightsPayload } from '../src/data/bankInsights';
+import { createEnsureActions } from '../src/data/storeEnsure';
+import * as payloadApi from '../src/data/payload';
+import type { AppState, StoreSet } from '../src/data/storeTypes';
 
 const files = new Map<string, string>();
 
@@ -77,6 +81,32 @@ describe('cache core-meta sidecar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetFs();
+  });
+
+  it('persists a downloaded event-ledger marker through the real cache and ensure read path', async () => {
+    const manifest = { ...sampleManifest, files: { ...sampleManifest.files,
+      bank_history: { name: 'bank-history.json.gz', url: 'https://example.test/bank-history.json.gz', bytes: 1, sha256: 'a'.repeat(64) } } };
+    const source = normalizeBankInsightsPayload({ schema_version: 1, run_date: sampleCore.run_date,
+      run_dates: [sampleCore.run_date], banks: { Bank: { Savings: { median: [0.04], best: [0.04], count: [1] } } }, events: [] })!;
+    const state = { source: 'remote', core: sampleCore, manifest, bankInsights: null } as AppState;
+    const get = () => state;
+    const set = ((update: Parameters<StoreSet>[0]) => Object.assign(state, typeof update === 'function' ? update(state) : update)) as StoreSet;
+    const actions = createEnsureActions(set, get);
+    const download = jest.spyOn(payloadApi, 'downloadBankInsights').mockResolvedValue({ bankInsights: source, text: JSON.stringify(source) });
+    try {
+      await actions.ensureBankInsights({ force: true });
+      expect(download).toHaveBeenCalledTimes(1);
+      expect((await cache.readBankInsights())?.eventLedgerComplete).toBe(true);
+      state.bankInsights = null;
+      await actions.ensureBankInsights({ cacheOnly: true });
+      expect(get().bankInsights?.eventLedgerComplete).toBe(true);
+      // Emulate a pre-marker cache using the same production writer and read path.
+      await cache.writeBankInsights(JSON.stringify({ ...source, eventLedgerComplete: undefined }));
+      state.bankInsights = null;
+      await actions.ensureBankInsights({ cacheOnly: true });
+      expect(get().bankInsights?.eventLedgerComplete).toBe(false);
+      expect(download).toHaveBeenCalledTimes(1);
+    } finally { download.mockRestore(); }
   });
 
   it('retains a sidecar-only historical correction when the next bundle write is interrupted before staging', async () => {

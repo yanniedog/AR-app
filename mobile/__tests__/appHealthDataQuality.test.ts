@@ -84,10 +84,11 @@ describe('app-health data quality', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     const checks = evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS);
 
-    expect(checks).toHaveLength(16);
-    expect(checks.filter(check => check.code !== APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE)
+    expect(checks).toHaveLength(17);
+    expect(checks.filter(check => check.code !== APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE && check.code !== APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE)
       .every((check) => check.status === 'pass')).toBe(true);
     expect(byCode(checks, APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE).status).toBe('unavailable');
+    expect(byCode(checks, APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE).status).toBe('unavailable');
   });
 
   it('does not infer product identity coverage from equal detail counts', () => {

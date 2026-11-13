@@ -1,5 +1,6 @@
 import type { ManifestFile, RateRow, SectionData, SectionKey } from '../../types';
 import { evaluateAppHealthCatalogueCoverage } from './catalogueCoverage';
+import { evaluateBankResponseCoverage } from './bankResponseCoverage';
 import { versionLt } from '../versionCompare';
 import { isValidCalendarDate } from '../calendarDate';
 import { validatePayloadAccounting } from './payloadAccounting';
@@ -979,6 +980,7 @@ export const APP_HEALTH_DATA_CHECKS: readonly {
   { code: APP_HEALTH_CHECK_CODES.FRESHNESS, backgroundMetadataOnly: true, evaluate: evaluateFreshness },
   { code: APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS, evaluate: evaluateDetailsCompleteness },
   { code: APP_HEALTH_CHECK_CODES.ASSET_AVAILABILITY, backgroundMetadataOnly: true, evaluate: evaluateAssetAvailability },
+  { code: APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE, evaluate: evaluateBankResponseCoverage },
 ];
 
 /** Evaluate payload correctness, completeness, freshness, and asset gaps without I/O. */
