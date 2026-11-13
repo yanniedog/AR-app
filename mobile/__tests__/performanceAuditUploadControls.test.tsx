@@ -71,7 +71,7 @@ async function press(title: string) { await act(async () => { tree!.root.findByP
 beforeEach(() => { resetPerformanceAuditForTests(); jest.clearAllMocks(); mockResultsReady = true; mockDeferRecovery = false; mockRecoveryWork = null; mockUpload = { sessionId: null, phase: 'idle' }; mockUploadBusy = false; mockMountedDisclosure = false; mockHydratedDownload.mockResolvedValue(mockDownload); });
 afterEach(() => { if (tree) act(() => tree!.unmount()); tree = undefined; resetPerformanceAuditForTests(); });
 
-test.each([['Run audit', 'local'], ['Live audit', 'live-source']] as const)('%s automatically publishes the sanitized report by default', async (title, mode) => {
+test.each([['Local audit', 'local'], ['Live audit', 'live-source']] as const)('%s automatically publishes the sanitized report by default', async (title, mode) => {
   await mount(); expect(toggle().props.value).toBe(true); expect(toggle().props.disabled).toBe(false);
   expect(tree!.root.findByProps({ label: 'Next audit upload' }).props.value).toBe('Public');
   expect(tree!.root.findByProps({ label: 'Next destination' }).props.value).toBe('Public hosting');
@@ -84,7 +84,7 @@ test('the current publication choice remains visible after cancellation', async 
   await mount(); act(() => toggle().props.onChange(true));
   expect(tree!.root.findByProps({ label: 'Next audit upload' }).props.value).toBe('Public');
   expect(tree!.root.findByProps({ label: 'Next destination' }).props.value).toBe('Public hosting');
-  await press('Run audit');
+  await press('Local audit');
   expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', uploadLog: true });
   expect(toggle().props.value).toBe(true); expect(toggle().props.disabled).toBe(true);
   act(() => markPerformanceAuditCancelled());
@@ -97,7 +97,7 @@ test('the current publication choice remains visible after cancellation', async 
 
 test.each(['cancelled', 'failed', 'completed'])('a local-only audit keeps that choice after the screen remounts following %s', async (terminal) => {
   await mount(); act(() => toggle().props.onChange(false));
-  await press('Run audit');
+  await press('Local audit');
   act(() => {
     if (terminal === 'cancelled') markPerformanceAuditCancelled();
     else if (terminal === 'failed') failPerformanceAudit('test failure');
@@ -107,7 +107,7 @@ test.each(['cancelled', 'failed', 'completed'])('a local-only audit keeps that c
   await mount();
   expect(toggle().props.value).toBe(false);
   expect(tree!.root.findByProps({ label: 'Next audit upload' }).props.value).toBe('Local');
-  await press('Run audit');
+  await press('Local audit');
   expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', uploadLog: false });
 });
 
@@ -115,7 +115,7 @@ test('preflight disables publication controls and retains the choice captured by
   await mount(); act(() => toggle().props.onChange(true));
   let finish!: (value: typeof mockDownload) => void;
   mockHydratedDownload.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-  act(() => tree!.root.findByProps({ title: 'Run audit' }).props.onPress());
+  act(() => tree!.root.findByProps({ title: 'Local audit' }).props.onPress());
   expect(toggle().props.disabled).toBe(true); expect(getPerformanceAuditState().status).toBe('idle');
   await act(async () => { finish(mockDownload); });
   expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', uploadLog: true });
@@ -124,7 +124,7 @@ test('preflight disables publication controls and retains the choice captured by
 test('an in-flight public upload blocks new measurements and the publication toggle', async () => {
   mockUploadBusy = true; await mount();
   expect(toggle().props.disabled).toBe(true);
-  expect(tree!.root.findByProps({ title: 'Run audit' }).props.disabled).toBe(true);
+  expect(tree!.root.findByProps({ title: 'Local audit' }).props.disabled).toBe(true);
   expect(tree!.root.findByProps({ title: 'Live audit' }).props.disabled).toBe(true);
   expect(mockHydratedDownload).not.toHaveBeenCalled(); expect(getPerformanceAuditState().status).toBe('idle');
 });
@@ -133,14 +133,14 @@ test('a confirmed active update blocks the new local request without queuing it'
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   try {
     await mount(); mockHydratedDownload.mockResolvedValueOnce({ phase: 'downloading' });
-    await press('Run audit');
+    await press('Local audit');
     expect(getPerformanceAuditState().status).toBe('idle');
     expect(alert).toHaveBeenCalledWith('Report unavailable', 'App update active');
   } finally { alert.mockRestore(); }
 });
 
 
-test.each([['Run audit', 'Live audit', 'local'], ['Live audit', 'Run audit', 'live-source']] as const)('two synchronous presses queue only the first %s intent after deferred hydration', async (first, second, mode) => {
+test.each([['Local audit', 'Live audit', 'local'], ['Live audit', 'Local audit', 'live-source']] as const)('two synchronous presses queue only the first %s intent after deferred hydration', async (first, second, mode) => {
   await mount(); act(() => toggle().props.onChange(true));
   let finish!: (value: typeof mockDownload) => void;
   mockHydratedDownload.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
@@ -157,7 +157,7 @@ test.each([['Run audit', 'Live audit', 'local'], ['Live audit', 'Run audit', 'li
 });
 
 test('a terminal public audit with its upload still running labels the next choice separately', async () => {
-  await mount(); act(() => toggle().props.onChange(true)); await press('Run audit');
+  await mount(); act(() => toggle().props.onChange(true)); await press('Local audit');
   const sessionId = getPerformanceAuditState().sessionId;
   mockUploadBusy = true; mockUpload = { sessionId, phase: 'uploading' };
   act(() => failPerformanceAudit('Test terminal failure'));
@@ -166,7 +166,7 @@ test('a terminal public audit with its upload still running labels the next choi
   expect(tree!.root.findByProps({ label: 'Next destination' }).props.value).toBe('Public hosting');
   expect(toggle().props.value).toBe(true); expect(toggle().props.disabled).toBe(true);
   expect(tree!.root.findByProps({ children: 'Uploading' })).toBeDefined();
-  expect(tree!.root.findByProps({ title: 'Run audit' }).props.disabled).toBe(true);
+  expect(tree!.root.findByProps({ title: 'Local audit' }).props.disabled).toBe(true);
   expect(tree!.root.findByProps({ title: 'Live audit' }).props.disabled).toBe(true);
 });
 
@@ -174,7 +174,7 @@ test('failed hydration releases the synchronous preflight lock for the next inte
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   try {
     await mount(); mockHydratedDownload.mockRejectedValueOnce(new Error('Hydration failed'));
-    await press('Run audit'); expect(getPerformanceAuditState().status).toBe('idle');
+    await press('Local audit'); expect(getPerformanceAuditState().status).toBe('idle');
     expect(toggle().props.disabled).toBe(false);
     await press('Live audit');
     expect(mockHydratedDownload).toHaveBeenCalledTimes(2);
@@ -183,7 +183,7 @@ test('failed hydration releases the synchronous preflight lock for the next inte
 });
 
 test('preselection off still offers upload after completion and retains the report across Back, retry and a cancelled new audit', async () => {
-  await mount(); act(() => toggle().props.onChange(false)); await press('Run audit');
+  await mount(); act(() => toggle().props.onChange(false)); await press('Local audit');
   expect(getPerformanceAuditState().uploadLog).toBe(false);
   const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
   act(() => completePerformanceAudit(report));
@@ -193,7 +193,7 @@ test('preselection off still offers upload after completion and retains the repo
   await mount();
   expect(getPerformanceAuditState().report).toBe(report);
   expect(tree!.root.findByProps({ title: 'Upload report' })).toBeDefined();
-  await press('Run audit');
+  await press('Local audit');
   expect(getPerformanceAuditState().report).toBe(report);
   act(() => markPerformanceAuditCancelled());
   expect(getPerformanceAuditState().report).toBe(report);
@@ -201,10 +201,10 @@ test('preselection off still offers upload after completion and retains the repo
 });
 
 test('a later failed audit shows its own upload status while keeping the earlier completed diagnosis', async () => {
-  await mount(); await press('Run audit');
+  await mount(); await press('Local audit');
   const prior = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
   act(() => completePerformanceAudit(prior));
-  await press('Run audit');
+  await press('Local audit');
   const sessionId = getPerformanceAuditState().sessionId;
   mockUploadBusy = true; mockUpload = { sessionId, phase: 'uploading' };
   act(() => failPerformanceAudit('later failure'));
@@ -218,7 +218,7 @@ test('Back during deferred preflight does not queue an audit or upload after the
   await mount();
   let finish!: (value: typeof mockDownload) => void;
   mockHydratedDownload.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-  act(() => tree!.root.findByProps({ title: 'Run audit' }).props.onPress());
+  act(() => tree!.root.findByProps({ title: 'Local audit' }).props.onPress());
   act(() => tree!.unmount()); tree = undefined;
   await act(async () => { finish(mockDownload); });
   expect(getPerformanceAuditState().status).toBe('idle');
@@ -226,7 +226,7 @@ test('Back during deferred preflight does not queue an audit or upload after the
 });
 
 test('rendered failure and success controls retain the diagnosis while retrying or copying a known link', async () => {
-  await mount(); await press('Run audit');
+  await mount(); await press('Local audit');
   const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
   mockUpload = { sessionId: report.sessionId, phase: 'failed', verified: false, mayHaveUploaded: false };
   act(() => completePerformanceAudit(report));
@@ -285,7 +285,7 @@ test('an uncertain upload restored after restart requires the explicit duplicate
 });
 
 test('Back and remount retain an in-flight report upload and block duplicate controls', async () => {
-  await mount(); await press('Run audit');
+  await mount(); await press('Local audit');
   const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
   mockUpload = { sessionId: report.sessionId, phase: 'uploading' }; mockUploadBusy = true;
   act(() => completePerformanceAudit(report));
@@ -294,7 +294,7 @@ test('Back and remount retain an in-flight report upload and block duplicate con
   expect(getPerformanceAuditState()).toMatchObject({ status: 'complete', report });
   expect(tree!.root.findByProps({ children: 'Uploading' })).toBeDefined();
   expect(tree!.root.findByProps({ title: 'Upload report' }).props.disabled).toBe(true);
-  expect(tree!.root.findByProps({ title: 'Run audit' }).props.disabled).toBe(true);
+  expect(tree!.root.findByProps({ title: 'Local audit' }).props.disabled).toBe(true);
   expect(uploadCompletedPerformanceAudit).not.toHaveBeenCalled();
   expect(mockRetry).not.toHaveBeenCalled();
 });
@@ -322,7 +322,7 @@ test.each(['cancelled', 'failed'] as const)('a diagnosis loaded after a new run 
   const saved = makePerformanceAuditReport('previous-diagnosis');
   let finish!: (value: typeof saved) => void;
   jest.mocked(loadCompletedPerformanceAudit).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-  await mount(); await press('Run audit');
+  await mount(); await press('Local audit');
   const active = getPerformanceAuditState();
   await act(async () => { finish(saved); await Promise.resolve(); });
   expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', sessionId: active.sessionId, startedAt: active.startedAt, report: saved });
@@ -337,7 +337,7 @@ test('late disk recovery cannot replace a newer completed diagnosis', async () =
   const saved = makePerformanceAuditReport('previous-diagnosis');
   let finish!: (value: typeof saved) => void;
   jest.mocked(loadCompletedPerformanceAudit).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-  await mount(); await press('Run audit');
+  await mount(); await press('Local audit');
   const current = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
   act(() => completePerformanceAudit(current));
   await act(async () => { finish(saved); await Promise.resolve(); });
@@ -357,7 +357,7 @@ test('successful diagnostic Clear removes the displayed diagnosis and upload act
 test('diagnostic Clear retains the active run identity and progress', async () => {
   const saved = makePerformanceAuditReport('clear-previous-diagnosis');
   jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(saved);
-  await mount(); await press('Run audit');
+  await mount(); await press('Local audit');
   const active = getPerformanceAuditState();
   act(() => clearCompletedPerformanceAuditState());
   expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', sessionId: active.sessionId,
@@ -365,7 +365,7 @@ test('diagnostic Clear retains the active run identity and progress', async () =
 });
 
 test('the completed result ties its finish instant and audit reference to its verified link', async () => {
-  await mount(); await press('Run audit');
+  await mount(); await press('Local audit');
   const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
   mockUpload = { sessionId: report.sessionId, phase: 'copied', verified: true, url: 'https://paste.c-net.org/current-audit' };
   act(() => completePerformanceAudit(report));
@@ -373,12 +373,12 @@ test('the completed result ties its finish instant and audit reference to its ve
   expect(tree!.root.findByProps({ label: 'Audit ID' }).props.value).toBe(performanceAuditReference(report.sessionId));
   expect(tree!.root.findByProps({ children: 'https://paste.c-net.org/current-audit' })).toBeDefined();
   expect(tree!.root.findByProps({ title: 'Audit details' }).props.open).toBe(false);
-  expect(tree!.root.findByProps({ title: 'Run audit' }).props.disabled).toBe(false);
+  expect(tree!.root.findByProps({ title: 'Local audit' }).props.disabled).toBe(false);
   expect(tree!.root.findByProps({ title: 'Audit settings' }).props.open).toBe(false);
 });
 
 test('a completed audit cannot present the verified link of a different report', async () => {
-  await mount(); await press('Run audit');
+  await mount(); await press('Local audit');
   const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!);
   mockUpload = { sessionId: 'earlier-audit', phase: 'copied', verified: true, url: 'https://paste.c-net.org/earlier-audit' };
   act(() => completePerformanceAudit(report));
@@ -388,7 +388,7 @@ test('a completed audit cannot present the verified link of a different report',
 });
 
 test('failed checks expose numbered positions without expanding the verbose audit results', async () => {
-  await mount(); await press('Run audit');
+  await mount(); await press('Local audit');
   const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!, [
     { id: 'first-check', label: 'First check', kind: 'runtime', status: 'pass', durationMs: 1, metrics: {} },
     { id: 'failed-check', label: 'Failed check', kind: 'runtime', status: 'fail', durationMs: null, metrics: { nonTimingFailure: true } },
@@ -407,7 +407,7 @@ test('failed checks expose numbered positions without expanding the verbose audi
 test('deidentified sharing discloses audit timestamps and reference before opening the share sheet', async () => {
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   try {
-    await mount(); await press('Run audit');
+    await mount(); await press('Local audit');
     act(() => completePerformanceAudit(makePerformanceAuditReport(getPerformanceAuditState().sessionId!)));
     await act(async () => { tree!.root.findByProps({ title: 'Audit details' }).props.onToggle(); });
     await press('Share deidentified report');
@@ -421,7 +421,7 @@ test('deidentified sharing discloses audit timestamps and reference before openi
 });
 
 test('combined health totals use the complete denominator without counting warnings twice', async () => {
-  await mount(); await press('Run audit');
+  await mount(); await press('Local audit');
   const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!, [
     { id: 'runtime', label: 'Runtime', kind: 'runtime', status: 'pass', durationMs: 1, metrics: { executionAttempted: true } },
   ]);
@@ -451,7 +451,7 @@ test('an older saved report with malformed optional coverage remains reviewable 
 
 test('the real disclosure mounts every diagnostic section only while audit details are open', async () => {
   mockMountedDisclosure = true;
-  await mount(); await press('Run audit');
+  await mount(); await press('Local audit');
   const report = makePerformanceAuditReport(getPerformanceAuditState().sessionId!, [
     { id: 'runtime-detail', label: 'Runtime', kind: 'runtime', status: 'pass', durationMs: 1, metrics: { executionAttempted: true } },
   ]);
@@ -483,16 +483,30 @@ test('the real disclosure mounts every diagnostic section only while audit detai
 test('start controls render before saved-result derivation and deferred recovery', async () => {
   mockResultsReady = false; mockDeferRecovery = true;
   await mount();
-  expect(tree!.root.findByProps({ title: 'Run audit' }).props.disabled).toBe(false);
+  expect(tree!.root.findByProps({ title: 'Local audit' }).props.disabled).toBe(false);
   expect(tree!.root.findByProps({ label: 'Estimated time' }).props.value).toBe('09:00');
   expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
   expect(tree!.root.findAllByType('AuditMetricHistory')).toHaveLength(0);
   expect(mockCancelRecovery).not.toHaveBeenCalled();
-  await press('Run audit');
+  await press('Local audit');
   expect(mockCancelRecovery).toHaveBeenCalled();
   await act(async () => { mockRecoveryWork?.(); });
   expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
   expect(getPerformanceAuditState().status).toBe('queued');
+});
+
+test('report exposes HTTP attempt coverage independently of unverified outcomes', async () => {
+  const report = makePerformanceAuditReport('http-coverage', [
+    { id: 'external-link-inventory', label: 'Inventory', kind: 'data', status: 'pass', durationMs: 0, metrics: { uniqueDestinations: 4 } },
+    { id: 'external-link-1', label: 'Link', kind: 'network', status: 'warn', durationMs: 0, metrics: { httpAttempted: true, httpReachability: 'unknown' } },
+    { id: 'external-link-2', label: 'Link', kind: 'network', status: 'warn', durationMs: 0, metrics: { httpAttempted: false, httpReachability: 'unknown' } },
+  ]);
+  restoreCompletedPerformanceAudit(report);
+  await mount();
+  expect(tree!.root.findByProps({ label: 'HTTP attempts / destinations' }).props.value).toBe('1 / 4');
+  expect(tree!.root.findByProps({ label: 'HTTP not attempted' }).props.value).toBe('1');
+  expect(tree!.root.findByProps({ label: 'HTTP attempt evidence missing' }).props.value).toBe('2');
+  expect(tree!.root.findByProps({ label: 'Unverified links' })).toBeDefined();
 });
 
 test('estimated time retains seconds from the last measured run', async () => {
@@ -533,7 +547,7 @@ test('an in-memory diagnosis is not traversed before result paint is allowed', a
   Object.defineProperty(report, 'checks', { configurable: true, get: checks });
   mockResultsReady = false;
   await mount();
-  expect(tree!.root.findByProps({ title: 'Run audit' }).props.disabled).toBe(false);
+  expect(tree!.root.findByProps({ title: 'Local audit' }).props.disabled).toBe(false);
   expect(tree!.root.findByProps({ label: 'Last audit' }).props.value).toBe('Loading');
   expect(checks).not.toHaveBeenCalled();
   Object.defineProperty(report, 'checks', { configurable: true, writable: true, value: originalChecks });
@@ -547,7 +561,7 @@ test('a failed native preflight reschedules deferred recovery', async () => {
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   try {
     await mount();
-    await press('Run audit');
+    await press('Local audit');
     expect(getPerformanceAuditState().status).toBe('idle');
     expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
     await act(async () => { mockRecoveryWork?.(); });
