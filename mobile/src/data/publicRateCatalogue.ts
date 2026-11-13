@@ -232,7 +232,10 @@ function clientFor(manifest: Manifest | null): CatalogueClient {
 /** Index discovery is lazy after render; evidence and programme shards load only when needed. */
 export function usePublicRateCatalogue(manifest: Manifest | null): PublicRateCatalogueState {
   const client = useMemo(() => clientFor(manifest), [manifest]);
-  const key = manifest ? manifestKey(manifest) : undefined;
+  // Installed editions are replaced by the store. Layout/selection rerenders
+  // must not canonicalize and hash the entire capability for every visible row.
+  // Imperative audit admission still revalidates the key on every read.
+  const key = useMemo(() => manifest ? manifestKey(manifest) : undefined, [manifest]);
   const read = useCallback(() => auditOverlay && auditOverlay.key === key ? auditOverlay.state : reservedSnapshot(client), [client, key]);
   const subscribe = useCallback((listener: () => void) => {
     auditListeners.add(listener);

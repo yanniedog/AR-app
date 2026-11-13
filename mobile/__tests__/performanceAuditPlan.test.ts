@@ -20,6 +20,7 @@ import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { maximumPerformanceAuditPrefs } from '../src/lib/performanceAuditProfile';
 import { buildPerformanceAuditSetupPlans } from '../src/lib/performanceAuditSetup';
 import { lenderProductRows } from '../src/data/selectors';
+import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 
 
 const EMPTY_RIBBON: Ribbon = {
@@ -413,11 +414,71 @@ describe('deep performance audit plan', () => {
       expect(product.selectionToken).toBe(`${product.rateIndex}#${product.productKey}`);
     }
     const steps = buildDeepPerformanceAuditPlan(core, options).passes[0].steps;
-    expect(steps.find(step => step.semanticActionId === 'search.compare.open')?.parameters)
-      .toMatchObject({ section: 'Mortgage', selectionTokens: inputs.compareSelectionTokens,
-        primaryRateIndex: inputs.primaryProduct?.rateIndex, secondaryRateIndex: inputs.secondaryProduct?.rateIndex });
+    expect(steps.find(step => step.semanticActionId === 'search.compare.open'))
+      .toMatchObject({ parameters: { section: 'Mortgage', selectionTokens: [] },
+        skipReason: expect.stringContaining('applied Rates comparison scope') });
     expect(steps.find(step => step.scenarioId === 'route.product' && step.semanticActionId === 'product.open'))
       .toMatchObject({ parameters: { productKey: inputs.primaryProduct?.productKey, rateIndex: inputs.primaryProduct?.rateIndex } });
+  });
+
+  test('Rates targets share the applied facets, amount and LVR while generic targets retain coverage', () => {
+    const core = corePayload();
+    core.sections.Savings.rates = [];
+    core.sections.Mortgage.rates = Array.from({ length: 8 }, (_, index) => rate({
+      product_key: `scoped-${index}`, provider: `Bank ${index}`, rate_index: index,
+      loan_purpose: index < 4 ? 'OWNER_OCCUPIED' : 'INVESTMENT',
+      ribbon_repayment_type: index < 4 ? 'PRINCIPAL_AND_INTEREST' : 'INTEREST_ONLY',
+      lvr_tier: index % 4 < 2 ? 'lvr_60-70%' : 'lvr_80-90%',
+      balance_min: index % 4 < 2 ? '200000' : '600000',
+      balance_max: index % 4 < 2 ? '400000' : '800000',
+    }));
+    let genericMismatch = false;
+    for (let index = 0; index < 20; index++) {
+      const plan = buildDeepPerformanceAuditPlan(core, { seed: `scoped-${index}`, includeNonStandard: true });
+      const scope = plan.inputs.mortgageScopePrimary!;
+      const pair = [plan.inputs.ratesPrimaryProduct!, plan.inputs.ratesSecondaryProduct!];
+      expect(pair[0].productKey).not.toBe(pair[1].productKey);
+      for (const product of pair) {
+        const row = core.sections.Mortgage.rates.find(row => row.product_key === product.productKey)!;
+        expect(scope.loanPurposes).toContain(row.loan_purpose);
+        expect(scope.repaymentTypes).toContain(row.ribbon_repayment_type);
+        expect(Number(scope.loanAmount)).toBeGreaterThanOrEqual(Number(row.balance_min));
+        expect(Number(scope.loanAmount)).toBeLessThanOrEqual(Number(row.balance_max));
+        expect(Number(scope.lvr)).toBeGreaterThan(row.lvr_tier === 'lvr_60-70%' ? 60 : 80);
+        expect(Number(scope.lvr)).toBeLessThan(row.lvr_tier === 'lvr_60-70%' ? 70 : 90);
+      }
+      genericMismatch ||= pair.some(product => !plan.inputs.compareSelectionTokens.includes(product.selectionToken));
+      expect(plan.passes[0].steps.find(step => step.semanticActionId === 'search.compare.open'))
+        .toMatchObject({ skipReason: null, parameters: { selectionTokens: pair.map(product => product.selectionToken) } });
+    }
+    expect(genericMismatch).toBe(true);
+  });
+
+  test('verified source clauses exclude incompatible Rates targets and preserve explicit pair availability', () => {
+    const rows = [1, 2].map(index => rate({ provider: 'Bank', product_key: `source-${index}`, rate_index: index,
+      loan_purpose: 'OWNER_OCCUPIED', ribbon_repayment_type: 'PRINCIPAL_AND_INTEREST', lvr_tier: 'lvr_80-90%' }));
+    const context = selectedConstraintFixture('Mortgage', rows, [{ rateIndex: 2, text: 'LVR up to 70%.' }]);
+    const plan = buildDeepPerformanceAuditPlan(context.core, { seed: 'source-scope', includeNonStandard: true,
+      detailsProducts: context.details.products, sourceConditionContext: context });
+    expect(plan.inputs.compareSelectionTokens).toHaveLength(2);
+    expect(plan.inputs.ratesPrimaryProduct?.productKey).toBe('source-1');
+    expect(plan.inputs.ratesSecondaryProduct).toBeNull();
+    for (const step of plan.passes[0].steps.filter(step => step.semanticActionId.startsWith('search.compare.'))) {
+      expect(step.skipReason).toContain('applied Rates comparison scope');
+    }
+  });
+
+  test('Savings comparisons keep Savings active without applying a Mortgage scope', () => {
+    const core = corePayload();
+    core.sections.Mortgage.rates = [core.sections.Mortgage.rates[0]];
+    core.sections.Savings.rates.push(rate({ provider: 'Other', product_key: 'savings-two', rate_index: 1 }));
+    const plan = buildDeepPerformanceAuditPlan(core, { seed: 'savings', includeNonStandard: true });
+    expect(plan.inputs.section).toBe('Savings');
+    expect(plan.inputs.ratesPrimaryProduct).toEqual(plan.inputs.primaryProduct);
+    expect(plan.passes[0].steps.filter(step => step.scenarioId === 'route.rates')
+      .some(step => step.semanticActionId.startsWith('search.mortgage.scope'))).toBe(false);
+    expect(plan.passes[0].steps.some(step => step.scenarioId === 'route.rates-mortgage-scope' &&
+      step.semanticActionId === 'search.mortgage.scope.apply.0')).toBe(true);
   });
 
   test('randomizes across all eligible banks, products and tiers while sampling every non-empty category', () => {

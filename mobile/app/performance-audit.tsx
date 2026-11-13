@@ -1,4 +1,4 @@
-import { uiCount, uiDate, uiIdentifier, uiInputNumber, uiJoin, uiLabel, uiNumber, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
+import { uiCount, uiDate, uiDurationClock, uiIdentifier, uiInputNumber, uiJoin, uiLabel, uiNumber, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
 import { fontStyle } from '../src/theme/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -54,7 +54,10 @@ import {
   auditEntryClock, markAuditEntryScreenMounted, markAuditEntryScreenReady, markAuditEntrySettingsOpened,
   markAuditEntryStartPressed, setAuditEntrySettingsProbe,
 } from '../src/lib/auditEntryTrace';
-import { PERFORMANCE_AUDIT_TYPICAL_DURATION_MS, performanceAuditEstimateParts } from '../src/lib/performanceAuditTiming';
+import { PERFORMANCE_AUDIT_TYPICAL_DURATION_MS } from '../src/lib/performanceAuditTiming';
+
+import { useDeferredHistorySurface } from '../src/hooks/useDeferredHistorySurface';
+import { scheduleAfterInteractions, yieldToPaintFrames } from '../src/lib/yieldToUi';
 
 const DEIDENTIFIED_AUDIT_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-app-health-report.json`;
 
@@ -115,6 +118,8 @@ function PerformanceAuditScreenInner() {
   const [failuresOpen, setFailuresOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [recoveryFailed, setRecoveryFailed] = useState(false);
+  const [recoveryAttempt, setRecoveryAttempt] = useState(0);
   // Entry trace: how long this screen, its settings and its start control take.
   const entryMounted = useRef(false);
   if (!entryMounted.current) { entryMounted.current = true; markAuditEntryScreenMounted(); }
@@ -161,10 +166,11 @@ function PerformanceAuditScreenInner() {
   const [auditPreflightMode, setAuditPreflightMode] = useState<'local' | 'live-source' | null>(null);
   const [visibleCheckLimit, setVisibleCheckLimit] = useState(MAX_REPORTED_AUDIT_CHECKS);
   const running = state.status === 'queued' || state.status === 'running';
-  const report = running ? null : state.report;
+  const resultsReady = useDeferredHistorySurface(running || auditPreflightMode ? null : 'audit-results');
+  const report = running || auditPreflightMode || !resultsReady ? null : state.report;
   const orderedChecks = useMemo(
-    () => (report ? selectReportedAuditChecks(report.checks) : []),
-    [report],
+    () => (report && detailsOpen ? selectReportedAuditChecks(report.checks) : []),
+    [report, detailsOpen],
   );
   const reportedChecks = orderedChecks.slice(0, visibleCheckLimit);
   const completion = useMemo(() => report ? buildPerformanceAuditCompletion(report) : null, [report]);
@@ -177,17 +183,23 @@ function PerformanceAuditScreenInner() {
     setRawReportOpen(false);
   }, [report?.sessionId]);
   useEffect(() => {
-    let active = true;
     mounted.current = true;
-    // A diagnosis already in memory wins over the saved copy, so reading and
-    // parsing that multi-megabyte file again would only block this screen.
-    if (!getPerformanceAuditState().report) {
-      void loadCompletedPerformanceAudit().then(saved => {
-        if (active && saved) restoreCompletedPerformanceAudit(saved);
-      }).catch(() => {});
-    }
-    return () => { active = false; mounted.current = false; };
+    return () => { mounted.current = false; };
   }, []);
+  useEffect(() => {
+    // Paint the controls before restoring a potentially multi-megabyte report.
+    // Returning here during a run must not start recovery or history work.
+    let cancelled = false;
+    const cancelRecovery = scheduleAfterInteractions(() => { void (async () => {
+      await yieldToPaintFrames(2);
+      const current = getPerformanceAuditState();
+      if (cancelled || !mounted.current || current.report || current.status === 'queued' || current.status === 'running' || auditPreflightLocked.current) return;
+      setRecoveryFailed(false);
+      const saved = await loadCompletedPerformanceAudit();
+      if (mounted.current && saved) restoreCompletedPerformanceAudit(saved);
+    })().catch(() => { if (!cancelled && mounted.current) setRecoveryFailed(true); }); });
+    return () => { cancelled = true; cancelRecovery(); };
+  }, [running, auditPreflightMode, recoveryAttempt]);
   useEffect(() => {
     if (report) void restorePerformanceAuditUpload(report).catch(() => {});
   }, [report]);
@@ -355,12 +367,12 @@ function PerformanceAuditScreenInner() {
   const outcomeLabel = (value: NonNullable<typeof completion>['outcome']): UiLabel =>
     value === 'successful' ? 'Successful' : value === 'failed' ? 'Failed' : value === 'incomplete' ? 'Incomplete' : 'Needs review';
   // One value: the last measured run on this device, or the typical duration before a first run.
-  const nextEstimate = performanceAuditEstimateParts(report && report.durationMs > 0 ? report.durationMs : PERFORMANCE_AUDIT_TYPICAL_DURATION_MS);
+  const nextEstimate = uiDurationClock(state.report && state.report.durationMs > 0 ? state.report.durationMs : PERFORMANCE_AUDIT_TYPICAL_DURATION_MS);
   const controls = <Card style={{ gap: 10 }}>
         <AppText variant="h2">{uiLabel('App health audit')}</AppText>
         {!running ? <>
-          <InfoRow label="Last audit" value={completion ? uiJoin(outcomeLabel(completion.outcome), ' · ', uiDate(completion.finishedAt)) : uiLabel('No audit history')} />
-          <InfoRow label="Estimated time" value={uiJoin(uiCount(nextEstimate.value), ' ', nextEstimate.unit)} />
+          <InfoRow label="Last audit" value={completion ? uiJoin(outcomeLabel(completion.outcome), ' · ', uiDate(completion.finishedAt)) : uiLabel(state.report ? 'Loading' : recoveryFailed ? 'Report unavailable' : 'No audit history')} />
+          <InfoRow label="Estimated time" value={nextEstimate} />
         </> : null}
         <Button title="Run audit" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
         <Button title="Live audit" icon="cloud-download-outline" variant="secondary" loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'} disabled={auditDisabled} onPress={() => void runAudit('live-source')} />
@@ -408,7 +420,9 @@ function PerformanceAuditScreenInner() {
   return (
     <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }} onLayout={() => setLayoutReady(true)}>
       {controls}
-      {!running && !report ? <AuditMetricHistory report={null} /> : null}
+      {!running && !auditPreflightMode && !state.report && recoveryFailed ?
+        <Button title="Retry saved report" onPress={() => setRecoveryAttempt(attempt => attempt + 1)} /> : null}
+      {!running && !auditPreflightMode && resultsReady && !report ? <AuditMetricHistory report={null} /> : null}
       {!running && (!report || state.sessionId !== report.sessionId) ? <DebugLogUploadStatus sessionId={state.sessionId} /> : null}
       {state.status === 'cancelled' ? <Card><AppText>{uiLabel('Audit cancelled')}</AppText><InfoRow label="Results" value="Debug log" /></Card>:null}
       {state.status === 'failed' ? <Card style={{gap:8,borderColor:theme.colors.danger}}>
@@ -445,14 +459,15 @@ function PerformanceAuditScreenInner() {
         <AuditMetricHistory report={report} />
         <AuditHistoryCoverage report={report} />
         {completion.failurePositions.length ? <Disclosure title="Failure positions" open={failuresOpen} onToggle={() => setFailuresOpen(!failuresOpen)}>
-          {completion.failurePositions.map((failure, index) => <Card key={`${failure.source}:${failure.position}:${index}`} style={{gap:4}}>
+          {failuresOpen ? completion.failurePositions.map((failure, index) => <Card key={`${failure.source}:${failure.position}:${index}`} style={{gap:4}}>
             <InfoRow label="Position" value={uiCount(failure.position)} />
             <InfoRow label="Source" value={uiLabel(failure.source === 'health' ? 'Data and display health' : 'Check results')} />
             <InfoRow label="Check ID" value={uiIdentifier(failure.checkId)} />
             <InfoRow label="Stage" value={uiIdentifier(failure.stage)} />
-          </Card>)}
+          </Card>) : null}
         </Disclosure> : null}
         <Disclosure title="Audit details" open={detailsOpen} onToggle={() => setDetailsOpen(!detailsOpen)}>
+        {detailsOpen ? <>
         <Card style={{gap:8}}>
           <AuditOutcomeSymbols checks={report.checks} />
           <InfoRow label="Collection" value={uiLabel(completion.collectionComplete ? 'Complete' : 'Incomplete')} />
@@ -525,6 +540,7 @@ function PerformanceAuditScreenInner() {
           </Card>)}
           {reportedChecks.length < orderedChecks.length ? <Button title={uiJoin('Show', ' ', uiCount(Math.min(MAX_REPORTED_AUDIT_CHECKS,orderedChecks.length-reportedChecks.length)), ' ', 'Checks')} icon="chevron-down-outline" variant="ghost" onPress={() => setVisibleCheckLimit(current => Math.min(orderedChecks.length,current+MAX_REPORTED_AUDIT_CHECKS))}/>:null}
         </View>
+        </> : null}
         </Disclosure>
       </>:null}
     </ScreenScrollView>
