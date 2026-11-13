@@ -37,6 +37,22 @@ test('time coordinates preserve spacing and missing measurements break lines', (
   expect(auditMetricPlot([], 'failures').points).toEqual([]);
 });
 
+test('schema 2 keeps recorded values with legacy methods and plots break at method changes', () => {
+  const current = auditMetricRun(makePerformanceAuditReport('new'));
+  current.metrics.actionP95Ms = 20;
+  const [old] = parseAuditMetricHistory(JSON.stringify({ schemaVersion: 2,
+    runs: [{ ...current, sessionId: 'old', finishedAt: new Date(Date.parse(current.finishedAt) - 1000).toISOString(),
+      metrics: { ...current.metrics, actionP95Ms: 200 } }] }));
+  expect(old.metrics.actionP95Ms).toBe(200);
+  expect(old.methodVersions.actionP95Ms).toBe(1);
+  expect(current.methodVersions.actionP95Ms).toBe(2);
+  expect(auditMetricPlot([old, current], 'actionP95Ms').path.match(/M/g)).toHaveLength(2);
+  expect(auditMetricPlot([old, current], 'actionP95Ms').path).not.toContain('L');
+  expect(auditMetricPlot([old, current], 'failures').path).toContain('L');
+  expect(parseAuditMetricHistory(JSON.stringify({ schemaVersion: 3, runs: [old, current] }))).toEqual([old, current]);
+  expect(() => parseAuditMetricHistory(JSON.stringify({ schemaVersion: 3, runs: [{ ...current, methodVersions: {} }] }))).toThrow();
+});
+
 test('invalid history is rejected instead of silently erasing it', () => {
   const run = auditMetricRun(makePerformanceAuditReport());
   const encode = (runs: unknown[]) => JSON.stringify({ schemaVersion: 1, runs });

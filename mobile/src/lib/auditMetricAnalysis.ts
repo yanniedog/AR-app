@@ -1,7 +1,7 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion, hasValidPerformanceAuditHealth } from './performanceAuditCompletion';
-import { AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_METHODS, type AuditMetric } from './auditMetricHistoryMetrics';
-import { auditMetricValues, hasAuditReturnEvidence, measuredAuditCount as measuredCount, measuredAuditValue as measured } from './auditMetricHistoryValues';
+import { AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_METHODS, auditMetricMethodVersion, type AuditMetric } from './auditMetricHistoryMetrics';
+import { auditMetricValues, auditTaskOutcomePopulation, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount as measuredCount, measuredAuditValue as measured } from './auditMetricHistoryValues';
 
 export type AuditMetricMissingEvidence = 'missing-evidence' | 'missing-denominator' | 'missing-samples'
   | 'partial-samples' | 'inconsistent-counts' | 'invalid-identities' | 'incomplete-health-collection'
@@ -28,7 +28,7 @@ export interface AuditMetricEvidence {
   value: number | null;
   unit: 'count' | 'percent' | 'ms';
   methodId: string;
-  methodVersion: 1;
+  methodVersion: 1 | 2;
   formula: string;
   unitOfAnalysis: string;
   numerator: number | null;
@@ -45,7 +45,8 @@ export interface AuditMetricEvidence {
   /** Indices into the shared observations table, avoiding repeated raw evidence. */
   contributors: number[];
   distribution?: AuditMetricDistribution;
-  outcomes?: { success: number; failure: number; indeterminate: number };
+  outcomes?: { success: number; failure: number; indeterminate: number;
+    withinTimingLimits: number; timingFailures: number; warnings: number };
   uncertainty: { interval: null; reason: 'deterministic-inventory' | 'correlated-observations' };
 }
 export interface AuditMetricAnalysis {
@@ -125,7 +126,8 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     if (value !== null && missing) evidence.push('partial-samples');
     metrics[metric] = {
       value, unit: AUDIT_METRIC_DEFINITIONS[metric].unit, methodId: `ar.audit.${metric}`,
-      methodVersion: 1, formula: AUDIT_METRIC_METHODS[metric][0], unitOfAnalysis: AUDIT_METRIC_METHODS[metric][1],
+      methodVersion: auditMetricMethodVersion(metric),
+      formula: AUDIT_METRIC_METHODS[metric][0], unitOfAnalysis: AUDIT_METRIC_METHODS[metric][1],
       numerator: null, denominator: null, sampleSize: observed, sampleUnit: 'evidence-field', eligibleCount: refs.length,
       observedCount: observed, missingCount: missing, excludedCount: 0,
       ...detail, applicability: value !== null ? 'observed' : evidence.some(reason =>
@@ -173,14 +175,12 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   const allJourneys = report.checks.filter(check => check.kind === 'journey');
   const journeys = allJourneys.filter(check => check.status !== 'skipped' && check.metrics.executionAttempted !== false
     && check.metrics.availabilityFailure !== true);
-  const actions = journeys.filter(check => check.metrics.actionInvoked === true);
+  const { actions, success, failure, outcomes } = auditTaskOutcomePopulation(report, completion);
   const gaps = new Set(completion.gapPositions.filter(gap => gap.source === 'performance').map(gap => gap.checkId));
-  const success = actions.filter(check => check.metrics.actionCompleted === true && check.metrics.nonTimingFailure === false
-    && check.diagnostic?.readiness?.ready === true && !gaps.has(check.id));
-  const failure = actions.filter(check => check.metrics.nonTimingFailure === true || check.metrics.actionCompleted === false);
-  const outcomes = { success: success.length, failure: failure.length, indeterminate: actions.length - success.length - failure.length };
   const actionRefs = actions.flatMap(check => [perf(check, 'actionInvoked'), perf(check, 'actionCompleted'), perf(check, 'nonTimingFailure'),
-    perf(check, 'readinessReady', check.diagnostic?.readiness?.ready), perf(check, 'completionGap', gaps.has(check.id))]);
+    perf(check, 'readinessReady', check.diagnostic?.readiness?.ready), perf(check, 'completionGap', gaps.has(check.id)),
+    perf(check, 'statusPass', check.status === 'pass'), perf(check, 'statusFail', check.status === 'fail'),
+    perf(check, 'eventLoopMeasurementAvailable'), perf(check, 'frameMeasurementAvailable'), perf(check, 'forwardWorkMs')]);
   for (const metric of ['automatedTaskSuccessPercent', 'automatedTaskFailurePercent'] as const) {
     ratio(metric, metric === 'automatedTaskSuccessPercent' ? success.length : failure.length, actions.length,
       actionRefs, { outcomes, eligibleCount: actions.length, observedCount: actions.length - outcomes.indeterminate,
@@ -189,7 +189,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   }
   distribution('journeyP50Ms', journeys, 'forwardWorkMs', allJourneys.length - journeys.length);
   distribution('journeyP95Ms', journeys, 'forwardWorkMs', allJourneys.length - journeys.length);
-  const completed = actions.filter(check => check.metrics.actionCompleted === true);
+  const completed = actions.filter(check => check.metrics.actionCompleted === true && hasAuditActionDurationEvidence(check));
   distribution('actionP50Ms', completed, 'actionMs', allJourneys.length - completed.length, 'action-duration');
   distribution('actionP95Ms', completed, 'actionMs', allJourneys.length - completed.length, 'action-duration');
   const returns = journeys.filter(hasAuditReturnEvidence);

@@ -89,6 +89,17 @@ test('stale assets fail and unloaded calendar/source never become a zero-gap pas
     .toMatchObject({ status: 'fail', metrics: { runMatches: false, coverageComplete: false } });
 });
 
+test('a stale projected snapshot cannot certify a longer current observation window', () => {
+  const f = fixture();
+  f.calendar.decisions = f.calendar.decisions.slice(0, 1);
+  const projected = { ...f.source, run_date: '2026-11-04', run_dates: f.source.run_dates.slice(0, 3) };
+  const coverage = bankResponseCoverage(f.source, projected, f.calendar, f.core)!;
+  expect(coverage.runMatches).toBe(false);
+  expect(coverage.rows.every(row => !row.displayed)).toBe(true);
+  expect(evaluateBankResponseCoverage({ ...f.snapshot, bankResponseCoverage: coverage }))
+    .toMatchObject({ status: 'fail', metrics: { coverageComplete: false, noRecordedMove: 0 } });
+});
+
 test.each([undefined, {}, [{ provider: 'Private Bank', date: 'invalid' }]])('normalization retains incomplete event-ledger evidence for %j', events => {
   const f = fixture();
   const normalized = normalizeBankInsightsPayload({ ...f.source, events })!;

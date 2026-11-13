@@ -91,7 +91,8 @@ export function evaluateAppHealthCatalogueCoverage(snapshot: AppHealthDataSnapsh
   const appHistoryGaps = history?.gaps.filter(gap => !PRODUCER_HISTORY_GAPS.has(gap[1])).length ?? 0;
   const status = identityMismatches || catalogue.searchIndexRunMatches === false || (history?.processingMismatches ?? 0) > 0 || (history?.chartProjectionMismatches ?? 0) > 0 || appHistoryGaps > 0 ? 'fail'
     : !history ? (headless && !unavailable ? 'warn' : 'unavailable')
-    : (missingDetails ?? 0) > 0 || (missingSearchIndex ?? 0) > 0 ? 'warn'
+    : (missingDetails ?? 0) > 0 || (missingSearchIndex ?? 0) > 0 ||
+      history.available !== true || history.sourceGapDays.length > 0 || history.gaps.length > 0 ? 'warn'
       : unavailable ? 'unavailable' : 'pass';
   const allRows = SECTION_KEYS.flatMap(section => snapshot.core!.sections[section]?.rates ?? []);
   const metrics: AppHealthCheck['metrics'] = {

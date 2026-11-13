@@ -152,7 +152,7 @@ import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAudi
 import { awaitPerformanceAuditWork } from '../lib/performanceAuditWork';
 import { buildPerformanceAuditSetupPlans, measurePerformanceAuditSetupStage, PERFORMANCE_AUDIT_SETUP_STAGES, PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from '../lib/performanceAuditSetup';
 import { AUDIT_ENTRY_CHECK_IDS, buildAuditEntryChecks } from '../lib/auditEntryTrace';
-import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, PerformanceAuditStepTimeoutError, estimatePerformanceAuditTime, scoreUserVisibleJourney, userVisibleForwardMs } from '../lib/performanceAuditTiming';
+import { captureAuditRunTiming, PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, PerformanceAuditStepTimeoutError, estimatePerformanceAuditTime, scoreUserVisibleJourney, userVisibleForwardMs } from '../lib/performanceAuditTiming';
 import {
   buildIntegratedAppHealthReport, buildPartialAppHealthReport,
   captureAppHealthDataEvidence, combineAppHealthPerformanceSummary,
@@ -2501,6 +2501,12 @@ export async function runJourney(
   let replaceRecoveryMs: number | null = null;
   let anchorResetMs: number | null = null;
   let originReadinessMs: number | null = null;
+  type ResponseWindow = { start: ReturnType<ResponsivenessMonitor['snapshot']>; end: ReturnType<ResponsivenessMonitor['snapshot']> };
+  let forwardWindow: ResponseWindow | null = null;
+  const backWindows: ResponseWindow[] = [];
+  const backgroundWindows: ResponseWindow[] = [];
+  let backWindowStart: ReturnType<ResponsivenessMonitor['snapshot']> | null = null;
+  let backSettleStart: ReturnType<ResponsivenessMonitor['snapshot']> | null = null;
   let forwardResponsiveness = EMPTY_RESPONSIVENESS;
   let backgroundResponsiveness = EMPTY_RESPONSIVENESS;
   let backResponsiveness = EMPTY_RESPONSIVENESS;
@@ -2546,6 +2552,7 @@ export async function runJourney(
         surfaceIds: [journey.expectedSurface],
         signal: destinationReadinessAbort.signal,
       });
+      forwardWindow = { start: forwardResponsivenessAt, end: monitor.snapshot() };
       destinationDiagnostic = captureAuditDiagnostic(visibleReady.snapshot, 'complete');
       readinessStepExpired = visibleReady.stepExpired;
       backgroundUnsettled = visibleReady.settled === false;
@@ -2558,7 +2565,7 @@ export async function runJourney(
       navigationCommitMs,
       firstReadyFrameMs: visibleReady.elapsedMs,
     }) : null;
-    forwardResponsiveness = monitor.metricsSince(forwardResponsivenessAt);
+    // Read after settle so delayed timer/RAF observations can be clipped to the ready endpoint.
     const backgroundResponsivenessAt = monitor.snapshot();
     if (!visibleReady.stepExpired) {
       await outsideStepBudget(watchdog, () => settleUi());
@@ -2584,14 +2591,24 @@ export async function runJourney(
       // completed (or failed) during the separately measured background settle.
       destinationDiagnostic = captureAuditDiagnostic(performanceAuditReadinessRegistry.snapshot(), 'complete');
     }
-    backgroundResponsiveness = monitor.metricsSince(backgroundResponsivenessAt);
+    backgroundWindows.push({ start: backgroundResponsivenessAt, end: monitor.snapshot() });
 
-    const backResponsivenessAt = monitor.snapshot();
     journeyStage = 'back';
     // Tab history returns through Rates before the root-stack audit origin.
     // Keep both real dispatches measured; an anchor reset is recovery, not Back.
     const measuredBack = await measureAuditBackNavigation({
       currentPath, back: () => router.back(), now, matchesPath: pathMatches,
+      measureWindow: phase => {
+        if (phase === 'start') backWindowStart = monitor.snapshot();
+        else if (phase === 'end' && backWindowStart) {
+          backSettleStart = monitor.snapshot();
+          backWindows.push({ start: backWindowStart, end: backSettleStart });
+          backWindowStart = null;
+        } else if (phase === 'settled' && backSettleStart) {
+          backgroundWindows.push({ start: backSettleStart, end: monitor.snapshot() });
+          backSettleStart = null;
+        }
+      },
       tabJourney: journey.navigationKind === 'tab',
       awaitCommit: async (before) => {
         const deadline = now() + ROUTE_TIMEOUT_MS;
@@ -2613,16 +2630,15 @@ export async function runJourney(
         backDestination = first.destination;
         backReturnedToAudit = first.returnedToAudit;
         backChangedPath = first.changedPath;
-        backResponsiveness = monitor.metricsSince(backResponsivenessAt);
       },
       recordSecondStart: () => { returnNavigationKind = 'second-back'; },
     });
     backMs = measuredBack.durationMs;
+    backgroundSettleMs = (backgroundSettleMs ?? 0) + measuredBack.settleMs;
     backDestination = measuredBack.destination;
     backReturnedToAudit = measuredBack.returnedToAudit;
     backChangedPath = measuredBack.changedPath;
     secondBackMs = measuredBack.secondBackMs;
-    backResponsiveness = monitor.metricsSince(backResponsivenessAt);
     if (secondBackMs != null) {
       returnNavigationKind = 'second-back';
       returnFallbackMs = secondBackMs;
@@ -2643,6 +2659,14 @@ export async function runJourney(
       returnFallbackMs = (returnFallbackMs ?? 0) + recoveryMs;
     }
   } catch (caught) {
+    if (backWindowStart) {
+      backWindows.push({ start: backWindowStart, end: monitor.snapshot() });
+      backWindowStart = null;
+    }
+    if (backSettleStart) {
+      backgroundWindows.push({ start: backSettleStart, end: monitor.snapshot() });
+      backSettleStart = null;
+    }
     rethrowAuditControl(caught);
     productDataFailure = caught instanceof JourneyBackgroundDataError;
     routeError = formatAuditError(caught);
@@ -2677,18 +2701,12 @@ export async function runJourney(
     }
   }
 
-  const larger = (left: number | null, right: number | null): number | null =>
-    left == null && right == null ? null : Math.max(left ?? 0, right ?? 0);
-  const visibleResponsiveness: ResponsivenessMetrics = {
-    eventLoopSamples: forwardResponsiveness.eventLoopSamples + backResponsiveness.eventLoopSamples,
-    eventLoopP95Ms: larger(forwardResponsiveness.eventLoopP95Ms, backResponsiveness.eventLoopP95Ms),
-    maxEventLoopLagMs: larger(forwardResponsiveness.maxEventLoopLagMs, backResponsiveness.maxEventLoopLagMs),
-    stallsOver100Ms: (forwardResponsiveness.stallsOver100Ms ?? 0) + (backResponsiveness.stallsOver100Ms ?? 0),
-    frameSamples: forwardResponsiveness.frameSamples + backResponsiveness.frameSamples,
-    frameP95Ms: larger(forwardResponsiveness.frameP95Ms, backResponsiveness.frameP95Ms),
-    maxFrameGapMs: larger(forwardResponsiveness.maxFrameGapMs, backResponsiveness.maxFrameGapMs),
-    framesOver50Ms: (forwardResponsiveness.framesOver50Ms ?? 0) + (backResponsiveness.framesOver50Ms ?? 0),
-  };
+  forwardResponsiveness = forwardWindow ? monitor.metricsForWindows([forwardWindow]) : EMPTY_RESPONSIVENESS;
+  backResponsiveness = monitor.metricsForWindows(backWindows);
+  backgroundResponsiveness = monitor.metricsForWindows(backgroundWindows);
+  const visibleResponsiveness = monitor.metricsForWindows([
+    ...(forwardWindow ? [forwardWindow] : []), ...backWindows,
+  ]);
   const errors = routeErrorMessages(logCursor);
   const backContractMet = backReturnedToAudit && backChangedPath && backMs != null && Number.isFinite(backMs) && backMs >= 0;
   const forwardWorkMs = forwardMs;
@@ -2863,7 +2881,6 @@ export function PerformanceAuditRunner() {
       const startedAt = state.startedAt!;
       const auditMode = state.auditMode;
       const uploadLog = state.uploadLog;
-      const startedMs = Date.now();
       // The report's duration is time the audit actually measured. A five-minute
       // pause is the user's, not the app's, and counting it would attribute the
       // wait to a run that was deliberately suspended for it.
@@ -3759,7 +3776,8 @@ export function PerformanceAuditRunner() {
         };
         auditEnvironment = environment;
 
-        const finishedAt = new Date().toISOString();
+        const runTiming = captureAuditRunTiming(startedAt, activeDurationMs);
+        const { finishedAt } = runTiming;
         closeAuditApplicationJournal();
         const performanceSummary = summarizePerformanceAudit(checks);
         const journeyChecks = checks.filter((check) => check.kind === 'journey');
@@ -3848,8 +3866,8 @@ export function PerformanceAuditRunner() {
           sessionId,
           startedAt,
           finishedAt,
-          durationMs: activeDurationMs(),
-          wallClockMs: Date.now() - startedMs,
+          durationMs: runTiming.durationMs,
+          wallClockMs: runTiming.wallClockMs,
           app,
           watchdog: {
             hangTimeoutMs: watchdog.hangTimeoutMs,
@@ -4224,8 +4242,9 @@ export function PerformanceAuditRunner() {
                 maxFrameGapMs: entry.metrics.maxFrameGapMs ?? undefined,
               })),
           }, 'error');
-          const finishedAt = new Date().toISOString();
-        closeAuditApplicationJournal();
+          const runTiming = captureAuditRunTiming(startedAt, activeDurationMs);
+          const { finishedAt } = runTiming;
+          closeAuditApplicationJournal();
           const partialHealth = buildPartialAppHealthReport({
             sessionId, mode: auditMode, startedAt, finishedAt,
             capturedData: capturedHealthData,
@@ -4240,8 +4259,8 @@ export function PerformanceAuditRunner() {
             sessionId,
             startedAt,
             finishedAt,
-            durationMs: activeDurationMs(),
-            wallClockMs: Date.now() - startedMs,
+            durationMs: runTiming.durationMs,
+            wallClockMs: runTiming.wallClockMs,
             app,
             watchdog: {
               hangTimeoutMs: watchdog.hangTimeoutMs,

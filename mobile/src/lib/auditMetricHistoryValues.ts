@@ -20,6 +20,12 @@ export const hasAuditReturnEvidence = (check: AuditCheck): boolean =>
   || typeof check.metrics.backReturnedToAudit === 'boolean'
   || typeof check.metrics.backChangedPath === 'boolean';
 
+/** Route navigation has forward/Back timings, not a semantic-action duration. */
+export const hasAuditActionDurationEvidence = (check: AuditCheck): boolean =>
+  check.metrics.measurementMode === 'semantic-action'
+  || check.metrics.measurementMode !== 'route-round-trip'
+    && Object.prototype.hasOwnProperty.call(check.metrics, 'actionMs');
+
 /** Invalid/inconsistent denominators are unknown, never silently clamped to 100. */
 function percent(numerator: unknown, denominator: unknown): number | null {
   const n = measuredAuditCount(numerator), d = measuredAuditCount(denominator);
@@ -40,6 +46,23 @@ function sampledRate(checks: AuditCheck[], samples: string, events: string, avai
     if (!Number.isSafeInteger(total) || !Number.isSafeInteger(slow)) return null;
   }
   return percent(slow, total);
+}
+
+export function auditTaskOutcomePopulation(report: PerformanceAuditReport,
+  completion: ReturnType<typeof buildPerformanceAuditCompletion>) {
+  const actions = report.checks.filter(check => check.kind === 'journey' && check.status !== 'skipped'
+    && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true && check.metrics.actionInvoked === true);
+  const defects = new Set(completion.gapPositions.filter(gap => gap.source === 'performance').map(gap => gap.checkId));
+  const success = actions.filter(check => check.metrics.actionCompleted === true && check.metrics.nonTimingFailure === false
+    && check.diagnostic?.readiness?.ready === true && !defects.has(check.id));
+  const failure = actions.filter(check => check.metrics.nonTimingFailure === true || check.metrics.actionCompleted === false);
+  const withinTimingLimits = success.filter(check => check.status === 'pass'
+    && check.metrics.eventLoopMeasurementAvailable === true && check.metrics.frameMeasurementAvailable === true
+    && measuredAuditValue(check.metrics.forwardWorkMs) !== null).length;
+  const timingFailures = success.filter(check => check.status === 'fail').length;
+  return { actions, success, failure, outcomes: { success: success.length, failure: failure.length,
+    indeterminate: actions.length - success.length - failure.length, withinTimingLimits, timingFailures,
+    warnings: success.length - withinTimingLimits - timingFailures } };
 }
 
 function extendedAuditMetricValues(report: PerformanceAuditReport,
@@ -67,12 +90,9 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
   };
   const journeys = report.checks.filter(check => check.kind === 'journey' && check.status !== 'skipped'
     && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true);
-  const actions = journeys.filter(check => check.metrics.actionInvoked === true);
-  const defects = new Set(completion.gapPositions.filter(gap => gap.source === 'performance').map(gap => gap.checkId));
-  const successful = actions.filter(check => check.metrics.actionCompleted === true
-    && check.metrics.nonTimingFailure === false && check.diagnostic?.readiness?.ready === true && !defects.has(check.id));
-  const failed = actions.filter(check => check.metrics.nonTimingFailure === true || check.metrics.actionCompleted === false);
-  const actionTimes = actions.filter(check => check.metrics.actionCompleted === true).map(check => measuredAuditValue(check.metrics.actionMs));
+  const { actions, success: successful, failure: failed } = auditTaskOutcomePopulation(report, completion);
+  const actionTimes = actions.filter(check => check.metrics.actionCompleted === true && hasAuditActionDurationEvidence(check))
+    .map(check => measuredAuditValue(check.metrics.actionMs));
   const journeyTimes = journeys.map(check => measuredAuditValue(check.metrics.forwardWorkMs));
   const links = report.checks.filter(check => /^external-link-[0-9]+$/.test(check.id));
   const coverage = completion.gaps.invalidCoverageReports === 0 ? report.coverage : undefined;

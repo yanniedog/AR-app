@@ -1,6 +1,16 @@
 /** Every foreground check shares one budget across all of its sub-operations. */
 export const PERFORMANCE_AUDIT_STEP_LIMIT_MS = 10_000;
 
+/** Freeze run boundaries before report aggregation/export adds its own CPU work. */
+export function captureAuditRunTiming(startedAt: string, activeDurationMs: () => number, clock = Date.now) {
+  const finishedMs = clock();
+  return {
+    finishedAt: new Date(finishedMs).toISOString(),
+    durationMs: activeDurationMs(),
+    wallClockMs: Math.max(0, finishedMs - Date.parse(startedAt)),
+  };
+}
+
 export class PerformanceAuditStepTimeoutError extends Error {
   constructor(readonly label: string, readonly elapsedMs: number) {
     super(`${label} exceeded the 10-second step limit (${Math.round(elapsedMs)}ms foreground time)`);

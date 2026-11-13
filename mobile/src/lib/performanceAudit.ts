@@ -1084,11 +1084,16 @@ export class ResponsivenessMonitor {
   }
 
   metricsSince(snapshot: ResponsivenessSnapshot, until?: ResponsivenessSnapshot): ResponsivenessMetrics {
+    return this.metricsForWindows([{ start: snapshot, end: until }]);
+  }
+
+  /** Pool observations, not already-computed percentiles, over disjoint action windows. */
+  metricsForWindows(windows: readonly { start: ResponsivenessSnapshot; end?: ResponsivenessSnapshot }[]): ResponsivenessMetrics {
+    const collect = (samples: TimedSample[], field: 'lagIndex' | 'frameIndex') => windows.flatMap(({ start: snapshot, end: until }) => {
     const endsAt = until?.capturedAt ?? Infinity;
-    if (endsAt <= snapshot.capturedAt) return summarizeResponsiveness([], []);
-    const samplesSince = (samples: TimedSample[], index: number): number[] =>
-      samples
-        .slice(index)
+    if (endsAt <= snapshot.capturedAt) return [];
+    return samples
+        .slice(snapshot[field])
         .filter((sample) => sample.endsAt > snapshot.capturedAt &&
           (sample.observedFrom ?? sample.startsAt) < endsAt)
         .map((sample) =>
@@ -1096,9 +1101,10 @@ export class ResponsivenessMonitor {
             ? Math.max(0, Math.min(sample.endsAt, endsAt) - Math.max(sample.startsAt, snapshot.capturedAt))
             : sample.value,
         );
+    });
     return summarizeResponsiveness(
-      samplesSince(this.lagSamples, snapshot.lagIndex),
-      samplesSince(this.frameSamples, snapshot.frameIndex),
+      collect(this.lagSamples, 'lagIndex'),
+      collect(this.frameSamples, 'frameIndex'),
     );
   }
 

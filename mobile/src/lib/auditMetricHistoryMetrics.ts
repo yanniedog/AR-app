@@ -1,6 +1,6 @@
 import type { UiLabel } from './uiCopy';
 
-export const AUDIT_METRIC_GROUPS = ['Performance', 'Coverage', 'Task outcomes', 'App quality', 'Display quality'] as const satisfies readonly UiLabel[];
+export const AUDIT_METRIC_GROUPS = ['Performance', 'Coverage', 'Task outcomes', 'Check results', 'Rendering checks'] as const satisfies readonly UiLabel[];
 export type AuditMetricGroup = typeof AUDIT_METRIC_GROUPS[number];
 
 /** Named measured ratios, not a synthetic industry certification or usability grade. */
@@ -35,24 +35,27 @@ export const AUDIT_METRIC_DEFINITIONS = {
   backP95Ms: { label: 'Back time p95', group: 'Task outcomes', unit: 'ms' },
   recoveryPercent: { label: 'Navigation recoveries', group: 'Task outcomes', unit: 'percent' },
   runtimeErrors: { label: 'Runtime errors', group: 'Task outcomes', unit: 'count' },
-  checkPassPercent: { label: 'Check pass rate', group: 'App quality', unit: 'percent' },
-  healthPassPercent: { label: 'Health pass rate', group: 'App quality', unit: 'percent' },
-  dataIntegrityPassPercent: { label: 'Data integrity pass rate', group: 'App quality', unit: 'percent' },
-  dataCompletenessPassPercent: { label: 'Data completeness pass rate', group: 'App quality', unit: 'percent' },
-  timingFailures: { label: 'Timing failures', group: 'App quality', unit: 'count' },
-  historyProcessingMismatches: { label: 'History processing mismatches', group: 'App quality', unit: 'count' },
-  historyProjectionMismatches: { label: 'History projection mismatches', group: 'App quality', unit: 'count' },
-  surfaceCoveragePercent: { label: 'Observed surfaces', group: 'Display quality', unit: 'percent' },
-  displayModelPassPercent: { label: 'Display model pass rate', group: 'Display quality', unit: 'percent' },
-  displayListPassPercent: { label: 'List rendering pass rate', group: 'Display quality', unit: 'percent' },
-  displayVisiblePassPercent: { label: 'Visible content pass rate', group: 'Display quality', unit: 'percent' },
-  displayLayoutPassPercent: { label: 'Layout pass rate', group: 'Display quality', unit: 'percent' },
-  displayChartPassPercent: { label: 'Chart rendering pass rate', group: 'Display quality', unit: 'percent' },
-  displayEmptyPassPercent: { label: 'Empty state pass rate', group: 'Display quality', unit: 'percent' },
-  displayLogoPassPercent: { label: 'Logo rendering pass rate', group: 'Display quality', unit: 'percent' },
+  checkPassPercent: { label: 'Performance checks passed', group: 'Check results', unit: 'percent' },
+  healthPassPercent: { label: 'Health checks passed', group: 'Check results', unit: 'percent' },
+  dataIntegrityPassPercent: { label: 'Integrity checks passed', group: 'Check results', unit: 'percent' },
+  dataCompletenessPassPercent: { label: 'Completeness checks passed', group: 'Check results', unit: 'percent' },
+  timingFailures: { label: 'Timing failures', group: 'Check results', unit: 'count' },
+  historyProcessingMismatches: { label: 'History processing mismatches', group: 'Check results', unit: 'count' },
+  historyProjectionMismatches: { label: 'History projection mismatches', group: 'Check results', unit: 'count' },
+  surfaceCoveragePercent: { label: 'Observed surface contracts', group: 'Rendering checks', unit: 'percent' },
+  displayModelPassPercent: { label: 'Model-count checks passed', group: 'Rendering checks', unit: 'percent' },
+  displayListPassPercent: { label: 'List-presence checks passed', group: 'Rendering checks', unit: 'percent' },
+  displayVisiblePassPercent: { label: 'Viewport-count checks passed', group: 'Rendering checks', unit: 'percent' },
+  displayLayoutPassPercent: { label: 'Layout-callback checks passed', group: 'Rendering checks', unit: 'percent' },
+  displayChartPassPercent: { label: 'Chart-contract checks passed', group: 'Rendering checks', unit: 'percent' },
+  displayEmptyPassPercent: { label: 'Empty-state checks passed', group: 'Rendering checks', unit: 'percent' },
+  displayLogoPassPercent: { label: 'Logo-load checks passed', group: 'Rendering checks', unit: 'percent' },
 } as const satisfies Record<string, { label: UiLabel; group: AuditMetricGroup; unit: 'count' | 'percent' | 'ms' }>;
 
 export type AuditMetric = keyof typeof AUDIT_METRIC_DEFINITIONS;
+export const auditMetricMethodVersion = (metric: AuditMetric): 1 | 2 =>
+  ['actionP50Ms', 'actionP95Ms', 'displayModelPassPercent', 'displayListPassPercent', 'displayVisiblePassPercent',
+    'displayLayoutPassPercent', 'displayEmptyPassPercent', 'displayLogoPassPercent'].includes(metric) ? 2 : 1;
 export const AUDIT_METRICS: readonly AuditMetric[] = Object.freeze(Object.keys(AUDIT_METRIC_DEFINITIONS) as AuditMetric[]);
 export const LEGACY_AUDIT_METRICS: readonly AuditMetric[] = ['failures', 'coveragePercent', 'durationMs', 'slowestCheckMs', 'maxEventLoopLagMs', 'maxFrameGapMs'];
 
@@ -84,8 +87,8 @@ export const AUDIT_METRIC_METHODS = {
   unverifiedLinks: ['Count of inventoried destinations without classified evidence', 'destination'],
   automatedTaskSuccessPercent: ['Actions with completed, ready, gap-free functional success / invoked actions × 100', 'action'],
   automatedTaskFailurePercent: ['Explicit functional or incomplete action failures / invoked actions × 100', 'action'],
-  actionP50Ms: ['Nearest-rank percentile 50 of completed measured action durations', 'action'],
-  actionP95Ms: ['Nearest-rank percentile 95 of completed measured action durations', 'action'],
+  actionP50Ms: ['Nearest-rank percentile 50 of completed semantic-action durations; route navigation excluded', 'action'],
+  actionP95Ms: ['Nearest-rank percentile 95 of completed semantic-action durations; route navigation excluded', 'action'],
   backP95Ms: ['Nearest-rank percentile 95 of measured Back durations', 'journey'],
   recoveryPercent: ['Returns requiring replacement or anchor reset / measured returns × 100', 'journey'],
   runtimeErrors: ['Sum of measured runtime errors across executed journeys', 'error'],

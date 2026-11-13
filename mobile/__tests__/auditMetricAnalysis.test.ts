@@ -4,6 +4,8 @@ import { auditMetricRun, AUDIT_METRICS } from '../src/lib/auditMetricHistory';
 import { finalizeAppHealthReport, toPublicAppHealthReport, APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth';
 import type { AuditCheck } from '../src/lib/performanceAudit';
 import type { AppHealthCheck } from '../src/lib/appHealth';
+import { auditCheckResultSummary } from '../src/lib/auditCheckResultSummary';
+import { auditMetricMethodVersion } from '../src/lib/auditMetricHistoryMetrics';
 
 function journey(id: string, duration: number | null): AuditCheck {
   return { id, kind: 'journey', label: 'Rates', status: 'pass', durationMs: duration,
@@ -21,6 +23,40 @@ function healthMetricReport(code: AppHealthCheck['code'], metrics: AppHealthChec
     checks: [{ id: code, code, domain: 'data-completeness', label: 'Evidence', status: 'pass', metrics }] });
   return report;
 }
+
+test('lightweight result summaries retain full-analysis operands across valid, missing, invalid and unavailable evidence', () => {
+  for (const code of [APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT, APP_HEALTH_CHECK_CODES.DISPLAY_MODEL,
+    APP_HEALTH_CHECK_CODES.DISPLAY_LIST, APP_HEALTH_CHECK_CODES.DISPLAY_VISIBILITY, APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT,
+    APP_HEALTH_CHECK_CODES.DISPLAY_CHART, APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE, APP_HEALTH_CHECK_CODES.DISPLAY_LOGO,
+    APP_HEALTH_CHECK_CODES.CORE_SCHEMA]) {
+    for (const variant of ['valid', 'missing', 'invalid', 'unavailable', 'zero'] as const) {
+      const metrics: AppHealthCheck['metrics'] = { plannedSurfaces: 5, missingSurfaces: 1, duplicateContracts: 0,
+        checked: 4, missing: 1, failed: 1, warned: 1, unavailable: 0 };
+      if (variant === 'missing') delete metrics.failed;
+      if (variant === 'invalid') metrics.failed = 10;
+      if (variant === 'zero') Object.keys(metrics).forEach(key => { metrics[key] = 0; });
+      const report = healthMetricReport(code, metrics);
+      if (variant === 'unavailable') report.appHealth!.checks[0].status = 'unavailable';
+      const full = buildAuditMetricAnalysis(report), summary = auditCheckResultSummary(report);
+      for (const [metric, { inventory: _inventory, ...operands }] of Object.entries(summary.metrics)) {
+        const expected = full.metrics[metric as keyof typeof full.metrics];
+        expect({ code, variant, metric, ...operands }).toEqual({ code, variant, metric,
+          numerator: expected.numerator, denominator: expected.denominator, missingCount: expected.missingCount,
+          unit: expected.unit, unitOfAnalysis: expected.unitOfAnalysis });
+      }
+      expect(summary).not.toHaveProperty('observations');
+      expect(summary.taskEvidence.outcomes).toEqual(full.metrics.automatedTaskSuccessPercent.outcomes);
+    }
+  }
+});
+
+test('unmeasured ready-model evidence retains its unavailable inventory instead of implying zero gaps', () => {
+  const report = healthMetricReport(APP_HEALTH_CHECK_CODES.DISPLAY_MODEL,
+    { checked: 1, missing: 0, failed: 0, warned: 0, unavailable: 1 });
+  report.appHealth!.checks[0].status = 'unavailable';
+  expect(auditCheckResultSummary(report).metrics.displayModelPassPercent).toMatchObject({
+    numerator: null, denominator: null, missingCount: 0, inventory: { observed: 1, expected: 1, unavailable: 1 } });
+});
 
 test('count admission rejects fractional operands before subtraction and unsafe sums while durations retain fractions', () => {
   const cases = [
@@ -191,7 +227,7 @@ test('all graph values have the same versioned analysis and valid shared evidenc
     const evidence = analysis.metrics[metric];
     expect(evidence.value).toBe(run.metrics[metric]);
     expect(evidence.methodId).toBe(`ar.audit.${metric}`);
-    expect(evidence.methodVersion).toBe(1);
+    expect(evidence.methodVersion).toBe(auditMetricMethodVersion(metric));
     expect(evidence.formula.length).toBeGreaterThan(10);
     expect(evidence.uncertainty.interval).toBeNull();
     expect(evidence.contributors.every(index => Number.isSafeInteger(index) && analysis.observations[index])).toBe(true);
@@ -216,6 +252,28 @@ test('nearest-rank tails, MAD, IQR and worst observations preserve sample sizes 
   expect(evidence.distribution?.worst.map(item => item.value)).toEqual([1000, 30, 20, 10]);
 });
 
+test('action duration population excludes route navigation without inventing missing action samples', () => {
+  const route = journey('journey-rates-cold', 100);
+  route.metrics.measurementMode = 'route-round-trip';
+  delete route.metrics.actionMs;
+  const action = journey('deep-first-pass.action', 20);
+  action.metrics.measurementMode = 'semantic-action';
+  const missingAction = journey('deep-repeat.action', null);
+  missingAction.metrics.measurementMode = 'semantic-action';
+  delete missingAction.metrics.actionMs;
+  const report = makePerformanceAuditReport('action-population', [route, action, missingAction]);
+  const analysis = buildAuditMetricAnalysis(report);
+  for (const metric of ['actionP50Ms', 'actionP95Ms'] as const) {
+    expect(analysis.metrics[metric]).toMatchObject({ value: 20, sampleSize: 1, eligibleCount: 2,
+      observedCount: 1, missingCount: 1, excludedCount: 1, missingEvidence: ['partial-samples'] });
+    expect(auditMetricRun(report).metrics[metric]).toBe(20);
+  }
+  expect(analysis.metrics.automatedTaskSuccessPercent.denominator).toBe(3);
+  const onlyRoutes = buildAuditMetricAnalysis(makePerformanceAuditReport('route-only', [route]));
+  expect(onlyRoutes.metrics.actionP95Ms).toMatchObject({ value: null, eligibleCount: 0, missingCount: 0,
+    excludedCount: 1, missingEvidence: ['no-eligible-observations'] });
+});
+
 test('task outcomes partition measured success, failure and indeterminate evidence', () => {
   const success = journey('success', 10), failure = journey('failure', 10), unknown = journey('unknown', 10);
   failure.metrics.nonTimingFailure = true;
@@ -224,6 +282,17 @@ test('task outcomes partition measured success, failure and indeterminate eviden
   expect(analysis.metrics.automatedTaskSuccessPercent).toMatchObject({ value: 33.3, numerator: 1, denominator: 3,
     outcomes: { success: 1, failure: 1, indeterminate: 1 }, missingCount: 1, missingEvidence: ['unverified-evidence', 'partial-samples'] });
   expect(analysis.metrics.automatedTaskFailurePercent.value).toBeNull();
+});
+
+test('functional success is separated from successful readiness within timing limits', () => {
+  const fast = journey('fast', 10), slow = journey('slow', 500), warning = journey('warning', 100);
+  slow.status = 'fail'; warning.status = 'warn';
+  const report = makePerformanceAuditReport('timely-outcomes', [fast, slow, warning]);
+  const evidence = buildAuditMetricAnalysis(report).metrics.automatedTaskSuccessPercent;
+  expect(evidence.value).toBe(100);
+  expect(evidence.outcomes).toEqual({ success: 3, failure: 0, indeterminate: 0,
+    withinTimingLimits: 1, timingFailures: 1, warnings: 1 });
+  expect(evidence.denominator).toBe(3);
 });
 
 test('pooled callbacks expose their actual denominator without pretending independent random trials', () => {

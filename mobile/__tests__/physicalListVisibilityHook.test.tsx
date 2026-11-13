@@ -1,6 +1,7 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { usePhysicalListVisibility } from '../src/hooks/usePhysicalListVisibility';
+import { useFocusMeasurement } from '../src/hooks/useFocusMeasurement';
 let mockGeneration = 1;
 let mockListener = () => {};
 jest.mock('../src/lib/performanceAuditReadiness', () => ({ performanceAuditReadinessRegistry: {
@@ -12,12 +13,38 @@ const rows = [{ key: 'one' }];
 const rowKey = (row: typeof rows[number]) => row.key;
 let hook!: ReturnType<typeof usePhysicalListVisibility<typeof rows[number]>>;
 const measured = jest.fn();
+let onFocus: (() => void) | undefined;
+const navigation = { addListener: (_event: 'focus', listener: () => void) => {
+  onFocus = listener; return () => { onFocus = undefined; };
+} };
 function Probe({ revision = 'a', unobscured = true, source = rows }) {
   hook = usePhysicalListVisibility(revision, source, unobscured, rowKey, measured);
+  useFocusMeasurement(navigation, true, hook.measure);
   return null;
 }
 type Measure = (x: number, y: number, width: number, height: number) => void;
 afterEach(() => { jest.useRealTimers(); measured.mockClear(); });
+
+test('native focus retries an exhausted detached measurement without a blur render or new revision', () => {
+  jest.useFakeTimers(); let tree!: ReactTestRenderer;
+  let attached = false;
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  Object.assign(hook.viewport, { current: { measureInWindow: (cb: Measure) => cb(0, 0, 400, 700) } });
+  act(() => {
+    hook.register(rows[0], { measureInWindow: (cb: Measure) => cb(0, attached ? 100 : -1000, 400, 200) } as never);
+    hook.measure(); jest.advanceTimersByTime(10_000);
+  });
+  expect(hook.visibleCount).toBe(0);
+  // Frozen navigation returns the same mounted tree, so no prop/state identity
+  // changes can trigger the hook's ordinary effect. Only the native focus fires.
+  attached = true;
+  act(() => onFocus?.());
+  expect(hook.visibleCount).toBe(0);
+  act(() => jest.advanceTimersByTime(40));
+  expect(hook.visibleCount).toBe(1);
+  act(() => tree.unmount());
+  expect(onFocus).toBeUndefined();
+});
 test('revokes positive evidence before a delayed or dropped scroll measurement and rejects stale callbacks', () => {
   jest.useFakeTimers(); let tree!: ReactTestRenderer;
   act(() => { tree = TestRenderer.create(<Probe />); jest.runOnlyPendingTimers(); });

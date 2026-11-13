@@ -74,8 +74,29 @@ test('metric groups show one chart and retain percent versus duration units', ()
   expect(tree.root.findAllByProps({ label: 'Collected checks' })[0].props.value).toBe('80.0%');
   expect(tree.root.findAllByType('Svg')).toHaveLength(1);
   expect(tree.root.findAllByProps({ title: 'Slowest check' })).toHaveLength(0);
-  act(() => tree.root.findByProps({ title: 'Display quality' }).props.onPress());
-  act(() => tree.root.findByProps({ title: 'Layout pass rate' }).props.onPress());
-  expect(tree.root.findAllByProps({ label: 'Layout pass rate' })[0].props.value).toBe('75.0%');
+  act(() => tree.root.findByProps({ title: 'Rendering checks' }).props.onPress());
+  act(() => tree.root.findByProps({ title: 'Layout-callback checks passed' }).props.onPress());
+  expect(tree.root.findAllByProps({ label: 'Layout-callback checks passed' })[0].props.value).toBe('75.0%');
   expect(tree.root.findAllByType('Svg')).toHaveLength(1);
+});
+
+test('check results expose timely task outcomes and never imply measured usability or pixel quality', () => {
+  const report = makePerformanceAuditReport('quality-scope', [{ id: 'action', label: 'Action', kind: 'journey',
+    status: 'fail', durationMs: 500, metrics: { executionAttempted: true, actionInvoked: true,
+      actionCompleted: true, nonTimingFailure: false, actionMs: 500, forwardWorkMs: 500,
+      eventLoopMeasurementAvailable: true, frameMeasurementAvailable: true },
+    diagnostic: { stage: 'complete', readiness: { capturing: true, ready: true, blockers: [], surfaces: [] } } }]);
+  const run = auditMetricRun(report);
+  act(() => { tree = TestRenderer.create(<AuditMetricHistoryChart runs={[run]} report={report} />); });
+  expect(tree.root.findAllByProps({ title: 'App quality' })).toHaveLength(0);
+  expect(tree.root.findAllByProps({ title: 'Display quality' })).toHaveLength(0);
+  act(() => tree.root.findByProps({ title: 'Check results' }).props.onPress());
+  expect(tree.root.findByProps({ label: 'Invoked actions' }).props.value).toBe('1');
+  expect(tree.root.findByProps({ label: 'Ready within timing limits' }).props.value).toBe('0');
+  expect(tree.root.findByProps({ label: 'Ready with timing failures' }).props.value).toBe('1');
+  expect(tree.root.findByProps({ label: 'Human usability' }).props.value).toBe('Not measured');
+  act(() => tree.root.findByProps({ title: 'Rendering checks' }).props.onPress());
+  expect(tree.root.findByProps({ label: 'Visual design' }).props.value).toBe('Not measured');
+  expect(tree.root.findByProps({ label: 'Pixel correctness' }).props.value).toBe('Not measured');
+  expect(tree.root.findByProps({ label: 'Denominator' }).props.value).toBe('Not measured');
 });
