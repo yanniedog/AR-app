@@ -36,6 +36,24 @@ afterEach(() => {
   setSuitabilityAllowed(null);
 });
 
+test('headless catalogue scope retains unknown history without weakening identity or input checks', () => {
+  const { snapshot } = fixture();
+  delete snapshot.historyCoverage;
+  expect(evaluateAppHealthCatalogueCoverage(snapshot).status).toBe('unavailable');
+  snapshot.catalogueAuditMode = 'headless_default_preferences';
+  const check = evaluateAppHealthCatalogueCoverage(snapshot);
+  expect(check.status).toBe('warn');
+  expect(check.metrics.historyAvailable).toBeNull();
+  expect(check.metrics.allProductsRendered).toBe(false);
+  snapshot.catalogue!.sections[0].searchUnexpected = ['mismatched-tier'];
+  expect(evaluateAppHealthCatalogueCoverage(snapshot).status).toBe('fail');
+  snapshot.catalogue!.sections[0].searchUnexpected = [];
+  snapshot.catalogue!.detailsAvailable = false;
+  expect(evaluateAppHealthCatalogueCoverage(snapshot).status).toBe('unavailable');
+  snapshot.catalogue = null;
+  expect(evaluateAppHealthCatalogueCoverage(snapshot).status).toBe('unavailable');
+});
+
 test('manual snapshots reuse passive catalogue evidence without rerunning any selectors', () => {
   const state = stateFor(makeHealthyDataFixture().snapshot.core!);
   const search = jest.spyOn(selectors, 'filterRows');

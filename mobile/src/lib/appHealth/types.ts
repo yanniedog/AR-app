@@ -165,6 +165,8 @@ export interface AppHealthQuarantineObservation {
 }
 
 export interface AppHealthDataSnapshot {
+  /** CLI-only selector scan; does not supply personal profile or historical UI evidence. */
+  catalogueAuditMode?: 'headless_default_preferences';
   historyCoverage?: import('./historyCoverage').HistoryCoverageEvidence | null;
   source: PayloadSource | 'unavailable';
   core: CorePayload | null;

@@ -11,7 +11,7 @@ import { validFact, validDefinition, validProvenance, safeId, type CustomerAnswe
 import { THIRD_PARTY_NOTICES } from '../content/thirdPartyNotices';
 import { LENDER_ARTWORK_TERMS, OPTIONAL_DIAGNOSTICS_TERMS } from './privacyPolicy';
 import { Decimal } from './productTermsEngine/decimal';
-import { readBoundCustomerQuestion, type CustomerQuestionBinding } from './customerQuestionBinding';
+import type { CustomerQuestionBinding } from './customerQuestionBinding';
 import type { BackgroundWorkSnapshot } from './backgroundPayloadWork';
 import type { MortgageComparisonInputs } from '../data/mortgageComparison';
 import type { PublicProduct, PublicReferenceRate, PublicCoverage, PublicEvidence } from '../data/publicRateModel';
@@ -763,6 +763,9 @@ export function useNegotiatedTermDraft() {
 export function uiInputDefinitionLabel(definition: InputDefinition, question?: CustomerQuestionBinding | null): UiText {
   if (!validDefinition(definition)) return uiLabel('Source review required');
   if (question !== undefined) {
+    // Load the real transport-bound question verifier only for this capability;
+    // pure catalogue labels must not initialize native payload transport.
+    const { readBoundCustomerQuestion } = require('./customerQuestionBinding') as typeof import('./customerQuestionBinding');
     const label = readBoundCustomerQuestion(definition, question);
     return label === null ? uiLabel('Source review required') : known(label);
   }
