@@ -2,6 +2,7 @@ import type { AssetState } from './assetState';
 import { coverageFailures, coverageFailureProvenanceReported } from './coverage';
 import type { PayloadCoverage, PayloadSource } from '../types';
 import { displayEvidenceFacts, type EvidencePresentation } from './displayEvidenceFacts';
+import { parsePopulationAssessment } from './populationAssessment';
 
 export type DisplayEvidenceKind =
   | 'current'
@@ -108,7 +109,7 @@ function coverageSummary(coverage: PayloadCoverage | null | undefined): {
   // producer's reconciled split count when it is present; the list length is
   // only a legacy fallback when no failed-provider count was published.
   const failed = reportedFailed ?? failures.length;
-  const partialState = partial > 0
+  const partialState = Boolean(parsePopulationAssessment(coverage?.population_assessment)) || partial > 0
     || failed > 0
     || (attempted !== null && succeeded !== null && succeeded < attempted);
   const completeState = !partialState

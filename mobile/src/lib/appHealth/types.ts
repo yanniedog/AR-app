@@ -112,6 +112,8 @@ export type AppHealthAssetKey = (typeof APP_HEALTH_ASSET_KEYS)[number];
 
 export interface AppHealthSourceContract {
   readonly contract: 'v1';
+  /** Explicitly selected candidate consumer only; omitted remains the legacy source contract. */
+  readonly payloadChannel?: 'observed-population-v1';
   readonly repo: string;
   readonly rollingTag: string;
   readonly manifestUrl: string;

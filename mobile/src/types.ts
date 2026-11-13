@@ -114,6 +114,7 @@ export interface CoverageFailure {
 }
 
 export interface PayloadCoverage {
+  population_assessment?: import('./data/populationAssessment').PopulationAssessmentV1;
   /** Producer's exhaustive source-to-published exclusions; verified by app health. */
   payload_accounting?: unknown;
   schema_version?: number;

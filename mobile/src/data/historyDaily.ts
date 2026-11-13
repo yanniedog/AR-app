@@ -2,6 +2,7 @@ import { HISTORY_DERIVATION_VERSION, historyDateStatuses } from './historyDeriva
 import { resolveDatedPublication, resolveLegacyPublications, type HistoricalPublication } from './historicalPublication';
 import { parseDatesIndex, type DatesIndex } from './datesIndex';
 import { DATES_INDEX_URL } from '../config';
+import { validatePopulationEdition } from './populationAssessment';
 import { debugLog } from '../lib/debugLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import type { BankHistoryPoint, CorePayload, SectionKey } from '../types';
@@ -109,6 +110,7 @@ export async function downloadDatedCore(runDate: string, index?: DatesIndex, pub
     { fileName: manifest.files.core.name, expectedBytes: manifest.files.core.bytes, requireExactBytes: true,
       maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024 });
   if (core.run_date !== runDate) throw new Error('Dated core publication date mismatch');
+  validatePopulationEdition(core, manifest);
   return core;
 }
 

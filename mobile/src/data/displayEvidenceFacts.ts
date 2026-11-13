@@ -1,10 +1,13 @@
 /** Closed coverage/status presentation; reason and limitation prose never leaves this adapter. */
+import { parsePopulationAssessment, type PopulationAssessmentV1 } from './populationAssessment';
+
 export type EvidenceSource = 'remote' | 'cache' | 'sample';
 export type EvidenceAssetStatus = 'loading' | 'live' | 'cached' | 'sample' | 'partial' | 'unavailable' | 'error';
 export type EvidenceKind = 'current' | 'partial' | 'saved' | 'overdue' | 'sample' | 'offline' | 'unavailable' | 'loading';
 export type EvidenceTone = 'positive' | 'caution' | 'neutral' | 'danger';
 export type EvidenceCoverageState = 'complete' | 'partial' | 'unknown';
 interface CoverageInput {
+  population_assessment?: PopulationAssessmentV1;
   providers_attempted?: number;
   providers_succeeded?: number;
   observed_on?: string;
@@ -28,6 +31,10 @@ export interface EvidenceInput {
 }
 
 export type EvidenceFact =
+  | { readonly kind: 'population'; readonly assessment: PopulationAssessmentV1 }
+  | { readonly kind: 'population-scope' | 'missing-products' }
+  | { readonly kind: 'published-products' | 'published-rates' | 'published-providers'; readonly count: number }
+  | { readonly kind: 'registered-provider'; readonly provider: string }
   | { readonly kind: 'source'; readonly value: EvidenceSource }
   | { readonly kind: 'observed'; readonly state: 'known'; readonly day: string }
   | { readonly kind: 'observed'; readonly state: 'unknown' }
@@ -71,6 +78,7 @@ export function displayEvidenceFacts(input: EvidenceInput): EvidencePresentation
   const now = input.now ?? new Date();
   const observedOn = safeDay(input.runDate ?? input.coverage?.observed_on ?? input.coverage?.observed_at);
   const coverage = input.coverage;
+  const population = parsePopulationAssessment(coverage?.population_assessment);
   const attempted = safeCount(coverage?.providers_attempted);
   const succeeded = safeCount(coverage?.providers_succeeded);
   const partial = safeCount(coverage?.counts?.providers_partial);
@@ -78,7 +86,7 @@ export function displayEvidenceFacts(input: EvidenceInput): EvidencePresentation
   const failures = coverage?.provider_failures ?? coverage?.failures ?? [];
   const failureProvenance = Array.isArray(coverage?.provider_failures) || Array.isArray(coverage?.failures);
   const failed = reportedFailed ?? (failureProvenance ? failures.length : null);
-  const partialState = (partial ?? 0) > 0 || (failed ?? 0) > 0
+  const partialState = Boolean(population) || (partial ?? 0) > 0 || (failed ?? 0) > 0
     || (attempted !== null && succeeded !== null && succeeded < attempted);
   const complete = !partialState && attempted !== null && attempted > 0
     && succeeded === attempted && partial === 0
@@ -90,6 +98,11 @@ export function displayEvidenceFacts(input: EvidenceInput): EvidencePresentation
   const facts: EvidenceFact[] = [{ kind: 'source', value: input.source },
     observedOn === null ? { kind: 'observed', state: 'unknown' } : { kind: 'observed', state: 'known', day: observedOn },
     { kind: 'coverage', value: state }, { kind: 'connection', value: input.offline ? 'offline' : 'online' }];
+  if (population) facts.push({ kind: 'population', assessment: population }, { kind: 'population-scope' }, { kind: 'missing-products' },
+    { kind: 'published-products', count: population.observed_counts.products },
+    { kind: 'published-rates', count: population.observed_counts.rates },
+    { kind: 'published-providers', count: population.observed_counts.providers },
+    ...population.affected_providers.map(provider => ({ kind: 'registered-provider' as const, provider: provider.provider_name })));
   for (const [kind, count] of [
     ['providers-attempted', attempted], ['providers-succeeded', succeeded],
     ['providers-partial', partial], ['providers-failed', failed],
