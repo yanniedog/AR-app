@@ -5,6 +5,7 @@ import { MortgageComparisonControls } from '../src/components/MortgageComparison
 import { clearMortgageComparison, setMortgageComparisonInputs, useMortgageComparison } from '../src/data/mortgageComparison';
 import { captureRatesSession, restoreRatesSession } from '../src/data/ratesSession';
 import { EMPTY_FILTERS } from '../src/data/selectors';
+import { catalogue, programme, product, row } from '../testUtils/publicRateJourney';
 
 let mockDimensions = { width: 360, height: 800, scale: 3, fontScale: 1 };
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ default: () => mockDimensions }));
@@ -40,6 +41,29 @@ beforeEach(() => {
   previousSession = captureRatesSession(); jest.useFakeTimers(); clearMortgageComparison();
 });
 afterEach(() => { clearMortgageComparison(); restoreRatesSession(previousSession); jest.useRealTimers(); });
+
+test.each([1, 49])('widely available facets exclude placeholders from rows, selections and %i catalogue products', async count => {
+  const products = Array.from({ length: count }, (_, i) => ({ ...product, productId: `p-${i}` }));
+  const view = catalogue(products.map(p => programme({ productId: p.productId, conditions: [
+    { conditionId: 'purpose', evidenceIds: [], field: 'purpose', operator: 'in', values: ['OO', 'INV', 'UNCONSTRAINED', 'OTHER'] },
+    { conditionId: 'repayment', evidenceIds: [], field: 'repayment', operator: 'in', values: ['PI', 'IO', 'UNKNOWN'] },
+  ] })), products);
+  const filters = { ...EMPTY_FILTERS, loanPurposes: ['UNKNOWN'], repaymentTypes: ['UNSPECIFIED'] };
+  const render = (includeNonStandard: boolean) => <MortgageComparisonControls
+    rows={[row, { ...row, loan_purpose: 'OTHER', ribbon_repayment_type: 'UNKNOWN' }]}
+    catalogue={view} filters={{ ...filters, includeNonStandard }} unverified={0} invalid={false} />;
+  let tree!: Tree;
+  await act(async () => { tree = TestRenderer.create(render(true)) as Tree; });
+  await act(async () => { await jest.runAllTimersAsync(); });
+  const labels = () => tree.root.findAllByType('Chip').map(node => node.props.label);
+  try {
+    expect(labels()).toEqual(expect.arrayContaining(['Unspecified', 'OTHER', 'UNKNOWN']));
+    act(() => tree.update(render(false)));
+    expect(labels()).toEqual(['Owner occupied', 'Investor', 'Principal & interest', 'Interest only']);
+    act(() => tree.update(render(true)));
+    expect(labels()).toEqual(expect.arrayContaining(['Unspecified', 'OTHER', 'UNKNOWN']));
+  } finally { act(() => tree.unmount()); }
+});
 
 test('exclusive accessible modes keep raw direct LVR and show computed facts without editable LVR in funds mode', () => {
   setMortgageComparisonInputs({ loanAmount: '600000', lvr: '72' });

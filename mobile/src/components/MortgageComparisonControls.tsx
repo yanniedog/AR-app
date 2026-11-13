@@ -1,4 +1,4 @@
-import { canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
+import { canonicalPurpose, canonicalRepayment, isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../data/mortgageFacets';
 import { publicCataloguePricingKey, type PublicCatalogueView } from '../data/publicRateIntegration';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TextInput, useWindowDimensions, View } from 'react-native';
@@ -224,7 +224,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
       facetCatalogueOptions[group.key],
       filters[group.key],
       group.canonicalize,
-    ),
+    ).filter(option => filters.includeNonStandard || isWidelyAvailableMortgageFacet(group.key, option)),
   })), [rowOptions, facetCatalogueOptions, filters]);
   const change = (field: NumericInputField, text: string) => {
     dirty.current = true;
@@ -286,10 +286,12 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
         const meaningOf = (value: string) => group.canonicalize(value) ?? value;
         const selected = filters[group.key].some(item => meaningOf(item) === option);
         return <Chip key={option} label={humanizeEnum(option)} selected={selected}
-          onPress={() => { if (dirty.current) commitDraft(draftRef.current); updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
-            [group.key]: selected
-              ? current.filters[group.key].filter(item => meaningOf(item) !== option)
-              : [...current.filters[group.key], option] } }), true); }} />;
+          onPress={() => { if (dirty.current) commitDraft(draftRef.current); updateRatesSection('Mortgage', current => {
+            const scoped = scopeMortgageFacets(current.filters, filters.includeNonStandard);
+            return { filters: { ...scoped, [group.key]: selected
+              ? scoped[group.key].filter(item => meaningOf(item) !== option)
+              : [...scoped[group.key], option] } };
+          }, true); }} />;
       })}</Row>
     </View>)}
     </Row>

@@ -15,3 +15,23 @@ export function matchesMortgageFacet(value: string | undefined, selected: readon
   const canonical = field === 'purpose' ? canonicalPurpose : canonicalRepayment;
   return selected.length === 0 || (value !== undefined && selected.some(item => canonical(item) === canonical(value)));
 }
+
+export type MortgageFacetKey = 'loanPurposes' | 'repaymentTypes';
+
+/** Broad-market controls offer concrete customer choices, never evidence placeholders. */
+export function isWidelyAvailableMortgageFacet(key: MortgageFacetKey, value: string): boolean {
+  const meaning = key === 'loanPurposes' ? canonicalPurpose(value) : canonicalRepayment(value);
+  return key === 'loanPurposes'
+    ? meaning === 'OWNER_OCCUPIED' || meaning === 'INVESTMENT'
+    : meaning === 'PRINCIPAL_AND_INTEREST' || meaning === 'INTEREST_ONLY';
+}
+
+export function scopeMortgageFacets<T extends Record<MortgageFacetKey, string[]>>(
+  filters: T, includeNonStandard: boolean,
+): T {
+  if (includeNonStandard) return filters;
+  const loanPurposes = filters.loanPurposes.filter(value => isWidelyAvailableMortgageFacet('loanPurposes', value));
+  const repaymentTypes = filters.repaymentTypes.filter(value => isWidelyAvailableMortgageFacet('repaymentTypes', value));
+  return loanPurposes.length === filters.loanPurposes.length && repaymentTypes.length === filters.repaymentTypes.length
+    ? filters : { ...filters, loanPurposes, repaymentTypes };
+}
