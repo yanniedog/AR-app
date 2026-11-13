@@ -286,7 +286,10 @@ export function useResolvedPublicRankingRows(options: {
       ? scheduleAfterInteractions(run)
       : scheduleAfterNavigation(run, 100);
     return () => { if (!finished) stats.cancellations++; cancelled = true; cancelNavigation(); };
-  }, [synchronous, focused, interactive, attempt, current, clockRevision, collectValidity]);
+    // Admission gates can advance before their React subscriber commits. The
+    // worker then cancels against the live gate without seeing a new request;
+    // explicitly restart on that later render instead of leaving it pending.
+  }, [synchronous, focused, interactive, attempt, current, clockRevision, collectValidity, mandatoryRevision, suitabilityGateRevision]);
   const ready = synchronous != null || current && snapshot!.error === null;
   useEffect(() => {
     if (!prepareMortgageIndex || catalogue.status !== 'ready' || !catalogue.allLoaded) return;

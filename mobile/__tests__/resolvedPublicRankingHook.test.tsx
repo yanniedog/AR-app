@@ -66,6 +66,43 @@ test('remounted pricing cannot revive an expired retained quote after clock roll
   try { expect(latest.ready).toBe(false); expect(latest.work.pricingSnapshotReused).toBe(false); }
   finally { act(() => tree.unmount()); }
 });
+
+test('a gate change while a worker is suspended restarts after the later React render', async () => {
+  const host = globalThis as typeof globalThis & { nativeRuntimeScheduler?: { unstable_NormalPriority: number; unstable_scheduleCallback: (priority: number, callback: () => null) => unknown } };
+  const previous = host.nativeRuntimeScheduler;
+  const callbacks: (() => null)[] = [];
+  host.nativeRuntimeScheduler = { unstable_NormalPriority: 3, unstable_scheduleCallback: (_priority, callback) => { callbacks.push(callback); return callbacks.length; } };
+  const source = Array.from({ length: 128 }, () => ({ ...row })), view = catalogue(), scenario = {};
+  let latest!: ReturnType<typeof useResolvedPublicRankingRows>;
+  function Probe() {
+    latest = useResolvedPublicRankingRows({ candidates: source, catalogue: view, section: 'Mortgage', sectionScenario: scenario,
+      rowScenario: () => scenario, resolutionContextKey: '{}', focused: true, interactive: true, revision: 1 });
+    return null;
+  }
+  let tree!: ReactTestRenderer;
+  try {
+    act(() => { tree = TestRenderer.create(<Probe />); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(49); });
+    for (let i = 0; latest.work.pricingStage !== 'resolution' && i < 20; i++) {
+      const resume = callbacks.shift(); expect(resume).toBeDefined();
+      await act(async () => { resume!(); });
+    }
+    expect(latest.work.pricingStage).toBe('resolution');
+    // The external admission store updates before React commits its subscriber
+    // render. Allow the old worker to see that change and terminate first.
+    installMandatoryEligibility(selectMandatoryEligibility(null, null, null));
+    await act(async () => { await jest.advanceTimersByTimeAsync(100); });
+    expect(latest.ready).toBe(false);
+    act(() => tree.update(<Probe />));
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(latest.ready).toBe(true);
+    expect(latest.resolution.rows).toHaveLength(128);
+    expect(latest.work.workerStarts).toBe(2);
+  } finally {
+    act(() => tree.unmount());
+    if (previous) host.nativeRuntimeScheduler = previous; else delete host.nativeRuntimeScheduler;
+  }
+});
 afterEach(() => {
   jest.useRealTimers();
 });
