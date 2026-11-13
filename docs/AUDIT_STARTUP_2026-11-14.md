@@ -17,6 +17,9 @@ redirects, a Market action and a theme action. Maximum JS lag is 668 ms and
 maximum JS animation gap is 680.1 ms. These are failures even when actions
 eventually complete.
 
+The 2,521 warnings comprise 148 journey latency/frame warnings and 2,373
+unverified remote destinations. Warning thresholds remain unchanged.
+
 Entry measurements are 69.2 ms for screen readiness, 52.9 ms for settings,
 65.1 ms for accepting Start, 30 ms for visible Start feedback and 138.8 ms
 from Start to the runner. Setup adds 214.5 ms for safety, 200.3 ms for payload
@@ -39,6 +42,9 @@ settlement, 552.3 ms for pinned inputs, 1,007.4 ms for link inventory and
   character limit per key. Every clause, source membership, edition and
   provenance check still executes. Hash reuse cannot admit mutated evidence.
   The regression requires only one digest for 100 identical requests.
+- Memoize each mounted catalogue hook's edition key by its installed manifest.
+  One hundred layout/selection rerenders perform no capability hashes; manifest
+  replacement and imperative audit reads still recompute and verify the key.
 - Display both the idle estimate and running estimate as minutes and seconds,
   rounded upward once. For example, 480,484 ms displays `08:01`; minutes continue
   beyond an hour. Paused and unknown states retain their explicit labels.
