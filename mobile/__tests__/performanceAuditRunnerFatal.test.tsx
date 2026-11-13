@@ -105,7 +105,8 @@ test('a capacity stop retains a failed position and cannot claim complete eviden
 });
 
 test.each<MortgageComparisonInputs>([
-  { loanAmount: '654321.98', lvr: '71.234567', lvrMode: 'funds', fundsAvailable: '123456.79' },
+  { loanAmount: '654321.98', lvr: '71.234567', lvrMode: 'funds', fundsAvailable: '123456.79', fundsType: 'deposit', propertyValue: '876543.21' },
+  { loanAmount: '654321.98', lvr: '71.234567', lvrMode: 'funds', fundsAvailable: '123456.79', fundsType: 'offset', propertyValue: '876543.21' },
   { loanAmount: '654321.98', lvr: '71.234567' },
 ])('the mounted audit restores the exact private comparison snapshot after interruption: %j', async baseline => {
   setMortgageComparisonInputs(baseline);
@@ -113,7 +114,7 @@ test.each<MortgageComparisonInputs>([
   jest.mocked(captureRatesSession).mockImplementation(() => {
     setMortgageComparisonInputs(baseline.lvrMode === 'funds'
       ? { loanAmount: '500000', lvr: '80' }
-      : { loanAmount: '500000', lvr: '80', lvrMode: 'funds', fundsAvailable: '200000' });
+      : { loanAmount: '500000', lvr: '80', lvrMode: 'funds', fundsAvailable: '200000', fundsType: 'offset', propertyValue: '800000' });
     return ratesSnapshot;
   });
   jest.mocked(activateKeepAwakeAsync).mockRejectedValueOnce(new Error('interrupted audit fixture'));
@@ -135,6 +136,6 @@ test.each<MortgageComparisonInputs>([
       jest.mocked(debugLog.warn).mock.calls,
       jest.mocked(debugLog.error).mock.calls,
     ]);
-    expect(evidence).not.toMatch(/654321\.98|71\.234567|123456\.79|fundsAvailable|lvrMode/);
+    expect(evidence.match(/654321\.98|71\.234567|123456\.79|876543\.21|fundsAvailable|lvrMode|fundsType/)?.[0] ?? null).toBeNull();
   } finally { act(() => tree.unmount()); }
 });

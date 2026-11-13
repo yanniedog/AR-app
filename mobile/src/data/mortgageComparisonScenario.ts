@@ -34,6 +34,7 @@ export function mortgageComparisonScenario(section: SectionKey, scenario: RateSc
     // Missing/invalid values must not inherit a saved property's assumptions.
     result.amount = values.lvrFraction !== undefined ? String(values.amount) : undefined;
     result.lvr = values.lvrFraction;
+    result.offsetBalance = values.offsetBalance !== null ? String(values.offsetBalance) : undefined;
   } else if (inputs.loanAmount.trim()) {
     const amount = calculatorAmount(inputs.loanAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT);
     result.amount = amount != null && amount > 0 ? String(amount) : undefined;

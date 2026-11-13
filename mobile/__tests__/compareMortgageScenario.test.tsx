@@ -41,7 +41,7 @@ jest.mock('../src/components/product/RateConditionsDisclosure', () => ({ Selecte
 jest.mock('../src/components/scenario/PublicRateEvidence', () => ({ PublicRateEvidence: 'PublicRateEvidence' }));
 jest.mock('../src/components/scenario/PublicCostComparison', () => ({ PublicCostComparison: 'PublicCostComparison' }));
 
-test.each(['lvr', 'funds'] as const)('Compare retains amount/LVR eligibility and pricing with ephemeral %s inputs', mode => {
+test.each(['lvr', 'funds', 'offset'] as const)('Compare retains amount/LVR eligibility and pricing with ephemeral %s inputs', mode => {
   const products = ['a', 'b'].map(id => ({ ...product, productId: id, productKey: id, name: id, programmeIds: [id] }));
   const programmes = products.map((item, index) => {
     const p = programme({ productId: item.productId, programmeId: item.productId, offerId: item.productId, sourceBindings: [], conditions: [
@@ -55,7 +55,9 @@ test.each(['lvr', 'funds'] as const)('Compare retains amount/LVR eligibility and
   mockState = { core: core([]), manifest: null, prefs: DEFAULT_PREFS, details: { products: {} }, ensureDetails: jest.fn() };
   mockKeys = JSON.stringify(products.map(item => publicOfferSelectionToken(item.productKey, item.productId)));
   installMandatoryEligibility(selectMandatoryEligibility(mockState.core, DEFAULT_PREFS.profileFilters, null));
-  useMortgageComparison.setState({ loanAmount: '600000', lvr: mode === 'funds' ? '10' : '75', lvrMode: mode, fundsAvailable: '200000' }, true);
+  useMortgageComparison.setState({ loanAmount: '600000', lvr: mode === 'lvr' ? '75' : '10',
+    lvrMode: mode === 'lvr' ? 'lvr' : 'funds', fundsAvailable: '200000',
+    fundsType: mode === 'offset' ? 'offset' : 'deposit', propertyValue: '800000' }, true);
   let tree!: Tree;
   act(() => { tree = TestRenderer.create(<Compare />) as Tree; });
   try {
@@ -73,6 +75,17 @@ test.each(['lvr', 'funds'] as const)('Compare retains amount/LVR eligibility and
       expect(tree.root.findAllByType('EmptyState')).toHaveLength(1);
       expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(0);
       act(() => useMortgageComparison.setState({ fundsAvailable: '200000' }));
+      expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(2);
+    }
+    if (mode === 'offset') {
+      expect(tree.root.findAllByType('PublicCostComparison').map(node => node.props.rateScenario.offsetBalance)).toEqual(['200000', '200000']);
+      act(() => useMortgageComparison.setState({ fundsAvailable: '500000' }));
+      expect(tree.root.findAllByType('PublicRateEvidence').map(node => node.props.scenario.lvr)).toEqual(['0.75', '0.75']);
+      expect(tree.root.findAllByType('PublicCostComparison').map(node => node.props.rateScenario.offsetBalance)).toEqual(['500000', '500000']);
+      act(() => useMortgageComparison.setState({ propertyValue: '749999.99' }));
+      expect(tree.root.findAllByType('EmptyState')).toHaveLength(1);
+      expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(0);
+      act(() => useMortgageComparison.setState({ propertyValue: '800000' }));
       expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(2);
     }
     act(() => useMortgageComparison.setState({ loanAmount: '400000' }));

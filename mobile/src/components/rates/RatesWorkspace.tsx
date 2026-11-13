@@ -226,7 +226,9 @@ export default function RatesWorkspace() {
     const inputsChanged = previous.loanAmount !== mortgageInputs.loanAmount
       || previous.lvr !== mortgageInputs.lvr
       || (previous.lvrMode ?? 'lvr') !== (mortgageInputs.lvrMode ?? 'lvr')
-      || (previous.fundsAvailable ?? '') !== (mortgageInputs.fundsAvailable ?? '');
+      || (previous.fundsAvailable ?? '') !== (mortgageInputs.fundsAvailable ?? '')
+      || (previous.fundsType ?? 'deposit') !== (mortgageInputs.fundsType ?? 'deposit')
+      || (previous.propertyValue ?? '') !== (mortgageInputs.propertyValue ?? '');
     const facetsChanged = previousFacets.loanPurposes !== nextFacets.loanPurposes
       || previousFacets.repaymentTypes !== nextFacets.repaymentTypes;
     if (!inputsChanged && !facetsChanged) return;

@@ -79,7 +79,7 @@ export const UI_LABELS = [
   'Open link', 'Domain', 'Address', 'Email', 'Website', 'Licence', 'Legal', 'Terms and privacy',
   'Ongoing rate', 'Bonus rate', 'Introductory period', 'Conditions required', 'Providers attempted',
   'Providers succeeded', 'Partial providers', 'Failed providers', 'Coverage limitations',
-  'Update deadline', 'Source condition', 'Loan amount', 'Borrowing amount', 'Deposit balance', 'Funds available', 'Calculated LVR',
+  'Update deadline', 'Source condition', 'Loan amount', 'Borrowing amount', 'Deposit balance', 'Funds available', 'Calculated LVR', 'Offset balance', 'Loan less offset',
   'Deposit term', 'Fixed term', 'Loan term', 'Unassessed', 'Not applicable', 'Entered', 'Recorded',
   'Effective from', 'Effective to', 'Assessment date', 'Unresolved inputs', 'Source changed',
   'Copy failed', 'No upload', 'Local only', 'Data details',
@@ -450,7 +450,7 @@ export function useReceiptImportInput() { return useInputController(); }
 export function useSetupKeyInput() { return useInputController(); }
 export function useProviderSearchInput() { return useInputController(); }
 export function uiRatesQuery(session: Pick<RatesSectionState, 'query'>): UiInputText { return inputText(session.query); }
-export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr' | 'fundsAvailable'): UiInputText { return inputText(model[field] ?? ''); }
+export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr' | 'fundsAvailable' | 'propertyValue'): UiInputText { return inputText(model[field] ?? ''); }
 export function uiPrivateOfferInput(model: Pick<MortgageInputs, 'confirmedOfferFacts' | 'provenance'>, field: 'purpose' | 'security' | 'repaymentType'): UiInputText {
   const value = model.confirmedOfferFacts[field] ?? '';
   return inputText(model.provenance === 'user_reported_bank_offer_and_statement' && value.length <= 2000 && !/[\r\n\t]/.test(value) ? value : '');

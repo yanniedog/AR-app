@@ -141,15 +141,16 @@ describe('performance audit rollback journal', () => {
     expect(secureStore.get(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY)).toMatch(/ar\.secure-value/);
   });
 
-  it('keeps exploratory funds and the inactive manual LVR draft out of every durable rollback store', async () => {
-    const baseline = { loanAmount: '654321.98', lvr: '71.234567', lvrMode: 'funds' as const, fundsAvailable: '123456.79' };
+  it.each(['deposit', 'offset'] as const)('keeps exploratory %s funds and inactive drafts out of every durable rollback store', async fundsType => {
+    const baseline = { loanAmount: '654321.98', lvr: '71.234567', lvrMode: 'funds' as const, fundsAvailable: '123456.79',
+      fundsType, propertyValue: '876543.21' };
     setMortgageComparisonInputs(baseline);
     const store = makeStore();
     await ensureUserRateScenarioLoaded();
     const snapshot = await beginPerformanceAuditRollback(store);
     const persisted = await Promise.all((await AsyncStorage.getAllKeys()).map(key => AsyncStorage.getItem(key)));
     const serialized = JSON.stringify([snapshot, persisted, [...secureStore.values()]]);
-    expect(serialized).not.toMatch(/654321\.98|71\.234567|123456\.79|fundsAvailable|lvrMode/);
+    expect(serialized).not.toMatch(/654321\.98|71\.234567|123456\.79|876543\.21|fundsAvailable|lvrMode|fundsType/);
     expect(useMortgageComparison.getState()).toEqual(baseline);
     await expect(restorePerformanceAuditRollback(store, snapshot)).resolves.toBe(true);
     expect(useMortgageComparison.getState()).toEqual(baseline);

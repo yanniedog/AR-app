@@ -185,6 +185,15 @@ test('mode and funds changes reset paging even when the eligible rows stay the s
     act(() => setMortgageComparisonInputs({ ...useMortgageComparison.getState(), fundsAvailable: '160000' }));
     expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
     expect(list().data[0].rate_index).toBe(0);
+    act(() => setMortgageComparisonInputs({ ...useMortgageComparison.getState(), propertyValue: '750000' }));
+    act(() => updateRatesSection('Mortgage', { page: 2 }));
+    act(() => setMortgageComparisonInputs({ ...useMortgageComparison.getState(), fundsType: 'offset' }));
+    expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
+    expect(list().data[0].rate_index).toBe(0);
+    act(() => updateRatesSection('Mortgage', { page: 2 }));
+    act(() => setMortgageComparisonInputs({ ...useMortgageComparison.getState(), propertyValue: '760000' }));
+    expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
+    expect(list().data[0].rate_index).toBe(0);
   } finally { act(() => tree.unmount()); }
 });
 

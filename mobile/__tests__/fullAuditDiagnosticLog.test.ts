@@ -18,7 +18,8 @@ test('retired scenario-recovery fields remain readable in historical reports', (
 
 test('funds mode and both private comparison drafts cannot leak through public diagnostics', () => {
   const report = makePerformanceAuditReport();
-  const privateInputs = { loanAmount: '654321.98', lvr: '71.234567', lvrMode: 'funds', fundsAvailable: '123456.79' };
+  const privateInputs = { loanAmount: '654321.98', lvr: '71.234567', lvrMode: 'funds', fundsAvailable: '123456.79',
+    fundsType: 'offset', propertyValue: '876543.21', offsetBalance: '234567.89', interestBearingBalance: '419754.09' };
   report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 12,
     metrics: { actionMs: 4, ...privateInputs, parameters: privateInputs as never },
     diagnostic: { stage: 'readiness', readiness: { surfaces: [{ id: 'search.results', work: privateInputs, probes: [] }] } } as never }];
@@ -26,8 +27,9 @@ test('funds mode and both private comparison drafts cannot leak through public d
   const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
   expect(decoded.diagnosticLog.checks[0]).toMatchObject({ id: 'journey-rates-cold', status: 'fail', durationMs: 12,
     metrics: { actionMs: 4 } });
-  expect(JSON.stringify(decoded)).not.toMatch(/654321\.98|71\.234567|123456\.79|fundsAvailable|lvrMode|"funds"/);
-  expect(JSON.stringify(fullAuditDiagnosticLog(report, id => id))).not.toMatch(/654321\.98|71\.234567|123456\.79|fundsAvailable|lvrMode|"funds"/);
+  const privateSentinels = /654321\.98|71\.234567|123456\.79|876543\.21|234567\.89|419754\.09|fundsAvailable|lvrMode|fundsType|offsetBalance|interestBearingBalance|"funds"|"offset"/;
+  expect(JSON.stringify(decoded)).not.toMatch(privateSentinels);
+  expect(JSON.stringify(fullAuditDiagnosticLog(report, id => id))).not.toMatch(privateSentinels);
 });
 
 test('every upload includes all retained checks, errors, traces, metrics and diagnostic context', () => {

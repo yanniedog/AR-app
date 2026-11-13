@@ -14,6 +14,9 @@ export interface MortgageComparisonInputs {
   lvr: string;
   lvrMode?: 'lvr' | 'funds';
   fundsAvailable?: string;
+  fundsType?: 'deposit' | 'offset';
+  /** Raw property value required only when the funds stay in an offset account. */
+  propertyValue?: string;
 }
 /** Private exploratory inputs stay in memory, separate from saved searches and reports. */
 export const useMortgageComparison = create<MortgageComparisonInputs>(() => ({ loanAmount: '', lvr: '' }));
@@ -24,19 +27,35 @@ export function mortgageComparisonValues(value: MortgageComparisonInputs) {
   const amount = value.loanAmount.trim() ? calculatorAmount(value.loanAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT) : null;
   const invalidAmount = !!value.loanAmount.trim() && (amount === null || amount <= 0);
   if (value.lvrMode === 'funds') {
+    const offsetMode = value.fundsType === 'offset';
     const fundsText = value.fundsAvailable?.trim() ?? '';
     const funds = fundsText ? calculatorAmount(fundsText, MAX_CALCULATOR_MORTGAGE_AMOUNT) : null;
-    const invalid = invalidAmount || !!fundsText && funds === null;
-    if (invalid || amount === null || amount <= 0 || funds === null) {
-      return { amount, lvr: null, invalid, incompleteFunds: !invalid, lvrFraction: undefined, propertyValue: null, exactLvr: null };
+    const propertyText = offsetMode ? value.propertyValue?.trim() ?? '' : '';
+    const enteredProperty = propertyText ? calculatorAmount(propertyText, MAX_CALCULATOR_MORTGAGE_AMOUNT) : null;
+    const invalidProperty = !!propertyText && (enteredProperty === null || enteredProperty <= 0
+      || amount !== null && enteredProperty < amount);
+    const invalid = invalidAmount || !!fundsText && funds === null || invalidProperty;
+    if (invalid || amount === null || amount <= 0 || !offsetMode && funds === null || offsetMode && enteredProperty === null) {
+      return { amount, lvr: null, invalid, incompleteFunds: !invalid, lvrFraction: undefined, propertyValue: null, exactLvr: null,
+        offsetBalance: null, interestBearingBalance: null };
     }
     // Money validation admits at most cents. Decimal keeps the ratio rational
     // for scope comparisons; only the public scenario's decimal transport and
     // the displayed number need conversion. Never feed display precision back.
-    const loan = Decimal.parse(String(amount)), property = loan.add(Decimal.parse(String(funds)));
+    const loan = Decimal.parse(String(amount)), available = funds === null ? null : Decimal.parse(String(funds));
+    // Offset savings reduce the interest-bearing balance, never the lender's
+    // principal or LVR. Deposit funds instead contribute to the property value.
+    const property = offsetMode ? Decimal.parse(String(enteredProperty)) : loan.add(available!);
     const fraction = loan.div(property), exactLvr = fraction.mul(Decimal.parse('100'));
+    // A property and loan determine lender LVR even before the offset balance
+    // is entered. Keep that display fact, but require an explicit balance for
+    // scope/pricing so a blank offset is never silently treated as zero.
+    if (available === null) return { amount, lvr: Number(decimalText(exactLvr)), invalid: false, incompleteFunds: true,
+      lvrFraction: undefined, propertyValue: Number(decimalText(property)), exactLvr, offsetBalance: null, interestBearingBalance: null };
+    const interestBearing = offsetMode ? (loan.compare(available) > 0 ? loan.sub(available) : Decimal.parse('0')) : loan;
     return { amount, lvr: Number(decimalText(exactLvr)), invalid: false, incompleteFunds: false, lvrFraction: decimalText(fraction),
-      propertyValue: Number(decimalText(property)), exactLvr };
+      propertyValue: Number(decimalText(property)), exactLvr, offsetBalance: offsetMode ? funds : 0,
+      interestBearingBalance: Number(decimalText(interestBearing)) };
   }
   // Trim before stripping % so pasted values like "71% " parse instead of becoming NaN.
   const lvrText = value.lvr.trim();
@@ -44,7 +63,8 @@ export function mortgageComparisonValues(value: MortgageComparisonInputs) {
     ? Number(lvrText.replace(/\s*%$/, '')) : null;
   const invalidLvr = !!lvrText && (lvr === null || !Number.isFinite(lvr) || lvr <= 0 || lvr > 100);
   return { amount, lvr, invalid: invalidAmount || invalidLvr, incompleteFunds: false,
-    lvrFraction: lvr !== null && !invalidLvr ? String(lvr / 100) : undefined, propertyValue: null, exactLvr: null };
+    lvrFraction: lvr !== null && !invalidLvr ? String(lvr / 100) : undefined, propertyValue: null, exactLvr: null,
+    offsetBalance: null, interestBearingBalance: null };
 }
 
 const inputs = mortgageComparisonValues;
@@ -60,7 +80,7 @@ export function mortgageComparisonCriteriaReady(
   facets: { loanPurposes: readonly string[]; repaymentTypes: readonly string[] },
 ): boolean {
   const parsed = inputs(value);
-  return !parsed.invalid && parsed.lvr !== null
+  return !parsed.invalid && !parsed.incompleteFunds && parsed.lvr !== null
     && facets.loanPurposes.length > 0 && facets.repaymentTypes.length > 0;
 }
 

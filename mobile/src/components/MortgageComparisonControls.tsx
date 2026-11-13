@@ -22,10 +22,13 @@ const EMPTY_FACETS = { loanPurposes: [], repaymentTypes: [] };
 function sameInputs(left: MortgageComparisonInputs, right: MortgageComparisonInputs): boolean {
   return left.loanAmount === right.loanAmount && left.lvr === right.lvr
     && (left.lvrMode ?? 'lvr') === (right.lvrMode ?? 'lvr')
-    && (left.fundsAvailable ?? '') === (right.fundsAvailable ?? '');
+    && (left.fundsAvailable ?? '') === (right.fundsAvailable ?? '')
+    && (left.fundsType ?? 'deposit') === (right.fundsType ?? 'deposit')
+    && (left.propertyValue ?? '') === (right.propertyValue ?? '');
 }
 
 type FacetKey = 'loanPurposes' | 'repaymentTypes';
+type NumericInputField = 'loanAmount' | 'lvr' | 'fundsAvailable' | 'propertyValue';
 
 function rowFacetOptions(
   rows: RateRow[],
@@ -223,7 +226,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
       group.canonicalize,
     ),
   })), [rowOptions, facetCatalogueOptions, filters]);
-  const change = (field: 'loanAmount' | 'lvr' | 'fundsAvailable', text: string) => {
+  const change = (field: NumericInputField, text: string) => {
     dirty.current = true;
     setDraft(current => ({ ...current, [field]: text }));
   };
@@ -234,6 +237,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     updateRatesSection('Mortgage', { page: 1 }, true);
   };
   const mode = draft.lvrMode ?? 'lvr';
+  const fundsType = draft.fundsType ?? 'deposit';
   const values = mortgageComparisonValues(draft);
   const pending = !sameInputs(draft, storeValue);
   const changeMode = (nextMode: 'lvr' | 'funds') => {
@@ -244,13 +248,23 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     // like selecting a purpose/repayment facet, and cancels an older debounce.
     commitDraft(next);
   };
-  const activeField = mode === 'funds' ? 'fundsAvailable' : 'lvr';
-  const fieldLabel = (field: 'loanAmount' | 'lvr' | 'fundsAvailable') =>
-    uiLabel(field === 'loanAmount' ? 'Loan amount' : field === 'fundsAvailable' ? 'Funds available' : 'LVR');
+  const changeFundsType = (nextType: 'deposit' | 'offset') => {
+    if (nextType === fundsType) return;
+    const next = { ...draftRef.current, fundsType: nextType };
+    setDraft(next);
+    commitDraft(next);
+  };
+  const fields: NumericInputField[] = mode === 'lvr' ? ['loanAmount', 'lvr']
+    : fundsType === 'offset' ? ['loanAmount', 'fundsAvailable', 'propertyValue'] : ['loanAmount', 'fundsAvailable'];
+  const fieldLabel = (field: NumericInputField) =>
+    uiLabel(field === 'loanAmount' ? 'Loan amount' : field === 'propertyValue' ? 'Property value'
+      : field === 'fundsAvailable' ? fundsType === 'offset' ? 'Offset balance' : 'Deposit' : 'LVR');
   return <View style={{ gap: 8 }} testID="mortgage-comparison-controls">
     <SegmentedControl value={mode} options={[{ value: 'funds', label: uiLabel('Funds available') }, { value: 'lvr', label: uiLabel('LVR') }]}
       onChange={changeMode} />
-    <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>{(['loanAmount', activeField] as const).map(field => <View key={field} style={{ flexBasis: Math.min(220, 120 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0, gap: 4 }}>
+    {mode === 'funds' ? <SegmentedControl value={fundsType} options={[{ value: 'deposit', label: uiLabel('Deposit') }, { value: 'offset', label: uiLabel('Offset account') }]}
+      onChange={changeFundsType} /> : null}
+    <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>{fields.map(field => <View key={field} style={{ flexBasis: Math.min(220, 120 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0, gap: 4 }}>
       <AppText variant="small">{fieldLabel(field)}</AppText>
       <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)} keyboardType="decimal-pad"
         accessibilityLabel={fieldLabel(field)}
@@ -259,7 +273,9 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     </View>)}<IconAction icon="close" word="Clear" accessibilityLabel="Clear comparison inputs" onPress={clearInputs} /></Row>
     {mode === 'funds' ? <Row gap={12} style={{ flexWrap: 'wrap' }}>
       <AppText variant="small" testID="mortgage-calculated-lvr">{uiJoin('Calculated LVR', ' · ', values.lvr === null ? uiLabel('Unknown') : uiRate(values.lvr / 100))}</AppText>
-      <AppText variant="small" testID="mortgage-property-value">{uiJoin('Property value', ' · ', uiMoney(values.propertyValue, Number.isInteger(values.propertyValue) ? 0 : 2))}</AppText>
+      {fundsType === 'deposit'
+        ? <AppText variant="small" testID="mortgage-property-value">{uiJoin('Property value', ' · ', uiMoney(values.propertyValue, Number.isInteger(values.propertyValue) ? 0 : 2))}</AppText>
+        : <AppText variant="small" testID="mortgage-loan-less-offset">{uiJoin('Loan less offset', ' · ', uiMoney(values.interestBearingBalance, Number.isInteger(values.interestBearingBalance) ? 0 : 2))}</AppText>}
     </Row> : null}
     {pending
       ? <AppText variant="tiny" color="textMuted">{uiLabel('Updating')}</AppText> : null}

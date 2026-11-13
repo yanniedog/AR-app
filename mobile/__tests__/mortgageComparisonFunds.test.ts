@@ -13,6 +13,9 @@ import { catalogue } from '../testUtils/publicRateJourney';
 const funds = (fundsAvailable = '150000', loanAmount = '600000'): MortgageComparisonInputs => ({
   loanAmount, lvr: 'invalid inactive input', lvrMode: 'funds', fundsAvailable,
 });
+const offset = (fundsAvailable = '150000', propertyValue = '750000', loanAmount = '600000'): MortgageComparisonInputs => ({
+  ...funds(fundsAvailable, loanAmount), fundsType: 'offset', propertyValue,
+});
 const row: RateRow = { product_key: 'loan', provider: 'Bank', product_name: 'Loan', rate_index: 4,
   rate: '0.05', lvr_tier: 'lvr_=80%', balance_min: 100000, balance_max: 900000 };
 const facets = { loanPurposes: ['OO'], repaymentTypes: ['PI'] };
@@ -21,6 +24,7 @@ afterEach(() => clearMortgageComparison());
 test('loan plus available funds determines LVR and ignores the inactive direct entry', () => {
   expect(mortgageComparisonValues(funds('$150,000.00', '$600,000'))).toMatchObject({
     amount: 600000, lvr: 80, lvrFraction: '0.8', propertyValue: 750000, invalid: false,
+    offsetBalance: 0, interestBearingBalance: 600000,
   });
   expect(mortgageComparisonCriteriaReady(funds(), facets)).toBe(true);
   expect(mortgageComparisonValues(funds('0'))).toMatchObject({ lvr: 100, lvrFraction: '1', invalid: false });
@@ -81,13 +85,68 @@ test('source scope, prepared scope and cooperative scope agree at exact funds bo
 
 test('funds scenario replaces saved assumptions and carries computational ratio precision', () => {
   const saved = { amount: '100000', lvr: '0.9', purpose: 'OWNER_OCCUPIED' };
-  expect(mortgageComparisonScenario('Mortgage', saved, funds())).toEqual({ ...saved, amount: '600000', lvr: '0.8' });
+  expect(mortgageComparisonScenario('Mortgage', saved, funds())).toEqual({ ...saved, amount: '600000', lvr: '0.8', offsetBalance: '0' });
   expect(mortgageComparisonScenario('Mortgage', saved, funds('1', '2')).lvr).toBe('0.666666666666666666666667');
   for (const value of [funds(''), funds('150000', ''), funds('-1'), funds('0', '0')]) {
-    expect(mortgageComparisonScenario('Mortgage', saved, value)).toEqual({ ...saved, amount: undefined, lvr: undefined });
+    expect(mortgageComparisonScenario('Mortgage', saved, value)).toEqual({ ...saved, amount: undefined, lvr: undefined, offsetBalance: undefined });
   }
   expect(mortgageComparisonScenario('Savings', saved, funds())).toBe(saved);
   expect(saved).toEqual({ amount: '100000', lvr: '0.9', purpose: 'OWNER_OCCUPIED' });
+});
+
+test('offset balances affect interest-bearing principal but never lender LVR or amount eligibility', () => {
+  for (const [balance, bearing] of [['0', 600000], ['150000', 450000], ['600000', 0], ['700000', 0]] as const) {
+    const value = offset(balance);
+    expect(mortgageComparisonValues(value)).toMatchObject({ amount: 600000, lvr: 80, lvrFraction: '0.8',
+      propertyValue: 750000, offsetBalance: Number(balance), interestBearingBalance: bearing, invalid: false });
+    expect(mortgageComparisonCriteriaReady(value, facets)).toBe(true);
+    expect(mortgageComparisonMatch(row, value)).toBe('listed');
+    expect(mortgageComparisonMatch({ ...row, lvr_tier: 'lvr_=70%' }, value)).toBe('outside');
+    expect(mortgageComparisonMatch({ ...row, balance_max: 500000 }, value)).toBe('outside');
+  }
+  expect(mortgageComparisonMatch({ ...row, lvr_tier: 'lvr_=70%' }, funds('300000'))).toBe('listed');
+  expect(mortgageComparisonMatch({ ...row, lvr_tier: 'lvr_=70%' }, offset('300000'))).toBe('outside');
+  expect(mortgageComparisonValues(offset('0.01', '0.05', '0.03')).interestBearingBalance).toBe(0.02);
+});
+
+test('offset property value preserves exact lender LVR boundaries and excludes above-100% inputs', () => {
+  expect(mortgageComparisonMatch(row, offset('600000', '749999.99'))).toBe('outside');
+  expect(mortgageComparisonMatch(row, offset('600000', '750000'))).toBe('listed');
+  expect(mortgageComparisonMatch({ ...row, lvr_tier: 'lvr_<80%' }, offset('600000', '750000'))).toBe('outside');
+  expect(mortgageComparisonMatch({ ...row, lvr_tier: 'lvr_<80%' }, offset('600000', '750000.01'))).toBe('listed');
+  expect(mortgageComparisonValues(offset('150000', '600000'))).toMatchObject({ lvr: 100, invalid: false });
+  expect(mortgageComparisonValues(offset('150000', '599999.99'))).toMatchObject({ lvr: null, invalid: true });
+});
+
+test.each(['0', '-1', 'private', '100000001'])('invalid active offset property value is rejected: %s', property => {
+  const value = offset('150000', property);
+  expect(mortgageComparisonValues(value)).toMatchObject({ invalid: true, lvrFraction: undefined, offsetBalance: null, interestBearingBalance: null });
+  expect(mortgageComparisonRows([row], value).rows).toEqual([]);
+});
+
+test('blank offset is unknown even with a calculable lender LVR; blank property cannot fall back to loan plus funds', () => {
+  expect(mortgageComparisonValues(offset(''))).toMatchObject({ lvr: 80, propertyValue: 750000, invalid: false, incompleteFunds: true,
+    lvrFraction: undefined, offsetBalance: null, interestBearingBalance: null });
+  for (const value of [offset(''), offset('150000', ''), offset('150000', '750000', '')]) {
+    expect(mortgageComparisonCriteriaReady(value, facets)).toBe(false);
+    expect(mortgageComparisonRows([row], value).rows).toEqual([]);
+  }
+  expect(mortgageComparisonValues({ ...funds(), propertyValue: 'invalid inactive' })).toMatchObject({ lvr: 80, invalid: false });
+  expect(mortgageComparisonValues({ ...offset('-1', 'invalid'), lvrMode: 'lvr', lvr: '75' })).toMatchObject({ lvr: 75, invalid: false });
+});
+
+test('only active complete funds modes override offset cost assumptions without mutating saved state', () => {
+  const saved = { amount: '100000', lvr: '0.9', offsetBalance: '25000' };
+  expect(mortgageComparisonScenario('Mortgage', saved, offset('150000'))).toEqual({ amount: '600000', lvr: '0.8', offsetBalance: '150000' });
+  expect(mortgageComparisonScenario('Mortgage', saved, funds())).toEqual({ amount: '600000', lvr: '0.8', offsetBalance: '0' });
+  expect(mortgageComparisonScenario('Mortgage', saved, { ...offset(), lvrMode: 'lvr', lvr: '75' }))
+    .toEqual({ amount: '600000', lvr: '0.75', offsetBalance: '25000' });
+  for (const value of [offset(''), offset('150000', ''), offset('-1'), offset('0', '599999.99')]) {
+    const scenario = mortgageComparisonScenario('Mortgage', saved, value);
+    expect(scenario).toEqual({ amount: undefined, lvr: undefined, offsetBalance: undefined });
+    expect(Object.hasOwn(scenario, 'offsetBalance')).toBe(true);
+  }
+  expect(saved).toEqual({ amount: '100000', lvr: '0.9', offsetBalance: '25000' });
 });
 
 test('one prepared Mortgage index reflects each funds edit at the same loan amount', async () => {
@@ -103,10 +162,16 @@ test('one prepared Mortgage index reflects each funds edit at the same loan amou
     expect(selected.scope.rows).toHaveLength(count);
     expect(selected.scope.rows).toEqual(mortgageComparisonRows(context.rows, value, context).rows);
   }
+  for (const balance of ['0', '150000', '700000']) {
+    const value = offset(balance), scenario = mortgageComparisonScenario('Mortgage', {}, value, facets);
+    expect(index!.select(scenario, value)!.scope.rows).toEqual(context.rows);
+  }
+  const ineligible = offset('700000', '749999.99');
+  expect(index!.select(mortgageComparisonScenario('Mortgage', {}, ineligible, facets), ineligible)!.scope.rows).toEqual([]);
 });
 
 test('full comparison replacement and clear remove inactive metadata; snapshot restoration preserves mode', () => {
-  const snapshot = funds();
+  const snapshot = offset();
   setMortgageComparisonInputs(snapshot);
   expect(useMortgageComparison.getState()).toEqual(snapshot);
   setMortgageComparisonInputs({ loanAmount: '500000', lvr: '75' });
