@@ -49,3 +49,19 @@ it('bounds mounted evidence while keeping every one of 1320 rows reachable', () 
   expect(tree.root.findByProps({ title: 'Next' }).props.disabled).toBe(true);
   act(() => tree.unmount());
 });
+
+it('preserves malformed saved evidence positions as placeholders across pages', () => {
+  const rows = [...Array.from({ length: 40 }, () => null), { provider: 'Private Bank', displayReason: 'invented' }];
+  const check = { metrics: {}, localEvidence: { bankResponseCoverage: { rows } } } as unknown as AppHealthCheck;
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<AuditBankResponseCoverage check={check} />) as Renderer; });
+  const press = (title: string) => act(() => tree.root.findByProps({ title }).props.onPress());
+  const placeholders = () => tree.root.findAll(node => node.type === 'AppText' && node.props.children === 'Invalid evidence');
+  press('Show');
+  expect(placeholders()).toHaveLength(40);
+  press('Next');
+  expect(placeholders()).toHaveLength(1);
+  expect(tree.root.findByProps({ title: 'Next' }).props.disabled).toBe(true);
+  expect(tree.root.findAll(node => typeof node.props.children === 'string' && node.props.children.includes('Private Bank'))).toHaveLength(0);
+  act(() => tree.unmount());
+});

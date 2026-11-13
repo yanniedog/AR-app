@@ -4,7 +4,7 @@ import { isValidCalendarDate } from '../calendarDate';
 import type { AppHealthCheck, AppHealthMetricValue } from './types';
 const FLAGS = ['baselineAvailable', 'displayed', 'moveKnown', 'timingKnown', 'firstMoveVerified'] as const;
 
-function validRow(row: unknown): row is Record<string, unknown> & { provider: string } {
+export function validBankResponseCoverageRow(row: unknown): row is Record<string, unknown> & { provider: string } {
   if (!row || typeof row !== 'object') return false;
   const r = row as Record<string, unknown>;
   return typeof r.provider === 'string' && r.provider.trim().length > 0 && SECTION_KEYS.some(section => section === r.section) &&
@@ -27,14 +27,14 @@ export function publicBankResponseCoverage(check: AppHealthCheck): Record<string
   const rows = record?.rows;
   if (!Array.isArray(rows)) return { bankResponseRows: '[]',
     bankResponseEvidenceInvalid: check.metrics.coverageAvailable === true };
-  const valid = rows.filter(validRow);
+  const valid = rows.filter(validBankResponseCoverageRow);
   const banks = new Map([...new Set(valid.map(row => row.provider))].sort().map((provider, index) => [provider, index]));
   const windowKey = (row: Record<string, unknown>) => JSON.stringify([row.decisionDate, row.windowEnd]);
   const windows = [...new Set(valid.map(windowKey))].sort();
   const windowIndices = new Map(windows.map((key, index) => [key, index]));
   let invalid = 0;
   const output = rows.map((row: unknown) => {
-    if (!validRow(row)) { invalid++; return null; }
+    if (!validBankResponseCoverageRow(row)) { invalid++; return null; }
     const r = row;
     return [banks.get(r.provider), SECTION_KEYS.findIndex(section => section === r.section), windowIndices.get(windowKey(r)),
       BANK_RESPONSE_REASONS.findIndex(reason => reason === r.sourceReason), BANK_RESPONSE_REASONS.findIndex(reason => reason === r.displayReason),
@@ -42,7 +42,7 @@ export function publicBankResponseCoverage(check: AppHealthCheck): Record<string
   });
   const completeClaimInvalid = check.metrics.coverageComplete === true && (!rows.length ||
     record?.runMatches !== true || record.projectionAvailable !== true ||
-    rows.some(row => !validRow(row) || !['recorded-move', 'no-recorded-move', 'no-products'].includes(String(row.displayReason))));
+    rows.some(row => !validBankResponseCoverageRow(row) || !['recorded-move', 'no-recorded-move', 'no-products'].includes(String(row.displayReason))));
   return { bankResponseRowSchema: JSON.stringify({ version: 1,
     columns: ['bank', 'section', 'window', 'sourceReason', 'displayReason', 'missingDays', 'flags'],
     banks: [...banks.values()].map(index => `bank-${index + 1}`), sections: SECTION_KEYS,

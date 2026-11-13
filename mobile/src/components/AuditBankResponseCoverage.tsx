@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import type { AppHealthCheck } from '../lib/appHealth/types';
 import type { BankResponseCoverage } from '../lib/appHealth/bankResponseCoverage';
+import { validBankResponseCoverageRow } from '../lib/appHealth/publicBankResponseCoverage';
 import { uiBankResponseReason } from '../lib/chartUiCopy';
 import { uiCount, uiDate, uiJoin, uiLabel, uiProviderName, uiSectionName } from '../lib/uiCopy';
 import { AppText, Button, Card } from './ui';
@@ -31,7 +32,9 @@ export function AuditBankResponseCoverage({ check }: { check?: AppHealthCheck })
         <Button title="Previous" accessibilityLabel="Previous page" variant="ghost" disabled={currentPage === 0} onPress={() => setPage(currentPage - 1)} />
         <Button title="Next" accessibilityLabel="Next page" variant="ghost" disabled={currentPage === pages - 1} onPress={() => setPage(currentPage + 1)} />
       </View>
-      {rows.slice(currentPage * 40, (currentPage + 1) * 40).map(row => <View key={`${row.section}:${row.decisionDate}:${row.provider}`} style={{ gap: 2 }}>
+      {rows.slice(currentPage * 40, (currentPage + 1) * 40).map((row, index) => !validBankResponseCoverageRow(row)
+        ? <AppText key={currentPage * 40 + index}>{uiLabel('Invalid evidence')}</AppText>
+        : <View key={currentPage * 40 + index} style={{ gap: 2 }}>
       <AppText variant="small">{uiJoin(uiProviderName(row), ' · ', uiSectionName(row.section), ' · ', uiDate(row.decisionDate))}</AppText>
       <AppText variant="tiny">{uiJoin('Source', ': ', uiBankResponseReason(row.sourceReason), ' · ', 'Recorded results', ': ', uiBankResponseReason(row.displayReason))}</AppText>
       <AppText variant="tiny">{uiJoin('Daily gaps', ': ', uiCount(row.missingDays))}</AppText>
