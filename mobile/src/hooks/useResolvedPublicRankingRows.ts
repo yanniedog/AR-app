@@ -19,6 +19,8 @@ import type { PublicProgramme } from '../data/publicRateModel';
 import type { RateScenario } from '../data/publicRateModel';
 import { scheduleAfterInteractions, scheduleAfterNavigation, yieldToUi } from '../lib/yieldToUi';
 import type { RateRow, SectionKey } from '../types';
+import { getMandatoryEligibilityRevision } from '../data/eligibilityGate';
+import { getSuitabilityRevision } from '../data/suitabilityGate';
 
 /** Pricing is heavier than filter/sort; keep the sync path for tiny fixtures only. */
 export const SYNCHRONOUS_PUBLIC_PRICING_ROW_LIMIT = 48;
@@ -33,6 +35,21 @@ const EMPTY_MORTGAGE = {
   unverifiedRows: new WeakSet<RateRow>(),
   invalid: false,
 };
+
+type PreparedPricing = {
+  candidates: RateRow[]; resolution: PublicRankingResolution; mortgage: typeof EMPTY_MORTGAGE;
+};
+const reusable: { key: readonly unknown[]; from: number; until: number; value: PreparedPricing }[] = [];
+const sameKey = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+export function clearReusablePublicPricing() { reusable.length = 0; }
+function reusablePricing(key: readonly unknown[], now: number) {
+  // Once time has left a retained quote's validity window, never revive that
+  // entry after a later clock correction.
+  for (let i = reusable.length - 1; i >= 0; i--) {
+    if (now < reusable[i].from || now >= reusable[i].until) reusable.splice(i, 1);
+  }
+  return reusable.find(item => sameKey(item.key, key));
+}
 
 /**
  * Resolve payable public rates (and optional mortgage amount/LVR scope) without
@@ -86,10 +103,18 @@ export function useResolvedPublicRankingRows(options: {
   const sectionScenarioRef = useRef(sectionScenario);
   sectionScenarioRef.current = sectionScenario;
   const sectionScenarioKey = useMemo(() => JSON.stringify(sectionScenario), [sectionScenario]);
+  const mandatoryRevision = getMandatoryEligibilityRevision(), suitabilityGateRevision = getSuitabilityRevision();
   const request = useMemo(() => ({
     sourceRows, providedCandidates, catalogueKey, section, sectionScenarioKey,
-    mortgageInputs, mortgageContext, applyMortgageScope, revision, clockRevision, resolutionContextKey,
-  }), [sourceRows, providedCandidates, catalogueKey, section, sectionScenarioKey, mortgageInputs, mortgageContext, applyMortgageScope, revision, clockRevision, resolutionContextKey]);
+    mortgageInputs, mortgageContext, applyMortgageScope, revision, clockRevision, resolutionContextKey, mandatoryRevision, suitabilityGateRevision,
+  }), [sourceRows, providedCandidates, catalogueKey, section, sectionScenarioKey, mortgageInputs, mortgageContext, applyMortgageScope, revision, clockRevision, resolutionContextKey, mandatoryRevision, suitabilityGateRevision]);
+  // The context wrapper and callbacks are recreated by a remounted screen.
+  // Bind reuse to their immutable inputs and the caller's complete callback
+  // semantics instead, so Savings/TD can return without repricing the book.
+  const reuseKey = [sourceRows, providedCandidates, catalogue, catalogueKey, section, sectionScenarioKey,
+    JSON.stringify(mortgageInputs), mortgageContext?.core, mortgageContext?.details, mortgageContext?.manifest,
+    mortgageContext?.coreIntegrity, applyMortgageScope, revision, mandatoryRevision, suitabilityGateRevision, resolutionContextKey] as const;
+  const reusableRef = useRef(reuseKey); reusableRef.current = reuseKey;
   const [attempt, setAttempt] = useState(0);
   const requestVersion = useRef({ request, attempt, version: 1 });
   if (requestVersion.current.request !== request || requestVersion.current.attempt !== attempt) requestVersion.current = { request, attempt, version: requestVersion.current.version + 1 };
@@ -114,11 +139,15 @@ export function useResolvedPublicRankingRows(options: {
     request.applyMortgageScope, request.revision, request.clockRevision, request.resolutionContextKey, attempt]);
   const cached = resolutionContextKey === undefined ? undefined : completed.current.find(item => item.key === requestKey && item.catalogue === catalogue &&
     item.request.sourceRows === request.sourceRows && item.request.providedCandidates === request.providedCandidates &&
+    item.request.mandatoryRevision === mandatoryRevision && item.request.suitabilityGateRevision === suitabilityGateRevision &&
     item.request.mortgageContext === request.mortgageContext && observedAt >= item.from && observedAt < item.until);
+  const retained = resolutionContextKey !== undefined && attempt === 0 ? reusablePricing(reuseKey, observedAt) : undefined;
   const snapshot = storedSnapshot?.request === request && storedSnapshot.attempt === attempt ? storedSnapshot
-    : cached ? { ...cached.snapshot, request, attempt } : storedSnapshot;
+    : cached ? { ...cached.snapshot, request, attempt }
+      : retained ? { ...retained.value, request, attempt, error: null } : storedSnapshot;
   const current = snapshot?.request === request && snapshot.attempt === attempt;
   if (cached) clock.current.until = cached.until;
+  else if (retained) clock.current.until = retained.until;
   const collectValidity = useCallback((view: PublicCatalogueView) => {
     const started = Date.now(), seen = new Set<string>(), asOf = new Date(started).toISOString();
     let until = Infinity;
@@ -131,7 +160,7 @@ export function useResolvedPublicRankingRows(options: {
       }
       return rowScenarioRef.current(row);
     };
-    return { rowScenario, asOf: (value: PublicProgramme) => { programme(value); return asOf; }, until: () => until };
+    return { rowScenario, from: started, asOf: (value: PublicProgramme) => { programme(value); return asOf; }, until: () => until };
   }, []);
   const buildCandidatesSync = useCallback((value: typeof request, view: PublicCatalogueView, scenario: RateScenario, asOf: (programme: PublicProgramme) => string): RateRow[] => value.providedCandidates
     ? [...value.providedCandidates]
@@ -189,10 +218,12 @@ export function useResolvedPublicRankingRows(options: {
         // search.data never left pending.
         while (!cancelled && flightRef.current === flight) {
           const req = requestRef.current;
+          const retainedKey = reusableRef.current;
           try {
           setProgress({ request: req, attempt, stage: 'candidates' });
           const control = {
-            cancelled: () => cancelled || flightRef.current !== flight || requestRef.current !== req,
+            cancelled: () => cancelled || flightRef.current !== flight || requestRef.current !== req ||
+              getMandatoryEligibilityRevision() !== req.mandatoryRevision || getSuitabilityRevision() !== req.suitabilityGateRevision,
           };
           await yieldToUi(0);
           if (cancelled || flightRef.current !== flight) return;
@@ -220,7 +251,7 @@ export function useResolvedPublicRankingRows(options: {
             : { rows: resolution.rows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
           if (cancelled || flightRef.current !== flight) return;
           if (requestRef.current !== req) { stats.restarts++; continue; }
-          if (!mortgage) return;
+          if (!mortgage || control.cancelled()) return;
           if (Date.now() >= validity.until()) { stats.restarts++; continue; }
           clock.current.until = validity.until();
           finished = true;
@@ -231,6 +262,10 @@ export function useResolvedPublicRankingRows(options: {
             completed.current = completed.current.filter(item => item.key !== key);
             if (completed.current.length >= 4) completed.current.shift();
             completed.current.push({ key, request: req, catalogue: view, from: Date.now(), until: validity.until(), snapshot: value });
+            const previous = reusable.findIndex(item => sameKey(item.key, retainedKey));
+            if (previous >= 0) reusable.splice(previous, 1);
+            reusable.push({ key: retainedKey, from: validity.from, until: validity.until(), value });
+            if (reusable.length > 6) reusable.shift();
           }
           setSnapshot(value);
           return;
@@ -272,7 +307,7 @@ export function useResolvedPublicRankingRows(options: {
     pricingStage: ready ? 'ready' : current && snapshot!.error ? 'error' : progress?.request === request && progress.attempt === attempt ? progress.stage : 'queued',
     ...(current && snapshot!.error && progress?.request === request && progress.attempt === attempt ? { pricingErrorStage: progress.stage } : {}),
     pricingIndexHits: resolverIndex.stats.hits, pricingIndexMisses: resolverIndex.stats.misses,
-    pricingIndexPrepared: resolverIndex.stats.warmed, pricingSnapshotReused: cached != null && storedSnapshot?.request !== request,
+    pricingIndexPrepared: resolverIndex.stats.warmed, pricingSnapshotReused: (cached != null || retained != null) && storedSnapshot?.request !== request,
     pricingRequestRevision: requestVersion.current.version, workerStarts: workerStats.current.starts,
     workerRestarts: workerStats.current.restarts, workerCancellations: workerStats.current.cancellations,
     sourceRowCount: sourceRows.length,

@@ -8,6 +8,14 @@ import { buildDeepPerformanceAuditPlan, buildDeepPerformanceAuditPlanFromInputs 
 import { ANDROID_UPDATE_READINESS_AUDIT } from '../src/lib/performanceAuditCheckInventory';
 import { AUDIT_REGISTERED_ACTION_IDS } from '../src/lib/auditDiagnosticProducerFields';
 
+test('retired scenario-recovery fields remain readable in historical reports', () => {
+  const report = makePerformanceAuditReport();
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'skipped', durationMs: null,
+    metrics: { skipClassification: 'scenario-recovery', scenarioRecoveryCascade: true } }];
+  const retained = fullAuditDiagnosticLog(report, id => id) as typeof report;
+  expect(retained.checks[0].metrics).toEqual({ skipClassification: 'scenario-recovery', scenarioRecoveryCascade: true });
+});
+
 test('every upload includes all retained checks, errors, traces, metrics and diagnostic context', () => {
   const report = makePerformanceAuditReport('private-session');
   report.checks = [{ id: 'deep-first-pass.route.projections.projections.advanced.toggle', label: 'Private input label', kind: 'journey',

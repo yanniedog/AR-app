@@ -3,13 +3,68 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
-import { useResolvedPublicRankingRows } from '../src/hooks/useResolvedPublicRankingRows';
+import { clearReusablePublicPricing, useResolvedPublicRankingRows } from '../src/hooks/useResolvedPublicRankingRows';
 import { AS_OF, catalogue, product, programme, row } from '../testUtils/publicRateJourney';
 
 beforeEach(() => {
+  clearReusablePublicPricing();
   jest.useFakeTimers();
   jest.setSystemTime(new Date(AS_OF));
   installMandatoryEligibility(selectMandatoryEligibility(null, null, null));
+});
+
+test('a remounted section reuses exact completed pricing and rejects changed context, source and gate owners', async () => {
+  const source = Array.from({ length: 128 }, () => ({ ...row }));
+  const view = catalogue(), scenario = {};
+  let latest!: ReturnType<typeof useResolvedPublicRankingRows>;
+  function Probe({ input = source, context = 'original' }: { input?: typeof source; context?: string }) {
+    latest = useResolvedPublicRankingRows({ candidates: input, catalogue: view, section: 'Mortgage', sectionScenario: scenario,
+      rowScenario: () => scenario, resolutionContextKey: context, focused: true, interactive: true, revision: 1 });
+    return null;
+  }
+  let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Probe />); });
+  await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+  expect(latest.ready).toBe(true);
+  const original = latest.resolution;
+  act(() => tree.unmount());
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  try {
+    expect(latest.ready).toBe(true);
+    expect(latest.resolution).toBe(original);
+    expect(latest.work.pricingSnapshotReused).toBe(true);
+    expect(latest.work.workerStarts).toBe(0);
+    act(() => tree.update(<Probe context="changed assumptions" />));
+    expect(latest.ready).toBe(false);
+    act(() => tree.update(<Probe input={source.slice()} />));
+    expect(latest.ready).toBe(false);
+    installMandatoryEligibility(selectMandatoryEligibility(null, null, null));
+    act(() => tree.update(<Probe />));
+    expect(latest.ready).toBe(false);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('remounted pricing cannot revive an expired retained quote after clock rollback', async () => {
+  const expiry = Date.parse(AS_OF) + 2000;
+  const source = Array.from({ length: 128 }, () => ({ ...row }));
+  const view = catalogue([programme({ effectiveTo: new Date(expiry).toISOString() })]), scenario = {};
+  let latest!: ReturnType<typeof useResolvedPublicRankingRows>;
+  function Probe() {
+    latest = useResolvedPublicRankingRows({ candidates: source, catalogue: view, section: 'Mortgage', sectionScenario: scenario,
+      rowScenario: () => scenario, resolutionContextKey: '{}', focused: true, interactive: true, revision: 1 });
+    return null;
+  }
+  let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Probe />); });
+  await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+  expect(latest.ready).toBe(true); expect(latest.resolution.rows).toHaveLength(128);
+  act(() => tree.unmount());
+  jest.setSystemTime(expiry);
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  expect(latest.ready).toBe(false);
+  act(() => tree.unmount());
+  jest.setSystemTime(new Date(AS_OF));
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  try { expect(latest.ready).toBe(false); expect(latest.work.pricingSnapshotReused).toBe(false); }
+  finally { act(() => tree.unmount()); }
 });
 afterEach(() => {
   jest.useRealTimers();

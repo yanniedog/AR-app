@@ -141,6 +141,7 @@ import {
 } from '../lib/performanceAudit';
 import {
   compactAuditCheckForLog,
+  compactAuditCheckCheckpoint,
   encodePerformanceAuditEvent,
   omitNullishDeep,
 } from '../lib/performanceAuditLog';
@@ -877,35 +878,6 @@ async function runDeepAuditStep(
   }
 }
 
-function skippedAfterScenarioRecovery(step: DeepAuditStep): AuditCheck {
-  const iteration: JourneyIteration = step.passId === 'first-pass' ? 'cold' : 'warm';
-  const reason =
-    'An earlier step failed and route recovery removed the local screen state this action depends on';
-  return {
-    id: `deep-${step.id}`,
-    label: `${step.scenarioId}: ${step.semanticActionId} (${step.passId})`,
-    kind: 'journey',
-    status: 'skipped',
-    durationMs: null,
-    metrics: {
-      journeyId: `${step.scenarioId}.${step.semanticActionId}`,
-      journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
-      iteration,
-      passId: step.passId,
-      scenarioId: step.scenarioId,
-      semanticActionId: step.semanticActionId,
-      depth: step.depth,
-      reason,
-      skipClassification: 'scenario-recovery',
-      scenarioRecoveryCascade: true,
-      executionAttempted: false,
-      actionInvoked: false,
-      actionCompleted: false,
-      routeStateInvalidated: false,
-    },
-  };
-}
-
 async function runDeepAuditStepBody(
   step: DeepAuditStep,
   currentPath: () => string,
@@ -1194,7 +1166,10 @@ async function runDeepAuditStepBody(
       renderRevisionAfter,
     });
   }
-  const responsiveness = monitor.metricsSince(responsivenessAt);
+  // A synchronous action can finish before its delayed timer/RAF callbacks
+  // have run. Close the visible window now, then collect those observations
+  // after the existing settle; clipping excludes the background work.
+  const responsivenessUntil = monitor.snapshot();
   let backgroundSettleMs = 0;
   if (!visibleReady.stepExpired) {
     execution.stage = 'settle';
@@ -1211,6 +1186,7 @@ async function runDeepAuditStepBody(
     });
     assertDatasetRevision(datasetRevision);
   }
+  const responsiveness = monitor.metricsSince(responsivenessAt, responsivenessUntil);
   const errors = routeErrorMessages(logCursor);
   const forwardMs = firstReadyFrameMs == null ? null : userVisibleForwardMs({ navigationCommitMs, firstReadyFrameMs });
   const latency = scoreUserVisibleJourney({
@@ -1354,8 +1330,8 @@ function logAuditEvent(
 function logAuditCheck(app: AuditAppIdentity, sessionId: string, check: AuditCheck): void {
   const level = check.status === 'fail' ? 'error' : check.status === 'warn' ? 'warn' : 'info';
   const payload = level === 'info'
-    ? compactAuditCheckForLog(check)
-    : compactAuditCheckForLog({
+    ? compactAuditCheckCheckpoint(check)
+    : compactAuditCheckCheckpoint({
       ...check,
       error: check.error ? flattenAuditLogText(check.error) : null,
       trace: check.trace ? flattenAuditLogText(check.trace) : null,
@@ -2498,7 +2474,6 @@ export async function runJourney(
     };
   }
 
-  const responsivenessAt = monitor.snapshot();
   const logCursor = debugLog.getCursor();
   let forwardMs: number | null = null;
   let backgroundSettleMs: number | null = null;

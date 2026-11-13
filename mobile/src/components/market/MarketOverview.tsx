@@ -69,6 +69,7 @@ export default function MarketOverview() {
   const params = useLocalSearchParams<{ section?: string | string[] }>();
   const requestedSection = scalarRouteParam(params.section);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
+  const feedSections = useMemo(() => [activeSection], [activeSection]);
 
   useEffect(() => {
     setActiveSection((current) => resolveInterestSection(interests, current));
@@ -117,12 +118,12 @@ export default function MarketOverview() {
       coreIntegrity,
     );
   }, [contentReady, core, coreIntegrity, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
-  const pulse = useMemo(() => marketPulse(payload, 7, [activeSection]), [activeSection, payload]);
+  const pulse = useMemo(() => marketPulse(payload, 7, feedSections), [feedSections, payload]);
   const suitabilityWarming = rawPayload !== null && payload === null && !error && (!suitabilityReady || !contentReady);
   const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady && contentReady;
   const feedExpectedCount = useMemo(
-    () => payload ? recentBankEvents(payload, { sections: [activeSection], limit: 14 }).length : 0,
-    [activeSection, payload],
+    () => payload ? recentBankEvents(payload, { sections: feedSections, limit: 14 }).length : 0,
+    [feedSections, payload],
   );
   const feedRenderRevision = `${payload?.run_date ?? core?.run_date ?? 'none'}:${bankInsightsSha ?? 'no-bank-history'}:${activeSection}:${suitabilityRevision}`;
 
@@ -180,10 +181,11 @@ export default function MarketOverview() {
     'market.rba.open': openRba,
     'market.response.open': openResponse,
   }), [changeSection, openHistory, openOutlook, openRba, openResponse, toggleMovers]);
-  const history = core?.rba.filter(point => point.date <= sydneyYmd(now)) ?? [];
+  const asOfDate = sydneyYmd(now);
+  const history = core?.rba.filter(point => point.date <= asOfDate) ?? [];
   const verifiedCalendarRate = currentCashRate(calendar, now);
   const cashRate = verifiedCalendarRate ?? history.at(-1)?.rate ?? null;
-  const confirmedDecision = calendar?.decisions.filter(decision => (decision.effective ?? decision.date) <= sydneyYmd(now)).at(-1);
+  const confirmedDecision = calendar?.decisions.filter(decision => (decision.effective ?? decision.date) <= asOfDate).at(-1);
   const cashRateDate = verifiedCalendarRate != null ? confirmedDecision?.effective ?? confirmedDecision?.date : history.at(-1)?.date;
   const coverage = rbaCalendarCoverage(calendar, now);
   const meeting = coverage.unresolvedMeeting ?? nextMeeting(calendar, now);
@@ -267,7 +269,7 @@ export default function MarketOverview() {
           <SectionHeading title="Recent movements" />
           <AppText variant="small" color="textMuted">{payload ? uiDate(payload.run_date) : uiLabel("Unavailable")}</AppText>
         </View>
-        {payload ? <BankMovesFeed payload={payload} error={error} sections={[activeSection]} limit={14}
+        {payload ? <BankMovesFeed payload={payload} error={error} sections={feedSections} limit={14}
           contentRevision={feedRenderRevision} onRenderEvidence={recordFeedEvidence} /> : suitabilityWarming ? (
           <View style={{ gap: 8 }}><AppText variant="small">{uiLabel("Loading")}</AppText><Button title="Retry" variant="secondary" onPress={() => void ensureDetails({ force: true, abandonInFlight: true })} /></View>
         ) : filteredEmpty ? (

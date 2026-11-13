@@ -1,6 +1,7 @@
 import {
   boundAuditCheckEvidence,
   compactAuditCheckForLog,
+  compactAuditCheckCheckpoint,
   compactAuditLogJson,
   compactPerformanceAuditReportForLog,
   encodePerformanceAuditEvent,
@@ -62,6 +63,32 @@ describe('self-contained audit log identity', () => {
 });
 
 describe('bounded audit evidence', () => {
+  it('references long canonical metrics without truncating their duplicate journal copy', () => {
+    const check = { id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 500,
+      metrics: { renderRevisionBefore: 'r'.repeat(3000), readinessEvidence: 'p'.repeat(4000), maxFrameGapMs: 350 },
+      error: 'Readiness failed' };
+    const checkpoint = compactAuditCheckCheckpoint(check);
+    expect(checkpoint).toMatchObject({ id: check.id, status: 'fail', error: 'Readiness failed',
+      metrics: { maxFrameGapMs: 350 }, canonicalMetricFields: ['renderRevisionBefore', 'readinessEvidence'] });
+    expect(JSON.stringify(checkpoint)).not.toContain('[truncated');
+    expect(check.metrics.renderRevisionBefore).toHaveLength(3000);
+    expect(check.metrics.readinessEvidence).toHaveLength(4000);
+  });
+
+  it('keeps a 2369-link checkpoint inventory small without hiding unverified reachability', () => {
+    const checks = Array.from({ length: 2369 }, (_, index) => compactAuditCheckCheckpoint({
+      id: `external-link-${index + 1}`, label: 'Lender source', kind: 'network', status: 'warn', durationMs: 20,
+      metrics: { urlValidation: 'pass', browserHandler: 'pass', httpReachability: 'unknown',
+        httpAttempted: false, httpSelected: false, handlerAttempted: true,
+        validationDetail: 'Approved, credential-free HTTPS destination.',
+        handlerDetail: 'The operating system reports an installed handler for this destination.',
+        reachabilityDetail: 'HTTP reachability was not tested in this audit mode or within its time budget.' },
+    }));
+    expect(JSON.stringify(checks).length).toBeLessThan(1_100_000);
+    expect(checks[2368]).toMatchObject({ status: 'warn', metrics: { httpReachability: 'unknown', httpAttempted: false },
+      canonicalMetricFields: ['validationDetail', 'handlerDetail', 'reachabilityDetail'] });
+  });
+
   it('leaves a check within budget untouched', () => {
     const check = {
       id: 'c1',
