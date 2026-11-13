@@ -20,6 +20,12 @@ function role(value: string | undefined): string | null {
 }
 
 const STAGES = new Set<AuditDiagnosticStage>(['start', 'route', 'pre-action', 'action', 'path', 'data', 'readiness', 'settle', 'back', 'recovery', 'origin-readiness', 'complete', 'check']);
+/** Read one admitted field without copying every readiness probe and work item. */
+export function publicAuditDiagnosticStage(value: unknown): AuditDiagnosticStage | null {
+  if (!value || typeof value !== 'object' || !Object.prototype.propertyIsEnumerable.call(value, 'stage')) return null;
+  const stage = (value as { stage?: unknown }).stage;
+  return typeof stage === 'string' && STAGES.has(stage as AuditDiagnosticStage) ? stage as AuditDiagnosticStage : null;
+}
 const KEYS = new Set('returnReadiness returnStage work stage readiness ready capturing blockers code surface probe surfaces id actionRevision probes kind required status expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent errorClass coveredBySheet'.split(' '));
 const CODES = new Set('capture-inactive no-surfaces no-probes probe-pending probe-error dataset-revision-mismatch render-revision-mismatch count-incomplete graphic-evidence-missing required-kind-missing'.split(' '));
 const NUMERIC = new Set('actionRevision expected actual visible fallback'.split(' '));
@@ -143,8 +149,7 @@ function stepLimitMs(check: AuditCheck, message: string): number {
  */
 export function publicAuditFailureReason(check: AuditCheck, hangTimeoutMs?: number): string | null {
   if (check.status !== 'fail') return null;
-  const diagnostic = publicAuditDiagnostic(check.diagnostic) as { stage?: string } | null;
-  const stage = diagnostic?.stage ?? 'unknown';
+  const stage = publicAuditDiagnosticStage(check.diagnostic) ?? 'unknown';
   const prose = auditErrorProse(check.error);
   const error = publicAuditError(check.error, check.trace);
   const message = error.message;

@@ -1,5 +1,6 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
+import { restoreCompletedPerformanceAudit } from '../src/lib/performanceAudit';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,6 +27,14 @@ const mockRetry = jest.fn(async (_options: unknown) => {});
 const mockPassive = { completed: 0, total: 0, linksCompleted: 0, linksTotal: 0, nativeStatus: 'unavailable' };
 let mockUploadBusy = false;
 let mockMountedDisclosure = false;
+let mockResultsReady = true;
+let mockRecoveryWork: (() => void) | null = null;
+let mockDeferRecovery = false;
+jest.mock('../src/hooks/useDeferredHistorySurface', () => ({ useDeferredHistorySurface: (key: string | null) => key != null && mockResultsReady }));
+jest.mock('../src/lib/yieldToUi', () => ({ scheduleAfterInteractions: (work: () => void) => {
+  if (mockDeferRecovery) mockRecoveryWork = work; else work();
+  return () => { mockRecoveryWork = null; };
+} }));
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined) }));
 jest.mock('../src/lib/appUpdate', () => ({
   getApkDownloadSnapshot: () => mockDownload, getHydratedApkDownloadSnapshot: () => mockHydratedDownload(), subscribeApkDownload: () => () => undefined,
@@ -57,7 +66,7 @@ let tree: Renderer | undefined;
 const toggle = () => tree!.root.findByProps({ label: 'Public upload' });
 async function mount() { await act(async () => { tree = TestRenderer.create(<PerformanceAuditScreen />) as Renderer; }); }
 async function press(title: string) { await act(async () => { tree!.root.findByProps({ title }).props.onPress(); }); }
-beforeEach(() => { resetPerformanceAuditForTests(); jest.clearAllMocks(); mockUpload = { sessionId: null, phase: 'idle' }; mockUploadBusy = false; mockMountedDisclosure = false; mockHydratedDownload.mockResolvedValue(mockDownload); });
+beforeEach(() => { resetPerformanceAuditForTests(); jest.clearAllMocks(); mockResultsReady = true; mockDeferRecovery = false; mockRecoveryWork = null; mockUpload = { sessionId: null, phase: 'idle' }; mockUploadBusy = false; mockMountedDisclosure = false; mockHydratedDownload.mockResolvedValue(mockDownload); });
 afterEach(() => { if (tree) act(() => tree!.unmount()); tree = undefined; resetPerformanceAuditForTests(); });
 
 test.each([['Run audit', 'local'], ['Live audit', 'live-source']] as const)('%s automatically publishes the sanitized report by default', async (title, mode) => {
@@ -385,10 +394,11 @@ test('failed checks expose numbered positions without expanding the verbose audi
   act(() => completePerformanceAudit(report));
   expect(tree!.root.findByProps({ label: 'Failures' }).props.value).toBe('1');
   expect(tree!.root.findByProps({ label: 'First failure' }).props.value).toBe('Check results · 2 · failed-check');
-  expect(tree!.root.findByProps({ label: 'Position' }).props.value).toBe('2');
+  expect(tree!.root.findAllByProps({ label: 'Position' })).toHaveLength(0);
   expect(tree!.root.findByProps({ title: 'Failure positions' }).props.open).toBe(false);
   await act(async () => { tree!.root.findByProps({ title: 'Failure positions' }).props.onToggle(); });
   expect(tree!.root.findByProps({ title: 'Failure positions' }).props.open).toBe(true);
+  expect(tree!.root.findByProps({ label: 'Position' }).props.value).toBe('2');
   expect(tree!.root.findByProps({ title: 'Audit details' }).props.open).toBe(false);
 });
 
@@ -397,6 +407,7 @@ test('deidentified sharing discloses audit timestamps and reference before openi
   try {
     await mount(); await press('Run audit');
     act(() => completePerformanceAudit(makePerformanceAuditReport(getPerformanceAuditState().sessionId!)));
+    await act(async () => { tree!.root.findByProps({ title: 'Audit details' }).props.onToggle(); });
     await press('Share deidentified report');
     expect(alert).toHaveBeenCalledWith('Share deidentified report?',
       expect.stringContaining('Included: App / publication / aggregate counts / timing / fixed checks / Audit timestamps / Audit ID'),
@@ -464,4 +475,26 @@ test('the real disclosure mounts every diagnostic section only while audit detai
   expectDiagnostics(true);
   act(() => tree!.root.findByProps({ title: 'Audit details' }).props.onToggle());
   expectDiagnostics(false);
+});
+
+
+test('start controls render before saved-result derivation and deferred recovery', async () => {
+  mockResultsReady = false; mockDeferRecovery = true;
+  await mount();
+  expect(tree!.root.findByProps({ title: 'Run audit' }).props.disabled).toBe(false);
+  expect(tree!.root.findByProps({ label: 'Estimated time' }).props.value).toBe('09:00');
+  expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
+  expect(tree!.root.findAllByType('AuditMetricHistory')).toHaveLength(0);
+  await press('Run audit');
+  await act(async () => { mockRecoveryWork?.(); });
+  expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
+  expect(getPerformanceAuditState().status).toBe('queued');
+});
+
+test('estimated time retains seconds from the last measured run', async () => {
+  const report = makePerformanceAuditReport('clock');
+  report.durationMs = 480_484;
+  restoreCompletedPerformanceAudit(report);
+  await mount();
+  expect(tree!.root.findByProps({ label: 'Estimated time' }).props.value).toBe('08:01');
 });

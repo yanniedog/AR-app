@@ -87,12 +87,11 @@ export function estimatePerformanceAuditTime(input: {
   };
 }
 
-/** Whole minutes from one minute up; five-second steps below that. */
-export function performanceAuditEstimateParts(remainingMs: number): { value: number; unit: 'min' | 'seconds' } {
+/** Round up once before splitting so 59.1 seconds is 01:00, never 00:60. */
+export function performanceAuditEstimateParts(remainingMs: number): { minutes: number; seconds: number } {
   const ms = Number.isFinite(remainingMs) ? Math.max(0, remainingMs) : 0;
-  return ms >= 60_000
-    ? { value: Math.max(1, Math.round(ms / 60_000)), unit: 'min' }
-    : { value: Math.max(5, Math.ceil(ms / 5_000) * 5), unit: 'seconds' };
+  const seconds = Math.ceil(ms / 1_000);
+  return { minutes: Math.floor(seconds / 60), seconds: seconds % 60 };
 }
 
 export function formatPerformanceAuditEstimate(
@@ -100,8 +99,8 @@ export function formatPerformanceAuditEstimate(
   paused: boolean,
 ): string {
   if (!estimate) return paused ? 'ETA paused until you return' : 'ETA: estimating the audit plan…';
-  const { value, unit } = performanceAuditEstimateParts(estimate.remainingMs);
-  const remaining = `about ${value} ${unit === 'min' ? 'min' : 'sec'}`;
+  const { minutes, seconds } = performanceAuditEstimateParts(estimate.remainingMs);
+  const remaining = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   return paused
     ? `ETA paused · ${remaining} of foreground work remains`
     : `ETA: ${remaining} remaining${estimate.basis === 'initial' ? ' · initial estimate' : ''}`;
