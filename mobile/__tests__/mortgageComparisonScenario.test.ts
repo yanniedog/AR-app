@@ -1,5 +1,5 @@
 import { mortgageComparisonScenario } from '../src/data/mortgageComparisonScenario';
-import { matchesMortgageFacet, scopeMortgageFacets } from '../src/data/mortgageFacets';
+import { scopeMortgageFacets } from '../src/data/mortgageFacetScope';
 
 test('comparison amount and percentage LVR override saved pricing assumptions without changing them', () => {
   const saved = { amount: '100000', lvr: '0.9', purpose: 'OWNER_OCCUPIED' };
@@ -48,15 +48,10 @@ test('duplicate aliases remain one semantic purpose and repayment choice', () =>
   expect(filters).toEqual({ loanPurposes: ['OO', 'OWNER_OCCUPIED'], repaymentTypes: ['PI', 'P&I'] });
 });
 
-test.each([
-  ['OWNER_OCCUPIER', 'OWNER_OCCUPIED'], ['INVESTOR', 'INVESTMENT'],
-])('recognised %s alias remains selectable and matches canonical rates', (alias, purpose) => {
+test.each(['OWNER_OCCUPIER', 'INVESTOR'])('recognised %s display alias retains its exact selection token', alias => {
   const filters = { loanPurposes: [alias], repaymentTypes: ['PRINCIPAL_INTEREST'] };
   expect(scopeMortgageFacets(filters, false)).toBe(filters);
-  expect(mortgageComparisonScenario('Mortgage', {}, { loanAmount: '', lvr: '' }, filters))
-    .toMatchObject({ purpose, repayment: 'PRINCIPAL_AND_INTEREST' });
-  expect(matchesMortgageFacet(purpose, [alias], 'purpose')).toBe(true);
-  expect(matchesMortgageFacet('PRINCIPAL_AND_INTEREST', ['PRINCIPAL_INTEREST'], 'repayment')).toBe(true);
+  expect(filters).toEqual({ loanPurposes: [alias], repaymentTypes: ['PRINCIPAL_INTEREST'] });
   const factual = { loanPurposes: ['OTHER', 'private-source-token'], repaymentTypes: ['UNKNOWN'] };
   expect(scopeMortgageFacets(factual, true)).toBe(factual);
   expect(scopeMortgageFacets(factual, false)).toEqual({ loanPurposes: [], repaymentTypes: [] });

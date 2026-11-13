@@ -1,4 +1,5 @@
-import { canonicalPurpose, canonicalRepayment, isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../data/mortgageFacets';
+import { canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
+import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../data/mortgageFacetScope';
 import { publicCataloguePricingKey, type PublicCatalogueView } from '../data/publicRateIntegration';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TextInput, useWindowDimensions, View } from 'react-native';

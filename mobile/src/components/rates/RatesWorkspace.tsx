@@ -1,5 +1,5 @@
 import { PreparedProductCard } from './PreparedProductCard';
-import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../../data/mortgageFacets';
+import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../../data/mortgageFacetScope';
 import { useMortgageResultsIndex } from '../../hooks/useMortgageResultsIndex';
 import { profileSectionCount } from '../../data/profile';
 import { checkDrillOutcome } from '../../lib/degradationLog';
