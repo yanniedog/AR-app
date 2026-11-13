@@ -10,6 +10,18 @@ import type { RbaCalendar } from '../src/data/rbaCalendar';
 import type { CorePayload } from '../src/types';
 import { bankHistoryPairKey } from '../src/data/sectionIntegrity';
 import { normalizeBankInsightsPayload } from '../src/data/bankInsights';
+import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
+import { createDeidentifiedDiagnosticsShare } from '../src/lib/diagnosticsEnvelope';
+
+function decodeRows(metrics: Record<string, unknown>) {
+  const schema = JSON.parse(metrics.bankResponseRowSchema as string);
+  return JSON.parse(metrics.bankResponseRows as string).map((cells: number[] | null) => cells === null ? { invalid: true } : {
+    bank: schema.banks[cells[0]], section: schema.sections[cells[1]],
+    decisionDate: schema.windows[cells[2]][0], windowEnd: schema.windows[cells[2]][1],
+    sourceReason: schema.reasons[cells[3]], displayReason: schema.reasons[cells[4]], missingDays: cells[5],
+    ...Object.fromEntries(schema.flags.map((key: string, index: number) => [key, Boolean(cells[6] & (1 << index))])),
+  });
+}
 
 function fixture() {
   const series = { median: [0.04, 0.04, 0.04, 0.04], best: [0.045, 0.045, 0.045, 0.045], count: [2, 2, 2, 2] };
@@ -98,6 +110,22 @@ test('legacy normalized caches cannot prove absent events, while validated sourc
   expect(normalizeBankInsightsPayload(JSON.parse(JSON.stringify(source)), { fromCache: true })!.eventLedgerComplete).toBe(true);
 });
 
+test.each(['false', 0, 1, null, {}])('a malformed explicit ledger marker stays incomplete (%j)', eventLedgerComplete => {
+  const f = fixture();
+  expect(normalizeBankInsightsPayload({ ...f.source, eventLedgerComplete })!.eventLedgerComplete).toBe(false);
+});
+
+test('explicit zero-product series survives normalization without inventing rate values', () => {
+  const f = fixture();
+  const normalized = normalizeBankInsightsPayload({ ...f.source, banks: { Bank: { Savings: {
+    median: [null, null, null, null], best: [null, null, null, null], count: [0, 0, 0, 0],
+  } } } })!;
+  expect(normalized.banks.Bank.Savings!.median.every(value => value === null)).toBe(true);
+  const coverage = bankResponseCoverage(normalized, normalized, f.calendar, f.core)!;
+  expect(coverage.rows.every(row => row.displayReason === 'no-products')).toBe(true);
+  expect(evaluateBankResponseCoverage({ ...f.snapshot, bankResponseCoverage: coverage }).metrics.coverageComplete).toBe(true);
+});
+
 test.each([[null, null], [0, 2], [3, 2], [0.5, 2], [1, 1.5]])('normalization cannot erase invalid event count evidence (%s/%s)', (moved, total) => {
   const f = fixture();
   const normalized = normalizeBankInsightsPayload({ ...f.source, events: [{
@@ -168,15 +196,21 @@ test('public aliases survive bank insertion order and malformed complete claims 
   const f = fixture();
   f.source.banks.Other = f.source.banks['Private Bank'];
   const check = evaluateBankResponseCoverage({ ...f.snapshot, bankResponseCoverage: bankResponseCoverage(f.source, f.source, f.calendar, f.core) });
-  const original = JSON.parse(publicBankResponseCoverage(check).bankResponseRows as string);
+  const original = decodeRows(publicBankResponseCoverage(check));
   const evidence = check.localEvidence!.bankResponseCoverage as ReturnType<typeof bankResponseCoverage>;
   const reordered = publicBankResponseCoverage({ ...check, localEvidence: { bankResponseCoverage: { ...evidence, rows: [...evidence!.rows].reverse() } } });
-  expect(JSON.parse(reordered.bankResponseRows as string).reverse()).toEqual(original);
+  expect(decodeRows(reordered).reverse()).toEqual(original);
   expect(publicBankResponseCoverage({ ...check, metrics: { ...check.metrics, checked: 0 },
     localEvidence: { bankResponseCoverage: { ...evidence, rows: [] } } }).bankResponseEvidenceInvalid).toBe(true);
   expect(publicBankResponseCoverage({ ...check, localEvidence: { bankResponseCoverage: {
     ...evidence, rows: evidence!.rows.map(row => ({ ...row, missingDays: 1 })),
   } } }).bankResponseEvidenceInvalid).toBe(true);
+  for (const displayReason of ['no-recorded-move', 'no-products']) {
+    for (const key of ['moveKnown', 'timingKnown']) expect(publicBankResponseCoverage({ ...check,
+      localEvidence: { bankResponseCoverage: { ...evidence,
+        rows: evidence!.rows.map(row => ({ ...row, displayReason, [key]: true })),
+      } } }).bankResponseEvidenceInvalid).toBe(true);
+  }
 });
 
 test('public diagnostics keep every bank/window cause with stable aliases and reject malformed nested records', () => {
@@ -186,7 +220,7 @@ test('public diagnostics keep every bank/window cause with stable aliases and re
     checks: [check], plannedCheckIds: [check.id] });
   const exported = toPublicAppHealthReport(report);
   expect(JSON.stringify(exported)).not.toContain('Private Bank');
-  const rows = JSON.parse(exported.checks[0].metrics.bankResponseRows as string);
+  const rows = decodeRows(exported.checks[0].metrics);
   expect(rows).toHaveLength(6);
   expect(new Set(rows.map((row: { bank: string }) => row.bank)).size).toBe(1);
   expect(rows[0]).toMatchObject({ bank: 'bank-1', sourceReason: 'no-recorded-move', displayReason: 'no-recorded-move' });
@@ -195,4 +229,23 @@ test('public diagnostics keep every bank/window cause with stable aliases and re
   ] } } });
   expect(malformed).toMatchObject({ bankResponseInvalidRows: 2, bankResponseEvidenceInvalid: true });
   expect(JSON.stringify(malformed)).not.toContain('private');
+});
+
+test('a full provider/window breakdown fits the OS share budget without dropping rows', () => {
+  const f = fixture();
+  const series = f.source.banks['Private Bank'];
+  f.source.banks = Object.fromEntries(Array.from({ length: 110 }, (_, index) => [`Bank ${index}`, series]));
+  f.calendar.decisions = f.source.run_dates.map(date => ({ ...f.calendar.decisions[0], date }));
+  const coverage = bankResponseCoverage(f.source, f.source, f.calendar, f.core)!;
+  expect(coverage.rows).toHaveLength(1320);
+  const check = evaluateBankResponseCoverage({ ...f.snapshot, bankResponseCoverage: coverage });
+  const report = makePerformanceAuditReport('complete-bank-breakdown');
+  report.appHealth = finalizeAppHealthReport({ sessionId: report.sessionId, mode: 'local',
+    startedAt: report.startedAt, finishedAt: report.finishedAt, checks: [check], plannedCheckIds: [check.id] });
+  const share = createDeidentifiedDiagnosticsShare(report);
+  const exported = JSON.parse(share.body).appHealth.checks[0].metrics;
+  const retained = decodeRows(exported);
+  expect(retained).toHaveLength(1320);
+  expect(retained.map((row: any) => [row.section, row.decisionDate, row.sourceReason, row.displayReason, row.missingDays]))
+    .toEqual(coverage.rows.map(row => [row.section, row.decisionDate, row.sourceReason, row.displayReason, row.missingDays]));
 });

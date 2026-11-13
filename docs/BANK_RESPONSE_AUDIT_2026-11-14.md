@@ -21,7 +21,10 @@ persist the normalized marker; valid source survives the cache roundtrip, and
 an incomplete marker cannot be upgraded merely by reading the cache again.
 
 Public diagnostics retain all row positions with deterministic bank aliases and
-a closed schema. Malformed saved rows and contradictory completeness claims
+a closed indexed-table schema (bank, section, window, reasons, missing days and
+boolean flags). A 1,320-row OS-share regression retains every field within the
+existing 256 KiB budget; the uncompressed repeated-key representation exceeded
+that budget at 467,083 bytes. Malformed saved rows and contradictory completeness claims
 invalidate coverage. Local details preserve provider names; no arbitrary nested
 source text is forwarded publicly.
 

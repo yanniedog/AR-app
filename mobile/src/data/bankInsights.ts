@@ -513,7 +513,8 @@ export function normalizeBankInsightsPayload(raw: unknown, options: { fromCache?
       const median = alignedSeries(series.median, run_dates.length);
       const best = alignedSeries(series.best, run_dates.length);
       const count = alignedSeries(series.count, run_dates.length);
-      if (!median || !best || !median.some((v) => v != null)) continue;
+      if (!median || !best || !median.some((v) => v != null) &&
+          !count?.some((value, index) => value === 0 && median[index] == null && best[index] == null)) continue;
       sections[section] = {
         median,
         best,
@@ -567,7 +568,7 @@ export function normalizeBankInsightsPayload(raw: unknown, options: { fromCache?
     banks,
     events,
     eventLedgerComplete: eventCountsComplete && Array.isArray(obj.events) && events.length === obj.events.length &&
-      obj.eventLedgerComplete !== false && (!options.fromCache || obj.eventLedgerComplete === true),
+      (obj.eventLedgerComplete === undefined || obj.eventLedgerComplete === true) && (!options.fromCache || obj.eventLedgerComplete === true),
     behaviour: normalizeBehaviour(obj.behaviour),
   };
 }

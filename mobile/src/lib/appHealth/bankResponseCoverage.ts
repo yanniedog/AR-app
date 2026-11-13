@@ -1,5 +1,5 @@
 import { buildCompactBankResponseWindows } from '../../data/bankResponseModel';
-import { bankResponseEvidence, type BankResponseReason } from '../../data/bankResponseEvidence';
+import { createBankResponseEvidenceReader, type BankResponseReason } from '../../data/bankResponseEvidence';
 import type { BankInsightsPayload } from '../../data/bankInsightsTypes';
 import type { RbaCalendar } from '../../data/rbaCalendar';
 import { bankHistoryPairKey } from '../../data/sectionIntegrity';
@@ -35,10 +35,11 @@ export function bankResponseCoverage(source: BankInsightsPayload | null | undefi
   core: CorePayload | null, quarantinedPairs: ReadonlySet<string> = new Set()): BankResponseCoverage | null {
   if (!source || !calendar || !core) return null;
   const rows: BankResponseCoverageRow[] = [];
+  const sourceEvidence = createBankResponseEvidenceReader(source);
   const windows = new Set<string>();
   for (const section of SECTION_KEYS) {
     const sourceWindows = buildCompactBankResponseWindows(source, calendar, section);
-    const displayWindows = new Map((projected ? buildCompactBankResponseWindows(projected, calendar, section, source) : [])
+    const displayWindows = new Map((projected === source ? sourceWindows : projected ? buildCompactBankResponseWindows(projected, calendar, section, source) : [])
       .map(window => [window.decision.date, new Map(window.rows.map(row => [row.provider, row]))]));
     const providers = new Set([...Object.keys(source.banks).filter(provider => source.banks[provider][section]),
       ...source.events.filter(event => event.section === section).map(event => event.provider),
@@ -49,7 +50,7 @@ export function bankResponseCoverage(source: BankInsightsPayload | null | undefi
       for (const provider of providers) {
         const raw = sourceRows.get(provider);
         const visible = displayWindows.get(window.decision.date)?.get(provider);
-        const evidence = raw?.evidence ?? bankResponseEvidence(source, section, provider,
+        const evidence = raw?.evidence ?? sourceEvidence(section, provider,
           window.decision.date, window.windowEnd, null);
         rows.push({ provider, section, decisionDate: window.decision.date, windowEnd: window.windowEnd,
           sourceReason: evidence.reason,
@@ -75,7 +76,7 @@ export function evaluateBankResponseCoverage(snapshot: AppHealthDataSnapshot): A
   const base = { id: APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE, code: APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE,
     label: 'Bank response coverage', domain: 'data-completeness' as const };
   if (!evidence) return { ...base, status: 'unavailable', metrics: { coverageAvailable: false, coverageComplete: false },
-    summary: 'Bank response source, calendar or selected-product evidence is unavailable.' };
+    summary: 'Unavailable' };
   const count = (reason: BankResponseReason) => evidence.rows.filter(row => row.displayReason === reason).length;
   const complete = evidence.runMatches && evidence.projectionAvailable && evidence.windows > 0 && evidence.rows.length > 0 &&
     evidence.rows.every(row => ['recorded-move', 'no-recorded-move', 'no-products'].includes(row.displayReason));
@@ -92,6 +93,5 @@ export function evaluateBankResponseCoverage(snapshot: AppHealthDataSnapshot): A
     unverifiedEvents: count('unverified-events'),
     coverageComplete: complete, renderedCoverageVerified: false,
   }, localEvidence: { bankResponseCoverage: evidence },
-  summary: complete ? 'All bank response model rows have classified evidence; physical rendering remains sampled.'
-    : 'Bank response has unknown or filtered history. Per-bank, section and decision-window evidence is retained.' };
+  summary: complete ? 'Complete' : 'Incomplete' };
 }
