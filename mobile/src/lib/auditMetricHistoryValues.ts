@@ -5,6 +5,13 @@ import { AUDIT_METRICS, type AuditMetric } from './auditMetricHistoryMetrics';
 export const measuredAuditValue = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 
+/** A missing Back sample is meaningful only for a journey with return evidence. */
+export const hasAuditReturnEvidence = (check: AuditCheck): boolean =>
+  check.metrics.measurementMode === 'route-round-trip'
+  || Object.prototype.hasOwnProperty.call(check.metrics, 'backMs')
+  || typeof check.metrics.backReturnedToAudit === 'boolean'
+  || typeof check.metrics.backChangedPath === 'boolean';
+
 /** Invalid/inconsistent denominators are unknown, never silently clamped to 100. */
 function percent(numerator: unknown, denominator: unknown): number | null {
   const n = measuredAuditValue(numerator), d = measuredAuditValue(denominator);
@@ -20,8 +27,9 @@ function sampledRate(checks: AuditCheck[], samples: string, events: string, avai
   let total = 0, slow = 0;
   for (const check of observed) {
     const n = measuredAuditValue(check.metrics[samples]), e = measuredAuditValue(check.metrics[events]);
-    if (n === null || e === null || e > n) return null;
+    if (n === null || e === null || !Number.isSafeInteger(n) || !Number.isSafeInteger(e) || e > n) return null;
     total += n; slow += e;
+    if (!Number.isSafeInteger(total) || !Number.isSafeInteger(slow)) return null;
   }
   return percent(slow, total);
 }
@@ -63,7 +71,8 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
   const observedIds = new Set(report.checks.map(check => check.id));
   const unexpected = new Set(coverage?.unexpectedStoredCheckIds ?? []);
   const collected = [...observedIds].filter(id => !unexpected.has(id)).length;
-  const backChecks = journeys.filter(check => measuredAuditValue(check.metrics.backMs) !== null);
+  const returnChecks = journeys.filter(hasAuditReturnEvidence);
+  const backChecks = returnChecks.filter(check => measuredAuditValue(check.metrics.backMs) !== null);
   const recoveryChecks = backChecks.filter(check => ['replaceRecoveryMs', 'anchorResetMs']
     .some(key => (measuredAuditValue(check.metrics[key]) ?? 0) > 0));
   const errorCounts = journeys.map(check => measuredAuditValue(check.metrics.runtimeErrors));
@@ -111,7 +120,7 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
     automatedTaskFailurePercent: actions.every(check => typeof check.metrics.nonTimingFailure === 'boolean'
       && typeof check.metrics.actionCompleted === 'boolean') ? percent(failed.length, actions.length) : null,
     actionP50Ms: percentile(actionTimes, .5), actionP95Ms: percentile(actionTimes, .95),
-    backP95Ms: percentile(backChecks.map(check => measuredAuditValue(check.metrics.backMs)), .95),
+    backP95Ms: percentile(returnChecks.map(check => measuredAuditValue(check.metrics.backMs)), .95),
     recoveryPercent: percent(recoveryChecks.length, backChecks.length),
     runtimeErrors: errorCounts.length && errorCounts.every(count => count !== null)
       ? errorCounts.reduce<number>((sum, count) => sum + (count ?? 0), 0) : null,

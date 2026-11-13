@@ -98,6 +98,29 @@ callbacks. Confidence intervals, human SUS/SEQ scores, native-frame metrics and
 standards certification require evidence this audit does not collect. Formulas,
 scope and limits are documented in [Audit history metrics](AUDIT_HISTORY_METRICS.md).
 
+## Original-report replay
+
+A bounded desktop Node/Jest replay used the supplied report's public diagnostic
+log: 2,756 performance checks and 26 deidentified health checks. It produced all
+45 metric evidence records and 14,057 shared observations. All values matched
+the lightweight history derivation; contributor references, nearest-rank
+percentiles, median absolute deviation, interquartile range and worst-observation
+references were independently checked against their contributing measurements.
+
+The public log lacks canonical health inventory metadata. The replay therefore
+keeps 17 metrics unknown and observes 28; it does not reconstruct health evidence.
+Legacy check completion retains its reported 99.2%, with an explicitly unknown
+denominator. Back timing uses 40 measured returns with zero missing return
+samples; 326 other or unexecuted journeys are excluded. Semantic actions do not
+become missing Back measurements. Regression cases retain missing attempted
+returns in the eligible population.
+
+The rebuilt deidentified envelope contains one observation table and a reference
+from the full diagnostic log. Its compressed representation was 592,918 bytes
+against the 2 MiB limit, and its decoded JSON was 8,475,467 bytes against the
+32 MiB limit. Detailed analysis alone occupied 1,880,043 bytes. These are desktop
+replay and payload-size checks, not Android latency or fresh device-audit evidence.
+
 ## Acceptance
 
 The combined focused run passed 14 suites / 235 tests. A final follow-up of the

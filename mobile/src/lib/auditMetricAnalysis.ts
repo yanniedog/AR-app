@@ -1,7 +1,7 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion, hasValidPerformanceAuditHealth } from './performanceAuditCompletion';
 import { AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_METHODS, type AuditMetric } from './auditMetricHistoryMetrics';
-import { auditMetricValues, measuredAuditValue as measured } from './auditMetricHistoryValues';
+import { auditMetricValues, hasAuditReturnEvidence, measuredAuditValue as measured } from './auditMetricHistoryValues';
 
 export type AuditMetricMissingEvidence = 'missing-evidence' | 'missing-denominator' | 'missing-samples'
   | 'partial-samples' | 'inconsistent-counts' | 'invalid-identities' | 'incomplete-health-collection'
@@ -184,8 +184,9 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   const completed = actions.filter(check => check.metrics.actionCompleted === true);
   distribution('actionP50Ms', completed, 'actionMs', allJourneys.length - completed.length, 'action-duration');
   distribution('actionP95Ms', completed, 'actionMs', allJourneys.length - completed.length, 'action-duration');
-  const back = journeys.filter(check => measured(check.metrics.backMs) !== null);
-  distribution('backP95Ms', journeys, 'backMs', allJourneys.length - journeys.length, 'return-duration');
+  const returns = journeys.filter(hasAuditReturnEvidence);
+  const back = returns.filter(check => measured(check.metrics.backMs) !== null);
+  distribution('backP95Ms', returns, 'backMs', allJourneys.length - returns.length, 'return-duration');
   const recoveries = back.filter(check => ['replaceRecoveryMs', 'anchorResetMs'].some(field => (measured(check.metrics[field]) ?? 0) > 0));
   ratio('recoveryPercent', recoveries.length, back.length,
     back.flatMap(check => [perf(check, 'backMs'), perf(check, 'replacementRecoveryObserved', (measured(check.metrics.replaceRecoveryMs) ?? 0) > 0),
@@ -197,11 +198,17 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   ] as const) {
     const checks = journeys.filter(check => check.metrics[available] === true);
     const sampleRefs = checks.map(check => perf(check, samples)), eventRefs = checks.map(check => perf(check, events));
-    ratio(metric, total(eventRefs), total(sampleRefs), [...sampleRefs, ...eventRefs],
-      { observedCount: total(sampleRefs), eligibleCount: checks.length < journeys.length ? null : total(sampleRefs),
-        missingCount: checks.length < journeys.length ? null : 0, excludedCount: checks.length < journeys.length ? null : 0,
+    const consistent = checks.length === 0 || sampleRefs.every((ref, index) => Number.isSafeInteger(numeric(ref))
+      && Number.isSafeInteger(numeric(eventRefs[index])) && numeric(eventRefs[index])! <= numeric(ref)!)
+      && Number.isSafeInteger(total(sampleRefs)) && Number.isSafeInteger(total(eventRefs));
+    ratio(metric, consistent ? total(eventRefs) : null, consistent ? total(sampleRefs) : null, [...sampleRefs, ...eventRefs],
+      { observedCount: consistent ? total(sampleRefs) : null,
+        eligibleCount: !consistent || checks.length < journeys.length ? null : total(sampleRefs),
+        missingCount: !consistent || checks.length < journeys.length ? null : 0,
+        excludedCount: !consistent || checks.length < journeys.length ? null : 0,
         instrumentation: { contributingJourneys: checks.length, missingJourneys: journeys.length - checks.length } },
-      checks.length < journeys.length ? ['partial-samples'] : []);
+      [...(consistent ? [] : ['inconsistent-counts' as const]),
+        ...(checks.length < journeys.length ? ['partial-samples' as const] : [])]);
   }
   put('runtimeErrors', journeys.map(check => perf(check, 'runtimeErrors')),
     { sampleUnit: 'journey', eligibleCount: journeys.length, excludedCount: allJourneys.length - journeys.length });
@@ -237,11 +244,16 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   put('timingFailures', completion.failurePositions.filter(failed => failed.category === 'timing').map(failed => add({
     source: failed.source, checkId: failed.checkId ?? undefined, position: failed.position, field: 'timingFailure', value: true })),
   { sampleSize: report.checks.length, sampleUnit: 'check', eligibleCount: report.checks.length, observedCount: report.checks.length, missingCount: 0 });
+  // The legacy numerator includes health checks. A public or older report may
+  // retain that percentage while omitting the canonical health inventory;
+  // absent health metadata cannot establish a zero-sized health population.
+  const legacyCompletionTotal = report.coverage && completion.gaps.invalidCoverageReports === 0 && health
+    ? measured(report.coverage.plannedChecks + health.summary.total) : null;
   put('coveragePercent', [reportField('summary.coveragePercent', report.summary.coveragePercent),
     reportField('summary.executed', report.summary.executed), reportField('coverage.plannedChecks', report.coverage?.plannedChecks),
     reportField('health.summary.total', health?.summary.total)],
-    { numerator: measured(report.summary.executed), denominator: report.coverage
-      ? measured(report.coverage.plannedChecks + (health?.summary.total ?? 0)) : null });
+    { numerator: measured(report.summary.executed), denominator: legacyCompletionTotal },
+    legacyCompletionTotal === null ? ['missing-denominator'] : []);
   const coverage = completion.gaps.invalidCoverageReports === 0 ? report.coverage : undefined;
   const unexpected = new Set(coverage?.unexpectedStoredCheckIds ?? []);
   const collected = new Set(report.checks.filter(check => !unexpected.has(check.id)).map(check => check.id)).size;
@@ -283,11 +295,12 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     const domain = metric === 'dataIntegrityPassPercent' ? 'data-integrity' : metric === 'dataCompletenessPassPercent' ? 'data-completeness' : null;
     const checks = health?.checks.filter(check => !domain || check.domain === domain) ?? [];
     const accepted = checks.filter(check => metric === 'healthCoveragePercent' ? !['not-run', 'unavailable'].includes(check.status) : check.status === 'pass');
-    ratio(metric, health ? accepted.length : null, domain ? checks.length : measured(health?.coverage.plannedChecks),
+    const admitted = healthIdsValid && (!domain || health?.coverage.complete === true);
+    ratio(metric, admitted ? accepted.length : null, admitted ? domain ? checks.length : measured(health?.coverage.plannedChecks) : null,
       checks.map(check => add({ source: 'health', checkId: check.id, position: health!.checks.indexOf(check) + 1,
         field: metric === 'healthCoveragePercent' ? 'executed' : 'statusPass', value: accepted.includes(check) })),
-      { eligibleCount: domain ? health?.coverage.complete ? checks.length : null : measured(health?.coverage.plannedChecks),
-        observedCount: checks.length, missingCount: domain ? health?.coverage.complete ? 0 : null
+      { eligibleCount: admitted ? domain ? checks.length : measured(health?.coverage.plannedChecks) : null,
+        observedCount: checks.length, missingCount: !admitted ? null : domain ? 0
           : health ? Math.max(0, health.coverage.plannedChecks - checks.length) : null },
       [...healthReasons, ...(domain && health?.coverage.complete !== true ? ['incomplete-health-collection' as const] : [])]);
   }
@@ -296,12 +309,15 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     ['detailsCoveragePercent', 'details-completeness', 'matchedProducts', 'coreProducts', 'runMatches'],
   ] as const) {
     const refs = healthObservations(code, [numerator, denominator, guard]);
-    ratio(metric, numeric(refs[0]), numeric(refs[1]), refs);
+    const admitted = observations[refs[2]].value === (guard === 'invalidCounts' ? false : true);
+    ratio(metric, admitted ? numeric(refs[0]) : null, admitted ? numeric(refs[1]) : null, refs,
+      {}, admitted ? [] : ['unverified-evidence']);
   }
   const historyRefs = healthObservations('catalogue-identity-coverage', ['historyDaysChecked', 'historyAvailable']);
   const historyCheck = health?.checks.filter(check => check.code === 'catalogue-identity-coverage');
+  const historyAdmitted = observations[historyRefs[1]].value === true;
   let sourceGapDays: number | null = null;
-  if (historyCheck?.length === 1 && typeof historyCheck[0].metrics.historySourceGapDays === 'string') {
+  if (historyAdmitted && historyCheck?.length === 1 && typeof historyCheck[0].metrics.historySourceGapDays === 'string') {
     try {
       const parsed: unknown = JSON.parse(historyCheck[0].metrics.historySourceGapDays);
       if (Array.isArray(parsed) && parsed.every(day => typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day))) sourceGapDays = new Set(parsed).size;
@@ -310,9 +326,9 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   historyRefs.push(add({ source: 'health', checkId: historyCheck?.length === 1 ? historyCheck[0].id : undefined,
     position: historyCheck?.length === 1 ? health!.checks.indexOf(historyCheck[0]) + 1 : undefined,
     field: 'distinctHistorySourceGapDays', value: sourceGapDays }));
-  const historyDays = numeric(historyRefs[0]);
+  const historyDays = historyAdmitted ? numeric(historyRefs[0]) : null;
   ratio('historySourceCoveragePercent', historyDays !== null && sourceGapDays !== null ? historyDays - sourceGapDays : null,
-    historyDays, historyRefs);
+    historyDays, historyRefs, {}, historyAdmitted ? [] : ['unverified-evidence']);
   for (const [metric, field] of [['historyProcessingMismatches', 'historyProcessingMismatches'],
     ['historyProjectionMismatches', 'historyChartProjectionMismatches']] as const) {
     put(metric, healthObservations('catalogue-identity-coverage', [field]));
@@ -320,9 +336,14 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   const surfaces = healthObservations('display-contract', ['plannedSurfaces', 'missingSurfaces', 'duplicateContracts', 'duplicateObservations', 'unexpectedSurfaces']);
   const planned = numeric(surfaces[0]), missing = numeric(surfaces[1]);
   const surfaceAdmission = displayAdmission('display-contract');
-  ratio('surfaceCoveragePercent', planned !== null && missing !== null ? planned - missing : null, planned, [...surfaces, ...surfaceAdmission.refs],
-    { observedCount: planned !== null && missing !== null ? Math.max(0, planned - missing) : 0, missingCount: missing ?? 0 },
-    surfaceAdmission.reasons);
+  const duplicateContracts = numeric(surfaces[2]);
+  const surfacesAdmitted = duplicateContracts === 0 && surfaceAdmission.reasons.length === 0;
+  ratio('surfaceCoveragePercent', surfacesAdmitted && planned !== null && missing !== null ? planned - missing : null,
+    surfacesAdmitted ? planned : null, [...surfaces, ...surfaceAdmission.refs],
+    { observedCount: surfacesAdmitted && planned !== null && missing !== null ? Math.max(0, planned - missing) : null,
+      missingCount: surfacesAdmitted ? missing : null },
+    [...surfaceAdmission.reasons, ...(duplicateContracts === 0 ? []
+      : [duplicateContracts === null ? 'unverified-evidence' as const : 'invalid-identities' as const])]);
   for (const [metric, code] of [
     ['displayModelPassPercent', 'display-model'], ['displayListPassPercent', 'display-list'],
     ['displayVisiblePassPercent', 'display-visible'], ['displayLayoutPassPercent', 'display-layout'],
@@ -331,8 +352,9 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     const refs = healthObservations(code, ['checked', 'missing', 'failed', 'warned', 'unavailable']);
     const [checked, absent, failed, warned, unavailable] = refs.map(numeric);
     const admission = displayAdmission(code);
-    ratio(metric, checked !== null && failed !== null && warned !== null && unavailable !== null ? checked - failed - warned - unavailable : null,
-      checked !== null && absent !== null ? checked + absent : null, [...refs, ...admission.refs],
+    const admitted = admission.reasons.length === 0;
+    ratio(metric, admitted && checked !== null && failed !== null && warned !== null && unavailable !== null ? checked - failed - warned - unavailable : null,
+      admitted && checked !== null && absent !== null ? checked + absent : null, [...refs, ...admission.refs],
       { observedCount: checked ?? 0, missingCount: absent ?? 0 }, admission.reasons);
   }
   return { schemaVersion: 1, context: { plannedChecks: measured(report.coverage?.plannedChecks),

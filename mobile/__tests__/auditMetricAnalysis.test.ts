@@ -1,8 +1,9 @@
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { buildAuditMetricAnalysis } from '../src/lib/auditMetricAnalysis';
 import { auditMetricRun, AUDIT_METRICS } from '../src/lib/auditMetricHistory';
-import { finalizeAppHealthReport, APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth';
+import { finalizeAppHealthReport, toPublicAppHealthReport, APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth';
 import type { AuditCheck } from '../src/lib/performanceAudit';
+import type { AppHealthCheck } from '../src/lib/appHealth';
 
 function journey(id: string, duration: number | null): AuditCheck {
   return { id, kind: 'journey', label: 'Rates', status: 'pass', durationMs: duration,
@@ -12,6 +13,79 @@ function journey(id: string, duration: number | null): AuditCheck {
       actionMs: duration, forwardWorkMs: duration, backMs: duration },
     diagnostic: { stage: 'complete', readiness: { ready: true, capturing: true, blockers: [], surfaces: [] } } };
 }
+
+function healthMetricReport(code: AppHealthCheck['code'], metrics: AppHealthCheck['metrics']) {
+  const report = makePerformanceAuditReport();
+  report.appHealth = finalizeAppHealthReport({ sessionId: report.sessionId, mode: 'local',
+    startedAt: report.startedAt, finishedAt: report.finishedAt, plannedCheckIds: [code],
+    checks: [{ id: code, code, domain: 'data-completeness', label: 'Evidence', status: 'pass', metrics }] });
+  return report;
+}
+
+test.each([
+  ['providerSuccessPercent', APP_HEALTH_CHECK_CODES.COVERAGE, 'providersSucceeded', 'providersAttempted', 'invalidCounts', false],
+  ['detailsCoveragePercent', APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS, 'matchedProducts', 'coreProducts', 'runMatches', true],
+] as const)('%s analysis honors its validity guard and preserves raw rejected observations', (metric, code, numerator, denominator, guard, accepted) => {
+  for (const guardValue of [accepted, !accepted, undefined]) {
+    const report = healthMetricReport(code, { [numerator]: 2, [denominator]: 3,
+      ...(guardValue === undefined ? {} : { [guard]: guardValue }) });
+    const analysis = buildAuditMetricAnalysis(report), evidence = analysis.metrics[metric];
+    expect(evidence.value).toBe(auditMetricRun(report).metrics[metric]);
+    if (guardValue === accepted) {
+      expect(evidence).toMatchObject({ value: 66.7, numerator: 2, denominator: 3, applicability: 'observed' });
+    } else {
+      expect(evidence).toMatchObject({ value: null, numerator: null, denominator: null, applicability: 'not-observed',
+        missingEvidence: ['unverified-evidence', 'missing-denominator'] });
+      expect(evidence.contributors.map(index => analysis.observations[index])).toContainEqual(
+        expect.objectContaining({ field: numerator, value: 2 }));
+    }
+  }
+});
+
+test.each([true, false, undefined])('historical source operands require positive availability evidence: %s', available => {
+  const report = healthMetricReport(APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE, {
+    historyDaysChecked: 3, historySourceGapDays: '["2026-11-01"]',
+    ...(available === undefined ? {} : { historyAvailable: available }),
+  });
+  const evidence = buildAuditMetricAnalysis(report).metrics.historySourceCoveragePercent;
+  expect(evidence.value).toBe(auditMetricRun(report).metrics.historySourceCoveragePercent);
+  expect(evidence).toMatchObject(available === true ? { value: 66.7, numerator: 2, denominator: 3 }
+    : { value: null, numerator: null, denominator: null, missingEvidence: ['unverified-evidence', 'missing-denominator'] });
+});
+
+test.each([0, 1, undefined])('surface operands require unique contract evidence: %s', duplicates => {
+  const report = healthMetricReport(APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT, {
+    plannedSurfaces: 3, missingSurfaces: 1, duplicateObservations: 0, unexpectedSurfaces: 0,
+    ...(duplicates === undefined ? {} : { duplicateContracts: duplicates }),
+  });
+  const evidence = buildAuditMetricAnalysis(report).metrics.surfaceCoveragePercent;
+  expect(evidence.value).toBe(auditMetricRun(report).metrics.surfaceCoveragePercent);
+  if (duplicates === 0) expect(evidence).toMatchObject({ value: 66.7, numerator: 2, denominator: 3 });
+  else expect(evidence).toMatchObject({ value: null, numerator: null, denominator: null,
+    applicability: duplicates === undefined ? 'not-observed' : 'invalid-evidence',
+    missingEvidence: [duplicates === undefined ? 'unverified-evidence' : 'invalid-identities', 'missing-denominator'] });
+});
+
+test.each([
+  ['jsStallPercent', 'eventLoopSamples', 'stallsOver100Ms'],
+  ['slowFramePercent', 'frameSamples', 'framesOver50Ms'],
+] as const)('%s rejects fractional and unsafe callback counts before pooling', (metric, samples, events) => {
+  for (const [sampleCount, eventCount] of [[10.5, 1], [10, 0.5], [Number.MAX_SAFE_INTEGER + 1, 0], [1, 2]]) {
+    const first = journey('first', 10), second = journey('second', 10);
+    first.metrics[samples] = sampleCount; first.metrics[events] = eventCount;
+    const report = makePerformanceAuditReport('invalid-counts', [first, second]);
+    expect(auditMetricRun(report).metrics[metric]).toBeNull();
+    expect(buildAuditMetricAnalysis(report).metrics[metric]).toMatchObject({ value: null, numerator: null, denominator: null,
+      applicability: 'invalid-evidence', missingEvidence: ['inconsistent-counts', 'missing-denominator'] });
+  }
+  const first = journey('first', 10), second = journey('second', 10);
+  first.metrics[samples] = Number.MAX_SAFE_INTEGER; first.metrics[events] = 0;
+  second.metrics[samples] = 1; second.metrics[events] = 0;
+  const report = makePerformanceAuditReport('overflow', [first, second]);
+  expect(auditMetricRun(report).metrics[metric]).toBeNull();
+  expect(buildAuditMetricAnalysis(report).metrics[metric]).toMatchObject({ value: null, numerator: null, denominator: null,
+    eligibleCount: null, observedCount: null, missingEvidence: ['inconsistent-counts', 'missing-denominator'] });
+});
 
 test('all graph values have the same versioned analysis and valid shared evidence references', () => {
   const report = makePerformanceAuditReport('analysis', [journey('journey-rates-cold', 10), journey('journey-rates-warm', 20)]);
@@ -75,6 +149,31 @@ test('unverified links retain contributors and full-plan legacy completion has a
     source: 'performance', checkId: 'external-link-1', position: 1, field: 'destinationClassified', value: false });
 });
 
+test.each(['missing', 'public-only'] as const)('legacy completion does not invent a zero health population from %s metadata', healthMetadata => {
+  const report = makePerformanceAuditReport('legacy-completion', [journey('journey-rates-cold', 10)]);
+  report.coverage = { plannedChecks: 1, storedChecks: 1, plannedJourneyChecks: 1, executedJourneyChecks: 1,
+    justifiedSkippedJourneyChecks: 0, unexpectedSkippedJourneyChecks: 0, unavailableJourneyChecks: 0,
+    coveragePercent: 100, attemptedPercent: 100, missingPlannedCheckIds: [], duplicateStoredCheckIds: [],
+    unexpectedStoredCheckIds: [], excludedUnsafeFacetCount: 0, complete: true };
+  report.summary.coveragePercent = 99.2;
+  const code = APP_HEALTH_CHECK_CODES.CORE_SCHEMA;
+  const health = finalizeAppHealthReport({ sessionId: report.sessionId, mode: 'local',
+    startedAt: report.startedAt, finishedAt: report.finishedAt, plannedCheckIds: [code],
+    checks: [{ id: code, code, domain: 'data-integrity', label: 'Schema', status: 'pass', metrics: {} }] });
+  if (healthMetadata === 'public-only') report.appHealth = toPublicAppHealthReport(health) as never;
+  const evidence = buildAuditMetricAnalysis(report).metrics.coveragePercent;
+  expect(evidence).toMatchObject({ value: 99.2, numerator: 1, denominator: null,
+    missingEvidence: expect.arrayContaining(['missing-denominator']) });
+  expect(auditMetricRun(report).metrics.coveragePercent).toBe(99.2);
+  report.appHealth = health;
+  const combinedChecks = 1 + health.summary.total;
+  report.summary.executed = combinedChecks;
+  report.summary.coveragePercent = 100;
+  expect(buildAuditMetricAnalysis(report).metrics.coveragePercent).toMatchObject({
+    value: 100, numerator: combinedChecks, denominator: combinedChecks, missingEvidence: [],
+  });
+});
+
 test('partial display observations cannot become 100 percent design scores', () => {
   const report = makePerformanceAuditReport();
   const code = APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT;
@@ -83,7 +182,7 @@ test('partial display observations cannot become 100 percent design scores', () 
     checks: [{ id: code, code, domain: 'display-completeness', label: 'Layout', status: 'not-run',
       metrics: { checked: 1, missing: 0, failed: 0, warned: 0, unavailable: 0, partial: true } }] });
   expect(buildAuditMetricAnalysis(report).metrics.displayLayoutPassPercent).toMatchObject({ value: null,
-    missingEvidence: ['incomplete-health-collection'], applicability: 'not-observed' });
+    missingEvidence: ['incomplete-health-collection', 'missing-denominator'], applicability: 'not-observed' });
 });
 
 
@@ -133,5 +232,5 @@ test('an incomplete health plan cannot assign absent checks to a domain denomina
     startedAt: report.startedAt, finishedAt: report.finishedAt, plannedCheckIds: [code, APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT],
     incompleteReason: 'Stopped', checks: [{ id: code, code, domain: 'data-integrity', label: 'Schema', status: 'pass', metrics: {} }] });
   expect(buildAuditMetricAnalysis(report).metrics.dataIntegrityPassPercent).toMatchObject({ value: null,
-    eligibleCount: null, missingCount: null, missingEvidence: ['incomplete-health-collection'] });
+    eligibleCount: null, missingCount: null, missingEvidence: ['incomplete-health-collection', 'missing-denominator'] });
 });

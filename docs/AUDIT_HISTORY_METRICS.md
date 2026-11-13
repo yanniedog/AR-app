@@ -17,6 +17,10 @@ These scores are explicit measured percentages, not a combined quality grade or 
 
 The original **Check completion** remains comparable with old reports; it is distinct from **Collected checks**, **Journey execution**, and the report's strict boolean coverage status. A local zero-network run can collect every link result while destination verification remains zero. A successful health report does not override missing source identities, unverified upstream population or missing historical rendering evidence.
 
+Legacy completion percentages can survive in public or older reports without the canonical health inventory that contributed to their denominator. Preserve the recorded percentage, but report its denominator as unknown with `missing-denominator`; missing health metadata never establishes a zero health population.
+
+Back timing eligibility requires an executed route round trip or explicit Back timing/outcome evidence. Semantic actions without return evidence are excluded; eligible returns with absent or invalid durations remain missing samples. The percentile uses only measured durations from this population.
+
 ## Established measures and limits
 
 Task completion, task time and error rate are established usability measures. This implementation uses their measurable automated analogues with explicit labels. Human ease of use needs participant studies: SUS requires its questionnaire, and SEQ requires task ratings. No participant responses exist in the audit, so no SUS/SEQ score is generated. [Nielsen Norman Group usability metrics](https://www.nngroup.com/articles/usability-metrics/) and [MeasuringU SUS methodology](https://measuringu.com/sus/) describe these separate measurement types.
