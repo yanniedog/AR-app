@@ -186,7 +186,10 @@ export default function RatesWorkspace() {
   // Scope before criteria/pricing on this render, then remove hidden selections
   // from the session so returning to the full catalogue cannot resurrect them.
   useEffect(() => {
-    if (mortgageFilters !== mortgageTask.filters) updateRatesSection('Mortgage', { filters: mortgageFilters }, true);
+    const current = useRatesSession.getState().sections.Mortgage;
+    const scoped = scopeMortgageFacets(current.filters,
+      current.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard);
+    if (scoped !== current.filters) updateRatesSection('Mortgage', { filters: scoped }, true);
   }, [mortgageFilters, mortgageTask.filters]);
   // Do not price/filter the full Mortgage catalogue until LVR + purpose + repayment
   // are set. Empty criteria previously ran an identity pass over every row.
@@ -581,8 +584,12 @@ export default function RatesWorkspace() {
   }, [draftFilters, effectiveFilters.includeNonStandard, section]);
   useEffect(() => {
     if (section !== 'Mortgage') return;
-    const scoped = scopeMortgageFacets(draftFilters, effectiveFilters.includeNonStandard);
-    if (scoped !== draftFilters) setDraftFilters(scoped);
+    setDraftFilters(current => {
+      const session = useRatesSession.getState();
+      if (session.section !== 'Mortgage') return current;
+      return scopeMortgageFacets(current,
+        session.sections.Mortgage.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard);
+    });
   }, [draftFilters, effectiveFilters.includeNonStandard, section]);
 
   const draftResultCount = useCallback(

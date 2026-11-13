@@ -1,12 +1,12 @@
 export function canonicalPurpose(value?: string): string | undefined {
   const key = value?.toUpperCase();
-  return key === 'OO' || key === 'OWNER_OCCUPIED' ? 'OWNER_OCCUPIED'
-    : key === 'INV' || key === 'INVESTMENT' ? 'INVESTMENT' : value;
+  return key === 'OO' || key === 'OWNER_OCCUPIED' || key === 'OWNER_OCCUPIER' ? 'OWNER_OCCUPIED'
+    : key === 'INV' || key === 'INVESTMENT' || key === 'INVESTOR' ? 'INVESTMENT' : value;
 }
 
 export function canonicalRepayment(value?: string): string | undefined {
   const key = value?.toUpperCase();
-  return key === 'PI' || key === 'P&I' || key === 'PRINCIPAL_AND_INTEREST' ? 'PRINCIPAL_AND_INTEREST'
+  return key === 'PI' || key === 'P&I' || key === 'PRINCIPAL_AND_INTEREST' || key === 'PRINCIPAL_INTEREST' ? 'PRINCIPAL_AND_INTEREST'
     : key === 'IO' || key === 'INTEREST_ONLY' ? 'INTEREST_ONLY' : value;
 }
 

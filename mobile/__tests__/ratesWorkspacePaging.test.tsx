@@ -42,7 +42,12 @@ jest.mock('../src/hooks/useLogoReadiness', () => ({ useLogoReadiness: () => ({ r
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/components/Screen', () => ({ Screen: 'Screen', screenScrollContentStyle: () => ({}) }));
 jest.mock('../src/components/SheetSurface', () => ({ SheetSurface: ({ children }: any) => jest.requireActual('react').createElement('SheetSurface', null, children) }));
-jest.mock('../src/components/FilterSheet', () => ({ FilterSheet: 'FilterSheet' }));
+let mockSheetLayoutUpdate: ((props: any) => void) | null = null;
+jest.mock('../src/components/FilterSheet', () => ({ FilterSheet: (props: any) => {
+  const R = jest.requireActual('react');
+  R.useLayoutEffect(() => { const update = mockSheetLayoutUpdate; mockSheetLayoutUpdate = null; update?.(props); });
+  return R.createElement('FilterSheet', props);
+} }));
 jest.mock('../src/components/ProductCard', () => ({ ProductCard: 'ProductCard' }));
 jest.mock('../src/components/SearchReportExport', () => ({ SearchReportExport: 'SearchReportExport' }));
 jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }));
@@ -125,7 +130,7 @@ const rows = Array.from({ length: 45 }, (_, i) => ({ product_key: `p-${i}`, prod
 function install(profile = DEFAULT_PREFS.profileFilters) { installMandatoryEligibility(selectMandatoryEligibility(mockStore.getState().core, profile, null)); }
 beforeEach(() => {
   jest.clearAllMocks();
-  mockPublicCatalogue = null; mockAuditCancelled = false; mockEmitLoad = true; mockCancelListeners.clear();
+  mockPublicCatalogue = null; mockAuditCancelled = false; mockEmitLoad = true; mockCancelListeners.clear(); mockSheetLayoutUpdate = null;
   mockHoldScroll = false; mockRejectScroll = false; mockAutoViewability = true; mockScrollCalls.length = 0; mockScrollResolutions.length = 0;
   jest.spyOn(global, 'requestAnimationFrame').mockImplementation(callback => { callback(0); return 0; });
   restoreRatesSession(original); clearMortgageComparison();
@@ -144,6 +149,22 @@ beforeEach(() => {
 });
 afterEach(() => { jest.restoreAllMocks(); restoreRatesSession(original); clearMortgageComparison(); installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null)); });
 function mount() { let tree: any; act(() => { tree = TestRenderer.create(<RatesWorkspace />); }); return tree; }
+
+test.each([false, true])('cleanup preserves render-to-effect filter updates and live full-catalogue override=%s', override => {
+  mockStore.getState().setPref('includeNonStandard', false);
+  updateRatesSection('Mortgage', { filters: { ...MORTGAGE_CRITERIA_FILTERS, loanPurposes: ['OO', 'OTHER'] } });
+  const latest = { ...MORTGAGE_CRITERIA_FILTERS, providers: ['B'], loanPurposes: ['INV', 'OTHER'], repaymentTypes: ['IO'] };
+  mockSheetLayoutUpdate = props => {
+    updateRatesSection('Mortgage', { filters: latest, includeNonStandardOverride: override });
+    props.onDraftChange(latest);
+  };
+  const tree = mount();
+  try {
+    const expected = { providers: ['B'], loanPurposes: override ? ['INV', 'OTHER'] : ['INV'], repaymentTypes: ['IO'] };
+    expect(useRatesSession.getState().sections.Mortgage.filters).toMatchObject(expected);
+    expect(tree.root.findByType('FilterSheet').props.controlledDraft).toMatchObject(expected);
+  } finally { act(() => tree.unmount()); }
+});
 
 test('widely available mode scopes both control surfaces and clears hidden choices before pricing or applying drafts', () => {
   const options = jest.requireActual('../src/data/searchFilterOptions');
