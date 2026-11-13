@@ -284,7 +284,18 @@ function encodedWithinBudget(value: Record<string, unknown>, header: Record<stri
   }
 }
 
-/** Gzip the hosted report. If the compressed body exceeds the budget, drop only repeated frames. */
+/** Omit regenerable analysis before considering the existing repeated-frame fallback. */
+function omitDerivedMetricAnalysis(value: Record<string, unknown>): Record<string, unknown> | null {
+  if (!value.metricAnalysis) return null;
+  const omission = { schemaVersion: 1, methodVersion: 1, status: 'omitted', reason: 'export-budget',
+    regenerableFrom: 'retained-local-report' };
+  const diagnosticLog = value.diagnosticLog;
+  return { ...value, metricAnalysis: omission,
+    ...(diagnosticLog && typeof diagnosticLog === 'object' && !Array.isArray(diagnosticLog)
+      ? { diagnosticLog: { ...diagnosticLog, metricAnalysis: omission } } : {}) };
+}
+
+/** Preserve original diagnostic evidence when derived analysis exceeds the hosted budget. */
 export function encodeHostedPerformanceAudit(
   value: Record<string, unknown>,
   header: Record<string, unknown>,
@@ -292,7 +303,12 @@ export function encodeHostedPerformanceAudit(
 ): string {
   const encoded = encodedWithinBudget(value, header, maxCompressedBytes);
   if (encoded) return encoded;
-  const collapsed = collapseRepeatedFrames(value);
+  const withoutAnalysis = omitDerivedMetricAnalysis(value);
+  if (withoutAnalysis) {
+    const sourceOnly = encodedWithinBudget(withoutAnalysis, header, maxCompressedBytes);
+    if (sourceOnly) return sourceOnly;
+  }
+  const collapsed = collapseRepeatedFrames(withoutAnalysis ?? value);
   if (collapsed.removed === 0 || !collapsed.value || typeof collapsed.value !== 'object' || Array.isArray(collapsed.value)) {
     throw new Error('The deidentified report exceeds the public upload limit.');
   }

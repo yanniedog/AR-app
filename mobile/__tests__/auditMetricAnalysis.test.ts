@@ -22,6 +22,88 @@ function healthMetricReport(code: AppHealthCheck['code'], metrics: AppHealthChec
   return report;
 }
 
+test('count admission rejects fractional operands before subtraction and unsafe sums while durations retain fractions', () => {
+  const cases = [
+    [APP_HEALTH_CHECK_CODES.COVERAGE, 'providerSuccessPercent', { providersSucceeded: 1.5, providersAttempted: 3, invalidCounts: false }],
+    [APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS, 'detailsCoveragePercent', { matchedProducts: 1, coreProducts: Number.MAX_SAFE_INTEGER + 1, runMatches: true }],
+    [APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT, 'displayLayoutPassPercent', { checked: 1.5, failed: 0.5, missing: 0.5, warned: 0, unavailable: 0 }],
+    [APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT, 'displayLayoutPassPercent', { checked: Number.MAX_SAFE_INTEGER, failed: 0, missing: 1, warned: 0, unavailable: 0 }],
+    [APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT, 'surfaceCoveragePercent', { plannedSurfaces: 3.5, missingSurfaces: 0.5, duplicateContracts: 0 }],
+  ] as const;
+  for (const [code, metric, counts] of cases) {
+    const report = healthMetricReport(code, counts);
+    expect(auditMetricRun(report).metrics[metric]).toBeNull();
+    const evidence = buildAuditMetricAnalysis(report).metrics[metric];
+    expect(evidence.value).toBeNull();
+    expect(evidence.missingEvidence).toContain('inconsistent-counts');
+  }
+  const report = makePerformanceAuditReport('fractional-duration', [journey('fractional-duration', 10.25)]);
+  expect(auditMetricRun(report).metrics.actionP95Ms).toBe(10.25);
+  expect(buildAuditMetricAnalysis(report).metrics.actionP95Ms.distribution?.p95).toBe(10.25);
+  expect(Object.isFrozen(AUDIT_METRICS)).toBe(true);
+});
+
+test('legacy percentages remain intact when their reconstructed count total is unsafe', () => {
+  const report = healthMetricReport(APP_HEALTH_CHECK_CODES.CORE_SCHEMA, {});
+  report.coverage = { plannedChecks: 1, storedChecks: 0, plannedJourneyChecks: 0, executedJourneyChecks: 0,
+    justifiedSkippedJourneyChecks: 0, unexpectedSkippedJourneyChecks: 0, unavailableJourneyChecks: 0,
+    coveragePercent: 0, attemptedPercent: 0, missingPlannedCheckIds: ['missing'], duplicateStoredCheckIds: [],
+    unexpectedStoredCheckIds: [], excludedUnsafeFacetCount: 0, complete: false };
+  report.summary.coveragePercent = 99.2;
+  report.appHealth!.summary.total = Number.MAX_SAFE_INTEGER;
+  expect(buildAuditMetricAnalysis(report).metrics.coveragePercent).toMatchObject({ value: 99.2,
+    denominator: null, missingEvidence: ['inconsistent-counts'] });
+});
+
+test('invalid ratio populations cannot be restored by display detail counts', () => {
+  const surface = healthMetricReport(APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT,
+    { plannedSurfaces: 1, missingSurfaces: 2, duplicateContracts: 0 });
+  const display = healthMetricReport(APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT,
+    { checked: Number.MAX_SAFE_INTEGER, missing: 1, failed: 0, warned: 0, unavailable: 0 });
+  for (const [report, metric] of [[surface, 'surfaceCoveragePercent'], [display, 'displayLayoutPassPercent']] as const) {
+    expect(buildAuditMetricAnalysis(report).metrics[metric]).toMatchObject({ value: null,
+      numerator: null, denominator: null, sampleSize: 0, eligibleCount: null, observedCount: null, missingCount: null,
+      missingEvidence: ['inconsistent-counts'] });
+  }
+});
+
+test('runtime error counts reject fractional, negative and overflowed totals without fabricating zeros', () => {
+  for (const invalid of [0.5, -1, Number.MAX_SAFE_INTEGER + 1]) {
+    const check = journey('errors', 1); check.metrics.runtimeErrors = invalid;
+    const report = makePerformanceAuditReport('errors', [check]);
+    expect(auditMetricRun(report).metrics.runtimeErrors).toBeNull();
+    expect(buildAuditMetricAnalysis(report).metrics.runtimeErrors).toMatchObject({ value: null,
+      observedCount: 0, missingCount: 1, missingEvidence: ['inconsistent-counts'] });
+  }
+  const checks = [journey('first', 1), journey('second', 1)];
+  checks[0].metrics.runtimeErrors = Number.MAX_SAFE_INTEGER; checks[1].metrics.runtimeErrors = 1;
+  const overflow = makePerformanceAuditReport('overflow', checks);
+  expect(auditMetricRun(overflow).metrics.runtimeErrors).toBeNull();
+  expect(buildAuditMetricAnalysis(overflow).metrics.runtimeErrors.missingEvidence).toContain('inconsistent-counts');
+  const absent = makePerformanceAuditReport('absent');
+  expect(auditMetricRun(absent).metrics.runtimeErrors).toBeNull();
+  expect(buildAuditMetricAnalysis(absent).metrics.runtimeErrors.value).toBeNull();
+});
+
+test.each(['historyProcessingMismatches', 'historyProjectionMismatches'] as const)(
+  '%s separates unobserved zero from compared zero and retained nonzero mismatches', metric => {
+    const field = metric === 'historyProcessingMismatches' ? 'historyProcessingMismatches' : 'historyChartProjectionMismatches';
+    const comparisonField = metric === 'historyProcessingMismatches' ? 'historyProcessingComparisons' : 'historyChartProjectionComparisons';
+    for (const available of [true, false]) {
+      const unknown = healthMetricReport(APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE, { historyAvailable: available, [field]: 0 });
+      expect(auditMetricRun(unknown).metrics[metric]).toBeNull();
+      expect(buildAuditMetricAnalysis(unknown).metrics[metric].missingEvidence).toContain('unverified-evidence');
+      const observed = healthMetricReport(APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE, { historyAvailable: available, [field]: 0, [comparisonField]: 3 });
+      expect(auditMetricRun(observed).metrics[metric]).toBe(0);
+      expect(buildAuditMetricAnalysis(observed).metrics[metric]).toMatchObject({ value: 0, numerator: 0,
+        sampleSize: 3, sampleUnit: 'comparison', observedCount: 3 });
+      const failed = healthMetricReport(APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE, { historyAvailable: available, [field]: 2 });
+      expect(auditMetricRun(failed).metrics[metric]).toBe(2);
+      expect(buildAuditMetricAnalysis(failed).metrics[metric]).toMatchObject({ value: 2, numerator: 2,
+        observedCount: null });
+    }
+  });
+
 test.each([
   ['providerSuccessPercent', APP_HEALTH_CHECK_CODES.COVERAGE, 'providersSucceeded', 'providersAttempted', 'invalidCounts', false],
   ['detailsCoveragePercent', APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS, 'matchedProducts', 'coreProducts', 'runMatches', true],

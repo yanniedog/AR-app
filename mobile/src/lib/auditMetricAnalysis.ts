@@ -1,7 +1,7 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion, hasValidPerformanceAuditHealth } from './performanceAuditCompletion';
 import { AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_METHODS, type AuditMetric } from './auditMetricHistoryMetrics';
-import { auditMetricValues, hasAuditReturnEvidence, measuredAuditValue as measured } from './auditMetricHistoryValues';
+import { auditMetricValues, hasAuditReturnEvidence, measuredAuditCount as measuredCount, measuredAuditValue as measured } from './auditMetricHistoryValues';
 
 export type AuditMetricMissingEvidence = 'missing-evidence' | 'missing-denominator' | 'missing-samples'
   | 'partial-samples' | 'inconsistent-counts' | 'invalid-identities' | 'incomplete-health-collection'
@@ -96,7 +96,8 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     if (matches.length !== 1) return fields.map(field => add({ source: 'health', field, value: null }));
     const { check, index } = matches[0];
     return fields.map(field => add({ source: 'health', checkId: check.id, position: index + 1, field,
-      value: typeof check.metrics[field] === 'boolean' ? check.metrics[field] : measured(check.metrics[field]) }));
+      value: typeof check.metrics[field] === 'boolean' ? check.metrics[field]
+        : typeof check.metrics[field] === 'number' && Number.isFinite(check.metrics[field]) ? check.metrics[field] : null }));
   };
   const displayAdmission = (code: string) => {
     const index = health?.checks.findIndex(check => check.code === code) ?? -1;
@@ -107,6 +108,9 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     return { refs, reasons: partial ? ['incomplete-health-collection' as const] : [] };
   };
   const numeric = (index: number) => measured(observations[index].value);
+  const count = (index: number) => measuredCount(observations[index].value);
+  const countReasons = (refs: number[]): AuditMetricMissingEvidence[] => refs.some(index =>
+    observations[index].value !== null && count(index) === null) ? ['inconsistent-counts'] : [];
   const total = (refs: number[]) => refs.length && refs.every(ref => numeric(ref) !== null)
     ? refs.reduce((sum, ref) => sum + numeric(ref)!, 0) : null;
   const metrics = {} as Record<AuditMetric, AuditMetricEvidence>;
@@ -133,12 +137,16 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   };
   const ratio = (metric: AuditMetric, numerator: number | null, denominator: number | null,
     refs: number[], detail: Detail = {}, reasons: AuditMetricMissingEvidence[] = []) => {
-    const invalid = numerator !== null && denominator !== null && (numerator < 0 || numerator > denominator);
+    const invalid = numerator !== null && measuredCount(numerator) === null
+      || denominator !== null && measuredCount(denominator) === null
+      || numerator !== null && denominator !== null && numerator > denominator;
     const missing = numerator === null || denominator === null;
-    put(metric, refs, { numerator, denominator, sampleSize: missing || invalid ? 0 : denominator!,
-      sampleUnit: AUDIT_METRIC_METHODS[metric][1], eligibleCount: denominator,
-      observedCount: denominator === null ? null : numerator === null || invalid ? 0 : denominator,
-      missingCount: denominator === null ? null : numerator === null || invalid ? denominator : 0, excludedCount: 0, ...detail },
+    put(metric, refs, { numerator: invalid ? null : numerator, denominator: invalid ? null : denominator,
+      sampleSize: missing || invalid ? 0 : denominator!,
+      sampleUnit: AUDIT_METRIC_METHODS[metric][1], eligibleCount: invalid ? null : denominator,
+      observedCount: denominator === null || invalid ? null : numerator === null ? 0 : denominator,
+      missingCount: denominator === null || invalid ? null : numerator === null ? denominator : 0, excludedCount: 0, ...detail,
+      ...(invalid ? { sampleSize: 0, eligibleCount: null, observedCount: null, missingCount: null } : {}) },
     [...reasons, ...(invalid ? ['inconsistent-counts' as const] : denominator === null ? ['missing-denominator' as const]
       : numerator === null ? ['missing-evidence' as const] : denominator === 0 ? ['no-eligible-observations' as const] : [])]);
   };
@@ -210,8 +218,15 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
       [...(consistent ? [] : ['inconsistent-counts' as const]),
         ...(checks.length < journeys.length ? ['partial-samples' as const] : [])]);
   }
-  put('runtimeErrors', journeys.map(check => perf(check, 'runtimeErrors')),
-    { sampleUnit: 'journey', eligibleCount: journeys.length, excludedCount: allJourneys.length - journeys.length });
+  const errorRefs = journeys.map(check => perf(check, 'runtimeErrors'));
+  const errorSamples = journeys.filter(check => measuredCount(check.metrics.runtimeErrors) !== null).length;
+  const invalidErrors = journeys.some(check => check.metrics.runtimeErrors != null && measuredCount(check.metrics.runtimeErrors) === null)
+    || errorSamples > 0 && errorSamples === journeys.length && measuredCount(total(errorRefs)) === null;
+  put('runtimeErrors', errorRefs,
+    { sampleUnit: 'journey', sampleSize: errorSamples, eligibleCount: journeys.length, observedCount: errorSamples,
+      missingCount: journeys.length - errorSamples, excludedCount: allJourneys.length - journeys.length },
+    invalidErrors ? ['inconsistent-counts'] : errorSamples < journeys.length ? ['missing-evidence']
+      : journeys.length === 0 ? ['no-eligible-observations'] : []);
   put('durationMs', [reportField('durationMs', report.durationMs)]);
   put('wallClockMs', [reportField('wallClockMs', report.wallClockMs)]);
   const slowest = report.checks.filter(check => check.id === report.summary.slowestCheckId);
@@ -247,13 +262,16 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   // The legacy numerator includes health checks. A public or older report may
   // retain that percentage while omitting the canonical health inventory;
   // absent health metadata cannot establish a zero-sized health population.
-  const legacyCompletionTotal = report.coverage && completion.gaps.invalidCoverageReports === 0 && health
-    ? measured(report.coverage.plannedChecks + health.summary.total) : null;
+  const legacyCountInvalid = report.coverage && health && (measuredCount(report.coverage.plannedChecks) === null
+    || measuredCount(health.summary.total) === null || measuredCount(report.summary.executed) === null
+    || measuredCount(report.coverage.plannedChecks + health.summary.total) === null);
+  const legacyCompletionTotal = report.coverage && completion.gaps.invalidCoverageReports === 0 && health && !legacyCountInvalid
+    ? measuredCount(report.coverage.plannedChecks + health.summary.total) : null;
   put('coveragePercent', [reportField('summary.coveragePercent', report.summary.coveragePercent),
     reportField('summary.executed', report.summary.executed), reportField('coverage.plannedChecks', report.coverage?.plannedChecks),
     reportField('health.summary.total', health?.summary.total)],
-    { numerator: measured(report.summary.executed), denominator: legacyCompletionTotal },
-    legacyCompletionTotal === null ? ['missing-denominator'] : []);
+    { numerator: measuredCount(report.summary.executed), denominator: legacyCompletionTotal },
+    legacyCountInvalid ? ['inconsistent-counts'] : legacyCompletionTotal === null ? ['missing-denominator'] : []);
   const coverage = completion.gaps.invalidCoverageReports === 0 ? report.coverage : undefined;
   const unexpected = new Set(coverage?.unexpectedStoredCheckIds ?? []);
   const collected = new Set(report.checks.filter(check => !unexpected.has(check.id)).map(check => check.id)).size;
@@ -310,8 +328,8 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   ] as const) {
     const refs = healthObservations(code, [numerator, denominator, guard]);
     const admitted = observations[refs[2]].value === (guard === 'invalidCounts' ? false : true);
-    ratio(metric, admitted ? numeric(refs[0]) : null, admitted ? numeric(refs[1]) : null, refs,
-      {}, admitted ? [] : ['unverified-evidence']);
+    ratio(metric, admitted ? count(refs[0]) : null, admitted ? count(refs[1]) : null, refs,
+      {}, [...countReasons(refs.slice(0, 2)), ...(admitted ? [] : ['unverified-evidence' as const])]);
   }
   const historyRefs = healthObservations('catalogue-identity-coverage', ['historyDaysChecked', 'historyAvailable']);
   const historyCheck = health?.checks.filter(check => check.code === 'catalogue-identity-coverage');
@@ -326,23 +344,27 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   historyRefs.push(add({ source: 'health', checkId: historyCheck?.length === 1 ? historyCheck[0].id : undefined,
     position: historyCheck?.length === 1 ? health!.checks.indexOf(historyCheck[0]) + 1 : undefined,
     field: 'distinctHistorySourceGapDays', value: sourceGapDays }));
-  const historyDays = historyAdmitted ? numeric(historyRefs[0]) : null;
+  const historyDays = historyAdmitted ? count(historyRefs[0]) : null;
   ratio('historySourceCoveragePercent', historyDays !== null && sourceGapDays !== null ? historyDays - sourceGapDays : null,
-    historyDays, historyRefs, {}, historyAdmitted ? [] : ['unverified-evidence']);
-  for (const [metric, field] of [['historyProcessingMismatches', 'historyProcessingMismatches'],
-    ['historyProjectionMismatches', 'historyChartProjectionMismatches']] as const) {
-    put(metric, healthObservations('catalogue-identity-coverage', [field]));
+    historyDays, historyRefs, {}, [...countReasons([historyRefs[0]]), ...(historyAdmitted ? [] : ['unverified-evidence' as const])]);
+  for (const [metric, field, comparisons] of [['historyProcessingMismatches', 'historyProcessingMismatches', 'historyProcessingComparisons'],
+    ['historyProjectionMismatches', 'historyChartProjectionMismatches', 'historyChartProjectionComparisons']] as const) {
+    const refs = healthObservations('catalogue-identity-coverage', [field, comparisons]);
+    const compared = count(refs[1]);
+    put(metric, refs, { numerator: values[metric], sampleUnit: 'comparison', sampleSize: compared ?? 0,
+      eligibleCount: null, observedCount: compared, missingCount: compared === null ? null : 0 },
+      [...countReasons(refs), ...(values[metric] === null ? ['unverified-evidence' as const] : [])]);
   }
   const surfaces = healthObservations('display-contract', ['plannedSurfaces', 'missingSurfaces', 'duplicateContracts', 'duplicateObservations', 'unexpectedSurfaces']);
-  const planned = numeric(surfaces[0]), missing = numeric(surfaces[1]);
+  const planned = count(surfaces[0]), missing = count(surfaces[1]);
   const surfaceAdmission = displayAdmission('display-contract');
-  const duplicateContracts = numeric(surfaces[2]);
+  const duplicateContracts = count(surfaces[2]);
   const surfacesAdmitted = duplicateContracts === 0 && surfaceAdmission.reasons.length === 0;
   ratio('surfaceCoveragePercent', surfacesAdmitted && planned !== null && missing !== null ? planned - missing : null,
     surfacesAdmitted ? planned : null, [...surfaces, ...surfaceAdmission.refs],
     { observedCount: surfacesAdmitted && planned !== null && missing !== null ? Math.max(0, planned - missing) : null,
       missingCount: surfacesAdmitted ? missing : null },
-    [...surfaceAdmission.reasons, ...(duplicateContracts === 0 ? []
+    [...countReasons(surfaces.slice(0, 3)), ...surfaceAdmission.reasons, ...(duplicateContracts === 0 ? []
       : [duplicateContracts === null ? 'unverified-evidence' as const : 'invalid-identities' as const])]);
   for (const [metric, code] of [
     ['displayModelPassPercent', 'display-model'], ['displayListPassPercent', 'display-list'],
@@ -350,16 +372,16 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     ['displayChartPassPercent', 'display-chart'], ['displayEmptyPassPercent', 'display-empty-state'], ['displayLogoPassPercent', 'display-logo'],
   ] as const) {
     const refs = healthObservations(code, ['checked', 'missing', 'failed', 'warned', 'unavailable']);
-    const [checked, absent, failed, warned, unavailable] = refs.map(numeric);
+    const [checked, absent, failed, warned, unavailable] = refs.map(count);
     const admission = displayAdmission(code);
     const admitted = admission.reasons.length === 0;
     ratio(metric, admitted && checked !== null && failed !== null && warned !== null && unavailable !== null ? checked - failed - warned - unavailable : null,
       admitted && checked !== null && absent !== null ? checked + absent : null, [...refs, ...admission.refs],
-      { observedCount: checked ?? 0, missingCount: absent ?? 0 }, admission.reasons);
+      { observedCount: checked, missingCount: absent }, [...countReasons(refs), ...admission.reasons]);
   }
-  return { schemaVersion: 1, context: { plannedChecks: measured(report.coverage?.plannedChecks),
-    plannedJourneys: measured(report.coverage?.plannedJourneyChecks), payloadProducts: measured(report.environment.payloadProducts),
-    payloadProviders: measured(report.environment.payloadProviders), viewportWidth: measured(report.environment.viewportWidth),
+  return { schemaVersion: 1, context: { plannedChecks: measuredCount(report.coverage?.plannedChecks),
+    plannedJourneys: measuredCount(report.coverage?.plannedJourneyChecks), payloadProducts: measuredCount(report.environment.payloadProducts),
+    payloadProviders: measuredCount(report.environment.payloadProviders), viewportWidth: measured(report.environment.viewportWidth),
     fontScale: measured(report.environment.fontScale), developmentBuild: typeof report.environment.developmentBuild === 'boolean'
       ? report.environment.developmentBuild : null }, observations, metrics };
 }

@@ -244,9 +244,11 @@ test('metric collisions use displayed precision and keep the full row facts out 
 test('an exact displayed-rate override does not traverse the 16,728-row source book', () => {
   const f = selectedConstraintFixture('Mortgage', [loan], []);
   let traversals = 0;
+  let rowReads = 0;
   const rows = Array.from({ length: 16_728 }, () => loan);
   f.core.sections.Mortgage.rates = new Proxy(rows, { get(target, key, receiver) {
     if (key === Symbol.iterator) return () => { traversals++; return target[Symbol.iterator](); };
+    if (typeof key === 'string' && /^(0|[1-9][0-9]*)$/.test(key)) rowReads++;
     return Reflect.get(target, key, receiver);
   } });
   const identity = productSaveIdentity(loan, 'Mortgage', 'headline', f,
@@ -254,6 +256,7 @@ test('an exact displayed-rate override does not traverse the 16,728-row source b
   expect(identity.name).toBe('Budget Home Loan, Maitland Mutual Limited, Comparison rate 6.00%, Rate index 4');
   expect(identity.testID).toBe('rate-save:maitland-budget:4');
   expect(traversals).toBe(0);
+  expect(rowReads).toBe(0);
 });
 
 test('source-array identity and metric changes invalidate peer groups without per-card global rescans', () => {

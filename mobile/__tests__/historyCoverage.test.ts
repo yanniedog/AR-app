@@ -11,11 +11,38 @@ import { toPublicAppHealthReport, finalizeAppHealthReport } from '../src/lib/app
 import { APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth/types';
 import { encodeCompactDiagnosticJson, decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 import { type BankRateSnapshot } from '../src/data/bankRateOverview';
+import { observedHistoryMismatchCount } from '../src/lib/auditMetricHistoryValues';
+import { evaluateAppHealthCatalogueCoverage } from '../src/lib/appHealth/catalogueCoverage';
 
 const evidence = (): HistoryCoverageEvidence => ({ available: true, runDate: '2026-10-24', days: 0,
   sourceGapDays: [], gaps: [], processingMismatches: 0, chartProjectionMismatches: 0, historicalPixelsVerified: false });
 const counts = (count: number) => ({ Mortgage: { Bank: { ...stats, count } } });
 const stats = { min: 5, mean: 6, median: 6, max: 7, count: 2 };
+
+it('records actual product comparisons even without bank history and distinguishes entirely unobserved zeros', () => {
+  const core = makeHealthyCore(), now = Date.parse(`${core.run_date}T01:00:00Z`);
+  const absent = historyCoverageEvidence(core, null, now);
+  expect(absent).toMatchObject({ available: false, processingMismatches: 0, chartProjectionMismatches: 0,
+    processingComparisons: 0, chartProjectionComparisons: 0 });
+  expect(observedHistoryMismatchCount(absent.processingMismatches, absent.processingComparisons)).toBeNull();
+  const products = Object.fromEntries(Object.values(core.sections).flatMap(section => section.rates.map(row => [row.product_key, [Number(row.rate)]])));
+  const history: productProjection.ProductHistoryPayload = { schema_version: 3, run_date: core.run_date,
+    run_dates: [core.run_date], products };
+  const compared = historyCoverageEvidence(core, history, now);
+  expect(compared).toMatchObject({ available: false, processingMismatches: 0, chartProjectionMismatches: 0,
+    processingComparisons: 3, chartProjectionComparisons: 3 });
+  expect(observedHistoryMismatchCount(compared.processingMismatches, compared.processingComparisons)).toBe(0);
+  const check = evaluateAppHealthCatalogueCoverage({ source: 'remote', core, manifest: null, historyCoverage: compared });
+  const report = finalizeAppHealthReport({ sessionId: 'history-counts', mode: 'local', startedAt: `${core.run_date}T00:00:00Z`,
+    finishedAt: `${core.run_date}T00:00:01Z`, checks: [check], plannedCheckIds: [check.id] });
+  expect(toPublicAppHealthReport(report).checks.find(item => item.code === check.code)?.metrics).toMatchObject({
+    historyProcessingComparisons: 3, historyChartProjectionComparisons: 3 });
+  const changed = { ...history, products: { ...history.products, 'mortgage-1': [0.5] } };
+  const mismatch = historyCoverageEvidence(core, changed, now);
+  expect(mismatch.available).toBe(false);
+  expect(mismatch.processingMismatches).toBeGreaterThan(0);
+  expect(observedHistoryMismatchCount(mismatch.processingMismatches, mismatch.processingComparisons)).toBeGreaterThan(0);
+});
 
 it('retains every unavailable and unprocessed day, even when current data works', () => {
   const days = ['2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24'];
@@ -206,6 +233,9 @@ it('reuses raw product reconciliation while checking real product chart projecti
     expect(rawReads).toBe(reads);
     expect(projection.mock.calls.length).toBeGreaterThan(calls);
     expect(second.gaps).toEqual(first.gaps);
+    expect(first.processingComparisons).toBeGreaterThan(0);
+    expect(second.processingComparisons).toBe(first.processingComparisons);
+    expect(second.chartProjectionComparisons).toBe(first.chartProjectionComparisons);
     const updated = { ...history, products: { mortgage: [0.05, 0.05, null] } };
     const third = historyCoverageEvidence(core, updated, now);
     expect(rawReads).toBeGreaterThan(reads);

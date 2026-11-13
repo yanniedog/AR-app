@@ -4,6 +4,14 @@ import { AUDIT_METRICS, type AuditMetric } from './auditMetricHistoryMetrics';
 
 export const measuredAuditValue = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+export const measuredAuditCount = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+
+/** A nonzero retained mismatch proves an observation; zero needs comparison evidence. */
+export function observedHistoryMismatchCount(mismatches: unknown, comparisons: unknown): number | null {
+  const count = measuredAuditCount(mismatches), compared = measuredAuditCount(comparisons);
+  return count !== null && (count > 0 || compared !== null && compared > 0) ? count : null;
+}
 
 /** A missing Back sample is meaningful only for a journey with return evidence. */
 export const hasAuditReturnEvidence = (check: AuditCheck): boolean =>
@@ -14,7 +22,7 @@ export const hasAuditReturnEvidence = (check: AuditCheck): boolean =>
 
 /** Invalid/inconsistent denominators are unknown, never silently clamped to 100. */
 function percent(numerator: unknown, denominator: unknown): number | null {
-  const n = measuredAuditValue(numerator), d = measuredAuditValue(denominator);
+  const n = measuredAuditCount(numerator), d = measuredAuditCount(denominator);
   return n !== null && d !== null && d > 0 && n <= d ? Math.round(n / d * 1000) / 10 : null;
 }
 function percentile(values: (number | null)[], fraction: number): number | null {
@@ -41,7 +49,7 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
     const matches = health?.checks.filter(check => check.code === code) ?? [];
     return matches.length === 1 ? matches[0] : undefined;
   };
-  const value = (code: string, name: string) => measuredAuditValue(healthCheck(code)?.metrics[name]);
+  const value = (code: string, name: string) => measuredAuditCount(healthCheck(code)?.metrics[name]);
   const ratio = (code: string, numerator: string, denominator: string) => percent(value(code, numerator), value(code, denominator));
   const healthIdentityValid = health != null && health.coverage.duplicateStoredCheckIds.length === 0
     && health.coverage.unexpectedStoredCheckIds.length === 0
@@ -75,13 +83,13 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
   const backChecks = returnChecks.filter(check => measuredAuditValue(check.metrics.backMs) !== null);
   const recoveryChecks = backChecks.filter(check => ['replaceRecoveryMs', 'anchorResetMs']
     .some(key => (measuredAuditValue(check.metrics[key]) ?? 0) > 0));
-  const errorCounts = journeys.map(check => measuredAuditValue(check.metrics.runtimeErrors));
+  const errorCounts = journeys.map(check => measuredAuditCount(check.metrics.runtimeErrors));
   let historySourceCoverage: number | null = null;
   const history = healthCheck('catalogue-identity-coverage')?.metrics;
   if (history?.historyAvailable === true && typeof history.historySourceGapDays === 'string') {
     try {
       const gaps: unknown = JSON.parse(history.historySourceGapDays);
-      const days = measuredAuditValue(history.historyDaysChecked);
+      const days = measuredAuditCount(history.historyDaysChecked);
       if (days !== null && Array.isArray(gaps) && gaps.every(day => typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day))) {
         historySourceCoverage = percent(days - new Set(gaps).size, days);
       }
@@ -123,13 +131,13 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
     backP95Ms: percentile(returnChecks.map(check => measuredAuditValue(check.metrics.backMs)), .95),
     recoveryPercent: percent(recoveryChecks.length, backChecks.length),
     runtimeErrors: errorCounts.length && errorCounts.every(count => count !== null)
-      ? errorCounts.reduce<number>((sum, count) => sum + (count ?? 0), 0) : null,
+      ? measuredAuditCount(errorCounts.reduce<number>((sum, count) => sum + (count ?? 0), 0)) : null,
     checkPassPercent: percent(report.checks.filter(check => check.status === 'pass').length, report.checks.length),
     healthPassPercent: health && healthIdentityValid ? percent(health.checks.filter(check => check.status === 'pass').length, health.coverage.plannedChecks) : null,
     dataIntegrityPassPercent: domainPass('data-integrity'), dataCompletenessPassPercent: domainPass('data-completeness'),
     timingFailures: report.checks.length ? completion.failurePositions.filter(failure => failure.category === 'timing').length : null,
-    historyProcessingMismatches: value('catalogue-identity-coverage', 'historyProcessingMismatches'),
-    historyProjectionMismatches: value('catalogue-identity-coverage', 'historyChartProjectionMismatches'),
+    historyProcessingMismatches: observedHistoryMismatchCount(history?.historyProcessingMismatches, history?.historyProcessingComparisons),
+    historyProjectionMismatches: observedHistoryMismatchCount(history?.historyChartProjectionMismatches, history?.historyChartProjectionComparisons),
     surfaceCoveragePercent: surfaceCoverage,
     displayModelPassPercent: displayPass('display-model'), displayListPassPercent: displayPass('display-list'),
     displayVisiblePassPercent: displayPass('display-visible'), displayLayoutPassPercent: displayPass('display-layout'),

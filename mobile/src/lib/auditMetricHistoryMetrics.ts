@@ -53,7 +53,7 @@ export const AUDIT_METRIC_DEFINITIONS = {
 } as const satisfies Record<string, { label: UiLabel; group: AuditMetricGroup; unit: 'count' | 'percent' | 'ms' }>;
 
 export type AuditMetric = keyof typeof AUDIT_METRIC_DEFINITIONS;
-export const AUDIT_METRICS = Object.keys(AUDIT_METRIC_DEFINITIONS) as AuditMetric[];
+export const AUDIT_METRICS: readonly AuditMetric[] = Object.freeze(Object.keys(AUDIT_METRIC_DEFINITIONS) as AuditMetric[]);
 export const LEGACY_AUDIT_METRICS: readonly AuditMetric[] = ['failures', 'coveragePercent', 'durationMs', 'slowestCheckMs', 'maxEventLoopLagMs', 'maxFrameGapMs'];
 
 
@@ -94,8 +94,8 @@ export const AUDIT_METRIC_METHODS = {
   dataIntegrityPassPercent: ['Passing data-integrity checks / recorded data-integrity checks × 100; complete health collection required', 'health-check'],
   dataCompletenessPassPercent: ['Passing data-completeness checks / recorded data-completeness checks × 100; complete health collection required', 'health-check'],
   timingFailures: ['Count of failures classified as timing-only', 'check'],
-  historyProcessingMismatches: ['Recorded historical processing mismatch count', 'record'],
-  historyProjectionMismatches: ['Recorded historical chart projection mismatch count', 'record'],
+  historyProcessingMismatches: ['Recorded processing mismatches; zero requires observed processing comparisons', 'mismatch'],
+  historyProjectionMismatches: ['Recorded projection mismatches; zero requires observed chart comparisons', 'mismatch'],
   surfaceCoveragePercent: ['(Planned surfaces − missing surfaces) / planned surfaces × 100; unique contracts required', 'surface'],
   displayModelPassPercent: ['(Checked − failed − warned − unavailable) / (checked + missing) × 100', 'surface'],
   displayListPassPercent: ['(Checked − failed − warned − unavailable) / (checked + missing) × 100', 'surface'],

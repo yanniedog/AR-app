@@ -121,6 +121,23 @@ against the 2 MiB limit, and its decoded JSON was 8,475,467 bytes against the
 32 MiB limit. Detailed analysis alone occupied 1,880,043 bytes. These are desktop
 replay and payload-size checks, not Android latency or fresh device-audit evidence.
 
+Hosted export prioritizes source evidence over the regenerable analysis table.
+If analysis exceeds either export budget, both analysis locations carry an
+explicit `export-budget` omission marker, schema/method version and a reference
+to the retained local report as the regeneration source. No check, journal entry
+or original diagnostic field is removed by this fallback; standalone local
+analysis remains available. Public exports may lack canonical health metadata,
+so the marker does not promise full reconstruction from the public log alone.
+
+A bounded synthetic desktop replay also tested both actual resource limits.
+A source-only report of 1,994,423 wire bytes exceeded the 2 MiB limit after adding
+analysis, then exported losslessly at 1,994,575 bytes with omission markers.
+A second report crossed the 32 MiB decoded limit only when analysis was added;
+its fallback decoded size was 33,550,774 bytes, within that unchanged limit.
+Both round trips retained the exact source checks and journal. If source evidence
+still exceeds the budget, the existing duplicate-stack-frame retry and eventual
+oversize rejection remain unchanged.
+
 ## Acceptance
 
 The combined focused run passed 14 suites / 235 tests. A final follow-up of the
@@ -128,6 +145,10 @@ four metric/history/storage suites passed 55 tests after adding the incomplete
 health-domain denominator regression. Typecheck, ESLint (no errors), the
 diagnostic-schema guard and full UI-copy guard (zero violations) passed locally.
 The full repository lint retains existing warnings outside the changed paths.
+
+After review hardening, the final combined metric, history, privacy, export and
+identity regression run passed 11 suites / 176 tests. Typecheck and the diagnostic
+schema guard passed again; scoped ESLint and whitespace checks also passed.
 
 Use focused regression tests for the changed execution, cache, identity, and
 metric-history paths, plus typecheck, lint, diagnostic-schema and UI-copy guards.

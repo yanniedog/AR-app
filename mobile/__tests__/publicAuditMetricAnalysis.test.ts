@@ -1,7 +1,7 @@
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { auditMetricRun, AUDIT_METRICS } from '../src/lib/auditMetricHistory';
-import { buildDeidentifiedPerformanceAudit, createPublicPerformanceAuditReport } from '../src/lib/diagnosticsEnvelope';
-import { decodeCompactDiagnosticJson } from '../src/lib/compactDiagnosticJson';
+import { buildDeidentifiedPerformanceAudit, createPublicPerformanceAuditReport, encodeHostedPerformanceAudit } from '../src/lib/diagnosticsEnvelope';
+import { decodeCompactDiagnosticJson, encodeCompressedDiagnosticJson } from '../src/lib/compactDiagnosticJson';
 import { fullAuditDiagnosticLog } from '../src/lib/fullAuditDiagnosticLog';
 import { publicAuditMetricAnalysis } from '../src/lib/publicAuditMetricAnalysis';
 
@@ -50,6 +50,30 @@ test('saved analysis cannot forge derived scores or leak private labels and iden
     && Number.isInteger(item.position))).toBe(true);
   const hosted = decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report));
   expect(JSON.stringify(hosted)).not.toMatch(/private-person|Private borrower|PRIVATE_ANALYSIS|987654321/);
+});
+
+test('budget fallback omits only regenerable analysis and retains complete source evidence', () => {
+  const report = reportFixture();
+  report.checks = Array.from({ length: 100 }, (_, index) => ({ ...report.checks[0],
+    id: `external-link-${index + 1}`, metrics: { ...report.checks[0].metrics, actionMs: index + .125 } }));
+  const source = { ...buildDeidentifiedPerformanceAudit(report),
+    diagnosticLog: fullAuditDiagnosticLog(report, id => id, { metricAnalysis: 'top-level' }),
+    applicationJournal: { beforeAudit: { entries: [{ message: 'retained', count: 0 }] },
+      duringAndAfterAudit: { entries: [{ failed: false, unknown: null }] } } };
+  const omission = { schemaVersion: 1, methodVersion: 1, status: 'omitted', reason: 'export-budget',
+    regenerableFrom: 'retained-local-report' };
+  const expected = { ...source, metricAnalysis: omission,
+    diagnosticLog: { ...(source.diagnosticLog as Record<string, unknown>), metricAnalysis: omission } };
+  const budget = new TextEncoder().encode(encodeCompressedDiagnosticJson(expected)).length;
+  expect(new TextEncoder().encode(encodeCompressedDiagnosticJson(source)).length).toBeGreaterThan(budget);
+  const body = encodeHostedPerformanceAudit(source, {}, budget);
+  expect(decodeCompactDiagnosticJson(body)).toEqual(expected);
+  expect(JSON.stringify(decodeCompactDiagnosticJson(body))).not.toContain('"$ref":"$.metricAnalysis"');
+  expect(() => encodeHostedPerformanceAudit(source, {}, budget - 1)).toThrow('exceeds the public upload limit');
+  // Hosted fallback cannot mutate the retained report or standalone full evidence.
+  expect((fullAuditDiagnosticLog(report, id => id) as { metricAnalysis: unknown }).metricAnalysis)
+    .toEqual(source.metricAnalysis);
+  expect(source.metricAnalysis.observations.length).toBeGreaterThan(0);
 });
 
 test('performance evidence identifiers use the caller privacy boundary without changing observation indexes', () => {

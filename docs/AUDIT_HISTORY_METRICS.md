@@ -21,6 +21,10 @@ Legacy completion percentages can survive in public or older reports without the
 
 Back timing eligibility requires an executed route round trip or explicit Back timing/outcome evidence. Semantic actions without return evidence are excluded; eligible returns with absent or invalid durations remain missing samples. The percentile uses only measured durations from this population.
 
+Count operands must be nonnegative safe integers before arithmetic, and summed populations must remain safe integers. Fractional timing measurements remain valid. Rejected counts remain available as raw evidence with `inconsistent-counts`; they cannot establish a score or population.
+
+Historical mismatch zeros require recorded processing or chart-projection comparison counts greater than zero. Availability alone does not prove a comparison occurred. Older reports without these counters leave zero mismatches unmeasured; observed positive mismatch counts remain available even when history is partial or unavailable. The comparison counters record actual date-axis, expected-day, product-value, provider-statistic and model-to-chart comparisons performed by the app audit. Reused product-source comparisons retain counts only with the matching cached input evidence. Analysis exposes the mismatch count as its numerator and the comparison count as its sample size with unit `comparison`. These heterogeneous checks neither establish exhaustive upstream coverage nor form independent statistical trials; the total eligible comparison population remains unknown.
+
 ## Established measures and limits
 
 Task completion, task time and error rate are established usability measures. This implementation uses their measurable automated analogues with explicit labels. Human ease of use needs participant studies: SUS requires its questionnaire, and SEQ requires task ratings. No participant responses exist in the audit, so no SUS/SEQ score is generated. [Nielsen Norman Group usability metrics](https://www.nngroup.com/articles/usability-metrics/) and [MeasuringU SUS methodology](https://measuringu.com/sus/) describe these separate measurement types.
