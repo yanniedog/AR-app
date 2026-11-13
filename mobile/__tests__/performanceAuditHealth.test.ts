@@ -17,6 +17,7 @@ import { makeHealthyDataFixture } from '../__fixtures__/appHealth';
 import { normalizeCoreWithIntegrity } from '../src/data/sectionIntegrity';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { ANDROID_UPDATE_READINESS_AUDIT } from '../src/lib/performanceAuditCheckInventory';
+import { compactPerformanceAuditReadinessEvidence, PerformanceAuditReadinessRegistry } from '../src/lib/performanceAuditReadiness';
 
 function check(readinessEvidence: string): AuditCheck {
   return {
@@ -41,13 +42,37 @@ describe('integrated app-health display evidence', () => {
       expect(results.find(result => result.code === code)).toMatchObject({ status: 'fail', metrics: { checked: 1, failed: 1 } });
   });
   it('does not retain optional in-progress image or layout work as a completed adverse visit', () => {
-    const observations = appHealthDisplayObservations([
-      check('screen:logo:logo:pending:0/3:fallback=0:required=0 | screen:layout:layout:pending:0/1:measured=0:required=0'),
-      check('screen:logo:logo:ready:3/3:fallback=0 | screen:layout:layout:ready:1/1:measured=1'),
-    ]);
+    const registry = new PerformanceAuditReadinessRegistry();
+    registry.beginCapture('optional-display');
+    const surface = registry.registerSurface({ id: 'screen', probes: [
+      { id: 'logo', kind: 'logo', status: 'pending', required: false, actualCount: 0, expectedCount: 3, fallbackCount: 0 },
+      { id: 'layout', kind: 'layout', status: 'pending', required: false, actualCount: 0, expectedCount: 1, layoutMeasured: false },
+    ] })!;
+    const pending = compactPerformanceAuditReadinessEvidence(registry.snapshot());
+    expect(pending.match(/required=0/g)).toHaveLength(2);
+    const required = compactPerformanceAuditReadinessEvidence(registry.snapshot(['screen'], ['logo', 'layout']));
+    expect(required.match(/required=1/g)).toHaveLength(2);
+    registry.updateProbe(surface, 'logo', { status: 'ready', actualCount: 3 });
+    registry.updateProbe(surface, 'layout', { status: 'ready', actualCount: 1, layoutMeasured: true });
+    const ready = compactPerformanceAuditReadinessEvidence(registry.snapshot());
+    const observations = appHealthDisplayObservations([check(pending), check(ready)]);
     const results = evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['logo', 'critical-layout'], logosRequired: true }], observations);
     for (const code of [APP_HEALTH_CHECK_CODES.DISPLAY_LOGO, APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT])
       expect(results.find(result => result.code === code)).toMatchObject({ status: 'pass', metrics: { checked: 1, failed: 0 } });
+  });
+  it.each([
+    { actualCount: 4, expectedCount: null },
+    { actualCount: null, expectedCount: 3 },
+    { actualCount: null, expectedCount: null },
+  ])('preserves unknown registry populations through serialization (%j)', counts => {
+    const registry = new PerformanceAuditReadinessRegistry();
+    registry.beginCapture('unknown-count');
+    registry.registerSurface({ id: 'screen', probes: [{ id: 'data', kind: 'data', status: 'ready', ...counts }] });
+    const observations = appHealthDisplayObservations([check(compactPerformanceAuditReadinessEvidence(registry.snapshot()))]);
+    expect(observations[0].evidence).toEqual([{ role: 'model', sourceCount: counts.expectedCount, modelCount: counts.actualCount }]);
+    expect(evaluateAppHealthDisplayQuality([{ id: 'screen', requiredRoles: ['model'] }], observations)
+      .find(result => result.code === APP_HEALTH_CHECK_CODES.DISPLAY_MODEL))
+      .toMatchObject({ status: 'unavailable', metrics: { checked: 1, unavailable: 1 } });
   });
   it('retains the reported terminal Rates visibility failure after a successful later visit', () => {
     // audit-f63bbcf8998f77f9: not-found.home reached 10s with 20/20

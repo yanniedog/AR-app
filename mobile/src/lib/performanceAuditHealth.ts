@@ -46,7 +46,7 @@ function parseProbe(line: string): ParsedProbe | null {
   if (parts.length < 5) return null;
   const [surfaceId, probeId, kind, status, counts] = parts;
   if (!['data', 'list', 'logo', 'graphic', 'layout'].includes(kind)) return null;
-  const match = /^(\d+)\/(\d+)$/.exec(counts);
+  const match = /^(\d*)\/(\d*)$/.exec(counts);
   const fallback = parts
     .map((part) => /^fallback=(\d+)$/.exec(part)?.[1] ?? null)
     .find((value): value is string => value != null);
@@ -69,8 +69,8 @@ function parseProbe(line: string): ParsedProbe | null {
     kind: kind as ParsedProbe['kind'],
     ready: status === 'ready',
     pending: status === 'pending',
-    actual: match ? Number(match[1]) : null,
-    expected: match ? Number(match[2]) : null,
+    actual: match?.[1] ? Number(match[1]) : null,
+    expected: match?.[2] ? Number(match[2]) : null,
     fallbackCount: fallback == null ? null : Number(fallback),
     visibleCount: visible == null ? null : Number(visible),
     emptyStateRendered: empty == null ? null : empty === '1',

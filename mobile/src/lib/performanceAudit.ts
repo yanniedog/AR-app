@@ -108,6 +108,8 @@ export interface PerformanceAuditSummary {
 
 export interface PerformanceAuditReport {
   schemaVersion: number;
+  /** Collector provenance; absent reports retain legacy rendering evidence. */
+  renderingEvidenceVersion?: 1 | 2;
   sessionId: string;
   startedAt: string;
   finishedAt: string;

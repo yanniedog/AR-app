@@ -1,4 +1,5 @@
 import type { UiLabel } from './uiCopy';
+import type { PerformanceAuditReport } from './performanceAudit';
 
 export const AUDIT_METRIC_GROUPS = ['Performance', 'Coverage', 'Task outcomes', 'Check results', 'Rendering checks'] as const satisfies readonly UiLabel[];
 export type AuditMetricGroup = typeof AUDIT_METRIC_GROUPS[number];
@@ -56,6 +57,10 @@ export type AuditMetric = keyof typeof AUDIT_METRIC_DEFINITIONS;
 export const auditMetricMethodVersion = (metric: AuditMetric): 1 | 2 =>
   ['actionP50Ms', 'actionP95Ms', 'displayModelPassPercent', 'displayListPassPercent', 'displayVisiblePassPercent',
     'displayLayoutPassPercent', 'displayEmptyPassPercent', 'displayLogoPassPercent'].includes(metric) ? 2 : 1;
+/** Stored rendering aggregates cannot be upgraded by recalculating their ratio. */
+export const auditReportMetricMethodVersion = (report: PerformanceAuditReport, metric: AuditMetric): 1 | 2 =>
+  AUDIT_METRIC_DEFINITIONS[metric].group === 'Rendering checks' && report.renderingEvidenceVersion !== 2
+    ? 1 : auditMetricMethodVersion(metric);
 export const AUDIT_METRICS: readonly AuditMetric[] = Object.freeze(Object.keys(AUDIT_METRIC_DEFINITIONS) as AuditMetric[]);
 export const LEGACY_AUDIT_METRICS: readonly AuditMetric[] = ['failures', 'coveragePercent', 'durationMs', 'slowestCheckMs', 'maxEventLoopLagMs', 'maxFrameGapMs'];
 

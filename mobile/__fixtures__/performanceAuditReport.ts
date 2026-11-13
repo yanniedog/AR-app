@@ -2,7 +2,7 @@ import { PERFORMANCE_AUDIT_SCHEMA_VERSION, summarizePerformanceAudit, type Audit
   type PerformanceAuditReport } from '../src/lib/performanceAudit';
 
 export function makePerformanceAuditReport(sessionId = 'audit-fixture', checks: AuditCheck[] = []): PerformanceAuditReport {
-  return { schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION, sessionId,
+  return { schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION, renderingEvidenceVersion: 2, sessionId,
     startedAt: '2026-10-15T18:00:00Z', finishedAt: '2026-10-15T18:01:00Z', durationMs: 60_000,
     app: { appVersion: '1.0.240', buildVersion: '297' },
     watchdog: { hangTimeoutMs: 10_000, storedCheckCount: checks.length, lastStoredCheckAt: null },

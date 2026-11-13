@@ -1,6 +1,6 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion, hasValidPerformanceAuditHealth } from './performanceAuditCompletion';
-import { AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_METHODS, auditMetricMethodVersion, type AuditMetric } from './auditMetricHistoryMetrics';
+import { AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_METHODS, auditReportMetricMethodVersion, type AuditMetric } from './auditMetricHistoryMetrics';
 import { auditMetricValues, auditTaskOutcomePopulation, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount as measuredCount, measuredAuditValue as measured } from './auditMetricHistoryValues';
 
 export type AuditMetricMissingEvidence = 'missing-evidence' | 'missing-denominator' | 'missing-samples'
@@ -126,7 +126,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     if (value !== null && missing) evidence.push('partial-samples');
     metrics[metric] = {
       value, unit: AUDIT_METRIC_DEFINITIONS[metric].unit, methodId: `ar.audit.${metric}`,
-      methodVersion: auditMetricMethodVersion(metric),
+      methodVersion: auditReportMetricMethodVersion(report, metric),
       formula: AUDIT_METRIC_METHODS[metric][0], unitOfAnalysis: AUDIT_METRIC_METHODS[metric][1],
       numerator: null, denominator: null, sampleSize: observed, sampleUnit: 'evidence-field', eligibleCount: refs.length,
       observedCount: observed, missingCount: missing, excludedCount: 0,

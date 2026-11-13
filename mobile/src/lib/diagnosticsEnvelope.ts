@@ -179,6 +179,7 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
   return {
     schemaVersion: 1,
     kind: 'performance-audit',
+    renderingEvidenceVersion: report.renderingEvidenceVersion === 2 ? 2 : 1,
     completion,
     metricAnalysis: publicAuditMetricAnalysis(report, safeCheckId),
     app: {

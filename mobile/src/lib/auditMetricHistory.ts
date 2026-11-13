@@ -1,6 +1,6 @@
 import type { PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
-import { AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, LEGACY_AUDIT_METRICS, auditMetricMethodVersion, type AuditMetric } from './auditMetricHistoryMetrics';
+import { AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, LEGACY_AUDIT_METRICS, auditMetricMethodVersion, auditReportMetricMethodVersion, type AuditMetric } from './auditMetricHistoryMetrics';
 import { auditMetricValues, measuredAuditValue as measured, measuredAuditCount } from './auditMetricHistoryValues';
 export { AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_GROUPS, type AuditMetric, type AuditMetricGroup } from './auditMetricHistoryMetrics';
 
@@ -31,13 +31,26 @@ export function auditMetricRun(report: PerformanceAuditReport): AuditMetricRun {
     outcome: completion.outcome, collectionComplete: completion.collectionComplete,
     coverageComplete: completion.coverageComplete, executed: report.summary.executed,
     metrics: auditMetricValues(report, completion),
-    methodVersions: Object.fromEntries(AUDIT_METRICS.map(metric => [metric, auditMetricMethodVersion(metric)])) as AuditMetricRun['methodVersions'],
+    methodVersions: Object.fromEntries(AUDIT_METRICS.map(metric => [metric, auditReportMetricMethodVersion(report, metric)])) as AuditMetricRun['methodVersions'],
   };
 }
 
 export function mergeAuditMetricRuns(runs: AuditMetricRun[], additions: AuditMetricRun[]): AuditMetricRun[] {
   const byId = new Map(runs.map(run => [run.sessionId, run]));
-  additions.forEach(run => byId.set(run.sessionId, run));
+  additions.forEach(run => {
+    const prior = byId.get(run.sessionId);
+    if (!prior) { byId.set(run.sessionId, run); return; }
+    const metrics = { ...run.metrics }, methodVersions = { ...run.methodVersions };
+    for (const metric of AUDIT_METRICS) {
+      if (prior.methodVersions[metric] !== run.methodVersions[metric]) {
+        // Recovery of raw evidence must not rewrite an already saved aggregate
+        // using a different method for the same historical run.
+        metrics[metric] = prior.metrics[metric];
+        methodVersions[metric] = prior.methodVersions[metric];
+      }
+    }
+    byId.set(run.sessionId, { ...run, metrics, methodVersions });
+  });
   return [...byId.values()].sort((a, b) => Date.parse(a.finishedAt) - Date.parse(b.finishedAt)
     || a.sessionId.localeCompare(b.sessionId)).slice(-AUDIT_HISTORY_LIMIT);
 }

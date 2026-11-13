@@ -2845,6 +2845,7 @@ export function PerformanceAuditRunner() {
         closeAuditApplicationJournal();
       const summaryMarker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=${state.sessionId} partial=true admissionRejected=true`;
       const report: PerformanceAuditReport = {
+        renderingEvidenceVersion: 2,
         schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION, sessionId: state.sessionId,
         startedAt: state.startedAt, finishedAt, durationMs: 0,
         app, watchdog: { hangTimeoutMs: state.hangTimeoutMs, storedCheckCount: 0, lastStoredCheckAt: null },
@@ -3862,6 +3863,7 @@ export function PerformanceAuditRunner() {
         });
         const summary = combineAppHealthPerformanceSummary(performanceSummary, appHealth, checks.length);
         const report: PerformanceAuditReport = {
+          renderingEvidenceVersion: 2,
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
           sessionId,
           startedAt,
@@ -4255,6 +4257,7 @@ export function PerformanceAuditRunner() {
             summarizePartialPerformanceAudit(checks, total, completed), partialHealth, total,
           );
           const partialReport: PerformanceAuditReport = {
+            renderingEvidenceVersion: 2,
             schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
             sessionId,
             startedAt,
