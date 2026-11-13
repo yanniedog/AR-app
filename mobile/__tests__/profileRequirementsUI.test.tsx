@@ -18,6 +18,30 @@ function core(types: string[]) { return { sections: { Mortgage: { rates: types.m
 })) }, Savings: { rates: [] }, TD: { rates: [] } } }; }
 afterEach(() => installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null)));
 
+test('selection edits reuse catalogue metadata and a replaced edition refreshes options', () => {
+  mockCore = core(['VARIABLE']);
+  const readType = jest.fn(() => 'VARIABLE');
+  Object.defineProperty(mockCore.sections.Mortgage.rates[0], 'rate_type', { get: readType });
+  const sections = ['Mortgage'] as const;
+  const onChange = jest.fn(); let tree: any;
+  const render = (value: ProfileFilters) => <ProfileEditor sections={[...sections]} value={value} onChange={onChange} />;
+  // The screen supplies the stable SECTION_ORDER array.
+  const stableSections: 'Mortgage'[] = ['Mortgage'];
+  act(() => { tree = TestRenderer.create(<ProfileEditor sections={stableSections} value={EMPTY_PROFILE} onChange={onChange} />); });
+  try {
+    const initialReads = readType.mock.calls.length;
+    expect(initialReads).toBeGreaterThan(0);
+    act(() => tree.update(<ProfileEditor sections={stableSections} value={{ ...EMPTY_PROFILE, rateTypes: ['OLD_TYPE'] }} onChange={onChange} />));
+    expect(readType).toHaveBeenCalledTimes(initialReads);
+    expect(tree.root.findAllByType('Chip').some((n: any) => n.props.label === 'OLD_TYPE' && n.props.selected)).toBe(true);
+    mockCore = core(['FIXED']);
+    act(() => tree.update(render(EMPTY_PROFILE)));
+    const labels = tree.root.findAllByType('Chip').map((n: any) => n.props.label);
+    expect(labels).toContain('Fixed');
+    expect(labels).not.toContain('Variable');
+  } finally { act(() => tree.unmount()); }
+});
+
 test('all selected values remain visible beyond the old twelve-option limit and every available value is reachable', () => {
   mockCore = core(Array.from({ length: 18 }, (_, i) => `TYPE_${i}`));
   const onChange = jest.fn(); let tree: any;

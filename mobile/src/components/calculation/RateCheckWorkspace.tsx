@@ -77,6 +77,7 @@ function monthlyPayment(balance: number, annualRate: number, months: number): nu
 }
 
 const formatDollars = (n: number): UiText => uiMoney(n);
+const MORTGAGE_PROFILE_SECTIONS: SectionKey[] = ['Mortgage'];
 
 interface Candidate {
   row: RateRow;
@@ -1016,7 +1017,7 @@ export function RateCheckWorkspace() {
             onToggle={() => setAssumptionsOpen((open) => !open)}
           >
             <ProfileEditor
-              sections={['Mortgage']}
+              sections={MORTGAGE_PROFILE_SECTIONS}
               value={profileFilters}
               onChange={(next) => setPref('profileFilters', next)}
             />

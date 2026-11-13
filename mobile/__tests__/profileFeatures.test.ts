@@ -10,6 +10,50 @@ import {
   profileToFilters,
 } from '../src/data/profile';
 import { EMPTY_FILTERS } from '../src/data/selectors';
+import { productHasAllFeatures } from '../src/data/featuresCore';
+import { selectProfileRows } from '../src/data/profileSelection';
+
+test('batch feature matching reuses exact scopes while preserving variants and corrected evidence', () => {
+  const facts: NonNullable<ProductDetail['facts']> = [
+    { id: 'offset', kind: 'feature', canonicalKey: 'OFFSET', value: true, unit: 'boolean', appliesTo: ['VARIABLE'] },
+    { id: 'fixed-offset', kind: 'feature', canonicalKey: 'OFFSET', value: false, unit: 'boolean', appliesTo: ['FIXED'] },
+  ];
+  const readFacts = jest.fn(() => facts);
+  const lookup: Record<string, ProductDetail> = {
+    bank: { get facts() { return readFacts(); } },
+    BANK: { facts: [{ id: 'offset', kind: 'feature', canonicalKey: 'OFFSET', value: false, unit: 'boolean' }] },
+  };
+  const base = { product_key: 'bank', provider: 'A', product_name: 'A', rate: '0.05', rate_type: 'VARIABLE' };
+  const rows: RateRow[] = Array.from({ length: 100 }, (_, i) => ({ ...base, rate_index: i }));
+  rows.push({ ...base, rate_type: 'FIXED' }, { ...base, product_key: 'BANK' });
+  const profile = { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] };
+  const expected = rows.filter(row => productHasAllFeatures(row.product_key, profile.accountFeatures, lookup, row, 'Mortgage'));
+  const unsharedReads = readFacts.mock.calls.length;
+  readFacts.mockClear();
+  expect(selectProfileRows(rows, profile, 'Mortgage', lookup)).toEqual(expected);
+  expect(expected).toHaveLength(100);
+  expect(readFacts.mock.calls.length).toBeLessThan(unsharedReads / 10);
+  facts[0].value = false;
+  expect(selectProfileRows(rows, profile, 'Mortgage', lookup)).toEqual([]);
+  expect(selectProfileRows(rows, { ...profile, accountFeatures: ['OFFSET', 'REDRAW'] }, 'Mortgage', lookup)).toEqual([]);
+  expect(selectProfileRows(rows, profile, 'Mortgage', null)).toEqual([]);
+});
+
+test.each(['Mortgage', 'Savings', 'TD'] as const)('app selection preserves canonical attributes and feature intersections for %s', section => {
+  const key = PROFILE_FEATURE_OPTIONS[section][0];
+  const rows: RateRow[] = ['one', 'two', 'unknown'].map((product_key, index) => ({
+    product_key, provider: 'Bank', product_name: product_key, rate: '0.05',
+    rate_type: index ? 'FIXED' : 'VARIABLE', ribbon_deposit_kind: index ? 'BONUS' : 'STANDARD',
+    interest_payment: index ? 'ANNUALLY' : 'MONTHLY',
+  }));
+  const lookup: Record<string, ProductDetail> = Object.fromEntries(rows.map(row => [row.product_key, {
+    facts: [{ id: 'feature', kind: 'feature', canonicalKey: key, value: row.product_key === 'unknown' ? 'unknown' : true, unit: 'boolean' }],
+  }]));
+  const profile = { ...EMPTY_PROFILE, rateTypes: ['FIXED'], depositKinds: ['BONUS'], interestPayments: ['ANNUALLY'], accountFeatures: [key] };
+  expect(selectProfileRows(rows, profile, section, lookup)).toEqual([rows[1]]);
+  expect(selectProfileRows(rows, profile, section, lookup)).toEqual(profileFilterRows(rows, profile, section, lookup));
+  expect(selectProfileRows(rows, EMPTY_PROFILE, section, lookup)).toBe(rows);
+});
 
 const mortgageRows: RateRow[] = [
   {

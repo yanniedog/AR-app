@@ -48,9 +48,8 @@ export function ProfileEditor({
         section: g.section,
         title: g.title,
         key: g.key,
-        options: profileAttributeOptions(core?.sections[g.section].rates ?? [], g.field, value[g.key]),
-      }))
-      .filter((g) => g.options.length > 0);
+        options: profileAttributeOptions(core?.sections[g.section].rates ?? [], g.field, []),
+      }));
 
     const featureGroups: EditorGroup[] = sections
       .filter((section) => (PROFILE_FEATURE_OPTIONS[section] ?? []).length > 0)
@@ -68,7 +67,7 @@ export function ProfileEditor({
       out.push(...featureGroups.filter((g) => g.section === section));
     }
     return out;
-  }, [core, sections, value]);
+  }, [core, sections]);
 
   const toggle = (key: keyof ProfileFilters, option: string) => {
     const list = value[key];
@@ -89,7 +88,10 @@ export function ProfileEditor({
           onPress={() => onChange(clearHomeLoanRequirements(value))} /> : null}
         {groups.filter(group => group.section === section).map(g => {
           const groupKey = `${g.section}-${g.key}`;
-          const { visible, hidden } = visibleFilterOptions(g.options, value[g.key], expanded.has(groupKey), 12);
+          // Saved values remain removable even if absent from this catalogue.
+          const options = g.key === 'accountFeatures' ? g.options : [...new Set([...value[g.key], ...g.options])];
+          if (!options.length) return null;
+          const { visible, hidden } = visibleFilterOptions(options, value[g.key], expanded.has(groupKey), 12);
           return <View key={groupKey}>
             <AppText variant="small" weight="700" style={{ marginBottom: theme.spacing(2) }}>
               {GROUP_LABELS[g.key]}
@@ -104,7 +106,7 @@ export function ProfileEditor({
                 />
               ))}
             </Row>
-            {hidden > 0 ? <Button title={uiJoin('Show', ' ', 'All', ' ', uiCount(g.options.length), ' ', GROUP_LABELS[g.key])}
+            {hidden > 0 ? <Button title={uiJoin('Show', ' ', 'All', ' ', uiCount(options.length), ' ', GROUP_LABELS[g.key])}
               variant="ghost" accessibilityState={{ expanded: false }}
               onPress={() => setExpanded(current => new Set(current).add(groupKey))} /> : null}
           </View>;

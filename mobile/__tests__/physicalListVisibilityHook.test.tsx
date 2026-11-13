@@ -58,3 +58,64 @@ test('replacement row identity and recycled node removal revoke published proof'
   act(() => tree.update(<Probe source={[{ key: 'one' }]} />)); expect(hook.visibleCount).toBeNull();
   act(() => tree.unmount());
 });
+
+test('a detached recycled cell cannot block independently measured visible cells on return', () => {
+  jest.useFakeTimers(); let tree!: ReactTestRenderer;
+  const source = [...rows, { key: 'two' }, { key: 'detached' }];
+  act(() => { tree = TestRenderer.create(<Probe source={source} />); jest.runOnlyPendingTimers(); });
+  Object.assign(hook.viewport, { current: { measureInWindow: (cb: Measure) => cb(0, 0, 400, 700) } });
+  const dropped: Measure[] = [];
+  act(() => {
+    hook.register(source[0], { measureInWindow: (cb: Measure) => cb(0, 100, 400, 200) } as never);
+    hook.register(source[1], { measureInWindow: (cb: Measure) => cb(0, 300, 400, 200) } as never);
+    hook.register(source[2], { measureInWindow: (cb: Measure) => dropped.push(cb) } as never);
+    jest.advanceTimersByTime(20);
+    measured.mockClear();
+    hook.measure();
+  });
+  expect(hook.visibleCount).toBeNull();
+  act(() => { jest.advanceTimersByTime(20); });
+  expect(hook.visibleCount).toBe(2);
+  expect(measured.mock.calls.filter(([info]) => info.viewableItems.length > 0)).toHaveLength(1);
+  expect(measured.mock.calls.at(-1)![0].viewableItems.map((item: { key: string }) => item.key)).toEqual(['one', 'two']);
+  // The missing cell has no visibility proof. A late response from an older
+  // measurement must not add it after a scroll/revision changed the viewport.
+  const stale = dropped.shift()!;
+  act(() => { tree.update(<Probe source={source} revision="b" />); stale(0, 100, 400, 200); });
+  expect(hook.visibleCount).toBeNull();
+  act(() => tree.unmount());
+});
+
+test('refocusing unchanged frozen rows restarts physical measurement after a long detached interval', () => {
+  jest.useFakeTimers(); let tree!: ReactTestRenderer;
+  const source = [...rows, { key: 'recycled' }];
+  const detachedCallbacks: Measure[] = [];
+  let attached = true;
+  act(() => { tree = TestRenderer.create(<Probe source={source} />); jest.runOnlyPendingTimers(); });
+  Object.assign(hook.viewport, { current: { measureInWindow: (cb: Measure) => {
+    if (attached) cb(0, 0, 400, 700); else detachedCallbacks.push(cb);
+  } } });
+  act(() => {
+    hook.register(source[0], { measureInWindow: (cb: Measure) => cb(0, 100, 400, 200) } as never);
+    hook.register(source[1], { measureInWindow: () => {} } as never);
+    hook.measure();
+    jest.advanceTimersByTime(40);
+  });
+  expect(hook.visibleCount).toBe(1);
+  // react-native-screens allows the blur render before freezing. Preserve the
+  // same row/revision identities while native views remain detached for longer
+  // than the retry budget, as when several stack routes cover Rates.
+  act(() => { attached = false; tree.update(<Probe source={source} unobscured={false} />); jest.advanceTimersByTime(12_000); });
+  expect(hook.visibleCount ?? 0).toBe(0);
+  act(() => { tree.update(<Probe source={source} />); });
+  act(() => { jest.advanceTimersByTime(20); });
+  expect(hook.visibleCount).toBeNull();
+  expect(detachedCallbacks.length).toBeGreaterThan(0);
+  act(() => { attached = true; jest.advanceTimersByTime(640); });
+  expect(hook.visibleCount).toBe(1);
+  // A measurement started before reattachment cannot replace current proof.
+  act(() => { detachedCallbacks.forEach(cb => cb(0, -900, 400, 700)); });
+  expect(hook.visibleCount).toBe(1);
+  expect(measured.mock.calls.at(-1)![0].viewableItems.map((item: { key: string }) => item.key)).toEqual(['one']);
+  act(() => tree.unmount());
+});

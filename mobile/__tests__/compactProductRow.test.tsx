@@ -154,6 +154,51 @@ test.each([false, true])('logo height follows content shrinking independently of
   } finally { act(() => tree.unmount()); }
 });
 
+test('a viewport of cards needs no second commit for the expected first native width', () => {
+  const f = fixture(), commits = jest.fn();
+  mockState = { ...f, isRateSaved: () => false, toggleSavedRate: mockSave, prefs: { mortgageRateMetric: 'comparison' } };
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<React.Profiler id="lender-products" onRender={commits}>
+    {Array.from({ length: 11 }, (_, index) => <ProductCard key={index} row={row} section="Mortgage" />)}
+  </React.Profiler>) as Tree; });
+  try {
+    expect(commits).toHaveBeenCalledTimes(1);
+    const rows = tree.root.findAllByProps({ testID: 'compact-product-row' });
+    for (const item of rows) {
+      act(() => item.props.onLayout({ nativeEvent: { layout: { width: 328, height: 56 } } }));
+    }
+    expect(commits).toHaveBeenCalledTimes(1);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('real width corrections resize the rail without remounting facts or its horizontal scroller', () => {
+  const tree = render();
+  try {
+    const originalName = tree.root.findByProps({ testID: 'compact-product-name' });
+    const originalMetric = tree.root.findByProps({ testID: 'compact-primary-rate' });
+    const originalScroll = tree.root.findByProps({ testID: 'compact-product-scroll' });
+    const originalWidth = mainTarget(tree).props.style.width;
+    act(() => tree.root.findByProps({ testID: 'compact-product-row' }).props.onLayout({
+      nativeEvent: { layout: { width: 1400, height: 56 } },
+    }));
+    expect(mainTarget(tree).props.style.width).toBeGreaterThan(originalWidth);
+    expect(tree.root.findByProps({ testID: 'compact-product-name' })).toBe(originalName);
+    expect(tree.root.findByProps({ testID: 'compact-primary-rate' })).toBe(originalMetric);
+    expect(tree.root.findByProps({ testID: 'compact-product-scroll' })).toBe(originalScroll);
+    act(() => tree.root.findByProps({ testID: 'compact-product-row' }).props.onLayout({
+      nativeEvent: { layout: { width: 300, height: 56 } },
+    }));
+    expect(mainTarget(tree).props.style.width).toBe(originalWidth);
+    expect(tree.root.findByProps({ testID: 'compact-product-name' })).toBe(originalName);
+    for (const invalid of [0, -1, NaN, Infinity]) {
+      act(() => tree.root.findByProps({ testID: 'compact-product-row' }).props.onLayout({
+        nativeEvent: { layout: { width: invalid, height: 56 } },
+      }));
+    }
+    expect(mainTarget(tree).props.style.width).toBe(originalWidth);
+  } finally { act(() => tree.unmount()); }
+});
+
 
 
 test.each([false, true])('loading rows keep the same56dp single baseline and noninteractive action slots with screen wrapper=%s', wholeScreen => {

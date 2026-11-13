@@ -46,9 +46,13 @@ export async function prepareMortgageResultsIndex(options: {
   const asOf = new Date().toISOString(), at = Date.parse(asOf);
   let until = Infinity, checkpoint = performance.now();
   const pause = async () => {
-    if (performance.now() - checkpoint >= 4) { await yieldToUi(0); checkpoint = performance.now(); }
+    await yieldToUi(0); checkpoint = performance.now();
     return stale();
   };
+  // Avoid a resolved-Promise/microtask round trip for every source row. Only
+  // cross the async boundary after the CPU slice budget, retaining gate checks
+  // throughout preparation and after each actual yield.
+  const sliceExpired = () => performance.now() - checkpoint >= 4;
   await yieldToUi(0);
   if (stale() || !legacy && (catalogue.status !== 'ready' || !catalogue.allLoaded)) return null;
   const coreKeys = new Set<string>(), entries: Entry[] = [], candidates: RateRow[] = [];
@@ -66,14 +70,14 @@ export async function prepareMortgageResultsIndex(options: {
     for (const programme of catalogue.getProgrammes(product.productId)) {
       if (!supported(programme)) return null;
       until = Math.min(until, nextPublicPricingBoundary(programme, at));
-      if (await pause()) return null;
+      if (stale() || sliceExpired() && await pause()) return null;
     }
   }
   for (const original of source) {
     if (legacy) {
       candidates.push(original);
       entries.push({ programme: null, candidate: original, quote: original, generated: false, key: '' });
-      if (await pause()) return null;
+      if (stale() || sliceExpired() && await pause()) return null;
       continue;
     }
     if (catalogue.getProduct(original.product_key)?.status === 'legacy') continue;
@@ -88,7 +92,7 @@ export async function prepareMortgageResultsIndex(options: {
       if (!resolved) return null; // Cannot prove this quote independently of an actual scenario.
       entries.push({ programme, candidate: row, quote: rowWithPublicResolution(row, resolved.resolution), generated: false, key: key ?? '' });
     }
-    if (await pause()) return null;
+    if (stale() || sliceExpired() && await pause()) return null;
   }
   for (const product of products) {
     if (product.section !== 'Mortgage' || product.status === 'legacy') continue;
@@ -105,7 +109,7 @@ export async function prepareMortgageResultsIndex(options: {
         if (!row || boundPublicProgramme(row, catalogue) !== programme) return null;
         entries.push({ programme, candidate: row, quote: rowWithPublicResolution(row, resolved.resolution), generated: true, key });
       }
-      if (await pause()) return null;
+      if (stale() || sliceExpired() && await pause()) return null;
     }
   }
   const allQuotes = entries.map(entry => entry.quote);
@@ -115,10 +119,13 @@ export async function prepareMortgageResultsIndex(options: {
   const scoped = await prepareMortgageComparisonRowsCooperatively(allQuotes, context, { cancelled: stale });
   if (!scoped) return null;
   const orders = new Map<string, RateRow[]>();
-  for (const [sort, metric] of [['rate', 'headline'], ['rate', 'comparison'], ['comparison', 'comparison'], ['bank', 'headline']] as const) {
+  for (const [sort, metric] of [['rate', 'headline'], ['rate', 'comparison'], ['bank', 'headline']] as const) {
     const rows = await sortRowsCooperatively(eligible, sort, 'Mortgage', 'max', metric, { cancelled: stale });
     if (!rows) return null;
     orders.set(sort === 'bank' ? 'bank' : sort + ':' + metric, rows);
+    // Both canonical comparison modes use effectiveFraction, the same null
+    // ordering, provider/name tie-break and original-row stability.
+    if (sort === 'rate' && metric === 'comparison') orders.set('comparison:comparison', rows);
   }
   if (stale() || (Date.now() < at || Date.now() >= until)) return null;
   return {
