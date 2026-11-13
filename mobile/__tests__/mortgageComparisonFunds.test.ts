@@ -85,7 +85,8 @@ test('source scope, prepared scope and cooperative scope agree at exact funds bo
 
 test('funds scenario replaces saved assumptions and carries computational ratio precision', () => {
   const saved = { amount: '100000', lvr: '0.9', purpose: 'OWNER_OCCUPIED' };
-  expect(mortgageComparisonScenario('Mortgage', saved, funds())).toEqual({ ...saved, amount: '600000', lvr: '0.8', offsetBalance: '0' });
+  expect(mortgageComparisonScenario('Mortgage', saved, funds())).toEqual({ ...saved, amount: '600000', lvr: '0.8', offsetBalance: '0',
+    lvrSourceAmount: '600000', lvrPropertyValue: '750000' });
   expect(mortgageComparisonScenario('Mortgage', saved, funds('1', '2')).lvr).toBe('0.666666666666666666666667');
   for (const value of [funds(''), funds('150000', ''), funds('-1'), funds('0', '0')]) {
     expect(mortgageComparisonScenario('Mortgage', saved, value)).toEqual({ ...saved, amount: undefined, lvr: undefined, offsetBalance: undefined });
@@ -137,8 +138,10 @@ test('blank offset is unknown even with a calculable lender LVR; blank property 
 
 test('only active complete funds modes override offset cost assumptions without mutating saved state', () => {
   const saved = { amount: '100000', lvr: '0.9', offsetBalance: '25000' };
-  expect(mortgageComparisonScenario('Mortgage', saved, offset('150000'))).toEqual({ amount: '600000', lvr: '0.8', offsetBalance: '150000' });
-  expect(mortgageComparisonScenario('Mortgage', saved, funds())).toEqual({ amount: '600000', lvr: '0.8', offsetBalance: '0' });
+  expect(mortgageComparisonScenario('Mortgage', saved, offset('150000'))).toEqual({ amount: '600000', lvr: '0.8', offsetBalance: '150000',
+    lvrSourceAmount: '600000', lvrPropertyValue: '750000' });
+  expect(mortgageComparisonScenario('Mortgage', saved, funds())).toEqual({ amount: '600000', lvr: '0.8', offsetBalance: '0',
+    lvrSourceAmount: '600000', lvrPropertyValue: '750000' });
   expect(mortgageComparisonScenario('Mortgage', saved, { ...offset(), lvrMode: 'lvr', lvr: '75' }))
     .toEqual({ amount: '600000', lvr: '0.75', offsetBalance: '25000' });
   for (const value of [offset(''), offset('150000', ''), offset('-1'), offset('0', '599999.99')]) {

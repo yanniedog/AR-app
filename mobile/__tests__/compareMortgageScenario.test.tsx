@@ -66,7 +66,17 @@ test.each(['lvr', 'funds', 'offset'] as const)('Compare retains amount/LVR eligi
     expect(evidence).toHaveLength(2);
     expect(evidence.map(node => node.props.row.rate)).toEqual(['0.05', '0.06']);
     expect(evidence.every(node => node.props.scenario.amount === '600000' && node.props.scenario.lvr === '0.75')).toBe(true);
-    expect(tree.root.findAllByType('PublicCostComparison').every(node => node.props.rateScenario.amount === '600000' && node.props.rateScenario.lvr === '0.75')).toBe(true);
+    const costs = tree.root.findAllByType('PublicCostComparison');
+    expect(costs).toHaveLength(2);
+    expect(costs.every(node => node.props.rateScenario.amount === '600000' && node.props.rateScenario.lvr === '0.75')).toBe(true);
+    if (mode === 'lvr') {
+      Object.assign(mockScenario.mortgage, { mode: 'refi', loanBalance: '600000', propertyValue: '800000' });
+      act(() => useMortgageComparison.setState({ lvr: '' }));
+      expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(0);
+      expect(tree.root.findAllByType('PublicCostComparison')).toHaveLength(0);
+      act(() => useMortgageComparison.setState({ lvr: '75' }));
+      expect(tree.root.findAllByType('PublicCostComparison')).toHaveLength(2);
+    }
     if (mode === 'funds') {
       act(() => useMortgageComparison.setState({ fundsAvailable: '150000' }));
       expect(tree.root.findAllByType('PublicRateEvidence').map(node => node.props.scenario.lvr)).toEqual(['0.8', '0.8']);

@@ -1,5 +1,6 @@
 import { Decimal, publicDecimal, PUBLIC_ONE, PUBLIC_ZERO, decimalText, finiteDecimal, isRecurringDecimal, rateDecimal } from './publicRateDecimal';
 import type { PublicComponent, PublicCondition, PublicFormula, PublicFreshness, PublicProgramme, PublicTier, RateResolution, RateScenario, ResolvedPhase } from './publicRateModel';
+import { publicScenarioLvr } from './publicScenarioLvr';
 
 const NUMERICAL = new Set(['amount', 'balance', 'lvr', 'termMonths', 'termDays', 'monthlyDeposit', 'withdrawals', 'balanceGrowth', 'cardTransactions']);
 const FIELDS = new Set([...NUMERICAL, 'purpose', 'repayment', 'channel', 'package', 'customerCategory', 'qualification', 'custom', 'effectiveDate']);
@@ -33,21 +34,23 @@ export function evaluatePublicCondition(condition: PublicCondition, scenario: Ra
   const value = condition.field === 'effectiveDate' ? (scenario.effectiveDate ?? asOf.slice(0, 10)) : scenario[condition.field];
   if (value === undefined || value === '') return 'unknown';
   if (NUMERICAL.has(condition.field) && !finiteDecimal(value)) return 'unknown';
+  const numeric = NUMERICAL.has(condition.field)
+    ? condition.field === 'lvr' ? publicScenarioLvr(scenario) : publicDecimal(value as string) : null;
   if (condition.operator === 'known') return 'met';
   if (condition.operator === 'eq') {
     if (NUMERICAL.has(condition.field)) return finiteDecimal(condition.value) && typeof value === 'string'
-      ? publicDecimal(value).compare(publicDecimal(condition.value)) === 0 ? 'met' : 'unmet' : 'unknown';
+      ? numeric!.compare(publicDecimal(condition.value)) === 0 ? 'met' : 'unmet' : 'unknown';
     return value === condition.value ? 'met' : 'unmet';
   }
   if (condition.operator === 'in') {
     if (NUMERICAL.has(condition.field)) {
       if (!condition.values?.every(finiteDecimal) || typeof value !== 'string') return 'unknown';
-      return condition.values.some(candidate => publicDecimal(value).compare(publicDecimal(candidate as string)) === 0) ? 'met' : 'unmet';
+      return condition.values.some(candidate => numeric!.compare(publicDecimal(candidate as string)) === 0) ? 'met' : 'unmet';
     }
     return condition.values?.includes(value) ? 'met' : 'unmet';
   }
   if (condition.operator === 'bounds' && NUMERICAL.has(condition.field) && typeof value === 'string') {
-    try { return bound(publicDecimal(value), condition.minimum, condition.maximum, condition.minimumInclusive, condition.maximumInclusive) ? 'met' : 'unmet'; }
+    try { return bound(numeric!, condition.minimum, condition.maximum, condition.minimumInclusive, condition.maximumInclusive) ? 'met' : 'unmet'; }
     catch { return 'unknown'; }
   }
   return 'unknown';
@@ -85,7 +88,7 @@ function combine(operands: Evaluation[], subtract: boolean): Evaluation {
 function tiered(formula: Extract<PublicFormula, { op: 'tiered' }>, context: Context, depth: number): Evaluation {
   const raw = context.scenario[formula.field];
   if (!NUMERICAL.has(formula.field) || !finiteDecimal(raw)) fail('tier_input_unknown');
-  const value = publicDecimal(raw);
+  const value = formula.field === 'lvr' ? publicScenarioLvr(context.scenario)! : publicDecimal(raw);
   if (formula.method === 'whole_balance') {
     const applicable = formula.tiers.filter(tier => bound(value, tier.minimum, tier.maximum, tier.minimumInclusive, tier.maximumInclusive));
     if (applicable.length !== 1) fail(applicable.length ? 'overlapping_tiers' : 'no_applicable_tier');

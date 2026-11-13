@@ -2,6 +2,7 @@ import { Decimal, PUBLIC_ONE, PUBLIC_ZERO, decimalText } from './publicRateDecim
 import type { PublicCostEstimate, PublicCostFee, PublicCostScenario } from './publicCostModel';
 import type { RateResolution, RateScenario } from './publicRateModel';
 import { evaluatePublicCondition, resolvePublicRate } from './publicRateResolver';
+import { attachExactPublicLvr, clearExactPublicLvr, exactPublicScenarioLvr, publicScenarioLvr } from './publicScenarioLvr';
 
 export type { PublicCostScenario, PublicCostEstimate, PublicCostFee } from './publicCostModel';
 const TWELVE = Decimal.parse('12');
@@ -122,9 +123,15 @@ function mortgage(resolution: RateResolution, scenario: Extract<PublicCostScenar
         const scope: RateScenario = { ...scenario.rateScenario, amount: nextBalance.fixed(2) };
         if (scenario.rateScenario?.amount !== undefined && money(scenario.rateScenario.amount).compare(openingBalance) !== 0) throw new Error('financed_fee_scope_inconsistent');
         if (scenario.rateScenario?.lvr !== undefined) {
-          const originalLvr = Decimal.parse(scenario.rateScenario.lvr);
+          const exact = exactPublicScenarioLvr(scenario.rateScenario);
+          const originalLvr = publicScenarioLvr(scenario.rateScenario);
+          if (!originalLvr) throw new Error('financed_fee_scope_unknown');
           if (originalLvr.compare(PUBLIC_ZERO) <= 0 || openingBalance.compare(PUBLIC_ZERO) <= 0) throw new Error('financed_fee_scope_unknown');
-          scope.lvr = decimalText(nextBalance.mul(originalLvr).div(openingBalance));
+          if (exact) attachExactPublicLvr(scope, decimalText(nextBalance), decimalText(exact.property));
+          else {
+            clearExactPublicLvr(scope);
+            scope.lvr = decimalText(nextBalance.mul(originalLvr).div(openingBalance));
+          }
         }
         const adjusted = resolvePublicRate(scenario.programme, scope, scenario.asOf);
         result.evidenceIds.push(...adjusted.evidenceIds);

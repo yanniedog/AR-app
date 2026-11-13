@@ -17,6 +17,18 @@ test.each([
     .toEqual({ amount: undefined, lvr: undefined });
 });
 
+test.each([
+  { loanAmount: '600000', lvr: '' },
+  { loanAmount: '600000', lvr: ' ', lvrMode: 'lvr' as const },
+  { loanAmount: '', lvr: '', lvrMode: 'lvr' as const },
+])('blank active direct LVR cannot inherit a saved pricing ratio: %p', inputs => {
+  const saved = { amount: '100000', lvr: '0.75' };
+  const result = mortgageComparisonScenario('Mortgage', saved, inputs);
+  expect(Object.hasOwn(result, 'lvr')).toBe(true);
+  expect(result.lvr).toBeUndefined();
+  expect(saved.lvr).toBe('0.75');
+});
+
 test('temporary purpose and repayment canonicalize before pricing without changing saved requirements or assumptions', () => {
   const saved = { purpose: 'OWNER_OCCUPIED', repayment: 'PRINCIPAL_AND_INTEREST', amount: '500000' };
   const filters = { loanPurposes: ['INV'], repaymentTypes: ['IO'] };
