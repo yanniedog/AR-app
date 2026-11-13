@@ -1,6 +1,6 @@
 import { matchesMortgageFacet } from './mortgageFacets';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
-import { productHasAllFeatures } from './featuresCore';
+import { createProductFeatureMatcher } from './featuresCore';
 import type { Filters } from './selectors';
 import { lvrRangeContains, matchesLvrTier, parseLvrRange } from './lvrRange';
 
@@ -188,7 +188,7 @@ export function profileFilterRows(
     // Fail closed until details are loaded — otherwise must-have features would
     // silently disappear and Home/Calculator could show non-matching winners.
     if (!detailsProducts) return [];
-    out = out.filter((r) => productHasAllFeatures(r.product_key, features, detailsProducts, r, section));
+    out = out.filter(createProductFeatureMatcher(features, detailsProducts, section));
   }
   return out;
 }

@@ -10,6 +10,33 @@ import {
   profileToFilters,
 } from '../src/data/profile';
 import { EMPTY_FILTERS } from '../src/data/selectors';
+import { productHasAllFeatures } from '../src/data/featuresCore';
+
+test('batch feature matching reuses exact scopes while preserving variants and corrected evidence', () => {
+  const facts: NonNullable<ProductDetail['facts']> = [
+    { id: 'offset', kind: 'feature', canonicalKey: 'OFFSET', value: true, unit: 'boolean', appliesTo: ['VARIABLE'] },
+    { id: 'fixed-offset', kind: 'feature', canonicalKey: 'OFFSET', value: false, unit: 'boolean', appliesTo: ['FIXED'] },
+  ];
+  const readFacts = jest.fn(() => facts);
+  const lookup: Record<string, ProductDetail> = {
+    bank: { get facts() { return readFacts(); } },
+    BANK: { facts: [{ id: 'offset', kind: 'feature', canonicalKey: 'OFFSET', value: false, unit: 'boolean' }] },
+  };
+  const base = { product_key: 'bank', provider: 'A', product_name: 'A', rate: '0.05', rate_type: 'VARIABLE' };
+  const rows: RateRow[] = Array.from({ length: 100 }, (_, i) => ({ ...base, rate_index: i }));
+  rows.push({ ...base, rate_type: 'FIXED' }, { ...base, product_key: 'BANK' });
+  const profile = { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] };
+  const expected = rows.filter(row => productHasAllFeatures(row.product_key, profile.accountFeatures, lookup, row, 'Mortgage'));
+  const unsharedReads = readFacts.mock.calls.length;
+  readFacts.mockClear();
+  expect(profileFilterRows(rows, profile, 'Mortgage', lookup)).toEqual(expected);
+  expect(expected).toHaveLength(100);
+  expect(readFacts.mock.calls.length).toBeLessThan(unsharedReads / 10);
+  facts[0].value = false;
+  expect(profileFilterRows(rows, profile, 'Mortgage', lookup)).toEqual([]);
+  expect(profileFilterRows(rows, { ...profile, accountFeatures: ['OFFSET', 'REDRAW'] }, 'Mortgage', lookup)).toEqual([]);
+  expect(profileFilterRows(rows, profile, 'Mortgage', null)).toEqual([]);
+});
 
 const mortgageRows: RateRow[] = [
   {

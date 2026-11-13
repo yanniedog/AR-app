@@ -8,6 +8,7 @@ import { condition } from '../testUtils/publicRates';
 import { EMPTY_FILTERS, filterRows, sortRows } from '../src/data/selectors';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
+import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 
 beforeEach(() => { jest.useFakeTimers(); jest.setSystemTime(new Date(AS_OF)); installMandatoryEligibility(selectMandatoryEligibility(null, null, null)); });
 afterEach(() => jest.useRealTimers());
@@ -121,4 +122,33 @@ test('filter selection on a prepared book neither reprices programmes nor sorts 
     }
     expect(pricing).not.toHaveBeenCalled(); expect(sorting).not.toHaveBeenCalled();
   } finally { pricing.mockRestore(); sorting.mockRestore(); }
+});
+
+test('legacy preparation shares comparison ordering while preserving nulls, ties and headline ordering', async () => {
+  const rates = [
+    { rate: '0.06', comparison_rate: '0.09', provider: 'Z Bank' },
+    { rate: '0.06', comparison_rate: '0.07', provider: 'A Bank' },
+    { rate: '0.08', comparison_rate: undefined, provider: 'B Bank' },
+    { rate: '', comparison_rate: undefined, provider: 'C Bank' },
+    { rate: '0.06', comparison_rate: '0.07', provider: 'A Bank' },
+  ].map((values, index) => ({ ...row, ...values, rate_index: index, lvr_tier: 'lvr_=80%', balance_min: 100000, balance_max: 900000 }));
+  const sourceContext = selectedConstraintFixture('Mortgage', rates, []);
+  const view = { ...catalogue(), status: 'unavailable' as const, allLoaded: false, products: [], getProgrammes: () => [] };
+  const sorting = jest.spyOn(selectors, 'sortRowsCooperatively');
+  try {
+    const pending = prepareMortgageResultsIndex({ source: sourceContext.rows, catalogue: view, context: sourceContext,
+      includeNonStandard: true, cancelled: () => false });
+    await jest.runAllTimersAsync();
+    const index = await pending;
+    expect(index).not.toBeNull();
+    expect(sorting).toHaveBeenCalledTimes(3);
+    const selected = index!.select({ amount: '650000', lvr: '0.72', purpose: 'OWNER_OCCUPIED', repayment: 'PRINCIPAL_AND_INTEREST' },
+      { loanAmount: '650000', lvr: '72' })!;
+    const filters = { ...EMPTY_FILTERS, includeNonStandard: true };
+    const canonical = filterRows(mortgageComparisonRows(sourceContext.rows, { loanAmount: '650000', lvr: '72' }, sourceContext).rows,
+      filters, undefined, null, 'Mortgage');
+    for (const sort of ['rate', 'comparison', 'bank'] as const) for (const metric of ['headline', 'comparison'] as const) {
+      expect(selected.filtered(filters, sort, metric)).toEqual(sortRows(canonical, sort, 'Mortgage', 'max', metric));
+    }
+  } finally { sorting.mockRestore(); }
 });

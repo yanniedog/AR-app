@@ -116,7 +116,9 @@ function ProductCardView({
 }) {
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
-  const [measuredWidth, setMeasuredWidth] = React.useState<number | null>(null);
+  // Lists use 16dp gutters. Start with that width so the first matching native
+  // measurement does not render every visible card a second time.
+  const [measuredWidth, setMeasuredWidth] = React.useState(() => width - 32);
   const [rowHeight, setRowHeight] = React.useState<number>(COMPACT_ROW.minHeight);
   const [textMeasurements, setTextMeasurements] = React.useState<{ key: string; primary: number; secondary: number } | null>(null);
   const detailsBubble = useWordBubble('Details');
@@ -135,14 +137,16 @@ function ProductCardView({
   const admittedConditions = React.useMemo(() => scopedRateConditions(sourceRowForPublicRow(row), section, { core, details, manifest, coreIntegrity }),
     [row, section, core, details, manifest, coreIntegrity]);
   const conditions = React.useMemo(() => scopedFinancialConditionFacts(admittedConditions), [admittedConditions]);
-  const nonStandard = isNonStandard(row);
-  const qualifier = rateQualifier(row, section);
+  const nonStandard = React.useMemo(() => isNonStandard(row), [row]);
+  const qualifier = React.useMemo(() => rateQualifier(row, section), [row, section]);
   const access = React.useMemo(
     () => assessAccess(row.product_name, detail, row.provider),
     [row.product_name, row.provider, detail],
   );
-  const tags = chips(row, section, qualifier.conditional, conditions);
-  const presentation = ratePresentation(row, section, mortgageRateMetric);
+  const tags = React.useMemo(() => chips(row, section, qualifier.conditional, conditions),
+    [row, section, qualifier.conditional, conditions]);
+  const presentation = React.useMemo(() => ratePresentation(row, section, mortgageRateMetric),
+    [row, section, mortgageRateMetric]);
   const hasDisplayedRateOverride = displayedRate !== undefined;
   const rateLabel = hasDisplayedRateOverride
     ? displayedRateLabel ?? presentation.primaryLabel
@@ -190,7 +194,7 @@ function ProductCardView({
     : favorite ? 'Remove all rates' : 'Save all rates',
     ', ', saveIdentity.name);
 
-  const facet = compactProductFacet(row, section, conditions);
+  const facet = React.useMemo(() => compactProductFacet(row, section, conditions), [row, section, conditions]);
   const unknown = comparisonUnverified || !facet.known || qualifier.facts.some(fact => 'state' in fact && fact.state === 'unknown');
   const statusIcons: (keyof typeof Ionicons.glyphMap)[] = [
     ...(qualifier.conditional ? ['flash-outline' as const] : []),
@@ -203,13 +207,13 @@ function ProductCardView({
   activeMeasurementKey.current = measurementKey;
   const measurements = textMeasurements?.key === measurementKey ? textMeasurements : null;
   const tierIndex = compactTierIndex(row);
-  const logoFrame = compactBankLogoFrame(measuredWidth ?? width - 32, rowHeight, fontScale, embedded ? 0 : StyleSheet.hairlineWidth);
+  const logoFrame = compactBankLogoFrame(measuredWidth, rowHeight, fontScale, embedded ? 0 : StyleSheet.hairlineWidth);
   const logoWidth = selectMode ? COMPACT_ROW.action : logoFrame.width;
-  const layout = compactProductRowLayout(measuredWidth ?? width - 32, fontScale, rateText, secondaryText,
+  const layout = compactProductRowLayout(measuredWidth, fontScale, rateText, secondaryText,
     facet, statusIcons.length, measurements?.primary, measurements?.secondary, tierIndex, logoWidth, uiProductName(row));
   const onRowLayout = (event: LayoutChangeEvent) => {
     const next = event.nativeEvent.layout.width;
-    if (next > 0) setMeasuredWidth(previous => previous === next ? previous : next);
+    if (Number.isFinite(next) && next > 0 && next !== measuredWidth) setMeasuredWidth(next);
   };
   const measureMetric = (key: 'primary' | 'secondary') => (event: NativeSyntheticEvent<TextLayoutEventData>) => {
     if (activeMeasurementKey.current !== measurementKey) return;
@@ -236,7 +240,11 @@ function ProductCardView({
     : icon === 'flash-outline' ? 'Conditional' : icon === 'people-outline' ? 'Eligibility'
       : conditions.unresolved.length ? 'Sources' : access.restricted || access.verify || nonStandard ? 'Eligibility'
         : qualifier.conditional ? 'Conditional' : 'Details';
-  const geometryKey = JSON.stringify([row.product_key, row.rate_index, fontScale, layout, facet.kind, facet.value,
+  // Widening the rail's trailing space changes no child coordinates. Preserve
+  // its native text/icon nodes and measured hit regions in that case; remount
+  // only when the facts or their own geometry change.
+  const { main: railWidth, ...regionLayout } = layout;
+  const geometryKey = JSON.stringify([row.product_key, row.rate_index, fontScale, regionLayout, facet.kind, facet.value,
     rateLabel, secondaryLabel, visibleStatuses]);
   const bubbleRegions = React.useRef<{ key: string; regions: Record<string, { x: number; width: number }> }>({ key: geometryKey, regions: {} });
   const mainBounds = React.useRef<{ width: number; height: number } | null>(null);
@@ -255,7 +263,7 @@ function ProductCardView({
     let word: IconWord = 'Details';
     if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)
       && bounds && x >= 0 && x < bounds.width && y >= 0 && y < bounds.height
-      && Math.abs(bounds.width - layout.main) <= 1 && bubbleRegions.current.key === geometryKey) {
+      && Math.abs(bounds.width - railWidth) <= 1 && bubbleRegions.current.key === geometryKey) {
       const regions = bubbleRegions.current.regions;
       const candidates: { id: string; parent?: string; word: IconWord }[] = [
         { id: 'name', word: 'Details' },
@@ -330,7 +338,7 @@ function ProductCardView({
         style={{
           minHeight: 48,
           minWidth: 48,
-          width: layout.main,
+          width: railWidth,
           alignItems: 'center',
           justifyContent: 'center',
           borderRadius: theme.radius.sm,
@@ -345,7 +353,7 @@ function ProductCardView({
           if (Number.isFinite(targetHeight) && targetHeight > 0) {
             const height = Math.max(COMPACT_ROW.minHeight,
               targetHeight + 2 * logoFrame.inset + (embedded ? 0 : StyleSheet.hairlineWidth));
-            setRowHeight(previous => previous === height ? previous : height);
+            if (height !== rowHeight) setRowHeight(height);
           }
         }}
       >

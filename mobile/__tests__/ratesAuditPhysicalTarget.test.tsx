@@ -54,3 +54,29 @@ test('ordinary cell commits and scrolling retain proof without rerendering Rates
   expect(hook.cellRevision).toBe(2);
   act(() => { tree.unmount(); });
 });
+
+test('partial physical visibility cannot certify an unmeasured comparison target', async () => {
+  mockStatus = 'running';
+  const target = { id: 'target' }, source = [row, target];
+  const list = { current: { scrollToIndex: jest.fn(async () => {}), recomputeViewableItems: jest.fn() } as never };
+  function TargetProbe() {
+    hook = useRatesAuditTarget({ rows: source, results: source, page: 1, size: 20, revision: 'a', context: 'test',
+      selectMode: true, canScroll: true, physicalViewport: true, list,
+      token: item => item.id, key: item => item.id, navigate: () => {} });
+    return null;
+  }
+  let tree!: ReactTestRenderer;
+  act(() => { tree = TestRenderer.create(<TargetProbe />); });
+  act(() => { hook.onCellCommit(row, 'a'); hook.onCellCommit(target, 'a'); });
+  let pending!: ReturnType<typeof hook.prepare>;
+  act(() => { pending = hook.prepare('target'); });
+  await act(async () => { await pending; });
+  act(() => { hook.onViewableItemsChanged({ viewableItems: [{ item: row, index: 0, key: 'one', isViewable: true }] }); });
+  expect(hook.targetProbe).toMatchObject({ required: true, status: 'pending', actualCount: 1, visibleCount: 0 });
+  expect(hook.isVisible(target)).toBe(false);
+  act(() => { hook.onViewableItemsChanged({ viewableItems: [
+    { item: row, index: 0, key: 'one', isViewable: true }, { item: target, index: 1, key: 'target', isViewable: true },
+  ] }); });
+  expect(hook.targetProbe).toMatchObject({ required: true, status: 'ready', visibleCount: 1 });
+  act(() => tree.unmount());
+});

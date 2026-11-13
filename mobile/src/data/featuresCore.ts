@@ -33,3 +33,24 @@ export function productHasAllFeatures(
   const scope = featureEvidenceScope(productKey, row, section);
   return required.every(feature => featureEvidenceMatches(lookup[productKey], feature, true, scope));
 }
+
+/** Reuse evidence for tiers with the exact same feature scope within one selection. */
+export function createProductFeatureMatcher(
+  required: string[],
+  lookup: Record<string, ProductDetail>,
+  section: SectionKey,
+): (row: RateRow) => boolean {
+  // Invocation-local: a changed profile, detail or even an in-place correction
+  // is re-evaluated on the next selection. No evidence owner is retained.
+  const matches = new Map<string, boolean>();
+  return row => {
+    const scope = featureEvidenceScope(row.product_key, row, section);
+    // Keep the exact lookup key as well as the case-normalized evidence scope.
+    const key = JSON.stringify([row.product_key, scope]);
+    const cached = matches.get(key);
+    if (cached !== undefined) return cached;
+    const matched = required.every(feature => featureEvidenceMatches(lookup[row.product_key], feature, true, scope));
+    matches.set(key, matched);
+    return matched;
+  };
+}

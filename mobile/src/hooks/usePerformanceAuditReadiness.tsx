@@ -2,9 +2,9 @@ import type { UiChild } from '../lib/uiCopy';
 import React, {
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
-  useState,
   useSyncExternalStore,
 } from 'react';
 
@@ -58,27 +58,34 @@ export function usePerformanceAuditSurface(
 ): PerformanceAuditSurfaceController {
   const registry = usePerformanceAuditReadinessRegistry();
   const definitionRef = useRef(definition);
-  definitionRef.current = definition;
+  // Publish definitions only after commit; an abandoned concurrent render
+  // must not replace the mounted surface's actions or evidence.
+  useLayoutEffect(() => { definitionRef.current = definition; });
   const captureGeneration = useSyncExternalStore(
     registry.subscribeCapture,
     registry.getCaptureGeneration,
     registry.getCaptureGeneration,
   );
-  const [handle, setHandle] = useState<PerformanceAuditSurfaceHandle | null>(null);
+  // Each capture/owner has its own slot. Old controllers never follow the ref
+  // into a replacement capture, and registration cannot trigger a second
+  // render of a potentially expensive Rates/lender screen.
+  const registration = useMemo(() => ({
+    handle: null as PerformanceAuditSurfaceHandle | null,
+    captureGeneration, surfaceId: definition.id, enabled, registry,
+  }), [captureGeneration, definition.id, enabled, registry]);
 
-  useEffect(() => {
-    if (!enabled || !registry.isCapturing()) {
-      setHandle(null);
-      return;
-    }
+  useLayoutEffect(() => {
+    if (!enabled || !registry.isCapturing()) return;
     const next = registry.registerSurface(definitionRef.current);
-    setHandle(next);
+    registration.handle = next;
     return () => {
+      registration.handle = null;
       if (next) registry.unregisterSurface(next);
     };
-  }, [captureGeneration, definition.id, enabled, registry]);
+  }, [enabled, registration, registry]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const handle = registration.handle;
     if (!enabled || !handle) return;
     registry.updateSurface(handle, {
       routeKey: definition.routeKey,
@@ -88,17 +95,22 @@ export function usePerformanceAuditSurface(
       actions: definition.actions,
     });
     for (const probe of definition.probes ?? []) registry.upsertProbe(handle, probe);
-  }, [definition.work, definition.actions, definition.datasetRevision, definition.probes, definition.renderRevision, definition.routeKey, enabled, handle, registry]);
+  }, [definition.work, definition.actions, definition.datasetRevision, definition.probes, definition.renderRevision, definition.routeKey, enabled, registration, registry]);
 
-  return useMemo<PerformanceAuditSurfaceController>(() => ({
-    active: enabled && handle != null,
-    surfaceId: definition.id,
-    upsertProbe: (probe) => enabled && handle != null && registry.upsertProbe(handle, probe),
-    updateProbe: (probeId, patch) => enabled && handle != null && registry.updateProbe(handle, probeId, patch),
-    removeProbe: (probeId) => enabled && handle != null && registry.removeProbe(handle, probeId),
-    setActions: (actions) => enabled && handle != null && registry.updateSurface(handle, { actions }),
-    getHandle: () => enabled ? handle : null,
-  }), [definition.id, enabled, handle, registry]);
+  return useMemo<PerformanceAuditSurfaceController>(() => {
+    const { captureGeneration, enabled, registry } = registration;
+    const getHandle = () => enabled && registry.isCapturing() && registry.getCaptureGeneration() === captureGeneration
+      ? registration.handle : null;
+    return {
+      get active() { return getHandle() != null; },
+      surfaceId: registration.surfaceId,
+      upsertProbe: probe => { const handle = getHandle(); return handle != null && registry.upsertProbe(handle, probe); },
+      updateProbe: (probeId, patch) => { const handle = getHandle(); return handle != null && registry.updateProbe(handle, probeId, patch); },
+      removeProbe: probeId => { const handle = getHandle(); return handle != null && registry.removeProbe(handle, probeId); },
+      setActions: actions => { const handle = getHandle(); return handle != null && registry.updateSurface(handle, { actions }); },
+      getHandle,
+    };
+  }, [registration]);
 }
 
 export interface PerformanceAuditProbeController {
@@ -117,13 +129,14 @@ export function usePerformanceAuditProbe(
   enabled = true,
 ): PerformanceAuditProbeController {
   const definitionRef = useRef(definition);
-  definitionRef.current = definition;
+  useLayoutEffect(() => { definitionRef.current = definition; });
 
   useEffect(() => {
     if (!surface.active || !enabled) return;
-    surface.upsertProbe(definitionRef.current);
+    const registered = definitionRef.current;
+    surface.upsertProbe(registered);
     return () => {
-      surface.removeProbe(definitionRef.current.id);
+      surface.removeProbe(registered.id);
     };
   }, [definition.id, enabled, surface]);
 
@@ -135,7 +148,7 @@ export function usePerformanceAuditProbe(
     const update = (patch: PerformanceAuditProbePatch) =>
       enabled && surface.updateProbe(definition.id, patch);
     return {
-      active: surface.active && enabled,
+      get active() { return surface.active && enabled; },
       probeId: definition.id,
       pending: (patch = {}) => update({ ...patch, status: 'pending', error: null }),
       ready: (patch = {}) => update({ ...patch, status: 'ready', error: null }),
