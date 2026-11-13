@@ -10,6 +10,13 @@ const zlib = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const ts = require('typescript');
 const sourceRoot = path.resolve(__dirname, '../src');
+const bankArtworkRoot = path.resolve(__dirname, '../assets/banks');
+// Selectors import the real offline branding map. Node retains file identities;
+// it does not decode/render artwork or claim native image acceptance.
+require.extensions['.png'] = (module, filename) => {
+  if (!filename.startsWith(bankArtworkRoot + path.sep)) throw new Error('Audit may only load bundled bank artwork');
+  module.exports = { uri: filename };
+};
 require.extensions['.ts'] = (module, filename) => {
   if (!filename.startsWith(sourceRoot + path.sep)) throw new Error('Audit may only load checked-in app sources');
   const output = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
@@ -19,6 +26,8 @@ require.extensions['.ts'] = (module, filename) => {
   module._compile(output.outputText, filename);
 };
 const { evaluateAppHealthDataQuality } = require('../src/lib/appHealth/dataQuality.ts');
+const { appHealthCatalogueSnapshot } = require('../src/lib/performanceAuditCatalogueSnapshot.ts');
+const { DEFAULT_PREFS } = require('../src/data/storeTypes.ts');
 const { publishedV1SourceContract } = require('../src/lib/appHealth/v1Contract.ts');
 const { normalizeCoreWithIntegrity } = require('../src/data/sectionIntegrity.ts');
 const { parseDatesIndex } = require('../src/data/datesIndex.ts');
@@ -290,6 +299,9 @@ async function audit(opts) {
   const detailKeys = Object.keys(decoded.details?.products ?? {});
   const snapshot = {
     source: 'remote', manifest, core: normalized?.core ?? null, appVersion: '1.0.0',
+    catalogueAuditMode: 'headless_default_preferences',
+    catalogue: appHealthCatalogueSnapshot({ core: normalized?.core ?? null,
+      details: decoded.details ?? null, searchIndex: decoded.search_index ?? null, prefs: DEFAULT_PREFS }),
     datesIndex: index ? { dates: index.dates, latestRunDate: index.latest_date } : undefined,
     assets: observations,
     details: decoded.details ? { runDate: decoded.details.run_date, productCount: detailKeys.length,

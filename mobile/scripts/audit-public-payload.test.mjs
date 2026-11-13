@@ -169,6 +169,36 @@ function candidate(t) {
   return { directory, manifest, opts: options(['--directory', directory]) };
 }
 
+test('headless audit reconciles retained catalogue identities with explicit default-profile scope', async t => {
+  const { opts, directory, manifest } = candidate(t);
+  // The old bundled capture predates search-index publication. Derive its index
+  // with the shipping indexer from unchanged retained detail records.
+  const { detailSearchIndex } = require('../src/data/detailSearch.ts');
+  const details = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.details.name)));
+  const body = Buffer.from(JSON.stringify({ schema_version: 1, run_date: manifest.run_date,
+    products: Object.fromEntries(detailSearchIndex(details.products)) }));
+  const name = 'search-index.json';
+  fs.writeFileSync(path.join(directory, name), body);
+  manifest.files.search_index = { name, bytes: body.length, sha256: hash(body),
+    url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}` };
+  fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+  const report = await audit(opts);
+  const check = report.checks.find(row => row.id === 'catalogue-identity-coverage');
+  assert.equal(check.status, 'warn');
+  assert.equal(check.metrics.catalogueAvailable, true);
+  assert.equal(check.metrics.headlessDefaultPreferences, true);
+  assert.ok(check.metrics.publishedProducts > 0);
+  assert.equal(check.metrics.identityMismatches, 0);
+  assert.equal(check.metrics.historyAvailable, null);
+  assert.equal(check.metrics.historicalPixelsVerified, false);
+  assert.equal(check.metrics.allProductsRendered, false);
+  assert.equal(report.publication_verified, false);
+  delete manifest.files.search_index;
+  fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+  const missing = await audit(opts);
+  assert.equal(missing.checks.find(row => row.id === 'catalogue-identity-coverage').status, 'unavailable');
+});
+
 test('private candidates verify local bytes without claiming public publication', async (t) => {
   const { directory, manifest, opts } = candidate(t);
   const originalFetch = globalThis.fetch;

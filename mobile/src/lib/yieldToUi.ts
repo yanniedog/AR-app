@@ -1,4 +1,10 @@
-import { InteractionManager } from 'react-native';
+import type { InteractionManager as NativeInteractionManager } from 'react-native';
+
+// Synchronous selectors can run in a headless audit without loading native code.
+// Scheduling still uses the real native manager when that capability is invoked.
+function interactionManager(): typeof NativeInteractionManager {
+  return require('react-native').InteractionManager;
+}
 
 /** Fallback so looping progress animations cannot stall yield forever. */
 const YIELD_TIMEOUT_MS = 48;
@@ -96,7 +102,7 @@ export function scheduleAfterInteractions(work: () => void): () => void {
   let cancelled = false;
   let settled = false;
   let timeout: ReturnType<typeof setTimeout> | null = null;
-  let handle: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
+  let handle: ReturnType<typeof NativeInteractionManager.runAfterInteractions> | null = null;
   const finish = () => {
     if (cancelled || settled) return;
     settled = true;
@@ -105,7 +111,7 @@ export function scheduleAfterInteractions(work: () => void): () => void {
     work();
   };
   try {
-    handle = InteractionManager.runAfterInteractions(finish);
+    handle = interactionManager().runAfterInteractions(finish);
   } catch {
     // The timeout below still yields before running required heavy work when
     // InteractionManager is unavailable or throws during navigation.
@@ -137,7 +143,7 @@ export function scheduleAfterNavigation(
   let minimumDelayDone = false;
   let minimumDelay: ReturnType<typeof setTimeout> | null = null;
   let fallback: ReturnType<typeof setTimeout> | null = null;
-  let handle: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
+  let handle: ReturnType<typeof NativeInteractionManager.runAfterInteractions> | null = null;
   const finish = () => {
     if (cancelled || settled) return;
     settled = true;
@@ -154,7 +160,7 @@ export function scheduleAfterNavigation(
     finishWhenReady();
   });
   try {
-    handle = InteractionManager.runAfterInteractions(() => {
+    handle = interactionManager().runAfterInteractions(() => {
       interactionsDone = true;
       finishWhenReady();
     });
@@ -194,7 +200,7 @@ export async function yieldToUi(timeoutMs: number = YIELD_TIMEOUT_MS): Promise<v
     };
     armTimeout(Math.max(0, timeoutMs), finish);
     try {
-      InteractionManager.runAfterInteractions(finish);
+      interactionManager().runAfterInteractions(finish);
     } catch {
       finish();
     }
