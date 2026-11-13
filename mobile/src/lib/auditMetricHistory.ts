@@ -61,8 +61,7 @@ export function parseAuditMetricHistory(text: string): AuditMetricRun[] {
   if (!valid) throw new Error('Invalid audit metric history');
   return mergeAuditMetricRuns([], value.runs.map((run: AuditMetricRun) => ({ ...run,
     metrics: Object.fromEntries(AUDIT_METRICS.map(metric => [metric,
-      // A v1 file may have been written during migration; validate every retained number.
-      run.metrics[metric] == null ? null : validMetricValue(metric, run.metrics[metric]) ? run.metrics[metric] : null,
+      value.schemaVersion === 1 && !LEGACY_AUDIT_METRICS.includes(metric) ? null : run.metrics[metric],
     ])) as Record<AuditMetric, number | null>,
   })));
 }

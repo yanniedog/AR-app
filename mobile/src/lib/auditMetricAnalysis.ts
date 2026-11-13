@@ -33,7 +33,7 @@ export interface AuditMetricEvidence {
   unitOfAnalysis: string;
   numerator: number | null;
   denominator: number | null;
-  sampleSize: number;
+  sampleSize: number | null;
   sampleUnit: string;
   eligibleCount: number | null;
   observedCount: number | null;
@@ -326,10 +326,13 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     ['providerSuccessPercent', 'coverage-reconciliation', 'providersSucceeded', 'providersAttempted', 'invalidCounts'],
     ['detailsCoveragePercent', 'details-completeness', 'matchedProducts', 'coreProducts', 'runMatches'],
   ] as const) {
-    const refs = healthObservations(code, [numerator, denominator, guard]);
-    const admitted = observations[refs[2]].value === (guard === 'invalidCounts' ? false : true);
+    const refs = healthObservations(code, [numerator, denominator, guard,
+      ...(metric === 'detailsCoveragePercent' ? ['impossibleCounts'] : [])]);
+    const impossible = metric === 'detailsCoveragePercent' ? observations[refs[3]].value : false;
+    const admitted = observations[refs[2]].value === (guard === 'invalidCounts' ? false : true) && impossible === false;
     ratio(metric, admitted ? count(refs[0]) : null, admitted ? count(refs[1]) : null, refs,
-      {}, [...countReasons(refs.slice(0, 2)), ...(admitted ? [] : ['unverified-evidence' as const])]);
+      {}, [...countReasons(refs.slice(0, 2)), ...(admitted ? [] : [impossible === true
+        ? 'inconsistent-counts' as const : 'unverified-evidence' as const])]);
   }
   const historyRefs = healthObservations('catalogue-identity-coverage', ['historyDaysChecked', 'historyAvailable']);
   const historyCheck = health?.checks.filter(check => check.code === 'catalogue-identity-coverage');
@@ -351,7 +354,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     ['historyProjectionMismatches', 'historyChartProjectionMismatches', 'historyChartProjectionComparisons']] as const) {
     const refs = healthObservations('catalogue-identity-coverage', [field, comparisons]);
     const compared = count(refs[1]);
-    put(metric, refs, { numerator: values[metric], sampleUnit: 'comparison', sampleSize: compared ?? 0,
+    put(metric, refs, { numerator: values[metric], sampleUnit: 'comparison', sampleSize: compared,
       eligibleCount: null, observedCount: compared, missingCount: compared === null ? null : 0 },
       [...countReasons(refs), ...(values[metric] === null ? ['unverified-evidence' as const] : [])]);
   }

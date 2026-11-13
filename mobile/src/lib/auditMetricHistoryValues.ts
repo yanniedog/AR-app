@@ -119,6 +119,7 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
     providerSuccessPercent: healthCheck('coverage-reconciliation')?.metrics.invalidCounts === false
       ? ratio('coverage-reconciliation', 'providersSucceeded', 'providersAttempted') : null,
     detailsCoveragePercent: healthCheck('details-completeness')?.metrics.runMatches === true
+      && healthCheck('details-completeness')?.metrics.impossibleCounts === false
       ? ratio('details-completeness', 'matchedProducts', 'coreProducts') : null,
     historySourceCoveragePercent: historySourceCoverage,
     missingChecks: coverage ? completion.gaps.missingChecks : null,

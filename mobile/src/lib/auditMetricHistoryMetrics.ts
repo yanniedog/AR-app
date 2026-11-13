@@ -77,7 +77,7 @@ export const AUDIT_METRIC_METHODS = {
   responsivenessCoveragePercent: ['Executed journeys with both timing observers / executed journeys × 100', 'journey'],
   linkVerificationPercent: ['Classified destinations / inventoried destinations × 100', 'destination'],
   providerSuccessPercent: ['Successful provider fetches / attempted providers × 100', 'provider'],
-  detailsCoveragePercent: ['Matched product details / core products in the same run × 100', 'product'],
+  detailsCoveragePercent: ['Matched product details / core products in the same run with validated count consistency × 100', 'product'],
   historySourceCoveragePercent: ['(Checked days − distinct source-gap days) / checked days × 100', 'day'],
   missingChecks: ['Count of missing planned performance and health checks', 'check'],
   targetProbeDefects: ['Count of target probe error and revision-mismatch issues', 'probe-issue'],

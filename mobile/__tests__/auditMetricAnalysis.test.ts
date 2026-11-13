@@ -25,7 +25,7 @@ function healthMetricReport(code: AppHealthCheck['code'], metrics: AppHealthChec
 test('count admission rejects fractional operands before subtraction and unsafe sums while durations retain fractions', () => {
   const cases = [
     [APP_HEALTH_CHECK_CODES.COVERAGE, 'providerSuccessPercent', { providersSucceeded: 1.5, providersAttempted: 3, invalidCounts: false }],
-    [APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS, 'detailsCoveragePercent', { matchedProducts: 1, coreProducts: Number.MAX_SAFE_INTEGER + 1, runMatches: true }],
+    [APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS, 'detailsCoveragePercent', { matchedProducts: 1, coreProducts: Number.MAX_SAFE_INTEGER + 1, runMatches: true, impossibleCounts: false }],
     [APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT, 'displayLayoutPassPercent', { checked: 1.5, failed: 0.5, missing: 0.5, warned: 0, unavailable: 0 }],
     [APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT, 'displayLayoutPassPercent', { checked: Number.MAX_SAFE_INTEGER, failed: 0, missing: 1, warned: 0, unavailable: 0 }],
     [APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT, 'surfaceCoveragePercent', { plannedSurfaces: 3.5, missingSurfaces: 0.5, duplicateContracts: 0 }],
@@ -100,7 +100,7 @@ test.each(['historyProcessingMismatches', 'historyProjectionMismatches'] as cons
       const failed = healthMetricReport(APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE, { historyAvailable: available, [field]: 2 });
       expect(auditMetricRun(failed).metrics[metric]).toBe(2);
       expect(buildAuditMetricAnalysis(failed).metrics[metric]).toMatchObject({ value: 2, numerator: 2,
-        observedCount: null });
+        sampleSize: null, observedCount: null });
     }
   });
 
@@ -109,7 +109,7 @@ test.each([
   ['detailsCoveragePercent', APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS, 'matchedProducts', 'coreProducts', 'runMatches', true],
 ] as const)('%s analysis honors its validity guard and preserves raw rejected observations', (metric, code, numerator, denominator, guard, accepted) => {
   for (const guardValue of [accepted, !accepted, undefined]) {
-    const report = healthMetricReport(code, { [numerator]: 2, [denominator]: 3,
+    const report = healthMetricReport(code, { [numerator]: 2, [denominator]: 3, impossibleCounts: false,
       ...(guardValue === undefined ? {} : { [guard]: guardValue }) });
     const analysis = buildAuditMetricAnalysis(report), evidence = analysis.metrics[metric];
     expect(evidence.value).toBe(auditMetricRun(report).metrics[metric]);
@@ -122,6 +122,19 @@ test.each([
         expect.objectContaining({ field: numerator, value: 2 }));
     }
   }
+});
+
+test.each([true, false, undefined])('details consistency guard must explicitly validate counts: %s', impossibleCounts => {
+  const report = healthMetricReport(APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS,
+    { matchedProducts: 2, coreProducts: 3, runMatches: true,
+      ...(impossibleCounts === undefined ? {} : { impossibleCounts }) });
+  const analysis = buildAuditMetricAnalysis(report), evidence = analysis.metrics.detailsCoveragePercent;
+  expect(evidence.value).toBe(auditMetricRun(report).metrics.detailsCoveragePercent);
+  expect(evidence).toMatchObject(impossibleCounts === false ? { value: 66.7, numerator: 2, denominator: 3 }
+    : { value: null, numerator: null, denominator: null,
+      missingEvidence: [impossibleCounts === true ? 'inconsistent-counts' : 'unverified-evidence', 'missing-denominator'] });
+  expect(evidence.contributors.map(index => analysis.observations[index])).toContainEqual(
+    expect.objectContaining({ field: 'impossibleCounts', value: impossibleCounts ?? null }));
 });
 
 test.each([true, false, undefined])('historical source operands require positive availability evidence: %s', available => {
@@ -312,7 +325,7 @@ test('unknown aggregate numerators do not claim a fully observed denominator', (
   report.appHealth = finalizeAppHealthReport({ sessionId: report.sessionId, mode: 'local',
     startedAt: report.startedAt, finishedAt: report.finishedAt, plannedCheckIds: [code],
     checks: [{ id: code, code, domain: 'data-completeness', label: 'Details', status: 'unavailable',
-      metrics: { coreProducts: 100, runMatches: true } }] });
+      metrics: { coreProducts: 100, runMatches: true, impossibleCounts: false } }] });
   expect(buildAuditMetricAnalysis(report).metrics.detailsCoveragePercent).toMatchObject({ value: null,
     numerator: null, denominator: 100, eligibleCount: 100, observedCount: 0, missingCount: 100,
     sampleSize: 0, missingEvidence: ['missing-evidence'] });

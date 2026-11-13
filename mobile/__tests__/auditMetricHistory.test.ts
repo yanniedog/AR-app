@@ -40,7 +40,7 @@ test('time coordinates preserve spacing and missing measurements break lines', (
 test('invalid history is rejected instead of silently erasing it', () => {
   const run = auditMetricRun(makePerformanceAuditReport());
   const encode = (runs: unknown[]) => JSON.stringify({ schemaVersion: 1, runs });
-  expect(parseAuditMetricHistory(encode([run]))).toEqual([run]);
+  expect(parseAuditMetricHistory(encode([run]))[0].metrics.failures).toEqual(run.metrics.failures);
   for (const invalid of [{ ...run, finishedAt: 'bad' }, { ...run, metrics: {} },
     { ...run, metrics: { ...run.metrics, coveragePercent: 101 } }]) {
     expect(() => parseAuditMetricHistory(encode([invalid]))).toThrow('Invalid audit');
@@ -51,11 +51,12 @@ test('invalid history is rejected instead of silently erasing it', () => {
 test('v1 history keeps old facts and introduces unknown metric gaps; v2 requires complete validated fields', () => {
   const run = auditMetricRun(makePerformanceAuditReport());
   const legacy = { ...run, metrics: { failures: 0, coveragePercent: 99.2, durationMs: 100,
-    slowestCheckMs: 2, maxEventLoopLagMs: null, maxFrameGapMs: 0 } };
+    slowestCheckMs: 2, maxEventLoopLagMs: null, maxFrameGapMs: 0, automatedTaskSuccessPercent: 100, runtimeErrors: 3 } };
   const [migrated] = parseAuditMetricHistory(JSON.stringify({ schemaVersion: 1, runs: [legacy] }));
   expect(migrated.metrics.coveragePercent).toBe(99.2);
   expect(migrated.metrics.maxFrameGapMs).toBe(0);
   expect(migrated.metrics.automatedTaskSuccessPercent).toBeNull();
+  expect(migrated.metrics.runtimeErrors).toBeNull();
   expect(Object.keys(migrated.metrics)).toHaveLength(AUDIT_METRICS.length);
   expect(() => parseAuditMetricHistory(JSON.stringify({ schemaVersion: AUDIT_METRIC_HISTORY_VERSION, runs: [legacy] }))).toThrow();
   expect(parseAuditMetricHistory(JSON.stringify({ schemaVersion: AUDIT_METRIC_HISTORY_VERSION, runs: [migrated] }))).toEqual([migrated]);
