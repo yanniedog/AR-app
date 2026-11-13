@@ -16,6 +16,20 @@ test('retired scenario-recovery fields remain readable in historical reports', (
   expect(retained.checks[0].metrics).toEqual({ skipClassification: 'scenario-recovery', scenarioRecoveryCascade: true });
 });
 
+test('funds mode and both private comparison drafts cannot leak through public diagnostics', () => {
+  const report = makePerformanceAuditReport();
+  const privateInputs = { loanAmount: '654321.98', lvr: '71.234567', lvrMode: 'funds', fundsAvailable: '123456.79' };
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 12,
+    metrics: { actionMs: 4, ...privateInputs, parameters: privateInputs as never },
+    diagnostic: { stage: 'readiness', readiness: { surfaces: [{ id: 'search.results', work: privateInputs, probes: [] }] } } as never }];
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.checks[0]).toMatchObject({ id: 'journey-rates-cold', status: 'fail', durationMs: 12,
+    metrics: { actionMs: 4 } });
+  expect(JSON.stringify(decoded)).not.toMatch(/654321\.98|71\.234567|123456\.79|fundsAvailable|lvrMode|"funds"/);
+  expect(JSON.stringify(fullAuditDiagnosticLog(report, id => id))).not.toMatch(/654321\.98|71\.234567|123456\.79|fundsAvailable|lvrMode|"funds"/);
+});
+
 test('every upload includes all retained checks, errors, traces, metrics and diagnostic context', () => {
   const report = makePerformanceAuditReport('private-session');
   report.checks = [{ id: 'deep-first-pass.route.projections.projections.advanced.toggle', label: 'Private input label', kind: 'journey',

@@ -6,14 +6,8 @@ import TestRenderer, { act } from 'react-test-renderer';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { EMPTY_FILTERS } from '../src/data/selectors';
 import { captureRatesSession, restoreRatesSession, initializeRatesSession, updateRatesSection, recordRatesScroll, useRatesSession } from '../src/data/ratesSession';
-import { clearMortgageComparison, useMortgageComparison } from '../src/data/mortgageComparison';
+import { clearMortgageComparison, setMortgageComparisonInputs, useMortgageComparison } from '../src/data/mortgageComparison';
 
-/** Mortgage catalogue search requires LVR + purpose + repayment; keep facets when wiping other filters. */
-const MORTGAGE_CRITERIA_FILTERS = {
-  ...EMPTY_FILTERS,
-  loanPurposes: ['OWNER_OCCUPIED'],
-  repaymentTypes: ['PRINCIPAL_AND_INTEREST'],
-};
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { buildDeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
@@ -24,6 +18,13 @@ import { auditSearchEntryParams } from '../src/lib/performanceAuditActionParams'
 import { resolveRatesIntent } from '../src/lib/ratesIntent';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditMutationBarrier } from '../src/lib/performanceAuditTiming';
 import { PerformanceAuditReadinessRegistry, PerformanceAuditReadinessTimeoutError } from '../src/lib/performanceAuditReadiness';
+
+/** Mortgage catalogue search requires LVR + purpose + repayment; keep facets when wiping other filters. */
+const MORTGAGE_CRITERIA_FILTERS = {
+  ...EMPTY_FILTERS,
+  loanPurposes: ['OWNER_OCCUPIED'],
+  repaymentTypes: ['PRINCIPAL_AND_INTEREST'],
+};
 
 jest.mock('../src/data/store', () => ({ useStore: jest.requireActual('zustand').create(() => ({})) }));
 jest.mock('../src/lib/nav', () => ({ ...jest.requireActual('../src/lib/nav'), openCompare: jest.fn(), openProduct: jest.fn() }));
@@ -170,6 +171,23 @@ test('the mounted workspace pages sorted rows, retains cross-page selections, an
     expect(useRatesSession.getState().sections.Mortgage.page).toBe(2);
   } finally { act(() => tree.unmount()); }
 });
+test('mode and funds changes reset paging even when the eligible rows stay the same', () => {
+  setMortgageComparisonInputs({ loanAmount: '600000', lvr: '80', fundsAvailable: '150000' });
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  try {
+    act(() => updateRatesSection('Mortgage', { page: 2 }));
+    expect(list().data[0].rate_index).toBe(20);
+    act(() => setMortgageComparisonInputs({ ...useMortgageComparison.getState(), lvrMode: 'funds' }));
+    expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
+    expect(list().data[0].rate_index).toBe(0);
+    act(() => updateRatesSection('Mortgage', { page: 2 }));
+    expect(list().data[0].rate_index).toBe(20);
+    act(() => setMortgageComparisonInputs({ ...useMortgageComparison.getState(), fundsAvailable: '160000' }));
+    expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
+    expect(list().data[0].rate_index).toBe(0);
+  } finally { act(() => tree.unmount()); }
+});
+
 test('temporary filters reset paging and never erase the saved profile; clearing saved requirements retains explicit temporary filters', () => {
   const profile = { ...DEFAULT_PREFS.profileFilters, rateTypes: ['VARIABLE'] };
   mockStore.getState().setPref('profileFilters', profile);
@@ -197,6 +215,7 @@ test('comparison uncertainty counts the complete filtered result set, not the pr
 
 test('audit mortgage scope apply and clear update comparison inputs and temporary facets', () => {
   install();
+  setMortgageComparisonInputs({ loanAmount: '600000', lvr: '20', lvrMode: 'funds', fundsAvailable: '150000' });
   updateRatesSection('Mortgage', { page: 3, scrollOffset: 420 });
   const tree = mount();
   const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];

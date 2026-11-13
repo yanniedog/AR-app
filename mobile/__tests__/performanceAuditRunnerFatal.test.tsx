@@ -7,7 +7,9 @@ import { EMPTY_FILTERS } from '../src/data/selectors';
 import { getPerformanceAuditState, requestPerformanceAudit, resetPerformanceAuditForTests, type PerformanceAuditReport } from '../src/lib/performanceAudit';
 import { debugLog } from '../src/lib/debugLog';
 import { startDebugLogUpload } from '../src/lib/debugLogSharing';
-import { captureRatesSession } from '../src/data/ratesSession';
+import { captureRatesSession, restoreRatesSession } from '../src/data/ratesSession';
+import { clearMortgageComparison, setMortgageComparisonInputs, useMortgageComparison, type MortgageComparisonInputs } from '../src/data/mortgageComparison';
+import { activateKeepAwakeAsync } from 'expo-keep-awake';
 import * as Clipboard from 'expo-clipboard';
 import { AuditEvidenceCapacityError } from '../src/lib/auditEvidenceCapacity';
 import { buildPerformanceAuditCompletion } from '../src/lib/performanceAuditCompletion';
@@ -33,7 +35,7 @@ jest.mock('../src/lib/debugLog', () => ({
 }));
 
 beforeEach(() => { jest.useFakeTimers(); });
-afterEach(() => { resetPerformanceAuditForTests(); jest.clearAllMocks(); jest.clearAllTimers(); jest.useRealTimers(); });
+afterEach(() => { resetPerformanceAuditForTests(); clearMortgageComparison(); jest.clearAllMocks(); jest.clearAllTimers(); jest.useRealTimers(); });
 
 test('the runner routes both real search passes with a fresh deterministic task intent', () => {
   const requests: string[] = [];
@@ -99,5 +101,40 @@ test('a capacity stop retains a failed position and cannot claim complete eviden
     const completion = buildPerformanceAuditCompletion(partial);
     expect(completion).toMatchObject({ outcome: 'failed', detailsComplete: false, gaps: { evidenceCapacityFailures: 1 } });
     expect(completion.failurePositions).toContainEqual(expect.objectContaining({ source: 'performance', position: 1 }));
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each<MortgageComparisonInputs>([
+  { loanAmount: '654321.98', lvr: '71.234567', lvrMode: 'funds', fundsAvailable: '123456.79' },
+  { loanAmount: '654321.98', lvr: '71.234567' },
+])('the mounted audit restores the exact private comparison snapshot after interruption: %j', async baseline => {
+  setMortgageComparisonInputs(baseline);
+  const ratesSnapshot = {} as ReturnType<typeof captureRatesSession>;
+  jest.mocked(captureRatesSession).mockImplementation(() => {
+    setMortgageComparisonInputs(baseline.lvrMode === 'funds'
+      ? { loanAmount: '500000', lvr: '80' }
+      : { loanAmount: '500000', lvr: '80', lvrMode: 'funds', fundsAvailable: '200000' });
+    return ratesSnapshot;
+  });
+  jest.mocked(activateKeepAwakeAsync).mockRejectedValueOnce(new Error('interrupted audit fixture'));
+  jest.mocked(debugLog.storePerformanceAudit).mockResolvedValue(undefined);
+  requestPerformanceAudit({ uploadLog: false });
+  let tree!: ReactTestRenderer;
+  await act(async () => {
+    tree = TestRenderer.create(<PerformanceAuditRunner />);
+    for (let turn = 0; turn < 300; turn++) await Promise.resolve();
+  });
+  try {
+    expect(getPerformanceAuditState().status).toBe('failed');
+    expect(restoreRatesSession).toHaveBeenCalledWith(ratesSnapshot);
+    expect(useMortgageComparison.getState()).toEqual(baseline);
+    expect(debugLog.storePerformanceAudit).toHaveBeenCalledTimes(1);
+    const evidence = JSON.stringify([
+      jest.mocked(debugLog.storePerformanceAudit).mock.calls,
+      jest.mocked(debugLog.info).mock.calls,
+      jest.mocked(debugLog.warn).mock.calls,
+      jest.mocked(debugLog.error).mock.calls,
+    ]);
+    expect(evidence).not.toMatch(/654321\.98|71\.234567|123456\.79|fundsAvailable|lvrMode/);
   } finally { act(() => tree.unmount()); }
 });

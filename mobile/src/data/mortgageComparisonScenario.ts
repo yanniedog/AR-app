@@ -6,6 +6,7 @@ import type { Filters } from './selectors';
 import type { SectionKey } from '../types';
 import { calculatorAmount, calculatorRateFraction, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
 import type { MortgageComparisonInputs } from './mortgageComparison';
+import { mortgageComparisonValues } from './mortgageComparison';
 import type { RateScenario } from './publicRateModel';
 
 /** Ephemeral comparison inputs override pricing assumptions without saving them. */
@@ -27,11 +28,17 @@ export function mortgageComparisonScenario(section: SectionKey, scenario: RateSc
       result.repayment = facets.repayment; result.profileRepayment = facets.profileRepayment;
     }
   }
-  if (inputs.loanAmount.trim()) {
+  if (inputs.lvrMode === 'funds') {
+    const values = mortgageComparisonValues(inputs);
+    // Funds mode owns both dimensions, even before all required fields exist.
+    // Missing/invalid values must not inherit a saved property's assumptions.
+    result.amount = values.lvrFraction !== undefined ? String(values.amount) : undefined;
+    result.lvr = values.lvrFraction;
+  } else if (inputs.loanAmount.trim()) {
     const amount = calculatorAmount(inputs.loanAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT);
     result.amount = amount != null && amount > 0 ? String(amount) : undefined;
   }
-  if (inputs.lvr.trim()) {
+  if (inputs.lvrMode !== 'funds' && inputs.lvr.trim()) {
     const lvr = calculatorRateFraction(inputs.lvr);
     result.lvr = lvr != null ? String(lvr) : undefined;
   }
