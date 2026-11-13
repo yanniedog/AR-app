@@ -184,10 +184,17 @@ function bankResponseCandidate(t) {
   manifest.run_date = core.run_date;
   manifest.tag = `app-payload-${core.run_date}`;
   manifest.files = {};
+  const rows = Object.values(core.sections).flatMap(section => section.rates);
+  manifest.counts = { rates: rows.length, products: new Set(rows.map(row => row.product_key)).size,
+    providers: new Set(rows.map(row => row.provider)).size };
   for (const [key, name] of Object.entries({ core: 'core-subset.json', details: 'details-subset.json',
     bank_history: 'bank-history.json', rba_calendar: 'rba-calendar.json' })) {
     writeJsonAsset(directory, manifest, key, JSON.parse(fs.readFileSync(path.join(fixture, name))));
   }
+  const { detailSearchIndex } = require('../src/data/detailSearch.ts');
+  const details = JSON.parse(fs.readFileSync(path.join(fixture, 'details-subset.json')));
+  writeJsonAsset(directory, manifest, 'search_index', { schema_version: 1, run_date: core.run_date,
+    products: Object.fromEntries(detailSearchIndex(details.products)) });
   return result;
 }
 
@@ -195,17 +202,19 @@ test('headless Bank response uses retained source and default projection without
   const { opts } = bankResponseCandidate(t);
   const report = await audit(opts);
   const check = report.checks.find(row => row.id === 'bank-response-coverage');
+  assert.equal(report.status, 'WARN');
+  assert.deepEqual(report.checks.filter(row => !['pass', 'warn'].includes(row.status)).map(row => row.id).sort(),
+    ['coverage-reconciliation', 'freshness-window']); // Deliberately omitted full-capture claims/schedule.
+  assert.equal(report.checks.find(row => row.id === 'ribbon-reconciliation').status, 'pass');
   assert.equal(report.assets.bank_history.status, 'PASS');
   assert.equal(report.assets.rba_calendar.status, 'PASS');
   assert.equal(check.status, 'warn');
-  assert.equal(check.metrics.coverageAvailable, true);
-  assert.equal(check.metrics.runMatches, true);
-  assert.equal(check.metrics.projectionAvailable, true);
-  assert.ok(check.metrics.checked > 0);
-  assert.ok(check.metrics.filteredHistory > 0);
-  assert.ok(check.metrics.unknownMoves > 0);
-  assert.equal(check.metrics.coverageComplete, false);
-  assert.equal(check.metrics.renderedCoverageVerified, false);
+  assert.deepEqual(check.metrics, { coverageAvailable: true, runMatches: true, projectionAvailable: true,
+    windows: 1, checked: 274, displayed: 1, knownMoves: 0, knownTiming: 0,
+    unknownMoves: 274, unknownTiming: 274, noRecordedMove: 0, noProducts: 0,
+    filteredHistory: 272, quarantinedHistory: 0, missingHistory: 1, missingBaseline: 1,
+    historyGaps: 0, unverifiedFirstMoves: 0, unverifiedEvents: 0,
+    coverageComplete: false, renderedCoverageVerified: false });
   assert.equal(report.historical_coverage_verified, null);
   assert.equal(report.publication_verified, false);
 });
@@ -222,8 +231,11 @@ for (const key of ['bank_history', 'rba_calendar']) {
   test(`headless Bank response keeps invalid ${key} unavailable`, async t => {
     const { opts, directory, manifest } = bankResponseCandidate(t);
     writeJsonAsset(directory, manifest, key, {});
-    const check = (await audit(opts)).checks.find(row => row.id === 'bank-response-coverage');
+    const report = await audit(opts);
+    const check = report.checks.find(row => row.id === 'bank-response-coverage');
     assert.equal(check.status, 'unavailable');
+    assert.equal(report.status, 'FAIL');
+    assert.equal(report.assets[key].status, 'FAIL');
   });
 }
 
@@ -231,10 +243,22 @@ test('headless Bank response rejects a different source observation date', async
   const { opts, directory, manifest } = bankResponseCandidate(t);
   const history = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.bank_history.name)));
   history.run_date = '2026-11-12'; // Metadata-only negative control, no invented observations.
+  history.run_dates[history.run_dates.length - 1] = history.run_date;
   writeJsonAsset(directory, manifest, 'bank_history', history);
   const check = (await audit(opts)).checks.find(row => row.id === 'bank-response-coverage');
   assert.equal(check.status, 'fail');
   assert.equal(check.metrics.runMatches, false);
+});
+
+test('matching metadata cannot hide a Bank timeline ending on an earlier observation', async t => {
+  const { opts, directory, manifest } = bankResponseCandidate(t);
+  const history = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.bank_history.name)));
+  history.run_dates[history.run_dates.length - 1] = '2026-11-12';
+  writeJsonAsset(directory, manifest, 'bank_history', history);
+  const report = await audit(opts);
+  assert.equal(report.status, 'FAIL');
+  assert.equal(report.assets.bank_history.status, 'FAIL');
+  assert.equal(report.checks.find(row => row.id === 'bank-response-coverage').status, 'unavailable');
 });
 
 test('unverified Bank history bytes never become headless coverage evidence', async t => {

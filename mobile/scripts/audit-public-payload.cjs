@@ -59,6 +59,23 @@ function validateSearchIndex(value) {
   }
 }
 
+function normalizeBankAuditAsset(key, decoded, observations, evidence) {
+  if (!Object.hasOwn(decoded, key)) return null;
+  try {
+    const value = key === 'bank_history'
+      ? normalizeBankInsightsPayload(decoded[key]) : normalizeRbaCalendar(decoded[key]);
+    if (!value) throw new Error(`Invalid ${key} payload`);
+    if (key === 'bank_history' && value.run_dates.at(-1) !== value.run_date) {
+      throw new Error('Bank history timeline does not end at its observation date');
+    }
+    return value;
+  } catch {
+    evidence[key] = { ...evidence[key], status: 'FAIL', error: `Invalid ${key} observation` };
+    observations[key] = { state: 'failed' };
+    return null;
+  }
+}
+
 function publicationSource(source, repo) {
   const url = new URL(source);
   const prefix = `/${repo}/releases/download/`;
@@ -312,8 +329,8 @@ async function audit(opts) {
   const detailKeys = Object.keys(decoded.details?.products ?? {});
   const auditState = { core: normalized?.core ?? null, coreIntegrity: normalized?.integrity ?? null,
     details: decoded.details ?? null, searchIndex: decoded.search_index ?? null, prefs: DEFAULT_PREFS,
-    bankInsights: normalizeBankInsightsPayload(decoded.bank_history),
-    rbaCalendar: normalizeRbaCalendar(decoded.rba_calendar) };
+    bankInsights: normalizeBankAuditAsset('bank_history', decoded, observations, evidence),
+    rbaCalendar: normalizeBankAuditAsset('rba_calendar', decoded, observations, evidence) };
   const snapshot = {
     source: 'remote', manifest, core: normalized?.core ?? null, appVersion: '1.0.0',
     catalogueAuditMode: 'headless_default_preferences',

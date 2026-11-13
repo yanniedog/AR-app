@@ -17,7 +17,15 @@ and missing historical evidence remains unknown with a warning. The result
 does not claim rendered coverage, personal-profile acceptance or device testing.
 No producer qualification rule changes.
 
-Local checks: 68 CLI script tests and 126 relevant Jest tests passed; typecheck
+Review follow-up also records semantically invalid present assets as failed
+evidence/observations instead of leaving their byte-read state ready. A Bank
+timeline must end on its own declared observation date before becoming audit
+evidence; sparse historical gaps remain valid unknowns. The subset's derived
+ribbons/counts are recalculated from its actual rows. Exact 274-row coverage and
+the overall WARN result are pinned, with only deliberately omitted full-capture
+coverage/scheduling unavailable.
+
+Local checks: 69 CLI script tests and 126 relevant Jest tests passed; typecheck
 passed, and UI-copy verification reported zero violations. The new regression
 fixture is a documented subset of real retained
 November 13 CDR products with unchanged Bank history/RBA bodies and original
