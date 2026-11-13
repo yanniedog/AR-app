@@ -24,6 +24,10 @@ updates:
       time: "05:30"
       timezone: Australia/Hobart
     open-pull-requests-limit: 3
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
   - package-ecosystem: npm
     directory: /mobile/tools/eas-cli
     schedule:
