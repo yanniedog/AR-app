@@ -69,7 +69,7 @@ jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({
 jest.mock('../src/hooks/useLogoReadiness', () => ({ useLogoReadiness: () => ({ ready: true }) }));
 jest.mock('../src/hooks/useDebouncedValue', () => ({ useDebouncedValue: (value: string) => mockCommittedQuery ?? value }));
 jest.mock('../src/hooks/useSearchFilterOptions', () => ({
-  useSearchFilterOptions: () => ({ ready: true, options: {} }),
+  useSearchFilterOptions: () => ({ ready: true, options: jest.requireActual('../src/data/searchFilterOptions').EMPTY_SEARCH_FILTER_OPTIONS }),
 }));
 jest.mock('@shopify/flash-list', () => {
   const React = jest.requireActual('react');
