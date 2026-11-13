@@ -3,7 +3,7 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import type { PerformanceAuditReport } from './performanceAudit';
 import { auditOutcome } from './auditPresentation';
 import { APP_HEALTH_CHECK_CODES, APP_HEALTH_DOMAINS } from './appHealth';
-import { publicAuditDiagnostic } from './performanceAuditDiagnostic';
+import { publicAuditDiagnosticStage } from './performanceAuditDiagnostic';
 import { publicHistoryCoverageSanitizer } from './appHealth/publicHistoryCoverage';
 
 /** Only machine-authored ISO instants are public; arbitrary saved text is not. */
@@ -60,6 +60,7 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   // even though the actual private text will become an opaque public alias.
   const countTruncation = (value: unknown): void => {
     if (typeof value === 'string') {
+      if (!value.includes('…[truncated ')) return;
       const markers = [...value.matchAll(/…\[truncated (\d+) chars\]/g)];
       if (markers.length) truncatedEvidenceFields++;
       for (const marker of markers) omittedEvidenceChars += Number(marker[1]);
@@ -212,9 +213,8 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     stage: string | null; category: 'failure' | 'timing' }[] = [];
   report.checks.forEach((check, index) => {
     if (check.status !== 'fail') return;
-    const diagnostic = publicAuditDiagnostic(check.diagnostic) as { stage?: string } | null;
     failurePositions.push({ source: 'performance', position: index + 1, checkId: safeCheckId(check.id),
-      stage: diagnostic?.stage ?? null, category: auditOutcome(check) === 'timing' ? 'timing' : 'failure' });
+      stage: publicAuditDiagnosticStage(check.diagnostic), category: auditOutcome(check) === 'timing' ? 'timing' : 'failure' });
   });
   const healthCodes = new Set<string>(Object.values(APP_HEALTH_CHECK_CODES));
   healthChecks.forEach((check, index) => {

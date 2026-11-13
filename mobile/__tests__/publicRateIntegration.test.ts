@@ -14,6 +14,7 @@ import { currentProductDiscovery, currentProductSelectionMatches, alphabeticalSc
 import { publicReferenceScope } from '../src/data/publicRatePresentation';
 import { resolveCompareSelections } from '../src/data/compareSelection';
 import { AS_OF, catalogue, core, product, programme, reference, row } from '../testUtils/publicRateJourney';
+import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 
 const profile = normalizeProfileFilters({ loanPurposes: ['OWNER_OCCUPIED'], repaymentTypes: ['PRINCIPAL_AND_INTEREST'] });
 beforeEach(() => { jest.useFakeTimers(); jest.setSystemTime(new Date(AS_OF)); installMandatoryEligibility(selectMandatoryEligibility(null, null, null)); });
@@ -205,6 +206,15 @@ it('combined audit plans and saved/compare selection use one semantic offer for 
   expect(savedStep.parameters.savedId).toMatch(/^rate-offer-v2:/);
   const refs = effective.sections.Mortgage.rates.map(row => makeSavedRateRef(row, 'rate', AS_OF));
   expect(resolveSavedRates(source, refs, view).map(item => item.row.public_offer_id).sort()).toEqual(['other-offer', 'unit-offer']);
+  // A public semantic offer must still obey its original verified source clause.
+  const context = selectedConstraintFixture('Mortgage', source.sections.Mortgage.rates,
+    [{ rateIndex: 9, text: 'LVR up to 50%.' }]);
+  const constrained = publicComparisonCore(context.core, view, () => ({}));
+  const scoped = buildPerformanceAuditSetupPlans(constrained, { seed: 'combined-semantic', includeNonStandard: true,
+    detailsProducts: context.details.products, sourceConditionContext: context }).plan;
+  expect(new Set(scoped.inputs.compareSelectionTokens)).toEqual(new Set(tokens));
+  expect(scoped.inputs.ratesPrimaryProduct?.selectionToken).toBe(tokens[0]);
+  expect(scoped.inputs.ratesSecondaryProduct).toBeNull();
 });
 
 

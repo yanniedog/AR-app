@@ -283,9 +283,13 @@ test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seed
   useMortgageComparison.setState({ loanAmount: '123456', lvr: '78' });
   const before = captureRatesSession(), preferences = JSON.parse(JSON.stringify(mockStore.getState().prefs));
   const comparison = { ...useMortgageComparison.getState() };
-  const plan = buildDeepPerformanceAuditPlan(mockStore.getState().core, { seed: 'review-412', includeNonStandard: true });
-  const targets = [plan.inputs.primaryProduct!, plan.inputs.secondaryProduct!];
-  expect(targets.map(target => target.productKey)).toEqual(['p-20', 'p-35']);
+  const plan = Array.from({ length: 30 }, (_, index) => buildDeepPerformanceAuditPlan(mockStore.getState().core,
+    { seed: `review-412-${index}`, includeNonStandard: true })).find(candidate =>
+    [candidate.inputs.ratesPrimaryProduct!, candidate.inputs.ratesSecondaryProduct!].every(target =>
+      catalogue.findIndex(row => row.product_key === target.productKey) >= pageSize))!;
+  expect(plan).toBeDefined();
+  const targets = [plan.inputs.ratesPrimaryProduct!, plan.inputs.ratesSecondaryProduct!];
+  expect(targets.every(target => catalogue.findIndex(row => row.product_key === target.productKey) >= pageSize)).toBe(true);
   const steps = plan.passes.flatMap(pass => pass.steps.filter(step => step.scenarioId === 'route.rates'));
   const tree = mount(), list = () => tree.root.findByType('FlashList').props;
   const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
@@ -344,6 +348,22 @@ test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seed
     expect(list().data).toHaveLength(0); // Original missing-bank/FIXED scope is restored too.
     act(() => tree.unmount());
   }
+});
+
+test('audit compare cannot bypass missing or partial rendered selections with planned tokens', () => {
+  const tree = mount();
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  const tokens = ['0#p-0', '1#p-1'];
+  try {
+    expect(surface().actions!['search.compare.open']({ selectionTokens: tokens })).toHaveProperty('unavailableReason');
+    act(() => updateRatesSection('Mortgage', { selected: [tokens[0]], selectMode: true }));
+    expect(surface().actions!['search.compare.open']({ selectionTokens: tokens })).toHaveProperty('unavailableReason');
+    expect(surface().actions!['search.compare.open']({ selectionTokens: [tokens[0], tokens[0]] })).toHaveProperty('unavailableReason');
+    expect(openCompare).not.toHaveBeenCalled();
+    act(() => updateRatesSection('Mortgage', { selected: tokens }));
+    surface().actions!['search.compare.open']({ selectionTokens: tokens });
+    expect(openCompare).toHaveBeenCalledWith(tokens, 'rates-comparison');
+  } finally { act(() => tree.unmount()); }
 });
 
 test('list readiness remeasures native geometry when unchanged viewability events are omitted', async () => {

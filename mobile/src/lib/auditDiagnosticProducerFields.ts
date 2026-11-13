@@ -814,6 +814,7 @@ export const AUDIT_PRODUCER_ENUMS: Record<string, readonly string[]> = {
     "Covers official sources, loaded lender details and links rendered during this run. Unloaded lazy sources remain outside this inventory.",
     "Enumerates all loaded source destinations; it does not certify OS handlers or HTTP reachability.",
     "Fewer than two distinct exact products are available in one section",
+    "Fewer than two distinct exact products match the applied Rates comparison scope",
     "Fewer than two products are loaded",
     "Maximum coverage is unavailable because optional assets are not cached",
     "No Mortgage rates are available for comparison-scope latency",

@@ -6,6 +6,8 @@ import { savedRateId } from '../data/savedRates';
 import { publicOfferSelectionToken } from '../data/publicOfferIdentity';
 import { canonicalPurpose, canonicalRepayment } from '../data/mortgageFacets';
 import { parseLvrRange } from '../data/lvrRange';
+import { mortgageComparisonRows } from '../data/mortgageComparison';
+import type { RateConditionContext } from '../data/rateConditions';
 import { SECTION_KEYS, type CorePayload, type ProductDetail, type RateRow, type SectionKey } from '../types';
 import { MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID } from './performanceAuditProfile';
 
@@ -89,6 +91,9 @@ export interface DeepAuditDerivedInputs {
   /** A separate rendered lender-card target; never replaces any sampled exact tier. */
   lenderReturnProduct: DeepAuditExactProduct | null;
   compareSelectionTokens: string[];
+  /** Rates targets must survive the exact comparison scope applied in that journey. */
+  ratesPrimaryProduct: DeepAuditExactProduct | null;
+  ratesSecondaryProduct: DeepAuditExactProduct | null;
   /** A bounded foreground sample, never evidence that the entire catalogue rendered. */
   sampledProducts: DeepAuditExactProduct[];
   /** First seeded mortgage comparison scope for list-latency measurement. */
@@ -115,6 +120,7 @@ export interface DeepAuditSelectionOptions {
   detailsProducts?: Record<string, ProductDetail> | null;
   depositRankMetric?: RankMetric;
   mortgageRateMetric?: MortgageRateMetric;
+  sourceConditionContext?: RateConditionContext;
 }
 
 export interface DeepAuditSkipSafety {
@@ -444,6 +450,14 @@ export function deriveDeepAuditInputs(
     : [];
   const mortgageScopePrimary = mortgageRows.length ? sampleMortgageScope(mortgageRows, random) : null;
   const mortgageScopeAlternate = mortgageRows.length ? sampleMortgageScope(mortgageRows, random) : null;
+  const ratesPair = chosenSection === 'Mortgage' && mortgageScopePrimary
+    ? stratifiedRows(mortgageComparisonRows(filterRows(
+      mortgageRows,
+      { ...EMPTY_FILTERS, includeNonStandard: options.includeNonStandard ?? false,
+        loanPurposes: mortgageScopePrimary.loanPurposes, repaymentTypes: mortgageScopePrimary.repaymentTypes },
+      options.detailsProducts, null, 'Mortgage',
+    ), mortgageScopePrimary, options.sourceConditionContext).rows, random).map(row => exactProduct(row, 'Mortgage'))
+    : chosenSection ? samples.get(chosenSection)! : [];
   return {
     datasetDate: core?.run_date ?? null,
     section: chosenSection,
@@ -455,6 +469,8 @@ export function deriveDeepAuditInputs(
     lenderReturnProduct: lenderReturnRow && primaryProduct ? exactProduct(lenderReturnRow, primaryProduct.section) : null,
     compareSelectionTokens: primaryProduct && secondaryProduct
       ? [primaryProduct.selectionToken, secondaryProduct.selectionToken] : [],
+    ratesPrimaryProduct: ratesPair[0] ?? null,
+    ratesSecondaryProduct: ratesPair[1] ?? null,
     sampledProducts,
     mortgageScopePrimary,
     mortgageScopeAlternate,
@@ -501,6 +517,8 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   const templates: StepTemplate[] = [];
   const primary = inputs.primaryProduct;
   const secondary = inputs.secondaryProduct;
+  const ratesPrimary = inputs.ratesPrimaryProduct;
+  const ratesSecondary = inputs.ratesSecondaryProduct;
   const lenderReturn = inputs.lenderReturnProduct;
   const section = inputs.section;
   const missingCore = inputs.datasetDate ? null : 'No active core payload is loaded';
@@ -508,6 +526,8 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   const missingPair = primary && secondary
     ? null
     : 'Fewer than two distinct exact products are available in one section';
+  const missingRatesPair = ratesPrimary && ratesSecondary
+    ? null : 'Fewer than two distinct exact products match the applied Rates comparison scope';
   const missingProvider = inputs.provider ? null : 'No observed provider is available';
   const missingMortgageScope = inputs.mortgageScopePrimary && inputs.mortgageScopeAlternate
     ? null
@@ -539,6 +559,12 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     selectionTokens: inputs.compareSelectionTokens,
     primaryRateIndex: primary?.rateIndex ?? null,
     secondaryRateIndex: secondary?.rateIndex ?? null,
+  };
+  const ratesCompareParameters: Record<string, DeepAuditParameter> = {
+    section: section ?? null,
+    selectionTokens: ratesPrimary && ratesSecondary ? [ratesPrimary.selectionToken, ratesSecondary.selectionToken] : [],
+    primaryRateIndex: ratesPrimary?.rateIndex ?? null,
+    secondaryRateIndex: ratesSecondary?.rateIndex ?? null,
   };
   const optionalFeatureSkip = {
     skipWhen: ['The feature is disabled', 'Its trusted asset is absent', 'The mounted surface reports a terminal error'],
@@ -576,62 +602,62 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 2, semanticActionId: 'search.filters.apply', stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'search.filters.clear', stateImpact: 'local-only' },
     // Mortgage criteria gate: seed LVR + purpose + repayment before compare targets.
-    {
-      depth: 2,
+    ...(section === 'Mortgage' ? [{
+      depth: 2 as const,
       semanticActionId: 'search.mortgage.scope.apply.0',
       parameters: mortgageScopeParameters(inputs.mortgageScopePrimary),
-      stateImpact: 'local-only',
+      stateImpact: 'local-only' as const,
       optional: true,
       skipReason: missingMortgageScope,
-    },
+    }] : []),
     {
       depth: 2,
       semanticActionId: 'search.compare.mode',
       stateImpact: 'local-only',
       optional: true,
-      skipReason: missingPair,
+      skipReason: missingRatesPair,
     },
     {
       depth: 2,
       semanticActionId: 'search.compare.page.0',
-      parameters: primary ? { selectionToken: primary.selectionToken } : {},
+      parameters: ratesPrimary ? { selectionToken: ratesPrimary.selectionToken } : {},
       stateImpact: 'local-only',
       optional: true,
-      skipReason: missingPair,
+      skipReason: missingRatesPair,
     },
     {
       depth: 2,
       semanticActionId: 'search.compare.select.0',
-      parameters: primary ? { selectionToken: primary.selectionToken, rateIndex: primary.rateIndex } : {},
+      parameters: ratesPrimary ? { selectionToken: ratesPrimary.selectionToken, rateIndex: ratesPrimary.rateIndex } : {},
       stateImpact: 'local-only',
       optional: true,
-      skipReason: missingPair,
+      skipReason: missingRatesPair,
     },
     {
       depth: 2,
       semanticActionId: 'search.compare.page.1',
-      parameters: secondary ? { selectionToken: secondary.selectionToken } : {},
+      parameters: ratesSecondary ? { selectionToken: ratesSecondary.selectionToken } : {},
       stateImpact: 'local-only',
       optional: true,
-      skipReason: missingPair,
+      skipReason: missingRatesPair,
     },
     {
       depth: 2,
       semanticActionId: 'search.compare.select.1',
-      parameters: secondary ? { selectionToken: secondary.selectionToken, rateIndex: secondary.rateIndex } : {},
+      parameters: ratesSecondary ? { selectionToken: ratesSecondary.selectionToken, rateIndex: ratesSecondary.rateIndex } : {},
       stateImpact: 'local-only',
       optional: true,
-      skipReason: missingPair,
+      skipReason: missingRatesPair,
     },
     {
       depth: 2,
       semanticActionId: 'search.compare.open',
       expectedPath: '/compare',
       expectedSurface: 'compare.table',
-      parameters: compareParameters,
+      parameters: ratesCompareParameters,
       readiness: ['details', 'logos'],
       optional: true,
-      skipReason: missingPair,
+      skipReason: missingRatesPair,
     },
   ]);
 

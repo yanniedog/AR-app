@@ -20,7 +20,7 @@ import type { CurrentProductOption } from '../data/scenarioCatalog';
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
   'Audit history', 'No audit history', 'History unavailable', 'Retained runs', 'Audit settings', 'Recorded results',
-  'Estimated time', 'Last audit', 'Upload details', 'min',
+  'Estimated time', 'Last audit', 'Upload details', 'Retry saved report', 'min',
   'Unverified details', 'Quarantined tiers', 'History days', 'Daily gaps', 'Rendered coverage', 'Chart gaps', 'Processing gaps', 'Source unavailable',
   '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '#', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
   'Rates', 'Saved', 'Market', 'Account', 'Profile', 'Settings', 'About',
@@ -466,6 +466,12 @@ export function uiCount(value: number | null | undefined): UiText {
   if (!finite(value)) return uiLabel('Unknown');
   countFormatter ??= new Intl.NumberFormat('en-AU');
   return known(countFormatter.format(value));
+}
+/** Elapsed or estimated duration; minutes continue beyond an hour. */
+export function uiDurationClock(milliseconds: number): UiText {
+  if (!finite(milliseconds) || milliseconds < 0) return uiLabel('Unknown');
+  const seconds = Math.ceil(milliseconds / 1_000);
+  return known(`${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`);
 }
 let countFormatter: Intl.NumberFormat | undefined;
 const MONEY_FORMATTERS = new Map<number, Intl.NumberFormat>();

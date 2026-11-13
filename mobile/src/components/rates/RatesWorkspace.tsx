@@ -922,8 +922,11 @@ export default function RatesWorkspace() {
     'search.compare.select.1': selectAuditToken,
     'search.compare.open': (...args: unknown[]) => {
       const exactTokens = auditActionStrings(args, 'selectionTokens');
-      const tokens = exactTokens.length >= 2 ? exactTokens : selected;
-      if (tokens.length >= 2) openCompare(tokens, 'rates-comparison');
+      const tokens = exactTokens.length ? exactTokens : selected;
+      if (new Set(tokens).size < 2 || tokens.some(token => !selected.includes(token))) {
+        return { unavailableReason: 'The intended exact rates have not both been selected in the rendered results' };
+      }
+      openCompare(tokens, 'rates-comparison');
     },
   }), [applyFilters, applyMortgageScope, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
   // Logo decode callbacks can churn during mortgage.scope.apply settle; the

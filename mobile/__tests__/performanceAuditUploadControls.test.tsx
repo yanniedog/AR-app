@@ -1,5 +1,6 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
+import { restoreCompletedPerformanceAudit } from '../src/lib/performanceAudit';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +9,7 @@ import { getPerformanceAuditState, completePerformanceAudit, failPerformanceAudi
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { restorePerformanceAuditUpload, uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
 import { loadCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
+import { yieldToPaintFrames } from '../src/lib/yieldToUi';
 import type { DebugLogUploadSnapshot } from '../src/lib/debugLogSharing';
 import { performanceAuditReference } from '../src/lib/performanceAuditCompletion';
 import { finalizeAppHealthReport } from '../src/lib/appHealth';
@@ -26,6 +28,15 @@ const mockRetry = jest.fn(async (_options: unknown) => {});
 const mockPassive = { completed: 0, total: 0, linksCompleted: 0, linksTotal: 0, nativeStatus: 'unavailable' };
 let mockUploadBusy = false;
 let mockMountedDisclosure = false;
+let mockResultsReady = true;
+let mockRecoveryWork: (() => void) | null = null;
+let mockDeferRecovery = false;
+const mockCancelRecovery = jest.fn();
+jest.mock('../src/hooks/useDeferredHistorySurface', () => ({ useDeferredHistorySurface: (key: string | null) => key != null && mockResultsReady }));
+jest.mock('../src/lib/yieldToUi', () => ({ scheduleAfterInteractions: (work: () => void) => {
+  if (mockDeferRecovery) mockRecoveryWork = work; else work();
+  return () => { mockCancelRecovery(); mockRecoveryWork = null; };
+}, yieldToPaintFrames: jest.fn(async () => {}) }));
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined) }));
 jest.mock('../src/lib/appUpdate', () => ({
   getApkDownloadSnapshot: () => mockDownload, getHydratedApkDownloadSnapshot: () => mockHydratedDownload(), subscribeApkDownload: () => () => undefined,
@@ -57,7 +68,7 @@ let tree: Renderer | undefined;
 const toggle = () => tree!.root.findByProps({ label: 'Public upload' });
 async function mount() { await act(async () => { tree = TestRenderer.create(<PerformanceAuditScreen />) as Renderer; }); }
 async function press(title: string) { await act(async () => { tree!.root.findByProps({ title }).props.onPress(); }); }
-beforeEach(() => { resetPerformanceAuditForTests(); jest.clearAllMocks(); mockUpload = { sessionId: null, phase: 'idle' }; mockUploadBusy = false; mockMountedDisclosure = false; mockHydratedDownload.mockResolvedValue(mockDownload); });
+beforeEach(() => { resetPerformanceAuditForTests(); jest.clearAllMocks(); mockResultsReady = true; mockDeferRecovery = false; mockRecoveryWork = null; mockUpload = { sessionId: null, phase: 'idle' }; mockUploadBusy = false; mockMountedDisclosure = false; mockHydratedDownload.mockResolvedValue(mockDownload); });
 afterEach(() => { if (tree) act(() => tree!.unmount()); tree = undefined; resetPerformanceAuditForTests(); });
 
 test.each([['Run audit', 'local'], ['Live audit', 'live-source']] as const)('%s automatically publishes the sanitized report by default', async (title, mode) => {
@@ -385,10 +396,11 @@ test('failed checks expose numbered positions without expanding the verbose audi
   act(() => completePerformanceAudit(report));
   expect(tree!.root.findByProps({ label: 'Failures' }).props.value).toBe('1');
   expect(tree!.root.findByProps({ label: 'First failure' }).props.value).toBe('Check results · 2 · failed-check');
-  expect(tree!.root.findByProps({ label: 'Position' }).props.value).toBe('2');
+  expect(tree!.root.findAllByProps({ label: 'Position' })).toHaveLength(0);
   expect(tree!.root.findByProps({ title: 'Failure positions' }).props.open).toBe(false);
   await act(async () => { tree!.root.findByProps({ title: 'Failure positions' }).props.onToggle(); });
   expect(tree!.root.findByProps({ title: 'Failure positions' }).props.open).toBe(true);
+  expect(tree!.root.findByProps({ label: 'Position' }).props.value).toBe('2');
   expect(tree!.root.findByProps({ title: 'Audit details' }).props.open).toBe(false);
 });
 
@@ -397,6 +409,7 @@ test('deidentified sharing discloses audit timestamps and reference before openi
   try {
     await mount(); await press('Run audit');
     act(() => completePerformanceAudit(makePerformanceAuditReport(getPerformanceAuditState().sessionId!)));
+    await act(async () => { tree!.root.findByProps({ title: 'Audit details' }).props.onToggle(); });
     await press('Share deidentified report');
     expect(alert).toHaveBeenCalledWith('Share deidentified report?',
       expect.stringContaining('Included: App / publication / aggregate counts / timing / fixed checks / Audit timestamps / Audit ID'),
@@ -464,4 +477,81 @@ test('the real disclosure mounts every diagnostic section only while audit detai
   expectDiagnostics(true);
   act(() => tree!.root.findByProps({ title: 'Audit details' }).props.onToggle());
   expectDiagnostics(false);
+});
+
+
+test('start controls render before saved-result derivation and deferred recovery', async () => {
+  mockResultsReady = false; mockDeferRecovery = true;
+  await mount();
+  expect(tree!.root.findByProps({ title: 'Run audit' }).props.disabled).toBe(false);
+  expect(tree!.root.findByProps({ label: 'Estimated time' }).props.value).toBe('09:00');
+  expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
+  expect(tree!.root.findAllByType('AuditMetricHistory')).toHaveLength(0);
+  expect(mockCancelRecovery).not.toHaveBeenCalled();
+  await press('Run audit');
+  expect(mockCancelRecovery).toHaveBeenCalled();
+  await act(async () => { mockRecoveryWork?.(); });
+  expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
+  expect(getPerformanceAuditState().status).toBe('queued');
+});
+
+test('estimated time retains seconds from the last measured run', async () => {
+  const report = makePerformanceAuditReport('clock');
+  report.durationMs = 480_484;
+  restoreCompletedPerformanceAudit(report);
+  await mount();
+  expect(tree!.root.findByProps({ label: 'Estimated time' }).props.value).toBe('08:01');
+});
+
+test('a failed saved-report read stays explicit and can be retried', async () => {
+  jest.mocked(loadCompletedPerformanceAudit).mockRejectedValueOnce(new Error('Transient read failure'));
+  await mount();
+  expect(tree!.root.findByProps({ label: 'Last audit' }).props.value).toBe('Report unavailable');
+  const saved = makePerformanceAuditReport('retried-report');
+  jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(saved);
+  await press('Retry saved report');
+  expect(getPerformanceAuditState().report).toBe(saved);
+  expect(tree!.root.findAllByProps({ title: 'Retry saved report' })).toHaveLength(0);
+});
+
+test('recovery waits for paint and cancels before disk access when unmounted', async () => {
+  let finishPaint!: () => void;
+  jest.mocked(yieldToPaintFrames).mockImplementationOnce(() => new Promise(resolve => { finishPaint = resolve; }));
+  await mount();
+  expect(yieldToPaintFrames).toHaveBeenCalledWith(2);
+  expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
+  act(() => tree!.unmount());
+  await act(async () => { finishPaint(); });
+  expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
+});
+
+test('an in-memory diagnosis is not traversed before result paint is allowed', async () => {
+  const report = makePerformanceAuditReport('deferred-known-diagnosis');
+  restoreCompletedPerformanceAudit(report);
+  const originalChecks = report.checks;
+  const checks = jest.fn(() => originalChecks);
+  Object.defineProperty(report, 'checks', { configurable: true, get: checks });
+  mockResultsReady = false;
+  await mount();
+  expect(tree!.root.findByProps({ title: 'Run audit' }).props.disabled).toBe(false);
+  expect(tree!.root.findByProps({ label: 'Last audit' }).props.value).toBe('Loading');
+  expect(checks).not.toHaveBeenCalled();
+  Object.defineProperty(report, 'checks', { configurable: true, writable: true, value: originalChecks });
+});
+
+test('a failed native preflight reschedules deferred recovery', async () => {
+  mockDeferRecovery = true;
+  const saved = makePerformanceAuditReport('after-preflight-failure');
+  jest.mocked(loadCompletedPerformanceAudit).mockResolvedValueOnce(saved);
+  mockHydratedDownload.mockRejectedValueOnce(new Error('Native update state unavailable'));
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  try {
+    await mount();
+    await press('Run audit');
+    expect(getPerformanceAuditState().status).toBe('idle');
+    expect(loadCompletedPerformanceAudit).not.toHaveBeenCalled();
+    await act(async () => { mockRecoveryWork?.(); });
+    expect(loadCompletedPerformanceAudit).toHaveBeenCalledTimes(1);
+    expect(getPerformanceAuditState().report).toBe(saved);
+  } finally { alert.mockRestore(); }
 });
