@@ -199,6 +199,38 @@ export function compactAuditCheckForLog(check: {
   return base;
 }
 
+/** A checkpoint references verbose evidence already retained by the canonical
+ * check. Repeating long render identities and fixed link descriptions for
+ * thousands of checks exhausted the application journal before audit finish.
+ * Keep status/timing/error evidence here and every original field in the report.
+ */
+export function compactAuditCheckCheckpoint(check: Parameters<typeof compactAuditCheckForLog>[0]): Record<string, unknown> {
+  if (/^external-link-\d+$/.test(check.id)) {
+    const metrics: Record<string, unknown> = {};
+    for (const key of ['executionAttempted', 'nonTimingFailure', 'urlValidation', 'browserHandler', 'httpReachability',
+      'statusCode', 'handlerAttempted', 'httpAttempted', 'httpSelected', 'handlerResolution']) {
+      if (check.metrics[key] != null) metrics[key] = check.metrics[key];
+    }
+    const checkpoint = compactAuditCheckForLog({ ...check, metrics });
+    // Thousands of repeated destination labels, paths and description fields
+    // exceed the journal even when each field is individually short. The ID
+    // resolves all of them in the canonical report without another field list.
+    delete checkpoint.label;
+    checkpoint.canonicalMetrics = true;
+    return checkpoint;
+  }
+  const metrics: Record<string, unknown> = {};
+  const referencedMetrics: string[] = [];
+  for (const [key, value] of Object.entries(check.metrics)) {
+    if (typeof value === 'string' && value.length > MAX_AUDIT_METRIC_TEXT_CHARS) {
+      referencedMetrics.push(key);
+    } else metrics[key] = value;
+  }
+  const compact = compactAuditCheckForLog({ ...check, metrics });
+  if (referencedMetrics.length) compact.canonicalMetricFields = referencedMetrics;
+  return compact;
+}
+
 export function compactPerformanceAuditReportForLog(report: unknown): unknown {
   if (report == null || typeof report !== 'object' || Array.isArray(report)) return report;
   const source = report as Record<string, unknown>;

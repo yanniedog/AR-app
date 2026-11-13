@@ -240,7 +240,6 @@ export const AUDIT_PRODUCER_METRIC_FIELDS = new Set<string>([
   "sampledProviders",
   "samplingSeed",
   "scenarioId",
-  "scenarioRecoveryCascade",
   "searchMode",
   "secondBackMs",
   "section",
@@ -439,7 +438,6 @@ export const AUDIT_PRODUCER_SCALARS = new Set<string>([
   "sampledBytes",
   "sampledProducts",
   "sampledProviders",
-  "scenarioRecoveryCascade",
   "secondBackMs",
   "setupStage",
   "stallsOver100Ms",
@@ -868,7 +866,6 @@ export const AUDIT_PRODUCER_ENUMS: Record<string, readonly string[]> = {
     "settings.update.check"
   ],
   "skipClassification": [
-    "scenario-recovery",
     "terminal-availability"
   ],
   "transportScope": [

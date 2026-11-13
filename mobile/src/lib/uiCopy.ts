@@ -463,10 +463,21 @@ export function uiJoin(...parts: readonly (UiCopy | number | null | undefined)[]
   return known(parts.filter(value => value !== null && value !== undefined).join(''));
 }
 export function uiCount(value: number | null | undefined): UiText {
-  return known(finite(value) ? value.toLocaleString('en-AU') : 'Unknown');
+  if (!finite(value)) return uiLabel('Unknown');
+  countFormatter ??= new Intl.NumberFormat('en-AU');
+  return known(countFormatter.format(value));
 }
+let countFormatter: Intl.NumberFormat | undefined;
+const MONEY_FORMATTERS = new Map<number, Intl.NumberFormat>();
 export function uiMoney(value: number | null | undefined, digits = 0): UiText {
-  return known(finite(value) ? new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value) : 'Unknown');
+  if (!finite(value)) return uiLabel('Unknown');
+  let formatter = MONEY_FORMATTERS.get(digits);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: digits, maximumFractionDigits: digits });
+    if (MONEY_FORMATTERS.size >= 24) MONEY_FORMATTERS.delete(MONEY_FORMATTERS.keys().next().value!);
+    MONEY_FORMATTERS.set(digits, formatter);
+  }
+  return known(formatter.format(value));
 }
 export function uiRate(value: number | null | undefined, digits = 2): UiText {
   return finite(value) ? uiJoin(uiNumber(value * 100, digits), '%') : uiLabel('Unknown');
@@ -486,6 +497,7 @@ export function uiDuration(value: number | null | undefined, unit: 'months' | 'y
   const label = value === 1 ? unit === 'months' ? 'month' : unit === 'years' ? 'year' : 'day' : unit;
   return finite(value) ? uiJoin(uiCount(value), ' ', label) : uiLabel('Unknown');
 }
+let publicationDateFormatter: Intl.DateTimeFormat | undefined;
 /** Invalid dates stay unknown, never a raw source message. */
 export function uiDate(value: string | null | undefined): UiText {
   if (!value || !/^\d{4}-\d{2}-\d{2}(?:T[\d:.+\-Z]+)?$/.test(value)) return uiLabel('Unknown');
@@ -493,11 +505,18 @@ export function uiDate(value: string | null | undefined): UiText {
   const [year, month, day] = value.slice(0, 10).split('-').map(Number);
   const calendarDay = new Date(Date.UTC(year, month - 1, day));
   if (calendarDay.getUTCFullYear() !== year || calendarDay.getUTCMonth() !== month - 1 || calendarDay.getUTCDate() !== day) return uiLabel('Unknown');
-  return known(Number.isFinite(date.getTime()) ? date.toLocaleDateString('en-AU', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    // A publication date is a calendar day, not midnight in the user's zone.
-    ...(value.length === 10 ? { timeZone: 'UTC' } : {}),
-  }) : 'Unknown');
+  if (!Number.isFinite(date.getTime())) return uiLabel('Unknown');
+  // Lists format the same edition's dates on each native layout pass. Reuse
+  // the UTC formatter rather than constructing an ICU formatter for every row.
+  // Timestamps remain local and resolve the device zone on every call, so a
+  // timezone change while the app is running cannot leave them stale.
+  if (value.length === 10) {
+    publicationDateFormatter ??= new Intl.DateTimeFormat('en-AU', {
+      day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+    });
+    return known(publicationDateFormatter.format(date));
+  }
+  return known(date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }));
 }
 /** Opaque technical references are identifiers, never descriptions or error messages. */
 export function uiIdentifier(value: string | null | undefined): UiText {

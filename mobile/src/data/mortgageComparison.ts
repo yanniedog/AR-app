@@ -48,8 +48,7 @@ function within(value: number, lower: NumericConditionBoundary, upper: NumericCo
 }
 
 /** Distinct source pointers are explicit alternative bands; same-pointer parses AND. */
-function admitsValue(value: number, facts: readonly PublishedNumericConditionFact[]): boolean {
-  if (!facts.length) return false;
+function alternativeBands(facts: readonly PublishedNumericConditionFact[]) {
   const byPointer = new Map<string, PublishedNumericConditionFact[]>();
   for (const fact of facts) {
     const key = fact.source.sourcePointer;
@@ -57,10 +56,21 @@ function admitsValue(value: number, facts: readonly PublishedNumericConditionFac
     if (group) group.push(fact);
     else byPointer.set(key, [fact]);
   }
-  for (const group of byPointer.values()) {
+  return [...byPointer.values()];
+}
+function admitsValue(value: number, bands: readonly (readonly PublishedNumericConditionFact[])[]): boolean {
+  for (const group of bands) {
     if (group.every(fact => within(value, fact.lower, fact.upper))) return true;
   }
   return false;
+}
+
+function listedAmountBounds(row: RateRow) {
+  const bound = (raw: RateRow['balance_min']): number | null => raw != null && String(raw).trim() !== ''
+    && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(String(raw).trim()) && Number.isFinite(Number(raw)) ? Number(raw) : null;
+  const low = bound(row.balance_min), high = bound(row.balance_max);
+  return { low, high, invalid: (low !== null && high !== null && low > high) || (row.balance_min != null && low === null)
+    || (row.balance_max != null && high === null) };
 }
 
 function matchListedTier(
@@ -69,6 +79,7 @@ function matchListedTier(
   fallthroughLvr: boolean,
   fallthroughAmount: boolean,
   range = parseLvrRange(row.lvr_tier),
+  amountBounds?: ReturnType<typeof listedAmountBounds>,
 ): MortgageComparisonMatch {
   let unverified = false;
   if (parsed.lvr !== null && fallthroughLvr) {
@@ -78,11 +89,8 @@ function matchListedTier(
     if (!lvrRangeContains(range, parsed.lvr)) return 'outside';
   }
   if (parsed.amount !== null && fallthroughAmount) {
-    const bound = (raw: RateRow['balance_min']): number | null => raw != null && String(raw).trim() !== ''
-      && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(String(raw).trim()) && Number.isFinite(Number(raw)) ? Number(raw) : null;
-    const low = bound(row.balance_min), high = bound(row.balance_max);
-    if ((low !== null && high !== null && low > high) || (row.balance_min != null && low === null)
-      || (row.balance_max != null && high === null)) unverified = true;
+    const { low, high, invalid } = amountBounds ?? listedAmountBounds(row);
+    if (invalid) unverified = true;
     else if (low !== null && parsed.amount < low || high !== null && parsed.amount > high) return 'outside';
     else if (low === null || high === null) unverified = true;
   }
@@ -90,10 +98,15 @@ function matchListedTier(
 }
 
 export function prepareMortgageComparisonRow(row: RateRow, context?: RateConditionContext) {
-  return { source: scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context)),
-    range: parseLvrRange(row.lvr_tier) };
+  return prepareComparisonMetadata(row, scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context)));
 }
 export type PreparedMortgageComparisonRow = ReturnType<typeof prepareMortgageComparisonRow>;
+function prepareComparisonMetadata(row: RateRow, source: ReturnType<typeof scopedFinancialConditionFacts>) {
+  return { source, range: parseLvrRange(row.lvr_tier), amountBounds: listedAmountBounds(row),
+    lvrBands: alternativeBands(source.facts.filter(fact => fact.kind === 'published-lvr-range')),
+    amountBands: alternativeBands(source.facts.filter(fact => fact.kind === 'published-balance-range'
+      && (fact.subject === 'loan-amount' || fact.subject === 'borrowing-amount'))) };
+}
 
 /** Validate each product envelope once per synchronous batch, then yield before
  * the next product. A cancelled source owner never publishes prepared facts. */
@@ -115,7 +128,7 @@ export async function prepareMortgageComparisonRowsCooperatively(rows: readonly 
     const scopes = scopedRateConditionsForRows(group.map(sourceRowForPublicRow), 'Mortgage', context);
     for (let index = 0; index < group.length; index++) {
       const row = group[index];
-      prepared.set(row, { source: scopedFinancialConditionFacts(scopes[index]), range: parseLvrRange(row.lvr_tier) });
+      prepared.set(row, prepareComparisonMetadata(row, scopedFinancialConditionFacts(scopes[index])));
     }
     if (now() - checkpoint >= 4) { await yieldControl(); checkpoint = now(); }
   }
@@ -130,10 +143,10 @@ function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateCo
   if (parsed.lvr !== null || parsed.amount !== null) {
     const source = prepared?.source ?? scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context));
     if (source.state === 'admitted') {
-      const dimensions: readonly [number | null, readonly PublishedNumericConditionFact[], 'lvr' | 'amount'][] = [
-        [parsed.lvr, source.facts.filter(fact => fact.kind === 'published-lvr-range'), 'lvr'],
-        [parsed.amount, source.facts.filter(fact => fact.kind === 'published-balance-range'
-          && (fact.subject === 'loan-amount' || fact.subject === 'borrowing-amount')), 'amount'],
+      const dimensions: readonly [number | null, readonly (readonly PublishedNumericConditionFact[])[], 'lvr' | 'amount'][] = [
+        [parsed.lvr, prepared?.lvrBands ?? alternativeBands(source.facts.filter(fact => fact.kind === 'published-lvr-range')), 'lvr'],
+        [parsed.amount, prepared?.amountBands ?? alternativeBands(source.facts.filter(fact => fact.kind === 'published-balance-range'
+          && (fact.subject === 'loan-amount' || fact.subject === 'borrowing-amount'))), 'amount'],
       ];
       for (const [value, facts, dimension] of dimensions) {
         if (value === null) continue;
@@ -157,7 +170,8 @@ function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateCo
       // Missing admitted LVR/amount facts only: fall through to listed tier/bounds.
     }
   }
-  const listed = matchListedTier(row, parsed, fallthroughLvr, fallthroughAmount, prepared ? prepared.range : parseLvrRange(row.lvr_tier));
+  const listed = matchListedTier(row, parsed, fallthroughLvr, fallthroughAmount,
+    prepared ? prepared.range : parseLvrRange(row.lvr_tier), prepared?.amountBounds);
   if (listed === 'outside' || listed === 'invalid') return listed;
   return listed === 'unverified' || unverified ? 'unverified' : 'listed';
 }

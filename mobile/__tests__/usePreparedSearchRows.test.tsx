@@ -1,7 +1,7 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
-import { usePreparedSearchRows } from '../src/hooks/usePreparedSearchRows';
+import { clearReusableSearchResults, usePreparedSearchRows } from '../src/hooks/usePreparedSearchRows';
 import { EMPTY_FILTERS, sortRows, type Filters, type SortKey } from '../src/data/selectors';
 import type { ProductDetail, RateRow, SectionKey } from '../src/types';
 import type { SearchIndexPayload } from '../src/data/detailSearch';
@@ -43,8 +43,86 @@ function pending() {
   return { promise, resolve };
 }
 beforeEach(() => {
+  clearReusableSearchResults();
   mockPrepare.mockReset(); mockSort.mockReset().mockImplementation((values: RateRow[]) => Promise.resolve(values.slice()));
   mockJobs.length = 0;
+});
+
+test('remounting an unchanged section reuses complete rows without scheduling another scan or sort', async () => {
+  mockPrepare.mockResolvedValue(rows);
+  let tree!: ReactTestRenderer;
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  await act(async () => { mockJobs[0].run(); });
+  expect(latest.rows).toBe(rows);
+  act(() => tree.unmount());
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  try {
+    expect(latest.ready).toBe(true);
+    expect(latest.reused).toBe(true);
+    expect(latest.rows).toBe(rows);
+    expect(mockJobs).toHaveLength(1);
+    expect(mockPrepare).toHaveBeenCalledTimes(1);
+    act(() => tree.update(<Probe revision={1} />));
+    expect(latest.ready).toBe(false);
+    expect(latest.rows).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('a gate change before completion cannot populate the remount cache', async () => {
+  const job = pending(); mockPrepare.mockReturnValue(job.promise);
+  let tree!: ReactTestRenderer;
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  act(() => mockJobs[0].run());
+  installMandatoryEligibility({ active: true, loading: false, rows: new WeakSet(), productKeys: new Set() });
+  try {
+    await act(async () => { job.resolve(rows); await job.promise; });
+    expect(latest.ready).toBe(false);
+    act(() => tree.unmount());
+    act(() => { tree = TestRenderer.create(<Probe />); });
+    expect(latest.ready).toBe(false);
+    expect(latest.rows).toEqual([]);
+  } finally {
+    act(() => tree.unmount());
+    installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() });
+  }
+});
+
+test('an oversized source/result installs normally but is not retained across remounts', async () => {
+  const oversized = Array.from({ length: 26_000 }, () => rows[0]);
+  mockPrepare.mockImplementation((input: RateRow[]) => Promise.resolve(input.slice()));
+  let tree!: ReactTestRenderer;
+  for (const input of [rows, oversized]) {
+    act(() => { tree = TestRenderer.create(<Probe inputRows={input} />); });
+    await act(async () => { mockJobs[mockJobs.length - 1].run(); });
+    expect(latest.ready).toBe(true); expect(latest.rows).toHaveLength(input.length);
+    act(() => tree.unmount());
+  }
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  expect(latest.ready).toBe(true); // Skipping an oversized entry does not evict a useful one.
+  act(() => tree.unmount());
+  act(() => { tree = TestRenderer.create(<Probe inputRows={oversized} />); });
+  try { expect(latest.ready).toBe(false); expect(latest.reused).toBe(false); }
+  finally { act(() => tree.unmount()); }
+});
+
+test('aggregate retained source/result slots evict oldest entries before the entry limit', async () => {
+  const sources = Array.from({ length: 3 }, () => Array.from({ length: 12_000 }, () => rows[0]));
+  mockPrepare.mockImplementation((input: RateRow[]) => Promise.resolve(input.slice()));
+  let tree!: ReactTestRenderer;
+  for (const input of sources) {
+    act(() => { tree = TestRenderer.create(<Probe inputRows={input} />); });
+    await act(async () => { mockJobs[mockJobs.length - 1].run(); });
+    expect(latest.ready).toBe(true);
+    act(() => tree.unmount());
+  }
+  for (const input of sources.slice(1)) {
+    act(() => { tree = TestRenderer.create(<Probe inputRows={input} />); });
+    expect(latest.ready).toBe(true); expect(latest.reused).toBe(true);
+    act(() => tree.unmount());
+  }
+  act(() => { tree = TestRenderer.create(<Probe inputRows={sources[0]} />); });
+  try { expect(latest.ready).toBe(false); expect(latest.reused).toBe(false); }
+  finally { act(() => tree.unmount()); }
 });
 
 test('large results stay pending until the full active request completes', async () => {
