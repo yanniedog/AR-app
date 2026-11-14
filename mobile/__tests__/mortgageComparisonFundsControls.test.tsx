@@ -123,7 +123,10 @@ test.each(['clear', 'replace'])('external %s discards pending funds and wins ove
     act(() => setMortgageComparisonInputs(expected));
     expect(input(tree, 'Deposit')).toBeUndefined();
     expect(input(tree, 'Loan amount')?.props.value).toBe(expected.loanAmount);
-    expect(input(tree, 'LVR')?.props.value).toBe(expected.lvr);
+    if (action === 'clear') {
+      expect(input(tree, 'LVR')).toBeUndefined();
+      expect(input(tree, 'Offset balance')?.props.value).toBe('');
+    } else expect(input(tree, 'LVR')?.props.value).toBe(expected.lvr);
     act(() => jest.advanceTimersByTime(500));
   } finally { act(() => tree.unmount()); }
   expect(useMortgageComparison.getState()).toEqual(expected);
@@ -142,7 +145,8 @@ test('remount retains both drafts and mode; Clear removes both drafts and resets
     choose(tree, 'LVR');
     expect(input(tree, 'LVR')?.props.value).toBe('71');
     choose(tree, 'Funds available');
-    type(tree, 'Deposit', '250000');
+    expect(tab(tree, 'Offset account').props.accessibilityState.selected).toBe(true);
+    type(tree, 'Offset balance', '250000');
     act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
     act(() => jest.advanceTimersByTime(500));
     expect(useMortgageComparison.getState()).toEqual({ loanAmount: '', lvr: '' });
