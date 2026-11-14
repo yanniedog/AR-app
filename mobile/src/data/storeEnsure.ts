@@ -214,6 +214,8 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             const { text, details: fresh } = await downloadDetails(
               manifest.files.details.url,
               manifest.files.details.sha256,
+              { expectedBytes: manifest.files.details.bytes, requireExactBytes: !!manifest.payload_revision,
+                maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024 },
             );
             if (!datasetUnchanged()) return;
             work.stage('Saving verified product details');

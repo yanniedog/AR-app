@@ -37,6 +37,7 @@ const { parseDatesIndex } = require('../src/data/datesIndex.ts');
 const { assertRevisionManifest, validateRevisionHead } = require('../src/data/payloadRevision.ts');
 const { payloadBundleIdentity } = require('../src/data/payloadBundleIdentity.ts');
 const { isValidCalendarDate } = require('../src/lib/calendarDate.ts');
+const { withinStartupCoreBudget } = require('../src/data/payloadNetworkBudget.ts');
 const { automaticDataUrl } = require('../src/lib/automaticDataAccess.ts');
 const { isReleaseTransport } = require('../src/lib/releaseTransport.ts');
 const { validateLegacyHistoricalCatalogueDescriptor, validatePackedHistoricalCatalogueDescriptor, validateReadyHistoricalDescriptor,
@@ -245,7 +246,7 @@ async function audit(opts) {
       const file = validateDescriptor(manifest, opts.repo);
       if (!file || file.enc) throw new Error('Invalid or encrypted detached history descriptor');
       if (ready && file.bytes > 1024 * 1024) throw new Error('Prepared history exceeds transport byte budget');
-      if (manifest.files.core.bytes > 512 * 1024 || decoded.core?.bank_rate_history !== undefined ||
+      if (!withinStartupCoreBudget(manifest.files.core.bytes) || decoded.core?.bank_rate_history !== undefined ||
           decoded.core?.bank_rate_history_catalogue !== undefined || decoded.core?.bank_rate_history_catalogue_packed !== undefined ||
           decoded.core?.bank_rate_history_ready !== undefined) throw new Error('Detached history must preserve the compact startup core');
       const bytes = directory ? privateFile(directory, file.name, file.bytes + 1) : await publicBytes(file.url, file.bytes + 1);

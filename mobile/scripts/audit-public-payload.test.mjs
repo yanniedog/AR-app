@@ -371,8 +371,9 @@ test('private audit rejects unsafe descriptor paths before reading them', async 
   assert.equal(report.assets.core.status, 'FAIL');
 });
 
-function detachedCandidate(t, editEnvelope = () => {}, editCatalogue = value => value) {
+function detachedCandidate(t, editEnvelope = () => {}, editCatalogue = value => value, editCoreFile = () => {}) {
   const result = candidate(t), { directory, manifest } = result;
+  editCoreFile(result);
   const core = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.core.name)));
   const details = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.details.name)));
   const catalogue = editCatalogue(upsertHistoricalCatalogueDay(null, core, details, { kind: 'published_core',
@@ -405,6 +406,31 @@ test('private candidate audits detached history bytes and retained real catalogu
   assert.equal(proof.source_selection.status, 'NOT_CHECKED');
   assert.equal(proof.source_selection.selected_heads_checked, false);
   assert.equal(report.checks.find(check => check.code === 'bank-history-selected-sources').status, 'warn');
+});
+
+for (const [bytes, expected] of [[611125, 'PASS'], [1024 * 1024, 'PASS'], [1024 * 1024 + 1, 'FAIL']]) {
+  test(`detached history preserves finite startup ceiling at ${bytes} source bytes`, async t => {
+    const value = detachedCandidate(t, () => {}, value => value, ({ directory, manifest }) => {
+      const file = manifest.files.core, target = path.join(directory, file.name), original = fs.readFileSync(target);
+      // Whitespace changes transport size only, never retained financial observations.
+      const padded = Buffer.concat([original, Buffer.alloc(bytes - original.length, 32)]);
+      fs.writeFileSync(target, padded);
+      file.bytes = padded.length; file.sha256 = hash(padded);
+      fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+    });
+    const report = await audit(value.opts);
+    assert.equal(report.assets.bank_rate_history_catalogue.status, expected);
+  });
+}
+
+test('expanded startup allowance never permits eager embedded history', async t => {
+  const value = detachedCandidate(t, () => {}, value => value, ({ directory, manifest }) => {
+    const core = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.core.name)));
+    core.bank_rate_history = {};
+    writeJsonAsset(directory, manifest, 'core', core);
+  });
+  const report = await audit(value.opts);
+  assert.equal(report.assets.bank_rate_history_catalogue.status, 'FAIL');
 });
 
 function publicCandidate(t, value, editIndex = () => {}, editRevision = () => {}, deliver = (_url, bytes) => bytes) {

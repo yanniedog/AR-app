@@ -50,12 +50,15 @@ function descriptorSignature(row: HistoricalRateDescriptor): string {
 // Duplicate detection is not transport authentication. Keep ordinary exact
 // signatures without hashing every tier, but bound JSON escaping amplification.
 const MAX_RETAINED_SIGNATURE = 4096, MAX_SECTION_SIGNATURE_CHARACTERS = 16 * 1024 * 1024;
+// Original producer artifact provenance, never a downloaded or inflated app asset.
+// The producer streams this source under the same finite ceiling.
+export const MAX_HISTORICAL_SOURCE_BYTES = 512 * 1024 * 1024;
 
 export function validateHistoricalCatalogueSource(value: unknown): value is HistoricalCatalogueSource {
   if (!record(value)) return false;
   if (value.kind === 'published_core') return sha(value.core_sha256) && sha(value.details_sha256) && sha(value.manifest_sha256);
   if (value.kind !== 'selected_contract' && value.kind !== 'retained_legacy_export') return false;
-  return sha(value.banks_sha256) && Number.isSafeInteger(value.bytes) && Number(value.bytes) > 0 && Number(value.bytes) <= 128 * 1024 * 1024 &&
+  return sha(value.banks_sha256) && Number.isSafeInteger(value.bytes) && Number(value.bytes) > 0 && Number(value.bytes) <= MAX_HISTORICAL_SOURCE_BYTES &&
     (value.kind === 'retained_legacy_export' || (text(value.generation_id) && sha(value.contract_digest)));
 }
 
