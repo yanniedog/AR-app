@@ -103,6 +103,11 @@ export function validateEvidencePublication(raw: Manifest, selected: PayloadRevi
   return { manifest, head: { ...head }, references };
 }
 
+/** Metadata-only adoption check. Legacy editions need no evidence capability. */
+export function validateOptionalEvidencePublication(manifest: Manifest, selected: PayloadRevisionHead): void {
+  if (Object.keys(EVIDENCE_REFERENCE_SCHEMAS).some(key => Object.hasOwn(manifest, key))) validateEvidencePublication(manifest, selected);
+}
+
 function verifyBinding(binding: EvidenceBinding, ref: EvidenceReference) {
   responseRequire(Object.entries(ref.source).every(([key, value]) => binding.source[key as keyof typeof binding.source] === value)
     && binding.core_sha256 === ref.core_sha256 && binding.details_sha256 === ref.details_sha256,

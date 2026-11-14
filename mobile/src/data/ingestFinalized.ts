@@ -1,5 +1,6 @@
 import { datedManifestUrl, PAYLOAD_REPO } from '../config';
 import { assertNoRevisionRollback, assertRevisionManifest, type PayloadRevisionHead } from './payloadRevision';
+import { validateOptionalEvidencePublication } from './productEvidencePublication';
 import { debugLog } from '../lib/debugLog';
 import type { Manifest, ManifestFile } from '../types';
 import { formatRunDate } from './format';
@@ -171,6 +172,7 @@ export async function resolveFinalizedManifest(
     const manifest = await (opts.fetchRevision ?? ((selected) =>
       fetchManifest(selected.manifest_url, undefined, selected.manifest_sha256)))(head);
     assertRevisionManifest(manifest, head, date, PAYLOAD_REPO);
+    validateOptionalEvidencePublication(manifest, head);
     assertNoRevisionRollback(opts.verifiedDated, manifest);
     return { status: 'finalized', manifest, pendingIngestRunDate: null, datesIndex };
   }

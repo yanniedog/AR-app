@@ -197,6 +197,17 @@ function inspectUiCopy({ root, policyFile = 'src/lib/uiCopy.ts', program: provid
         && returned.arguments[3] && ts.isObjectLiteralExpression(returned.arguments[3]) && returned.arguments[3].properties.length === 0
         && returned.arguments[4]?.getText() === '{ fullEvidence }') return true;
     }
+    if (path.resolve(node.getSourceFile().fileName).toLowerCase() === path.resolve(root, 'src/components/ProductEvidenceText.tsx').toLowerCase()
+      && ts.isCallExpression(node) && node.arguments.length === 1) {
+      const symbol = checker.getSymbolAtLocation(node.expression);
+      const actual = symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+      const sourcePath = path.resolve(root, 'src/data/productEvidenceDocument.ts').toLowerCase();
+      const type = checker.getTypeAtLocation(node.arguments[0]);
+      if (actual?.name === 'productEvidencePageText' && actual.getDeclarations()?.some(declaration =>
+        path.resolve(declaration.getSourceFile().fileName).toLowerCase() === sourcePath)
+        && type.symbol?.name === 'ProductEvidencePage' && type.symbol.getDeclarations()?.some(declaration =>
+          path.resolve(declaration.getSourceFile().fileName).toLowerCase() === sourcePath)) return true;
+    }
     if (path.resolve(node.getSourceFile().fileName).toLowerCase() === path.resolve(root, 'src/components/ReceiptEvidenceText.tsx').toLowerCase()
       && ts.isCallExpression(node) && node.expression.getText() === 'JSON.stringify'
       && node.arguments[0]?.getText() === 'document.original' && node.arguments[1]?.kind === ts.SyntaxKind.NullKeyword && node.arguments[2]?.getText() === '2') {

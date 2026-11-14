@@ -1,6 +1,7 @@
 import type { CorePayload, Manifest } from '../src/types';
 import { sampleCore, sampleCoreIntegrity, sampleManifest } from '../src/data/sample';
 import { revisionHead, revisionManifest } from '../testUtils/payloadRevision';
+import { evidenceSelection } from '../testUtils/productEvidenceSelection';
 import { cache } from '../src/data/cache';
 import { COMPACT_HISTORY_NORMALIZATION_VERSION } from '../src/data/historyDerivation';
 
@@ -49,6 +50,7 @@ jest.mock('../src/data/cache', () => ({
     readHistoryBanks: jest.fn(async () => null),
     readBankInsights: jest.fn(async () => null),
     readSearchIndex: jest.fn(async () => null),
+    readProductHistory: jest.fn(async () => null),
     updateMeta: (meta: unknown) => mockUpdateMeta(meta),
     readSuitabilityIndex: jest.fn(async () => null),
     writeSuitabilityIndex: jest.fn(async () => {}),
@@ -108,6 +110,7 @@ function resetStore() {
     coreIntegrity: sampleCoreIntegrity,
     coreAssetState: { status: 'sample', data: sampleCoreIntegrity },
     details: null,
+    productEvidenceHead: null,
     detailsLoading: false,
     error: null,
     offline: false,
@@ -164,6 +167,7 @@ describe('selected immutable payload refresh', () => {
     expect(mockDownloadDetails).toHaveBeenCalledWith(next.files.details.url, next.files.details.sha256, expect.objectContaining({ requireExactBytes: true }));
     expect(mockWriteBundle).toHaveBeenCalledWith(expect.objectContaining({ manifest: next, detailsSha: next.files.details.sha256 }), expect.any(String));
     expect(useStore.getState().manifest).toEqual(next);
+    expect(useStore.getState().productEvidenceHead).toEqual(revisionHead(next));
   });
 
   it('drops old live details when another refresh already committed the newer cache edition', async () => {
@@ -175,6 +179,40 @@ describe('selected immutable payload refresh', () => {
     expect(mockDownloadCore).not.toHaveBeenCalled();
     expect(useStore.getState().manifest).toEqual(next);
     expect(useStore.getState().details).toBeNull();
+    expect(useStore.getState().productEvidenceHead).toEqual(revisionHead(next));
+  });
+
+  it('adopts detached capability metadata with its actual head and no eager evidence acquisition', async () => {
+    const p = evidenceSelection();
+    useStore.setState({ manifest: null, core: null, coreIntegrity: null, productEvidenceHead: null });
+    mockReadMeta.mockResolvedValue(null); mockReadBundle.mockResolvedValue(null);
+    mockFetchDatesIndexJson.mockResolvedValue(p.dates); mockFetchManifest.mockResolvedValue(p.manifest);
+    mockDownloadCore.mockResolvedValue({ core: p.context.core, integrity: p.context.coreIntegrity, text: JSON.stringify(p.context.core) });
+    mockDownloadDetails.mockResolvedValue({ details: p.context.details, text: JSON.stringify(p.context.details) });
+    expect(await useStore.getState().refresh({ manual: true })).toBe(true);
+    expect(useStore.getState().productEvidenceHead).toEqual(p.head);
+    expect(mockDownloadInflate).not.toHaveBeenCalled();
+  });
+
+  it.each(['bootstrap', 'ensureCoreLoaded'] as const)('%s retains a validated selection across cloned cached metadata', async action => {
+    const p = evidenceSelection();
+    useStore.setState({ status: 'idle', core: null, coreIntegrity: null, manifest: null, productEvidenceHead: null });
+    mockReadBundle.mockResolvedValue({ core: p.context.core, integrity: p.context.coreIntegrity,
+      meta: { manifest: JSON.parse(JSON.stringify(p.manifest)), source: 'remote', coreSha: p.manifest.files.core.sha256,
+        detailsSha: p.manifest.files.details.sha256, historyDatesIndex: JSON.parse(JSON.stringify(p.dates)) } });
+    if (action === 'bootstrap') await useStore.getState().bootstrap({ skipRefresh: true });
+    else await useStore.getState().ensureCoreLoaded();
+    expect(useStore.getState().error).toBeNull();
+    expect(useStore.getState().productEvidenceHead).toEqual(p.head);
+    expect(mockDownloadInflate).not.toHaveBeenCalled();
+  });
+
+  it('cache hydration cannot manufacture a missing selected-head receipt', async () => {
+    const p = evidenceSelection(); useStore.setState({ core: null, productEvidenceHead: p.head });
+    mockReadBundle.mockResolvedValue({ core: p.context.core, integrity: p.context.coreIntegrity,
+      meta: { manifest: p.manifest, source: 'remote', coreSha: p.manifest.files.core.sha256 } });
+    await useStore.getState().ensureCoreLoaded();
+    expect(useStore.getState().productEvidenceHead).toBeNull();
   });
 
   it('keeps the installed edition if a selected asset fails hash verification', async () => {

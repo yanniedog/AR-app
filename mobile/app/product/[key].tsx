@@ -9,6 +9,7 @@ import { EligibilityAssessment } from '../../src/components/product/EligibilityA
 import { DetailsOnlyProduct } from '../../src/components/product/DetailsOnlyProduct';
 import { FixedDepositCalculation } from '../../src/components/product/FixedDepositCalculation';
 import { ProductTermsDisclosure } from '../../src/components/product/ProductTermsDisclosure';
+import { ProductEvidenceDisclosure } from '../../src/components/product/ProductEvidenceDisclosure';
 import { SavedRateActions } from '../../src/components/product/SavedRateActions';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -961,6 +962,7 @@ export default function ProductDetail() {
 
         <OfficialLinks links={detail?.links} sourceDocuments={detail?.sourceDocuments} />
         <ProductTermsDisclosure productKey={productKey} />
+        <ProductEvidenceDisclosure productKey={productKey} />
 
         <Button
           title={uiJoin('View', ' ', uiProviderName(row), ' ', 'Products')}

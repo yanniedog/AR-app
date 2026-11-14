@@ -133,6 +133,8 @@ export interface AppState {
   postRefreshWarming: boolean;
   source: PayloadSource;
   manifest: Manifest | null;
+  /** The validated dated selection receipt; never reconstructed from manifest fields. */
+  productEvidenceHead?: import('./payloadRevision').PayloadRevisionHead | null;
   core: CorePayload | null;
   /** Invalidates graph memoization when the same catalogue gains verified history. */
   bankRateHistoryRevision?: number;

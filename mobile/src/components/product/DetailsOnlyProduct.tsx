@@ -14,6 +14,7 @@ import { ScreenScrollView } from '../Screen';
 import { AppText, Button } from '../ui';
 import { DetailGroup, OfficialLinks, ProductFacts } from './ProductDetailParts';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
+import { ProductEvidenceDisclosure } from './ProductEvidenceDisclosure';
 import { uiLabel, uiDate, uiIdentifier, uiJoin, uiProductName, uiProviderName, uiPublicProductName } from '../../lib/uiCopy';
 export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { productKey: string; programmeId?: string; rateScenario?: RateScenario }) {
   const { details, manifest, loading, retry } = useDetailsCatalogue();
@@ -38,5 +39,6 @@ export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { 
       <AppText variant="small">{uiLabel(details ? 'Unavailable' : 'Unverified')}</AppText>
       <Button title="Retry" variant="secondary" onPress={retry} />
     </>}
+    <ProductEvidenceDisclosure productKey={productKey} />
   </View></ScreenScrollView>;
 }

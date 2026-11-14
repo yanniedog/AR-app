@@ -4,6 +4,7 @@ import type { ProductDetail } from '../../types';
 import { AppText, Card, Disclosure } from '../ui';
 import { DetailGroup, OfficialLinks, ProductFacts } from './ProductDetailParts';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
+import { ProductEvidenceDisclosure } from './ProductEvidenceDisclosure';
 import { uiCount, uiJoin, uiLabel, uiProductName, uiProviderName, type UiText } from '../../lib/uiCopy';
 
 export function publishedItemCount(items: unknown[] | undefined): UiText {
@@ -35,6 +36,7 @@ export function ComparisonDisclosures({
       <ProductFacts productDetails={productDetails ?? null} />
       <OfficialLinks links={productDetails?.links} sourceDocuments={productDetails?.sourceDocuments} />
       <ProductTermsDisclosure productKey={productKey} />
+      <ProductEvidenceDisclosure productKey={productKey} />
     </Card>
   );
 }

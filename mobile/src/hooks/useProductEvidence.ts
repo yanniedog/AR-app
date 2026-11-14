@@ -1,0 +1,37 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useStore } from '../data/store';
+import type { EvidenceLane } from '../data/productEvidencePublication';
+import { EvidenceError } from '../data/productEvidenceWire';
+import { loadProductEvidenceDocument, type ProductEvidenceOutcome } from '../data/productEvidenceDocument';
+
+type State = ProductEvidenceOutcome | { status: 'idle' | 'loading' | 'paused' | 'failed' };
+// One retained UI document globally; comparison cards cannot retain whole products in parallel.
+let owner: { cancel: () => void } | null = null;
+export function useProductEvidence(productKey: string, lane: EvidenceLane, open: boolean, retry: number, bodySha?: string) {
+  const manifest = useStore(s => s.manifest), core = useStore(s => s.core), coreIntegrity = useStore(s => s.coreIntegrity);
+  const details = useStore(s => s.details), head = useStore(s => s.productEvidenceHead), source = useStore(s => s.source);
+  const context = useMemo(() => ({ manifest, core, coreIntegrity, details, productEvidenceHead: head, source }), [manifest, core, coreIntegrity, details, head, source]);
+  const [result, setResult] = useState<{ identity: string; context: typeof context; state: State } | null>(null);
+  const identity = `${manifest?.payload_revision?.bundle_sha256 ?? ''}:${productKey}:${lane}:${bodySha ?? ''}`;
+  useEffect(() => {
+    if (!open) { setResult(null); return; }
+    const controller = new AbortController(); let active = true;
+    const lease = { cancel: () => { controller.abort(); if (active) setResult({ identity, context, state: { status: 'paused' } }); } };
+    owner?.cancel(); owner = lease;
+    const isCurrent = () => {
+      const live = useStore.getState();
+      return active && owner === lease && !controller.signal.aborted && live.manifest === manifest && live.core === core
+        && live.coreIntegrity === coreIntegrity && live.details === details && live.productEvidenceHead === head && live.source === source;
+    };
+    setResult({ identity, context, state: { status: 'loading' } });
+    // Yield before integrity checks; never hash the current core during rendering.
+    void new Promise<void>(resolve => setTimeout(resolve, 0)).then(() => {
+      if (!isCurrent()) throw new EvidenceError('cancelled', 'Evidence selection changed');
+      return loadProductEvidenceDocument(context, productKey, lane, isCurrent, controller.signal, bodySha);
+    }).then(state => { if (isCurrent()) setResult({ identity, context, state }); }, error => {
+      if (isCurrent()) setResult({ identity, context, state: { status: error instanceof EvidenceError && error.code === 'unsupported' ? 'unsupported' : 'failed' } });
+    });
+    return () => { active = false; controller.abort(); if (owner === lease) owner = null; };
+  }, [manifest, core, coreIntegrity, details, head, source, productKey, lane, open, retry, identity, bodySha, context]);
+  return open && result?.identity === identity && result.context === context ? result.state : { status: 'idle' as const };
+}

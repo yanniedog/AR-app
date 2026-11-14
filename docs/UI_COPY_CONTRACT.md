@@ -25,6 +25,8 @@ Private edited facts keep their real provenance and encryption. Neither a format
 
 `DocumentText` owns the fixed legal/licence registry. `DebugEvidenceText` owns the bounded local log subscription. `AuditEvidenceText` owns an actual `PerformanceAuditReport`; `ReceiptEvidenceText` owns an admitted `ReplayDocument.original`. The explicit native debug share helper reads the complete local evidence with installed application metadata and accepts only a boolean full-evidence option. These are individual source-bound expressions, not file or route exemptions. All surrounding headings, controls and status remain subject to normal copy rules.
 
+`ProductEvidenceText` owns only `productEvidencePageText` from the admitted product-evidence document module. Its private page registry permits at most 16,384 UTF-16 units per page (plus one unit at a surrogate-safe boundary), derived from the verified current product's acquired facts or original response. Unknown handles fail. It never renders arbitrary text props, executes HTML, or converts source wording into approved pricing/eligibility facts; all surrounding controls and statuses retain the normal copy rules.
+
 ## Enforcement
 
 Run `cd mobile && npm run ci`. Its `check:ui-copy` step builds the real TypeScript program and inspects production app/source text sinks, native calls, spreads, aliases, casts and controlled assignments. The guard verifies brand declaration origins, typed report cells and checked HTML construction. Tests exercise valid boundaries and reject raw/any strings, forged brands/models, fake hooks/factories, unsafe aliases, HTML paragraphs, attributes and CSS content.

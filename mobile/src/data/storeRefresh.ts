@@ -1,6 +1,6 @@
 import { cache } from './cache';
 import { prepareBankRateHistoryAfterPaint } from './storeBankRateHistory';
-import { parseHistoryDatesIndex } from './historyDatesIndex';
+import { parseHistoryDatesIndex, selectedProductEvidenceHead } from './historyDatesIndex';
 import type { PayloadProgressSnapshot } from './downloadProgress';
 import { computeChanges, notify, type NotifyMessage } from './notifications';
 import { checkPublicReferenceChanges } from './referenceRateAlerts';
@@ -497,6 +497,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             }
             set({
               manifest: remote,
+              productEvidenceHead: selectedProductEvidenceHead(resolution.datesIndex, remote),
               status: 'ready',
               bankRateHistoryLoading: true,
               source: 'remote',
@@ -671,6 +672,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           coreAssetState: liveAssetStateForProviderCoverage(integrity, core.coverage),
           manifest: remote,
           source: 'remote',
+          productEvidenceHead: selectedProductEvidenceHead(resolution.datesIndex, remote),
           status: 'ready',
           bankRateHistoryLoading: true,
           error: null,

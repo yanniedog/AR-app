@@ -11,6 +11,7 @@ jest.mock('../src/components/ExternalLinkConfirmation', () => ({ useTrustedExter
 jest.mock('../src/components/feedback', () => ({}));
 jest.mock('../src/components/TouchTarget', () => ({}));
 jest.mock('../src/components/product/ProductTermsDisclosure', () => ({ ProductTermsDisclosure: 'ProductTermsDisclosure' }));
+jest.mock('../src/components/product/ProductEvidenceDisclosure', () => ({ ProductEvidenceDisclosure: 'ProductEvidenceDisclosure' }));
 jest.mock('../src/data/store', () => ({}));
 jest.mock('../src/lib/nav', () => ({}));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {} }) }));
