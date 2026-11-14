@@ -21,6 +21,7 @@ import { normalizeBankSpreadHistoryPayload } from './bankSpreadHistory';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import { normalizeRbaCalendar } from './rbaCalendar';
 import { decodePayloadUtf8, inflatePayloadOffThread, MAX_PAYLOAD_INFLATED_BYTES } from './payloadInflation';
+import { payloadDownloadTimeoutMs } from './payloadNetworkBudget';
 import {
   fileNameFromUrl,
   type PayloadProgressHandler,
@@ -135,6 +136,7 @@ async function downloadWireBytes(
   const fileName = opts.fileName ?? fileNameFromUrl(url);
   const phase = opts.phase ?? 'download';
   const startedAt = Date.now();
+  const timeoutMs = payloadDownloadTimeoutMs(opts.expectedBytes);
   emit(opts.onProgress, {
     phase,
     fileName,
@@ -148,7 +150,7 @@ async function downloadWireBytes(
     const abort = () => controller.abort();
     opts.signal?.addEventListener('abort', abort, { once: true });
     if (opts.signal?.aborted) controller.abort();
-    const timer = setTimeout(() => controller.abort(), 30_000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await globalThis.fetch(url, { signal: controller.signal, headers: legacyHeaders });
       if (!response.ok) {
@@ -175,7 +177,7 @@ async function downloadWireBytes(
     const xhr = new XMLHttpRequest();
     xhr.open('GET', deliveryUrl ?? url);
     if (opts.legacySha) xhr.setRequestHeader('X-AR-Legacy-SHA256', opts.legacySha);
-    xhr.timeout = 30000;
+    xhr.timeout = timeoutMs;
     xhr.responseType = 'arraybuffer';
     xhr.ontimeout = () => reject(new Error('network timeout'));
     xhr.onprogress = (event) => {

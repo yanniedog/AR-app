@@ -1,6 +1,7 @@
 import type { Manifest } from '../types';
 import { isValidCalendarDate } from '../lib/calendarDate';
 import { finiteDecimal } from './publicRateDecimal';
+import { withinStartupCoreBudget } from './payloadNetworkBudget';
 import type { PublicCondition, PublicEvidence, PublicFormula, PublicProduct, PublicProgramme, PublicRateAsset, PublicRateBinding, PublicRateCapability, PublicRateIndex, PublicRateShard } from './publicRateModel';
 
 export const PUBLIC_RATE_INDEX_COMPRESSED = 256 * 1024;
@@ -47,7 +48,7 @@ export function validatePublicRateCapability(manifest: Manifest, expectedRepo = 
   if (value === undefined) return null;
   if (!manifest.payload_revision || manifest.repo !== expectedRepo || !new RegExp(`^app-payload-${manifest.run_date}-r[0-9]{6}$`).test(manifest.tag) ||
       !binding(value, manifest) || !object(value) || !keys(value, ['schemaVersion', 'generationId', 'runDate', 'coreSha256', 'detailsSha256', 'index', 'shards']) ||
-      Object.hasOwn(manifest.files, 'public_rate_catalogue') || manifest.files.core.bytes > 512 * 1024 ||
+      Object.hasOwn(manifest.files, 'public_rate_catalogue') || !withinStartupCoreBudget(manifest.files.core.bytes) ||
       !validAsset(value.index, manifest, PUBLIC_RATE_INDEX_COMPRESSED, PUBLIC_RATE_INDEX_DECODED) || !Array.isArray(value.shards) || value.shards.length > 128 ||
       !value.shards.every(item => validAsset(item, manifest, PUBLIC_RATE_SHARD_COMPRESSED, PUBLIC_RATE_SHARD_DECODED))) invalid('Invalid public rate capability binding or budget');
   const capability = value as PublicRateCapability;
