@@ -107,7 +107,7 @@ test('funds typing stays local and changing mode commits only the latest draft w
     expect(useMortgageComparison.getState().fundsAvailable).toBe('');
     type(tree, 'Deposit', '150000');
     choose(tree, 'LVR');
-    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '75', lvrMode: 'lvr', fundsAvailable: '150000' });
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '75', lvrMode: 'lvr', fundsType: 'deposit', fundsAvailable: '150000' });
     act(() => jest.advanceTimersByTime(500));
     expect(useMortgageComparison.getState().lvrMode).toBe('lvr');
     expect(input(tree, 'LVR')?.props.value).toBe('75');
@@ -145,8 +145,8 @@ test('remount retains both drafts and mode; Clear removes both drafts and resets
     choose(tree, 'LVR');
     expect(input(tree, 'LVR')?.props.value).toBe('71');
     choose(tree, 'Funds available');
-    expect(tab(tree, 'Offset account').props.accessibilityState.selected).toBe(true);
-    type(tree, 'Offset balance', '250000');
+    expect(tab(tree, 'Deposit').props.accessibilityState.selected).toBe(true);
+    type(tree, 'Deposit', '250000');
     act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
     act(() => jest.advanceTimersByTime(500));
     expect(useMortgageComparison.getState()).toEqual({ loanAmount: '', lvr: '' });
@@ -341,5 +341,32 @@ test('untouched inputs default to funds available with an offset account and com
     act(() => jest.advanceTimersByTime(500));
     expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '', lvrMode: 'funds', fundsType: 'offset',
       fundsAvailable: '100000', propertyValue: '750000' });
+  } finally { act(() => tree.unmount()); }
+});
+
+test('editing an implicit direct LVR keeps LVR mode while the field is cleared', () => {
+  setMortgageComparisonInputs({ loanAmount: '600000', lvr: '72' });
+  const tree = mount();
+  try {
+    type(tree, 'LVR', '');
+    expect(tab(tree, 'LVR').props.accessibilityState.selected).toBe(true);
+    expect(input(tree, 'LVR')?.props.value).toBe('');
+    type(tree, 'LVR', '80');
+    act(() => jest.advanceTimersByTime(500));
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '80', lvrMode: 'lvr' });
+  } finally { act(() => tree.unmount()); }
+});
+
+test('a saved funds scenario without a type stays a deposit through edits and a mode round trip', () => {
+  setMortgageComparisonInputs({ loanAmount: '600000', lvr: '', lvrMode: 'funds', fundsAvailable: '150000' });
+  const tree = mount();
+  try {
+    type(tree, 'Deposit', '160000');
+    act(() => jest.advanceTimersByTime(500));
+    expect(useMortgageComparison.getState().fundsType).toBe('deposit');
+    choose(tree, 'LVR');
+    choose(tree, 'Funds available');
+    expect(tab(tree, 'Deposit').props.accessibilityState.selected).toBe(true);
+    expect(input(tree, 'Deposit')?.props.value).toBe('160000');
   } finally { act(() => tree.unmount()); }
 });
