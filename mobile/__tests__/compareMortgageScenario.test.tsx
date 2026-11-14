@@ -30,7 +30,8 @@ jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {} }
 jest.mock('../src/components/Screen', () => ({ Screen: 'Screen' }));
 jest.mock('../src/components/BankAvatar', () => ({ BankAvatar: 'BankAvatar' }));
 jest.mock('../src/components/feedback', () => ({ EmptyState: 'EmptyState', ScreenSkeleton: 'ScreenSkeleton' }));
-jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Badge: 'Badge', Button: 'Button', Card: 'Card', Divider: 'Divider', Row: 'Row' }));
+jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Badge: 'Badge', Button: 'Button', Card: 'Card', Divider: 'Divider', Row: 'Row',
+  Disclosure: ({ children, open, ...props }: any) => jest.requireActual('react').createElement('Disclosure', { ...props, open }, open ? children : null) }));
 jest.mock('../src/components/product/ComparisonDisclosures', () => ({ ComparisonDisclosures: 'Disclosures', PersonalCostComparisonDisclosure: 'CostDisclosure', publishedItemCount: () => '0' }));
 jest.mock('../src/components/product/CanonicalTermsComparison', () => ({ CanonicalTermsComparison: 'CanonicalTermsComparison' }));
 jest.mock('../src/components/product/FixedDepositComparison', () => ({ FixedDepositComparison: 'FixedDepositComparison' }));

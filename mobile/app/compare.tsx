@@ -13,6 +13,7 @@ import { BankAvatar } from '../src/components/BankAvatar';
 import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { ComparisonDisclosures, PersonalCostComparisonDisclosure, publishedItemCount } from '../src/components/product/ComparisonDisclosures';
 import { CanonicalTermsComparison } from '../src/components/product/CanonicalTermsComparison';
+import { ProductEvidenceCriteriaComparison } from '../src/components/product/ProductEvidenceCriteriaComparison';
 import { FixedDepositComparison } from '../src/components/product/FixedDepositComparison';
 import { MortgageComparison } from '../src/components/product/MortgageComparison';
 import { PortfolioComparison } from '../src/components/product/PortfolioComparison';
@@ -546,6 +547,7 @@ export default function Compare() {
       </Card>)}
       {/* Differences first; calculations and document terms are follow-up detail. */}
       <CanonicalTermsComparison rows={calculationRows} />
+      <ProductEvidenceCriteriaComparison rows={calculationRows} />
       {entries.map(entry => <View key={`public:${entry.row.product_key}:${entry.row.public_offer_id ?? entry.row.rate_index}`}>
         <PublicRateEvidence productKey={entry.row.product_key} row={entry.row} scenario={scenarioFor(entry.section, entry.row)} />
         <PublicCostComparison section={entry.section} target={entry.row} scenario={scenario} rateScenario={scenarioFor(entry.section, entry.row)} />

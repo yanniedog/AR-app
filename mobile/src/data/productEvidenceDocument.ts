@@ -7,6 +7,7 @@ import { EvidenceError, type EvidenceFact } from './productEvidenceWire';
 import { verifiedCoreContents } from './sectionIntegrity';
 import { verifiedCatalogueDetails } from './detailsCatalogue';
 import { productEvidenceTextSlice } from './productEvidencePagination';
+import { projectSourceCriteria, type CriteriaProjection, type CriteriaQuery } from './productEvidenceCriteria';
 
 export type ProductEvidenceContext = Pick<AppState, 'manifest' | 'core' | 'coreIntegrity' | 'details' | 'productEvidenceHead' | 'source'>;
 export interface ProductEvidenceDocument {
@@ -76,4 +77,20 @@ export function productEvidencePageText(page: ProductEvidencePage): string {
   const text = pages.get(page);
   if (text === undefined) throw new EvidenceError('invalid', 'Evidence page is not admitted');
   return text;
+}
+
+/** Explicit lifecycle release; existing admitted bounded pages remain readable. */
+export function releaseProductEvidenceDocument(document: ProductEvidenceDocument): void { documents.delete(document); }
+
+export async function projectProductEvidenceCriteria(document: ProductEvidenceDocument, query: CriteriaQuery,
+  checkpoint: () => Promise<void>): Promise<Omit<CriteriaProjection, 'text'> & { sourcePage: ProductEvidencePage | null }> {
+  const content = documents.get(document);
+  if (!content?.facts) throw new EvidenceError('invalid', 'Criteria requires an admitted facts document');
+  const { text, ...projection } = await projectSourceCriteria(content.facts, query, checkpoint);
+  if (documents.get(document) !== content) throw new EvidenceError('cancelled', 'Evidence document released');
+  if (projection.sourceRecord === null || projection.page >= projection.pages) return { ...projection, sourcePage: null };
+  const sourcePage = Object.freeze({ record: projection.sourceRecord, records: document.records,
+    page: projection.page, pages: projection.pages, start: projection.start, end: projection.end, characters: projection.characters });
+  pages.set(sourcePage, text);
+  return { ...projection, sourcePage };
 }

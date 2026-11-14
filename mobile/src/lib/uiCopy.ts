@@ -19,6 +19,10 @@ import type { CurrentProductOption } from '../data/scenarioCatalog';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
+  'Reference product', 'Exact scope',
+  'Source criteria', 'Selected products only', 'Search selected products', 'Matching records', 'Typed records', 'Source-only records',
+  'Record', 'First record', 'Previous record', 'Next record', 'Last record',
+  'Conditional', 'Conflicting', 'Attributes', 'Bundles', 'Tiers', 'All', 'Coverage unverified',
   'Recorded move', 'No recorded move', 'Filtered history', 'Quarantined history', 'Baseline unavailable', 'History gaps', 'No products',
   'Bank response coverage', 'Decision windows', 'Unknown changes', 'Unknown timing', 'Unverified first moves',
   'Metric evidence', 'Method', 'Numerator', 'Denominator', 'Sample size', 'Eligible', 'Missing evidence',
@@ -462,6 +466,7 @@ function useInputController() {
 export function useReceiptImportInput() { return useInputController(); }
 export function useSetupKeyInput() { return useInputController(); }
 export function useProviderSearchInput() { return useInputController(); }
+export function useEvidenceCriteriaInput() { return useInputController(); }
 export function uiRatesQuery(session: Pick<RatesSectionState, 'query'>): UiInputText { return inputText(session.query); }
 export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr' | 'fundsAvailable' | 'propertyValue'): UiInputText { return inputText(model[field] ?? ''); }
 export function uiPrivateOfferInput(model: Pick<MortgageInputs, 'confirmedOfferFacts' | 'provenance'>, field: 'purpose' | 'security' | 'repaymentType'): UiInputText {

@@ -7,6 +7,7 @@ import { productEvidencePage, type ProductEvidenceDocument, type ProductEvidence
 import { uiCount, uiDate, uiIdentifier, uiJoin, uiLabel, type UiLabel } from '../../lib/uiCopy';
 import { AppText, Button, Disclosure, Row } from '../ui';
 import { ProductEvidenceText } from '../ProductEvidenceText';
+import { ProductEvidenceCriteria } from './ProductEvidenceCriteria';
 
 function EvidencePages({ document }: { document: ProductEvidenceDocument }) {
   const [record, setRecord] = useState(0), [page, setPage] = useState(0);
@@ -73,7 +74,7 @@ export function ProductEvidenceDisclosure({ productKey }: { productKey: string }
     : state.status === 'unavailable' ? 'Unavailable' : state.status === 'paused' ? 'Paused'
     : state.status === 'unknown' ? state.routeState === 'ambiguous' ? 'Ambiguous' : state.routeState === 'index_only' ? 'Index only'
     : state.routeState === 'projection_unverified' ? 'Source review required' : 'Unknown' : 'Unverified';
-  return <Disclosure title="Source evidence" open={open} onToggle={() => setOpen(value => !value)}>
+  return <><ProductEvidenceCriteria productKeys={[productKey]} /><Disclosure title="Source evidence" open={open} onToggle={() => setOpen(value => !value)}>
     <View style={{ gap: 12 }}>
       <Row style={{ gap: 8 }}><Button title="Product facts" variant="secondary" disabled={lane === 'product_evidence_v1'} onPress={() => setLane('product_evidence_v1')} />
         <Button title="Original response" variant="secondary" disabled={lane === 'product_response_evidence_v1'} onPress={() => setLane('product_response_evidence_v1')} /></Row>
@@ -87,5 +88,5 @@ export function ProductEvidenceDisclosure({ productKey }: { productKey: string }
         </> : null}
       </>}
     </View>
-  </Disclosure>;
+  </Disclosure></>;
 }
