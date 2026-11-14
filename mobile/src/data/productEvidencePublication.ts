@@ -80,6 +80,12 @@ export function validateEvidencePublication(raw: Manifest, selected: PayloadRevi
   assertRevisionManifest(manifest, head, manifest.run_date, 'yanniedog/AR-local');
   const bundle = payloadBundleIdentity(manifest);
   responseRequire(head.bundle_sha256 === bundle && head.generation_id === `sha256-${bundle}`, 'Evidence selected bundle mismatch');
+  return { ...validateEvidenceCandidate(manifest), head: { ...head } };
+}
+
+/** Private byte/schema admission only. This grants no selected-head authority. */
+export function validateEvidenceCandidate(raw: Manifest): Omit<EvidencePublication, 'head'> {
+  const manifest = boundedManifest(raw);
   const root = manifest as unknown as Record<string, unknown>;
   const references = Object.fromEntries(Object.keys(EVIDENCE_REFERENCE_SCHEMAS).map(key =>
     [key, reference(root[key], key as EvidenceLane, manifest)])) as EvidencePublication['references'];
@@ -93,7 +99,7 @@ export function validateEvidencePublication(raw: Manifest, selected: PayloadRevi
     responseRequire(!names.has(state.reference.capability.name), 'Aliased evidence capability');
     names.add(state.reference.capability.name);
   }
-  return { manifest, head: { ...head }, references, availability: validateEvidenceStatuses(manifest, references) };
+  return { manifest, references, availability: validateEvidenceStatuses(manifest, references) };
 }
 
 /** Metadata-only adoption check. Legacy editions need no evidence capability. */

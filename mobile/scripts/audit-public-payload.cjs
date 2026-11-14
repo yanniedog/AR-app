@@ -47,6 +47,7 @@ const { unpackHistoricalBankRateCatalogue } = require('../src/data/historicalBan
 const { validateAcceptedHistoricalBankRateReady: validateHistoricalBankRateReadyForApp } = require('../src/data/historicalBankRateReadyAcceptance.ts');
 const { validatePublicRateCapability, validatePublicRateDiscovery, validatePublicRateIndex, validatePublicRateShard,
   PUBLIC_RATE_INDEX_DECODED, PUBLIC_RATE_SHARD_DECODED } = require('../src/data/publicRateWire.ts');
+const { auditProductEvidence } = require('./audit-product-evidence.cjs');
 
 const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const MAX_COMPRESSED = 64 * 1024 * 1024;
@@ -88,14 +89,15 @@ function publicationSource(source, repo) {
   return url.href;
 }
 
-async function fetchBytes(source, maxBytes, repo = 'yanniedog/AR-local', transports = []) {
+async function fetchBytes(source, maxBytes, repo = 'yanniedog/AR-local', transports = [], timeoutMs = 60000) {
   const url = publicationSource(source, repo);
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > MAX_COMPRESSED) throw new Error('Invalid publication byte limit');
   // Use the shipping app's Cloudflare service. Canonical identities and
   // manifest byte counts/hashes still describe the exact published domain bytes.
   const delivery = automaticDataUrl(url);
   const requested = delivery ?? url;
-  const signal = AbortSignal.timeout(60_000);
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000) throw new Error('Invalid publication timeout');
+  const signal = AbortSignal.timeout(timeoutMs);
   let target = requested;
   for (let redirects = 0; ; redirects++) {
     const response = await fetch(target, { cache: 'no-store', redirect: 'manual', signal });
@@ -175,7 +177,7 @@ function historySourceSelection(catalogue, manifest, index) {
 
 async function audit(opts) {
   const transports = [];
-  const publicBytes = (url, limit) => fetchBytes(url, limit, opts.repo, transports);
+  const publicBytes = (url, limit, timeoutMs) => fetchBytes(url, limit, opts.repo, transports, timeoutMs);
   const base = `https://github.com/${opts.repo}/releases/download/`;
   const contract = publishedV1SourceContract({
     repo: opts.repo, rollingTag: 'app-payload-latest',
@@ -325,6 +327,26 @@ async function audit(opts) {
         coverage: pricingIndex.coverage };
     } catch (error) { evidence.public_rate_catalogue = { status: 'FAIL', error: error.message }; }
   }
+  const optionalEvidence = await auditProductEvidence({ manifest, manifestSha: hash(manifestBytes), head, directory,
+    financialAssets: evidence, publicTransportVerified: transports.length > 0 && transports.every(item => item.route === 'cloudflare_service'),
+    read: async (file, timeoutMs) => {
+      if (directory) return privateFile(directory, file.name, file.bytes + 1);
+      const url = `${base}${manifest.tag}/${file.name}`;
+      if (!automaticDataUrl(url)) throw new Error('Optional evidence requires the authenticated immutable route');
+      const before = transports.length, bytes = await publicBytes(url, file.bytes + 1, timeoutMs);
+      if (transports.length !== before + 1 || transports.at(-1).route !== 'cloudflare_service') throw new Error('Optional evidence transport was not verified');
+      return bytes;
+    } });
+  if (optionalEvidence) {
+    Object.assign(evidence, optionalEvidence.assets);
+    if (!directory && optionalEvidence.receipt.status === 'PASS') {
+      const finalIndex = await publicBytes(`${contract.datesIndexUrl}?_=${Date.now()}`, 4 * 1024 * 1024);
+      if (hash(finalIndex) !== hash(indexBytes)) {
+        Object.assign(optionalEvidence.receipt, { status: 'FAIL', selected_head_verified: false,
+          error: 'Selected publication index changed during complete evidence audit' });
+      }
+    }
+  }
   const normalized = decoded.core ? normalizeCoreWithIntegrity(decoded.core, { coreSha256: manifest.files.core.sha256 }) : null;
   const coreKeys = new Set(Object.values(normalized?.core.sections ?? {}).flatMap((section) => section.rates).map((row) => row.product_key));
   const detailKeys = Object.keys(decoded.details?.products ?? {});
@@ -347,6 +369,12 @@ async function audit(opts) {
       countImpacts: normalized.integrity.quarantines.countImpacts } : null,
   };
   const checks = evaluateAppHealthDataQuality(snapshot, contract);
+  if (optionalEvidence) checks.push({ id: 'optional-product-evidence', code: 'optional-product-evidence', label: 'Optional product evidence', domain: 'data-integrity',
+    status: optionalEvidence.receipt.status !== 'PASS' ? 'fail'
+      : Object.values(optionalEvidence.receipt.lanes).some(lane => lane.state !== 'available') ? 'warn' : 'pass',
+    metrics: { declaredAssetsVerified: Object.keys(optionalEvidence.assets).length, selectedHeadVerified: optionalEvidence.receipt.selected_head_verified },
+    summary: optionalEvidence.receipt.status === 'PASS' ? 'Declared evidence and availability are verified; population completeness and rendered coverage are not established.'
+      : 'Optional evidence was not completely verified: ' + optionalEvidence.receipt.status });
   const historySelection = evidence.bank_rate_history_ready?.source_selection ?? evidence.bank_rate_history_catalogue_packed?.source_selection ?? evidence.bank_rate_history_catalogue?.source_selection;
   if (historySelection) checks.push({ id: 'bank-history-selected-sources', code: 'bank-history-selected-sources',
     label: 'Historical source selection', domain: 'data-integrity',
@@ -378,7 +406,9 @@ async function audit(opts) {
     app_commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: sourceRoot, encoding: 'utf8' }).trim(),
     app_worktree_clean: execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], { cwd: sourceRoot, encoding: 'utf8' }).trim() === '',
     run_date: date, manifest_url: manifestUrl, manifest_sha256: hash(manifestBytes), dates_index_sha256: indexBytes ? hash(indexBytes) : null,
-    payload_revision: manifest.payload_revision ?? null, assets: evidence, checks };
+    payload_revision: manifest.payload_revision ?? null, assets: evidence, checks,
+    ...(optionalEvidence ? { optional_product_evidence: optionalEvidence.receipt,
+      optional_product_evidence_summary: optionalEvidence.summary } : {}) };
 }
 
 async function main() {
