@@ -20,6 +20,23 @@ import { SegmentedControl } from './controls';
 const TYPING_DEBOUNCE_MS = 200;
 const EMPTY_FACETS = { loanPurposes: [], repaymentTypes: [] };
 
+// Untouched inputs default to funds available with an offset account. A
+// direct LVR (for example from an audit scope) keeps the LVR mode, and a saved
+// funds scenario without a type keeps its deposit meaning.
+function resolvedMode(value: MortgageComparisonInputs): 'lvr' | 'funds' {
+  return value.lvrMode ?? (value.lvr.trim() ? 'lvr' : 'funds');
+}
+function resolvedFundsType(value: MortgageComparisonInputs): 'deposit' | 'offset' {
+  return value.fundsType ?? (value.lvrMode === 'funds' ? 'deposit' : 'offset');
+}
+// Materialises the displayed mode and funds type so edits never flip the
+// selected inputs and the data layer never has to infer either default.
+function withResolvedMode(value: MortgageComparisonInputs): MortgageComparisonInputs {
+  if (resolvedMode(value) === 'lvr') return value.lvrMode === 'lvr' ? value : { ...value, lvrMode: 'lvr' };
+  const fundsType = resolvedFundsType(value);
+  return value.lvrMode === 'funds' && value.fundsType === fundsType ? value : { ...value, lvrMode: 'funds', fundsType };
+}
+
 function sameInputs(left: MortgageComparisonInputs, right: MortgageComparisonInputs): boolean {
   return left.loanAmount === right.loanAmount && left.lvr === right.lvr
     && (left.lvrMode ?? 'lvr') === (right.lvrMode ?? 'lvr')
@@ -229,7 +246,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   })), [rowOptions, facetCatalogueOptions, filters]);
   const change = (field: NumericInputField, text: string) => {
     dirty.current = true;
-    setDraft(current => ({ ...current, [field]: text }));
+    setDraft(current => ({ ...withResolvedMode(current), [field]: text }));
   };
   const clearInputs = () => {
     dirty.current = false;
@@ -237,13 +254,16 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     clearMortgageComparison();
     updateRatesSection('Mortgage', { page: 1 }, true);
   };
-  const mode = draft.lvrMode ?? 'lvr';
-  const fundsType = draft.fundsType ?? 'deposit';
-  const values = mortgageComparisonValues(draft);
+  const mode = resolvedMode(draft);
+  const fundsType = resolvedFundsType(draft);
+  const values = mortgageComparisonValues(withResolvedMode(draft));
   const pending = !sameInputs(draft, storeValue);
   const changeMode = (nextMode: 'lvr' | 'funds') => {
     if (nextMode === mode) return;
-    const next = { ...draftRef.current, lvrMode: nextMode };
+    const current = draftRef.current;
+    const next: MortgageComparisonInputs = nextMode === 'funds'
+      ? { ...current, lvrMode: nextMode, fundsType: current.fundsType ?? 'offset' }
+      : { ...withResolvedMode(current), lvrMode: nextMode };
     setDraft(next);
     // An explicit mode choice commits the latest typed values together, just
     // like selecting a purpose/repayment facet, and cancels an older debounce.
@@ -251,7 +271,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   };
   const changeFundsType = (nextType: 'deposit' | 'offset') => {
     if (nextType === fundsType) return;
-    const next = { ...draftRef.current, fundsType: nextType };
+    const next = { ...withResolvedMode(draftRef.current), fundsType: nextType };
     setDraft(next);
     commitDraft(next);
   };
