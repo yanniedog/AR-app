@@ -8,7 +8,7 @@ import { buildStaySwitchProjection } from '../src/data/staySwitchProjection';
 import { catalogue, product, programme, core as emptyCore } from '../testUtils/publicRateJourney';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
-import { clearMortgageComparison } from '../src/data/mortgageComparison';
+import { clearMortgageComparison, setMortgageComparisonInputs } from '../src/data/mortgageComparison';
 import { captureRatesSession, restoreRatesSession, initializeRatesSession, changeRatesSection, updateRatesSection } from '../src/data/ratesSession';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
@@ -212,13 +212,14 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     repaymentTypes: useOr ? ['PI', 'IO'] : ['PI'] } }));
   installMandatoryEligibility(selectMandatoryEligibility(store.getState().core, DEFAULT_PREFS.profileFilters, null));
   clearMortgageComparison();
+  setMortgageComparisonInputs({ loanAmount: '', lvr: '', lvrMode: 'lvr' });
   let rates!: InspectableRenderer, detail!: InspectableRenderer;
   try {
     act(() => { rates = TestRenderer.create(<RatesWorkspace />) as InspectableRenderer; });
     expect(rates.root.findAllByType('ProductCard')).toHaveLength(0);
     act(() => {
       rates.root.findAllByProps({ accessibilityLabel: 'Loan amount' })[0].props.onChangeText('600000');
-      rates.root.findAllByProps({ accessibilityLabel: 'LVR' })[0].props.onChangeText('75');
+      rates.root.findAllByProps({ accessibilityLabel: 'LVR' }).find(node => node.props.onChangeText)!.props.onChangeText('75');
     });
     act(() => { jest.advanceTimersByTime(500); });
     const card = rates.root.findAllByType('ProductCard')[0];
@@ -303,6 +304,7 @@ test('Rates 75% offer does not show the saved 90% LVR contradiction; ordinary Pr
     subscriptions: [], searchIndexStatus: 'idle', setActiveSection: jest.fn(), ensureSearchIndex: jest.fn(),
     subscribeSearch: jest.fn(), unsubscribeSearch: jest.fn() }, true);
   initializeRatesSession(store.getState().prefs, 'Mortgage'); clearMortgageComparison();
+  setMortgageComparisonInputs({ loanAmount: '', lvr: '', lvrMode: 'lvr' });
   updateRatesSection('Mortgage', current => ({ filters: { ...current.filters,
     loanPurposes: ['OO'], repaymentTypes: ['PI'] } }));
   installMandatoryEligibility(selectMandatoryEligibility(store.getState().core, DEFAULT_PREFS.profileFilters, null));
@@ -311,7 +313,7 @@ test('Rates 75% offer does not show the saved 90% LVR contradiction; ordinary Pr
     act(() => { rates = TestRenderer.create(<RatesWorkspace />) as InspectableRenderer; });
     act(() => {
       rates.root.findAllByProps({ accessibilityLabel: 'Loan amount' })[0].props.onChangeText('600000');
-      rates.root.findAllByProps({ accessibilityLabel: 'LVR' })[0].props.onChangeText('75');
+      rates.root.findAllByProps({ accessibilityLabel: 'LVR' }).find(node => node.props.onChangeText)!.props.onChangeText('75');
     });
     act(() => { jest.advanceTimersByTime(500); });
     const card = rates.root.findAllByType('ProductCard')[0];

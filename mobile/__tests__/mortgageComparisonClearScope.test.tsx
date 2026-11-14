@@ -82,7 +82,7 @@ test('external store clear discards a pending typed draft instead of restoring i
   }
 });
 
-test('selecting the final facet flushes the latest amount and LVR before the debounce and clear cannot resurrect them', () => {
+test('selecting the final facet flushes the latest amount and offset inputs before the debounce and clear cannot resurrect them', () => {
   jest.useFakeTimers();
   const original = captureRatesSession(); initializeRatesSession(DEFAULT_PREFS, 'Mortgage'); clearMortgageComparison();
   const filters = { ...EMPTY_FILTERS, loanPurposes: ['OWNER_OCCUPIED'] };
@@ -93,11 +93,13 @@ test('selecting the final facet flushes the latest amount and LVR before the deb
   act(() => { tree = TestRenderer.create(<MortgageComparisonControls rows={rows} filters={filters} unverified={0} invalid={false} />) as typeof tree; });
   try {
     act(() => tree.root.findByProps({ accessibilityLabel: 'Loan amount' }).props.onChangeText('650000'));
-    act(() => tree.root.findByProps({ accessibilityLabel: 'LVR' }).props.onChangeText('72'));
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Offset balance' }).props.onChangeText('100000'));
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Property value' }).props.onChangeText('900000'));
     expect(useMortgageComparison.getState().loanAmount).toBe('');
     const chip = tree.root.findAllByType('Chip' as any).find(item => /principal/i.test(String(item.props.label)))!;
     act(() => chip.props.onPress());
-    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '650000', lvr: '72' });
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '650000', lvr: '', lvrMode: 'funds', fundsType: 'offset',
+      fundsAvailable: '100000', propertyValue: '900000' });
     expect(useRatesSession.getState().sections.Mortgage.filters.repaymentTypes).toEqual(['PRINCIPAL_AND_INTEREST']);
     act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
     act(() => jest.advanceTimersByTime(250));

@@ -76,6 +76,9 @@ test('exclusive accessible modes keep raw direct LVR and show computed facts wit
     expect(tab(tree, 'Funds available').props.accessibilityState).toEqual({ selected: true });
     expect(tab(tree, 'LVR').props.accessibilityState).toEqual({ selected: false });
     expect(input(tree, 'LVR')).toBeUndefined();
+    expect(tab(tree, 'Offset account').props.accessibilityState).toEqual({ selected: true });
+    expect(input(tree, 'Offset balance')?.props.keyboardType).toBe('decimal-pad');
+    choose(tree, 'Deposit');
     expect(input(tree, 'Deposit')?.props.keyboardType).toBe('decimal-pad');
     expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · Unknown');
     type(tree, 'Deposit', '150000');
@@ -83,7 +86,7 @@ test('exclusive accessible modes keep raw direct LVR and show computed facts wit
     expect(fact(tree, 'mortgage-property-value')).toBe('Property value · $750,000');
     expect(useMortgageComparison.getState().fundsAvailable).toBeUndefined();
     act(() => jest.advanceTimersByTime(200));
-    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '72', lvrMode: 'funds', fundsAvailable: '150000' });
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '72', lvrMode: 'funds', fundsType: 'deposit', fundsAvailable: '150000' });
     choose(tree, 'LVR');
     expect(input(tree, 'LVR')?.props.value).toBe('72');
     expect(input(tree, 'Deposit')).toBeUndefined();
@@ -126,7 +129,7 @@ test.each(['clear', 'replace'])('external %s discards pending funds and wins ove
   expect(useMortgageComparison.getState()).toEqual(expected);
 });
 
-test('remount retains both drafts and mode; Clear removes both drafts and resets to direct LVR', () => {
+test('remount retains both drafts and mode; Clear removes both drafts and resets to the offset default', () => {
   setMortgageComparisonInputs({ loanAmount: '600000', lvr: '71', lvrMode: 'funds' });
   let tree = mount();
   type(tree, 'Deposit', '200000');
@@ -144,8 +147,11 @@ test('remount retains both drafts and mode; Clear removes both drafts and resets
     act(() => jest.advanceTimersByTime(500));
     expect(useMortgageComparison.getState()).toEqual({ loanAmount: '', lvr: '' });
     expect(input(tree, 'Deposit')).toBeUndefined();
+    expect(input(tree, 'LVR')).toBeUndefined();
     expect(input(tree, 'Loan amount')?.props.value).toBe('');
-    expect(input(tree, 'LVR')?.props.value).toBe('');
+    expect(input(tree, 'Offset balance')?.props.value).toBe('');
+    expect(tab(tree, 'Funds available').props.accessibilityState.selected).toBe(true);
+    expect(tab(tree, 'Offset account').props.accessibilityState.selected).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
 
@@ -197,9 +203,9 @@ test('large text retains wrapping fields and both labelled selectable tabs with 
     }
     choose(tree, 'Funds available');
     const inputs = tree.root.findAllByType(TextInput);
-    expect(inputs.map(node => node.props.accessibilityLabel)).toEqual(['Loan amount', 'Deposit']);
+    expect(inputs.map(node => node.props.accessibilityLabel)).toEqual(['Loan amount', 'Offset balance', 'Property value']);
     expect(inputs.every(node => node.props.style.minHeight >= 48 && node.props.allowFontScaling !== false)).toBe(true);
-    expect(tree.root.findAllByType(View).filter(node => node.props.style?.flexBasis === 220)).toHaveLength(2);
+    expect(tree.root.findAllByType(View).filter(node => node.props.style?.flexBasis === 220)).toHaveLength(3);
     expect(tree.root.findAllByType('Row').some(node => node.props.style?.flexWrap === 'wrap'
       && node.props.style?.alignItems === 'flex-end')).toBe(true);
     expect(tab(tree, 'Funds available').props.accessibilityState.selected).toBe(true);
@@ -288,8 +294,7 @@ test('property edits debounce and survive remount; external replacement clears e
     expect(input(tree, 'LVR')?.props.value).toBe('71');
     expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '71' });
     choose(tree, 'Funds available');
-    expect(tab(tree, 'Deposit').props.accessibilityState.selected).toBe(true);
-    choose(tree, 'Offset account');
+    expect(tab(tree, 'Offset account').props.accessibilityState.selected).toBe(true);
     type(tree, 'Property value', '800000');
     type(tree, 'Offset balance', '100000');
     act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
@@ -314,5 +319,23 @@ test('offset inputs and type selector retain wrapping accessible controls at lar
     }
     expect(tab(tree, 'Deposit').props.accessibilityState.selected).toBe(false);
     expect(tab(tree, 'Offset account').props.accessibilityState.selected).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('untouched inputs default to funds available with an offset account and commit that mode', () => {
+  const tree = mount();
+  try {
+    expect(tab(tree, 'Funds available').props.accessibilityState.selected).toBe(true);
+    expect(tab(tree, 'Offset account').props.accessibilityState.selected).toBe(true);
+    expect(tree.root.findAllByType(TextInput).map(node => node.props.accessibilityLabel))
+      .toEqual(['Loan amount', 'Offset balance', 'Property value']);
+    type(tree, 'Loan amount', '600000');
+    type(tree, 'Offset balance', '100000');
+    type(tree, 'Property value', '750000');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80.00%');
+    expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · $500,000');
+    act(() => jest.advanceTimersByTime(500));
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '', lvrMode: 'funds', fundsType: 'offset',
+      fundsAvailable: '100000', propertyValue: '750000' });
   } finally { act(() => tree.unmount()); }
 });
