@@ -16,6 +16,7 @@ export interface ProductEvidenceDocument {
   readonly bodySha256: string | null; readonly bodyMatchesExport: boolean; readonly productKey: string;
   readonly bodyRole: 'detail' | 'index' | null;
   readonly responseState: string | null;
+  readonly availability: 'available' | 'unreported';
 }
 export interface ProductEvidencePage { readonly record: number; readonly records: number; readonly page: number;
   readonly pages: number; readonly start: number; readonly end: number; readonly characters: number }
@@ -23,7 +24,7 @@ type Contents = { facts?: EvidenceFact[]; text?: string; current?: { record: num
 const documents = new WeakMap<ProductEvidenceDocument, Contents>(), pages = new WeakMap<ProductEvidencePage, string>();
 export interface ProductEvidenceBodyChoice { sha256: string; role: 'detail' | 'index'; matchesExport: boolean }
 export type ProductEvidenceOutcome = { status: 'observed'; document: ProductEvidenceDocument; bodies: ProductEvidenceBodyChoice[] }
-  | { status: 'unavailable' | 'unsupported' | 'unknown'; reason?: string; routeState?: string; bodies?: ProductEvidenceBodyChoice[] };
+  | { status: 'disabled' | 'pending' | 'failed' | 'unavailable' | 'unsupported' | 'unknown'; reason?: string; routeState?: string; bodies?: ProductEvidenceBodyChoice[] };
 
 export function verifyEvidenceProduct(context: ProductEvidenceContext, productKey: string): void {
   const { core, coreIntegrity: integrity, manifest, details, productEvidenceHead: head } = context;
@@ -37,7 +38,8 @@ export function verifyEvidenceProduct(context: ProductEvidenceContext, productKe
 
 export async function loadProductEvidenceDocument(context: ProductEvidenceContext, productKey: string,
   lane: EvidenceLane, isCurrent: () => boolean, signal: AbortSignal, bodySha?: string): Promise<ProductEvidenceOutcome> {
-  if (!context.manifest || !Object.hasOwn(context.manifest, lane)) return { status: 'unavailable' };
+  if (!context.manifest || (!Object.hasOwn(context.manifest, lane)
+    && !Object.hasOwn(context.manifest, 'optional_product_evidence_status'))) return { status: 'unavailable' };
   verifyEvidenceProduct(context, productKey);
   const reader = createPublishedProductEvidence({ manifest: context.manifest, selected: context.productEvidenceHead!, isCurrent });
   const result = lane === 'product_evidence_v1' ? await reader.readFacts(productKey, signal) : await reader.readResponse(productKey, { signal, bodySha });
@@ -54,7 +56,8 @@ export async function loadProductEvidenceDocument(context: ProductEvidenceContex
     facts: facts?.length ?? null, observedDate: source.observation_date, observationState: source.observation_state,
     edition: context.manifest.payload_revision!.bundle_sha256,
     bodySha256: body?.body.sha256 ?? null, bodyMatchesExport: body?.currentMatchesExport ?? false, bodyRole: body?.role ?? null,
-    responseState: route?.state ?? null, productKey });
+    responseState: route?.state ?? null, productKey,
+    availability: reader.availability[lane].state === 'available' ? 'available' : 'unreported' });
   documents.set(document, facts ? { facts } : { text: body!.text });
   return { status: 'observed', document, bodies };
 }

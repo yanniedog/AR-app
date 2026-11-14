@@ -353,7 +353,7 @@ function isCacheMeta(value: unknown): value is CacheMeta {
 function assertHistoryReceiptWrite(next: CacheMeta, previous: CacheMeta | null): void {
   const index = parseHistoryDatesIndex(next.historyDatesIndex, next.manifest);
   const prior = previous && parseHistoryDatesIndex(previous.historyDatesIndex, previous.manifest);
-  if ((next.historyDatesIndex !== undefined || prior) && !index) {
+  if ((Object.hasOwn(next.manifest, 'optional_product_evidence_status') || next.historyDatesIndex !== undefined || prior) && !index) {
     throw new Error('Historical publication recovery index is unavailable or invalid');
   }
   if (index && prior) assertHistoryDatesIndexAdvances(index, prior);
@@ -371,6 +371,16 @@ async function recoverHistoryReceipt(meta: CacheMeta): Promise<CacheMeta> {
     if (embedded) assertHistoryDatesIndexAdvances(recovered, embedded);
     return { ...meta, historyDatesIndex: recovered };
   } catch { return meta; }
+}
+
+async function admittedEvidenceMeta(meta: CacheMeta): Promise<CacheMeta | null> {
+  const recovered = await recoverHistoryReceipt(meta);
+  // Legacy editions keep their prior behavior. New public availability is only
+  // adopted with the actual recovered selected head; invalid bytes remain on
+  // disk for recovery and never overwrite an independently valid embedded copy.
+  if (Object.hasOwn(recovered.manifest, 'optional_product_evidence_status')
+    && !parseHistoryDatesIndex(recovered.historyDatesIndex, recovered.manifest)) return null;
+  return recovered;
 }
 
 let writeChain: Promise<void> = Promise.resolve();
@@ -427,14 +437,19 @@ export const cache = {
     if (sidecar && sidecar.coreSha === b.meta.coreSha &&
         (!(sidecar.manifest.payload_revision || b.meta.manifest.payload_revision) ||
           samePayloadIdentity(sidecar.manifest, b.meta.manifest))) {
-      return { meta: sidecar, core: normalized.core, integrity: normalized.integrity };
+      const meta = await admittedEvidenceMeta(sidecar);
+      if (meta) return { meta, core: normalized.core, integrity: normalized.integrity };
     }
-    return { ...b, meta: await recoverHistoryReceipt(b.meta), core: normalized.core, integrity: normalized.integrity };
+    const meta = await admittedEvidenceMeta(b.meta);
+    return meta ? { ...b, meta, core: normalized.core, integrity: normalized.integrity } : null;
   },
 
   async readMeta(): Promise<CacheMeta | null> {
     const sidecar = await readCoreMetaSidecar();
-    if (sidecar) return sidecar;
+    if (sidecar) {
+      const admitted = await admittedEvidenceMeta(sidecar);
+      if (admitted) return admitted;
+    }
     // Older installs only embed meta in the multi-MB bundle. Also covers the
     // crash window after writeBundle deleted the sidecar / committed a new
     // bundle but before writeCoreMeta finished — fall back to embedded meta
@@ -445,7 +460,7 @@ export const cache = {
       (await readJson<CoreBundle>(BUNDLE))?.meta ??
       (await readJson<CoreBundle>(BUNDLE_TMP))?.meta ??
       null;
-    return isCacheMeta(fromBundle) ? recoverHistoryReceipt(fromBundle) : null;
+    return isCacheMeta(fromBundle) ? admittedEvidenceMeta(fromBundle) : null;
   },
 
   async readCore(): Promise<CorePayload | null> {

@@ -306,6 +306,7 @@ export interface Manifest {
   /** Lazy, detached descriptive evidence; never a pricing or eligibility authority. */
   product_evidence_v1?: import('./data/productEvidencePublication').EvidenceReference;
   product_response_evidence_v1?: import('./data/productEvidencePublication').EvidenceReference;
+  optional_product_evidence_status?: import('./data/productEvidenceStatus').EvidenceDeliveryStatus;
   /** Public pricing is lazy, independently hashed and bound to the selected ingest. */
   public_rate_catalogue?: import('./data/publicRateModel').PublicRateCapability;
   /** Verified full history loaded after first paint, outside legacy eager files. */

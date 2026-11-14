@@ -1,6 +1,5 @@
 /** Detached optional references; callers supply the adopter's selected revision head. */
 import type { Manifest } from '../types';
-import { isValidCalendarDate } from '../lib/calendarDate';
 import { payloadBundleIdentity } from './payloadBundleIdentity';
 import { assertRevisionManifest, validateRevisionHead, type PayloadRevisionHead } from './payloadRevision';
 import { parseBoundedEvidenceJson } from './productEvidenceJson';
@@ -8,20 +7,20 @@ import { EVIDENCE_SCHEMA, EvidenceError, sameEvidence, validateEvidenceBinding, 
   type EvidenceBinding, type EvidenceCapability } from './productEvidenceWire';
 import { RESPONSE_SCHEMA, responseFields, responseInteger, responseRequire, responseSha, responseUtf8,
   validateResponseBinding, validateResponseCapability, type ResponseCapability } from './productResponseWire';
+import { validateEvidenceSource, validateEvidenceStatuses, type EvidenceLaneStatus, type EvidenceReferenceSource } from './productEvidenceStatus';
+export type { EvidenceReferenceSource } from './productEvidenceStatus';
 
 export const PUBLICATION_REFERENCE_LIMIT = 65536;
 export const EVIDENCE_REFERENCE_SCHEMAS = { product_evidence_v1: 'ar-product-evidence-reference-v1',
   product_response_evidence_v1: 'ar-product-response-evidence-reference-v1' } as const;
 export type EvidenceLane = keyof typeof EVIDENCE_REFERENCE_SCHEMAS;
-export interface EvidenceReferenceSource { generation_id: string; observation_date: string;
-  observation_state: 'complete' | 'partial' | 'failed'; contract_digest: string }
 export interface EvidenceReferenceAsset { name: string; sha256: string; bytes: number; decoded_bytes: number }
 export interface EvidenceReference { schema: string; source: EvidenceReferenceSource;
   core_sha256: string; details_sha256: string; capability: EvidenceReferenceAsset }
 export type EvidenceReferenceState = { status: 'absent' | 'unsupported' }
   | { status: 'declared'; reference: EvidenceReference };
 export interface EvidencePublication { manifest: Manifest; head: PayloadRevisionHead;
-  references: Record<EvidenceLane, EvidenceReferenceState> }
+  references: Record<EvidenceLane, EvidenceReferenceState>; availability: Record<EvidenceLane, EvidenceLaneStatus> }
 export const evidenceFamily = (lane: EvidenceLane) => lane === 'product_evidence_v1' ? 'product-evidence' : 'product-response';
 
 /** Bound unknown objects before serialization/canonicalization, including hostile deep inputs. */
@@ -64,13 +63,7 @@ function reference(value: unknown, lane: EvidenceLane, manifest: Manifest): Evid
       && value.schema !== EVIDENCE_REFERENCE_SCHEMAS[lane]) return { status: 'unsupported' };
   const ref = responseFields(value, ['schema', 'source', 'core_sha256', 'details_sha256', 'capability']);
   responseRequire(ref.schema === EVIDENCE_REFERENCE_SCHEMAS[lane], 'Invalid evidence reference schema');
-  const source = responseFields(ref.source, ['generation_id', 'observation_date', 'observation_state', 'contract_digest']);
-  responseRequire(typeof source.observation_date === 'string' && isValidCalendarDate(source.observation_date)
-    && source.observation_date === manifest.run_date && typeof source.generation_id === 'string'
-    && new RegExp(`^obs-${source.observation_date}-[a-f0-9]{16}$`).test(source.generation_id)
-    && typeof source.observation_state === 'string' && ['complete', 'partial', 'failed'].includes(source.observation_state)
-    && responseSha(source.contract_digest), 'Invalid evidence source reference');
-  responseRequire(Object.entries(source).every(([key, field]) => manifest.source_observation?.[key] === field), 'Evidence selected source mismatch');
+  validateEvidenceSource(ref.source, manifest);
   responseRequire(responseSha(ref.core_sha256) && ref.core_sha256 === manifest.files.core.sha256
     && responseSha(ref.details_sha256) && ref.details_sha256 === manifest.files.details.sha256, 'Evidence selected asset mismatch');
   const asset = responseFields(ref.capability, ['name', 'sha256', 'bytes', 'decoded_bytes']);
@@ -100,12 +93,13 @@ export function validateEvidencePublication(raw: Manifest, selected: PayloadRevi
     responseRequire(!names.has(state.reference.capability.name), 'Aliased evidence capability');
     names.add(state.reference.capability.name);
   }
-  return { manifest, head: { ...head }, references };
+  return { manifest, head: { ...head }, references, availability: validateEvidenceStatuses(manifest, references) };
 }
 
 /** Metadata-only adoption check. Legacy editions need no evidence capability. */
 export function validateOptionalEvidencePublication(manifest: Manifest, selected: PayloadRevisionHead): void {
-  if (Object.keys(EVIDENCE_REFERENCE_SCHEMAS).some(key => Object.hasOwn(manifest, key))) validateEvidencePublication(manifest, selected);
+  if (Object.hasOwn(manifest, 'optional_product_evidence_status')
+    || Object.keys(EVIDENCE_REFERENCE_SCHEMAS).some(key => Object.hasOwn(manifest, key))) validateEvidencePublication(manifest, selected);
 }
 
 function verifyBinding(binding: EvidenceBinding, ref: EvidenceReference) {

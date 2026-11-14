@@ -16,6 +16,8 @@ import { normalizeBankInsightsPayload } from '../src/data/bankInsights';
 import { createEnsureActions } from '../src/data/storeEnsure';
 import * as payloadApi from '../src/data/payload';
 import type { AppState, StoreSet } from '../src/data/storeTypes';
+import { statusSelection } from '../testUtils/productEvidenceStatusSelection';
+import { selectedProductEvidenceHead } from '../src/data/historyDatesIndex';
 
 const files = new Map<string, string>();
 
@@ -81,6 +83,45 @@ describe('cache core-meta sidecar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetFs();
+  });
+
+  it.each(['available', 'pending', 'disabled'] as const)('hydrates %s evidence status through actual cache reads without downloading capabilities', async state => {
+    const p=statusSelection(state),meta:CacheMeta={manifest:p.manifest,source:'remote',savedAt:p.manifest.generated_at,
+      coreSha:p.manifest.files.core.sha256,detailsSha:p.manifest.files.details.sha256,historyDatesIndex:p.dates};
+    const download=jest.spyOn(payloadApi,'downloadInflate').mockRejectedValue(new Error('metadata must not download'));
+    try {
+      await cache.writeBundle(meta,JSON.stringify(p.context.core));
+      const read=await cache.readBundle(),sidecar=await cache.readMeta();
+      expect(read?.meta.manifest.optional_product_evidence_status).toEqual(meta.manifest.optional_product_evidence_status);
+      expect(selectedProductEvidenceHead(read?.meta.historyDatesIndex,read!.meta.manifest)).toEqual(p.head);
+      expect(sidecar?.historyDatesIndex).toEqual(p.dates);expect(download).not.toHaveBeenCalled();
+    } finally {download.mockRestore();}
+  });
+
+  it.each(['missing-reference','missing-head','mismatched-source'] as const)('rejects %s before replacing last known-good cached financial edition',async fault=>{
+    const good=statusSelection('pending'),meta:CacheMeta={manifest:good.manifest,source:'remote',savedAt:good.manifest.generated_at,
+      coreSha:good.manifest.files.core.sha256,detailsSha:good.manifest.files.details.sha256,historyDatesIndex:good.dates};
+    await cache.writeBundle(meta,JSON.stringify(good.context.core));const before=new Map(files);
+    const bad=statusSelection();bad.seal(2);
+    if(fault==='missing-reference')delete bad.manifest.product_evidence_v1;
+    if(fault==='mismatched-source')bad.manifest.optional_product_evidence_status!.source.contract_digest='0'.repeat(64);
+    bad.seal(2);
+    const replacement:CacheMeta={...meta,manifest:bad.manifest,historyDatesIndex:fault==='missing-head'?undefined:bad.dates};
+    await expect(cache.writeBundle(replacement,JSON.stringify(bad.context.core))).rejects.toThrow('recovery index');
+    expect(files).toEqual(before);expect((await cache.readBundle())?.meta).toEqual(meta);
+  });
+
+  it('rejects corrupt optional sidecar metadata while retaining the independently valid embedded edition',async()=>{
+    const p=statusSelection(),meta:CacheMeta={manifest:p.manifest,source:'remote',savedAt:p.manifest.generated_at,
+      coreSha:p.manifest.files.core.sha256,detailsSha:p.manifest.files.details.sha256,historyDatesIndex:p.dates};
+    await cache.writeBundle(meta,JSON.stringify(p.context.core));
+    const path=`${FileSystem.documentDirectory}payload/core-meta.json`;
+    const bad=JSON.parse(files.get(path)!);delete bad.manifest.product_evidence_v1;files.set(path,JSON.stringify(bad));
+    const before=new Map(files);
+    expect((await cache.readBundle())?.meta).toEqual(meta);expect(await cache.readMeta()).toEqual(meta);expect(files).toEqual(before);
+    const bundlePath=`${FileSystem.documentDirectory}payload/core-bundle.json`;
+    const bundle=JSON.parse(files.get(bundlePath)!);bundle.meta=bad;files.set(bundlePath,JSON.stringify(bundle));
+    expect(await cache.readBundle()).toBeNull();expect(await cache.readMeta()).toBeNull();expect(files.has(bundlePath)).toBe(true);
   });
 
   it('persists a downloaded event-ledger marker through the real cache and ensure read path', async () => {

@@ -11,7 +11,8 @@ import { PUBLICATION_REFERENCE_LIMIT, checkCommonEvidenceBinding, validateDetach
 
 type Capability = EvidenceCapability | ResponseCapability;
 export type CapabilityLoader = (url: string, asset: EvidenceReferenceAsset, signal?: AbortSignal) => Promise<string>;
-export type MissingEvidence = { status: 'unavailable' | 'unsupported'; absenceIsWithdrawal: false };
+export type MissingEvidence = { status: 'disabled' | 'pending' | 'failed' | 'unavailable' | 'unsupported';
+  reason?: string; absenceIsWithdrawal: false };
 async function acquire(url: string, asset: EvidenceReferenceAsset, signal?: AbortSignal): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { downloadInflate } = require('./payload') as typeof import('./payload');
@@ -41,6 +42,10 @@ export function createPublishedProductEvidence(options: {
   }
   async function capability(lane: EvidenceLane, signal?: AbortSignal): Promise<Capability | MissingEvidence> {
     current(signal);
+    const availability = publication.availability[lane];
+    if (availability.state !== 'available' && availability.state !== 'unreported') {
+      return { status: availability.state, reason: availability.reason, absenceIsWithdrawal: false };
+    }
     const state = publication.references[lane];
     if (state.status !== 'declared') return { status: state.status === 'absent' ? 'unavailable' : 'unsupported', absenceIsWithdrawal: false };
     const descriptor = state.reference.capability, key = `${edition.bundle_sha256}:${lane}:${descriptor.sha256}`;
@@ -64,6 +69,7 @@ export function createPublishedProductEvidence(options: {
   }
   return {
     references: JSON.parse(JSON.stringify(publication.references)) as typeof publication.references,
+    availability: JSON.parse(JSON.stringify(publication.availability)) as typeof publication.availability,
     async readFacts(productKey: string, signal?: AbortSignal): Promise<ProductEvidenceResult | MissingEvidence> {
       const value = await capability('product_evidence_v1', signal);
       if ('status' in value) return value;
