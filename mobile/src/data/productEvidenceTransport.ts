@@ -4,6 +4,7 @@ import {
   validateEvidenceIndex, validateEvidenceShard, type EvidenceAsset, type EvidenceBinding,
   type EvidenceFact, type EvidenceIdentity, type EvidenceIndex,
 } from './productEvidenceWire';
+import { evidenceIndex, forgetEvidenceIndex, reserveEvidence } from './productEvidenceBudget';
 
 export interface EvidenceEdition { repo: 'yanniedog/AR-local'; tag: string; bundle_sha256: string }
 export type EvidenceLoader = (url: string, asset: EvidenceAsset, signal?: AbortSignal) => Promise<string>;
@@ -13,6 +14,7 @@ export type ProductEvidenceResult = { status: 'unknown'; reason: 'product_not_ob
 
 async function acquire(url: string, asset: EvidenceAsset, signal?: AbortSignal): Promise<string> {
   // Keep the pure validator/import usable in headless audits; load real native IO only on acquisition.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { downloadInflate } = require('./payload') as typeof import('./payload');
   return downloadInflate(url, asset.sha256, { signal, fileName: asset.name, expectedBytes: asset.bytes,
     expectedInflatedBytes: asset.decoded_bytes, maxCompressedBytes: EVIDENCE_LIMITS.compressed,
@@ -24,7 +26,8 @@ export function createProductEvidenceReader(options: {
   isCurrent: () => boolean; load?: EvidenceLoader;
 }) {
   // Defensive copies prevent callers changing a pinned edition while its asynchronous request runs.
-  const capability = validateEvidenceCapability(JSON.parse(JSON.stringify(options.capability)) as unknown, options.binding);
+  const accepted = validateEvidenceCapability(options.capability, options.binding);
+  const capability = JSON.parse(JSON.stringify(accepted)) as typeof accepted;
   const edition = { ...options.edition }, binding = capability.binding;
   if (edition.repo !== 'yanniedog/AR-local' || !/^[a-f0-9]{64}$/.test(edition.bundle_sha256)
       || !new RegExp(`^app-payload-${binding.source.observation_date}-r[0-9]{6,}$`).test(edition.tag)
@@ -34,11 +37,14 @@ export function createProductEvidenceReader(options: {
   const prefix = `https://github.com/${edition.repo}/releases/download/${edition.tag}/`;
   const load = options.load ?? acquire;
   const descriptors = new Map(capability.shards.map(item => [item.sha256, item]));
-  let cachedIndex: EvidenceIndex | undefined;
+  const cacheKey = {};
 
   function current(signal?: AbortSignal) {
     if (signal?.aborted) throw new EvidenceError('cancelled', 'Evidence request cancelled');
-    if (!options.isCurrent()) throw new EvidenceError('unavailable', 'Selected evidence edition changed');
+    if (!options.isCurrent()) {
+      forgetEvidenceIndex(cacheKey);
+      throw new EvidenceError('unavailable', 'Selected evidence edition changed');
+    }
   }
   async function asset(item: EvidenceAsset, signal?: AbortSignal): Promise<unknown> {
     current(signal);
@@ -53,14 +59,15 @@ export function createProductEvidenceReader(options: {
   }
   async function index(signal?: AbortSignal): Promise<EvidenceIndex> {
     current(signal);
-    if (cachedIndex) return cachedIndex;
+    const cached = evidenceIndex(cacheKey);
+    if (cached) return cached;
     // Failure/abort is never cached; another attempt may retry the same immutable source.
     const parsed = validateEvidenceIndex(await asset(capability.index, signal), capability);
     current(signal);
-    cachedIndex = parsed;
+    evidenceIndex(cacheKey, parsed);
     return parsed;
   }
-  async function readProduct(productKey: string, signal?: AbortSignal): Promise<ProductEvidenceResult> {
+  async function read(productKey: string, signal?: AbortSignal): Promise<ProductEvidenceResult> {
     const routing = await index(signal);
     const route = routing.products.find(product => product.identity.product_key === productKey);
     current(signal);
@@ -98,6 +105,12 @@ export function createProductEvidenceReader(options: {
     const facts = route.pages.flatMap((_, sequence) => pages.get(sequence)!);
     return { status: 'observed', identity: { ...route.identity }, facts, binding: JSON.parse(JSON.stringify(binding)) as EvidenceBinding,
       edition: { ...edition }, renderedCoverageVerified: false, originalBodyIncluded: false };
+  }
+  async function readProduct(productKey: string, signal?: AbortSignal): Promise<ProductEvidenceResult> {
+    current(signal);
+    const release = await reserveEvidence(signal);
+    try { return await read(productKey, signal); }
+    finally { release(); }
   }
   return { readProduct };
 }

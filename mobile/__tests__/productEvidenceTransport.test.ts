@@ -63,6 +63,29 @@ test('unsupported namespace is an explicit unsupported error', () => {
   catch (error) { expect((error as EvidenceError).code).toBe('unsupported'); }
 });
 
+test.each(['future', 'current', 'state'])('deep malformed %s capability fails before cloning or coercion', kind => {
+  let nested: unknown = null;
+  for (let depth = 0; depth < 10000; depth++) nested = [nested];
+  const candidate: Record<string, unknown> = { ...copy(capability) };
+  if (kind === 'state') (candidate.binding as EvidenceBinding).source.observation_state = nested as never;
+  else {
+    candidate.future = nested;
+    if (kind === 'future') candidate.schema = 'ar-product-evidence-delivery-v2';
+  }
+  expect(() => reader({ capability: candidate })).toThrow(EvidenceError);
+  try { reader({ capability: candidate }); }
+  catch (error) { expect((error as EvidenceError).code).toBe(kind === 'future' ? 'unsupported' : 'invalid'); }
+});
+
+test('validated capability is still defensively copied before asynchronous acquisition', async () => {
+  const candidate = copy(capability), sourceBinding = copy(binding);
+  const { value } = reader({ capability: candidate, binding: sourceBinding });
+  candidate.shards[0].sha256 = '0'.repeat(64);
+  candidate.binding.source.generation_id = 'changed';
+  sourceBinding.core_sha256 = '0'.repeat(64);
+  await expect(value.readProduct(key)).resolves.toMatchObject({ status: 'observed', binding });
+});
+
 test('download failure is retryable and never supplies stale partial facts', async () => {
   const load = jest.fn(async (_url, descriptor) => assets[descriptor.name]).mockRejectedValueOnce(new Error('offline'));
   const { value } = reader({ load });
@@ -113,7 +136,7 @@ test('index counts and across-shard product budgets cannot be bypassed', () => {
 });
 
 test('duplicate outer JSON and inflated overruns fail', () => {
-  expect(() => parseEvidenceJson('{"a":1,"a":1}', 100)).toThrow('not canonical');
+  expect(() => parseEvidenceJson('{"a":1,"a":1}', 100)).toThrow('Duplicate');
   expect(() => parseEvidenceJson('{}', 1)).toThrow('exceeds');
 });
 
@@ -134,4 +157,50 @@ test('default production IO enforces hash, exact sizes, inflation and cancellati
   expect(download.mock.calls[0][1]).toBe(capability.index.sha256);
   expect(download.mock.calls[0][2]).toMatchObject({ signal, requireExactBytes: true, expectedEncoding: 'gzip', allowEncrypted: false,
     expectedBytes: capability.index.bytes, expectedInflatedBytes: capability.index.decoded_bytes, maxInflatedBytes: 4 * 1024 ** 2 });
+});
+
+test.each(['depth', 'duplicate', 'infinite', 'nodes'])('nested source JSON rejects %s without precision loss', kind => {
+  const shard = JSON.parse(assets[capability.shards[0].name]);
+  shard.pages[0].facts[0].source_value_json = kind === 'depth' ? '['.repeat(66) + 'null' + ']'.repeat(66)
+    : kind === 'duplicate' ? '{"unknown":1,"unknown":2}' : kind === 'infinite' ? '{"nested":1e999}'
+      : '[' + Array(65536).fill('null').join(',') + ']';
+  expect(() => validateEvidenceShard(shard, capability)).toThrow(EvidenceError);
+});
+
+test('deep outer JSON fails before recursive canonicalization', () => {
+  expect(() => parseEvidenceJson('['.repeat(5000) + '0' + ']'.repeat(5000), 20000)).toThrow(EvidenceError);
+});
+
+test('concurrent readers serialize work and queued abort consumes no transport', async () => {
+  let release!: () => void, started!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const entered = new Promise<void>(resolve => { started = resolve; });
+  const firstLoad = jest.fn(async (_url, descriptor) => { started(); await held; return assets[descriptor.name]; });
+  const first = reader({ load: firstLoad }), second = reader();
+  const active = first.value.readProduct(key); await entered;
+  const abort = new AbortController();
+  const blocked = expect(second.value.readProduct(key, abort.signal)).rejects.toMatchObject({ code: 'cancelled' });
+  await Promise.resolve(); expect(second.load).not.toHaveBeenCalled();
+  abort.abort(); await blocked;
+  release(); await active;
+  await expect(second.value.readProduct(key)).resolves.toMatchObject({ status: 'observed' });
+});
+
+test('shared evidence waiting capacity is finite and every reservation releases', async () => {
+  let release!: () => void, started!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const entered = new Promise<void>(resolve => { started = resolve; });
+  const first = reader({ load: async (_url, descriptor) => { started(); await held; return assets[descriptor.name]; } });
+  const active = first.value.readProduct(key); await entered;
+  const queued = Array.from({ length: 4 }, () => reader().value.readProduct('not-observed'));
+  await expect(reader().value.readProduct(key)).rejects.toMatchObject({ code: 'unavailable' });
+  release(); await active; await Promise.all(queued);
+  await expect(reader().value.readProduct(key)).resolves.toMatchObject({ status: 'observed' });
+});
+
+test('index LRU evicts old readers instead of accumulating every edition', async () => {
+  const first = reader(); await first.value.readProduct('not-observed');
+  await reader().value.readProduct('not-observed'); await reader().value.readProduct('not-observed');
+  await first.value.readProduct('not-observed');
+  expect(first.load).toHaveBeenCalledTimes(2);
 });

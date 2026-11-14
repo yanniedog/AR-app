@@ -1,6 +1,7 @@
 /** Descriptive normalized facts only. This contract grants no pricing/eligibility authority. */
 import { isValidCalendarDate } from '../lib/calendarDate';
 import { canonicalTermsJson } from './productTerms';
+import { parseBoundedEvidenceJson } from './productEvidenceJson';
 
 export const EVIDENCE_SCHEMA = 'ar-product-evidence-delivery-v1';
 export const EVIDENCE_SCOPE = 'normalized_facts_only; raw_null_empty_and_transport_envelope_not_inventoried';
@@ -44,6 +45,10 @@ function integer(value: unknown, minimum: number, maximum: number): value is num
 }
 function sha(value: unknown): value is string { return typeof value === 'string' && SHA.test(value); }
 function text(value: unknown): value is string { return typeof value === 'string' && value.length > 0; }
+function parsedJson(text: string, maximum: number, nodes = 65536): unknown {
+  try { return parseBoundedEvidenceJson(text, maximum, nodes); }
+  catch (error) { throw new EvidenceError('invalid', error instanceof Error ? error.message : 'Invalid evidence JSON'); }
+}
 export function sameEvidence(a: unknown, b: unknown): boolean { return canonicalTermsJson(a) === canonicalTermsJson(b); }
 function identity(raw: unknown): EvidenceIdentity {
   const value = fields(raw, IDENTITY);
@@ -57,9 +62,10 @@ export function validateEvidenceBinding(raw: unknown): EvidenceBinding {
     'source_generation_digest', 'contract_file_sha256', 'contract_normalization', 'fact_normalization', 'database']);
   requireEvidence(typeof source.observation_date === 'string' && isValidCalendarDate(source.observation_date)
     && typeof source.generation_id === 'string' && new RegExp(`^obs-${source.observation_date}-[a-f0-9]{16}$`).test(source.generation_id), 'Evidence date/generation invalid');
-  requireEvidence(['complete', 'partial', 'failed'].includes(String(source.observation_state))
+  requireEvidence(typeof source.observation_state === 'string' && ['complete', 'partial', 'failed'].includes(source.observation_state)
     && ['contract_digest', 'source_generation_digest', 'contract_file_sha256'].every(key => sha(source[key]))
-    && text(source.contract_normalization) && source.fact_normalization === 'cdr-product-facts-2', 'Unsupported source normalization');
+    && text(source.contract_normalization) && source.contract_normalization.length <= EVIDENCE_LIMITS.namespace
+    && source.fact_normalization === 'cdr-product-facts-2', 'Unsupported source normalization');
   const database = fields(source.database, ['path', 'bytes', 'sha256']);
   requireEvidence(database.path === 'local-cdr.sqlite' && integer(database.bytes, 1, 4 * 1024 ** 3) && sha(database.sha256), 'Evidence database invalid');
   return binding as unknown as EvidenceBinding;
@@ -123,7 +129,7 @@ function fact(raw: unknown): EvidenceFact {
   const value = fields(raw, [...FACT_TEXT, ...JSON_FIELDS]);
   requireEvidence(FACT_TEXT.every(key => text(value[key])) && JSON_FIELDS.every(key => typeof value[key] === 'string'), 'Evidence fact fields invalid');
   requireEvidence(['canonical', 'canonical_text', 'preserved'].includes(String(value.mapping)), 'Evidence mapping unsupported');
-  const decoded = Object.fromEntries(JSON_FIELDS.map(key => [key, JSON.parse(value[key] as string) as unknown]));
+  const decoded = Object.fromEntries(JSON_FIELDS.map(key => [key, parsedJson(value[key] as string, 512 * 1024)]));
   const scalar = decoded.value_json, kind = value.value_type;
   requireEvidence((kind === 'boolean' && typeof scalar === 'boolean')
     || (['number', 'rate', 'money'].includes(String(kind)) && typeof scalar === 'number' && Number.isFinite(scalar))
@@ -149,7 +155,7 @@ export function validateEvidenceShard(raw: unknown, capability: EvidenceCapabili
 }
 export function parseEvidenceJson(text: string, maximum: number): unknown {
   requireEvidence(new TextEncoder().encode(text).length <= maximum, 'Inflated evidence exceeds byte budget');
-  const value: unknown = JSON.parse(text);
+  const value: unknown = parsedJson(text, maximum, 1000000);
   requireEvidence(canonicalTermsJson(value) === text, 'Evidence JSON is not canonical');
   return value;
 }
