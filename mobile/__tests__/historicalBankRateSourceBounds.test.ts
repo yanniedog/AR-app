@@ -11,7 +11,8 @@ const source = { kind: 'selected_contract', generation_id: 'obs-2026-11-14-00000
 
 test.each(['selected_contract', 'retained_legacy_export'])('expanded original %s provenance fits without larger app assets', kind => {
   expect(validateHistoricalCatalogueSource({ ...source, kind })).toBe(true);
-  expect(validateHistoricalCatalogueSource({ ...source, kind, bytes: MAX_HISTORICAL_SOURCE_BYTES })).toBe(true);
+  expect(MAX_HISTORICAL_SOURCE_BYTES).toBe(512 * 1024 * 1024);
+  expect(validateHistoricalCatalogueSource({ ...source, kind, bytes: 512 * 1024 * 1024 })).toBe(true);
   const catalogue = JSON.parse(JSON.stringify(rich));
   for (const day of Object.keys(catalogue.sources)) catalogue.sources[day] = { ...source, kind };
   expect(validateHistoricalBankRateCatalogue(catalogue)).toBe(true);
