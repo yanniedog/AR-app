@@ -612,5 +612,11 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
     });
     expect(malformedTargetsAudit.pillars.standardsAndAccessibility.wcagSummary.unavailable).toBe(1);
     expect(malformedTargetsAudit.affsScore).toBeNull();
+
+    // Unrecognized environment.platform values are omitted (null) while known platforms are preserved
+    malformedTargetSamples.environment.platform = 'private-person@example.invalid';
+    expect(buildUxFrictionFluidityAudit(malformedTargetSamples).evidenceCoverage.platform).toBeNull();
+    malformedTargetSamples.environment.platform = 'android';
+    expect(buildUxFrictionFluidityAudit(malformedTargetSamples).evidenceCoverage.platform).toBe('android');
   });
 });

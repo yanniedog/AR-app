@@ -59,6 +59,12 @@ test('saved analysis cannot forge derived scores or leak private labels and iden
     && Number.isInteger(item.position))).toBe(true);
   const hosted = decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report));
   expect(JSON.stringify(hosted)).not.toMatch(/private-person|Private borrower|PRIVATE_ANALYSIS|987654321/);
+
+  const badPlatformReport = reportFixture();
+  badPlatformReport.environment.platform = 'private-person@example.invalid';
+  const badPlatformShared = buildDeidentifiedPerformanceAudit(badPlatformReport);
+  expect(badPlatformShared.metricAnalysis.uxAudit.evidenceCoverage.platform).toBeNull();
+  expect(JSON.stringify(badPlatformShared.metricAnalysis)).not.toMatch(/private-person/);
 });
 
 test('budget fallback omits only regenerable analysis and retains complete source evidence', () => {

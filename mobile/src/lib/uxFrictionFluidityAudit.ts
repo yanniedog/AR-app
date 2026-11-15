@@ -298,7 +298,7 @@ export interface UxFrictionFluidityAudit {
     executedJourneyCount: number;
     viewportWidth: number | null;
     fontScale: number | null;
-    platform: string | null;
+    platform: 'android' | 'ios' | 'web' | null;
   };
   humanValidation: HumanUxValidationLayer;
   findings: UxAuditFinding[];
@@ -995,6 +995,8 @@ function evaluateStandardsPillar(
   };
 }
 
+const ALLOWED_ENVIRONMENT_PLATFORMS = new Set<'android' | 'ios' | 'web'>(['android', 'ios', 'web']);
+
 export function buildUxFrictionFluidityAudit(
   report: PerformanceAuditReport,
   completion = buildPerformanceAuditCompletion(report),
@@ -1382,9 +1384,12 @@ export function buildUxFrictionFluidityAudit(
         : 'unknown',
       representativeTaskCount: evaluatedTasks.length,
       executedJourneyCount,
-      viewportWidth: measuredAuditValue(report.environment.viewportWidth),
-      fontScale: measuredAuditValue(report.environment.fontScale),
-      platform: typeof report.environment.platform === 'string' ? report.environment.platform : null,
+      viewportWidth: measuredAuditValue(report.environment?.viewportWidth),
+      fontScale: measuredAuditValue(report.environment?.fontScale),
+      platform: typeof report.environment?.platform === 'string'
+        && ALLOWED_ENVIRONMENT_PLATFORMS.has(report.environment.platform as 'android' | 'ios' | 'web')
+        ? (report.environment.platform as 'android' | 'ios' | 'web')
+        : null,
     },
     humanValidation,
     findings,
