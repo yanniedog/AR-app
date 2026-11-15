@@ -365,15 +365,17 @@ function ProductCardView({
               </View> : null}
             </View>
             <View testID="compact-product-facts" onLayout={recordRegion('facts')}
-              style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-              <View testID="compact-facet-cell" onLayout={recordRegion('facet')} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+              style={{ flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1, maxWidth: '100%', alignItems: 'center', gap: 6 }}>
+              <View testID="compact-facet-cell" onLayout={recordRegion('facet')}
+                style={{ flexDirection: 'row', flexShrink: 1, maxWidth: '100%', alignItems: 'center', gap: 3 }}>
                 <Ionicons testID="compact-facet-symbol" name={facetIcon} size={COMPACT_ROW.icon} color={theme.colors.primary} />
-                <AppText testID="compact-facet-value" variant="small" color="textMuted">{facet.value}</AppText>
+                <AppText testID="compact-facet-value" variant="small" color="textMuted" style={{ flexShrink: 1 }}>{facet.value}</AppText>
               </View>
               {statusIcons.map((icon, index) => <Ionicons key={`${icon}:${index}`} testID={`compact-status-${index}`} onLayout={recordRegion(`status:${index}`)} name={icon} size={COMPACT_ROW.icon} color={theme.colors.warning} />)}
-              {tierIndex ? <View testID="compact-tier-cell" onLayout={recordRegion('tier')} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+              {tierIndex ? <View testID="compact-tier-cell" onLayout={recordRegion('tier')}
+                style={{ flexDirection: 'row', flexShrink: 1, maxWidth: '100%', alignItems: 'center', gap: 3 }}>
                 <Ionicons name="layers-outline" size={COMPACT_ROW.icon} color={theme.colors.textMuted} />
-                <AppText testID="compact-tier-index" variant="small" color="textMuted">{tierIndex}</AppText>
+                <AppText testID="compact-tier-index" variant="small" color="textMuted" style={{ flexShrink: 1 }}>{tierIndex}</AppText>
               </View> : null}
             </View>
           </View>

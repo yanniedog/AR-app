@@ -66,6 +66,9 @@ test.each([[320, 1], [360, 1], [411, 1], [320, 2], [360, 3]])('renders a scannab
     expect(name.props).toMatchObject({ numberOfLines: 2, weight: '600', children: exact.product_name });
     expect(line2.props.style).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
     expect(metrics.props.style).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1 });
+    expect(facts.props.style).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1, maxWidth: '100%' });
+    expect(tree.root.findByProps({ testID: 'compact-facet-cell' }).props.style).toMatchObject({ flexDirection: 'row', flexShrink: 1, maxWidth: '100%' });
+    expect(tree.root.findByProps({ testID: 'compact-facet-value' }).props.style).toMatchObject({ flexShrink: 1 });
     expect(line2.findByProps({ testID: 'compact-product-metrics' })).toBe(metrics);
     expect(line2.findByProps({ testID: 'compact-product-facts' })).toBe(facts);
     const primary = tree.root.findByProps({ testID: 'compact-primary-rate' });
