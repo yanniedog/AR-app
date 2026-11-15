@@ -101,8 +101,8 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
       || uxAudit.humanValidation.nasaTlxScore !== null
     );
   const points = plot.points.filter(point => point !== null);
-  const tabButtonStyle = { minHeight: 38, paddingHorizontal: 12, paddingVertical: 8 } as const;
-  const metricButtonStyle = { minHeight: 36, paddingHorizontal: 12, paddingVertical: 6 } as const;
+  const tabButtonStyle = { minHeight: 48, paddingHorizontal: 12, paddingVertical: 8 } as const;
+  const metricButtonStyle = { minHeight: 48, paddingHorizontal: 12, paddingVertical: 8 } as const;
   const availableModes = (Object.keys(MODES) as AuditMetricRun['mode'][]).filter(key => runs.some(run => run.mode === key));
   if (!runs.length) return <AppText>{uiLabel('No audit history')}</AppText>;
   return <View style={{ gap: 12 }}>

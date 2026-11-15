@@ -52,7 +52,8 @@ test('schema 2 keeps recorded values with legacy methods and plots break at meth
   expect(auditMetricPlot([old, current], 'failures').path).toContain('L');
   expect(parseAuditMetricHistory(JSON.stringify({ schemaVersion: 3, runs: [old, current] }))).toEqual([old, current]);
   expect(() => parseAuditMetricHistory(JSON.stringify({ schemaVersion: 3, runs: [{ ...current, methodVersions: {} }] }))).toThrow();
-  expect(auditMetricPlot([current], 'affsScore').ceiling).toBe(100);
+  expect(auditMetricPlot([{ ...current, metrics: { ...current.metrics, affsScore: 50 } }], 'affsScore'))
+    .toMatchObject({ ceiling: 100, points: [{ y: 72, value: 50 }] });
   expect(() => parseAuditMetricHistory(JSON.stringify({ schemaVersion: AUDIT_METRIC_HISTORY_VERSION,
     runs: [{ ...current, metrics: { ...current.metrics, affsScore: 101 } }] }))).toThrow('Invalid audit');
 });
