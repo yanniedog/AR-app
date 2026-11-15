@@ -570,5 +570,47 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
     expect(justifiedSkippedAudit.pillars.interactionFriction.score).toBe(100);
     expect(justifiedSkippedAudit.pillars.fluidityAndResponsiveness.components.jsRuntimeScore).toBe(100);
     expect(justifiedSkippedAudit.affsScore).not.toBeNull();
+
+    // Semantic-action journeys require both actionMs and forwardWorkMs/forwardMs (no single-phase fallback or 1.0 omission)
+    const missingForwardSemantic = makePerformanceAuditReport('semantic-missing-forward', [
+      makeJourneyCheck('journey-semantic-no-forward', {
+        measurementMode: 'semantic-action',
+        actionMs: 100,
+        forwardWorkMs: null,
+        forwardMs: null,
+      }),
+    ]);
+    attachCompleteDisplayHealth(missingForwardSemantic);
+    const missingForwardAudit = buildUxFrictionFluidityAudit(missingForwardSemantic, undefined, {
+      wcagActChecks: { passed: 4, failed: 0, requiresManualReview: 1, unavailable: 0 },
+    });
+    expect(missingForwardAudit.pillars.interactionFriction.meanResponseTimeEfficiency).toBeNull();
+    expect(missingForwardAudit.pillars.interactionFriction.score).toBeNull();
+    expect(missingForwardAudit.affsScore).toBeNull();
+
+    const missingActionSemantic = makePerformanceAuditReport('semantic-missing-action', [
+      makeJourneyCheck('journey-semantic-no-action', {
+        measurementMode: 'semantic-action',
+        actionMs: null,
+        forwardWorkMs: 120,
+      }),
+    ]);
+    attachCompleteDisplayHealth(missingActionSemantic);
+    const missingActionAudit = buildUxFrictionFluidityAudit(missingActionSemantic, undefined, {
+      wcagActChecks: { passed: 4, failed: 0, requiresManualReview: 1, unavailable: 0 },
+    });
+    expect(missingActionAudit.pillars.interactionFriction.meanResponseTimeEfficiency).toBeNull();
+    expect(missingActionAudit.pillars.interactionFriction.score).toBeNull();
+    expect(missingActionAudit.affsScore).toBeNull();
+
+    // Malformed retained targetSamples (e.g. null elements) become unavailable evidence instead of throwing TypeError
+    const malformedTargetSamples = makePerformanceAuditReport('malformed-targets', [makeJourneyCheck('journey-1')]);
+    attachCompleteDisplayHealth(malformedTargetSamples);
+    const malformedTargetsAudit = buildUxFrictionFluidityAudit(malformedTargetSamples, undefined, {
+      targetSamples: [null as unknown as { width: number; height: number; platform: 'android' }],
+      wcagActChecks: { passed: 4, failed: 0, requiresManualReview: 1, unavailable: 0 },
+    });
+    expect(malformedTargetsAudit.pillars.standardsAndAccessibility.wcagSummary.unavailable).toBe(1);
+    expect(malformedTargetsAudit.affsScore).toBeNull();
   });
 });

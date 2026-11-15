@@ -334,19 +334,32 @@ export function calculatePathEfficiency(
   return round3(Math.min(1, minActions / obsActions));
 }
 
+const TARGET_SIZING_MINIMUMS = Object.freeze({
+  'web-wcag-aa': UX_AUDIT_STANDARDS.wcagAaMinTargetCssPx,
+  'ios-hig': UX_AUDIT_STANDARDS.iosMinTargetPt,
+  android: UX_AUDIT_STANDARDS.androidMinTargetDp,
+} as const);
+
 export function evaluateTargetSizing(input: {
   width: number;
   height: number;
   platform: 'web-wcag-aa' | 'ios-hig' | 'android';
 }): { passes: boolean; minimumRequired: number; observedMinDimension: number } {
-  const minimumRequired = input.platform === 'web-wcag-aa'
-    ? UX_AUDIT_STANDARDS.wcagAaMinTargetCssPx
-    : input.platform === 'ios-hig'
-      ? UX_AUDIT_STANDARDS.iosMinTargetPt
-      : UX_AUDIT_STANDARDS.androidMinTargetDp;
+  if (
+    !input
+    || typeof input !== 'object'
+    || Array.isArray(input)
+    || !Object.prototype.hasOwnProperty.call(TARGET_SIZING_MINIMUMS, input.platform)
+  ) {
+    return { passes: false, minimumRequired: UX_AUDIT_STANDARDS.wcagAaMinTargetCssPx, observedMinDimension: Number.NaN };
+  }
+  const minimumRequired = TARGET_SIZING_MINIMUMS[input.platform];
+  if (typeof input.width !== 'number' || typeof input.height !== 'number' || !Number.isFinite(input.width) || !Number.isFinite(input.height)) {
+    return { passes: false, minimumRequired, observedMinDimension: Number.NaN };
+  }
   const observedMinDimension = Math.min(input.width, input.height);
   return {
-    passes: Number.isFinite(observedMinDimension) && observedMinDimension >= minimumRequired,
+    passes: observedMinDimension >= minimumRequired,
     minimumRequired,
     observedMinDimension,
   };
@@ -654,10 +667,9 @@ function evaluateReportTaskJourney(
   const isSemanticAction = hasAuditActionDurationEvidence(check);
   const actionMs = isSemanticAction ? measuredAuditValue(check.metrics.actionMs) : null;
   const forwardPhaseMs = measuredAuditValue(check.metrics.forwardWorkMs) ?? measuredAuditValue(check.metrics.forwardMs);
-  const observedResponseMs = isSemanticAction ? actionMs ?? forwardPhaseMs : forwardPhaseMs;
+  const observedResponseMs = isSemanticAction ? actionMs : forwardPhaseMs;
   const targetResponseMs = measuredAuditValue(check.metrics.targetResponseMs)
     ?? (isSemanticAction ? 250 : 400);
-  const hasSeparateForwardReadiness = isSemanticAction && actionMs !== null && forwardPhaseMs !== null;
 
   const explicitWait = measuredAuditValue(check.metrics.avoidableWaitMs);
   const preWaitMs = measuredAuditValue(check.metrics.preActionWaitMs);
@@ -690,7 +702,7 @@ function evaluateReportTaskJourney(
     modalInterruptions: measuredAuditCount(check.metrics.modalInterruptions),
     observedResponseMs,
     targetResponseMs,
-    ...(hasSeparateForwardReadiness
+    ...(isSemanticAction
       ? {
         observedForwardResponseMs: forwardPhaseMs,
         targetForwardResponseMs: measuredAuditValue(check.metrics.targetForwardResponseMs) ?? 400,
