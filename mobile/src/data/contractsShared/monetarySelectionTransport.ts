@@ -4,7 +4,6 @@ import { isValidCalendarDate } from '../../lib/calendarDate';
 import { canonical, hashText } from '../../lib/productTermsEngine/validation';
 import { verifiedCatalogueDetails } from '../detailsCatalogue';
 import { eligibilityBundleIdentity, type EligibilityContext, type EligibilityTarget } from '../eligibilityContracts/transport';
-import { assertMonetaryWire } from '../monetaryContracts/schemaValidation';
 import type { MonetaryDescriptor, MonetaryRouting } from '../monetaryContracts/types';
 import { mortgageSnapshotBudget } from '../mortgageContracts/snapshotBudget';
 import { downloadInflate } from '../payload';
@@ -39,7 +38,7 @@ export interface SelectionTransportConfig<
   useSnapshotBudget?: boolean;
   isValidCategory?: (target: EligibilityTarget) => boolean;
   extraCategoryCheck?: (target: EligibilityTarget) => void;
-  assertNamespaceWire?: (value: unknown) => void;
+  assertNamespaceWire: (value: unknown) => void;
   assertEnvelopeWire: (value: unknown, kind: 'index' | 'shard') => void;
   validateAsset: (raw: unknown) => TAsset;
   checkOperationsBudget: (subjects: TSubject[]) => void;
@@ -56,7 +55,6 @@ export function createSelectionTransport<
 
   function contextCheck(c: EligibilityContext, target: EligibilityTarget) {
     const { manifest: m, core, details } = c;
-    const sectionRates = config.section === 'Savings' ? core?.sections.Savings.rates : core?.sections.Mortgage.rates;
     if (
       !m ||
       !core ||
@@ -67,7 +65,7 @@ export function createSelectionTransport<
       verifiedCatalogueDetails(core, c.coreIntegrity, m, details) !== details ||
       !Object.hasOwn(details.products, target.productKey) ||
       details.products[target.productKey] !== target.detail ||
-      target.kind === 'rate_variant' && (target.section !== config.section || !sectionRates?.includes(target.row) || target.row.product_key !== target.productKey) ||
+      target.kind === 'rate_variant' && (target.section !== config.section || !core.sections?.[config.section]?.rates?.includes(target.row) || target.row.product_key !== target.productKey) ||
       config.isValidCategory && !config.isValidCategory(target)
     ) {
       throw new Error(`${config.label} product publication is not verified`);
@@ -85,8 +83,7 @@ export function createSelectionTransport<
     const namespaceKey = config.namespaceVersion === 'v4' ? 'executable_v4' : 'executable_v3';
     if (!Object.hasOwn(m, namespaceKey)) return null;
     if (utf8ToBytes(JSON.stringify(m)).length > 64 * 1024) throw new Error('Monetary manifest size limit');
-    if (config.assertNamespaceWire) config.assertNamespaceWire(m[namespaceKey]);
-    else assertMonetaryWire(m.executable_v3, 'namespace');
+    config.assertNamespaceWire(m[namespaceKey]);
 
     const r = m.payload_revision!;
     const bundle = eligibilityBundleIdentity(m);

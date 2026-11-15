@@ -3,6 +3,7 @@ import { canonical, hashText } from '../../lib/productTermsEngine/validation';
 import { createSelectionTransport } from '../contractsShared/monetarySelectionTransport';
 import { detailsDisplayIdentity } from '../detailsCatalogue';
 import type { EligibilityContext, EligibilityTarget } from '../eligibilityContracts/transport';
+import { assertMonetaryWire } from '../monetaryContracts/schemaValidation';
 import { assertMortgageWire } from './schemaValidation';
 import type { MortgageApproval, MortgageSubject } from './types';
 import { mortgageBudget, validateMortgageAsset } from './validation';
@@ -36,6 +37,7 @@ const transport = createSelectionTransport<MortgageSubject, MortgageApproval, Re
   capability: 'mortgage_calculation',
   useSnapshotBudget: true,
   isValidCategory: target => detailsDisplayIdentity(target.detail).productCategory === 'RESIDENTIAL_MORTGAGES',
+  assertNamespaceWire: v => assertMonetaryWire(v, 'namespace'),
   assertEnvelopeWire: (v, kind) => assertMortgageWire(v, kind),
   validateAsset: validateMortgageAsset,
   checkOperationsBudget: mortgageBudget,

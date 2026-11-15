@@ -17,6 +17,7 @@ const transport = createSelectionTransport<SavingsSubject, SavingsApproval, Retu
   section: 'Savings',
   namespaceVersion: 'v3',
   capability: 'savings_calculation',
+  assertNamespaceWire: v => assertMonetaryWire(v, 'namespace'),
   assertEnvelopeWire: (v, kind) => assertMonetaryWire(v, kind),
   validateAsset: validateMonetaryAsset,
   checkOperationsBudget: operationBudget,
