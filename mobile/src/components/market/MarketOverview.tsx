@@ -255,10 +255,15 @@ export default function MarketOverview() {
           <AppText variant="small" color="textMuted">{uiLabel(coverage.unresolvedMeeting ? 'Awaiting decision' : 'Next decision')}</AppText>
           <AppText variant="body" weight="600">{meeting ? uiDate(meeting.date) : calendarAttempted ? uiLabel("Unavailable") : uiLabel("Loading")}</AppText>
         </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          <Button title="History" variant="secondary" onPress={openHistory} />
-          <Button title="Outlook" variant="secondary" onPress={openOutlook} />
-          <Button title="RBA" variant="ghost" onPress={openRba} />
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button title="History" variant="secondary" style={{ flex: 1 }} onPress={openHistory} />
+            <Button title="Outlook" variant="secondary" style={{ flex: 1 }} onPress={openOutlook} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button title="RBA" variant="secondary" style={{ flex: 1 }} onPress={openRba} />
+            <Button title="Bank response" variant="secondary" style={{ flex: 1 }} onPress={openResponse} disabled={!payload} />
+          </View>
         </View>
       </View>
       <SegmentedControl options={sectionOptions} value={activeSection} onChange={setActiveSection} />
@@ -289,7 +294,6 @@ export default function MarketOverview() {
       {payload ? <Disclosure title="30-day movers" open={moversOpen} onToggle={toggleMovers}>
         <MoversLeaderboard payload={payload} section={activeSection} />
       </Disclosure> : null}
-      <Button title="Bank response" variant="secondary" onPress={openResponse} disabled={!payload} />
     </ScreenScrollView>
   );
 }

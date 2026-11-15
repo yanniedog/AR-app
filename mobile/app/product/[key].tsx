@@ -847,8 +847,10 @@ export default function ProductDetail() {
             onPress={openCalculate}
           />
         </Row>
-        <PublicRateEvidence productKey={productKey} row={row} programmeId={requestedProgramme}
-          scenario={fromRatesComparison ? scenarioFor(section, row) : undefined} />
+        {publicCatalogue.status !== 'unavailable' && publicProduct ? (
+          <PublicRateEvidence productKey={productKey} row={row} programmeId={requestedProgramme}
+            scenario={fromRatesComparison ? scenarioFor(section, row) : undefined} />
+        ) : null}
         <PublicCostComparison section={section} target={row} scenario={calculationScenario}
           rateScenario={fromRatesComparison ? scenarioFor(section, row) : undefined} />
 

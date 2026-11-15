@@ -55,7 +55,7 @@ import { auditActionString } from '../../lib/performanceAuditActionParams';
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
 import { SECTION_ORDER } from '../../constants';
 
-const SECTION_OPTIONS = SECTION_ORDER.map(value => ({ value, label: uiSectionName(value) }));
+const SECTION_OPTIONS = SECTION_ORDER.map(value => ({ value, label: uiSectionName(value, true) }));
 
 const FREQUENCY_OPTIONS: { label: UiCopy; value: ProjectionFrequency }[] = [
   { label: uiLabel("Weekly"), value: 'weekly' },
@@ -198,7 +198,16 @@ function FrequencyField({
   return (
     <View style={{ gap: 8 }}>
       <NumericField label={label} value={amount} onChangeText={onAmount} prefix="$" editable={editable} error={error} />
-      <SegmentedControl options={FREQUENCY_OPTIONS} value={value} onChange={(next) => { if (editable) onFrequency(next); }} />
+      <Row gap={8} style={{ flexWrap: 'wrap' }}>
+        {FREQUENCY_OPTIONS.map((opt) => (
+          <Chip
+            key={opt.value}
+            label={opt.label}
+            selected={value === opt.value}
+            onPress={() => { if (editable) onFrequency(opt.value); }}
+          />
+        ))}
+      </Row>
     </View>
   );
 }
@@ -790,14 +799,19 @@ export function ProjectionWorkspace() {
               void flush().then(saved => { if (saved) router.setParams({ mode: 'check' }); });
             }} />
           ) : null}
-          <SegmentedControl
-            options={[
+          <Row gap={8} style={{ flexWrap: 'wrap' }}>
+            {([
               { label: uiLabel("Variable rate"), value: 'variable' },
               { label: uiLabel("Fixed rate"), value: 'fixed' },
-            ]}
-            value={projectionInputs.mortgageRateStructure}
-            onChange={(mortgageRateStructure) => { if (inputsEditable) updateProjection({ mortgageRateStructure }); }}
-          />
+            ] as const).map((opt) => (
+              <Chip
+                key={opt.value}
+                label={opt.label}
+                selected={projectionInputs.mortgageRateStructure === opt.value}
+                onPress={() => { if (inputsEditable) updateProjection({ mortgageRateStructure: opt.value }); }}
+              />
+            ))}
+          </Row>
           {projectionInputs.mortgageRateStructure === 'fixed' ? (
             <NumericField
               label="Fixed period remaining"
@@ -821,11 +835,16 @@ export function ProjectionWorkspace() {
             <NumericField label="Current offset balance" value={projectionInputs.offsetBalance} onChangeText={(offsetBalance) => updateProjection({ offsetBalance })} prefix="$" editable={inputsEditable} error={errors.offsetBalance} />
             <NumericField label="Amount added to offset" value={projectionInputs.offsetContributionAmount} onChangeText={(offsetContributionAmount) => updateProjection({ offsetContributionAmount })} prefix="$" editable={inputsEditable} error={errors.offsetContributionAmount} />
           </Row>
-          <SegmentedControl
-            options={FREQUENCY_OPTIONS}
-            value={projectionInputs.offsetContributionFrequency}
-            onChange={(offsetContributionFrequency) => { if (inputsEditable) updateProjection({ offsetContributionFrequency }); }}
-          />
+          <Row gap={8} style={{ flexWrap: 'wrap' }}>
+            {FREQUENCY_OPTIONS.map((opt) => (
+              <Chip
+                key={opt.value}
+                label={opt.label}
+                selected={projectionInputs.offsetContributionFrequency === opt.value}
+                onPress={() => { if (inputsEditable) updateProjection({ offsetContributionFrequency: opt.value }); }}
+              />
+            ))}
+          </Row>
         </>
       ) : section === 'Savings' ? (
         <>
@@ -833,14 +852,19 @@ export function ProjectionWorkspace() {
             <NumericField label="Current balance" value={scenario.savings.balance} onChangeText={(balance) => updateDeposit({ balance })} prefix="$" editable={inputsEditable} error={errors.savingsBalance} />
             <NumericField label="Projection horizon" value={projectionInputs.horizonYears} onChangeText={(horizonYears) => updateProjection({ horizonYears })} suffix="years" editable={inputsEditable} error={errors.horizon} />
           </Row>
-          <SegmentedControl
-            options={[
+          <Row gap={8} style={{ flexWrap: 'wrap' }}>
+            {([
               { label: uiLabel("Ongoing rate"), value: 'ongoing' },
               { label: uiLabel("Conditional bonus"), value: 'conditional-bonus' },
-            ]}
-            value={projectionInputs.savingsRateStructure}
-            onChange={(savingsRateStructure) => { if (inputsEditable) updateProjection({ savingsRateStructure }); }}
-          />
+            ] as const).map((opt) => (
+              <Chip
+                key={opt.value}
+                label={opt.label}
+                selected={projectionInputs.savingsRateStructure === opt.value}
+                onPress={() => { if (inputsEditable) updateProjection({ savingsRateStructure: opt.value }); }}
+              />
+            ))}
+          </Row>
           {projectionInputs.savingsRateStructure === 'conditional-bonus' ? (
             <>
               <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -971,14 +995,19 @@ export function ProjectionWorkspace() {
       ) : (
         <>
           {section === 'Mortgage' ? (
-            <SegmentedControl
-              options={[
+            <Row gap={8} style={{ flexWrap: 'wrap' }}>
+              {([
                 { label: uiLabel("Rate scenarios"), value: 'rates' },
                 { label: uiLabel("Offset scenarios"), value: 'offsets' },
-              ]}
-              value={dimension}
-              onChange={changeDimension}
-            />
+              ] as const).map((opt) => (
+                <Chip
+                  key={opt.value}
+                  label={opt.label}
+                  selected={dimension === opt.value}
+                  onPress={() => changeDimension(opt.value)}
+                />
+              ))}
+            </Row>
           ) : null}
           <View>
             <AppText variant="tiny" color="textFaint" weight="700" style={{ marginBottom: 8 }}>{uiLabel('Y-axis')}</AppText>

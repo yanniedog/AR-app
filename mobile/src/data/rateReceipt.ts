@@ -399,7 +399,20 @@ export function buildNegotiationBrief(input: {
   if (receipt.ongoingRate) selectedProduct.push({ label: 'Ongoing rate', value: receipt.ongoingRate });
   selectedProduct.push({ label: 'Observed', value: uiDate(receipt.evidenceDate) });
 
-  const facts: ReceiptStatusFact[] = [{ kind: 'comparables', state: 'unmatched' }, { kind: 'eligibility', state: 'unverified' }, { kind: 'costs', state: 'unverified' }, { kind: 'privacy', state: 'local-only' }, { kind: 'advice', state: 'excluded' }, ...receipt.facts];
+  const seenKinds = new Set<ReceiptStatusFact['kind']>();
+  const rawFacts: ReceiptStatusFact[] = [
+    { kind: 'comparables', state: 'unmatched' },
+    { kind: 'eligibility', state: 'unverified' },
+    { kind: 'costs', state: 'unverified' },
+    { kind: 'privacy', state: 'local-only' },
+    { kind: 'advice', state: 'excluded' },
+    ...receipt.facts,
+  ];
+  const facts: ReceiptStatusFact[] = rawFacts.filter((fact) => {
+    if (seenKinds.has(fact.kind)) return false;
+    seenKinds.add(fact.kind);
+    return true;
+  });
 
   return {
     version: 1,

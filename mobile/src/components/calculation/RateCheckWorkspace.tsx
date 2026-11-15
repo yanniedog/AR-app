@@ -22,7 +22,7 @@ import { CurrentBankPicker } from '../../components/scenario/CurrentBankPicker';
 import { SwitchCostEditor } from '../../components/scenario/SwitchCostEditor';
 import { ScreenScrollView } from '../../components/Screen';
 import { CompactToggle, SegmentedControl } from '../../components/controls';
-import { AppText, Badge, Button, Card, Disclosure, Row } from '../../components/ui';
+import { AppText, Badge, Button, Card, Chip, Disclosure, Row } from '../../components/ui';
 import { SECTIONS, SECTION_ORDER } from '../../constants';
 import { assessAccess } from '../../data/access';
 import { verifiedDetailsSha } from '../../data/detailsIdentity';
@@ -132,7 +132,7 @@ export function RateCheckWorkspace() {
   const [leftFields, setLeftFields] = useState<ReadonlySet<string>>(() => new Set());
   const appliedCheckIntent = useRef('');
   const renderRevisionTracker = useRef(new OpaquePerformanceAuditRenderRevision());
-  const sectionOptions = useMemo(() => SECTION_ORDER.map(value => ({ value, label: uiSectionName(value) })), []);
+  const sectionOptions = useMemo(() => SECTION_ORDER.map(value => ({ value, label: uiSectionName(value, true) })), []);
   const suitabilityRevision = useSuitabilityRevision();
   const {
     scenario,
@@ -736,16 +736,19 @@ export function RateCheckWorkspace() {
         {section === 'Savings' ? <SavingsQualificationEditor inputs={scenario.projections.savings} editable={scenarioStorageStatus === 'ready'} onChange={patch => updateScenario(previous => ({ ...previous, projections: { ...previous.projections, savings: { ...previous.projections.savings, ...patch } } }))} /> : null}
         {isMortgage ? (
           <>
-            <View style={{ marginBottom: 10 }}>
-              <SegmentedControl<CalcInputs['mode']>
-                options={[
-                  { label: uiLabel("Buying"), value: 'buy' },
-                  { label: uiLabel("Refinancing"), value: 'refi' },
-                ]}
-                value={inputs.mode}
-                onChange={(mode) => upd({ mode })}
-              />
-            </View>
+            <Row gap={8} style={{ marginBottom: 10, flexWrap: 'wrap' }}>
+              {([
+                { label: uiLabel("Buying"), value: 'buy' },
+                { label: uiLabel("Refinancing"), value: 'refi' },
+              ] as const).map((option) => (
+                <Chip
+                  key={option.value}
+                  label={option.label}
+                  selected={inputs.mode === option.value}
+                  onPress={() => upd({ mode: option.value })}
+                />
+              ))}
+            </Row>
             {inputs.mode === 'buy' ? (
               <>
                 <Row gap={10} style={compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}>
