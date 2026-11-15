@@ -7,11 +7,12 @@ import { buildUxFrictionFluidityAudit, type UxFrictionFluidityTelemetryOptions }
 /** Screen-sized facts only: never build distributions or per-observation contributor tables. */
 export function auditCheckResultSummary(report: PerformanceAuditReport, uxTelemetry?: UxFrictionFluidityTelemetryOptions) {
   const completion = buildPerformanceAuditCompletion(report);
-  const values = auditMetricValues(report, completion);
+  const uxAudit = buildUxFrictionFluidityAudit(report, completion, uxTelemetry);
+  const values = auditMetricValues(report, completion, uxAudit);
   const population = auditTaskOutcomePopulation(report, completion);
   const health = hasValidPerformanceAuditHealth(report) ? report.appHealth : undefined;
   const metrics = {} as Partial<Record<AuditMetric, { numerator: number | null; denominator: number | null;
-    missingCount: number | null; unit: 'count' | 'percent' | 'ms'; unitOfAnalysis: string;
+    missingCount: number | null; unit: 'count' | 'percent' | 'ms' | 'score'; unitOfAnalysis: string;
     inventory?: { observed: number | null; expected: number | null; unavailable: number | null } }>>;
   const displayCodes: Partial<Record<AuditMetric, string>> = {
     displayModelPassPercent: 'display-model', displayListPassPercent: 'display-list', displayVisiblePassPercent: 'display-visible',
@@ -84,6 +85,6 @@ export function auditCheckResultSummary(report: PerformanceAuditReport, uxTeleme
   return {
     metrics,
     taskEvidence: { denominator: population.actions.length, outcomes: population.outcomes },
-    uxAudit: buildUxFrictionFluidityAudit(report, completion, uxTelemetry),
+    uxAudit,
   };
 }

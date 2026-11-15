@@ -151,7 +151,7 @@ export default function RbaRates() {
   });
   usePerformanceAuditProbe(auditSurface, {
     id: 'rba.data', kind: 'data', datasetRevision, renderRevision,
-    status: loading ? 'pending' : error ? 'error' : 'ready',
+    status: loading ? 'pending' : error ? 'error' : outlook ? 'ready' : 'pending',
     expectedCount: 1,
     actualCount: loading || error ? 0 : outlook ? 1 : 0,
   });

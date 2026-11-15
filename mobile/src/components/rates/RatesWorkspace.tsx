@@ -998,7 +998,15 @@ export default function RatesWorkspace() {
   logoCallbacksActiveRef.current = logoCallbacksActive;
   const onLogoRenderStateChangeRef = useRef(logoReadiness.onLogoRenderStateChange);
   onLogoRenderStateChangeRef.current = logoReadiness.onLogoRenderStateChange;
+  const latestLogoStatesRef = useRef(new Map<string, LogoRenderState>());
+  useEffect(() => {
+    if (!logoCallbacksActive || latestLogoStatesRef.current.size === 0) return;
+    for (const [id, state] of latestLogoStatesRef.current.entries()) {
+      logoReadiness.onLogoRenderStateChange(id, state);
+    }
+  }, [logoCallbacksActive, logoReadiness.onLogoRenderStateChange]);
   const handleLogoRenderStateChange = useCallback((id: string, state: LogoRenderState) => {
+    latestLogoStatesRef.current.set(id, state);
     if (logoCallbacksActiveRef.current) onLogoRenderStateChangeRef.current(id, state);
   }, []);
   const { refFor: physicalCellRef, measure: measurePhysicalCells } = physicalVisibility;

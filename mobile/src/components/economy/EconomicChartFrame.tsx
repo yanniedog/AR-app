@@ -101,7 +101,7 @@ export function EconomicChartFrame({
 }: EconomicChartFrameProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
-  const [svgLayoutMeasured, setSvgLayoutMeasured] = useState(false);
+  const [measuredLayoutRevision, setMeasuredLayoutRevision] = useState<string | null>(null);
   const allPoints = useMemo(
     () => series.flatMap((item) => item.points.map((point) => ({ ...point, seriesId: item.id }))),
     [series],
@@ -183,7 +183,7 @@ export function EconomicChartFrame({
   const accessibleSummary = selectedText.trim().length > 0;
 
   useEffect(() => {
-    if (!allPoints.length || width <= 0 || !svgLayoutMeasured) return;
+    if (!allPoints.length || width <= 0 || measuredLayoutRevision !== effectiveRevision) return;
     onGraphicReady?.({
       revision: effectiveRevision,
       expectedCount: allPoints.length,
@@ -192,7 +192,7 @@ export function EconomicChartFrame({
       layoutMeasured: true,
       emptyStateRendered: false,
     });
-  }, [accessibleSummary, allPoints.length, effectiveRevision, finitePointCount, onGraphicReady, svgLayoutMeasured, width]);
+  }, [accessibleSummary, allPoints.length, effectiveRevision, finitePointCount, measuredLayoutRevision, onGraphicReady, width]);
 
   if (!allPoints.length) {
     return <AppText key={effectiveRevision} variant="small" color="textMuted" onLayout={(event) => {
@@ -237,9 +237,9 @@ export function EconomicChartFrame({
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
+          <Svg key={effectiveRevision} width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
             onLayout={(event) => {
-              if (hasPositiveChartLayout(event)) setSvgLayoutMeasured(true);
+              if (hasPositiveChartLayout(event)) setMeasuredLayoutRevision(effectiveRevision);
             }}>
             {targetBand ? (
               <Rect

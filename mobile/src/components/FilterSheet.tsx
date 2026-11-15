@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import type { Filters } from '../data/selectors';
@@ -74,14 +74,18 @@ function FilterSheetInner({
   if (visible && !everOpened) setEverOpened(true);
   const { value: lenderQuery, onChangeText: setLenderQuery } = useProviderSearchInput();
 
+  const isControlledDraft = Boolean(controlledDraft && onDraftChange);
+  const wasVisibleRef = useRef(false);
   useEffect(() => {
-    if (visible) {
-      if (!controlledDraft) setDraft(filters);
+    const wasVisible = wasVisibleRef.current;
+    wasVisibleRef.current = visible;
+    if (visible && !isControlledDraft) setDraft(filters);
+    if (visible && !wasVisible) {
       setPublishedOpen(false);
       setExpandedGroups(new Set());
       setLenderQuery('');
     }
-  }, [visible, filters, controlledDraft, setDraft, setLenderQuery]);
+  }, [visible, filters, isControlledDraft, setDraft, setLenderQuery]);
 
   const { groups: groupOptions, providers, accountFeatures, eligibilityCriteria } = options;
   const publishedDetails = useMemo(

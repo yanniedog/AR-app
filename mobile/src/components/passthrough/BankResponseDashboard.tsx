@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { sectionSegmentOptions } from '../../data/interests';
 import Ionicons from '../icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
-import React, { memo, useEffect, useMemo, useState } from 'react';
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import { FLASH_LIST_DRAW_DISTANCE, FLASH_LIST_VIEWABILITY_CONFIG } from '../../lib/flashListDefaults';
@@ -90,12 +90,24 @@ export function BankResponseDashboard({
   const [listReadyRevision, setListReadyRevision] = useState<string | null>(null);
   const [layoutReadyRevision, setLayoutReadyRevision] = useState<string | null>(null);
   useEffect(() => setSection(initialSection), [initialSection]);
-  useEffect(() => setSelectedDecisionIndex(0), [section]);
+  const appliedInitialDateRef = useRef<string | null>(null);
+  const lastSectionRef = useRef<SectionKey>(section);
+  useEffect(() => {
+    if (lastSectionRef.current === section) return;
+    lastSectionRef.current = section;
+    appliedInitialDateRef.current = null;
+    setSelectedDecisionIndex(0);
+  }, [section]);
   useEffect(() => {
     if (!initialDecisionDate) return;
+    const key = `${section}:${initialDecisionDate}`;
+    if (appliedInitialDateRef.current === key) return;
     const index = windows.findIndex((window) => window.decision.date === initialDecisionDate);
-    if (index >= 0) setSelectedDecisionIndex(index);
-  }, [initialDecisionDate, windows]);
+    if (index >= 0) {
+      appliedInitialDateRef.current = key;
+      setSelectedDecisionIndex(index);
+    }
+  }, [initialDecisionDate, section, windows]);
   const listRevision = `${payload.run_date}:${section}:${active?.decision.date ?? 'none'}`;
   const renderRevision = listRevision;
   useEffect(() => {

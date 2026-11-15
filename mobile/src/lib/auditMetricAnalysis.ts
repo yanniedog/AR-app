@@ -76,7 +76,8 @@ function statistics(values: number[]): AuditMetricDistributionSummary {
 export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   completion = buildPerformanceAuditCompletion(report),
   uxTelemetry?: UxFrictionFluidityTelemetryOptions): AuditMetricAnalysis {
-  const values = auditMetricValues(report, completion);
+  const uxAudit = buildUxFrictionFluidityAudit(report, completion, uxTelemetry);
+  const values = auditMetricValues(report, completion, uxAudit);
   const observations: AuditMetricObservation[] = [];
   const indices = new Map<string, number>();
   const add = (observation: AuditMetricObservation): number => {
@@ -395,7 +396,6 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
       admitted && checked !== null && absent !== null ? checked + absent : null, [...refs, ...admission.refs],
       { observedCount: checked, missingCount: absent }, [...countReasons(refs), ...admission.reasons]);
   }
-  const uxAudit = buildUxFrictionFluidityAudit(report, completion, uxTelemetry);
   const uxRefs = [
     add({ source: 'report', field: 'affsScore', value: uxAudit.affsScore }),
     add({ source: 'report', field: 'uxInteractionFrictionScore', value: uxAudit.pillars.interactionFriction.score }),
