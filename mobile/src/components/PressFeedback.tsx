@@ -44,8 +44,9 @@ export function PressFeedback({
   if (auditInstanceIdRef.current === null) {
     auditInstanceIdRef.current = nextAuditTargetInstanceId++;
   }
-  const auditLabel = rest.testID ?? (typeof rest.accessibilityLabel === 'string' ? rest.accessibilityLabel : 'target');
-  const auditTargetKey = `${auditLabel.slice(0, 100)}#${auditInstanceIdRef.current}`;
+  const auditTargetKey = rest.testID
+    ? `${rest.testID.slice(0, 100)}#${auditInstanceIdRef.current}`
+    : `target#${auditInstanceIdRef.current}`;
   useEffect(() => () => {
     unregisterAuditTargetLayout(auditTargetKey);
   }, [auditTargetKey]);
