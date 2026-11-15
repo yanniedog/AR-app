@@ -950,18 +950,20 @@ export function buildUxFrictionFluidityAudit(
     check => check.kind === 'journey' && check.status !== 'skipped'
       && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true,
   );
+  const validCoverage = completion.gaps.invalidCoverageReports === 0 ? report.coverage : undefined;
+  const duplicateCoverageIds = Array.isArray(validCoverage?.duplicateStoredCheckIds) ? validCoverage.duplicateStoredCheckIds : [];
+  const missingCoverageIds = Array.isArray(validCoverage?.missingPlannedCheckIds) ? validCoverage.missingPlannedCheckIds : [];
+  const unexpectedCoverageIds = Array.isArray(validCoverage?.unexpectedStoredCheckIds) ? validCoverage.unexpectedStoredCheckIds : [];
   const hasDuplicateCheckIds = new Set(report.checks.map(check => check.id)).size !== report.checks.length
-    || (report.coverage?.duplicateStoredCheckIds.length ?? 0) > 0
+    || duplicateCoverageIds.length > 0
     || completion.gaps.duplicateChecks > 0;
-  const collectionComplete = report.coverage == null
-    ? completion.gaps.missingChecks === 0
-      && completion.gaps.unexpectedChecks === 0
-      && completion.gaps.invalidCoverageReports === 0
-    : report.coverage.complete === true
-      && report.coverage.missingPlannedCheckIds.length === 0
-      && report.coverage.unexpectedStoredCheckIds.length === 0
-      && completion.gaps.missingChecks === 0
-      && completion.gaps.invalidCoverageReports === 0;
+  const collectionComplete = completion.gaps.invalidCoverageReports === 0
+    && (validCoverage == null
+      ? completion.gaps.missingChecks === 0 && completion.gaps.unexpectedChecks === 0
+      : validCoverage.complete === true
+        && missingCoverageIds.length === 0
+        && unexpectedCoverageIds.length === 0
+        && completion.gaps.missingChecks === 0);
 
   const evaluatedTasks = evaluateReportTaskJourneys(report, completion, sanitizeId);
   const measuredTasks = evaluatedTasks.filter(task => task.score !== null);
@@ -1005,7 +1007,9 @@ export function buildUxFrictionFluidityAudit(
     : null;
 
   let jsRuntimeScore: number | null = null;
-  if (collectionComplete && values.jsStallPercent !== null && values.slowFramePercent !== null) {
+  const allJourneysHaveCallbacks = journeys.length > 0
+    && journeys.every(check => check.metrics.eventLoopMeasurementAvailable === true && check.metrics.frameMeasurementAvailable === true);
+  if (collectionComplete && allJourneysHaveCallbacks && values.jsStallPercent !== null && values.slowFramePercent !== null) {
     const stallScore = Math.max(0, 100 - values.jsStallPercent * 2.5);
     const frameScore = Math.max(0, 100 - values.slowFramePercent * 2.5);
     const lagPenalty = values.maxEventLoopLagMs !== null && values.maxEventLoopLagMs > 100
@@ -1191,8 +1195,31 @@ export function buildUxFrictionFluidityAudit(
   }
 
   const rawParticipantCount = measuredAuditCount(resolvedOptions?.humanValidation?.participantCount);
-  const validSus = resolvedOptions?.humanValidation?.sus ?? null;
-  const validUmuxLite = resolvedOptions?.humanValidation?.umuxLite ?? null;
+  const rawSus = resolvedOptions?.humanValidation?.sus;
+  const susScore = measuredAuditValue(rawSus?.score);
+  const validSus: SusEvaluation | null = susScore !== null && susScore <= 100
+    ? {
+      score: round1(susScore),
+      isPercentage: false,
+      benchmarkBand: susScore >= 80 ? 'strong' : susScore >= 68 ? 'average' : 'below-average',
+      referenceAverage: 68,
+      referenceStrong: 80,
+    }
+    : null;
+  const rawUmux = resolvedOptions?.humanValidation?.umuxLite;
+  const umuxRawScore = measuredAuditValue(rawUmux?.rawScore);
+  const umuxSusApprox = measuredAuditValue(rawUmux?.susApproximation);
+  const umuxScale = measuredAuditCount(rawUmux?.scalePoints);
+  const validUmuxLite: UmuxLiteEvaluation | null = umuxRawScore !== null && umuxRawScore <= 100
+    && umuxSusApprox !== null && umuxSusApprox <= 100
+    && umuxScale !== null && umuxScale >= 2
+    ? {
+      rawScore: round1(umuxRawScore),
+      susApproximation: round1(umuxSusApprox),
+      isPercentage: false,
+      scalePoints: umuxScale,
+    }
+    : null;
   const validSeqTasks: SeqTaskSummary[] = Array.isArray(resolvedOptions?.humanValidation?.seqTasks)
     ? resolvedOptions!.humanValidation!.seqTasks.flatMap(task => {
       const n = measuredAuditCount(task?.n);
@@ -1218,7 +1245,8 @@ export function buildUxFrictionFluidityAudit(
       }];
     })
     : [];
-  const validNasaTlx = measuredAuditValue(resolvedOptions?.humanValidation?.nasaTlxScore);
+  const rawNasaTlx = measuredAuditValue(resolvedOptions?.humanValidation?.nasaTlxScore);
+  const validNasaTlx = rawNasaTlx !== null && rawNasaTlx <= 100 ? round1(rawNasaTlx) : null;
   const hasInstrumentEvidence = validSus !== null
     || validUmuxLite !== null
     || validSeqTasks.length > 0

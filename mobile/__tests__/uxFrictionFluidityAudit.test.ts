@@ -446,17 +446,53 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
     expect(dupAudit.pillars.interactionFriction.score).toBeNull();
     expect(dupAudit.affsScore).toBeNull();
 
-    // SEQ task IDs are sanitized through safeCheckId when exporting
+    // SEQ task IDs are sanitized through safeCheckId, invalid instrument scores are rejected, and extra fields are stripped
     const seqAudit = buildUxFrictionFluidityAudit(dupReport, undefined, {
       safeCheckId: () => null,
       humanValidation: {
         status: 'completed',
         participantCount: 5,
+        sus: Object.assign(scoreSusQuestionnaire([5, 1, 5, 1, 4, 2, 5, 1, 5, 1])!, { participantEmail: 'leaked@example.invalid' }),
+        umuxLite: Object.assign(scoreUmuxLiteQuestionnaire(6, 6, 7)!, { participantName: 'leaked' }),
         seqTasks: [{ taskId: 'private-person@example.invalid', n: 5, meanRating: 6.2, minRating: 5, maxRating: 7 }],
       },
     });
     expect(seqAudit.humanValidation.seqTasks).toEqual([
       { taskId: 'redacted-task', n: 5, meanRating: 6.2, minRating: 5, maxRating: 7 },
     ]);
+    expect(seqAudit.humanValidation.sus).toEqual({
+      score: 95,
+      isPercentage: false,
+      benchmarkBand: 'strong',
+      referenceAverage: 68,
+      referenceStrong: 80,
+    });
+    expect(seqAudit.humanValidation.umuxLite).toEqual({
+      rawScore: 83.3,
+      susApproximation: 77,
+      isPercentage: false,
+      scalePoints: 7,
+    });
+
+    const badInstrument = buildUxFrictionFluidityAudit(dupReport, undefined, {
+      humanValidation: {
+        status: 'completed',
+        participantCount: 5,
+        sus: { score: -1, isPercentage: false, benchmarkBand: 'below-average', referenceAverage: 68, referenceStrong: 80 },
+      },
+    });
+    expect(badInstrument.humanValidation.status).toBe('not-performed');
+    expect(badInstrument.humanValidation.humanValidationClaimed).toBe(false);
+    expect(badInstrument.humanValidation.sus).toBeNull();
+
+    // Malformed legacy coverage ({}) does not throw and withholds scores; partial callback coverage withholds jsRuntimeScore
+    const malformedCovReport = makePerformanceAuditReport('malformed-cov', [
+      makeJourneyCheck('journey-1'),
+      makeJourneyCheck('journey-2', { eventLoopMeasurementAvailable: false, frameMeasurementAvailable: false }),
+    ]);
+    malformedCovReport.coverage = {} as PerformanceAuditReport['coverage'];
+    const malformedAudit = buildUxFrictionFluidityAudit(malformedCovReport);
+    expect(malformedAudit.affsScore).toBeNull();
+    expect(malformedAudit.pillars.fluidityAndResponsiveness.components.jsRuntimeScore).toBeNull();
   });
 });
