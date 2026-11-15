@@ -27,7 +27,7 @@ export interface AuditMetricDistribution extends AuditMetricDistributionSummary 
 }
 export interface AuditMetricEvidence {
   value: number | null;
-  unit: 'count' | 'percent' | 'ms';
+  unit: 'count' | 'percent' | 'ms' | 'score';
   methodId: string;
   methodVersion: 1 | 2;
   formula: string;
@@ -76,7 +76,8 @@ function statistics(values: number[]): AuditMetricDistributionSummary {
 export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   completion = buildPerformanceAuditCompletion(report),
   uxTelemetry?: UxFrictionFluidityTelemetryOptions): AuditMetricAnalysis {
-  const values = auditMetricValues(report, completion);
+  const uxAudit = buildUxFrictionFluidityAudit(report, completion, uxTelemetry);
+  const values = auditMetricValues(report, completion, uxAudit);
   const observations: AuditMetricObservation[] = [];
   const indices = new Map<string, number>();
   const add = (observation: AuditMetricObservation): number => {
@@ -395,10 +396,39 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
       admitted && checked !== null && absent !== null ? checked + absent : null, [...refs, ...admission.refs],
       { observedCount: checked, missingCount: absent }, [...countReasons(refs), ...admission.reasons]);
   }
+  const uxRefs = [
+    add({ source: 'report', field: 'affsScore', value: uxAudit.affsScore }),
+    add({ source: 'report', field: 'uxInteractionFrictionScore', value: uxAudit.pillars.interactionFriction.score }),
+    add({ source: 'report', field: 'uxStandardsAccessibilityScore', value: uxAudit.pillars.standardsAndAccessibility.score }),
+    add({ source: 'report', field: 'uxFluidityResponsivenessScore', value: uxAudit.pillars.fluidityAndResponsiveness.score }),
+  ];
+  put('affsScore', uxRefs, {
+    eligibleCount: uxAudit.evidenceCoverage.representativeTaskCount,
+    observedCount: uxAudit.pillars.interactionFriction.evaluatedTaskCount,
+  }, uxAudit.affsScore === null ? ['incomplete-health-collection'] : []);
+  put('uxInteractionFrictionScore', [uxRefs[1]], {
+    sampleUnit: 'task',
+    sampleSize: uxAudit.pillars.interactionFriction.evaluatedTaskCount,
+    eligibleCount: uxAudit.evidenceCoverage.representativeTaskCount,
+    observedCount: uxAudit.pillars.interactionFriction.completedTaskCount,
+  });
+  const surfaceSummary = uxAudit.pillars.standardsAndAccessibility.surfaceContractSummary;
+  put('uxStandardsAccessibilityScore', [uxRefs[2]], {
+    sampleUnit: 'surface',
+    sampleSize: surfaceSummary.applicableChecks,
+    eligibleCount: surfaceSummary.applicableChecks,
+    observedCount: surfaceSummary.applicableChecks - surfaceSummary.unavailable,
+  });
+  put('uxFluidityResponsivenessScore', [uxRefs[3]], {
+    sampleUnit: 'run',
+    sampleSize: uxAudit.evidenceCoverage.executedJourneyCount,
+    eligibleCount: uxAudit.evidenceCoverage.executedJourneyCount,
+    observedCount: uxAudit.evidenceCoverage.executedJourneyCount,
+  });
   return { schemaVersion: 1, context: { plannedChecks: measuredCount(report.coverage?.plannedChecks),
     plannedJourneys: measuredCount(report.coverage?.plannedJourneyChecks), payloadProducts: measuredCount(report.environment.payloadProducts),
     payloadProviders: measuredCount(report.environment.payloadProviders), viewportWidth: measured(report.environment.viewportWidth),
     fontScale: measured(report.environment.fontScale), developmentBuild: typeof report.environment.developmentBuild === 'boolean'
       ? report.environment.developmentBuild : null }, observations, metrics,
-    uxAudit: buildUxFrictionFluidityAudit(report, completion, uxTelemetry) };
+    uxAudit };
 }

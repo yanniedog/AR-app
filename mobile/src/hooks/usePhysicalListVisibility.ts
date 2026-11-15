@@ -12,8 +12,10 @@ export function physicallyVisible(row: WindowRect, viewport: WindowRect, window:
 }
 
 const PHYSICAL_VISIBILITY_RETRY_MS = 120;
+const PHYSICAL_VISIBILITY_SLOW_RETRY_MS = 400;
+const PHYSICAL_VISIBILITY_FAST_RETRY_COUNT = 16;
 const PHYSICAL_VISIBILITY_LOST_CALLBACK_MS = 600;
-const PHYSICAL_VISIBILITY_RETRY_LIMIT = 16;
+const PHYSICAL_VISIBILITY_RETRY_LIMIT = 24;
 
 /** Native viewability is only a measurement trigger, never audit visibility proof. */
 export function usePhysicalListVisibility<Row>(revision: string, rows: readonly Row[], unobscured: boolean,
@@ -81,7 +83,10 @@ export function usePhysicalListVisibility<Row>(revision: string, rows: readonly 
       // requested target that has not answered can still be measured later.
       if (complete) {
         stopPublication();
-        if (viewableItems.length > 0) stopRetry(); else again(PHYSICAL_VISIBILITY_RETRY_MS);
+        if (viewableItems.length > 0) stopRetry();
+        else again(retry.current.attempts >= PHYSICAL_VISIBILITY_FAST_RETRY_COUNT
+          ? PHYSICAL_VISIBILITY_SLOW_RETRY_MS
+          : PHYSICAL_VISIBILITY_RETRY_MS);
       }
       setResult(previous => previous?.identity === measuredIdentity && previous.rows === snapshot.rows && previous.count === viewableItems.length ? previous : { identity: measuredIdentity, rows: snapshot.rows, count: viewableItems.length });
       snapshot.onMeasured({ viewableItems });

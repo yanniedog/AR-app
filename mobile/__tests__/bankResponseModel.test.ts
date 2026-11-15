@@ -95,4 +95,66 @@ describe('compact bank response windows', () => {
       .toContainEqual(expect.objectContaining({ provider: 'Zero', movePp: null, daysAfter: null, direction: null }));
     expect(windows.find(window => window.decision.date === '2026-05-05')?.rows.some(row => row.provider === 'Zero')).toBe(false);
   });
+
+  it('builds large multi-year decision windows with a distinct source quickly', () => {
+    const startMs = Date.parse('2023-01-01T00:00:00Z');
+    const dayCount = 900;
+    const runDates = Array.from({ length: dayCount }, (_, i) =>
+      new Date(startMs + i * 86_400_000).toISOString().slice(0, 10));
+    const zeros = Array.from({ length: dayCount }, () => 0.06);
+    const counts = Array.from({ length: dayCount }, () => 3);
+    const banks: BankInsightsPayload['banks'] = {};
+    for (let b = 0; b < 80; b++) {
+      banks[`Bank ${String(b).padStart(2, '0')}`] = {
+        Mortgage: { median: zeros, best: zeros, count: counts },
+      };
+    }
+    const events: BankInsightsPayload['events'] = Array.from({ length: 24 }, (_, d) => ({
+      date: runDates[d * 35 + 3],
+      provider: `Bank ${String(d % 80).padStart(2, '0')}`,
+      section: 'Mortgage' as const,
+      dir: 'hike' as const,
+      moved: 1,
+      total: 3,
+      avg_bps: 25,
+    }));
+    const largeSource = {
+      schema_version: 1,
+      run_date: runDates[dayCount - 1],
+      run_dates: runDates,
+      banks,
+      events,
+      eventLedgerComplete: true,
+    } as BankInsightsPayload;
+    const largeFiltered = {
+      ...largeSource,
+      events: events.slice(0, 20),
+    } as BankInsightsPayload;
+    const largeCalendar: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      schedule: [],
+      decisions: Array.from({ length: 24 }, (_, d) => ({
+        date: runDates[d * 35 + 1],
+        effective: null,
+        rate: 4.35,
+        delta_bps: 25,
+        outcome: 'hike' as const,
+      })),
+    };
+    const t0 = performance.now();
+    const activeOnly = buildCompactBankResponseWindows(largeFiltered, largeCalendar, 'Mortgage', largeSource, { activeIndex: 0 });
+    const activeElapsedMs = performance.now() - t0;
+    expect(activeOnly).toHaveLength(24);
+    expect(activeOnly[0].rows).toHaveLength(80);
+    expect(activeOnly[1].rows).toHaveLength(0);
+    expect(activeElapsedMs).toBeLessThan(100);
+
+    const t1 = performance.now();
+    const windows = buildCompactBankResponseWindows(largeFiltered, largeCalendar, 'Mortgage', largeSource);
+    const fullElapsedMs = performance.now() - t1;
+    expect(windows).toHaveLength(24);
+    expect(windows[0].rows).toHaveLength(80);
+    expect(windows[0]).toEqual(activeOnly[0]);
+    expect(fullElapsedMs).toBeLessThan(1000);
+  });
 });

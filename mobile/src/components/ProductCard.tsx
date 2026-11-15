@@ -173,7 +173,7 @@ function ProductCardView({
   const rateChange = useProductRateChangeSummary(row.product_key);
   const rateChangeText = productRateChangeText(rateChange, true);
   const freshnessLabel = ({ current: 'Current', overdue: 'Overdue', stale: 'Stale', unknown: 'Unknown' } as const)
-    [rateFreshness(row, rowVerificationReceipt(row), Date.now())];
+  [rateFreshness(row, rowVerificationReceipt(row), Date.now())];
   const openLender = onLongPress ?? (() => openBank(row.provider, { section }));
   const joinFacts = (facts: readonly UiText[]) => uiJoin(...facts.flatMap((fact, index) => index ? [uiLabel(' · '), fact] : [fact]));
   const cardA11yLabel = uiJoin(uiProductName(row), ', ', uiProviderName(row), ', ', rateLabel, ' ', rateText,
@@ -187,7 +187,7 @@ function ProductCardView({
   const saveIdentity = React.useMemo(() => productSaveIdentity(row, section, mortgageRateMetric,
     { core, details, manifest, coreIntegrity },
     hasDisplayedRateOverride ? { label: rateLabel, value: displayedRate ?? null } : undefined),
-  [row, section, mortgageRateMetric, core, details, manifest, coreIntegrity, hasDisplayedRateOverride, rateLabel, displayedRate]);
+    [row, section, mortgageRateMetric, core, details, manifest, coreIntegrity, hasDisplayedRateOverride, rateLabel, displayedRate]);
   const saveA11yLabel = uiJoin(Number.isInteger(row.rate_index)
     ? favorite ? 'Remove' : 'Save'
     : favorite ? 'Remove all rates' : 'Save all rates',

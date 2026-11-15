@@ -1,7 +1,7 @@
 import type { UiLabel } from './uiCopy';
 import type { PerformanceAuditReport } from './performanceAudit';
 
-export const AUDIT_METRIC_GROUPS = ['Performance', 'Coverage', 'Task outcomes', 'Check results', 'Rendering checks'] as const satisfies readonly UiLabel[];
+export const AUDIT_METRIC_GROUPS = ['Performance', 'UX & fluidity', 'Coverage', 'Task outcomes', 'Check results', 'Rendering checks'] as const satisfies readonly UiLabel[];
 export type AuditMetricGroup = typeof AUDIT_METRIC_GROUPS[number];
 
 /** Named measured ratios, not a synthetic industry certification or usability grade. */
@@ -17,6 +17,10 @@ export const AUDIT_METRIC_DEFINITIONS = {
   journeyP95Ms: { label: 'Journey time p95', group: 'Performance', unit: 'ms' },
   jsStallPercent: { label: 'JS stalls over 100 ms', group: 'Performance', unit: 'percent' },
   slowFramePercent: { label: 'JS frames over 50 ms', group: 'Performance', unit: 'percent' },
+  affsScore: { label: 'Friction & Fluidity Score', group: 'UX & fluidity', unit: 'score' },
+  uxInteractionFrictionScore: { label: 'Interaction friction', group: 'UX & fluidity', unit: 'score' },
+  uxStandardsAccessibilityScore: { label: 'Standards & accessibility', group: 'UX & fluidity', unit: 'score' },
+  uxFluidityResponsivenessScore: { label: 'Fluidity & responsiveness', group: 'UX & fluidity', unit: 'score' },
   collectionPercent: { label: 'Collected checks', group: 'Coverage', unit: 'percent' },
   journeyCoveragePercent: { label: 'Journey execution', group: 'Coverage', unit: 'percent' },
   healthCoveragePercent: { label: 'Health check execution', group: 'Coverage', unit: 'percent' },
@@ -51,7 +55,7 @@ export const AUDIT_METRIC_DEFINITIONS = {
   displayChartPassPercent: { label: 'Chart-contract checks passed', group: 'Rendering checks', unit: 'percent' },
   displayEmptyPassPercent: { label: 'Empty-state checks passed', group: 'Rendering checks', unit: 'percent' },
   displayLogoPassPercent: { label: 'Logo-load checks passed', group: 'Rendering checks', unit: 'percent' },
-} as const satisfies Record<string, { label: UiLabel; group: AuditMetricGroup; unit: 'count' | 'percent' | 'ms' }>;
+} as const satisfies Record<string, { label: UiLabel; group: AuditMetricGroup; unit: 'count' | 'percent' | 'ms' | 'score' }>;
 
 export type AuditMetric = keyof typeof AUDIT_METRIC_DEFINITIONS;
 export const auditMetricMethodVersion = (metric: AuditMetric): 1 | 2 =>
@@ -63,6 +67,7 @@ export const auditReportMetricMethodVersion = (report: PerformanceAuditReport, m
     ? 1 : auditMetricMethodVersion(metric);
 export const AUDIT_METRICS: readonly AuditMetric[] = Object.freeze(Object.keys(AUDIT_METRIC_DEFINITIONS) as AuditMetric[]);
 export const LEGACY_AUDIT_METRICS: readonly AuditMetric[] = ['failures', 'coveragePercent', 'durationMs', 'slowestCheckMs', 'maxEventLoopLagMs', 'maxFrameGapMs'];
+export const UX_AUDIT_METRICS: readonly AuditMetric[] = ['affsScore', 'uxInteractionFrictionScore', 'uxStandardsAccessibilityScore', 'uxFluidityResponsivenessScore'];
 
 
 /** Versioned source-authored calculations. No claim of industry certification. */
@@ -78,6 +83,10 @@ export const AUDIT_METRIC_METHODS = {
   journeyP95Ms: ['Nearest-rank percentile 95 of measured journey forward work', 'journey'],
   jsStallPercent: ['Sum of timer delays over 100 ms / sum of measured timer samples × 100', 'callback'],
   slowFramePercent: ['Sum of JavaScript frame gaps over 50 ms / sum of measured frame samples × 100', 'callback'],
+  affsScore: ['Weighted composite of interaction friction (40%), standards & accessibility (30%), and fluidity & responsiveness (30%)', 'run'],
+  uxInteractionFrictionScore: ['Mean task friction efficiency across evaluated representative tasks (0–100)', 'task'],
+  uxStandardsAccessibilityScore: ['Automated WCAG / standards and display surface contract compliance score (0–100)', 'surface'],
+  uxFluidityResponsivenessScore: ['Weighted responsiveness score across JS runtime, native frame, and Web Vitals telemetry (0–100)', 'run'],
   collectionPercent: ['Unique expected stored performance checks / planned performance checks × 100', 'check'],
   journeyCoveragePercent: ['Executed journeys / planned journeys × 100', 'journey'],
   healthCoveragePercent: ['Executed health checks / planned health checks × 100', 'health-check'],

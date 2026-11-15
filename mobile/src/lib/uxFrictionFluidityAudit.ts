@@ -5,7 +5,7 @@ import {
   hasValidPerformanceAuditHealth,
   isJustifiedAvailabilitySkip,
 } from './performanceAuditCompletion';
-import { auditMetricValues, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount, measuredAuditValue } from './auditMetricHistoryValues';
+import { auditCoreMetricValues, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount, measuredAuditValue } from './auditMetricHistoryValues';
 
 export const AFFS_PILLAR_WEIGHTS = Object.freeze({
   interactionFriction: 0.40,
@@ -1006,7 +1006,7 @@ export function buildUxFrictionFluidityAudit(
     ? { ...report.uxTelemetry, ...options }
     : report.uxTelemetry;
   const sanitizeId = resolvedOptions?.safeCheckId ?? ((id: string) => id);
-  const values = auditMetricValues(report, completion);
+  const values = auditCoreMetricValues(report, completion);
   const journeys = selectRequiredReportJourneys(report);
   const validCoverage = completion.gaps.invalidCoverageReports === 0 ? report.coverage : undefined;
   const duplicateCoverageIds = Array.isArray(validCoverage?.duplicateStoredCheckIds) ? validCoverage.duplicateStoredCheckIds : [];

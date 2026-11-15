@@ -720,7 +720,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 1, semanticActionId: 'market.outlook.open', expectedPath: '/research', expectedSurface: 'outlook.dashboard', readiness: ['data'], skipReason: missingCore, stateImpact: 'local-only' },
     { depth: 1, semanticActionId: 'market.history.open', expectedPath: '/bank-rates', expectedSurface: 'bank-rates.dashboard', readiness: ['graphics'], skipReason: missingCore, stateImpact: 'local-only' },
     { depth: 1, semanticActionId: 'market.rba.open', expectedPath: '/rba', expectedSurface: 'rba.dashboard', readiness: ['rba-calendar'], stateImpact: 'local-only' },
-    { depth: 1, semanticActionId: 'market.response.open', expectedPath: '/rba-response', expectedSurface: 'moves.response-chart', readiness: ['rba-calendar', 'graphics'], stateImpact: 'local-only' },
+    { depth: 1, semanticActionId: 'market.response.open', expectedPath: '/rba-response', expectedSurface: 'moves.response-chart', readiness: ['rba-calendar', 'list'], stateImpact: 'local-only' },
   ]);
 
   scenario(templates, 'route.bank-rates', {
@@ -1033,7 +1033,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 0, semanticActionId: 'moves.open' },
     { depth: 1, semanticActionId: 'moves.decision.previous', readiness: ['rba-calendar'], stateImpact: 'local-only' },
     { depth: 1, semanticActionId: 'moves.section.next', stateImpact: 'local-only' },
-    { depth: 2, semanticActionId: 'moves.response-chart.provider.next', readiness: ['graphics'], stateImpact: 'local-only' },
+    { depth: 2, semanticActionId: 'moves.response-chart.provider.next', stateImpact: 'local-only' },
   ]);
 
   scenario(templates, 'route.rba', {

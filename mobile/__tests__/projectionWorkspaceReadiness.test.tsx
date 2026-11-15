@@ -1,5 +1,7 @@
 import { captureAuditDiagnostic, scoreAuditTargetProbeEvidence } from '../src/lib/performanceAuditDiagnostic';
 import { PerformanceAuditReadinessRegistry } from '../src/lib/performanceAuditReadiness';
+import { buildProjectionAuditJourneyScenario } from '../src/lib/performanceAuditScenario';
+import { buildLifecycleProjection } from '../src/data/projections';
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
@@ -83,4 +85,11 @@ test('a rendered projection input screen with an incomplete model cannot score a
     registry.registerSurface(surface);
     expect(scoreAuditTargetProbeEvidence(captureAuditDiagnostic(registry.snapshot(), 'complete'), surface.id)).toBe('warn');
   } finally { mockScenario.mortgage.loanBalance = balance; if (tree) act(() => tree.unmount()); }
+});
+
+test('buildProjectionAuditJourneyScenario produces a ready Mortgage projection from an empty scenario', () => {
+  const empty = normalizeUserRateScenario(undefined);
+  expect(buildLifecycleProjection('Mortgage', empty).ready).toBe(false);
+  const seeded = buildProjectionAuditJourneyScenario(empty);
+  expect(buildLifecycleProjection('Mortgage', seeded).ready).toBe(true);
 });

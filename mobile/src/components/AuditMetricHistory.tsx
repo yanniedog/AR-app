@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { AUDIT_HISTORY_LIMIT, AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_GROUPS, auditMetricPlot, auditMetricRun, mergeAuditMetricRuns, type AuditMetric, type AuditMetricRun, type AuditMetricGroup } from '../lib/auditMetricHistory';
 import { loadPerformanceAuditHistory } from '../lib/performanceAuditReportStorage';
@@ -26,6 +26,7 @@ const AFFS_BAND_LABELS: Record<AffsOperationalBand, UiLabel> = {
 function valueLabel(value: number | null, metric: AuditMetric) {
   if (value === null) return uiLabel('Not measured');
   const unit = AUDIT_METRIC_DEFINITIONS[metric].unit;
+  if (unit === 'score') return uiJoin(uiNumber(value, 1), ' / ', uiCount(100));
   return uiJoin(uiNumber(value, unit === 'percent' ? 1 : 0),
     unit === 'count' ? '' : unit === 'percent' ? '%' : uiJoin(' ', 'ms'));
 }
@@ -68,8 +69,9 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
   const plot = useMemo(() => auditMetricPlot(visibleRuns, metric), [visibleRuns, metric]);
   const currentReport = report?.sessionId === visibleRuns[visibleRuns.length - 1]?.sessionId ? report : null;
   const checkGroup = group === 'Check results' || group === 'Rendering checks';
-  const analysis = useMemo(() => currentReport && checkGroup ? auditCheckResultSummary(currentReport) : null,
-    [currentReport, checkGroup]);
+  const uxGroup = group === 'UX & fluidity';
+  const analysis = useMemo(() => currentReport && (checkGroup || uxGroup) ? auditCheckResultSummary(currentReport) : null,
+    [currentReport, checkGroup, uxGroup]);
   const evidence = analysis?.metrics[metric];
   const taskEvidence = analysis?.taskEvidence;
   const uxAudit = analysis?.uxAudit;
@@ -99,24 +101,51 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
       || uxAudit.humanValidation.nasaTlxScore !== null
     );
   const points = plot.points.filter(point => point !== null);
+  const tabButtonStyle = { minHeight: 38, paddingHorizontal: 12, paddingVertical: 8 } as const;
+  const metricButtonStyle = { minHeight: 36, paddingHorizontal: 12, paddingVertical: 6 } as const;
+  const availableModes = (Object.keys(MODES) as AuditMetricRun['mode'][]).filter(key => runs.some(run => run.mode === key));
   if (!runs.length) return <AppText>{uiLabel('No audit history')}</AppText>;
   return <View style={{ gap: 12 }}>
     <InfoRow label="Retained runs" value={uiJoin(uiCount(runs.length), ' / ', uiCount(AUDIT_HISTORY_LIMIT))} />
-    <Row gap={8} style={{ flexWrap: 'wrap' }}>
-      {(Object.keys(MODES) as AuditMetricRun['mode'][]).filter(key => runs.some(run => run.mode === key)).map(key =>
-        <Button key={key} title={MODES[key]} variant={key === mode ? 'primary' : 'secondary'}
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, alignItems: 'center' }}>
+      {availableModes.map(key =>
+        <Button key={key} title={MODES[key]} variant={key === mode ? 'primary' : 'secondary'} style={tabButtonStyle}
           accessibilityState={{ selected: key === mode }} onPress={() => setChosenMode(key)} />)}
-    </Row>
-    <Row gap={8} style={{ flexWrap: 'wrap' }}>
-      {AUDIT_METRIC_GROUPS.map(key => <Button key={key} title={key} variant={key === group ? 'primary' : 'secondary'}
+    </ScrollView>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, alignItems: 'center' }}>
+      {AUDIT_METRIC_GROUPS.map(key => <Button key={key} title={key} variant={key === group ? 'primary' : 'secondary'} style={tabButtonStyle}
         accessibilityState={{ selected: key === group }} onPress={() => setMetric(key === 'Check results' ? 'timingFailures'
           : AUDIT_METRICS.find(candidate => AUDIT_METRIC_DEFINITIONS[candidate].group === key)!)} />)}
-    </Row>
-    <Row gap={8} style={{ flexWrap: 'wrap' }}>
-      {AUDIT_METRICS.filter(key => AUDIT_METRIC_DEFINITIONS[key].group === group).map(key => <Button key={key} title={AUDIT_METRIC_DEFINITIONS[key].label} variant={key === metric ? 'secondary' : 'ghost'}
+    </ScrollView>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, alignItems: 'center' }}>
+      {AUDIT_METRICS.filter(key => AUDIT_METRIC_DEFINITIONS[key].group === group).map(key => <Button key={key} title={AUDIT_METRIC_DEFINITIONS[key].label} variant={key === metric ? 'secondary' : 'ghost'} style={metricButtonStyle}
         accessibilityState={{ selected: key === metric }} onPress={() => setMetric(key)} />)}
-    </Row>
+    </ScrollView>
     <InfoRow label={AUDIT_METRIC_DEFINITIONS[metric].label} value={valueLabel(visibleRuns[visibleRuns.length - 1]?.metrics[metric] ?? null, metric)} />
+    {points.length ? <View>
+      <AppText variant="tiny" color="textMuted">{valueLabel(plot.ceiling, metric)}</AppText>
+      <Svg width="100%" height={148} viewBox="0 0 320 148" accessible={false}>
+        {[16, 72, 128].map(y => <Line key={y} x1={12} x2={308} y1={y} y2={y} stroke={theme.colors.border} />)}
+        <Path d={plot.path} stroke={theme.colors.primary} strokeWidth={2} fill="none" />
+        {points.map(point => <Circle key={point.sessionId} cx={point.x} cy={point.y} r={4}
+          fill={theme.colors.primary} stroke={theme.colors.surface} strokeWidth={1} />)}
+      </Svg>
+      <AppText variant="tiny" color="textMuted">{valueLabel(0, metric)}</AppText>
+      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <AppText variant="tiny">{uiDate(visibleRuns[0].finishedAt)}</AppText>
+        {visibleRuns.length > 1 ? <AppText variant="tiny">{uiDate(visibleRuns[visibleRuns.length - 1].finishedAt)}</AppText> : null}
+      </Row>
+    </View> : <AppText>{uiLabel('Not measured')}</AppText>}
+    {uxGroup ? <View style={{ gap: 4 }}>
+      <InfoRow label="Friction & Fluidity Score" value={affsSummary} />
+      <InfoRow label="Composite basis" value="Proprietary · Non-normative" />
+      <InfoRow label="Interaction friction (40%)" value={measuredScore(uxAudit?.pillars.interactionFriction.score)} />
+      <InfoRow label="Standards & accessibility (30%)" value={measuredScore(uxAudit?.pillars.standardsAndAccessibility.score)} />
+      <InfoRow label="Fluidity & responsiveness (30%)" value={measuredScore(uxAudit?.pillars.fluidityAndResponsiveness.score)} />
+      <InfoRow label="Automated WCAG / standards" value={wcagSummaryValue} />
+      <InfoRow label="Human usability" value="Not measured" />
+      <InfoRow label="SUS / UMUX-Lite / SEQ" value={humanValidationRecorded ? 'Recorded' : 'Not performed'} />
+    </View> : null}
     {checkGroup ? <View style={{ gap: 4 }}>
       <InfoRow label="Measurement scope" value={evidence ? uiIdentifier(evidence.unitOfAnalysis) : 'Not measured'} />
       <InfoRow label="Numerator" value={measuredCount(evidence?.numerator)} />
@@ -150,20 +179,6 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
         <InfoRow label="Pixel correctness" value="Not measured" />
       </>}
     </View> : null}
-    {points.length ? <View>
-      <AppText variant="tiny" color="textMuted">{valueLabel(plot.ceiling, metric)}</AppText>
-      <Svg width="100%" height={148} viewBox="0 0 320 148" accessible={false}>
-        {[16, 72, 128].map(y => <Line key={y} x1={12} x2={308} y1={y} y2={y} stroke={theme.colors.border} />)}
-        <Path d={plot.path} stroke={theme.colors.primary} strokeWidth={2} fill="none" />
-        {points.map(point => <Circle key={point.sessionId} cx={point.x} cy={point.y} r={4}
-          fill={theme.colors.primary} stroke={theme.colors.surface} strokeWidth={1} />)}
-      </Svg>
-      <AppText variant="tiny" color="textMuted">{valueLabel(0, metric)}</AppText>
-      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-        <AppText variant="tiny">{uiDate(visibleRuns[0].finishedAt)}</AppText>
-        {visibleRuns.length > 1 ? <AppText variant="tiny">{uiDate(visibleRuns[visibleRuns.length - 1].finishedAt)}</AppText> : null}
-      </Row>
-    </View> : <AppText>{uiLabel('Not measured')}</AppText>}
     {report?.sessionId === visibleRuns[visibleRuns.length - 1]?.sessionId
       ? <AuditMetricDetails report={report!} metric={metric} /> : null}
     <Disclosure title="Recorded results" open={showRuns} onToggle={() => setShowRuns(!showRuns)}>
