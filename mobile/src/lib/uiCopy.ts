@@ -422,6 +422,7 @@ export const UI_LABELS = [
   'Cash-flow conflict', 'Interest basis', 'Actual days/365', 'Cash flows', 'Month boundaries',
   'Quoted maturity', 'Periodic interest', 'Paid outside deposit', 'Reinvestment return', 'Charges',
   'Recurring fees', 'Frequency interval start',
+  '<60', '60-70', '70-80', '80-90', '>90',
 ] as const;
 
 export type UiLabel = typeof UI_LABELS[number];
