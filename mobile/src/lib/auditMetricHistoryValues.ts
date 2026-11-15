@@ -1,7 +1,7 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { hasValidPerformanceAuditHealth, type buildPerformanceAuditCompletion } from './performanceAuditCompletion';
 import { AUDIT_METRICS, type AuditMetric } from './auditMetricHistoryMetrics';
-import { buildUxFrictionFluidityAudit } from './uxFrictionFluidityAudit';
+import { buildUxFrictionFluidityAudit, type UxFrictionFluidityAudit } from './uxFrictionFluidityAudit';
 
 export const measuredAuditValue = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
@@ -190,9 +190,10 @@ export function auditCoreMetricValues(report: PerformanceAuditReport,
 
 /** Canonical lightweight value derivation shared by storage and full analysis. */
 export function auditMetricValues(report: PerformanceAuditReport,
-  completion: ReturnType<typeof buildPerformanceAuditCompletion>): Record<AuditMetric, number | null> {
+  completion: ReturnType<typeof buildPerformanceAuditCompletion>,
+  precomputedUxAudit?: UxFrictionFluidityAudit): Record<AuditMetric, number | null> {
   const core = auditCoreMetricValues(report, completion);
-  const uxAudit = buildUxFrictionFluidityAudit(report, completion);
+  const uxAudit = precomputedUxAudit ?? buildUxFrictionFluidityAudit(report, completion);
   return {
     ...core,
     affsScore: measuredAuditValue(uxAudit.affsScore),
