@@ -199,10 +199,13 @@ export default function MarketOverview() {
     renderRevision,
     actions: auditActions,
     probes: [
-      { id: 'market.core', kind: 'data', status: core ? 'ready' : 'pending', datasetRevision: coreSha },
+      { id: 'market.core', kind: 'data', status: core ? 'ready' : 'pending', datasetRevision: coreSha,
+        expectedCount: 1, actualCount: core ? 1 : 0 },
       { id: 'market.calendar', kind: 'data', required: false,
         status: calendar ? 'ready' : calendarAttempted || calendarError ? 'error' : 'pending',
         error: !calendar && (calendarAttempted || calendarError) ? 'Calendar unavailable' : null,
+        expectedCount: calendar ? calendar.decisions.length + calendar.schedule.length : 0,
+        actualCount: calendar ? calendar.decisions.length + calendar.schedule.length : 0,
         // Dataset identity is the publication, not this asset's distinct SHA.
         // calendarSha still invalidates factsRevision and its measured layout.
         datasetRevision: coreSha ?? core?.run_date ?? null },
@@ -214,6 +217,8 @@ export default function MarketOverview() {
         status: payload || filteredEmpty ? 'ready' : error ? 'error' : 'pending',
         error: error && !payload ? 'Observed rate changes could not be prepared' : null,
         datasetRevision: coreSha ?? core?.run_date ?? null,
+        expectedCount: feedExpectedCount,
+        actualCount: payload || filteredEmpty ? feedExpectedCount : 0,
       },
       {
         id: 'market.movements.list',

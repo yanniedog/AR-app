@@ -421,3 +421,31 @@ test('optional errors and stale ready graphics on the target cannot claim comple
       expect.objectContaining({ probeId: 'projections.graphic', reason: 'probe-revision-mismatch' }),
     ]) });
 });
+
+test('aggregate external-link-unverified check counts unverified destinations without inflating check count', () => {
+  const report = completeReport();
+  report.checks[0] = {
+    id: 'external-link-unverified',
+    label: 'Unverified external links (3)',
+    kind: 'network',
+    status: 'warn',
+    durationMs: 0,
+    metrics: {
+      executionAttempted: true,
+      nonTimingFailure: false,
+      destinationCount: 3,
+      httpSelected: false,
+      httpAttempted: false,
+      httpReachability: 'unknown',
+      browserHandler: 'unknown',
+      handlerAttempted: false,
+      handlerResolution: 'not-selected',
+    },
+  };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({
+    coverageComplete: false,
+    outcome: 'incomplete',
+    gaps: { unverifiedLinks: 3, unavailableChecks: 0 },
+    gapPositions: [{ source: 'performance', position: 1, checkId: 'external-link-unverified', reason: 'unverified-link' }],
+  });
+});

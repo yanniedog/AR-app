@@ -788,22 +788,28 @@ export default function RatesWorkspace() {
   }, []);
   const restoreCommittedScroll = useCallback(() => {
     const list = listRef.current, pending = restoration.current;
-    if (!listLoaded.current || !list || pending.scheduled || pending.applied) return;
+    if (!isFocused || !listLoaded.current || !list || pending.scheduled || pending.applied) return;
     pending.scheduled = true;
     requestAnimationFrame(() => {
-      if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) return;
+      if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) {
+        pending.scheduled = false;
+        return;
+      }
       list.scrollToOffset({ offset: pending.offset, animated: false });
       // Wait for the native scroll to reach a frame before asking for current
       // viewport evidence. A measurement from before that move is insufficient.
       requestAnimationFrame(() => {
-        if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) return;
+        if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) {
+          pending.scheduled = false;
+          return;
+        }
         pending.applied = true;
         setRestoredDataRevision(pending.revision);
         list.recomputeViewableItems();
       });
     });
-  }, []);
-  useEffect(() => { restoreCommittedScroll(); }, [restorationKey, restoreCommittedScroll]);
+  }, [isFocused]);
+  useEffect(() => { restoreCommittedScroll(); }, [isFocused, restorationKey, restoreCommittedScroll]);
   const onListCommit = useCallback(() => {
     markListCommit();
     restoreCommittedScroll();
@@ -1004,6 +1010,8 @@ export default function RatesWorkspace() {
         // otherwise diagnostics show datasetMatches=true while status=pending.
         status: task.intentError || preparedResults.error || publicPricing.error ? 'error' : !searchPending && core ? 'ready' : 'pending',
         error: task.intentError ?? preparedResults.error ?? publicPricing.error,
+        expectedCount: 1,
+        actualCount: !searchPending && core && !(task.intentError || preparedResults.error || publicPricing.error) ? 1 : 0,
         datasetRevision: !searchPending && core ? (coreSha ?? core.run_date ?? null) : null,
       },
       {
@@ -1040,6 +1048,8 @@ export default function RatesWorkspace() {
         kind: 'data',
         status: !filterOpen ? 'ready' : filterOptions.error ? 'error' : filterOptions.ready ? 'ready' : 'pending',
         error: filterOpen ? filterOptions.error : null,
+        expectedCount: filterOpen ? 1 : 0,
+        actualCount: filterOpen && !filterOptions.error && filterOptions.ready ? 1 : 0,
       },
       {
         id: 'search.logos',

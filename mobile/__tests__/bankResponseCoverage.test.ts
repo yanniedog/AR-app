@@ -260,3 +260,28 @@ test('a full provider/window breakdown fits the OS share budget without dropping
   expect(retained.map((row: any) => [row.section, row.decisionDate, row.sourceReason, row.displayReason, row.missingDays]))
     .toEqual(coverage.rows.map(row => [row.section, row.decisionDate, row.sourceReason, row.displayReason, row.missingDays]));
 });
+
+test('incomplete source windows retain missing-history, missing-baseline and history-gap reasons when filtered', () => {
+  const f = fixture();
+  const gapSource = {
+    ...f.source,
+    banks: {
+      'Missing Baseline': { Savings: { median: [null, 0.04, 0.04, 0.04], best: [null, 0.04, 0.04, 0.04], count: [null, 1, 1, 1] } },
+      'History Gap': { Savings: { median: [0.04, null, 0.04, 0.04], best: [0.04, null, 0.04, 0.04], count: [1, null, 1, 1] } },
+      'Missing History': { Savings: { median: [null, null, null, null], best: [null, null, null, null], count: [null, null, null, null] } },
+    },
+  };
+  const currentOnly = (rate: number) => ({ median: [null, null, null, rate], best: [null, null, null, rate], count: [null, null, null, 1] });
+  const projected = {
+    ...gapSource,
+    banks: {
+      'Missing Baseline': { Savings: currentOnly(0.04) },
+      'History Gap': { Savings: currentOnly(0.04) },
+    },
+  };
+  const coverage = bankResponseCoverage(gapSource, projected, f.calendar, f.core)!;
+  const rows = coverage.rows.filter(row => row.decisionDate === '2026-11-03' && row.section === 'Savings');
+  expect(rows.find(row => row.provider === 'Missing Baseline')).toMatchObject({ sourceReason: 'missing-baseline', displayReason: 'missing-baseline' });
+  expect(rows.find(row => row.provider === 'History Gap')).toMatchObject({ sourceReason: 'history-gap', displayReason: 'history-gap' });
+  expect(rows.find(row => row.provider === 'Missing History')).toMatchObject({ sourceReason: 'missing-history', displayReason: 'missing-history' });
+});

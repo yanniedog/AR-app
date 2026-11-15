@@ -186,7 +186,7 @@ export function BankResponseDashboard({
   usePerformanceAuditProbe(auditSurface, {
     id: 'bank-rates-chart',
     kind: 'graphic',
-    required: false,
+    required: Boolean(active),
     status: chartAuditState?.status ?? 'pending', error: chartAuditState?.error,
     datasetRevision: payload.run_date,
     renderRevision,

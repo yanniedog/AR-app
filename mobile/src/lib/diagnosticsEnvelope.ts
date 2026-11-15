@@ -25,6 +25,7 @@ const FIXED_CHECK_IDS = new Set([
   'update-readiness',
   'audit-state-restoration',
   'external-link-inventory',
+  'external-link-unverified',
 ]);
 const JOURNEY_IDS = [
   'rates', 'rates-mortgage', 'rates-savings', 'rates-td', 'market', 'bank-rates',

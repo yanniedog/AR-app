@@ -152,6 +152,8 @@ export default function RbaRates() {
   usePerformanceAuditProbe(auditSurface, {
     id: 'rba.data', kind: 'data', datasetRevision, renderRevision,
     status: loading ? 'pending' : 'ready',
+    expectedCount: 1,
+    actualCount: loading ? 0 : 1,
   });
   usePerformanceAuditProbe(auditSurface, {
     id: 'rba.layout', kind: 'layout', datasetRevision, renderRevision,

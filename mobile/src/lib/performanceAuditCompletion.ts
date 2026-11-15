@@ -207,7 +207,11 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     pendingProbes: report.checks.reduce((count, check) => count + pendingRequiredProbes(check).length, 0),
     missingReadinessChecks: report.checks.filter(check => check.kind === 'journey' && check.metrics.executionAttempted !== false
       && check.metrics.availabilityFailure !== true && check.status !== 'skipped' && !structuredReadiness(check)).length,
-    unverifiedLinks: report.checks.filter(unverifiedLink).length,
+    unverifiedLinks: report.checks.filter(unverifiedLink).length + report.checks.reduce((sum, check) => {
+      if (check.id !== 'external-link-unverified') return sum;
+      const count = check.metrics.destinationCount;
+      return sum + (typeof count === 'number' && Number.isSafeInteger(count) && count > 0 ? count : 0);
+    }, 0),
     unavailableResponsivenessChecks: report.checks.filter(missingResponsiveness).length,
     targetProbeDefects: report.checks.reduce((count, check) => count + targetProbeDefects(check).length, 0),
     missingHealthReports: report.schemaVersion >= 7 && !health ? 1 : 0,
@@ -260,7 +264,11 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     surfaceId?: string; probeId?: string };
   const gapPositions: GapPosition[] = [
     ...report.checks.flatMap((check, index) => {
-      const reason = unverifiedLink(check) ? 'unverified-link' as const
+      const aggregateUnverified = check.id === 'external-link-unverified'
+        && typeof check.metrics.destinationCount === 'number'
+        && Number.isSafeInteger(check.metrics.destinationCount)
+        && check.metrics.destinationCount > 0;
+      const reason = unverifiedLink(check) || aggregateUnverified ? 'unverified-link' as const
         : blockingUnavailable(check) ? 'unavailable' as const
           : check.status === 'skipped' && !justifiedAvailabilitySkip(check) ? 'skipped' as const
             : null;

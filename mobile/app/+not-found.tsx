@@ -29,7 +29,7 @@ export default function NotFound() {
     renderRevision: 'not-found-v1',
     actions: auditActions,
     probes: [
-      { id: 'not-found.local-state', kind: 'data', status: 'ready' },
+      { id: 'not-found.local-state', kind: 'data', status: 'ready', expectedCount: 1, actualCount: 1 },
       {
         id: 'not-found.layout',
         kind: 'layout',

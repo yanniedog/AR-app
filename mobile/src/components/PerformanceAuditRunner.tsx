@@ -64,7 +64,7 @@ import { debugLog, getDebugLogFlushDiagnostics } from '../lib/debugLog';
 import { runExternalLinkAuditCheck } from '../lib/performanceAuditLinks';
 import { createExternalAuditLinkCollector, FIXED_EXTERNAL_AUDIT_LINKS, beginExternalLinkCapture, endExternalLinkCapture,
   getCapturedExternalAuditLinks } from '../lib/externalLinkInventory';
-import type { TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
+import { trustedExternalUrl, type TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
 import { captureAuditPayloadWork } from '../lib/performanceAuditPayloadWork';
 import { benchmarkPayloadCapacity } from '../lib/performanceAuditCapacity';
 import { waitForAuditBackgroundWork, describeAuditBackgroundWork, classifyJourneyBackgroundObservation, journeyDetailsRequirementState, JourneyBackgroundDataError, type AuditBackgroundWorkWait } from '../lib/performanceAuditBackgroundWork';
@@ -3609,31 +3609,94 @@ export function PerformanceAuditRunner() {
           },
         });
         inventoryFailureEvidence = {};
+        const plannedLinkCheckIds: string[] = [];
         const linkDeadline = Date.now() + 90_000;
-        for (let offset = 0; offset < externalLinks.length; offset += 4) {
+        let nextLinkIndex = 0;
+        if (auditMode === 'live-source' && externalLinks.length > 0) {
+          let unflushed = 0;
+          let recordChain = Promise.resolve();
+          const enqueueLinkRecord = (check: AuditCheck) => {
+            const step = recordChain.then(async () => {
+              await record(check, true);
+              plannedLinkCheckIds.push(check.id);
+              unflushed += 1;
+              if (unflushed >= 24) {
+                unflushed = 0;
+                await flushRecordedChecks();
+              }
+            });
+            recordChain = step.catch(() => {});
+            return step;
+          };
+          const workerCount = Math.min(10, externalLinks.length);
+          await Promise.all(Array.from({ length: workerCount }, async () => {
+            while (nextLinkIndex < externalLinks.length) {
+              await waitWhilePaused(watchdog);
+              assertSessionActive(watchdog);
+              const remaining = linkDeadline - Date.now();
+              if (remaining <= 0) break;
+              const index = nextLinkIndex;
+              nextLinkIndex += 1;
+              const request = externalLinks[index];
+              transportGuard.allowExternalUrls([request]);
+              updatePerformanceAuditProgress(completed, total,
+                `Checking external link ${index + 1} of ${externalLinks.length}`);
+              const check = await runExternalLinkAuditCheck(request, index, {
+                platform: Platform.OS,
+                reachability: true,
+                handler: true,
+                timeoutMs: Math.max(1, Math.min(2_500, remaining)),
+                signal: linkAbort.signal,
+              });
+              await enqueueLinkRecord(check);
+            }
+          }));
+          await recordChain;
+        }
+        let unverifiedCount = 0;
+        for (let index = nextLinkIndex; index < externalLinks.length; index += 1) {
           await waitWhilePaused(watchdog);
           assertSessionActive(watchdog);
-          const chunk = externalLinks.slice(offset, offset + 4);
-          // Validate and register only the destinations about to be checked.
-          // Revalidating the whole inventory synchronously can exhaust the
-          // stored-check watchdog before the first real link check begins.
-          transportGuard.allowExternalUrls(chunk);
-          const remaining = Math.max(0, linkDeadline - Date.now());
-          const pending = chunk.map((request, index) => runExternalLinkAuditCheck(request, offset + index, {
-            platform: Platform.OS,
-            reachability: auditMode === 'live-source' && remaining > 0,
-            handler: remaining > 0,
-            timeoutMs: Math.max(1, Math.min(5_000, remaining || 5_000)),
-            signal: linkAbort.signal,
-          }));
-          updatePerformanceAuditProgress(completed, total,
-            `Checking external links ${offset + 1}-${offset + chunk.length} of ${externalLinks.length}`);
-          for (let index = 0; index < pending.length; index += 1) {
-            const label = `Checking external link ${offset + index + 1} of ${externalLinks.length}`;
-            await recordContinuable(label, () => pending[index], true);
+          const request = externalLinks[index];
+          let trustedOk = false;
+          try { trustedOk = trustedExternalUrl(request).ok; } catch { trustedOk = false; }
+          if (!trustedOk) {
+            const check = await runExternalLinkAuditCheck(request, index, {
+              platform: Platform.OS, reachability: false, handler: false, timeoutMs: 1, signal: linkAbort.signal,
+            });
+            await record(check, true);
+            plannedLinkCheckIds.push(check.id);
+          } else {
+            unverifiedCount += 1;
           }
-          await flushRecordedChecks();
         }
+        if (unverifiedCount > 0) {
+          await record({
+            id: 'external-link-unverified',
+            label: `Unverified external links (${unverifiedCount})`,
+            kind: 'network',
+            status: 'warn',
+            durationMs: 0,
+            metrics: {
+              executionAttempted: true,
+              nonTimingFailure: false,
+              destinationCount: unverifiedCount,
+              httpSelected: false,
+              httpAttempted: false,
+              httpReachability: 'unknown',
+              browserHandler: 'unknown',
+              handlerAttempted: false,
+              handlerResolution: 'not-selected',
+              reason: auditMode === 'live-source'
+                ? 'Remaining valid external destinations were not tested after the link budget expired.'
+                : 'External HTTP reachability is skipped in local audit mode.',
+            },
+          }, true);
+          plannedLinkCheckIds.push('external-link-unverified');
+        }
+        await flushRecordedChecks();
+        total += plannedLinkCheckIds.length - reservedLinkChecks;
+        reservedLinkChecks = plannedLinkCheckIds.length;
 
         for (const section of SECTION_ORDER) {
           assertSessionActive(watchdog);
@@ -3809,7 +3872,7 @@ export function PerformanceAuditRunner() {
           ...PERFORMANCE_AUDIT_SETUP_CHECK_IDS,
           'maximum-coverage-profile',
           'external-link-inventory',
-          ...externalLinks.map((_, index) => `external-link-${index + 1}`),
+          ...plannedLinkCheckIds,
           'runtime-responsiveness',
           ...AUDIT_ENTRY_CHECK_IDS,
           ...navigationJourneys.flatMap((journey) => [

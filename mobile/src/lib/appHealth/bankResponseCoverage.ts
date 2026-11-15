@@ -53,10 +53,15 @@ export function bankResponseCoverage(source: BankInsightsPayload | null | undefi
         const visible = displayWindows.get(windowKey(window.decision.date, window.windowEnd))?.get(provider);
         const evidence = raw?.evidence ?? sourceEvidence(section, provider,
           window.decision.date, window.windowEnd, null);
+        const sourceDeficit = evidence.reason === 'missing-history'
+          || evidence.reason === 'missing-baseline'
+          || evidence.reason === 'history-gap'
+          || evidence.reason === 'no-products';
         rows.push({ provider, section, decisionDate: window.decision.date, windowEnd: window.windowEnd,
           sourceReason: evidence.reason,
           displayReason: quarantinedPairs.has(bankHistoryPairKey(provider, section)) ? 'quarantined-history'
-            : visible?.evidence.reason ?? (raw && projected ? 'filtered-history' : 'missing-history'),
+            : sourceDeficit ? evidence.reason
+              : visible?.evidence.reason ?? (raw && projected ? 'filtered-history' : 'missing-history'),
           missingDays: evidence.missingDays, baselineAvailable: evidence.baselineAvailable,
           displayed: !!visible, moveKnown: visible?.movePp != null, timingKnown: visible?.daysAfter != null,
           firstMoveVerified: visible?.evidence.firstMoveVerified ?? false });

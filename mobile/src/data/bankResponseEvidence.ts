@@ -25,6 +25,9 @@ export function bankResponseEvidence(payload: BankInsightsPayload, section: Sect
  * every provider/window. They are rebuilt for each source adoption, not cached. */
 export function createBankResponseEvidenceReader(payload: BankInsightsPayload, source?: BankInsightsPayload | null) {
   const dateIndices = new Map(payload.run_dates.map((date, index) => [date, index]));
+  const sourceDateIndices = source && source !== payload
+    ? new Map(source.run_dates.map((date, index) => [date, index]))
+    : null;
   const eventKey = (event: BankInsightsPayload['events'][number]) =>
     JSON.stringify([event.date, event.dir, event.moved, event.total, event.avg_bps]);
   const pair = (provider: string, section: SectionKey) => JSON.stringify([provider, section]);
@@ -68,13 +71,43 @@ export function createBankResponseEvidenceReader(payload: BankInsightsPayload, s
       if (series?.count[index] !== 0) nonzeroDays++;
     }
   }
-  if (source && source !== payload && sourceSeries) {
-    filtered ||= source.run_dates.some((date, index) => date >= baselineDate && date <= end &&
-      observed(sourceSeries, index) && !observed(series, dateIndices.get(date) ?? -1));
+  let sourceDeficit: BankResponseReason | null = null;
+  if (source && source !== payload && sourceDateIndices) {
+    const earliestRemoved = removed.get(pair(provider, section))
+      ?.filter(date => date >= start && date <= end)
+      .sort()[0] ?? null;
+    const sourceEnd = eventDate ?? earliestRemoved ?? end;
+    const sourceTo = Date.parse(`${sourceEnd}T00:00:00Z`);
+    if (!sourceSeries) {
+      sourceDeficit = 'missing-history';
+    } else if (Number.isFinite(sourceTo) && sourceTo >= from) {
+      const sourceBaselineAvailable = observed(sourceSeries, sourceDateIndices.get(baselineDate) ?? -1);
+      let sourceObservedDays = 0;
+      let sourceNonzeroDays = 0;
+      for (let index = 0; index < source.run_dates.length; index++) {
+        const date = source.run_dates[index];
+        if (date < start || date > sourceEnd) continue;
+        if (observed(sourceSeries, index)) {
+          sourceObservedDays++;
+          if (sourceSeries.count[index] !== 0) sourceNonzeroDays++;
+        }
+      }
+      const sourceMissingDays = Math.max(0, Math.round((sourceTo - from) / DAY) + 1 - sourceObservedDays);
+      if (!sourceObservedDays) sourceDeficit = 'missing-history';
+      else if (!sourceBaselineAvailable) sourceDeficit = 'missing-baseline';
+      else if (sourceMissingDays > 0) sourceDeficit = 'history-gap';
+      else if (sourceNonzeroDays === 0 && !eventDate && !earliestRemoved) sourceDeficit = 'no-products';
+    }
+    if (sourceSeries) {
+      filtered ||= source.run_dates.some((date, index) => date >= baselineDate && date <= end &&
+        observed(sourceSeries, index) && !observed(series, dateIndices.get(date) ?? -1));
+    }
   }
   const missingDays = Math.max(0, Math.round((to - from) / DAY) + 1 - observedDays);
   const complete = baselineAvailable && missingDays === 0 && !filtered && payload.eventLedgerComplete === true;
-  const reason: BankResponseReason = filtered ? 'filtered-history'
+  const reason: BankResponseReason = sourceDeficit
+    ? sourceDeficit
+    : filtered ? 'filtered-history'
     : !observedDays ? 'missing-history'
       : !baselineAvailable ? 'missing-baseline'
         : missingDays ? 'history-gap'

@@ -224,6 +224,8 @@ function PerformanceAuditScreenInner() {
         id: 'audit.state',
         kind: 'data',
         status: state.status === 'queued' ? 'pending' : 'ready',
+        expectedCount: 1,
+        actualCount: state.status === 'queued' ? 0 : 1,
       },
       {
         id: 'audit.log-buffer',

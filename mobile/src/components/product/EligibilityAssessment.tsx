@@ -77,6 +77,7 @@ export function EligibilityAssessment({ productKey, row, section }: { productKey
   const identity = open ? hashText(canonical([manifest, productKey, row ?? null, section ?? null])) : '';
   const [loaded, setLoaded] = useState<{ identity: string; core: typeof core; details: typeof details; integrity: typeof coreIntegrity; selections?: EligibilitySelection[]; target?: EligibilityTarget; error?: string } | null>(null);
   const current = loaded?.identity === identity && loaded.core === core && loaded.details === details && loaded.integrity === coreIntegrity ? loaded : null;
+  const published = Boolean(manifest?.executable_v2);
   useEffect(() => {
     if (!open) return; let active = true;
     const detail = details && Object.hasOwn(details.products, productKey) ? details.products[productKey] : null;
@@ -88,8 +89,8 @@ export function EligibilityAssessment({ productKey, row, section }: { productKey
   }, [open, identity, manifest, core, coreIntegrity, details, productKey, row, section, retry]);
   return <Disclosure title="Recorded criteria" open={open} onToggle={() => setOpen(!open)}>
     {!current ? <AppText variant="small">{uiLabel('Loading')}</AppText> : current.selections?.length && current.target ? <EligibilityForm key={identity} selections={current.selections} target={current.target} context={{ manifest, core, coreIntegrity, details }} /> : <>
-      <AppText variant="small">{uiLabel('Unavailable')}</AppText>
-      <Button title="Retry" variant="secondary" onPress={() => void ensureDetails({ forProductView: true }).catch(() => undefined).finally(() => setRetry(value => value + 1))} />
+      <AppText variant="small">{uiLabel(current.error ? 'Unavailable' : published ? 'Unavailable' : 'Not published')}</AppText>
+      {current.error ? <Button title="Retry" variant="secondary" onPress={() => void ensureDetails({ forProductView: true }).catch(() => undefined).finally(() => setRetry(value => value + 1))} /> : null}
     </>}
   </Disclosure>;
 }

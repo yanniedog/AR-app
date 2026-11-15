@@ -114,6 +114,27 @@ describe('app-health data quality', () => {
     });
   });
 
+  it('treats reconciled disclosed producer failures and limitations as pass', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.core!.coverage!.providers_attempted = 115;
+    snapshot.core!.coverage!.providers_succeeded = 105;
+    snapshot.core!.coverage!.counts = { providers_failed: 2, providers_partial: 8 };
+    snapshot.core!.coverage!.provider_failures = [{ provider: 'withheld-from-public-report' }];
+    snapshot.core!.coverage!.limitations = ['upstream endpoint failed'];
+    expect(byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.COVERAGE)).toMatchObject({
+      status: 'pass',
+      metrics: {
+        providersAttempted: 115,
+        providersSucceeded: 105,
+        providersFailed: 2,
+        providersPartial: 8,
+        unaccountedProviders: 0,
+        limitations: 1,
+      },
+    });
+  });
+
   it('does not pass when attempted providers have no recorded outcome', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     snapshot.core!.coverage!.providers_attempted = 4;
@@ -143,7 +164,7 @@ describe('app-health data quality', () => {
     snapshot.core.sections.TD.rates[0].taxonomy_path = 'SAVINGS.WRONG';
     snapshot.details.runDate = '2026-08-31';
     snapshot.manifest.schedule.next_due_utc = '2026-08-01T00:00:00.000Z';
-    snapshot.core.coverage!.providers_succeeded = 2;
+    snapshot.core.coverage!.providers_succeeded = 1;
     snapshot.core.coverage!.counts!.providers_failed = 1;
     snapshot.core.coverage!.provider_failures = [{ provider: 'withheld-from-public-report' }];
     snapshot.quarantine = {

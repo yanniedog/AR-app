@@ -177,6 +177,8 @@ export default function Compare() {
         status: comparison?.issue ? 'error' : core && entries.length >= 2 ? 'ready' : 'pending',
         datasetRevision: core?.run_date ?? null,
         error: comparison?.issue ? comparisonIssueCopy(comparison.issue).title : null,
+        expectedCount: Math.max(2, entries.length),
+        actualCount: !comparison?.issue && core && entries.length >= 2 ? entries.length : 0,
       },
       {
         id: 'compare.columns',

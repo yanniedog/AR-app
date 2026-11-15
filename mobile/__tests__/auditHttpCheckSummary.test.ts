@@ -34,3 +34,12 @@ test('missing or inconsistent inventory remains unknown and duplicate rows canno
   expect(auditHttpCheckSummary([entry('external-link-inventory', { uniqueDestinations: 1 }), attempted, attempted]))
     .toEqual({ total: 1, attempted: 0, notAttempted: 0, missingEvidence: 1 });
 });
+
+test('aggregate unverified link check accounts for remaining not-attempted destinations', () => {
+  expect(auditHttpCheckSummary([
+    entry('external-link-inventory', { uniqueDestinations: 5 }),
+    entry('external-link-1', { httpAttempted: true, httpReachability: 'pass' }),
+    entry('external-link-2', { httpAttempted: true, httpReachability: 'fail' }),
+    entry('external-link-unverified', { destinationCount: 3, httpAttempted: false, httpReachability: 'unknown' }),
+  ])).toEqual({ total: 5, attempted: 2, notAttempted: 3, missingEvidence: 0 });
+});

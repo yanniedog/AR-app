@@ -603,6 +603,8 @@ export function RateCheckWorkspace() {
         kind: 'data',
         status: core ? 'ready' : storeStatus === 'error' ? 'error' : 'pending',
         error: !core && storeStatus === 'error' ? storeError ?? 'Core data unavailable' : null,
+        expectedCount: 1,
+        actualCount: core ? 1 : 0,
         datasetRevision: coreRevision,
       },
       {
@@ -610,6 +612,8 @@ export function RateCheckWorkspace() {
         kind: 'data',
         status: target.status === 'pending' ? 'pending' : target.status === 'unavailable' ? 'error' : 'ready',
         error: target.status === 'unavailable' ? 'Selected calculation target is unavailable' : null,
+        expectedCount: 1,
+        actualCount: target.status !== 'pending' && target.status !== 'unavailable' ? 1 : 0,
       },
       {
         id: 'calculator.scenario-storage',
@@ -620,6 +624,8 @@ export function RateCheckWorkspace() {
             ? 'error'
             : 'pending',
         error: scenarioStorageStatus === 'error' ? scenarioError ?? 'Encrypted scenario unavailable' : null,
+        expectedCount: 1,
+        actualCount: scenarioStorageStatus === 'ready' ? 1 : 0,
       },
       {
         id: 'calculator.details',
@@ -639,6 +645,8 @@ export function RateCheckWorkspace() {
         id: 'calculator.suitability',
         kind: 'data',
         status: suitabilityReady ? 'ready' : 'pending',
+        expectedCount: 1,
+        actualCount: suitabilityReady ? 1 : 0,
         datasetRevision: coreRevision,
       },
       {

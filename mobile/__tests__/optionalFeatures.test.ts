@@ -833,6 +833,43 @@ describe('optional feature prefs', () => {
     expect(ensureBankInsights).toHaveBeenCalledTimes(1);
   });
 
+  it('treats omitted optional history_banks in a revisioned publication without error', async () => {
+    const omittedManifest: Manifest = {
+      ...remoteManifest,
+      payload_revision: {
+        schema_version: 1,
+        revision: 1,
+        generation_id: 'rev-2026-11-15',
+        bundle_sha256: 'a'.repeat(64),
+        parent_revision: null,
+      },
+      files: { ...remoteManifest.files },
+    };
+    delete omittedManifest.files.history_banks;
+    mockReadHistoryBanks.mockResolvedValue(null);
+    mockReadMeta.mockResolvedValue({
+      manifest: omittedManifest,
+      source: 'remote',
+      savedAt: '2026-11-15T00:00:00Z',
+      coreSha: omittedManifest.files.core.sha256,
+      detailsSha: null,
+      historyBanksSha: null,
+    });
+    store.setState({
+      prefs: historyRibbonPrefs,
+      source: 'remote',
+      manifest: omittedManifest,
+      core: remoteCore,
+      historyBanksError: 'stale error',
+    });
+
+    await store.getState().ensureHistoryBanks();
+
+    expect(mockDownloadHistoryBanks).not.toHaveBeenCalled();
+    expect(store.getState().historyBanks).toBeNull();
+    expect(store.getState().historyBanksError).toBeNull();
+  });
+
   it('ensureProductHistory rechecks for newly indexed dates even when the core revision is unchanged', async () => {
     const cached = {
       schema_version: 2,

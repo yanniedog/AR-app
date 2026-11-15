@@ -359,6 +359,8 @@ export default function Settings() {
           : updateStatus.error
             ? 'error'
             : 'ready',
+        expectedCount: 1,
+        actualCount: updateStatus.terminal && !updateStatus.error ? 1 : 0,
         error: updateStatus.error,
       },
       {

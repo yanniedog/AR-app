@@ -677,6 +677,8 @@ export function ProjectionWorkspace() {
         kind: 'data',
         status: core ? 'ready' : storeStatus === 'error' ? 'error' : 'pending',
         error: !core && storeStatus === 'error' ? storeError ?? 'Core data unavailable' : null,
+        expectedCount: 1,
+        actualCount: core ? 1 : 0,
         datasetRevision: coreRevision,
       },
       {
@@ -684,12 +686,16 @@ export function ProjectionWorkspace() {
         kind: 'data',
         status: target.status === 'pending' ? 'pending' : target.status === 'unavailable' ? 'error' : 'ready',
         error: target.status === 'unavailable' ? 'Selected calculation target is unavailable' : null,
+        expectedCount: 1,
+        actualCount: target.status !== 'pending' && target.status !== 'unavailable' ? 1 : 0,
       },
       {
         id: 'projections.scenario-storage',
         kind: 'data',
         status: storageStatus === 'ready' ? 'ready' : storageStatus === 'error' ? 'error' : 'pending',
         error: storageStatus === 'error' ? storageError ?? 'Scenario unavailable' : null,
+        expectedCount: 1,
+        actualCount: storageStatus === 'ready' ? 1 : 0,
       },
       {
         id: 'projections.model',
@@ -697,6 +703,8 @@ export function ProjectionWorkspace() {
         required: false,
         status: deferredScenario !== calculationScenario ? 'pending' : result.ready ? 'ready' : 'error',
         error: deferredScenario !== calculationScenario || result.ready ? null : `Incomplete scenario: ${result.missing.join(', ')}`,
+        expectedCount: 1,
+        actualCount: deferredScenario === calculationScenario && result.ready ? 1 : 0,
       },
       {
         id: 'projections.chart',
@@ -734,6 +742,8 @@ export function ProjectionWorkspace() {
         kind: 'data',
         status: core ? 'ready' : storeStatus === 'error' ? 'error' : 'pending',
         error: !core && storeStatus === 'error' ? storeError ?? 'Core data unavailable' : null,
+        expectedCount: 1,
+        actualCount: core ? 1 : 0,
         datasetRevision: coreRevision,
       },
       {
@@ -741,6 +751,8 @@ export function ProjectionWorkspace() {
         kind: 'data',
         status: storageStatus === 'ready' ? 'ready' : storageStatus === 'error' ? 'error' : 'pending',
         error: storageStatus === 'error' ? storageError ?? 'Scenario unavailable' : null,
+        expectedCount: 1,
+        actualCount: storageStatus === 'ready' ? 1 : 0,
       },
       {
         id: 'projections-inputs.layout',

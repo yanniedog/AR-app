@@ -296,12 +296,22 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
         excludedCount: allJourneys.length - journeys.length });
   }
   const links = report.checks.filter(check => /^external-link-[0-9]+$/.test(check.id));
+  const aggregateUnverifiedCount = report.checks.reduce((sum, check) => {
+    if (check.id !== 'external-link-unverified') return sum;
+    const count = check.metrics.destinationCount;
+    return sum + (typeof count === 'number' && Number.isSafeInteger(count) && count > 0 ? count : 0);
+  }, 0);
+  const totalLinks = links.length + aggregateUnverifiedCount;
   const unverifiedLinkIds = new Set(completion.gapPositions.filter(gap => gap.source === 'performance'
     && gap.reason === 'unverified-link').map(gap => gap.checkId));
-  const linkRefs = links.map(check => perf(check, 'destinationClassified', !unverifiedLinkIds.has(check.id)));
-  ratio('linkVerificationPercent', links.length - completion.gaps.unverifiedLinks, links.length, linkRefs,
-    { observedCount: links.length - completion.gaps.unverifiedLinks, missingCount: completion.gaps.unverifiedLinks });
-  put('unverifiedLinks', linkRefs, { sampleSize: links.length, sampleUnit: 'destination', observedCount: links.length - completion.gaps.unverifiedLinks,
+  const linkRefs = [
+    ...links.map(check => perf(check, 'destinationClassified', !unverifiedLinkIds.has(check.id))),
+    ...report.checks.filter(check => check.id === 'external-link-unverified')
+      .map(check => perf(check, 'destinationCount', check.metrics.destinationCount)),
+  ];
+  ratio('linkVerificationPercent', totalLinks - completion.gaps.unverifiedLinks, totalLinks, linkRefs,
+    { observedCount: totalLinks - completion.gaps.unverifiedLinks, missingCount: completion.gaps.unverifiedLinks });
+  put('unverifiedLinks', linkRefs, { sampleSize: totalLinks, sampleUnit: 'destination', observedCount: totalLinks - completion.gaps.unverifiedLinks,
     missingCount: completion.gaps.unverifiedLinks });
   put('missingChecks', [reportField('completion.gaps.missingChecks', completion.gaps.missingChecks),
     ...completion.missingPlannedChecks.map(missing => add({ source: missing.source, checkId: missing.checkId ?? undefined, field: 'missingPlanned', value: true }))]);

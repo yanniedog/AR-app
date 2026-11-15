@@ -58,6 +58,7 @@ export function FixedDepositCalculation({ row }: { row: RateRow }) {
   const identity = open ? `${edition}:${hashText(canonical(row))}` : '';
   const [loaded, setLoaded] = useState<{ identity: string; selections?: ApprovedSelection[]; error?: string } | null>(null);
   const selected = loaded?.identity === identity ? loaded : null;
+  const published = Boolean(manifest?.files && Object.hasOwn(manifest.files as Record<string, unknown>, 'executable_index'));
   useEffect(() => {
     if (!open) return; let active = true; setLoaded(null);
     void loadExecutableSelections({ manifest, core, coreIntegrity }, row).then(selections => { if (active) setLoaded({ identity, selections: selections.filter(item => item.template.evaluatorVersion === EVALUATOR_VERSION) }); }, () => { if (active) setLoaded({ identity, error: 'The calculation approval could not be verified for this publication.' }); });
@@ -66,6 +67,6 @@ export function FixedDepositCalculation({ row }: { row: RateRow }) {
   return <Disclosure title="Maturity return" open={open} onToggle={() => setOpen(!open)}>
     {!selected ? <AppText variant="small">{uiLabel("Checking")}</AppText> : !!selected.selections?.length ?
       <DepositForm key={identity} candidates={selected.selections} context={{ manifest, core, coreIntegrity }} row={row} /> :
-      <AppText variant="small">{uiLabel(selected.error ? 'Source unverified' : 'Unavailable')}</AppText>}
+      <AppText variant="small">{uiLabel(selected.error ? 'Source unverified' : published ? 'Unavailable' : 'Not published')}</AppText>}
   </Disclosure>;
 }

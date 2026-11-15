@@ -251,7 +251,9 @@ export default function RateReceiptScreen() {
     probes: [
       { id: 'receipt.comparisons', kind: 'data',
         status: comparisonPricing.error || catalogueStatus === 'error' ? 'error' : comparisonsAvailable ? 'ready' : 'pending',
-        error: comparisonPricing.error ?? (catalogueStatus === 'error' ? 'Public comparison pricing unavailable' : null) },
+        error: comparisonPricing.error ?? (catalogueStatus === 'error' ? 'Public comparison pricing unavailable' : null),
+        expectedCount: 1,
+        actualCount: !comparisonPricing.error && catalogueStatus !== 'error' && comparisonsAvailable ? 1 : 0 },
       {
         id: 'receipt.data',
         kind: 'data',
@@ -260,11 +262,15 @@ export default function RateReceiptScreen() {
         error: core && isMandatoryEligibilityReady() && (!found || !row)
           ? 'The selected exact rate is absent from the eligible current catalogue' : null,
         datasetRevision: core?.run_date ?? null,
+        expectedCount: 1,
+        actualCount: !(core && isMandatoryEligibilityReady() && (!found || !row)) && receipt && brief ? 1 : 0,
       },
       {
         id: 'receipt.scenario-storage',
         kind: 'data',
         status: scenarioLoaded ? 'ready' : 'pending',
+        expectedCount: 1,
+        actualCount: scenarioLoaded ? 1 : 0,
       },
       {
         id: 'receipt.facts',
@@ -289,6 +295,7 @@ export default function RateReceiptScreen() {
         status: 'ready',
         expectedCount: 0,
         actualCount: 0,
+        fallbackCount: 0,
       },
     ],
   });

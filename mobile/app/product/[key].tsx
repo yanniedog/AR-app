@@ -584,6 +584,8 @@ export default function ProductDetail() {
         kind: 'data',
         status: auditProductError ? 'error' : core && row ? 'ready' : 'pending',
         error: auditProductError,
+        expectedCount: 1,
+        actualCount: !auditProductError && core && row ? 1 : 0,
         datasetRevision: core?.run_date ?? null,
       },
       {
@@ -591,6 +593,8 @@ export default function ProductDetail() {
         kind: 'data',
         status: !detailsRequestSettled ? 'pending' : auditDetailsError ? 'error' : 'ready',
         error: auditDetailsError,
+        expectedCount: 1,
+        actualCount: detailsRequestSettled && !auditDetailsError ? 1 : 0,
         datasetRevision: core?.run_date ?? null,
       },
       {

@@ -40,7 +40,7 @@ test('actual verified transport opens local form, calculates maturity, and remov
   mockState = { ...mockState, manifest: { ...mockState.manifest, files: { core: mockState.manifest.files.core, details: mockState.manifest.files.details } } };
   await act(async () => { tree.update(<FixedDepositCalculation row={x.row} />); });
   expect(receipt(tree)).toBeUndefined();
-  expect(copy(tree)).toContain('Unavailable');
+  expect(copy(tree)).toContain('Not published');
   act(() => tree.unmount());
 });
 
