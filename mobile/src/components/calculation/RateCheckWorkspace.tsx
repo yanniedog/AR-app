@@ -775,7 +775,7 @@ export function RateCheckWorkspace() {
             {lvr !== null ? (
               <View style={{ marginTop: 12 }}>
                 <Row gap={8} style={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                  <AppText variant="small" weight="800">{uiJoin("Scenario LVR",": ",uiNumber(lvr,lvr < 100 ? 1 : 0),"%")}</AppText>
+                  <AppText variant="small" weight="800">{uiJoin("Scenario LVR",": ",uiNumber(Math.round(lvr),0),"%")}</AppText>
                   {lvrBand ? (
                     <Badge label={uiListedLvr({lvr_tier:lvrBand})} tone="success" />
                   ) : (

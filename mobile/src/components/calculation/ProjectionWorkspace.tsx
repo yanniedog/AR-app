@@ -63,14 +63,16 @@ const FREQUENCY_OPTIONS: { label: UiCopy; value: ProjectionFrequency }[] = [
   { label: uiLabel("Monthly"), value: 'monthly' },
 ];
 
-function enteredNumber(value: string): number | null {
+function enteredNumber(value: string, allowK = false): number | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
   const cleaned = trimmed.replace(/[$,%\s,]/g, '');
-  const kMatch = cleaned.match(/^([+-]?\d+(?:\.\d+)?)[kK]$/);
-  if (kMatch) {
-    const parsed = Number(kMatch[1]) * 1_000;
-    return Number.isFinite(parsed) ? parsed : null;
+  if (allowK) {
+    const kMatch = cleaned.match(/^([+-]?\d+(?:\.\d+)?)[kK]$/);
+    if (kMatch) {
+      const parsed = Number(kMatch[1]) * 1_000;
+      return Number.isFinite(parsed) ? parsed : null;
+    }
   }
   const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : null;
@@ -88,7 +90,7 @@ function positiveAmountError(
   maximum: number,
   required = false,
 ): UiText | undefined {
-  const parsed = enteredNumber(value);
+  const parsed = enteredNumber(value, true);
   if (parsed == null) return required || value.trim() ? uiJoin(label,': ','Required') : undefined;
   if (parsed <= 0) return uiJoin(label,': ','Required');
   if (parsed > maximum) return uiJoin(label,': ','≤',uiMoney(maximum));
@@ -97,7 +99,7 @@ function positiveAmountError(
 
 function optionalAmountError(value: string, maximum: number): UiText | undefined {
   if (!value.trim()) return undefined;
-  const parsed = enteredNumber(value);
+  const parsed = enteredNumber(value, true);
   if (parsed == null || parsed < 0 || parsed > maximum) {
     return uiJoin('Amount',': ',uiMoney(0),'–',uiMoney(maximum));
   }
@@ -461,7 +463,7 @@ export function ProjectionWorkspace() {
     withdrawalAmount: optionalAmountError(projectionInputs.withdrawalAmount, MAX_PERIODIC_AMOUNT),
     offsetBalance: optionalAmountError(
       projectionInputs.offsetBalance,
-      Math.min(enteredNumber(currentMortgageBalance) ?? MAX_MORTGAGE_BALANCE, MAX_MORTGAGE_BALANCE),
+      Math.min(enteredNumber(currentMortgageBalance, true) ?? MAX_MORTGAGE_BALANCE, MAX_MORTGAGE_BALANCE),
     ),
     startOffsetBalance: optionalAmountError(projectionInputs.startOffsetBalance, MAX_MORTGAGE_BALANCE),
     offsetContributionAmount: optionalAmountError(projectionInputs.offsetContributionAmount, MAX_PERIODIC_AMOUNT),
