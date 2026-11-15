@@ -2783,8 +2783,12 @@ export async function runJourney(
       // Retain wall-clock evidence while excluding the deliberate quiet wait from scoring.
       readinessQuietWindowMs: READINESS_QUIET_WINDOW_MS,
       forwardWorkMs: forwardWorkMs == null ? null : roundMetric(forwardWorkMs),
-      minimumJustifiedActions: 1,
-      observedActions: anchorResetMs != null || replaceRecoveryMs != null || secondBackMs != null ? 2 : 1,
+      minimumJustifiedActions: 2,
+      observedActions: 1
+        + (backMs != null ? 1 : 0)
+        + (secondBackMs != null ? 1 : 0)
+        + (anchorResetMs != null ? 1 : 0)
+        + (replaceRecoveryMs != null ? 1 : 0),
       retries: 0,
       validationFailures: 0,
       backtracks: secondBackMs != null ? 1 : 0,
