@@ -54,17 +54,14 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
   useEffect(() => setChosenSection(requestedSection), [requestedSection]);
   useEffect(() => { if (core) void ensureCalendar(); }, [core, ensureCalendar]);
   const model = useMemo(() => buildBankRateChart(snapshots ?? {}, section, statistic, gap, calendar), [calendar, gap, section, snapshots, statistic]);
-  const hasValidObservation = (line: BankRateChartModel['lines'][number]) =>
-    line.points.some(point => Number.isFinite(point.value) && point.count > 0 && (gap || point.value > 0));
-  const defaultProvider = useMemo(
-    () => (model.lines.find(hasValidObservation) ?? model.lines[0])?.provider ?? '',
-    [gap, model.lines],
-  );
+  const defaultProvider = useMemo(() => {
+    const hasValidObservation = (line: BankRateChartModel['lines'][number]) =>
+      line.points.some(point => Number.isFinite(point.value) && point.count > 0 && (gap || point.value > 0));
+    return (model.lines.find(hasValidObservation) ?? model.lines[0])?.provider ?? '';
+  }, [gap, model.lines]);
   const requestedProvider = selectedProvider ?? provider;
   const requestedLine = model.lines.find(line => line.provider === requestedProvider);
-  const activeProvider = requestedLine && (selectedProvider ? true : hasValidObservation(requestedLine))
-    ? requestedLine.provider
-    : defaultProvider;
+  const activeProvider = requestedLine ? requestedLine.provider : defaultProvider;
   const chartSourceRevision = `${revision}:${section}:${statistic}:${tab}:${model.decisions.map(item => `${item.date}:${item.outcome}`).join(',')}`;
   const chartRevision = `${chartSourceRevision}:${activeProvider || 'none'}`;
   const activeChartRevision = useRef(chartRevision); activeChartRevision.current = chartRevision;

@@ -42,8 +42,6 @@ const CompactRow = memo(function CompactRow({ row }: { row: CompactBankResponseR
   const theme = useTheme();
   const move = uiBankResponseMove(row);
   const after = uiBankResponseTiming(row);
-  const visibleMove = row.movePp == null ? uiLabel('—') : move;
-  const visibleAfter = row.daysAfter == null ? uiLabel('—') : after;
   return <View
     accessible
     accessibilityLabel={uiJoin(uiProviderName(row), ' · ', 'First move', ' · ', move, ' · ', 'After', ' · ', after)}
@@ -53,8 +51,8 @@ const CompactRow = memo(function CompactRow({ row }: { row: CompactBankResponseR
       <BankAvatar provider={row.provider} size={28} />
       <AppText variant="small" weight="600" style={{ minWidth: 0, flex: 1 }}>{uiProviderName(row)}</AppText>
     </Row>
-    <AppText variant="small" weight="600" style={{ minWidth: 72, textAlign: 'right', fontVariant: ['tabular-nums'] }}>{visibleMove}</AppText>
-    <AppText variant="small" color="textMuted" style={{ minWidth: 56, textAlign: 'right', fontVariant: ['tabular-nums'] }}>{visibleAfter}</AppText>
+    <AppText variant="small" weight="600" style={{ width: '26%', textAlign: 'right', fontVariant: ['tabular-nums'] }}>{move}</AppText>
+    <AppText variant="small" color="textMuted" style={{ width: '20%', textAlign: 'right', fontVariant: ['tabular-nums'] }}>{after}</AppText>
   </View>;
 });
 
