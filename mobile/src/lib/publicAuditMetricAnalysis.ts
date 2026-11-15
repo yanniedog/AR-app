@@ -2,6 +2,7 @@ import { APP_HEALTH_CHECK_CODES } from './appHealth';
 import { buildAuditMetricAnalysis } from './auditMetricAnalysis';
 import type { PerformanceAuditReport } from './performanceAudit';
 import { publicAuditDiagnostic } from './performanceAuditDiagnostic';
+import { buildUxFrictionFluidityAudit } from './uxFrictionFluidityAudit';
 
 const HEALTH_CODES: ReadonlySet<string> = new Set(Object.values(APP_HEALTH_CHECK_CODES));
 function publicRole(value: string | undefined): string | null {
@@ -17,6 +18,7 @@ export function publicAuditMetricAnalysis(report: PerformanceAuditReport,
   const analysis = buildAuditMetricAnalysis(report);
   return {
     ...analysis,
+    uxAudit: buildUxFrictionFluidityAudit(report, undefined, { safeCheckId }),
     observations: analysis.observations.map(observation => ({
       ...observation,
       ...(observation.checkId === undefined ? {} : { checkId: observation.source === 'health'

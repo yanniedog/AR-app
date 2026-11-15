@@ -10,10 +10,18 @@ import { AppText, Button, Card, Disclosure, Row } from './ui';
 import { InfoRow } from './settings/settingsUi';
 import { AuditMetricDetails } from './AuditMetricDetails';
 import { auditCheckResultSummary } from '../lib/auditCheckResultSummary';
+import type { AffsOperationalBand } from '../lib/uxFrictionFluidityAudit';
 
 const MODES: Record<AuditMetricRun['mode'], UiLabel> = { local: 'Local checks', 'live-source': 'Live checks', unknown: 'Unknown' };
 const OUTCOMES: Record<AuditMetricRun['outcome'], UiLabel> = {
   successful: 'Successful', failed: 'Failed', incomplete: 'Incomplete', warning: 'Needs review',
+};
+const AFFS_BAND_LABELS: Record<AffsOperationalBand, UiLabel> = {
+  exemplary: 'Exemplary',
+  strong: 'Strong',
+  'moderate-friction': 'Moderate friction',
+  'material-friction': 'Material friction',
+  'high-friction': 'High friction',
 };
 function valueLabel(value: number | null, metric: AuditMetric) {
   if (value === null) return uiLabel('Not measured');
@@ -64,7 +72,18 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
     [currentReport, checkGroup]);
   const evidence = analysis?.metrics[metric];
   const taskEvidence = analysis?.taskEvidence;
+  const uxAudit = analysis?.uxAudit;
   const measuredCount = (value: number | null | undefined) => value == null ? uiLabel('Not measured') : uiCount(value);
+  const measuredScore = (value: number | null | undefined) => value == null
+    ? uiLabel('Not measured')
+    : uiJoin(uiNumber(value, 1), ' / ', uiCount(100));
+  const affsSummary = uxAudit?.affsScore != null && uxAudit.band != null
+    ? uiJoin(uiNumber(uxAudit.affsScore, 1), ' / ', uiCount(100), ' · ', AFFS_BAND_LABELS[uxAudit.band])
+    : uiLabel('Not measured');
+  const wcag = uxAudit?.pillars.standardsAndAccessibility.wcagSummary;
+  const wcagSummaryValue = wcag && wcag.applicableChecks > 0
+    ? uiJoin(uiCount(wcag.passed), ' ', 'Passed', ' · ', uiCount(wcag.failed), ' ', 'Failed', ' · ', uiCount(wcag.requiresManualReview), ' ', 'Manual review')
+    : uiLabel('Not measured');
   const points = plot.points.filter(point => point !== null);
   if (!runs.length) return <AppText>{uiLabel('No audit history')}</AppText>;
   return <View style={{ gap: 12 }}>
@@ -96,6 +115,11 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
       </> : null}
       {evidence?.unit === 'percent' && evidence.numerator !== null && evidence.denominator !== null
         ? <InfoRow label="Not passed" value={uiCount(evidence.denominator - evidence.numerator)} /> : null}
+      <InfoRow label="Friction & Fluidity Score" value={affsSummary} />
+      <InfoRow label="Composite basis" value="Proprietary · Non-normative" />
+      <InfoRow label="Interaction friction (40%)" value={measuredScore(uxAudit?.pillars.interactionFriction.score)} />
+      <InfoRow label="Standards & accessibility (30%)" value={measuredScore(uxAudit?.pillars.standardsAndAccessibility.score)} />
+      <InfoRow label="Fluidity & responsiveness (30%)" value={measuredScore(uxAudit?.pillars.fluidityAndResponsiveness.score)} />
       {group === 'Check results' ? <>
         <InfoRow label="Invoked actions" value={measuredCount(taskEvidence?.denominator)} />
         <InfoRow label="Ready within timing limits" value={measuredCount(taskEvidence?.outcomes?.withinTimingLimits)} />
@@ -104,7 +128,10 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
         <InfoRow label="Action failures" value={measuredCount(taskEvidence?.outcomes?.failure)} />
         <InfoRow label="Indeterminate" value={measuredCount(taskEvidence?.outcomes?.indeterminate)} />
         <InfoRow label="Human usability" value="Not measured" />
+        <InfoRow label="SUS / UMUX-Lite / SEQ" value={uxAudit?.humanValidation.status === 'completed' ? 'Recorded' : 'Not performed'} />
       </> : <>
+        <InfoRow label="Automated WCAG / standards" value={wcagSummaryValue} />
+        <InfoRow label="WCAG 2.2 conformance" value="Manual review required" />
         <InfoRow label="Visual design" value="Not measured" />
         <InfoRow label="Pixel correctness" value="Not measured" />
       </>}

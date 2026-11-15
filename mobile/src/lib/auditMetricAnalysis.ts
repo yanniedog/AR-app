@@ -2,6 +2,7 @@ import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion, hasValidPerformanceAuditHealth } from './performanceAuditCompletion';
 import { AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_METHODS, auditReportMetricMethodVersion, type AuditMetric } from './auditMetricHistoryMetrics';
 import { auditMetricValues, auditTaskOutcomePopulation, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount as measuredCount, measuredAuditValue as measured } from './auditMetricHistoryValues';
+import { buildUxFrictionFluidityAudit, type UxFrictionFluidityAudit } from './uxFrictionFluidityAudit';
 
 export type AuditMetricMissingEvidence = 'missing-evidence' | 'missing-denominator' | 'missing-samples'
   | 'partial-samples' | 'inconsistent-counts' | 'invalid-identities' | 'incomplete-health-collection'
@@ -58,6 +59,7 @@ export interface AuditMetricAnalysis {
   };
   observations: AuditMetricObservation[];
   metrics: Record<AuditMetric, AuditMetricEvidence>;
+  uxAudit: UxFrictionFluidityAudit;
 }
 
 function statistics(values: number[]): AuditMetricDistributionSummary {
@@ -386,5 +388,6 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     plannedJourneys: measuredCount(report.coverage?.plannedJourneyChecks), payloadProducts: measuredCount(report.environment.payloadProducts),
     payloadProviders: measuredCount(report.environment.payloadProviders), viewportWidth: measured(report.environment.viewportWidth),
     fontScale: measured(report.environment.fontScale), developmentBuild: typeof report.environment.developmentBuild === 'boolean'
-      ? report.environment.developmentBuild : null }, observations, metrics };
+      ? report.environment.developmentBuild : null }, observations, metrics,
+    uxAudit: buildUxFrictionFluidityAudit(report, completion) };
 }

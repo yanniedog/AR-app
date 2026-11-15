@@ -94,8 +94,11 @@ test('check results expose timely task outcomes and never imply measured usabili
   expect(tree.root.findByProps({ label: 'Invoked actions' }).props.value).toBe('1');
   expect(tree.root.findByProps({ label: 'Ready within timing limits' }).props.value).toBe('0');
   expect(tree.root.findByProps({ label: 'Ready with timing failures' }).props.value).toBe('1');
+  expect(tree.root.findByProps({ label: 'Composite basis' }).props.value).toBe('Proprietary · Non-normative');
   expect(tree.root.findByProps({ label: 'Human usability' }).props.value).toBe('Not measured');
+  expect(tree.root.findByProps({ label: 'SUS / UMUX-Lite / SEQ' }).props.value).toBe('Not performed');
   act(() => tree.root.findByProps({ title: 'Rendering checks' }).props.onPress());
+  expect(tree.root.findByProps({ label: 'WCAG 2.2 conformance' }).props.value).toBe('Manual review required');
   expect(tree.root.findByProps({ label: 'Visual design' }).props.value).toBe('Not measured');
   expect(tree.root.findByProps({ label: 'Pixel correctness' }).props.value).toBe('Not measured');
   expect(tree.root.findByProps({ label: 'Denominator' }).props.value).toBe('Not measured');
