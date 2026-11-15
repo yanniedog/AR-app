@@ -14,6 +14,7 @@ import {
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { LEDGER_MOTION, ledgerMotionDuration } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
+import { recordAuditTargetLayout } from '../lib/auditTargetRegistry';
 import type { UiNativeProps, UiChild } from '../lib/uiCopy';
 
 export interface PressFeedbackProps extends Omit<UiNativeProps<PressableProps>, 'children'> {
@@ -29,6 +30,7 @@ export function PressFeedback({
   contentStyle,
   onPressIn,
   onPressOut,
+  onLayout,
   android_ripple,
   disabled,
   ...rest
@@ -70,6 +72,15 @@ export function PressFeedback({
       style={style}
       onPressIn={(event) => { animate(true); onPressIn?.(event); }}
       onPressOut={(event) => { animate(false); onPressOut?.(event); }}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        recordAuditTargetLayout(
+          rest.testID ?? (typeof rest.accessibilityLabel === 'string' ? rest.accessibilityLabel : undefined),
+          width,
+          height,
+        );
+        onLayout?.(event);
+      }}
     >
       {(state) => {
         // Preserve existing Pressable/TouchTarget flex layouts when they migrate.

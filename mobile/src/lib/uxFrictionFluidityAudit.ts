@@ -658,8 +658,10 @@ function evaluateReportTaskJourney(
   const hasReturn = hasAuditReturnEvidence(check);
   const completed = check.metrics.actionInvoked === true
     ? typeof check.metrics.actionCompleted === 'boolean' && typeof check.metrics.nonTimingFailure === 'boolean'
-      && check.diagnostic?.readiness?.ready === true && !defectCheckIds.has(check.id)
-      ? check.metrics.actionCompleted && !check.metrics.nonTimingFailure
+      ? check.metrics.actionCompleted
+        && !check.metrics.nonTimingFailure
+        && check.diagnostic?.readiness?.ready === true
+        && !defectCheckIds.has(check.id)
       : check.metrics.actionCompleted === false || check.metrics.nonTimingFailure === true
         ? false
         : null
@@ -708,7 +710,7 @@ function evaluateReportTaskJourney(
         targetForwardResponseMs: measuredAuditValue(check.metrics.targetForwardResponseMs) ?? 400,
       }
       : {}),
-    ...(hasReturn
+    ...(hasReturn && (measuredAuditValue(check.metrics.backMs) !== null || check.metrics.actionCompleted !== false)
       ? {
         observedReturnResponseMs: measuredAuditValue(check.metrics.backMs),
         targetReturnResponseMs: measuredAuditValue(check.metrics.targetBackResponseMs) ?? 400,
@@ -1016,12 +1018,10 @@ export function buildUxFrictionFluidityAudit(
     || duplicateCoverageIds.length > 0
     || completion.gaps.duplicateChecks > 0;
   const collectionComplete = completion.gaps.invalidCoverageReports === 0
-    && (validCoverage == null
-      ? completion.gaps.missingChecks === 0 && completion.gaps.unexpectedChecks === 0
-      : validCoverage.complete === true
-        && missingCoverageIds.length === 0
-        && unexpectedCoverageIds.length === 0
-        && completion.gaps.missingChecks === 0);
+    && missingCoverageIds.length === 0
+    && unexpectedCoverageIds.length === 0
+    && completion.gaps.missingChecks === 0
+    && completion.gaps.unexpectedChecks === 0;
 
   const evaluatedTasks = evaluateReportTaskJourneys(report, completion, sanitizeId);
   const measuredTasks = evaluatedTasks.filter(task => task.score !== null);
