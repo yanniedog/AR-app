@@ -431,11 +431,15 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     observedCount: standardsObserved,
     missingCount: standardsMissing,
   });
+  const fluidityObserved = Object.values(uxAudit.pillars.fluidityAndResponsiveness.components)
+    .filter(score => score !== null).length;
+  const fluidityScored = uxAudit.pillars.fluidityAndResponsiveness.score !== null && fluidityObserved > 0;
   put('uxFluidityResponsivenessScore', [uxRefs[3]], {
-    sampleUnit: 'run',
-    sampleSize: uxAudit.evidenceCoverage.executedJourneyCount,
-    eligibleCount: uxAudit.evidenceCoverage.executedJourneyCount,
-    observedCount: uxAudit.evidenceCoverage.executedJourneyCount,
+    sampleUnit: 'component',
+    sampleSize: fluidityScored ? fluidityObserved : 0,
+    eligibleCount: fluidityScored ? fluidityObserved : 1,
+    observedCount: fluidityScored ? fluidityObserved : 0,
+    missingCount: fluidityScored ? 0 : 1,
   });
   return { schemaVersion: 1, context: { plannedChecks: measuredCount(report.coverage?.plannedChecks),
     plannedJourneys: measuredCount(report.coverage?.plannedJourneyChecks), payloadProducts: measuredCount(report.environment.payloadProducts),

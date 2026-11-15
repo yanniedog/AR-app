@@ -84,7 +84,7 @@ export const AUDIT_METRIC_METHODS = {
   jsStallPercent: ['Sum of timer delays over 100 ms / sum of measured timer samples × 100', 'callback'],
   slowFramePercent: ['Sum of JavaScript frame gaps over 50 ms / sum of measured frame samples × 100', 'callback'],
   affsScore: ['0.40 × interactionFriction + 0.30 × standardsAndAccessibility + 0.30 × fluidityAndResponsiveness', 'run'],
-  uxInteractionFrictionScore: ['mean(taskScore) × 100', 'task'],
+  uxInteractionFrictionScore: ['mean(taskScore)', 'task'],
   uxStandardsAccessibilityScore: ['standardsCompliance × 100', 'surface'],
   uxFluidityResponsivenessScore: ['weightedFluidityScore × 100', 'run'],
   collectionPercent: ['Unique expected stored performance checks / planned performance checks × 100', 'check'],
