@@ -1,6 +1,7 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { hasValidPerformanceAuditHealth, type buildPerformanceAuditCompletion } from './performanceAuditCompletion';
 import { AUDIT_METRICS, type AuditMetric } from './auditMetricHistoryMetrics';
+import { buildUxFrictionFluidityAudit } from './uxFrictionFluidityAudit';
 
 export const measuredAuditValue = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
@@ -174,8 +175,8 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
 }
 
 
-/** Canonical lightweight value derivation shared by storage and full analysis. */
-export function auditMetricValues(report: PerformanceAuditReport,
+/** Core non-UX metric values shared by UX friction scoring and history storage. */
+export function auditCoreMetricValues(report: PerformanceAuditReport,
   completion: ReturnType<typeof buildPerformanceAuditCompletion>): Record<AuditMetric, number | null> {
   return {
     ...Object.fromEntries(AUDIT_METRICS.map(metric => [metric, null])) as Record<AuditMetric, number | null>,
@@ -184,5 +185,19 @@ export function auditMetricValues(report: PerformanceAuditReport,
     coveragePercent: measuredAuditValue(report.summary.coveragePercent), durationMs: measuredAuditValue(report.durationMs),
     slowestCheckMs: measuredAuditValue(report.summary.slowestCheckMs),
     maxEventLoopLagMs: measuredAuditValue(report.summary.maxEventLoopLagMs), maxFrameGapMs: measuredAuditValue(report.summary.maxFrameGapMs),
+  };
+}
+
+/** Canonical lightweight value derivation shared by storage and full analysis. */
+export function auditMetricValues(report: PerformanceAuditReport,
+  completion: ReturnType<typeof buildPerformanceAuditCompletion>): Record<AuditMetric, number | null> {
+  const core = auditCoreMetricValues(report, completion);
+  const uxAudit = buildUxFrictionFluidityAudit(report, completion);
+  return {
+    ...core,
+    affsScore: measuredAuditValue(uxAudit.affsScore),
+    uxInteractionFrictionScore: measuredAuditValue(uxAudit.pillars.interactionFriction.score),
+    uxStandardsAccessibilityScore: measuredAuditValue(uxAudit.pillars.standardsAndAccessibility.score),
+    uxFluidityResponsivenessScore: measuredAuditValue(uxAudit.pillars.fluidityAndResponsiveness.score),
   };
 }
