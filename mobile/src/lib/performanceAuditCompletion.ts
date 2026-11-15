@@ -44,6 +44,46 @@ export function hasValidPerformanceAuditHealth(report: PerformanceAuditReport): 
       && check.metrics != null && typeof check.metrics === 'object' && !Array.isArray(check.metrics));
 }
 
+const CONTRACT_AVAILABILITY_EVIDENCE = new Set([
+  'local app-health mode blocks fetch and XMLHttpRequest before transport',
+  'the local download state was observed without checking the remote manifest',
+  'the update mechanism is Android-only',
+]);
+const CONTRACT_AVAILABILITY_REASONS = new Set([
+  'Not run: local mode has a zero-network contract',
+  'Not run: remote update checks are outside the local audit contract',
+  'Not run: Android-only',
+  'Maximum coverage is unavailable because optional assets are not cached',
+]);
+
+/** Index planned deep-step metadata by audit check ID (`deep-${step.id}`). */
+export function buildPlannedStepMetadataMap(
+  plan: PerformanceAuditReport['plan'],
+): Map<string, { optional: boolean; expectedSurface: string }> {
+  const planSteps = new Map<string, { optional: boolean; expectedSurface: string }>();
+  for (const pass of Array.isArray(plan?.passes) ? plan.passes : []) {
+    for (const step of Array.isArray(pass?.steps) ? pass.steps : []) {
+      planSteps.set(`deep-${step.id}`, { optional: step.optional === true, expectedSurface: step.expectedSurface });
+    }
+  }
+  return planSteps;
+}
+
+/** Return true only when a skipped check represents an allowed availability skip rather than a recovery/required gap. */
+export function isJustifiedAvailabilitySkip(
+  check: PerformanceAuditReport['checks'][number],
+  optionalPlannedStep = false,
+): boolean {
+  if (check.status !== 'skipped' || check.metrics.skipClassification === 'scenario-recovery') return false;
+  const evidence = typeof check.metrics.availabilityEvidence === 'string' ? check.metrics.availabilityEvidence : '';
+  if (evidence === 'mounted action terminal-unavailable result'
+    || evidence === 'an optional required probe reported a terminal error'
+    || evidence.startsWith('Optional assets are not cached')
+    || CONTRACT_AVAILABILITY_EVIDENCE.has(evidence)) return true;
+  if (typeof check.metrics.reason === 'string' && CONTRACT_AVAILABILITY_REASONS.has(check.metrics.reason)) return true;
+  return optionalPlannedStep && check.metrics.skipClassification === 'terminal-availability';
+}
+
 /** Completion and evidence retention are separate from whether checks passed. */
 export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   safeCheckId: (id: string) => string | null = id => id) {
@@ -74,33 +114,11 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   if (report.appHealth) countTruncation(report.appHealth);
   const actualIds = new Set(report.checks.map(check => check.id));
   const healthActualIds = new Set(healthChecks.map(check => check.id));
-  const planSteps = new Map<string, { optional: boolean; expectedSurface: string }>();
-  for (const pass of report.plan?.passes ?? []) {
-    for (const step of pass.steps) planSteps.set(`deep-${step.id}`, { optional: step.optional === true, expectedSurface: step.expectedSurface });
-  }
+  const planSteps = buildPlannedStepMetadataMap(report.plan);
   const missingPerformanceIds = [...new Set([...(coverage?.missingPlannedCheckIds ?? []),
     ...[...planSteps.keys()].filter(id => !actualIds.has(id))])];
-  const contractAvailabilityEvidence = new Set([
-    'local app-health mode blocks fetch and XMLHttpRequest before transport',
-    'the local download state was observed without checking the remote manifest',
-    'the update mechanism is Android-only',
-  ]);
-  const contractAvailabilityReasons = new Set([
-    'Not run: local mode has a zero-network contract',
-    'Not run: remote update checks are outside the local audit contract',
-    'Not run: Android-only',
-    'Maximum coverage is unavailable because optional assets are not cached',
-  ]);
-  const justifiedAvailabilitySkip = (check: PerformanceAuditReport['checks'][number]) => {
-    if (check.status !== 'skipped' || check.metrics.skipClassification === 'scenario-recovery') return false;
-    const evidence = typeof check.metrics.availabilityEvidence === 'string' ? check.metrics.availabilityEvidence : '';
-    if (evidence === 'mounted action terminal-unavailable result'
-      || evidence === 'an optional required probe reported a terminal error'
-      || evidence.startsWith('Optional assets are not cached')
-      || contractAvailabilityEvidence.has(evidence)) return true;
-    if (typeof check.metrics.reason === 'string' && contractAvailabilityReasons.has(check.metrics.reason)) return true;
-    return planSteps.get(check.id)?.optional === true && check.metrics.skipClassification === 'terminal-availability';
-  };
+  const justifiedAvailabilitySkip = (check: PerformanceAuditReport['checks'][number]) =>
+    isJustifiedAvailabilitySkip(check, planSteps.get(check.id)?.optional === true);
   const justifiedHealthUnavailable = (check: NonNullable<PerformanceAuditReport['appHealth']>['checks'][number]) => {
     if (check.status !== 'unavailable' || check.code !== APP_HEALTH_CHECK_CODES.ASSET_AVAILABILITY) return false;
     const metric = (name: string) => typeof check.metrics[name] === 'number' ? check.metrics[name] as number : null;

@@ -2,9 +2,10 @@ import type { PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion, hasValidPerformanceAuditHealth } from './performanceAuditCompletion';
 import { AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_METHODS, type AuditMetric } from './auditMetricHistoryMetrics';
 import { auditMetricValues, auditTaskOutcomePopulation, measuredAuditCount } from './auditMetricHistoryValues';
+import { buildUxFrictionFluidityAudit, type UxFrictionFluidityTelemetryOptions } from './uxFrictionFluidityAudit';
 
 /** Screen-sized facts only: never build distributions or per-observation contributor tables. */
-export function auditCheckResultSummary(report: PerformanceAuditReport) {
+export function auditCheckResultSummary(report: PerformanceAuditReport, uxTelemetry?: UxFrictionFluidityTelemetryOptions) {
   const completion = buildPerformanceAuditCompletion(report);
   const values = auditMetricValues(report, completion);
   const population = auditTaskOutcomePopulation(report, completion);
@@ -80,5 +81,9 @@ export function auditCheckResultSummary(report: PerformanceAuditReport) {
     metrics[metric] = { numerator, denominator, missingCount, unit: AUDIT_METRIC_DEFINITIONS[metric].unit,
       unitOfAnalysis: AUDIT_METRIC_METHODS[metric][1], ...(inventory ? { inventory } : {}) };
   }
-  return { metrics, taskEvidence: { denominator: population.actions.length, outcomes: population.outcomes } };
+  return {
+    metrics,
+    taskEvidence: { denominator: population.actions.length, outcomes: population.outcomes },
+    uxAudit: buildUxFrictionFluidityAudit(report, completion, uxTelemetry),
+  };
 }
