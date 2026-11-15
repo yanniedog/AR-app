@@ -19,10 +19,8 @@ import { uiListedLvr } from '../lib/financialUiCopy';
 import { uiCount, uiJoin, uiLabel, uiSectionName, type UiLabel, type UiText } from '../lib/uiCopy';
 
 function lvrOptionLabel(option: string): UiText {
-  if ((PROFILE_LVR_OPTIONS as readonly string[]).includes(option)) {
-    return uiLabel(option as (typeof PROFILE_LVR_OPTIONS)[number]);
-  }
-  return uiListedLvr({ lvr_tier: option });
+  const canonical = PROFILE_LVR_OPTIONS.find((item) => item === option);
+  return canonical ? uiLabel(canonical) : uiListedLvr({ lvr_tier: option });
 }
 
 type EditorGroup = {
