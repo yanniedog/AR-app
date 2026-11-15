@@ -263,6 +263,8 @@ describe('deep performance audit plan', () => {
       ['market.rba.open', '/rba', 'rba.dashboard'],
       ['market.response.open', '/rba-response', 'moves.response-chart'],
     ]) expect(step(id)).toMatchObject({ depth: 1, expectedPath, expectedSurface });
+    expect(step('market.response.open')?.readiness).not.toContain('graphics');
+    expect(step('moves.response-chart.provider.next')?.readiness).not.toContain('graphics');
     expect(step('calculator.projections.open')).toMatchObject({ expectedPath: '/calculator', expectedSurface: 'projections.inputs' });
     expect(step('redirect.projections.verify')).toMatchObject({ expectedPath: '/calculator', expectedSurface: 'projections.inputs' });
   });

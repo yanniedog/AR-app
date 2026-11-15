@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { sectionSegmentOptions } from '../../data/interests';
 import Ionicons from '../icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
-import React, { memo, useEffect, useMemo, useState } from 'react';
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import { FLASH_LIST_DRAW_DISTANCE, FLASH_LIST_VIEWABILITY_CONFIG } from '../../lib/flashListDefaults';
@@ -70,20 +70,44 @@ export function BankResponseDashboard({
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [section, setSection] = useState<SectionKey>(initialSection);
   useEffect(() => { if (!sectionOptions.some(option => option.value === section)) setSection(sectionOptions[0].value); }, [section, sectionOptions]);
-  const windows = useMemo(() => buildCompactBankResponseWindows(payload, calendar, section, sourcePayload), [calendar, payload, section, sourcePayload]);
+  const [selectedDecisionIndex, setSelectedDecisionIndex] = useState<number | null>(null);
+  const windows = useMemo(
+    () => buildCompactBankResponseWindows(
+      payload,
+      calendar,
+      section,
+      sourcePayload,
+      selectedDecisionIndex === null
+        ? { activeIndex: 0, activeDecisionDate: initialDecisionDate }
+        : { activeIndex: selectedDecisionIndex },
+    ),
+    [calendar, initialDecisionDate, payload, section, selectedDecisionIndex, sourcePayload],
+  );
   const initialIndex = Math.max(0, windows.findIndex((window) => window.decision.date === initialDecisionDate));
-  const [decisionIndex, setDecisionIndex] = useState(initialIndex);
+  const decisionIndex = selectedDecisionIndex ?? initialIndex;
   const active = windows[Math.min(decisionIndex, Math.max(0, windows.length - 1))];
   const [listMounted, setListMounted] = useState(false);
   const [listReadyRevision, setListReadyRevision] = useState<string | null>(null);
   const [layoutReadyRevision, setLayoutReadyRevision] = useState<string | null>(null);
   useEffect(() => setSection(initialSection), [initialSection]);
-  useEffect(() => setDecisionIndex(0), [section]);
+  const appliedInitialDateRef = useRef<string | null>(null);
+  const lastSectionRef = useRef<SectionKey>(section);
+  useEffect(() => {
+    if (lastSectionRef.current === section) return;
+    lastSectionRef.current = section;
+    appliedInitialDateRef.current = null;
+    setSelectedDecisionIndex(0);
+  }, [section]);
   useEffect(() => {
     if (!initialDecisionDate) return;
+    const key = `${section}:${initialDecisionDate}`;
+    if (appliedInitialDateRef.current === key) return;
     const index = windows.findIndex((window) => window.decision.date === initialDecisionDate);
-    if (index >= 0) setDecisionIndex(index);
-  }, [initialDecisionDate, windows]);
+    if (index >= 0) {
+      appliedInitialDateRef.current = key;
+      setSelectedDecisionIndex(index);
+    }
+  }, [initialDecisionDate, section, windows]);
   const listRevision = `${payload.run_date}:${section}:${active?.decision.date ?? 'none'}`;
   const renderRevision = listRevision;
   useEffect(() => {
@@ -101,7 +125,7 @@ export function BankResponseDashboard({
       if (decisionIndex >= windows.length - 1) {
         return { unavailableReason: 'No older RBA decision is available' };
       }
-      setDecisionIndex((index) => Math.min(windows.length - 1, index + 1));
+      setSelectedDecisionIndex((index) => Math.min(windows.length - 1, (index ?? decisionIndex) + 1));
       return undefined;
     },
     'moves.section.next': (...args: unknown[]) => {
@@ -172,7 +196,7 @@ export function BankResponseDashboard({
         </AppText>
       </View>
       <Row style={{ alignItems: 'center', justifyContent: 'space-between' }}>
-        <DecisionArrow newer={false} disabled={decisionIndex >= windows.length - 1} onPress={() => setDecisionIndex((index) => Math.min(windows.length - 1, index + 1))} />
+        <DecisionArrow newer={false} disabled={decisionIndex >= windows.length - 1} onPress={() => setSelectedDecisionIndex((index) => Math.min(windows.length - 1, (index ?? decisionIndex) + 1))} />
         <View style={{ flex: 1, alignItems: 'center' }}>
           <AppText variant="tiny" color="textMuted">{uiDate(active.decision.date)}</AppText>
           <AppText variant="h3" style={{ textAlign: 'center' }}>{uiJoin(uiChartBps(active.decision.delta_bps), ' · ', uiChartPercent(active.decision.rate))}</AppText>
@@ -180,7 +204,7 @@ export function BankResponseDashboard({
             {uiJoin(active.partialHistory ? 'Partial' : active.open ? 'Open window' : 'Closed window', ' · ', active.partialHistory ? uiDate(active.observationStart) : active.open ? uiDate(active.observedThrough) : uiDate(active.windowEnd))}
           </AppText>
         </View>
-        <DecisionArrow newer disabled={decisionIndex <= 0} onPress={() => setDecisionIndex((index) => Math.max(0, index - 1))} />
+        <DecisionArrow newer disabled={decisionIndex <= 0} onPress={() => setSelectedDecisionIndex((index) => Math.max(0, (index ?? decisionIndex) - 1))} />
       </Row>
       <SegmentedControl options={sectionOptions} value={section} onChange={setSection} />
     </View>

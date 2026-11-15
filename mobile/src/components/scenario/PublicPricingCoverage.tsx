@@ -24,7 +24,7 @@ function coverageStatus(value: unknown) {
 }
 
 /** Complete ranking requires the full selected catalogue, independently of cost coverage. */
-export function PublicPricingCoverage({ section, rows, scenario, scenarioForRow, compact = false, pricingSummary = null }: {
+export const PublicPricingCoverage = React.memo(function PublicPricingCoverage({ section, rows, scenario, scenarioForRow, compact = false, pricingSummary = null }: {
   section: SectionKey; rows: readonly RateRow[]; scenario?: UserRateScenario; scenarioForRow?: (row: RateRow) => RateScenario; compact?: boolean;
   /** Prefer parent-resolved counts so Rates does not price the catalogue twice. */
   pricingSummary?: { priced: number; unresolved: number; complete: boolean } | null;
@@ -49,8 +49,8 @@ export function PublicPricingCoverage({ section, rows, scenario, scenarioForRow,
     if (compact) return { priced: 0, unresolved: 0, complete: false };
     return resolvedPublicRankingRows(rows, catalogue, row => scenarioForRow?.(row) ?? publicRateScenario(section, scenario, profile, row));
   }, [pricingSummary, compact, rows, catalogue, section, scenario, profile, scenarioForRow]);
+  const products = useMemo(() => catalogue.products.filter(product => product.section === section), [catalogue.products, section]);
   if (catalogue.status === 'unavailable') return null;
-  const products = catalogue.products.filter(product => product.section === section);
   const summary = catalogue.status === 'ready' && catalogue.allLoaded && (pricingSummary || !compact)
     ? uiJoin('Payable rate', ': ', uiCount(pricing.priced), ' · ', 'Unresolved offers', ': ', uiCount(pricing.unresolved))
     : uiJoin('Public pricing', ': ', 'Partial');
@@ -70,10 +70,10 @@ export function PublicPricingCoverage({ section, rows, scenario, scenarioForRow,
       </View>
     </Disclosure>
   </View>;
-}
+});
 
 /** Discovery identities never become synthetic zero-price rows. */
-export function PublicProductDiscovery({ section, query = '', rows = [], rateScenario, pricingOrigin, eligibleProductKeys = null }: {
+export const PublicProductDiscovery = React.memo(function PublicProductDiscovery({ section, query = '', rows = [], rateScenario, pricingOrigin, eligibleProductKeys = null }: {
   section: SectionKey; query?: string; rows?: readonly RateRow[]; rateScenario?: RateScenario; pricingOrigin?: ProductPricingOrigin;
   /** Prefer parent-priced candidate keys so Rates does not re-expand the catalogue. */
   eligibleProductKeys?: ReadonlySet<string> | null;
@@ -81,14 +81,21 @@ export function PublicProductDiscovery({ section, query = '', rows = [], rateSce
   const manifest = useStore(state => state.manifest);
   const catalogue = usePublicRateCatalogue(manifest);
   const [limit, setLimit] = useState(20);
-  useSuitabilityRevision();
+  const suitabilityRevision = useSuitabilityRevision();
   const profile = useStore(state => state.prefs?.profileFilters);
   const { scenario } = useUserRateScenario();
-  const eligible = eligibleProductKeys ?? eligiblePublicProductKeys(catalogue, section, rateScenario ?? publicRateScenario(section, scenario, profile));
-  const represented = new Set(rows.map(row => row.product_key));
+  const eligible = useMemo(
+    () => {
+      void suitabilityRevision;
+      return eligibleProductKeys ?? eligiblePublicProductKeys(catalogue, section, rateScenario ?? publicRateScenario(section, scenario, profile));
+    },
+    [eligibleProductKeys, catalogue, section, rateScenario, scenario, profile, suitabilityRevision],
+  );
+  const represented = useMemo(() => new Set(rows.map(row => row.product_key)), [rows]);
   const needle = query.trim().toLocaleLowerCase('en-AU');
-  const products = catalogue.products.filter(product => product.section === section && eligible.has(product.productKey) && !represented.has(product.productKey)
-    && (!needle || (product.name + ' ' + product.providerName + ' ' + product.aliases.map(alias => alias.name).join(' ')).toLocaleLowerCase('en-AU').includes(needle)));
+  const products = useMemo(() => catalogue.products.filter(product => product.section === section && eligible.has(product.productKey) && !represented.has(product.productKey)
+    && (!needle || (product.name + ' ' + product.providerName + ' ' + product.aliases.map(alias => alias.name).join(' ')).toLocaleLowerCase('en-AU').includes(needle))),
+  [catalogue.products, section, eligible, represented, needle]);
   if (!products.length) return null;
   return <Card style={{ marginVertical: 12, gap: 8 }}>
     <AppText variant="h3">{uiJoin('Other products', ': ', uiCount(products.length))}</AppText>
@@ -99,4 +106,4 @@ export function PublicProductDiscovery({ section, query = '', rows = [], rateSce
     </View>)}
     {products.length > limit ? <Button title="More" variant="secondary" onPress={() => setLimit(value => value + 20)} /> : null}
   </Card>;
-}
+});

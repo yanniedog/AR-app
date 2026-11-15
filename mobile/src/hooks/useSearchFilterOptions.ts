@@ -17,10 +17,12 @@ interface FacetSnapshot {
   options: SearchFilterOptions | null; error: UiCopy | null;
 }
 const reusable: FacetSnapshot[] = [];
+const sameRows = (a: readonly RateRow[], b: readonly RateRow[]) =>
+  a === b || (a.length === b.length && a.every((row, index) => row === b[index]));
 export function clearReusableSearchFilterOptions() { reusable.length = 0; }
 function retain(snapshot: FacetSnapshot) {
   if (snapshot.rows.length > 50_000) return;
-  const previous = reusable.findIndex(item => item.rows === snapshot.rows && item.details === snapshot.details &&
+  const previous = reusable.findIndex(item => sameRows(item.rows, snapshot.rows) && item.details === snapshot.details &&
     item.section === snapshot.section && item.revision === snapshot.revision && item.mandatoryRevision === snapshot.mandatoryRevision);
   if (previous >= 0) reusable.splice(previous, 1);
   reusable.push(snapshot);
@@ -42,7 +44,7 @@ export function useSearchFilterOptions(
   const warmed = useRef(false);
   const mandatoryRevision = getMandatoryEligibilityRevision();
   const [stored, setSnapshot] = useState<FacetSnapshot | null>(null);
-  const matches = (value: FacetSnapshot) => value.rows === rows && value.details === details &&
+  const matches = (value: FacetSnapshot) => sameRows(value.rows, rows) && value.details === details &&
     value.section === section && value.revision === revision && value.mandatoryRevision === mandatoryRevision;
   const snapshot: FacetSnapshot | null = stored && matches(stored) && stored.attempt === attempt ? stored
     : attempt === 0 ? reusable.find(matches) ?? null : null;

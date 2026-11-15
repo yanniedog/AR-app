@@ -16,7 +16,7 @@ function countFacts(label: UiLabel, counts: ReturnType<typeof catalogueCounts> |
 }
 
 /** Saved scope stays visible even when temporary filters return zero products. */
-export function SavedRequirementsSummary({ section, onEdit, catalogueRows }: {
+export const SavedRequirementsSummary = React.memo(function SavedRequirementsSummary({ section, onEdit, catalogueRows }: {
   section: SectionKey; onEdit?: () => void; catalogueRows?: readonly RateRow[] | null;
 }) {
   const core = useStore(state => state.core);
@@ -44,4 +44,4 @@ export function SavedRequirementsSummary({ section, onEdit, catalogueRows }: {
         }} /> : null}
     </Row>
   </View>;
-}
+});

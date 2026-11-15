@@ -374,9 +374,11 @@ test('comparison and filter disclosure commit without remounting unchanged searc
     const token = `${first.rate_index}#${first.product_key}`;
     let previousRevision = mockSurfaces.get('rates.results').renderRevision;
     let previousListRevision = tree.root.findByType('FlashList' as any).props.extraData;
-    for (const [action, parameters] of [
-      ['search.filters.open'], ['search.filters.apply'], ['search.compare.mode'],
-      ['search.compare.select.0', { selectionToken: token }],
+    for (const [action, parameters, expectsListRevisionChange] of [
+      ['search.filters.open', undefined, false],
+      ['search.filters.apply', undefined, false],
+      ['search.compare.mode', undefined, true],
+      ['search.compare.select.0', { selectionToken: token }, true],
     ] as const) {
       act(() => mockSurfaces.get('rates.results').actions[action](parameters));
       expect(mockListMount).toHaveBeenCalledTimes(1);
@@ -385,11 +387,16 @@ test('comparison and filter disclosure commit without remounting unchanged searc
       const revision = mockSurfaces.get('rates.results').renderRevision;
       expect(revision).not.toBe(previousRevision);
       const listRevision = tree.root.findByType('FlashList' as any).props.extraData;
-      expect(listRevision).not.toBe(previousListRevision);
+      if (expectsListRevisionChange) {
+        expect(listRevision).not.toBe(previousListRevision);
+        expect(mockRecomputeViewableItems).toHaveBeenCalledTimes(++measurements);
+      } else {
+        expect(listRevision).toBe(previousListRevision);
+        expect(mockRecomputeViewableItems).toHaveBeenCalledTimes(measurements);
+      }
       expect(mockSurfaces.get('rates.results').probes.find((probe: any) => probe.id === 'search.layout').renderRevision).toBe(revision);
       previousListRevision = listRevision;
       expect(listProbe().visibleCount).toBe(measuredCount);
-      expect(mockRecomputeViewableItems).toHaveBeenCalledTimes(++measurements);
       previousRevision = revision;
     }
     expect(tree.root.findAllByType('ProductCard' as any)[0].props.selected).toBe(true);

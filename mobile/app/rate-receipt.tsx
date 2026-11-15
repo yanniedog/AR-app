@@ -61,21 +61,21 @@ function Facts({ items, empty }: { items: readonly ReceiptFact[]; empty?: UiCopy
   );
 }
 
-const money=(value:number):UiText=>uiMoney(value);
-function statusFact(fact:ReceiptStatusFact):ReceiptFact {
-  switch(fact.kind) {
-    case 'eligibility':return {label:uiLabel("Eligibility"),value:uiLabel('Unverified')};
-    case 'quote':return {label:uiLabel("Lender quote / approval"),value:uiLabel('Unavailable')};
-    case 'advice':return {label:uiLabel("Personal advice"),value:uiLabel('Excluded')};
-    case 'privacy':return {label:uiLabel("Privacy"),value:uiLabel('Local only')};
-    case 'costs':return {label:uiLabel("Total costs"),value:uiLabel('Unverified')};
-    case 'comparables':return {label:uiLabel("Comparable criteria"),value:uiLabel('Unmatched')};
-    case 'source':return {label:uiLabel("Source"),value:uiLabel('Unavailable')};
-    case 'detailed-eligibility':return {label:uiLabel("Detailed eligibility"),value:uiLabel('Unavailable')};
+const money = (value: number): UiText => uiMoney(value);
+function statusFact(fact: ReceiptStatusFact): ReceiptFact {
+  switch (fact.kind) {
+    case 'eligibility': return { label: uiLabel("Eligibility"), value: uiLabel('Unverified') };
+    case 'quote': return { label: uiLabel("Lender quote / approval"), value: uiLabel('Unavailable') };
+    case 'advice': return { label: uiLabel("Personal advice"), value: uiLabel('Excluded') };
+    case 'privacy': return { label: uiLabel("Privacy"), value: uiLabel('Local only') };
+    case 'costs': return { label: uiLabel("Total costs"), value: uiLabel('Unverified') };
+    case 'comparables': return { label: uiLabel("Comparable criteria"), value: uiLabel('Unmatched') };
+    case 'source': return { label: uiLabel("Source"), value: uiLabel('Unavailable') };
+    case 'detailed-eligibility': return { label: uiLabel("Detailed eligibility"), value: uiLabel('Unavailable') };
   }
 }
-const TOPICS:Record<'current-rate'|'selected-tier'|'fees'|'conditions',UiLabel>={'current-rate':'Current rate','selected-tier':'Selected tier',fees:'Fees',conditions:'Conditions'};
-const EXCLUSIONS:Record<'repayments'|'fees'|'loan-structure'|'switching-costs'|'compounding'|'maturity-instructions'|'bonus-eligibility'|'tax'|'balance-changes',UiLabel>={repayments:'Repayments',fees:'Fees','loan-structure':'Loan structure','switching-costs':'Switching costs',compounding:'Compounding','maturity-instructions':'Maturity instructions','bonus-eligibility':'Bonus qualification',tax:'Tax','balance-changes':'Balance changes'};
+const TOPICS: Record<'current-rate' | 'selected-tier' | 'fees' | 'conditions', UiLabel> = { 'current-rate': 'Current rate', 'selected-tier': 'Selected tier', fees: 'Fees', conditions: 'Conditions' };
+const EXCLUSIONS: Record<'repayments' | 'fees' | 'loan-structure' | 'switching-costs' | 'compounding' | 'maturity-instructions' | 'bonus-eligibility' | 'tax' | 'balance-changes', UiLabel> = { repayments: 'Repayments', fees: 'Fees', 'loan-structure': 'Loan structure', 'switching-costs': 'Switching costs', compounding: 'Compounding', 'maturity-instructions': 'Maturity instructions', 'bonus-eligibility': 'Bonus qualification', tax: 'Tax', 'balance-changes': 'Balance changes' };
 
 const EMPTY_RECEIPT_ROWS: RateRow[] = [];
 
@@ -126,9 +126,13 @@ export default function RateReceiptScreen() {
     () => {
       void suitabilityRevision;
       if (!core) return null;
-      const sections = publicProduct ? { ...core.sections, [publicProduct.section]: { ...core.sections[publicProduct.section],
-        rates: publicRecommendationRowsForProduct(core.sections[publicProduct.section].rates, publicCatalogue, publicProduct.section,
-          scenarioFor(publicProduct.section), productKey) } } : core.sections;
+      const sections = publicProduct ? {
+        ...core.sections, [publicProduct.section]: {
+          ...core.sections[publicProduct.section],
+          rates: publicRecommendationRowsForProduct(core.sections[publicProduct.section].rates, publicCatalogue, publicProduct.section,
+            scenarioFor(publicProduct.section), productKey)
+        }
+      } : core.sections;
       return findEligibleByKey(sections, productKey);
     },
     [core, productKey, suitabilityRevision, publicProduct, publicCatalogue, scenarioFor],
@@ -165,7 +169,7 @@ export default function RateReceiptScreen() {
     ? { ...selectedRow, rate: publicResolution.payableRate ?? '' } : selectedRow, [selectedRow, publicResolution]);
   const calculationScenario = useMemo(() => found && localResolution
     ? scenarioWithLocalCurrentRate(found.section, scenario, localResolution) : scenario,
-  [found, scenario, localResolution]);
+    [found, scenario, localResolution]);
   const receipt = useMemo(
     () => row && found && core
       ? buildRateReceipt({ row, section: found.section, evidenceDate: core.run_date, detail, rateConditionContext: { core, details, manifest, coreIntegrity } })
@@ -176,12 +180,12 @@ export default function RateReceiptScreen() {
     () => {
       if (!receipt || !found) return null;
       const brief = buildNegotiationBrief({
-          receipt,
-          scenario: calculationScenario,
-          sectionRows: comparisonsAvailable ? comparisonPricing.resolution.rows : EMPTY_RECEIPT_ROWS,
-          comparisonsReady: comparisonsAvailable,
-          detailsProducts,
-        });
+        receipt,
+        scenario: calculationScenario,
+        sectionRows: comparisonsAvailable ? comparisonPricing.resolution.rows : EMPTY_RECEIPT_ROWS,
+        comparisonsReady: comparisonsAvailable,
+        detailsProducts,
+      });
       if (!fromRatesComparison || found.section !== 'Mortgage') return brief;
       const scoped = scenarioFor(found.section, selectedRow ?? undefined);
       // Rates inputs describe offer applicability, not the saved current loan.
@@ -198,17 +202,17 @@ export default function RateReceiptScreen() {
   useAuditExternalLinks((receipt?.officialSources ?? []).map((source) => ({ url: source.url, purpose: 'lender_source', label: source.label })));
   const shareText = useMemo(() => {
     if (!receipt || !brief) return uiLabel('Unavailable');
-    const lines:UiCopy[]=[uiJoin('Bank-call brief',': ',uiProviderName({provider:receipt.provider})),
-      uiJoin(uiProductName({product_name:receipt.productName}),' · ',receipt.advertisedRate,' · ','Observed',': ',uiDate(receipt.evidenceDate)),
-      ...rateConditionReceiptLines(receipt),...brief.facts.map(fact=>{const row=statusFact(fact);return uiJoin(row.label,': ',row.value);})];
-    if(brief.illustration) lines.push(uiJoin('Simple interest-rate difference',': ',money(brief.illustration.periodDifference),' · ',brief.illustration.periodLabel),
-      uiJoin('Entered / observed',': ',brief.illustration.currentRate,' / ',brief.illustration.selectedRate),
-      ...brief.illustration.exclusions.map(code=>uiJoin('Excluded',': ',EXCLUSIONS[code])));
-    for(const item of brief.comparables) lines.push(uiJoin(uiProviderName({provider:item.provider}),': ',item.advertisedRate,
-      item.comparisonRate ? uiJoin(' · ','Comparison rate',': ',item.comparisonRate) : null,
-      ' · ',uiProductName({product_name:item.productName})),...item.conditionalFacts.map(uiConditionalRateFact));
-    lines.push(uiJoin('Topics',': ',...brief.topics.flatMap<UiCopy>((topic,index)=>index?[' / ',TOPICS[topic]]:[TOPICS[topic]])));
-    return uiJoin(...lines.flatMap<UiCopy>((line,index)=>index?[' · ',line]:[line]));
+    const lines: UiCopy[] = [uiJoin('Bank-call brief', ': ', uiProviderName({ provider: receipt.provider })),
+    uiJoin(uiProductName({ product_name: receipt.productName }), ' · ', receipt.advertisedRate, ' · ', 'Observed', ': ', uiDate(receipt.evidenceDate)),
+    ...rateConditionReceiptLines(receipt), ...brief.facts.map(fact => { const row = statusFact(fact); return uiJoin(row.label, ': ', row.value); })];
+    if (brief.illustration) lines.push(uiJoin('Simple interest-rate difference', ': ', money(brief.illustration.periodDifference), ' · ', brief.illustration.periodLabel),
+      uiJoin('Entered / observed', ': ', brief.illustration.currentRate, ' / ', brief.illustration.selectedRate),
+      ...brief.illustration.exclusions.map(code => uiJoin('Excluded', ': ', EXCLUSIONS[code])));
+    for (const item of brief.comparables) lines.push(uiJoin(uiProviderName({ provider: item.provider }), ': ', item.advertisedRate,
+      item.comparisonRate ? uiJoin(' · ', 'Comparison rate', ': ', item.comparisonRate) : null,
+      ' · ', uiProductName({ product_name: item.productName })), ...item.conditionalFacts.map(uiConditionalRateFact));
+    lines.push(uiJoin('Topics', ': ', ...brief.topics.flatMap<UiCopy>((topic, index) => index ? [' / ', TOPICS[topic]] : [TOPICS[topic]])));
+    return uiJoin(...lines.flatMap<UiCopy>((line, index) => index ? [' · ', line] : [line]));
   }, [brief, receipt]);
   const auditActions = useMemo(() => ({
     'receipt.open': () => undefined,
@@ -249,11 +253,13 @@ export default function RateReceiptScreen() {
     renderRevision: `${productKey}:${row?.rate_index ?? 'none'}:${receiptFactCount}:${evidenceOpen ? 'evidence-open' : 'evidence-closed'}`,
     actions: auditActions,
     probes: [
-      { id: 'receipt.comparisons', kind: 'data',
+      {
+        id: 'receipt.comparisons', kind: 'data',
         status: comparisonPricing.error || catalogueStatus === 'error' ? 'error' : comparisonsAvailable ? 'ready' : 'pending',
         error: comparisonPricing.error ?? (catalogueStatus === 'error' ? 'Public comparison pricing unavailable' : null),
         expectedCount: 1,
-        actualCount: !comparisonPricing.error && catalogueStatus !== 'error' && comparisonsAvailable ? 1 : 0 },
+        actualCount: !comparisonPricing.error && catalogueStatus !== 'error' && comparisonsAvailable ? 1 : 0
+      },
       {
         id: 'receipt.data',
         kind: 'data',
@@ -320,55 +326,55 @@ export default function RateReceiptScreen() {
     );
   }
 
-  return <><Stack.Screen options={{title:'Bank-call brief'}}/>
-    <ScreenScrollView ref={scrollRef} onLayout={()=>setLayoutReady(true)} contentContainerStyle={{padding:16,paddingBottom:32,gap:12}}>
-      <Card style={{gap:8}}>
+  return <><Stack.Screen options={{ title: 'Bank-call brief' }} />
+    <ScreenScrollView ref={scrollRef} onLayout={() => setLayoutReady(true)} contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}>
+      <Card style={{ gap: 8 }}>
         <AppText variant="small" color="textMuted">{uiProviderName(row)}</AppText>
         <AppText variant="h3">{uiProductName(row)}</AppText>
-        <AppText variant="rateHero" style={{color:theme.colors.primary}}>{receipt.advertisedRate}</AppText>
-        <AppText variant="tiny" color="textMuted">{uiJoin('Tier',': ',receipt.rateIndex == null ? 'Unknown':uiCount(receipt.rateIndex),' · ','Observed',': ',uiDate(receipt.evidenceDate))}</AppText>
-        {receipt.comparisonRate ? <AppText variant="small">{uiJoin('Comparison rate',': ',receipt.comparisonRate)}</AppText>:null}
-        {receipt.ongoingRate ? <AppText variant="small">{uiJoin('Ongoing rate',': ',receipt.ongoingRate)}</AppText>:null}
+        <AppText variant="rateHero" style={{ color: theme.colors.primary }}>{receipt.advertisedRate}</AppText>
+        <AppText variant="tiny" color="textMuted">{uiJoin('Tier', ': ', receipt.rateIndex == null ? 'Unknown' : uiCount(receipt.rateIndex), ' · ', 'Observed', ': ', uiDate(receipt.evidenceDate))}</AppText>
+        {receipt.comparisonRate ? <AppText variant="small">{uiJoin('Comparison rate', ': ', receipt.comparisonRate)}</AppText> : null}
+        {receipt.ongoingRate ? <AppText variant="small">{uiJoin('Ongoing rate', ': ', receipt.ongoingRate)}</AppText> : null}
       </Card>
-      {brief.illustration ? <Card style={{gap:8}}>
+      {brief.illustration ? <Card style={{ gap: 8 }}>
         <AppText variant="small" color="textMuted">{uiLabel('Simple interest-rate difference')}</AppText>
-        <AppText variant="h2">{uiJoin(money(brief.illustration.periodDifference),' ',brief.illustration.periodLabel)}</AppText>
-        {brief.illustration.monthlyDifference != null ? <AppText weight="700">{uiJoin('Approximate',': ',money(brief.illustration.monthlyDifference),' ','per month')}</AppText>:null}
-        <Facts items={[{label:uiLabel("Entered / observed"),value:uiJoin(brief.illustration.currentRate,' / ',brief.illustration.selectedRate)},
-          {label:uiLabel("Basis"),value:uiLabel('Illustrative')},...brief.illustration.exclusions.map(code=>({label:'Excluded' as const,value:uiLabel(EXCLUSIONS[code])}))]}/>
-      </Card>:<Button title="Add my rate" variant="secondary" onPress={()=>router.push({pathname:'/calculator',params:{intent:'check',section:receipt.section}})}/>}
-      <Card style={{gap:8}}><Facts items={brief.facts.map(statusFact)}/></Card>
-      <SectionTitle text="Comparable observed rates" icon="git-compare-outline"/>
-      <Card style={{gap:8}}>
-        {comparisonsAvailable ? <AppText variant="tiny" color="textMuted">{uiJoin(brief.cohortSummary,brief.typicalAdvertisedRate ? uiJoin(' · ','Median',': ',brief.typicalAdvertisedRate):null)}</AppText> : null}
+        <AppText variant="h2">{uiJoin(money(brief.illustration.periodDifference), ' ', brief.illustration.periodLabel)}</AppText>
+        {brief.illustration.monthlyDifference != null ? <AppText weight="700">{uiJoin('Approximate', ': ', money(brief.illustration.monthlyDifference), ' ', 'per month')}</AppText> : null}
+        <Facts items={[{ label: uiLabel("Entered / observed"), value: uiJoin(brief.illustration.currentRate, ' / ', brief.illustration.selectedRate) },
+        { label: uiLabel("Basis"), value: uiLabel('Illustrative') }, ...brief.illustration.exclusions.map(code => ({ label: 'Excluded' as const, value: uiLabel(EXCLUSIONS[code]) }))]} />
+      </Card> : <Button title="Add my rate" variant="secondary" onPress={() => router.push({ pathname: '/calculator', params: { intent: 'check', section: receipt.section } })} />}
+      <Card style={{ gap: 8 }}><Facts items={brief.facts.map(statusFact)} /></Card>
+      <SectionTitle text="Comparable observed rates" icon="git-compare-outline" />
+      <Card style={{ gap: 8 }}>
+        {comparisonsAvailable ? <AppText variant="tiny" color="textMuted">{uiJoin(brief.cohortSummary, brief.typicalAdvertisedRate ? uiJoin(' · ', 'Median', ': ', brief.typicalAdvertisedRate) : null)}</AppText> : null}
         {!comparisonsAvailable ? <Row><AppText>{uiLabel(comparisonPricing.error || catalogueStatus === 'error' ? 'Unavailable' : 'Loading')}</AppText>
-          {comparisonPricing.error ? <Button title="Retry" variant="secondary" onPress={comparisonPricing.retry} /> : null}</Row> : brief.comparables.length ? brief.comparables.map((comparable,index)=><Pressable key={`${comparable.productKey}#${comparable.rateIndex??'default'}`}
-          accessibilityRole="button" accessibilityLabel={uiJoin('Open',' ',uiProviderName({provider:comparable.provider}),' · ',uiProductName({product_name:comparable.productName}))}
-          onPress={()=>router.push({pathname:'/product/[key]',params:{key:comparable.productKey,...(comparable.programmeId ? {programme:comparable.programmeId} : comparable.rateIndex!=null?{ri:String(comparable.rateIndex)}:{}),...(fromRatesComparison?{origin:'rates-comparison'}:{})}} as Href)}
-          style={{minHeight:TOUCH_TARGET_MIN,justifyContent:'center',gap:4}}>
-          {index ? <Divider/>:null}
-          <Row style={{justifyContent:'space-between',gap:12}}><View style={{flex:1}}><AppText weight="700">{uiProviderName({provider:comparable.provider})}</AppText><AppText variant="tiny" color="textMuted">{uiProductName({product_name:comparable.productName})}</AppText></View><AppText weight="800">{comparable.advertisedRate}</AppText></Row>
-          {comparable.comparisonRate ? <AppText variant="tiny" color="textMuted">{uiJoin('Comparison rate',': ',comparable.comparisonRate)}</AppText>:null}
-          {comparable.conditionalFacts.map((fact,i)=><AppText key={i} variant="tiny" color="textMuted">{uiConditionalRateFact(fact)}</AppText>)}
-        </Pressable>):<AppText>{uiLabel('No comparable rates observed')}</AppText>}
+          {comparisonPricing.error ? <Button title="Retry" variant="secondary" onPress={comparisonPricing.retry} /> : null}</Row> : brief.comparables.length ? brief.comparables.map((comparable, index) => <Pressable key={`${comparable.productKey}#${comparable.rateIndex ?? 'default'}`}
+            accessibilityRole="button" accessibilityLabel={uiJoin('Open', ' ', uiProviderName({ provider: comparable.provider }), ' · ', uiProductName({ product_name: comparable.productName }))}
+            onPress={() => router.push({ pathname: '/product/[key]', params: { key: comparable.productKey, ...(comparable.programmeId ? { programme: comparable.programmeId } : comparable.rateIndex != null ? { ri: String(comparable.rateIndex) } : {}), ...(fromRatesComparison ? { origin: 'rates-comparison' } : {}) } } as Href)}
+            style={{ minHeight: TOUCH_TARGET_MIN, justifyContent: 'center', gap: 4 }}>
+            {index ? <Divider /> : null}
+            <Row style={{ justifyContent: 'space-between', gap: 12 }}><View style={{ flex: 1 }}><AppText weight="700">{uiProviderName({ provider: comparable.provider })}</AppText><AppText variant="tiny" color="textMuted">{uiProductName({ product_name: comparable.productName })}</AppText></View><AppText weight="800">{comparable.advertisedRate}</AppText></Row>
+            {comparable.comparisonRate ? <AppText variant="tiny" color="textMuted">{uiJoin('Comparison rate', ': ', comparable.comparisonRate)}</AppText> : null}
+            {comparable.conditionalFacts.map((fact, i) => <AppText key={i} variant="tiny" color="textMuted">{uiConditionalRateFact(fact)}</AppText>)}
+          </Pressable>) : <AppText>{uiLabel('No comparable rates observed')}</AppText>}
       </Card>
-      <Row gap={8}><Button title="Copy" disabled={!comparisonsAvailable} variant="secondary" icon="copy-outline" style={{flex:1}} onPress={()=>void Clipboard.setStringAsync(shareText)}/><Button title="Share" disabled={!comparisonsAvailable} icon="share-outline" style={{flex:1}} onPress={()=>void Share.share({title:'Bank-call brief',message:shareText})}/></Row>
-      <Disclosure title="Your entered scenario" open={scenarioOpen} onToggle={()=>setScenarioOpen(!scenarioOpen)}><Card>
-        {!scenarioLoaded ? <AppText>{uiLabel('Loading')}</AppText>:brief.scenario.length ? <Facts items={brief.scenario}/>:<Button title="Add scenario" variant="secondary" onPress={()=>router.push('/calculator')}/>}
+      <Row gap={8}><Button title="Copy" disabled={!comparisonsAvailable} variant="secondary" icon="copy-outline" style={{ flex: 1 }} onPress={() => void Clipboard.setStringAsync(shareText)} /><Button title="Share" disabled={!comparisonsAvailable} icon="share-outline" style={{ flex: 1 }} onPress={() => void Share.share({ title: 'Bank-call brief', message: shareText })} /></Row>
+      <Disclosure title="Your entered scenario" open={scenarioOpen} onToggle={() => setScenarioOpen(!scenarioOpen)}><Card>
+        {!scenarioLoaded ? <AppText>{uiLabel('Loading')}</AppText> : brief.scenario.length ? <Facts items={brief.scenario} /> : <Button title="Add scenario" variant="secondary" onPress={() => router.push('/calculator')} />}
       </Card></Disclosure>
-      <Disclosure title="Published evidence" open={evidenceOpen} onToggle={()=>setEvidenceOpen(!evidenceOpen)}>
-        <SectionTitle text="Exact published tier" icon="layers-outline"/><Card><Facts items={receipt.tier}/></Card>
-        <SectionTitle text="Conditions recorded" icon="checkmark-done-outline"/><RateConditionsDisclosure model={receipt.rateConditions}/><Card><Facts items={receipt.conditions} empty="Eligibility / constraints unpublished"/></Card>
-        {receipt.fees.length ? <><SectionTitle text="Fees recorded" icon="cash-outline"/><Card><Facts items={receipt.fees}/></Card></>:null}
-        <SectionTitle text="Published source links" icon="link-outline"/><Card>
-          {receipt.officialSources.length ? receipt.officialSources.map((source,index)=><View key={source.url}>
-            {index ? <Divider/>:null}
-            <Pressable accessibilityRole="link" accessibilityLabel={uiJoin(source.label,' · ',source.hostname,' · ','External link')}
-              onPress={()=>requestExternalUrl({url:source.url,purpose:'lender_source',label:source.label})}
-              style={({pressed})=>({minHeight:TOUCH_TARGET_MIN,flexDirection:'row',alignItems:'center',gap:10,opacity:pressed?0.7:1})}>
-              <Ionicons name="open-outline" size={17} color={theme.colors.primary}/><View style={{flex:1}}><AppText weight="700">{source.label}</AppText><AppText variant="tiny" color="textMuted">{source.hostname}</AppText></View>
+      <Disclosure title="Published evidence" open={evidenceOpen} onToggle={() => setEvidenceOpen(!evidenceOpen)}>
+        <SectionTitle text="Exact published tier" icon="layers-outline" /><Card><Facts items={receipt.tier} /></Card>
+        <SectionTitle text="Conditions recorded" icon="checkmark-done-outline" /><RateConditionsDisclosure model={receipt.rateConditions} /><Card><Facts items={receipt.conditions} empty="Eligibility / constraints unpublished" /></Card>
+        {receipt.fees.length ? <><SectionTitle text="Fees recorded" icon="cash-outline" /><Card><Facts items={receipt.fees} /></Card></> : null}
+        <SectionTitle text="Published source links" icon="link-outline" /><Card>
+          {receipt.officialSources.length ? receipt.officialSources.map((source, index) => <View key={source.url}>
+            {index ? <Divider /> : null}
+            <Pressable accessibilityRole="link" accessibilityLabel={uiJoin(source.label, ' · ', source.hostname, ' · ', 'External link')}
+              onPress={() => requestExternalUrl({ url: source.url, purpose: 'lender_source', label: source.label })}
+              style={({ pressed }) => ({ minHeight: TOUCH_TARGET_MIN, flexDirection: 'row', alignItems: 'center', gap: 10, opacity: pressed ? 0.7 : 1 })}>
+              <Ionicons name="open-outline" size={17} color={theme.colors.primary} /><View style={{ flex: 1 }}><AppText weight="700">{source.label}</AppText><AppText variant="tiny" color="textMuted">{source.hostname}</AppText></View>
             </Pressable>
-          </View>):<AppText>{uiLabel('Published source unavailable')}</AppText>}
+          </View>) : <AppText>{uiLabel('Published source unavailable')}</AppText>}
         </Card>
       </Disclosure>
     </ScreenScrollView>

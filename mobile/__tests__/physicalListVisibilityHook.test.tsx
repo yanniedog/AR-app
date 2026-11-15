@@ -146,3 +146,20 @@ test('refocusing unchanged frozen rows restarts physical measurement after a lon
   expect(measured.mock.calls.at(-1)![0].viewableItems.map((item: { key: string }) => item.key)).toEqual(['one']);
   act(() => tree.unmount());
 });
+
+test('slow retry phase recovers visibility when native attachment settles after the fast retry window', () => {
+  jest.useFakeTimers(); let tree!: ReactTestRenderer;
+  let attached = false;
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  Object.assign(hook.viewport, { current: { measureInWindow: (cb: Measure) => cb(0, 0, 400, 700) } });
+  act(() => {
+    hook.register(rows[0], { measureInWindow: (cb: Measure) => cb(0, attached ? 100 : -1000, 400, 200) } as never);
+    hook.measure();
+    jest.advanceTimersByTime(2_100);
+  });
+  expect(hook.visibleCount).toBe(0);
+  attached = true;
+  act(() => { jest.advanceTimersByTime(500); });
+  expect(hook.visibleCount).toBe(1);
+  act(() => tree.unmount());
+});

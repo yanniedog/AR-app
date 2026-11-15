@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import type { Filters } from '../data/selectors';
@@ -30,7 +30,7 @@ function filterGroupTitle(field: string): UiCopy {
 
 // Plain RN Modal sheet: @gorhom/bottom-sheet modals silently failed to present
 // under Reanimated 4, leaving the filter button dead.
-export function FilterSheet({
+function FilterSheetInner({
   visible,
   onAuditStateChange,
   onClose,
@@ -70,25 +70,33 @@ export function FilterSheet({
   const setDraft = controlledDraft && onDraftChange ? onDraftChange : setInternalDraft;
   const [publishedOpen, setPublishedOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const [everOpened, setEverOpened] = useState(visible);
+  if (visible && !everOpened) setEverOpened(true);
   const { value: lenderQuery, onChangeText: setLenderQuery } = useProviderSearchInput();
 
+  const isControlledDraft = Boolean(controlledDraft && onDraftChange);
+  const wasVisibleRef = useRef(false);
   useEffect(() => {
-    if (visible) {
-      setDraft(filters);
+    const wasVisible = wasVisibleRef.current;
+    wasVisibleRef.current = visible;
+    if (visible && !isControlledDraft) setDraft(filters);
+    if (visible && !wasVisible) {
       setPublishedOpen(false);
       setExpandedGroups(new Set());
       setLenderQuery('');
     }
-  }, [visible, filters, setDraft, setLenderQuery]);
+  }, [visible, filters, isControlledDraft, setDraft, setLenderQuery]);
 
   const { groups: groupOptions, providers, accountFeatures, eligibilityCriteria } = options;
   const publishedDetails = useMemo(
-    () => boundedPublishedFactFilterOptions(
-      options.publishedDetails,
-      draft.factCriteria,
-      32,
-    ),
-    [options.publishedDetails, draft.factCriteria],
+    () => everOpened
+      ? boundedPublishedFactFilterOptions(
+          options.publishedDetails,
+          draft.factCriteria,
+          32,
+        )
+      : [],
+    [everOpened, options.publishedDetails, draft.factCriteria],
   );
 
   // Counting re-runs the list filter, so let chip presses paint first.
@@ -175,7 +183,10 @@ export function FilterSheet({
       </>
     );
   };
-  const lenderMatches = matchingLenders(providers, lenderQuery, draft.providers);
+  const lenderMatches = useMemo(
+    () => (everOpened ? matchingLenders(providers, lenderQuery, draft.providers) : []),
+    [everOpened, providers, lenderQuery, draft.providers],
+  );
 
   return (
     <SheetSurface
@@ -183,7 +194,7 @@ export function FilterSheet({
       visible={visible}
       title="Temporary filters"
       onClose={onClose}
-      footer={(
+      footer={everOpened ? (
         <>
           <Divider />
           <Row gap={12} style={{ paddingHorizontal: 16, paddingTop: 12 }}>
@@ -191,8 +202,9 @@ export function FilterSheet({
             <Button title={applyTitle} style={{ flex: 2 }} onPress={() => { onApply(draft); onClose(); }} />
           </Row>
         </>
-      )}
+      ) : null}
     >
+          {everOpened ? <>
           <Divider />
           <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 16, gap: 24, paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
             {optionsPending ? <AppText variant="small" color="textMuted">{uiJoin('Filter', ' · ', 'Loading')}</AppText> : null}
@@ -297,9 +309,12 @@ export function FilterSheet({
               ) : null}
             </View>
           </ScrollView>
+          </> : null}
     </SheetSurface>
   );
 }
+
+export const FilterSheet = React.memo(FilterSheetInner);
 
 function resetFilters() {
   return {
