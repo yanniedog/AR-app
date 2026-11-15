@@ -1,4 +1,5 @@
-import { uiCount, uiDate, uiMoney } from '../src/lib/uiCopy';
+import { calculatorAmount } from '../src/data/calc';
+import { uiCount, uiDate, uiInputNumber, uiMoney } from '../src/lib/uiCopy';
 
 test('repeated row facts reuse formatter instances without rounding or unknown-state changes', () => {
   const number = jest.spyOn(Intl, 'NumberFormat');
@@ -20,4 +21,15 @@ test('repeated row facts reuse formatter instances without rounding or unknown-s
     expect(number).toHaveBeenCalledTimes(3); // count, cents and whole dollars
     expect(date).toHaveBeenCalledTimes(1); // all publication calendar dates
   } finally { number.mockRestore(); date.mockRestore(); }
+});
+
+test('multiples of $1,000 display with k and k-suffixed amounts parse cleanly', () => {
+  expect(uiMoney(750_000)).toBe('$750k');
+  expect(uiMoney(-50_000)).toBe('-$50k');
+  expect(uiMoney(750_000, 2)).toBe('$750,000.00');
+  expect(uiMoney(1_234)).toBe('$1,234');
+  expect(uiInputNumber('$750k')).toBe('$750k');
+  expect(calculatorAmount('$750k', 1_000_000)).toBe(750_000);
+  expect(calculatorAmount('750k', 1_000_000)).toBe(750_000);
+  expect(calculatorAmount('750.5K', 1_000_000)).toBe(750_500);
 });

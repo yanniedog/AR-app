@@ -492,6 +492,9 @@ let countFormatter: Intl.NumberFormat | undefined;
 const MONEY_FORMATTERS = new Map<number, Intl.NumberFormat>();
 export function uiMoney(value: number | null | undefined, digits = 0): UiText {
   if (!finite(value)) return uiLabel('Unknown');
+  if (digits === 0 && value !== 0 && Math.abs(value) >= 1_000 && value % 1_000 === 0) {
+    return known(`${value < 0 ? '-' : ''}$${uiNumber(Math.abs(value) / 1_000, 0)}k`);
+  }
   let formatter = MONEY_FORMATTERS.get(digits);
   if (!formatter) {
     formatter = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -722,7 +725,7 @@ export function uiSectionName(section: SectionKey, short = false): UiText {
 }
 /** Editable calculator number text remains user input; payload prose is rejected. */
 export function uiInputNumber(value: string): UiText {
-  return known(/^[\d.,+\- $%]*$/.test(value) ? value : '');
+  return known(/^[\d.,+\- $%kK]*$/.test(value) ? value : '');
 }
 export function uiInputIdentifier(value: string): UiText {
   return known(/^[A-Za-z0-9_./:@%+\-=#?&]*$/.test(value) ? value : '');

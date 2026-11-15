@@ -1,6 +1,13 @@
 import { humanizeEnum } from './format';
 import { parseLvrTier } from './profile';
-import { uiDecimal, uiJoin, type UiText } from '../lib/uiCopy';
+import { uiDecimal, uiJoin, uiNumber, type UiText } from '../lib/uiCopy';
+
+function roundedLvr(raw: string, unit: 'count' | 'percent'): UiText {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return uiDecimal(raw, unit);
+  const rounded = uiNumber(Math.round(n), 0);
+  return unit === 'percent' ? uiJoin(rounded, '%') : rounded;
+}
 
 // Kept outside format.ts/profile.ts: those files are pinned inside the
 // history-ready compiler bundle, and display copy must not change its digest.
@@ -16,14 +23,14 @@ export function lvrTierLabel(value: string): UiText | null {
   const v = tier[1].replace(/%/g, '').trim().toLowerCase();
   if (!v || v.includes('unspec') || v === 'na' || v === 'n/a') return uiJoin('LVR', ' · ', 'Unknown');
   let m = /^(?:=|<=|≤)?(\d+(?:\.\d+)?)$/.exec(v);
-  if (m) return uiJoin('LVR', ' ', '≤', uiDecimal(m[1], 'percent'));
+  if (m) return uiJoin('LVR', ' ', '≤', roundedLvr(m[1], 'percent'));
   m = /^(>=|>)?(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)$/.exec(v);
   if (m) return uiJoin('LVR', ' ', m[1] === '>=' ? '≥' : m[1] === '>' ? '>' : '',
-    uiDecimal(m[2], 'count'), '–', uiDecimal(m[3], 'percent'));
+    roundedLvr(m[2], 'count'), '–', roundedLvr(m[3], 'percent'));
   m = /^>=(\d+(?:\.\d+)?)$/.exec(v);
-  if (m) return uiJoin('LVR', ' ', '≥', uiDecimal(m[1], 'percent'));
+  if (m) return uiJoin('LVR', ' ', '≥', roundedLvr(m[1], 'percent'));
   m = /^(?:>|gt)(\d+(?:\.\d+)?)$|^(\d+(?:\.\d+)?)\+$/.exec(v);
-  if (m) return uiJoin('LVR', ' ', '>', uiDecimal(m[1] ?? m[2], 'percent'));
+  if (m) return uiJoin('LVR', ' ', '>', roundedLvr(m[1] ?? m[2], 'percent'));
   return null;
 }
 

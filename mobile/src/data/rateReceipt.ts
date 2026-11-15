@@ -279,7 +279,7 @@ function scenarioForSection(
     if (balance > 0) addFact(facts, 'Loan amount', uiMoney(balance));
     const propertyValue = num(mortgage.propertyValue);
     if (propertyValue > 0) addFact(facts, 'Property value ($)', uiMoney(propertyValue));
-    if (lvr.lvr != null) addFact(facts, 'Scenario LVR', uiJoin(uiNumber(Number(lvr.lvr.toFixed(1)), 1), '%'));
+    if (lvr.lvr != null) addFact(facts, 'Scenario LVR', uiJoin(uiNumber(Math.round(lvr.lvr), 0), '%'));
     if (mortgage.currentRate.trim()) addFact(facts, 'Current entered rate', formatRate(num(mortgage.currentRate) / 100));
     if (mortgage.years.trim()) addFact(facts, 'Years remaining', uiDuration(num(mortgage.years), 'years'));
     const current = num(mortgage.currentRate);

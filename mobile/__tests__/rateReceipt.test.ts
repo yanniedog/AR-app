@@ -83,7 +83,7 @@ describe('rate receipt', () => {
     ]));
     expect(receipt.conditions).toEqual(expect.arrayContaining([
       { label: 'Minimum age', value: '18 years · Australian resident' },
-      { label: 'Minimum limit', value: '$150,000' },
+      { label: 'Minimum limit', value: '$150k' },
     ]));
     expect(receipt.fees).toContainEqual({ label: 'Annual fee', value: '$0' });
     expect(receipt.officialSources.map((source) => source.kind)).toEqual(['overview', 'eligibility']);
@@ -142,7 +142,7 @@ describe('local negotiation brief', () => {
 
     expect(brief.scenario).toEqual(expect.arrayContaining([
       { label: 'Your rate scenario', value: 'Refinancing' },
-      { label: 'Loan amount', value: '$500,000' },
+      { label: 'Loan amount', value: '$500k' },
       { label: 'Current entered rate', value: '6.00%' },
     ]));
     expect(brief.comparables.map((item) => item.productKey)).toEqual(['best|1', 'other|1']);

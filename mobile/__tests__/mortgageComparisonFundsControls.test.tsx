@@ -82,8 +82,8 @@ test('exclusive accessible modes keep raw direct LVR and show computed facts wit
     expect(input(tree, 'Deposit')?.props.keyboardType).toBe('decimal-pad');
     expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · Unknown');
     type(tree, 'Deposit', '150000');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80.00%');
-    expect(fact(tree, 'mortgage-property-value')).toBe('Property value · $750,000');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80%');
+    expect(fact(tree, 'mortgage-property-value')).toBe('Property value · $750k');
     expect(useMortgageComparison.getState().fundsAvailable).toBeUndefined();
     act(() => jest.advanceTimersByTime(200));
     expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '72', lvrMode: 'funds', fundsType: 'deposit', fundsAvailable: '150000' });
@@ -141,7 +141,7 @@ test('remount retains both drafts and mode; Clear removes both drafts and resets
   tree = mount();
   try {
     expect(input(tree, 'Deposit')?.props.value).toBe('200000');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 75.00%');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 75%');
     choose(tree, 'LVR');
     expect(input(tree, 'LVR')?.props.value).toBe('71');
     choose(tree, 'Funds available');
@@ -169,11 +169,11 @@ test('blank and invalid funds remain editable unknowns; explicit zero yields 100
       expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · Unknown');
     }
     type(tree, 'Deposit', '0');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 100.00%');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 100%');
     type(tree, 'Deposit', '150000');
     type(tree, 'Loan amount', '450000');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 75.00%');
-    expect(fact(tree, 'mortgage-property-value')).toBe('Property value · $600,000');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 75%');
+    expect(fact(tree, 'mortgage-property-value')).toBe('Property value · $600k');
     type(tree, 'Loan amount', '');
     expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · Unknown');
     expect(fact(tree, 'mortgage-property-value')).toBe('Property value · Unknown');
@@ -185,7 +185,7 @@ test('computed money facts retain cents and rounded displayed LVR never overwrit
   const tree = mount();
   try {
     expect(fact(tree, 'mortgage-property-value')).toBe('Property value · $749,999.99');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80.00%');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80%');
     act(() => jest.advanceTimersByTime(500));
     expect(useMortgageComparison.getState().lvr).toBe('71.2345');
     choose(tree, 'LVR');
@@ -231,18 +231,18 @@ test('offset mode prices lender LVR from property value and keeps interest-beari
     expect(input(tree, 'LVR')).toBeUndefined();
     expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · Unknown');
     type(tree, 'Property value', '750000');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80.00%');
-    expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · $450,000');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80%');
+    expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · $450k');
     type(tree, 'Offset balance', '250000');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80.00%');
-    expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · $350,000');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80%');
+    expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · $350k');
     choose(tree, 'Deposit');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 70.59%');
-    expect(fact(tree, 'mortgage-property-value')).toBe('Property value · $850,000');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 71%');
+    expect(fact(tree, 'mortgage-property-value')).toBe('Property value · $850k');
     expect(input(tree, 'Property value')).toBeUndefined();
     choose(tree, 'Offset account');
     expect(input(tree, 'Property value')?.props.value).toBe('750000');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80.00%');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80%');
     choose(tree, 'LVR');
     expect(input(tree, 'LVR')?.props.value).toBe('71');
     expect(input(tree, 'Property value')).toBeUndefined();
@@ -260,16 +260,16 @@ test('offset zero, missing property and invalid raw edits stay distinct without 
     expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · Unknown');
     expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · Unknown');
     type(tree, 'Property value', '750000');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80.00%');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80%');
     expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · Unknown');
     type(tree, 'Property value', '');
     type(tree, 'Offset balance', '0');
     expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · Unknown');
     type(tree, 'Property value', '750000');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80.00%');
-    expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · $600,000');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80%');
+    expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · $600k');
     type(tree, 'Offset balance', '650000');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80.00%');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80%');
     expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · $0');
     for (const text of ['.', '-1', 'abc', '']) {
       type(tree, 'Property value', text);
@@ -336,8 +336,8 @@ test('untouched inputs default to funds available with an offset account and com
     type(tree, 'Loan amount', '600000');
     type(tree, 'Offset balance', '100000');
     type(tree, 'Property value', '750000');
-    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80.00%');
-    expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · $500,000');
+    expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80%');
+    expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · $500k');
     act(() => jest.advanceTimersByTime(500));
     expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '', lvrMode: 'funds', fundsType: 'offset',
       fundsAvailable: '100000', propertyValue: '750000' });

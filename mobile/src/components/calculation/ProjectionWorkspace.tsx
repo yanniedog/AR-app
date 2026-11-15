@@ -64,8 +64,15 @@ const FREQUENCY_OPTIONS: { label: UiCopy; value: ProjectionFrequency }[] = [
 ];
 
 function enteredNumber(value: string): number | null {
-  if (!value.trim()) return null;
-  const parsed = Number(value.replace(/[$,%\s,]/g, ''));
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const cleaned = trimmed.replace(/[$,%\s,]/g, '');
+  const kMatch = cleaned.match(/^([+-]?\d+(?:\.\d+)?)[kK]$/);
+  if (kMatch) {
+    const parsed = Number(kMatch[1]) * 1_000;
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : null;
 }
 

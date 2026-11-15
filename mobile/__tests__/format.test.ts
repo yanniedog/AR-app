@@ -97,6 +97,7 @@ describe('format', () => {
 
   test('formatBalanceRange', () => {
     expect(formatBalanceRange('0', '50000')).toBe('$0–$50k');
+    expect(formatBalanceRange('0', '49999')).toBe('$0–$50k');
     expect(formatBalanceRange('250000', '')).toBe('$250k+');
     expect(formatBalanceRange('', '')).toBe('');
   });

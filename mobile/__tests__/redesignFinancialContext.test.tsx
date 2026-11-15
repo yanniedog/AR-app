@@ -26,13 +26,13 @@ test('listed LVR preserves known catalogue spellings and rejects invalid or expl
 
 test('listed public NAB bounds remain structured inclusive facts', () => {
   const row = nabCapture.rates.find(rate => rate.lvr_tier === 'lvr_>=80.01-95%')!;
-  expect(uiListedLvrRange(row)).toBe('80.01%–95%');
+  expect(uiListedLvrRange(row)).toBe('80%–95%');
 });
 
 test.each([
-  ['lvr_>=80.01%', '≥80.01%'],
-  ['LVR_GE80p01_95', '80.01%–95%'],
-  ['LVR_GT80p01_95', '>80.01%–95%'],
+  ['lvr_>=80.01%', '≥80%'],
+  ['LVR_GE80p01_95', '80%–95%'],
+  ['LVR_GT80p01_95', '>80%–95%'],
   ['LVR_LT95', '<95%'],
   ['lvr_<95%', '<95%'],
 ] as const)('listed %s preserves its endpoint flags', (lvr_tier, expected) => {
