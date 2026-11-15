@@ -10,9 +10,10 @@ requires Node 24, and its CI and EAS build profiles pin Node 24, so install scri
 and release tooling satisfy that requirement.
 
 The isolated EAS CLI installs the published `ts-deepmerge@8.0.0` release, which
-fixes GHSA-87mf-gv2c-c62c. The project generators in EAS 23.2.0 and 24.7.0 still
-import the legacy callable default export. The EAS compatibility command changes
-only that caller to use the patched library's named `merge` export.
+fixes GHSA-87mf-gv2c-c62c. The EAS 27.9.0 project generator still imports the
+legacy callable default export. The EAS compatibility command changes only
+that caller to use the patched library's named `merge` export. It also accepts
+the previously reviewed 23.2.0, 24.7.0, 24.12.0 and 24.14.0 callers.
 
 These are guarded caller adaptations, not modifications to either patched
 library. Each patch checks the package versions and exact original call site,
@@ -67,28 +68,14 @@ GHSA-xhq7-xmqj-769h, GHSA-wjr9-j795-jxcr, GHSA-333x-w4r6-6crp,
 GHSA-xjj6-f33q-929c, and GHSA-4qv8-2p9j-2685 once Dependabot re-scans
 `main`.
 
-## Remaining upstream alerts (2026-10-24)
+## Forge in release tooling
 
-`node-forge@1.4.0` (GHSA-86w9-cpqp-85rv) remains in each lockfile. There is
-still no published fix (`npm` latest is 1.4.0; advisory `first_patched_version`
-is null). Do not dismiss the alerts based on toolchain placement alone.
+The mobile and isolated EAS lockfiles resolve `node-forge@1.4.3`. Both
+resolutions are outside the affected range (`<=1.4.0`) in
+[GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv).
+Dependabot alert state follows its scan of `main`.
 
-Forge accepts extra nested DigestAlgorithm elements during RSA PKCS#1 v1.5
-signature verification, enabling forgery with low-exponent keys. It parses
-signing credentials and verifies signatures in Expo signing helpers.
-Matching private-key checks and local signing constrain the observed
-call paths, but are not a replacement for a fixed verifier. Keep signing input
-and release credentials restricted to approved protected-source workflows.
-Track [forge issue 1149](https://github.com/digitalbazaar/forge/issues/1149)
-and [unmerged fix 1152](https://github.com/digitalbazaar/forge/pull/1152).
-The current EAS and Expo releases still select these packages. Avoid crypto
-forks, downgrades or overrides that merely rename vulnerable code.
-
-The observed paths are Node toolchain dependencies; no direct application
-import of these packages was found in this assessment. This does not prove
-their absence from the transitive Metro graph or shipped APK. An APK's native
-verifier and runtime acceptance remain separate. Export source-map checks can
-additionally enforce that these tooling packages stay outside shipped bundles.
-
-Revisit as soon as `node-forge` publishes a release newer than 1.4.0 that
-GHSA-86w9-cpqp-85rv marks as patched, then override both lockfiles.
+Expo signing helpers parse credentials and verify signatures through Forge.
+Keep signing input and release credentials restricted to approved workflows on
+protected source. The lockfile check covers the dependency version. Shipped
+bundle inspection and APK runtime acceptance require their own evidence.
