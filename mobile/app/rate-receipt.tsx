@@ -1,7 +1,7 @@
 import { useIsFocused } from '@react-navigation/native';
 import { useResolvedPublicRankingRows } from '../src/hooks/useResolvedPublicRankingRows';
 import { useMortgageComparison } from '../src/data/mortgageComparison';
-import { mortgageComparisonScenario } from '../src/data/mortgageComparisonScenario';
+import { ratesComparisonScenario } from '../src/data/mortgageComparisonScenario';
 import { useRatesSession } from '../src/data/ratesSession';
 import { uiCount, uiDate, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
 import { uiConditionalRateFact } from "../src/lib/financialUiCopy";
@@ -106,7 +106,7 @@ export default function RateReceiptScreen() {
   const scenarioFor = useCallback((section: SectionKey, row?: RateRow) => {
     const saved = publicRateScenario(section, scenario, profile, row);
     return publicScenarioForRow(row, publicCatalogue, fromRatesComparison
-      ? mortgageComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved);
+      ? ratesComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved);
   }, [scenario, profile, publicCatalogue, fromRatesComparison, comparisonInputs, mortgageFilters]);
   const scrollRef = useRef<ScrollView>(null);
   const [layoutReady, setLayoutReady] = useState(false);

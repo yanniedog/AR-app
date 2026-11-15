@@ -327,3 +327,41 @@ test('partial paths cannot certify a complete chart and late old bank layouts ca
     expect(onAuditStateChange.mock.calls.at(-1)![0]).toMatchObject({ status: 'ready', revision: current, renderedPointCount: 4 });
   } finally { act(() => tree.unmount()); }
 });
+
+test('prefers positive initial default while honoring explicit selection of a zero-rate bank', () => {
+  const zeroFirstCore = {
+    run_date: '2026-09-22',
+    sections: {
+      Mortgage: {
+        rates: [
+          { provider: 'Aardvark Zero', product_key: 'z', product_name: 'Promo', rate: '0', bank_rate_tier: 0 },
+          { provider: 'Alpha', product_key: 'a', product_name: 'Loan', rate: '0.04', bank_rate_tier: 1 },
+          { provider: 'Beta', product_key: 'b', product_name: 'Zero', rate: '0', bank_rate_tier: 2 },
+          { provider: 'Gamma', product_key: 'g', product_name: 'High', rate: '0.05', bank_rate_tier: 3 },
+        ],
+      },
+      Savings: { rates: [] },
+      TD: { rates: [] },
+    },
+    bank_rate_history: {
+      schema_version: 1,
+      row_tiers: { Mortgage: [0, 1, 2, 3], Savings: [], TD: [] },
+      run_dates: ['2026-08-01', '2026-09-22'],
+      sections: { Mortgage: [[[0, 2, [0]]], [[0, 2, [4]]], [[0, 2, [0]]], [[0, 2, [5]]]], Savings: [], TD: [] },
+    },
+  } as unknown as CorePayload;
+  installMandatoryEligibility(selectMandatoryEligibility(zeroFirstCore, EMPTY_PROFILE, null));
+  mockState.core = zeroFirstCore;
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankRatesPanel showSections={false} />) as Renderer; });
+  const chart = () => tree.root.find(node => node.type === ('BankRateChart' as unknown));
+  try {
+    expect((chart().props as unknown as { provider: string }).provider).toBe('Alpha');
+    act(() => (chart().props as unknown as { onProviderChange: (p: string) => void }).onProviderChange('Beta'));
+    expect((chart().props as unknown as { provider: string }).provider).toBe('Beta');
+    act(() => (chart().props as unknown as { onProviderChange: (p: string) => void }).onProviderChange('Gamma'));
+    expect((chart().props as unknown as { provider: string }).provider).toBe('Gamma');
+  } finally {
+    act(() => tree.unmount());
+  }
+});

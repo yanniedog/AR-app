@@ -6,7 +6,7 @@ import { profileSectionCount } from '../../data/profile';
 import { checkDrillOutcome } from '../../lib/degradationLog';
 import { reconcilePublicCompareSelectionTokens } from '../../data/publicCompareSelectionTokens';
 import { publicScenarioForRow } from '../../data/publicRateIntegration';
-import { mortgageComparisonScenario } from '../../data/mortgageComparisonScenario';
+import { effectiveMortgageBrowseAssumptions, mortgageComparisonScenario } from '../../data/mortgageComparisonScenario';
 import type { RateScenario } from '../../data/publicRateModel';
 import { ratesResultRowKey } from '../../data/ratesResultRowKey';
 import { publicOfferSelectionToken } from '../../data/publicOfferIdentity';
@@ -52,7 +52,6 @@ import {
   setMortgageComparisonInputs,
   mortgageComparisonRows,
   mortgageComparisonCriteriaReady,
-  mortgageComparisonInputsInvalid,
   clearMortgageComparison,
 } from '../../data/mortgageComparison';
 import { EmptyState, IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../../components/feedback';
@@ -197,30 +196,16 @@ export default function RatesWorkspace() {
   // Owner-Occupied + Principal & Interest + <=80% LVR catalogue browse).
   const mortgageCriteriaReady = section !== 'Mortgage'
     || mortgageComparisonCriteriaReady(mortgageInputs, mortgageFilters);
-  const mortgageInputsInvalid = section === 'Mortgage' && mortgageComparisonInputsInvalid(mortgageInputs);
-  const mortgageInputsEmpty = section !== 'Mortgage' || (
-    !mortgageInputs.loanAmount.trim()
-    && !mortgageInputs.lvr.trim()
-    && !(mortgageInputs.fundsAvailable ?? '').trim()
-    && !(mortgageInputs.propertyValue ?? '').trim()
+  const mortgageAssumptions = useMemo(
+    () => effectiveMortgageBrowseAssumptions(section, mortgageInputs, mortgageFilters),
+    [section, mortgageInputs, mortgageFilters],
   );
-  const mortgageFacetsEmpty = section !== 'Mortgage'
-    || (mortgageFilters.loanPurposes.length === 0 && mortgageFilters.repaymentTypes.length === 0);
-  const isDefaultMortgageBrowse = section === 'Mortgage'
-    && mortgageInputsEmpty
-    && mortgageFacetsEmpty
-    && !mortgageInputsInvalid;
-  const effectiveMortgageInputs = useMemo(
-    () => (isDefaultMortgageBrowse ? { loanAmount: '', lvr: '80' } : mortgageInputs),
-    [isDefaultMortgageBrowse, mortgageInputs],
-  );
+  const mortgageInputsInvalid = mortgageAssumptions.inputsInvalid;
+  const isDefaultMortgageBrowse = mortgageAssumptions.isDefaultBrowse;
+  const effectiveMortgageInputs = mortgageAssumptions.inputs;
   // Prepare the common facet combination while fields are edited, without
   // selecting it for the user or exposing results before actual criteria exist.
-  const pricingFacetsKey = JSON.stringify({
-    loanPurposes: mortgageFilters.loanPurposes.length ? mortgageFilters.loanPurposes : ['OWNER_OCCUPIED'],
-    repaymentTypes: mortgageFilters.repaymentTypes.length ? mortgageFilters.repaymentTypes : ['PRINCIPAL_AND_INTEREST'],
-  });
-  const pricingMortgageFilters = useMemo(() => JSON.parse(pricingFacetsKey) as Pick<Filters, 'loanPurposes' | 'repaymentTypes'>, [pricingFacetsKey]);
+  const pricingMortgageFilters = mortgageAssumptions.pricingFacets;
   const mortgagePricingReady = section !== 'Mortgage' || mortgageComparisonCriteriaReady(effectiveMortgageInputs, pricingMortgageFilters);
   const preparingMortgageDefaults = section === 'Mortgage' && !mortgageCriteriaReady && mortgagePricingReady;
   const scenarioFor = useMemo(() => {

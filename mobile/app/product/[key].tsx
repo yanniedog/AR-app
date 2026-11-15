@@ -1,7 +1,7 @@
 import type { RateRow, SectionKey } from '../../src/types';
 import { useRatesSession } from '../../src/data/ratesSession';
 import { useMortgageComparison } from '../../src/data/mortgageComparison';
-import { mortgageComparisonScenario } from '../../src/data/mortgageComparisonScenario';
+import { ratesComparisonScenario } from '../../src/data/mortgageComparisonScenario';
 import { ActivityPeriodCalculation } from '../../src/components/product/ActivityPeriodCalculation';
 import { MortgagePeriodCalculation } from '../../src/components/product/MortgagePeriodCalculation';
 import { SavingsPeriodCalculation } from '../../src/components/product/SavingsPeriodCalculation';
@@ -138,7 +138,7 @@ export default function ProductDetail() {
   const pricingScenario = publicProduct ? scenario : undefined;
   const scenarioFor = useCallback((section: SectionKey, row?: RateRow) => {
     const saved = publicRateScenario(section, pricingScenario, profile, row);
-    const scoped = fromRatesComparison ? mortgageComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved;
+    const scoped = fromRatesComparison ? ratesComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved;
     return publicScenarioForRow(row, publicCatalogue, scoped);
   }, [pricingScenario, profile, fromRatesComparison, comparisonInputs, mortgageFilters, publicCatalogue]);
   const found = useMemo(

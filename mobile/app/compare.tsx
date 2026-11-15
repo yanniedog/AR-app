@@ -1,6 +1,6 @@
 import { publicScenarioForRow } from '../src/data/publicRateIntegration';
 import { useRatesSession } from '../src/data/ratesSession';
-import { mortgageComparisonScenario } from '../src/data/mortgageComparisonScenario';
+import { ratesComparisonScenario } from '../src/data/mortgageComparisonScenario';
 import { useMortgageComparison } from '../src/data/mortgageComparison';
 import { uiCount, uiDate, uiJoin, uiLabel, uiProductName, uiProviderName, type UiCopy, type UiChild } from "../src/lib/uiCopy";
 import { SelectedRateConditions } from "../src/components/product/RateConditionsDisclosure";
@@ -98,7 +98,7 @@ export default function Compare() {
   const scenarioFor = useCallback((section: SectionKey, row?: RateRow) => {
     const saved = publicRateScenario(section, scenario, profile, row);
     return publicScenarioForRow(row, catalogue, fromRatesComparison
-      ? mortgageComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved);
+      ? ratesComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved);
   }, [catalogue, scenario, profile, fromRatesComparison, comparisonInputs, mortgageFilters]);
   const details = useStore((s) => s.details);
   const ensureDetails = useStore((s) => s.ensureDetails);

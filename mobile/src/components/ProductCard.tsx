@@ -350,9 +350,9 @@ function ProductCardView({
           <View key={geometryKey} testID="compact-product-line2" pointerEvents="none" accessible={false}
             accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
             onLayout={recordRegion('line2')}
-            style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+            style={{ flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1, maxWidth: '100%', alignItems: 'center', gap: 6 }}>
             <View testID="compact-product-metrics" onLayout={recordRegion('metrics')}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              style={{ flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1, maxWidth: '100%', alignItems: 'center', gap: 6 }}>
               <View testID="compact-primary-cell" onLayout={recordRegion('primary')} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                 <Ionicons name={metricIcon(rateLabel)} size={COMPACT_ROW.icon} color={metricColor(rateLabel)} />
                 <AppText testID="compact-primary-rate" variant="small" weight="700"
