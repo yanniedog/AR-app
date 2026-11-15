@@ -501,7 +501,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
 
         const compactAsset = manifest.files.history_banks;
         if (manifest.payload_revision && !compactAsset) {
-          set({ historyBanks: null, historyBanksError: 'history unavailable in this publication' });
+          set({ historyBanks: null, historyBanksError: null });
           return;
         }
         if (compactAsset) {

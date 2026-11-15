@@ -4,7 +4,7 @@ import { bindCurrentPublicRow, publicRateScenario, resolveRowPublicRate } from '
 import { publicRateOriginLabel, publicRateText } from '../data/publicRatePresentation';
 import Ionicons from './icons/AppIcon';
 import React from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View, type GestureResponderEvent, type LayoutChangeEvent, type TextLayoutEventData, type NativeSyntheticEvent } from 'react-native';
+import { StyleSheet, useWindowDimensions, View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
 
 import {
   formatBalanceRange,
@@ -33,7 +33,7 @@ import { androidRipple, AppText } from './ui';
 import { PressFeedback } from './PressFeedback';
 import { IconAction } from './IconAction';
 import { useWordBubble, type IconWord } from './WordBubble';
-import { COMPACT_ROW, compactBankLogoFrame, compactFactWidth, compactProductFacet, compactProductRowLayout, compactTierIndex } from './product/compactProductRow';
+import { COMPACT_ROW, compactBankLogoFrame, compactProductFacet, compactTierIndex } from './product/compactProductRow';
 import { sourceRowForPublicRow } from '../data/publicRateIntegration';
 import { scopedRateConditions } from '../data/rateConditions';
 import { scopedFinancialConditionFacts, type ScopedFinancialConditionPresentation } from '../data/scopedFinancialConditionFacts';
@@ -120,7 +120,6 @@ function ProductCardView({
   // measurement does not render every visible card a second time.
   const [measuredWidth, setMeasuredWidth] = React.useState(() => width - 32);
   const [rowHeight, setRowHeight] = React.useState<number>(COMPACT_ROW.minHeight);
-  const [textMeasurements, setTextMeasurements] = React.useState<{ key: string; primary: number; secondary: number } | null>(null);
   const detailsBubble = useWordBubble('Details');
   const historyBubble = useWordBubble('History');
   const held = React.useRef(false);
@@ -202,29 +201,11 @@ function ProductCardView({
     ...(conditions.unresolved.length ? ['warning-outline' as const]
       : access.restricted || access.verify || nonStandard ? ['people-outline' as const] : []),
   ];
-  const measurementKey = `${fontScale}:${rateText}:${secondaryText ?? ''}`;
-  const activeMeasurementKey = React.useRef(measurementKey);
-  activeMeasurementKey.current = measurementKey;
-  const measurements = textMeasurements?.key === measurementKey ? textMeasurements : null;
   const tierIndex = compactTierIndex(row);
   const logoFrame = compactBankLogoFrame(measuredWidth, rowHeight, fontScale, embedded ? 0 : StyleSheet.hairlineWidth);
-  const logoWidth = selectMode ? COMPACT_ROW.action : logoFrame.width;
-  const layout = compactProductRowLayout(measuredWidth, fontScale, rateText, secondaryText,
-    facet, statusIcons.length, measurements?.primary, measurements?.secondary, tierIndex, logoWidth, uiProductName(row));
   const onRowLayout = (event: LayoutChangeEvent) => {
     const next = event.nativeEvent.layout.width;
     if (Number.isFinite(next) && next > 0 && next !== measuredWidth) setMeasuredWidth(next);
-  };
-  const measureMetric = (key: 'primary' | 'secondary') => (event: NativeSyntheticEvent<TextLayoutEventData>) => {
-    if (activeMeasurementKey.current !== measurementKey) return;
-    const actual = event.nativeEvent.lines[0]?.width ?? 0;
-    const estimated = compactFactWidth(key === 'primary' ? rateText : secondaryText ?? uiLabel(''), fontScale);
-    if (actual <= estimated) return;
-    setTextMeasurements(previous => {
-      if (activeMeasurementKey.current !== measurementKey) return previous;
-      const current = previous?.key === measurementKey ? previous : { key: measurementKey, primary: 0, secondary: 0 };
-      return current[key] >= actual ? previous : { ...current, [key]: Math.ceil(actual) };
-    });
   };
   const metricIcon = (label: UiCopy): keyof typeof Ionicons.glyphMap => label === 'Comparison rate' ? 'calculator-outline'
     : label === 'Ongoing rate' ? 'time' : 'cash-outline';
@@ -234,26 +215,22 @@ function ProductCardView({
         : label === 'Rate' && section === 'Savings' && qualifier.kind === 'base' ? 'Ongoing' : 'Details';
   const metricColor = (label: UiCopy) => label === 'Comparison rate' ? theme.colors.primary : theme.colors.success;
   const facetIcon = facet.kind === 'LVR' ? 'home' : facet.kind === 'Term' ? 'calendar-outline' : 'wallet';
-  const visibleStatuses = !layout.showStatuses ? [] : layout.combinedStatus && statusIcons.length
-    ? [unknown ? 'help-circle-outline' as const : 'warning-outline' as const] : statusIcons;
   const statusWord = (icon: keyof typeof Ionicons.glyphMap): IconWord => icon === 'help-circle-outline' ? 'Unknown'
     : icon === 'flash-outline' ? 'Conditional' : icon === 'people-outline' ? 'Eligibility'
       : conditions.unresolved.length ? 'Sources' : access.restricted || access.verify || nonStandard ? 'Eligibility'
         : qualifier.conditional ? 'Conditional' : 'Details';
-  // Widening the rail's trailing space changes no child coordinates. Preserve
-  // its native text/icon nodes and measured hit regions in that case; remount
-  // only when the facts or their own geometry change.
-  const { main: railWidth, ...regionLayout } = layout;
-  const geometryKey = JSON.stringify([row.product_key, row.rate_index, fontScale, regionLayout, facet.kind, facet.value,
-    rateLabel, secondaryLabel, visibleStatuses]);
-  const bubbleRegions = React.useRef<{ key: string; regions: Record<string, { x: number; width: number }> }>({ key: geometryKey, regions: {} });
+  const geometryKey = JSON.stringify([row.product_key, row.rate_index, fontScale, facet.kind, facet.value,
+    rateLabel, secondaryLabel, statusIcons, tierIndex !== null]);
+  type RegionRect = { x: number; y: number; width: number; height: number };
+  const bubbleRegions = React.useRef<{ key: string; regions: Record<string, RegionRect> }>({ key: geometryKey, regions: {} });
   const mainBounds = React.useRef<{ width: number; height: number } | null>(null);
   if (bubbleRegions.current.key !== geometryKey) bubbleRegions.current = { key: geometryKey, regions: {} };
   const recordRegion = (id: string) => (event: LayoutChangeEvent) => {
     if (bubbleRegions.current.key !== geometryKey) return;
-    const { x, width: regionWidth } = event.nativeEvent.layout;
-    if (Number.isFinite(x) && x >= 0 && Number.isFinite(regionWidth) && regionWidth > 0)
-      bubbleRegions.current.regions[id] = { x, width: regionWidth };
+    const { x, y, width: regionWidth, height: regionHeight } = event.nativeEvent.layout;
+    if (Number.isFinite(x) && x >= 0 && Number.isFinite(y) && y >= 0
+      && Number.isFinite(regionWidth) && regionWidth > 0 && Number.isFinite(regionHeight) && regionHeight > 0)
+      bubbleRegions.current.regions[id] = { x, y, width: regionWidth, height: regionHeight };
     else delete bubbleRegions.current.regions[id];
   };
   const showRowWord = (event?: GestureResponderEvent) => {
@@ -263,22 +240,35 @@ function ProductCardView({
     let word: IconWord = 'Details';
     if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)
       && bounds && x >= 0 && x < bounds.width && y >= 0 && y < bounds.height
-      && Math.abs(bounds.width - railWidth) <= 1 && bubbleRegions.current.key === geometryKey) {
+      && bubbleRegions.current.key === geometryKey) {
       const regions = bubbleRegions.current.regions;
-      const candidates: { id: string; parent?: string; word: IconWord }[] = [
+      const candidates: { id: string; parents?: string[]; word: IconWord }[] = [
         { id: 'name', word: 'Details' },
-        ...(!layout.warningOnly ? [{ id: 'primary', parent: 'metrics', word: metricWord(rateLabel) }] : []),
-        ...(layout.showSecondary && secondaryText ? [{ id: 'secondary', parent: 'metrics', word: metricWord(secondaryLabel) }] : []),
-        ...(layout.showFacetValue || layout.showFacetSymbol ? [{ id: 'facet', parent: 'facts', word: facet.kind }] : []),
-        ...visibleStatuses.map((icon, index) => ({ id: `status:${index}`, parent: 'facts', word: statusWord(icon) })),
-        ...(layout.showTier ? [{ id: 'tier', parent: 'facts', word: 'Tier' as const }] : []),
+        { id: 'primary', parents: ['line2', 'metrics'], word: metricWord(rateLabel) },
+        ...(secondaryText ? [{ id: 'secondary', parents: ['line2', 'metrics'], word: metricWord(secondaryLabel) }] : []),
+        { id: 'facet', parents: ['line2', 'facts'], word: facet.kind },
+        ...statusIcons.map((icon, index) => ({ id: `status:${index}`, parents: ['line2', 'facts'], word: statusWord(icon) })),
+        ...(tierIndex ? [{ id: 'tier', parents: ['line2', 'facts'], word: 'Tier' as const }] : []),
       ];
       for (const candidate of candidates) {
-        const region = regions[candidate.id], parent = candidate.parent ? regions[candidate.parent] : null;
-        if (!region || candidate.parent && !parent) continue;
-        const left = (parent?.x ?? 0) + region.x, right = left + region.width;
-        if (region.x + region.width > (parent?.width ?? bounds.width) || right > bounds.width) continue;
-        if (x >= left && x < right) { word = candidate.word; break; }
+        const region = regions[candidate.id];
+        if (!region) continue;
+        let offsetX = 0;
+        let offsetY = 0;
+        let valid = true;
+        for (const parentId of candidate.parents ?? []) {
+          const parent = regions[parentId];
+          if (!parent) { valid = false; break; }
+          offsetX += parent.x;
+          offsetY += parent.y;
+        }
+        if (!valid) continue;
+        const left = offsetX + region.x;
+        const top = offsetY + region.y;
+        if (x >= left && x < left + region.width && y >= top && y < top + region.height) {
+          word = candidate.word;
+          break;
+        }
       }
     }
     detailsBubble.show(word);
@@ -298,8 +288,8 @@ function ProductCardView({
         borderBottomColor: theme.ledger.rule,
       }}
     >
-      <View ref={historyBubble.anchorRef} collapsable={false} style={{ width: logoWidth, alignSelf: 'stretch' }}>
-        {showLenderAction || selectMode ? (
+      {showLenderAction || selectMode ? (
+        <View ref={historyBubble.anchorRef} collapsable={false} style={{ flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap, alignSelf: 'stretch' }}>
           <PressFeedback onPressIn={() => { historyHeld.current = false; }}
             onLongPress={selectMode ? undefined : () => { historyHeld.current = true; historyBubble.show(); }} delayLongPress={350}
             onPress={() => {
@@ -309,90 +299,87 @@ function ProductCardView({
             disabled={false} accessibilityRole="button"
             accessibilityLabel={uiJoin('View', ' ', uiProviderName(row), ' · ', 'History', ' · ', 'Freshness', ' · ', freshnessLabel)}
             accessibilityElementsHidden={!!selectMode} importantForAccessibility={selectMode ? 'no-hide-descendants' : 'auto'}
-            style={{ width: logoWidth, flex: 1, minHeight: 48, justifyContent: 'center', alignItems: 'center', borderRadius: theme.radius.sm }}>
+            style={{ width: selectMode ? COMPACT_ROW.action : logoFrame.width, alignSelf: 'stretch', minHeight: 48, justifyContent: 'center', alignItems: 'center', borderRadius: theme.radius.sm }}>
             <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ flexDirection: 'row', alignItems: 'center' }}>
               {selectMode ? <Ionicons name={selected ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
                 : <><BankAvatar width={Math.max(0, logoFrame.width - 16)} height={logoFrame.height} inset={3} provider={row.provider} renderStateId={logoRenderStateId} onRenderStateChange={onLogoRenderStateChange} /><RateFreshnessSymbol row={row} palette={theme.colors} /></>}
             </View>
           </PressFeedback>
-        ) : <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: logoWidth, flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-          {selectMode ? <Ionicons name={selected ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
-            : <><BankAvatar width={Math.max(0, logoFrame.width - 16)} height={logoFrame.height} inset={3} provider={row.provider} renderStateId={logoRenderStateId} onRenderStateChange={onLogoRenderStateChange} /><RateFreshnessSymbol row={row} palette={theme.colors} /></>}
-        </View>}
-      </View>
+          {selectMode && showLenderAction ? (
+            <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <BankAvatar width={Math.max(0, logoFrame.width - 16)} height={logoFrame.height} inset={3} provider={row.provider} renderStateId={logoRenderStateId} onRenderStateChange={onLogoRenderStateChange} />
+              <RateFreshnessSymbol row={row} palette={theme.colors} />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
       <View ref={detailsBubble.anchorRef} collapsable={false} style={{ flex: 1, minWidth: 0 }}>
-      <ScrollView testID="compact-product-scroll" horizontal showsHorizontalScrollIndicator
-        directionalLockEnabled nestedScrollEnabled keyboardShouldPersistTaps="handled"
-        onScrollBeginDrag={() => { held.current = true; detailsBubble.dismiss(); }}
-        style={{ width: '100%' }} contentContainerStyle={{ minWidth: '100%' }}>
-      <PressFeedback
-        onPressIn={() => { held.current = false; }}
-        onPress={() => { if (!held.current) { detailsBubble.dismiss(); onPress?.(); } held.current = false; }}
-        onLongPress={showRowWord}
-        delayLongPress={350}
-        accessibilityRole="button"
-        accessibilityLabel={cardA11yLabel}
-        accessibilityState={selectMode ? { selected: !!selected } : undefined}
-        android_ripple={androidRipple(theme.colors.primaryMuted)}
-        contentStyle={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: COMPACT_ROW.gap }}
-        style={{
-          minHeight: 48,
-          minWidth: 48,
-          width: railWidth,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: theme.radius.sm,
-          overflow: 'hidden',
-        }}
-        onLayout={event => {
-          const { width: targetWidth, height: targetHeight } = event.nativeEvent.layout;
-          mainBounds.current = Number.isFinite(targetWidth) && targetWidth > 0 && Number.isFinite(targetHeight) && targetHeight > 0
-            ? { width: targetWidth, height: targetHeight } : null;
-          // Measure content independently: a logo measured from the whole row
-          // would preserve its previous height after large text shrinks again.
-          if (Number.isFinite(targetHeight) && targetHeight > 0) {
-            const height = Math.max(COMPACT_ROW.minHeight,
-              targetHeight + 2 * logoFrame.inset + (embedded ? 0 : StyleSheet.hairlineWidth));
-            if (height !== rowHeight) setRowHeight(height);
-          }
-        }}
-      >
-        <View key={geometryKey} pointerEvents="none" accessible={false}
-          style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap }}>
-        <View testID="compact-product-metrics" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
-          onLayout={recordRegion('metrics')}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap, flexShrink: 0 }}>
-          <View testID="compact-primary-cell" onLayout={recordRegion('primary')} style={{ width: layout.primary, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-            {layout.warningOnly ? <Ionicons name="warning-outline" size={16} color={theme.colors.warning} /> : <>
-            {layout.showPrimaryIcon ? <Ionicons name={metricIcon(rateLabel)} size={COMPACT_ROW.icon} color={metricColor(rateLabel)} /> : null}
-            <AppText testID="compact-primary-rate" variant="small" weight="600" onTextLayout={measureMetric('primary')}
-              style={{ fontVariant: ['tabular-nums'], flexShrink: 0 }}>{rateText}</AppText>
-            </>}
+        <PressFeedback
+          onPressIn={() => { held.current = false; }}
+          onPress={() => { if (!held.current) { detailsBubble.dismiss(); onPress?.(); } held.current = false; }}
+          onLongPress={showRowWord}
+          delayLongPress={350}
+          accessibilityRole="button"
+          accessibilityLabel={cardA11yLabel}
+          accessibilityState={selectMode ? { selected: !!selected } : undefined}
+          android_ripple={androidRipple(theme.colors.primaryMuted)}
+          contentStyle={{ flexDirection: 'column', alignItems: 'stretch', justifyContent: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 4 }}
+          style={{
+            minHeight: 48,
+            minWidth: 48,
+            width: '100%',
+            justifyContent: 'center',
+            borderRadius: theme.radius.sm,
+            overflow: 'hidden',
+          }}
+          onLayout={event => {
+            const { width: targetWidth, height: targetHeight } = event.nativeEvent.layout;
+            mainBounds.current = Number.isFinite(targetWidth) && targetWidth > 0 && Number.isFinite(targetHeight) && targetHeight > 0
+              ? { width: targetWidth, height: targetHeight } : null;
+            // Measure content independently: a logo measured from the whole row
+            // would preserve its previous height after large text shrinks again.
+            if (Number.isFinite(targetHeight) && targetHeight > 0) {
+              const height = Math.max(COMPACT_ROW.minHeight,
+                targetHeight + 2 * logoFrame.inset + (embedded ? 0 : StyleSheet.hairlineWidth));
+              if (height !== rowHeight) setRowHeight(height);
+            }
+          }}
+        >
+          <AppText testID="compact-product-name" variant="small" weight="600" numberOfLines={2}
+            onLayout={recordRegion('name')} style={{ flexShrink: 1 }}>{uiProductName(row)}</AppText>
+          <View key={geometryKey} testID="compact-product-line2" pointerEvents="none" accessible={false}
+            accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+            onLayout={recordRegion('line2')}
+            style={{ flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1, maxWidth: '100%', alignItems: 'center', gap: 6 }}>
+            <View testID="compact-product-metrics" onLayout={recordRegion('metrics')}
+              style={{ flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1, maxWidth: '100%', alignItems: 'center', gap: 6 }}>
+              <View testID="compact-primary-cell" onLayout={recordRegion('primary')} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                <Ionicons name={metricIcon(rateLabel)} size={COMPACT_ROW.icon} color={metricColor(rateLabel)} />
+                <AppText testID="compact-primary-rate" variant="small" weight="700"
+                  style={{ fontVariant: ['tabular-nums'] }}>{rateText}</AppText>
+              </View>
+              {secondaryText ? <View testID="compact-secondary-cell" onLayout={recordRegion('secondary')} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                <Ionicons name={metricIcon(secondaryLabel!)} size={COMPACT_ROW.icon} color={metricColor(secondaryLabel!)} />
+                <AppText testID="compact-secondary-rate" variant="small" color="textMuted"
+                  style={{ fontVariant: ['tabular-nums'] }}>{secondaryText}</AppText>
+              </View> : null}
+            </View>
+            <View testID="compact-product-facts" onLayout={recordRegion('facts')}
+              style={{ flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1, maxWidth: '100%', alignItems: 'center', gap: 6 }}>
+              <View testID="compact-facet-cell" onLayout={recordRegion('facet')}
+                style={{ flexDirection: 'row', flexShrink: 1, maxWidth: '100%', alignItems: 'center', gap: 3 }}>
+                <Ionicons testID="compact-facet-symbol" name={facetIcon} size={COMPACT_ROW.icon} color={theme.colors.primary} />
+                <AppText testID="compact-facet-value" variant="small" color="textMuted" style={{ flexShrink: 1 }}>{facet.value}</AppText>
+              </View>
+              {statusIcons.map((icon, index) => <Ionicons key={`${icon}:${index}`} testID={`compact-status-${index}`} onLayout={recordRegion(`status:${index}`)} name={icon} size={COMPACT_ROW.icon} color={theme.colors.warning} />)}
+              {tierIndex ? <View testID="compact-tier-cell" onLayout={recordRegion('tier')}
+                style={{ flexDirection: 'row', flexShrink: 1, maxWidth: '100%', alignItems: 'center', gap: 3 }}>
+                <Ionicons name="layers-outline" size={COMPACT_ROW.icon} color={theme.colors.textMuted} />
+                <AppText testID="compact-tier-index" variant="small" color="textMuted" style={{ flexShrink: 1 }}>{tierIndex}</AppText>
+              </View> : null}
+            </View>
           </View>
-          {layout.showSecondary && secondaryText ? <View testID="compact-secondary-cell" onLayout={recordRegion('secondary')} style={{ width: layout.secondary, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-            <Ionicons name={metricIcon(secondaryLabel!)} size={COMPACT_ROW.icon} color={metricColor(secondaryLabel!)} />
-            <AppText testID="compact-secondary-rate" variant="small" color="textMuted" onTextLayout={measureMetric('secondary')}
-              style={{ fontVariant: ['tabular-nums'], flexShrink: 0 }}>{secondaryText}</AppText>
-          </View> : null}
-        </View>
-        {layout.facet > 0 ? <View testID="compact-product-facts" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
-          onLayout={recordRegion('facts')}
-          style={{ width: layout.facet, flexDirection: 'row', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          <View testID="compact-facet-cell" onLayout={recordRegion('facet')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Ionicons testID="compact-facet-symbol" name={facetIcon} size={COMPACT_ROW.icon} color={theme.colors.primary} />
-            <AppText testID="compact-facet-value" variant="small" color="textMuted" style={{ flexShrink: 0 }}>{facet.value}</AppText>
-          </View>
-          {visibleStatuses.map((icon, index) => <Ionicons key={`${icon}:${index}`} testID={`compact-status-${index}`} onLayout={recordRegion(`status:${index}`)} name={icon} size={COMPACT_ROW.icon} color={theme.colors.warning} />)}
-          {layout.showTier ? <View testID="compact-tier-cell" onLayout={recordRegion('tier')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Ionicons name="layers-outline" size={COMPACT_ROW.icon} color={theme.colors.textMuted} />
-            <AppText testID="compact-tier-index" variant="small" color="textMuted" style={{ flexShrink: 0 }}>{tierIndex}</AppText>
-          </View> : null}
-        </View> : null}
-        <AppText testID="compact-product-name" variant="small" weight="600" numberOfLines={1}
-          onLayout={recordRegion('name')} style={{ width: layout.identity, minWidth: 0, flexShrink: 0 }}>{uiProductName(row)}</AppText>
-        </View>
-      </PressFeedback>
-      </ScrollView>
+        </PressFeedback>
       </View>
       <View style={{ width: 48, opacity: selectMode ? 0 : 1 }} pointerEvents={selectMode ? 'none' : 'auto'}
         accessibilityElementsHidden={!!selectMode} importantForAccessibility={selectMode ? 'no-hide-descendants' : 'auto'}>

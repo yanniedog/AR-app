@@ -95,6 +95,12 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
     .map(check => measuredAuditValue(check.metrics.actionMs));
   const journeyTimes = journeys.map(check => measuredAuditValue(check.metrics.forwardWorkMs));
   const links = report.checks.filter(check => /^external-link-[0-9]+$/.test(check.id));
+  const aggregateUnverifiedCount = report.checks.reduce((sum, check) => {
+    if (check.id !== 'external-link-unverified') return sum;
+    const count = check.metrics.destinationCount;
+    return sum + (typeof count === 'number' && Number.isSafeInteger(count) && count > 0 ? count : 0);
+  }, 0);
+  const totalLinks = links.length + aggregateUnverifiedCount;
   const coverage = completion.gaps.invalidCoverageReports === 0 ? report.coverage : undefined;
   const observedIds = new Set(report.checks.map(check => check.id));
   const unexpected = new Set(coverage?.unexpectedStoredCheckIds ?? []);
@@ -135,7 +141,7 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
       && typeof check.diagnostic.readiness.ready === 'boolean').length, journeys.length),
     responsivenessCoveragePercent: percent(journeys.filter(check => check.metrics.eventLoopMeasurementAvailable === true
       && check.metrics.frameMeasurementAvailable === true).length, journeys.length),
-    linkVerificationPercent: percent(links.length - completion.gaps.unverifiedLinks, links.length),
+    linkVerificationPercent: percent(totalLinks - completion.gaps.unverifiedLinks, totalLinks),
     providerSuccessPercent: healthCheck('coverage-reconciliation')?.metrics.invalidCounts === false
       ? ratio('coverage-reconciliation', 'providersSucceeded', 'providersAttempted') : null,
     detailsCoveragePercent: healthCheck('details-completeness')?.metrics.runMatches === true
@@ -144,7 +150,7 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
     historySourceCoveragePercent: historySourceCoverage,
     missingChecks: coverage ? completion.gaps.missingChecks : null,
     targetProbeDefects: journeys.length ? completion.gaps.targetProbeDefects : null,
-    unverifiedLinks: links.length ? completion.gaps.unverifiedLinks : null,
+    unverifiedLinks: totalLinks ? completion.gaps.unverifiedLinks : null,
     automatedTaskSuccessPercent: percent(successful.length, actions.length),
     automatedTaskFailurePercent: actions.every(check => typeof check.metrics.nonTimingFailure === 'boolean'
       && typeof check.metrics.actionCompleted === 'boolean') ? percent(failed.length, actions.length) : null,

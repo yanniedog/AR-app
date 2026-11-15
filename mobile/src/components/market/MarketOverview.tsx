@@ -199,10 +199,13 @@ export default function MarketOverview() {
     renderRevision,
     actions: auditActions,
     probes: [
-      { id: 'market.core', kind: 'data', status: core ? 'ready' : 'pending', datasetRevision: coreSha },
+      { id: 'market.core', kind: 'data', status: core ? 'ready' : 'pending', datasetRevision: coreSha,
+        expectedCount: 1, actualCount: core ? 1 : 0 },
       { id: 'market.calendar', kind: 'data', required: false,
         status: calendar ? 'ready' : calendarAttempted || calendarError ? 'error' : 'pending',
         error: !calendar && (calendarAttempted || calendarError) ? 'Calendar unavailable' : null,
+        expectedCount: calendar ? calendar.decisions.length + calendar.schedule.length : 0,
+        actualCount: calendar ? calendar.decisions.length + calendar.schedule.length : 0,
         // Dataset identity is the publication, not this asset's distinct SHA.
         // calendarSha still invalidates factsRevision and its measured layout.
         datasetRevision: coreSha ?? core?.run_date ?? null },
@@ -214,6 +217,8 @@ export default function MarketOverview() {
         status: payload || filteredEmpty ? 'ready' : error ? 'error' : 'pending',
         error: error && !payload ? 'Observed rate changes could not be prepared' : null,
         datasetRevision: coreSha ?? core?.run_date ?? null,
+        expectedCount: feedExpectedCount,
+        actualCount: payload || filteredEmpty ? feedExpectedCount : 0,
       },
       {
         id: 'market.movements.list',
@@ -250,10 +255,15 @@ export default function MarketOverview() {
           <AppText variant="small" color="textMuted">{uiLabel(coverage.unresolvedMeeting ? 'Awaiting decision' : 'Next decision')}</AppText>
           <AppText variant="body" weight="600">{meeting ? uiDate(meeting.date) : calendarAttempted ? uiLabel("Unavailable") : uiLabel("Loading")}</AppText>
         </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          <Button title="History" variant="secondary" onPress={openHistory} />
-          <Button title="Outlook" variant="secondary" onPress={openOutlook} />
-          <Button title="RBA" variant="ghost" onPress={openRba} />
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button title="History" variant="secondary" style={{ flex: 1 }} onPress={openHistory} />
+            <Button title="Outlook" variant="secondary" style={{ flex: 1 }} onPress={openOutlook} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button title="RBA" variant="secondary" style={{ flex: 1 }} onPress={openRba} />
+            <Button title="Bank response" variant="secondary" style={{ flex: 1 }} onPress={openResponse} disabled={!payload} />
+          </View>
         </View>
       </View>
       <SegmentedControl options={sectionOptions} value={activeSection} onChange={setActiveSection} />
@@ -284,7 +294,6 @@ export default function MarketOverview() {
       {payload ? <Disclosure title="30-day movers" open={moversOpen} onToggle={toggleMovers}>
         <MoversLeaderboard payload={payload} section={activeSection} />
       </Disclosure> : null}
-      <Button title="Bank response" variant="secondary" onPress={openResponse} disabled={!payload} />
     </ScreenScrollView>
   );
 }

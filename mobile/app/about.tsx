@@ -10,15 +10,25 @@ import {
   Section,
   SettingsGap,
 } from '../src/components/settings/settingsUi';
-import { uiIdentifier, uiJoin } from '../src/lib/uiCopy';
+import { uiIdentifier, uiJoin, uiLabel } from '../src/lib/uiCopy';
 
 export default function AboutScreen() {
+  const appVersion = Application.nativeApplicationVersion?.trim();
+  const buildVersion = Application.nativeBuildVersion?.trim();
+  const versionValue = appVersion && buildVersion
+    ? uiJoin(uiIdentifier(appVersion), ' ', '(', uiIdentifier(buildVersion), ')')
+    : appVersion
+      ? uiIdentifier(appVersion)
+      : buildVersion
+        ? uiIdentifier(buildVersion)
+        : uiLabel('Unavailable');
+
   return (
     <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
       <Section title="Australian Rates">
         <InfoRow
           label="Version"
-          value={uiJoin(uiIdentifier(Application.nativeApplicationVersion), ' ', '(', uiIdentifier(Application.nativeBuildVersion), ')')}
+          value={versionValue}
         />
       </Section>
 

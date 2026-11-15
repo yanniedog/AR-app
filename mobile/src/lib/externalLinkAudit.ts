@@ -110,6 +110,17 @@ export async function auditExternalLink(
   result.path = new StandardUrl(trusted.url).pathname;
   if (options.signal?.aborted) return result;
   const timeoutMs = Math.min(15_000, Math.max(1, options.timeoutMs ?? 5_000));
+  const deadlineController = new AbortController();
+  let onSignalAbort: (() => void) | undefined;
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  if (options.signal) {
+    onSignalAbort = () => deadlineController.abort();
+    if (options.signal.aborted) deadlineController.abort();
+    else options.signal.addEventListener('abort', onSignalAbort, { once: true });
+  }
+  const handlerExpected = options.handler !== false && options.platform !== 'web';
+  let handlerSettled = !handlerExpected;
+  let networkSettled = !options.reachability;
   const handler = options.handler === false
     ? Promise.resolve().then(() => {
       result.handler = check('unknown', 'The installed browser handler was not checked within the audit time budget.', false, 'not-selected');
@@ -120,18 +131,19 @@ export async function auditExternalLink(
       // that a browser will allow a popup or an external application.
       result.handler = check('unknown', 'Browser handling requires an explicit user tap on web.', false, 'not-selected');
     })
-    : bounded(() => (options.canOpenUrl ?? ((url: string) => Linking.canOpenURL(url)))(trusted.url), timeoutMs, options.signal)
+    : bounded(() => (options.canOpenUrl ?? ((url: string) => Linking.canOpenURL(url)))(trusted.url), timeoutMs, deadlineController.signal)
       .then((available) => {
         result.handler = available
           ? check('pass', 'The operating system reports an installed handler for this destination.')
           : check('fail', 'The operating system could not find a handler for this destination.');
       })
       .catch((error: unknown) => {
-        const cancelled = error instanceof Error && error.message === 'cancelled';
+        const cancelled = error instanceof Error && error.message === 'cancelled' && Boolean(options.signal?.aborted);
         // Cancellation never started a resolution. A timeout or platform error
         // did, and an unknown result is not a missing-handler defect.
         result.handler = check('unknown', 'The installed browser handler could not be verified.', !cancelled, 'selected');
-      });
+      })
+      .finally(() => { handlerSettled = true; });
   const network = !options.reachability
     ? Promise.resolve()
     : bounded((signal) => (options.fetch ?? globalThis.fetch)(trusted.url, {
@@ -140,7 +152,7 @@ export async function auditExternalLink(
       credentials: 'omit',
       cache: 'no-store',
       signal,
-    }), timeoutMs, options.signal)
+    }), timeoutMs, deadlineController.signal)
       .then((response) => {
         result.httpStatus = response.status;
         if (!response.status || (response.status >= 300 && response.status < 400)) {
@@ -169,7 +181,29 @@ export async function auditExternalLink(
           result.reachability = check('unknown', `HTTP ${response.status}: reachability was not confirmed.`);
         }
       })
-      .catch(() => { result.reachability = check('unknown', 'HTTP reachability could not be verified (offline, blocked, cancelled or timed out).', true, 'selected'); });
-  await Promise.all([handler, network]);
+      .catch(() => {
+        result.reachability = check('unknown', 'HTTP reachability could not be verified (offline, blocked, cancelled or timed out).', true, 'selected');
+      })
+      .finally(() => { networkSettled = true; });
+  try {
+    await Promise.race([
+      Promise.all([handler, network]),
+      new Promise<void>((resolve) => {
+        deadlineTimer = setTimeout(() => {
+          deadlineController.abort();
+          if (!handlerSettled && !options.signal?.aborted) {
+            result.handler = check('unknown', 'The installed browser handler could not be verified.', true, 'selected');
+          }
+          if (!networkSettled && !options.signal?.aborted) {
+            result.reachability = check('unknown', 'HTTP reachability could not be verified (offline, blocked, cancelled or timed out).', true, 'selected');
+          }
+          resolve();
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (deadlineTimer) clearTimeout(deadlineTimer);
+    if (onSignalAbort) options.signal?.removeEventListener('abort', onSignalAbort);
+  }
   return result;
 }

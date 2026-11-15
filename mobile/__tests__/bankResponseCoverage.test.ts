@@ -260,3 +260,49 @@ test('a full provider/window breakdown fits the OS share budget without dropping
   expect(retained.map((row: any) => [row.section, row.decisionDate, row.sourceReason, row.displayReason, row.missingDays]))
     .toEqual(coverage.rows.map(row => [row.section, row.decisionDate, row.sourceReason, row.displayReason, row.missingDays]));
 });
+
+test('incomplete source windows retain missing-history, missing-baseline and history-gap reasons when filtered', () => {
+  const f = fixture();
+  const gapSource = {
+    ...f.source,
+    banks: {
+      'Missing Baseline': { Savings: { median: [null, 0.04, 0.04, 0.04], best: [null, 0.04, 0.04, 0.04], count: [null, 1, 1, 1] } },
+      'History Gap': { Savings: { median: [0.04, null, 0.04, 0.04], best: [0.04, null, 0.04, 0.04], count: [1, null, 1, 1] } },
+      'Missing History': { Savings: { median: [null, null, null, null], best: [null, null, null, null], count: [null, null, null, null] } },
+    },
+  };
+  const currentOnly = (rate: number) => ({ median: [null, null, null, rate], best: [null, null, null, rate], count: [null, null, null, 1] });
+  const projected = {
+    ...gapSource,
+    banks: {
+      'Missing Baseline': { Savings: currentOnly(0.04) },
+      'History Gap': { Savings: currentOnly(0.04) },
+    },
+  };
+  const coverage = bankResponseCoverage(gapSource, projected, f.calendar, f.core)!;
+  const rows = coverage.rows.filter(row => row.decisionDate === '2026-11-03' && row.section === 'Savings');
+  expect(rows.find(row => row.provider === 'Missing Baseline')).toMatchObject({ sourceReason: 'missing-baseline', displayReason: 'missing-baseline' });
+  expect(rows.find(row => row.provider === 'History Gap')).toMatchObject({ sourceReason: 'history-gap', displayReason: 'history-gap' });
+  expect(rows.find(row => row.provider === 'Missing History')).toMatchObject({ sourceReason: 'missing-history', displayReason: 'missing-history' });
+});
+
+test('source coverage stops at the earliest removed event before a later retained event and later gap', () => {
+  const f = fixture();
+  const source = {
+    ...f.source,
+    run_dates: ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06'],
+    banks: {
+      'Private Bank': {
+        Savings: { median: [0.04, 0.04, 0.045, null, 0.05], best: [0.04, 0.04, 0.045, null, 0.05], count: [1, 1, 1, null, 1] },
+      },
+    },
+    events: [
+      { date: '2026-11-04', provider: 'Private Bank', section: 'Savings' as const, dir: 'hike' as const, moved: 1, total: 2, avg_bps: 25 },
+      { date: '2026-11-06', provider: 'Private Bank', section: 'Savings' as const, dir: 'hike' as const, moved: 1, total: 1, avg_bps: 25 },
+    ],
+  };
+  const projected = { ...source, events: [source.events[1]] };
+  const coverage = bankResponseCoverage(source, projected, f.calendar, f.core)!;
+  expect(coverage.rows.find(row => row.section === 'Savings' && row.decisionDate === '2026-11-03'))
+    .toMatchObject({ sourceReason: 'recorded-move', displayReason: 'filtered-history' });
+});

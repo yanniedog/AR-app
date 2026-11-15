@@ -1,4 +1,4 @@
-import { mortgageComparisonScenario } from '../src/data/mortgageComparisonScenario';
+import { mortgageComparisonScenario, ratesComparisonScenario } from '../src/data/mortgageComparisonScenario';
 import { scopeMortgageFacets } from '../src/data/mortgageFacetScope';
 
 test('comparison amount and percentage LVR override saved pricing assumptions without changing them', () => {
@@ -55,4 +55,15 @@ test.each(['OWNER_OCCUPIER', 'INVESTOR'])('recognised %s display alias retains i
   const factual = { loanPurposes: ['OTHER', 'private-source-token'], repaymentTypes: ['UNKNOWN'] };
   expect(scopeMortgageFacets(factual, true)).toBe(factual);
   expect(scopeMortgageFacets(factual, false)).toEqual({ loanPurposes: [], repaymentTypes: [] });
+});
+
+test('ratesComparisonScenario preserves cold-launch browse defaults without inventing partial inputs', () => {
+  const emptyFilters = { loanPurposes: [], repaymentTypes: [] };
+  expect(ratesComparisonScenario('Mortgage', {}, { loanAmount: '', lvr: '' }, emptyFilters)).toMatchObject({
+    lvr: '0.8',
+    purpose: 'OWNER_OCCUPIED',
+    repayment: 'PRINCIPAL_AND_INTEREST',
+  });
+  expect(ratesComparisonScenario('Mortgage', {}, { loanAmount: '600000', lvr: '' }, emptyFilters).lvr).toBeUndefined();
+  expect(ratesComparisonScenario('Mortgage', {}, { loanAmount: '', lvr: '' }, { loanPurposes: ['INVESTMENT'], repaymentTypes: [] }).lvr).toBeUndefined();
 });

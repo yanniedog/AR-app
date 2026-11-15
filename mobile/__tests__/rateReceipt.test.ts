@@ -317,6 +317,8 @@ describe('local negotiation brief', () => {
 
     expect(brief.comparables.map((item) => item.productKey)).toEqual([open.product_key]);
     expect(brief.cohortSummary).toMatch(/^2 rates/);
+    expect(brief.facts.filter((fact) => fact.kind === 'eligibility')).toHaveLength(1);
+    expect(brief.facts.filter((fact) => fact.kind === 'costs')).toHaveLength(1);
   });
 });
 

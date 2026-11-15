@@ -703,11 +703,11 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
     failedCount < 0 ||
     !Number.isInteger(partialCount) ||
     partialCount < 0 ||
-    (attempted != null && succeeded != null && succeeded + failedCount > attempted + partialCount);
+    (attempted != null && succeeded != null && succeeded + failedCount > attempted);
   const unaccountedProviders = Math.max(0, attempted - succeeded - failedCount - partialCount);
-  // Partial observations that the producer already counted are a data fact.
-  // Failed, unaccounted, or internally inconsistent coverage is an app defect.
-  const degraded = failedCount > 0 || unaccountedProviders > 0 || (coverage.limitations?.length ?? 0) > 0;
+  // Disclosed producer failures, partials and limitations that reconcile with
+  // attempted totals are informational data facts, not app warnings.
+  const degraded = unaccountedProviders > 0;
   const status: AppHealthStatus = invalidCounts ? 'fail' : degraded ? 'warn' : 'pass';
   return check(
     APP_HEALTH_CHECK_CODES.COVERAGE,
@@ -727,7 +727,7 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
     invalidCounts
       ? 'Producer coverage counts do not reconcile.'
       : degraded
-        ? 'Provider coverage has a failed or unaccounted outcome.'
+        ? 'Provider coverage has an unaccounted outcome.'
         : undefined,
   );
 }

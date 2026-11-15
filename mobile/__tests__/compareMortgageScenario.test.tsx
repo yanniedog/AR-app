@@ -6,6 +6,7 @@ import { openCompare } from '../src/lib/nav';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import { catalogue, core, product, programme } from '../testUtils/publicRateJourney';
 import { captureRatesSession, restoreRatesSession, updateRatesSection } from '../src/data/ratesSession';
+import { EMPTY_FILTERS } from '../src/data/selectors';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { useMortgageComparison, clearMortgageComparison } from '../src/data/mortgageComparison';
 import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
@@ -177,6 +178,37 @@ test.each([undefined, 'other'])('Saved/default Compare ignores lingering Rates a
     expect(JSON.stringify(mockScenario)).toBe(savedScenario);
   } finally {
     act(() => { tree.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });
+    installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));
+  }
+});
+
+test('rates-comparison origin preserves cold-launch default mortgage assumptions across Compare', () => {
+  const previous = captureRatesSession();
+  const products = ['a', 'b'].map(id => ({ ...product, productId: id, productKey: id, name: id, programmeIds: [id] }));
+  const programmes = products.map((item, index) => {
+    const p = programme({ productId: item.productId, programmeId: item.productId, offerId: item.productId, sourceBindings: [], conditions: [
+      { conditionId: 'lvr', field: 'lvr', operator: 'bounds', maximum: '0.8', evidenceIds: [] },
+      { conditionId: 'purpose', field: 'purpose', operator: 'eq', value: 'OWNER_OCCUPIED', evidenceIds: [] },
+      { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: 'PRINCIPAL_AND_INTEREST', evidenceIds: [] },
+    ] });
+    return { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() }, components: [{ ...p.components[0], value: index ? '0.06' : '0.05', scopeId: item.productId }] };
+  });
+  mockCatalogue = { ...catalogue(programmes, products, []), loadAll: async () => undefined };
+  mockState = { core: core([]), manifest: null, prefs: DEFAULT_PREFS, details: { products: {} }, ensureDetails: jest.fn() };
+  mockKeys = JSON.stringify(products.map(item => publicOfferSelectionToken(item.productKey, item.productId)));
+  installMandatoryEligibility(selectMandatoryEligibility(mockState.core, DEFAULT_PREFS.profileFilters, null));
+  clearMortgageComparison();
+  updateRatesSection('Mortgage', { filters: EMPTY_FILTERS }, true);
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<Compare />) as Tree; });
+  try {
+    const evidence = tree.root.findAllByType('PublicRateEvidence');
+    expect(evidence).toHaveLength(2);
+    expect(evidence.every(node => node.props.scenario.lvr === '0.8'
+      && node.props.scenario.purpose === 'OWNER_OCCUPIED'
+      && node.props.scenario.repayment === 'PRINCIPAL_AND_INTEREST')).toBe(true);
+  } finally {
+    act(() => { tree.unmount(); restoreRatesSession(previous); });
     installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));
   }
 });

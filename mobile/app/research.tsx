@@ -50,6 +50,7 @@ export default function Market() {
   const calendar = useStore((s) => s.rbaCalendar);
   const calendarError = useStore((s) => s.rbaCalendarError);
   const hasCalendarAsset = useStore((s) => !!s.manifest?.files.rba_calendar);
+  const hasHistoryAsset = useStore((s) => !!s.manifest?.files.history_banks);
   const bankInsights = useStore((s) => s.bankInsights);
   const bankInsightsError = useStore((s) => s.bankInsightsError);
   const historyBanks = useStore((s) => s.historyBanks);
@@ -91,6 +92,7 @@ export default function Market() {
     revision: string;
     expectedCount: number;
     terminalCount: number;
+    fallbackCount: number;
   } | null>(null);
   const [economicAuditState, setEconomicAuditState] = useState<RbaOutlookAuditState | null>(null);
   const [pendingEconomyAuditAction, setPendingEconomyAuditAction] = useState<{
@@ -111,7 +113,7 @@ export default function Market() {
   const interestSections = useMemo(() => orderedInterestSections(interests), [interests]);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const showBankInsights = effectiveBankInsights();
-  const prebuiltHistoryEnabled = shouldEnsurePrebuiltBankHistory(showHistoryRibbon, includeNonStandard);
+  const prebuiltHistoryEnabled = hasHistoryAsset && shouldEnsurePrebuiltBankHistory(showHistoryRibbon, includeNonStandard);
 
   useEffect(() => {
     setActiveSection((current) => resolveInterestSection(interests, current));
@@ -331,21 +333,25 @@ export default function Market() {
   });
   usePerformanceAuditProbe(surface, {
     id: 'rba-calendar', kind: 'data', status: !hasCalendarAsset || calendar ? 'ready' : calendarError ? 'error' : 'pending',
+    expectedCount: hasCalendarAsset ? 1 : 0, actualCount: hasCalendarAsset && calendar ? 1 : 0,
     error: calendarError, datasetRevision, renderRevision,
   });
   usePerformanceAuditProbe(surface, {
     id: 'bank-insights', kind: 'data', required: showBankInsights,
     status: explorerInsights ? 'ready' : bankInsightsError ? 'error' : 'pending', error: bankInsightsError,
+    expectedCount: showBankInsights ? 1 : 0, actualCount: showBankInsights && explorerInsights ? 1 : 0,
     datasetRevision, renderRevision,
   });
   usePerformanceAuditProbe(surface, {
     id: 'bank-history', kind: 'data', required: prebuiltHistoryEnabled,
     status: !prebuiltHistoryEnabled || historyBanks ? 'ready' : historyBanksError ? 'error' : 'pending',
+    expectedCount: prebuiltHistoryEnabled ? 1 : 0, actualCount: prebuiltHistoryEnabled && historyBanks ? 1 : 0,
     error: historyBanksError, datasetRevision, renderRevision,
   });
   usePerformanceAuditProbe(surface, {
     id: 'product-history', kind: 'data', required: explorerMode === 'pulse',
     status: explorerMode !== 'pulse' || productHistory ? 'ready' : productHistoryError ? 'error' : 'pending',
+    expectedCount: explorerMode === 'pulse' ? 1 : 0, actualCount: explorerMode === 'pulse' && productHistory ? 1 : 0,
     error: productHistoryError, datasetRevision, renderRevision,
   });
   usePerformanceAuditProbe(surface, {
@@ -415,6 +421,7 @@ export default function Market() {
     ) ? 'ready' : 'pending',
     expectedCount: explorerMode === 'race' ? leaderLogoState?.expectedCount ?? 0 : 0,
     actualCount: explorerMode === 'race' ? leaderLogoState?.terminalCount ?? 0 : 0,
+    fallbackCount: explorerMode === 'race' ? leaderLogoState?.fallbackCount ?? 0 : 0,
     datasetRevision, renderRevision,
   });
 

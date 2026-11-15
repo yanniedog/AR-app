@@ -359,6 +359,8 @@ export default function Settings() {
           : updateStatus.error
             ? 'error'
             : 'ready',
+        expectedCount: 1,
+        actualCount: updateStatus.terminal && !updateStatus.error ? 1 : 0,
         error: updateStatus.error,
       },
       {
@@ -407,7 +409,7 @@ export default function Settings() {
         <Label text="Deposit ranking" />
         <SegmentedControl<RankMetric>
           options={[
-            { value: 'base', label: uiLabel("Base rate") },
+            { value: 'base', label: uiLabel("Ongoing rate") },
             { value: 'max', label: uiLabel("Headline rate") },
           ]}
           value={prefs.depositRankMetric}
@@ -417,7 +419,7 @@ export default function Settings() {
         <Label text="Mortgage ranking" />
         <SegmentedControl<MortgageRateMetric>
           options={[
-            { value: 'headline', label: uiLabel("Headline rate") },
+            { value: 'headline', label: uiLabel("Advertised rate") },
             { value: 'comparison', label: uiLabel("Comparison rate") },
           ]}
           value={prefs.mortgageRateMetric}
@@ -441,7 +443,7 @@ export default function Settings() {
           {orderedInterests.map((key, idx, ordered) => (
             <InterestOrderRow
               key={key}
-              title={uiSectionName(key)}
+              title={uiSectionName(key, true)}
               canMoveUp={idx > 0}
               canMoveDown={idx < ordered.length - 1}
               canRemove={ordered.length > 1}
@@ -458,7 +460,7 @@ export default function Settings() {
                 {hiddenSections.map((key) => (
                   <Chip
                     key={key}
-                    label={uiSectionName(key)}
+                    label={uiSectionName(key, true)}
                     icon={SECTIONS[key].icon as keyof typeof Ionicons.glyphMap}
                     onPress={() => setPref('interests', toggleInterest(prefs.interests, key))}
                   />

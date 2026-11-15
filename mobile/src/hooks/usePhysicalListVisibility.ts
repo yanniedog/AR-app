@@ -133,7 +133,22 @@ export function usePhysicalListVisibility<Row>(revision: string, rows: readonly 
   const refs = useRef(new Map<Row, (node: View | null) => void>());
   const refFor = useCallback((row: Row) => {
     let callback = refs.current.get(row);
-    if (!callback) { callback = node => register(row, node); refs.current.set(row, callback); }
+    if (!callback) {
+      let currentNode: View | null = null;
+      callback = node => {
+        if (node) {
+          currentNode = node;
+          register(row, node);
+        } else if (currentNode) {
+          const leaving = currentNode;
+          currentNode = null;
+          if (cells.current.get(row) === leaving) register(row, null);
+        } else {
+          register(row, null);
+        }
+      };
+      refs.current.set(row, callback);
+    }
     return callback;
   }, [register]);
   useEffect(() => { for (const row of refs.current.keys()) if (!rows.includes(row)) refs.current.delete(row); }, [rows]);

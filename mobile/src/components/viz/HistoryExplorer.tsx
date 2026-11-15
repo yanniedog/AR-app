@@ -72,7 +72,7 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
   onWindowChange?: (window: HistoryWindow) => void;
   auditRevision?: string;
   onGraphicReadiness?: (state: ChartRenderEvidence) => void;
-  onLeaderLogoReadiness?: (state: { revision: string; expectedCount: number; terminalCount: number }) => void;
+  onLeaderLogoReadiness?: (state: { revision: string; expectedCount: number; terminalCount: number; fallbackCount: number }) => void;
   /** Keeps the default Market view calm; advanced lenses can be disclosed on demand. */
   showModePicker?: boolean;
 }) {

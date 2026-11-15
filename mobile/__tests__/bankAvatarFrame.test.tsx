@@ -4,12 +4,13 @@ import { Image, Text, View } from 'react-native';
 import { BankAvatar } from '../src/components/BankAvatar';
 
 let mockSources: (string | number | { uri: string; width: number; height: number })[] = [];
+let mockDark = false;
 jest.mock('../src/data/store', () => ({ useStore: (select: (state: unknown) => unknown) => select({ core: { brands: { Bank: { short: 'BK', color: '#123456' } } } }) }));
 jest.mock('../src/data/bankBrand', () => ({ ...jest.requireActual('../src/data/bankBrand'), resolveBankLogoSourcesForRuntime: () => mockSources,
   isSvgLogoSource: (source: unknown) => typeof source === 'string' && source.endsWith('.svg') }));
 jest.mock('react-native-svg', () => ({ SvgUri: 'SvgUri' }));
 jest.mock('../src/lib/performanceAudit', () => ({ isPerformanceAuditActive: () => false, subscribePerformanceAudit: () => () => {} }));
-jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: { chipText: '#123456' } }) }));
+jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ dark: mockDark, colors: { chipText: '#123456' } }) }));
 
 test.each([[96, 50], [112, 66], [32, 106]])('raster and wide/square SVG marks contain inside a %ix%i frame without clipping or stretching', (width, height) => {
   for (const source of ['https://example.test/wide.png', 'https://example.test/square.svg']) {
@@ -52,4 +53,18 @@ test('a failed curated image ends at initials', () => {
     expect(tree.root.findAllByType(Image)).toHaveLength(0);
     expect(tree.root.findByType(Text).props.children).toBe('BK');
   } finally { act(() => tree.unmount()); }
+});
+
+test('softens the logo plate in dark mode while keeping #ffffff in light mode', () => {
+  mockSources = ['https://example.test/logo.png'];
+  for (const [dark, expectedBg, expectedBorder] of [[false, '#ffffff', '#dbe2ea'], [true, '#F1F5F9', '#64748b']] as const) {
+    mockDark = dark;
+    let tree: any;
+    act(() => { tree = TestRenderer.create(<BankAvatar provider="Bank" />); });
+    try {
+      const frame = tree.root.findAllByType(View).find((node: any) => node.props.accessible);
+      expect(frame.props.style).toMatchObject({ backgroundColor: expectedBg, borderColor: expectedBorder, borderWidth: 1 });
+    } finally { act(() => tree.unmount()); }
+  }
+  mockDark = false;
 });

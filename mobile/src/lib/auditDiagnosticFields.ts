@@ -69,6 +69,7 @@ export const PUBLIC_AUDIT_METRIC_FIELDS = new Set([
   'handlerAttempted',
   'httpAttempted',
   'uniqueDestinations',
+  'destinationCount',
   'lenderDetailsLoaded',
   'observedDestinations',
 ]);

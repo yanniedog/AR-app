@@ -567,6 +567,8 @@ export default function BankDetail() {
         kind: 'data',
         status: core ? 'ready' : 'pending',
         datasetRevision: coreSha ?? core?.run_date ?? null,
+        expectedCount: productCount,
+        actualCount: core ? productCount : 0,
       },
       {
         id: 'lender.products',
@@ -602,7 +604,8 @@ export default function BankDetail() {
               ? 'pending'
               : 'ready',
         error: rateHistory.failed ? 'Historical rates could not be prepared' : null,
-        actualCount: chartModel?.dates.length ?? 0,
+        expectedCount: !historySurfaceReady ? 0 : rateHistory.failed ? Math.max(1, chartModel?.dates.length ?? 0) : (chartModel?.dates.length ?? 0),
+        actualCount: !historySurfaceReady || rateHistory.failed ? 0 : (chartModel?.dates.length ?? 0),
       },
       {
         id: 'lender.history-graphic',

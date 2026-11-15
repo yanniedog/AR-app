@@ -835,16 +835,15 @@ test('one visible tap commits the common sort preset, while advanced Cancel/Back
     act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 312 } } }));
     const before = captureRatesSession();
     const sortSheet = () => tree.root.findAllByType('SheetSurface' as any).find((node: any) => node.props.title === 'Sort');
-    for (const close of ['button', 'back']) {
-      act(() => tree.root.findByProps({ word: 'Sort' }).props.onPress());
-      expect(sortSheet().props.visible).toBe(true);
-      act(() => close === 'button' ? sortSheet().findByProps({ title: 'Cancel' }).props.onPress() : sortSheet().props.onClose());
-      expect(sortSheet().props.visible).toBe(false);
-      expect(captureRatesSession()).toEqual(before);
-    }
+    expect(sortSheet().findAllByProps({ title: 'Cancel' })).toHaveLength(0);
+    act(() => tree.root.findByProps({ word: 'Sort' }).props.onPress());
+    expect(sortSheet().props.visible).toBe(true);
+    act(() => sortSheet().props.onClose());
+    expect(sortSheet().props.visible).toBe(false);
+    expect(captureRatesSession()).toEqual(before);
     act(() => tree.root.findByProps({ word: 'Sort' }).props.onPress());
     const commits = jest.fn(), stop = useRatesSession.subscribe(commits);
-    act(() => sortSheet().findByProps({ title: 'Advertised rate' }).props.onPress());
+    act(() => sortSheet().findByProps({ accessibilityLabel: 'Advertised rate' }).props.onPress());
     stop();
     expect(commits).toHaveBeenCalledTimes(1);
     expect(sortSheet().props.visible).toBe(false);
