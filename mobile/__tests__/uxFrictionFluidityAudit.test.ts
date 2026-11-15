@@ -1,10 +1,9 @@
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { APP_HEALTH_CHECK_CODES, finalizeAppHealthReport } from '../src/lib/appHealth';
-import type { AuditCheck } from '../src/lib/performanceAudit';
+import { buildAuditMetricAnalysis } from '../src/lib/auditMetricAnalysis';
+import type { AuditCheck, PerformanceAuditReport } from '../src/lib/performanceAudit';
 import {
-  AFFS_PILLAR_WEIGHTS,
   AFFS_TASK_FRICTION_WEIGHTS,
-  UX_AUDIT_STANDARDS,
   androidFrameDeadlineMs,
   buildUxFrictionFluidityAudit,
   calculatePathEfficiency,
@@ -42,6 +41,15 @@ function makeJourneyCheck(id: string, overrides: Partial<AuditCheck['metrics']> 
       framesOver50Ms: 0,
       maxFrameGapMs: 22,
       runtimeErrors: 0,
+      retries: 0,
+      validationFailures: 0,
+      backtracks: 0,
+      repeatedFields: 0,
+      scrollDetours: 0,
+      modalInterruptions: 0,
+      minimumJustifiedActions: 2,
+      observedActions: 2,
+      preActionWaitMs: 0,
       actionMs: 120,
       forwardWorkMs: 120,
       backMs: 60,
@@ -52,6 +60,52 @@ function makeJourneyCheck(id: string, overrides: Partial<AuditCheck['metrics']> 
       readiness: { ready: true, capturing: true, blockers: [], surfaces: [] },
     },
   };
+}
+
+function attachCompleteDisplayHealth(report: PerformanceAuditReport): void {
+  const roleCodes = [
+    APP_HEALTH_CHECK_CODES.DISPLAY_MODEL,
+    APP_HEALTH_CHECK_CODES.DISPLAY_LIST,
+    APP_HEALTH_CHECK_CODES.DISPLAY_VISIBILITY,
+    APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT,
+    APP_HEALTH_CHECK_CODES.DISPLAY_CHART,
+    APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE,
+    APP_HEALTH_CHECK_CODES.DISPLAY_LOGO,
+  ] as const;
+  const allCodes = [APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT, ...roleCodes];
+  report.appHealth = finalizeAppHealthReport({
+    sessionId: report.sessionId,
+    mode: 'local',
+    startedAt: report.startedAt,
+    finishedAt: report.finishedAt,
+    plannedCheckIds: [...allCodes],
+    checks: [
+      {
+        id: APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT,
+        code: APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT,
+        domain: 'display-completeness',
+        label: 'Contract',
+        status: 'pass',
+        metrics: {
+          plannedSurfaces: 20,
+          missingSurfaces: 0,
+          duplicateContracts: 0,
+          duplicateObservations: 0,
+          unexpectedSurfaces: 0,
+        },
+      },
+      ...roleCodes.map(code => ({
+        id: code,
+        code,
+        domain: 'display-completeness' as const,
+        label: code,
+        status: code === APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT ? ('warn' as const) : ('pass' as const),
+        metrics: code === APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT
+          ? { checked: 10, missing: 0, failed: 2, warned: 1, unavailable: 0 }
+          : { checked: 10, missing: 0, failed: 0, warned: 0, unavailable: 0 },
+      })),
+    ],
+  });
 }
 
 describe('AR Friction & Fluidity Score (AFFS) framework', () => {
@@ -66,7 +120,7 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
     expect(calculatePathEfficiency(2.5, 4)).toBeNull();
   });
 
-  test('per-task interaction friction follows Ft = 0.30*St + 0.20*Et + 0.20*At + 0.15*Rt + 0.15*Wt', () => {
+  test('per-task interaction friction follows Ft = 0.30*(1-St) + 0.20*(1-Et) + 0.20*(1-At) + 0.15*(1-Rt) + 0.15*(1-Wt) and preserves null on missing counters', () => {
     expect(AFFS_TASK_FRICTION_WEIGHTS).toEqual({
       taskSuccess: 0.30,
       errorRetryPerformance: 0.20,
@@ -81,11 +135,17 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
       observedActions: 4,
       errors: 0,
       retries: 0,
+      validationFailures: 0,
+      backtracks: 0,
+      repeatedFields: 0,
+      scrollDetours: 0,
+      modalInterruptions: 0,
       observedResponseMs: 180,
       targetResponseMs: 200,
       comparatorKind: 'product-target',
       avoidableWaitMs: 0,
     });
+    expect(ideal.frictionIndex).toBe(0);
     expect(ideal.score).toBe(100);
     expect(ideal.components).toEqual({
       taskSuccess: 1,
@@ -93,6 +153,13 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
       pathEfficiency: 1,
       responseTimeEfficiency: 1,
       waitingInterruptionPerformance: 1,
+    });
+    expect(ideal.frictionComponents).toEqual({
+      taskFailure: 0,
+      errorRetry: 0,
+      stepExcess: 0,
+      responseDelay: 0,
+      waitingInterruption: 0,
     });
 
     const degraded = scoreTaskInteractionFriction({
@@ -102,8 +169,11 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
       observedActions: 8,
       errors: 1,
       retries: 0,
+      validationFailures: 0,
+      backtracks: 0,
       repeatedFields: 1,
       scrollDetours: 2,
+      modalInterruptions: 0,
       observedResponseMs: 400,
       targetResponseMs: 200,
       comparatorKind: 'best-known-path',
@@ -111,7 +181,8 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
       maxAvoidableWaitBudgetMs: 1_000,
       probeDefects: 1,
     });
-    // St=1, Et=0.5, At=0.625, Rt=0.5, Wt=0.5 => Ft = 0.30 + 0.10 + 0.125 + 0.075 + 0.075 = 0.675 => 67.5
+    // Friction Ft = 0.30*0 + 0.20*0.5 + 0.20*0.375 + 0.15*0.5 + 0.15*0.5 = 0.325 => score = 100*(1 - 0.325) = 67.5
+    expect(degraded.frictionIndex).toBe(0.325);
     expect(degraded.score).toBe(67.5);
     expect(degraded.comparatorKind).toBe('best-known-path');
     expect(degraded.frictionTaxonomy).toEqual({
@@ -120,6 +191,26 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
       cognitiveProbeFlags: 1,
       requiresHumanComprehensionReview: true,
     });
+
+    const missingCounters = scoreTaskInteractionFriction({
+      taskId: 'missing-evidence',
+      completed: true,
+      minimumJustifiedActions: 4,
+      observedActions: 4,
+      errors: null,
+      retries: 0,
+      validationFailures: 0,
+      backtracks: 0,
+      repeatedFields: 0,
+      scrollDetours: 0,
+      modalInterruptions: 0,
+      observedResponseMs: 150,
+      targetResponseMs: 200,
+      avoidableWaitMs: 0,
+    });
+    expect(missingCounters.components.errorRetryPerformance).toBeNull();
+    expect(missingCounters.frictionIndex).toBeNull();
+    expect(missingCounters.score).toBeNull();
   });
 
   test('house operational bands classify 0..100 scores and reject invalid inputs', () => {
@@ -165,6 +256,17 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
     expect(androidFrameDeadlineMs(90)).toBeCloseTo(11.111, 2);
     expect(androidFrameDeadlineMs(120)).toBeCloseTo(8.333, 2);
 
+    // Omitted refreshRateHz or input-latency-only telemetry must return null
+    expect(scoreAndroidNativeFluidity({ frameOverrunP95Ms: 1, jankPercent: 1 })).toBeNull();
+    expect(scoreAndroidNativeFluidity({ inputLatencyP95Ms: 50 })).toBeNull();
+    // Positive frozenFrameCount without >=700 ms duration evidence returns null
+    expect(scoreAndroidNativeFluidity({
+      refreshRateHz: 120,
+      frameOverrunP95Ms: 1,
+      frozenFrameCount: 1,
+      maxFrozenFrameMs: 650,
+    })).toBeNull();
+
     const smooth120Hz = scoreAndroidNativeFluidity({
       refreshRateHz: 120,
       frameOverrunP95Ms: 1,
@@ -177,10 +279,12 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
       frameOverrunP95Ms: 1,
       jankPercent: 1,
       frozenFrameCount: 2,
+      maxFrozenFrameMs: 740,
       inputLatencyP95Ms: 50,
     });
-    expect(smooth120Hz).toBeGreaterThan(85);
-    expect(frozen120Hz).toBe(round1(smooth120Hz! - 30));
+    // At 120 Hz, deadline = 8.333 ms, goodLimit = 2.083 ms => overrun 1 ms scores 90.4; jank 1% scores 90; input 50 ms scores 90 => mean = 90.1
+    expect(smooth120Hz).toBe(90.1);
+    expect(frozen120Hz).toBe(60.1);
   });
 
   test('SUS, UMUX-Lite and SEQ questionnaires validate inputs and stay separate from automated scores', () => {
@@ -221,60 +325,69 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
   test('buildUxFrictionFluidityAudit combines the three pillars, preserves ACT/WCAG boundaries and keeps human validation separate', () => {
     const report = makePerformanceAuditReport('affs-complete', [
       makeJourneyCheck('journey-rates-cold'),
-      makeJourneyCheck('journey-rates-warm', { replaceRecoveryMs: 25, maxEventLoopLagMs: 140, maxFrameGapMs: 65, stallsOver100Ms: 1, framesOver50Ms: 2 }),
+      makeJourneyCheck('journey-rates-warm', {
+        observedActions: 3,
+        retries: 1,
+        replaceRecoveryMs: 25,
+        maxEventLoopLagMs: 140,
+        maxFrameGapMs: 65,
+        stallsOver100Ms: 1,
+        framesOver50Ms: 2,
+      }),
     ]);
-    report.appHealth = finalizeAppHealthReport({
-      sessionId: report.sessionId,
-      mode: 'local',
-      startedAt: report.startedAt,
-      finishedAt: report.finishedAt,
-      plannedCheckIds: [APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT, APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT],
-      checks: [
-        {
-          id: APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT,
-          code: APP_HEALTH_CHECK_CODES.DISPLAY_CONTRACT,
-          domain: 'display-completeness',
-          label: 'Contract',
-          status: 'pass',
-          metrics: { plannedSurfaces: 23, missingSurfaces: 0, duplicateContracts: 0 },
-        },
-        {
-          id: APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT,
-          code: APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT,
-          domain: 'display-completeness',
-          label: 'Layout',
-          status: 'warn',
-          metrics: { checked: 11, missing: 0, failed: 2, warned: 1, unavailable: 0 },
-        },
+    attachCompleteDisplayHealth(report);
+    report.uxTelemetry = {
+      targetSamples: [
+        { id: 'cta-primary', width: 48, height: 48, platform: 'android' },
+        { id: 'filter-chip', width: 44, height: 48, platform: 'android' },
       ],
-    });
+      wcagActChecks: { passed: 8, failed: 0, requiresManualReview: 1, unavailable: 0 },
+    };
 
-    const audit = buildUxFrictionFluidityAudit(report);
+    const analysis = buildAuditMetricAnalysis(report);
+    const audit = analysis.uxAudit;
     expect(audit.proprietaryComposite).toBe(true);
     expect(audit.validatedUsabilityScaleClaimed).toBe(false);
     expect(audit.houseThresholds).toBe(true);
     expect(audit.normativeCutoffsClaimed).toBe(false);
     expect(audit.standards).toEqual({
-      usabilityDefinition: UX_AUDIT_STANDARDS.usabilityDefinition,
-      interactionPrinciples: UX_AUDIT_STANDARDS.interactionPrinciples,
-      usabilityReporting: UX_AUDIT_STANDARDS.usabilityReporting,
-      accessibility: UX_AUDIT_STANDARDS.accessibility,
-      actRulesFormat: UX_AUDIT_STANDARDS.actRulesFormat,
+      usabilityDefinition: 'ISO 9241-11:2018',
+      interactionPrinciples: 'ISO 9241-110:2020',
+      usabilityReporting: 'ISO 25062:2025',
+      accessibility: 'WCAG 2.2',
+      actRulesFormat: '1.1',
     });
-    expect(audit.weights).toEqual(AFFS_PILLAR_WEIGHTS);
+    expect(audit.weights).toEqual({
+      interactionFriction: 0.4,
+      standardsAndAccessibility: 0.3,
+      fluidityAndResponsiveness: 0.3,
+    });
     expect(audit.pillars.standardsAndAccessibility.wcagSummary).toEqual({
-      applicableChecks: 34,
-      passed: 31,
+      applicableChecks: 11,
+      passed: 9,
+      failed: 1,
+      requiresManualReview: 1,
+      unavailable: 0,
+      automatedConformityClaimed: false,
+    });
+    expect(audit.pillars.standardsAndAccessibility.surfaceContractSummary).toEqual({
+      applicableChecks: 90,
+      passed: 87,
       failed: 2,
       requiresManualReview: 1,
       unavailable: 0,
       automatedConformityClaimed: false,
     });
-    expect(audit.pillars.standardsAndAccessibility.score).toBe(91.2);
+    // Interaction friction: cold = 100, warm: St=1, Et=0.5, At=0.667, Rt=1, Wt=1 => Ft=0.167 => 83.3 => mean = 91.7
+    expect(audit.pillars.interactionFriction.score).toBe(91.7);
+    // Standards: (87 + 9) / (90 + 11) = 96 / 101 = 95.0%
+    expect(audit.pillars.standardsAndAccessibility.score).toBe(95);
     expect(audit.pillars.fluidityAndResponsiveness.telemetryKind).toBe('js-runtime-callbacks');
     expect(audit.pillars.fluidityAndResponsiveness.nativeFrameDeadlineMeasured).toBe(false);
-    expect(audit.affsScore).not.toBeNull();
-    expect(audit.band).toBe('Exemplary'.toLowerCase());
+    expect(audit.pillars.fluidityAndResponsiveness.score).toBe(91.9);
+    // Composite: 0.4 * 91.7 + 0.3 * 95.0 + 0.3 * 91.9 = 36.68 + 28.5 + 27.57 = 92.8
+    expect(audit.affsScore).toBe(92.8);
+    expect(audit.band).toBe('exemplary');
     expect(audit.humanValidation).toEqual({
       status: 'not-performed',
       humanValidationClaimed: false,
@@ -285,11 +398,46 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
       nasaTlxScore: null,
     });
     expect(audit.findings.map(item => item.code)).toEqual(
-      expect.arrayContaining(['avoidable-interactions', 'standards-check-failed']),
+      expect.arrayContaining(['avoidable-interactions', 'standards-check-failed', 'js-event-loop-stall', 'js-frame-gap-overrun']),
     );
   });
-});
 
-function round1(value: number): number {
-  return Math.round(value * 10) / 10;
-}
+  test('withholds scores on slow Back round-trip, uninvoked/duplicate journeys, missing standards checks or unevidenced human validation', () => {
+    const slowBackReport = makePerformanceAuditReport('slow-back', [
+      makeJourneyCheck('journey-round-trip', {
+        measurementMode: 'route-round-trip',
+        forwardWorkMs: 100,
+        backMs: 9_000,
+      }, 'fail'),
+    ]);
+    delete slowBackReport.checks[0].metrics.actionMs;
+    attachCompleteDisplayHealth(slowBackReport);
+    const slowBackAudit = buildUxFrictionFluidityAudit(slowBackReport, undefined, {
+      wcagActChecks: { passed: 4, failed: 0, requiresManualReview: 1, unavailable: 0 },
+      iosFluidity: { hitchTimeRatioMsPerS: 8 },
+      webVitals: { lcpP75Ms: 4_200, clsP75: 0.3 },
+      humanValidation: { status: 'completed' },
+    });
+    expect(slowBackAudit.pillars.interactionFriction.score).toBeLessThan(90);
+    expect(slowBackAudit.pillars.fluidityAndResponsiveness.nativeFrameDeadlineMeasured).toBe(false);
+    expect(slowBackAudit.humanValidation.status).toBe('not-performed');
+    expect(slowBackAudit.humanValidation.humanValidationClaimed).toBe(false);
+    expect(slowBackAudit.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'cwv-lcp-over-threshold', valueMs: 4_200, unit: 'ms' }),
+      expect.objectContaining({ code: 'cwv-cls-over-threshold', value: 0.3, unit: 'unitless' }),
+      expect.objectContaining({ code: 'ios-hitch-ratio-over-threshold', valueMsPerS: 8, unit: 'ms-per-s' }),
+    ]));
+
+    // Duplicate journey IDs withhold interactionFriction and affsScore
+    const dupReport = makePerformanceAuditReport('dup-journeys', [
+      makeJourneyCheck('journey-dup'),
+      makeJourneyCheck('journey-dup'),
+    ]);
+    attachCompleteDisplayHealth(dupReport);
+    const dupAudit = buildUxFrictionFluidityAudit(dupReport, undefined, {
+      wcagActChecks: { passed: 4, failed: 0, requiresManualReview: 1, unavailable: 0 },
+    });
+    expect(dupAudit.pillars.interactionFriction.score).toBeNull();
+    expect(dupAudit.affsScore).toBeNull();
+  });
+});

@@ -2,7 +2,7 @@ import { APP_HEALTH_CHECK_CODES } from './appHealth';
 import { buildAuditMetricAnalysis } from './auditMetricAnalysis';
 import type { PerformanceAuditReport } from './performanceAudit';
 import { publicAuditDiagnostic } from './performanceAuditDiagnostic';
-import { buildUxFrictionFluidityAudit } from './uxFrictionFluidityAudit';
+import { buildUxFrictionFluidityAudit, type UxFrictionFluidityTelemetryOptions } from './uxFrictionFluidityAudit';
 
 const HEALTH_CODES: ReadonlySet<string> = new Set(Object.values(APP_HEALTH_CHECK_CODES));
 function publicRole(value: string | undefined): string | null {
@@ -14,11 +14,12 @@ function publicRole(value: string | undefined): string | null {
  * Observation indexes preserve contributor identity even when a private check,
  * surface or probe identifier cannot cross the public diagnostics boundary. */
 export function publicAuditMetricAnalysis(report: PerformanceAuditReport,
-  safeCheckId: (value: string) => string | null) {
-  const analysis = buildAuditMetricAnalysis(report);
+  safeCheckId: (value: string) => string | null,
+  uxTelemetry?: Omit<UxFrictionFluidityTelemetryOptions, 'safeCheckId'>) {
+  const analysis = buildAuditMetricAnalysis(report, undefined, uxTelemetry);
   return {
     ...analysis,
-    uxAudit: buildUxFrictionFluidityAudit(report, undefined, { safeCheckId }),
+    uxAudit: buildUxFrictionFluidityAudit(report, undefined, { ...uxTelemetry, safeCheckId }),
     observations: analysis.observations.map(observation => ({
       ...observation,
       ...(observation.checkId === undefined ? {} : { checkId: observation.source === 'health'

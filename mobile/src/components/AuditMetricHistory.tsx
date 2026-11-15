@@ -82,8 +82,22 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
     : uiLabel('Not measured');
   const wcag = uxAudit?.pillars.standardsAndAccessibility.wcagSummary;
   const wcagSummaryValue = wcag && wcag.applicableChecks > 0
-    ? uiJoin(uiCount(wcag.passed), ' ', 'Passed', ' · ', uiCount(wcag.failed), ' ', 'Failed', ' · ', uiCount(wcag.requiresManualReview), ' ', 'Manual review')
+    ? uiJoin(
+      uiCount(wcag.passed), ' ', 'Passed', ' · ',
+      uiCount(wcag.failed), ' ', 'Failed', ' · ',
+      uiCount(wcag.requiresManualReview), ' ', 'Manual review', ' · ',
+      uiCount(wcag.unavailable), ' ', 'Unavailable',
+    )
     : uiLabel('Not measured');
+  const humanValidationRecorded = uxAudit?.humanValidation.status === 'completed'
+    && uxAudit.humanValidation.humanValidationClaimed === true
+    && (uxAudit.humanValidation.participantCount ?? 0) > 0
+    && (
+      uxAudit.humanValidation.sus !== null
+      || uxAudit.humanValidation.umuxLite !== null
+      || uxAudit.humanValidation.seqTasks.length > 0
+      || uxAudit.humanValidation.nasaTlxScore !== null
+    );
   const points = plot.points.filter(point => point !== null);
   if (!runs.length) return <AppText>{uiLabel('No audit history')}</AppText>;
   return <View style={{ gap: 12 }}>
@@ -128,7 +142,7 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
         <InfoRow label="Action failures" value={measuredCount(taskEvidence?.outcomes?.failure)} />
         <InfoRow label="Indeterminate" value={measuredCount(taskEvidence?.outcomes?.indeterminate)} />
         <InfoRow label="Human usability" value="Not measured" />
-        <InfoRow label="SUS / UMUX-Lite / SEQ" value={uxAudit?.humanValidation.status === 'completed' ? 'Recorded' : 'Not performed'} />
+        <InfoRow label="SUS / UMUX-Lite / SEQ" value={humanValidationRecorded ? 'Recorded' : 'Not performed'} />
       </> : <>
         <InfoRow label="Automated WCAG / standards" value={wcagSummaryValue} />
         <InfoRow label="WCAG 2.2 conformance" value="Manual review required" />

@@ -1,6 +1,6 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion, hasValidPerformanceAuditHealth } from './performanceAuditCompletion';
-import { auditMetricValues, auditTaskOutcomePopulation, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount, measuredAuditValue } from './auditMetricHistoryValues';
+import { auditMetricValues, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount, measuredAuditValue } from './auditMetricHistoryValues';
 
 export const AFFS_PILLAR_WEIGHTS = Object.freeze({
   interactionFriction: 0.40,
@@ -57,29 +57,47 @@ export type AffsOperationalBand =
 export type TaskComparatorKind = 'product-target' | 'best-known-path' | 'historical-baseline';
 export type FrictionDimension = 'intrinsic' | 'performance' | 'cognitive';
 
+export interface TargetSizeSampleInput {
+  id?: string;
+  width: number;
+  height: number;
+  platform: 'web-wcag-aa' | 'ios-hig' | 'android';
+}
+
+export interface WcagActChecksInput {
+  passed: number;
+  failed: number;
+  requiresManualReview?: number;
+  unavailable?: number;
+}
+
 export interface TaskFrictionInput {
   taskId: string;
   completed: boolean | null;
   functionalFailure?: boolean;
   minimumJustifiedActions: number | null;
   observedActions: number | null;
-  errors?: number | null;
-  retries?: number | null;
-  validationFailures?: number | null;
-  backtracks?: number | null;
-  repeatedFields?: number | null;
-  scrollDetours?: number | null;
-  modalInterruptions?: number | null;
+  errors: number | null;
+  retries: number | null;
+  validationFailures: number | null;
+  backtracks: number | null;
+  repeatedFields: number | null;
+  scrollDetours: number | null;
+  modalInterruptions: number | null;
   observedResponseMs: number | null;
   targetResponseMs: number | null;
+  observedReturnResponseMs?: number | null;
+  targetReturnResponseMs?: number | null;
   comparatorKind?: TaskComparatorKind;
-  avoidableWaitMs?: number | null;
+  avoidableWaitMs: number | null;
   maxAvoidableWaitBudgetMs?: number;
   probeDefects?: number | null;
 }
 
 export interface TaskFrictionEvaluation {
   taskId: string;
+  /** Normalized per-task friction F_t in [0, 1]; converted to score = round1(100 * (1 - frictionIndex)). */
+  frictionIndex: number | null;
   score: number | null;
   components: {
     taskSuccess: number | null;
@@ -88,11 +106,20 @@ export interface TaskFrictionEvaluation {
     responseTimeEfficiency: number | null;
     waitingInterruptionPerformance: number | null;
   };
+  frictionComponents: {
+    taskFailure: number | null;
+    errorRetry: number | null;
+    stepExcess: number | null;
+    responseDelay: number | null;
+    waitingInterruption: number | null;
+  };
   comparatorKind: TaskComparatorKind;
   minimumJustifiedActions: number | null;
   observedActions: number | null;
   observedResponseMs: number | null;
   targetResponseMs: number | null;
+  observedReturnResponseMs: number | null;
+  targetReturnResponseMs: number | null;
   frictionTaxonomy: {
     intrinsicExtraActions: number | null;
     performanceOverrunMs: number | null;
@@ -121,7 +148,12 @@ export interface AndroidFluidityTelemetryInput {
   frameOverrunP95Ms?: number | null;
   frameOverrunP99Ms?: number | null;
   jankPercent?: number | null;
+  /** Count of frames exceeding UX_AUDIT_STANDARDS.androidFrozenFrameMs (700 ms). */
   frozenFrameCount?: number | null;
+  /** Individual candidate frozen-frame durations in ms; filtered against >= 700 ms. */
+  frozenFrameDurationsMs?: readonly number[] | null;
+  /** Maximum observed frozen-frame duration in ms; must be >= 700 ms when frozenFrameCount > 0. */
+  maxFrozenFrameMs?: number | null;
   totalFrameCount?: number | null;
   inputLatencyP95Ms?: number | null;
 }
@@ -129,6 +161,16 @@ export interface AndroidFluidityTelemetryInput {
 export interface IosFluidityTelemetryInput {
   hitchTimeRatioMsPerS?: number | null;
   scrollTransitionP95Ms?: number | null;
+}
+
+export interface UxFrictionFluidityTelemetryOptions {
+  safeCheckId?: (value: string) => string | null;
+  webVitals?: WebVitalsTelemetryInput;
+  androidFluidity?: AndroidFluidityTelemetryInput;
+  iosFluidity?: IosFluidityTelemetryInput;
+  targetSamples?: readonly TargetSizeSampleInput[] | null;
+  wcagActChecks?: WcagActChecksInput | null;
+  humanValidation?: Partial<HumanUxValidationLayer>;
 }
 
 export interface SusEvaluation {
@@ -185,6 +227,9 @@ export interface UxAuditFinding {
   severity: 'high' | 'medium';
   count: number;
   valueMs?: number;
+  valueMsPerS?: number;
+  value?: number;
+  unit?: 'ms' | 'ms-per-s' | 'unitless' | 'percent';
   checkId?: string | null;
 }
 
@@ -223,6 +268,7 @@ export interface UxFrictionFluidityAudit {
       score: number | null;
       weight: 0.30;
       wcagSummary: StandardsCheckBreakdown;
+      surfaceContractSummary: StandardsCheckBreakdown;
     };
     fluidityAndResponsiveness: {
       score: number | null;
@@ -332,24 +378,63 @@ export function androidFrameDeadlineMs(refreshRateHz: number | null | undefined)
   return 1_000 / refreshRateHz;
 }
 
-export function scoreAndroidNativeFluidity(input: AndroidFluidityTelemetryInput): number | null {
-  const parts: number[] = [];
-  const deadline = androidFrameDeadlineMs(input.refreshRateHz ?? 60);
-  if (deadline !== null && typeof input.frameOverrunP95Ms === 'number' && Number.isFinite(input.frameOverrunP95Ms)) {
-    const overrun = Math.max(0, input.frameOverrunP95Ms);
-    parts.push(scorePiecewiseThreshold(overrun, deadline * 0.25, deadline) ?? 0);
+function resolveThresholdQualifiedFrozenFrames(input: AndroidFluidityTelemetryInput | undefined): {
+  qualifiedCount: number | null;
+  maxFrozenMs: number | null;
+} {
+  if (!input) return { qualifiedCount: 0, maxFrozenMs: null };
+  if (Array.isArray(input.frozenFrameDurationsMs)) {
+    const valid = input.frozenFrameDurationsMs.filter(
+      (ms): ms is number => typeof ms === 'number' && Number.isFinite(ms) && ms >= 0,
+    );
+    if (valid.length !== input.frozenFrameDurationsMs.length) {
+      return { qualifiedCount: null, maxFrozenMs: null };
+    }
+    const overThreshold = valid.filter(ms => ms >= UX_AUDIT_STANDARDS.androidFrozenFrameMs);
+    return {
+      qualifiedCount: overThreshold.length,
+      maxFrozenMs: overThreshold.length > 0 ? Math.max(...overThreshold) : null,
+    };
   }
-  if (typeof input.jankPercent === 'number' && Number.isFinite(input.jankPercent) && input.jankPercent >= 0 && input.jankPercent <= 100) {
+  if (input.frozenFrameCount === undefined) {
+    return { qualifiedCount: 0, maxFrozenMs: null };
+  }
+  const count = measuredAuditCount(input.frozenFrameCount);
+  if (count === null) return { qualifiedCount: null, maxFrozenMs: null };
+  if (count === 0) return { qualifiedCount: 0, maxFrozenMs: null };
+  const maxFrozenMs = measuredAuditValue(input.maxFrozenFrameMs);
+  if (maxFrozenMs === null || maxFrozenMs < UX_AUDIT_STANDARDS.androidFrozenFrameMs) {
+    return { qualifiedCount: null, maxFrozenMs: null };
+  }
+  return { qualifiedCount: count, maxFrozenMs };
+}
+
+export function scoreAndroidNativeFluidity(input: AndroidFluidityTelemetryInput): number | null {
+  const deadline = androidFrameDeadlineMs(input.refreshRateHz);
+  const overrun = measuredAuditValue(input.frameOverrunP95Ms);
+  // Refresh-rate-derived frame deadline and P95 frame overrun are required for native frame scoring.
+  if (deadline === null || overrun === null) {
+    return null;
+  }
+  const parts: number[] = [
+    scorePiecewiseThreshold(overrun, deadline * 0.25, deadline) ?? 0,
+  ];
+  if (input.jankPercent !== undefined) {
+    if (typeof input.jankPercent !== 'number' || !Number.isFinite(input.jankPercent) || input.jankPercent < 0 || input.jankPercent > 100) {
+      return null;
+    }
     parts.push(scorePiecewiseThreshold(input.jankPercent, 2, 10) ?? 0);
   }
-  if (typeof input.inputLatencyP95Ms === 'number' && Number.isFinite(input.inputLatencyP95Ms) && input.inputLatencyP95Ms >= 0) {
-    parts.push(scorePiecewiseThreshold(input.inputLatencyP95Ms, 100, 250) ?? 0);
+  if (input.inputLatencyP95Ms !== undefined) {
+    const latency = measuredAuditValue(input.inputLatencyP95Ms);
+    if (latency === null) return null;
+    parts.push(scorePiecewiseThreshold(latency, 100, 250) ?? 0);
   }
-  if (!parts.length) return null;
+  const frozen = resolveThresholdQualifiedFrozenFrames(input);
+  if (frozen.qualifiedCount === null) return null;
   let score = parts.reduce((sum, item) => sum + item, 0) / parts.length;
-  const frozen = measuredAuditCount(input.frozenFrameCount);
-  if (frozen !== null && frozen > 0) {
-    score = Math.max(0, score - Math.min(40, frozen * 15));
+  if (frozen.qualifiedCount > 0) {
+    score = Math.max(0, score - Math.min(40, frozen.qualifiedCount * 15));
   }
   return round1(score);
 }
@@ -424,21 +509,46 @@ export function scoreTaskInteractionFriction(input: TaskFrictionInput): TaskFric
   const taskSuccess = input.completed === null
     ? null
     : input.completed && input.functionalFailure !== true ? 1 : 0;
-  const pathEfficiency = calculatePathEfficiency(input.minimumJustifiedActions, input.observedActions);
+
+  const minActions = measuredAuditCount(input.minimumJustifiedActions);
+  const obsActions = measuredAuditCount(input.observedActions);
+  const repeatedFields = measuredAuditCount(input.repeatedFields);
+  const scrollDetours = measuredAuditCount(input.scrollDetours);
+  const pathEfficiency = repeatedFields !== null && scrollDetours !== null
+    ? calculatePathEfficiency(minActions, obsActions)
+    : null;
+
   const errorEvents = [input.errors, input.retries, input.validationFailures, input.backtracks]
-    .map(val => measuredAuditCount(val ?? 0));
+    .map(val => measuredAuditCount(val));
   const errorRetryPerformance = errorEvents.some(val => val === null)
     ? null
-    : round3(clamp01(1 / (1 + errorEvents.reduce<number>((sum, val) => sum + (val ?? 0), 0))));
+    : round3(clamp01(1 / (1 + errorEvents.reduce<number>((sum, val) => sum + val!, 0))));
+
   const obsResponse = measuredAuditValue(input.observedResponseMs);
   const targetResponse = measuredAuditValue(input.targetResponseMs);
-  const responseTimeEfficiency = obsResponse === null || targetResponse === null || targetResponse <= 0
+  const forwardEfficiency = obsResponse === null || targetResponse === null || targetResponse <= 0
     ? null
     : obsResponse <= targetResponse
       ? 1
       : round3(clamp01(targetResponse / obsResponse));
-  const waitMs = measuredAuditValue(input.avoidableWaitMs ?? 0);
-  const interruptions = measuredAuditCount(input.modalInterruptions ?? 0);
+
+  const hasReturnExpectation = input.observedReturnResponseMs !== undefined || input.targetReturnResponseMs !== undefined;
+  const obsReturn = hasReturnExpectation ? measuredAuditValue(input.observedReturnResponseMs) : null;
+  const targetReturn = hasReturnExpectation ? measuredAuditValue(input.targetReturnResponseMs) : null;
+  const returnEfficiency = !hasReturnExpectation
+    ? 1
+    : obsReturn === null || targetReturn === null || targetReturn <= 0
+      ? null
+      : obsReturn <= targetReturn
+        ? 1
+        : round3(clamp01(targetReturn / obsReturn));
+
+  const responseTimeEfficiency = forwardEfficiency === null || returnEfficiency === null
+    ? null
+    : round3(Math.min(forwardEfficiency, returnEfficiency));
+
+  const waitMs = measuredAuditValue(input.avoidableWaitMs);
+  const interruptions = measuredAuditCount(input.modalInterruptions);
   const waitBudget = typeof input.maxAvoidableWaitBudgetMs === 'number' && input.maxAvoidableWaitBudgetMs > 0
     ? input.maxAvoidableWaitBudgetMs
     : 1_000;
@@ -446,30 +556,43 @@ export function scoreTaskInteractionFriction(input: TaskFrictionInput): TaskFric
     ? null
     : round3(clamp01(1 - (waitMs / waitBudget) - interruptions * 0.25));
 
-  const allMeasured = taskSuccess !== null && errorRetryPerformance !== null
-    && pathEfficiency !== null && responseTimeEfficiency !== null && waitingInterruptionPerformance !== null;
-  const composite01 = allMeasured
-    ? AFFS_TASK_FRICTION_WEIGHTS.taskSuccess * taskSuccess
-      + AFFS_TASK_FRICTION_WEIGHTS.errorRetryPerformance * errorRetryPerformance
-      + AFFS_TASK_FRICTION_WEIGHTS.pathEfficiency * pathEfficiency
-      + AFFS_TASK_FRICTION_WEIGHTS.responseTimeEfficiency * responseTimeEfficiency
-      + AFFS_TASK_FRICTION_WEIGHTS.waitingInterruptionPerformance * waitingInterruptionPerformance
+  const taskFailureFriction = taskSuccess !== null ? round3(1 - taskSuccess) : null;
+  const errorRetryFriction = errorRetryPerformance !== null ? round3(1 - errorRetryPerformance) : null;
+  const stepExcessFriction = pathEfficiency !== null ? round3(1 - pathEfficiency) : null;
+  const responseDelayFriction = responseTimeEfficiency !== null ? round3(1 - responseTimeEfficiency) : null;
+  const waitingInterruptionFriction = waitingInterruptionPerformance !== null ? round3(1 - waitingInterruptionPerformance) : null;
+
+  const allMeasured = taskFailureFriction !== null && errorRetryFriction !== null
+    && stepExcessFriction !== null && responseDelayFriction !== null && waitingInterruptionFriction !== null;
+  const frictionIndex = allMeasured
+    ? round3(
+      AFFS_TASK_FRICTION_WEIGHTS.taskSuccess * taskFailureFriction
+      + AFFS_TASK_FRICTION_WEIGHTS.errorRetryPerformance * errorRetryFriction
+      + AFFS_TASK_FRICTION_WEIGHTS.pathEfficiency * stepExcessFriction
+      + AFFS_TASK_FRICTION_WEIGHTS.responseTimeEfficiency * responseDelayFriction
+      + AFFS_TASK_FRICTION_WEIGHTS.waitingInterruptionPerformance * waitingInterruptionFriction,
+    )
     : null;
 
-  const minActions = measuredAuditCount(input.minimumJustifiedActions);
-  const obsActions = measuredAuditCount(input.observedActions);
-  const extraActions = minActions !== null && obsActions !== null
-    ? Math.max(0, obsActions - minActions)
-      + (measuredAuditCount(input.repeatedFields ?? 0) ?? 0)
-      + (measuredAuditCount(input.scrollDetours ?? 0) ?? 0)
+  const extraActions = minActions !== null && obsActions !== null && repeatedFields !== null && scrollDetours !== null
+    ? Math.max(0, obsActions - minActions) + repeatedFields + scrollDetours
     : null;
-  const overrunMs = obsResponse !== null && targetResponse !== null
-    ? round1(Math.max(0, obsResponse - targetResponse) + (waitMs ?? 0))
+  const forwardOverrun = obsResponse !== null && targetResponse !== null
+    ? Math.max(0, obsResponse - targetResponse)
+    : null;
+  const returnOverrun = !hasReturnExpectation
+    ? 0
+    : obsReturn !== null && targetReturn !== null
+      ? Math.max(0, obsReturn - targetReturn)
+      : null;
+  const overrunMs = forwardOverrun !== null && returnOverrun !== null && waitMs !== null
+    ? round1(forwardOverrun + returnOverrun + waitMs)
     : null;
 
   return {
     taskId: input.taskId,
-    score: composite01 !== null ? round1(composite01 * 100) : null,
+    frictionIndex,
+    score: frictionIndex !== null ? round1(100 * (1 - frictionIndex)) : null,
     components: {
       taskSuccess,
       errorRetryPerformance,
@@ -477,15 +600,24 @@ export function scoreTaskInteractionFriction(input: TaskFrictionInput): TaskFric
       responseTimeEfficiency,
       waitingInterruptionPerformance,
     },
+    frictionComponents: {
+      taskFailure: taskFailureFriction,
+      errorRetry: errorRetryFriction,
+      stepExcess: stepExcessFriction,
+      responseDelay: responseDelayFriction,
+      waitingInterruption: waitingInterruptionFriction,
+    },
     comparatorKind,
     minimumJustifiedActions: minActions,
     observedActions: obsActions,
     observedResponseMs: obsResponse,
     targetResponseMs: targetResponse,
+    observedReturnResponseMs: obsReturn,
+    targetReturnResponseMs: targetReturn,
     frictionTaxonomy: {
       intrinsicExtraActions: extraActions,
       performanceOverrunMs: overrunMs,
-      cognitiveProbeFlags: measuredAuditCount(input.probeDefects ?? 0) ?? 0,
+      cognitiveProbeFlags: measuredAuditCount(input.probeDefects) ?? 0,
       requiresHumanComprehensionReview: true,
     },
   };
@@ -495,12 +627,7 @@ function evaluateReportTaskJourney(
   check: AuditCheck,
   defectCheckIds: ReadonlySet<string>,
 ): TaskFrictionEvaluation {
-  const isRoundTrip = hasAuditReturnEvidence(check) && !hasAuditActionDurationEvidence(check);
-  const minActions = isRoundTrip ? 2 : 1;
-  const recoveryOccurred = ['replaceRecoveryMs', 'anchorResetMs']
-    .some(key => (measuredAuditValue(check.metrics[key]) ?? 0) > 0);
-  const secondBack = (measuredAuditValue(check.metrics.secondBackMs) ?? 0) > 0;
-  const observedActions = minActions + (recoveryOccurred ? 1 : 0);
+  const hasReturn = hasAuditReturnEvidence(check);
   const completed = check.metrics.actionInvoked === true
     ? typeof check.metrics.actionCompleted === 'boolean' && typeof check.metrics.nonTimingFailure === 'boolean'
       && check.diagnostic?.readiness?.ready === true && !defectCheckIds.has(check.id)
@@ -508,31 +635,52 @@ function evaluateReportTaskJourney(
       : check.metrics.actionCompleted === false || check.metrics.nonTimingFailure === true
         ? false
         : null
-    : check.status !== 'skipped'
-      ? check.status !== 'fail' || check.metrics.nonTimingFailure === false
-      : null;
+    : null;
   const observedResponseMs = hasAuditActionDurationEvidence(check)
     ? measuredAuditValue(check.metrics.actionMs) ?? measuredAuditValue(check.metrics.forwardWorkMs)
     : measuredAuditValue(check.metrics.forwardWorkMs) ?? measuredAuditValue(check.metrics.forwardMs);
-  const targetResponseMs = hasAuditActionDurationEvidence(check) ? 250 : 400;
-  const preWaitMs = measuredAuditValue(check.metrics.preActionWaitMs) ?? 0;
+  const targetResponseMs = measuredAuditValue(check.metrics.targetResponseMs)
+    ?? (hasAuditActionDurationEvidence(check) ? 250 : 400);
+
+  const explicitWait = measuredAuditValue(check.metrics.avoidableWaitMs);
+  const preWaitMs = measuredAuditValue(check.metrics.preActionWaitMs);
   const waitAvoided = check.metrics.preActionQuietWindowReused === true;
+  const settleInvalid = check.metrics.backgroundUnsettled === true
+    && measuredAuditValue(check.metrics.backgroundSettleMs) === null;
   const backgroundSettleMs = check.metrics.backgroundUnsettled === true
-    ? measuredAuditValue(check.metrics.backgroundSettleMs) ?? 250
+    ? measuredAuditValue(check.metrics.backgroundSettleMs) ?? 0
     : 0;
+  const avoidableWaitMs = settleInvalid
+    ? null
+    : explicitWait !== null
+      ? explicitWait
+      : preWaitMs !== null
+        ? (waitAvoided ? 0 : preWaitMs) + backgroundSettleMs
+        : null;
+
   return scoreTaskInteractionFriction({
     taskId: check.id,
     completed,
     functionalFailure: check.metrics.nonTimingFailure === true || check.metrics.actionCompleted === false,
-    minimumJustifiedActions: minActions,
-    observedActions,
-    errors: measuredAuditCount(check.metrics.runtimeErrors) ?? 0,
-    retries: recoveryOccurred ? 1 : 0,
-    backtracks: recoveryOccurred && secondBack ? 1 : 0,
+    minimumJustifiedActions: measuredAuditCount(check.metrics.minimumJustifiedActions),
+    observedActions: measuredAuditCount(check.metrics.observedActions),
+    errors: measuredAuditCount(check.metrics.runtimeErrors),
+    retries: measuredAuditCount(check.metrics.retries),
+    validationFailures: measuredAuditCount(check.metrics.validationFailures),
+    backtracks: measuredAuditCount(check.metrics.backtracks),
+    repeatedFields: measuredAuditCount(check.metrics.repeatedFields),
+    scrollDetours: measuredAuditCount(check.metrics.scrollDetours),
+    modalInterruptions: measuredAuditCount(check.metrics.modalInterruptions),
     observedResponseMs,
     targetResponseMs,
+    ...(hasReturn
+      ? {
+        observedReturnResponseMs: measuredAuditValue(check.metrics.backMs),
+        targetReturnResponseMs: measuredAuditValue(check.metrics.targetBackResponseMs) ?? 400,
+      }
+      : {}),
     comparatorKind: 'product-target',
-    avoidableWaitMs: (waitAvoided ? 0 : preWaitMs) + backgroundSettleMs,
+    avoidableWaitMs,
     maxAvoidableWaitBudgetMs: 1_500,
     probeDefects: defectCheckIds.has(check.id) ? 1 : 0,
   });
@@ -543,29 +691,45 @@ export function evaluateReportTaskJourneys(
   completion = buildPerformanceAuditCompletion(report),
   safeCheckId: (value: string) => string | null = id => id,
 ): TaskFrictionEvaluation[] {
-  const { actions } = auditTaskOutcomePopulation(report, completion);
   const journeys = report.checks.filter(
     check => check.kind === 'journey' && check.status !== 'skipped'
       && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true,
   );
-  const taskChecks = actions.length > 0 ? actions : journeys;
+  const idCounts = new Map<string, number>();
+  for (const check of journeys) {
+    idCounts.set(check.id, (idCounts.get(check.id) ?? 0) + 1);
+  }
   const defectCheckIds = new Set(
     completion.gapPositions
       .filter(gap => gap.source === 'performance' && typeof gap.checkId === 'string')
       .map(gap => gap.checkId!),
   );
-  return taskChecks.map(check => {
+  return journeys.map(check => {
     const evaluated = evaluateReportTaskJourney(check, defectCheckIds);
-    return { ...evaluated, taskId: safeCheckId(evaluated.taskId) ?? 'redacted-task' };
+    const isDuplicate = (idCounts.get(check.id) ?? 0) > 1;
+    return {
+      ...evaluated,
+      ...(isDuplicate ? { frictionIndex: null, score: null } : {}),
+      taskId: safeCheckId(evaluated.taskId) ?? 'redacted-task',
+    };
   });
 }
 
-function evaluateStandardsPillar(report: PerformanceAuditReport): {
+function evaluateStandardsPillar(
+  report: PerformanceAuditReport,
+  options?: UxFrictionFluidityTelemetryOptions,
+): {
   score: number | null;
   wcagSummary: StandardsCheckBreakdown;
+  surfaceContractSummary: StandardsCheckBreakdown;
   findings: UxAuditFinding[];
 } {
   const health = hasValidPerformanceAuditHealth(report) ? report.appHealth : undefined;
+  const healthIdentitiesValid = health != null
+    && health.coverage.complete === true
+    && health.coverage.duplicateStoredCheckIds.length === 0
+    && health.coverage.unexpectedStoredCheckIds.length === 0
+    && new Set(health.checks.map(check => check.id)).size === health.checks.length;
   const displayCodes = [
     'display-contract',
     'display-model',
@@ -576,39 +740,62 @@ function evaluateStandardsPillar(report: PerformanceAuditReport): {
     'display-empty-state',
     'display-logo',
   ] as const;
-  let applicableChecks = 0;
-  let passed = 0;
-  let failed = 0;
-  let requiresManualReview = 0;
-  let unavailable = 0;
+
+  let surfaceApplicable = 0;
+  let surfacePassed = 0;
+  let surfaceFailed = 0;
+  let surfaceManual = 0;
+  let surfaceUnavailable = 0;
   const findings: UxAuditFinding[] = [];
 
   for (const code of displayCodes) {
     const matches = health?.checks.filter(item => item.code === code) ?? [];
-    if (matches.length !== 1) continue;
+    if (matches.length !== 1) {
+      surfaceUnavailable += 1;
+      continue;
+    }
     const check = matches[0];
     if (check.metrics.partial === true || ['not-run', 'unavailable'].includes(check.status)) {
-      unavailable += 1;
+      surfaceUnavailable += 1;
       continue;
     }
     if (code === 'display-contract') {
       const planned = measuredAuditCount(check.metrics.plannedSurfaces);
       const missing = measuredAuditCount(check.metrics.missingSurfaces);
-      const duplicates = measuredAuditCount(check.metrics.duplicateContracts);
-      if (planned !== null && missing !== null && duplicates === 0 && planned >= missing) {
-        applicableChecks += planned;
-        passed += planned - missing;
-        failed += missing;
-        if (missing > 0) {
-          findings.push({
-            pillar: 'standards-accessibility',
-            dimension: 'accessibility-standard',
-            code: 'standards-check-failed',
-            severity: 'high',
-            count: missing,
-            checkId: code,
-          });
-        }
+      const duplicateContracts = measuredAuditCount(check.metrics.duplicateContracts);
+      const duplicateObservations = check.metrics.duplicateObservations === undefined
+        ? 0
+        : measuredAuditCount(check.metrics.duplicateObservations);
+      const unexpectedSurfaces = check.metrics.unexpectedSurfaces === undefined
+        ? 0
+        : measuredAuditCount(check.metrics.unexpectedSurfaces);
+      if (
+        planned === null || missing === null || duplicateContracts === null
+        || duplicateObservations === null || unexpectedSurfaces === null
+        || planned < missing
+      ) {
+        surfaceUnavailable += 1;
+        continue;
+      }
+      const rawDefects = missing + duplicateContracts + duplicateObservations + unexpectedSurfaces;
+      const contractDefects = check.status === 'fail' && rawDefects === 0 ? 1 : rawDefects;
+      const total = planned + unexpectedSurfaces + duplicateContracts + duplicateObservations;
+      const boundedFailed = Math.min(total, contractDefects);
+      surfaceApplicable += total;
+      surfacePassed += Math.max(0, total - boundedFailed);
+      surfaceFailed += boundedFailed;
+      if (check.status === 'warn' && boundedFailed === 0) {
+        surfaceManual += 1;
+      }
+      if (contractDefects > 0) {
+        findings.push({
+          pillar: 'standards-accessibility',
+          dimension: 'accessibility-standard',
+          code: 'standards-check-failed',
+          severity: 'high',
+          count: contractDefects,
+          checkId: code,
+        });
       }
       continue;
     }
@@ -622,17 +809,17 @@ function evaluateStandardsPillar(report: PerformanceAuditReport): {
       || warned === null || checkUnavailable === null
       || checked < checkFailed + warned + checkUnavailable
     ) {
-      unavailable += 1;
+      surfaceUnavailable += 1;
       continue;
     }
     const total = checked + missing;
     const checkPassed = checked - checkFailed - warned - checkUnavailable;
     const totalFailed = checkFailed + missing;
-    applicableChecks += total;
-    passed += checkPassed;
-    failed += totalFailed;
-    requiresManualReview += warned;
-    unavailable += checkUnavailable;
+    surfaceApplicable += total;
+    surfacePassed += checkPassed;
+    surfaceFailed += totalFailed;
+    surfaceManual += warned;
+    surfaceUnavailable += checkUnavailable;
     if (totalFailed > 0) {
       findings.push({
         pillar: 'standards-accessibility',
@@ -645,24 +832,100 @@ function evaluateStandardsPillar(report: PerformanceAuditReport): {
     }
   }
 
-  // Cognitive comprehension, visual design and full WCAG 2.2 manual criteria always require manual review.
-  if (applicableChecks > 0 && requiresManualReview === 0) {
-    requiresManualReview = 1;
+  let wcagApplicable = 0;
+  let wcagPassed = 0;
+  let wcagFailed = 0;
+  let wcagManual = 0;
+  let wcagUnavailable = 0;
+
+  const targetSamples = options?.targetSamples;
+  if (Array.isArray(targetSamples) && targetSamples.length > 0) {
+    let targetFailures = 0;
+    for (const sample of targetSamples) {
+      const evaluated = evaluateTargetSizing(sample);
+      if (!Number.isFinite(evaluated.observedMinDimension) || evaluated.observedMinDimension <= 0) {
+        wcagUnavailable += 1;
+      } else if (evaluated.passes) {
+        wcagApplicable += 1;
+        wcagPassed += 1;
+      } else {
+        wcagApplicable += 1;
+        wcagFailed += 1;
+        targetFailures += 1;
+      }
+    }
+    if (targetFailures > 0) {
+      findings.push({
+        pillar: 'standards-accessibility',
+        dimension: 'accessibility-standard',
+        code: 'standards-check-failed',
+        severity: 'high',
+        count: targetFailures,
+        checkId: 'target-size',
+      });
+    }
   }
 
-  const resolved = passed + failed;
-  const score = applicableChecks > 0 && resolved > 0 && unavailable === 0
-    ? round1(clamp100((passed / applicableChecks) * 100))
+  const actInput = options?.wcagActChecks;
+  if (actInput) {
+    const actPassed = measuredAuditCount(actInput.passed);
+    const actFailed = measuredAuditCount(actInput.failed);
+    const actManual = actInput.requiresManualReview === undefined ? 0 : measuredAuditCount(actInput.requiresManualReview);
+    const actUnavailable = actInput.unavailable === undefined ? 0 : measuredAuditCount(actInput.unavailable);
+    if (actPassed === null || actFailed === null || actManual === null || actUnavailable === null) {
+      wcagUnavailable += 1;
+    } else {
+      wcagApplicable += actPassed + actFailed + actManual + actUnavailable;
+      wcagPassed += actPassed;
+      wcagFailed += actFailed;
+      wcagManual += actManual;
+      wcagUnavailable += actUnavailable;
+      if (actFailed > 0) {
+        findings.push({
+          pillar: 'standards-accessibility',
+          dimension: 'accessibility-standard',
+          code: 'standards-check-failed',
+          severity: 'high',
+          count: actFailed,
+          checkId: 'wcag-act',
+        });
+      }
+    }
+  }
+
+  if (wcagApplicable === 0 && wcagUnavailable === 0) {
+    wcagUnavailable = 1;
+  }
+  if (wcagManual === 0) {
+    wcagManual = 1;
+  }
+
+  const totalApplicable = surfaceApplicable + wcagApplicable;
+  const totalPassed = surfacePassed + wcagPassed;
+  const totalUnavailable = surfaceUnavailable + wcagUnavailable;
+  const score = healthIdentitiesValid
+    && surfaceApplicable > 0
+    && wcagApplicable > 0
+    && totalUnavailable === 0
+    ? round1(clamp100((totalPassed / totalApplicable) * 100))
     : null;
 
   return {
     score,
     wcagSummary: {
-      applicableChecks,
-      passed,
-      failed,
-      requiresManualReview,
-      unavailable,
+      applicableChecks: wcagApplicable,
+      passed: wcagPassed,
+      failed: wcagFailed,
+      requiresManualReview: wcagManual,
+      unavailable: wcagUnavailable,
+      automatedConformityClaimed: false,
+    },
+    surfaceContractSummary: {
+      applicableChecks: surfaceApplicable,
+      passed: surfacePassed,
+      failed: surfaceFailed,
+      requiresManualReview: surfaceManual,
+      unavailable: surfaceUnavailable,
       automatedConformityClaimed: false,
     },
     findings,
@@ -672,36 +935,49 @@ function evaluateStandardsPillar(report: PerformanceAuditReport): {
 export function buildUxFrictionFluidityAudit(
   report: PerformanceAuditReport,
   completion = buildPerformanceAuditCompletion(report),
-  options?: {
-    safeCheckId?: (value: string) => string | null;
-    webVitals?: WebVitalsTelemetryInput;
-    androidFluidity?: AndroidFluidityTelemetryInput;
-    iosFluidity?: IosFluidityTelemetryInput;
-    humanValidation?: Partial<HumanUxValidationLayer>;
-  },
+  options?: UxFrictionFluidityTelemetryOptions,
 ): UxFrictionFluidityAudit {
-  const sanitizeId = options?.safeCheckId ?? ((id: string) => id);
+  const resolvedOptions: UxFrictionFluidityTelemetryOptions | undefined = options
+    ? { ...report.uxTelemetry, ...options }
+    : report.uxTelemetry;
+  const sanitizeId = resolvedOptions?.safeCheckId ?? ((id: string) => id);
   const values = auditMetricValues(report, completion);
   const journeys = report.checks.filter(
     check => check.kind === 'journey' && check.status !== 'skipped'
       && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true,
   );
+  const hasDuplicateCheckIds = new Set(report.checks.map(check => check.id)).size !== report.checks.length
+    || (report.coverage?.duplicateStoredCheckIds.length ?? 0) > 0
+    || completion.gaps.duplicateChecks > 0;
+  const collectionComplete = report.coverage == null
+    ? completion.gaps.missingChecks === 0
+      && completion.gaps.unexpectedChecks === 0
+      && completion.gaps.invalidCoverageReports === 0
+    : report.coverage.complete === true
+      && report.coverage.missingPlannedCheckIds.length === 0
+      && report.coverage.unexpectedStoredCheckIds.length === 0
+      && completion.gaps.missingChecks === 0
+      && completion.gaps.invalidCoverageReports === 0;
+
   const evaluatedTasks = evaluateReportTaskJourneys(report, completion, sanitizeId);
   const measuredTasks = evaluatedTasks.filter(task => task.score !== null);
-  const interactionFrictionScore = measuredTasks.length > 0 && measuredTasks.length === evaluatedTasks.length
+  const interactionFrictionScore = collectionComplete
+    && !hasDuplicateCheckIds
+    && measuredTasks.length > 0
+    && measuredTasks.length === evaluatedTasks.length
     ? round1(measuredTasks.reduce((sum, task) => sum + task.score!, 0) / measuredTasks.length)
     : null;
   const completedTaskCount = evaluatedTasks.filter(task => task.components.taskSuccess === 1).length;
   const pathEfficiencies = evaluatedTasks
     .map(task => task.components.pathEfficiency)
     .filter((val): val is number => val !== null);
-  const meanPathEfficiency = pathEfficiencies.length > 0
+  const meanPathEfficiency = pathEfficiencies.length > 0 && pathEfficiencies.length === evaluatedTasks.length
     ? round3(pathEfficiencies.reduce((sum, val) => sum + val, 0) / pathEfficiencies.length)
     : null;
   const responseEfficiencies = evaluatedTasks
     .map(task => task.components.responseTimeEfficiency)
     .filter((val): val is number => val !== null);
-  const meanResponseTimeEfficiency = responseEfficiencies.length > 0
+  const meanResponseTimeEfficiency = responseEfficiencies.length > 0 && responseEfficiencies.length === evaluatedTasks.length
     ? round3(responseEfficiencies.reduce((sum, val) => sum + val, 0) / responseEfficiencies.length)
     : null;
 
@@ -714,16 +990,18 @@ export function buildUxFrictionFluidityAudit(
   ).length;
   const cognitiveProbeFlags = completion.gaps.targetProbeDefects;
 
-  const standards = evaluateStandardsPillar(report);
+  const standards = evaluateStandardsPillar(report, resolvedOptions);
 
-  const inpScore = scoreWebVitalInp(options?.webVitals?.inpP75Ms);
-  const lcpScore = scoreWebVitalLcp(options?.webVitals?.lcpP75Ms);
-  const clsScore = scoreWebVitalCls(options?.webVitals?.clsP75);
-  const iosHitchScore = scoreIosHitchRatio(options?.iosFluidity?.hitchTimeRatioMsPerS);
-  const androidFrameScore = options?.androidFluidity ? scoreAndroidNativeFluidity(options.androidFluidity) : null;
+  const inpScore = scoreWebVitalInp(resolvedOptions?.webVitals?.inpP75Ms);
+  const lcpScore = scoreWebVitalLcp(resolvedOptions?.webVitals?.lcpP75Ms);
+  const clsScore = scoreWebVitalCls(resolvedOptions?.webVitals?.clsP75);
+  const iosHitchScore = scoreIosHitchRatio(resolvedOptions?.iosFluidity?.hitchTimeRatioMsPerS);
+  const androidFrameScore = resolvedOptions?.androidFluidity
+    ? scoreAndroidNativeFluidity(resolvedOptions.androidFluidity)
+    : null;
 
   let jsRuntimeScore: number | null = null;
-  if (values.jsStallPercent !== null && values.slowFramePercent !== null) {
+  if (collectionComplete && values.jsStallPercent !== null && values.slowFramePercent !== null) {
     const stallScore = Math.max(0, 100 - values.jsStallPercent * 2.5);
     const frameScore = Math.max(0, 100 - values.slowFramePercent * 2.5);
     const lagPenalty = values.maxEventLoopLagMs !== null && values.maxEventLoopLagMs > 100
@@ -752,7 +1030,10 @@ export function buildUxFrictionFluidityAudit(
 
   const fluidityScore = androidFrameScore ?? cwvComposite ?? iosHitchScore ?? jsRuntimeScore;
 
-  const affsScore = interactionFrictionScore !== null && standards.score !== null && fluidityScore !== null
+  const affsScore = collectionComplete
+    && interactionFrictionScore !== null
+    && standards.score !== null
+    && fluidityScore !== null
     ? round1(
       AFFS_PILLAR_WEIGHTS.interactionFriction * interactionFrictionScore
       + AFFS_PILLAR_WEIGHTS.standardsAndAccessibility * standards.score
@@ -789,7 +1070,7 @@ export function buildUxFrictionFluidityAudit(
       code: 'latency-over-budget',
       severity: 'high',
       count: timingFailureCount,
-      ...(values.slowestCheckMs !== null ? { valueMs: values.slowestCheckMs } : {}),
+      ...(values.slowestCheckMs !== null ? { valueMs: values.slowestCheckMs, unit: 'ms' as const } : {}),
     });
   }
   if (cognitiveProbeFlags > 0) {
@@ -810,6 +1091,7 @@ export function buildUxFrictionFluidityAudit(
       severity: values.maxEventLoopLagMs > 300 ? 'high' : 'medium',
       count: 1,
       valueMs: values.maxEventLoopLagMs,
+      unit: 'ms',
     });
   }
   if (values.maxFrameGapMs !== null && values.maxFrameGapMs > 50) {
@@ -820,47 +1102,112 @@ export function buildUxFrictionFluidityAudit(
       severity: values.maxFrameGapMs > 250 ? 'high' : 'medium',
       count: 1,
       valueMs: values.maxFrameGapMs,
+      unit: 'ms',
     });
   }
-  if ((options?.webVitals?.inpP75Ms ?? 0) > UX_AUDIT_STANDARDS.inpGoodMs) {
+  const inpVal = measuredAuditValue(resolvedOptions?.webVitals?.inpP75Ms);
+  if (inpVal !== null && inpVal > UX_AUDIT_STANDARDS.inpGoodMs) {
     findings.push({
       pillar: 'fluidity-responsiveness',
       dimension: 'performance',
       code: 'cwv-inp-over-threshold',
-      severity: (options?.webVitals?.inpP75Ms ?? 0) > UX_AUDIT_STANDARDS.inpPoorMs ? 'high' : 'medium',
+      severity: inpVal > UX_AUDIT_STANDARDS.inpPoorMs ? 'high' : 'medium',
       count: 1,
-      valueMs: options!.webVitals!.inpP75Ms!,
+      valueMs: inpVal,
+      unit: 'ms',
     });
   }
-  if ((options?.iosFluidity?.hitchTimeRatioMsPerS ?? 0) >= UX_AUDIT_STANDARDS.iosHitchGoodMsPerS) {
+  const lcpVal = measuredAuditValue(resolvedOptions?.webVitals?.lcpP75Ms);
+  if (lcpVal !== null && lcpVal > UX_AUDIT_STANDARDS.lcpGoodMs) {
+    findings.push({
+      pillar: 'fluidity-responsiveness',
+      dimension: 'performance',
+      code: 'cwv-lcp-over-threshold',
+      severity: lcpVal > UX_AUDIT_STANDARDS.lcpPoorMs ? 'high' : 'medium',
+      count: 1,
+      valueMs: lcpVal,
+      unit: 'ms',
+    });
+  }
+  const clsVal = measuredAuditValue(resolvedOptions?.webVitals?.clsP75);
+  if (clsVal !== null && clsVal > UX_AUDIT_STANDARDS.clsGood) {
+    findings.push({
+      pillar: 'fluidity-responsiveness',
+      dimension: 'performance',
+      code: 'cwv-cls-over-threshold',
+      severity: clsVal > UX_AUDIT_STANDARDS.clsPoor ? 'high' : 'medium',
+      count: 1,
+      value: clsVal,
+      unit: 'unitless',
+    });
+  }
+  const hitchVal = measuredAuditValue(resolvedOptions?.iosFluidity?.hitchTimeRatioMsPerS);
+  if (hitchVal !== null && hitchVal >= UX_AUDIT_STANDARDS.iosHitchGoodMsPerS) {
     findings.push({
       pillar: 'fluidity-responsiveness',
       dimension: 'performance',
       code: 'ios-hitch-ratio-over-threshold',
-      severity: (options?.iosFluidity?.hitchTimeRatioMsPerS ?? 0) > UX_AUDIT_STANDARDS.iosHitchPoorMsPerS ? 'high' : 'medium',
+      severity: hitchVal > UX_AUDIT_STANDARDS.iosHitchPoorMsPerS ? 'high' : 'medium',
       count: 1,
-      valueMs: options!.iosFluidity!.hitchTimeRatioMsPerS!,
+      valueMsPerS: hitchVal,
+      unit: 'ms-per-s',
     });
   }
-  if ((options?.androidFluidity?.frozenFrameCount ?? 0) > 0) {
+  const androidDeadline = androidFrameDeadlineMs(resolvedOptions?.androidFluidity?.refreshRateHz);
+  const androidOverrun = measuredAuditValue(resolvedOptions?.androidFluidity?.frameOverrunP95Ms);
+  const androidJank = measuredAuditValue(resolvedOptions?.androidFluidity?.jankPercent);
+  const androidInputLatency = measuredAuditValue(resolvedOptions?.androidFluidity?.inputLatencyP95Ms);
+  const overrunBreached = androidDeadline !== null && androidOverrun !== null && androidOverrun > androidDeadline * 0.25;
+  const jankBreached = androidJank !== null && androidJank > 2;
+  const inputLatencyBreached = androidInputLatency !== null && androidInputLatency > 100;
+  if (overrunBreached || jankBreached || inputLatencyBreached) {
+    const severe = (androidDeadline !== null && androidOverrun !== null && androidOverrun > androidDeadline)
+      || (androidJank !== null && androidJank > 10)
+      || (androidInputLatency !== null && androidInputLatency > 250);
+    findings.push({
+      pillar: 'fluidity-responsiveness',
+      dimension: 'performance',
+      code: 'native-frame-deadline-overrun',
+      severity: severe ? 'high' : 'medium',
+      count: 1,
+      ...(androidOverrun !== null ? { valueMs: androidOverrun, unit: 'ms' as const } : {}),
+    });
+  }
+  const frozenResolved = resolveThresholdQualifiedFrozenFrames(resolvedOptions?.androidFluidity);
+  if (frozenResolved.qualifiedCount !== null && frozenResolved.qualifiedCount > 0) {
     findings.push({
       pillar: 'fluidity-responsiveness',
       dimension: 'performance',
       code: 'native-frozen-frames',
       severity: 'high',
-      count: options!.androidFluidity!.frozenFrameCount!,
+      count: frozenResolved.qualifiedCount,
+      ...(frozenResolved.maxFrozenMs !== null ? { valueMs: frozenResolved.maxFrozenMs, unit: 'ms' as const } : {}),
     });
   }
 
-  const humanCompleted = options?.humanValidation?.status === 'completed';
+  const rawParticipantCount = measuredAuditCount(resolvedOptions?.humanValidation?.participantCount);
+  const validSus = resolvedOptions?.humanValidation?.sus ?? null;
+  const validUmuxLite = resolvedOptions?.humanValidation?.umuxLite ?? null;
+  const validSeqTasks = Array.isArray(resolvedOptions?.humanValidation?.seqTasks)
+    ? resolvedOptions!.humanValidation!.seqTasks.filter(task => task && task.n > 0)
+    : [];
+  const validNasaTlx = measuredAuditValue(resolvedOptions?.humanValidation?.nasaTlxScore);
+  const hasInstrumentEvidence = validSus !== null
+    || validUmuxLite !== null
+    || validSeqTasks.length > 0
+    || validNasaTlx !== null;
+  const humanCompleted = resolvedOptions?.humanValidation?.status === 'completed'
+    && rawParticipantCount !== null
+    && rawParticipantCount > 0
+    && hasInstrumentEvidence;
   const humanValidation: HumanUxValidationLayer = {
     status: humanCompleted ? 'completed' : 'not-performed',
     humanValidationClaimed: humanCompleted,
-    participantCount: humanCompleted ? measuredAuditCount(options?.humanValidation?.participantCount) : null,
-    sus: humanCompleted ? options?.humanValidation?.sus ?? null : null,
-    umuxLite: humanCompleted ? options?.humanValidation?.umuxLite ?? null : null,
-    seqTasks: humanCompleted ? options?.humanValidation?.seqTasks ?? [] : [],
-    nasaTlxScore: humanCompleted ? measuredAuditValue(options?.humanValidation?.nasaTlxScore) : null,
+    participantCount: humanCompleted ? rawParticipantCount : null,
+    sus: humanCompleted ? validSus : null,
+    umuxLite: humanCompleted ? validUmuxLite : null,
+    seqTasks: humanCompleted ? validSeqTasks : [],
+    nasaTlxScore: humanCompleted ? validNasaTlx : null,
   };
 
   return {
@@ -898,12 +1245,13 @@ export function buildUxFrictionFluidityAudit(
         score: standards.score,
         weight: AFFS_PILLAR_WEIGHTS.standardsAndAccessibility,
         wcagSummary: standards.wcagSummary,
+        surfaceContractSummary: standards.surfaceContractSummary,
       },
       fluidityAndResponsiveness: {
         score: fluidityScore,
         weight: AFFS_PILLAR_WEIGHTS.fluidityAndResponsiveness,
         telemetryKind,
-        nativeFrameDeadlineMeasured: telemetryKind === 'android-native-frame-trace' || telemetryKind === 'ios-hitch-ratio',
+        nativeFrameDeadlineMeasured: telemetryKind === 'android-native-frame-trace',
         components: {
           inpScore,
           lcpScore,

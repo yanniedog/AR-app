@@ -2,7 +2,7 @@ import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion, hasValidPerformanceAuditHealth } from './performanceAuditCompletion';
 import { AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_METHODS, auditReportMetricMethodVersion, type AuditMetric } from './auditMetricHistoryMetrics';
 import { auditMetricValues, auditTaskOutcomePopulation, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount as measuredCount, measuredAuditValue as measured } from './auditMetricHistoryValues';
-import { buildUxFrictionFluidityAudit, type UxFrictionFluidityAudit } from './uxFrictionFluidityAudit';
+import { buildUxFrictionFluidityAudit, type UxFrictionFluidityAudit, type UxFrictionFluidityTelemetryOptions } from './uxFrictionFluidityAudit';
 
 export type AuditMetricMissingEvidence = 'missing-evidence' | 'missing-denominator' | 'missing-samples'
   | 'partial-samples' | 'inconsistent-counts' | 'invalid-identities' | 'incomplete-health-collection'
@@ -74,7 +74,8 @@ function statistics(values: number[]): AuditMetricDistributionSummary {
 
 /** All numbers are descriptive observations of this run, not independent random trials. */
 export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
-  completion = buildPerformanceAuditCompletion(report)): AuditMetricAnalysis {
+  completion = buildPerformanceAuditCompletion(report),
+  uxTelemetry?: UxFrictionFluidityTelemetryOptions): AuditMetricAnalysis {
   const values = auditMetricValues(report, completion);
   const observations: AuditMetricObservation[] = [];
   const indices = new Map<string, number>();
@@ -389,5 +390,5 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     payloadProviders: measuredCount(report.environment.payloadProviders), viewportWidth: measured(report.environment.viewportWidth),
     fontScale: measured(report.environment.fontScale), developmentBuild: typeof report.environment.developmentBuild === 'boolean'
       ? report.environment.developmentBuild : null }, observations, metrics,
-    uxAudit: buildUxFrictionFluidityAudit(report, completion) };
+    uxAudit: buildUxFrictionFluidityAudit(report, completion, uxTelemetry) };
 }

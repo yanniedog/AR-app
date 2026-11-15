@@ -5,6 +5,7 @@ import { markAuditEntryInterrupted, markAuditEntryRunning, markAuditEntryStartQu
 import type { AuditBackgroundWorkWait } from './performanceAuditBackgroundWork';
 import type { AuditCheckDiagnostic } from './performanceAuditDiagnostic';
 import type { AuditMetricAnalysis } from './auditMetricAnalysis';
+import type { UxFrictionFluidityTelemetryOptions } from './uxFrictionFluidityAudit';
 
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import type { Prefs } from '../data/storeTypes';
@@ -130,6 +131,8 @@ export interface PerformanceAuditReport {
   limitations: string[];
   /** Schema-v7 quality, availability, display and network diagnosis. */
   appHealth?: AppHealthReport;
+  /** Optional external/platform UX telemetry and human validation inputs. */
+  uxTelemetry?: UxFrictionFluidityTelemetryOptions;
   /** Derived evidence, regenerated from canonical checks for local display/export. */
   metricAnalysis?: AuditMetricAnalysis;
 }
