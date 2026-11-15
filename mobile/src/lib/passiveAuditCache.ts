@@ -37,6 +37,7 @@ export function passiveAuditCheckKey(snapshot: AppHealthDataSnapshot, appBuild: 
     case 'asset-availability': observation = [core?.run_date, snapshot.details, snapshot.assets]; break;
     case 'details-completeness': observation = [rowIdentity, snapshot.details, snapshot.manifest?.files.details?.sha256]; break;
     case 'catalogue-identity-coverage': observation = [rowIdentity, snapshot.catalogue, snapshot.historyCoverage]; break;
+    case 'bank-response-coverage': observation = snapshot.bankResponseCoverage; break;
     default: observation = rowIdentity;
   }
   return bytesToHex(sha256(utf8ToBytes(JSON.stringify({ schema: PASSIVE_AUDIT_SCHEMA,
@@ -103,7 +104,7 @@ export function parsePassiveAuditRecord(raw: string | null, appBuild: string, no
         !Number.isFinite(entry.checkedAt) || entry.checkedAt > now || now - entry.checkedAt >= PASSIVE_AUDIT_MAX_AGE_MS ||
         !Number.isFinite(entry.durationMs) || entry.durationMs < 0) continue;
       // Catalogue breakdown is intentionally not persisted; regenerate it in memory.
-      if (job.code === 'catalogue-identity-coverage') continue;
+      if (job.code === 'catalogue-identity-coverage' || job.code === 'bank-response-coverage') continue;
       entries[job.code] = entry;
     }
     return { ...value, entries };

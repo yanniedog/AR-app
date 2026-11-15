@@ -13,7 +13,25 @@ export interface ScopedRateConditions {
 const hex = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const pointer = (value: unknown): value is string => typeof value === 'string' && value.length <= 512 && /^\/[A-Za-z0-9/]+$/.test(value);
 const keys = (value: object, allowed: string[]) => Object.keys(value).every(key => allowed.includes(key));
-export function rateConditionId(sourceSha: string, sourcePointer: string): string { return bytesToHex(sha256(utf8ToBytes(JSON.stringify([sourceSha, sourcePointer])))); }
+// Hashes are pure functions of these two strings. Reusing the hash never caches
+// validation or provenance: mutations still pass every admission check below.
+// Product cards and receipts revisit the same published clauses many times.
+const conditionIds = new Map<string, string>();
+export function rateConditionId(sourceSha: string, sourcePointer: string): string {
+  const key = JSON.stringify([sourceSha, sourcePointer]);
+  const cached = conditionIds.get(key);
+  if (cached) {
+    conditionIds.delete(key);
+    conditionIds.set(key, cached);
+    return cached;
+  }
+  const id = bytesToHex(sha256(utf8ToBytes(key)));
+  if (key.length <= 1_024) {
+    if (conditionIds.size >= 2_048) conditionIds.delete(conditionIds.keys().next().value!);
+    conditionIds.set(key, id);
+  }
+  return id;
+}
 export function validRateConditions(value: unknown): value is RateConditions {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const e = value as RateConditions;

@@ -19,7 +19,14 @@ const timestamp = (date: string) => Date.parse(`${date}T00:00:00Z`);
 
 type ChartPaths = { path: string; coordinates: { x: number; y: number }[]; background: string; pointCount: number }[];
 
-function buildChartPaths(model: BankRateChartModel): ChartPaths {
+function chartYRange(model: BankRateChartModel, gap: boolean): { yMin: number; yMax: number } {
+  const yMin = gap ? model.min : Math.max(0, model.min);
+  const yMax = Math.max(yMin + 0.01, model.max);
+  return { yMin, yMax };
+}
+
+function buildChartPaths(model: BankRateChartModel, gap: boolean): ChartPaths {
+  const { yMin, yMax } = chartYRange(model, gap);
   const start = timestamp(model.dates[0]);
   const end = timestamp(model.dates.at(-1)!);
   const positions = new Map(model.dates.map((date, i) => [date, i]));
@@ -31,13 +38,15 @@ function buildChartPaths(model: BankRateChartModel): ChartPaths {
     const coordinates: { x: number; y: number }[] = [];
     const path = line.points.map((point, i) => {
       const previous = line.points[i - 1];
-      const continuous = previous && positions.get(point.date)! === positions.get(previous.date)! + 1 &&
+      const continuous = previous &&
+        positions.get(point.date)! === positions.get(previous.date)! + 1 &&
         timestamps.get(point.date)! - timestamps.get(previous.date)! === 86_400_000;
       const next = line.points[i + 1];
-      const continues = next && positions.get(next.date)! === positions.get(point.date)! + 1 &&
+      const continues = next &&
+        positions.get(next.date)! === positions.get(point.date)! + 1 &&
         timestamps.get(next.date)! - timestamps.get(point.date)! === 86_400_000;
       const px = xCoordinates.get(point.date)!;
-      const py = T + (model.max - point.value) / (model.max - model.min) * (H - T - B);
+      const py = T + (yMax - point.value) / (yMax - yMin) * (H - T - B);
       coordinates.push({ x: px, y: py });
       // One SVG path retains every selected observation, including isolated
       // days, without allocating a native Circle for each bank and date.
@@ -56,15 +65,16 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap, a
   const index = Math.max(0, model.lines.findIndex(line => line.provider === provider));
   const selected = model.lines[index];
   const latest = selected?.points.at(-1);
+  const { yMin, yMax } = chartYRange(model, gap);
   const start = timestamp(model.dates[0]), end = timestamp(model.dates.at(-1)!);
   const x = (date: string) => model.dates.length === 1 ? (L + W - R) / 2 : L + (timestamp(date) - start) / Math.max(1, end - start) * (W - L - R);
-  const y = (value: number) => T + (model.max - value) / (model.max - model.min) * (H - T - B);
+  const y = (value: number) => T + (yMax - value) / (yMax - yMin) * (H - T - B);
   const pointCount = model.lines.reduce((count, line) => count + line.points.length, 0);
   const synchronousPaths = useMemo(
-    () => pointCount <= SYNCHRONOUS_CHART_POINTS ? buildChartPaths(model) : null,
-    [model, pointCount],
+    () => pointCount <= SYNCHRONOUS_CHART_POINTS ? buildChartPaths(model, gap) : null,
+    [gap, model, pointCount],
   );
-  const [deferredPaths, setDeferredPaths] = useState<{ model: BankRateChartModel; paths: ChartPaths } | null>(null);
+  const [deferredPaths, setDeferredPaths] = useState<{ model: BankRateChartModel; gap: boolean; paths: ChartPaths } | null>(null);
   useEffect(() => {
     if (pointCount <= SYNCHRONOUS_CHART_POINTS) {
       setDeferredPaths(null);
@@ -80,13 +90,13 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap, a
         built.push(...buildChartPaths({
           ...model,
           lines: model.lines.slice(offset, offset + banksPerSlice),
-        }));
+        }, gap));
       }
-      if (!cancelled) setDeferredPaths({ model, paths: built });
+      if (!cancelled) setDeferredPaths({ model, gap, paths: built });
     })();
     return () => { cancelled = true; };
-  }, [model, pointCount]);
-  const paths = synchronousPaths ?? (deferredPaths?.model === model ? deferredPaths.paths : null);
+  }, [gap, model, pointCount]);
+  const paths = synchronousPaths ?? (deferredPaths?.model === model && deferredPaths?.gap === gap ? deferredPaths.paths : null);
   const selectedPath = paths?.[index];
   // Only the selected bank draws all observation markers. Keep coordinates for
   // other banks so selection never rescans history, without formatting and
@@ -130,7 +140,7 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap, a
           accessibleSummary: summary.trim().length > 0 && hasFiniteChartPath(selectedMarkers),
           emptyStateRendered: false,
         })}>
-        {[model.min, (model.min + model.max) / 2, model.max].map(value => <React.Fragment key={value}>
+        {[yMin, (yMin + yMax) / 2, yMax].map(value => <React.Fragment key={value}>
           <Line x1={L} x2={W - R} y1={y(value)} y2={y(value)} stroke={theme.colors.border} />
           <ChartText x={L - 5} y={y(value) + 3} textAnchor="end" fontSize={10} fill={theme.colors.textMuted}>{uiNumber(value, 2)}</ChartText>
         </React.Fragment>)}

@@ -4,6 +4,8 @@ import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, type
 import { markAuditEntryInterrupted, markAuditEntryRunning, markAuditEntryStartQueued } from './auditEntryTrace';
 import type { AuditBackgroundWorkWait } from './performanceAuditBackgroundWork';
 import type { AuditCheckDiagnostic } from './performanceAuditDiagnostic';
+import type { AuditMetricAnalysis } from './auditMetricAnalysis';
+import type { UxFrictionFluidityTelemetryOptions } from './uxFrictionFluidityAudit';
 
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import type { Prefs } from '../data/storeTypes';
@@ -107,6 +109,8 @@ export interface PerformanceAuditSummary {
 
 export interface PerformanceAuditReport {
   schemaVersion: number;
+  /** Collector provenance; absent reports retain legacy rendering evidence. */
+  renderingEvidenceVersion?: 1 | 2;
   sessionId: string;
   startedAt: string;
   finishedAt: string;
@@ -127,6 +131,10 @@ export interface PerformanceAuditReport {
   limitations: string[];
   /** Schema-v7 quality, availability, display and network diagnosis. */
   appHealth?: AppHealthReport;
+  /** Optional external/platform UX telemetry and human validation inputs. */
+  uxTelemetry?: UxFrictionFluidityTelemetryOptions;
+  /** Derived evidence, regenerated from canonical checks for local display/export. */
+  metricAnalysis?: AuditMetricAnalysis;
 }
 
 export interface PerformanceAuditCoverage {
@@ -1081,11 +1089,16 @@ export class ResponsivenessMonitor {
   }
 
   metricsSince(snapshot: ResponsivenessSnapshot, until?: ResponsivenessSnapshot): ResponsivenessMetrics {
+    return this.metricsForWindows([{ start: snapshot, end: until }]);
+  }
+
+  /** Pool observations, not already-computed percentiles, over disjoint action windows. */
+  metricsForWindows(windows: readonly { start: ResponsivenessSnapshot; end?: ResponsivenessSnapshot }[]): ResponsivenessMetrics {
+    const collect = (samples: TimedSample[], field: 'lagIndex' | 'frameIndex') => windows.flatMap(({ start: snapshot, end: until }) => {
     const endsAt = until?.capturedAt ?? Infinity;
-    if (endsAt <= snapshot.capturedAt) return summarizeResponsiveness([], []);
-    const samplesSince = (samples: TimedSample[], index: number): number[] =>
-      samples
-        .slice(index)
+    if (endsAt <= snapshot.capturedAt) return [];
+    return samples
+        .slice(snapshot[field])
         .filter((sample) => sample.endsAt > snapshot.capturedAt &&
           (sample.observedFrom ?? sample.startsAt) < endsAt)
         .map((sample) =>
@@ -1093,9 +1106,10 @@ export class ResponsivenessMonitor {
             ? Math.max(0, Math.min(sample.endsAt, endsAt) - Math.max(sample.startsAt, snapshot.capturedAt))
             : sample.value,
         );
+    });
     return summarizeResponsiveness(
-      samplesSince(this.lagSamples, snapshot.lagIndex),
-      samplesSince(this.frameSamples, snapshot.frameIndex),
+      collect(this.lagSamples, 'lagIndex'),
+      collect(this.frameSamples, 'frameIndex'),
     );
   }
 

@@ -1,9 +1,11 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
-import { useSearchFilterOptions } from '../src/hooks/useSearchFilterOptions';
+import { clearReusableSearchFilterOptions, useSearchFilterOptions } from '../src/hooks/useSearchFilterOptions';
 import { EMPTY_SEARCH_FILTER_OPTIONS, type SearchFilterOptions } from '../src/data/searchFilterOptions';
 import { debugLog } from '../src/lib/debugLog';
+import { installMandatoryEligibility } from '../src/data/eligibilityGate';
+import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import type { ProductDetail, RateRow } from '../src/types';
 
 const mockPrepare = jest.fn();
@@ -36,7 +38,7 @@ function pendingPreparation() {
   const promise = new Promise<SearchFilterOptions | null>(done => { resolve = done; });
   return { promise, resolve };
 }
-beforeEach(() => { mockPrepare.mockReset(); mockNavigationJobs.length = 0; });
+beforeEach(() => { clearReusableSearchFilterOptions(); mockPrepare.mockReset(); mockNavigationJobs.length = 0; });
 
 test('route render queues facets after navigation and reports readiness only after a complete model', async () => {
   const pending = pendingPreparation();
@@ -100,4 +102,48 @@ test('a failed preparation becomes a terminal error and can retry without a rout
     await act(async () => { mockNavigationJobs[1].run(); });
     expect(latest).toEqual({ ready: true, options, error: null, retry: expect.any(Function) });
   } finally { act(() => tree.unmount()); log.mockRestore(); }
+});
+
+
+test('completed facets survive a route remount and do not repeat the catalogue preparation', async () => {
+  const options = { ...EMPTY_SEARCH_FILTER_OPTIONS, providers: ['Macquarie'] };
+  mockPrepare.mockResolvedValue(options);
+  let tree!: ReactTestRenderer;
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  await act(async () => { mockNavigationJobs[0].run(); });
+  expect(latest.ready).toBe(true);
+  act(() => tree.unmount());
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  try {
+    expect(latest.ready).toBe(true);
+    expect(latest.options).toBe(options);
+    expect(mockPrepare).toHaveBeenCalledTimes(1);
+    expect(mockNavigationJobs).toHaveLength(1);
+    act(() => latest.retry());
+    expect(latest.ready).toBe(false);
+    expect(mockNavigationJobs).toHaveLength(2);
+  } finally { act(() => tree.unmount()); }
+});
+
+
+test('a changed eligibility owner invalidates retained options and suspended work before parent revision commits', async () => {
+  const options = { ...EMPTY_SEARCH_FILTER_OPTIONS, providers: ['Macquarie'] };
+  mockPrepare.mockResolvedValueOnce(options);
+  let tree!: ReactTestRenderer;
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  await act(async () => { mockNavigationJobs[0].run(); });
+  expect(latest.ready).toBe(true);
+  act(() => tree.unmount());
+  installMandatoryEligibility(selectMandatoryEligibility(null, null, null));
+  const pending = pendingPreparation(); mockPrepare.mockReturnValueOnce(pending.promise);
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  try {
+    expect(latest.ready).toBe(false);
+    act(() => mockNavigationJobs[1].run());
+    const control = mockPrepare.mock.calls[1][3];
+    installMandatoryEligibility(selectMandatoryEligibility(null, null, null));
+    expect(control.cancelled()).toBe(true);
+    await act(async () => { pending.resolve(options); await pending.promise; });
+    expect(latest.ready).toBe(false);
+  } finally { act(() => tree.unmount()); }
 });

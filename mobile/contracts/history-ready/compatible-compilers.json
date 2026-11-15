@@ -3,6 +3,11 @@
   "semantic_revision": "ar-history-ready-v1",
   "compatible": [
     {
+      "sha256": "c6d1ff733a579a5fef1d17105922aee20bf73d96e66adc60aaa637ff2c1cec9b",
+      "pinned_by": "0f217f0a573dd072c019bef93b26f3b71d038d7d",
+      "note": "Same history/cohort semantics; successor accepts up to 512 MiB original producer-source provenance without increasing downloaded or decoded app assets. Retain acceptance while the producer uses this released pin."
+    },
+    {
       "sha256": "7d717bdf3a86289876a1c5dee238df1d0e79df0634feaa0a499b2199246ab5d7",
       "pinned_by": "65cfb60",
       "note": "Same compiler and cohort wire; later pins changed only consumer-side LVR bound parsing and mortgage facet aliases. Remove once the producer publishes with the current pin."

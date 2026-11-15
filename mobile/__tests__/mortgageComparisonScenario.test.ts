@@ -1,4 +1,5 @@
-import { mortgageComparisonScenario } from '../src/data/mortgageComparisonScenario';
+import { mortgageComparisonScenario, ratesComparisonScenario } from '../src/data/mortgageComparisonScenario';
+import { scopeMortgageFacets } from '../src/data/mortgageFacetScope';
 
 test('comparison amount and percentage LVR override saved pricing assumptions without changing them', () => {
   const saved = { amount: '100000', lvr: '0.9', purpose: 'OWNER_OCCUPIED' };
@@ -17,12 +18,25 @@ test.each([
     .toEqual({ amount: undefined, lvr: undefined });
 });
 
+test.each([
+  { loanAmount: '600000', lvr: '' },
+  { loanAmount: '600000', lvr: ' ', lvrMode: 'lvr' as const },
+  { loanAmount: '', lvr: '', lvrMode: 'lvr' as const },
+])('blank active direct LVR cannot inherit a saved pricing ratio: %p', inputs => {
+  const saved = { amount: '100000', lvr: '0.75' };
+  const result = mortgageComparisonScenario('Mortgage', saved, inputs);
+  expect(Object.hasOwn(result, 'lvr')).toBe(true);
+  expect(result.lvr).toBeUndefined();
+  expect(saved.lvr).toBe('0.75');
+});
+
 test('temporary purpose and repayment canonicalize before pricing without changing saved requirements or assumptions', () => {
   const saved = { purpose: 'OWNER_OCCUPIED', repayment: 'PRINCIPAL_AND_INTEREST', amount: '500000' };
   const filters = { loanPurposes: ['INV'], repaymentTypes: ['IO'] };
   const before = JSON.stringify([saved, filters]);
   expect(mortgageComparisonScenario('Mortgage', saved, { loanAmount: '', lvr: '' }, filters)).toEqual({
-    ...saved, purpose: 'INVESTMENT', repayment: 'INTEREST_ONLY', profileLoanPurpose: 'INV', profileRepayment: 'IO' });
+    ...saved, purpose: 'INVESTMENT', repayment: 'INTEREST_ONLY', profileLoanPurpose: 'INV', profileRepayment: 'IO'
+  });
   expect(JSON.stringify([saved, filters])).toBe(before);
   expect(mortgageComparisonScenario('Mortgage', saved, { loanAmount: '', lvr: '' }, { loanPurposes: [], repaymentTypes: [] })).toEqual(saved);
   expect(mortgageComparisonScenario('Mortgage', saved, { loanAmount: '', lvr: '' }, { loanPurposes: ['OO', 'INV'], repaymentTypes: [] }).purpose).toBeUndefined();
@@ -33,4 +47,24 @@ test('duplicate aliases remain one semantic purpose and repayment choice', () =>
   const result = mortgageComparisonScenario('Mortgage', {}, { loanAmount: '', lvr: '' }, filters);
   expect(result).toMatchObject({ purpose: 'OWNER_OCCUPIED', repayment: 'PRINCIPAL_AND_INTEREST' });
   expect(filters).toEqual({ loanPurposes: ['OO', 'OWNER_OCCUPIED'], repaymentTypes: ['PI', 'P&I'] });
+});
+
+test.each(['OWNER_OCCUPIER', 'INVESTOR'])('recognised %s display alias retains its exact selection token', alias => {
+  const filters = { loanPurposes: [alias], repaymentTypes: ['PRINCIPAL_INTEREST'] };
+  expect(scopeMortgageFacets(filters, false)).toBe(filters);
+  expect(filters).toEqual({ loanPurposes: [alias], repaymentTypes: ['PRINCIPAL_INTEREST'] });
+  const factual = { loanPurposes: ['OTHER', 'private-source-token'], repaymentTypes: ['UNKNOWN'] };
+  expect(scopeMortgageFacets(factual, true)).toBe(factual);
+  expect(scopeMortgageFacets(factual, false)).toEqual({ loanPurposes: [], repaymentTypes: [] });
+});
+
+test('ratesComparisonScenario preserves cold-launch browse defaults without inventing partial inputs', () => {
+  const emptyFilters = { loanPurposes: [], repaymentTypes: [] };
+  expect(ratesComparisonScenario('Mortgage', {}, { loanAmount: '', lvr: '' }, emptyFilters)).toMatchObject({
+    lvr: '0.8',
+    purpose: 'OWNER_OCCUPIED',
+    repayment: 'PRINCIPAL_AND_INTEREST',
+  });
+  expect(ratesComparisonScenario('Mortgage', {}, { loanAmount: '600000', lvr: '' }, emptyFilters).lvr).toBeUndefined();
+  expect(ratesComparisonScenario('Mortgage', {}, { loanAmount: '', lvr: '' }, { loanPurposes: ['INVESTMENT'], repaymentTypes: [] }).lvr).toBeUndefined();
 });

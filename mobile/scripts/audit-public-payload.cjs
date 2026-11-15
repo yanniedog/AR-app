@@ -10,6 +10,13 @@ const zlib = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const ts = require('typescript');
 const sourceRoot = path.resolve(__dirname, '../src');
+const bankArtworkRoot = path.resolve(__dirname, '../assets/banks');
+// Selectors import the real offline branding map. Node retains file identities;
+// it does not decode/render artwork or claim native image acceptance.
+require.extensions['.png'] = (module, filename) => {
+  if (!filename.startsWith(bankArtworkRoot + path.sep)) throw new Error('Audit may only load bundled bank artwork');
+  module.exports = { uri: filename };
+};
 require.extensions['.ts'] = (module, filename) => {
   if (!filename.startsWith(sourceRoot + path.sep)) throw new Error('Audit may only load checked-in app sources');
   const output = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
@@ -19,12 +26,18 @@ require.extensions['.ts'] = (module, filename) => {
   module._compile(output.outputText, filename);
 };
 const { evaluateAppHealthDataQuality } = require('../src/lib/appHealth/dataQuality.ts');
+const { appHealthCatalogueSnapshot } = require('../src/lib/performanceAuditCatalogueSnapshot.ts');
+const { bankResponseAuditSnapshot } = require('../src/lib/performanceAuditDataSnapshot.ts');
+const { normalizeBankInsightsPayload } = require('../src/data/bankInsights.ts');
+const { normalizeRbaCalendar } = require('../src/data/rbaCalendar.ts');
+const { DEFAULT_PREFS } = require('../src/data/storeTypes.ts');
 const { publishedV1SourceContract } = require('../src/lib/appHealth/v1Contract.ts');
 const { normalizeCoreWithIntegrity } = require('../src/data/sectionIntegrity.ts');
 const { parseDatesIndex } = require('../src/data/datesIndex.ts');
 const { assertRevisionManifest, validateRevisionHead } = require('../src/data/payloadRevision.ts');
 const { payloadBundleIdentity } = require('../src/data/payloadBundleIdentity.ts');
 const { isValidCalendarDate } = require('../src/lib/calendarDate.ts');
+const { withinStartupCoreBudget } = require('../src/data/payloadNetworkBudget.ts');
 const { automaticDataUrl } = require('../src/lib/automaticDataAccess.ts');
 const { isReleaseTransport } = require('../src/lib/releaseTransport.ts');
 const { validateLegacyHistoricalCatalogueDescriptor, validatePackedHistoricalCatalogueDescriptor, validateReadyHistoricalDescriptor,
@@ -38,6 +51,31 @@ const { validatePublicRateCapability, validatePublicRateDiscovery, validatePubli
 const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const MAX_COMPRESSED = 64 * 1024 * 1024;
 const MAX_DECODED = 192 * 1024 * 1024;
+
+function validateSearchIndex(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || value.schema_version !== 1 ||
+      !isValidCalendarDate(value.run_date) || !value.products || typeof value.products !== 'object' ||
+      Array.isArray(value.products) || Object.entries(value.products).some(([key, text]) => !key || typeof text !== 'string')) {
+    throw new Error('Invalid search-index payload');
+  }
+}
+
+function normalizeBankAuditAsset(key, decoded, observations, evidence) {
+  if (!Object.hasOwn(decoded, key)) return null;
+  try {
+    const value = key === 'bank_history'
+      ? normalizeBankInsightsPayload(decoded[key]) : normalizeRbaCalendar(decoded[key]);
+    if (!value) throw new Error(`Invalid ${key} payload`);
+    if (key === 'bank_history' && value.run_dates.at(-1) !== value.run_date) {
+      throw new Error('Bank history timeline does not end at its observation date');
+    }
+    return value;
+  } catch {
+    evidence[key] = { ...evidence[key], status: 'FAIL', error: `Invalid ${key} observation` };
+    observations[key] = { state: 'failed' };
+    return null;
+  }
+}
 
 function publicationSource(source, repo) {
   const url = new URL(source);
@@ -185,7 +223,9 @@ async function audit(opts) {
       const digest = hash(bytes);
       if (bytes.length !== file.bytes || digest !== file.sha256) throw new Error('Asset size/hash mismatch');
       const body = bytes[0] === 0x1f && bytes[1] === 0x8b ? zlib.gunzipSync(bytes, { maxOutputLength: MAX_DECODED }) : bytes;
-      decoded[key] = JSON.parse(body.toString('utf8'));
+      const value = JSON.parse(body.toString('utf8'));
+      if (key === 'search_index') validateSearchIndex(value);
+      decoded[key] = value;
       evidence[key] = { status: 'PASS', url: directory ? null : file.url, sha256: digest, bytes: bytes.length,
         decoded_bytes: body.length, acquisition: directory ? 'local_file' : 'public_http' };
       observations[key] = { state: 'ready', runDate: decoded[key].run_date ?? null, itemCount: null };
@@ -206,7 +246,7 @@ async function audit(opts) {
       const file = validateDescriptor(manifest, opts.repo);
       if (!file || file.enc) throw new Error('Invalid or encrypted detached history descriptor');
       if (ready && file.bytes > 1024 * 1024) throw new Error('Prepared history exceeds transport byte budget');
-      if (manifest.files.core.bytes > 512 * 1024 || decoded.core?.bank_rate_history !== undefined ||
+      if (!withinStartupCoreBudget(manifest.files.core.bytes) || decoded.core?.bank_rate_history !== undefined ||
           decoded.core?.bank_rate_history_catalogue !== undefined || decoded.core?.bank_rate_history_catalogue_packed !== undefined ||
           decoded.core?.bank_rate_history_ready !== undefined) throw new Error('Detached history must preserve the compact startup core');
       const bytes = directory ? privateFile(directory, file.name, file.bytes + 1) : await publicBytes(file.url, file.bytes + 1);
@@ -288,8 +328,15 @@ async function audit(opts) {
   const normalized = decoded.core ? normalizeCoreWithIntegrity(decoded.core, { coreSha256: manifest.files.core.sha256 }) : null;
   const coreKeys = new Set(Object.values(normalized?.core.sections ?? {}).flatMap((section) => section.rates).map((row) => row.product_key));
   const detailKeys = Object.keys(decoded.details?.products ?? {});
+  const auditState = { core: normalized?.core ?? null, coreIntegrity: normalized?.integrity ?? null,
+    details: decoded.details ?? null, searchIndex: decoded.search_index ?? null, prefs: DEFAULT_PREFS,
+    bankInsights: normalizeBankAuditAsset('bank_history', decoded, observations, evidence),
+    rbaCalendar: normalizeBankAuditAsset('rba_calendar', decoded, observations, evidence) };
   const snapshot = {
     source: 'remote', manifest, core: normalized?.core ?? null, appVersion: '1.0.0',
+    catalogueAuditMode: 'headless_default_preferences',
+    catalogue: appHealthCatalogueSnapshot(auditState),
+    bankResponseCoverage: bankResponseAuditSnapshot(auditState),
     datesIndex: index ? { dates: index.dates, latestRunDate: index.latest_date } : undefined,
     assets: observations,
     details: decoded.details ? { runDate: decoded.details.run_date, productCount: detailKeys.length,

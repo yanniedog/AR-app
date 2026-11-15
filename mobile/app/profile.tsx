@@ -1,4 +1,4 @@
-import { uiCount,uiJoin,uiLabel,uiSectionName } from "../src/lib/uiCopy";
+import { uiCount,uiJoin,uiLabel } from "../src/lib/uiCopy";
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 
@@ -6,10 +6,7 @@ import { ProfileEditor } from '../src/components/ProfileEditor';
 import { CustomerProfilePanel } from '../src/components/CustomerProfilePanel';
 import { ScreenScrollView } from '../src/components/Screen';
 import { AppText, Button, Card } from '../src/components/ui';
-import { LedgerRow, LedgerSection } from '../src/components/ledger';
-import { LedgerIcon } from '../src/components/icons/LedgerIcon';
 import { SECTION_ORDER } from '../src/constants';
-import { toggleInterest } from '../src/data/interests';
 import {
   EMPTY_PROFILE,
   PROFILE_FEATURE_OPTIONS,
@@ -93,17 +90,6 @@ export default function Profile() {
       contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
       onLayout={() => setLayoutReady(true)}
     >
-      <LedgerSection title="Preferred types" ruled={false}>
-        {SECTION_ORDER.map(section => {
-          const selected = interests.includes(section);
-          const disabled = selected && interests.length === 1;
-          return <LedgerRow key={section} title={uiSectionName(section)}
-            accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled }}
-            aria-checked={selected} aria-disabled={disabled}
-            disabled={disabled} onPress={() => setPref('interests', toggleInterest(interests, section))}
-            trailing={<LedgerIcon name={selected ? 'checkbox' : 'checkbox-empty'} size={24} color={theme.colors.primary} />} />;
-        })}
-      </LedgerSection>
       <Card>
         <AppText variant="h2">{uiLabel('Saved requirements')}</AppText>
         <AppText variant="small" color="textMuted">{uiJoin('Scope', ' · ', 'All screens')}</AppText>

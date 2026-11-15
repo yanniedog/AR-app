@@ -23,6 +23,7 @@ import {
   bankEventMedianContext,
   bankTrendChartModel,
   filterBankInsightsForSuitability,
+  filterBankInsightsForSuitabilityCooperatively,
   recentBankEvents,
   type BankEventRateContext,
   type BankRateEvent,
@@ -35,7 +36,7 @@ import {
   type ProductRateMove,
 } from '../../src/data/productHistory';
 import { lenderProductRows } from '../../src/data/selectors';
-import { rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
+import { hasRateHistoryChartSection, rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
 import { stableRowsForProvider } from '../../src/data/rateRowIndex';
 import { useStore } from '../../src/data/store';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
@@ -289,25 +290,97 @@ export default function BankDetail() {
     return out;
   }, [bySection, core, hasProductHistory, showBankInsights]);
 
+  const heavyHistory =
+    (core?.sections.Mortgage.rates.length ?? 0) > 400 ||
+    (core?.sections.Savings.rates.length ?? 0) > 400 ||
+    (core?.sections.TD.rates.length ?? 0) > 400;
+  const [deferredBankInsights, setDeferredBankInsights] = useState<{
+    bankInsights: typeof bankInsights;
+    core: typeof core;
+    coreIntegrity: typeof coreIntegrity;
+    detailsProducts: typeof detailsProducts;
+    includeNonStandard: boolean;
+    suitabilityRevision: number;
+    insights: ReturnType<typeof filterBankInsightsForSuitability>;
+  } | null>(null);
+  const currentDeferredBankInsights =
+    deferredBankInsights &&
+    deferredBankInsights.bankInsights === bankInsights &&
+    deferredBankInsights.core === core &&
+    deferredBankInsights.coreIntegrity === coreIntegrity &&
+    deferredBankInsights.detailsProducts === detailsProducts &&
+    deferredBankInsights.includeNonStandard === includeNonStandard &&
+    deferredBankInsights.suitabilityRevision === suitabilityRevision
+      ? deferredBankInsights.insights
+      : null;
+
+  useEffect(() => {
+    if (!heavyHistory || !historySurfaceReady || !showBankInsights || !bankInsights || !core) {
+      setDeferredBankInsights(null);
+      return;
+    }
+    let cancelled = false;
+    setDeferredBankInsights(null);
+    void filterBankInsightsForSuitabilityCooperatively(
+      bankInsights,
+      core,
+      includeNonStandard,
+      detailsProducts,
+      suitabilityRevision,
+      coreIntegrity,
+      { cancelled: () => cancelled, yieldControl: () => yieldToUi(0) },
+    ).then((insights) => {
+      if (!cancelled) {
+        setDeferredBankInsights({
+          bankInsights,
+          core,
+          coreIntegrity,
+          detailsProducts,
+          includeNonStandard,
+          suitabilityRevision,
+          insights,
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    bankInsights,
+    core,
+    coreIntegrity,
+    detailsProducts,
+    heavyHistory,
+    historySurfaceReady,
+    includeNonStandard,
+    showBankInsights,
+    suitabilityRevision,
+  ]);
+
   const visibleBankInsights = useMemo(
     () =>
-      !historySurfaceReady
+      !historySurfaceReady || !showBankInsights
         ? null
-        : filterBankInsightsForSuitability(
-            bankInsights,
-            core,
-            includeNonStandard,
-            detailsProducts,
-            suitabilityRevision,
-            coreIntegrity,
-          ),
+        : heavyHistory
+          ? currentDeferredBankInsights
+          : filterBankInsightsForSuitability(
+              bankInsights,
+              core,
+              includeNonStandard,
+              detailsProducts,
+              suitabilityRevision,
+              coreIntegrity,
+            ),
     [
       bankInsights,
       core,
       coreIntegrity,
+      currentDeferredBankInsights,
       detailsProducts,
+      heavyHistory,
       historySurfaceReady,
       includeNonStandard,
+      showBankInsights,
       suitabilityRevision,
     ],
   );
@@ -321,7 +394,7 @@ export default function BankDetail() {
     if (!historySurfaceReady || rateHistory.updating || rateHistory.failed) return [] as SectionKey[];
     return SECTION_ORDER.filter((section) => {
       if (rateHistory.historyAvailable) {
-        return !!rateHistoryChartModel(rateHistory.snapshots, section, provider);
+        return hasRateHistoryChartSection(rateHistory.snapshots, section, provider);
       }
       return !!bankTrendChartModel(visibleBankInsights, provider, section);
     });
@@ -567,6 +640,8 @@ export default function BankDetail() {
         kind: 'data',
         status: core ? 'ready' : 'pending',
         datasetRevision: coreSha ?? core?.run_date ?? null,
+        expectedCount: productCount,
+        actualCount: core ? productCount : 0,
       },
       {
         id: 'lender.products',
@@ -602,7 +677,8 @@ export default function BankDetail() {
               ? 'pending'
               : 'ready',
         error: rateHistory.failed ? 'Historical rates could not be prepared' : null,
-        actualCount: chartModel?.dates.length ?? 0,
+        expectedCount: !historySurfaceReady ? 0 : rateHistory.failed ? Math.max(1, chartModel?.dates.length ?? 0) : (chartModel?.dates.length ?? 0),
+        actualCount: !historySurfaceReady || rateHistory.failed ? 0 : (chartModel?.dates.length ?? 0),
       },
       {
         id: 'lender.history-graphic',

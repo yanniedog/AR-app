@@ -11,7 +11,7 @@ import { validFact, validDefinition, validProvenance, safeId, type CustomerAnswe
 import { THIRD_PARTY_NOTICES } from '../content/thirdPartyNotices';
 import { LENDER_ARTWORK_TERMS, OPTIONAL_DIAGNOSTICS_TERMS } from './privacyPolicy';
 import { Decimal } from './productTermsEngine/decimal';
-import { readBoundCustomerQuestion, type CustomerQuestionBinding } from './customerQuestionBinding';
+import type { CustomerQuestionBinding } from './customerQuestionBinding';
 import type { BackgroundWorkSnapshot } from './backgroundPayloadWork';
 import type { MortgageComparisonInputs } from '../data/mortgageComparison';
 import type { PublicProduct, PublicReferenceRate, PublicCoverage, PublicEvidence } from '../data/publicRateModel';
@@ -19,8 +19,22 @@ import type { CurrentProductOption } from '../data/scenarioCatalog';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
+  'Recorded move', 'No recorded move', 'Filtered history', 'Quarantined history', 'Baseline unavailable', 'History gaps', 'No products',
+  'Bank response coverage', 'Decision windows', 'Unknown changes', 'Unknown timing', 'Unverified first moves',
+  'Metric evidence', 'Method', 'Numerator', 'Denominator', 'Sample size', 'Eligible', 'Missing evidence',
+  'Worst observations', 'Median absolute deviation', 'Interquartile range', 'p50', 'p90', 'p95', 'p99',
+  'Evidence references', 'Evidence status', 'Not observed', 'Invalid evidence', 'Measurement scope',
+  'Indeterminate', 'Measurement groups',
+  'Sample unit', 'Contributing journeys', 'Unmeasured journeys',
+  'UX & fluidity', 'Friction & Fluidity Score', 'Composite basis', 'Proprietary · Non-normative',
+  'Interaction friction', 'Standards & accessibility', 'Fluidity & responsiveness', 'Score',
+  'Interaction friction (40%)', 'Standards & accessibility (30%)', 'Fluidity & responsiveness (30%)',
+  'Exemplary', 'Moderate friction', 'Material friction', 'High friction',
+  'SUS / UMUX-Lite / SEQ', 'Not performed', 'Automated WCAG / standards', 'Manual review', 'Manual review required', 'WCAG 2.2 conformance',
+  'Rendering checks', 'Performance checks passed', 'Health checks passed', 'Integrity checks passed', 'Completeness checks passed', 'Observed surface contracts', 'Model-count checks passed', 'List-presence checks passed', 'Viewport-count checks passed', 'Layout-callback checks passed', 'Chart-contract checks passed', 'Empty-state checks passed', 'Logo-load checks passed', 'Human usability', 'Visual design', 'Pixel correctness', 'Invoked actions', 'Ready within timing limits', 'Ready with timing failures', 'Ready with warnings', 'Action failures', 'Not passed',
+  'Journey time p50', 'Journey time p95', 'JS stalls over 100 ms', 'JS frames over 50 ms', 'Collected checks', 'Journey execution', 'Health check execution', 'Readiness evidence', 'Responsiveness evidence', 'Verified destinations', 'Provider fetch success', 'Product detail coverage', 'History source coverage', 'Target probe defects', 'Unverified destinations', 'Automated task success', 'Automated task failures', 'Action time p50', 'Action time p95', 'Back time p95', 'Navigation recoveries', 'Runtime errors', 'Check pass rate', 'Health pass rate', 'Data integrity pass rate', 'Data completeness pass rate', 'Timing failures', 'History processing mismatches', 'History projection mismatches', 'Observed surfaces', 'Display model pass rate', 'List rendering pass rate', 'Visible content pass rate', 'Layout pass rate', 'Chart rendering pass rate', 'Empty state pass rate', 'Logo rendering pass rate', 'Task outcomes', 'App quality', 'Display quality',
   'Audit history', 'No audit history', 'History unavailable', 'Retained runs', 'Audit settings', 'Recorded results',
-  'Estimated time', 'Last audit', 'Upload details', 'min',
+  'Estimated time', 'Last audit', 'Upload details', 'Retry saved report', 'Event history unavailable', 'min',
   'Unverified details', 'Quarantined tiers', 'History days', 'Daily gaps', 'Rendered coverage', 'Chart gaps', 'Processing gaps', 'Source unavailable',
   '', '—', '·', ':', '/', '→', '↑', '↓', '%', '$', '#', '(', ')', '+', '−', '–', ' ', ' · ', ', ', ' — ', ' / ', ': ', '<', '>', '≤', '≥',
   'Rates', 'Saved', 'Market', 'Account', 'Profile', 'Settings', 'About',
@@ -72,14 +86,15 @@ export const UI_LABELS = [
   'Show', 'Hide', 'Expand', 'Collapse', 'More', 'Less', 'Ascending', 'Descending',
   'Newest', 'Oldest', 'Name', 'Date', 'Version', 'Build', 'Update', 'Install',
   'Download', 'Downloaded', 'Download failed', 'Update available', 'Up to date',
-  'Pause', 'Resume', 'Stop', 'Start', 'Run audit', 'Live audit', 'Public upload', 'Next audit upload', 'Next destination', 'Audit', 'Performance audit',
+  'Pause', 'Resume', 'Stop', 'Start', 'Local audit', 'Live audit', 'Public upload', 'Next audit upload', 'Next destination', 'Audit', 'Performance audit',
+  'HTTP attempts / destinations', 'HTTP not attempted', 'HTTP attempt evidence missing', 'Unverified links',
   'Debug log', 'Report', 'Upload', 'Upload report', 'Uploaded', 'Upload failed', 'Upload status', 'Clear cache',
   'Reset app', 'Delete local data', 'Data deleted', 'Authentication required', 'Unlock',
   'Authenticate', 'Export data key', 'Import data key', 'Share data key', 'External link',
   'Open link', 'Domain', 'Address', 'Email', 'Website', 'Licence', 'Legal', 'Terms and privacy',
   'Ongoing rate', 'Bonus rate', 'Introductory period', 'Conditions required', 'Providers attempted',
   'Providers succeeded', 'Partial providers', 'Failed providers', 'Coverage limitations',
-  'Update deadline', 'Source condition', 'Loan amount', 'Borrowing amount', 'Deposit balance',
+  'Update deadline', 'Source condition', 'Loan amount', 'Borrowing amount', 'Deposit balance', 'Funds available', 'Calculated LVR', 'Offset balance', 'Loan less offset',
   'Deposit term', 'Fixed term', 'Loan term', 'Unassessed', 'Not applicable', 'Entered', 'Recorded',
   'Effective from', 'Effective to', 'Assessment date', 'Unresolved inputs', 'Source changed',
   'Copy failed', 'No upload', 'Local only', 'Data details',
@@ -450,7 +465,7 @@ export function useReceiptImportInput() { return useInputController(); }
 export function useSetupKeyInput() { return useInputController(); }
 export function useProviderSearchInput() { return useInputController(); }
 export function uiRatesQuery(session: Pick<RatesSectionState, 'query'>): UiInputText { return inputText(session.query); }
-export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr'): UiInputText { return inputText(model[field]); }
+export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr' | 'fundsAvailable' | 'propertyValue'): UiInputText { return inputText(model[field] ?? ''); }
 export function uiPrivateOfferInput(model: Pick<MortgageInputs, 'confirmedOfferFacts' | 'provenance'>, field: 'purpose' | 'security' | 'repaymentType'): UiInputText {
   const value = model.confirmedOfferFacts[field] ?? '';
   return inputText(model.provenance === 'user_reported_bank_offer_and_statement' && value.length <= 2000 && !/[\r\n\t]/.test(value) ? value : '');
@@ -466,6 +481,12 @@ export function uiCount(value: number | null | undefined): UiText {
   if (!finite(value)) return uiLabel('Unknown');
   countFormatter ??= new Intl.NumberFormat('en-AU');
   return known(countFormatter.format(value));
+}
+/** Elapsed or estimated duration; minutes continue beyond an hour. */
+export function uiDurationClock(milliseconds: number): UiText {
+  if (!finite(milliseconds) || milliseconds < 0) return uiLabel('Unknown');
+  const seconds = Math.ceil(milliseconds / 1_000);
+  return known(`${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`);
 }
 let countFormatter: Intl.NumberFormat | undefined;
 const MONEY_FORMATTERS = new Map<number, Intl.NumberFormat>();
@@ -763,6 +784,9 @@ export function useNegotiatedTermDraft() {
 export function uiInputDefinitionLabel(definition: InputDefinition, question?: CustomerQuestionBinding | null): UiText {
   if (!validDefinition(definition)) return uiLabel('Source review required');
   if (question !== undefined) {
+    // Load the real transport-bound question verifier only for this capability;
+    // pure catalogue labels must not initialize native payload transport.
+    const { readBoundCustomerQuestion } = require('./customerQuestionBinding') as typeof import('./customerQuestionBinding');
     const label = readBoundCustomerQuestion(definition, question);
     return label === null ? uiLabel('Source review required') : known(label);
   }

@@ -3,8 +3,9 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import type { PerformanceAuditReport } from './performanceAudit';
 import { auditOutcome } from './auditPresentation';
 import { APP_HEALTH_CHECK_CODES, APP_HEALTH_DOMAINS } from './appHealth';
-import { publicAuditDiagnostic } from './performanceAuditDiagnostic';
+import { publicAuditDiagnosticStage } from './performanceAuditDiagnostic';
 import { publicHistoryCoverageSanitizer } from './appHealth/publicHistoryCoverage';
+import { publicBankResponseCoverage } from './appHealth/publicBankResponseCoverage';
 
 /** Only machine-authored ISO instants are public; arbitrary saved text is not. */
 export function publicAuditTimestamp(value: unknown): string | null {
@@ -43,6 +44,46 @@ export function hasValidPerformanceAuditHealth(report: PerformanceAuditReport): 
       && check.metrics != null && typeof check.metrics === 'object' && !Array.isArray(check.metrics));
 }
 
+const CONTRACT_AVAILABILITY_EVIDENCE = new Set([
+  'local app-health mode blocks fetch and XMLHttpRequest before transport',
+  'the local download state was observed without checking the remote manifest',
+  'the update mechanism is Android-only',
+]);
+const CONTRACT_AVAILABILITY_REASONS = new Set([
+  'Not run: local mode has a zero-network contract',
+  'Not run: remote update checks are outside the local audit contract',
+  'Not run: Android-only',
+  'Maximum coverage is unavailable because optional assets are not cached',
+]);
+
+/** Index planned deep-step metadata by audit check ID (`deep-${step.id}`). */
+export function buildPlannedStepMetadataMap(
+  plan: PerformanceAuditReport['plan'],
+): Map<string, { optional: boolean; expectedSurface: string }> {
+  const planSteps = new Map<string, { optional: boolean; expectedSurface: string }>();
+  for (const pass of Array.isArray(plan?.passes) ? plan.passes : []) {
+    for (const step of Array.isArray(pass?.steps) ? pass.steps : []) {
+      planSteps.set(`deep-${step.id}`, { optional: step.optional === true, expectedSurface: step.expectedSurface });
+    }
+  }
+  return planSteps;
+}
+
+/** Return true only when a skipped check represents an allowed availability skip rather than a recovery/required gap. */
+export function isJustifiedAvailabilitySkip(
+  check: PerformanceAuditReport['checks'][number],
+  optionalPlannedStep = false,
+): boolean {
+  if (check.status !== 'skipped' || check.metrics.skipClassification === 'scenario-recovery') return false;
+  const evidence = typeof check.metrics.availabilityEvidence === 'string' ? check.metrics.availabilityEvidence : '';
+  if (evidence === 'mounted action terminal-unavailable result'
+    || evidence === 'an optional required probe reported a terminal error'
+    || evidence.startsWith('Optional assets are not cached')
+    || CONTRACT_AVAILABILITY_EVIDENCE.has(evidence)) return true;
+  if (typeof check.metrics.reason === 'string' && CONTRACT_AVAILABILITY_REASONS.has(check.metrics.reason)) return true;
+  return optionalPlannedStep && check.metrics.skipClassification === 'terminal-availability';
+}
+
 /** Completion and evidence retention are separate from whether checks passed. */
 export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   safeCheckId: (id: string) => string | null = id => id) {
@@ -54,12 +95,15 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   const sanitizeHistory = publicHistoryCoverageSanitizer();
   const invalidHistoryChecks = new Set(healthChecks.filter(check => check.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE
     && sanitizeHistory(check.metrics).historyGapEvidenceInvalid === true));
+  const invalidBankResponseChecks = new Set(healthChecks.filter(check => check.code === APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE
+    && publicBankResponseCoverage(check).bankResponseEvidenceInvalid === true));
   let truncatedEvidenceFields = 0;
   let omittedEvidenceChars = 0;
   // Older builds bounded evidence before storage. Preserve that loss explicitly
   // even though the actual private text will become an opaque public alias.
   const countTruncation = (value: unknown): void => {
     if (typeof value === 'string') {
+      if (!value.includes('…[truncated ')) return;
       const markers = [...value.matchAll(/…\[truncated (\d+) chars\]/g)];
       if (markers.length) truncatedEvidenceFields++;
       for (const marker of markers) omittedEvidenceChars += Number(marker[1]);
@@ -70,33 +114,11 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   if (report.appHealth) countTruncation(report.appHealth);
   const actualIds = new Set(report.checks.map(check => check.id));
   const healthActualIds = new Set(healthChecks.map(check => check.id));
-  const planSteps = new Map<string, { optional: boolean; expectedSurface: string }>();
-  for (const pass of report.plan?.passes ?? []) {
-    for (const step of pass.steps) planSteps.set(`deep-${step.id}`, { optional: step.optional === true, expectedSurface: step.expectedSurface });
-  }
+  const planSteps = buildPlannedStepMetadataMap(report.plan);
   const missingPerformanceIds = [...new Set([...(coverage?.missingPlannedCheckIds ?? []),
     ...[...planSteps.keys()].filter(id => !actualIds.has(id))])];
-  const contractAvailabilityEvidence = new Set([
-    'local app-health mode blocks fetch and XMLHttpRequest before transport',
-    'the local download state was observed without checking the remote manifest',
-    'the update mechanism is Android-only',
-  ]);
-  const contractAvailabilityReasons = new Set([
-    'Not run: local mode has a zero-network contract',
-    'Not run: remote update checks are outside the local audit contract',
-    'Not run: Android-only',
-    'Maximum coverage is unavailable because optional assets are not cached',
-  ]);
-  const justifiedAvailabilitySkip = (check: PerformanceAuditReport['checks'][number]) => {
-    if (check.status !== 'skipped' || check.metrics.skipClassification === 'scenario-recovery') return false;
-    const evidence = typeof check.metrics.availabilityEvidence === 'string' ? check.metrics.availabilityEvidence : '';
-    if (evidence === 'mounted action terminal-unavailable result'
-      || evidence === 'an optional required probe reported a terminal error'
-      || evidence.startsWith('Optional assets are not cached')
-      || contractAvailabilityEvidence.has(evidence)) return true;
-    if (typeof check.metrics.reason === 'string' && contractAvailabilityReasons.has(check.metrics.reason)) return true;
-    return planSteps.get(check.id)?.optional === true && check.metrics.skipClassification === 'terminal-availability';
-  };
+  const justifiedAvailabilitySkip = (check: PerformanceAuditReport['checks'][number]) =>
+    isJustifiedAvailabilitySkip(check, planSteps.get(check.id)?.optional === true);
   const justifiedHealthUnavailable = (check: NonNullable<PerformanceAuditReport['appHealth']>['checks'][number]) => {
     if (check.status !== 'unavailable' || check.code !== APP_HEALTH_CHECK_CODES.ASSET_AVAILABILITY) return false;
     const metric = (name: string) => typeof check.metrics[name] === 'number' ? check.metrics[name] as number : null;
@@ -185,13 +207,20 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     pendingProbes: report.checks.reduce((count, check) => count + pendingRequiredProbes(check).length, 0),
     missingReadinessChecks: report.checks.filter(check => check.kind === 'journey' && check.metrics.executionAttempted !== false
       && check.metrics.availabilityFailure !== true && check.status !== 'skipped' && !structuredReadiness(check)).length,
-    unverifiedLinks: report.checks.filter(unverifiedLink).length,
+    unverifiedLinks: report.checks.filter(unverifiedLink).length + report.checks.reduce((sum, check) => {
+      if (check.id !== 'external-link-unverified') return sum;
+      const count = check.metrics.destinationCount;
+      return sum + (typeof count === 'number' && Number.isSafeInteger(count) && count > 0 ? count : 0);
+    }, 0),
     unavailableResponsivenessChecks: report.checks.filter(missingResponsiveness).length,
     targetProbeDefects: report.checks.reduce((count, check) => count + targetProbeDefects(check).length, 0),
     missingHealthReports: report.schemaVersion >= 7 && !health ? 1 : 0,
     invalidCoverageReports: report.coverage != null && !coverageValid ? 1 : 0,
     invalidHealthReports: report.appHealth != null && !healthValid ? 1 : 0,
     invalidHistoryEvidenceChecks: invalidHistoryChecks.size,
+    bankResponseCoverageGaps: healthChecks.filter(check => check.code === APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE
+      && (check.metrics.coverageComplete !== true || invalidBankResponseChecks.has(check))).length,
+    invalidBankResponseEvidenceChecks: invalidBankResponseChecks.size,
     evidenceCapacityFailures: report.checks.filter(check => check.metrics.evidenceCapacityExceeded === true).length,
     truncatedEvidenceFields, omittedEvidenceChars,
   };
@@ -201,20 +230,20 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     && (!health || health.coverage.storedChecks === healthChecks.length && health.coverage.plannedChecks === healthChecks.length);
   const coverageComplete = collectionComplete && health?.coverage.complete !== false
     && gaps.skippedChecks === 0 && gaps.unavailableChecks === 0 && gaps.notRunChecks === 0 && gaps.pendingProbes === 0
-    && gaps.targetProbeDefects === 0 && gaps.unverifiedLinks === 0 && gaps.unavailableResponsivenessChecks === 0 && gaps.missingHealthReports === 0 && gaps.invalidHistoryEvidenceChecks === 0;
+    && gaps.targetProbeDefects === 0 && gaps.unverifiedLinks === 0 && gaps.unavailableResponsivenessChecks === 0 && gaps.missingHealthReports === 0 && gaps.invalidHistoryEvidenceChecks === 0
+    && gaps.bankResponseCoverageGaps === 0;
   const startedAt = publicAuditTimestamp(report.startedAt);
   const finishedAt = publicAuditTimestamp(report.finishedAt);
   const timestampsValid = startedAt != null && finishedAt != null && startedAt <= finishedAt;
   const detailsComplete = collectionComplete && timestampsValid && truncatedEvidenceFields === 0
     && gaps.missingReadinessChecks === 0 && gaps.missingHealthReports === 0 && gaps.evidenceCapacityFailures === 0
-    && gaps.invalidHistoryEvidenceChecks === 0;
+    && gaps.invalidHistoryEvidenceChecks === 0 && gaps.invalidBankResponseEvidenceChecks === 0;
   const failurePositions: { source: 'performance' | 'health'; position: number; checkId: string | null;
     stage: string | null; category: 'failure' | 'timing' }[] = [];
   report.checks.forEach((check, index) => {
     if (check.status !== 'fail') return;
-    const diagnostic = publicAuditDiagnostic(check.diagnostic) as { stage?: string } | null;
     failurePositions.push({ source: 'performance', position: index + 1, checkId: safeCheckId(check.id),
-      stage: diagnostic?.stage ?? null, category: auditOutcome(check) === 'timing' ? 'timing' : 'failure' });
+      stage: publicAuditDiagnosticStage(check.diagnostic), category: auditOutcome(check) === 'timing' ? 'timing' : 'failure' });
   });
   const healthCodes = new Set<string>(Object.values(APP_HEALTH_CHECK_CODES));
   healthChecks.forEach((check, index) => {
@@ -231,11 +260,15 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
     ...(health?.coverage.missingPlannedCheckIds ?? []).map(id => ({ source: 'health' as const, checkId: healthId(id) })),
   ];
   type GapPosition = { source: 'performance' | 'health'; position: number; checkId: string | null;
-    reason: 'unavailable' | 'skipped' | 'unverified-link' | 'not-run' | 'pending-probe' | 'missing-readiness' | 'duplicate' | 'unexpected' | 'invalid-history-evidence' | 'missing-responsiveness' | 'probe-error' | 'probe-revision-mismatch';
+    reason: 'unavailable' | 'skipped' | 'unverified-link' | 'not-run' | 'pending-probe' | 'missing-readiness' | 'duplicate' | 'unexpected' | 'invalid-history-evidence' | 'missing-responsiveness' | 'probe-error' | 'probe-revision-mismatch' | 'bank-response-coverage-gap';
     surfaceId?: string; probeId?: string };
   const gapPositions: GapPosition[] = [
     ...report.checks.flatMap((check, index) => {
-      const reason = unverifiedLink(check) ? 'unverified-link' as const
+      const aggregateUnverified = check.id === 'external-link-unverified'
+        && typeof check.metrics.destinationCount === 'number'
+        && Number.isSafeInteger(check.metrics.destinationCount)
+        && check.metrics.destinationCount > 0;
+      const reason = unverifiedLink(check) || aggregateUnverified ? 'unverified-link' as const
         : blockingUnavailable(check) ? 'unavailable' as const
           : check.status === 'skipped' && !justifiedAvailabilitySkip(check) ? 'skipped' as const
             : null;
@@ -245,6 +278,10 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
       ? [{ source: 'health' as const, position: index + 1, checkId: healthId(check.code), reason: check.status }] : []),
   ];
   healthChecks.forEach((check, index) => {
+    if (check.code === APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE &&
+      (check.metrics.coverageComplete !== true || invalidBankResponseChecks.has(check))) {
+      gapPositions.push({ source: 'health', position: index + 1, checkId: check.code, reason: 'bank-response-coverage-gap' });
+    }
     if (invalidHistoryChecks.has(check)) gapPositions.push({ source: 'health', position: index + 1,
       checkId: healthId(check.code), reason: 'invalid-history-evidence' });
   });

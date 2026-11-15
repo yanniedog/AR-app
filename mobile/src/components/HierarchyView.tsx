@@ -244,6 +244,8 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
         id: 'browse.data',
         kind: 'data',
         status: rows ? 'ready' : 'pending',
+        expectedCount: 1,
+        actualCount: rows ? 1 : 0,
         datasetRevision,
       },
       {

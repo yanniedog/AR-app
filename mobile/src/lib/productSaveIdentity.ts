@@ -140,7 +140,9 @@ export function productSaveIdentity(row: RateRow, section: SectionKey, metric: M
   const parts: UiText[] = [uiProductName(row), uiProviderName(row)];
   if (exact) parts.push(uiJoin(label, ' ', rate));
   const rows = context.core?.sections[section]?.rates;
-  const index = rows ? peersFor(rows) : null;
+  // Overrides use their exact rate index below; no peer lookup contributes to
+  // that identity. Avoid scanning the whole source book for an unused index.
+  const index = exact && !displayed && rows ? peersFor(rows) : null;
   let unresolved = exact;
   let indexAlsoCollides = false;
   if (exact && index?.members.has(row) && !displayed) {

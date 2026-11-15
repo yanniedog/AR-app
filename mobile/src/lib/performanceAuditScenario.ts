@@ -19,3 +19,29 @@ export function prepareProjectionAuditScenario(current: UserRateScenario): UserR
     },
   };
 }
+
+/** Complete, restorable mortgage scenario for cold/warm projection route round-trip journeys. */
+export function buildProjectionAuditJourneyScenario(current: UserRateScenario): UserRateScenario {
+  const prepared = prepareProjectionAuditScenario(current);
+  return {
+    ...prepared,
+    mortgage: {
+      ...prepared.mortgage,
+      mode: 'refi',
+      propertyValue: '850000',
+      loanBalance: '600000',
+      currentRate: '6.40',
+      years: '28',
+    },
+    projections: {
+      ...prepared.projections,
+      mortgage: {
+        ...prepared.projections.mortgage,
+        mortgageRateStructure: 'variable',
+        lowerRate: '5.40',
+        higherRate: '7.40',
+        offsetBalance: '25000',
+      },
+    },
+  };
+}

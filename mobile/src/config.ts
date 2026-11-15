@@ -70,7 +70,7 @@ export const IOS_INSTALL_URL = String(extra.iosInstallUrl ?? '').trim() || null;
 export const SUPPORTED_SCHEMA = 1;
 
 /** Local-notification defaults. */
-export const RATE_MOVE_BPS_THRESHOLD = 5; // notify when a category best rate moves >= 5bps
+export { RATE_MOVE_BPS_THRESHOLD } from './ratePolicy';
 
 /**
  * Minimum deposit rate (fraction) treated as a real savings/TD interest offer.
@@ -81,13 +81,4 @@ export const RATE_MOVE_BPS_THRESHOLD = 5; // notify when a category best rate mo
  * intentional savers (sample AR-local cores show genuine-ish floors from ~0.25%+).
  * Mortgages are never gated by this floor.
  */
-export const MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION = 0.001; // 0.10%
-
-/** True when `fraction` clears the deposit token-rate floor (mortgages always pass). */
-export function isMeaningfulDepositRate(
-  fraction: number,
-  section: 'Mortgage' | 'Savings' | 'TD' | string,
-): boolean {
-  if (section === 'Mortgage') return true;
-  return fraction >= MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION;
-}
+export { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION, isMeaningfulDepositRate } from './ratePolicy';

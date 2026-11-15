@@ -67,8 +67,9 @@ it.each([false, true])('keeps original raster/SVG artwork on a white plate in da
     onRenderStateChange={onRenderStateChange} />) as Tree; });
   try {
     const raster = tree.root.findByType(Image);
+    const expectedPlate = dark ? '#F1F5F9' : '#ffffff';
     expect(tree.root.findByType(View).props.style).toMatchObject({
-      width: 32, height: 32, borderRadius: 8, backgroundColor: '#ffffff',
+      width: 32, height: 32, borderRadius: 8, backgroundColor: expectedPlate,
     });
     expect(raster.props.source).toBe(123);
     expect(raster.props.resizeMode).toBe('contain');
@@ -86,7 +87,7 @@ it.each([false, true])('keeps original raster/SVG artwork on a white plate in da
     expect(vector.props.uri).toBe(svg);
     expect(vector.props.width).toBe(32 * 0.8);
     expect(vector.props.height).toBe(32 * 0.8);
-    expect(tree.root.findByType(View).props.style.backgroundColor).toBe('#ffffff');
+    expect(tree.root.findByType(View).props.style.backgroundColor).toBe(expectedPlate);
     act(() => vector.props.onError());
     expect(tree.root.findAllByType(Image)).toHaveLength(0);
     expect(tree.root.findAllByType('SvgUri' as never)).toHaveLength(0);

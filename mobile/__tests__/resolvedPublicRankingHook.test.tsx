@@ -129,6 +129,38 @@ test.each(['outputs', 'source owner'] as const)('oversized pricing %s still disp
   finally { act(() => tree.unmount()); }
 });
 
+test('three warm requests share a 16,728-row publication without evicting each other', async () => {
+  const source = Array.from({ length: 128 }, () => row);
+  const core = { ...sample, sections: { ...sample.sections, Mortgage: { ...sample.sections.Mortgage,
+    rates: Array.from({ length: 16_728 }, () => row) } } } as unknown as CorePayload;
+  const context: RateConditionContext = { core, details: null, manifest: null, coreIntegrity: null };
+  const view = { ...catalogue(), status: 'unavailable' as const }, scenario = {};
+  let latest!: ReturnType<typeof useResolvedPublicRankingRows>;
+  function Probe({ query }: { query: string }) {
+    latest = useResolvedPublicRankingRows({ candidates: source, catalogue: view, section: 'Mortgage', sectionScenario: scenario,
+      mortgageContext: context, rowScenario: () => scenario, resolutionContextKey: query, focused: true, interactive: true, revision: 1 });
+    return null;
+  }
+  let tree!: ReactTestRenderer;
+  const originals = new Map<string, typeof latest.resolution>();
+  for (const query of ['first', 'second', 'third']) {
+    act(() => { tree = TestRenderer.create(<Probe query={query} />); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(latest.ready).toBe(true);
+    originals.set(query, latest.resolution);
+    act(() => tree.unmount());
+  }
+  for (const [query, original] of originals) {
+    act(() => { tree = TestRenderer.create(<Probe query={query} />); });
+    try {
+      expect(latest.ready).toBe(true);
+      expect(latest.resolution).toBe(original);
+      expect(latest.work.workerStarts).toBe(0);
+      expect(latest.work.pricingSnapshotReused).toBe(true);
+    } finally { act(() => tree.unmount()); }
+  }
+});
+
 test('aggregate pricing retention evicts the oldest source and row copies before the entry limit', async () => {
   const sources = Array.from({ length: 2 }, () => Array.from({ length: 9_000 }, () => row));
   const view = { ...catalogue(), status: 'unavailable' as const }, scenario = {};

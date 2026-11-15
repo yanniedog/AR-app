@@ -4,6 +4,7 @@ import { estimatePublicCost } from '../src/data/publicCost';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import { resolvePublicRate } from '../src/data/publicRateResolver';
 import { AS_OF, programme, row } from '../testUtils/publicRateJourney';
+import { mortgageComparisonScenario } from '../src/data/mortgageComparisonScenario';
 
 it('defaults to three mortgage years, twelve savings months and quoted maturity, requiring an explicit variable-rate assumption', () => {
   const initial = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' },
@@ -87,3 +88,49 @@ it.each([{ amount: undefined }, { amount: '-1' }, { amount: '600000', lvr: undef
     expect(scenarioPublicCost({ section: 'Mortgage', scenario: input, row, rateScenario }).scenario).toBeUndefined();
   },
 );
+
+it('offset funds reduce interest without changing principal or lender LVR, while deposit funds cannot be counted twice', () => {
+  const saved = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '100000', propertyValue: '200000', years: '25' },
+    mortgageSwitch: { targetOffsetAvailable: 'yes' },
+    projections: { mortgage: { holdVariableRate: true, horizonYears: '1', offsetBalance: '99000' } } });
+  const before = JSON.stringify(saved);
+  const p = programme({ conditions: [{ conditionId: 'lvr', field: 'lvr', operator: 'bounds', maximum: '0.8', evidenceIds: [] }],
+    components: [{ ...programme().components[0], value: '0.05' }] });
+  for (const [fundsType, fundsAvailable, expectedOffset, expectedInterest] of [
+    ['offset', '150000', '150000', '22500.00'],
+    // Monthly accrual rounds $1,666.666... to $1,666.67 before summing.
+    ['offset', '200000', '200000', '20000.04'],
+    ['offset', '900000', '900000', '0.00'],
+    ['deposit', '150000', '0', '30000.00'],
+  ] as const) {
+    const scope = mortgageComparisonScenario('Mortgage', { repayment: 'INTEREST_ONLY' }, {
+      loanAmount: '600000', lvr: '', lvrMode: 'funds', fundsType, fundsAvailable, propertyValue: '750000',
+    });
+    expect(scope).toMatchObject({ amount: '600000', lvr: '0.8', offsetBalance: expectedOffset });
+    const rate = resolvePublicRate(p, scope, AS_OF);
+    expect(rate.status).toBe('exact');
+    const bridge = scenarioPublicCost({ section: 'Mortgage', scenario: saved, row, programme: p, rateScenario: scope, asOf: AS_OF });
+    expect(bridge.scenario).toMatchObject({ principal: '600000', offsetBalance: expectedOffset });
+    expect(estimatePublicCost(rate, bridge.scenario!)).toMatchObject({ interest: expectedInterest, endingBalance: '600000.00' });
+  }
+  expect(JSON.stringify(saved)).toBe(before);
+});
+
+it.each([undefined, '', '-1', '0.001', true])('invalid explicit offset cannot reuse saved funds: %p', offsetBalance => {
+  const saved = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '600000', years: '25' },
+    projections: { mortgage: { offsetBalance: '150000' } } });
+  const bridge = scenarioPublicCost({ section: 'Mortgage', scenario: saved, row,
+    rateScenario: { amount: '600000', lvr: '0.8', offsetBalance } });
+  expect(bridge.scenario).toBeUndefined();
+  expect(bridge.reasonCodes).toEqual(['scenario_inputs_missing']);
+});
+
+it('an offset assumption cannot claim savings when the product does not support an offset', () => {
+  const saved = normalizeUserRateScenario({ mortgage: { mode: 'refi', loanBalance: '600000', years: '25' },
+    mortgageSwitch: { targetOffsetAvailable: 'no' }, projections: { mortgage: { holdVariableRate: true } } });
+  const p = programme();
+  const bridge = scenarioPublicCost({ section: 'Mortgage', scenario: saved, row, programme: p, asOf: AS_OF,
+    rateScenario: { amount: '600000', lvr: '0.8', offsetBalance: '150000' } });
+  expect(bridge.scenario).toMatchObject({ principal: '600000', offsetSupported: false });
+  expect(estimatePublicCost(resolvePublicRate(p, {}, AS_OF), bridge.scenario!)).toMatchObject({ completeness: 'unsupported' });
+});

@@ -1,4 +1,8 @@
 import { historyCoverageEvidence } from './appHealth/historyCoverage';
+import { bankResponseCoverage } from './appHealth/bankResponseCoverage';
+import { filterBankInsightsForSuitability } from '../data/bankInsights';
+import { isSuitabilityFilterReady } from '../data/suitabilityGate';
+import { quarantinedBankHistoryPairs } from '../data/sectionIntegrity';
 import type { AppState } from '../data/storeTypes';
 import type { AppHealthAssetObservation, AppHealthAssetKey, AppHealthDataSnapshot } from './appHealth/types';
 import { clearPreparedAppHealthCatalogueSnapshot, preparedAppHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
@@ -7,6 +11,15 @@ function countRecord(value: unknown): number | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? Object.keys(value as Record<string, unknown>).length
     : null;
+}
+
+export function bankResponseAuditSnapshot(state: AppState) {
+  if (!state.bankInsights || !state.rbaCalendar || !state.core) return null;
+  const projected = isSuitabilityFilterReady(state.prefs.includeNonStandard)
+    ? filterBankInsightsForSuitability(state.bankInsights, state.core, state.prefs.includeNonStandard,
+      state.details?.products, undefined, state.coreIntegrity) : null;
+  return bankResponseCoverage(state.bankInsights, projected, state.rbaCalendar, state.core,
+    quarantinedBankHistoryPairs(state.coreIntegrity));
 }
 
 function asset(
@@ -82,6 +95,7 @@ export function appHealthDataSnapshot(
   };
   return {
     historyCoverage: includeCatalogue && state.core ? historyCoverageEvidence(state.core, state.productHistory) : null,
+    bankResponseCoverage: includeCatalogue ? bankResponseAuditSnapshot(state) : null,
     catalogue: includeCatalogue ? preparedAppHealthCatalogueSnapshot(state) : null,
     source: state.source,
     core: state.core,

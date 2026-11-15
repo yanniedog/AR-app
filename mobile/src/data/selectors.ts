@@ -5,7 +5,7 @@ import { getSuitabilityRevision } from './suitabilityGate';
 import { rowsForProductKey } from './rateRowIndex';
 import { matchesLvrTier } from './lvrRange';
 import { yieldToUi } from '../lib/yieldToUi';
-import { isMeaningfulDepositRate, MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
+import { isMeaningfulDepositRate, MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../ratePolicy';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import {
   prepareRowSearchQuery,

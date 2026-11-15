@@ -11,13 +11,25 @@ import {
   type AuditCheck,
 } from '../src/lib/performanceAudit';
 import {
+  captureAuditRunTiming,
   estimatePerformanceAuditTime,
   formatPerformanceAuditEstimate,
+  performanceAuditEstimateParts,
   PerformanceAuditStepTimeoutError,
   PerformanceAuditMutationBarrier,
   scoreUserVisibleJourney,
   userVisibleForwardMs,
 } from '../src/lib/performanceAuditTiming';
+
+test('terminal timing shares one endpoint and excludes subsequent report aggregation', () => {
+  const start = Date.parse('2026-11-13T20:22:06.552Z');
+  let clock = start + 502_364;
+  let active = 500_000;
+  const timing = captureAuditRunTiming(new Date(start).toISOString(), () => active, () => clock);
+  clock += 3_739; active += 3_739;
+  expect(timing).toEqual({ finishedAt: '2026-11-13T20:30:28.916Z', durationMs: 500_000, wallClockMs: 502_364 });
+  expect(Date.parse(timing.finishedAt) - start).toBe(timing.wallClockMs);
+});
 
 const result = (durationMs: number): AuditCheck => ({
   id: 'journey', label: 'Product readiness', kind: 'journey', status: 'pass',
@@ -129,7 +141,7 @@ it('provides an initial estimate, adapts to slow checks and covers finalization'
   const slow = estimatePerformanceAuditTime({ total: 200, completed: 20, elapsedMs: 150_000, finalizing: false });
   expect(slow.remainingMs).toBeGreaterThan(fast.remainingMs);
   expect(Object.keys(slow).sort()).toEqual(['basis', 'elapsedMs', 'remainingMs']);
-  expect(formatPerformanceAuditEstimate(slow, false)).toMatch(/^ETA: about \d+ (?:min|sec) remaining$/);
+  expect(formatPerformanceAuditEstimate(slow, false)).toBe('ETA: 16:45 remaining');
   expect(formatPerformanceAuditEstimate(slow, true)).toContain('ETA paused');
   const finalizing = estimatePerformanceAuditTime({ total: 200, completed: 200, elapsedMs: 300_000, finalizing: true });
   expect(finalizing.remainingMs).toBeGreaterThan(0);
@@ -177,4 +189,12 @@ it('does not estimate thousands of preloaded links at the route-check pace', () 
     links: { total: 2_000, completed: 2_000, elapsedMs: 100_000 },
   });
   expect(finalChecks.remainingMs).toBeGreaterThan(15_000);
+});
+
+
+it.each([
+  [0, 0, 0], [1, 0, 1], [59_000, 0, 59], [59_001, 1, 0],
+  [60_000, 1, 0], [480_484, 8, 1], [3_661_000, 61, 1],
+])('splits %i ms without rounding away the seconds', (ms, minutes, seconds) => {
+  expect(performanceAuditEstimateParts(ms)).toEqual({ minutes, seconds });
 });

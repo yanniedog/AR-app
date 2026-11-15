@@ -6,14 +6,8 @@ import TestRenderer, { act } from 'react-test-renderer';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { EMPTY_FILTERS } from '../src/data/selectors';
 import { captureRatesSession, restoreRatesSession, initializeRatesSession, updateRatesSection, recordRatesScroll, useRatesSession } from '../src/data/ratesSession';
-import { clearMortgageComparison, useMortgageComparison } from '../src/data/mortgageComparison';
+import { clearMortgageComparison, setMortgageComparisonInputs, useMortgageComparison } from '../src/data/mortgageComparison';
 
-/** Mortgage catalogue search requires LVR + purpose + repayment; keep facets when wiping other filters. */
-const MORTGAGE_CRITERIA_FILTERS = {
-  ...EMPTY_FILTERS,
-  loanPurposes: ['OWNER_OCCUPIED'],
-  repaymentTypes: ['PRINCIPAL_AND_INTEREST'],
-};
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { buildDeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
@@ -24,6 +18,13 @@ import { auditSearchEntryParams } from '../src/lib/performanceAuditActionParams'
 import { resolveRatesIntent } from '../src/lib/ratesIntent';
 import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditMutationBarrier } from '../src/lib/performanceAuditTiming';
 import { PerformanceAuditReadinessRegistry, PerformanceAuditReadinessTimeoutError } from '../src/lib/performanceAuditReadiness';
+
+/** Mortgage catalogue search requires LVR + purpose + repayment; keep facets when wiping other filters. */
+const MORTGAGE_CRITERIA_FILTERS = {
+  ...EMPTY_FILTERS,
+  loanPurposes: ['OWNER_OCCUPIED'],
+  repaymentTypes: ['PRINCIPAL_AND_INTEREST'],
+};
 
 jest.mock('../src/data/store', () => ({ useStore: jest.requireActual('zustand').create(() => ({})) }));
 jest.mock('../src/lib/nav', () => ({ ...jest.requireActual('../src/lib/nav'), openCompare: jest.fn(), openProduct: jest.fn() }));
@@ -41,7 +42,12 @@ jest.mock('../src/hooks/useLogoReadiness', () => ({ useLogoReadiness: () => ({ r
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/components/Screen', () => ({ Screen: 'Screen', screenScrollContentStyle: () => ({}) }));
 jest.mock('../src/components/SheetSurface', () => ({ SheetSurface: ({ children }: any) => jest.requireActual('react').createElement('SheetSurface', null, children) }));
-jest.mock('../src/components/FilterSheet', () => ({ FilterSheet: 'FilterSheet' }));
+let mockSheetLayoutUpdate: ((props: any) => void) | null = null;
+jest.mock('../src/components/FilterSheet', () => ({ FilterSheet: (props: any) => {
+  const R = jest.requireActual('react');
+  R.useLayoutEffect(() => { const update = mockSheetLayoutUpdate; mockSheetLayoutUpdate = null; update?.(props); });
+  return R.createElement('FilterSheet', props);
+} }));
 jest.mock('../src/components/ProductCard', () => ({ ProductCard: 'ProductCard' }));
 jest.mock('../src/components/SearchReportExport', () => ({ SearchReportExport: 'SearchReportExport' }));
 jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }));
@@ -124,7 +130,7 @@ const rows = Array.from({ length: 45 }, (_, i) => ({ product_key: `p-${i}`, prod
 function install(profile = DEFAULT_PREFS.profileFilters) { installMandatoryEligibility(selectMandatoryEligibility(mockStore.getState().core, profile, null)); }
 beforeEach(() => {
   jest.clearAllMocks();
-  mockPublicCatalogue = null; mockAuditCancelled = false; mockEmitLoad = true; mockCancelListeners.clear();
+  mockPublicCatalogue = null; mockAuditCancelled = false; mockEmitLoad = true; mockCancelListeners.clear(); mockSheetLayoutUpdate = null;
   mockHoldScroll = false; mockRejectScroll = false; mockAutoViewability = true; mockScrollCalls.length = 0; mockScrollResolutions.length = 0;
   jest.spyOn(global, 'requestAnimationFrame').mockImplementation(callback => { callback(0); return 0; });
   restoreRatesSession(original); clearMortgageComparison();
@@ -143,6 +149,67 @@ beforeEach(() => {
 });
 afterEach(() => { jest.restoreAllMocks(); restoreRatesSession(original); clearMortgageComparison(); installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null)); });
 function mount() { let tree: any; act(() => { tree = TestRenderer.create(<RatesWorkspace />); }); return tree; }
+
+test.each([false, true])('cleanup preserves render-to-effect filter updates and live full-catalogue override=%s', override => {
+  mockStore.getState().setPref('includeNonStandard', false);
+  updateRatesSection('Mortgage', { filters: { ...MORTGAGE_CRITERIA_FILTERS, loanPurposes: ['OO', 'OTHER'] } });
+  const latest = { ...MORTGAGE_CRITERIA_FILTERS, providers: ['B'], loanPurposes: ['INV', 'OTHER'], repaymentTypes: ['IO'] };
+  mockSheetLayoutUpdate = props => {
+    updateRatesSection('Mortgage', { filters: latest, includeNonStandardOverride: override });
+    props.onDraftChange(latest);
+  };
+  const tree = mount();
+  try {
+    const expected = { providers: ['B'], loanPurposes: override ? ['INV', 'OTHER'] : ['INV'], repaymentTypes: ['IO'] };
+    expect(useRatesSession.getState().sections.Mortgage.filters).toMatchObject(expected);
+    expect(tree.root.findByType('FilterSheet').props.controlledDraft).toMatchObject(expected);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('widely available mode scopes both control surfaces and clears hidden choices before pricing or applying drafts', () => {
+  const options = jest.requireActual('../src/data/searchFilterOptions');
+  jest.spyOn(jest.requireMock('../src/hooks/useSearchFilterOptions'), 'useSearchFilterOptions').mockReturnValue({
+    options: { ...options.EMPTY_SEARCH_FILTER_OPTIONS, groups: [
+      { g: { title: 'Purpose', field: 'loan_purpose', key: 'loanPurposes' }, options: ['OO', 'INV', 'UNCONSTRAINED', 'UNKNOWN', 'OTHER'] },
+      { g: { title: 'Repayment', field: 'ribbon_repayment_type', key: 'repaymentTypes' }, options: ['PI', 'IO', 'UNKNOWN'] },
+    ] }, ready: true, error: null, retry: jest.fn(),
+  });
+  const allFilters = { ...MORTGAGE_CRITERIA_FILTERS, loanPurposes: ['OO', 'OTHER', 'UNKNOWN'], repaymentTypes: ['PI', 'UNCONSTRAINED'] };
+  updateRatesSection('Mortgage', { filters: allFilters });
+  const tree = mount();
+  const sheet = () => tree.root.findByType('FilterSheet').props;
+  const controls = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' });
+  try {
+    expect(sheet().options.groups[0].options).toContain('UNKNOWN');
+    act(() => sheet().onDraftChange(allFilters));
+    act(() => mockStore.getState().setPref('includeNonStandard', false));
+    expect(sheet().options.groups.map((group: any) => group.options)).toEqual([['OO', 'INV'], ['PI', 'IO']]);
+    expect(controls().findAllByType('Chip').map((node: any) => node.props.label)).not.toContain('OTHER');
+    expect(useRatesSession.getState().sections.Mortgage.filters).toMatchObject({ loanPurposes: ['OO'], repaymentTypes: ['PI'] });
+    expect(sheet().controlledDraft).toMatchObject({ includeNonStandard: false, loanPurposes: ['OO'], repaymentTypes: ['PI'] });
+    act(() => sheet().onApply(allFilters));
+    expect(useRatesSession.getState().sections.Mortgage.filters.loanPurposes).toEqual(['OO']);
+    // An explicit full-catalogue override takes priority over the saved preference.
+    act(() => updateRatesSection('Mortgage', { includeNonStandardOverride: true, filters: allFilters }));
+    expect(sheet().options.groups[0].options).toContain('UNKNOWN');
+    expect(useRatesSession.getState().sections.Mortgage.filters.loanPurposes).toContain('UNKNOWN');
+    act(() => updateRatesSection('Mortgage', { includeNonStandardOverride: null }));
+    expect(useRatesSession.getState().sections.Mortgage.filters.loanPurposes).toEqual(['OO']);
+    act(() => mockStore.getState().setPref('includeNonStandard', true));
+    expect(useRatesSession.getState().sections.Mortgage.filters.loanPurposes).toEqual(['OO']);
+    expect(sheet().controlledDraft).toMatchObject({ loanPurposes: ['OO'], repaymentTypes: ['PI'] });
+  } finally { act(() => tree.unmount()); }
+});
+
+test('unknown-only selections do not make mortgage comparison criteria ready in widely available mode', () => {
+  mockStore.getState().setPref('includeNonStandard', false);
+  updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS, loanPurposes: ['UNCONSTRAINED'], repaymentTypes: ['UNKNOWN'] } });
+  const tree = mount();
+  try {
+    expect(useRatesSession.getState().sections.Mortgage.filters).toMatchObject({ loanPurposes: [], repaymentTypes: [] });
+    expect(tree.root.findByType('FlashList').props.data).toHaveLength(0);
+  } finally { act(() => tree.unmount()); }
+});
 function currentProgramme(row: (typeof rows)[number], programmeId: string, offerId: string) {
   const value = publicProgramme({ productId: row.product_key, programmeId, offerId,
     sourceBindings: [{ rateIndex: row.rate_index, pointer: `/lendingRates/${row.rate_index}` }] });
@@ -170,6 +237,32 @@ test('the mounted workspace pages sorted rows, retains cross-page selections, an
     expect(useRatesSession.getState().sections.Mortgage.page).toBe(2);
   } finally { act(() => tree.unmount()); }
 });
+test('mode and funds changes reset paging even when the eligible rows stay the same', () => {
+  setMortgageComparisonInputs({ loanAmount: '600000', lvr: '80', fundsAvailable: '150000' });
+  const tree = mount(), list = () => tree.root.findByType('FlashList').props;
+  try {
+    act(() => updateRatesSection('Mortgage', { page: 2 }));
+    expect(list().data[0].rate_index).toBe(20);
+    act(() => setMortgageComparisonInputs({ ...useMortgageComparison.getState(), lvrMode: 'funds' }));
+    expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
+    expect(list().data[0].rate_index).toBe(0);
+    act(() => updateRatesSection('Mortgage', { page: 2 }));
+    expect(list().data[0].rate_index).toBe(20);
+    act(() => setMortgageComparisonInputs({ ...useMortgageComparison.getState(), fundsAvailable: '160000' }));
+    expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
+    expect(list().data[0].rate_index).toBe(0);
+    act(() => setMortgageComparisonInputs({ ...useMortgageComparison.getState(), propertyValue: '750000' }));
+    act(() => updateRatesSection('Mortgage', { page: 2 }));
+    act(() => setMortgageComparisonInputs({ ...useMortgageComparison.getState(), fundsType: 'offset' }));
+    expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
+    expect(list().data[0].rate_index).toBe(0);
+    act(() => updateRatesSection('Mortgage', { page: 2 }));
+    act(() => setMortgageComparisonInputs({ ...useMortgageComparison.getState(), propertyValue: '760000' }));
+    expect(useRatesSession.getState().sections.Mortgage.page).toBe(1);
+    expect(list().data[0].rate_index).toBe(0);
+  } finally { act(() => tree.unmount()); }
+});
+
 test('temporary filters reset paging and never erase the saved profile; clearing saved requirements retains explicit temporary filters', () => {
   const profile = { ...DEFAULT_PREFS.profileFilters, rateTypes: ['VARIABLE'] };
   mockStore.getState().setPref('profileFilters', profile);
@@ -197,6 +290,7 @@ test('comparison uncertainty counts the complete filtered result set, not the pr
 
 test('audit mortgage scope apply and clear update comparison inputs and temporary facets', () => {
   install();
+  setMortgageComparisonInputs({ loanAmount: '600000', lvr: '20', lvrMode: 'funds', fundsAvailable: '150000' });
   updateRatesSection('Mortgage', { page: 3, scrollOffset: 420 });
   const tree = mount();
   const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
@@ -255,9 +349,13 @@ test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seed
   useMortgageComparison.setState({ loanAmount: '123456', lvr: '78' });
   const before = captureRatesSession(), preferences = JSON.parse(JSON.stringify(mockStore.getState().prefs));
   const comparison = { ...useMortgageComparison.getState() };
-  const plan = buildDeepPerformanceAuditPlan(mockStore.getState().core, { seed: 'review-412', includeNonStandard: true });
-  const targets = [plan.inputs.primaryProduct!, plan.inputs.secondaryProduct!];
-  expect(targets.map(target => target.productKey)).toEqual(['p-20', 'p-35']);
+  const plan = Array.from({ length: 30 }, (_, index) => buildDeepPerformanceAuditPlan(mockStore.getState().core,
+    { seed: `review-412-${index}`, includeNonStandard: true })).find(candidate =>
+    [candidate.inputs.ratesPrimaryProduct!, candidate.inputs.ratesSecondaryProduct!].every(target =>
+      catalogue.findIndex(row => row.product_key === target.productKey) >= pageSize))!;
+  expect(plan).toBeDefined();
+  const targets = [plan.inputs.ratesPrimaryProduct!, plan.inputs.ratesSecondaryProduct!];
+  expect(targets.every(target => catalogue.findIndex(row => row.product_key === target.productKey) >= pageSize)).toBe(true);
   const steps = plan.passes.flatMap(pass => pass.steps.filter(step => step.scenarioId === 'route.rates'));
   const tree = mount(), list = () => tree.root.findByType('FlashList').props;
   const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
@@ -316,6 +414,22 @@ test.each([[10, false], [10, true], [20, false], [20, true]] as const)('the seed
     expect(list().data).toHaveLength(0); // Original missing-bank/FIXED scope is restored too.
     act(() => tree.unmount());
   }
+});
+
+test('audit compare cannot bypass missing or partial rendered selections with planned tokens', () => {
+  const tree = mount();
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  const tokens = ['0#p-0', '1#p-1'];
+  try {
+    expect(surface().actions!['search.compare.open']({ selectionTokens: tokens })).toHaveProperty('unavailableReason');
+    act(() => updateRatesSection('Mortgage', { selected: [tokens[0]], selectMode: true }));
+    expect(surface().actions!['search.compare.open']({ selectionTokens: tokens })).toHaveProperty('unavailableReason');
+    expect(surface().actions!['search.compare.open']({ selectionTokens: [tokens[0], tokens[0]] })).toHaveProperty('unavailableReason');
+    expect(openCompare).not.toHaveBeenCalled();
+    act(() => updateRatesSection('Mortgage', { selected: tokens }));
+    surface().actions!['search.compare.open']({ selectionTokens: tokens });
+    expect(openCompare).toHaveBeenCalledWith(tokens, 'rates-comparison');
+  } finally { act(() => tree.unmount()); }
 });
 
 test('list readiness remeasures native geometry when unchanged viewability events are omitted', async () => {
@@ -993,4 +1107,32 @@ test('loaded legacy mortgage edits settle in the same render without reloading d
     expect(list().data.length).toBeGreaterThan(0);
     expect(list().data.every((row: any) => row.rate === '0.03')).toBe(true); expect(updating()).toBe(false);
   } finally { act(() => tree.unmount()); jest.useRealTimers(); }
+});
+
+test('cold-launch Mortgage browses standard OO+PI <=80% LVR rates, omits pagination when empty, and renders clean Sort/Search sheets', () => {
+  clearMortgageComparison();
+  updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS } });
+  const tree = mount();
+  const list = () => tree.root.findByType('FlashList').props;
+  try {
+    expect(list().data.length).toBeGreaterThan(0);
+    expect(tree.root.findByProps({ testID: 'mortgage-scenario-summary' })).toBeTruthy();
+    expect(list().ListFooterComponent).not.toBeNull();
+
+    // When query yields 0 results, ListFooterComponent is null (RatesPagination omitted).
+    act(() => updateRatesSection('Mortgage', { query: 'zzz-no-such-product-zzz' }));
+    expect(list().data).toHaveLength(0);
+    expect(list().ListFooterComponent).toBeNull();
+
+    // Sort sheet has active checkmark, no Cancel button, and Savings Ongoing/Headline labels.
+    const activeMetricLabel = mockStore.getState().prefs.mortgageRateMetric === 'comparison' ? 'Comparison rate' : 'Advertised rate';
+    const sortButtons = tree.root.findAllByProps({ accessibilityLabel: activeMetricLabel });
+    expect(sortButtons.some((node: any) => node.props.accessibilityState?.selected === true)).toBe(true);
+    expect(tree.root.findAllByProps({ title: 'Cancel' })).toHaveLength(0);
+    expect(tree.root.findAllByProps({ name: 'checkmark-circle' }).length).toBeGreaterThanOrEqual(1);
+
+    // Search tools sheet has paddingBottom: 20.
+    const scrollViews = tree.root.findAll((node: any) => node.props?.contentContainerStyle?.paddingBottom === 20);
+    expect(scrollViews.length).toBeGreaterThanOrEqual(1);
+  } finally { act(() => tree.unmount()); }
 });

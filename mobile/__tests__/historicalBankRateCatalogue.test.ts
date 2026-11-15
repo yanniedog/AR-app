@@ -324,6 +324,8 @@ test('accepts bounded selected and legacy source receipts', () => {
   catalogue.sources[day[1]] = { kind: 'retained_legacy_export', banks_sha256: hash, bytes: 1 };
   expect(validateHistoricalBankRateCatalogue(catalogue)).toBe(true);
   catalogue.sources[day[0]] = { kind: 'retained_legacy_export', banks_sha256: hash, bytes: 128 * 1024 * 1024 + 1 };
+  expect(validateHistoricalBankRateCatalogue(catalogue)).toBe(true);
+  catalogue.sources[day[0]] = { kind: 'retained_legacy_export', banks_sha256: hash, bytes: 512 * 1024 * 1024 + 1 };
   expect(validateHistoricalBankRateCatalogue(catalogue)).toBe(false);
 });
 

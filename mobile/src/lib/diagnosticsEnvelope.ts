@@ -5,6 +5,7 @@ import { AUDIT_ENTRY_CHECK_IDS } from './auditEntryTrace';
 import { encodeCompressedDiagnosticJson, MAX_COMPRESSED_DIAGNOSTIC_BYTES } from './compactDiagnosticJson';
 import { publicAuditDiagnostic, publicAuditError, publicAuditFailureReason, publicHealthFailureReason, stallTimeoutFields } from './performanceAuditDiagnostic';
 import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
+import { publicAuditMetricAnalysis } from './publicAuditMetricAnalysis';
 import { auditApplicationJournal } from './auditApplicationJournal';
 import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
 import { measureAuditEvidence } from './auditEvidenceCapacity';
@@ -24,6 +25,7 @@ const FIXED_CHECK_IDS = new Set([
   'update-readiness',
   'audit-state-restoration',
   'external-link-inventory',
+  'external-link-unverified',
 ]);
 const JOURNEY_IDS = [
   'rates', 'rates-mortgage', 'rates-savings', 'rates-td', 'market', 'bank-rates',
@@ -40,6 +42,7 @@ export const DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW = [
   'app version, build, platform, OS major version and JavaScript engine',
   'payload source, run date, product/provider counts and optional-asset availability',
   'aggregate outcome/counts and measured responsiveness values',
+  'derived metric formulas, sample counts, distributions and deidentified evidence references',
   'aggregate data-quality, asset, display and network-policy findings',
   'fixed check IDs, status, enumerated failure codes, measured duration and allowlisted numeric/boolean metrics',
 ] as const;
@@ -69,6 +72,9 @@ const OBSERVED_COUNT_KEYS = new Set([
 
 const PUBLIC_METRIC_ENUMS: Record<string, ReadonlySet<string>> = {
   handlerResolution: new Set(['pass', 'fail', 'not-attempted', 'unresolved']),
+  urlValidation: new Set(['pass', 'fail', 'unknown']),
+  browserHandler: new Set(['pass', 'fail', 'unknown']),
+  httpReachability: new Set(['pass', 'fail', 'unknown']),
 };
 
 function allowlistedMetrics(check: AuditCheck): Record<string, string | number | boolean | null> {
@@ -76,8 +82,8 @@ function allowlistedMetrics(check: AuditCheck): Record<string, string | number |
   const result: Record<string, string | number | boolean | null> = {};
   for (const [key, value] of Object.entries(metrics)) {
     if (!METRIC_ALLOWLIST.has(key)) continue;
-    if (typeof value === 'string' && PUBLIC_METRIC_ENUMS[key]?.has(value)) {
-      result[key] = value;
+    if (PUBLIC_METRIC_ENUMS[key]) {
+      if (typeof value === 'string' && PUBLIC_METRIC_ENUMS[key].has(value)) result[key] = value;
       continue;
     }
     const prefix = ['forward', 'background', 'back'].find(candidate => key.startsWith(candidate) && /[A-Z]/.test(key[candidate.length] ?? ''));
@@ -159,13 +165,24 @@ function safeDuration(check: AuditCheck): number | null {
  */
 export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport) {
   measureAuditEvidence(report);
-  const completion = buildPerformanceAuditCompletion(report, safeCheckId);
+  const derivedCompletion = buildPerformanceAuditCompletion(report, safeCheckId);
+  const completion = { ...derivedCompletion, gapPositions: derivedCompletion.gapPositions.map(gap => {
+    const roles = publicAuditDiagnostic({ surface: gap.surfaceId, probe: gap.probeId }) as {
+      surface?: string | null; probe?: string | null;
+    };
+    return { ...gap,
+      ...(gap.surfaceId === undefined ? {} : { surfaceId: roles.surface ?? null }),
+      ...(gap.probeId === undefined ? {} : { probeId: roles.probe ?? null }),
+    };
+  }) };
   const stallTimeout = stallTimeoutFields(report.watchdog.hangTimeoutMs);
   const appHealth = report.appHealth && completion.gaps.invalidHealthReports === 0 ? toPublicAppHealthReport(report.appHealth) : null;
   return {
     schemaVersion: 1,
     kind: 'performance-audit',
+    renderingEvidenceVersion: report.renderingEvidenceVersion === 2 ? 2 : 1,
     completion,
+    metricAnalysis: publicAuditMetricAnalysis(report, safeCheckId),
     app: {
       version: report.app.appVersion,
       build: report.app.buildVersion,
@@ -272,7 +289,18 @@ function encodedWithinBudget(value: Record<string, unknown>, header: Record<stri
   }
 }
 
-/** Gzip the hosted report. If the compressed body exceeds the budget, drop only repeated frames. */
+/** Omit regenerable analysis before considering the existing repeated-frame fallback. */
+function omitDerivedMetricAnalysis(value: Record<string, unknown>): Record<string, unknown> | null {
+  if (!value.metricAnalysis) return null;
+  const omission = { schemaVersion: 1, methodVersions: [1, 2], status: 'omitted', reason: 'export-budget',
+    regenerableFrom: 'retained-local-report' };
+  const diagnosticLog = value.diagnosticLog;
+  return { ...value, metricAnalysis: omission,
+    ...(diagnosticLog && typeof diagnosticLog === 'object' && !Array.isArray(diagnosticLog)
+      ? { diagnosticLog: { ...diagnosticLog, metricAnalysis: omission } } : {}) };
+}
+
+/** Preserve original diagnostic evidence when derived analysis exceeds the hosted budget. */
 export function encodeHostedPerformanceAudit(
   value: Record<string, unknown>,
   header: Record<string, unknown>,
@@ -280,7 +308,12 @@ export function encodeHostedPerformanceAudit(
 ): string {
   const encoded = encodedWithinBudget(value, header, maxCompressedBytes);
   if (encoded) return encoded;
-  const collapsed = collapseRepeatedFrames(value);
+  const withoutAnalysis = omitDerivedMetricAnalysis(value);
+  if (withoutAnalysis) {
+    const sourceOnly = encodedWithinBudget(withoutAnalysis, header, maxCompressedBytes);
+    if (sourceOnly) return sourceOnly;
+  }
+  const collapsed = collapseRepeatedFrames(withoutAnalysis ?? value);
   if (collapsed.removed === 0 || !collapsed.value || typeof collapsed.value !== 'object' || Array.isArray(collapsed.value)) {
     throw new Error('The deidentified report exceeds the public upload limit.');
   }
@@ -350,7 +383,7 @@ export function createPublicPerformanceAuditReport(report: PerformanceAuditRepor
       privacyBoundary: { ...completion.privacyBoundary, generalApplicationJournal: 'included-deidentified' as const },
     },
     applicationJournal,
-    diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId),
+    diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId, { metricAnalysis: 'top-level' }),
   }, { audit: { auditId: completion.auditId, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
     finishedAt: completion.finishedAt,
     outcome: completion.outcome, collectionComplete: completion.collectionComplete,

@@ -59,6 +59,7 @@ test('retains the measured second Back for the legacy root tab alias', async () 
 
 test('path commit is the measured Back and the following settle is bookkeeping', async () => {
   let clock = 0;
+  const windows: [string, number][] = [];
   const paths = ['/browse', '/browse', '/performance-audit'];
   let index = 0;
   const result = await measureAuditBackNavigation({
@@ -67,12 +68,14 @@ test('path commit is the measured Back and the following settle is bookkeeping',
     awaitCommit: async () => { clock += 40; index = 2; },
     settle: async () => { clock += 650; },
     now: () => clock,
+    measureWindow: phase => { windows.push([phase, clock]); },
     matchesPath: (actual, expected) => actual === expected,
     tabJourney: false,
     recordFirst: () => {},
   });
   expect(result.durationMs).toBe(40);
   expect(result.settleMs).toBe(650);
+  expect(windows).toEqual([['start', 0], ['end', 40], ['settled', 690]]);
   expect(result.returnedToAudit).toBe(true);
 });
 

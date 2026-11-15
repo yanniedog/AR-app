@@ -1,5 +1,6 @@
 import { SECTION_KEYS, type CorePayload, type ProductDetail, type RateRow } from '../types';
-import { normalizeProfileFilters, profileFeaturesForSection, profileFilterRows, profileSelectionCount, type ProfileFilters } from './profile';
+import { normalizeProfileFilters, profileFeaturesForSection, profileSelectionCount, type ProfileFilters } from './profile';
+import { selectProfileRows } from './profileSelection';
 
 export interface MandatoryEligibility {
   active: boolean;
@@ -21,7 +22,7 @@ export function selectMandatoryEligibility(
   const loading = active && (!core || (!verifiedProducts && SECTION_KEYS.some(section => profileFeaturesForSection(required, section).length > 0)));
   const rows = new WeakSet<RateRow>(), productKeys = new Set<string>();
   if (core) for (const section of SECTION_KEYS) {
-    for (const row of profileFilterRows(core.sections[section].rates, required, section, verifiedProducts)) {
+    for (const row of selectProfileRows(core.sections[section].rates, required, section, verifiedProducts)) {
       rows.add(row); productKeys.add(row.product_key);
     }
   }

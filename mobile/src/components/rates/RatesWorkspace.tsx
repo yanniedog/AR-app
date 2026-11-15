@@ -1,10 +1,12 @@
 import { PreparedProductCard } from './PreparedProductCard';
+import { useFocusMeasurement } from '../../hooks/useFocusMeasurement';
+import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../../data/mortgageFacetScope';
 import { useMortgageResultsIndex } from '../../hooks/useMortgageResultsIndex';
 import { profileSectionCount } from '../../data/profile';
 import { checkDrillOutcome } from '../../lib/degradationLog';
 import { reconcilePublicCompareSelectionTokens } from '../../data/publicCompareSelectionTokens';
 import { publicScenarioForRow } from '../../data/publicRateIntegration';
-import { mortgageComparisonScenario } from '../../data/mortgageComparisonScenario';
+import { effectiveMortgageBrowseAssumptions, mortgageComparisonScenario } from '../../data/mortgageComparisonScenario';
 import type { RateScenario } from '../../data/publicRateModel';
 import { ratesResultRowKey } from '../../data/ratesResultRowKey';
 import { publicOfferSelectionToken } from '../../data/publicOfferIdentity';
@@ -47,9 +49,9 @@ import { RatesPagination } from '../RatesPagination';
 import { MortgageComparisonControls } from '../MortgageComparisonControls';
 import {
   useMortgageComparison,
+  setMortgageComparisonInputs,
   mortgageComparisonRows,
   mortgageComparisonCriteriaReady,
-  mortgageComparisonInputsInvalid,
   clearMortgageComparison,
 } from '../../data/mortgageComparison';
 import { EmptyState, IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../../components/feedback';
@@ -166,7 +168,7 @@ export default function RatesWorkspace() {
   const manifest = useStore(state => state.manifest);
   const catalogue = usePublicRateCatalogue(manifest);
   useLayoutEffect(() => {
-    if (!core) return;
+    if (!core || !task.selected.length) return;
     const next = reconcilePublicCompareSelectionTokens(core, catalogue, task.selected);
     if (next.length !== task.selected.length || next.some((token, index) => token !== task.selected[index])) {
       updateRatesSection(section, { selected: next });
@@ -177,20 +179,34 @@ export default function RatesWorkspace() {
   // store updates. Audit/programmatic applies write the store immediately so
   // readiness waits on cooperative pricing rather than a second 200ms delay.
   const mortgageInputs = useMortgageComparison();
-  const mortgageFilters = session.sections.Mortgage.filters;
+  const mortgageTask = session.sections.Mortgage;
+  const mortgageIncludesNonStandard = mortgageTask.includeNonStandardOverride ?? prefs.includeNonStandard;
+  const mortgageFilters = useMemo(() => scopeMortgageFacets(mortgageTask.filters, mortgageIncludesNonStandard),
+    [mortgageTask.filters, mortgageIncludesNonStandard]);
+  // Scope before criteria/pricing on this render, then remove hidden selections
+  // from the session so returning to the full catalogue cannot resurrect them.
+  useEffect(() => {
+    const current = useRatesSession.getState().sections.Mortgage;
+    const scoped = scopeMortgageFacets(current.filters,
+      current.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard);
+    if (scoped !== current.filters) updateRatesSection('Mortgage', { filters: scoped }, true);
+  }, [mortgageFilters, mortgageTask.filters]);
   // Do not price/filter the full Mortgage catalogue until LVR + purpose + repayment
-  // are set. Empty criteria previously ran an identity pass over every row.
+  // are set, except on cold launch when inputs and facets are both empty (default
+  // Owner-Occupied + Principal & Interest + <=80% LVR catalogue browse).
   const mortgageCriteriaReady = section !== 'Mortgage'
     || mortgageComparisonCriteriaReady(mortgageInputs, mortgageFilters);
-  const mortgageInputsInvalid = section === 'Mortgage' && mortgageComparisonInputsInvalid(mortgageInputs);
+  const mortgageAssumptions = useMemo(
+    () => effectiveMortgageBrowseAssumptions(section, mortgageInputs, mortgageFilters),
+    [section, mortgageInputs, mortgageFilters],
+  );
+  const mortgageInputsInvalid = mortgageAssumptions.inputsInvalid;
+  const isDefaultMortgageBrowse = mortgageAssumptions.isDefaultBrowse;
+  const effectiveMortgageInputs = mortgageAssumptions.inputs;
   // Prepare the common facet combination while fields are edited, without
   // selecting it for the user or exposing results before actual criteria exist.
-  const pricingFacetsKey = JSON.stringify({
-    loanPurposes: mortgageFilters.loanPurposes.length ? mortgageFilters.loanPurposes : ['OWNER_OCCUPIED'],
-    repaymentTypes: mortgageFilters.repaymentTypes.length ? mortgageFilters.repaymentTypes : ['PRINCIPAL_AND_INTEREST'],
-  });
-  const pricingMortgageFilters = useMemo(() => JSON.parse(pricingFacetsKey) as Pick<Filters, 'loanPurposes' | 'repaymentTypes'>, [pricingFacetsKey]);
-  const mortgagePricingReady = section !== 'Mortgage' || mortgageComparisonCriteriaReady(mortgageInputs, pricingMortgageFilters);
+  const pricingMortgageFilters = mortgageAssumptions.pricingFacets;
+  const mortgagePricingReady = section !== 'Mortgage' || mortgageComparisonCriteriaReady(effectiveMortgageInputs, pricingMortgageFilters);
   const preparingMortgageDefaults = section === 'Mortgage' && !mortgageCriteriaReady && mortgagePricingReady;
   const scenarioFor = useMemo(() => {
     // Only term fields vary by row in comparison scenarios. Normalize private
@@ -200,13 +216,13 @@ export default function RatesWorkspace() {
       const key = JSON.stringify([selected, row?.term_months, row?.term]);
       let base = bases.get(key);
       if (!base) {
-        base = mortgageComparisonScenario(selected, publicRateScenario(selected, scenario, prefs.profileFilters, row), mortgageInputs, pricingMortgageFilters);
+        base = mortgageComparisonScenario(selected, publicRateScenario(selected, scenario, prefs.profileFilters, row), effectiveMortgageInputs, pricingMortgageFilters);
         if (bases.size >= 64) bases.delete(bases.keys().next().value!);
         bases.set(key, base);
       }
       return publicScenarioForRow(row, catalogue, base);
     };
-  }, [catalogue, scenario, prefs.profileFilters, mortgageInputs, pricingMortgageFilters]);
+  }, [catalogue, scenario, prefs.profileFilters, effectiveMortgageInputs, pricingMortgageFilters]);
   const rowScenario = useCallback((row: RateRow) => scenarioFor(section, row), [scenarioFor, section]);
   const previousMortgageInputs = useRef(mortgageInputs);
   const previousMortgageFacets = useRef({
@@ -223,11 +239,15 @@ export default function RatesWorkspace() {
     const previousFacets = previousMortgageFacets.current;
     previousMortgageFacets.current = nextFacets;
     const inputsChanged = previous.loanAmount !== mortgageInputs.loanAmount
-      || previous.lvr !== mortgageInputs.lvr;
+      || previous.lvr !== mortgageInputs.lvr
+      || (previous.lvrMode ?? 'lvr') !== (mortgageInputs.lvrMode ?? 'lvr')
+      || (previous.fundsAvailable ?? '') !== (mortgageInputs.fundsAvailable ?? '')
+      || (previous.fundsType ?? 'deposit') !== (mortgageInputs.fundsType ?? 'deposit')
+      || (previous.propertyValue ?? '') !== (mortgageInputs.propertyValue ?? '');
     const facetsChanged = previousFacets.loanPurposes !== nextFacets.loanPurposes
       || previousFacets.repaymentTypes !== nextFacets.repaymentTypes;
     if (!inputsChanged && !facetsChanged) return;
-    // Always reset Mortgage paging/scroll for a committed amount/LVR/facet change,
+    // Reset paging/scroll for committed amount, LVR, funds, mode or facet changes,
     // including when the user is temporarily on another section.
     const mortgage = useRatesSession.getState().sections.Mortgage;
     if (mortgage.page === 1 && mortgage.scrollOffset === 0) return;
@@ -291,7 +311,7 @@ export default function RatesWorkspace() {
     }
   }, [deepSearchActive, ensureSearchIndex, isFocused, source]);
 
-  const query = task.query, sortKey = task.sort, filters = task.filters;
+  const query = task.query, sortKey = task.sort, filters = section === 'Mortgage' ? mortgageFilters : task.filters;
   const selectMode = task.selectMode, selected = task.selected, availability = task.availability;
   const setQuery = useCallback((value: string) => updateRatesSection(section, { query: value }, true), [section]);
   const setSortKey = useCallback((value: SortKey | ((current: SortKey) => SortKey)) =>
@@ -317,8 +337,10 @@ export default function RatesWorkspace() {
   const cancelFilters = useCallback(() => setFilterOpen(false), [setFilterOpen]);
   const applyFilters = useCallback((draft: Filters) => {
     const current = useRatesSession.getState().sections[section];
+    const scopedDraft = section === 'Mortgage'
+      ? scopeMortgageFacets(draft, current.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard) : draft;
     const nextFilters = draftAvailability === 'unlisted' ? { ...EMPTY_FILTERS, providers: draft.providers }
-      : { ...draft, includeNonStandard: current.filters.includeNonStandard };
+      : { ...scopedDraft, includeNonStandard: current.filters.includeNonStandard };
     const filtersChanged = JSON.stringify(current.filters) !== JSON.stringify(nextFilters);
     if (filtersChanged || current.availability !== draftAvailability) {
       updateRatesSection(section, { availability: draftAvailability,
@@ -340,14 +362,15 @@ export default function RatesWorkspace() {
     [core, details, manifest, coreIntegrity]);
   const sourceRates = core?.sections[section]?.rates ?? EMPTY_RATE_ROWS;
   // Unlisted Mortgage browse has no comparison controls; do not gate it behind LVR/purpose/repayment.
-  const mortgageSearchActive = section !== 'Mortgage' || availability === 'unlisted' || mortgageCriteriaReady;
+  const mortgageSearchActive = section !== 'Mortgage' || availability === 'unlisted' || mortgageCriteriaReady || isDefaultMortgageBrowse;
   const pricingActive = mortgageSearchActive || section === 'Mortgage' && availability === 'listed' && mortgagePricingReady;
   const mortgageIndex = useMortgageResultsIndex(core?.sections.Mortgage.rates ?? EMPTY_RATE_ROWS,
-    catalogue, mortgageContext, task.includeNonStandardOverride ?? includeNonStandard, suitabilityRevision, isFocused);
-  const indexedScenarioKey = JSON.stringify(sectionScenario), indexedInputsKey = JSON.stringify(mortgageInputs);
+    catalogue, mortgageContext, task.includeNonStandardOverride ?? includeNonStandard, suitabilityRevision, isFocused && section === 'Mortgage');
+  const indexedScenarioKey = JSON.stringify(sectionScenario), indexedInputsKey = JSON.stringify(effectiveMortgageInputs);
   const indexedPricing = useMemo(() => section === 'Mortgage' && !task.intentError && mortgagePricingReady &&
     pricingMortgageFilters.loanPurposes.length === 1 && pricingMortgageFilters.repaymentTypes.length === 1
-    ? mortgageIndex.index?.select(JSON.parse(indexedScenarioKey), JSON.parse(indexedInputsKey)) ?? null : null,
+    ? mortgageIndex.index?.select(sectionScenario, effectiveMortgageInputs) ?? null : null,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   [section, task.intentError, mortgagePricingReady, pricingMortgageFilters.loanPurposes.length, pricingMortgageFilters.repaymentTypes.length,
     mortgageIndex.index, indexedScenarioKey, indexedInputsKey]);
   const cooperativePricing = useResolvedPublicRankingRows({
@@ -360,7 +383,7 @@ export default function RatesWorkspace() {
     section,
     sectionScenario,
     rowScenario,
-    mortgageInputs,
+    mortgageInputs: effectiveMortgageInputs,
     mortgageContext,
     applyMortgageScope: section === 'Mortgage' && mortgagePricingReady,
     focused: isFocused && pricingActive && !indexedPricing,
@@ -378,19 +401,21 @@ export default function RatesWorkspace() {
       candidateCount: indexedPricing.candidates.length, pricedRowCount: indexedPricing.priced.length },
   } : cooperativePricing;
   const fullPricingCandidates = publicPricing.candidates;
+  const mandatoryActive = hasMandatoryRequirements();
   const discoveryKeys = useMemo(() => {
     void suitabilityRevision;
-    if (!hasMandatoryRequirements()) return new Set(catalogue.products.filter(product => product.section === section).map(product => product.productKey));
+    if (!mandatoryActive) return new Set(catalogue.products.filter(product => product.section === section).map(product => product.productKey));
     if (!isMandatoryEligibilityReady() || !publicPricing.ready) return new Set<string>();
-    return new Set(mandatoryEligibleRows(publicPricing.resolution.rows).map(row => row.product_key));
-  }, [catalogue, section, suitabilityRevision, publicPricing.ready, publicPricing.resolution.rows]);
+    const sourceRows = indexedPricing ? indexedPricing.mandatoryQuotes : mandatoryEligibleRows(publicPricing.resolution.rows);
+    return new Set(sourceRows.map(row => row.product_key));
+  }, [catalogue, section, suitabilityRevision, mandatoryActive, publicPricing.ready, indexedPricing, mandatoryActive ? publicPricing.resolution.rows : null]);
   const resolvedCatalogueRows = publicPricing.resolution.rows;
   // Reuse cooperative candidates for compare selection — never re-expand the
   // full-day catalogue on the render path (that stalled search.data readiness).
   const comparisonCore = useMemo((): CorePayload | null => {
     if (!core) return null;
     if (catalogue.status === 'unavailable' || !publicPricing.ready) return core;
-    if (section === 'Mortgage' && !mortgageCriteriaReady) return core;
+    if (section === 'Mortgage' && !mortgageCriteriaReady && !isDefaultMortgageBrowse) return core;
     return {
       ...core,
       sections: {
@@ -401,7 +426,7 @@ export default function RatesWorkspace() {
         },
       },
     };
-  }, [core, catalogue.status, section, fullPricingCandidates, publicPricing.ready, mortgageCriteriaReady]);
+  }, [core, catalogue.status, section, fullPricingCandidates, publicPricing.ready, mortgageCriteriaReady, isDefaultMortgageBrowse]);
   const pricingCandidates = useMemo(() => {
     void suitabilityRevision;
     return task.intentError || !pricingActive ? []
@@ -528,7 +553,10 @@ export default function RatesWorkspace() {
     mortgageSearchActive ? details?.products : undefined,
     section, suitabilityRevision, publicPricing.ready && preparedResults.ready,
   );
-  const unverifiedResultCount = useMemo(() => rows.reduce((count, row) => count + (mortgageScope.unverifiedRows.has(row) ? 1 : 0), 0), [rows, mortgageScope.unverifiedRows]);
+  const unverifiedResultCount = useMemo(
+    () => (section !== 'Mortgage' || mortgageScope.unverified === 0 ? 0 : rows.reduce((count, row) => count + (mortgageScope.unverifiedRows.has(row) ? 1 : 0), 0)),
+    [section, rows, mortgageScope.unverified, mortgageScope.unverifiedRows],
+  );
   const catalogueDetails = verifiedCatalogueDetails(core, coreIntegrity, manifest, details);
   // Only the no-listed-rate view and its filter draft read this inventory.
   // Building it scans every rate row and detail product, so listed browsing
@@ -545,29 +573,56 @@ export default function RatesWorkspace() {
       (!filters.providers.length || filters.providers.includes(item.provider ?? '')));
   }, [debouncedQuery, filters.providers, unlistedEntries]);
   type ResultRow = RateRow | (typeof unlistedEntries)[number];
-  const resultRows: ResultRow[] = availability === 'unlisted' ? unlistedRows : section === 'Mortgage' && !mortgageCriteriaReady ? EMPTY_RATE_ROWS : rows;
+  const resultRows: ResultRow[] = availability === 'unlisted' ? unlistedRows : section === 'Mortgage' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? EMPTY_RATE_ROWS : rows;
   const pageSize = normalizeRatesPageSize(prefs.ratesPageSize);
   const pagination = ratesPageWindow(resultRows.length, task.page, pageSize);
   const pageRows = useMemo(() => resultRows.slice(pagination.offset, pagination.to), [resultRows, pagination.offset, pagination.to]);
   const resultRowKey = useCallback((row: ResultRow, i: number) => ratesResultRowKey(row, pagination.offset + i), [pagination.offset]);
   const catalogueOptions = useMemo(() => ({ ...EMPTY_SEARCH_FILTER_OPTIONS,
     providers: [...new Set(unlistedEntries.map(item => item.provider).filter((value): value is string => Boolean(value)))].sort() }), [unlistedEntries]);
-  const activeFilterOptions = draftAvailability === 'unlisted' ? catalogueOptions : filterOptions.options;
+  const scopedFilterOptions = useMemo(() => section !== 'Mortgage' || effectiveFilters.includeNonStandard
+    ? filterOptions.options : { ...filterOptions.options, groups: filterOptions.options.groups.map(group => ({
+      ...group, options: group.g.key === 'loanPurposes' || group.g.key === 'repaymentTypes'
+        ? group.options.filter(option => isWidelyAvailableMortgageFacet(group.g.key as 'loanPurposes' | 'repaymentTypes', option))
+        : group.options,
+    })) }, [section, effectiveFilters.includeNonStandard, filterOptions.options]);
+  const activeFilterOptions = draftAvailability === 'unlisted' ? catalogueOptions : scopedFilterOptions;
+  const effectiveDraftFilters = useMemo(() => {
+    const draft = { ...draftFilters, includeNonStandard: effectiveFilters.includeNonStandard };
+    return section === 'Mortgage' ? scopeMortgageFacets(draft, draft.includeNonStandard) : draft;
+  }, [draftFilters, effectiveFilters.includeNonStandard, section]);
+  useEffect(() => {
+    if (section !== 'Mortgage') return;
+    setDraftFilters(current => {
+      const session = useRatesSession.getState();
+      if (session.section !== 'Mortgage') return current;
+      return scopeMortgageFacets(current,
+        session.sections.Mortgage.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard);
+    });
+  }, [draftFilters, effectiveFilters.includeNonStandard, section]);
 
   const draftResultCount = useCallback(
-    async (draft: Filters, cancelled?: () => boolean) => (
+    async (draft: Filters, cancelled?: () => boolean) => {
       // Suitability rebuilds can keep the same row array; count against the gate the list uses.
-      void suitabilityRevision,
-      (await filterRowsCooperatively(
+      void suitabilityRevision;
+      if (indexedPricing && !path.length && !hierarchyScoped) {
+        const fast = indexedPricing.filtered(
+          { ...draft, includeNonStandard: effectiveFilters.includeNonStandard, query: debouncedQuery },
+          sortKey,
+          mortgageRateMetric,
+        );
+        if (fast) return fast.length;
+      }
+      return (await filterRowsCooperatively(
         mortgageScope.rows,
         { ...draft, query: debouncedQuery },
         details?.products ?? null,
         resultSearchIndex,
         section,
         { cancelled },
-      ))?.length ?? null
-    ),
-    [mortgageScope.rows, debouncedQuery, details?.products, resultSearchIndex, section, suitabilityRevision],
+      ))?.length ?? null;
+    },
+    [indexedPricing, path.length, hierarchyScoped, effectiveFilters.includeNonStandard, sortKey, mortgageRateMetric, mortgageScope.rows, debouncedQuery, details?.products, resultSearchIndex, section, suitabilityRevision],
   );
   const unlistedResultCount = useCallback((draft: Filters, cancelled?: () => boolean) => {
     void suitabilityRevision;
@@ -702,7 +757,7 @@ export default function RatesWorkspace() {
     queryNeedsSearchIndex, resultSearchIndex != null, suitabilityRevision, resultRows.length, pagination.page, pageSize, mortgageInputs]);
   // Selection and disclosure changes need a fresh committed render, but keep
   // the same list and decoded logos while its result identities are unchanged.
-  const listRevision = uiTracker.current.update([listDataRevision, filterOpen, draftFilters, draftAvailability, sortOpen, toolsOpen, selectMode, selected]);
+  const listRevision = uiTracker.current.update([listDataRevision, selectMode, selected]);
   const [emptyCommit, setEmptyCommit] = useState<string | null>(null);
   const listReadiness = useVirtualizedListReadiness(listRevision, pageRows.length);
   const measuredVisibility = useRef(listReadiness.measuredVisibleCount);
@@ -726,6 +781,7 @@ export default function RatesWorkspace() {
   const physicalVisibility = usePhysicalListVisibility(listRevision, pageRows,
     isFocused && restoredDataRevision === restorationKey && !sheetCovered, resultRowKey,
     info => auditViewability.current(info));
+  useFocusMeasurement(sheetNavigation, physicalVisibility.active, physicalVisibility.measure);
   const requestPhysicalVisibility = useRef(physicalVisibility.measure);
   requestPhysicalVisibility.current = physicalVisibility.measure;
   const physicalCapture = useRef(physicalVisibility.active);
@@ -746,24 +802,32 @@ export default function RatesWorkspace() {
     }
     listRef.current = list;
   }, []);
+  const focusedRef = useRef(isFocused);
+  focusedRef.current = isFocused;
   const restoreCommittedScroll = useCallback(() => {
     const list = listRef.current, pending = restoration.current;
-    if (!listLoaded.current || !list || pending.scheduled || pending.applied) return;
+    if (!focusedRef.current || !listLoaded.current || !list || pending.scheduled || pending.applied) return;
     pending.scheduled = true;
     requestAnimationFrame(() => {
-      if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) return;
+      if (!focusedRef.current || listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) {
+        pending.scheduled = false;
+        return;
+      }
       list.scrollToOffset({ offset: pending.offset, animated: false });
       // Wait for the native scroll to reach a frame before asking for current
       // viewport evidence. A measurement from before that move is insufficient.
       requestAnimationFrame(() => {
-        if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) return;
+        if (!focusedRef.current || listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) {
+          pending.scheduled = false;
+          return;
+        }
         pending.applied = true;
         setRestoredDataRevision(pending.revision);
         list.recomputeViewableItems();
       });
     });
   }, []);
-  useEffect(() => { restoreCommittedScroll(); }, [restorationKey, restoreCommittedScroll]);
+  useEffect(() => { restoreCommittedScroll(); }, [isFocused, restorationKey, restoreCommittedScroll]);
   const onListCommit = useCallback(() => {
     markListCommit();
     restoreCommittedScroll();
@@ -846,7 +910,10 @@ export default function RatesWorkspace() {
   const { isVisible: isAuditTargetVisible, selectionFinished: finishAuditTargetSelection, prepare: prepareAuditTarget } = auditTarget;
   auditViewability.current = auditTarget.onViewableItemsChanged;
   const surfaceTracker = useRef(new OpaquePerformanceAuditRenderRevision());
-  const surfaceRevision = surfaceTracker.current.update([listRevision, auditTarget.cellRevision, auditTarget.viewport]);
+  const surfaceRevision = surfaceTracker.current.update([
+    listRevision, auditTarget.cellRevision, auditTarget.viewport,
+    filterOpen, sortOpen, toolsOpen, sheetEvidence.filter, sheetEvidence.sort, sheetEvidence.tools,
+  ]);
   const selectAuditToken = useCallback((...args: unknown[]) => {
     const token = auditActionString(args, 'selectionToken');
     const row = token ? pageRows.find(row => 'product_key' in row && rowToken(row) === token) : undefined;
@@ -864,7 +931,7 @@ export default function RatesWorkspace() {
   const applyMortgageScope = useCallback((args: readonly unknown[]) => {
     if (section !== 'Mortgage') return { unavailableReason: 'Mortgage comparison scope requires the Mortgage section' };
     if (availability === 'unlisted') return { unavailableReason: 'Mortgage comparison scope requires listed rates' };
-    useMortgageComparison.setState({
+    setMortgageComparisonInputs({
       loanAmount: auditActionString(args, 'loanAmount') ?? '',
       lvr: auditActionString(args, 'lvr') ?? '',
     });
@@ -917,19 +984,37 @@ export default function RatesWorkspace() {
     'search.compare.select.1': selectAuditToken,
     'search.compare.open': (...args: unknown[]) => {
       const exactTokens = auditActionStrings(args, 'selectionTokens');
-      const tokens = exactTokens.length >= 2 ? exactTokens : selected;
-      if (tokens.length >= 2) openCompare(tokens, 'rates-comparison');
+      const tokens = exactTokens.length ? exactTokens : selected;
+      if (new Set(tokens).size < 2 || tokens.some(token => !selected.includes(token))) {
+        return { unavailableReason: 'The intended exact rates have not both been selected in the rendered results' };
+      }
+      openCompare(tokens, 'rates-comparison');
     },
-  }), [applyFilters, applyMortgageScope, availability, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
+  }), [applyFilters, applyMortgageScope, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
   // Logo decode callbacks can churn during mortgage.scope.apply settle; the
   // logos probe is optional, so wait until search.data/list are no longer pending.
   const logoCallbacksActive = physicalVisibility.active && !searchPending && listReadiness.visiblyCommitted;
+  const logoCallbacksActiveRef = useRef(logoCallbacksActive);
+  logoCallbacksActiveRef.current = logoCallbacksActive;
+  const onLogoRenderStateChangeRef = useRef(logoReadiness.onLogoRenderStateChange);
+  onLogoRenderStateChangeRef.current = logoReadiness.onLogoRenderStateChange;
+  const latestLogoStatesRef = useRef(new Map<string, LogoRenderState>());
+  useEffect(() => {
+    if (!logoCallbacksActive || latestLogoStatesRef.current.size === 0) return;
+    for (const [id, state] of latestLogoStatesRef.current.entries()) {
+      logoReadiness.onLogoRenderStateChange(id, state);
+    }
+  }, [logoCallbacksActive, logoReadiness.onLogoRenderStateChange]);
+  const handleLogoRenderStateChange = useCallback((id: string, state: LogoRenderState) => {
+    latestLogoStatesRef.current.set(id, state);
+    if (logoCallbacksActiveRef.current) onLogoRenderStateChangeRef.current(id, state);
+  }, []);
   const { refFor: physicalCellRef, measure: measurePhysicalCells } = physicalVisibility;
   const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => <View collapsable={false}
     ref={target === 'Cell' ? physicalCellRef(item) : undefined}
     onLayout={measurePhysicalCells}>{'product_key' in item ? (
     <SearchProductRow row={item} section={section}
-      onLogoRenderStateChange={logoCallbacksActive ? logoReadiness.onLogoRenderStateChange : undefined}
+      onLogoRenderStateChange={handleLogoRenderStateChange}
       quoteOwner={indexedPricing && !searchPending && !retainingPrevious ? mortgageIndex.index : null}
       rateScenario={displayedScenario(item)} comparisonUnverified={section === 'Mortgage' && displayedUnverified.has(item)}
       auditCell={target === 'Cell' && !retainingPrevious} auditRevision={listRevision} onAuditCellCommit={auditTarget.onCellCommit}
@@ -939,7 +1024,7 @@ export default function RatesWorkspace() {
       <AppText variant="body" weight="600">{uiProductName({product_name:item.name??''})}</AppText>
       <AppText variant="small" color="textMuted">{uiJoin(uiProviderName({provider:item.provider??''}),' · ',humanizeEnum(item.productCategory??''))}</AppText>
       <AppText variant="small" color="textMuted">{uiLabel("No listed rate")}</AppText>
-    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, auditTarget.onCellCommit, listRevision, logoCallbacksActive, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, displayedUnverified, displayedScenario, retainingPrevious, indexedPricing, searchPending, mortgageIndex.index]);
+    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, auditTarget.onCellCommit, listRevision, section, handleLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, displayedUnverified, displayedScenario, retainingPrevious, indexedPricing, searchPending, mortgageIndex.index]);
   usePerformanceAuditSurface({
     id: 'rates.results',
     work: { ...publicPricing.work, mortgageCriteriaReady, mortgageInputsInvalid, preparingMortgageDefaults,
@@ -961,6 +1046,8 @@ export default function RatesWorkspace() {
         // otherwise diagnostics show datasetMatches=true while status=pending.
         status: task.intentError || preparedResults.error || publicPricing.error ? 'error' : !searchPending && core ? 'ready' : 'pending',
         error: task.intentError ?? preparedResults.error ?? publicPricing.error,
+        expectedCount: 1,
+        actualCount: !searchPending && core && !(task.intentError || preparedResults.error || publicPricing.error) ? 1 : 0,
         datasetRevision: !searchPending && core ? (coreSha ?? core.run_date ?? null) : null,
       },
       {
@@ -997,6 +1084,8 @@ export default function RatesWorkspace() {
         kind: 'data',
         status: !filterOpen ? 'ready' : filterOptions.error ? 'error' : filterOptions.ready ? 'ready' : 'pending',
         error: filterOpen ? filterOptions.error : null,
+        expectedCount: filterOpen ? 1 : 0,
+        actualCount: filterOpen && !filterOptions.error && filterOptions.ready ? 1 : 0,
       },
       {
         id: 'search.logos',
@@ -1063,8 +1152,8 @@ export default function RatesWorkspace() {
           data={displayedPageRows}
           ListHeaderComponent={availability === 'listed' ? <View style={{ gap: 8 }}>
             <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows} />
-            {section === 'Mortgage' ? <MortgageComparisonControls catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={filters}
-              unverified={mortgageCriteriaReady ? unverifiedResultCount : 0} invalid={mortgageScope.invalid} /> : null}
+            {section === 'Mortgage' ? <MortgageComparisonControls collapsible catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={effectiveFilters}
+              unverified={mortgageCriteriaReady || isDefaultMortgageBrowse ? unverifiedResultCount : 0} invalid={mortgageScope.invalid} /> : null}
             {mortgageSearchActive && catalogue.status !== 'unavailable' ? <><PublicPricingCoverage section={section} rows={pricingCandidates} scenario={scenario} scenarioForRow={rowScenario} compact
               pricingSummary={publicPricing.ready ? {
                 priced: baseRows.length,
@@ -1072,9 +1161,9 @@ export default function RatesWorkspace() {
                 complete: publicPricing.resolution.complete,
               } : null} />
               {/* Mount after pricing so catalogue re-expansion cannot stall search.data. */}
-              {publicPricing.ready ? <PublicProductDiscovery eligibleProductKeys={discoveryKeys} section={section} rateScenario={scenarioFor(section)} pricingOrigin="rates-comparison" rows={baseRows} query={debouncedQuery} /> : null}</> : null}
+              {publicPricing.ready ? <PublicProductDiscovery eligibleProductKeys={discoveryKeys} section={section} rateScenario={sectionScenario} pricingOrigin="rates-comparison" rows={baseRows} query={debouncedQuery} /> : null}</> : null}
           </View> : null}
-          ListFooterComponent={<RatesPagination total={resultRows.length} page={pagination.page} size={pageSize}
+          ListFooterComponent={resultRows.length === 0 ? null : <RatesPagination total={resultRows.length} page={pagination.page} size={pageSize}
             noun={availability === 'listed' ? 'rates' : 'products'} pending={searchPending}
             onPage={page => updateRatesSection(section, { page }, true)}
             onSize={size => useStore.getState().setPref('ratesPageSize', size)} />}
@@ -1137,7 +1226,7 @@ export default function RatesWorkspace() {
                 <EmptyState title="Products unavailable"  />
                 <Button title="Retry" variant="secondary" onPress={publicPricing.error ? publicPricing.retry : preparedResults.retry} />
               </View>
-            ) : section === 'Mortgage' && availability === 'listed' && !mortgageCriteriaReady ? (
+            ) : section === 'Mortgage' && availability === 'listed' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? (
               <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
                 <EmptyState title={mortgageInputsInvalid ? 'Invalid comparison inputs' : 'Inputs incomplete'} />
               </View>
@@ -1177,7 +1266,7 @@ export default function RatesWorkspace() {
         optionsError={filterOptions.error}
         onRetryOptions={filterOptions.retry}
         filters={effectiveFilters}
-        controlledDraft={draftFilters}
+        controlledDraft={effectiveDraftFilters}
         onDraftChange={setDraftFilters}
         onApply={applyFilters}
         preserveOnReset={section === 'Mortgage' ? {
@@ -1187,7 +1276,7 @@ export default function RatesWorkspace() {
         resultNoun={draftAvailability === 'listed' ? 'rates' : 'products'}
         resultCount={draftAvailability === 'listed' ? draftResultCount : unlistedResultCount}
       >
-        {draftAvailability === 'listed' ? <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows}
+        {filterOpen && draftAvailability === 'listed' ? <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows}
           onEdit={() => { setFilterOpen(false); router.push('/profile'); }} /> : null}
         <View style={{ gap: 8 }}><AppText variant="small" weight="700">{uiLabel("Availability")}</AppText>
           <SegmentedControl value={draftAvailability} options={[{ value: 'listed', label: uiLabel("Listed rate") }, { value: 'unlisted', label: uiLabel("No listed rate") }]} onChange={setDraftAvailability} />
@@ -1197,17 +1286,66 @@ export default function RatesWorkspace() {
         <ScrollView contentContainerStyle={{ padding: 16, gap: 8 }}>
           {(section === 'Mortgage' ? [{ label: uiLabel("Advertised rate"), metric: 'headline' }, { label: uiLabel("Comparison rate"), metric: 'comparison' }]
             : section === 'Savings' ? [{ label: uiLabel("Ongoing rate"), metric: 'base' }, { label: uiLabel("Headline rate"), metric: 'max' }]
-            : [{ label: uiLabel("Advertised rate"), metric: 'base' }] as const).map(option => <Button key={option.metric} title={option.label} variant="ghost" onPress={() => {
-              if (section === 'Mortgage') setPref('mortgageRateMetric', option.metric as 'headline' | 'comparison');
-              else if (section === 'Savings') setPref('depositRankMetric', option.metric as 'base' | 'max');
-              setSortKey('rate'); setSortOpen(false);
-            }} />)}
-          <Button title="Bank A–Z" variant="ghost" onPress={() => { setSortKey('bank'); setSortOpen(false); }} />
-          <Button title="Cancel" variant="ghost" onPress={() => setSortOpen(false)} />
+            : [{ label: uiLabel("Advertised rate"), metric: 'base' }] as const).map(option => {
+              const currentMetric = section === 'Mortgage' ? mortgageRateMetric : depositRankMetric;
+              const isSelected = (sortKey === 'rate' && (section === 'TD' || currentMetric === option.metric))
+                || (section === 'Mortgage' && sortKey === 'comparison' && option.metric === 'comparison');
+              return (
+                <TouchTarget
+                  key={option.metric}
+                  fill
+                  accessibilityRole="button"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ selected: isSelected }}
+                  onPress={() => {
+                    if (section === 'Mortgage') setPref('mortgageRateMetric', option.metric as 'headline' | 'comparison');
+                    else if (section === 'Savings') setPref('depositRankMetric', option.metric as 'base' | 'max');
+                    setSortKey('rate'); setSortOpen(false);
+                  }}
+                  style={{
+                    minHeight: 48,
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    borderRadius: theme.radius?.sm ?? 6,
+                    backgroundColor: isSelected ? theme.colors.primaryMuted : 'transparent',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <AppText variant="body" weight="600" color={isSelected ? 'primary' : 'text'}>
+                    {option.label}
+                  </AppText>
+                  {isSelected ? <Ionicons name="checkmark-circle" size={18} color={theme.colors.primary} /> : null}
+                </TouchTarget>
+              );
+            })}
+          <TouchTarget
+            fill
+            accessibilityRole="button"
+            accessibilityLabel="Bank A–Z"
+            accessibilityState={{ selected: sortKey === 'bank' }}
+            onPress={() => { setSortKey('bank'); setSortOpen(false); }}
+            style={{
+              minHeight: 48,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              borderRadius: theme.radius?.sm ?? 6,
+              backgroundColor: sortKey === 'bank' ? theme.colors.primaryMuted : 'transparent',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <AppText variant="body" weight="600" color={sortKey === 'bank' ? 'primary' : 'text'}>
+              {uiLabel("Bank A–Z")}
+            </AppText>
+            {sortKey === 'bank' ? <Ionicons name="checkmark-circle" size={18} color={theme.colors.primary} /> : null}
+          </TouchTarget>
         </ScrollView>
       </SheetSurface>
       <SheetSurface onAuditStateChange={physicalVisibility.active ? toolsEvidence : undefined} visible={toolsOpen} title="Search" onClose={() => setToolsOpen(false)}>
-        <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: theme.spacing(4) }}>
+        <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: 20 }}>
           <Button
             icon={searchSub ? 'notifications' : 'notifications-outline'}
             title={uiLabel(searchSub ? 'Alert off' : 'Alert on')}

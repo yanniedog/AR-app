@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import { View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -162,39 +162,41 @@ export function OfflineBanner({
         : theme.colors.warning;
 
   return (
-    <Animated.View
-      entering={motionAllowed ? FadeIn.duration(200) : undefined}
-      exiting={motionAllowed ? FadeOut.duration(BANNER_FADE_MS) : undefined}
-      style={[{ marginBottom: 12 }, containerStyle]}
-    >
-      <Row
-        gap={8}
-        style={{
-          backgroundColor: theme.ledger.raised,
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          borderLeftWidth: 3,
-          borderLeftColor: iconColor,
-          borderBottomWidth: 1,
-          borderBottomColor: theme.ledger.rule,
-          alignItems: showProgress && payloadProgress ? 'flex-start' : 'center',
-        }}
+    <View style={[{ overflow: 'hidden', width: '100%', marginBottom: 12 }, containerStyle]}>
+      <Animated.View
+        entering={motionAllowed ? FadeIn.duration(200) : undefined}
+        exiting={motionAllowed ? FadeOut.duration(BANNER_FADE_MS) : undefined}
+        style={{ overflow: 'hidden' }}
       >
-        <LedgerIcon
-          name={iconName}
-          size={16}
-          color={iconColor}
-          style={showProgress && payloadProgress ? { marginTop: 2 } : undefined}
-        />
-        {showProgress && payloadProgress ? (
-          <PayloadProgressBar progress={payloadProgress} caption={message} />
-        ) : (
-          <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
-            {message}
-          </AppText>
-        )}
-      </Row>
-    </Animated.View>
+        <Row
+          gap={8}
+          style={{
+            backgroundColor: theme.ledger.raised,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderLeftWidth: 3,
+            borderLeftColor: iconColor,
+            borderBottomWidth: 1,
+            borderBottomColor: theme.ledger.rule,
+            alignItems: showProgress && payloadProgress ? 'flex-start' : 'center',
+          }}
+        >
+          <LedgerIcon
+            name={iconName}
+            size={16}
+            color={iconColor}
+            style={showProgress && payloadProgress ? { marginTop: 2 } : undefined}
+          />
+          {showProgress && payloadProgress ? (
+            <PayloadProgressBar progress={payloadProgress} caption={message} />
+          ) : (
+            <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
+              {message}
+            </AppText>
+          )}
+        </Row>
+      </Animated.View>
+    </View>
   );
 }
 

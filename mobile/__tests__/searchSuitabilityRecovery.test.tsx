@@ -69,7 +69,7 @@ jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({
 jest.mock('../src/hooks/useLogoReadiness', () => ({ useLogoReadiness: () => ({ ready: true }) }));
 jest.mock('../src/hooks/useDebouncedValue', () => ({ useDebouncedValue: (value: string) => mockCommittedQuery ?? value }));
 jest.mock('../src/hooks/useSearchFilterOptions', () => ({
-  useSearchFilterOptions: () => ({ ready: true, options: {} }),
+  useSearchFilterOptions: () => ({ ready: true, options: jest.requireActual('../src/data/searchFilterOptions').EMPTY_SEARCH_FILTER_OPTIONS }),
 }));
 jest.mock('@shopify/flash-list', () => {
   const React = jest.requireActual('react');
@@ -374,9 +374,11 @@ test('comparison and filter disclosure commit without remounting unchanged searc
     const token = `${first.rate_index}#${first.product_key}`;
     let previousRevision = mockSurfaces.get('rates.results').renderRevision;
     let previousListRevision = tree.root.findByType('FlashList' as any).props.extraData;
-    for (const [action, parameters] of [
-      ['search.filters.open'], ['search.filters.apply'], ['search.compare.mode'],
-      ['search.compare.select.0', { selectionToken: token }],
+    for (const [action, parameters, expectsListRevisionChange] of [
+      ['search.filters.open', undefined, false],
+      ['search.filters.apply', undefined, false],
+      ['search.compare.mode', undefined, true],
+      ['search.compare.select.0', { selectionToken: token }, true],
     ] as const) {
       act(() => mockSurfaces.get('rates.results').actions[action](parameters));
       expect(mockListMount).toHaveBeenCalledTimes(1);
@@ -385,11 +387,16 @@ test('comparison and filter disclosure commit without remounting unchanged searc
       const revision = mockSurfaces.get('rates.results').renderRevision;
       expect(revision).not.toBe(previousRevision);
       const listRevision = tree.root.findByType('FlashList' as any).props.extraData;
-      expect(listRevision).not.toBe(previousListRevision);
+      if (expectsListRevisionChange) {
+        expect(listRevision).not.toBe(previousListRevision);
+        expect(mockRecomputeViewableItems).toHaveBeenCalledTimes(++measurements);
+      } else {
+        expect(listRevision).toBe(previousListRevision);
+        expect(mockRecomputeViewableItems).toHaveBeenCalledTimes(measurements);
+      }
       expect(mockSurfaces.get('rates.results').probes.find((probe: any) => probe.id === 'search.layout').renderRevision).toBe(revision);
       previousListRevision = listRevision;
       expect(listProbe().visibleCount).toBe(measuredCount);
-      expect(mockRecomputeViewableItems).toHaveBeenCalledTimes(++measurements);
       previousRevision = revision;
     }
     expect(tree.root.findAllByType('ProductCard' as any)[0].props.selected).toBe(true);
@@ -835,16 +842,15 @@ test('one visible tap commits the common sort preset, while advanced Cancel/Back
     act(() => list.props.onScroll({ nativeEvent: { contentOffset: { y: 312 } } }));
     const before = captureRatesSession();
     const sortSheet = () => tree.root.findAllByType('SheetSurface' as any).find((node: any) => node.props.title === 'Sort');
-    for (const close of ['button', 'back']) {
-      act(() => tree.root.findByProps({ word: 'Sort' }).props.onPress());
-      expect(sortSheet().props.visible).toBe(true);
-      act(() => close === 'button' ? sortSheet().findByProps({ title: 'Cancel' }).props.onPress() : sortSheet().props.onClose());
-      expect(sortSheet().props.visible).toBe(false);
-      expect(captureRatesSession()).toEqual(before);
-    }
+    expect(sortSheet().findAllByProps({ title: 'Cancel' })).toHaveLength(0);
+    act(() => tree.root.findByProps({ word: 'Sort' }).props.onPress());
+    expect(sortSheet().props.visible).toBe(true);
+    act(() => sortSheet().props.onClose());
+    expect(sortSheet().props.visible).toBe(false);
+    expect(captureRatesSession()).toEqual(before);
     act(() => tree.root.findByProps({ word: 'Sort' }).props.onPress());
     const commits = jest.fn(), stop = useRatesSession.subscribe(commits);
-    act(() => sortSheet().findByProps({ title: 'Advertised rate' }).props.onPress());
+    act(() => sortSheet().findByProps({ accessibilityLabel: 'Advertised rate' }).props.onPress());
     stop();
     expect(commits).toHaveBeenCalledTimes(1);
     expect(sortSheet().props.visible).toBe(false);

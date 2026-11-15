@@ -6,6 +6,7 @@ import { openCompare } from '../src/lib/nav';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import { catalogue, core, product, programme } from '../testUtils/publicRateJourney';
 import { captureRatesSession, restoreRatesSession, updateRatesSection } from '../src/data/ratesSession';
+import { EMPTY_FILTERS } from '../src/data/selectors';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import { useMortgageComparison, clearMortgageComparison } from '../src/data/mortgageComparison';
 import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
@@ -41,7 +42,7 @@ jest.mock('../src/components/product/RateConditionsDisclosure', () => ({ Selecte
 jest.mock('../src/components/scenario/PublicRateEvidence', () => ({ PublicRateEvidence: 'PublicRateEvidence' }));
 jest.mock('../src/components/scenario/PublicCostComparison', () => ({ PublicCostComparison: 'PublicCostComparison' }));
 
-test('Compare retains amount/LVR eligibility and pricing for offers selected with ephemeral inputs', () => {
+test.each(['lvr', 'funds', 'offset'] as const)('Compare retains amount/LVR eligibility and pricing with ephemeral %s inputs', mode => {
   const products = ['a', 'b'].map(id => ({ ...product, productId: id, productKey: id, name: id, programmeIds: [id] }));
   const programmes = products.map((item, index) => {
     const p = programme({ productId: item.productId, programmeId: item.productId, offerId: item.productId, sourceBindings: [], conditions: [
@@ -55,7 +56,9 @@ test('Compare retains amount/LVR eligibility and pricing for offers selected wit
   mockState = { core: core([]), manifest: null, prefs: DEFAULT_PREFS, details: { products: {} }, ensureDetails: jest.fn() };
   mockKeys = JSON.stringify(products.map(item => publicOfferSelectionToken(item.productKey, item.productId)));
   installMandatoryEligibility(selectMandatoryEligibility(mockState.core, DEFAULT_PREFS.profileFilters, null));
-  useMortgageComparison.setState({ loanAmount: '600000', lvr: '75' });
+  useMortgageComparison.setState({ loanAmount: '600000', lvr: mode === 'lvr' ? '75' : '10',
+    lvrMode: mode === 'lvr' ? 'lvr' : 'funds', fundsAvailable: '200000',
+    fundsType: mode === 'offset' ? 'offset' : 'deposit', propertyValue: '800000' }, true);
   let tree!: Tree;
   act(() => { tree = TestRenderer.create(<Compare />) as Tree; });
   try {
@@ -64,7 +67,38 @@ test('Compare retains amount/LVR eligibility and pricing for offers selected wit
     expect(evidence).toHaveLength(2);
     expect(evidence.map(node => node.props.row.rate)).toEqual(['0.05', '0.06']);
     expect(evidence.every(node => node.props.scenario.amount === '600000' && node.props.scenario.lvr === '0.75')).toBe(true);
-    expect(tree.root.findAllByType('PublicCostComparison').every(node => node.props.rateScenario.amount === '600000' && node.props.rateScenario.lvr === '0.75')).toBe(true);
+    const costs = tree.root.findAllByType('PublicCostComparison');
+    expect(costs).toHaveLength(2);
+    expect(costs.every(node => node.props.rateScenario.amount === '600000' && node.props.rateScenario.lvr === '0.75')).toBe(true);
+    if (mode === 'lvr') {
+      Object.assign(mockScenario.mortgage, { mode: 'refi', loanBalance: '600000', propertyValue: '800000' });
+      act(() => useMortgageComparison.setState({ lvr: '' }));
+      expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(0);
+      expect(tree.root.findAllByType('PublicCostComparison')).toHaveLength(0);
+      act(() => useMortgageComparison.setState({ lvr: '75' }));
+      expect(tree.root.findAllByType('PublicCostComparison')).toHaveLength(2);
+    }
+    if (mode === 'funds') {
+      act(() => useMortgageComparison.setState({ fundsAvailable: '150000' }));
+      expect(tree.root.findAllByType('PublicRateEvidence').map(node => node.props.scenario.lvr)).toEqual(['0.8', '0.8']);
+      expect(tree.root.findAllByType('PublicCostComparison').map(node => node.props.rateScenario.lvr)).toEqual(['0.8', '0.8']);
+      act(() => useMortgageComparison.setState({ fundsAvailable: '149999.99' }));
+      expect(tree.root.findAllByType('EmptyState')).toHaveLength(1);
+      expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(0);
+      act(() => useMortgageComparison.setState({ fundsAvailable: '200000' }));
+      expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(2);
+    }
+    if (mode === 'offset') {
+      expect(tree.root.findAllByType('PublicCostComparison').map(node => node.props.rateScenario.offsetBalance)).toEqual(['200000', '200000']);
+      act(() => useMortgageComparison.setState({ fundsAvailable: '500000' }));
+      expect(tree.root.findAllByType('PublicRateEvidence').map(node => node.props.scenario.lvr)).toEqual(['0.75', '0.75']);
+      expect(tree.root.findAllByType('PublicCostComparison').map(node => node.props.rateScenario.offsetBalance)).toEqual(['500000', '500000']);
+      act(() => useMortgageComparison.setState({ propertyValue: '749999.99' }));
+      expect(tree.root.findAllByType('EmptyState')).toHaveLength(1);
+      expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(0);
+      act(() => useMortgageComparison.setState({ propertyValue: '800000' }));
+      expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(2);
+    }
     act(() => useMortgageComparison.setState({ loanAmount: '400000' }));
     expect(tree.root.findAllByType('EmptyState')).toHaveLength(1);
     expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(0);
@@ -144,6 +178,37 @@ test.each([undefined, 'other'])('Saved/default Compare ignores lingering Rates a
     expect(JSON.stringify(mockScenario)).toBe(savedScenario);
   } finally {
     act(() => { tree.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });
+    installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));
+  }
+});
+
+test('rates-comparison origin preserves cold-launch default mortgage assumptions across Compare', () => {
+  const previous = captureRatesSession();
+  const products = ['a', 'b'].map(id => ({ ...product, productId: id, productKey: id, name: id, programmeIds: [id] }));
+  const programmes = products.map((item, index) => {
+    const p = programme({ productId: item.productId, programmeId: item.productId, offerId: item.productId, sourceBindings: [], conditions: [
+      { conditionId: 'lvr', field: 'lvr', operator: 'bounds', maximum: '0.8', evidenceIds: [] },
+      { conditionId: 'purpose', field: 'purpose', operator: 'eq', value: 'OWNER_OCCUPIED', evidenceIds: [] },
+      { conditionId: 'repayment', field: 'repayment', operator: 'eq', value: 'PRINCIPAL_AND_INTEREST', evidenceIds: [] },
+    ] });
+    return { ...p, freshness: { ...p.freshness, lastSuccessAt: new Date().toISOString() }, components: [{ ...p.components[0], value: index ? '0.06' : '0.05', scopeId: item.productId }] };
+  });
+  mockCatalogue = { ...catalogue(programmes, products, []), loadAll: async () => undefined };
+  mockState = { core: core([]), manifest: null, prefs: DEFAULT_PREFS, details: { products: {} }, ensureDetails: jest.fn() };
+  mockKeys = JSON.stringify(products.map(item => publicOfferSelectionToken(item.productKey, item.productId)));
+  installMandatoryEligibility(selectMandatoryEligibility(mockState.core, DEFAULT_PREFS.profileFilters, null));
+  clearMortgageComparison();
+  updateRatesSection('Mortgage', { filters: EMPTY_FILTERS }, true);
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<Compare />) as Tree; });
+  try {
+    const evidence = tree.root.findAllByType('PublicRateEvidence');
+    expect(evidence).toHaveLength(2);
+    expect(evidence.every(node => node.props.scenario.lvr === '0.8'
+      && node.props.scenario.purpose === 'OWNER_OCCUPIED'
+      && node.props.scenario.repayment === 'PRINCIPAL_AND_INTEREST')).toBe(true);
+  } finally {
+    act(() => { tree.unmount(); restoreRatesSession(previous); });
     installMandatoryEligibility(selectMandatoryEligibility(null, DEFAULT_PREFS.profileFilters, null));
   }
 });

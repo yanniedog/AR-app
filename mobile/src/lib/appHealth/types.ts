@@ -37,6 +37,7 @@ export const APP_HEALTH_CHECK_CODES = {
   RIBBON_RECONCILIATION: 'ribbon-reconciliation',
   COVERAGE: 'coverage-reconciliation',
   CATALOGUE_COVERAGE: 'catalogue-identity-coverage',
+  BANK_RESPONSE_COVERAGE: 'bank-response-coverage',
   QUARANTINE: 'quarantine-impact',
   FRESHNESS: 'freshness-window',
   DETAILS_COMPLETENESS: 'details-completeness',
@@ -67,6 +68,7 @@ export const APP_HEALTH_EXPECTED_CHECK_IDS = [
   APP_HEALTH_CHECK_CODES.RIBBON_RECONCILIATION,
   APP_HEALTH_CHECK_CODES.COVERAGE,
   APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE,
+  APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE,
   APP_HEALTH_CHECK_CODES.QUARANTINE,
   APP_HEALTH_CHECK_CODES.FRESHNESS,
   APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS,
@@ -165,6 +167,9 @@ export interface AppHealthQuarantineObservation {
 }
 
 export interface AppHealthDataSnapshot {
+  bankResponseCoverage?: import('./bankResponseCoverage').BankResponseCoverage | null;
+  /** CLI-only selector scan; does not supply personal profile or historical UI evidence. */
+  catalogueAuditMode?: 'headless_default_preferences';
   historyCoverage?: import('./historyCoverage').HistoryCoverageEvidence | null;
   source: PayloadSource | 'unavailable';
   core: CorePayload | null;
@@ -181,13 +186,13 @@ export interface AppHealthDataSnapshot {
 export type AppHealthDisplayEvidence =
   | {
       role: 'model';
-      sourceCount: number;
-      modelCount: number;
+      sourceCount: number | null;
+      modelCount: number | null;
     }
   | {
       role: 'list';
-      modelCount: number;
-      renderedCount: number;
+      modelCount: number | null;
+      renderedCount: number | null;
     }
   | {
       role: 'visible';
@@ -221,10 +226,10 @@ export type AppHealthDisplayEvidence =
     }
   | {
       role: 'logo';
-      expectedCount: number;
-      decodedCount: number;
-      fallbackCount: number;
-      missingCount: number;
+      expectedCount: number | null;
+      decodedCount: number | null;
+      fallbackCount: number | null;
+      missingCount: number | null;
     };
 
 export type AppHealthDisplayRole = AppHealthDisplayEvidence['role'];
@@ -239,6 +244,8 @@ export interface AppHealthSurfaceContract {
 }
 
 export interface AppHealthSurfaceObservation {
+  /** Adverse completed/required observations survive a later successful visit. */
+  adverseEvidence?: AppHealthDisplayEvidence[];
   surfaceId: string;
   evidence: readonly AppHealthDisplayEvidence[];
   /** Keep each distinct list failure with counts from that same visit. */

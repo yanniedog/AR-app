@@ -153,6 +153,17 @@ describe('store refresh lifecycle', () => {
     });
   });
 
+  it('lazy remote details pass declared bytes and unchanged bounds after cache loss', async () => {
+    const manifest = { ...remoteManifest, files: { ...remoteManifest.files,
+      details: { ...remoteManifest.files.details, bytes: 5102102 } } };
+    useStore.setState({ source: 'remote', manifest, details: null });
+    jest.mocked(payload.downloadDetails).mockRejectedValueOnce(new Error('deliberate transport failure control'));
+    await useStore.getState().ensureDetails({ force: true });
+    expect(payload.downloadDetails).toHaveBeenCalledWith(manifest.files.details.url, manifest.files.details.sha256,
+      { expectedBytes: 5102102, requireExactBytes: !!manifest.payload_revision,
+        maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024 });
+  });
+
   it.each(['master', 'watch'] as const)('rechecks %s opt-out after protected scenario loading during public refresh', async kind => {
     const previous = { ...remoteManifest, public_rate_catalogue: {} } as Manifest;
     const next = { ...previous, files: { ...previous.files, core: { ...previous.files.core, sha256: 'c'.repeat(64) } } };

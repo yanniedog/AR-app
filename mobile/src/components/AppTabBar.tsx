@@ -30,10 +30,12 @@ function TabItem({ route, focused, onPress, labelLines, fontScale }: {
     accessibilityLabel={primaryTabLabel(route)} onPress={onPress} hitSlop={0}
     style={{ flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
     <View style={{ alignItems: 'center', width: '100%', gap: 2 }}>
-      <View style={{ width: 60, height: 30, alignItems: 'center', justifyContent: 'center' }}>
-        <Animated.View pointerEvents="none" style={{ ...StyleSheet.absoluteFillObject, opacity,
+      <View style={{ position: 'relative', width: 60, height: 30, alignItems: 'center', justifyContent: 'center' }}>
+        <Animated.View pointerEvents="none" style={{ ...StyleSheet.absoluteFillObject, zIndex: 0, opacity,
           borderRadius: theme.radius.pill, backgroundColor: theme.colors.primaryMuted }} />
-        <LedgerIcon name={TAB_LEDGER_ICONS[route]} size={23} color={tint} />
+        <View style={{ position: 'relative', zIndex: 1 }}>
+          <LedgerIcon name={TAB_LEDGER_ICONS[route]} size={23} color={tint} />
+        </View>
       </View>
       {/* Recreate native SP metrics after configuration changes; retain the tab target and selection. */}
       <Text key={fontScale} numberOfLines={labelLines} style={{ fontSize: 12, lineHeight: TAB_BAR_LABEL_LINE_HEIGHT,
