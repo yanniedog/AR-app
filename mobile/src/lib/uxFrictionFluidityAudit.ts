@@ -86,6 +86,8 @@ export interface TaskFrictionInput {
   modalInterruptions: number | null;
   observedResponseMs: number | null;
   targetResponseMs: number | null;
+  observedForwardResponseMs?: number | null;
+  targetForwardResponseMs?: number | null;
   observedReturnResponseMs?: number | null;
   targetReturnResponseMs?: number | null;
   comparatorKind?: TaskComparatorKind;
@@ -508,6 +510,16 @@ export function summarizeSeqTaskRatings(
   }));
 }
 
+function scoreResponsePhase(observedMs: unknown, targetMs: unknown): { efficiency: number | null; overrunMs: number | null } {
+  const obs = measuredAuditValue(observedMs);
+  const target = measuredAuditValue(targetMs);
+  if (obs === null || target === null || target <= 0) return { efficiency: null, overrunMs: null };
+  return {
+    efficiency: obs <= target ? 1 : round3(clamp01(target / obs)),
+    overrunMs: Math.max(0, obs - target),
+  };
+}
+
 export function scoreTaskInteractionFriction(input: TaskFrictionInput): TaskFrictionEvaluation {
   const comparatorKind = input.comparatorKind ?? 'product-target';
   const taskSuccess = input.completed === null
@@ -530,26 +542,25 @@ export function scoreTaskInteractionFriction(input: TaskFrictionInput): TaskFric
 
   const obsResponse = measuredAuditValue(input.observedResponseMs);
   const targetResponse = measuredAuditValue(input.targetResponseMs);
-  const forwardEfficiency = obsResponse === null || targetResponse === null || targetResponse <= 0
-    ? null
-    : obsResponse <= targetResponse
-      ? 1
-      : round3(clamp01(targetResponse / obsResponse));
+  const primaryPhase = scoreResponsePhase(obsResponse, targetResponse);
+
+  const hasForwardPhase = input.observedForwardResponseMs !== undefined || input.targetForwardResponseMs !== undefined;
+  const forwardPhase = hasForwardPhase
+    ? scoreResponsePhase(input.observedForwardResponseMs, input.targetForwardResponseMs)
+    : { efficiency: 1, overrunMs: 0 };
 
   const hasReturnExpectation = input.observedReturnResponseMs !== undefined || input.targetReturnResponseMs !== undefined;
   const obsReturn = hasReturnExpectation ? measuredAuditValue(input.observedReturnResponseMs) : null;
   const targetReturn = hasReturnExpectation ? measuredAuditValue(input.targetReturnResponseMs) : null;
-  const returnEfficiency = !hasReturnExpectation
-    ? 1
-    : obsReturn === null || targetReturn === null || targetReturn <= 0
-      ? null
-      : obsReturn <= targetReturn
-        ? 1
-        : round3(clamp01(targetReturn / obsReturn));
+  const returnPhase = hasReturnExpectation
+    ? scoreResponsePhase(obsReturn, targetReturn)
+    : { efficiency: 1, overrunMs: 0 };
 
-  const responseTimeEfficiency = forwardEfficiency === null || returnEfficiency === null
+  const responseTimeEfficiency = primaryPhase.efficiency === null
+    || forwardPhase.efficiency === null
+    || returnPhase.efficiency === null
     ? null
-    : round3(Math.min(forwardEfficiency, returnEfficiency));
+    : round3(Math.min(primaryPhase.efficiency, forwardPhase.efficiency, returnPhase.efficiency));
 
   const waitMs = measuredAuditValue(input.avoidableWaitMs);
   const interruptions = measuredAuditCount(input.modalInterruptions);
@@ -581,16 +592,11 @@ export function scoreTaskInteractionFriction(input: TaskFrictionInput): TaskFric
   const extraActions = minActions !== null && obsActions !== null && repeatedFields !== null && scrollDetours !== null
     ? Math.max(0, obsActions - minActions) + repeatedFields + scrollDetours
     : null;
-  const forwardOverrun = obsResponse !== null && targetResponse !== null
-    ? Math.max(0, obsResponse - targetResponse)
-    : null;
-  const returnOverrun = !hasReturnExpectation
-    ? 0
-    : obsReturn !== null && targetReturn !== null
-      ? Math.max(0, obsReturn - targetReturn)
-      : null;
-  const overrunMs = forwardOverrun !== null && returnOverrun !== null && waitMs !== null
-    ? round1(forwardOverrun + returnOverrun + waitMs)
+  const overrunMs = primaryPhase.overrunMs !== null
+    && forwardPhase.overrunMs !== null
+    && returnPhase.overrunMs !== null
+    && waitMs !== null
+    ? round1(primaryPhase.overrunMs + forwardPhase.overrunMs + returnPhase.overrunMs + waitMs)
     : null;
 
   return {
@@ -640,11 +646,13 @@ function evaluateReportTaskJourney(
         ? false
         : null
     : null;
-  const observedResponseMs = hasAuditActionDurationEvidence(check)
-    ? measuredAuditValue(check.metrics.actionMs) ?? measuredAuditValue(check.metrics.forwardWorkMs)
-    : measuredAuditValue(check.metrics.forwardWorkMs) ?? measuredAuditValue(check.metrics.forwardMs);
+  const isSemanticAction = hasAuditActionDurationEvidence(check);
+  const actionMs = isSemanticAction ? measuredAuditValue(check.metrics.actionMs) : null;
+  const forwardPhaseMs = measuredAuditValue(check.metrics.forwardWorkMs) ?? measuredAuditValue(check.metrics.forwardMs);
+  const observedResponseMs = isSemanticAction ? actionMs ?? forwardPhaseMs : forwardPhaseMs;
   const targetResponseMs = measuredAuditValue(check.metrics.targetResponseMs)
-    ?? (hasAuditActionDurationEvidence(check) ? 250 : 400);
+    ?? (isSemanticAction ? 250 : 400);
+  const hasSeparateForwardReadiness = isSemanticAction && actionMs !== null && forwardPhaseMs !== null;
 
   const explicitWait = measuredAuditValue(check.metrics.avoidableWaitMs);
   const preWaitMs = measuredAuditValue(check.metrics.preActionWaitMs);
@@ -677,6 +685,12 @@ function evaluateReportTaskJourney(
     modalInterruptions: measuredAuditCount(check.metrics.modalInterruptions),
     observedResponseMs,
     targetResponseMs,
+    ...(hasSeparateForwardReadiness
+      ? {
+        observedForwardResponseMs: forwardPhaseMs,
+        targetForwardResponseMs: measuredAuditValue(check.metrics.targetForwardResponseMs) ?? 400,
+      }
+      : {}),
     ...(hasReturn
       ? {
         observedReturnResponseMs: measuredAuditValue(check.metrics.backMs),

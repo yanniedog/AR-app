@@ -434,6 +434,21 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
       expect.objectContaining({ code: 'ios-hitch-ratio-over-threshold', valueMsPerS: 8, unit: 'ms-per-s' }),
     ]));
 
+    // Semantic action with fast actionMs (100 ms) but slow forwardWorkMs readiness (9,000 ms) must penalize response efficiency
+    const slowReadinessReport = makePerformanceAuditReport('slow-readiness', [
+      makeJourneyCheck('journey-action-readiness', {
+        measurementMode: 'semantic-action',
+        actionMs: 100,
+        forwardWorkMs: 9_000,
+      }, 'fail'),
+    ]);
+    attachCompleteDisplayHealth(slowReadinessReport);
+    const slowReadinessAudit = buildUxFrictionFluidityAudit(slowReadinessReport, undefined, {
+      wcagActChecks: { passed: 4, failed: 0, requiresManualReview: 1, unavailable: 0 },
+    });
+    expect(slowReadinessAudit.pillars.interactionFriction.meanResponseTimeEfficiency).toBeLessThan(0.1);
+    expect(slowReadinessAudit.pillars.interactionFriction.taxonomyTotals.performanceOverrunChecks).toBe(1);
+
     // Duplicate journey IDs withhold interactionFriction and affsScore
     const dupReport = makePerformanceAuditReport('dup-journeys', [
       makeJourneyCheck('journey-dup'),
