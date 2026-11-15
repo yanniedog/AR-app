@@ -2,21 +2,40 @@ import { dayNumber } from '../../lib/productTermsEngine/calendar';
 import { canonical } from '../../lib/productTermsEngine/validation';
 import schemas, { mortgageSchemas, activitySchemas } from './runtimeSchemas';
 const external: Record<string, any> = Object.fromEntries([...Object.values(schemas), ...Object.values(mortgageSchemas), ...Object.values(activitySchemas)].map(schema => [schema.$id, schema]));
-type Schema = Record<string, any>;
+export type Schema = Record<string, any>;
+export type SchemaRefResolver = (ref: string, document: Schema) => { target: Schema; root: Schema } | null;
+
+function resolveMonetaryRef(ref: string, document: Schema): { target: Schema; root: Schema } | null {
+  const [uri, fragment] = ref.split('#');
+  const root = uri ? external[uri] : document;
+  if (!root || fragment && !fragment.startsWith('/')) return null;
+  const target = fragment ? fragment.slice(1).split('/').reduce((o: Schema, key: string) => o?.[key], root) : root;
+  return target ? { target, root } : null;
+}
+
 /** Closed interpreter for checked-in frozen schemas only. No remote schema adoption. */
 export function assertMonetaryWire(value: unknown, kind: keyof typeof schemas) {
   return assertMonetarySchema(value, schemas[kind]);
 }
+
 export function assertMonetarySchema(value: unknown, schema: Schema) {
+  return assertSchemaValid(value, schema, {
+    errorMessage: 'Monetary wire is invalid or unsupported',
+    resolveRef: resolveMonetaryRef,
+  });
+}
+
+export function assertSchemaValid(
+  value: unknown,
+  schema: Schema,
+  options: { errorMessage: string; resolveRef: SchemaRefResolver },
+) {
   let nodes = 0;
   function valid(v: any, s: Schema, document: Schema, depth: number): boolean {
     if (++nodes > 250000 || depth > 128) return false;
     if (s.$ref) {
-      const [uri, fragment] = s.$ref.split('#');
-      const root = uri ? external[uri] : document;
-      if (!root || fragment && !fragment.startsWith('/')) return false;
-      const target = fragment ? fragment.slice(1).split('/').reduce((o: Schema, key: string) => o?.[key], root) : root;
-      return !!target && valid(v, target, root, depth + 1);
+      const resolved = options.resolveRef(s.$ref, document);
+      return !!resolved && valid(v, resolved.target, resolved.root, depth + 1);
     }
     if (s.not && valid(v, s.not, document, depth + 1)) return false;
     if (s.allOf && !s.allOf.every((item: Schema) => valid(v, item, document, depth + 1))) return false;
@@ -51,5 +70,5 @@ export function assertMonetarySchema(value: unknown, schema: Schema) {
     }
     return true;
   }
-  if (!valid(value, schema, schema, 0)) throw new Error('Monetary wire is invalid or unsupported');
+  if (!valid(value, schema, schema, 0)) throw new Error(options.errorMessage);
 }
