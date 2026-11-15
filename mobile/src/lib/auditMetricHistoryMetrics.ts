@@ -86,7 +86,7 @@ export const AUDIT_METRIC_METHODS = {
   affsScore: ['0.40 × interactionFriction + 0.30 × standardsAndAccessibility + 0.30 × fluidityAndResponsiveness', 'run'],
   uxInteractionFrictionScore: ['mean(taskScore)', 'task'],
   uxStandardsAccessibilityScore: ['standardsCompliance × 100', 'surface'],
-  uxFluidityResponsivenessScore: ['weightedFluidityScore × 100', 'run'],
+  uxFluidityResponsivenessScore: ['androidFrameScore ?? cwvComposite ?? iosHitchScore ?? jsRuntimeScore', 'run'],
   collectionPercent: ['Unique expected stored performance checks / planned performance checks × 100', 'check'],
   journeyCoveragePercent: ['Executed journeys / planned journeys × 100', 'journey'],
   healthCoveragePercent: ['Executed health checks / planned health checks × 100', 'health-check'],
