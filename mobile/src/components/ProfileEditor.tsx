@@ -57,7 +57,7 @@ export function ProfileEditor({
         title: g.title,
         key: g.key,
         options: g.key === 'lvrTiers'
-          ? [...PROFILE_LVR_OPTIONS]
+          ? [...PROFILE_LVR_OPTIONS, ...value.lvrTiers.filter(t => !(PROFILE_LVR_OPTIONS as readonly string[]).includes(t))]
           : profileAttributeOptions(core?.sections[g.section].rates ?? [], g.field, []),
       }));
 

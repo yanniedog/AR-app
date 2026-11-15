@@ -191,8 +191,9 @@ export function auditCoreMetricValues(report: PerformanceAuditReport,
 /** Canonical lightweight value derivation shared by storage and full analysis. */
 export function auditMetricValues(report: PerformanceAuditReport,
   completion: ReturnType<typeof buildPerformanceAuditCompletion>,
-  uxAudit: UxFrictionFluidityAudit = buildUxFrictionFluidityAudit(report, completion)): Record<AuditMetric, number | null> {
+  precomputedUxAudit?: UxFrictionFluidityAudit): Record<AuditMetric, number | null> {
   const core = auditCoreMetricValues(report, completion);
+  const uxAudit = precomputedUxAudit ?? buildUxFrictionFluidityAudit(report, completion);
   return {
     ...core,
     affsScore: measuredAuditValue(uxAudit.affsScore),

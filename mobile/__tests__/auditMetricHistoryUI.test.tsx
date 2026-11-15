@@ -111,8 +111,13 @@ test('UX & fluidity tab exposes AFFS score metrics, plots 0-100, and keeps chart
   run.metrics.uxInteractionFrictionScore = 90.0;
   act(() => { tree = TestRenderer.create(<AuditMetricHistoryChart runs={[run]} report={report} />); });
   act(() => tree.root.findByProps({ title: 'UX & fluidity' }).props.onPress());
-  expect(tree.root.findAllByProps({ label: 'Friction & Fluidity Score' })[0].props.value).toBe('84.5 / 100');
+  const affsRows = tree.root.findAllByProps({ label: 'Friction & Fluidity Score' });
+  expect(affsRows).toHaveLength(2);
+  expect(affsRows[0].props.value).toBe('84.5 / 100');
+  expect(affsRows[1].props.value).toBe('Not measured');
   expect(tree.root.findAllByType('Svg')).toHaveLength(1);
+  const rendered = JSON.stringify(tree.toJSON());
+  expect(rendered.indexOf('"type":"Svg"')).toBeLessThan(rendered.indexOf('"label":"Composite basis"'));
   expect(tree.root.findByProps({ label: 'Composite basis' }).props.value).toBe('Proprietary · Non-normative');
   expect(tree.root.findByProps({ label: 'Human usability' }).props.value).toBe('Not measured');
   act(() => tree.root.findByProps({ title: 'Interaction friction' }).props.onPress());
