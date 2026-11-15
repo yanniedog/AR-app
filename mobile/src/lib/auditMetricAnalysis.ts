@@ -414,14 +414,19 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   });
   const surfaceSummary = uxAudit.pillars.standardsAndAccessibility.surfaceContractSummary;
   const wcagSummary = uxAudit.pillars.standardsAndAccessibility.wcagSummary;
-  const standardsEligible = surfaceSummary.applicableChecks + wcagSummary.applicableChecks;
-  const standardsUnavailable = surfaceSummary.unavailable + wcagSummary.unavailable;
+  const standardsObserved = surfaceSummary.passed + surfaceSummary.failed + surfaceSummary.requiresManualReview
+    + wcagSummary.passed + wcagSummary.failed + wcagSummary.requiresManualReview;
+  const standardsMissing = surfaceSummary.unavailable + wcagSummary.unavailable;
+  const standardsEligible = Math.max(
+    surfaceSummary.applicableChecks + wcagSummary.applicableChecks,
+    standardsObserved + standardsMissing,
+  );
   put('uxStandardsAccessibilityScore', [uxRefs[2]], {
     sampleUnit: 'check',
-    sampleSize: standardsEligible,
+    sampleSize: standardsObserved,
     eligibleCount: standardsEligible,
-    observedCount: standardsEligible - standardsUnavailable,
-    missingCount: standardsUnavailable,
+    observedCount: standardsObserved,
+    missingCount: standardsMissing,
   });
   put('uxFluidityResponsivenessScore', [uxRefs[3]], {
     sampleUnit: 'run',
