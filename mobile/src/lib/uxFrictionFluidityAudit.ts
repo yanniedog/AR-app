@@ -409,13 +409,17 @@ function resolveThresholdQualifiedFrozenFrames(input: AndroidFluidityTelemetryIn
   return { qualifiedCount: count, maxFrozenMs };
 }
 
+const measuredSignedAuditValue = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
 export function scoreAndroidNativeFluidity(input: AndroidFluidityTelemetryInput): number | null {
   const deadline = androidFrameDeadlineMs(input.refreshRateHz);
-  const overrun = measuredAuditValue(input.frameOverrunP95Ms);
+  const signedOverrun = measuredSignedAuditValue(input.frameOverrunP95Ms);
   // Refresh-rate-derived frame deadline and P95 frame overrun are required for native frame scoring.
-  if (deadline === null || overrun === null) {
+  if (deadline === null || signedOverrun === null) {
     return null;
   }
+  const overrun = Math.max(0, signedOverrun);
   const parts: number[] = [
     scorePiecewiseThreshold(overrun, deadline * 0.25, deadline) ?? 0,
   ];
@@ -1154,7 +1158,8 @@ export function buildUxFrictionFluidityAudit(
     });
   }
   const androidDeadline = androidFrameDeadlineMs(resolvedOptions?.androidFluidity?.refreshRateHz);
-  const androidOverrun = measuredAuditValue(resolvedOptions?.androidFluidity?.frameOverrunP95Ms);
+  const signedAndroidOverrun = measuredSignedAuditValue(resolvedOptions?.androidFluidity?.frameOverrunP95Ms);
+  const androidOverrun = signedAndroidOverrun !== null ? Math.max(0, signedAndroidOverrun) : null;
   const androidJank = measuredAuditValue(resolvedOptions?.androidFluidity?.jankPercent);
   const androidInputLatency = measuredAuditValue(resolvedOptions?.androidFluidity?.inputLatencyP95Ms);
   const overrunBreached = androidDeadline !== null && androidOverrun !== null && androidOverrun > androidDeadline * 0.25;
@@ -1188,8 +1193,30 @@ export function buildUxFrictionFluidityAudit(
   const rawParticipantCount = measuredAuditCount(resolvedOptions?.humanValidation?.participantCount);
   const validSus = resolvedOptions?.humanValidation?.sus ?? null;
   const validUmuxLite = resolvedOptions?.humanValidation?.umuxLite ?? null;
-  const validSeqTasks = Array.isArray(resolvedOptions?.humanValidation?.seqTasks)
-    ? resolvedOptions!.humanValidation!.seqTasks.filter(task => task && task.n > 0)
+  const validSeqTasks: SeqTaskSummary[] = Array.isArray(resolvedOptions?.humanValidation?.seqTasks)
+    ? resolvedOptions!.humanValidation!.seqTasks.flatMap(task => {
+      const n = measuredAuditCount(task?.n);
+      const meanRating = measuredAuditValue(task?.meanRating);
+      const minRating = measuredAuditValue(task?.minRating);
+      const maxRating = measuredAuditValue(task?.maxRating);
+      if (
+        !task || typeof task.taskId !== 'string' || !task.taskId
+        || n === null || n <= 0
+        || meanRating === null || meanRating < 1 || meanRating > 7
+        || minRating === null || minRating < 1 || minRating > 7
+        || maxRating === null || maxRating < 1 || maxRating > 7
+        || minRating > maxRating
+      ) {
+        return [];
+      }
+      return [{
+        taskId: sanitizeId(task.taskId) ?? 'redacted-task',
+        n,
+        meanRating: round1(meanRating),
+        minRating,
+        maxRating,
+      }];
+    })
     : [];
   const validNasaTlx = measuredAuditValue(resolvedOptions?.humanValidation?.nasaTlxScore);
   const hasInstrumentEvidence = validSus !== null

@@ -285,6 +285,12 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
     // At 120 Hz, deadline = 8.333 ms, goodLimit = 2.083 ms => overrun 1 ms scores 90.4; jank 1% scores 90; input 50 ms scores 90 => mean = 90.1
     expect(smooth120Hz).toBe(90.1);
     expect(frozen120Hz).toBe(60.1);
+    // Negative frameOverrunP95Ms (frames completing before deadline) clamps to 0 overrun
+    expect(scoreAndroidNativeFluidity({
+      refreshRateHz: 60,
+      frameOverrunP95Ms: -7.1,
+      jankPercent: 0,
+    })).toBe(100);
   });
 
   test('SUS, UMUX-Lite and SEQ questionnaires validate inputs and stay separate from automated scores', () => {
@@ -439,5 +445,18 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
     });
     expect(dupAudit.pillars.interactionFriction.score).toBeNull();
     expect(dupAudit.affsScore).toBeNull();
+
+    // SEQ task IDs are sanitized through safeCheckId when exporting
+    const seqAudit = buildUxFrictionFluidityAudit(dupReport, undefined, {
+      safeCheckId: () => null,
+      humanValidation: {
+        status: 'completed',
+        participantCount: 5,
+        seqTasks: [{ taskId: 'private-person@example.invalid', n: 5, meanRating: 6.2, minRating: 5, maxRating: 7 }],
+      },
+    });
+    expect(seqAudit.humanValidation.seqTasks).toEqual([
+      { taskId: 'redacted-task', n: 5, meanRating: 6.2, minRating: 5, maxRating: 7 },
+    ]);
   });
 });
