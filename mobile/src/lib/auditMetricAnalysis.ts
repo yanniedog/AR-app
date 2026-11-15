@@ -413,11 +413,15 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     observedCount: uxAudit.pillars.interactionFriction.completedTaskCount,
   });
   const surfaceSummary = uxAudit.pillars.standardsAndAccessibility.surfaceContractSummary;
+  const wcagSummary = uxAudit.pillars.standardsAndAccessibility.wcagSummary;
+  const standardsEligible = surfaceSummary.applicableChecks + wcagSummary.applicableChecks;
+  const standardsUnavailable = surfaceSummary.unavailable + wcagSummary.unavailable;
   put('uxStandardsAccessibilityScore', [uxRefs[2]], {
-    sampleUnit: 'surface',
-    sampleSize: surfaceSummary.applicableChecks,
-    eligibleCount: surfaceSummary.applicableChecks,
-    observedCount: surfaceSummary.applicableChecks - surfaceSummary.unavailable,
+    sampleUnit: 'check',
+    sampleSize: standardsEligible,
+    eligibleCount: standardsEligible,
+    observedCount: standardsEligible - standardsUnavailable,
+    missingCount: standardsUnavailable,
   });
   put('uxFluidityResponsivenessScore', [uxRefs[3]], {
     sampleUnit: 'run',
