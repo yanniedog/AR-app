@@ -1,5 +1,10 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
-import { buildPerformanceAuditCompletion, hasValidPerformanceAuditHealth } from './performanceAuditCompletion';
+import {
+  buildPerformanceAuditCompletion,
+  buildPlannedStepMetadataMap,
+  hasValidPerformanceAuditHealth,
+  isJustifiedAvailabilitySkip,
+} from './performanceAuditCompletion';
 import { auditMetricValues, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount, measuredAuditValue } from './auditMetricHistoryValues';
 
 export const AFFS_PILLAR_WEIGHTS = Object.freeze({
@@ -704,15 +709,19 @@ function evaluateReportTaskJourney(
   });
 }
 
+function selectRequiredReportJourneys(report: PerformanceAuditReport): AuditCheck[] {
+  const planSteps = buildPlannedStepMetadataMap(report.plan);
+  return report.checks.filter(
+    check => check.kind === 'journey' && !isJustifiedAvailabilitySkip(check, planSteps.get(check.id)?.optional === true),
+  );
+}
+
 export function evaluateReportTaskJourneys(
   report: PerformanceAuditReport,
   completion = buildPerformanceAuditCompletion(report),
   safeCheckId: (value: string) => string | null = id => id,
 ): TaskFrictionEvaluation[] {
-  const journeys = report.checks.filter(
-    check => check.kind === 'journey' && check.status !== 'skipped'
-      && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true,
-  );
+  const journeys = selectRequiredReportJourneys(report);
   const idCounts = new Map<string, number>();
   for (const check of journeys) {
     idCounts.set(check.id, (idCounts.get(check.id) ?? 0) + 1);
@@ -723,6 +732,30 @@ export function evaluateReportTaskJourneys(
       .map(gap => gap.checkId!),
   );
   return journeys.map(check => {
+    const isUnavailable = check.status === 'skipped'
+      || check.metrics.executionAttempted === false
+      || check.metrics.availabilityFailure === true;
+    if (isUnavailable) {
+      return scoreTaskInteractionFriction({
+        taskId: safeCheckId(check.id) ?? 'redacted-task',
+        completed: null,
+        minimumJustifiedActions: null,
+        observedActions: null,
+        errors: null,
+        retries: null,
+        validationFailures: null,
+        backtracks: null,
+        repeatedFields: null,
+        scrollDetours: null,
+        modalInterruptions: null,
+        observedResponseMs: null,
+        targetResponseMs: null,
+        comparatorKind: 'product-target',
+        avoidableWaitMs: null,
+        maxAvoidableWaitBudgetMs: 1_500,
+        probeDefects: defectCheckIds.has(check.id) ? 1 : 0,
+      });
+    }
     const evaluated = evaluateReportTaskJourney(check, defectCheckIds);
     const isDuplicate = (idCounts.get(check.id) ?? 0) > 1;
     return {
@@ -960,10 +993,7 @@ export function buildUxFrictionFluidityAudit(
     : report.uxTelemetry;
   const sanitizeId = resolvedOptions?.safeCheckId ?? ((id: string) => id);
   const values = auditMetricValues(report, completion);
-  const journeys = report.checks.filter(
-    check => check.kind === 'journey' && check.status !== 'skipped'
-      && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true,
-  );
+  const journeys = selectRequiredReportJourneys(report);
   const validCoverage = completion.gaps.invalidCoverageReports === 0 ? report.coverage : undefined;
   const duplicateCoverageIds = Array.isArray(validCoverage?.duplicateStoredCheckIds) ? validCoverage.duplicateStoredCheckIds : [];
   const missingCoverageIds = Array.isArray(validCoverage?.missingPlannedCheckIds) ? validCoverage.missingPlannedCheckIds : [];
@@ -1021,7 +1051,10 @@ export function buildUxFrictionFluidityAudit(
     : null;
 
   let jsRuntimeScore: number | null = null;
-  const allJourneysHaveCallbacks = journeys.length > 0
+  const executedJourneyCount = journeys.filter(
+    check => check.status !== 'skipped' && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true,
+  ).length;
+  const allJourneysHaveCallbacks = executedJourneyCount > 0 && executedJourneyCount === journeys.length
     && journeys.every(check => check.metrics.eventLoopMeasurementAvailable === true && check.metrics.frameMeasurementAvailable === true);
   if (collectionComplete && allJourneysHaveCallbacks && values.jsStallPercent !== null && values.slowFramePercent !== null) {
     const stallScore = Math.max(0, 100 - values.jsStallPercent * 2.5);
@@ -1336,7 +1369,7 @@ export function buildUxFrictionFluidityAudit(
         ? report.appHealth.mode
         : 'unknown',
       representativeTaskCount: evaluatedTasks.length,
-      executedJourneyCount: journeys.length,
+      executedJourneyCount,
       viewportWidth: measuredAuditValue(report.environment.viewportWidth),
       fontScale: measuredAuditValue(report.environment.fontScale),
       platform: typeof report.environment.platform === 'string' ? report.environment.platform : null,

@@ -8,6 +8,7 @@ import {
   buildUxFrictionFluidityAudit,
   calculatePathEfficiency,
   classifyAffsBand,
+  evaluateReportTaskJourneys,
   evaluateTargetSizing,
   scoreAndroidNativeFluidity,
   scoreIosHitchRatio,
@@ -509,5 +510,65 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
     const malformedAudit = buildUxFrictionFluidityAudit(malformedCovReport);
     expect(malformedAudit.affsScore).toBeNull();
     expect(malformedAudit.pillars.fluidityAndResponsiveness.components.jsRuntimeScore).toBeNull();
+
+    // Unjustified skipped (scenario-recovery) or unattempted journeys stay in task evidence as unavailable and withhold scores
+    const recoverySkippedReport = makePerformanceAuditReport('recovery-skip', [
+      makeJourneyCheck('journey-clean'),
+      makeJourneyCheck('journey-recovered-skip', { skipClassification: 'scenario-recovery' }, 'skipped'),
+    ]);
+    attachCompleteDisplayHealth(recoverySkippedReport);
+    const recoverySkippedAudit = buildUxFrictionFluidityAudit(recoverySkippedReport, undefined, {
+      wcagActChecks: { passed: 4, failed: 0, requiresManualReview: 1, unavailable: 0 },
+    });
+    expect(recoverySkippedAudit.pillars.interactionFriction.evaluatedTaskCount).toBe(2);
+    expect(recoverySkippedAudit.pillars.interactionFriction.completedTaskCount).toBe(1);
+    expect(recoverySkippedAudit.evidenceCoverage.representativeTaskCount).toBe(2);
+    expect(recoverySkippedAudit.evidenceCoverage.executedJourneyCount).toBe(1);
+    expect(evaluateReportTaskJourneys(recoverySkippedReport)[1]).toMatchObject({
+      taskId: 'journey-recovered-skip',
+      frictionIndex: null,
+      score: null,
+      components: { taskSuccess: null, pathEfficiency: null, responseTimeEfficiency: null },
+    });
+    expect(recoverySkippedAudit.pillars.interactionFriction.score).toBeNull();
+    expect(recoverySkippedAudit.pillars.interactionFriction.meanPathEfficiency).toBeNull();
+    expect(recoverySkippedAudit.pillars.interactionFriction.meanResponseTimeEfficiency).toBeNull();
+    expect(recoverySkippedAudit.pillars.fluidityAndResponsiveness.components.jsRuntimeScore).toBeNull();
+    expect(recoverySkippedAudit.affsScore).toBeNull();
+
+    const unattemptedReport = makePerformanceAuditReport('unattempted-journey', [
+      makeJourneyCheck('journey-clean'),
+      makeJourneyCheck('journey-unattempted', { executionAttempted: false }),
+    ]);
+    attachCompleteDisplayHealth(unattemptedReport);
+    const unattemptedAudit = buildUxFrictionFluidityAudit(unattemptedReport, undefined, {
+      wcagActChecks: { passed: 4, failed: 0, requiresManualReview: 1, unavailable: 0 },
+    });
+    expect(unattemptedAudit.pillars.interactionFriction.score).toBeNull();
+    expect(unattemptedAudit.pillars.fluidityAndResponsiveness.components.jsRuntimeScore).toBeNull();
+    expect(unattemptedAudit.affsScore).toBeNull();
+
+    // Justified availability skips retain their exclusion so optional terminal availability does not withhold clean journey scores
+    const justifiedSkippedReport = makePerformanceAuditReport('justified-skip', [
+      makeJourneyCheck('journey-clean'),
+      makeJourneyCheck('deep-optional-journey', {
+        skipClassification: 'terminal-availability',
+        availabilityEvidence: 'mounted action terminal-unavailable result',
+      }, 'skipped'),
+    ]);
+    justifiedSkippedReport.plan = {
+      passes: [{
+        pass: 1,
+        steps: [{ id: 'optional-journey', optional: true, expectedSurface: 'optional.surface' }],
+      }],
+    } as unknown as PerformanceAuditReport['plan'];
+    attachCompleteDisplayHealth(justifiedSkippedReport);
+    const justifiedSkippedAudit = buildUxFrictionFluidityAudit(justifiedSkippedReport, undefined, {
+      wcagActChecks: { passed: 4, failed: 0, requiresManualReview: 1, unavailable: 0 },
+    });
+    expect(justifiedSkippedAudit.pillars.interactionFriction.evaluatedTaskCount).toBe(1);
+    expect(justifiedSkippedAudit.pillars.interactionFriction.score).toBe(100);
+    expect(justifiedSkippedAudit.pillars.fluidityAndResponsiveness.components.jsRuntimeScore).toBe(100);
+    expect(justifiedSkippedAudit.affsScore).not.toBeNull();
   });
 });
