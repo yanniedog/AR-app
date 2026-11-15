@@ -147,7 +147,7 @@ import {
 } from '../lib/performanceAuditLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import { appendAuditReturnDiagnostic, captureAuditDiagnostic, scoreAuditTargetProbeEvidence, type AuditDiagnosticStage } from '../lib/performanceAuditDiagnostic';
-import { setPassiveAuditPaused } from '../lib/passiveAudit';
+import { getPreloadedExternalLink, setPassiveAuditPaused } from '../lib/passiveAudit';
 import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAuditFinalization';
 import { awaitPerformanceAuditWork } from '../lib/performanceAuditWork';
 import { buildPerformanceAuditSetupPlans, measurePerformanceAuditSetupStage, PERFORMANCE_AUDIT_SETUP_STAGES, PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from '../lib/performanceAuditSetup';
@@ -3610,48 +3610,73 @@ export function PerformanceAuditRunner() {
         });
         inventoryFailureEvidence = {};
         const plannedLinkCheckIds: string[] = [];
-        const linkDeadline = Date.now() + 90_000;
+        const linkDeadline = Date.now() + PERFORMANCE_AUDIT_STEP_LIMIT_MS;
         let nextLinkIndex = 0;
         if (auditMode === 'live-source' && externalLinks.length > 0) {
+          const batchAbort = new AbortController();
+          const onLinkAbort = () => batchAbort.abort();
+          if (linkAbort.signal.aborted) batchAbort.abort();
+          else linkAbort.signal.addEventListener('abort', onLinkAbort, { once: true });
+          let workerError: unknown = null;
           let unflushed = 0;
           let recordChain = Promise.resolve();
           const enqueueLinkRecord = (check: AuditCheck) => {
             const step = recordChain.then(async () => {
-              await record(check, true);
-              plannedLinkCheckIds.push(check.id);
-              unflushed += 1;
-              if (unflushed >= 24) {
-                unflushed = 0;
-                await flushRecordedChecks();
+              if (workerError) return;
+              try {
+                await record(check, true);
+                plannedLinkCheckIds.push(check.id);
+                unflushed += 1;
+                if (unflushed >= 24) {
+                  unflushed = 0;
+                  await flushRecordedChecks();
+                }
+              } catch (error) {
+                workerError ??= error;
+                batchAbort.abort();
+                throw error;
               }
             });
             recordChain = step.catch(() => {});
             return step;
           };
           const workerCount = Math.min(10, externalLinks.length);
-          await Promise.all(Array.from({ length: workerCount }, async () => {
-            while (nextLinkIndex < externalLinks.length) {
-              await waitWhilePaused(watchdog);
-              assertSessionActive(watchdog);
-              const remaining = linkDeadline - Date.now();
-              if (remaining <= 0) break;
-              const index = nextLinkIndex;
-              nextLinkIndex += 1;
-              const request = externalLinks[index];
-              transportGuard.allowExternalUrls([request]);
-              updatePerformanceAuditProgress(completed, total,
-                `Checking external link ${index + 1} of ${externalLinks.length}`);
-              const check = await runExternalLinkAuditCheck(request, index, {
-                platform: Platform.OS,
-                reachability: true,
-                handler: true,
-                timeoutMs: Math.max(1, Math.min(2_500, remaining)),
-                signal: linkAbort.signal,
-              });
-              await enqueueLinkRecord(check);
+          const workers = Array.from({ length: workerCount }, async () => {
+            try {
+              while (!workerError && !batchAbort.signal.aborted && nextLinkIndex < externalLinks.length) {
+                await waitWhilePaused(watchdog);
+                assertSessionActive(watchdog);
+                if (workerError || batchAbort.signal.aborted) break;
+                const remaining = linkDeadline - Date.now();
+                if (remaining <= 0) break;
+                if (nextLinkIndex >= externalLinks.length) break;
+                const index = nextLinkIndex;
+                nextLinkIndex += 1;
+                const request = externalLinks[index];
+                transportGuard.allowExternalUrls([request]);
+                updatePerformanceAuditProgress(completed, total,
+                  `Checking external link ${index + 1} of ${externalLinks.length}`);
+                const check = await runExternalLinkAuditCheck(request, index, {
+                  platform: Platform.OS,
+                  reachability: true,
+                  handler: true,
+                  timeoutMs: Math.max(1, Math.min(2_500, remaining)),
+                  signal: batchAbort.signal,
+                });
+                await enqueueLinkRecord(check);
+              }
+            } catch (error) {
+              workerError ??= error;
+              batchAbort.abort();
             }
-          }));
-          await recordChain;
+          });
+          try {
+            await Promise.allSettled(workers);
+            await recordChain;
+            if (workerError) throw workerError;
+          } finally {
+            linkAbort.signal.removeEventListener('abort', onLinkAbort);
+          }
         }
         let unverifiedCount = 0;
         for (let index = nextLinkIndex; index < externalLinks.length; index += 1) {
@@ -3667,7 +3692,16 @@ export function PerformanceAuditRunner() {
             await record(check, true);
             plannedLinkCheckIds.push(check.id);
           } else {
-            unverifiedCount += 1;
+            const preloaded = auditMode !== 'live-source' && !linkAbort.signal.aborted ? getPreloadedExternalLink(request) : null;
+            if (preloaded && (preloaded.result.validation.status === 'fail' || preloaded.result.handler.status === 'fail')) {
+              const check = await runExternalLinkAuditCheck(request, index, {
+                platform: Platform.OS, reachability: false, handler: true, timeoutMs: 1, signal: linkAbort.signal,
+              });
+              await record(check, true);
+              plannedLinkCheckIds.push(check.id);
+            } else {
+              unverifiedCount += 1;
+            }
           }
         }
         if (unverifiedCount > 0) {
@@ -3686,10 +3720,7 @@ export function PerformanceAuditRunner() {
               httpReachability: 'unknown',
               browserHandler: 'unknown',
               handlerAttempted: false,
-              handlerResolution: 'not-selected',
-              reason: auditMode === 'live-source'
-                ? 'Remaining valid external destinations were not tested after the link budget expired.'
-                : 'External HTTP reachability is skipped in local audit mode.',
+              handlerResolution: 'not-attempted',
             },
           }, true);
           plannedLinkCheckIds.push('external-link-unverified');

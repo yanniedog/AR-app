@@ -22,7 +22,7 @@ export function useFocusMeasurement(
       // uses actual viewport/cell bounds; focus itself is never visibility proof.
       frame = requestAnimationFrame(() => { frame = null; latest.current(); });
     };
-    const unsubscribes: Array<(() => void) | void> = [];
+    const unsubscribes: (((() => void) | void))[] = [];
     for (let current: FocusableNavigation | undefined = navigation; current; current = current.getParent?.()) {
       unsubscribes.push(current.addListener?.('focus', trigger));
       if (current !== navigation) unsubscribes.push(current.addListener?.('transitionEnd', trigger));

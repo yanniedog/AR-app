@@ -142,6 +142,16 @@ describe('app-health data quality', () => {
       APP_HEALTH_CHECK_CODES.COVERAGE)).toMatchObject({ status: 'warn', metrics: { unaccountedProviders: 1 } });
   });
 
+  it('rejects provider totals where succeeded plus failed exceed attempted despite partials', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.core!.coverage!.providers_attempted = 10;
+    snapshot.core!.coverage!.providers_succeeded = 10;
+    snapshot.core!.coverage!.counts = { providers_failed: 1, providers_partial: 1 };
+    snapshot.core!.coverage!.provider_failures = [{ provider: 'withheld-from-public-report' }];
+    expect(byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.COVERAGE)).toMatchObject({ status: 'fail', metrics: { invalidCounts: true } });
+  });
+
   it('rejects a core payload schema that the app contract does not support', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     Object.assign(snapshot.core!, { schema_version: 99 });

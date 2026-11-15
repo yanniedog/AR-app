@@ -439,7 +439,7 @@ test('aggregate external-link-unverified check counts unverified destinations wi
       httpReachability: 'unknown',
       browserHandler: 'unknown',
       handlerAttempted: false,
-      handlerResolution: 'not-selected',
+      handlerResolution: 'not-attempted',
     },
   };
   expect(buildPerformanceAuditCompletion(report)).toMatchObject({

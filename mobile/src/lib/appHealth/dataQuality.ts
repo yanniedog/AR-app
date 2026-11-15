@@ -703,7 +703,7 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
     failedCount < 0 ||
     !Number.isInteger(partialCount) ||
     partialCount < 0 ||
-    (attempted != null && succeeded != null && succeeded + failedCount > attempted + partialCount);
+    (attempted != null && succeeded != null && succeeded + failedCount > attempted);
   const unaccountedProviders = Math.max(0, attempted - succeeded - failedCount - partialCount);
   // Disclosed producer failures, partials and limitations that reconcile with
   // attempted totals are informational data facts, not app warnings.

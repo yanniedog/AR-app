@@ -786,12 +786,14 @@ export default function RatesWorkspace() {
     }
     listRef.current = list;
   }, []);
+  const focusedRef = useRef(isFocused);
+  focusedRef.current = isFocused;
   const restoreCommittedScroll = useCallback(() => {
     const list = listRef.current, pending = restoration.current;
-    if (!isFocused || !listLoaded.current || !list || pending.scheduled || pending.applied) return;
+    if (!focusedRef.current || !listLoaded.current || !list || pending.scheduled || pending.applied) return;
     pending.scheduled = true;
     requestAnimationFrame(() => {
-      if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) {
+      if (!focusedRef.current || listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) {
         pending.scheduled = false;
         return;
       }
@@ -799,7 +801,7 @@ export default function RatesWorkspace() {
       // Wait for the native scroll to reach a frame before asking for current
       // viewport evidence. A measurement from before that move is insufficient.
       requestAnimationFrame(() => {
-        if (listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) {
+        if (!focusedRef.current || listRef.current !== list || restoration.current !== pending || useRatesSession.getState().section !== pending.section) {
           pending.scheduled = false;
           return;
         }
@@ -808,7 +810,7 @@ export default function RatesWorkspace() {
         list.recomputeViewableItems();
       });
     });
-  }, [isFocused]);
+  }, []);
   useEffect(() => { restoreCommittedScroll(); }, [isFocused, restorationKey, restoreCommittedScroll]);
   const onListCommit = useCallback(() => {
     markListCommit();

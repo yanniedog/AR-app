@@ -53,7 +53,7 @@ function DepositForm({ candidates, context, row }: { candidates: ApprovedSelecti
 }
 export function FixedDepositCalculation({ row }: { row: RateRow }) {
   const manifest = useStore(s => s.manifest), core = useStore(s => s.core), coreIntegrity = useStore(s => s.coreIntegrity);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false), [retry, setRetry] = useState(0);
   const edition = open && manifest ? hashText(canonical(manifest)) : '';
   const identity = open ? `${edition}:${hashText(canonical(row))}` : '';
   const [loaded, setLoaded] = useState<{ identity: string; selections?: ApprovedSelection[]; error?: string } | null>(null);
@@ -63,10 +63,12 @@ export function FixedDepositCalculation({ row }: { row: RateRow }) {
     if (!open) return; let active = true; setLoaded(null);
     void loadExecutableSelections({ manifest, core, coreIntegrity }, row).then(selections => { if (active) setLoaded({ identity, selections: selections.filter(item => item.template.evaluatorVersion === EVALUATOR_VERSION) }); }, () => { if (active) setLoaded({ identity, error: 'The calculation approval could not be verified for this publication.' }); });
     return () => { active = false; };
-  }, [open, identity, manifest, core, coreIntegrity, row]);
+  }, [open, retry, identity, manifest, core, coreIntegrity, row]);
   return <Disclosure title="Maturity return" open={open} onToggle={() => setOpen(!open)}>
     {!selected ? <AppText variant="small">{uiLabel("Checking")}</AppText> : !!selected.selections?.length ?
-      <DepositForm key={identity} candidates={selected.selections} context={{ manifest, core, coreIntegrity }} row={row} /> :
-      <AppText variant="small">{uiLabel(selected.error ? 'Source unverified' : published ? 'Unavailable' : 'Not published')}</AppText>}
+      <DepositForm key={identity} candidates={selected.selections} context={{ manifest, core, coreIntegrity }} row={row} /> : <>
+        <AppText variant="small">{uiLabel(selected.error ? 'Source unverified' : published ? 'Unavailable' : 'Not published')}</AppText>
+        {selected.error ? <Button title="Retry" variant="secondary" onPress={() => setRetry(value => value + 1)} /> : null}
+      </>}
   </Disclosure>;
 }
