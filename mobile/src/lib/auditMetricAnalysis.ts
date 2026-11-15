@@ -417,8 +417,8 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   });
   const surfaceSummary = uxAudit.pillars.standardsAndAccessibility.surfaceContractSummary;
   const wcagSummary = uxAudit.pillars.standardsAndAccessibility.wcagSummary;
-  const standardsObserved = surfaceSummary.passed + surfaceSummary.failed + surfaceSummary.requiresManualReview
-    + wcagSummary.passed + wcagSummary.failed + wcagSummary.requiresManualReview;
+  const standardsObserved = surfaceSummary.passed + surfaceSummary.failed
+    + wcagSummary.passed + wcagSummary.failed;
   const standardsMissing = surfaceSummary.unavailable + wcagSummary.unavailable;
   const standardsEligible = Math.max(
     surfaceSummary.applicableChecks + wcagSummary.applicableChecks,
