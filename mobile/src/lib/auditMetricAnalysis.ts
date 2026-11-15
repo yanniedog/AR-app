@@ -406,11 +406,14 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     eligibleCount: uxAudit.evidenceCoverage.representativeTaskCount,
     observedCount: uxAudit.pillars.interactionFriction.evaluatedTaskCount,
   }, uxAudit.affsScore === null ? ['incomplete-health-collection'] : []);
+  const evaluatedTasks = uxAudit.pillars.interactionFriction.evaluatedTaskCount;
+  const representativeTasks = uxAudit.evidenceCoverage.representativeTaskCount;
   put('uxInteractionFrictionScore', [uxRefs[1]], {
     sampleUnit: 'task',
-    sampleSize: uxAudit.pillars.interactionFriction.evaluatedTaskCount,
-    eligibleCount: uxAudit.evidenceCoverage.representativeTaskCount,
-    observedCount: uxAudit.pillars.interactionFriction.completedTaskCount,
+    sampleSize: evaluatedTasks,
+    eligibleCount: representativeTasks,
+    observedCount: evaluatedTasks,
+    missingCount: Math.max(0, representativeTasks - evaluatedTasks),
   });
   const surfaceSummary = uxAudit.pillars.standardsAndAccessibility.surfaceContractSummary;
   const wcagSummary = uxAudit.pillars.standardsAndAccessibility.wcagSummary;
