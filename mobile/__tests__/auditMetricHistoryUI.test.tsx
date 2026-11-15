@@ -103,3 +103,18 @@ test('check results expose timely task outcomes and never imply measured usabili
   expect(tree.root.findByProps({ label: 'Pixel correctness' }).props.value).toBe('Not measured');
   expect(tree.root.findByProps({ label: 'Denominator' }).props.value).toBe('Not measured');
 });
+
+test('UX & fluidity tab exposes AFFS score metrics, plots 0-100, and keeps chart above detail rows', () => {
+  const report = makePerformanceAuditReport('ux-tab');
+  const run = auditMetricRun(report);
+  run.metrics.affsScore = 84.5;
+  run.metrics.uxInteractionFrictionScore = 90.0;
+  act(() => { tree = TestRenderer.create(<AuditMetricHistoryChart runs={[run]} report={report} />); });
+  act(() => tree.root.findByProps({ title: 'UX & fluidity' }).props.onPress());
+  expect(tree.root.findAllByProps({ label: 'Friction & Fluidity Score' })[0].props.value).toBe('84.5 / 100');
+  expect(tree.root.findAllByType('Svg')).toHaveLength(1);
+  expect(tree.root.findByProps({ label: 'Composite basis' }).props.value).toBe('Proprietary · Non-normative');
+  expect(tree.root.findByProps({ label: 'Human usability' }).props.value).toBe('Not measured');
+  act(() => tree.root.findByProps({ title: 'Interaction friction' }).props.onPress());
+  expect(tree.root.findAllByProps({ label: 'Interaction friction' })[0].props.value).toBe('90.0 / 100');
+});

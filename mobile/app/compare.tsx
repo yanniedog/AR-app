@@ -263,7 +263,7 @@ export default function Compare() {
     { label: uiLabel("Features"), get: (e) => publishedItemCount(detailFor(e)?.features) },
     { label: uiLabel("Constraints"), get: (e) => publishedItemCount(detailFor(e)?.constraints) },
     // Calendar-day formatting: UTC-midnight parsing shows the previous day west of UTC.
-    { label: uiLabel("Last updated"), get: (e) => uiDate(e.row.last_updated?.slice(0,10)||core.run_date) },
+    { label: uiLabel("Last updated"), get: (e) => uiDate(e.row.last_updated?.slice(0, 10) || core.run_date) },
   ];
   const attrRows = commonRows.filter((item) => {
     if (item.label === 'Comparison rate' || item.label === 'Repayment' || item.label === 'Listed LVR') {
@@ -333,250 +333,250 @@ export default function Compare() {
   return (
     <Screen onLayout={() => setLayoutReady(true)}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
-      {compact ? (
-        <>
-          <AppText variant="h3">{uiLabel("Differences")}</AppText>
-          {entries.map((entry, idx) => {
-            const fraction = fractions[idx];
-            const isBest = bestVal !== null && fraction === bestVal;
-            const rankedRateLabel = rankedRateLabelForRow(
-              entry.row,
-              entry.section,
-              depositRankMetric,
-              mortgageRateMetric,
-            );
-            const compactDetailRows = detailRows.filter((row) =>
-              showCompactDetailRow(row.label, rankedRateLabel, differingRows.includes(row)));
-            return (
-              <Card
-                key={`${entry.row.product_key}#${entry.row.rate_index ?? idx}`}
-                variant="outlined"
-                accessibilityLabel={uiJoin(uiProviderName(entry.row),' · ',uiProductName(entry.row),' · ',uiCount(idx+1),' / ',uiCount(entries.length))}
-                style={styles.compactCard}
-              >
-                <Row gap={12} style={styles.compactProductHeader}>
-                  <BankAvatar
-                    provider={entry.row.provider}
-                    size={36}
-                    renderStateId={logoIds[idx]}
-                    onRenderStateChange={logoReadiness.onLogoRenderStateChange}
-                  />
-                  <View style={styles.compactProductTitle}>
-                    <AppText variant="body" weight="700">{uiProductName(entry.row)}</AppText>
-                    <AppText variant="small" color="textMuted">{uiProviderName(entry.row)}</AppText>
-                  </View>
-                  {isBest ? <Badge label={uiLabel(lowerIsBetter ? "Lowest rate" : "Highest rate")} tone={bestTone} /> : null}
-                </Row>
-
-                <View style={styles.compactRateBlock}>
-                  <AppText variant="tiny" color="textFaint">
-                    {rankedRateLabel}
-                  </AppText>
-                  <AppText variant="rateHero" style={{ color: rateColorFor(entry.section) }}>
-                    {fraction === null ? uiLabel("—") : formatRate(fraction)}
-                  </AppText>
-                  {productHistoryAvailable ? (
-                    <ProductRateChangeLine
-                      productKey={entry.row.product_key}
-                      section={entry.section}
-                      compact
+        {compact ? (
+          <>
+            <AppText variant="h3">{uiLabel("Differences")}</AppText>
+            {entries.map((entry, idx) => {
+              const fraction = fractions[idx];
+              const isBest = bestVal !== null && fraction === bestVal;
+              const rankedRateLabel = rankedRateLabelForRow(
+                entry.row,
+                entry.section,
+                depositRankMetric,
+                mortgageRateMetric,
+              );
+              const compactDetailRows = detailRows.filter((row) =>
+                showCompactDetailRow(row.label, rankedRateLabel, differingRows.includes(row)));
+              return (
+                <Card
+                  key={`${entry.row.product_key}#${entry.row.rate_index ?? idx}`}
+                  variant="outlined"
+                  accessibilityLabel={uiJoin(uiProviderName(entry.row), ' · ', uiProductName(entry.row), ' · ', uiCount(idx + 1), ' / ', uiCount(entries.length))}
+                  style={styles.compactCard}
+                >
+                  <Row gap={12} style={styles.compactProductHeader}>
+                    <BankAvatar
+                      provider={entry.row.provider}
+                      size={36}
+                      renderStateId={logoIds[idx]}
+                      onRenderStateChange={logoReadiness.onLogoRenderStateChange}
                     />
-                  ) : null}
-                </View>
+                    <View style={styles.compactProductTitle}>
+                      <AppText variant="body" weight="700">{uiProductName(entry.row)}</AppText>
+                      <AppText variant="small" color="textMuted">{uiProviderName(entry.row)}</AppText>
+                    </View>
+                    {isBest ? <Badge label={uiLabel(lowerIsBetter ? "Lowest rate" : "Highest rate")} tone={bestTone} /> : null}
+                  </Row>
 
-                {compactDetailRows.length ? (
-                  <View style={styles.compactFacts}>
-                    {compactDetailRows.map((row, rowIndex) => (
-                      <View key={row.label}>
-                        {rowIndex > 0 ? <Divider style={styles.compactDivider} /> : null}
-                        <AppText variant="tiny" color="textFaint">{row.label}</AppText>
-                        <AppText
-                          variant="small"
-                          weight="600"
-                          style={row.tabular ? { fontVariant: ['tabular-nums'] } : undefined}
-                        >
-                          {row.get(entry)}
-                        </AppText>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <AppText variant="small" color="textMuted">{uiLabel("No other differences")}</AppText>
-                )}
-              </Card>
-            );
-          })}
-
-          {sharedRows.length ? (
-            <View style={styles.sharedSection}>
-              <AppText variant="h3">{uiLabel("Shared details")}</AppText>
-              <Card variant="outlined" style={styles.sharedCard}>
-                {sharedRows.map((row, idx) => (
-                  <View key={row.label}>
-                    {idx > 0 ? <Divider style={styles.compactDivider} /> : null}
-                    <AppText variant="tiny" color="textFaint">{row.label}</AppText>
-                    <AppText
-                      variant="small"
-                      weight="600"
-                      style={row.tabular ? { fontVariant: ['tabular-nums'] } : undefined}
-                    >
-                      {row.get(entries[0])}
+                  <View style={styles.compactRateBlock}>
+                    <AppText variant="tiny" color="textFaint">
+                      {rankedRateLabel}
                     </AppText>
-                  </View>
-                ))}
-              </Card>
-            </View>
-          ) : null}
-        </>
-      ) : (
-      <View style={[styles.table, { borderColor: theme.colors.border }]}>
-        <View style={styles.bodyRow}>
-          {/* Frozen label column */}
-          <View>
-            <View
-              style={[
-                styles.labelCell,
-                {
-                  width: LABEL_W,
-                  height: HEADER_H,
-                  borderColor: theme.colors.border,
-                  backgroundColor: theme.colors.bg,
-                },
-              ]}
-            />
-             {labelCell(commonRankedRateLabel ?? 'Ranked rate', RATE_ROW_H, '700')}
-             {productHistoryAvailable ? labelCell('Recent move', CHANGE_ROW_H) : null}
-             {detailRows.map((r) => labelCell(r.label, ROW_H))}
-          </View>
-
-          {/* Horizontally scrollable product columns */}
-          <ScrollView
-            ref={horizontalScrollRef}
-            horizontal
-            showsHorizontalScrollIndicator
-            style={styles.scrollArea}
-            contentContainerStyle={{ flexGrow: 1 }}
-          >
-            <View style={{ flexDirection: 'row' }}>
-              {entries.map((e, idx) => {
-                const f = fractions[idx];
-                const isBest = bestVal !== null && f === bestVal;
-                const entryRateColor = rateColorFor(e.section);
-                const entryHighlightBg = isBest ? bestHighlightBg : theme.colors.card;
-                return (
-                  <View
-                    key={`${e.row.product_key}#${e.row.rate_index ?? idx}`}
-                    style={{ width: COL_W }}
-                  >
-                    {/* Product header */}
-                    <View
-                      style={[
-                        styles.headerCell,
-                        {
-                          height: HEADER_H,
-                          borderColor: theme.colors.border,
-                          backgroundColor: theme.colors.card,
-                        },
-                      ]}
-                    >
-                      <BankAvatar
-                        provider={e.row.provider}
-                        size={28}
-                        renderStateId={logoIds[idx]}
-                        onRenderStateChange={logoReadiness.onLogoRenderStateChange}
+                    <AppText variant="rateHero" style={{ color: rateColorFor(entry.section) }}>
+                      {fraction === null ? uiLabel("—") : formatRate(fraction)}
+                    </AppText>
+                    {productHistoryAvailable ? (
+                      <ProductRateChangeLine
+                        productKey={entry.row.product_key}
+                        section={entry.section}
+                        compact
                       />
-                      <AppText variant="tiny" weight="700" numberOfLines={2} style={{ marginTop: 4 }}>
-                        {uiProductName(e.row)}
-                      </AppText>
-                      <AppText variant="tiny" color="textMuted" numberOfLines={1}>
-                        {uiProviderName(e.row)}
+                    ) : null}
+                  </View>
+
+                  {compactDetailRows.length ? (
+                    <View style={styles.compactFacts}>
+                      {compactDetailRows.map((row, rowIndex) => (
+                        <View key={row.label}>
+                          {rowIndex > 0 ? <Divider style={styles.compactDivider} /> : null}
+                          <AppText variant="tiny" color="textFaint">{row.label}</AppText>
+                          <AppText
+                            variant="small"
+                            weight="600"
+                            style={row.tabular ? { fontVariant: ['tabular-nums'] } : undefined}
+                          >
+                            {row.get(entry)}
+                          </AppText>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <AppText variant="small" color="textMuted">{uiLabel("No other differences")}</AppText>
+                  )}
+                </Card>
+              );
+            })}
+
+            {sharedRows.length ? (
+              <View style={styles.sharedSection}>
+                <AppText variant="h3">{uiLabel("Shared details")}</AppText>
+                <Card variant="outlined" style={styles.sharedCard}>
+                  {sharedRows.map((row, idx) => (
+                    <View key={row.label}>
+                      {idx > 0 ? <Divider style={styles.compactDivider} /> : null}
+                      <AppText variant="tiny" color="textFaint">{row.label}</AppText>
+                      <AppText
+                        variant="small"
+                        weight="600"
+                        style={row.tabular ? { fontVariant: ['tabular-nums'] } : undefined}
+                      >
+                        {row.get(entries[0])}
                       </AppText>
                     </View>
+                  ))}
+                </Card>
+              </View>
+            ) : null}
+          </>
+        ) : (
+          <View style={[styles.table, { borderColor: theme.colors.border }]}>
+            <View style={styles.bodyRow}>
+              {/* Frozen label column */}
+              <View>
+                <View
+                  style={[
+                    styles.labelCell,
+                    {
+                      width: LABEL_W,
+                      height: HEADER_H,
+                      borderColor: theme.colors.border,
+                      backgroundColor: theme.colors.bg,
+                    },
+                  ]}
+                />
+                {labelCell(commonRankedRateLabel ?? 'Ranked rate', RATE_ROW_H, '700')}
+                {productHistoryAvailable ? labelCell('Recent move', CHANGE_ROW_H) : null}
+                {detailRows.map((r) => labelCell(r.label, ROW_H))}
+              </View>
 
-                    {/* Rate row */}
-                    {valueCell(
-                      'rate',
-                      RATE_ROW_H,
-                      <View style={styles.rateCell}>
-                        {isBest ? <Badge label={uiLabel(lowerIsBetter ? "Lowest rate" : "Highest rate")} tone={bestTone} /> : null}
-                        <AppText variant="rate" style={{ color: entryRateColor }}>
-                          {f === null ? uiLabel("—") : formatRate(f)}
-                        </AppText>
-                      </View>,
-                      entryHighlightBg,
-                     )}
-
-                     {productHistoryAvailable
-                       ? valueCell(
-                           'best-rate-move',
-                           CHANGE_ROW_H,
-                           <ProductRateChangeLine
-                             productKey={e.row.product_key}
-                             section={e.section}
-                             compact
-                           />,
-                         )
-                       : null}
-
-                     {/* Attribute rows */}
-                    {detailRows.map((r) =>
-                      valueCell(
-                        r.label,
-                        ROW_H,
-                        <AppText
-                          variant="small"
-                          weight="600"
-                          numberOfLines={2}
-                          style={r.tabular ? { fontVariant: ['tabular-nums'] } : undefined}
+              {/* Horizontally scrollable product columns */}
+              <ScrollView
+                ref={horizontalScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator
+                style={styles.scrollArea}
+                contentContainerStyle={{ flexGrow: 1 }}
+              >
+                <View style={{ flexDirection: 'row' }}>
+                  {entries.map((e, idx) => {
+                    const f = fractions[idx];
+                    const isBest = bestVal !== null && f === bestVal;
+                    const entryRateColor = rateColorFor(e.section);
+                    const entryHighlightBg = isBest ? bestHighlightBg : theme.colors.card;
+                    return (
+                      <View
+                        key={`${e.row.product_key}#${e.row.rate_index ?? idx}`}
+                        style={{ width: COL_W }}
+                      >
+                        {/* Product header */}
+                        <View
+                          style={[
+                            styles.headerCell,
+                            {
+                              height: HEADER_H,
+                              borderColor: theme.colors.border,
+                              backgroundColor: theme.colors.card,
+                            },
+                          ]}
                         >
-                          {r.get(e)}
-                        </AppText>,
-                      ),
-                    )}
-                  </View>
-                );
-              })}
+                          <BankAvatar
+                            provider={e.row.provider}
+                            size={28}
+                            renderStateId={logoIds[idx]}
+                            onRenderStateChange={logoReadiness.onLogoRenderStateChange}
+                          />
+                          <AppText variant="tiny" weight="700" numberOfLines={2} style={{ marginTop: 4 }}>
+                            {uiProductName(e.row)}
+                          </AppText>
+                          <AppText variant="tiny" color="textMuted" numberOfLines={1}>
+                            {uiProviderName(e.row)}
+                          </AppText>
+                        </View>
+
+                        {/* Rate row */}
+                        {valueCell(
+                          'rate',
+                          RATE_ROW_H,
+                          <View style={styles.rateCell}>
+                            {isBest ? <Badge label={uiLabel(lowerIsBetter ? "Lowest rate" : "Highest rate")} tone={bestTone} /> : null}
+                            <AppText variant="rate" style={{ color: entryRateColor }}>
+                              {f === null ? uiLabel("—") : formatRate(f)}
+                            </AppText>
+                          </View>,
+                          entryHighlightBg,
+                        )}
+
+                        {productHistoryAvailable
+                          ? valueCell(
+                            'best-rate-move',
+                            CHANGE_ROW_H,
+                            <ProductRateChangeLine
+                              productKey={e.row.product_key}
+                              section={e.section}
+                              compact
+                            />,
+                          )
+                          : null}
+
+                        {/* Attribute rows */}
+                        {detailRows.map((r) =>
+                          valueCell(
+                            r.label,
+                            ROW_H,
+                            <AppText
+                              variant="small"
+                              weight="600"
+                              numberOfLines={2}
+                              style={r.tabular ? { fontVariant: ['tabular-nums'] } : undefined}
+                            >
+                              {r.get(e)}
+                            </AppText>,
+                          ),
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
             </View>
-          </ScrollView>
-        </View>
-      </View>
-      )}
+          </View>
+        )}
 
-      {entries.map((entry,index)=><Card key={`conditions:${entry.row.product_key}#${entry.row.rate_index??index}`} style={{gap:8}}>
-        <AppText weight="700">{uiProductName(entry.row)}</AppText>
-        <SelectedRateConditions row={entry.row} section={entry.section}/>
-      </Card>)}
-      {/* Differences first; calculations and document terms are follow-up detail. */}
-      <CanonicalTermsComparison rows={calculationRows} />
-      {entries.map(entry => <View key={`public:${entry.row.product_key}:${entry.row.public_offer_id ?? entry.row.rate_index}`}>
-        <PublicRateEvidence productKey={entry.row.product_key} row={entry.row} scenario={scenarioFor(entry.section, entry.row)} />
-        <PublicCostComparison section={entry.section} target={entry.row} scenario={scenario} rateScenario={scenarioFor(entry.section, entry.row)} />
-      </View>)}
-      {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : entries.every(entry => entry.section === 'Savings') ? <PortfolioComparison rows={entries} /> : entries.every(entry => entry.section === 'Mortgage') ? <MortgageComparison rows={entries} /> : <PersonalCostComparisonDisclosure />}
+        {entries.map((entry, index) => <Card key={`conditions:${entry.row.product_key}#${entry.row.rate_index ?? index}`} style={{ gap: 8 }}>
+          <AppText weight="700">{uiProductName(entry.row)}</AppText>
+          <SelectedRateConditions row={entry.row} section={entry.section} />
+        </Card>)}
+        {/* Differences first; calculations and document terms are follow-up detail. */}
+        <CanonicalTermsComparison rows={calculationRows} />
+        {entries.map(entry => <View key={`public:${entry.row.product_key}:${entry.row.public_offer_id ?? entry.row.rate_index}`}>
+          <PublicRateEvidence productKey={entry.row.product_key} row={entry.row} scenario={scenarioFor(entry.section, entry.row)} />
+          <PublicCostComparison section={entry.section} target={entry.row} scenario={scenario} rateScenario={scenarioFor(entry.section, entry.row)} />
+        </View>)}
+        {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : entries.every(entry => entry.section === 'Savings') ? <PortfolioComparison rows={entries} /> : entries.every(entry => entry.section === 'Mortgage') ? <MortgageComparison rows={entries} /> : <PersonalCostComparisonDisclosure />}
 
-      <AppText variant="h3">{uiLabel("Published product details")}</AppText>
-      {entries.map((entry, index) => (
-        <ComparisonDisclosures
-          key={`${entry.row.product_key}#${entry.row.rate_index ?? index}`}
-          name={entry.row.product_name}
-          provider={entry.row.provider}
-          productKey={entry.row.product_key}
-          productDetails={detailFor(entry)}
-          loading={!details}
-        />
-      ))}
-      <Divider />
-      <AppText variant="tiny" color="textFaint">
-        {uiJoin(uiCount(entries.length),' ','Products',' · ','Ranked rate',': ',commonRankedRateLabel)}
-      </AppText>
-      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-        <AppText variant="tiny" color="textFaint">{uiLabel("Missing details")}</AppText>
-        <AppText variant="tiny">{uiLabel("Unknown")}</AppText>
-      </Row>
-      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-        <AppText variant="tiny" color="textFaint">{uiLabel("Eligibility / total costs")}</AppText>
-        <AppText variant="tiny">{uiLabel("Unverified")}</AppText>
-      </Row>
+        <AppText variant="h3">{uiLabel("Published product details")}</AppText>
+        {entries.map((entry, index) => (
+          <ComparisonDisclosures
+            key={`${entry.row.product_key}#${entry.row.rate_index ?? index}`}
+            name={entry.row.product_name}
+            provider={entry.row.provider}
+            productKey={entry.row.product_key}
+            productDetails={detailFor(entry)}
+            loading={!details}
+          />
+        ))}
+        <Divider />
+        <AppText variant="tiny" color="textFaint">
+          {uiJoin(uiCount(entries.length), ' ', 'Products', ' · ', 'Ranked rate', ': ', commonRankedRateLabel)}
+        </AppText>
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <AppText variant="tiny" color="textFaint">{uiLabel("Missing details")}</AppText>
+          <AppText variant="tiny">{uiLabel("Unknown")}</AppText>
+        </Row>
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <AppText variant="tiny" color="textFaint">{uiLabel("Eligibility / total costs")}</AppText>
+          <AppText variant="tiny">{uiLabel("Unverified")}</AppText>
+        </Row>
       </ScrollView>
     </Screen>
   );

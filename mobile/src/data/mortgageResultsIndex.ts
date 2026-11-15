@@ -24,7 +24,28 @@ function supported(programme: PublicProgramme): boolean {
     programme.components.every(component => component.conditions.length === 0) &&
     (programme.phases ?? []).every(phase => phase.conditions.length === 0 && fixedFormula(phase.formula));
 }
-interface Entry { programme: PublicProgramme | null; candidate: RateRow; quote: RateRow; generated: boolean; key: string }
+interface Entry {
+  programme: PublicProgramme | null;
+  candidate: RateRow;
+  quote: RateRow;
+  generated: boolean;
+  key: string;
+  index: number;
+  isMandatoryQuote: boolean;
+  isVisible: boolean;
+}
+
+function entryBucketKey(programme: PublicProgramme | null): string {
+  if (!programme) return '*\0*';
+  let purpose = '*';
+  let repayment = '*';
+  for (const c of programme.conditions) {
+    if (c.operator !== 'eq' || typeof c.value !== 'string') continue;
+    if (purpose === '*' && c.field === 'purpose') purpose = c.value;
+    else if (repayment === '*' && c.field === 'repayment') repayment = c.value;
+  }
+  return purpose + '\0' + repayment;
+}
 
 /** Exact fast lane for fixed public quotes with the four Mortgage input
  * predicates, and the already-published fixed rows in legacy core payloads.
@@ -76,7 +97,7 @@ export async function prepareMortgageResultsIndex(options: {
   for (const original of source) {
     if (legacy) {
       candidates.push(original);
-      entries.push({ programme: null, candidate: original, quote: original, generated: false, key: '' });
+      entries.push({ programme: null, candidate: original, quote: original, generated: false, key: '', index: entries.length, isMandatoryQuote: false, isVisible: false });
       if (stale() || sliceExpired() && await pause()) return null;
       continue;
     }
@@ -90,7 +111,7 @@ export async function prepareMortgageResultsIndex(options: {
     if (programme) {
       const resolved = quote(programme);
       if (!resolved) return null; // Cannot prove this quote independently of an actual scenario.
-      entries.push({ programme, candidate: row, quote: rowWithPublicResolution(row, resolved.resolution), generated: false, key: key ?? '' });
+      entries.push({ programme, candidate: row, quote: rowWithPublicResolution(row, resolved.resolution), generated: false, key: key ?? '', index: entries.length, isMandatoryQuote: false, isVisible: false });
     }
     if (stale() || sliceExpired() && await pause()) return null;
   }
@@ -107,7 +128,7 @@ export async function prepareMortgageResultsIndex(options: {
         const view = { ...catalogue, getProgrammes: () => [programme] };
         const row = publicProductOfferRows(product, view, resolved.sample, () => asOf)[0];
         if (!row || boundPublicProgramme(row, catalogue) !== programme) return null;
-        entries.push({ programme, candidate: row, quote: rowWithPublicResolution(row, resolved.resolution), generated: true, key });
+        entries.push({ programme, candidate: row, quote: rowWithPublicResolution(row, resolved.resolution), generated: true, key, index: entries.length, isMandatoryQuote: false, isVisible: false });
       }
       if (stale() || sliceExpired() && await pause()) return null;
     }
@@ -116,6 +137,15 @@ export async function prepareMortgageResultsIndex(options: {
   const eligible = await filterRowsCooperatively(allQuotes, { ...EMPTY_FILTERS, includeNonStandard }, context.details?.products, null, 'Mortgage', { cancelled: stale });
   if (!eligible || stale()) return null;
   const visible = new Set(eligible), mandatoryCandidates = new Set(mandatoryEligibleRows(candidates)), mandatoryQuotes = new Set(mandatoryEligibleRows(allQuotes));
+  const baseMandatoryCandidates = candidates.filter(row => mandatoryCandidates.has(row));
+  const buckets = new Map<string, Entry[]>();
+  for (const entry of entries) {
+    entry.isMandatoryQuote = mandatoryQuotes.has(entry.quote);
+    entry.isVisible = visible.has(entry.quote);
+    const bKey = entryBucketKey(entry.programme);
+    const bucket = buckets.get(bKey);
+    if (bucket) bucket.push(entry); else buckets.set(bKey, [entry]);
+  }
   const scoped = await prepareMortgageComparisonRowsCooperatively(allQuotes, context, { cancelled: stale });
   if (!scoped) return null;
   const orders = new Map<string, RateRow[]>();
@@ -134,27 +164,53 @@ export async function prepareMortgageResultsIndex(options: {
       if (mandatory !== getMandatoryEligibilityRevision() || suitability !== getSuitabilityRevision() || (Date.now() < at || Date.now() >= until) || !scenario.purpose || !scenario.repayment) return null;
       const chosen = new Set<string>(), allowed = new Set<RateRow>(), priced: RateRow[] = [], visibleQuotes: RateRow[] = [];
       const queryAsOf = new Date().toISOString();
-      const currentCandidates = [...candidates], currentMandatoryCandidates = candidates.filter(row => mandatoryCandidates.has(row)), currentMandatoryQuotes: RateRow[] = [];
-      for (const entry of entries) {
+      const currentCandidates = [...candidates], currentMandatoryCandidates = [...baseMandatoryCandidates], currentMandatoryQuotes: RateRow[] = [];
+      const bucketKeys = [
+        scenario.purpose + '\0' + scenario.repayment,
+        scenario.purpose + '\0*',
+        '*\0' + scenario.repayment,
+        '*\0*',
+      ];
+      const activeBuckets: Entry[][] = [];
+      for (const bKey of bucketKeys) {
+        const bucket = buckets.get(bKey);
+        if (bucket) activeBuckets.push(bucket);
+      }
+      const matchedEntries: Entry[] = activeBuckets.length === 1 ? activeBuckets[0] : activeBuckets.flat().sort((a, b) => a.index - b.index);
+      for (const entry of matchedEntries) {
         if (entry.programme && !entry.programme.conditions.every(condition => evaluatePublicCondition(condition, scenario, queryAsOf) === 'met')) continue;
         if (entry.generated && chosen.has(entry.key)) continue;
-        if (entry.generated) { chosen.add(entry.key); currentCandidates.push(entry.candidate); if (mandatoryQuotes.has(entry.quote)) currentMandatoryCandidates.push(entry.candidate); }
-        priced.push(entry.quote); if (mandatoryQuotes.has(entry.quote)) currentMandatoryQuotes.push(entry.quote);
-        if (visible.has(entry.quote)) { visibleQuotes.push(entry.quote); allowed.add(entry.quote); }
+        if (entry.generated) { chosen.add(entry.key); currentCandidates.push(entry.candidate); if (entry.isMandatoryQuote) currentMandatoryCandidates.push(entry.candidate); }
+        priced.push(entry.quote); if (entry.isMandatoryQuote) currentMandatoryQuotes.push(entry.quote);
+        if (entry.isVisible) { visibleQuotes.push(entry.quote); allowed.add(entry.quote); }
       }
       const rawScope = indexedMortgageComparisonRows(priced, inputs, scoped);
       const gatedRows = rawScope.rows.filter(row => mandatoryQuotes.has(row));
       const scope = { ...rawScope, rows: gatedRows, unverified: gatedRows.filter(row => rawScope.unverifiedRows.has(row)).length };
       const scopeSet = new Set(scope.rows);
+      const scopedOrders = new Map<string, RateRow[]>();
+      const filteredCache = new Map<string, RateRow[]>();
       return {
         candidates: currentCandidates, mandatoryCandidates: currentMandatoryCandidates, priced, mandatoryQuotes: currentMandatoryQuotes, visibleQuotes, scope, rawScope,
         filtered(filters: Filters, sort: SortKey, metric: MortgageRateMetric) {
           if (mandatory !== getMandatoryEligibilityRevision() || suitability !== getSuitabilityRevision() || (Date.now() < at || Date.now() >= until)) return null;
           if (filters.query.trim() || filters.accountFeatures.length || filters.eligibilityCriteria.length || (filters.factCriteria?.length ?? 0) || filters.includeNonStandard !== includeNonStandard) return null;
-          const order = orders.get(sort === 'bank' ? 'bank' : sort + ':' + (sort === 'comparison' ? 'comparison' : metric));
+          const orderKey = sort === 'bank' ? 'bank' : sort + ':' + (sort === 'comparison' ? 'comparison' : metric);
+          const order = orders.get(orderKey);
           if (!order) return null;
+          const cacheKey = orderKey + '\0' + JSON.stringify([filters.providers, filters.rateTypes, filters.lvrTiers, filters.repaymentTypes, filters.loanPurposes, filters.depositKinds, filters.interestPayments]);
+          const cached = filteredCache.get(cacheKey);
+          if (cached) return cached;
+          let scopedOrder = scopedOrders.get(orderKey);
+          if (!scopedOrder) {
+            scopedOrder = order.filter(row => allowed.has(row) && scopeSet.has(row));
+            scopedOrders.set(orderKey, scopedOrder);
+          }
           const matches = prepareRowFilter(filters, context.details?.products, null, 'Mortgage');
-          return order.filter(row => allowed.has(row) && scopeSet.has(row) && matches(row));
+          const result = scopedOrder.filter(matches);
+          if (filteredCache.size >= 8) filteredCache.delete(filteredCache.keys().next().value!);
+          filteredCache.set(cacheKey, result);
+          return result;
         },
       };
     },

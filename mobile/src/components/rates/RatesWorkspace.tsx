@@ -168,7 +168,7 @@ export default function RatesWorkspace() {
   const manifest = useStore(state => state.manifest);
   const catalogue = usePublicRateCatalogue(manifest);
   useLayoutEffect(() => {
-    if (!core) return;
+    if (!core || !task.selected.length) return;
     const next = reconcilePublicCompareSelectionTokens(core, catalogue, task.selected);
     if (next.length !== task.selected.length || next.some((token, index) => token !== task.selected[index])) {
       updateRatesSection(section, { selected: next });
@@ -365,11 +365,12 @@ export default function RatesWorkspace() {
   const mortgageSearchActive = section !== 'Mortgage' || availability === 'unlisted' || mortgageCriteriaReady || isDefaultMortgageBrowse;
   const pricingActive = mortgageSearchActive || section === 'Mortgage' && availability === 'listed' && mortgagePricingReady;
   const mortgageIndex = useMortgageResultsIndex(core?.sections.Mortgage.rates ?? EMPTY_RATE_ROWS,
-    catalogue, mortgageContext, task.includeNonStandardOverride ?? includeNonStandard, suitabilityRevision, isFocused);
+    catalogue, mortgageContext, task.includeNonStandardOverride ?? includeNonStandard, suitabilityRevision, isFocused && section === 'Mortgage');
   const indexedScenarioKey = JSON.stringify(sectionScenario), indexedInputsKey = JSON.stringify(effectiveMortgageInputs);
   const indexedPricing = useMemo(() => section === 'Mortgage' && !task.intentError && mortgagePricingReady &&
     pricingMortgageFilters.loanPurposes.length === 1 && pricingMortgageFilters.repaymentTypes.length === 1
-    ? mortgageIndex.index?.select(JSON.parse(indexedScenarioKey), JSON.parse(indexedInputsKey)) ?? null : null,
+    ? mortgageIndex.index?.select(sectionScenario, effectiveMortgageInputs) ?? null : null,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   [section, task.intentError, mortgagePricingReady, pricingMortgageFilters.loanPurposes.length, pricingMortgageFilters.repaymentTypes.length,
     mortgageIndex.index, indexedScenarioKey, indexedInputsKey]);
   const cooperativePricing = useResolvedPublicRankingRows({
@@ -400,12 +401,14 @@ export default function RatesWorkspace() {
       candidateCount: indexedPricing.candidates.length, pricedRowCount: indexedPricing.priced.length },
   } : cooperativePricing;
   const fullPricingCandidates = publicPricing.candidates;
+  const mandatoryActive = hasMandatoryRequirements();
   const discoveryKeys = useMemo(() => {
     void suitabilityRevision;
-    if (!hasMandatoryRequirements()) return new Set(catalogue.products.filter(product => product.section === section).map(product => product.productKey));
+    if (!mandatoryActive) return new Set(catalogue.products.filter(product => product.section === section).map(product => product.productKey));
     if (!isMandatoryEligibilityReady() || !publicPricing.ready) return new Set<string>();
-    return new Set(mandatoryEligibleRows(publicPricing.resolution.rows).map(row => row.product_key));
-  }, [catalogue, section, suitabilityRevision, publicPricing.ready, publicPricing.resolution.rows]);
+    const sourceRows = indexedPricing ? indexedPricing.mandatoryQuotes : mandatoryEligibleRows(publicPricing.resolution.rows);
+    return new Set(sourceRows.map(row => row.product_key));
+  }, [catalogue, section, suitabilityRevision, mandatoryActive, publicPricing.ready, indexedPricing, mandatoryActive ? publicPricing.resolution.rows : null]);
   const resolvedCatalogueRows = publicPricing.resolution.rows;
   // Reuse cooperative candidates for compare selection — never re-expand the
   // full-day catalogue on the render path (that stalled search.data readiness).
@@ -550,7 +553,10 @@ export default function RatesWorkspace() {
     mortgageSearchActive ? details?.products : undefined,
     section, suitabilityRevision, publicPricing.ready && preparedResults.ready,
   );
-  const unverifiedResultCount = useMemo(() => rows.reduce((count, row) => count + (mortgageScope.unverifiedRows.has(row) ? 1 : 0), 0), [rows, mortgageScope.unverifiedRows]);
+  const unverifiedResultCount = useMemo(
+    () => (section !== 'Mortgage' || mortgageScope.unverified === 0 ? 0 : rows.reduce((count, row) => count + (mortgageScope.unverifiedRows.has(row) ? 1 : 0), 0)),
+    [section, rows, mortgageScope.unverified, mortgageScope.unverifiedRows],
+  );
   const catalogueDetails = verifiedCatalogueDetails(core, coreIntegrity, manifest, details);
   // Only the no-listed-rate view and its filter draft read this inventory.
   // Building it scans every rate row and detail product, so listed browsing
@@ -596,19 +602,27 @@ export default function RatesWorkspace() {
   }, [draftFilters, effectiveFilters.includeNonStandard, section]);
 
   const draftResultCount = useCallback(
-    async (draft: Filters, cancelled?: () => boolean) => (
+    async (draft: Filters, cancelled?: () => boolean) => {
       // Suitability rebuilds can keep the same row array; count against the gate the list uses.
-      void suitabilityRevision,
-      (await filterRowsCooperatively(
+      void suitabilityRevision;
+      if (indexedPricing && !path.length && !hierarchyScoped) {
+        const fast = indexedPricing.filtered(
+          { ...draft, includeNonStandard: effectiveFilters.includeNonStandard, query: debouncedQuery },
+          sortKey,
+          mortgageRateMetric,
+        );
+        if (fast) return fast.length;
+      }
+      return (await filterRowsCooperatively(
         mortgageScope.rows,
         { ...draft, query: debouncedQuery },
         details?.products ?? null,
         resultSearchIndex,
         section,
         { cancelled },
-      ))?.length ?? null
-    ),
-    [mortgageScope.rows, debouncedQuery, details?.products, resultSearchIndex, section, suitabilityRevision],
+      ))?.length ?? null;
+    },
+    [indexedPricing, path.length, hierarchyScoped, effectiveFilters.includeNonStandard, sortKey, mortgageRateMetric, mortgageScope.rows, debouncedQuery, details?.products, resultSearchIndex, section, suitabilityRevision],
   );
   const unlistedResultCount = useCallback((draft: Filters, cancelled?: () => boolean) => {
     void suitabilityRevision;
@@ -743,7 +757,7 @@ export default function RatesWorkspace() {
     queryNeedsSearchIndex, resultSearchIndex != null, suitabilityRevision, resultRows.length, pagination.page, pageSize, mortgageInputs]);
   // Selection and disclosure changes need a fresh committed render, but keep
   // the same list and decoded logos while its result identities are unchanged.
-  const listRevision = uiTracker.current.update([listDataRevision, filterOpen, draftFilters, draftAvailability, sortOpen, toolsOpen, selectMode, selected]);
+  const listRevision = uiTracker.current.update([listDataRevision, selectMode, selected]);
   const [emptyCommit, setEmptyCommit] = useState<string | null>(null);
   const listReadiness = useVirtualizedListReadiness(listRevision, pageRows.length);
   const measuredVisibility = useRef(listReadiness.measuredVisibleCount);
@@ -896,7 +910,10 @@ export default function RatesWorkspace() {
   const { isVisible: isAuditTargetVisible, selectionFinished: finishAuditTargetSelection, prepare: prepareAuditTarget } = auditTarget;
   auditViewability.current = auditTarget.onViewableItemsChanged;
   const surfaceTracker = useRef(new OpaquePerformanceAuditRenderRevision());
-  const surfaceRevision = surfaceTracker.current.update([listRevision, auditTarget.cellRevision, auditTarget.viewport]);
+  const surfaceRevision = surfaceTracker.current.update([
+    listRevision, auditTarget.cellRevision, auditTarget.viewport,
+    filterOpen, sortOpen, toolsOpen, sheetEvidence.filter, sheetEvidence.sort, sheetEvidence.tools,
+  ]);
   const selectAuditToken = useCallback((...args: unknown[]) => {
     const token = auditActionString(args, 'selectionToken');
     const row = token ? pageRows.find(row => 'product_key' in row && rowToken(row) === token) : undefined;
@@ -977,12 +994,19 @@ export default function RatesWorkspace() {
   // Logo decode callbacks can churn during mortgage.scope.apply settle; the
   // logos probe is optional, so wait until search.data/list are no longer pending.
   const logoCallbacksActive = physicalVisibility.active && !searchPending && listReadiness.visiblyCommitted;
+  const logoCallbacksActiveRef = useRef(logoCallbacksActive);
+  logoCallbacksActiveRef.current = logoCallbacksActive;
+  const onLogoRenderStateChangeRef = useRef(logoReadiness.onLogoRenderStateChange);
+  onLogoRenderStateChangeRef.current = logoReadiness.onLogoRenderStateChange;
+  const handleLogoRenderStateChange = useCallback((id: string, state: LogoRenderState) => {
+    if (logoCallbacksActiveRef.current) onLogoRenderStateChangeRef.current(id, state);
+  }, []);
   const { refFor: physicalCellRef, measure: measurePhysicalCells } = physicalVisibility;
   const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => <View collapsable={false}
     ref={target === 'Cell' ? physicalCellRef(item) : undefined}
     onLayout={measurePhysicalCells}>{'product_key' in item ? (
     <SearchProductRow row={item} section={section}
-      onLogoRenderStateChange={logoCallbacksActive ? logoReadiness.onLogoRenderStateChange : undefined}
+      onLogoRenderStateChange={handleLogoRenderStateChange}
       quoteOwner={indexedPricing && !searchPending && !retainingPrevious ? mortgageIndex.index : null}
       rateScenario={displayedScenario(item)} comparisonUnverified={section === 'Mortgage' && displayedUnverified.has(item)}
       auditCell={target === 'Cell' && !retainingPrevious} auditRevision={listRevision} onAuditCellCommit={auditTarget.onCellCommit}
@@ -992,7 +1016,7 @@ export default function RatesWorkspace() {
       <AppText variant="body" weight="600">{uiProductName({product_name:item.name??''})}</AppText>
       <AppText variant="small" color="textMuted">{uiJoin(uiProviderName({provider:item.provider??''}),' · ',humanizeEnum(item.productCategory??''))}</AppText>
       <AppText variant="small" color="textMuted">{uiLabel("No listed rate")}</AppText>
-    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, auditTarget.onCellCommit, listRevision, logoCallbacksActive, section, logoReadiness.onLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, displayedUnverified, displayedScenario, retainingPrevious, indexedPricing, searchPending, mortgageIndex.index]);
+    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, auditTarget.onCellCommit, listRevision, section, handleLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, displayedUnverified, displayedScenario, retainingPrevious, indexedPricing, searchPending, mortgageIndex.index]);
   usePerformanceAuditSurface({
     id: 'rates.results',
     work: { ...publicPricing.work, mortgageCriteriaReady, mortgageInputsInvalid, preparingMortgageDefaults,
@@ -1129,7 +1153,7 @@ export default function RatesWorkspace() {
                 complete: publicPricing.resolution.complete,
               } : null} />
               {/* Mount after pricing so catalogue re-expansion cannot stall search.data. */}
-              {publicPricing.ready ? <PublicProductDiscovery eligibleProductKeys={discoveryKeys} section={section} rateScenario={scenarioFor(section)} pricingOrigin="rates-comparison" rows={baseRows} query={debouncedQuery} /> : null}</> : null}
+              {publicPricing.ready ? <PublicProductDiscovery eligibleProductKeys={discoveryKeys} section={section} rateScenario={sectionScenario} pricingOrigin="rates-comparison" rows={baseRows} query={debouncedQuery} /> : null}</> : null}
           </View> : null}
           ListFooterComponent={resultRows.length === 0 ? null : <RatesPagination total={resultRows.length} page={pagination.page} size={pageSize}
             noun={availability === 'listed' ? 'rates' : 'products'} pending={searchPending}
@@ -1244,7 +1268,7 @@ export default function RatesWorkspace() {
         resultNoun={draftAvailability === 'listed' ? 'rates' : 'products'}
         resultCount={draftAvailability === 'listed' ? draftResultCount : unlistedResultCount}
       >
-        {draftAvailability === 'listed' ? <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows}
+        {filterOpen && draftAvailability === 'listed' ? <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows}
           onEdit={() => { setFilterOpen(false); router.push('/profile'); }} /> : null}
         <View style={{ gap: 8 }}><AppText variant="small" weight="700">{uiLabel("Availability")}</AppText>
           <SegmentedControl value={draftAvailability} options={[{ value: 'listed', label: uiLabel("Listed rate") }, { value: 'unlisted', label: uiLabel("No listed rate") }]} onChange={setDraftAvailability} />

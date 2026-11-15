@@ -1,11 +1,12 @@
 import type { PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
-import { AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, LEGACY_AUDIT_METRICS, auditMetricMethodVersion, auditReportMetricMethodVersion, type AuditMetric } from './auditMetricHistoryMetrics';
+import { AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, LEGACY_AUDIT_METRICS, UX_AUDIT_METRICS, auditMetricMethodVersion, auditReportMetricMethodVersion, type AuditMetric } from './auditMetricHistoryMetrics';
 import { auditMetricValues, measuredAuditValue as measured, measuredAuditCount } from './auditMetricHistoryValues';
 export { AUDIT_METRICS, AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_GROUPS, type AuditMetric, type AuditMetricGroup } from './auditMetricHistoryMetrics';
 
 export const AUDIT_HISTORY_LIMIT = 120;
-export const AUDIT_METRIC_HISTORY_VERSION = 3;
+export const AUDIT_METRIC_HISTORY_VERSION = 4;
+const PRE_V4_AUDIT_METRICS = AUDIT_METRICS.filter(metric => !UX_AUDIT_METRICS.includes(metric));
 export interface AuditMetricRun {
   sessionId: string;
   finishedAt: string;
@@ -58,12 +59,16 @@ export function mergeAuditMetricRuns(runs: AuditMetricRun[], additions: AuditMet
 function validMetricValue(metric: AuditMetric, value: unknown): boolean {
   const unit = AUDIT_METRIC_DEFINITIONS[metric].unit;
   return unit === 'count' ? measuredAuditCount(value) !== null
-    : measured(value) !== null && (unit !== 'percent' || (value as number) <= 100);
+    : measured(value) !== null && (unit !== 'percent' && unit !== 'score' || (value as number) <= 100);
 }
 
 export function parseAuditMetricHistory(text: string): AuditMetricRun[] {
   const value = JSON.parse(text);
-  const valid = [1, 2, AUDIT_METRIC_HISTORY_VERSION].includes(value?.schemaVersion) && Array.isArray(value.runs) && value.runs.length <= AUDIT_HISTORY_LIMIT
+  const schemaVersion = value?.schemaVersion;
+  const requiredMetrics = schemaVersion === 1 ? LEGACY_AUDIT_METRICS
+    : schemaVersion === 2 || schemaVersion === 3 ? PRE_V4_AUDIT_METRICS
+    : AUDIT_METRICS;
+  const valid = [1, 2, 3, AUDIT_METRIC_HISTORY_VERSION].includes(schemaVersion) && Array.isArray(value.runs) && value.runs.length <= AUDIT_HISTORY_LIMIT
     && value.runs.every((run: AuditMetricRun) => run && typeof run === 'object'
       && ['sessionId', 'appVersion', 'buildVersion'].every(key => typeof run[key as keyof AuditMetricRun] === 'string')
       && run.sessionId && typeof run.finishedAt === 'string' && Number.isFinite(Date.parse(run.finishedAt))
@@ -71,17 +76,20 @@ export function parseAuditMetricHistory(text: string): AuditMetricRun[] {
       && ['successful', 'failed', 'incomplete', 'warning'].includes(run.outcome)
       && typeof run.collectionComplete === 'boolean' && typeof run.coverageComplete === 'boolean'
       && Number.isSafeInteger(run.executed) && run.executed >= 0 && run.metrics
-      && (value.schemaVersion !== 3 || run.methodVersions && AUDIT_METRICS.every(metric =>
+      && (schemaVersion < 3 || run.methodVersions && requiredMetrics.every(metric =>
         Number.isInteger(run.methodVersions[metric]) && run.methodVersions[metric] >= 1
         && run.methodVersions[metric] <= auditMetricMethodVersion(metric)))
-      && (value.schemaVersion === 1 ? LEGACY_AUDIT_METRICS : AUDIT_METRICS).every(metric =>
+      && requiredMetrics.every(metric =>
         run.metrics[metric] === null || validMetricValue(metric, run.metrics[metric])));
   if (!valid) throw new Error('Invalid audit metric history');
   return mergeAuditMetricRuns([], value.runs.map((run: AuditMetricRun) => ({ ...run,
     methodVersions: Object.fromEntries(AUDIT_METRICS.map(metric => [metric,
-      value.schemaVersion < 3 ? 1 : run.methodVersions[metric]])) as AuditMetricRun['methodVersions'],
+      schemaVersion < 3 || (schemaVersion < 4 && UX_AUDIT_METRICS.includes(metric))
+        ? 1 : run.methodVersions[metric]])) as AuditMetricRun['methodVersions'],
     metrics: Object.fromEntries(AUDIT_METRICS.map(metric => [metric,
-      value.schemaVersion === 1 && !LEGACY_AUDIT_METRICS.includes(metric) ? null : run.metrics[metric],
+      (schemaVersion === 1 && !LEGACY_AUDIT_METRICS.includes(metric))
+      || (schemaVersion < 4 && UX_AUDIT_METRICS.includes(metric))
+        ? null : run.metrics[metric],
     ])) as Record<AuditMetric, number | null>,
   })));
 }
@@ -90,7 +98,8 @@ export function parseAuditMetricHistory(text: string): AuditMetricRun[] {
 export function auditMetricPlot(runs: AuditMetricRun[], metric: AuditMetric) {
   const start = runs.length ? Date.parse(runs[0].finishedAt) : 0;
   const end = runs.length ? Date.parse(runs[runs.length - 1].finishedAt) : start;
-  const ceiling = AUDIT_METRIC_DEFINITIONS[metric].unit === 'percent' ? 100 : Math.max(1, ...runs.map(run => run.metrics[metric] ?? 0));
+  const unit = AUDIT_METRIC_DEFINITIONS[metric].unit;
+  const ceiling = unit === 'percent' || unit === 'score' ? 100 : Math.max(1, ...runs.map(run => run.metrics[metric] ?? 0));
   const points = runs.map(run => {
     const value = run.metrics[metric];
     return value == null ? null : {

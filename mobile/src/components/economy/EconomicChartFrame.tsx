@@ -101,6 +101,7 @@ export function EconomicChartFrame({
 }: EconomicChartFrameProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
+  const [svgLayoutMeasured, setSvgLayoutMeasured] = useState(false);
   const allPoints = useMemo(
     () => series.flatMap((item) => item.points.map((point) => ({ ...point, seriesId: item.id }))),
     [series],
@@ -113,6 +114,11 @@ export function EconomicChartFrame({
     }
     return [...values].sort();
   }, [allPoints, holdDates, holdSeriesId, series]);
+  const dateSet = useMemo(() => new Set(dates), [dates]);
+  const holdSeries = useMemo(
+    () => (holdSeriesId ? series.find((item) => item.id === holdSeriesId) ?? null : null),
+    [holdSeriesId, series],
+  );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const activeDate = selectedDate && dates.includes(selectedDate)
     ? selectedDate
@@ -148,16 +154,10 @@ export function EconomicChartFrame({
   const revision = `${series.map((item) => `${item.id}:${item.points.at(-1)?.date ?? ''}:${item.points.length}`).join('|')}:${holdDates?.at(-1) ?? ''}`;
   useEffect(() => setSelectedDate(null), [revision]);
 
-  if (!allPoints.length) {
-    return <AppText key={auditRevision ?? revision} variant="small" color="textMuted" onLayout={(event) => {
-      onGraphicReady?.({ revision: auditRevision ?? revision, expectedCount: 0, pointCount: 0,
-        accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
-    }}>{uiLabel("No observations")}</AppText>;
-  }
   const values = allPoints.map((point) => point.value);
   if (targetBand) values.push(...targetBand);
-  const rawMin = Math.min(...values);
-  const rawMax = Math.max(...values);
+  const rawMin = values.length ? Math.min(...values) : 0;
+  const rawMax = values.length ? Math.max(...values) : 1;
   const padding = Math.max(0.12, (rawMax - rawMin) * 0.12);
   const min = rawMin - padding;
   const max = rawMax + padding;
@@ -172,6 +172,34 @@ export function EconomicChartFrame({
   }));
   const selectedText = uiJoin(...selectedValues.filter(item => item.point).map(item =>
     uiJoin(item.label, ' · ', uiChartPercent(item.point!.value), ' · ', uiDate(item.point!.date), ' · ')));
+  const effectiveRevision = auditRevision ?? revision;
+  const finitePointCount = useMemo(
+    () =>
+      Number.isFinite(min) && Number.isFinite(max)
+        ? allPoints.filter((point) => hasFiniteChartDate(point.date) && Number.isFinite(point.value)).length
+        : 0,
+    [allPoints, max, min],
+  );
+  const accessibleSummary = selectedText.trim().length > 0;
+
+  useEffect(() => {
+    if (!allPoints.length || width <= 0 || !svgLayoutMeasured) return;
+    onGraphicReady?.({
+      revision: effectiveRevision,
+      expectedCount: allPoints.length,
+      pointCount: finitePointCount,
+      accessibleSummary,
+      layoutMeasured: true,
+      emptyStateRendered: false,
+    });
+  }, [accessibleSummary, allPoints.length, effectiveRevision, finitePointCount, onGraphicReady, svgLayoutMeasured, width]);
+
+  if (!allPoints.length) {
+    return <AppText key={effectiveRevision} variant="small" color="textMuted" onLayout={(event) => {
+      onGraphicReady?.({ revision: effectiveRevision, expectedCount: 0, pointCount: 0,
+        accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+    }}>{uiLabel("No observations")}</AppText>;
+  }
 
   const onAccessibilityAction = (event: { nativeEvent: { actionName: string } }) => {
     if (event.nativeEvent.actionName === 'increment') {
@@ -209,14 +237,10 @@ export function EconomicChartFrame({
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg key={auditRevision ?? revision} width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
-            onLayout={(event) => onGraphicReady?.({
-              revision: auditRevision ?? revision, expectedCount: allPoints.length,
-              pointCount: Number.isFinite(min) && Number.isFinite(max)
-                ? allPoints.filter((point) => hasFiniteChartDate(point.date) && Number.isFinite(point.value)).length : 0,
-              accessibleSummary: selectedText.trim().length > 0,
-              layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: false,
-            })}>
+          <Svg width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
+            onLayout={(event) => {
+              if (hasPositiveChartLayout(event)) setSvgLayoutMeasured(true);
+            }}>
             {targetBand ? (
               <Rect
                 x={padL}
@@ -270,9 +294,8 @@ export function EconomicChartFrame({
             })}
             {(holdDates ?? []).map((raw) => {
               const date = String(raw || '').slice(0, 10);
-              const holdSeries = holdSeriesId ? series.find((item) => item.id === holdSeriesId) : null;
               const point = holdSeries ? economicPointAtOrBefore(holdSeries.points, date) : null;
-              if (!point || !dates.includes(date)) return null;
+              if (!point || !dateSet.has(date)) return null;
               const cx = xForDate(date);
               const cy = yForValue(point.value);
               return (

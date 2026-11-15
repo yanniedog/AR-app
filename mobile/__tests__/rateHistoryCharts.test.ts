@@ -1,4 +1,4 @@
-import { mergeProductHistoryTimeline, rateHistoryChartModel } from '../src/data/rateHistoryCharts';
+import { hasRateHistoryChartSection, mergeProductHistoryTimeline, rateHistoryChartModel } from '../src/data/rateHistoryCharts';
 import type { BankRateSnapshot, RateSummary } from '../src/data/bankRateOverview';
 
 const dates = ['2026-09-20', '2026-09-21', '2026-09-22'];
@@ -79,4 +79,19 @@ test('product-only history has a usable axis, excludes future stale ledger dates
   const otherSection = rateHistoryChartModel({ [dates[0]]: { sectionTotals: { Mortgage: summary } } }, 'Mortgage');
   expect(mergeProductHistoryTimeline(otherSection, 'Savings', dates, dates[2])!.points).toEqual(dates.map(blank));
   expect(mergeProductHistoryTimeline(null, 'Savings', null)).toBeNull();
+});
+
+test('hasRateHistoryChartSection detects valid provider and market sections without building full series', () => {
+  const snapshots: Record<string, BankRateSnapshot> = {
+    [dates[0]]: { Mortgage: { A: summary, Invalid: { ...summary, count: 0 } }, sectionTotals: { Mortgage: summary } },
+    [dates[1]]: {},
+  };
+  expect(hasRateHistoryChartSection(null, 'Mortgage', 'A')).toBe(false);
+  expect(hasRateHistoryChartSection(snapshots, 'Mortgage', 'A')).toBe(true);
+  expect(hasRateHistoryChartSection(snapshots, 'Mortgage', 'Invalid')).toBe(false);
+  expect(hasRateHistoryChartSection(snapshots, 'Savings', 'A')).toBe(false);
+  expect(hasRateHistoryChartSection(snapshots, 'Mortgage')).toBe(true);
+  expect(hasRateHistoryChartSection(snapshots, 'TD')).toBe(false);
+  expect(rateHistoryChartModel(snapshots, 'Mortgage', 'A')).not.toBeNull();
+  expect(hasRateHistoryChartSection(snapshots, 'Mortgage', 'A')).toBe(true);
 });

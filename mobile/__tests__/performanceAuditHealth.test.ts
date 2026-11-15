@@ -1,5 +1,5 @@
 import type { AuditCheck } from '../src/lib/performanceAudit';
-import { summarizePartialPerformanceAudit } from '../src/lib/performanceAudit';
+import { buildPerformanceAuditJourneys, summarizePartialPerformanceAudit } from '../src/lib/performanceAudit';
 import {
   appHealthDataSnapshot,
   appHealthDisplayObservations,
@@ -10,7 +10,7 @@ import {
   combineAppHealthPerformanceSummary,
 } from '../src/lib/performanceAuditHealth';
 import type { AppState } from '../src/data/storeTypes';
-import type { DeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
+import { buildDeepPerformanceAuditPlan, type DeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
 import { evaluateAppHealthDisplayQuality } from '../src/lib/appHealth/displayQuality';
 import { APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth/types';
 import { makeHealthyDataFixture } from '../__fixtures__/appHealth';
@@ -643,5 +643,16 @@ describe('fatal app-health evidence', () => {
     expect(report.checks.filter(entry => entry.status === 'not-run')).toHaveLength(25);
     expect(report.coverage.complete).toBe(false);
     expect(report.summary.coveragePercent).toBeLessThan(10);
+  });
+
+  it('does not require chart evidence for moves.response-chart in the generated plan', () => {
+    const core = makeHealthyDataFixture().snapshot.core!;
+    const plan = buildDeepPerformanceAuditPlan(core);
+    const contracts = appHealthSurfaceContracts(buildPerformanceAuditJourneys(core), plan);
+    const contract = contracts.find(entry => entry.id === 'moves.response-chart');
+    expect(contract).toBeDefined();
+    expect(contract?.chartRequired).toBe(false);
+    expect(contract?.requiredRoles).not.toContain('chart');
+    expect(contract?.requiredRoles).toContain('list');
   });
 });

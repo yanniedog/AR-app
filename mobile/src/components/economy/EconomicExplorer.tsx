@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
@@ -55,7 +55,8 @@ function signalColor(
   return theme.colors.textMuted;
 }
 
-function MiniSparkline({
+const MiniSparkline = React.memo(MiniSparklineInner);
+function MiniSparklineInner({
   points,
   color,
   targetBand,
@@ -69,63 +70,78 @@ function MiniSparkline({
   const height = 44;
   const padX = 2;
   const padY = 4;
+  const geometry = useMemo(() => {
+    if (points.length < 2 || width <= 0) return null;
+    const values = points.map((point) => point.value);
+    if (targetBand) values.push(...targetBand);
+    const rawMin = Math.min(...values);
+    const rawMax = Math.max(...values);
+    const padding = Math.max(0.05, (rawMax - rawMin) * 0.15);
+    const min = rawMin - padding;
+    const max = rawMax + padding;
+    const span = max - min || 1;
+    const innerW = Math.max(1, width - padX * 2);
+    const innerH = height - padY * 2;
+    const x = (index: number) => padX + (index / (points.length - 1)) * innerW;
+    const y = (value: number) => padY + innerH - ((value - min) / span) * innerH;
+    const path = points
+      .map((point, index) => `${index ? 'L' : 'M'} ${x(index)} ${y(point.value)}`)
+      .join(' ');
+    return {
+      path,
+      innerW,
+      lastX: x(points.length - 1),
+      lastY: y(points[points.length - 1].value),
+      bandTop: targetBand ? y(targetBand[1]) : 0,
+      bandHeight: targetBand ? Math.max(1, y(targetBand[0]) - y(targetBand[1])) : 0,
+    };
+  }, [points, targetBand, width]);
+
   if (points.length < 2) {
     return <View style={{ height, width: '100%' }} />;
   }
-  const values = points.map((point) => point.value);
-  if (targetBand) values.push(...targetBand);
-  const rawMin = Math.min(...values);
-  const rawMax = Math.max(...values);
-  const padding = Math.max(0.05, (rawMax - rawMin) * 0.15);
-  const min = rawMin - padding;
-  const max = rawMax + padding;
-  const span = max - min || 1;
-  const innerW = Math.max(1, width - padX * 2);
-  const innerH = height - padY * 2;
-  const x = (index: number) => padX + (index / (points.length - 1)) * innerW;
-  const y = (value: number) => padY + innerH - ((value - min) / span) * innerH;
-  const path = points
-    .map((point, index) => `${index ? 'L' : 'M'} ${x(index)} ${y(point.value)}`)
-    .join(' ');
   return (
     <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)} style={{ height, width: '100%' }}>
-      {width > 0 ? (
+      {geometry ? (
         <Svg width={width} height={height}>
           {targetBand ? (
             <Rect
               x={padX}
-              y={y(targetBand[1])}
-              width={innerW}
-              height={Math.max(1, y(targetBand[0]) - y(targetBand[1]))}
+              y={geometry.bandTop}
+              width={geometry.innerW}
+              height={geometry.bandHeight}
               fill={theme.colors.rba}
               opacity={0.12}
               rx={2}
             />
           ) : null}
-          <Path d={path} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-          <Circle cx={x(points.length - 1)} cy={y(points[points.length - 1].value)} r={2.5} fill={color} />
+          <Path d={geometry.path} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+          <Circle cx={geometry.lastX} cy={geometry.lastY} r={2.5} fill={color} />
         </Svg>
       ) : null}
     </View>
   );
 }
 
-function MiniTile({
+const MiniTile = React.memo(MiniTileInner);
+function MiniTileInner({
+  lensId,
   title,
   signal,
   valueLabel,
   selected,
-  onPress,
+  onSelect,
   color,
   points,
   targetBand,
   accessibilityLabel,
 }: {
+  lensId: EconomicExplorerLens;
   title: UiCopy;
   signal: UiCopy;
   valueLabel: UiCopy;
   selected: boolean;
-  onPress: () => void;
+  onSelect: (id: EconomicExplorerLens) => void;
   color: string;
   points: EconomicPoint[];
   targetBand?: [number, number];
@@ -134,7 +150,7 @@ function MiniTile({
   const theme = useTheme();
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => onSelect(lensId)}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       accessibilityLabel={accessibilityLabel}
@@ -232,35 +248,56 @@ export function EconomicExplorer({
   );
   const expanded = controlledLens ?? localExpanded;
 
-  const toggle = (id: EconomicExplorerLens) => {
+  const toggle = useCallback((id: EconomicExplorerLens) => {
     if (controlledLens == null) setLocalExpanded(id);
     onLensChange?.(id);
-  };
+  }, [controlledLens, onLensChange]);
   const graphicRevision = `${data.checkedAt || data.fetchedAt}:${expanded}:${window}:${selectionStep ?? 0}`;
 
-  const indicatorTiles = data.indicators.map((indicator) => {
+  const indicatorSparklines = useMemo(
+    () => data.indicators.map((indicator) => indicator.points.slice(-18)),
+    [data.indicators],
+  );
+  const comparisonSparkline = useMemo(
+    () => (comparison ? comparison.inflation.slice(-18) : []),
+    [comparison],
+  );
+  const momentumSparkline = useMemo(
+    () =>
+      momentum
+        ? momentum.rows.map((row, index) => ({
+            date: `p${index}`,
+            value: row.change,
+          }))
+        : [],
+    [momentum],
+  );
+  const policyPoints = useMemo(
+    () => (policy ? [...policy.actual.slice(-24), ...policy.forecast.slice(1)] : []),
+    [policy],
+  );
+
+  const indicatorTiles = data.indicators.map((indicator, index) => {
     const latest = indicator.points[indicator.points.length - 1];
     const color = signalColor(indicator.signal.direction, theme);
     const selected = expanded === indicator.id;
     return (
       <MiniTile
         key={indicator.id}
+        lensId={indicator.id}
         title={uiEconomicIndicator(indicator.id)}
         signal={uiEconomicPressure(indicator.signal.direction)}
         valueLabel={uiChartPercent(latest.value, 1)}
         selected={selected}
-        onPress={() => toggle(indicator.id)}
+        onSelect={toggle}
         color={color}
-        points={indicator.points.slice(-18)}
+        points={indicatorSparklines[index]}
         targetBand={indicator.targetBand}
         accessibilityLabel={uiJoin(uiEconomicIndicator(indicator.id), ' · ', uiChartPercent(latest.value), ' · ', uiEconomicPressure(indicator.signal.direction))}
       />
     );
   });
 
-  const policyPoints = policy
-    ? [...policy.actual.slice(-24), ...policy.forecast.slice(1)]
-    : [];
   const policyLatest = policyPoints.at(-1);
 
   return (
@@ -270,13 +307,14 @@ export function EconomicExplorer({
 
         {comparison ? (
           <MiniTile
+            lensId="compare"
             title="Inflation expectations"
             signal={uiLabel('Comparison')}
             valueLabel={uiChartPercent(comparison.inflation.at(-1)!.value, 1)}
             selected={expanded === 'compare'}
-            onPress={() => toggle('compare')}
+            onSelect={toggle}
             color={theme.colors.warning}
-            points={comparison.inflation.slice(-18)}
+            points={comparisonSparkline}
             targetBand={comparison.targetBand}
             accessibilityLabel="Inflation expectations"
           />
@@ -284,27 +322,26 @@ export function EconomicExplorer({
 
         {momentum ? (
           <MiniTile
+            lensId="momentum"
             title="Momentum"
             signal={uiJoin(uiCount(momentum.rows.length), ' ', 'Signals')}
             valueLabel="Changes"
             selected={expanded === 'momentum'}
-            onPress={() => toggle('momentum')}
+            onSelect={toggle}
             color={theme.colors.rba}
-            points={momentum.rows.map((row, index) => ({
-              date: `p${index}`,
-              value: row.change,
-            }))}
+            points={momentumSparkline}
             accessibilityLabel={uiJoin('Momentum', ' · ', uiCount(momentum.rows.length), ' ', 'Signals')}
           />
         ) : null}
 
         {policy && policyLatest ? (
           <MiniTile
+            lensId="policy"
             title="Policy path"
             signal={uiJoin('Survey', ' · ', uiDate(policy.surveyDate))}
             valueLabel={uiChartPercent(policyLatest.value)}
             selected={expanded === 'policy'}
-            onPress={() => toggle('policy')}
+            onSelect={toggle}
             color={theme.colors.rba}
             points={policyPoints}
             accessibilityLabel={uiJoin('Policy path', ' · ', uiChartPercent(policyLatest.value))}

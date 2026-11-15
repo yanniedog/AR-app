@@ -52,10 +52,10 @@ export default function RbaRates() {
   const epoch = useRef(0);
   const today = sydneyYmd(now);
   const history = useMemo(() => core?.rba.filter((point) => point.date <= today) ?? [], [core?.rba, today]);
-  const calendarCashRate=currentCashRate(calendar,now);
+  const calendarCashRate = currentCashRate(calendar, now);
   const cashRate = calendarCashRate ?? history.at(-1)?.rate ?? null;
-  const lastEffectiveDecision=calendar?.decisions.filter(decision=>(decision.effective??decision.date)<=today).at(-1);
-  const cashRateDate=calendarCashRate!=null ? lastEffectiveDecision?.date:history.at(-1)?.date;
+  const lastEffectiveDecision = calendar?.decisions.filter(decision => (decision.effective ?? decision.date) <= today).at(-1);
+  const cashRateDate = calendarCashRate != null ? lastEffectiveDecision?.date : history.at(-1)?.date;
   const meeting = nextMeeting(calendar, now);
   const coverage = rbaCalendarCoverage(calendar, now);
   const forecasts = useMemo(() => outlook?.economists?.points.filter((point) => point.date.slice(0, 7) >= today.slice(0, 7)) ?? [], [outlook?.economists, today]);
@@ -194,8 +194,8 @@ export default function RbaRates() {
             <LedgerText variant="heading">{coverage.unresolvedMeeting ? uiDate(coverage.unresolvedMeeting.date) : meeting ? uiDate(meeting.date) : uiLabel("Schedule unavailable")}</LedgerText>
           </View>
         </View>
-        <InfoRow label={uiLabel(calendarCashRate!=null?'Decision':'Observed')} value={uiDate(cashRateDate)} />
-        <InfoRow label="Source" value={calendarCashRate!=null?'Decisions':'History'} />
+        <InfoRow label={uiLabel(calendarCashRate != null ? 'Decision' : 'Observed')} value={uiDate(cashRateDate)} />
+        <InfoRow label="Source" value={calendarCashRate != null ? 'Decisions' : 'History'} />
 
         <LedgerSection title="Market expectations">
           <LedgerAction label="View ASX market expectations" onPress={() => requestExternalUrl({ url: ASX_TRACKER_URL, label: 'ASX RBA Rate Tracker', purpose: 'official_market_source' })} />
@@ -205,22 +205,26 @@ export default function RbaRates() {
         <LedgerSection title="Outlook">
           <LedgerAction label={uiLabel(loading ? 'Refreshing outlook' : 'Refresh outlook')} variant="quiet" loading={loading} onPress={() => { void refresh(true); }} style={{ alignSelf: 'flex-start' }} />
           {error ? <LedgerText tone="danger" accessibilityRole="alert">{uiLabel("Refresh failed")}</LedgerText> : null}
-          {outlook?.refreshStatus === 'offline' ? <LedgerText tone="mutedInk">{uiJoin('Cached',' · ','Offline')}</LedgerText> : null}
-          {outlook?.refreshStatus === 'partial' ? <LedgerText tone="mutedInk">{uiJoin('Refresh',' · ','Partial')}</LedgerText> : null}
+          {outlook?.refreshStatus === 'offline' ? <LedgerText tone="mutedInk">{uiJoin('Cached', ' · ', 'Offline')}</LedgerText> : null}
+          {outlook?.refreshStatus === 'partial' ? <LedgerText tone="mutedInk">{uiJoin('Refresh', ' · ', 'Partial')}</LedgerText> : null}
         </LedgerSection>
 
         <LedgerSection title="Economists’ cash-rate forecast">
           {forecasts.length ? <RateOutlookChart key={`forecast:${cashRate}`} label="Economists’ cash-rate forecast" points={forecasts} cashRate={cashRate} selectedIndex={forecastIndex} onSelect={setForecastIndex} onGraphicReady={forecastReady} /> : <LedgerText key={forecastGraphicKey} tone="mutedInk" onLayout={(event) => {
-            if (!loading) forecastReady({ revision: forecastRevision, expectedCount: 0, pointCount: 0,
-              accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+            if (!loading) forecastReady({
+              revision: forecastRevision, expectedCount: 0, pointCount: 0,
+              accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true
+            });
           }}>{loading ? uiLabel("Loading") : uiLabel("Forecast unavailable")}</LedgerText>}
           {outlook?.economists ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA J1', ' ', '·', ' ', 'Survey', ' ', uiDate(outlook.economists.surveyDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.economists.publicationDate), surveyStale ? uiJoin(' ', '·', ' ', 'Older survey') : '')}</LedgerText> : null}
         </LedgerSection>
 
         <LedgerSection title="Bond-market forward rates">
           {bonds?.length ? <RateOutlookChart key={`bonds:${cashRate}`} label="Bond-market forward rates" points={bonds} cashRate={cashRate} tone="info" selectedIndex={bondIndex} onSelect={setBondIndex} onGraphicReady={bondsReady} /> : <LedgerText key={bondGraphicKey} tone="mutedInk" onLayout={(event) => {
-            if (!loading) bondsReady({ revision: bondRevision, expectedCount: 0, pointCount: 0,
-              accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+            if (!loading) bondsReady({
+              revision: bondRevision, expectedCount: 0, pointCount: 0,
+              accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true
+            });
           }}>{loading ? uiLabel("Loading") : uiLabel("Bond data unavailable")}</LedgerText>}
           {outlook?.bondForwards ? <LedgerText variant="caption" tone="mutedInk">{uiJoin('RBA F17', ' ', '·', ' ', 'Observed', ' ', uiDate(outlook.bondForwards.observationDate), ' ', '·', ' ', 'Published', ' ', uiDate(outlook.bondForwards.publicationDate), bondStale ? uiJoin(' ', '·', ' ', 'Older observation') : '')}</LedgerText> : null}
         </LedgerSection>

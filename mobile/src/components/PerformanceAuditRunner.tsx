@@ -1,10 +1,16 @@
 import { closeAuditApplicationJournal } from '../lib/auditApplicationJournal';
-import { captureUserRateScenarioForAudit } from '../hooks/useUserRateScenario';
+import {
+  captureUserRateScenarioForAudit,
+  ensureUserRateScenarioLoaded,
+  restoreUserRateScenarioForAudit,
+} from '../hooks/useUserRateScenario';
 import { AuditDatasetChangedError, auditDatasetFailureMetrics, prepareAuditPublicCore, assertAuditPublicCataloguePinned } from '../lib/performanceAuditDataset';
 import type { PublicCatalogueView } from '../data/publicRateIntegration';
 import { validatePublicRateCapability } from '../data/publicRateWire';
 import { beginPublicRateCatalogueAudit, preparePublicRateCatalogueForAudit, getPublicRateCatalogueSnapshot } from '../data/publicRateCatalogue';
-import { normalizeUserRateScenario } from '../data/userRateScenario';
+import { normalizeUserRateScenario, type UserRateScenario } from '../data/userRateScenario';
+import { buildLifecycleProjection } from '../data/projections';
+import { buildProjectionAuditJourneyScenario } from '../lib/performanceAuditScenario';
 import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
 import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSelection';
 import { isVerifiedRatesPagePreparation } from '../lib/ratesAuditPage';
@@ -3516,18 +3522,41 @@ export function PerformanceAuditRunner() {
               assertSessionActive(watchdog);
               await recoverToAudit();
             }
-            await recordContinuable(
-              label,
-              (watchdog) => runJourney(
-                journey,
-                iteration,
-                () => pathnameRef.current,
-                monitor,
-                watchdog,
-                datasetRevision,
-                navigationAnchor,
-              ),
-            );
+            let previousProjectionScenario: UserRateScenario | null = null;
+            if (journey.id === 'projections') {
+              await ensureUserRateScenarioLoaded();
+              const current = captureUserRateScenarioForAudit();
+              if (current && !buildLifecycleProjection('Mortgage', current).ready) {
+                await restoreUserRateScenarioForAudit(buildProjectionAuditJourneyScenario(current));
+                previousProjectionScenario = current;
+              }
+            }
+            try {
+              await recordContinuable(
+                label,
+                (watchdog) => runJourney(
+                  journey,
+                  iteration,
+                  () => pathnameRef.current,
+                  monitor,
+                  watchdog,
+                  datasetRevision,
+                  navigationAnchor,
+                ),
+              );
+            } finally {
+              if (previousProjectionScenario) {
+                try {
+                  await restoreUserRateScenarioForAudit(previousProjectionScenario);
+                } catch (restoreError) {
+                  // Rollback journal at audit end will also attempt restoration.
+                  debugLog.warn(
+                    PERFORMANCE_AUDIT_LOG_TAG,
+                    `Failed to restore projection journey scenario: ${restoreError instanceof Error ? restoreError.message : String(restoreError)}`,
+                  );
+                }
+              }
+            }
           }
         }
 
