@@ -285,3 +285,24 @@ test('incomplete source windows retain missing-history, missing-baseline and his
   expect(rows.find(row => row.provider === 'History Gap')).toMatchObject({ sourceReason: 'history-gap', displayReason: 'history-gap' });
   expect(rows.find(row => row.provider === 'Missing History')).toMatchObject({ sourceReason: 'missing-history', displayReason: 'missing-history' });
 });
+
+test('source coverage stops at the earliest removed event before a later retained event and later gap', () => {
+  const f = fixture();
+  const source = {
+    ...f.source,
+    run_dates: ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06'],
+    banks: {
+      'Private Bank': {
+        Savings: { median: [0.04, 0.04, 0.045, null, 0.05], best: [0.04, 0.04, 0.045, null, 0.05], count: [1, 1, 1, null, 1] },
+      },
+    },
+    events: [
+      { date: '2026-11-04', provider: 'Private Bank', section: 'Savings' as const, dir: 'hike' as const, moved: 1, total: 2, avg_bps: 25 },
+      { date: '2026-11-06', provider: 'Private Bank', section: 'Savings' as const, dir: 'hike' as const, moved: 1, total: 1, avg_bps: 25 },
+    ],
+  };
+  const projected = { ...source, events: [source.events[1]] };
+  const coverage = bankResponseCoverage(source, projected, f.calendar, f.core)!;
+  expect(coverage.rows.find(row => row.section === 'Savings' && row.decisionDate === '2026-11-03'))
+    .toMatchObject({ sourceReason: 'recorded-move', displayReason: 'filtered-history' });
+});

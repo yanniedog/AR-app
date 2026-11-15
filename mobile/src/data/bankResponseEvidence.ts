@@ -76,7 +76,9 @@ export function createBankResponseEvidenceReader(payload: BankInsightsPayload, s
     const earliestRemoved = removed.get(pair(provider, section))
       ?.filter(date => date >= start && date <= end)
       .sort()[0] ?? null;
-    const sourceEnd = eventDate ?? earliestRemoved ?? end;
+    const sourceEnd = eventDate && earliestRemoved
+      ? (eventDate < earliestRemoved ? eventDate : earliestRemoved)
+      : eventDate ?? earliestRemoved ?? end;
     const sourceTo = Date.parse(`${sourceEnd}T00:00:00Z`);
     if (!sourceSeries) {
       sourceDeficit = 'missing-history';
