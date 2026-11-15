@@ -26,7 +26,7 @@ interface PendingAsset<TResult> {
 
 export interface DetachedHistoryLoaderConfig<TFile extends ManifestFile, TResult> {
   logScope: string;
-  workTitle: string;
+  workTitle: 'Detached historical catalogue' | 'Prepared bank history';
   maxCompressedBytes: number;
   maxDecodedBytes: number;
   hasDescriptor: (manifest: Manifest) => boolean;
