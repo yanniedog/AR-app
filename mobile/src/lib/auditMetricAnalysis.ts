@@ -417,9 +417,15 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   });
   const surfaceSummary = uxAudit.pillars.standardsAndAccessibility.surfaceContractSummary;
   const wcagSummary = uxAudit.pillars.standardsAndAccessibility.wcagSummary;
-  const standardsObserved = surfaceSummary.applicableChecks + wcagSummary.applicableChecks;
-  const standardsMissing = surfaceSummary.unavailable + wcagSummary.unavailable;
-  const standardsEligible = standardsObserved + standardsMissing;
+  const standardsParts = [surfaceSummary, wcagSummary].map(summary => {
+    const eligible = summary.applicableChecks > 0 ? summary.applicableChecks : summary.unavailable;
+    const missing = summary.unavailable;
+    const observed = summary.applicableChecks > 0 ? Math.max(0, summary.applicableChecks - summary.unavailable) : 0;
+    return { eligible, observed, missing };
+  });
+  const standardsObserved = standardsParts[0].observed + standardsParts[1].observed;
+  const standardsMissing = standardsParts[0].missing + standardsParts[1].missing;
+  const standardsEligible = standardsParts[0].eligible + standardsParts[1].eligible;
   put('uxStandardsAccessibilityScore', [uxRefs[2]], {
     sampleUnit: 'check',
     sampleSize: standardsObserved,
@@ -427,9 +433,18 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     observedCount: standardsObserved,
     missingCount: standardsMissing,
   });
-  const fluidityObserved = Object.values(uxAudit.pillars.fluidityAndResponsiveness.components)
-    .filter(score => score !== null).length;
-  const fluidityScored = uxAudit.pillars.fluidityAndResponsiveness.score !== null && fluidityObserved > 0;
+  const fluidity = uxAudit.pillars.fluidityAndResponsiveness;
+  const selectedFluidityComponents = fluidity.telemetryKind === 'android-native-frame-trace'
+    ? [fluidity.components.androidFrameScore]
+    : fluidity.telemetryKind === 'core-web-vitals'
+      ? [fluidity.components.inpScore, fluidity.components.lcpScore, fluidity.components.clsScore]
+      : fluidity.telemetryKind === 'ios-hitch-rate'
+        ? [fluidity.components.iosHitchScore]
+        : fluidity.telemetryKind === 'js-runtime-callback-fallback'
+          ? [fluidity.components.jsRuntimeScore]
+          : [];
+  const fluidityObserved = selectedFluidityComponents.filter(score => score !== null).length;
+  const fluidityScored = fluidity.score !== null && fluidityObserved > 0;
   put('uxFluidityResponsivenessScore', [uxRefs[3]], {
     sampleUnit: 'component',
     sampleSize: fluidityScored ? fluidityObserved : 0,
