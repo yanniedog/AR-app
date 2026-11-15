@@ -418,10 +418,9 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   const surfaceSummary = uxAudit.pillars.standardsAndAccessibility.surfaceContractSummary;
   const wcagSummary = uxAudit.pillars.standardsAndAccessibility.wcagSummary;
   const standardsParts = [surfaceSummary, wcagSummary].map(summary => {
-    const eligible = summary.applicableChecks > 0 ? summary.applicableChecks : summary.unavailable;
+    const observed = Math.max(summary.passed + summary.failed, summary.applicableChecks - summary.unavailable);
     const missing = summary.unavailable;
-    const observed = summary.applicableChecks > 0 ? Math.max(0, summary.applicableChecks - summary.unavailable) : 0;
-    return { eligible, observed, missing };
+    return { eligible: observed + missing, observed, missing };
   });
   const standardsObserved = standardsParts[0].observed + standardsParts[1].observed;
   const standardsMissing = standardsParts[0].missing + standardsParts[1].missing;
@@ -436,11 +435,11 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   const fluidity = uxAudit.pillars.fluidityAndResponsiveness;
   const selectedFluidityComponents = fluidity.telemetryKind === 'android-native-frame-trace'
     ? [fluidity.components.androidFrameScore]
-    : fluidity.telemetryKind === 'core-web-vitals'
+    : fluidity.telemetryKind === 'core-web-vitals-p75'
       ? [fluidity.components.inpScore, fluidity.components.lcpScore, fluidity.components.clsScore]
-      : fluidity.telemetryKind === 'ios-hitch-rate'
+      : fluidity.telemetryKind === 'ios-hitch-ratio'
         ? [fluidity.components.iosHitchScore]
-        : fluidity.telemetryKind === 'js-runtime-callback-fallback'
+        : fluidity.telemetryKind === 'js-runtime-callbacks'
           ? [fluidity.components.jsRuntimeScore]
           : [];
   const fluidityObserved = selectedFluidityComponents.filter(score => score !== null).length;
