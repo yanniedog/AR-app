@@ -193,10 +193,27 @@ export default function RatesWorkspace() {
     if (scoped !== current.filters) updateRatesSection('Mortgage', { filters: scoped }, true);
   }, [mortgageFilters, mortgageTask.filters]);
   // Do not price/filter the full Mortgage catalogue until LVR + purpose + repayment
-  // are set. Empty criteria previously ran an identity pass over every row.
+  // are set, except on cold launch when inputs and facets are both empty (default
+  // Owner-Occupied + Principal & Interest + <=80% LVR catalogue browse).
   const mortgageCriteriaReady = section !== 'Mortgage'
     || mortgageComparisonCriteriaReady(mortgageInputs, mortgageFilters);
   const mortgageInputsInvalid = section === 'Mortgage' && mortgageComparisonInputsInvalid(mortgageInputs);
+  const mortgageInputsEmpty = section !== 'Mortgage' || (
+    !mortgageInputs.loanAmount.trim()
+    && !mortgageInputs.lvr.trim()
+    && !(mortgageInputs.fundsAvailable ?? '').trim()
+    && !(mortgageInputs.propertyValue ?? '').trim()
+  );
+  const mortgageFacetsEmpty = section !== 'Mortgage'
+    || (mortgageFilters.loanPurposes.length === 0 && mortgageFilters.repaymentTypes.length === 0);
+  const isDefaultMortgageBrowse = section === 'Mortgage'
+    && mortgageInputsEmpty
+    && mortgageFacetsEmpty
+    && !mortgageInputsInvalid;
+  const effectiveMortgageInputs = useMemo(
+    () => (isDefaultMortgageBrowse ? { loanAmount: '', lvr: '80' } : mortgageInputs),
+    [isDefaultMortgageBrowse, mortgageInputs],
+  );
   // Prepare the common facet combination while fields are edited, without
   // selecting it for the user or exposing results before actual criteria exist.
   const pricingFacetsKey = JSON.stringify({
@@ -204,7 +221,7 @@ export default function RatesWorkspace() {
     repaymentTypes: mortgageFilters.repaymentTypes.length ? mortgageFilters.repaymentTypes : ['PRINCIPAL_AND_INTEREST'],
   });
   const pricingMortgageFilters = useMemo(() => JSON.parse(pricingFacetsKey) as Pick<Filters, 'loanPurposes' | 'repaymentTypes'>, [pricingFacetsKey]);
-  const mortgagePricingReady = section !== 'Mortgage' || mortgageComparisonCriteriaReady(mortgageInputs, pricingMortgageFilters);
+  const mortgagePricingReady = section !== 'Mortgage' || mortgageComparisonCriteriaReady(effectiveMortgageInputs, pricingMortgageFilters);
   const preparingMortgageDefaults = section === 'Mortgage' && !mortgageCriteriaReady && mortgagePricingReady;
   const scenarioFor = useMemo(() => {
     // Only term fields vary by row in comparison scenarios. Normalize private
@@ -214,13 +231,13 @@ export default function RatesWorkspace() {
       const key = JSON.stringify([selected, row?.term_months, row?.term]);
       let base = bases.get(key);
       if (!base) {
-        base = mortgageComparisonScenario(selected, publicRateScenario(selected, scenario, prefs.profileFilters, row), mortgageInputs, pricingMortgageFilters);
+        base = mortgageComparisonScenario(selected, publicRateScenario(selected, scenario, prefs.profileFilters, row), effectiveMortgageInputs, pricingMortgageFilters);
         if (bases.size >= 64) bases.delete(bases.keys().next().value!);
         bases.set(key, base);
       }
       return publicScenarioForRow(row, catalogue, base);
     };
-  }, [catalogue, scenario, prefs.profileFilters, mortgageInputs, pricingMortgageFilters]);
+  }, [catalogue, scenario, prefs.profileFilters, effectiveMortgageInputs, pricingMortgageFilters]);
   const rowScenario = useCallback((row: RateRow) => scenarioFor(section, row), [scenarioFor, section]);
   const previousMortgageInputs = useRef(mortgageInputs);
   const previousMortgageFacets = useRef({
@@ -360,11 +377,11 @@ export default function RatesWorkspace() {
     [core, details, manifest, coreIntegrity]);
   const sourceRates = core?.sections[section]?.rates ?? EMPTY_RATE_ROWS;
   // Unlisted Mortgage browse has no comparison controls; do not gate it behind LVR/purpose/repayment.
-  const mortgageSearchActive = section !== 'Mortgage' || availability === 'unlisted' || mortgageCriteriaReady;
+  const mortgageSearchActive = section !== 'Mortgage' || availability === 'unlisted' || mortgageCriteriaReady || isDefaultMortgageBrowse;
   const pricingActive = mortgageSearchActive || section === 'Mortgage' && availability === 'listed' && mortgagePricingReady;
   const mortgageIndex = useMortgageResultsIndex(core?.sections.Mortgage.rates ?? EMPTY_RATE_ROWS,
     catalogue, mortgageContext, task.includeNonStandardOverride ?? includeNonStandard, suitabilityRevision, isFocused);
-  const indexedScenarioKey = JSON.stringify(sectionScenario), indexedInputsKey = JSON.stringify(mortgageInputs);
+  const indexedScenarioKey = JSON.stringify(sectionScenario), indexedInputsKey = JSON.stringify(effectiveMortgageInputs);
   const indexedPricing = useMemo(() => section === 'Mortgage' && !task.intentError && mortgagePricingReady &&
     pricingMortgageFilters.loanPurposes.length === 1 && pricingMortgageFilters.repaymentTypes.length === 1
     ? mortgageIndex.index?.select(JSON.parse(indexedScenarioKey), JSON.parse(indexedInputsKey)) ?? null : null,
@@ -380,7 +397,7 @@ export default function RatesWorkspace() {
     section,
     sectionScenario,
     rowScenario,
-    mortgageInputs,
+    mortgageInputs: effectiveMortgageInputs,
     mortgageContext,
     applyMortgageScope: section === 'Mortgage' && mortgagePricingReady,
     focused: isFocused && pricingActive && !indexedPricing,
@@ -410,7 +427,7 @@ export default function RatesWorkspace() {
   const comparisonCore = useMemo((): CorePayload | null => {
     if (!core) return null;
     if (catalogue.status === 'unavailable' || !publicPricing.ready) return core;
-    if (section === 'Mortgage' && !mortgageCriteriaReady) return core;
+    if (section === 'Mortgage' && !mortgageCriteriaReady && !isDefaultMortgageBrowse) return core;
     return {
       ...core,
       sections: {
@@ -421,7 +438,7 @@ export default function RatesWorkspace() {
         },
       },
     };
-  }, [core, catalogue.status, section, fullPricingCandidates, publicPricing.ready, mortgageCriteriaReady]);
+  }, [core, catalogue.status, section, fullPricingCandidates, publicPricing.ready, mortgageCriteriaReady, isDefaultMortgageBrowse]);
   const pricingCandidates = useMemo(() => {
     void suitabilityRevision;
     return task.intentError || !pricingActive ? []
@@ -565,7 +582,7 @@ export default function RatesWorkspace() {
       (!filters.providers.length || filters.providers.includes(item.provider ?? '')));
   }, [debouncedQuery, filters.providers, unlistedEntries]);
   type ResultRow = RateRow | (typeof unlistedEntries)[number];
-  const resultRows: ResultRow[] = availability === 'unlisted' ? unlistedRows : section === 'Mortgage' && !mortgageCriteriaReady ? EMPTY_RATE_ROWS : rows;
+  const resultRows: ResultRow[] = availability === 'unlisted' ? unlistedRows : section === 'Mortgage' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? EMPTY_RATE_ROWS : rows;
   const pageSize = normalizeRatesPageSize(prefs.ratesPageSize);
   const pagination = ratesPageWindow(resultRows.length, task.page, pageSize);
   const pageRows = useMemo(() => resultRows.slice(pagination.offset, pagination.to), [resultRows, pagination.offset, pagination.to]);
@@ -1118,8 +1135,8 @@ export default function RatesWorkspace() {
           data={displayedPageRows}
           ListHeaderComponent={availability === 'listed' ? <View style={{ gap: 8 }}>
             <SavedRequirementsSummary section={section} catalogueRows={summaryCatalogueRows} />
-            {section === 'Mortgage' ? <MortgageComparisonControls catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={effectiveFilters}
-              unverified={mortgageCriteriaReady ? unverifiedResultCount : 0} invalid={mortgageScope.invalid} /> : null}
+            {section === 'Mortgage' ? <MortgageComparisonControls collapsible catalogue={catalogue} rows={core.sections.Mortgage.rates} filters={effectiveFilters}
+              unverified={mortgageCriteriaReady || isDefaultMortgageBrowse ? unverifiedResultCount : 0} invalid={mortgageScope.invalid} /> : null}
             {mortgageSearchActive && catalogue.status !== 'unavailable' ? <><PublicPricingCoverage section={section} rows={pricingCandidates} scenario={scenario} scenarioForRow={rowScenario} compact
               pricingSummary={publicPricing.ready ? {
                 priced: baseRows.length,
@@ -1129,7 +1146,7 @@ export default function RatesWorkspace() {
               {/* Mount after pricing so catalogue re-expansion cannot stall search.data. */}
               {publicPricing.ready ? <PublicProductDiscovery eligibleProductKeys={discoveryKeys} section={section} rateScenario={scenarioFor(section)} pricingOrigin="rates-comparison" rows={baseRows} query={debouncedQuery} /> : null}</> : null}
           </View> : null}
-          ListFooterComponent={<RatesPagination total={resultRows.length} page={pagination.page} size={pageSize}
+          ListFooterComponent={resultRows.length === 0 ? null : <RatesPagination total={resultRows.length} page={pagination.page} size={pageSize}
             noun={availability === 'listed' ? 'rates' : 'products'} pending={searchPending}
             onPage={page => updateRatesSection(section, { page }, true)}
             onSize={size => useStore.getState().setPref('ratesPageSize', size)} />}
@@ -1192,7 +1209,7 @@ export default function RatesWorkspace() {
                 <EmptyState title="Products unavailable"  />
                 <Button title="Retry" variant="secondary" onPress={publicPricing.error ? publicPricing.retry : preparedResults.retry} />
               </View>
-            ) : section === 'Mortgage' && availability === 'listed' && !mortgageCriteriaReady ? (
+            ) : section === 'Mortgage' && availability === 'listed' && !mortgageCriteriaReady && !isDefaultMortgageBrowse ? (
               <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
                 <EmptyState title={mortgageInputsInvalid ? 'Invalid comparison inputs' : 'Inputs incomplete'} />
               </View>
@@ -1252,17 +1269,66 @@ export default function RatesWorkspace() {
         <ScrollView contentContainerStyle={{ padding: 16, gap: 8 }}>
           {(section === 'Mortgage' ? [{ label: uiLabel("Advertised rate"), metric: 'headline' }, { label: uiLabel("Comparison rate"), metric: 'comparison' }]
             : section === 'Savings' ? [{ label: uiLabel("Ongoing rate"), metric: 'base' }, { label: uiLabel("Headline rate"), metric: 'max' }]
-            : [{ label: uiLabel("Advertised rate"), metric: 'base' }] as const).map(option => <Button key={option.metric} title={option.label} variant="ghost" onPress={() => {
-              if (section === 'Mortgage') setPref('mortgageRateMetric', option.metric as 'headline' | 'comparison');
-              else if (section === 'Savings') setPref('depositRankMetric', option.metric as 'base' | 'max');
-              setSortKey('rate'); setSortOpen(false);
-            }} />)}
-          <Button title="Bank A–Z" variant="ghost" onPress={() => { setSortKey('bank'); setSortOpen(false); }} />
-          <Button title="Cancel" variant="ghost" onPress={() => setSortOpen(false)} />
+            : [{ label: uiLabel("Advertised rate"), metric: 'base' }] as const).map(option => {
+              const currentMetric = section === 'Mortgage' ? mortgageRateMetric : depositRankMetric;
+              const isSelected = (sortKey === 'rate' && (section === 'TD' || currentMetric === option.metric))
+                || (section === 'Mortgage' && sortKey === 'comparison' && option.metric === 'comparison');
+              return (
+                <TouchTarget
+                  key={option.metric}
+                  fill
+                  accessibilityRole="button"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ selected: isSelected }}
+                  onPress={() => {
+                    if (section === 'Mortgage') setPref('mortgageRateMetric', option.metric as 'headline' | 'comparison');
+                    else if (section === 'Savings') setPref('depositRankMetric', option.metric as 'base' | 'max');
+                    setSortKey('rate'); setSortOpen(false);
+                  }}
+                  style={{
+                    minHeight: 48,
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    borderRadius: theme.radius?.sm ?? 6,
+                    backgroundColor: isSelected ? theme.colors.primaryMuted : 'transparent',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <AppText variant="body" weight="600" color={isSelected ? 'primary' : 'text'}>
+                    {option.label}
+                  </AppText>
+                  {isSelected ? <Ionicons name="checkmark-circle" size={18} color={theme.colors.primary} /> : null}
+                </TouchTarget>
+              );
+            })}
+          <TouchTarget
+            fill
+            accessibilityRole="button"
+            accessibilityLabel="Bank A–Z"
+            accessibilityState={{ selected: sortKey === 'bank' }}
+            onPress={() => { setSortKey('bank'); setSortOpen(false); }}
+            style={{
+              minHeight: 48,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              borderRadius: theme.radius?.sm ?? 6,
+              backgroundColor: sortKey === 'bank' ? theme.colors.primaryMuted : 'transparent',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <AppText variant="body" weight="600" color={sortKey === 'bank' ? 'primary' : 'text'}>
+              {uiLabel("Bank A–Z")}
+            </AppText>
+            {sortKey === 'bank' ? <Ionicons name="checkmark-circle" size={18} color={theme.colors.primary} /> : null}
+          </TouchTarget>
         </ScrollView>
       </SheetSurface>
       <SheetSurface onAuditStateChange={physicalVisibility.active ? toolsEvidence : undefined} visible={toolsOpen} title="Search" onClose={() => setToolsOpen(false)}>
-        <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: theme.spacing(4) }}>
+        <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: 20 }}>
           <Button
             icon={searchSub ? 'notifications' : 'notifications-outline'}
             title={uiLabel(searchSub ? 'Alert off' : 'Alert on')}

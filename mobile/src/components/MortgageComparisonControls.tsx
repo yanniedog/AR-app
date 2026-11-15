@@ -13,7 +13,7 @@ import { updateRatesSection } from '../data/ratesSession';
 import { uiCount, uiJoin, uiLabel, uiMoney, uiMortgageComparisonInput, uiRate } from '../lib/uiCopy';
 import { yieldToUi } from '../lib/yieldToUi';
 import { useTheme } from '../theme/ThemeProvider';
-import { AppText, Chip, Row } from './ui';
+import { AppText, Button, Chip, Row } from './ui';
 import { IconAction } from './IconAction';
 import { SegmentedControl } from './controls';
 
@@ -132,8 +132,8 @@ function mergeFacetOptions(
   return merged;
 }
 
-export function MortgageComparisonControls({ rows, catalogue, filters, unverified, invalid }: {
-  rows: RateRow[]; catalogue?: PublicCatalogueView; filters: Filters; unverified: number; invalid: boolean;
+export function MortgageComparisonControls({ rows, catalogue, filters, unverified, invalid, collapsible = false }: {
+  rows: RateRow[]; catalogue?: PublicCatalogueView; filters: Filters; unverified: number; invalid: boolean; collapsible?: boolean;
 }) {
   const theme = useTheme(), storeValue = useMortgageComparison();
   const { fontScale } = useWindowDimensions();
@@ -280,18 +280,60 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   const fieldLabel = (field: NumericInputField) =>
     uiLabel(field === 'loanAmount' ? 'Loan amount' : field === 'propertyValue' ? 'Property value'
       : field === 'fundsAvailable' ? fundsType === 'offset' ? 'Offset balance' : 'Deposit' : 'LVR');
+  const hasCustomInputs = Boolean(
+    draft.loanAmount.trim()
+    || draft.lvr.trim()
+    || (draft.fundsAvailable ?? '').trim()
+    || (draft.propertyValue ?? '').trim(),
+  );
+  const hasCustomFacets = filters.loanPurposes.length > 0 || filters.repaymentTypes.length > 0;
+  const hasAnyCustom = hasCustomInputs || hasCustomFacets;
+  const [expanded, setExpanded] = useState(!collapsible || hasAnyCustom);
+  const isExpanded = !collapsible || expanded || hasAnyCustom;
+  const defaultScenarioLabel = uiJoin('Owner occupied', ' · ', 'Principal & interest', ' · ', 'LVR', ' ', '≤', uiCount(80), '%');
+  if (!isExpanded) {
+    return (
+      <Row
+        testID="mortgage-scenario-summary"
+        gap={8}
+        style={{ justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 }}
+      >
+        <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
+          {defaultScenarioLabel}
+        </AppText>
+        <Button title="Edit" variant="secondary" accessibilityLabel="Edit" onPress={() => setExpanded(true)} />
+      </Row>
+    );
+  }
   return <View style={{ gap: 8 }} testID="mortgage-comparison-controls">
+    {collapsible && !hasAnyCustom ? (
+      <Row gap={8} style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
+          {defaultScenarioLabel}
+        </AppText>
+        <Button title="Hide" variant="ghost" accessibilityLabel="Hide" onPress={() => setExpanded(false)} />
+      </Row>
+    ) : null}
     <SegmentedControl value={mode} options={[{ value: 'funds', label: uiLabel('Funds available') }, { value: 'lvr', label: uiLabel('LVR') }]}
       onChange={changeMode} />
     {mode === 'funds' ? <SegmentedControl value={fundsType} options={[{ value: 'deposit', label: uiLabel('Deposit') }, { value: 'offset', label: uiLabel('Offset account') }]}
       onChange={changeFundsType} /> : null}
-    <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>{fields.map(field => <View key={field} style={{ flexBasis: Math.min(220, 120 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0, gap: 4 }}>
-      <AppText variant="small">{fieldLabel(field)}</AppText>
-      <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)} keyboardType="decimal-pad"
-        accessibilityLabel={fieldLabel(field)}
-        placeholder={uiLabel(field === 'lvr' ? '%' : '$')}
-        style={{ minHeight: 48, minWidth: 0, color: theme.colors.text, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 6, padding: 8, fontSize: theme.font.body }} />
-    </View>)}<IconAction icon="close" word="Clear" accessibilityLabel="Clear comparison inputs" onPress={clearInputs} /></Row>
+    <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>{fields.map(field => {
+      const fieldRequired = hasAnyCustom && values.lvr === null && !values.invalid && (
+        field === 'lvr'
+          ? !draft.lvr.trim()
+          : mode === 'funds' && !uiMortgageComparisonInput(draft, field).trim()
+      );
+      return <View key={field} style={{ flexBasis: Math.min(220, 120 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0, gap: 4 }}>
+        <AppText variant="small" color={fieldRequired ? 'warning' : 'text'} weight={fieldRequired ? '700' : undefined}>
+          {fieldRequired ? uiJoin(fieldLabel(field), ' · ', 'Required') : fieldLabel(field)}
+        </AppText>
+        <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)} keyboardType="decimal-pad"
+          accessibilityLabel={fieldLabel(field)}
+          placeholder={uiLabel(field === 'lvr' ? '%' : '$')}
+          style={{ minHeight: 48, minWidth: 0, color: theme.colors.text, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 6, padding: 8, fontSize: theme.font.body }} />
+      </View>;
+    })}<IconAction icon="close" word="Clear" accessibilityLabel="Clear comparison inputs" onPress={clearInputs} /></Row>
     {mode === 'funds' ? <Row gap={12} style={{ flexWrap: 'wrap' }}>
       <AppText variant="small" testID="mortgage-calculated-lvr">{uiJoin('Calculated LVR', ' · ', values.lvr === null ? uiLabel('Unknown') : uiRate(values.lvr / 100))}</AppText>
       {fundsType === 'deposit'
@@ -301,8 +343,12 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     {pending
       ? <AppText variant="tiny" color="textMuted">{uiLabel('Updating')}</AppText> : null}
     <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-    {groups.map(group => <View key={group.key} style={{ gap: 4, flexBasis: Math.min(240, 170 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0 }}>
-      <AppText variant="small">{uiLabel(group.label)}</AppText>
+    {groups.map(group => {
+      const groupIncomplete = hasAnyCustom && filters[group.key].length === 0;
+      return <View key={group.key} style={{ gap: 4, flexBasis: Math.min(240, 170 * Math.max(1, fontScale)), flexGrow: 1, minWidth: 0 }}>
+      <AppText variant="small" color={groupIncomplete ? 'warning' : 'text'} weight={groupIncomplete ? '700' : undefined}>
+        {groupIncomplete ? uiJoin(group.label, ' · ', 'Required') : uiLabel(group.label)}
+      </AppText>
       <Row gap={6} style={{ flexWrap: 'wrap' }}>{group.options.map(option => {
         const meaningOf = (value: string) => group.canonicalize(value) ?? value;
         const selected = filters[group.key].some(item => meaningOf(item) === option);
@@ -314,7 +360,8 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
               : [...scoped[group.key], option] } };
           }, true); }} />;
       })}</Row>
-    </View>)}
+    </View>;
+    })}
     </Row>
     <SegmentedControl value={metric} options={[{ value: 'headline', label: uiLabel('Advertised rate') }, { value: 'comparison', label: uiLabel('Comparison rate') }]}
       onChange={next => useStore.getState().setPref('mortgageRateMetric', next)} />

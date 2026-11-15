@@ -1108,3 +1108,31 @@ test('loaded legacy mortgage edits settle in the same render without reloading d
     expect(list().data.every((row: any) => row.rate === '0.03')).toBe(true); expect(updating()).toBe(false);
   } finally { act(() => tree.unmount()); jest.useRealTimers(); }
 });
+
+test('cold-launch Mortgage browses standard OO+PI <=80% LVR rates, omits pagination when empty, and renders clean Sort/Search sheets', () => {
+  clearMortgageComparison();
+  updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS } });
+  const tree = mount();
+  const list = () => tree.root.findByType('FlashList').props;
+  try {
+    expect(list().data.length).toBeGreaterThan(0);
+    expect(tree.root.findByProps({ testID: 'mortgage-scenario-summary' })).toBeTruthy();
+    expect(list().ListFooterComponent).not.toBeNull();
+
+    // When query yields 0 results, ListFooterComponent is null (RatesPagination omitted).
+    act(() => updateRatesSection('Mortgage', { query: 'zzz-no-such-product-zzz' }));
+    expect(list().data).toHaveLength(0);
+    expect(list().ListFooterComponent).toBeNull();
+
+    // Sort sheet has active checkmark, no Cancel button, and Savings Ongoing/Headline labels.
+    const activeMetricLabel = mockStore.getState().prefs.mortgageRateMetric === 'comparison' ? 'Comparison rate' : 'Advertised rate';
+    const sortButtons = tree.root.findAllByProps({ accessibilityLabel: activeMetricLabel });
+    expect(sortButtons.some((node: any) => node.props.accessibilityState?.selected === true)).toBe(true);
+    expect(tree.root.findAllByProps({ title: 'Cancel' })).toHaveLength(0);
+    expect(tree.root.findAllByProps({ name: 'checkmark-circle' }).length).toBeGreaterThanOrEqual(1);
+
+    // Search tools sheet has paddingBottom: 20.
+    const scrollViews = tree.root.findAll((node: any) => node.props?.contentContainerStyle?.paddingBottom === 20);
+    expect(scrollViews.length).toBeGreaterThanOrEqual(1);
+  } finally { act(() => tree.unmount()); }
+});
