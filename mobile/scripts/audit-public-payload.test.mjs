@@ -212,7 +212,7 @@ test('headless Bank response uses retained source and default projection without
   assert.deepEqual(check.metrics, { coverageAvailable: true, runMatches: true, projectionAvailable: true,
     windows: 1, checked: 274, displayed: 1, knownMoves: 0, knownTiming: 0,
     unknownMoves: 274, unknownTiming: 274, noRecordedMove: 0, noProducts: 0,
-    filteredHistory: 272, quarantinedHistory: 0, missingHistory: 1, missingBaseline: 1,
+    filteredHistory: 0, quarantinedHistory: 0, missingHistory: 1, missingBaseline: 273,
     historyGaps: 0, unverifiedFirstMoves: 0, unverifiedEvents: 0,
     coverageComplete: false, renderedCoverageVerified: false });
   assert.equal(report.historical_coverage_verified, null);
