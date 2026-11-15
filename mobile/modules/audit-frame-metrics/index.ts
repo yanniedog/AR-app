@@ -4,6 +4,7 @@ export interface AuditNativeFrameMetricsResult {
   jankPercent: number;
   frozenFrameCount: number;
   maxFrozenFrameMs?: number;
+  totalFrameCount?: number;
   totalFrames?: number;
 }
 

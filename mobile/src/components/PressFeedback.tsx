@@ -14,8 +14,10 @@ import {
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { LEDGER_MOTION, ledgerMotionDuration } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
-import { recordAuditTargetLayout } from '../lib/auditTargetRegistry';
+import { recordAuditTargetLayout, unregisterAuditTargetLayout } from '../lib/auditTargetRegistry';
 import type { UiNativeProps, UiChild } from '../lib/uiCopy';
+
+let nextAuditTargetInstanceId = 1;
 
 export interface PressFeedbackProps extends Omit<UiNativeProps<PressableProps>, 'children'> {
   children?: UiChild | ((state: PressableStateCallbackType) => UiChild);
@@ -38,6 +40,15 @@ export function PressFeedback({
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
   const scale = useRef(new Animated.Value(1)).current;
+  const auditInstanceIdRef = useRef<number | null>(null);
+  if (auditInstanceIdRef.current === null) {
+    auditInstanceIdRef.current = nextAuditTargetInstanceId++;
+  }
+  const auditLabel = rest.testID ?? (typeof rest.accessibilityLabel === 'string' ? rest.accessibilityLabel : 'target');
+  const auditTargetKey = `${auditLabel.slice(0, 100)}#${auditInstanceIdRef.current}`;
+  useEffect(() => () => {
+    unregisterAuditTargetLayout(auditTargetKey);
+  }, [auditTargetKey]);
 
   useEffect(() => {
     if (reducedMotion !== false || disabled) {
@@ -74,11 +85,7 @@ export function PressFeedback({
       onPressOut={(event) => { animate(false); onPressOut?.(event); }}
       onLayout={(event) => {
         const { width, height } = event.nativeEvent.layout;
-        recordAuditTargetLayout(
-          rest.testID ?? (typeof rest.accessibilityLabel === 'string' ? rest.accessibilityLabel : undefined),
-          width,
-          height,
-        );
+        recordAuditTargetLayout(auditTargetKey, width, height);
         onLayout?.(event);
       }}
     >

@@ -1018,6 +1018,7 @@ export function buildUxFrictionFluidityAudit(
     || duplicateCoverageIds.length > 0
     || completion.gaps.duplicateChecks > 0;
   const collectionComplete = completion.gaps.invalidCoverageReports === 0
+    && !hasDuplicateCheckIds
     && missingCoverageIds.length === 0
     && unexpectedCoverageIds.length === 0
     && completion.gaps.missingChecks === 0

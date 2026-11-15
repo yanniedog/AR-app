@@ -405,27 +405,51 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   put('affsScore', uxRefs, {
     eligibleCount: uxAudit.evidenceCoverage.representativeTaskCount,
     observedCount: uxAudit.pillars.interactionFriction.evaluatedTaskCount,
-  }, uxAudit.affsScore === null
-    ? [health?.coverage.complete !== true ? 'incomplete-health-collection' : 'missing-evidence']
-    : []);
+  }, uxAudit.affsScore === null ? ['incomplete-health-collection'] : []);
+  const evaluatedTasks = uxAudit.pillars.interactionFriction.evaluatedTaskCount;
+  const representativeTasks = uxAudit.evidenceCoverage.representativeTaskCount;
   put('uxInteractionFrictionScore', [uxRefs[1]], {
     sampleUnit: 'task',
-    sampleSize: uxAudit.pillars.interactionFriction.evaluatedTaskCount,
-    eligibleCount: uxAudit.evidenceCoverage.representativeTaskCount,
-    observedCount: uxAudit.pillars.interactionFriction.completedTaskCount,
+    sampleSize: evaluatedTasks,
+    eligibleCount: representativeTasks,
+    observedCount: evaluatedTasks,
+    missingCount: Math.max(0, representativeTasks - evaluatedTasks),
   });
   const surfaceSummary = uxAudit.pillars.standardsAndAccessibility.surfaceContractSummary;
-  put('uxStandardsAccessibilityScore', [uxRefs[2]], {
-    sampleUnit: 'surface',
-    sampleSize: surfaceSummary.applicableChecks,
-    eligibleCount: surfaceSummary.applicableChecks,
-    observedCount: surfaceSummary.applicableChecks - surfaceSummary.unavailable,
+  const wcagSummary = uxAudit.pillars.standardsAndAccessibility.wcagSummary;
+  const standardsParts = [surfaceSummary, wcagSummary].map(summary => {
+    const observed = Math.max(summary.passed + summary.failed, summary.applicableChecks - summary.unavailable);
+    const missing = summary.unavailable;
+    return { eligible: observed + missing, observed, missing };
   });
+  const standardsObserved = standardsParts[0].observed + standardsParts[1].observed;
+  const standardsMissing = standardsParts[0].missing + standardsParts[1].missing;
+  const standardsEligible = standardsParts[0].eligible + standardsParts[1].eligible;
+  put('uxStandardsAccessibilityScore', [uxRefs[2]], {
+    sampleUnit: 'check',
+    sampleSize: standardsObserved,
+    eligibleCount: standardsEligible,
+    observedCount: standardsObserved,
+    missingCount: standardsMissing,
+  });
+  const fluidity = uxAudit.pillars.fluidityAndResponsiveness;
+  const selectedFluidityComponents = fluidity.telemetryKind === 'android-native-frame-trace'
+    ? [fluidity.components.androidFrameScore]
+    : fluidity.telemetryKind === 'core-web-vitals-p75'
+      ? [fluidity.components.inpScore, fluidity.components.lcpScore, fluidity.components.clsScore]
+      : fluidity.telemetryKind === 'ios-hitch-ratio'
+        ? [fluidity.components.iosHitchScore]
+        : fluidity.telemetryKind === 'js-runtime-callbacks'
+          ? [fluidity.components.jsRuntimeScore]
+          : [];
+  const fluidityObserved = selectedFluidityComponents.filter(score => score !== null).length;
+  const fluidityScored = fluidity.score !== null && fluidityObserved > 0;
   put('uxFluidityResponsivenessScore', [uxRefs[3]], {
-    sampleUnit: 'run',
-    sampleSize: uxAudit.evidenceCoverage.executedJourneyCount,
-    eligibleCount: uxAudit.evidenceCoverage.executedJourneyCount,
-    observedCount: uxAudit.evidenceCoverage.executedJourneyCount,
+    sampleUnit: 'component',
+    sampleSize: fluidityScored ? fluidityObserved : 0,
+    eligibleCount: fluidityScored ? fluidityObserved : 1,
+    observedCount: fluidityScored ? fluidityObserved : 0,
+    missingCount: fluidityScored ? 0 : 1,
   });
   return { schemaVersion: 1, context: { plannedChecks: measuredCount(report.coverage?.plannedChecks),
     plannedJourneys: measuredCount(report.coverage?.plannedJourneyChecks), payloadProducts: measuredCount(report.environment.payloadProducts),

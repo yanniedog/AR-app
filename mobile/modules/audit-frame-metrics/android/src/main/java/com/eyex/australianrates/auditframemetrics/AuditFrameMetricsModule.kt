@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.view.FrameMetrics
 import android.view.Window
 import expo.modules.kotlin.modules.Module
@@ -17,6 +18,7 @@ import kotlin.math.round
 class AuditFrameMetricsModule : Module() {
   private val lock = Any()
   private var active = false
+  private var attachedActivity: Activity? = null
   private var attachedWindow: Window? = null
   private var listener: Window.OnFrameMetricsAvailableListener? = null
   private var handlerThread: HandlerThread? = null
@@ -79,8 +81,16 @@ class AuditFrameMetricsModule : Module() {
       var attached = false
       activity.runOnUiThread {
         try {
-          window.addOnFrameMetricsAvailableListener(frameListener, handler)
-          attached = true
+          synchronized(lock) {
+            if (!active || handlerThread !== thread) {
+              return@runOnUiThread
+            }
+            window.addOnFrameMetricsAvailableListener(frameListener, handler)
+            attachedWindow = window
+            attachedActivity = activity
+            listener = frameListener
+            attached = true
+          }
         } catch (_: Throwable) {
           attached = false
         } finally {
@@ -91,17 +101,18 @@ class AuditFrameMetricsModule : Module() {
 
       if (!attached) {
         synchronized(lock) {
-          active = false
-          handlerThread = null
+          if (handlerThread === thread) {
+            active = false
+            attachedWindow = null
+            attachedActivity = null
+            listener = null
+            handlerThread = null
+          }
         }
         thread.quitSafely()
         return@Function false
       }
 
-      synchronized(lock) {
-        attachedWindow = window
-        listener = frameListener
-      }
       return@Function true
     }
 
@@ -144,6 +155,7 @@ class AuditFrameMetricsModule : Module() {
       windowToDetach = attachedWindow
       listenerToDetach = listener
       threadToQuit = handlerThread
+      attachedActivity = null
       attachedWindow = null
       listener = null
       handlerThread = null
@@ -161,19 +173,16 @@ class AuditFrameMetricsModule : Module() {
     }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && windowToDetach != null && listenerToDetach != null) {
-      val activity = appContext.currentActivity
-      if (activity != null) {
-        val latch = CountDownLatch(1)
-        activity.runOnUiThread {
-          try {
-            windowToDetach.removeOnFrameMetricsAvailableListener(listenerToDetach)
-          } catch (_: Throwable) {
-          } finally {
-            latch.countDown()
-          }
+      val latch = CountDownLatch(1)
+      Handler(Looper.getMainLooper()).post {
+        try {
+          windowToDetach.removeOnFrameMetricsAvailableListener(listenerToDetach)
+        } catch (_: Throwable) {
+        } finally {
+          latch.countDown()
         }
-        latch.await(1, TimeUnit.SECONDS)
       }
+      latch.await(1, TimeUnit.SECONDS)
     }
     threadToQuit?.quitSafely()
 
@@ -185,11 +194,12 @@ class AuditFrameMetricsModule : Module() {
     val p95OverrunMs = round(sortedOverruns[p95Index] * 10.0) / 10.0
     val jankPercent = round(((jank * 100.0) / frames) * 10.0) / 10.0
 
-    val result = HashMap<String, Any>(6)
+    val result = HashMap<String, Any>(7)
     result["refreshRateHz"] = hz
     result["frameOverrunP95Ms"] = p95OverrunMs
     result["jankPercent"] = jankPercent
     result["frozenFrameCount"] = frozen
+    result["totalFrameCount"] = frames
     result["totalFrames"] = frames
     if (frozen > 0) {
       result["maxFrozenFrameMs"] = round(maxFrozen * 10.0) / 10.0
