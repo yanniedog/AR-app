@@ -139,3 +139,17 @@ test.each(['lvr_80-85%', 'lvr_85-90%', 'lvr_90-95%'])('prepared history keeps th
   while (!step.done) step = work.next();
   expect(step.value[day].Mortgage?.NAB.count).toBe(high.length);
 });
+
+test('canonical profile LVR bands match corresponding CDR tiers', () => {
+  expect(matchesLvrTier('lvr_=60%', ['<60'])).toBe(true);
+  expect(matchesLvrTier('lvr_<=59.99%', ['<60'])).toBe(true);
+  expect(matchesLvrTier('lvr_60-70%', ['<60'])).toBe(false);
+  expect(matchesLvrTier('lvr_60-70%', ['60-70'])).toBe(true);
+  expect(matchesLvrTier('lvr_70-80%', ['70-80'])).toBe(true);
+  expect(matchesLvrTier('lvr_80-90%', ['80-90'])).toBe(true);
+  expect(matchesLvrTier('lvr_90-95%', ['>90'])).toBe(true);
+  expect(matchesLvrTier('lvr_>=80.01-95%', ['>90'])).toBe(true);
+  expect(matchesLvrTier('lvr_>90%', ['>90'])).toBe(true);
+  expect(matchesLvrTier('lvr_80-90%', ['>90'])).toBe(false);
+  expect(matchesLvrTier('lvr_unspecified', ['>90'])).toBe(false);
+});
