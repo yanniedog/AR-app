@@ -51,7 +51,9 @@ function lossThrough(finishedAt?: string | null) {
   return { entries, chars, uncertain };
 }
 export const PUBLIC_JOURNAL_MESSAGE_MAX_CHARS = 16_384;
-export const PUBLIC_JOURNAL_SECTION_MAX_BYTES = 2 * 1024 * 1024;
+// The journal is inside the gzip envelope, whose hosted payload has its own
+// compressed limit. A full destination inventory can push the log above 2 MiB.
+export const PUBLIC_JOURNAL_SECTION_MAX_BYTES = 3 * 1024 * 1024;
 const encoder = new TextEncoder();
 function omittedChars(message: string): number {
   return [...message.matchAll(/…\[truncated (\d+) chars\]/g)].reduce((sum, match) => sum + Number(match[1]), 0);

@@ -288,8 +288,10 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   );
   const hasCustomFacets = filters.loanPurposes.length > 0 || filters.repaymentTypes.length > 0;
   const hasAnyCustom = hasCustomInputs || hasCustomFacets;
-  const [expanded, setExpanded] = useState(!collapsible || hasAnyCustom);
-  const isExpanded = !collapsible || expanded || hasAnyCustom;
+  // Custom criteria force the editor open only while they exist. Remember
+  // explicit Edit separately so clearing restored criteria reveals the rates.
+  const [openedForEdit, setOpenedForEdit] = useState(false);
+  const isExpanded = !collapsible || openedForEdit || hasAnyCustom;
   const defaultScenarioLabel = uiJoin('Owner occupied', ' · ', 'Principal & interest', ' · ', 'LVR', ' ', '≤', uiCount(80), '%');
   if (!isExpanded) {
     return (
@@ -301,7 +303,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
         <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
           {defaultScenarioLabel}
         </AppText>
-        <Button title="Edit" variant="secondary" accessibilityLabel="Edit" onPress={() => setExpanded(true)} />
+        <Button title="Edit" variant="secondary" accessibilityLabel="Edit" onPress={() => setOpenedForEdit(true)} />
       </Row>
     );
   }
@@ -311,7 +313,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
         <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
           {defaultScenarioLabel}
         </AppText>
-        <Button title="Hide" variant="ghost" accessibilityLabel="Hide" onPress={() => setExpanded(false)} />
+        <Button title="Hide" variant="ghost" accessibilityLabel="Hide" onPress={() => setOpenedForEdit(false)} />
       </Row>
     ) : null}
     <SegmentedControl value={mode} options={[{ value: 'funds', label: uiLabel('Funds available') }, { value: 'lvr', label: uiLabel('LVR') }]}
