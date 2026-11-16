@@ -82,3 +82,21 @@ test('prepared source matching preserves admitted alternatives, unknown wording 
     }
   }
 });
+
+test('batch validates a shared product envelope once while applying each exact tier condition', () => {
+  const fixture = selectedConstraintFixture('Mortgage', [row, { ...row, rate_index: 5 }], [
+    { rateIndex: 4, text: 'LVR up to 70%.' },
+    { rateIndex: 5, text: 'LVR up to 80%.' },
+  ]);
+  const envelope = fixture.details.products[row.product_key].rateConditions!;
+  const entries = envelope.entries;
+  const readEntries = jest.fn(() => entries);
+  Object.defineProperty(envelope, 'entries', { get: readEntries });
+  const comparison = { loanAmount: '', lvr: '75' };
+  const expected = fixture.rows.filter(value => mortgageComparisonMatch(value, comparison, fixture) === 'listed');
+  const readsWithoutBatching = readEntries.mock.calls.length;
+  readEntries.mockClear();
+  expect(mortgageComparisonRows(fixture.rows, comparison, fixture).rows).toEqual(expected);
+  expect(expected).toEqual([fixture.rows[1]]);
+  expect(readEntries.mock.calls.length).toBeLessThan(readsWithoutBatching);
+});

@@ -209,14 +209,15 @@ export async function prepareMortgageComparisonRowsCooperatively(rows: readonly 
   return cancelled() ? null : prepared;
 }
 function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateConditionContext,
-  prepared?: PreparedMortgageComparisonRow): MortgageComparisonMatch {
+  prepared?: PreparedMortgageComparisonRow,
+  scoped?: ReturnType<typeof scopedRateConditions>): MortgageComparisonMatch {
   if (parsed.invalid) return 'invalid';
   if (parsed.incompleteFunds) return 'outside';
   let unverified = false;
   let fallthroughLvr = parsed.lvr !== null;
   let fallthroughAmount = parsed.amount !== null;
   if (parsed.lvr !== null || parsed.amount !== null) {
-    const source = prepared?.source ?? scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context));
+    const source = prepared?.source ?? scopedFinancialConditionFacts(scoped ?? scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context));
     if (source.state === 'admitted') {
       const dimensions: readonly [number | null, readonly (readonly PublishedNumericConditionFact[])[], 'lvr' | 'amount'][] = [
         [parsed.lvr, prepared?.lvrBands ?? alternativeBands(source.facts.filter(fact => fact.kind === 'published-lvr-range')), 'lvr'],
@@ -254,8 +255,13 @@ export function mortgageComparisonRows(rows: RateRow[], value: MortgageCompariso
   const parsed = inputs(value);
   let unverified = 0;
   const unverifiedRows = new WeakSet<RateRow>();
-  const selected = rows.filter(row => {
-    const state = match(row, parsed, context);
+  // Tiers of the same product share a condition envelope. Revalidate it once
+  // per batch while preserving the publication and exact-row checks per tier.
+  const scopes = !parsed.invalid && !parsed.incompleteFunds && (parsed.lvr !== null || parsed.amount !== null)
+    ? scopedRateConditionsForRows(rows.map(sourceRowForPublicRow), 'Mortgage', context)
+    : null;
+  const selected = rows.filter((row, index) => {
+    const state = match(row, parsed, context, undefined, scopes?.[index]);
     if (state === 'unverified') { unverified++; unverifiedRows.add(row); }
     return state === 'listed' || state === 'unverified';
   });
