@@ -113,7 +113,7 @@ test('preserves unknowns, tier index and conditional warnings in two-line layout
 test('preserves exact source ranges with all statuses, tier and rates at large text size', () => {
   const f = fixture();
   const facets = f.rows.map(exact => compactProductFacet(exact, 'Mortgage', scopedFinancialConditionFacts(scopedRateConditions(exact, 'Mortgage', f))));
-  expect(facets.map(facet => facet.value)).toEqual(['≤59.99%', '60%–79.99%']);
+  expect(facets.map(facet => facet.value)).toEqual(['≤60%', '60%–80%']);
   for (const facet of facets) {
     const layout = compactProductRowLayout(280, 3, uiRate(0.058), uiRate(0.0579), facet, 3, 500, 400, compactTierIndex(row));
     expect(layout).toMatchObject({ showSecondary: true, showFacetValue: true, showStatuses: true, showTier: true, combinedStatus: false, warningOnly: false });
@@ -349,8 +349,8 @@ test('equal-metric actual tiers remain visibly distinct even when their long LVR
   try {
     expect(tree.root.findAllByType('AppText').filter(node => node.props.testID === 'compact-tier-index').map(node => node.props.children)).toEqual(['#4', '#5']);
     const labels = tree.root.findAllByType('PressFeedback').map(node => String(node.props.accessibilityLabel));
-    expect(labels.some(value => value.includes('LVR ≤59.99%'))).toBe(true);
-    expect(labels.some(value => value.includes('LVR 60%–79.99%'))).toBe(true);
+    expect(labels.some(value => value.includes('LVR ≤60%'))).toBe(true);
+    expect(labels.some(value => value.includes('LVR 60%–80%'))).toBe(true);
     expect(compactTierIndex({ ...row, rate_index: undefined })).toBeNull();
     expect(compactTierIndex({ ...row, rate_index: 0 })).toBe('#0');
     expect(compactTierIndex({ ...row, rate_index: -1 })).toBeNull();

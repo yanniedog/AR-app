@@ -88,8 +88,8 @@ test('exports exact admitted sibling LVR facts before cloning and keeps missing 
   installMandatoryEligibility(selectMandatoryEligibility(publication.core, EMPTY_PROFILE, publication.details.products));
   const snapshot = captureFilteredSearchSnapshot({ ...publication, request, profile: EMPTY_PROFILE });
   const rateRows = searchReportTables(snapshot).find(sheet => sheet.name === 'Rates and Tiers')!.rows;
-  expect(rateRows.some(row => row[2] === '4' && row[3] === 'Conditions' && row[5] === 'LVR ≤59.99%')).toBe(true);
-  expect(rateRows.some(row => row[2] === '5' && row[3] === 'Conditions' && row[5] === 'LVR 60%–79.99%')).toBe(true);
+  expect(rateRows.some(row => row[2] === '4' && row[3] === 'Conditions' && row[5] === 'LVR ≤60%')).toBe(true);
+  expect(rateRows.some(row => row[2] === '5' && row[3] === 'Conditions' && row[5] === 'LVR 60%–80%')).toBe(true);
   const html = await searchReportHtml(snapshot, () => undefined);
   expect(html).not.toContain('LVR up to'); expect(html).not.toContain('For LVR'); expect(html).toContain('Unverified');
   const unverified = captureFilteredSearchSnapshot({ ...publication, coreIntegrity: null, request, profile: EMPTY_PROFILE });

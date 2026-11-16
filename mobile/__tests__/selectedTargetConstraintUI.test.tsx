@@ -290,8 +290,8 @@ test('actual entered buying amounts including zero still derive the identical lo
     }
     expect(mockScenario.mortgage).toMatchObject({ propertyValue: '650000', deposit: '130000', costs: '0', currentRate: '6.00', years: '25' });
     expect(computeLvr(mockScenario.mortgage)).toEqual({ loan: 520000, lvr: 80, depositApplied: 130000 });
-    expect(texts(tree)).toContain('$520,000');
-    expect(texts(tree)).toContain('Scenario LVR: 80.0%');
+    expect(texts(tree)).toContain('$520k');
+    expect(texts(tree)).toContain('Scenario LVR: 80%');
     act(() => { (numericField(tree, 'Property price in dollars').onChangeText as (value: string) => void)(''); tree.update(<RateCheckWorkspace />); });
     expect(numericField(tree, 'Property price in dollars').value).toBe('');
     expect(texts(tree)).not.toContain('$520,000');

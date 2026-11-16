@@ -32,7 +32,7 @@ test('historical mismatch keeps the simulated and entered amounts, difference an
   const value = render(projectionFacts(mortgage({ history: { anchorDay: '2020-01-01', anchorBalance: 450000,
     anchorRateFraction: 0.04, simulatedEndBalance: 300321, currentEnteredBalance: 300000, balanceDifference: 321,
     balanceMismatchReported: true, offset: { simulatedEndAmount: 12345, currentEnteredAmount: 12000, difference: 345, mismatchReported: true } } })));
-  for (const expected of ['1 Jan 2020', '$300,321', '$300,000', '$321', '$12,345', '$12,000', '$345', 'Forward offset', 'Simulated history']) expect(value).toContain(expected);
+  for (const expected of ['1 Jan 2020', '$300,321', '$300k', '$321', '$12,345', '$12k', '$345', 'Forward offset', 'Simulated history']) expect(value).toContain(expected);
 });
 test('growing and residual loans remain linked to their actual scenario', () => {
   const value = render(projectionFacts(mortgage({ outcomes: [{ id: 'rate-higher', negativeAmortisation: true, closingBalance: 500 }, { id: 'offset-none', negativeAmortisation: false, closingBalance: 250 }] })));

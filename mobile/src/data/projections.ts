@@ -1,4 +1,4 @@
-import { computeLvr, num } from './calc';
+import { calculatorAmount, computeLvr, num } from './calc';
 import { estimateEnteredRate } from './publicRateLocal';
 import type { ProjectionFrequency, ProjectionInputs } from './projectionScenario';
 import type { UserRateScenario } from './userRateScenario';
@@ -88,6 +88,11 @@ function rawNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function cleanAmount(value: string): number {
+  const parsed = calculatorAmount(value, Number.MAX_SAFE_INTEGER);
+  return parsed != null ? Math.max(0, parsed) : 0;
+}
+
 /** Every local rate field is labelled in percentage points, including values below 1%. */
 function percentageFraction(value: string): number | null {
   const result = estimateEnteredRate(value);
@@ -122,7 +127,7 @@ function monthsBetween(from: Date, to: Date): number {
 }
 
 function monthlyAmount(value: string, frequency: ProjectionFrequency): number {
-  const amount = cleanNumber(value);
+  const amount = cleanAmount(value);
   if (frequency === 'weekly') return amount * 52 / 12;
   if (frequency === 'fortnightly') return amount * 26 / 12;
   return amount;
@@ -130,7 +135,7 @@ function monthlyAmount(value: string, frequency: ProjectionFrequency): number {
 
 // Presentation only: keep the original amount beside the existing converted local.
 function cashflowInput(value: string, frequency: ProjectionFrequency, monthlyValue: number) {
-  return { monthlyAmount: monthlyValue, enteredAmount: cleanNumber(value), enteredFrequency: frequency,
+  return { monthlyAmount: monthlyValue, enteredAmount: cleanAmount(value), enteredFrequency: frequency,
     annualPeriods: (frequency === 'weekly' ? 52 : frequency === 'fortnightly' ? 26 : 12) as 12 | 26 | 52 };
 }
 
@@ -356,7 +361,7 @@ function historyAnchor(inputs: ProjectionInputs, today: Date): {
   rate: number;
 } | null {
   const date = parseIsoDate(inputs.startDate);
-  const balance = cleanNumber(inputs.startBalance);
+  const balance = cleanAmount(inputs.startBalance);
   const rate = percentageFraction(inputs.startRate);
   if (!date || balance <= 0 || rate == null || date.getTime() >= today.getTime()) return null;
   const months = monthsBetween(date, today);
@@ -410,7 +415,7 @@ function optionalInputErrors(
     [inputs.extraRepaymentAmount, 'extra repayment', MAX_PERIODIC_AMOUNT, '$1 million per selected period'],
   ];
   amountFields.forEach(([value, label, maximum, maximumLabel]) => {
-    const parsed = rawNumber(value);
+    const parsed = calculatorAmount(value, Number.MAX_SAFE_INTEGER);
     if (value.trim() && (parsed == null || parsed < 0 || parsed > maximum)) {
       errors.push(`${label} from $0 to ${maximumLabel}`);
     }
@@ -519,7 +524,7 @@ export function buildLifecycleProjection(
     const enteredRepayment = monthlyAmount(inputs.periodicAmount, inputs.periodicFrequency);
     const repayment = enteredRepayment || repaymentFor(balance, annualRate!, remainingMonths);
     const extraRepayment = monthlyAmount(inputs.extraRepaymentAmount, inputs.extraRepaymentFrequency);
-    const offsetBalance = Math.min(balance, cleanNumber(inputs.offsetBalance));
+    const offsetBalance = Math.min(balance, cleanAmount(inputs.offsetBalance));
     const offsetGrowth = monthlyAmount(inputs.offsetContributionAmount, inputs.offsetContributionFrequency);
     const offsetBoost = monthlyAmount(inputs.offsetBoostAmount, inputs.offsetContributionFrequency);
     const anchor = historyAnchor(inputs, today);
@@ -533,7 +538,7 @@ export function buildLifecycleProjection(
         months: anchor.months,
         repayment: historicalPayment,
         extraRepayment,
-        offsetBalance: cleanNumber(inputs.startOffsetBalance),
+        offsetBalance: cleanAmount(inputs.startOffsetBalance),
         offsetGrowth,
         keepFullWindow: true,
       }).points;
@@ -599,7 +604,7 @@ export function buildLifecycleProjection(
         repayment: { ...cashflowInput(inputs.periodicAmount, inputs.periodicFrequency, repayment), source: enteredRepayment ? 'entered' : 'illustrative' },
         extraRepayment: cashflowInput(inputs.extraRepaymentAmount, inputs.extraRepaymentFrequency, extraRepayment),
         offset: { openingAmount: forwardOpeningOffset, openingSource: anchor ? 'simulated-history' : 'entered',
-          growthMonthlyAmount: offsetGrowth, boostMonthlyAmount: offsetBoost, enteredBoostAmount: cleanNumber(inputs.offsetBoostAmount),
+          growthMonthlyAmount: offsetGrowth, boostMonthlyAmount: offsetBoost, enteredBoostAmount: cleanAmount(inputs.offsetBoostAmount),
           ...cashflowInput(inputs.offsetContributionAmount, inputs.offsetContributionFrequency, offsetGrowth) }, outcomes }),
       defaultMetric: 'balance',
       availableMetrics: [
@@ -617,7 +622,7 @@ export function buildLifecycleProjection(
   }
 
   const deposit = section === 'TD' ? scenario.termDeposit : scenario.savings;
-  const balance = cleanNumber(deposit.balance);
+  const balance = cleanAmount(deposit.balance);
   const annualRate = percentageFraction(deposit.currentRate);
   const missing = [
     ...(balance > 0 && balance <= MAX_DEPOSIT_BALANCE ? [] : [section === 'TD' ? 'deposit amount up to $20 million' : 'current balance up to $20 million']),

@@ -335,7 +335,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
       </View>;
     })}<IconAction icon="close" word="Clear" accessibilityLabel="Clear comparison inputs" onPress={clearInputs} /></Row>
     {mode === 'funds' ? <Row gap={12} style={{ flexWrap: 'wrap' }}>
-      <AppText variant="small" testID="mortgage-calculated-lvr">{uiJoin('Calculated LVR', ' · ', values.lvr === null ? uiLabel('Unknown') : uiRate(values.lvr / 100))}</AppText>
+      <AppText variant="small" testID="mortgage-calculated-lvr">{uiJoin('Calculated LVR', ' · ', values.lvr === null ? uiLabel('Unknown') : uiRate(values.lvr / 100, 0))}</AppText>
       {fundsType === 'deposit'
         ? <AppText variant="small" testID="mortgage-property-value">{uiJoin('Property value', ' · ', uiMoney(values.propertyValue, Number.isInteger(values.propertyValue) ? 0 : 2))}</AppText>
         : <AppText variant="small" testID="mortgage-loan-less-offset">{uiJoin('Loan less offset', ' · ', uiMoney(values.interestBearingBalance, Number.isInteger(values.interestBearingBalance) ? 0 : 2))}</AppText>}

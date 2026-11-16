@@ -8,7 +8,13 @@ import type {
   RateRow,
   SectionKey,
 } from '../types';
-import { computeLvr, num } from './calc';
+import {
+  calculatorAmount,
+  computeLvr,
+  MAX_CALCULATOR_DEPOSIT_AMOUNT,
+  MAX_CALCULATOR_MORTGAGE_AMOUNT,
+  num,
+} from './calc';
 import {
   formatBalanceRange,
   formatRate,
@@ -274,12 +280,12 @@ function scenarioForSection(
     );
     if (!hasEnteredValue) return { facts, balance: 0, currentRateFraction: null };
     const lvr = computeLvr(mortgage);
-    const balance = lvr.loan ?? num(mortgage.loanBalance);
+    const balance = lvr.loan ?? (calculatorAmount(mortgage.loanBalance, MAX_CALCULATOR_MORTGAGE_AMOUNT) ?? 0);
     addFact(facts, 'Your rate scenario', uiLabel(mortgage.mode === 'refi' ? 'Refinancing' : 'Buying'));
     if (balance > 0) addFact(facts, 'Loan amount', uiMoney(balance));
-    const propertyValue = num(mortgage.propertyValue);
+    const propertyValue = calculatorAmount(mortgage.propertyValue, MAX_CALCULATOR_MORTGAGE_AMOUNT) ?? 0;
     if (propertyValue > 0) addFact(facts, 'Property value ($)', uiMoney(propertyValue));
-    if (lvr.lvr != null) addFact(facts, 'Scenario LVR', uiJoin(uiNumber(Number(lvr.lvr.toFixed(1)), 1), '%'));
+    if (lvr.lvr != null) addFact(facts, 'Scenario LVR', uiJoin(uiNumber(Math.round(lvr.lvr), 0), '%'));
     if (mortgage.currentRate.trim()) addFact(facts, 'Current entered rate', formatRate(num(mortgage.currentRate) / 100));
     if (mortgage.years.trim()) addFact(facts, 'Years remaining', uiDuration(num(mortgage.years), 'years'));
     const current = num(mortgage.currentRate);
@@ -287,7 +293,7 @@ function scenarioForSection(
   }
 
   const deposit = section === 'Savings' ? scenario.savings : scenario.termDeposit;
-  const balance = num(deposit.balance);
+  const balance = calculatorAmount(deposit.balance, MAX_CALCULATOR_DEPOSIT_AMOUNT) ?? 0;
   if (balance > 0) addFact(facts, 'Current entered balance', uiMoney(balance));
   if (deposit.currentRate.trim()) addFact(facts, 'Current entered rate', formatRate(num(deposit.currentRate) / 100));
   const current = num(deposit.currentRate);

@@ -89,7 +89,7 @@ describe('productFacts', () => {
     ] } };
 
     expect(publishedFactFilterOptions(rows, lookup).map((option) => option.label)).toEqual([
-      'Maximum balance: $250,000',
+      'Maximum balance: $250k',
       'Maximum LVR: 80.00%',
       'Minimum age: 18 years',
       'No Redraw facility',
