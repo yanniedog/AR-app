@@ -405,7 +405,9 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   put('affsScore', uxRefs, {
     eligibleCount: uxAudit.evidenceCoverage.representativeTaskCount,
     observedCount: uxAudit.pillars.interactionFriction.evaluatedTaskCount,
-  }, uxAudit.affsScore === null ? ['incomplete-health-collection'] : []);
+  }, uxAudit.affsScore === null
+    ? [health?.coverage?.complete === true ? 'missing-evidence' : 'incomplete-health-collection']
+    : []);
   const evaluatedTasks = uxAudit.pillars.interactionFriction.evaluatedTaskCount;
   const representativeTasks = uxAudit.evidenceCoverage.representativeTaskCount;
   put('uxInteractionFrictionScore', [uxRefs[1]], {

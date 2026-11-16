@@ -32,6 +32,10 @@ jest.mock('../src/data/rbaMarketOutlook', () => ({
   RBA_F17_FORWARD_URL: 'https://www.rba.gov.au/statistics/tables/csv/f17-forward-rates.csv',
   RBA_J1_FORECAST_URL: 'https://www.rba.gov.au/statistics/tables/csv/j1-cash-rate.csv',
 }));
+const mockLocalAudit = jest.fn(() => false);
+jest.mock('../src/lib/appHealthTransportGuard', () => ({
+  isLocalAppHealthAudit: () => mockLocalAudit(),
+}));
 jest.mock('../src/lib/yieldToUi', () => ({ yieldToPaintFrames: async () => undefined }));
 jest.mock('../src/hooks/useAuditExternalLinks', () => ({ useAuditExternalLinks: jest.fn() }));
 jest.mock('../src/components/ExternalLinkConfirmation', () => ({ useTrustedExternalUrl: () => ({ requestExternalUrl: jest.fn() }) }));
@@ -88,6 +92,7 @@ async function refresh() {
 beforeEach(() => {
   jest.useFakeTimers().setSystemTime(Date.parse('2026-09-22T12:00:00Z'));
   jest.clearAllMocks();
+  mockLocalAudit.mockReturnValue(false);
   mockLoad.mockResolvedValue(outlook);
 });
 afterEach(() => {
@@ -181,6 +186,24 @@ test('failed uncached source remains unavailable while its genuinely rendered em
   expect(graphics().ready).toBe(true);
   expect(await action('rba.forecast.next')).toEqual({ unavailableReason: expect.any(String) });
   expect(probe('forecast').actualCount).toBe(0);
+  const dataProbe = registry.snapshot(['rba.dashboard']).surfaces[0].probes.find((item) => item.id === 'rba.data');
+  expect(dataProbe).toMatchObject({ status: 'error', error: 'offline without cache' });
+});
+
+test('local audit without cached RBA outlook marks rba.data as intentionally empty once empty states are measured', async () => {
+  mockLocalAudit.mockReturnValue(true);
+  mockLoad.mockRejectedValueOnce(new Error('RBA market context is not cached. Connect to load official data.'));
+  await mount();
+  measureEmpty('Forecast unavailable');
+  measureEmpty('Bond data unavailable');
+  const snapshot = registry.snapshot(['rba.dashboard']);
+  expect(snapshot.ready).toBe(true);
+  expect(snapshot.surfaces[0].probes.find((item) => item.id === 'rba.data')).toMatchObject({
+    status: 'ready',
+    error: null,
+    expectedCount: 0,
+    actualCount: 0,
+  });
 });
 
 test('unchanged cached charts retain actual SVG proof across refresh without borrowing proof for new content', async () => {

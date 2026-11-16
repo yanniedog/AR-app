@@ -608,6 +608,7 @@ function requiredProbeKinds(step: DeepAuditStep): PerformanceAuditReadinessKind[
     if (category === 'graphics') kinds.add('graphic');
     else if (category === 'logos') kinds.add('logo');
     else if (category === 'list') kinds.add('list');
+    else if (category === 'local-state') kinds.add('layout');
   }
   return [...kinds];
 }
@@ -3793,6 +3794,11 @@ export function PerformanceAuditRunner() {
             const check = await runExternalLinkAuditCheck(request, index, {
               platform: Platform.OS, reachability: false, handler: false, timeoutMs: 1, signal: linkAbort.signal,
             });
+            if (check.status === 'fail' && !check.error) {
+              check.error = typeof check.metrics.validationDetail === 'string' && check.metrics.validationDetail.trim()
+                ? check.metrics.validationDetail
+                : 'External URL failed trustedExternalUrl validation';
+            }
             await record(check, true);
             plannedLinkCheckIds.push(check.id);
           } else {
@@ -3801,6 +3807,11 @@ export function PerformanceAuditRunner() {
               const check = await runExternalLinkAuditCheck(request, index, {
                 platform: Platform.OS, reachability: false, handler: true, timeoutMs: 1, signal: linkAbort.signal,
               });
+              if (check.status === 'fail' && !check.error) {
+                check.error = preloaded.result.validation.status === 'fail'
+                  ? preloaded.result.validation.detail || 'External URL failed trustedExternalUrl validation'
+                  : preloaded.result.handler.detail || 'External URL handler check failed';
+              }
               await record(check, true);
               plannedLinkCheckIds.push(check.id);
             } else {

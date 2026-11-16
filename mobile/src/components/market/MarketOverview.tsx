@@ -12,7 +12,7 @@ import { SegmentedControl } from '../../components/controls';
 import { ScreenSkeleton } from '../../components/feedback';
 import { AppText, Button, Disclosure, SectionHeading } from '../../components/ui';
 import {
-  filterBankInsightsForSuitability,
+  filterBankInsightsForSuitabilityCooperatively,
   marketPulse,
   recentBankEvents,
 } from '../../data/bankInsights';
@@ -106,21 +106,63 @@ export default function MarketOverview() {
     void ensureDetails({ force: true });
   }, [core, ensureDetails, includeNonStandard]);
 
-  const payload = useMemo(() => {
-    if (!contentReady) return null;
-    void suitabilityRevision;
-    return filterBankInsightsForSuitability(
+  const [filteredInsights, setFilteredInsights] = useState<{
+    rawPayload: typeof rawPayload;
+    core: typeof core;
+    coreIntegrity: typeof coreIntegrity;
+    detailsProducts: typeof detailsProducts;
+    includeNonStandard: boolean;
+    suitabilityRevision: number;
+    payload: Awaited<ReturnType<typeof filterBankInsightsForSuitabilityCooperatively>>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!contentReady || !rawPayload || !core) {
+      setFilteredInsights(null);
+      return;
+    }
+    let cancelled = false;
+    void filterBankInsightsForSuitabilityCooperatively(
       rawPayload,
       core,
       includeNonStandard,
       detailsProducts,
       suitabilityRevision,
       coreIntegrity,
-    );
+      { cancelled: () => cancelled },
+    ).then((nextPayload) => {
+      if (cancelled) return;
+      setFilteredInsights({
+        rawPayload,
+        core,
+        coreIntegrity,
+        detailsProducts,
+        includeNonStandard,
+        suitabilityRevision,
+        payload: nextPayload,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [contentReady, core, coreIntegrity, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
+
+  const filterMatchesCurrent =
+    contentReady &&
+    rawPayload !== null &&
+    core !== null &&
+    filteredInsights !== null &&
+    filteredInsights.rawPayload === rawPayload &&
+    filteredInsights.core === core &&
+    filteredInsights.coreIntegrity === coreIntegrity &&
+    filteredInsights.detailsProducts === detailsProducts &&
+    filteredInsights.includeNonStandard === includeNonStandard &&
+    filteredInsights.suitabilityRevision === suitabilityRevision;
+  const payload = filterMatchesCurrent ? filteredInsights.payload : null;
+  const filteringPending = contentReady && rawPayload !== null && core !== null && !filterMatchesCurrent;
   const pulse = useMemo(() => marketPulse(payload, 7, feedSections), [feedSections, payload]);
   const suitabilityWarming = rawPayload !== null && payload === null && !error && (!suitabilityReady || !contentReady);
-  const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady && contentReady;
+  const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady && contentReady && !filteringPending;
   const feedExpectedCount = useMemo(
     () => payload ? recentBankEvents(payload, { sections: feedSections, limit: 14 }).length : 0,
     [feedSections, payload],

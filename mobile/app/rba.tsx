@@ -19,6 +19,7 @@ import { useStore } from '../src/data/store';
 import { usePerformanceAuditProbe, usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { yieldToPaintFrames } from '../src/lib/yieldToUi';
 import { hasPositiveChartLayout, type ChartRenderEvidence } from '../src/lib/chartRenderEvidence';
+import { isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 import type { PerformanceAuditProbeDefinition } from '../src/lib/performanceAuditReadiness';
 
 const ASX_TRACKER_URL = 'https://www.asx.com.au/markets/trade-our-derivatives-market/futures-market/rba-rate-tracker';
@@ -41,7 +42,7 @@ export default function RbaRates() {
   const [now, setNow] = useState(Date.now);
   const [outlook, setOutlook] = useState<RbaMarketOutlook | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [forecastIndex, setForecastIndex] = useState(0);
   const [bondIndex, setBondIndex] = useState(1);
   const [sourcesOpen, setSourcesOpen] = useState(false);
@@ -66,14 +67,17 @@ export default function RbaRates() {
   const refresh = useCallback(async (force = false) => {
     const request = ++epoch.current;
     setLoading(true);
-    setError(false);
+    setError(null);
     await yieldToPaintFrames(2);
     if (request !== epoch.current) return;
     try {
       const next = await loadRbaMarketOutlook(force);
       if (request === epoch.current) setOutlook(next);
-    } catch {
-      if (request === epoch.current) setError(true);
+    } catch (err) {
+      if (request === epoch.current) {
+        const message = (err instanceof Error ? err.message : String(err ?? '')).trim();
+        setError(message || 'Official RBA market context could not be loaded.');
+      }
     } finally {
       if (request === epoch.current) setLoading(false);
     }
@@ -83,7 +87,7 @@ export default function RbaRates() {
     epoch.current += 1;
     setOutlook(null);
     setLoading(false);
-    setError(false);
+    setError(null);
     setGraphReady({ forecast: null, bonds: null });
     setActiveAuditChart(null);
     setForecastIndex(0);
@@ -149,10 +153,12 @@ export default function RbaRates() {
       },
     },
   });
+  const localAuditEmpty = Boolean(!loading && !outlook && error && isLocalAppHealthAudit());
   usePerformanceAuditProbe(auditSurface, {
     id: 'rba.data', kind: 'data', datasetRevision, renderRevision,
-    status: loading ? 'pending' : error ? 'error' : outlook ? 'ready' : 'pending',
-    expectedCount: 1,
+    status: loading ? 'pending' : outlook || localAuditEmpty ? 'ready' : error ? 'error' : 'pending',
+    error: localAuditEmpty ? null : error,
+    expectedCount: localAuditEmpty ? 0 : 1,
     actualCount: loading || error ? 0 : outlook ? 1 : 0,
   });
   usePerformanceAuditProbe(auditSurface, {

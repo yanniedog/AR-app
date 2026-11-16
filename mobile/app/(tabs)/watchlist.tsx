@@ -44,6 +44,7 @@ import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useUndoSnackbar } from '../../src/hooks/useUndoSnackbar';
 import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
 import { openCompare, openProduct } from '../../src/lib/nav';
+import { scheduleAfterInteractions } from '../../src/lib/yieldToUi';
 import {
   auditActionString,
   auditActionStrings,
@@ -138,9 +139,6 @@ export default function MyRates() {
     void ensureDetails();
   }, [contentReady, ensureDetails, profileDetailsPending]);
 
-  const positionsFocused = focused && contentReady && scenarioStatus === 'ready';
-  // Reference freshness has rolling timestamp boundaries. Resolve these small
-  // inputs each render, retaining equivalent values for expensive position work.
   const currentRates = SECTION_ORDER.map(section => [section,
     resolveLocalCurrentRate(section, scenario, publicCatalogue.references, undefined, publicCatalogue, profileFilters)] as const);
   const currentRatesSignature = JSON.stringify(currentRates);
@@ -150,6 +148,28 @@ export default function MyRates() {
   };
   const localCurrentRates = stableCurrentRates.current.values;
   const hasPosition = (section: SectionKey) => { const local = localCurrentRates.get(section); return local?.status === 'exact' && local.payableRate != null; };
+  const shouldDeferPositions = SECTION_ORDER.some(
+    (section) => hasPosition(section) && (core?.sections[section]?.rates?.length ?? 0) > 250,
+  );
+
+  const [deferredPositionsReady, setDeferredPositionsReady] = useState(false);
+  useEffect(() => {
+    if (!focused || !contentReady || !shouldDeferPositions) {
+      setDeferredPositionsReady(false);
+      return;
+    }
+    let mounted = true;
+    const cancel = scheduleAfterInteractions(() => {
+      if (mounted) setDeferredPositionsReady(true);
+    });
+    return () => {
+      mounted = false;
+      cancel();
+    };
+  }, [focused, contentReady, shouldDeferPositions]);
+
+  const positionsReady = !shouldDeferPositions || deferredPositionsReady;
+  const positionsFocused = focused && contentReady && positionsReady && scenarioStatus === 'ready';
   const mortgageLvr = computeLvr(scenario.mortgage).lvr;
   const mortgageSectionScenario = useMemo(
     () => publicRateScenario('Mortgage', scenario, profileFilters),
@@ -181,7 +201,7 @@ export default function MyRates() {
     sourceRows: core?.sections.Mortgage?.rates ?? [],
     catalogue: publicCatalogue,
     section: 'Mortgage',
-    candidates: hasPosition('Mortgage') ? null : EMPTY_POSITION_ROWS,
+    candidates: positionsReady && hasPosition('Mortgage') ? null : EMPTY_POSITION_ROWS,
     sectionScenario: mortgageSectionScenario,
     rowScenario: mortgageRowScenario,
     focused: positionsFocused && hasPosition('Mortgage'),
@@ -191,7 +211,7 @@ export default function MyRates() {
     sourceRows: core?.sections.Savings?.rates ?? [],
     catalogue: publicCatalogue,
     section: 'Savings',
-    candidates: hasPosition('Savings') ? null : EMPTY_POSITION_ROWS,
+    candidates: positionsReady && hasPosition('Savings') ? null : EMPTY_POSITION_ROWS,
     sectionScenario: savingsSectionScenario,
     rowScenario: savingsRowScenario,
     focused: positionsFocused && hasPosition('Savings'),
@@ -201,7 +221,7 @@ export default function MyRates() {
     sourceRows: core?.sections.TD?.rates ?? [],
     catalogue: publicCatalogue,
     section: 'TD',
-    candidates: hasPosition('TD') ? null : EMPTY_POSITION_ROWS,
+    candidates: positionsReady && hasPosition('TD') ? null : EMPTY_POSITION_ROWS,
     sectionScenario: tdSectionScenario,
     rowScenario: tdRowScenario,
     focused: positionsFocused && hasPosition('TD'),
@@ -227,7 +247,7 @@ export default function MyRates() {
         && !(profileFeaturesForSection(profileFilters, section).length > 0 && !detailsProducts)
         && catalogueReady;
       const priced = sectionPricing[section];
-      if (!gateReady || !priced.ready) {
+      if (!positionsReady || !gateReady || !priced.ready) {
         return [{
           section,
           currentRate,
@@ -277,6 +297,7 @@ export default function MyRates() {
     publicCatalogue,
     scenarioStatus,
     localCurrentRates,
+    positionsReady,
     sectionPricing,
     suitabilityRevision,
   ]);
