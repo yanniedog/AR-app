@@ -52,6 +52,9 @@ export function lvrTierDisplay(value: string | null | undefined): UiText {
   return (value ? lvrTierLabel(value) : null) ?? humanizeEnum(value);
 }
 
+/** Canonical LVR filter bands shown in the Profile editor. */
+export const PROFILE_LVR_OPTIONS = ['<60', '60-70', '70-80', '80-90', '>90'] as const;
+
 /** Order raw `lvr_tier` values from the lowest band up; tiers without a range sort last. */
 export function compareLvrTiers(a: string, b: string): number {
   const ra = parseLvrTier(a);
