@@ -24,7 +24,7 @@ export function NavigationHub({ title, surface, route, actions, children }: {
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
   const probes = useMemo(() => [
-    { id: `${surface}.model`, kind: 'data' as const, status: 'ready' as const },
+    { id: `${surface}.model`, kind: 'data' as const, status: 'ready' as const, expectedCount: 1, actualCount: 1 },
     { id: `${surface}.layout`, kind: 'layout' as const,
       status: focused && laidOut ? 'ready' as const : 'pending' as const,
       layoutMeasured: focused && laidOut },

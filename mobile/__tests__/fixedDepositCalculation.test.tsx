@@ -40,7 +40,7 @@ test('actual verified transport opens local form, calculates maturity, and remov
   mockState = { ...mockState, manifest: { ...mockState.manifest, files: { core: mockState.manifest.files.core, details: mockState.manifest.files.details } } };
   await act(async () => { tree.update(<FixedDepositCalculation row={x.row} />); });
   expect(receipt(tree)).toBeUndefined();
-  expect(copy(tree)).toContain('Unavailable');
+  expect(copy(tree)).toContain('Not published');
   act(() => tree.unmount());
 });
 
@@ -123,5 +123,21 @@ test('criteria disclosure preserves AND/OR/NOT structure and failed comparison e
   for (const source of x.t.evidence) expect(text).toContain(source.id);
   act(() => tree.root.findByProps({ title: 'Sources' }).props.onToggle());
   expect(tree.root.findAllByType('Button').length).toBeGreaterThan(0);
+  act(() => tree.unmount());
+});
+
+test('verification error offers Retry and succeeds when reloading completes', async () => {
+  const x = setup();
+  await x.load();
+  const calls = (downloadInflate as jest.Mock).mock.results.map(r => r.value);
+  (downloadInflate as jest.Mock).mockRejectedValueOnce(new Error('network error'));
+  for (const call of calls) (downloadInflate as jest.Mock).mockResolvedValueOnce(await call);
+  mockState = { manifest: x.context.manifest, core: x.context.core, coreIntegrity: x.context.coreIntegrity };
+  let tree!: ReactTestRenderer & { root: any; toJSON: () => unknown };
+  await act(async () => { tree = TestRenderer.create(<FixedDepositCalculation row={x.row} />) as typeof tree; });
+  await act(async () => { tree.root.findByType('Disclosure' as any).props.onToggle(); });
+  expect(copy(tree)).toContain('Source unverified');
+  await act(async () => { tree.root.findByProps({ title: 'Retry' }).props.onPress(); });
+  expect(tree.root.findByProps({ title: 'Calculate' })).toBeDefined();
   act(() => tree.unmount());
 });

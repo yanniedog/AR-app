@@ -9,7 +9,7 @@ type RowField = 'product_key' | 'provider';
 // used, and let replaced arrays (including same-day corrections) be collected.
 const indexes = new WeakMap<RateRow[], Partial<Record<RowField, Map<string, RateRow[]>>>>();
 
-function matchingRows(rows: RateRow[], field: RowField, value: string): RateRow[] {
+function indexedRows(rows: RateRow[], field: RowField, value: string): RateRow[] | undefined {
   let dimensions = indexes.get(rows);
   if (!dimensions) {
     dimensions = {};
@@ -26,9 +26,25 @@ function matchingRows(rows: RateRow[], field: RowField, value: string): RateRow[
     }
     dimensions[field] = index;
   }
+  return index.get(value);
+}
+
+function matchingRows(rows: RateRow[], field: RowField, value: string): RateRow[] {
   // Preserve the old filter contract: consumers own the result array, while
   // row identities and original tier order stay exactly as published.
-  return index.get(value)?.slice() ?? [];
+  return indexedRows(rows, field, value)?.slice() ?? [];
+}
+
+const NO_ROWS: RateRow[] = [];
+
+/**
+ * One array identity per installed edition and lender, for read-only use.
+ * `rowsForProvider` returns a fresh copy on every call, so results cached by
+ * input identity (the ranked lender product list) were recomputed on every
+ * lender open. Callers must not mutate the returned array.
+ */
+export function stableRowsForProvider(rows: RateRow[], provider: string): RateRow[] {
+  return indexedRows(rows, 'provider', provider) ?? NO_ROWS;
 }
 
 /** Raw source rows; apply the current eligibility gate at the consumer. */

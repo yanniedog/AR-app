@@ -2,6 +2,23 @@ import { catalogueFixture, condition, discoveryCatalogueFixture, freshness } fro
 import { validatePublicRateCapability, validatePublicRateDiscovery, validatePublicRateIndex, validatePublicRateShard, PUBLIC_RATE_TOTAL_DECODED } from '../src/data/publicRateWire';
 import { payloadBundleIdentity } from '../src/data/payloadBundleIdentity';
 import { mergeOptionalManifestFiles } from '../src/data/ingestFinalized';
+import { MAX_STARTUP_CORE_BYTES, withinStartupCoreBudget } from '../src/data/payloadNetworkBudget';
+
+it('admits the measured expanded core with finite startup and unchanged catalogue limits', () => {
+  const { manifest } = catalogueFixture();
+  manifest.files.core.bytes = 611125;
+  expect(validatePublicRateCapability(manifest)).not.toBeNull();
+  manifest.files.core.bytes = MAX_STARTUP_CORE_BYTES;
+  expect(validatePublicRateCapability(manifest)).not.toBeNull();
+  manifest.files.core.bytes++;
+  expect(() => validatePublicRateCapability(manifest)).toThrow('budget');
+  expect(MAX_STARTUP_CORE_BYTES).toBe(1024 * 1024);
+  expect(PUBLIC_RATE_TOTAL_DECODED).toBe(24 * 1024 * 1024);
+});
+
+it.each([0, -1, 1024 * 1024 + 1, 1.5, Infinity, '611125'])('rejects invalid startup core bytes %s', bytes => {
+  expect(withinStartupCoreBudget(bytes)).toBe(false);
+});
 
 it('rejects bounds without either limit while admitting one-sided and zero bounds', () => {
   const { manifest, capability, index, shard } = catalogueFixture();

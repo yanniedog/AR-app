@@ -1,4 +1,4 @@
-import { RATE_MOVE_BPS_THRESHOLD } from '../config';
+import { RATE_MOVE_BPS_THRESHOLD } from '../ratePolicy';
 import type {
   CorePayload,
   DetailsPayload,

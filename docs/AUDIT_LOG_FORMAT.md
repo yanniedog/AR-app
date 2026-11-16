@@ -120,6 +120,13 @@ errors, blocker messages, and timing of readiness updates. The explicit
 deidentified share option retains its stricter field allowlist.
 Full readiness snapshots stay in the persisted report and upload; bounded
 per-check journal lines omit those snapshots to avoid rollover work during a run.
+Checkpoints also list `canonicalMetricFields` for long metric strings instead
+of copying and truncating them again. External-link checkpoints use
+`canonicalMetrics: true` to reference destination labels, paths and details
+without repeating the same field list thousands of times.
+Each listed field remains on the same check ID in the canonical report; check
+status, link validation/handler/reachability states, timings and errors remain
+in the checkpoint. This does not turn untested HTTP reachability into a pass.
 New canonical checks retain full evidence before journal bounding. Existing saved
 reports containing `…[truncated N chars]` remain recoverable, but their completion
 metadata counts truncated fields and omitted characters before redaction hides

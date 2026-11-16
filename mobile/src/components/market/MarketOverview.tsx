@@ -69,6 +69,7 @@ export default function MarketOverview() {
   const params = useLocalSearchParams<{ section?: string | string[] }>();
   const requestedSection = scalarRouteParam(params.section);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
+  const feedSections = useMemo(() => [activeSection], [activeSection]);
 
   useEffect(() => {
     setActiveSection((current) => resolveInterestSection(interests, current));
@@ -117,12 +118,12 @@ export default function MarketOverview() {
       coreIntegrity,
     );
   }, [contentReady, core, coreIntegrity, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
-  const pulse = useMemo(() => marketPulse(payload, 7, [activeSection]), [activeSection, payload]);
+  const pulse = useMemo(() => marketPulse(payload, 7, feedSections), [feedSections, payload]);
   const suitabilityWarming = rawPayload !== null && payload === null && !error && (!suitabilityReady || !contentReady);
   const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady && contentReady;
   const feedExpectedCount = useMemo(
-    () => payload ? recentBankEvents(payload, { sections: [activeSection], limit: 14 }).length : 0,
-    [activeSection, payload],
+    () => payload ? recentBankEvents(payload, { sections: feedSections, limit: 14 }).length : 0,
+    [feedSections, payload],
   );
   const feedRenderRevision = `${payload?.run_date ?? core?.run_date ?? 'none'}:${bankInsightsSha ?? 'no-bank-history'}:${activeSection}:${suitabilityRevision}`;
 
@@ -180,10 +181,11 @@ export default function MarketOverview() {
     'market.rba.open': openRba,
     'market.response.open': openResponse,
   }), [changeSection, openHistory, openOutlook, openRba, openResponse, toggleMovers]);
-  const history = core?.rba.filter(point => point.date <= sydneyYmd(now)) ?? [];
+  const asOfDate = sydneyYmd(now);
+  const history = core?.rba.filter(point => point.date <= asOfDate) ?? [];
   const verifiedCalendarRate = currentCashRate(calendar, now);
   const cashRate = verifiedCalendarRate ?? history.at(-1)?.rate ?? null;
-  const confirmedDecision = calendar?.decisions.filter(decision => (decision.effective ?? decision.date) <= sydneyYmd(now)).at(-1);
+  const confirmedDecision = calendar?.decisions.filter(decision => (decision.effective ?? decision.date) <= asOfDate).at(-1);
   const cashRateDate = verifiedCalendarRate != null ? confirmedDecision?.effective ?? confirmedDecision?.date : history.at(-1)?.date;
   const coverage = rbaCalendarCoverage(calendar, now);
   const meeting = coverage.unresolvedMeeting ?? nextMeeting(calendar, now);
@@ -197,10 +199,13 @@ export default function MarketOverview() {
     renderRevision,
     actions: auditActions,
     probes: [
-      { id: 'market.core', kind: 'data', status: core ? 'ready' : 'pending', datasetRevision: coreSha },
+      { id: 'market.core', kind: 'data', status: core ? 'ready' : 'pending', datasetRevision: coreSha,
+        expectedCount: 1, actualCount: core ? 1 : 0 },
       { id: 'market.calendar', kind: 'data', required: false,
         status: calendar ? 'ready' : calendarAttempted || calendarError ? 'error' : 'pending',
         error: !calendar && (calendarAttempted || calendarError) ? 'Calendar unavailable' : null,
+        expectedCount: calendar ? calendar.decisions.length + calendar.schedule.length : 0,
+        actualCount: calendar ? calendar.decisions.length + calendar.schedule.length : 0,
         // Dataset identity is the publication, not this asset's distinct SHA.
         // calendarSha still invalidates factsRevision and its measured layout.
         datasetRevision: coreSha ?? core?.run_date ?? null },
@@ -212,6 +217,8 @@ export default function MarketOverview() {
         status: payload || filteredEmpty ? 'ready' : error ? 'error' : 'pending',
         error: error && !payload ? 'Observed rate changes could not be prepared' : null,
         datasetRevision: coreSha ?? core?.run_date ?? null,
+        expectedCount: feedExpectedCount,
+        actualCount: payload || filteredEmpty ? feedExpectedCount : 0,
       },
       {
         id: 'market.movements.list',
@@ -248,10 +255,15 @@ export default function MarketOverview() {
           <AppText variant="small" color="textMuted">{uiLabel(coverage.unresolvedMeeting ? 'Awaiting decision' : 'Next decision')}</AppText>
           <AppText variant="body" weight="600">{meeting ? uiDate(meeting.date) : calendarAttempted ? uiLabel("Unavailable") : uiLabel("Loading")}</AppText>
         </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          <Button title="History" variant="secondary" onPress={openHistory} />
-          <Button title="Outlook" variant="secondary" onPress={openOutlook} />
-          <Button title="RBA" variant="ghost" onPress={openRba} />
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button title="History" variant="secondary" style={{ flex: 1 }} onPress={openHistory} />
+            <Button title="Outlook" variant="secondary" style={{ flex: 1 }} onPress={openOutlook} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button title="RBA" variant="secondary" style={{ flex: 1 }} onPress={openRba} />
+            <Button title="Bank response" variant="secondary" style={{ flex: 1 }} onPress={openResponse} disabled={!payload} />
+          </View>
         </View>
       </View>
       <SegmentedControl options={sectionOptions} value={activeSection} onChange={setActiveSection} />
@@ -267,7 +279,7 @@ export default function MarketOverview() {
           <SectionHeading title="Recent movements" />
           <AppText variant="small" color="textMuted">{payload ? uiDate(payload.run_date) : uiLabel("Unavailable")}</AppText>
         </View>
-        {payload ? <BankMovesFeed payload={payload} error={error} sections={[activeSection]} limit={14}
+        {payload ? <BankMovesFeed payload={payload} error={error} sections={feedSections} limit={14}
           contentRevision={feedRenderRevision} onRenderEvidence={recordFeedEvidence} /> : suitabilityWarming ? (
           <View style={{ gap: 8 }}><AppText variant="small">{uiLabel("Loading")}</AppText><Button title="Retry" variant="secondary" onPress={() => void ensureDetails({ force: true, abandonInFlight: true })} /></View>
         ) : filteredEmpty ? (
@@ -282,7 +294,6 @@ export default function MarketOverview() {
       {payload ? <Disclosure title="30-day movers" open={moversOpen} onToggle={toggleMovers}>
         <MoversLeaderboard payload={payload} section={activeSection} />
       </Disclosure> : null}
-      <Button title="Bank response" variant="secondary" onPress={openResponse} disabled={!payload} />
     </ScreenScrollView>
   );
 }

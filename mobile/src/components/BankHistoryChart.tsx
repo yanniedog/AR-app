@@ -12,6 +12,7 @@ import type { BankHistoryPoint, HistoryWindow, RbaEntry, SectionKey } from '../t
 import {
   axisLabelInterval,
   chartYDomain,
+  parseYmd,
   rbaChangesInWindow,
   rbaHoldsInWindow,
   rbaStepForDates,
@@ -52,6 +53,21 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** Conservative SVG text width estimate; react-native-svg cannot measure text. */
+export function chartLabelWidth(text: string, fontSize: number): number {
+  return text.length * fontSize * 0.62;
+}
+
+/** Axis labels at the plot edges grow inwards so they are never clipped. */
+export function edgeLabelAnchor(x: number, text: string, fontSize: number, left: number, right: number): {
+  x: number; anchor: 'start' | 'middle' | 'end';
+} {
+  const half = chartLabelWidth(text, fontSize) / 2;
+  if (x + half > right) return { x: Math.min(x, right), anchor: 'end' };
+  if (x - half < left) return { x: Math.max(x, left), anchor: 'start' };
+  return { x, anchor: 'middle' };
 }
 
 function finiteCoord(value: number): number | null {
@@ -160,6 +176,27 @@ function sliceHistoryTimeline(
   }
 }
 
+const DAY_MS = 86_400_000;
+
+function gappedPlotIndices(plotDates: string[]): number[] {
+  const indices: number[] = [];
+  let prevTs: number | null = null;
+  for (let i = 0; i < plotDates.length; i += 1) {
+    const ts = parseYmd(plotDates[i]);
+    if (prevTs != null && ts != null && ts - prevTs > DAY_MS) indices.push(-1);
+    indices.push(i);
+    prevTs = ts;
+  }
+  return indices;
+}
+
+function isAdjacentDay(plotDates: string[], i: number, j: number): boolean {
+  if (i < 0 || j < 0 || i >= plotDates.length || j >= plotDates.length) return false;
+  const tsA = parseYmd(plotDates[i]);
+  const tsB = parseYmd(plotDates[j]);
+  return tsA != null && tsB != null && Math.abs(tsB - tsA) <= DAY_MS;
+}
+
 function buildHistoryChartPaths(
   plotDates: string[],
   plotPoints: BankHistoryPoint[],
@@ -183,15 +220,19 @@ function buildHistoryChartPaths(
   }
   const x = (index: number) => padL + (plotDates.length === 1 ? innerW / 2 : (index / (plotDates.length - 1)) * innerW);
   const y = (value: number) => padT + innerH - ((value - yMin) / span) * innerH;
+  const gapped = gappedPlotIndices(plotDates);
+  const gappedDates = gapped.map((idx) => (idx < 0 ? '' : plotDates[idx]));
+  const gx = (gappedIdx: number) => x(gapped[gappedIdx]);
+  const mapGapped = (values: (number | null)[]) => gapped.map((idx) => (idx < 0 ? null : values[idx]));
   return {
     mins, maxs, means, medians,
-    band: buildBandPath(plotDates, mins, maxs, x, y, true),
-    meanLine: buildLinePath(means, x, y, true),
-    medianLine: buildLinePath(medians, x, y, true),
-    minLine: buildLinePath(mins, x, y, true),
-    maxLine: buildLinePath(maxs, x, y, true),
+    band: buildBandPath(gappedDates, mapGapped(mins), mapGapped(maxs), gx, y, true),
+    meanLine: buildLinePath(mapGapped(means), gx, y, true),
+    medianLine: buildLinePath(mapGapped(medians), gx, y, true),
+    minLine: buildLinePath(mapGapped(mins), gx, y, true),
+    maxLine: buildLinePath(mapGapped(maxs), gx, y, true),
     rbaLine: showRba ? stepPath(rbaSteps, x, y) : null,
-    highlightLine: highlightValues ? buildLinePath(highlightValues, x, y, true) : null,
+    highlightLine: highlightValues ? buildLinePath(mapGapped(highlightValues), gx, y, true) : null,
   };
 }
 
@@ -386,19 +427,23 @@ function BankHistoryChartView({
       const maxs = plotPoints.map((point) => point.max);
       const means = plotPoints.map((point) => point.mean);
       const medians = plotPoints.map((point) => point.median);
-      const band = buildBandPath(plotDates, mins, maxs, x, y, true);
+      const gapped = gappedPlotIndices(plotDates);
+      const gappedDates = gapped.map((idx) => (idx < 0 ? '' : plotDates[idx]));
+      const gx = (gappedIdx: number) => x(gapped[gappedIdx]);
+      const mapGapped = (values: (number | null)[]) => gapped.map((idx) => (idx < 0 ? null : values[idx]));
+      const band = buildBandPath(gappedDates, mapGapped(mins), mapGapped(maxs), gx, y, true);
       await yieldToUi(0);
       if (cancelled) return;
-      const meanLine = buildLinePath(means, x, y, true);
-      const medianLine = buildLinePath(medians, x, y, true);
+      const meanLine = buildLinePath(mapGapped(means), gx, y, true);
+      const medianLine = buildLinePath(mapGapped(medians), gx, y, true);
       await yieldToUi(0);
       if (cancelled) return;
-      const minLine = buildLinePath(mins, x, y, true);
-      const maxLine = buildLinePath(maxs, x, y, true);
+      const minLine = buildLinePath(mapGapped(mins), gx, y, true);
+      const maxLine = buildLinePath(mapGapped(maxs), gx, y, true);
       await yieldToUi(0);
       if (cancelled) return;
       const rbaLine = showRba ? stepPath(rbaSteps, x, y) : null;
-      const highlightLine = highlightValues ? buildLinePath(highlightValues, x, y, true) : null;
+      const highlightLine = highlightValues ? buildLinePath(mapGapped(highlightValues), gx, y, true) : null;
       if (!cancelled) setDeferredPaths({
         identity,
         paths: { mins, maxs, means, medians, band, meanLine, medianLine, minLine, maxLine, rbaLine, highlightLine },
@@ -594,6 +639,14 @@ function BankHistoryChartView({
               const sliceW =
                 plotDates.length > 1 ? innerW / (plotDates.length - 1) : Math.min(innerW, 36);
               const half = Math.max(4, Math.min(sliceW * 0.45, 22));
+              const bpsLabel = uiChartBps(mark.bp);
+              // Keep the move label inside the plot: right-align it against the
+              // band when a start-aligned label would run past the chart edge.
+              const labelStart = Math.max(padL + 2, x - half + 2);
+              const labelFitsRight = labelStart + chartLabelWidth(bpsLabel, 9) <= width - padR;
+              // Right-aligned fallback never starts left of the plot either.
+              const labelEnd = Math.min(width - padR - 2,
+                Math.max(x + half - 2, padL + 2 + chartLabelWidth(bpsLabel, 9)));
               return (
                 <React.Fragment key={`${mark.date}-${mark.snap}`}>
                   <Rect
@@ -604,24 +657,28 @@ function BankHistoryChartView({
                     fill={rbaBand}
                   />
                   <SvgText
-                    x={Math.max(padL + 2, x - half + 2)}
+                    x={labelFitsRight ? labelStart : labelEnd}
                     y={padT + 10}
                     fontSize={9}
                     fill={rbaInk}
                     fontWeight="600"
+                    textAnchor={labelFitsRight ? 'start' : 'end'}
                   >
-                    {uiChartBps(mark.bp)}
+                    {bpsLabel}
                   </SvgText>
                 </React.Fragment>
               );
             })}
 
             {[mins, maxs, means, medians, highlightValues ?? []].flatMap((values, seriesIndex) =>
-              values.map((value, index) => isFiniteNumber(value) &&
-                !isFiniteNumber(values[index - 1]) && !isFiniteNumber(values[index + 1]) ? (
+              values.map((value, index) => {
+                const prevConnected = isFiniteNumber(values[index - 1]) && isAdjacentDay(plotDates, index - 1, index);
+                const nextConnected = isFiniteNumber(values[index + 1]) && isAdjacentDay(plotDates, index, index + 1);
+                return isFiniteNumber(value) && !prevConnected && !nextConnected ? (
                   <Circle key={`isolated-${seriesIndex}-${index}`} cx={xAt(index)} cy={yAt(value)} r={2.5}
                     fill={seriesIndex === 4 ? highlightColor : ribbonColor} />
-                ) : null),
+                ) : null;
+              }),
             )}
             {band ? (
               <AnimatedPath animatedProps={bandDrawProps} d={band} fill={bandFill} stroke="none" />
@@ -720,26 +777,45 @@ function BankHistoryChartView({
               />
             ) : null}
 
-            {plotDates.map((date, i) => {
-              const isLast = i === plotDates.length - 1;
-              const isScheduled = labelEvery === 0 || i % (labelEvery + 1) === 0;
-              const isTooCloseToLast = !isLast && (plotDates.length - 1 - i) < (labelEvery + 1) * 0.7;
-              if (isLast || (isScheduled && !isTooCloseToLast)) {
-                return (
-                  <SvgText
-                    key={date}
-                    x={xAt(i)}
-                    y={height - 4}
-                    fontSize={10}
-                    fill={theme.colors.textFaint}
-                    textAnchor="middle"
-                  >
-                    {uiChartDate(date)}
-                  </SvgText>
-                );
+            {(() => {
+              if (!plotDates.length) return null;
+              const minGap = 8;
+              const lastIdx = plotDates.length - 1;
+              const lastLabel = uiChartDate(plotDates[lastIdx]);
+              const lastPlaced = edgeLabelAnchor(xAt(lastIdx), lastLabel, 10, padL, width - padR);
+              const lastW = chartLabelWidth(lastLabel, 10);
+              const lastLeft = lastPlaced.anchor === 'end' ? lastPlaced.x - lastW
+                : lastPlaced.anchor === 'middle' ? lastPlaced.x - lastW / 2 : lastPlaced.x;
+              const rendered: { date: string; x: number; anchor: 'start' | 'middle' | 'end'; label: ReturnType<typeof uiChartDate> }[] = [];
+              let prevRight = -Infinity;
+              for (let i = 0; i < lastIdx; i += 1) {
+                const isScheduled = labelEvery === 0 || i % (labelEvery + 1) === 0;
+                const isTooCloseToLast = (lastIdx - i) < (labelEvery + 1) * 0.7;
+                if (!isScheduled || isTooCloseToLast) continue;
+                const label = uiChartDate(plotDates[i]);
+                const placed = edgeLabelAnchor(xAt(i), label, 10, padL, width - padR);
+                const w = chartLabelWidth(label, 10);
+                const left = placed.anchor === 'start' ? placed.x
+                  : placed.anchor === 'end' ? placed.x - w : placed.x - w / 2;
+                const right = left + w;
+                if (left < prevRight + minGap || right + minGap > lastLeft) continue;
+                prevRight = right;
+                rendered.push({ date: plotDates[i], x: placed.x, anchor: placed.anchor, label });
               }
-              return null;
-            })}
+              rendered.push({ date: plotDates[lastIdx], x: lastPlaced.x, anchor: lastPlaced.anchor, label: lastLabel });
+              return rendered.map((item) => (
+                <SvgText
+                  key={item.date}
+                  x={item.x}
+                  y={height - 4}
+                  fontSize={10}
+                  fill={theme.colors.textFaint}
+                  textAnchor={item.anchor}
+                >
+                  {item.label}
+                </SvgText>
+              ));
+            })()}
 
             {plotDates.length > 1 ? (
               <Line

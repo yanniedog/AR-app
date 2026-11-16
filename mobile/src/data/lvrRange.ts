@@ -37,11 +37,13 @@ export function matchesLvrTier(value: string | undefined | null, selected: reado
   const available = parseLvrRange(value ?? undefined);
   if (!available) return false;
   return selected.some(tier => {
+    if (tier === '>90') return available.hi > 90;
     const required = parseLvrRange(tier);
     if (!required) return false;
     const first = required.inclusive ? required.lo : Math.round((required.lo + 0.01) * 100) / 100;
-    const coversUpper = required.hi < available.hi || (required.hi === available.hi &&
-      (required.hiInclusive === false || available.hiInclusive !== false));
+    const coversUpper = required.hi < available.hi
+      || (required.hi === available.hi && (required.hiInclusive === false || available.hiInclusive !== false))
+      || (tier === '<60' && available.hi >= 59.99 && available.hiInclusive !== false);
     return lvrRangeContains(available, first) && coversUpper;
   });
 }

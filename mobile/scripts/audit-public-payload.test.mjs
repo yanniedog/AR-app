@@ -19,6 +19,16 @@ const readyCompiler = require('../contracts/history-ready/compiler-manifest.json
 const sample = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../assets/sample');
 const hash = (body) => createHash('sha256').update(body).digest('hex');
 
+function writeJsonAsset(directory, manifest, key, value) {
+  const name = `${key}.json`, body = Buffer.from(JSON.stringify(value));
+  fs.writeFileSync(path.join(directory, name), body);
+  manifest.files[key] = {
+    name, bytes: body.length, sha256: hash(body),
+    url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}`
+  };
+  fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+}
+
 // Model the URL actually requested, rather than rewriting a Response.url to
 // disguise delivery as GitHub. The response body uses Node's real byte stream.
 function httpResponse(url, bytes = null, status = 200, headers = {}) {
@@ -53,8 +63,10 @@ test('public transport requests the shipping Cloudflare service and retains the 
     return httpResponse(url, bytes);
   });
   assert.deepEqual(await fetchBytes(publication, bytes.length, 'yanniedog/AR-local', transports), bytes);
-  assert.deepEqual(transports, [{ source_url: publication, requested_url: automaticDataUrl(publication),
-    final_url: automaticDataUrl(publication), route: 'cloudflare_service' }]);
+  assert.deepEqual(transports, [{
+    source_url: publication, requested_url: automaticDataUrl(publication),
+    final_url: automaticDataUrl(publication), route: 'cloudflare_service'
+  }]);
 });
 
 test('an actual unopened ARE2 wire envelope is rejected before index JSON parsing', async t => {
@@ -169,6 +181,170 @@ function candidate(t) {
   return { directory, manifest, opts: options(['--directory', directory]) };
 }
 
+function bankResponseCandidate(t) {
+  const result = candidate(t), { directory, manifest } = result;
+  const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures/bank-response-20261113');
+  const core = JSON.parse(fs.readFileSync(path.join(fixture, 'core-subset.json')));
+  manifest.run_date = core.run_date;
+  manifest.tag = `app-payload-${core.run_date}`;
+  manifest.files = {};
+  const rows = Object.values(core.sections).flatMap(section => section.rates);
+  manifest.counts = {
+    rates: rows.length, products: new Set(rows.map(row => row.product_key)).size,
+    providers: new Set(rows.map(row => row.provider)).size
+  };
+  for (const [key, name] of Object.entries({
+    core: 'core-subset.json', details: 'details-subset.json',
+    bank_history: 'bank-history.json', rba_calendar: 'rba-calendar.json'
+  })) {
+    writeJsonAsset(directory, manifest, key, JSON.parse(fs.readFileSync(path.join(fixture, name))));
+  }
+  const { detailSearchIndex } = require('../src/data/detailSearch.ts');
+  const details = JSON.parse(fs.readFileSync(path.join(fixture, 'details-subset.json')));
+  writeJsonAsset(directory, manifest, 'search_index', {
+    schema_version: 1, run_date: core.run_date,
+    products: Object.fromEntries(detailSearchIndex(details.products))
+  });
+  return result;
+}
+
+test('headless Bank response uses retained source and default projection without inventing historical evidence', async t => {
+  const { opts } = bankResponseCandidate(t);
+  const report = await audit(opts);
+  const check = report.checks.find(row => row.id === 'bank-response-coverage');
+  assert.equal(report.status, 'WARN');
+  assert.deepEqual(report.checks.filter(row => !['pass', 'warn'].includes(row.status)).map(row => row.id).sort(),
+    ['coverage-reconciliation', 'freshness-window']); // Deliberately omitted full-capture claims/schedule.
+  assert.equal(report.checks.find(row => row.id === 'ribbon-reconciliation').status, 'pass');
+  assert.equal(report.assets.bank_history.status, 'PASS');
+  assert.equal(report.assets.rba_calendar.status, 'PASS');
+  assert.equal(check.status, 'warn');
+  assert.deepEqual(check.metrics, {
+    coverageAvailable: true, runMatches: true, projectionAvailable: true,
+    windows: 1, checked: 274, displayed: 1, knownMoves: 0, knownTiming: 0,
+    unknownMoves: 274, unknownTiming: 274, noRecordedMove: 0, noProducts: 0,
+    filteredHistory: 0, quarantinedHistory: 0, missingHistory: 1, missingBaseline: 273,
+    historyGaps: 0, unverifiedFirstMoves: 0, unverifiedEvents: 0,
+    coverageComplete: false, renderedCoverageVerified: false
+  });
+  assert.equal(report.historical_coverage_verified, null);
+  assert.equal(report.publication_verified, false);
+});
+
+for (const key of ['bank_history', 'rba_calendar']) {
+  test(`headless Bank response keeps missing ${key} unavailable`, async t => {
+    const { opts, directory, manifest } = bankResponseCandidate(t);
+    delete manifest.files[key];
+    fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+    const check = (await audit(opts)).checks.find(row => row.id === 'bank-response-coverage');
+    assert.equal(check.status, 'unavailable');
+    assert.equal(check.metrics.coverageAvailable, false);
+  });
+  test(`headless Bank response keeps invalid ${key} unavailable`, async t => {
+    const { opts, directory, manifest } = bankResponseCandidate(t);
+    writeJsonAsset(directory, manifest, key, {});
+    const report = await audit(opts);
+    const check = report.checks.find(row => row.id === 'bank-response-coverage');
+    assert.equal(check.status, 'unavailable');
+    assert.equal(report.status, 'FAIL');
+    assert.equal(report.assets[key].status, 'FAIL');
+  });
+}
+
+test('headless Bank response rejects a different source observation date', async t => {
+  const { opts, directory, manifest } = bankResponseCandidate(t);
+  const history = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.bank_history.name)));
+  history.run_date = '2026-11-12'; // Metadata-only negative control, no invented observations.
+  history.run_dates[history.run_dates.length - 1] = history.run_date;
+  writeJsonAsset(directory, manifest, 'bank_history', history);
+  const check = (await audit(opts)).checks.find(row => row.id === 'bank-response-coverage');
+  assert.equal(check.status, 'fail');
+  assert.equal(check.metrics.runMatches, false);
+});
+
+test('matching metadata cannot hide a Bank timeline ending on an earlier observation', async t => {
+  const { opts, directory, manifest } = bankResponseCandidate(t);
+  const history = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.bank_history.name)));
+  history.run_dates[history.run_dates.length - 1] = '2026-11-12';
+  writeJsonAsset(directory, manifest, 'bank_history', history);
+  const report = await audit(opts);
+  assert.equal(report.status, 'FAIL');
+  assert.equal(report.assets.bank_history.status, 'FAIL');
+  assert.equal(report.checks.find(row => row.id === 'bank-response-coverage').status, 'unavailable');
+});
+
+test('unverified Bank history bytes never become headless coverage evidence', async t => {
+  const { opts, directory, manifest } = bankResponseCandidate(t);
+  fs.appendFileSync(path.join(directory, manifest.files.bank_history.name), ' ');
+  const report = await audit(opts);
+  assert.equal(report.assets.bank_history.status, 'FAIL');
+  assert.equal(report.checks.find(row => row.id === 'bank-response-coverage').status, 'unavailable');
+});
+
+test('headless audit reconciles retained catalogue identities with explicit default-profile scope', async t => {
+  const { opts, directory, manifest } = candidate(t);
+  // The old bundled capture predates search-index publication. Derive its index
+  // with the shipping indexer from unchanged retained detail records.
+  const { detailSearchIndex } = require('../src/data/detailSearch.ts');
+  const details = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.details.name)));
+  const body = Buffer.from(JSON.stringify({
+    schema_version: 1, run_date: manifest.run_date,
+    products: Object.fromEntries(detailSearchIndex(details.products))
+  }));
+  const name = 'search-index.json';
+  fs.writeFileSync(path.join(directory, name), body);
+  manifest.files.search_index = {
+    name, bytes: body.length, sha256: hash(body),
+    url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}`
+  };
+  fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+  const report = await audit(opts);
+  const check = report.checks.find(row => row.id === 'catalogue-identity-coverage');
+  assert.equal(check.status, 'warn');
+  assert.equal(check.metrics.catalogueAvailable, true);
+  assert.equal(check.metrics.headlessDefaultPreferences, true);
+  const { DEFAULT_PREFS } = require('../src/data/storeTypes.ts');
+  assert.equal(check.metrics.includeNonStandard, DEFAULT_PREFS.includeNonStandard);
+  for (const section of ['Mortgage', 'Savings', 'TD']) {
+    assert.equal(check.metrics[`${section}SelectedInterest`], DEFAULT_PREFS.interests.includes(section));
+  }
+  assert.ok(check.metrics.publishedProducts > 0);
+  assert.equal(check.metrics.identityMismatches, 0);
+  assert.equal(check.metrics.historyAvailable, null);
+  assert.equal(check.metrics.historicalPixelsVerified, false);
+  assert.equal(check.metrics.allProductsRendered, false);
+  assert.equal(report.publication_verified, false);
+  delete manifest.files.search_index;
+  fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+  const missing = await audit(opts);
+  assert.equal(missing.checks.find(row => row.id === 'catalogue-identity-coverage').status, 'unavailable');
+});
+
+for (const products of [undefined, null, [], 'invalid', { retainedKey: null }]) {
+  test(`malformed search products ${JSON.stringify(products)} yield failed evidence without aborting`, async t => {
+    const { directory, manifest, opts } = candidate(t);
+    writeJsonAsset(directory, manifest, 'search_index', { schema_version: 1, run_date: manifest.run_date, products });
+    const report = await audit(opts);
+    assert.equal(report.status, 'FAIL');
+    assert.equal(report.assets.search_index.status, 'FAIL');
+    assert.match(report.assets.search_index.error, /Invalid search-index payload/);
+    assert.equal(report.checks.find(row => row.id === 'catalogue-identity-coverage').status, 'unavailable');
+  });
+}
+
+test('duplicate retained rate identities fail the independent exact-tier check', async t => {
+  const { directory, manifest, opts } = candidate(t);
+  const core = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.core.name)));
+  const rates = core.sections.Mortgage.rates;
+  rates.push({ ...rates[0] });
+  writeJsonAsset(directory, manifest, 'core', core);
+  const report = await audit(opts);
+  const check = report.checks.find(row => row.id === 'exact-tier-identities');
+  assert.equal(check.status, 'fail');
+  assert.ok(check.metrics.duplicateExactTiers > 0 || check.metrics.ambiguousMultiTierProducts > 0);
+  assert.equal(report.status, 'FAIL');
+});
+
 test('private candidates verify local bytes without claiming public publication', async (t) => {
   const { directory, manifest, opts } = candidate(t);
   const originalFetch = globalThis.fetch;
@@ -211,21 +387,30 @@ test('private audit rejects unsafe descriptor paths before reading them', async 
   assert.equal(report.assets.core.status, 'FAIL');
 });
 
-function detachedCandidate(t, editEnvelope = () => {}, editCatalogue = value => value) {
+function detachedCandidate(t, editEnvelope = () => { }, editCatalogue = value => value, editCoreFile = () => { }) {
   const result = candidate(t), { directory, manifest } = result;
+  editCoreFile(result);
   const core = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.core.name)));
   const details = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.details.name)));
-  const catalogue = editCatalogue(upsertHistoricalCatalogueDay(null, core, details, { kind: 'published_core',
+  const catalogue = editCatalogue(upsertHistoricalCatalogueDay(null, core, details, {
+    kind: 'published_core',
     core_sha256: manifest.files.core.sha256, details_sha256: manifest.files.details.sha256,
-    manifest_sha256: hash(fs.readFileSync(path.join(directory, 'manifest.json'))) }), core, details);
+    manifest_sha256: hash(fs.readFileSync(path.join(directory, 'manifest.json')))
+  }), core, details);
   const inner = Buffer.from(JSON.stringify(catalogue));
-  const envelope = { schema_version: 1, run_date: manifest.run_date, core_sha256: manifest.files.core.sha256,
-    catalogue: { sha256: hash(inner), bytes: inner.length, gzip_base64: gzipSync(inner).toString('base64') } };
+  const envelope = {
+    schema_version: 1, run_date: manifest.run_date, core_sha256: manifest.files.core.sha256,
+    catalogue: { sha256: hash(inner), bytes: inner.length, gzip_base64: gzipSync(inner).toString('base64') }
+  };
   editEnvelope(envelope);
   const outer = gzipSync(Buffer.from(JSON.stringify(envelope)));
   const sha256 = hash(outer), name = `bank-rate-history-catalogue-${manifest.run_date}-${sha256.slice(0, 12)}.json.gz`;
-  manifest.bank_rate_history_catalogue = { schema_version: 1, file: { name, sha256, bytes: outer.length,
-    url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}` } };
+  manifest.bank_rate_history_catalogue = {
+    schema_version: 1, file: {
+      name, sha256, bytes: outer.length,
+      url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}`
+    }
+  };
   fs.writeFileSync(path.join(directory, name), outer);
   fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
   return { ...result, catalogue };
@@ -247,30 +432,59 @@ test('private candidate audits detached history bytes and retained real catalogu
   assert.equal(report.checks.find(check => check.code === 'bank-history-selected-sources').status, 'warn');
 });
 
-function publicCandidate(t, value, editIndex = () => {}, editRevision = () => {}, deliver = (_url, bytes) => bytes) {
+for (const [bytes, expected] of [[611125, 'PASS'], [1024 * 1024, 'PASS'], [1024 * 1024 + 1, 'FAIL']]) {
+  test(`detached history preserves finite startup ceiling at ${bytes} source bytes`, async t => {
+    const value = detachedCandidate(t, () => { }, value => value, ({ directory, manifest }) => {
+      const file = manifest.files.core, target = path.join(directory, file.name), original = fs.readFileSync(target);
+      // Whitespace changes transport size only, never retained financial observations.
+      const padded = Buffer.concat([original, Buffer.alloc(bytes - original.length, 32)]);
+      fs.writeFileSync(target, padded);
+      file.bytes = padded.length; file.sha256 = hash(padded);
+      fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+    });
+    const report = await audit(value.opts);
+    assert.equal(report.assets.bank_rate_history_catalogue.status, expected);
+  });
+}
+
+test('expanded startup allowance never permits eager embedded history', async t => {
+  const value = detachedCandidate(t, () => { }, value => value, ({ directory, manifest }) => {
+    const core = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.core.name)));
+    core.bank_rate_history = {};
+    writeJsonAsset(directory, manifest, 'core', core);
+  });
+  const report = await audit(value.opts);
+  assert.equal(report.assets.bank_rate_history_catalogue.status, 'FAIL');
+});
+
+function publicCandidate(t, value, editIndex = () => { }, editRevision = () => { }, deliver = (_url, bytes) => bytes) {
   const { manifest, directory, catalogue } = value;
   const base = `https://github.com/${manifest.repo}/releases/download/`;
   manifest.tag = `app-payload-${manifest.run_date}-r000001`;
   for (const file of [...Object.values(manifest.files), ...(manifest.bank_rate_history_catalogue ? [manifest.bank_rate_history_catalogue.file] : [])]) file.url = `${base}${manifest.tag}/${file.name}`;
   const bundle = payloadBundleIdentity(manifest);
-  manifest.payload_revision = { schema_version: 1, revision: 1, parent_revision: null,
-    bundle_sha256: bundle, generation_id: `sha256-${bundle}` };
+  manifest.payload_revision = {
+    schema_version: 1, revision: 1, parent_revision: null,
+    bundle_sha256: bundle, generation_id: `sha256-${bundle}`
+  };
   editRevision(manifest.payload_revision);
   const manifestBytes = Buffer.from(JSON.stringify(manifest));
-  const index = { schema_version: 1, revision_protocol: 1, dates: [...catalogue.run_dates],
+  const index = {
+    schema_version: 1, revision_protocol: 1, dates: [...catalogue.run_dates],
     latest_date: manifest.run_date, min_date: catalogue.run_dates[0], count: catalogue.run_dates.length,
     revision_heads: Object.fromEntries(catalogue.run_dates.map(day => [day, {
       revision: 1, generation_id: manifest.payload_revision.generation_id, bundle_sha256: bundle,
       manifest_url: `${base}app-payload-${day}-r000001/manifest.json`,
       manifest_sha256: day === manifest.run_date ? hash(manifestBytes) : catalogue.sources[day]?.manifest_sha256 ?? 'd'.repeat(64),
-    }])) };
+    }]))
+  };
   editIndex(index);
   const assets = new Map([[`${base}${manifest.tag}/manifest.json`, manifestBytes],
-    [`${base}app-payload-latest/dates-index.json`, Buffer.from(JSON.stringify(index))],
-    ...[...Object.values(manifest.files), ...(manifest.bank_rate_history_catalogue ? [manifest.bank_rate_history_catalogue.file] : []),
-      ...(manifest.bank_rate_history_catalogue_packed ? [manifest.bank_rate_history_catalogue_packed.file] : []),
-      ...(manifest.bank_rate_history_ready ? [manifest.bank_rate_history_ready.file] : [])].map(file =>
-      [file.url ?? `${base}${manifest.tag}/${file.name}`, fs.readFileSync(path.join(directory, file.name))])]);
+  [`${base}app-payload-latest/dates-index.json`, Buffer.from(JSON.stringify(index))],
+  ...[...Object.values(manifest.files), ...(manifest.bank_rate_history_catalogue ? [manifest.bank_rate_history_catalogue.file] : []),
+  ...(manifest.bank_rate_history_catalogue_packed ? [manifest.bank_rate_history_catalogue_packed.file] : []),
+  ...(manifest.bank_rate_history_ready ? [manifest.bank_rate_history_ready.file] : [])].map(file =>
+    [file.url ?? `${base}${manifest.tag}/${file.name}`, fs.readFileSync(path.join(directory, file.name))])]);
   const deliveredAssets = new Map([...assets].map(([url, bytes]) => [automaticDataUrl(url), bytes]));
   mockFetch(t, async url => {
     const clean = String(url).split('?')[0], bytes = deliveredAssets.get(clean);
@@ -282,7 +496,7 @@ function publicCandidate(t, value, editIndex = () => {}, editRevision = () => {}
 
 test('opened public delivery bytes still must match the immutable domain size and digest', async t => {
   const value = detachedCandidate(t);
-  const opts = publicCandidate(t, value, () => {}, () => {}, (url, bytes) => {
+  const opts = publicCandidate(t, value, () => { }, () => { }, (url, bytes) => {
     if (!url.endsWith('/' + value.manifest.files.core.name)) return bytes;
     const changed = Buffer.from(bytes); changed[0] ^= 1; return changed;
   });
@@ -304,7 +518,7 @@ test('automatic public delivery does not waive unsupported legacy domain encrypt
 
 for (const acquisition of ['public', 'private']) test(`${acquisition} audit rejects a stale generation even when the selected head agrees`, async t => {
   const value = detachedCandidate(t);
-  const publicOpts = publicCandidate(t, value, () => {}, revision => { revision.generation_id = `sha256-${'f'.repeat(64)}`; });
+  const publicOpts = publicCandidate(t, value, () => { }, revision => { revision.generation_id = `sha256-${'f'.repeat(64)}`; });
   assert.equal(value.manifest.payload_revision.bundle_sha256, payloadBundleIdentity(value.manifest));
   fs.writeFileSync(path.join(value.directory, 'manifest.json'), JSON.stringify(value.manifest));
   await assert.rejects(audit(acquisition === 'public' ? publicOpts : value.opts), /Detached history bundle identity mismatch/);
@@ -326,11 +540,13 @@ test('public audit exposes a superseded current source without comparing its pri
 
 for (const state of ['matching', 'superseded', 'missing-head', 'missing-source']) test(`public archive selection reports ${state} historical observations`, async t => {
   const prior = '2026-08-04';
-  const value = detachedCandidate(t, () => {}, (catalogue, core, details) => {
+  const value = detachedCandidate(t, () => { }, (catalogue, core, details) => {
     const result = upsertHistoricalCatalogueDay(catalogue, { ...core, run_date: prior }, { ...details, run_date: prior },
       { kind: 'published_core', core_sha256: 'a'.repeat(64), details_sha256: 'b'.repeat(64), manifest_sha256: 'c'.repeat(64) });
-    result.sources[core.run_date] = { kind: 'selected_contract', generation_id: 'current-source',
-      contract_digest: 'e'.repeat(64), banks_sha256: 'f'.repeat(64), bytes: 123 };
+    result.sources[core.run_date] = {
+      kind: 'selected_contract', generation_id: 'current-source',
+      contract_digest: 'e'.repeat(64), banks_sha256: 'f'.repeat(64), bytes: 123
+    };
     if (state === 'missing-source') {
       delete result.sources[prior]; result.unavailable_dates[prior] = 'Source observation unavailable';
       for (const tiers of Object.values(result.sections)) for (const tier of tiers) tier.spans = tier.spans.flatMap(([start, count, rates, evidence]) =>
@@ -362,11 +578,13 @@ for (const [label, change] of [
   assert.equal(report.assets.bank_rate_history_catalogue.status, 'FAIL');
 });
 
-function addPacked(value, editEnvelope = () => {}, editInner = value => value) {
+function addPacked(value, editEnvelope = () => { }, editInner = value => value) {
   const { directory, manifest, catalogue } = value;
   const inner = Buffer.from(JSON.stringify(editInner(packHistoricalBankRateCatalogue(catalogue))));
-  const envelope = { schema_version: 1, run_date: manifest.run_date, core_sha256: manifest.files.core.sha256,
-    catalogue: { sha256: hash(inner), bytes: inner.length, gzip_base64: gzipSync(inner).toString('base64') } };
+  const envelope = {
+    schema_version: 1, run_date: manifest.run_date, core_sha256: manifest.files.core.sha256,
+    catalogue: { sha256: hash(inner), bytes: inner.length, gzip_base64: gzipSync(inner).toString('base64') }
+  };
   editEnvelope(envelope);
   const bytes = gzipSync(Buffer.from(JSON.stringify(envelope))), sha256 = hash(bytes);
   const name = `bank-rate-history-catalogue-packed-${manifest.run_date}-${sha256.slice(0, 12)}.json.gz`;
@@ -415,17 +633,19 @@ for (const [failure, editEnvelope, editInner] of [
 test('audit refuses stale compact-only bundle identity before reading optional asset', async t => {
   const value = addPacked(detachedCandidate(t));
   delete value.manifest.bank_rate_history_catalogue;
-  const opts = publicCandidate(t, value, () => {}, revision => { revision.generation_id = `sha256-${'f'.repeat(64)}`; });
+  const opts = publicCandidate(t, value, () => { }, revision => { revision.generation_id = `sha256-${'f'.repeat(64)}`; });
   await assert.rejects(audit(opts), /Detached history bundle identity mismatch/);
 });
 
-function addReady(value, edit = () => {}) {
+function addReady(value, edit = () => { }) {
   const { directory, manifest, catalogue } = value;
   const ready = compileHistoricalBankRateReady(catalogue, readyCompiler.sha256);
   edit(ready);
   const inner = Buffer.from(JSON.stringify(ready));
-  const envelope = { schema_version: 1, run_date: manifest.run_date, core_sha256: manifest.files.core.sha256,
-    catalogue: { sha256: hash(inner), bytes: inner.length, gzip_base64: gzipSync(inner).toString('base64') } };
+  const envelope = {
+    schema_version: 1, run_date: manifest.run_date, core_sha256: manifest.files.core.sha256,
+    catalogue: { sha256: hash(inner), bytes: inner.length, gzip_base64: gzipSync(inner).toString('base64') }
+  };
   const bytes = gzipSync(Buffer.from(JSON.stringify(envelope))), sha256 = hash(bytes);
   const name = `bank-rate-history-ready-${manifest.run_date}-${sha256.slice(0, 12)}.json.gz`;
   manifest.bank_rate_history_ready = { schema_version: 1, file: { name, sha256, bytes: bytes.length } };

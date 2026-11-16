@@ -20,11 +20,28 @@ function completeReport() {
   return report;
 }
 
+test('bank response unknowns keep coverage incomplete even when every list and audit check executed', () => {
+  const report = completeReport();
+  const code = APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE;
+  report.appHealth = finalizeAppHealthReport({ sessionId: report.sessionId, mode: 'local',
+    startedAt: report.startedAt, finishedAt: report.finishedAt, plannedCheckIds: [code],
+    checks: [{ id: code, code, domain: 'data-completeness', label: 'Bank response coverage', status: 'warn',
+      metrics: { coverageAvailable: true, coverageComplete: false, checked: 1, unknownMoves: 1, unknownTiming: 1 },
+      localEvidence: { bankResponseCoverage: { runDate: '2026-11-13', runMatches: true, projectionAvailable: true, windows: 1,
+        rows: [{ provider: 'Bank', section: 'Savings', decisionDate: '2026-11-03', windowEnd: '2026-11-13',
+          sourceReason: 'missing-history', displayReason: 'missing-history', missingDays: 11,
+          baselineAvailable: false, displayed: false, moveKnown: false, timingKnown: false, firstMoveVerified: false }] } } }] });
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ outcome: 'incomplete', collectionComplete: true,
+    coverageComplete: false, detailsComplete: true, gaps: { bankResponseCoverageGaps: 1, invalidBankResponseEvidenceChecks: 0 },
+    gapPositions: expect.arrayContaining([expect.objectContaining({ checkId: code, reason: 'bank-response-coverage-gap' })]) });
+});
+
 test('an oversized compressed upload fails preparation without returning a partial summary', () => {
   const encode = jest.spyOn(diagnosticCodec, 'encodeCompressedDiagnosticJson')
-    .mockReturnValueOnce('x'.repeat(2 * 1024 * 1024 + 1));
+    .mockReturnValue('x'.repeat(diagnosticCodec.MAX_COMPRESSED_DIAGNOSTIC_BYTES + 1));
   try {
     expect(() => createPublicPerformanceAuditReport(completeReport())).toThrow('public upload limit');
+    expect(encode.mock.calls.length).toBeGreaterThan(1);
   } finally { encode.mockRestore(); }
 });
 
@@ -403,4 +420,32 @@ test('optional errors and stale ready graphics on the target cannot claim comple
       expect.objectContaining({ probeId: 'projections.model', reason: 'probe-error' }),
       expect.objectContaining({ probeId: 'projections.graphic', reason: 'probe-revision-mismatch' }),
     ]) });
+});
+
+test('aggregate external-link-unverified check counts unverified destinations without inflating check count', () => {
+  const report = completeReport();
+  report.checks[0] = {
+    id: 'external-link-unverified',
+    label: 'Unverified external links (3)',
+    kind: 'network',
+    status: 'warn',
+    durationMs: 0,
+    metrics: {
+      executionAttempted: true,
+      nonTimingFailure: false,
+      destinationCount: 3,
+      httpSelected: false,
+      httpAttempted: false,
+      httpReachability: 'unknown',
+      browserHandler: 'unknown',
+      handlerAttempted: false,
+      handlerResolution: 'not-attempted',
+    },
+  };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({
+    coverageComplete: false,
+    outcome: 'incomplete',
+    gaps: { unverifiedLinks: 3, unavailableChecks: 0 },
+    gapPositions: [{ source: 'performance', position: 1, checkId: 'external-link-unverified', reason: 'unverified-link' }],
+  });
 });

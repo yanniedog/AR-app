@@ -33,6 +33,7 @@ test('a single recorded run is a dot, and mode switches keep unlike audits separ
   act(() => tree.root.findByProps({ title: 'Failures' }).props.onPress());
   expect(tree.root.findAllByType('Circle')).toHaveLength(1);
   expect(tree.root.findByType('Path').props.d).not.toContain('L');
+  act(() => tree.root.findByProps({ title: 'Recorded results' }).props.onToggle());
   expect(tree.root.findByProps({ label: 'Coverage' }).props.value).toBe('Incomplete');
 });
 
@@ -41,6 +42,8 @@ test('the completed in-memory report appears immediately and deduplicates its pe
   await act(async () => { tree = TestRenderer.create(<AuditMetricHistory report={report} />); });
   act(() => tree.root.findByProps({ title: 'Failures' }).props.onPress());
   expect(tree.root.findAllByType('Circle')).toHaveLength(1);
+  expect(tree.root.findAllByProps({ label: 'Finished' })).toHaveLength(0);
+  act(() => tree.root.findByProps({ title: 'Recorded results' }).props.onToggle());
   expect(tree.root.findByProps({ label: 'Finished' }).props.value).toBe(report.finishedAt);
   jest.mocked(loadPerformanceAuditHistory).mockResolvedValueOnce([auditMetricRun(report)]);
   await act(async () => tree.update(<AuditMetricHistory report={{ ...report }} />));
@@ -58,4 +61,65 @@ test('retention removing the selected mode falls back to the newest retained mod
   act(() => tree.root.findByProps({ title: 'Failures' }).props.onPress());
   expect(tree.root.findByProps({ title: 'Live checks' }).props.accessibilityState.selected).toBe(true);
   expect(tree.root.findAllByType('Circle')).toHaveLength(1);
+});
+
+
+test('metric groups show one chart and retain percent versus duration units', () => {
+  const run = auditMetricRun(makePerformanceAuditReport());
+  run.metrics.collectionPercent = 80;
+  run.metrics.displayLayoutPassPercent = 75;
+  act(() => { tree = TestRenderer.create(<AuditMetricHistoryChart runs={[run]} />); });
+  expect(tree.root.findAllByProps({ title: 'Collected checks' })).toHaveLength(0);
+  act(() => tree.root.findByProps({ title: 'Coverage' }).props.onPress());
+  expect(tree.root.findAllByProps({ label: 'Collected checks' })[0].props.value).toBe('80.0%');
+  expect(tree.root.findAllByType('Svg')).toHaveLength(1);
+  expect(tree.root.findAllByProps({ title: 'Slowest check' })).toHaveLength(0);
+  act(() => tree.root.findByProps({ title: 'Rendering checks' }).props.onPress());
+  act(() => tree.root.findByProps({ title: 'Layout-callback checks passed' }).props.onPress());
+  expect(tree.root.findAllByProps({ label: 'Layout-callback checks passed' })[0].props.value).toBe('75.0%');
+  expect(tree.root.findAllByType('Svg')).toHaveLength(1);
+});
+
+test('check results expose timely task outcomes and never imply measured usability or pixel quality', () => {
+  const report = makePerformanceAuditReport('quality-scope', [{ id: 'action', label: 'Action', kind: 'journey',
+    status: 'fail', durationMs: 500, metrics: { executionAttempted: true, actionInvoked: true,
+      actionCompleted: true, nonTimingFailure: false, actionMs: 500, forwardWorkMs: 500,
+      eventLoopMeasurementAvailable: true, frameMeasurementAvailable: true },
+    diagnostic: { stage: 'complete', readiness: { capturing: true, ready: true, blockers: [], surfaces: [] } } }]);
+  const run = auditMetricRun(report);
+  act(() => { tree = TestRenderer.create(<AuditMetricHistoryChart runs={[run]} report={report} />); });
+  expect(tree.root.findAllByProps({ title: 'App quality' })).toHaveLength(0);
+  expect(tree.root.findAllByProps({ title: 'Display quality' })).toHaveLength(0);
+  act(() => tree.root.findByProps({ title: 'Check results' }).props.onPress());
+  expect(tree.root.findByProps({ label: 'Invoked actions' }).props.value).toBe('1');
+  expect(tree.root.findByProps({ label: 'Ready within timing limits' }).props.value).toBe('0');
+  expect(tree.root.findByProps({ label: 'Ready with timing failures' }).props.value).toBe('1');
+  expect(tree.root.findByProps({ label: 'Composite basis' }).props.value).toBe('Proprietary · Non-normative');
+  expect(tree.root.findByProps({ label: 'Human usability' }).props.value).toBe('Not measured');
+  expect(tree.root.findByProps({ label: 'SUS / UMUX-Lite / SEQ' }).props.value).toBe('Not performed');
+  act(() => tree.root.findByProps({ title: 'Rendering checks' }).props.onPress());
+  expect(tree.root.findByProps({ label: 'WCAG 2.2 conformance' }).props.value).toBe('Manual review required');
+  expect(tree.root.findByProps({ label: 'Visual design' }).props.value).toBe('Not measured');
+  expect(tree.root.findByProps({ label: 'Pixel correctness' }).props.value).toBe('Not measured');
+  expect(tree.root.findByProps({ label: 'Denominator' }).props.value).toBe('Not measured');
+});
+
+test('UX & fluidity tab exposes AFFS score metrics, plots 0-100, and keeps chart above detail rows', () => {
+  const report = makePerformanceAuditReport('ux-tab');
+  const run = auditMetricRun(report);
+  run.metrics.affsScore = 84.5;
+  run.metrics.uxInteractionFrictionScore = 90.0;
+  act(() => { tree = TestRenderer.create(<AuditMetricHistoryChart runs={[run]} report={report} />); });
+  act(() => tree.root.findByProps({ title: 'UX & fluidity' }).props.onPress());
+  const affsRows = tree.root.findAllByProps({ label: 'Friction & Fluidity Score' });
+  expect(affsRows).toHaveLength(2);
+  expect(affsRows[0].props.value).toBe('84.5 / 100');
+  expect(affsRows[1].props.value).toBe('Not measured');
+  expect(tree.root.findAllByType('Svg')).toHaveLength(1);
+  const rendered = JSON.stringify(tree.toJSON());
+  expect(rendered.indexOf('"type":"Svg"')).toBeLessThan(rendered.indexOf('"label":"Composite basis"'));
+  expect(tree.root.findByProps({ label: 'Composite basis' }).props.value).toBe('Proprietary · Non-normative');
+  expect(tree.root.findByProps({ label: 'Human usability' }).props.value).toBe('Not measured');
+  act(() => tree.root.findByProps({ title: 'Interaction friction' }).props.onPress());
+  expect(tree.root.findAllByProps({ label: 'Interaction friction' })[0].props.value).toBe('90.0 / 100');
 });

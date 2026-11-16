@@ -91,12 +91,12 @@ test('ranking controls retain their actual preferences without explanatory defin
     expect(UI_LABELS).not.toContain(copy);
   }
   const deposit = tree!.root.findByProps({ value: mockStore.prefs.depositRankMetric });
-  expect(deposit.props.options).toEqual([{ value: 'base', label: 'Base rate' }, { value: 'max', label: 'Headline rate' }]);
+  expect(deposit.props.options).toEqual([{ value: 'base', label: 'Ongoing rate' }, { value: 'max', label: 'Headline rate' }]);
   act(() => deposit.props.onChange('max'));
   expect(mockSetPref).toHaveBeenLastCalledWith('depositRankMetric', 'max');
   expect(mockStore.prefs.depositRankMetric).toBe('max');
   const mortgage = tree!.root.findByProps({ value: mockStore.prefs.mortgageRateMetric });
-  expect(mortgage.props.options).toEqual([{ value: 'headline', label: 'Headline rate' }, { value: 'comparison', label: 'Comparison rate' }]);
+  expect(mortgage.props.options).toEqual([{ value: 'headline', label: 'Advertised rate' }, { value: 'comparison', label: 'Comparison rate' }]);
   act(() => mortgage.props.onChange('headline'));
   expect(mockSetPref).toHaveBeenLastCalledWith('mortgageRateMetric', 'headline');
   expect(mockStore.prefs.mortgageRateMetric).toBe('headline');

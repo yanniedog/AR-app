@@ -8,13 +8,17 @@ import { View } from 'react-native';
 import { PerformanceAuditReadinessRegistry } from '../src/lib/performanceAuditReadiness';
 let mockState: any;
 const mockSurfaces = new Map<string, any>();
+const mockFeedRenders = jest.fn();
 jest.mock('../src/data/store', () => ({ useStore: (selector: any) => selector(mockState) }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useLocalSearchParams: () => ({}) }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => jest.requireActual('../src/theme/theme').lightTheme }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 0 }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: (surface: any) => mockSurfaces.set(surface.id, surface) }));
-jest.mock('../src/components/BankInsights', () => ({ BankMovesFeed: 'BankMovesFeed', MoversLeaderboard: 'MoversLeaderboard' }));
+jest.mock('../src/components/BankInsights', () => ({ BankMovesFeed: jest.requireActual('react').memo((props: any) => {
+  mockFeedRenders();
+  return jest.requireActual('react').createElement('BankMovesFeed', props);
+}), MoversLeaderboard: 'MoversLeaderboard' }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
 jest.mock('../src/components/feedback', () => ({ ScreenSkeleton: 'ScreenSkeleton' }));
@@ -65,6 +69,23 @@ function measureMarket(tree: MarketTestRenderer) {
       .forEach(node => node.props.onLayout?.(event));
   });
 }
+
+test('layout and focus-style renders preserve the movement feed, while changing section updates it', async () => {
+  readyCalendarState();
+  const ready = jest.spyOn(navigationReady, 'useNavigationContentReady').mockReturnValue(true);
+  const projection = jest.spyOn(bankData, 'filterBankInsightsForSuitability').mockImplementation(payload => payload ?? null);
+  let tree!: MarketTestRenderer;
+  mockFeedRenders.mockClear();
+  await act(async () => { tree = TestRenderer.create(<Market />) as MarketTestRenderer; });
+  try {
+    const initial = mockFeedRenders.mock.calls.length;
+    measureMarket(tree);
+    await act(async () => { tree.update(<Market />); });
+    expect(mockFeedRenders).toHaveBeenCalledTimes(initial);
+    act(() => mockSurfaces.get('market.overview').actions['changes.section.next']());
+    expect(mockFeedRenders).toHaveBeenCalledTimes(initial + 1);
+  } finally { act(() => tree.unmount()); ready.mockRestore(); projection.mockRestore(); }
+});
 
 test.each(['a'.repeat(64), null])('calendar data uses publication identity for the real pre-action wait (%s)', async coreSha => {
   readyCalendarState(coreSha);

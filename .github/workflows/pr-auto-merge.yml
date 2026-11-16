@@ -1,0 +1,75 @@
+name: pr-auto-merge
+
+# Owner PRs to main merge by themselves. scripts/pr-auto-merge-reconcile.mjs
+# enables squash auto-merge on non-draft owner PRs whose commits all come from
+# trusted authors, keeps behind branches updated, and disables auto-merge for
+# drafts or the `hold` label. GitHub still merges only after the required gates
+# (mobile-ci, bot-feedback-gate, resolved threads) pass on main.
+#
+# A schedule reconciles every open PR (covering missed or failed events) and
+# dispatches the APK release when main has unreleased mobile changes, which
+# matters when a merge made with the workflow token fires no push workflows.
+#
+# Security: pull_request_target holds write scope, so only the default branch
+# is checked out; PR code is never fetched or run.
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled, converted_to_draft]
+  # Required checks finishing is when a PR becomes mergeable; react at once
+  # instead of waiting for the (best-effort, often delayed) schedule.
+  workflow_run:
+    workflows: [app-ci, pr-bot-feedback-check]
+    types: [completed]
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pull-requests:
+    name: Reconcile auto-merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: pr-auto-merge-${{ github.event.pull_request.number || 'all' }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Reconcile owner PRs
+        env:
+          GH_TOKEN: ${{ secrets.BOT_GATE_TOKEN || github.token }}
+          OWNER_TOKEN_CONFIGURED: ${{ secrets.BOT_GATE_TOKEN != '' }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -n "$PR" ]; then node scripts/pr-auto-merge-reconcile.mjs prs --pr "$PR"
+          else node scripts/pr-auto-merge-reconcile.mjs prs; fi
+
+  release-catch-up:
+    name: Dispatch APK release for unreleased main
+    if: github.event_name != 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: pr-auto-merge-release
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+      - name: Release main when it has unreleased mobile changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/pr-auto-merge-reconcile.mjs release

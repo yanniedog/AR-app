@@ -67,6 +67,8 @@ export function evaluateAppHealthCatalogueCoverage(snapshot: AppHealthDataSnapsh
     historyGaps: history ? JSON.stringify(history.gaps) : null,
     historyProcessingMismatches: history?.processingMismatches ?? null,
     historyChartProjectionMismatches: history?.chartProjectionMismatches ?? null,
+    historyProcessingComparisons: history?.processingComparisons ?? null,
+    historyChartProjectionComparisons: history?.chartProjectionComparisons ?? null,
     historicalPixelsVerified: false,
   };
   const base = { id: APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE, code: APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE,
@@ -85,16 +87,19 @@ export function evaluateAppHealthCatalogueCoverage(snapshot: AppHealthDataSnapsh
     (section.searchUnexpected?.length ?? 0) + (section.directoryMissing?.length ?? 0) +
     (section.directoryUnexpected?.length ?? 0)) : null;
   const unavailable = !ready || !catalogue.detailsAvailable || !catalogue.searchIndexAvailable;
+  const headless = snapshot.catalogueAuditMode === 'headless_default_preferences';
   const appHistoryGaps = history?.gaps.filter(gap => !PRODUCER_HISTORY_GAPS.has(gap[1])).length ?? 0;
   const status = identityMismatches || catalogue.searchIndexRunMatches === false || (history?.processingMismatches ?? 0) > 0 || (history?.chartProjectionMismatches ?? 0) > 0 || appHistoryGaps > 0 ? 'fail'
-    : !history ? 'unavailable'
-    : (missingDetails ?? 0) > 0 || (missingSearchIndex ?? 0) > 0 ? 'warn'
+    : !history ? (headless && !unavailable ? 'warn' : 'unavailable')
+    : (missingDetails ?? 0) > 0 || (missingSearchIndex ?? 0) > 0 ||
+      history.available !== true || history.sourceGapDays.length > 0 || history.gaps.length > 0 ? 'warn'
       : unavailable ? 'unavailable' : 'pass';
   const allRows = SECTION_KEYS.flatMap(section => snapshot.core!.sections[section]?.rates ?? []);
   const metrics: AppHealthCheck['metrics'] = {
     ...historyMetrics,
     catalogueAvailable: true, exhaustiveLoadedCatalogueScan: true, sourceIdentityInventoryAvailable: false,
-    allProductsRendered: false, filterReady: ready, includeNonStandard: catalogue.includeNonStandard,
+    allProductsRendered: false, headlessDefaultPreferences: headless,
+    filterReady: ready, includeNonStandard: catalogue.includeNonStandard,
     publishedRates: allRows.length, publishedProducts: new Set(allRows.map(row => row.product_key)).size,
     publishedProviders: new Set(allRows.map(row => row.provider)).size,
     sourceProducts: accounting.valid ? accounting.sourceProducts : null,

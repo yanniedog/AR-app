@@ -6,34 +6,81 @@ import { lvrRangeContains, parseLvrRange } from './lvrRange';
 import { scopedRateConditions, scopedRateConditionsForRows, type RateConditionContext } from './rateConditions';
 import { scopedFinancialConditionFacts, type PublishedNumericConditionFact, type NumericConditionBoundary } from './scopedFinancialConditionFacts';
 import { yieldToUi } from '../lib/yieldToUi';
+import { Decimal, decimalText } from './publicRateDecimal';
 
-export interface MortgageComparisonInputs { loanAmount: string; lvr: string }
+export interface MortgageComparisonInputs {
+  loanAmount: string;
+  /** Raw direct-entry percentage; inactive while funds determine the ratio. */
+  lvr: string;
+  lvrMode?: 'lvr' | 'funds';
+  fundsAvailable?: string;
+  fundsType?: 'deposit' | 'offset';
+  /** Raw property value required only when the funds stay in an offset account. */
+  propertyValue?: string;
+}
 /** Private exploratory inputs stay in memory, separate from saved searches and reports. */
 export const useMortgageComparison = create<MortgageComparisonInputs>(() => ({ loanAmount: '', lvr: '' }));
-export const clearMortgageComparison = () => useMortgageComparison.setState({ loanAmount: '', lvr: '' });
+export const setMortgageComparisonInputs = (value: MortgageComparisonInputs) => useMortgageComparison.setState(value, true);
+export const clearMortgageComparison = () => setMortgageComparisonInputs({ loanAmount: '', lvr: '' });
 
-function inputs(value: MortgageComparisonInputs) {
+export function mortgageComparisonValues(value: MortgageComparisonInputs) {
   const amount = value.loanAmount.trim() ? calculatorAmount(value.loanAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT) : null;
+  const invalidAmount = !!value.loanAmount.trim() && (amount === null || amount <= 0);
+  if (value.lvrMode === 'funds') {
+    const offsetMode = value.fundsType === 'offset';
+    const fundsText = value.fundsAvailable?.trim() ?? '';
+    const funds = fundsText ? calculatorAmount(fundsText, MAX_CALCULATOR_MORTGAGE_AMOUNT) : null;
+    const propertyText = offsetMode ? value.propertyValue?.trim() ?? '' : '';
+    const enteredProperty = propertyText ? calculatorAmount(propertyText, MAX_CALCULATOR_MORTGAGE_AMOUNT) : null;
+    const invalidProperty = !!propertyText && (enteredProperty === null || enteredProperty <= 0
+      || amount !== null && enteredProperty < amount);
+    const invalid = invalidAmount || !!fundsText && funds === null || invalidProperty;
+    if (invalid || amount === null || amount <= 0 || !offsetMode && funds === null || offsetMode && enteredProperty === null) {
+      return { amount, lvr: null, invalid, incompleteFunds: !invalid, lvrFraction: undefined, propertyValue: null, exactLvr: null,
+        offsetBalance: null, interestBearingBalance: null };
+    }
+    // Money validation admits at most cents. Decimal keeps the ratio rational
+    // for scope comparisons; only the public scenario's decimal transport and
+    // the displayed number need conversion. Never feed display precision back.
+    const loan = Decimal.parse(String(amount)), available = funds === null ? null : Decimal.parse(String(funds));
+    // Offset savings reduce the interest-bearing balance, never the lender's
+    // principal or LVR. Deposit funds instead contribute to the property value.
+    const property = offsetMode ? Decimal.parse(String(enteredProperty)) : loan.add(available!);
+    const fraction = loan.div(property), exactLvr = fraction.mul(Decimal.parse('100'));
+    // A property and loan determine lender LVR even before the offset balance
+    // is entered. Keep that display fact, but require an explicit balance for
+    // scope/pricing so a blank offset is never silently treated as zero.
+    if (available === null) return { amount, lvr: Number(decimalText(exactLvr)), invalid: false, incompleteFunds: true,
+      lvrFraction: undefined, propertyValue: Number(decimalText(property)), exactLvr, offsetBalance: null, interestBearingBalance: null };
+    const interestBearing = offsetMode ? (loan.compare(available) > 0 ? loan.sub(available) : Decimal.parse('0')) : loan;
+    return { amount, lvr: Number(decimalText(exactLvr)), invalid: false, incompleteFunds: false, lvrFraction: decimalText(fraction),
+      propertyValue: Number(decimalText(property)), exactLvr, offsetBalance: offsetMode ? funds : 0,
+      interestBearingBalance: Number(decimalText(interestBearing)) };
+  }
   // Trim before stripping % so pasted values like "71% " parse instead of becoming NaN.
   const lvrText = value.lvr.trim();
   const lvr = lvrText && /^(?:\d+(?:\.\d+)?|\.\d+)\s*%?$/.test(lvrText)
     ? Number(lvrText.replace(/\s*%$/, '')) : null;
-  return { amount, lvr, invalid: !!value.loanAmount.trim() && (amount === null || amount <= 0)
-    || !!lvrText && (lvr === null || !Number.isFinite(lvr) || lvr <= 0 || lvr > 100) };
+  const invalidLvr = !!lvrText && (lvr === null || !Number.isFinite(lvr) || lvr <= 0 || lvr > 100);
+  return { amount, lvr, invalid: invalidAmount || invalidLvr, incompleteFunds: false,
+    lvrFraction: lvr !== null && !invalidLvr ? String(lvr / 100) : undefined, propertyValue: null, exactLvr: null,
+    offsetBalance: null, interestBearingBalance: null };
 }
+
+const inputs = mortgageComparisonValues;
 
 /** True when loan amount or LVR text is present but not a usable comparison value. */
 export function mortgageComparisonInputsInvalid(value: MortgageComparisonInputs): boolean {
   return inputs(value).invalid;
 }
 
-/** Rates Mortgage search runs only after LVR + purpose + repayment are set. Loan amount stays optional. */
+/** Rates requires resolved LVR + purpose + repayment. Loan amount is optional only for direct LVR entry. */
 export function mortgageComparisonCriteriaReady(
   value: MortgageComparisonInputs,
   facets: { loanPurposes: readonly string[]; repaymentTypes: readonly string[] },
 ): boolean {
   const parsed = inputs(value);
-  return !parsed.invalid && parsed.lvr !== null
+  return !parsed.invalid && !parsed.incompleteFunds && parsed.lvr !== null
     && facets.loanPurposes.length > 0 && facets.repaymentTypes.length > 0;
 }
 
@@ -42,14 +89,32 @@ export type MortgageComparisonMatch = 'listed' | 'unverified' | 'outside' | 'inv
 export function mortgageComparisonMatch(row: RateRow, value: MortgageComparisonInputs, context?: RateConditionContext): MortgageComparisonMatch {
   return match(row, inputs(value), context);
 }
-function within(value: number, lower: NumericConditionBoundary, upper: NumericConditionBoundary): boolean {
-  return (lower.state === 'unspecified' || (lower.inclusive ? value >= lower.value : value > lower.value))
-    && (upper.state === 'unspecified' || (upper.inclusive ? value <= upper.value : value < upper.value));
+// A parsed input lives for one scope pass. Repeated tiers share its exact
+// comparisons without retaining the private input after that pass is released.
+const lvrBoundaryComparisons = new WeakMap<Decimal, Map<number, number>>();
+function compareBoundary(value: number, boundary: number, exact?: Decimal | null): number {
+  if (!exact || !Number.isFinite(boundary)) return value < boundary ? -1 : value > boundary ? 1 : 0;
+  let comparisons = lvrBoundaryComparisons.get(exact);
+  if (!comparisons) { comparisons = new Map(); lvrBoundaryComparisons.set(exact, comparisons); }
+  const previous = comparisons.get(boundary);
+  if (previous !== undefined) return previous;
+  // Source bounds are numeric and can stringify in exponential notation.
+  const [coefficient, exponent = '0'] = String(boundary).split('e');
+  const [whole, fraction = ''] = coefficient.split('.');
+  const scale = fraction.length - Number(exponent);
+  const bound = new Decimal(BigInt(whole + fraction) * (scale < 0 ? BigInt(10) ** BigInt(-scale) : BigInt(1)),
+    scale > 0 ? BigInt(10) ** BigInt(scale) : BigInt(1));
+  const result = exact.compare(bound);
+  if (comparisons.size < 128) comparisons.set(boundary, result);
+  return result;
+}
+function within(value: number, lower: NumericConditionBoundary, upper: NumericConditionBoundary, exact?: Decimal | null): boolean {
+  return (lower.state === 'unspecified' || (lower.inclusive ? compareBoundary(value, lower.value, exact) >= 0 : compareBoundary(value, lower.value, exact) > 0))
+    && (upper.state === 'unspecified' || (upper.inclusive ? compareBoundary(value, upper.value, exact) <= 0 : compareBoundary(value, upper.value, exact) < 0));
 }
 
 /** Distinct source pointers are explicit alternative bands; same-pointer parses AND. */
-function admitsValue(value: number, facts: readonly PublishedNumericConditionFact[]): boolean {
-  if (!facts.length) return false;
+function alternativeBands(facts: readonly PublishedNumericConditionFact[]) {
   const byPointer = new Map<string, PublishedNumericConditionFact[]>();
   for (const fact of facts) {
     const key = fact.source.sourcePointer;
@@ -57,10 +122,29 @@ function admitsValue(value: number, facts: readonly PublishedNumericConditionFac
     if (group) group.push(fact);
     else byPointer.set(key, [fact]);
   }
-  for (const group of byPointer.values()) {
-    if (group.every(fact => within(value, fact.lower, fact.upper))) return true;
+  return [...byPointer.values()];
+}
+function admitsValue(value: number, bands: readonly (readonly PublishedNumericConditionFact[])[], exact?: Decimal | null): boolean {
+  for (const group of bands) {
+    if (group.every(fact => within(value, fact.lower, fact.upper, exact))) return true;
   }
   return false;
+}
+
+function containsLvr(range: NonNullable<ReturnType<typeof parseLvrRange>>, parsed: ReturnType<typeof inputs>): boolean {
+  if (parsed.lvr === null) return false;
+  if (!parsed.exactLvr) return lvrRangeContains(range, parsed.lvr);
+  const low = compareBoundary(parsed.lvr, range.lo, parsed.exactLvr);
+  const high = compareBoundary(parsed.lvr, range.hi, parsed.exactLvr);
+  return parsed.lvr > 0 && (range.inclusive ? low >= 0 : low > 0) && (range.hiInclusive === false ? high < 0 : high <= 0);
+}
+
+function listedAmountBounds(row: RateRow) {
+  const bound = (raw: RateRow['balance_min']): number | null => raw != null && String(raw).trim() !== ''
+    && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(String(raw).trim()) && Number.isFinite(Number(raw)) ? Number(raw) : null;
+  const low = bound(row.balance_min), high = bound(row.balance_max);
+  return { low, high, invalid: (low !== null && high !== null && low > high) || (row.balance_min != null && low === null)
+    || (row.balance_max != null && high === null) };
 }
 
 function matchListedTier(
@@ -69,20 +153,18 @@ function matchListedTier(
   fallthroughLvr: boolean,
   fallthroughAmount: boolean,
   range = parseLvrRange(row.lvr_tier),
+  amountBounds?: ReturnType<typeof listedAmountBounds>,
 ): MortgageComparisonMatch {
   let unverified = false;
   if (parsed.lvr !== null && fallthroughLvr) {
     // User LVR is set: missing/unparseable listed tier is outside, never an
     // unverified keep that resurfaces identity-catalogue rows (e.g. <60% at 71%).
     if (!range) return 'outside';
-    if (!lvrRangeContains(range, parsed.lvr)) return 'outside';
+    if (!containsLvr(range, parsed)) return 'outside';
   }
   if (parsed.amount !== null && fallthroughAmount) {
-    const bound = (raw: RateRow['balance_min']): number | null => raw != null && String(raw).trim() !== ''
-      && /^(?:\d+(?:\.\d+)?|\.\d+)$/.test(String(raw).trim()) && Number.isFinite(Number(raw)) ? Number(raw) : null;
-    const low = bound(row.balance_min), high = bound(row.balance_max);
-    if ((low !== null && high !== null && low > high) || (row.balance_min != null && low === null)
-      || (row.balance_max != null && high === null)) unverified = true;
+    const { low, high, invalid } = amountBounds ?? listedAmountBounds(row);
+    if (invalid) unverified = true;
     else if (low !== null && parsed.amount < low || high !== null && parsed.amount > high) return 'outside';
     else if (low === null || high === null) unverified = true;
   }
@@ -90,10 +172,15 @@ function matchListedTier(
 }
 
 export function prepareMortgageComparisonRow(row: RateRow, context?: RateConditionContext) {
-  return { source: scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context)),
-    range: parseLvrRange(row.lvr_tier) };
+  return prepareComparisonMetadata(row, scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context)));
 }
 export type PreparedMortgageComparisonRow = ReturnType<typeof prepareMortgageComparisonRow>;
+function prepareComparisonMetadata(row: RateRow, source: ReturnType<typeof scopedFinancialConditionFacts>) {
+  return { source, range: parseLvrRange(row.lvr_tier), amountBounds: listedAmountBounds(row),
+    lvrBands: alternativeBands(source.facts.filter(fact => fact.kind === 'published-lvr-range')),
+    amountBands: alternativeBands(source.facts.filter(fact => fact.kind === 'published-balance-range'
+      && (fact.subject === 'loan-amount' || fact.subject === 'borrowing-amount'))) };
+}
 
 /** Validate each product envelope once per synchronous batch, then yield before
  * the next product. A cancelled source owner never publishes prepared facts. */
@@ -115,7 +202,7 @@ export async function prepareMortgageComparisonRowsCooperatively(rows: readonly 
     const scopes = scopedRateConditionsForRows(group.map(sourceRowForPublicRow), 'Mortgage', context);
     for (let index = 0; index < group.length; index++) {
       const row = group[index];
-      prepared.set(row, { source: scopedFinancialConditionFacts(scopes[index]), range: parseLvrRange(row.lvr_tier) });
+      prepared.set(row, prepareComparisonMetadata(row, scopedFinancialConditionFacts(scopes[index])));
     }
     if (now() - checkpoint >= 4) { await yieldControl(); checkpoint = now(); }
   }
@@ -124,16 +211,17 @@ export async function prepareMortgageComparisonRowsCooperatively(rows: readonly 
 function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateConditionContext,
   prepared?: PreparedMortgageComparisonRow): MortgageComparisonMatch {
   if (parsed.invalid) return 'invalid';
+  if (parsed.incompleteFunds) return 'outside';
   let unverified = false;
   let fallthroughLvr = parsed.lvr !== null;
   let fallthroughAmount = parsed.amount !== null;
   if (parsed.lvr !== null || parsed.amount !== null) {
     const source = prepared?.source ?? scopedFinancialConditionFacts(scopedRateConditions(sourceRowForPublicRow(row), 'Mortgage', context));
     if (source.state === 'admitted') {
-      const dimensions: readonly [number | null, readonly PublishedNumericConditionFact[], 'lvr' | 'amount'][] = [
-        [parsed.lvr, source.facts.filter(fact => fact.kind === 'published-lvr-range'), 'lvr'],
-        [parsed.amount, source.facts.filter(fact => fact.kind === 'published-balance-range'
-          && (fact.subject === 'loan-amount' || fact.subject === 'borrowing-amount')), 'amount'],
+      const dimensions: readonly [number | null, readonly (readonly PublishedNumericConditionFact[])[], 'lvr' | 'amount'][] = [
+        [parsed.lvr, prepared?.lvrBands ?? alternativeBands(source.facts.filter(fact => fact.kind === 'published-lvr-range')), 'lvr'],
+        [parsed.amount, prepared?.amountBands ?? alternativeBands(source.facts.filter(fact => fact.kind === 'published-balance-range'
+          && (fact.subject === 'loan-amount' || fact.subject === 'borrowing-amount'))), 'amount'],
       ];
       for (const [value, facts, dimension] of dimensions) {
         if (value === null) continue;
@@ -142,7 +230,7 @@ function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateCo
         // to a looser listed tier/bounds that could rescue an excluded input.
         if (dimension === 'lvr') fallthroughLvr = false;
         else fallthroughAmount = false;
-        if (!admitsValue(value, facts)) return 'outside';
+        if (!admitsValue(value, facts, dimension === 'lvr' ? parsed.exactLvr : null)) return 'outside';
       }
       if (source.unresolved.length) unverified = true;
       // Admitted LVR alternatives must still clear a parseable listed tier so a
@@ -150,14 +238,15 @@ function match(row: RateRow, parsed: ReturnType<typeof inputs>, context?: RateCo
       // Missing/unparseable listed tier is outside (same as matchListedTier).
       if (!fallthroughLvr && parsed.lvr !== null) {
         const range = prepared ? prepared.range : parseLvrRange(row.lvr_tier);
-        if (!range || !lvrRangeContains(range, parsed.lvr)) return 'outside';
+        if (!range || !containsLvr(range, parsed)) return 'outside';
       }
       if (!unverified && !fallthroughLvr && !fallthroughAmount) return 'listed';
       if (!fallthroughLvr && !fallthroughAmount) return unverified ? 'unverified' : 'listed';
       // Missing admitted LVR/amount facts only: fall through to listed tier/bounds.
     }
   }
-  const listed = matchListedTier(row, parsed, fallthroughLvr, fallthroughAmount, prepared ? prepared.range : parseLvrRange(row.lvr_tier));
+  const listed = matchListedTier(row, parsed, fallthroughLvr, fallthroughAmount,
+    prepared ? prepared.range : parseLvrRange(row.lvr_tier), prepared?.amountBounds);
   if (listed === 'outside' || listed === 'invalid') return listed;
   return listed === 'unverified' || unverified ? 'unverified' : 'listed';
 }
@@ -201,6 +290,7 @@ export async function mortgageComparisonRowsCooperatively(
   await yieldControl();
   if (cancelled()) return null;
   const parsed = inputs(value);
+  if (parsed.incompleteFunds) return { rows: [], unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
   // Empty scope is a cheap identity pass; keep it synchronous after the yield.
   if (parsed.amount === null && parsed.lvr === null && !parsed.invalid) {
     return { rows: [...rows], unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };

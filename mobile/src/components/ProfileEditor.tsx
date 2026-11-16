@@ -7,6 +7,7 @@ import {
   PROFILE_GROUPS,
   type ProfileFilters,
 } from '../data/profile';
+import { PROFILE_LVR_OPTIONS } from '../data/lvrTier';
 import { clearHomeLoanRequirements, otherProfileFeatures, profileAttributeOptions, sharedProfileFeatures } from '../data/profileRequirements';
 import { profileSectionCount } from '../data/profile';
 import { visibleFilterOptions } from '../lib/filterOptions';
@@ -15,7 +16,12 @@ import type { SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Chip, Row } from './ui';
 import { uiListedLvr } from '../lib/financialUiCopy';
-import { uiCount, uiJoin, uiLabel, uiSectionName, type UiLabel } from '../lib/uiCopy';
+import { uiCount, uiJoin, uiLabel, uiSectionName, type UiLabel, type UiText } from '../lib/uiCopy';
+
+function lvrOptionLabel(option: string): UiText {
+  const canonical = PROFILE_LVR_OPTIONS.find((item) => item === option);
+  return canonical ? uiLabel(canonical) : uiListedLvr({ lvr_tier: option });
+}
 
 type EditorGroup = {
   section: SectionKey;
@@ -48,9 +54,10 @@ export function ProfileEditor({
         section: g.section,
         title: g.title,
         key: g.key,
-        options: profileAttributeOptions(core?.sections[g.section].rates ?? [], g.field, value[g.key]),
-      }))
-      .filter((g) => g.options.length > 0);
+        options: g.key === 'lvrTiers'
+          ? [...PROFILE_LVR_OPTIONS, ...value.lvrTiers.filter(t => !(PROFILE_LVR_OPTIONS as readonly string[]).includes(t))]
+          : profileAttributeOptions(core?.sections[g.section].rates ?? [], g.field, []),
+      }));
 
     const featureGroups: EditorGroup[] = sections
       .filter((section) => (PROFILE_FEATURE_OPTIONS[section] ?? []).length > 0)
@@ -68,7 +75,7 @@ export function ProfileEditor({
       out.push(...featureGroups.filter((g) => g.section === section));
     }
     return out;
-  }, [core, sections, value]);
+  }, [core, sections]);
 
   const toggle = (key: keyof ProfileFilters, option: string) => {
     const list = value[key];
@@ -89,7 +96,10 @@ export function ProfileEditor({
           onPress={() => onChange(clearHomeLoanRequirements(value))} /> : null}
         {groups.filter(group => group.section === section).map(g => {
           const groupKey = `${g.section}-${g.key}`;
-          const { visible, hidden } = visibleFilterOptions(g.options, value[g.key], expanded.has(groupKey), 12);
+          // Saved values remain removable even if absent from this catalogue.
+          const options = g.key === 'accountFeatures' ? g.options : [...new Set([...value[g.key], ...g.options])];
+          if (!options.length) return null;
+          const { visible, hidden } = visibleFilterOptions(options, value[g.key], expanded.has(groupKey), 12);
           return <View key={groupKey}>
             <AppText variant="small" weight="700" style={{ marginBottom: theme.spacing(2) }}>
               {GROUP_LABELS[g.key]}
@@ -98,13 +108,13 @@ export function ProfileEditor({
               {visible.map((o) => (
                 <Chip
                   key={o}
-                  label={g.key === 'lvrTiers' ? uiListedLvr({ lvr_tier: o }) : humanizeEnum(o)}
+                  label={g.key === 'lvrTiers' ? lvrOptionLabel(o) : humanizeEnum(o)}
                   selected={value[g.key].includes(o)}
                   onPress={() => toggle(g.key, o)}
                 />
               ))}
             </Row>
-            {hidden > 0 ? <Button title={uiJoin('Show', ' ', 'All', ' ', uiCount(g.options.length), ' ', GROUP_LABELS[g.key])}
+            {hidden > 0 ? <Button title={uiJoin('Show', ' ', 'All', ' ', uiCount(options.length), ' ', GROUP_LABELS[g.key])}
               variant="ghost" accessibilityState={{ expanded: false }}
               onPress={() => setExpanded(current => new Set(current).add(groupKey))} /> : null}
           </View>;

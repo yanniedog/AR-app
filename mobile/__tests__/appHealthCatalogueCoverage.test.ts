@@ -36,6 +36,24 @@ afterEach(() => {
   setSuitabilityAllowed(null);
 });
 
+test('headless catalogue scope retains unknown history without weakening identity or input checks', () => {
+  const { snapshot } = fixture();
+  delete snapshot.historyCoverage;
+  expect(evaluateAppHealthCatalogueCoverage(snapshot).status).toBe('unavailable');
+  snapshot.catalogueAuditMode = 'headless_default_preferences';
+  const check = evaluateAppHealthCatalogueCoverage(snapshot);
+  expect(check.status).toBe('warn');
+  expect(check.metrics.historyAvailable).toBeNull();
+  expect(check.metrics.allProductsRendered).toBe(false);
+  snapshot.catalogue!.sections[0].searchUnexpected = ['mismatched-tier'];
+  expect(evaluateAppHealthCatalogueCoverage(snapshot).status).toBe('fail');
+  snapshot.catalogue!.sections[0].searchUnexpected = [];
+  snapshot.catalogue!.detailsAvailable = false;
+  expect(evaluateAppHealthCatalogueCoverage(snapshot).status).toBe('unavailable');
+  snapshot.catalogue = null;
+  expect(evaluateAppHealthCatalogueCoverage(snapshot).status).toBe('unavailable');
+});
+
 test('manual snapshots reuse passive catalogue evidence without rerunning any selectors', () => {
   const state = stateFor(makeHealthyDataFixture().snapshot.core!);
   const search = jest.spyOn(selectors, 'filterRows');
@@ -189,14 +207,14 @@ test('keeps blocked eligibility unknown even with full-catalogue opt-in', () => 
     filterReady: false, eligibleProducts: null, eligibleProviders: null, identityMismatches: null } });
 });
 
-test('keeps a reported producer history gap without failing catalogue identity', () => {
+test('warns about incomplete producer history without inventing a catalogue identity failure', () => {
   const { snapshot } = fixture();
   snapshot.historyCoverage = { ...snapshot.historyCoverage!, sourceGapDays: ['2026-05-13', '2026-10-07'], gaps: [
     ['2026-05-13', 'product-source-reconciliation-unavailable', null, 1],
     ['2026-10-07', 'historical-source-unavailable', null, 1],
     ['2026-10-25', 'historical-quarantined-tiers', null, 58],
   ], processingMismatches: 0, chartProjectionMismatches: 0 };
-  expect(evaluateAppHealthCatalogueCoverage(snapshot)).toMatchObject({ status: 'pass', metrics: {
+  expect(evaluateAppHealthCatalogueCoverage(snapshot)).toMatchObject({ status: 'warn', metrics: {
     historyProcessingMismatches: 0, identityMismatches: 0 } });
 });
 

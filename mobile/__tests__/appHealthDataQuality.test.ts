@@ -84,10 +84,11 @@ describe('app-health data quality', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     const checks = evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS);
 
-    expect(checks).toHaveLength(16);
-    expect(checks.filter(check => check.code !== APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE)
+    expect(checks).toHaveLength(17);
+    expect(checks.filter(check => check.code !== APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE && check.code !== APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE)
       .every((check) => check.status === 'pass')).toBe(true);
     expect(byCode(checks, APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE).status).toBe('unavailable');
+    expect(byCode(checks, APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE).status).toBe('unavailable');
   });
 
   it('does not infer product identity coverage from equal detail counts', () => {
@@ -113,11 +114,42 @@ describe('app-health data quality', () => {
     });
   });
 
+  it('treats reconciled disclosed producer failures and limitations as pass', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.core!.coverage!.providers_attempted = 115;
+    snapshot.core!.coverage!.providers_succeeded = 105;
+    snapshot.core!.coverage!.counts = { providers_failed: 2, providers_partial: 8 };
+    snapshot.core!.coverage!.provider_failures = [{ provider: 'withheld-from-public-report' }];
+    snapshot.core!.coverage!.limitations = ['upstream endpoint failed'];
+    expect(byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.COVERAGE)).toMatchObject({
+      status: 'pass',
+      metrics: {
+        providersAttempted: 115,
+        providersSucceeded: 105,
+        providersFailed: 2,
+        providersPartial: 8,
+        unaccountedProviders: 0,
+        limitations: 1,
+      },
+    });
+  });
+
   it('does not pass when attempted providers have no recorded outcome', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     snapshot.core!.coverage!.providers_attempted = 4;
     expect(byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
       APP_HEALTH_CHECK_CODES.COVERAGE)).toMatchObject({ status: 'warn', metrics: { unaccountedProviders: 1 } });
+  });
+
+  it('rejects provider totals where succeeded plus failed exceed attempted despite partials', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.core!.coverage!.providers_attempted = 10;
+    snapshot.core!.coverage!.providers_succeeded = 10;
+    snapshot.core!.coverage!.counts = { providers_failed: 1, providers_partial: 1 };
+    snapshot.core!.coverage!.provider_failures = [{ provider: 'withheld-from-public-report' }];
+    expect(byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.COVERAGE)).toMatchObject({ status: 'fail', metrics: { invalidCounts: true } });
   });
 
   it('rejects a core payload schema that the app contract does not support', () => {
@@ -142,7 +174,7 @@ describe('app-health data quality', () => {
     snapshot.core.sections.TD.rates[0].taxonomy_path = 'SAVINGS.WRONG';
     snapshot.details.runDate = '2026-08-31';
     snapshot.manifest.schedule.next_due_utc = '2026-08-01T00:00:00.000Z';
-    snapshot.core.coverage!.providers_succeeded = 2;
+    snapshot.core.coverage!.providers_succeeded = 1;
     snapshot.core.coverage!.counts!.providers_failed = 1;
     snapshot.core.coverage!.provider_failures = [{ provider: 'withheld-from-public-report' }];
     snapshot.quarantine = {

@@ -8,6 +8,31 @@ import { buildDeepPerformanceAuditPlan, buildDeepPerformanceAuditPlanFromInputs 
 import { ANDROID_UPDATE_READINESS_AUDIT } from '../src/lib/performanceAuditCheckInventory';
 import { AUDIT_REGISTERED_ACTION_IDS } from '../src/lib/auditDiagnosticProducerFields';
 
+test('retired scenario-recovery fields remain readable in historical reports', () => {
+  const report = makePerformanceAuditReport();
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'skipped', durationMs: null,
+    metrics: { skipClassification: 'scenario-recovery', scenarioRecoveryCascade: true } }];
+  const retained = fullAuditDiagnosticLog(report, id => id) as typeof report;
+  expect(retained.checks[0].metrics).toEqual({ skipClassification: 'scenario-recovery', scenarioRecoveryCascade: true });
+});
+
+test('funds mode and both private comparison drafts cannot leak through public diagnostics', () => {
+  const report = makePerformanceAuditReport();
+  const privateInputs = { loanAmount: '654321.98', lvr: '71.234567', lvrMode: 'funds', fundsAvailable: '123456.79',
+    fundsType: 'offset', propertyValue: '876543.21', offsetBalance: '234567.89', interestBearingBalance: '419754.09',
+    lvrSourceAmount: '765432.19', lvrPropertyValue: '987654.32' };
+  report.checks = [{ id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 12,
+    metrics: { actionMs: 4, ...privateInputs, parameters: privateInputs as never },
+    diagnostic: { stage: 'readiness', readiness: { surfaces: [{ id: 'search.results', work: privateInputs, probes: [] }] } } as never }];
+  const body = createPublicPerformanceAuditReport(report);
+  const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
+  expect(decoded.diagnosticLog.checks[0]).toMatchObject({ id: 'journey-rates-cold', status: 'fail', durationMs: 12,
+    metrics: { actionMs: 4 } });
+  const privateSentinels = /654321\.98|71\.234567|123456\.79|876543\.21|234567\.89|419754\.09|765432\.19|987654\.32|fundsAvailable|lvrMode|fundsType|offsetBalance|interestBearingBalance|lvrSourceAmount|lvrPropertyValue|"funds"|"offset"/;
+  expect(JSON.stringify(decoded)).not.toMatch(privateSentinels);
+  expect(JSON.stringify(fullAuditDiagnosticLog(report, id => id))).not.toMatch(privateSentinels);
+});
+
 test('every upload includes all retained checks, errors, traces, metrics and diagnostic context', () => {
   const report = makePerformanceAuditReport('private-session');
   report.checks = [{ id: 'deep-first-pass.route.projections.projections.advanced.toggle', label: 'Private input label', kind: 'journey',
@@ -20,7 +45,7 @@ test('every upload includes all retained checks, errors, traces, metrics and dia
       metrics: { actionMs: 13, maxFrameGapMs: 23 }, error: 'Different runtime failure' }];
   const body = createPublicPerformanceAuditReport(report);
   const decoded = decodeCompactDiagnosticJson(body) as { diagnosticLog: typeof report };
-  expect(decoded.diagnosticLog).toEqual(fullAuditDiagnosticLog(report, id => id));
+  expect(decoded.diagnosticLog).toEqual(fullAuditDiagnosticLog(report, id => id, { metricAnalysis: 'top-level' }));
   expect(decoded.diagnosticLog.checks.map(check => check.id)).toEqual(report.checks.map(check => check.id));
   expect(decoded.diagnosticLog.checks[1]).toMatchObject({ status: 'warn', durationMs: 41, metrics: { actionMs: 13, maxFrameGapMs: 23 } });
   expect(decoded.diagnosticLog.checks[1].error).not.toBe(decoded.diagnosticLog.checks[0].error);

@@ -11,13 +11,25 @@ import {
   type AuditCheck,
 } from '../src/lib/performanceAudit';
 import {
+  captureAuditRunTiming,
   estimatePerformanceAuditTime,
   formatPerformanceAuditEstimate,
+  performanceAuditEstimateParts,
   PerformanceAuditStepTimeoutError,
   PerformanceAuditMutationBarrier,
   scoreUserVisibleJourney,
   userVisibleForwardMs,
 } from '../src/lib/performanceAuditTiming';
+
+test('terminal timing shares one endpoint and excludes subsequent report aggregation', () => {
+  const start = Date.parse('2026-11-13T20:22:06.552Z');
+  let clock = start + 502_364;
+  let active = 500_000;
+  const timing = captureAuditRunTiming(new Date(start).toISOString(), () => active, () => clock);
+  clock += 3_739; active += 3_739;
+  expect(timing).toEqual({ finishedAt: '2026-11-13T20:30:28.916Z', durationMs: 500_000, wallClockMs: 502_364 });
+  expect(Date.parse(timing.finishedAt) - start).toBe(timing.wallClockMs);
+});
 
 const result = (durationMs: number): AuditCheck => ({
   id: 'journey', label: 'Product readiness', kind: 'journey', status: 'pass',
@@ -124,13 +136,15 @@ it('keeps interrupted timings out of the limit and report maxima', () => {
 it('provides an initial estimate, adapts to slow checks and covers finalization', () => {
   const initial = estimatePerformanceAuditTime({ total: 200, completed: 0, elapsedMs: 0, finalizing: false });
   expect(initial.basis).toBe('initial');
-  expect(initial.remainingMinMs).toBeGreaterThan(0);
+  expect(initial.remainingMs).toBeGreaterThan(0);
   const fast = estimatePerformanceAuditTime({ total: 200, completed: 20, elapsedMs: 20_000, finalizing: false });
   const slow = estimatePerformanceAuditTime({ total: 200, completed: 20, elapsedMs: 150_000, finalizing: false });
-  expect(slow.remainingMaxMs).toBeGreaterThan(fast.remainingMaxMs);
+  expect(slow.remainingMs).toBeGreaterThan(fast.remainingMs);
+  expect(Object.keys(slow).sort()).toEqual(['basis', 'elapsedMs', 'remainingMs']);
+  expect(formatPerformanceAuditEstimate(slow, false)).toBe('ETA: 16:45 remaining');
   expect(formatPerformanceAuditEstimate(slow, true)).toContain('ETA paused');
   const finalizing = estimatePerformanceAuditTime({ total: 200, completed: 200, elapsedMs: 300_000, finalizing: true });
-  expect(finalizing.remainingMaxMs).toBeGreaterThan(0);
+  expect(finalizing.remainingMs).toBeGreaterThan(0);
   expect(formatPerformanceAuditEstimate(finalizing, false)).toContain('remaining');
 });
 
@@ -162,17 +176,25 @@ it('does not estimate thousands of preloaded links at the route-check pace', () 
     total: 2_310, completed: 300, elapsedMs: 600_000, finalizing: false,
     links: { total: 2_000, completed: 0, elapsedMs: 0 },
   });
-  expect(startOfLinks.remainingMaxMs).toBeLessThan(450_000);
+  expect(startOfLinks.remainingMs).toBeLessThan(450_000);
   const halfway = estimatePerformanceAuditTime({
     total: 2_310, completed: 1_300, elapsedMs: 650_000, finalizing: false,
     links: { total: 2_000, completed: 1_000, elapsedMs: 50_000 },
   });
-  expect(halfway.remainingMaxMs).toBeLessThan(startOfLinks.remainingMaxMs);
+  expect(halfway.remainingMs).toBeLessThan(startOfLinks.remainingMs);
   // Keep route timing independent: fast cached links cannot make the final
   // foreground work appear instantaneous.
   const finalChecks = estimatePerformanceAuditTime({
     total: 2_310, completed: 2_300, elapsedMs: 700_000, finalizing: false,
     links: { total: 2_000, completed: 2_000, elapsedMs: 100_000 },
   });
-  expect(finalChecks.remainingMinMs).toBeGreaterThan(15_000);
+  expect(finalChecks.remainingMs).toBeGreaterThan(15_000);
+});
+
+
+it.each([
+  [0, 0, 0], [1, 0, 1], [59_000, 0, 59], [59_001, 1, 0],
+  [60_000, 1, 0], [480_484, 8, 1], [3_661_000, 61, 1],
+])('splits %i ms without rounding away the seconds', (ms, minutes, seconds) => {
+  expect(performanceAuditEstimateParts(ms)).toEqual({ minutes, seconds });
 });

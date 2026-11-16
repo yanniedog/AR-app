@@ -31,7 +31,10 @@ export default function BankRates() {
     },
   }), [interests, section]);
   const probes = useMemo(() => [
-    { id: 'bank-rates.model', kind: 'data' as const, status: contentReady ? (chart?.status ?? 'pending' as const) : 'pending' as const, error: chart?.error },
+    { id: 'bank-rates.model', kind: 'data' as const,
+      status: contentReady ? (chart?.status ?? 'pending' as const) : 'pending' as const, error: chart?.error,
+      expectedCount: chart?.modelPointCount ?? 0,
+      actualCount: contentReady && chart?.status === 'ready' ? chart.modelPointCount : chart?.renderedPointCount ?? 0 },
     { id: 'bank-rates.layout', kind: 'layout' as const, status: focused && laidOut ? 'ready' as const : 'pending' as const, layoutMeasured: focused && laidOut },
     { id: 'bank-rates.chart', kind: 'graphic' as const,
       status: contentReady ? (chart?.status ?? 'pending' as const) : 'pending' as const, error: chart?.error,

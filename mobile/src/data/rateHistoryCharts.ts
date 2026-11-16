@@ -10,15 +10,37 @@ const chartModels = new WeakMap<Record<string, BankRateSnapshot>, {
   sections: Map<SectionKey, Map<string | undefined, BankHistoryChartModel | null>>;
 }>();
 
+function isValidRateSummary(summary: RateSummary | undefined): summary is RateSummary {
+  return !!summary && Number.isInteger(summary.count) && summary.count > 0 &&
+    [summary.min, summary.max, summary.mean, summary.median].every(value => Number.isFinite(value) && value >= 0);
+}
+
 function historyPoint(date: string, summary: RateSummary | undefined): BankHistoryPoint {
-  if (!summary || !Number.isInteger(summary.count) || summary.count <= 0 ||
-    ![summary.min, summary.max, summary.mean, summary.median].every(value => Number.isFinite(value) && value >= 0)) {
+  if (!isValidRateSummary(summary)) {
     return sanitizeRibbonPoint(date);
   }
   return sanitizeRibbonPoint(date, {
     min: summary.min / 100, max: summary.max / 100,
     mean: summary.mean / 100, median: summary.median / 100, count: summary.count,
   });
+}
+
+/** Check whether a section has at least one valid dated summary without building the full chart series. */
+export function hasRateHistoryChartSection(
+  snapshots: Record<string, BankRateSnapshot> | null | undefined,
+  section: SectionKey,
+  provider?: string,
+): boolean {
+  if (!snapshots) return false;
+  const cached = chartModels.get(snapshots)?.sections.get(section);
+  if (cached?.has(provider)) return cached.get(provider) != null;
+  for (const date of Object.keys(snapshots)) {
+    const summary = provider === undefined
+      ? snapshots[date]?.sectionTotals?.[section]
+      : snapshots[date]?.[section]?.[provider];
+    if (isValidRateSummary(summary)) return true;
+  }
+  return false;
 }
 
 /** Adapt dated, profile-filtered tiers to the history chart's fractional units.

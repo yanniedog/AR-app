@@ -11,6 +11,12 @@ const EMPTY_ROWS: RateRow[] = [];
 const SYNCHRONOUS_ROW_LIMIT = 128;
 const sameRows = (a: readonly RateRow[], b: readonly RateRow[]) => a === b ||
   a.length === b.length && a.every((row, index) => row === b[index]);
+// A route remount must not discard a completed, immutable result. Keep only a
+// few recent queries and bind every entry to its source and admission owners.
+const REUSABLE_ROW_SLOT_LIMIT = 50_000;
+const reusable: { key: readonly unknown[]; result: RateRow[]; rowSlots: number }[] = [];
+const sameKey = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+export function clearReusableSearchResults() { reusable.length = 0; }
 
 /** Changed membership immediately invalidates results; cancelled work never installs. */
 export function usePreparedSearchRows(
@@ -31,12 +37,16 @@ export function usePreparedSearchRows(
   type Snapshot = { request: typeof request; attempt: number; rows: RateRow[]; error: string | null };
   const [storedSnapshot, setSnapshot] = useState<Snapshot | null>(null);
   const completed = useRef<{ request: typeof request; attempt: number; filtersKey: string; result: RateRow[] }[]>([]);
+  const reuseKey = useMemo(() => [rows, filtersKey, section, details, index, revision, mandatoryRevision,
+    suitabilityGateRevision, sortKey, metric, mortgageMetric] as const,
+  [rows, filtersKey, section, details, index, revision, mandatoryRevision, suitabilityGateRevision, sortKey, metric, mortgageMetric]);
   const cached = completed.current.find(item => item.attempt === attempt && item.filtersKey === filtersKey &&
     sameRows(item.request.membership.rows, rows) && item.request.membership.mandatoryRevision === mandatoryRevision &&
     item.request.membership.suitabilityGateRevision === suitabilityGateRevision && item.request.membership.section === section &&
     item.request.membership.details === details && item.request.membership.index === index &&
     item.request.membership.revision === revision && item.request.sortKey === sortKey &&
-    item.request.metric === metric && item.request.mortgageMetric === mortgageMetric);
+    item.request.metric === metric && item.request.mortgageMetric === mortgageMetric)
+    ?? (attempt === 0 ? reusable.find(item => sameKey(item.key, reuseKey)) : undefined);
   const snapshot = useMemo(() => storedSnapshot?.request === request && storedSnapshot.attempt === attempt ? storedSnapshot
     : cached ? { request, attempt, rows: cached.result, error: null } : storedSnapshot,
   [storedSnapshot, request, attempt, cached]);
@@ -67,7 +77,8 @@ export function usePreparedSearchRows(
     const suitabilityRevision = getSuitabilityRevision();
     // Only entry to the route needs the navigation animation delay. Applying
     // it to every query/sort/filter added 300 ms to mounted search controls.
-    const schedule = preparedWhileFocused.current ? scheduleAfterInteractions : scheduleAfterNavigation;
+    const schedule = preparedWhileFocused.current ? scheduleAfterInteractions
+      : (work: () => void) => scheduleAfterNavigation(work, 100);
     const cancelNavigation = schedule(() => {
       const control = { cancelled: () => cancelled || getMandatoryEligibilityRevision() !== eligibilityRevision ||
         getSuitabilityRevision() !== suitabilityRevision };
@@ -75,16 +86,26 @@ export function usePreparedSearchRows(
         ? sortRowsCooperatively(sortInput, sortKey, section, metric, mortgageMetric, control)
         : prepareSearchRows(rows, stableFilters, sortKey, section, details, index, metric, mortgageMetric, control);
       void work
-        .then(result => { if (!cancelled && result) {
+        .then(result => { if (!control.cancelled() && result) {
           if (completed.current.length >= 4) completed.current.shift();
           completed.current.push({ request, attempt, filtersKey, result });
+          const previous = reusable.findIndex(item => sameKey(item.key, reuseKey));
+          if (previous >= 0) reusable.splice(previous, 1);
+          // Include the source owner retained by the key, even when filtering
+          // leaves a tiny result. Oversized results still install for this
+          // mounted screen; only their cross-remount retention is skipped.
+          const rowSlots = rows.length + (result === rows ? 0 : result.length);
+          if (rowSlots <= REUSABLE_ROW_SLOT_LIMIT) {
+            reusable.push({ key: reuseKey, result, rowSlots });
+            while (reusable.length > 6 || reusable.reduce((sum, item) => sum + item.rowSlots, 0) > REUSABLE_ROW_SLOT_LIMIT) reusable.shift();
+          }
           setSnapshot({ request, attempt, rows: result, error: null });
         } })
         .catch(error => { if (!cancelled) setSnapshot({ request, attempt, rows: EMPTY_ROWS,
           error: error instanceof Error ? error.message : 'Could not prepare search results' }); });
     });
     return () => { cancelled = true; cancelNavigation(); };
-  }, [request, synchronous, focused, attempt, current, sortInput, rows, stableFilters, filtersKey, sortKey, section, details, index, metric, mortgageMetric]);
+  }, [request, synchronous, focused, attempt, current, sortInput, rows, stableFilters, filtersKey, sortKey, section, details, index, metric, mortgageMetric, reuseKey]);
   // Large reorders keep membership only as input to the worker. Withholding
   // rows preserves the list's new-result commit/measurement lifecycle.
   return { rows: synchronous ?? (current ? snapshot.rows : EMPTY_ROWS),

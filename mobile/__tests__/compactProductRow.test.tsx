@@ -52,27 +52,31 @@ function mainTarget(tree: Tree) {
 
 beforeEach(() => { mockDimensions = { width: 360, height: 800, scale: 3, fontScale: 1 }; jest.clearAllMocks(); });
 
-test.each([[320, 1], [360, 1], [411, 1], [320, 2], [360, 3]])('preserves a scrubbable complete rail with product name last at %sdp/font%s', (width, fontScale) => {
+test.each([[320, 1], [360, 1], [411, 1], [320, 2], [360, 3]])('renders a scannable two-line layout without horizontal ScrollView at %sdp/font%s', (width, fontScale) => {
   mockDimensions = { ...mockDimensions, width, fontScale };
   const exact = { ...row, product_name: 'An exceptionally long product name with every qualifier preserved' };
   const tree = render(exact);
   try {
-    const scroll = tree.root.findByProps({ testID: 'compact-product-scroll' });
-    expect(scroll.type).toBe(ScrollView);
-    expect(scroll.props).toMatchObject({ horizontal: true, showsHorizontalScrollIndicator: true, directionalLockEnabled: true });
+    expect(tree.root.findAllByType(ScrollView)).toHaveLength(0);
+    expect(tree.root.findAllByProps({ testID: 'compact-product-scroll' })).toHaveLength(0);
     const name = tree.root.findByProps({ testID: 'compact-product-name' });
-    const facts = tree.root.findByProps({ testID: 'compact-product-facts' });
+    const line2 = tree.root.findByProps({ testID: 'compact-product-line2' });
     const metrics = tree.root.findByProps({ testID: 'compact-product-metrics' });
-    expect(name.parent).toBe(facts.parent);
-    const ordered = name.parent.children;
-    expect(ordered.indexOf(metrics)).toBeLessThan(ordered.indexOf(facts));
-    expect(ordered.indexOf(facts)).toBeLessThan(ordered.indexOf(name));
-    expect(name.props.children).toBe(exact.product_name);
-    expect(name.props.style.width).toBeGreaterThanOrEqual(compactFactWidth(uiProductName(exact), fontScale));
-    expect(tree.root.findByProps({ testID: 'compact-primary-rate' }).props.children).toBe('5.80%');
+    const facts = tree.root.findByProps({ testID: 'compact-product-facts' });
+    expect(name.props).toMatchObject({ numberOfLines: 2, weight: '600', children: exact.product_name });
+    expect(line2.props.style).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
+    expect(metrics.props.style).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1 });
+    expect(facts.props.style).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1, maxWidth: '100%' });
+    expect(tree.root.findByProps({ testID: 'compact-facet-cell' }).props.style).toMatchObject({ flexDirection: 'row', flexShrink: 1, maxWidth: '100%' });
+    expect(tree.root.findByProps({ testID: 'compact-facet-value' }).props.style).toMatchObject({ flexShrink: 1 });
+    expect(line2.findByProps({ testID: 'compact-product-metrics' })).toBe(metrics);
+    expect(line2.findByProps({ testID: 'compact-product-facts' })).toBe(facts);
+    const primary = tree.root.findByProps({ testID: 'compact-primary-rate' });
+    expect(primary.props).toMatchObject({ weight: '700', children: '5.80%' });
+    expect(primary.props.style).toMatchObject({ fontVariant: ['tabular-nums'] });
     expect(tree.root.findByProps({ testID: 'compact-secondary-rate' }).props.children).toBe('5.79%');
     expect(tree.root.findByProps({ testID: 'compact-facet-value' }).props.children).toBe('≤60%');
-    expect(mainTarget(tree).props.style.width).toBeGreaterThan(width);
+    expect(mainTarget(tree).props.style.width).toBe('100%');
     expect(mainTarget(tree).props.accessibilityLabel).toContain('Advertised rate 5.79%');
     const icons = tree.root.findAllByType('Icon');
     expect(icons.find(node => node.props.name === 'calculator-outline')!.props.color).toBe('#123');
@@ -81,28 +85,25 @@ test.each([[320, 1], [360, 1], [411, 1], [320, 2], [360, 3]])('preserves a scrub
   } finally { act(() => tree.unmount()); }
 });
 
-test('scrubbing cancels opening; fixed save action preserves exact identity', () => {
+test('row press opens product and fixed save action preserves exact identity', () => {
   const open = jest.fn(), tree = render(row, { onPress: open });
   try {
     const main = mainTarget(tree);
-    act(() => { main.props.onPressIn(); tree.root.findByProps({ testID: 'compact-product-scroll' }).props.onScrollBeginDrag(); main.props.onPress(); });
-    expect(open).not.toHaveBeenCalled();
-    expect(mockDismiss).toHaveBeenCalled();
-    expect(tree.root.findByProps({ testID: 'compact-product-scroll' }).findAllByProps({ testID: 'rate-save:maitland-budget:4' })).toHaveLength(0);
+    act(() => { main.props.onPressIn(); main.props.onPress(); });
+    expect(open).toHaveBeenCalledTimes(1);
     act(() => tree.root.findByProps({ testID: 'rate-save:maitland-budget:4' }).props.onPress());
     expect(mockSave).toHaveBeenCalledWith(row, 'rate');
     expect(tree.root.findAllByType('PressFeedback').every(node => node.props.style.minHeight >= 48)).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
 
-test('native widths expand the rail without suppressing unknowns or conditional warnings', () => {
+test('preserves unknowns, tier index and conditional warnings in two-line layout at large fontScale', () => {
   mockDimensions = { ...mockDimensions, fontScale: 2 };
   const tree = render({ ...row, ribbon_deposit_kind: 'BONUS', ongoing_rate: undefined }, { section: 'Savings' });
   try {
-    act(() => tree.root.findByProps({ testID: 'compact-primary-rate' }).props.onTextLayout({ nativeEvent: { lines: [{ width: 500 }] } }));
-    expect(tree.root.findByProps({ testID: 'compact-primary-cell' }).props.style.width).toBeGreaterThan(500);
     expect(mainTarget(tree).props.accessibilityLabel).toContain('Ongoing rate: Unknown');
     expect(tree.root.findByProps({ testID: 'compact-product-name' }).props.children).toBe(row.product_name);
+    expect(tree.root.findByProps({ testID: 'compact-primary-rate' }).props.children).toBe('5.79%');
     expect(tree.root.findByProps({ testID: 'compact-tier-index' }).props.children).toBe('#4');
     expect(tree.root.findByProps({ testID: 'compact-status-0' }).props.name).toBe('flash-outline');
     expect(tree.root.findByProps({ testID: 'compact-status-1' }).props.name).toBe('help-circle-outline');
@@ -151,6 +152,57 @@ test.each([false, true])('logo height follows content shrinking independently of
     expect(avatar().height).toBeCloseTo(normal);
     act(() => outer().props.onLayout(layout(119)));
     expect(avatar().height).toBeCloseTo(normal);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('a viewport of cards needs no second commit for the expected first native width', () => {
+  const f = fixture(), commits = jest.fn();
+  mockState = { ...f, isRateSaved: () => false, toggleSavedRate: mockSave, prefs: { mortgageRateMetric: 'comparison' } };
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<React.Profiler id="lender-products" onRender={commits}>
+    {Array.from({ length: 11 }, (_, index) => <ProductCard key={index} row={row} section="Mortgage" />)}
+  </React.Profiler>) as Tree; });
+  try {
+    expect(commits).toHaveBeenCalledTimes(1);
+    const rows = tree.root.findAllByProps({ testID: 'compact-product-row' });
+    for (const item of rows) {
+      act(() => item.props.onLayout({ nativeEvent: { layout: { width: 328, height: 56 } } }));
+    }
+    expect(commits).toHaveBeenCalledTimes(1);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('omits redundant BankAvatar when showLenderAction is false and keeps lender identity visible in selectMode', () => {
+  const withoutLender = render(row, { showLenderAction: false });
+  try {
+    expect(withoutLender.root.findAllByType('BankAvatar')).toHaveLength(0);
+    expect(withoutLender.root.findByProps({ testID: 'compact-product-name' }).props.children).toBe(row.product_name);
+  } finally { act(() => withoutLender.unmount()); }
+
+  const selectingWithLender = render(row, { selectMode: true, showLenderAction: true });
+  try {
+    expect(selectingWithLender.root.findAllByType('BankAvatar')).toHaveLength(1);
+    expect(selectingWithLender.root.findAllByType('Icon').some(node => node.props.name === 'square-outline')).toBe(true);
+    expect(selectingWithLender.root.findByProps({ testID: 'compact-product-name' }).props.children).toBe(row.product_name);
+  } finally { act(() => selectingWithLender.unmount()); }
+});
+
+test('width corrections keep facts and product name mounted without remounting', () => {
+  const tree = render();
+  try {
+    const originalName = tree.root.findByProps({ testID: 'compact-product-name' });
+    const originalMetric = tree.root.findByProps({ testID: 'compact-primary-rate' });
+    act(() => tree.root.findByProps({ testID: 'compact-product-row' }).props.onLayout({
+      nativeEvent: { layout: { width: 1400, height: 56 } },
+    }));
+    expect(tree.root.findByProps({ testID: 'compact-product-name' })).toBe(originalName);
+    expect(tree.root.findByProps({ testID: 'compact-primary-rate' })).toBe(originalMetric);
+    for (const invalid of [0, -1, NaN, Infinity]) {
+      act(() => tree.root.findByProps({ testID: 'compact-product-row' }).props.onLayout({
+        nativeEvent: { layout: { width: invalid, height: 56 } },
+      }));
+    }
+    expect(tree.root.findByProps({ testID: 'compact-product-name' })).toBe(originalName);
   } finally { act(() => tree.unmount()); }
 });
 
@@ -228,21 +280,13 @@ test('has independent exact Save/History actions and holding the row only names 
   } finally { act(() => tree.unmount()); }
 });
 
-test('old font numeric callbacks cannot replace current measured widths or remount-loop the body', () => {
+test('fontScale updates preserve primary rate and product name cleanly', () => {
   const tree = render();
   try {
-    const old = tree.root.findByProps({ testID: 'compact-primary-rate' }).props.onTextLayout;
     mockDimensions = { ...mockDimensions, fontScale: 2 };
     act(() => tree.update(<ProductCard row={{ ...row }} section="Mortgage" />));
-    act(() => tree.root.findByProps({ testID: 'compact-primary-rate' }).props.onTextLayout({ nativeEvent: { lines: [{ width: 110 }] } }));
-    const main = mainTarget(tree);
-    const width = tree.root.findByProps({ testID: 'compact-primary-cell' }).props.style.width;
-    const name = tree.root.findByProps({ testID: 'compact-product-name' });
-    act(() => old({ nativeEvent: { lines: [{ width: 250 }] } }));
-    expect(tree.root.findByProps({ testID: 'compact-primary-cell' }).props.style.width).toBe(width);
-    expect(tree.root.findByProps({ testID: 'compact-product-name' })).toBe(name);
-    expect(mainTarget(tree)).toBe(main);
     expect(tree.root.findByProps({ testID: 'compact-primary-rate' }).props.children).toBe('5.80%');
+    expect(tree.root.findByProps({ testID: 'compact-product-name' }).props.children).toBe(row.product_name);
   } finally { act(() => tree.unmount()); }
 });
 
@@ -328,35 +372,38 @@ test('equal-metric actual tiers remain visibly distinct even when their long LVR
 
 afterEach(() => { jest.restoreAllMocks(); mockReducedMotion = true; });
 
-test('holds measured icons in the scrolled content coordinate space and ignores stale geometry', () => {
+test('holds measured icons in the two-line coordinate space and ignores stale geometry', () => {
   const tree = render();
   try {
     const main = mainTarget(tree);
+    const name = tree.root.findByProps({ testID: 'compact-product-name' });
+    const line2 = tree.root.findByProps({ testID: 'compact-product-line2' });
     const metrics = tree.root.findByProps({ testID: 'compact-product-metrics' });
     const primary = tree.root.findByProps({ testID: 'compact-primary-cell' });
     const secondary = tree.root.findByProps({ testID: 'compact-secondary-cell' });
     const facts = tree.root.findByProps({ testID: 'compact-product-facts' });
     const facet = tree.root.findByProps({ testID: 'compact-facet-cell' });
-    const layout = (node: { props: Record<string, any> }, x: number, width: number) => node.props.onLayout({ nativeEvent: { layout: { x, y: 0, width, height: 48 } } });
-    const primaryWidth = primary.props.style.width, secondaryWidth = secondary.props.style.width;
-    const metricsWidth = primaryWidth + secondaryWidth + 4, factsX = metricsWidth + 4;
+    const layout = (node: { props: Record<string, any> }, x: number, y: number, width: number, height: number) =>
+      node.props.onLayout({ nativeEvent: { layout: { x, y, width, height } } });
     act(() => {
-      layout(main, 0, main.props.style.width);
-      layout(metrics, 0, metricsWidth);
-      layout(primary, 0, primaryWidth);
-      layout(secondary, primaryWidth + 4, secondaryWidth);
-      layout(facts, factsX, facts.props.style.width);
-      layout(facet, 0, 70);
+      layout(main, 0, 0, 260, 56);
+      layout(name, 4, 6, 250, 20);
+      layout(line2, 4, 30, 250, 20);
+      layout(metrics, 0, 0, 120, 20);
+      layout(primary, 0, 0, 56, 20);
+      layout(secondary, 62, 0, 56, 20);
+      layout(facts, 126, 0, 110, 20);
+      layout(facet, 0, 0, 60, 20);
     });
-    for (const [x, word] of [[10, 'Comparison'], [primaryWidth + 10, 'Advertised'], [factsX + 10, 'LVR']] as const) {
-      act(() => { main.props.onPressIn(); main.props.onLongPress({ nativeEvent: { locationX: x, locationY: 24 } }); });
+    for (const [x, y, word] of [[20, 12, 'Details'], [14, 38, 'Comparison'], [76, 38, 'Advertised'], [140, 38, 'LVR']] as const) {
+      act(() => { main.props.onPressIn(); main.props.onLongPress({ nativeEvent: { locationX: x, locationY: y } }); });
       expect(mockShow).toHaveBeenLastCalledWith(word);
     }
     const oldLayout = facet.props.onLayout;
     mockDimensions = { ...mockDimensions, fontScale: 2 };
     act(() => tree.update(<ProductCard row={{ ...row }} section="Mortgage" />));
-    act(() => oldLayout({ nativeEvent: { layout: { x: 0, width: 70 } } }));
-    act(() => mainTarget(tree).props.onLongPress({ nativeEvent: { locationX: factsX + 10, locationY: 24 } }));
+    act(() => oldLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 60, height: 20 } } }));
+    act(() => mainTarget(tree).props.onLongPress({ nativeEvent: { locationX: 140, locationY: 38 } }));
     expect(mockShow).toHaveBeenLastCalledWith('Details');
   } finally { act(() => tree.unmount()); }
 });

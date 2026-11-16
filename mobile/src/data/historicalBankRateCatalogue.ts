@@ -8,7 +8,8 @@ import { featureEvidenceMatches, featureEvidenceScope } from './productFactsCore
 import { bankRateScope, snapshotBankRates, type BankRateScope, type BankRateSnapshot, type RateSummary } from './bankRateOverview';
 import { HISTORICAL_CATALOGUE_LIMITS, validateHistoricalBankRateCatalogue, validateHistoricalBankRateCatalogueAsync, type HistoricalBankRateCatalogue, type HistoricalCatalogueTier } from './historicalBankRateCatalogueWire';
 import { isValidCalendarDate } from '../lib/calendarDate';
-import { historicalReadySnapshots, validateHistoricalBankRateReadyForApp, type ReadyHistorySource } from './historicalBankRateReady';
+import { historicalReadySnapshots, type ReadyHistorySource } from './historicalBankRateReady';
+import { validateAcceptedHistoricalBankRateReady as validateHistoricalBankRateReadyForApp } from './historicalBankRateReadyAcceptance';
 import type { HistoricalBankRateReady } from './historicalBankRateReadyWire';
 import type { DatesIndex } from './datesIndex';
 

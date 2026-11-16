@@ -214,6 +214,8 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             const { text, details: fresh } = await downloadDetails(
               manifest.files.details.url,
               manifest.files.details.sha256,
+              { expectedBytes: manifest.files.details.bytes, requireExactBytes: !!manifest.payload_revision,
+                maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024 },
             );
             if (!datasetUnchanged()) return;
             work.stage('Saving verified product details');
@@ -499,7 +501,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
 
         const compactAsset = manifest.files.history_banks;
         if (manifest.payload_revision && !compactAsset) {
-          set({ historyBanks: null, historyBanksError: 'history unavailable in this publication' });
+          set({ historyBanks: null, historyBanksError: null });
           return;
         }
         if (compactAsset) {
@@ -624,7 +626,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         set({ bankInsightsError: null });
         return;
       }
-      const cached = force && !cacheOnly ? null : normalizeBankInsightsPayload(await cache.readBankInsights());
+      const cached = force && !cacheOnly ? null : normalizeBankInsightsPayload(await cache.readBankInsights(), { fromCache: true });
       if (cacheOnly && !cacheEditionStillCurrent()) return;
       if ((!force || cacheOnly) && fresh(cached)) {
         set({ bankInsights: cached, bankInsightsError: null });

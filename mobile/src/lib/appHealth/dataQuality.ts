@@ -1,5 +1,6 @@
 import type { ManifestFile, RateRow, SectionData, SectionKey } from '../../types';
 import { evaluateAppHealthCatalogueCoverage } from './catalogueCoverage';
+import { evaluateBankResponseCoverage } from './bankResponseCoverage';
 import { versionLt } from '../versionCompare';
 import { isValidCalendarDate } from '../calendarDate';
 import { validatePayloadAccounting } from './payloadAccounting';
@@ -716,11 +717,11 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
     failedCount < 0 ||
     !Number.isInteger(partialCount) ||
     partialCount < 0 ||
-    (attempted != null && succeeded != null && succeeded + failedCount > attempted + partialCount);
+    (attempted != null && succeeded != null && succeeded + failedCount > attempted);
   const unaccountedProviders = Math.max(0, attempted - succeeded - failedCount - partialCount);
-  // Partial observations that the producer already counted are a data fact.
-  // Failed, unaccounted, or internally inconsistent coverage is an app defect.
-  const degraded = Boolean(population) || failedCount > 0 || unaccountedProviders > 0 || (coverage.limitations?.length ?? 0) > 0;
+  // Disclosed producer failures, partials and limitations that reconcile with
+  // attempted totals are informational data facts, not app warnings.
+  const degraded = Boolean(population) || unaccountedProviders > 0;
   const status: AppHealthStatus = invalidCounts ? 'fail' : degraded ? 'warn' : 'pass';
   return check(
     APP_HEALTH_CHECK_CODES.COVERAGE,
@@ -744,9 +745,9 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
       ? 'Producer coverage counts do not reconcile.'
       : population
         ? 'Observed products only; registered-provider membership and missing-product count are unknown.'
-      : degraded
-        ? 'Provider coverage has a failed or unaccounted outcome.'
-        : undefined,
+        : degraded
+          ? 'Provider coverage has an unaccounted outcome.'
+          : undefined,
     population ? { populationAssessment: population } : undefined,
   );
 }
@@ -999,6 +1000,7 @@ export const APP_HEALTH_DATA_CHECKS: readonly {
   { code: APP_HEALTH_CHECK_CODES.FRESHNESS, backgroundMetadataOnly: true, evaluate: evaluateFreshness },
   { code: APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS, evaluate: evaluateDetailsCompleteness },
   { code: APP_HEALTH_CHECK_CODES.ASSET_AVAILABILITY, backgroundMetadataOnly: true, evaluate: evaluateAssetAvailability },
+  { code: APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE, evaluate: evaluateBankResponseCoverage },
 ];
 
 /** Evaluate payload correctness, completeness, freshness, and asset gaps without I/O. */

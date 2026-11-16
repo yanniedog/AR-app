@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { mergeAuditMetricRuns, parseAuditMetricHistory, type AuditMetricRun } from './auditMetricHistory';
+import { AUDIT_METRIC_HISTORY_VERSION, mergeAuditMetricRuns, parseAuditMetricHistory, type AuditMetricRun } from './auditMetricHistory';
 
 const FILE = `${FileSystem.documentDirectory ?? ''}logs/ar-audit-metric-history.json`;
 const TEMP = `${FILE}.tmp`;
@@ -23,7 +23,7 @@ export async function readAuditMetricHistory(): Promise<AuditMetricRun[]> {
 
 export async function appendAuditMetricHistory(additions: AuditMetricRun[]): Promise<void> {
   const runs = mergeAuditMetricRuns(await readAuditMetricHistory(), additions);
-  await FileSystem.writeAsStringAsync(TEMP, JSON.stringify({ schemaVersion: 1, runs }));
+  await FileSystem.writeAsStringAsync(TEMP, JSON.stringify({ schemaVersion: AUDIT_METRIC_HISTORY_VERSION, runs }));
   await FileSystem.moveAsync({ from: TEMP, to: FILE });
 }
 

@@ -1,6 +1,6 @@
 {
-  "sha256": "30d3948e66de329434e2177a9eeb9afadb293499e1a5e2c1ada254b6fb4282b3",
-  "compiler_sha256": "30d3948e66de329434e2177a9eeb9afadb293499e1a5e2c1ada254b6fb4282b3",
+  "sha256": "d508d9099c903db3f65ee2e7c7205d82f86f68b167589d95a455a934d1c0e8d3",
+  "compiler_sha256": "d508d9099c903db3f65ee2e7c7205d82f86f68b167589d95a455a934d1c0e8d3",
   "semantic_revision": "ar-history-ready-v1",
   "source_files": {
     "node_modules/@noble/hashes/_md.js": "4eaf0ae8f8191c50acdab7c3de7f335bf24845e4b562bdbc3e9f61cb7a873831",
@@ -18,11 +18,11 @@
     "src/data/bundledBankRateHistory.snapshot.json": "a4198b78667c30c24018401c0208a61544fe8f23b5fcf22ef2318b527e692c05",
     "src/data/bundledBankRateHistory.ts": "a896d96b5df45a9ea60b723e319bbfce03d230d9f1b213be5962f10aa4b352a3",
     "src/data/featuresCore.ts": "e8ce866e941efb3684c346a262c85f4f318b45a32fde99a7906780b8411faad1",
-    "src/data/historicalBankRateCatalogueWire.ts": "31bf27f7fbdada472bf24c37aba8f1303a9f9b7aaada38844a3952e98ab1f782",
+    "src/data/historicalBankRateCatalogueWire.ts": "97163bc0afdbf2346e3e701b7c4d78862aaf8386246b27b3d68a41e9df1f54f0",
     "src/data/historicalBankRateReady.ts": "a1ed2f29a80dcbd5de5b2a7169e8049b002951b129955b9a4d04bc7659e1f28e",
     "src/data/historicalBankRateReadyCompiler.ts": "78668c855e459e71a2a28a2289d0761b2853a05f0874fde97c72c2d4d1c4bfea",
     "src/data/historicalBankRateReadyWire.ts": "03d3152b0104347d32a182cbef7a37994029c77c00228b072f9365a383b72e26",
-    "src/data/lvrRange.ts": "c71e79a91c36727c555c0117f2aa34094afadd3722032360429d73df9a787405",
+    "src/data/lvrRange.ts": "8f06544a359c2e0b3ec7b6200409ebc060a6b855d308ff6d355a5aef343ef819",
     "src/data/mortgageFacets.ts": "30902a35c2da7f29bc6c35bc6c6d278826090e99faf98b4ce47a5abf5b61eaf6",
     "src/data/populationAssessment.ts": "48affb1b55327b27a854799de6f2434bdccb5100ff6388516ccfb4ecfcec6b16",
     "src/data/productFactsCore.ts": "d255a4a83b2ce7cf4443e2e5813973849a602677e39856d617b12f2083007c80",

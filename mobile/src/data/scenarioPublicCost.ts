@@ -41,7 +41,14 @@ export function scenarioPublicCost({ section, scenario, row, programme, rateScen
       || typeof inputs.extraRepaymentAmount !== 'string' || typeof inputs.extraRepaymentFrequency !== 'string')) {
     return { reasonCodes: ['scenario_inputs_missing'], assumptions: [] };
   }
-  const offset = clean(inputs.offsetBalance) || '0';
+  // Rates can supply a private, ephemeral offset assumption independently of
+  // principal and lender LVR. An explicit incomplete value cannot fall back to
+  // a saved account balance, and deposit funds have already been spent.
+  const comparisonOffset = section === 'Mortgage' && Object.hasOwn(rateScenario, 'offsetBalance');
+  const enteredOffset = comparisonOffset && typeof rateScenario.offsetBalance === 'string'
+    ? calculatorAmount(rateScenario.offsetBalance, MAX_CALCULATOR_MORTGAGE_AMOUNT) : null;
+  if (comparisonOffset && enteredOffset === null) return { reasonCodes: ['scenario_inputs_missing'], assumptions: [] };
+  const offset = comparisonOffset ? String(enteredOffset) : clean(inputs.offsetBalance) || '0';
   const feeContext = programme ? publicProgrammeCostFees(programme, {
     operation, switchingCostsKnown: false,
     offsetTermsKnown: offset === '0',

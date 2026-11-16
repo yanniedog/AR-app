@@ -35,6 +35,11 @@ export function useRatesAuditTarget<Row>(options: Options<Row>) {
   const [cellRevision, setCellRevision] = useState(0);
   const [viewport, setViewport] = useState('');
   const notify = useCallback(() => { if (mounted.current) wake(n => n + 1); }, []);
+  // Keep exact commit/viewport evidence in refs during ordinary browsing. Only
+  // an active audit consumes React revisions; scrolling must not rerender the
+  // entire Rates workspace just to update diagnostics that nobody is observing.
+  const observing = useCallback(() => getPerformanceAuditState().status === 'running' || request.current !== null, []);
+  const observedViewport = useRef('');
 
   const inViewport = useCallback((row: Row, index: number): boolean => {
     const active = current.current, list = active.list.current;
@@ -59,14 +64,14 @@ export function useRatesAuditTarget<Row>(options: Options<Row>) {
     const owner = Symbol('rates-cell');
     if (revision === current.current.revision && current.current.rows.includes(row)) {
       commits.current.set(row, { revision, owner });
-      if (mounted.current) setCellRevision(n => n + 1);
+      if (mounted.current && observing()) setCellRevision(n => n + 1);
     }
     return () => {
       if (commits.current.get(row)?.owner !== owner) return;
       commits.current.delete(row);
-      if (mounted.current) setCellRevision(n => n + 1);
+      if (mounted.current && observing()) setCellRevision(n => n + 1);
     };
-  }, []);
+  }, [observing]);
   const onViewableItemsChanged = useCallback((info: { viewableItems: ViewToken<Row>[] }) => {
     const active = current.current;
     if (!active.canScroll || request.current?.started && !request.current.nativeDone) return;
@@ -81,9 +86,11 @@ export function useRatesAuditTarget<Row>(options: Options<Row>) {
     visible.current = { revision: active.revision, rows };
     // Only genuine native viewport changes affect the surface render revision.
     const signature = JSON.stringify([active.revision, [...rows].map(row => active.token(row))]);
-    setViewport(previous => previous === signature ? previous : signature);
-    notify();
-  }, [inViewport, notify]);
+    if (observedViewport.current !== signature) {
+      observedViewport.current = signature;
+      if (observing()) setViewport(signature);
+    } else if (request.current) notify();
+  }, [inViewport, notify, observing]);
   const settle = useCallback((pending: Request<Row>, value: RatesAuditPagePreparation | Unavailable) => {
     if (!pending.settled) {
       pending.settled = true; pending.signal?.removeEventListener('abort', pending.abort!); pending.resolve(value);
@@ -121,8 +128,15 @@ export function useRatesAuditTarget<Row>(options: Options<Row>) {
   }, [retire]);
   useLayoutEffect(() => {
     mounted.current = true;
+    let running = getPerformanceAuditState().status === 'running';
     const unsubscribe = subscribePerformanceAudit(() => {
       const state = getPerformanceAuditState();
+      const nextRunning = state.status === 'running';
+      if (nextRunning && !running) {
+        setViewport(observedViewport.current);
+        setCellRevision(n => n + 1);
+      }
+      running = nextRunning;
       if (state.cancelRequested) cancel();
       if ((state.status === 'queued' || ['idle', 'complete', 'failed', 'cancelled'].includes(state.status)) &&
         request.current?.nativeDone) { request.current = null; notify(); }

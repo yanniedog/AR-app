@@ -23,7 +23,7 @@ import { useAuditExternalLinks } from '../hooks/useAuditExternalLinks';
 import type { EconomicExplorerLens } from './economy/EconomicExplorer';
 import { AppText, Button, Row } from './ui';
 
-function OutlookContent({
+const OutlookContent = React.memo(function OutlookContent({
   data,
   rba,
   rbaHolds,
@@ -149,7 +149,7 @@ function OutlookContent({
       </Row>
     </View>
   );
-}
+});
 
 export interface RbaOutlookAuditHandle {
   nextLens(): void;
@@ -172,7 +172,7 @@ export interface RbaOutlookAuditState {
   error: string | null;
 }
 
-export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
+export const RbaOutlook = React.memo(forwardRef<RbaOutlookAuditHandle, {
   rba: RbaEntry[];
   rbaHolds?: string[];
   onAuditStateChange?: (state: RbaOutlookAuditState) => void;
@@ -248,8 +248,9 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
   const layoutReady = revision != null && layoutRevision === revision;
   const graphicReady = expectedGraphicRevision != null && graphic?.revision === expectedGraphicRevision && graphic.layoutMeasured;
   const unavailableReady = !data && !loading && !!error && unavailableLayoutMeasured;
+  const lastAuditStateRef = useRef<RbaOutlookAuditState | null>(null);
   useEffect(() => {
-    onAuditStateChange?.({
+    const nextState: RbaOutlookAuditState = {
       status: data && !loading && layoutReady && graphicReady ? 'ready' : unavailableReady ? 'error' : 'pending',
       revision,
       renderRevision: expectedGraphicRevision,
@@ -262,7 +263,27 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
       graphicReady: graphicReady || unavailableReady,
       accessibleSummary: unavailableReady || graphic?.accessibleSummary === true,
       error,
-    });
+    };
+    const prev = lastAuditStateRef.current;
+    if (
+      prev &&
+      prev.status === nextState.status &&
+      prev.revision === nextState.revision &&
+      prev.renderRevision === nextState.renderRevision &&
+      prev.indicatorCount === nextState.indicatorCount &&
+      prev.pointCount === nextState.pointCount &&
+      prev.expectedCount === nextState.expectedCount &&
+      prev.layoutMeasured === nextState.layoutMeasured &&
+      prev.emptyStateRendered === nextState.emptyStateRendered &&
+      prev.layoutReady === nextState.layoutReady &&
+      prev.graphicReady === nextState.graphicReady &&
+      prev.accessibleSummary === nextState.accessibleSummary &&
+      prev.error === nextState.error
+    ) {
+      return;
+    }
+    lastAuditStateRef.current = nextState;
+    onAuditStateChange?.(nextState);
   }, [data, error, expectedGraphicRevision, graphic, graphicReady, layoutReady, loading, onAuditStateChange, revision, unavailableReady]);
 
   return (
@@ -329,4 +350,4 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
       )}
     </View>
   );
-});
+}));

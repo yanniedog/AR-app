@@ -65,6 +65,24 @@ function reportFixture(checks: AuditCheck[]): PerformanceAuditReport {
 }
 
 describe('deidentified diagnostics privacy boundary', () => {
+  it('retains closed link facet evidence so verification metrics can be independently checked', () => {
+    const check: AuditCheck = { id: 'external-link-1', label: 'Private lender', kind: 'network', status: 'pass', durationMs: 12,
+      metrics: { executionAttempted: true, urlValidation: 'pass', browserHandler: 'pass', httpReachability: 'pass',
+        handlerResolution: 'pass', handlerAttempted: true, httpAttempted: true, httpSelected: true,
+        host: 'private.example', destinationPath: '/private' } };
+    const report = reportFixture([check]);
+    const output = () => decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report)) as { checks: { metrics: Record<string, unknown> }[] };
+    expect(output().checks[0].metrics).toMatchObject({ urlValidation: 'pass', browserHandler: 'pass', httpReachability: 'pass',
+      httpAttempted: true, httpSelected: true, handlerResolution: 'pass' });
+    expect(output().checks[0].metrics).not.toHaveProperty('host');
+    for (const field of ['urlValidation', 'browserHandler', 'httpReachability', 'handlerResolution']) {
+      for (const value of ['private.example', 123, true]) {
+        check.metrics[field] = value;
+        expect(output().checks[0].metrics).not.toHaveProperty(field);
+      }
+    }
+  });
+
   it('preserves observed zero progress and empty catalogue counts when no measurement ran', () => {
     const failed: AuditCheck = { id: 'fatal-1', label: 'Private label', kind: 'runtime', status: 'fail', durationMs: null,
       metrics: { executionAttempted: false, completedBeforeFailure: 0, plannedChecks: 355,

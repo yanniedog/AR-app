@@ -25,6 +25,7 @@ export const PUBLIC_AUDIT_METRIC_FIELDS = new Set([
   'stepBudgetOmittedMs',
   'httpSelected',
   'handlerResolution',
+  'urlValidation', 'browserHandler', 'httpReachability',
   'backMs',
   'returnFallbackMs',
   'runtimeErrors',
@@ -68,6 +69,7 @@ export const PUBLIC_AUDIT_METRIC_FIELDS = new Set([
   'handlerAttempted',
   'httpAttempted',
   'uniqueDestinations',
+  'destinationCount',
   'lenderDetailsLoaded',
   'observedDestinations',
 ]);

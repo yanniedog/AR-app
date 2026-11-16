@@ -1,10 +1,16 @@
 import { closeAuditApplicationJournal } from '../lib/auditApplicationJournal';
-import { captureUserRateScenarioForAudit } from '../hooks/useUserRateScenario';
+import {
+  captureUserRateScenarioForAudit,
+  ensureUserRateScenarioLoaded,
+  restoreUserRateScenarioForAudit,
+} from '../hooks/useUserRateScenario';
 import { AuditDatasetChangedError, auditDatasetFailureMetrics, prepareAuditPublicCore, assertAuditPublicCataloguePinned } from '../lib/performanceAuditDataset';
 import type { PublicCatalogueView } from '../data/publicRateIntegration';
 import { validatePublicRateCapability } from '../data/publicRateWire';
 import { beginPublicRateCatalogueAudit, preparePublicRateCatalogueForAudit, getPublicRateCatalogueSnapshot } from '../data/publicRateCatalogue';
-import { normalizeUserRateScenario } from '../data/userRateScenario';
+import { normalizeUserRateScenario, type UserRateScenario } from '../data/userRateScenario';
+import { buildLifecycleProjection } from '../data/projections';
+import { buildProjectionAuditJourneyScenario } from '../lib/performanceAuditScenario';
 import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
 import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSelection';
 import { isVerifiedRatesPagePreparation } from '../lib/ratesAuditPage';
@@ -34,7 +40,7 @@ import { resolveSectionRibbonStats } from '../data/ribbonStats';
 import { excludeTokenDepositRates, rankFraction, sortRows } from '../data/selectors';
 import { useStore } from '../data/store';
 import { captureRatesSession, restoreRatesSession } from '../data/ratesSession';
-import { useMortgageComparison } from '../data/mortgageComparison';
+import { setMortgageComparisonInputs, useMortgageComparison } from '../data/mortgageComparison';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
@@ -64,7 +70,7 @@ import { debugLog, getDebugLogFlushDiagnostics } from '../lib/debugLog';
 import { runExternalLinkAuditCheck } from '../lib/performanceAuditLinks';
 import { createExternalAuditLinkCollector, FIXED_EXTERNAL_AUDIT_LINKS, beginExternalLinkCapture, endExternalLinkCapture,
   getCapturedExternalAuditLinks } from '../lib/externalLinkInventory';
-import type { TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
+import { trustedExternalUrl, type TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
 import { captureAuditPayloadWork } from '../lib/performanceAuditPayloadWork';
 import { benchmarkPayloadCapacity } from '../lib/performanceAuditCapacity';
 import { waitForAuditBackgroundWork, describeAuditBackgroundWork, classifyJourneyBackgroundObservation, journeyDetailsRequirementState, JourneyBackgroundDataError, type AuditBackgroundWorkWait } from '../lib/performanceAuditBackgroundWork';
@@ -141,16 +147,18 @@ import {
 } from '../lib/performanceAudit';
 import {
   compactAuditCheckForLog,
+  compactAuditCheckCheckpoint,
   encodePerformanceAuditEvent,
   omitNullishDeep,
 } from '../lib/performanceAuditLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import { appendAuditReturnDiagnostic, captureAuditDiagnostic, scoreAuditTargetProbeEvidence, type AuditDiagnosticStage } from '../lib/performanceAuditDiagnostic';
-import { setPassiveAuditPaused } from '../lib/passiveAudit';
+import { getPreloadedExternalLink, setPassiveAuditPaused } from '../lib/passiveAudit';
 import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAuditFinalization';
 import { awaitPerformanceAuditWork } from '../lib/performanceAuditWork';
 import { buildPerformanceAuditSetupPlans, measurePerformanceAuditSetupStage, PERFORMANCE_AUDIT_SETUP_STAGES, PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from '../lib/performanceAuditSetup';
-import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, PerformanceAuditStepTimeoutError, estimatePerformanceAuditTime, scoreUserVisibleJourney, userVisibleForwardMs } from '../lib/performanceAuditTiming';
+import { AUDIT_ENTRY_CHECK_IDS, buildAuditEntryChecks } from '../lib/auditEntryTrace';
+import { captureAuditRunTiming, PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, PerformanceAuditStepTimeoutError, estimatePerformanceAuditTime, scoreUserVisibleJourney, userVisibleForwardMs } from '../lib/performanceAuditTiming';
 import {
   buildIntegratedAppHealthReport, buildPartialAppHealthReport,
   captureAppHealthDataEvidence, combineAppHealthPerformanceSummary,
@@ -162,13 +170,14 @@ const AUDIT_HOME_PATH = '/performance-audit';
 const ROUTE_TIMEOUT_MS = 8_000;
 /** Readiness shares the complete check budget; sub-waits never extend it. */
 const DATA_SETTLE_TIMEOUT_MS = PERFORMANCE_AUDIT_STEP_LIMIT_MS;
-const ROUTE_DWELL_MS = 350;
 const READINESS_QUIET_WINDOW_MS = 650;
 const USER_VISIBLE_PROBE_KINDS = new Set<PerformanceAuditReadinessKind>(['data', 'layout']);
 const RUNTIME_SAMPLE_MS = 1_250;
 // Maximum-profile preparation, runtime, storage, filesystem, log I/O, payload,
 // network, and durable audit-state restoration. Dedicated owners add their own checks.
-const FIXED_BENCHMARK_CHECKS = 9;
+// The audit's own entry path (screen open, settings open, start response) is
+// measured from the interaction that started this run.
+const FIXED_BENCHMARK_CHECKS = 9 + AUDIT_ENTRY_CHECK_IDS.length;
 const STORAGE_KEY_PREFIX = '@ar/performance-audit/';
 const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
@@ -874,35 +883,6 @@ async function runDeepAuditStep(
   }
 }
 
-function skippedAfterScenarioRecovery(step: DeepAuditStep): AuditCheck {
-  const iteration: JourneyIteration = step.passId === 'first-pass' ? 'cold' : 'warm';
-  const reason =
-    'An earlier step failed and route recovery removed the local screen state this action depends on';
-  return {
-    id: `deep-${step.id}`,
-    label: `${step.scenarioId}: ${step.semanticActionId} (${step.passId})`,
-    kind: 'journey',
-    status: 'skipped',
-    durationMs: null,
-    metrics: {
-      journeyId: `${step.scenarioId}.${step.semanticActionId}`,
-      journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
-      iteration,
-      passId: step.passId,
-      scenarioId: step.scenarioId,
-      semanticActionId: step.semanticActionId,
-      depth: step.depth,
-      reason,
-      skipClassification: 'scenario-recovery',
-      scenarioRecoveryCascade: true,
-      executionAttempted: false,
-      actionInvoked: false,
-      actionCompleted: false,
-      routeStateInvalidated: false,
-    },
-  };
-}
-
 async function runDeepAuditStepBody(
   step: DeepAuditStep,
   currentPath: () => string,
@@ -1191,23 +1171,29 @@ async function runDeepAuditStepBody(
       renderRevisionAfter,
     });
   }
-  const responsiveness = monitor.metricsSince(responsivenessAt);
+  // A synchronous action can finish before its delayed timer/RAF callbacks
+  // have run. Close the visible window now, then collect those observations
+  // after the existing settle; clipping excludes the background work.
+  const responsivenessUntil = monitor.snapshot();
   let backgroundSettleMs = 0;
   if (!visibleReady.stepExpired) {
     execution.stage = 'settle';
     backgroundSettleMs = await outsideStepBudget(watchdog, async () => {
       const decorative = requiredProbeKinds(step).filter((kind) => !USER_VISIBLE_PROBE_KINDS.has(kind));
       const settleStarted = now();
+      // Settle mounted effects first; the quiet wait credits this already
+      // observed stable time instead of appending two frames to every step.
+      await settleUi();
       if (decorative.length) {
         await observeBackgroundReadiness([step.expectedSurface], decorative);
       } else {
         await observeBackgroundReadiness([step.expectedSurface], userVisibleProbeKinds(step));
       }
-      await settleUi();
       return now() - settleStarted;
     });
     assertDatasetRevision(datasetRevision);
   }
+  const responsiveness = monitor.metricsSince(responsivenessAt, responsivenessUntil);
   const errors = routeErrorMessages(logCursor);
   const forwardMs = firstReadyFrameMs == null ? null : userVisibleForwardMs({ navigationCommitMs, firstReadyFrameMs });
   const latency = scoreUserVisibleJourney({
@@ -1351,8 +1337,8 @@ function logAuditEvent(
 function logAuditCheck(app: AuditAppIdentity, sessionId: string, check: AuditCheck): void {
   const level = check.status === 'fail' ? 'error' : check.status === 'warn' ? 'warn' : 'info';
   const payload = level === 'info'
-    ? compactAuditCheckForLog(check)
-    : compactAuditCheckForLog({
+    ? compactAuditCheckCheckpoint(check)
+    : compactAuditCheckCheckpoint({
       ...check,
       error: check.error ? flattenAuditLogText(check.error) : null,
       trace: check.trace ? flattenAuditLogText(check.trace) : null,
@@ -2495,7 +2481,6 @@ export async function runJourney(
     };
   }
 
-  const responsivenessAt = monitor.snapshot();
   const logCursor = debugLog.getCursor();
   let forwardMs: number | null = null;
   let backgroundSettleMs: number | null = null;
@@ -2522,6 +2507,12 @@ export async function runJourney(
   let replaceRecoveryMs: number | null = null;
   let anchorResetMs: number | null = null;
   let originReadinessMs: number | null = null;
+  type ResponseWindow = { start: ReturnType<ResponsivenessMonitor['snapshot']>; end: ReturnType<ResponsivenessMonitor['snapshot']> };
+  let forwardWindow: ResponseWindow | null = null;
+  const backWindows: ResponseWindow[] = [];
+  const backgroundWindows: ResponseWindow[] = [];
+  let backWindowStart: ReturnType<ResponsivenessMonitor['snapshot']> | null = null;
+  let backSettleStart: ReturnType<ResponsivenessMonitor['snapshot']> | null = null;
   let forwardResponsiveness = EMPTY_RESPONSIVENESS;
   let backgroundResponsiveness = EMPTY_RESPONSIVENESS;
   let backResponsiveness = EMPTY_RESPONSIVENESS;
@@ -2567,6 +2558,7 @@ export async function runJourney(
         surfaceIds: [journey.expectedSurface],
         signal: destinationReadinessAbort.signal,
       });
+      forwardWindow = { start: forwardResponsivenessAt, end: monitor.snapshot() };
       destinationDiagnostic = captureAuditDiagnostic(visibleReady.snapshot, 'complete');
       readinessStepExpired = visibleReady.stepExpired;
       backgroundUnsettled = visibleReady.settled === false;
@@ -2579,7 +2571,7 @@ export async function runJourney(
       navigationCommitMs,
       firstReadyFrameMs: visibleReady.elapsedMs,
     }) : null;
-    forwardResponsiveness = monitor.metricsSince(forwardResponsivenessAt);
+    // Read after settle so delayed timer/RAF observations can be clipped to the ready endpoint.
     const backgroundResponsivenessAt = monitor.snapshot();
     if (!visibleReady.stepExpired) {
       await outsideStepBudget(watchdog, () => settleUi());
@@ -2597,7 +2589,7 @@ export async function runJourney(
         undefined,
       ));
       backgroundSettleMs = (backgroundSettleMs ?? 0) + quiet.durationMs;
-      await outsideStepBudget(watchdog, () => delay(ROUTE_DWELL_MS));
+      // The measured 650ms stable window already includes route dwell.
       assertDatasetRevision(datasetRevision);
     }
     if (!visibleReady.stepExpired) {
@@ -2605,14 +2597,24 @@ export async function runJourney(
       // completed (or failed) during the separately measured background settle.
       destinationDiagnostic = captureAuditDiagnostic(performanceAuditReadinessRegistry.snapshot(), 'complete');
     }
-    backgroundResponsiveness = monitor.metricsSince(backgroundResponsivenessAt);
+    backgroundWindows.push({ start: backgroundResponsivenessAt, end: monitor.snapshot() });
 
-    const backResponsivenessAt = monitor.snapshot();
     journeyStage = 'back';
     // Tab history returns through Rates before the root-stack audit origin.
     // Keep both real dispatches measured; an anchor reset is recovery, not Back.
     const measuredBack = await measureAuditBackNavigation({
       currentPath, back: () => router.back(), now, matchesPath: pathMatches,
+      measureWindow: phase => {
+        if (phase === 'start') backWindowStart = monitor.snapshot();
+        else if (phase === 'end' && backWindowStart) {
+          backSettleStart = monitor.snapshot();
+          backWindows.push({ start: backWindowStart, end: backSettleStart });
+          backWindowStart = null;
+        } else if (phase === 'settled' && backSettleStart) {
+          backgroundWindows.push({ start: backSettleStart, end: monitor.snapshot() });
+          backSettleStart = null;
+        }
+      },
       tabJourney: journey.navigationKind === 'tab',
       awaitCommit: async (before) => {
         const deadline = now() + ROUTE_TIMEOUT_MS;
@@ -2634,16 +2636,15 @@ export async function runJourney(
         backDestination = first.destination;
         backReturnedToAudit = first.returnedToAudit;
         backChangedPath = first.changedPath;
-        backResponsiveness = monitor.metricsSince(backResponsivenessAt);
       },
       recordSecondStart: () => { returnNavigationKind = 'second-back'; },
     });
     backMs = measuredBack.durationMs;
+    backgroundSettleMs = (backgroundSettleMs ?? 0) + measuredBack.settleMs;
     backDestination = measuredBack.destination;
     backReturnedToAudit = measuredBack.returnedToAudit;
     backChangedPath = measuredBack.changedPath;
     secondBackMs = measuredBack.secondBackMs;
-    backResponsiveness = monitor.metricsSince(backResponsivenessAt);
     if (secondBackMs != null) {
       returnNavigationKind = 'second-back';
       returnFallbackMs = secondBackMs;
@@ -2664,6 +2665,14 @@ export async function runJourney(
       returnFallbackMs = (returnFallbackMs ?? 0) + recoveryMs;
     }
   } catch (caught) {
+    if (backWindowStart) {
+      backWindows.push({ start: backWindowStart, end: monitor.snapshot() });
+      backWindowStart = null;
+    }
+    if (backSettleStart) {
+      backgroundWindows.push({ start: backSettleStart, end: monitor.snapshot() });
+      backSettleStart = null;
+    }
     rethrowAuditControl(caught);
     productDataFailure = caught instanceof JourneyBackgroundDataError;
     routeError = formatAuditError(caught);
@@ -2698,18 +2707,12 @@ export async function runJourney(
     }
   }
 
-  const larger = (left: number | null, right: number | null): number | null =>
-    left == null && right == null ? null : Math.max(left ?? 0, right ?? 0);
-  const visibleResponsiveness: ResponsivenessMetrics = {
-    eventLoopSamples: forwardResponsiveness.eventLoopSamples + backResponsiveness.eventLoopSamples,
-    eventLoopP95Ms: larger(forwardResponsiveness.eventLoopP95Ms, backResponsiveness.eventLoopP95Ms),
-    maxEventLoopLagMs: larger(forwardResponsiveness.maxEventLoopLagMs, backResponsiveness.maxEventLoopLagMs),
-    stallsOver100Ms: (forwardResponsiveness.stallsOver100Ms ?? 0) + (backResponsiveness.stallsOver100Ms ?? 0),
-    frameSamples: forwardResponsiveness.frameSamples + backResponsiveness.frameSamples,
-    frameP95Ms: larger(forwardResponsiveness.frameP95Ms, backResponsiveness.frameP95Ms),
-    maxFrameGapMs: larger(forwardResponsiveness.maxFrameGapMs, backResponsiveness.maxFrameGapMs),
-    framesOver50Ms: (forwardResponsiveness.framesOver50Ms ?? 0) + (backResponsiveness.framesOver50Ms ?? 0),
-  };
+  forwardResponsiveness = forwardWindow ? monitor.metricsForWindows([forwardWindow]) : EMPTY_RESPONSIVENESS;
+  backResponsiveness = monitor.metricsForWindows(backWindows);
+  backgroundResponsiveness = monitor.metricsForWindows(backgroundWindows);
+  const visibleResponsiveness = monitor.metricsForWindows([
+    ...(forwardWindow ? [forwardWindow] : []), ...backWindows,
+  ]);
   const errors = routeErrorMessages(logCursor);
   const backContractMet = backReturnedToAudit && backChangedPath && backMs != null && Number.isFinite(backMs) && backMs >= 0;
   const forwardWorkMs = forwardMs;
@@ -2848,6 +2851,7 @@ export function PerformanceAuditRunner() {
         closeAuditApplicationJournal();
       const summaryMarker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=${state.sessionId} partial=true admissionRejected=true`;
       const report: PerformanceAuditReport = {
+        renderingEvidenceVersion: 2,
         schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION, sessionId: state.sessionId,
         startedAt: state.startedAt, finishedAt, durationMs: 0,
         app, watchdog: { hangTimeoutMs: state.hangTimeoutMs, storedCheckCount: 0, lastStoredCheckAt: null },
@@ -2884,7 +2888,6 @@ export function PerformanceAuditRunner() {
       const startedAt = state.startedAt!;
       const auditMode = state.auditMode;
       const uploadLog = state.uploadLog;
-      const startedMs = Date.now();
       // The report's duration is time the audit actually measured. A five-minute
       // pause is the user's, not the app's, and counting it would attribute the
       // wait to a run that was deliberately suspended for it.
@@ -2976,7 +2979,7 @@ export function PerformanceAuditRunner() {
           // Restore baseline catalogue data before legacy tokens, but keep UI
           // loads reserved and the policy guard active through measured rollback.
           quiesceAuditCatalogue?.();
-          useMortgageComparison.setState(mortgageComparisonSnapshot);
+          setMortgageComparisonInputs(mortgageComparisonSnapshot);
           restoreRatesSession(ratesSessionSnapshot);
           ratesSessionRestored = true;
         }
@@ -3040,8 +3043,11 @@ export function PerformanceAuditRunner() {
             etaLinkElapsedMs += Math.max(0, recordedMs - etaLastRecordedMs);
           }
           etaLastRecordedMs = recordedMs;
-          markPerformanceAuditCheckStored(completed, total, check.label, lastStoredCheckAt);
         }
+        // All members are durable now. One notification publishes the exact
+        // final count without rerendering the audit screen for every link.
+        const lastCheck = pendingStoredChecks[pendingStoredChecks.length - 1];
+        markPerformanceAuditCheckStored(completed, total, lastCheck.label, lastStoredCheckAt!);
         pendingStoredChecks.length = 0;
       };
 
@@ -3258,6 +3264,8 @@ export function PerformanceAuditRunner() {
           const auditCore = prepareAuditPublicCore(initialStore.core, publicCatalogue, publicScenario, initialStore.prefs.profileFilters);
           const prepared = buildPerformanceAuditSetupPlans(auditCore,
             { seed: sessionId, includeNonStandard: true, detailsProducts: initialStore.details?.products,
+              sourceConditionContext: { core: initialStore.core, details: initialStore.details,
+                manifest: initialStore.manifest, coreIntegrity: initialStore.coreIntegrity },
               depositRankMetric: auditPrefs.depositRankMetric,
               mortgageRateMetric: auditPrefs.mortgageRateMetric }, SECTION_ORDER);
           plan = prepared.plan;
@@ -3489,6 +3497,17 @@ export function PerformanceAuditRunner() {
           (watchdog) => runRuntimeCheck(monitor, watchdog),
         );
 
+        // Recorded while the audit screen is still the mounted origin. The
+        // builder never throws, so each planned id is stored exactly once.
+        let entryChecks: AuditCheck[] | null = null;
+        for (let entryIndex = 0; entryIndex < AUDIT_ENTRY_CHECK_IDS.length; entryIndex++) {
+          updatePerformanceAuditProgress(completed, total, 'Measuring audit start path');
+          await recordContinuable('Measuring audit start path', async () => {
+            entryChecks ??= await buildAuditEntryChecks();
+            return entryChecks[entryIndex];
+          });
+        }
+
         // Deep semantic callbacks deliberately keep their screen mounted so a
         // scenario can continue. They cannot also be honest forward/back route
         // measurements. Run every steady-state destination as its own cold/warm
@@ -3503,18 +3522,41 @@ export function PerformanceAuditRunner() {
               assertSessionActive(watchdog);
               await recoverToAudit();
             }
-            await recordContinuable(
-              label,
-              (watchdog) => runJourney(
-                journey,
-                iteration,
-                () => pathnameRef.current,
-                monitor,
-                watchdog,
-                datasetRevision,
-                navigationAnchor,
-              ),
-            );
+            let previousProjectionScenario: UserRateScenario | null = null;
+            if (journey.id === 'projections') {
+              await ensureUserRateScenarioLoaded();
+              const current = captureUserRateScenarioForAudit();
+              if (current && !buildLifecycleProjection('Mortgage', current).ready) {
+                await restoreUserRateScenarioForAudit(buildProjectionAuditJourneyScenario(current));
+                previousProjectionScenario = current;
+              }
+            }
+            try {
+              await recordContinuable(
+                label,
+                (watchdog) => runJourney(
+                  journey,
+                  iteration,
+                  () => pathnameRef.current,
+                  monitor,
+                  watchdog,
+                  datasetRevision,
+                  navigationAnchor,
+                ),
+              );
+            } finally {
+              if (previousProjectionScenario) {
+                try {
+                  await restoreUserRateScenarioForAudit(previousProjectionScenario);
+                } catch (restoreError) {
+                  // Rollback journal at audit end will also attempt restoration.
+                  debugLog.warn(
+                    PERFORMANCE_AUDIT_LOG_TAG,
+                    `Failed to restore projection journey scenario: ${restoreError instanceof Error ? restoreError.message : String(restoreError)}`,
+                  );
+                }
+              }
+            }
           }
         }
 
@@ -3596,30 +3638,125 @@ export function PerformanceAuditRunner() {
           },
         });
         inventoryFailureEvidence = {};
-        const linkDeadline = Date.now() + 90_000;
-        for (let offset = 0; offset < externalLinks.length; offset += 4) {
+        const plannedLinkCheckIds: string[] = [];
+        const linkDeadline = Date.now() + PERFORMANCE_AUDIT_STEP_LIMIT_MS;
+        let nextLinkIndex = 0;
+        if (auditMode === 'live-source' && externalLinks.length > 0) {
+          const batchAbort = new AbortController();
+          const onLinkAbort = () => batchAbort.abort();
+          if (linkAbort.signal.aborted) batchAbort.abort();
+          else linkAbort.signal.addEventListener('abort', onLinkAbort, { once: true });
+          let workerError: unknown = null;
+          let unflushed = 0;
+          let recordChain = Promise.resolve();
+          const enqueueLinkRecord = (check: AuditCheck) => {
+            const step = recordChain.then(async () => {
+              if (workerError) return;
+              try {
+                await record(check, true);
+                plannedLinkCheckIds.push(check.id);
+                unflushed += 1;
+                if (unflushed >= 24) {
+                  unflushed = 0;
+                  await flushRecordedChecks();
+                }
+              } catch (error) {
+                workerError ??= error;
+                batchAbort.abort();
+                throw error;
+              }
+            });
+            recordChain = step.catch(() => {});
+            return step;
+          };
+          const workerCount = Math.min(10, externalLinks.length);
+          const workers = Array.from({ length: workerCount }, async () => {
+            try {
+              while (!workerError && !batchAbort.signal.aborted && nextLinkIndex < externalLinks.length) {
+                await waitWhilePaused(watchdog);
+                assertSessionActive(watchdog);
+                if (workerError || batchAbort.signal.aborted) break;
+                const remaining = linkDeadline - Date.now();
+                if (remaining <= 0) break;
+                if (nextLinkIndex >= externalLinks.length) break;
+                const index = nextLinkIndex;
+                nextLinkIndex += 1;
+                const request = externalLinks[index];
+                transportGuard.allowExternalUrls([request]);
+                updatePerformanceAuditProgress(completed, total,
+                  `Checking external link ${index + 1} of ${externalLinks.length}`);
+                const check = await runExternalLinkAuditCheck(request, index, {
+                  platform: Platform.OS,
+                  reachability: true,
+                  handler: true,
+                  timeoutMs: Math.max(1, Math.min(2_500, remaining)),
+                  signal: batchAbort.signal,
+                });
+                await enqueueLinkRecord(check);
+              }
+            } catch (error) {
+              workerError ??= error;
+              batchAbort.abort();
+            }
+          });
+          try {
+            await Promise.allSettled(workers);
+            await recordChain;
+            if (workerError) throw workerError;
+          } finally {
+            linkAbort.signal.removeEventListener('abort', onLinkAbort);
+          }
+        }
+        let unverifiedCount = 0;
+        for (let index = nextLinkIndex; index < externalLinks.length; index += 1) {
           await waitWhilePaused(watchdog);
           assertSessionActive(watchdog);
-          const chunk = externalLinks.slice(offset, offset + 4);
-          // Validate and register only the destinations about to be checked.
-          // Revalidating the whole inventory synchronously can exhaust the
-          // stored-check watchdog before the first real link check begins.
-          transportGuard.allowExternalUrls(chunk);
-          const remaining = Math.max(0, linkDeadline - Date.now());
-          const pending = chunk.map((request, index) => runExternalLinkAuditCheck(request, offset + index, {
-            platform: Platform.OS,
-            reachability: auditMode === 'live-source' && remaining > 0,
-            handler: remaining > 0,
-            timeoutMs: Math.max(1, Math.min(5_000, remaining || 5_000)),
-            signal: linkAbort.signal,
-          }));
-          for (let index = 0; index < pending.length; index += 1) {
-            const label = `Checking external link ${offset + index + 1} of ${externalLinks.length}`;
-            updatePerformanceAuditProgress(completed, total, label);
-            await recordContinuable(label, () => pending[index], true);
+          const request = externalLinks[index];
+          let trustedOk = false;
+          try { trustedOk = trustedExternalUrl(request).ok; } catch { trustedOk = false; }
+          if (!trustedOk) {
+            const check = await runExternalLinkAuditCheck(request, index, {
+              platform: Platform.OS, reachability: false, handler: false, timeoutMs: 1, signal: linkAbort.signal,
+            });
+            await record(check, true);
+            plannedLinkCheckIds.push(check.id);
+          } else {
+            const preloaded = auditMode !== 'live-source' && !linkAbort.signal.aborted ? getPreloadedExternalLink(request) : null;
+            if (preloaded && (preloaded.result.validation.status === 'fail' || preloaded.result.handler.status === 'fail')) {
+              const check = await runExternalLinkAuditCheck(request, index, {
+                platform: Platform.OS, reachability: false, handler: true, timeoutMs: 1, signal: linkAbort.signal,
+              });
+              await record(check, true);
+              plannedLinkCheckIds.push(check.id);
+            } else {
+              unverifiedCount += 1;
+            }
           }
-          await flushRecordedChecks();
         }
+        if (unverifiedCount > 0) {
+          await record({
+            id: 'external-link-unverified',
+            label: `Unverified external links (${unverifiedCount})`,
+            kind: 'network',
+            status: 'warn',
+            durationMs: 0,
+            metrics: {
+              executionAttempted: true,
+              nonTimingFailure: false,
+              destinationCount: unverifiedCount,
+              httpSelected: false,
+              httpAttempted: false,
+              httpReachability: 'unknown',
+              browserHandler: 'unknown',
+              handlerAttempted: false,
+              handlerResolution: 'not-attempted',
+            },
+          }, true);
+          plannedLinkCheckIds.push('external-link-unverified');
+        }
+        await flushRecordedChecks();
+        total += plannedLinkCheckIds.length - reservedLinkChecks;
+        reservedLinkChecks = plannedLinkCheckIds.length;
 
         for (const section of SECTION_ORDER) {
           assertSessionActive(watchdog);
@@ -3763,7 +3900,8 @@ export function PerformanceAuditRunner() {
         };
         auditEnvironment = environment;
 
-        const finishedAt = new Date().toISOString();
+        const runTiming = captureAuditRunTiming(startedAt, activeDurationMs);
+        const { finishedAt } = runTiming;
         closeAuditApplicationJournal();
         const performanceSummary = summarizePerformanceAudit(checks);
         const journeyChecks = checks.filter((check) => check.kind === 'journey');
@@ -3794,8 +3932,9 @@ export function PerformanceAuditRunner() {
           ...PERFORMANCE_AUDIT_SETUP_CHECK_IDS,
           'maximum-coverage-profile',
           'external-link-inventory',
-          ...externalLinks.map((_, index) => `external-link-${index + 1}`),
+          ...plannedLinkCheckIds,
           'runtime-responsiveness',
+          ...AUDIT_ENTRY_CHECK_IDS,
           ...navigationJourneys.flatMap((journey) => [
             `journey-${journey.id}-cold`,
             `journey-${journey.id}-warm`,
@@ -3847,12 +3986,13 @@ export function PerformanceAuditRunner() {
         });
         const summary = combineAppHealthPerformanceSummary(performanceSummary, appHealth, checks.length);
         const report: PerformanceAuditReport = {
+          renderingEvidenceVersion: 2,
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
           sessionId,
           startedAt,
           finishedAt,
-          durationMs: activeDurationMs(),
-          wallClockMs: Date.now() - startedMs,
+          durationMs: runTiming.durationMs,
+          wallClockMs: runTiming.wallClockMs,
           app,
           watchdog: {
             hangTimeoutMs: watchdog.hangTimeoutMs,
@@ -4227,8 +4367,9 @@ export function PerformanceAuditRunner() {
                 maxFrameGapMs: entry.metrics.maxFrameGapMs ?? undefined,
               })),
           }, 'error');
-          const finishedAt = new Date().toISOString();
-        closeAuditApplicationJournal();
+          const runTiming = captureAuditRunTiming(startedAt, activeDurationMs);
+          const { finishedAt } = runTiming;
+          closeAuditApplicationJournal();
           const partialHealth = buildPartialAppHealthReport({
             sessionId, mode: auditMode, startedAt, finishedAt,
             capturedData: capturedHealthData,
@@ -4239,12 +4380,13 @@ export function PerformanceAuditRunner() {
             summarizePartialPerformanceAudit(checks, total, completed), partialHealth, total,
           );
           const partialReport: PerformanceAuditReport = {
+            renderingEvidenceVersion: 2,
             schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
             sessionId,
             startedAt,
             finishedAt,
-            durationMs: activeDurationMs(),
-            wallClockMs: Date.now() - startedMs,
+            durationMs: runTiming.durationMs,
+            wallClockMs: runTiming.wallClockMs,
             app,
             watchdog: {
               hangTimeoutMs: watchdog.hangTimeoutMs,

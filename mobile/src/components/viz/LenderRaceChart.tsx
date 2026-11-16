@@ -47,7 +47,7 @@ export function LenderRaceChart({
   onDateSelect?: (date: string | null) => void;
   auditRevision?: string;
   onGraphicReadiness?: (state: ChartRenderEvidence) => void;
-  onLogoReadiness?: (state: { revision: string; expectedCount: number; terminalCount: number }) => void;
+  onLogoReadiness?: (state: { revision: string; expectedCount: number; terminalCount: number; fallbackCount: number }) => void;
   height?: number;
   topN?: number;
 }) {
@@ -91,34 +91,40 @@ export function LenderRaceChart({
       .filter((entry) => entry.rank != null)
       .sort((left, right) => left.rank! - right.rank! || left.provider.localeCompare(right.provider));
   }, [activeIndex, model]);
-  const [terminalLogoProviders, setTerminalLogoProviders] = useState<ReadonlySet<string>>(() => new Set());
+  const [terminalLogoStatuses, setTerminalLogoStatuses] = useState<ReadonlyMap<string, 'loaded' | 'fallback'>>(() => new Map());
   const markLogoPending = useCallback((provider: string) => {
-    setTerminalLogoProviders((current) => {
+    setTerminalLogoStatuses((current) => {
       if (!current.has(provider)) return current;
-      const next = new Set(current);
+      const next = new Map(current);
       next.delete(provider);
       return next;
     });
   }, []);
-  const markLogoTerminal = useCallback(({ provider }: { provider: string }) => {
-    setTerminalLogoProviders((current) => {
-      if (current.has(provider)) return current;
-      const next = new Set(current);
-      next.add(provider);
+  const markLogoTerminal = useCallback(({ provider, status }: { provider: string; status: 'loaded' | 'fallback' }) => {
+    setTerminalLogoStatuses((current) => {
+      if (current.get(provider) === status) return current;
+      const next = new Map(current);
+      next.set(provider, status);
       return next;
     });
   }, []);
   useEffect(() => {
     if (!auditRevision) return;
+    let terminalCount = 0;
+    let fallbackCount = 0;
+    for (const entry of ranked) {
+      const status = terminalLogoStatuses.get(uiProviderName(entry));
+      if (!status) continue;
+      terminalCount += 1;
+      if (status === 'fallback') fallbackCount += 1;
+    }
     onLogoReadiness?.({
       revision: auditRevision,
       expectedCount: ranked.length,
-      terminalCount: ranked.reduce(
-        (count, entry) => count + (terminalLogoProviders.has(entry.provider) ? 1 : 0),
-        0,
-      ),
+      terminalCount,
+      fallbackCount,
     });
-  }, [auditRevision, onLogoReadiness, ranked, terminalLogoProviders]);
+  }, [auditRevision, onLogoReadiness, ranked, terminalLogoStatuses]);
   if (!model) {
     return (
       <AppText key={auditRevision} variant="small" color="textMuted" onLayout={(event) => {

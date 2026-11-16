@@ -3,6 +3,7 @@ import { yieldToUi } from '../lib/yieldToUi';
 import type { PublicCatalogueView } from './publicRateIntegration';
 import { evaluatePublicCondition, nextPublicPricingBoundary, resolvePublicRate } from './publicRateResolver';
 import type { PublicCondition, PublicProgramme, RateResolution, RateScenario } from './publicRateModel';
+import { publicScenarioLvrKey } from './publicScenarioLvr';
 
 /** Edition-owned predicate index. Inputs are partitioned by canonical condition
  * truth, never rounded amount/LVR buckets. Tier arithmetic keeps exact inputs. */
@@ -45,7 +46,7 @@ export function createPublicRateResolverIndex() {
     index.publication = immutablePublication;
     const key = JSON.stringify([scenario.allowHistorical === true,
       index.conditions.map(condition => evaluatePublicCondition(condition, scenario, asOf)),
-      index.fields.map(field => scenario[field]), asOf.slice(0, 10)]);
+      index.fields.map(field => field === 'lvr' ? publicScenarioLvrKey(scenario) : scenario[field]), asOf.slice(0, 10)]);
     const prior = index.values.get(key);
     if (prior && at >= prior.from && at < prior.until) { stats.hits++; return copy(prior.value); }
     stats.misses++;

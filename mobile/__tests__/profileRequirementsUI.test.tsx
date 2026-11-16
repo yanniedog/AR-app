@@ -18,6 +18,30 @@ function core(types: string[]) { return { sections: { Mortgage: { rates: types.m
 })) }, Savings: { rates: [] }, TD: { rates: [] } } }; }
 afterEach(() => installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null)));
 
+test('selection edits reuse catalogue metadata and a replaced edition refreshes options', () => {
+  mockCore = core(['VARIABLE']);
+  const readType = jest.fn(() => 'VARIABLE');
+  Object.defineProperty(mockCore.sections.Mortgage.rates[0], 'rate_type', { get: readType });
+  const sections = ['Mortgage'] as const;
+  const onChange = jest.fn(); let tree: any;
+  const render = (value: ProfileFilters) => <ProfileEditor sections={[...sections]} value={value} onChange={onChange} />;
+  // The screen supplies the stable SECTION_ORDER array.
+  const stableSections: 'Mortgage'[] = ['Mortgage'];
+  act(() => { tree = TestRenderer.create(<ProfileEditor sections={stableSections} value={EMPTY_PROFILE} onChange={onChange} />); });
+  try {
+    const initialReads = readType.mock.calls.length;
+    expect(initialReads).toBeGreaterThan(0);
+    act(() => tree.update(<ProfileEditor sections={stableSections} value={{ ...EMPTY_PROFILE, rateTypes: ['OLD_TYPE'] }} onChange={onChange} />));
+    expect(readType).toHaveBeenCalledTimes(initialReads);
+    expect(tree.root.findAllByType('Chip').some((n: any) => n.props.label === 'OLD_TYPE' && n.props.selected)).toBe(true);
+    mockCore = core(['FIXED']);
+    act(() => tree.update(render(EMPTY_PROFILE)));
+    const labels = tree.root.findAllByType('Chip').map((n: any) => n.props.label);
+    expect(labels).toContain('Fixed');
+    expect(labels).not.toContain('Variable');
+  } finally { act(() => tree.unmount()); }
+});
+
 test('all selected values remain visible beyond the old twelve-option limit and every available value is reachable', () => {
   mockCore = core(Array.from({ length: 18 }, (_, i) => `TYPE_${i}`));
   const onChange = jest.fn(); let tree: any;
@@ -80,5 +104,28 @@ test('shared features are edited once with both affected categories visible', ()
   try {
     expect(tree.root.findAllByType('Chip').filter((node: any) => node.props.label === 'Digital banking')).toHaveLength(1);
     expect(tree.root.findAllByType('AppText').some((node: any) => node.props.children === 'Savings accounts / Term deposits')).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('LVR options in ProfileEditor are strictly the five canonical bands', () => {
+  mockCore = {
+    sections: {
+      Mortgage: {
+        rates: ['lvr_<=30%', 'lvr_0.01-35%', 'lvr_<=59.99%', 'lvr_<=60%', 'lvr_60-69.9999%', 'lvr_70-80%', 'lvr_85-90%', 'lvr_>=80.01-95%']
+          .map((lvr_tier, index) => ({ lvr_tier, product_key: String(index), product_name: String(index), provider: 'A', rate: '0.05' })),
+      },
+      Savings: { rates: [] },
+      TD: { rates: [] },
+    },
+  };
+  let tree: any;
+  const onChange = jest.fn();
+  act(() => { tree = TestRenderer.create(<ProfileEditor sections={['Mortgage']} value={EMPTY_PROFILE} onChange={onChange} />); });
+  try {
+    const labels = tree.root.findAllByType('Chip').map((node: any) => node.props.label);
+    expect(labels.filter((label: string) => label.includes('60') || label.includes('70') || label.includes('80') || label.includes('90') || label.includes('30')))
+      .toEqual(['<60', '60-70', '70-80', '80-90', '>90']);
+    act(() => tree.root.findAllByType('Chip').find((node: any) => node.props.label === '70-80').props.onPress());
+    expect(onChange).toHaveBeenCalledWith({ ...EMPTY_PROFILE, lvrTiers: ['70-80'] });
   } finally { act(() => tree.unmount()); }
 });

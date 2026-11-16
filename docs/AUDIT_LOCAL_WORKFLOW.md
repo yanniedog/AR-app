@@ -10,7 +10,9 @@ The last run's upload choice is retained when the audit screen remounts within
 the same app session, including after cancellation, failure and completion.
 
 After a completed run, **Audit history** shows its recorded aggregate metrics.
-Choose the audit mode and metric. **Recorded results** exposes the exact UTC
+Choose the audit mode, metric group, and metric. The five groups are Performance,
+Coverage, Task outcomes, App quality, and Display quality; only one chart renders
+at a time. **Recorded results** exposes the exact UTC
 finish time, version/build, collection and coverage status, and measured value.
 Repeated runs have distinct session IDs; saving the same run again does not
 create another point. Missing measurements are gaps, not zeros. A single run
@@ -22,6 +24,17 @@ An existing completed report becomes available on upgrade and is preserved
 when the next report is saved. Staged history writes are recoverable. A corrupt
 history displays **History unavailable** with **Retry**, instead of silently
 replacing the history. Diagnostic **Clear** also removes this history.
+
+History schema 2 preserves the six original metrics and adds measured coverage,
+automated task, app-quality and display-quality trends. Version-1 histories
+migrate with new fields unknown; existing points are not backfilled from guesses.
+See [metric definitions and evidence limits](AUDIT_HISTORY_METRICS.md) for all
+45 metrics, denominators, and the distinction between automated evidence and
+participant usability or standards conformance. **Metric evidence** exposes the
+current report's measurement method, denominator, samples and robust timing
+statistics. Raw reports and shared diagnostic envelopes include the complete
+per-metric analysis and contributor references; old aggregate-only runs remain
+aggregate-only.
 
 ## Source issue
 
@@ -51,3 +64,25 @@ For device acceptance, inspect light/dark bank marks, run a local audit twice,
 confirm both points and their exact timestamps, and confirm chart evidence in
 the RBA check. Test empty history and storage failure using the focused tests;
 do not erase real device diagnostics just to produce an empty screenshot.
+
+## Audit entry path and estimate
+
+Each run records three fixed checks from the interaction that started it:
+`audit-entry-screen-open` (screen mounted to usable controls, `forwardWorkMs`),
+`audit-entry-settings-open` (Audit settings toggle to painted content,
+`maxFrameGapMs`) and `audit-entry-start-response` (press to accepted request
+`actionMs`, press to next frame `maxFrameGapMs`, press to running runner
+`forwardWorkMs`). They use the existing latency limits and metric names. A
+phase without marks is declared unavailable, not failed.
+
+The time estimate is one value: before a run, the last measured duration on the
+device (9 min before any run); during a run, the adaptive remaining time.
+
+Source audit `audit-6f8b3a65f8128f4f` (Android/Hermes, build 316, 2026-11-10)
+reported 56 timing failures. Changes made from it: the completed report is read
+and parsed once when the screen opens (it was parsed up to five times); lender
+product ranking is cached per edition and lender; the no-listed-rate inventory
+is built only when that view is used; physical list visibility is re-measured
+after a returning navigation (`not-found.home` stalled for the full step limit
+twice). Rates, Market and lender open stalls need another Android/Hermes run
+before any claim that they are resolved.

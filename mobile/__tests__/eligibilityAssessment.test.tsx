@@ -7,6 +7,7 @@ import { profile as mockProfile } from '../test-support/executableDepositHarness
 import { eligibilityAnswerId } from '../src/data/eligibilityContracts/facts';
 import { eligibilityIdentity, eligibilityScopeId } from '../src/data/eligibilityContracts/validation';
 import { canonical, hashText } from '../src/lib/productTermsEngine/validation';
+import { bindVerifiedDetails } from '../src/data/detailsIdentity';
 import { downloadInflate } from '../src/data/payload';
 import type { RateRow } from '../src/types';
 import * as Clipboard from 'expo-clipboard';
@@ -56,15 +57,26 @@ test.each(['product', 'rate_variant'] as const)('technical Mortgage %s flow requ
   expect(tree.root.findAllByProps({ title: 'Copy Receipt' })).toHaveLength(0);
   mockState = { ...mockState, manifest: { ...mockState.manifest } }; delete mockState.manifest.executable_v2;
   await act(async () => tree.update(<EligibilityAssessment {...props} />));
-  expect(JSON.stringify(tree.toJSON())).toContain('Unavailable');
+  expect(JSON.stringify(tree.toJSON())).toContain('Not published');
+  expect(tree.root.findAllByProps({ title: 'Retry' })).toHaveLength(0);
   act(() => tree.unmount());
 });
 
-test('failed refresh retry rejection remains handled and bounded', async () => {
-  const h = await eligibilityTransportHarness(); delete (h.context.manifest as any).executable_v2;
-  mockState = { ...h.context, ensureDetails: jest.fn(async () => { throw new Error('offline'); }) };
-  let tree: any; await act(async () => { tree = TestRenderer.create(<EligibilityAssessment productKey={h.target.productKey} />); });
+test('failed refresh retry rejection remains handled and bounded, while unindexed products omit Retry', async () => {
+  const h = await eligibilityTransportHarness();
+  const unindexedDetails = { ...h.context.details, products: { ...h.context.details.products, unindexed: h.target.detail } };
+  bindVerifiedDetails(unindexedDetails, h.context.manifest.files.details.sha256);
+  mockState = {
+    ...h.context,
+    details: unindexedDetails,
+    ensureDetails: jest.fn(async () => { throw new Error('offline'); }),
+  };
+  let tree: any; await act(async () => { tree = TestRenderer.create(<EligibilityAssessment productKey="unindexed" />); });
   await act(async () => tree.root.findByProps({ title: 'Recorded criteria' }).props.onToggle());
+  expect(JSON.stringify(tree.toJSON())).toContain('Unavailable');
+  expect(tree.root.findAllByProps({ title: 'Retry' })).toHaveLength(0);
+  mockState = { ...h.context, details: { ...h.context.details, products: {} }, ensureDetails: jest.fn(async () => { throw new Error('offline'); }) };
+  await act(async () => tree.update(<EligibilityAssessment productKey={h.target.productKey} />));
   await act(async () => tree.root.findByProps({ title: 'Retry' }).props.onPress());
   expect(mockState.ensureDetails).toHaveBeenCalledTimes(1); expect(JSON.stringify(tree.toJSON())).toContain('Unavailable');
 });

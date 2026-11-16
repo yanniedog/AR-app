@@ -29,7 +29,7 @@ export default function NotFound() {
     renderRevision: 'not-found-v1',
     actions: auditActions,
     probes: [
-      { id: 'not-found.local-state', kind: 'data', status: 'ready' },
+      { id: 'not-found.local-state', kind: 'data', status: 'ready', expectedCount: 1, actualCount: 1 },
       {
         id: 'not-found.layout',
         kind: 'layout',
@@ -40,7 +40,7 @@ export default function NotFound() {
   });
   return (
     <>
-      <Stack.Screen options={{ title: uiLabel('Screen unavailable') }} />
+      <Stack.Screen options={{ title: uiLabel('Screen unavailable'), animation: 'fade' }} />
       <View
         onLayout={() => setLayoutReady(true)}
         style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: theme.colors.bg }}

@@ -407,6 +407,8 @@ export default function MyRates() {
         kind: 'data',
         status: core ? 'ready' : storeStatus === 'error' ? 'error' : 'pending',
         error: !core && storeStatus === 'error' ? storeError ?? 'Core data unavailable' : null,
+        expectedCount: 1,
+        actualCount: core ? 1 : 0,
         datasetRevision: coreRevision,
       },
       {

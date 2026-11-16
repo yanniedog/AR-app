@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { clearCompletedPerformanceAudit, loadCompletedPerformanceAudit, saveCompletedPerformanceAudit, loadPerformanceAuditHistory } from '../src/lib/performanceAuditReportStorage';
 import { buildPerformanceAuditCompletion } from '../src/lib/performanceAuditCompletion';
+import { auditMetricRun } from '../src/lib/auditMetricHistory';
 
 const files = new Map<string, string>();
 const path = 'file:///docs/logs/ar-performance-audit-completed.json';
@@ -18,6 +19,28 @@ beforeEach(() => {
     if (!files.has(from)) throw new Error('missing staged report');
     files.set(to, files.get(from)!); files.delete(from);
   });
+});
+
+test('raw-report recovery retains collector provenance and never upgrades persisted legacy methods', async () => {
+  const old = makePerformanceAuditReport('legacy-methods');
+  delete old.renderingEvidenceVersion;
+  files.set(path, JSON.stringify(old));
+  const recovered = (await loadPerformanceAuditHistory())[0];
+  expect(recovered.methodVersions.displayModelPassPercent).toBe(1);
+  expect(recovered.methodVersions.actionP95Ms).toBe(2);
+  const legacy = { ...auditMetricRun(old), metrics: { ...recovered.metrics, actionP95Ms: 321 } };
+  files.set(historyPath, JSON.stringify({ schemaVersion: 2, runs: [legacy] }));
+  const restored = (await loadPerformanceAuditHistory())[0];
+  expect(restored.methodVersions.actionP95Ms).toBe(1);
+  expect(restored.metrics.actionP95Ms).toBe(321);
+  const fresh = makePerformanceAuditReport('fresh-methods');
+  fresh.finishedAt = '2026-10-31T10:34:28.796Z';
+  await saveCompletedPerformanceAudit(fresh);
+  const history = await loadPerformanceAuditHistory();
+  expect(history.find(run => run.sessionId === old.sessionId)?.methodVersions.displayModelPassPercent).toBe(1);
+  expect(history.find(run => run.sessionId === old.sessionId)?.metrics.actionP95Ms).toBe(321);
+  expect(history.find(run => run.sessionId === fresh.sessionId)?.methodVersions.displayModelPassPercent).toBe(2);
+  expect(JSON.parse(files.get(path)!).renderingEvidenceVersion).toBe(2);
 });
 
 test('history retains both completed runs, deduplicates rerender recovery and clears with diagnostics', async () => {

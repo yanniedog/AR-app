@@ -116,7 +116,7 @@ export function BankAvatar({
       <View
         style={{
           ...frame,
-          backgroundColor: '#ffffff',
+          backgroundColor: theme.dark ? '#F1F5F9' : '#ffffff',
           alignItems: 'center',
           justifyContent: 'center',
         }}

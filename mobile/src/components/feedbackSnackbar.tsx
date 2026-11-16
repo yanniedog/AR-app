@@ -1,10 +1,12 @@
 import Ionicons from './icons/AppIcon';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import { Animated as RNAnimated } from 'react-native';
 import { formatRunDate } from '../data/format';
+import { useRatesSession } from '../data/ratesSession';
 import { useStore } from '../data/store';
 import { logRetry } from '../lib/degradationLog';
+import { isPrimaryTabRootPath, resolveActiveTab } from '../lib/tabRouting';
 import { useTheme } from '../theme/ThemeProvider';
 import { resolveRefreshOutcomeSnackbar } from './bannerState';
 import { TouchTarget } from './TouchTarget';
@@ -23,6 +25,14 @@ const SNACKBAR_ACTION = { marginVertical: -12, marginRight: -10, paddingHorizont
 /** Bottom snackbar for refresh success, failure, or Wi-Fi-only skip. Mount once per tab layout. */
 export function RefreshOutcomeSnackbar() {
   const theme = useTheme();
+  const pathname = usePathname();
+  const compareSelectedVisible = useRatesSession((s) => {
+    const task = s.sections[s.section];
+    return task.availability !== 'unlisted' && task.selectMode && task.selected.length >= 2;
+  });
+  const compareDockVisible = resolveActiveTab(pathname) === 'browse'
+    && isPrimaryTabRootPath(pathname, 'browse')
+    && compareSelectedVisible;
   const outcome = useStore((s) => s.refreshOutcome);
   const core = useStore((s) => s.core);
   const clearRefreshOutcome = useStore((s) => s.clearRefreshOutcome);
@@ -83,8 +93,8 @@ export function RefreshOutcomeSnackbar() {
         left: 16,
         right: 16,
         // Root AppTabBar sits below the navigator; overlay only needs a small inset
-        // inside the content pane (do not re-add the tab bar height).
-        bottom: 8,
+        // inside the content pane, lifted above CompareDock when it is visible.
+        bottom: compareDockVisible ? 84 : 8,
         opacity,
         transform: [{ translateY }],
         zIndex: 100,

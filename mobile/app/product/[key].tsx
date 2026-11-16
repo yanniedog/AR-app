@@ -1,7 +1,7 @@
 import type { RateRow, SectionKey } from '../../src/types';
 import { useRatesSession } from '../../src/data/ratesSession';
 import { useMortgageComparison } from '../../src/data/mortgageComparison';
-import { mortgageComparisonScenario } from '../../src/data/mortgageComparisonScenario';
+import { ratesComparisonScenario } from '../../src/data/mortgageComparisonScenario';
 import { ActivityPeriodCalculation } from '../../src/components/product/ActivityPeriodCalculation';
 import { MortgagePeriodCalculation } from '../../src/components/product/MortgagePeriodCalculation';
 import { SavingsPeriodCalculation } from '../../src/components/product/SavingsPeriodCalculation';
@@ -138,7 +138,7 @@ export default function ProductDetail() {
   const pricingScenario = publicProduct ? scenario : undefined;
   const scenarioFor = useCallback((section: SectionKey, row?: RateRow) => {
     const saved = publicRateScenario(section, pricingScenario, profile, row);
-    const scoped = fromRatesComparison ? mortgageComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved;
+    const scoped = fromRatesComparison ? ratesComparisonScenario(section, saved, comparisonInputs, mortgageFilters) : saved;
     return publicScenarioForRow(row, publicCatalogue, scoped);
   }, [pricingScenario, profile, fromRatesComparison, comparisonInputs, mortgageFilters, publicCatalogue]);
   const found = useMemo(
@@ -584,6 +584,8 @@ export default function ProductDetail() {
         kind: 'data',
         status: auditProductError ? 'error' : core && row ? 'ready' : 'pending',
         error: auditProductError,
+        expectedCount: 1,
+        actualCount: !auditProductError && core && row ? 1 : 0,
         datasetRevision: core?.run_date ?? null,
       },
       {
@@ -591,6 +593,8 @@ export default function ProductDetail() {
         kind: 'data',
         status: !detailsRequestSettled ? 'pending' : auditDetailsError ? 'error' : 'ready',
         error: auditDetailsError,
+        expectedCount: 1,
+        actualCount: detailsRequestSettled && !auditDetailsError ? 1 : 0,
         datasetRevision: core?.run_date ?? null,
       },
       {
@@ -843,8 +847,10 @@ export default function ProductDetail() {
             onPress={openCalculate}
           />
         </Row>
-        <PublicRateEvidence productKey={productKey} row={row} programmeId={requestedProgramme}
-          scenario={fromRatesComparison ? scenarioFor(section, row) : undefined} />
+        {publicCatalogue.status !== 'unavailable' && publicProduct ? (
+          <PublicRateEvidence productKey={productKey} row={row} programmeId={requestedProgramme}
+            scenario={fromRatesComparison ? scenarioFor(section, row) : undefined} />
+        ) : null}
         <PublicCostComparison section={section} target={row} scenario={calculationScenario}
           rateScenario={fromRatesComparison ? scenarioFor(section, row) : undefined} />
 
@@ -910,9 +916,11 @@ export default function ProductDetail() {
                   />
                 </ChartErrorBoundary>
                 <HistoryLegend productColor={productInk} sectionColor={sectionInk} />
-                {rateHistory.updating || rateHistory.failed || rateHistory.missingDates.length ? (
+                {/* Missing dates are already counted by the chart's own
+                    "Missing observations" fact; only surface load state here. */}
+                {rateHistory.updating || rateHistory.failed ? (
                   <AppText variant="tiny" color="textMuted" style={{ marginTop: 6 }}>
-                    {uiLabel(rateHistory.failed ? 'Unavailable' : rateHistory.updating ? 'Loading' : 'Missing details')}
+                    {uiLabel(rateHistory.failed ? 'Unavailable' : 'Loading')}
                   </AppText>
                 ) : null}
                 {productHistoryError && observedProductPoints < 2 ? (

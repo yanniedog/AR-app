@@ -56,5 +56,6 @@ test('lazy private savings form calculates, exports, and invalidates on input or
   expect(tree.root.findAllByProps({ title: 'Copy receipt' })).toHaveLength(0);
   mockState = { ...mockState, manifest: { ...mockState.manifest } }; delete mockState.manifest.executable_v4;
   await act(async () => tree.update(<ActivityPeriodCalculation productKey={h.target.productKey} />));
-  expect(JSON.stringify(tree.toJSON())).toContain('Unavailable');
+  expect(JSON.stringify(tree.toJSON())).toContain('Not published');
+  expect(tree.root.findAllByProps({ title: 'Retry' })).toHaveLength(0);
 });

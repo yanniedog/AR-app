@@ -14,12 +14,18 @@ export interface AuditCheckDiagnostic {
 }
 
 // Probe IDs are source-authored roles. Reject arbitrary route/account content.
-const WORDS = new Set(('1 2 a about account active actual advance age all app assessment async audit august b back bank bankrates base bonus bound browse buffer calculations calculator calendar candidates chart check collision columns compare comparisons content contribution core coverage criterion dashboard data debug deposit details different discount due duplicate economic economy eligible empty entries environment evidence excess execution external facet facts fake features fee file filters first flat forecast found frame future graphic graphics group growth hierarchy history id inputs insights interest inventory io items later layout leader lender lifecycle link linked list local log logo logos maintenance manifest market maturity maximum metric minimum model modeled movements moves name network new not notices observed one ongoing optional options outlook overview package pagination participation payload payment payments pi pinned preceding preferences prepared primary product products profile progress projection projections providers purchases rate rates rba readiness receipt recovery remaining render repay repayment response responsiveness restoration result results reversal root rule runtime safety saved scenario search secondary sections self september settings settle setup sheet snapshot source state status stop storage successor suitability system table target td terms there tier tiers transfer two unemployment unknown update visible wages waiver watchlist whole window zero').split(' '));
+const WORDS = new Set(('1 2 a about account active actual advance age all app assessment async audit august b back bank bankrates base bonus bound browse buffer calculations calculator calendar candidates chart check collision columns compare comparisons content contribution core coverage criterion dashboard data debug deposit details different discount due duplicate economic economy eligible empty entries environment evidence excess execution external facet facts fake features fee file filters first flat forecast found frame future graphic graphics group growth hierarchy history id inputs insights interest inventory io items later layout leader lender lifecycle link linked list local log logo logos maintenance manifest market maturity maximum metric minimum model modeled movements moves name network new not notices observed one ongoing optional options outlook overview package pagination participation payload payment payments pi pinned preceding preferences prepared primary product products profile progress projection projections providers purchases rate rates rba readiness receipt recovery remaining render repay repayment response responsiveness restoration result results reversal root rule runtime safety saved scenario search secondary sections self september settings settle setup sheet snapshot source state status stop storage successor suitability system table target td terms there tier tiers transfer two unemployment unknown unverified update visible wages waiver watchlist whole window zero').split(' '));
 function role(value: string | undefined): string | null {
   return value && value.length <= 100 && value.split(/[.-]/).every(word => WORDS.has(word)) ? value : null;
 }
 
 const STAGES = new Set<AuditDiagnosticStage>(['start', 'route', 'pre-action', 'action', 'path', 'data', 'readiness', 'settle', 'back', 'recovery', 'origin-readiness', 'complete', 'check']);
+/** Read one admitted field without copying every readiness probe and work item. */
+export function publicAuditDiagnosticStage(value: unknown): AuditDiagnosticStage | null {
+  if (!value || typeof value !== 'object' || !Object.prototype.propertyIsEnumerable.call(value, 'stage')) return null;
+  const stage = (value as { stage?: unknown }).stage;
+  return typeof stage === 'string' && STAGES.has(stage as AuditDiagnosticStage) ? stage as AuditDiagnosticStage : null;
+}
 const KEYS = new Set('returnReadiness returnStage work stage readiness ready capturing blockers code surface probe surfaces id actionRevision probes kind required status expected actual visible fallback empty layout accessible datasetMatches renderMatches errorPresent errorClass coveredBySheet'.split(' '));
 const CODES = new Set('capture-inactive no-surfaces no-probes probe-pending probe-error dataset-revision-mismatch render-revision-mismatch count-incomplete graphic-evidence-missing required-kind-missing'.split(' '));
 const NUMERIC = new Set('actionRevision expected actual visible fallback'.split(' '));
@@ -143,8 +149,7 @@ function stepLimitMs(check: AuditCheck, message: string): number {
  */
 export function publicAuditFailureReason(check: AuditCheck, hangTimeoutMs?: number): string | null {
   if (check.status !== 'fail') return null;
-  const diagnostic = publicAuditDiagnostic(check.diagnostic) as { stage?: string } | null;
-  const stage = diagnostic?.stage ?? 'unknown';
+  const stage = publicAuditDiagnosticStage(check.diagnostic) ?? 'unknown';
   const prose = auditErrorProse(check.error);
   const error = publicAuditError(check.error, check.trace);
   const message = error.message;

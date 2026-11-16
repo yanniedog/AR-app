@@ -94,7 +94,7 @@ function evaluateRole(
     // model count for empty-state validation. Count a surface once per role.
     const observation = failedVisit
       ? { surfaceId: contract.id, evidence: failedVisit } : representative;
-    const evidence = evidenceFor(observation, role);
+    const evidence = representative?.adverseEvidence?.find(entry => entry.role === role) ?? evidenceFor(observation, role);
     if (!evidence) {
       registerMissing(result, contract, role);
       continue;
@@ -103,10 +103,14 @@ function evaluateRole(
 
     switch (evidence.role) {
       case 'model': {
+        if (evidence.sourceCount == null || evidence.modelCount == null) {
+          result.unavailable += 1;
+          break;
+        }
         const invalid =
-          !Number.isInteger(evidence.sourceCount) ||
+          !Number.isSafeInteger(evidence.sourceCount) ||
           evidence.sourceCount < 0 ||
-          !Number.isInteger(evidence.modelCount) ||
+          !Number.isSafeInteger(evidence.modelCount) ||
           evidence.modelCount < 0 ||
           evidence.modelCount > evidence.sourceCount;
         const unexplainedEmpty =
@@ -118,10 +122,14 @@ function evaluateRole(
         break;
       }
       case 'list': {
+        if (evidence.modelCount == null || evidence.renderedCount == null) {
+          result.unavailable += 1;
+          break;
+        }
         const invalid =
-          !Number.isInteger(evidence.modelCount) ||
+          !Number.isSafeInteger(evidence.modelCount) ||
           evidence.modelCount < 0 ||
-          !Number.isInteger(evidence.renderedCount) ||
+          !Number.isSafeInteger(evidence.renderedCount) ||
           evidence.renderedCount < 0 ||
           evidence.renderedCount > evidence.modelCount;
         if (invalid || (evidence.modelCount > 0 && evidence.renderedCount === 0)) {
@@ -132,9 +140,9 @@ function evaluateRole(
       }
       case 'visible': {
         const invalid =
-          !Number.isInteger(evidence.expectedMinimum) ||
+          !Number.isSafeInteger(evidence.expectedMinimum) ||
           evidence.expectedMinimum < 0 ||
-          !Number.isInteger(evidence.visibleCount) ||
+          !Number.isSafeInteger(evidence.visibleCount) ||
           evidence.visibleCount < 0;
         if (invalid || evidence.visibleCount < evidence.expectedMinimum) {
           result.failed += 1;
@@ -145,9 +153,9 @@ function evaluateRole(
       case 'empty-state': {
         const list = evidenceFor(observation, 'list');
         const model = evidenceFor(observation, 'model');
-        const modelEmpty = list?.role === 'list'
+        const modelEmpty = list?.role === 'list' && list.modelCount != null
           ? list.modelCount === 0
-          : model?.role === 'model'
+          : model?.role === 'model' && model.modelCount != null
             ? model.modelCount === 0
             : null;
         if (
@@ -182,9 +190,9 @@ function evaluateRole(
       }
       case 'chart': {
         const invalid =
-          !Number.isInteger(evidence.modelPointCount) ||
+          !Number.isSafeInteger(evidence.modelPointCount) ||
           evidence.modelPointCount < 0 ||
-          !Number.isInteger(evidence.renderedPointCount) ||
+          !Number.isSafeInteger(evidence.renderedPointCount) ||
           evidence.renderedPointCount < 0 ||
           evidence.renderedPointCount !== evidence.modelPointCount;
         if (
@@ -202,15 +210,19 @@ function evaluateRole(
         break;
       }
       case 'logo': {
+        if (evidence.expectedCount == null || evidence.decodedCount == null || evidence.fallbackCount == null || evidence.missingCount == null) {
+          result.unavailable += 1;
+          break;
+        }
         const total = evidence.decodedCount + evidence.fallbackCount + evidence.missingCount;
         const invalid =
-          !Number.isInteger(evidence.expectedCount) ||
+          !Number.isSafeInteger(evidence.expectedCount) ||
           evidence.expectedCount < 0 ||
-          !Number.isInteger(evidence.decodedCount) ||
+          !Number.isSafeInteger(evidence.decodedCount) ||
           evidence.decodedCount < 0 ||
-          !Number.isInteger(evidence.fallbackCount) ||
+          !Number.isSafeInteger(evidence.fallbackCount) ||
           evidence.fallbackCount < 0 ||
-          !Number.isInteger(evidence.missingCount) ||
+          !Number.isSafeInteger(evidence.missingCount) ||
           evidence.missingCount < 0 ||
           total !== evidence.expectedCount;
         if (invalid || (contract.logosRequired && evidence.missingCount > 0)) {

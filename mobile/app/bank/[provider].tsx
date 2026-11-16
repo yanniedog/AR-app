@@ -1,6 +1,7 @@
 import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiProductName, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../src/lib/uiCopy";
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { FLASH_LIST_DRAW_DISTANCE } from '../../src/lib/flashListDefaults';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, Pressable, useWindowDimensions, View } from 'react-native';
@@ -22,6 +23,7 @@ import {
   bankEventMedianContext,
   bankTrendChartModel,
   filterBankInsightsForSuitability,
+  filterBankInsightsForSuitabilityCooperatively,
   recentBankEvents,
   type BankEventRateContext,
   type BankRateEvent,
@@ -34,8 +36,8 @@ import {
   type ProductRateMove,
 } from '../../src/data/productHistory';
 import { lenderProductRows } from '../../src/data/selectors';
-import { rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
-import { rowsForProvider } from '../../src/data/rateRowIndex';
+import { hasRateHistoryChartSection, rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
+import { stableRowsForProvider } from '../../src/data/rateRowIndex';
 import { useStore } from '../../src/data/store';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
@@ -191,7 +193,7 @@ export default function BankDetail() {
   const [historyGraphicEvidence, setHistoryGraphicEvidence] =
     useState<HistoryGraphicEvidence | null>(null);
   const lenderRow = useMemo(() => core ? SECTION_ORDER.map(section =>
-    rowsForProvider(core.sections[section].rates, provider)[0]).find(row => row != null) : undefined,
+    stableRowsForProvider(core.sections[section].rates, provider)[0]).find(row => row != null) : undefined,
   [core, provider]);
 
   const rawBankEvents = useMemo(
@@ -256,8 +258,11 @@ export default function BankDetail() {
     const out: { section: SectionKey; rows: RateRow[] }[] = [];
     if (!core) return out;
     for (const section of SECTION_ORDER) {
+      // Stable input identity: the ranked list is cached per edition and lender,
+      // so reopening a lender does not filter and rank its whole book again.
+      const sectionRates = core.sections[section]?.rates;
       const rows = lenderProductRows(
-        rowsForProvider(core.sections[section]?.rates ?? [], provider),
+        sectionRates ? stableRowsForProvider(sectionRates, provider) : [],
         section, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts,
       );
       if (rows.length) out.push({ section, rows });
@@ -285,25 +290,97 @@ export default function BankDetail() {
     return out;
   }, [bySection, core, hasProductHistory, showBankInsights]);
 
+  const heavyHistory =
+    (core?.sections.Mortgage.rates.length ?? 0) > 400 ||
+    (core?.sections.Savings.rates.length ?? 0) > 400 ||
+    (core?.sections.TD.rates.length ?? 0) > 400;
+  const [deferredBankInsights, setDeferredBankInsights] = useState<{
+    bankInsights: typeof bankInsights;
+    core: typeof core;
+    coreIntegrity: typeof coreIntegrity;
+    detailsProducts: typeof detailsProducts;
+    includeNonStandard: boolean;
+    suitabilityRevision: number;
+    insights: ReturnType<typeof filterBankInsightsForSuitability>;
+  } | null>(null);
+  const currentDeferredBankInsights =
+    deferredBankInsights &&
+    deferredBankInsights.bankInsights === bankInsights &&
+    deferredBankInsights.core === core &&
+    deferredBankInsights.coreIntegrity === coreIntegrity &&
+    deferredBankInsights.detailsProducts === detailsProducts &&
+    deferredBankInsights.includeNonStandard === includeNonStandard &&
+    deferredBankInsights.suitabilityRevision === suitabilityRevision
+      ? deferredBankInsights.insights
+      : null;
+
+  useEffect(() => {
+    if (!heavyHistory || !historySurfaceReady || !showBankInsights || !bankInsights || !core) {
+      setDeferredBankInsights(null);
+      return;
+    }
+    let cancelled = false;
+    setDeferredBankInsights(null);
+    void filterBankInsightsForSuitabilityCooperatively(
+      bankInsights,
+      core,
+      includeNonStandard,
+      detailsProducts,
+      suitabilityRevision,
+      coreIntegrity,
+      { cancelled: () => cancelled, yieldControl: () => yieldToUi(0) },
+    ).then((insights) => {
+      if (!cancelled) {
+        setDeferredBankInsights({
+          bankInsights,
+          core,
+          coreIntegrity,
+          detailsProducts,
+          includeNonStandard,
+          suitabilityRevision,
+          insights,
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    bankInsights,
+    core,
+    coreIntegrity,
+    detailsProducts,
+    heavyHistory,
+    historySurfaceReady,
+    includeNonStandard,
+    showBankInsights,
+    suitabilityRevision,
+  ]);
+
   const visibleBankInsights = useMemo(
     () =>
-      !historySurfaceReady
+      !historySurfaceReady || !showBankInsights
         ? null
-        : filterBankInsightsForSuitability(
-            bankInsights,
-            core,
-            includeNonStandard,
-            detailsProducts,
-            suitabilityRevision,
-            coreIntegrity,
-          ),
+        : heavyHistory
+          ? currentDeferredBankInsights
+          : filterBankInsightsForSuitability(
+              bankInsights,
+              core,
+              includeNonStandard,
+              detailsProducts,
+              suitabilityRevision,
+              coreIntegrity,
+            ),
     [
       bankInsights,
       core,
       coreIntegrity,
+      currentDeferredBankInsights,
       detailsProducts,
+      heavyHistory,
       historySurfaceReady,
       includeNonStandard,
+      showBankInsights,
       suitabilityRevision,
     ],
   );
@@ -317,7 +394,7 @@ export default function BankDetail() {
     if (!historySurfaceReady || rateHistory.updating || rateHistory.failed) return [] as SectionKey[];
     return SECTION_ORDER.filter((section) => {
       if (rateHistory.historyAvailable) {
-        return !!rateHistoryChartModel(rateHistory.snapshots, section, provider);
+        return hasRateHistoryChartSection(rateHistory.snapshots, section, provider);
       }
       return !!bankTrendChartModel(visibleBankInsights, provider, section);
     });
@@ -563,6 +640,8 @@ export default function BankDetail() {
         kind: 'data',
         status: core ? 'ready' : 'pending',
         datasetRevision: coreSha ?? core?.run_date ?? null,
+        expectedCount: productCount,
+        actualCount: core ? productCount : 0,
       },
       {
         id: 'lender.products',
@@ -598,7 +677,8 @@ export default function BankDetail() {
               ? 'pending'
               : 'ready',
         error: rateHistory.failed ? 'Historical rates could not be prepared' : null,
-        actualCount: chartModel?.dates.length ?? 0,
+        expectedCount: !historySurfaceReady ? 0 : rateHistory.failed ? Math.max(1, chartModel?.dates.length ?? 0) : (chartModel?.dates.length ?? 0),
+        actualCount: !historySurfaceReady || rateHistory.failed ? 0 : (chartModel?.dates.length ?? 0),
       },
       {
         id: 'lender.history-graphic',
@@ -659,6 +739,7 @@ export default function BankDetail() {
         <FlashList
           key={listRevision}
           ref={scrollRef}
+          drawDistance={FLASH_LIST_DRAW_DISTANCE}
           data={productItems}
           onLayout={() => { setLayoutReady(true); listReadiness.onRevisionLayout(); }}
           onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
