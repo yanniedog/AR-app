@@ -889,8 +889,8 @@ async function runDeepAuditStep(
         executionAttempted: execution.attempted,
         actionInvoked: execution.invoked,
         actionCompleted: false,
-        forwardMs: elapsedMs,
-        forwardWorkMs: elapsedMs,
+        forwardMs: null,
+        forwardWorkMs: null,
         firstReadyFrameObserved: false,
         firstReadyFrameMs: null,
         minimumJustifiedActions: 1,
@@ -2948,6 +2948,7 @@ export function PerformanceAuditRunner() {
       setPassiveAuditPaused(true);
       startAuditTargetCollection();
       startAuditNativeFrameMetrics();
+      let nativeFrameMetricsInterrupted = getPerformanceAuditState().paused;
       let collectedUxTelemetry: PerformanceAuditReport['uxTelemetry'] | undefined;
       let uxTelemetryFinalized = false;
       const finalizeUxTelemetry = (): PerformanceAuditReport['uxTelemetry'] | undefined => {
@@ -2955,9 +2956,10 @@ export function PerformanceAuditRunner() {
         uxTelemetryFinalized = true;
         const targetSamples = stopAuditTargetCollection();
         const androidFluidity = stopAuditNativeFrameMetrics();
+        const validAndroidFluidity = nativeFrameMetricsInterrupted ? undefined : androidFluidity;
         const telemetry: NonNullable<PerformanceAuditReport['uxTelemetry']> = {
           ...(targetSamples.length > 0 ? { targetSamples } : {}),
-          ...(androidFluidity ? { androidFluidity } : {}),
+          ...(validAndroidFluidity ? { androidFluidity: validAndroidFluidity } : {}),
         };
         collectedUxTelemetry = Object.keys(telemetry).length > 0 ? telemetry : undefined;
         return collectedUxTelemetry;
@@ -2990,6 +2992,7 @@ export function PerformanceAuditRunner() {
       let readinessPaused = getPerformanceAuditState().paused;
       const mirrorPauseToWatchdog = () => {
         const paused = getPerformanceAuditState().paused;
+        if (paused) nativeFrameMetricsInterrupted = true;
         if (paused !== readinessPaused) {
           performanceAuditReadinessRegistry.invalidateSettledReadiness();
           readinessPaused = paused;
