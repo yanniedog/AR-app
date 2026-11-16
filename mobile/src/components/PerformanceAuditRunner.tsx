@@ -2719,8 +2719,8 @@ export async function runJourney(
     if (!forwardWindow) {
       forwardWindow = { start: forwardResponsivenessAt, end: monitor.snapshot() };
     }
-    if (forwardMs == null) {
-      forwardMs = destinationReadinessMs ?? roundMetric(now() - started);
+    if (forwardMs == null && destinationReadinessMs != null) {
+      forwardMs = destinationReadinessMs;
     }
     if (backWindowStart) {
       backWindows.push({ start: backWindowStart, end: monitor.snapshot() });
