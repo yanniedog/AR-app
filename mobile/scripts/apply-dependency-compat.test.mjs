@@ -5,7 +5,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { createRequire } from 'node:module';
 
-const { patchExport } = createRequire(import.meta.url)('./apply-dependency-compat.cjs');
+const require = createRequire(import.meta.url);
+const { patchExport, patchAndroidScreenHeader } = require('./apply-dependency-compat.cjs');
 
 test('caller export patch is idempotent and rejects source drift without modifying it', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ar-caller-patch-'));
@@ -24,4 +25,14 @@ test('caller export patch is idempotent and rejects source drift without modifyi
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('Android stack header postinstall guards disappearing custom header views', () => {
+  const directory = path.dirname(require.resolve('react-native-screens/package.json'));
+  const file = path.join(directory, 'android/src/main/java/com/swmansion/rnscreens/ScreenStackHeaderConfig.kt');
+  const patched = fs.readFileSync(file, 'utf8');
+  assert.match(patched, /fun onUpdate\(\) \{\s+if \(hasRemovingScreenAncestor\(\)\) return/);
+  assert.match(patched, /if \(view\.parent === toolbar\) toolbar\.endViewTransition\(view\)\s+if \(view\.parent == null\) toolbar\.addView\(view\)/);
+  patchAndroidScreenHeader();
+  assert.equal(fs.readFileSync(file, 'utf8'), patched);
 });
