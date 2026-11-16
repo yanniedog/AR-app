@@ -1233,10 +1233,12 @@ async function runDeepAuditStepBody(
   }
   const responsiveness = monitor.metricsSince(responsivenessAt, responsivenessUntil);
   const errors = routeErrorMessages(logCursor);
-  const forwardMs = userVisibleForwardMs({
-    navigationCommitMs,
-    firstReadyFrameMs: firstReadyFrameMs ?? visibleReady.elapsedMs,
-  });
+  const forwardMs = visibleReady.settled
+    ? userVisibleForwardMs({
+      navigationCommitMs,
+      firstReadyFrameMs,
+    })
+    : null;
   const latency = scoreUserVisibleJourney({
     actionMs,
     navigationCommitMs,
