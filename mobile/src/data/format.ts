@@ -97,8 +97,16 @@ function toNumber(value: string | number | null | undefined): number | null {
 export function formatMoneyShort(value: string | number | null | undefined): UiText {
   const n = toNumber(value);
   if (n === null) return uiLabel('');
-  if (n >= 1_000_000) return uiJoin('$', uiNumber(Number((n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0)), n % 1_000_000 ? 1 : 0), 'm');
-  if (n >= 1_000) return uiJoin('$', uiNumber(Number((n / 1_000).toFixed(n % 1_000 ? 1 : 0)), n % 1_000 ? 1 : 0), 'k');
+  if (n >= 1_000_000) {
+    const m = Number((n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0));
+    const mDigits = Number.isInteger(m) ? 0 : 1;
+    return uiJoin('$', uiNumber(m, mDigits), 'm');
+  }
+  if (n >= 1_000) {
+    const k = Number((n / 1_000).toFixed(n % 1_000 ? 1 : 0));
+    const kDigits = Number.isInteger(k) ? 0 : 1;
+    return uiJoin('$', uiNumber(k, kDigits), 'k');
+  }
   return uiJoin('$', uiNumber(n, Math.min(3, (String(n).split('.')[1] ?? '').length)));
 }
 

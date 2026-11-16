@@ -77,8 +77,12 @@ function lvrLabel(seg: string): UiText {
   const exact = /^(GE|GT|LE)(\d+(?:p\d+)?)(?:_(\d+(?:p\d+)?))?$/.exec(v);
   if (exact) {
     const operator = exact[1] === 'GE' ? '≥' : exact[1] === 'GT' ? '>' : '≤';
-    return uiJoin(operator, uiDecimal(exact[2].replace('p', '.'), 'count'),
-      exact[3] ? uiJoin('–', uiDecimal(exact[3].replace('p', '.'), 'count')) : '', '%', ' ', 'LVR');
+    const roundLvr = (raw: string) => {
+      const n = Number(raw.replace('p', '.'));
+      return Number.isFinite(n) ? uiNumber(Math.round(n), 0) : uiDecimal(raw.replace('p', '.'), 'count');
+    };
+    return uiJoin(operator, roundLvr(exact[2]),
+      exact[3] ? uiJoin('–', roundLvr(exact[3])) : '', '%', ' ', 'LVR');
   }
   m = /^(\d+)_(\d+)$/.exec(v);
   if (m) return uiJoin(uiNumber(Number(m[1])), '–', uiNumber(Number(m[2])), '%', ' ', 'LVR');

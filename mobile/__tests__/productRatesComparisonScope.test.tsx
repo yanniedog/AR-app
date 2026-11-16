@@ -245,8 +245,8 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     await act(async () => { detail = TestRenderer.create(<RateReceiptScreen />) as InspectableRenderer; });
     expect(detail.root.findAllByProps({ title: 'Copy' })).toHaveLength(1);
     const texts = detail.root.findAllByType('AppText').map(node => node.props.children);
-    expect(texts).toContain('$600,000');
-    expect(texts).not.toContain('$100,000');
+    expect(texts).toContain('$600k');
+    expect(texts).not.toContain('$100k');
     expect(texts).not.toContain('Simple interest-rate difference');
     const surface = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
     act(() => { surface.actions!['receipt.back-to-product']({ productKey: product.productKey, rateIndex: 0 }); });
@@ -276,9 +276,9 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     act(() => detail.unmount());
     await act(async () => { detail = TestRenderer.create(<RateReceiptScreen />) as InspectableRenderer; });
     const normalTexts = detail.root.findAllByType('AppText').map(node => node.props.children);
-    expect(normalTexts).toContain('$100,000');
+    expect(normalTexts).toContain('$100k');
     expect(normalTexts).toContain('Simple interest-rate difference');
-    expect(normalTexts).not.toContain('$600,000');
+    expect(normalTexts).not.toContain('$600k');
     expect(JSON.stringify(mockScenario)).toBe(saved);
   } finally {
     act(() => { rates?.unmount(); detail?.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });

@@ -3,6 +3,11 @@
   "semantic_revision": "ar-history-ready-v1",
   "compatible": [
     {
+      "sha256": "ee91ff248a3afc6b6e99cbe45f588ee621a210a01efdea1f5c197a52e6233ab3",
+      "pinned_by": "bf28a0c0139ddcce7b26c07a3daefc9f4335648e",
+      "note": "The successor changes LVR profile matching at read time. Both compilers publish the same raw LVR dimensions, cohort events, and product histories."
+    },
+    {
       "sha256": "c6d1ff733a579a5fef1d17105922aee20bf73d96e66adc60aaa637ff2c1cec9b",
       "pinned_by": "0f217f0a573dd072c019bef93b26f3b71d038d7d",
       "note": "Same history/cohort semantics; successor accepts up to 512 MiB original producer-source provenance without increasing downloaded or decoded app assets. Retain acceptance while the producer uses this released pin."
