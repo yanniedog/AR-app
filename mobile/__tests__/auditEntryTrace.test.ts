@@ -1,6 +1,6 @@
 import {
   AUDIT_ENTRY_CHECK_IDS, buildAuditEntryChecks, markAuditEntryInterrupted, markAuditEntryRunning, markAuditEntryScreenMounted,
-  markAuditEntryScreenReady, markAuditEntrySettingsOpened, markAuditEntryStartPressed, markAuditEntryStartQueued,
+  markAuditEntryScreenOpenPressed, markAuditEntryScreenReady, markAuditEntrySettingsOpened, markAuditEntryStartPressed, markAuditEntryStartQueued,
   resetAuditEntryTraceForTests, setAuditEntrySettingsProbe,
 } from '../src/lib/auditEntryTrace';
 import { stableRowsForProvider, rowsForProvider } from '../src/data/rateRowIndex';
@@ -8,11 +8,16 @@ import type { RateRow } from '../src/types';
 
 let clock = 0;
 beforeEach(() => {
+  jest.useFakeTimers({ doNotFake: ['performance'] });
   resetAuditEntryTraceForTests();
   clock = 0;
   jest.spyOn(globalThis.performance, 'now').mockImplementation(() => clock);
 });
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.clearAllTimers();
+  jest.useRealTimers();
+  jest.restoreAllMocks();
+});
 
 test('a run requested without the screen declares every entry phase unavailable', async () => {
   const checks = await buildAuditEntryChecks();
@@ -24,7 +29,8 @@ test('a run requested without the screen declares every entry phase unavailable'
 });
 
 test('measures screen open, settings open and the start response from one visit', async () => {
-  markAuditEntryScreenMounted();
+  markAuditEntryScreenOpenPressed();
+  clock = 130; markAuditEntryScreenMounted();
   clock = 180; markAuditEntryScreenReady();
   clock = 900; markAuditEntryScreenReady();
   clock = 1_000; markAuditEntryStartPressed();

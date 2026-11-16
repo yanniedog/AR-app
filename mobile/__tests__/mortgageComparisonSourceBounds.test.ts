@@ -1,4 +1,4 @@
-import { mortgageComparisonMatch, mortgageComparisonRows, prepareMortgageComparisonRow, indexedMortgageComparisonRows } from '../src/data/mortgageComparison';
+import { mortgageComparisonMatch, mortgageComparisonRows, mortgageComparisonRowsCooperatively, prepareMortgageComparisonRow, indexedMortgageComparisonRows } from '../src/data/mortgageComparison';
 import { catalogue, product, programme } from '../testUtils/publicRateJourney';
 import { publicRecommendationRows, resolvedPublicRankingRows, sourceRowForPublicRow } from '../src/data/publicRateIntegration';
 import { scopedRateConditions } from '../src/data/rateConditions';
@@ -6,6 +6,23 @@ import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraint
 import type { RateRow } from '../src/types';
 const row: RateRow = { product_key: 'loan', provider: 'Bank', product_name: 'Loan', rate_index: 4,
   rate: '0.05', lvr_tier: 'lvr_=80%', balance_min: 100000, balance_max: 900000 };
+
+test('cooperative pricing skips condition parsing for rows outside the listed LVR', async () => {
+  const fixture = selectedConstraintFixture('Mortgage', [row], [{ rateIndex: 4, text: 'LVR up to 90%.' }]);
+  const rateConditions = fixture.details.products[row.product_key].rateConditions!;
+  const entries = rateConditions.entries;
+  const readEntries = jest.fn(() => entries);
+  Object.defineProperty(rateConditions, 'entries', { get: readEntries });
+  const control = { yieldControl: async () => {} };
+
+  const excluded = await mortgageComparisonRowsCooperatively(fixture.rows, { loanAmount: '', lvr: '85' }, fixture, control);
+  expect(excluded?.rows).toEqual([]);
+  expect(readEntries).not.toHaveBeenCalled();
+
+  const included = await mortgageComparisonRowsCooperatively(fixture.rows, { loanAmount: '', lvr: '80' }, fixture, control);
+  expect(included?.rows).toEqual(fixture.rows);
+  expect(readEntries).toHaveBeenCalled();
+});
 
 test('verified source LVR overrides a conflicting normalized tier with exact inclusive/exclusive edges', () => {
   const f = selectedConstraintFixture('Mortgage', [row], [{ rateIndex: 4, text: 'LVR up to 70%.' }]);

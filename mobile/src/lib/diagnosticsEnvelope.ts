@@ -360,7 +360,7 @@ export function createDeidentifiedDiagnosticsShare(
  * oversize reports instead of silently uploading a partial diagnostic. */
 export function createPublicPerformanceAuditReport(report: PerformanceAuditReport): string {
   const publicReport = buildDeidentifiedPerformanceAudit(report);
-  const applicationJournal = auditApplicationJournal(report.startedAt, report.finishedAt);
+  const applicationJournal = report.applicationJournal ?? auditApplicationJournal(report.startedAt, report.finishedAt);
   const journalSections = [applicationJournal.beforeAudit, applicationJournal.duringAndAfterAudit];
   const journalComplete = journalSections.every(section => section.complete);
   const completion = { ...publicReport.completion,

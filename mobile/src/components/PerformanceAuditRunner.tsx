@@ -1,4 +1,4 @@
-import { closeAuditApplicationJournal } from '../lib/auditApplicationJournal';
+import { auditApplicationJournal, closeAuditApplicationJournal } from '../lib/auditApplicationJournal';
 import {
   captureUserRateScenarioForAudit,
   ensureUserRateScenarioLoaded,
@@ -67,10 +67,10 @@ import {
   type AuditTransportTarget,
 } from '../lib/appHealthTransportGuard';
 import { debugLog, getDebugLogFlushDiagnostics } from '../lib/debugLog';
-import { runExternalLinkAuditCheck } from '../lib/performanceAuditLinks';
+import { externalLinkAuditCheckId, runExternalLinkAuditCheck } from '../lib/performanceAuditLinks';
 import { createExternalAuditLinkCollector, FIXED_EXTERNAL_AUDIT_LINKS, beginExternalLinkCapture, endExternalLinkCapture,
   getCapturedExternalAuditLinks } from '../lib/externalLinkInventory';
-import { trustedExternalUrl, type TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
+import type { TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
 import { captureAuditPayloadWork } from '../lib/performanceAuditPayloadWork';
 import { benchmarkPayloadCapacity } from '../lib/performanceAuditCapacity';
 import { waitForAuditBackgroundWork, describeAuditBackgroundWork, classifyJourneyBackgroundObservation, journeyDetailsRequirementState, JourneyBackgroundDataError, type AuditBackgroundWorkWait } from '../lib/performanceAuditBackgroundWork';
@@ -153,7 +153,7 @@ import {
 } from '../lib/performanceAuditLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import { appendAuditReturnDiagnostic, captureAuditDiagnostic, scoreAuditTargetProbeEvidence, type AuditDiagnosticStage } from '../lib/performanceAuditDiagnostic';
-import { getPreloadedExternalLink, setPassiveAuditPaused } from '../lib/passiveAudit';
+import { setPassiveAuditPaused } from '../lib/passiveAudit';
 import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAuditFinalization';
 import { awaitPerformanceAuditWork } from '../lib/performanceAuditWork';
 import { buildPerformanceAuditSetupPlans, measurePerformanceAuditSetupStage, PERFORMANCE_AUDIT_SETUP_STAGES, PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from '../lib/performanceAuditSetup';
@@ -2921,6 +2921,7 @@ export function PerformanceAuditRunner() {
         closeAuditApplicationJournal();
       const summaryMarker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=${state.sessionId} partial=true admissionRejected=true`;
       const report: PerformanceAuditReport = {
+        applicationJournal: auditApplicationJournal(state.startedAt, finishedAt),
         renderingEvidenceVersion: 2,
         schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION, sessionId: state.sessionId,
         startedAt: state.startedAt, finishedAt, durationMs: 0,
@@ -2949,7 +2950,7 @@ export function PerformanceAuditRunner() {
     const execute = async () => {
       setPassiveAuditPaused(true);
       startAuditTargetCollection();
-      startAuditNativeFrameMetrics();
+      const nativeFrameMetricsStarted = Platform.OS === 'android' && startAuditNativeFrameMetrics();
       let nativeFrameMetricsInterrupted = getPerformanceAuditState().paused;
       let collectedUxTelemetry: PerformanceAuditReport['uxTelemetry'] | undefined;
       let uxTelemetryFinalized = false;
@@ -2957,10 +2958,15 @@ export function PerformanceAuditRunner() {
         if (uxTelemetryFinalized) return collectedUxTelemetry;
         uxTelemetryFinalized = true;
         const targetSamples = stopAuditTargetCollection();
-        const androidFluidity = stopAuditNativeFrameMetrics();
+        const androidFluidity = nativeFrameMetricsStarted ? stopAuditNativeFrameMetrics() : null;
         const validAndroidFluidity = nativeFrameMetricsInterrupted ? undefined : androidFluidity;
         const telemetry: NonNullable<PerformanceAuditReport['uxTelemetry']> = {
           ...(targetSamples.length > 0 ? { targetSamples } : {}),
+          ...(Platform.OS === 'android' ? {
+            androidFrameCapture: !nativeFrameMetricsStarted ? 'start-unavailable'
+              : nativeFrameMetricsInterrupted ? 'interrupted'
+                : androidFluidity ? 'collected' : 'no-samples',
+          } : {}),
           ...(validAndroidFluidity ? { androidFluidity: validAndroidFluidity } : {}),
         };
         collectedUxTelemetry = Object.keys(telemetry).length > 0 ? telemetry : undefined;
@@ -3727,135 +3733,60 @@ export function PerformanceAuditRunner() {
           },
         });
         inventoryFailureEvidence = {};
-        const plannedLinkCheckIds: string[] = [];
-        const linkDeadline = Date.now() + 90_000;
+        const plannedLinkCheckIds = externalLinks.map((_, index) => externalLinkAuditCheckId(index));
+        const liveLinks = auditMode === 'live-source';
         let nextLinkIndex = 0;
-        if (auditMode === 'live-source' && externalLinks.length > 0) {
-          const batchAbort = new AbortController();
-          const onLinkAbort = () => batchAbort.abort();
-          if (linkAbort.signal.aborted) batchAbort.abort();
-          else linkAbort.signal.addEventListener('abort', onLinkAbort, { once: true });
-          let workerError: unknown = null;
-          let unflushed = 0;
-          let recordChain = Promise.resolve();
-          const enqueueLinkRecord = (check: AuditCheck) => {
-            const step = recordChain.then(async () => {
-              if (workerError) return;
-              try {
-                await record(check, true);
-                plannedLinkCheckIds.push(check.id);
-                unflushed += 1;
-                if (unflushed >= 24) {
-                  unflushed = 0;
-                  await flushRecordedChecks();
-                }
-              } catch (error) {
-                workerError ??= error;
-                batchAbort.abort();
-                throw error;
-              }
-            });
-            recordChain = step.catch(() => {});
-            return step;
-          };
-          const workerCount = Math.min(10, externalLinks.length);
-          const workers = Array.from({ length: workerCount }, async () => {
-            try {
-              while (!workerError && !batchAbort.signal.aborted && nextLinkIndex < externalLinks.length) {
-                await waitWhilePaused(watchdog);
-                assertSessionActive(watchdog);
-                if (workerError || batchAbort.signal.aborted) break;
-                const remaining = linkDeadline - Date.now();
-                if (remaining <= 0) break;
-                if (nextLinkIndex >= externalLinks.length) break;
-                const index = nextLinkIndex;
-                nextLinkIndex += 1;
-                const request = externalLinks[index];
-                transportGuard.allowExternalUrls([request]);
-                updatePerformanceAuditProgress(completed, total,
-                  `Checking external link ${index + 1} of ${externalLinks.length}`);
-                const check = await runExternalLinkAuditCheck(request, index, {
-                  platform: Platform.OS,
-                  reachability: true,
-                  handler: true,
-                  timeoutMs: Math.max(1, Math.min(2_500, remaining)),
-                  signal: batchAbort.signal,
-                });
-                await enqueueLinkRecord(check);
-              }
-            } catch (error) {
-              workerError ??= error;
-              batchAbort.abort();
+        const batchAbort = new AbortController();
+        const onLinkAbort = () => batchAbort.abort();
+        if (linkAbort.signal.aborted) batchAbort.abort();
+        else linkAbort.signal.addEventListener('abort', onLinkAbort, { once: true });
+        let workerError: unknown = null;
+        let recordChain = Promise.resolve();
+        const enqueueLinkRecord = (check: AuditCheck) => {
+          const step = recordChain.then(async () => {
+            if (workerError) return;
+            await record(check, true);
+            if (pendingStoredChecks.length >= 24) {
+              await flushRecordedChecks();
+              await yieldToUi();
             }
           });
+          recordChain = step.catch(() => {});
+          return step;
+        };
+        updatePerformanceAuditProgress(completed, total, 'Checking external destinations');
+        const workerCount = Math.min(liveLinks ? 10 : 1, externalLinks.length);
+        const workers = Array.from({ length: workerCount }, async () => {
           try {
-            await Promise.allSettled(workers);
-            await recordChain;
-            if (workerError) throw workerError;
-          } finally {
-            linkAbort.signal.removeEventListener('abort', onLinkAbort);
-          }
-        }
-        let unverifiedCount = 0;
-        for (let index = nextLinkIndex; index < externalLinks.length; index += 1) {
-          await waitWhilePaused(watchdog);
-          assertSessionActive(watchdog);
-          const request = externalLinks[index];
-          let trustedOk = false;
-          try { trustedOk = trustedExternalUrl(request).ok; } catch { trustedOk = false; }
-          if (!trustedOk) {
-            const check = await runExternalLinkAuditCheck(request, index, {
-              platform: Platform.OS, reachability: false, handler: false, timeoutMs: 1, signal: linkAbort.signal,
-            });
-            if (check.status === 'fail' && !check.error) {
-              check.error = typeof check.metrics.validationDetail === 'string' && check.metrics.validationDetail.trim()
-                ? check.metrics.validationDetail
-                : 'External URL failed trustedExternalUrl validation';
-            }
-            await record(check, true);
-            plannedLinkCheckIds.push(check.id);
-          } else {
-            const preloaded = auditMode !== 'live-source' && !linkAbort.signal.aborted ? getPreloadedExternalLink(request) : null;
-            if (preloaded && (preloaded.result.validation.status === 'fail' || preloaded.result.handler.status === 'fail')) {
+            while (!workerError && !batchAbort.signal.aborted && nextLinkIndex < externalLinks.length) {
+              await waitWhilePaused(watchdog);
+              assertSessionActive(watchdog);
+              if (workerError || batchAbort.signal.aborted || nextLinkIndex >= externalLinks.length) break;
+              const index = nextLinkIndex++;
+              const request = externalLinks[index];
+              if (liveLinks) transportGuard.allowExternalUrls([request]);
               const check = await runExternalLinkAuditCheck(request, index, {
-                platform: Platform.OS, reachability: false, handler: true, timeoutMs: 1, signal: linkAbort.signal,
+                platform: Platform.OS,
+                reachability: liveLinks,
+                handler: liveLinks || index < FIXED_EXTERNAL_AUDIT_LINKS.length,
+                timeoutMs: 2_500,
+                signal: batchAbort.signal,
               });
-              if (check.status === 'fail' && !check.error) {
-                check.error = preloaded.result.validation.status === 'fail'
-                  ? preloaded.result.validation.detail || 'External URL failed trustedExternalUrl validation'
-                  : preloaded.result.handler.detail || 'External URL handler check failed';
-              }
-              await record(check, true);
-              plannedLinkCheckIds.push(check.id);
-            } else {
-              unverifiedCount += 1;
+              if (!batchAbort.signal.aborted) await enqueueLinkRecord(check);
             }
+          } catch (error) {
+            workerError ??= error;
+            batchAbort.abort();
           }
+        });
+        try {
+          await Promise.allSettled(workers);
+          if (workerError) throw workerError;
+          assertSessionActive(watchdog);
+          await flushRecordedChecks();
+        } finally {
+          linkAbort.signal.removeEventListener('abort', onLinkAbort);
         }
-        if (unverifiedCount > 0) {
-          await record({
-            id: 'external-link-unverified',
-            label: `Unverified external links (${unverifiedCount})`,
-            kind: 'network',
-            status: 'warn',
-            durationMs: 0,
-            metrics: {
-              executionAttempted: true,
-              nonTimingFailure: false,
-              destinationCount: unverifiedCount,
-              httpSelected: false,
-              httpAttempted: false,
-              httpReachability: 'unknown',
-              browserHandler: 'unknown',
-              handlerAttempted: false,
-              handlerResolution: 'not-attempted',
-            },
-          }, true);
-          plannedLinkCheckIds.push('external-link-unverified');
-        }
-        await flushRecordedChecks();
-        total += plannedLinkCheckIds.length - reservedLinkChecks;
-        reservedLinkChecks = plannedLinkCheckIds.length;
 
         for (const section of SECTION_ORDER) {
           assertSessionActive(watchdog);
@@ -4086,6 +4017,7 @@ export function PerformanceAuditRunner() {
         const summary = combineAppHealthPerformanceSummary(performanceSummary, appHealth, checks.length);
         const uxTelemetry = finalizeUxTelemetry();
         const report: PerformanceAuditReport = {
+          applicationJournal: auditApplicationJournal(startedAt, finishedAt),
           ...(uxTelemetry ? { uxTelemetry } : {}),
           renderingEvidenceVersion: 2,
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
@@ -4157,12 +4089,12 @@ export function PerformanceAuditRunner() {
             'Virtualized product lists prove the complete pinned source/model count and each deterministic viewport they visit; they do not mount every off-screen cell simultaneously.',
             'Section benchmarks time named selector, filter, hierarchy, statistics and ranking phases. Their deliberately synchronous work is recorded but excluded from responsiveness scoring; they do not provide native CPU instruction sampling or React component commit attribution.',
             auditMode === 'local'
-              ? 'Local mode validates link addresses and OS browser handlers without HTTP transport. Website reachability remains unverified. It records the existing Android download snapshot without contacting a host or launching the installer.'
-              : 'Live-source mode permits public payload files, eight exact compiled official CSV destinations for credential-free GETs, and exact approved external destinations for credential-free HEAD checks. Link checks have a 90-second transport/handler budget; remaining destinations are validated but stay unverified. No browser or installer is launched.',
+              ? 'Local mode validates every inventoried address, checks the native handler for fixed official destinations, and reuses local handler evidence for other destinations when available. HTTP reachability requires Live audit. It records the existing Android download snapshot without contacting a host or launching the installer.'
+              : 'Live-source mode permits public payload files, eight exact compiled official CSV destinations for credential-free GETs, and exact approved external destinations for credential-free HEAD checks. Each destination has a 2.5-second check budget. No browser or installer is launched.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
             auditMode === 'local'
               ? 'Local audit measurements perform no network or clipboard action.'
-              : 'The live-source audit may read allowlisted public payload files and the eight compiled official CSV destinations during measurement.',
+              : 'The live-source audit may read allowlisted public payload files, the eight compiled official CSV destinations, and the approved link inventory during measurement.',
             uploadLog
               ? 'Public log upload requested after local finalization.'
               : 'Public log upload disabled.',
@@ -4482,6 +4414,7 @@ export function PerformanceAuditRunner() {
           );
           const partialUxTelemetry = finalizeUxTelemetry();
           const partialReport: PerformanceAuditReport = {
+            applicationJournal: auditApplicationJournal(startedAt, finishedAt),
             ...(partialUxTelemetry ? { uxTelemetry: partialUxTelemetry } : {}),
             renderingEvidenceVersion: 2,
             schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,

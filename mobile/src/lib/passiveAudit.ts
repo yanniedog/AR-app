@@ -24,6 +24,8 @@ import {
 export { PASSIVE_AUDIT_TASK } from '../background/taskNames';
 const STORAGE_KEY = 'ar-passive-audit-v1';
 const IDLE_INTERVAL_MS = 5_000;
+const FOREGROUND_QUIET_MS = 500;
+let foregroundWorkDeferredUntil = 0;
 export interface PassiveAuditStatus {
   completed: number;
   total: number;
@@ -72,6 +74,9 @@ function reportPassiveFailure(): void {
 }
 export function setPassiveAuditPaused(value: boolean): void { paused = value; }
 const blocked = () => paused || hasAppHealthFetchGuard();
+export function markPassiveAuditForegroundInteraction(): void {
+  foregroundWorkDeferredUntil = Date.now() + FOREGROUND_QUIET_MS;
+}
 
 /** Installed when the app store exists. A cold passive task deliberately has
  * no store getter and resumes only its persisted compact inputs. */
@@ -134,10 +139,11 @@ export function runPassiveAuditSlice(native = false): Promise<boolean> {
     if (native && !inFlightNative) return inFlight.then(() => runPassiveAuditSlice(true));
     return inFlight;
   }
-  if (blocked()) return Promise.resolve(true);
+  const stopped = () => blocked() || (!native && Date.now() < foregroundWorkDeferredUntil);
+  if (stopped()) return Promise.resolve(true);
   const run = async () => {
     await load();
-    if (blocked()) return true;
+    if (stopped()) return true;
     const liveState = getState?.();
     const liveStateBusy = liveState && stateBusy(liveState);
     if (liveStateBusy && !native) return true;
@@ -172,7 +178,7 @@ export function runPassiveAuditSlice(native = false): Promise<boolean> {
     emit({ busy: true });
     // Slow foreground preloading: one check every five seconds, after idle.
     // OS wake: at most sixteen checks / 250ms, preserving progress each slice.
-    for (let count = 0; record && count < (native ? 16 : 1) && !blocked() && Date.now() - start < 250; count++) {
+    for (let count = 0; record && count < (native ? 16 : 1) && !stopped() && Date.now() - start < 250; count++) {
       if (!runPassiveAuditCheck(record, snapshot)) break;
       didWork = true;
       if (Date.now() - start >= 250) break;
@@ -186,8 +192,8 @@ export function runPassiveAuditSlice(native = false): Promise<boolean> {
       await AsyncStorage.setItem(STORAGE_KEY, raw);
       recordDirty = false;
     }
-    if (!blocked()) await preloadPassiveLinks({ appBuild: passiveAuditAppBuild(),
-      revision: linkRevision(state), details: state?.details ?? null, platform: Platform.OS, stopped: blocked });
+    if (!stopped()) await preloadPassiveLinks({ appBuild: passiveAuditAppBuild(),
+      revision: linkRevision(state), details: state?.details ?? null, platform: Platform.OS, stopped });
     emit({ lastError: null });
     return true;
   };

@@ -10,7 +10,7 @@ import { AppText, Button, Card, Disclosure, Row } from './ui';
 import { InfoRow } from './settings/settingsUi';
 import { AuditMetricDetails } from './AuditMetricDetails';
 import { auditCheckResultSummary } from '../lib/auditCheckResultSummary';
-import type { AffsOperationalBand } from '../lib/uxFrictionFluidityAudit';
+import type { AffsOperationalBand, UxFrictionFluidityAudit } from '../lib/uxFrictionFluidityAudit';
 
 const MODES: Record<AuditMetricRun['mode'], UiLabel> = { local: 'Local checks', 'live-source': 'Live checks', unknown: 'Unknown' };
 const OUTCOMES: Record<AuditMetricRun['outcome'], UiLabel> = {
@@ -22,6 +22,17 @@ const AFFS_BAND_LABELS: Record<AffsOperationalBand, UiLabel> = {
   'moderate-friction': 'Moderate friction',
   'material-friction': 'Material friction',
   'high-friction': 'High friction',
+};
+const ANDROID_FRAME_CAPTURE_LABELS: Record<
+  UxFrictionFluidityAudit['pillars']['fluidityAndResponsiveness']['androidFrameCapture'], UiLabel
+> = {
+  observed: 'Observed',
+  'start-unavailable': 'Unavailable',
+  interrupted: 'Interrupted',
+  'no-samples': 'No samples',
+  invalid: 'Invalid evidence',
+  unknown: 'Unknown',
+  'not-applicable': 'Not applicable',
 };
 function valueLabel(value: number | null, metric: AuditMetric) {
   if (value === null) return uiLabel('Not measured');
@@ -75,6 +86,7 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
   const evidence = analysis?.metrics[metric];
   const taskEvidence = analysis?.taskEvidence;
   const uxAudit = analysis?.uxAudit;
+  const frameCapture = uxAudit?.pillars.fluidityAndResponsiveness.androidFrameCapture;
   const measuredCount = (value: number | null | undefined) => value == null ? uiLabel('Not measured') : uiCount(value);
   const measuredScore = (value: number | null | undefined) => value == null
     ? uiLabel('Not measured')
@@ -135,15 +147,22 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
         <AppText variant="tiny">{uiDate(visibleRuns[0].finishedAt)}</AppText>
         {visibleRuns.length > 1 ? <AppText variant="tiny">{uiDate(visibleRuns[visibleRuns.length - 1].finishedAt)}</AppText> : null}
       </Row>
-    </View> : <AppText>{uiLabel('Not measured')}</AppText>}
+    </View> : null}
     {uxGroup ? <View style={{ gap: 4 }}>
-      <InfoRow label="Friction & Fluidity Score" value={affsSummary} />
+      {metric !== 'affsScore' || uxAudit?.band ? <InfoRow label="Friction & Fluidity Score" value={affsSummary} /> : null}
       <InfoRow label="Composite basis" value="Proprietary · Non-normative" />
       <InfoRow label="Interaction friction (40%)" value={measuredScore(uxAudit?.pillars.interactionFriction.score)} />
+      {uxAudit && uxAudit.pillars.interactionFriction.score === null ? <>
+        <InfoRow label="Scored tasks" value={uiJoin(uiCount(uxAudit.pillars.interactionFriction.scoredTaskCount), ' / ',
+          uiCount(uxAudit.pillars.interactionFriction.evaluatedTaskCount))} />
+        {uxAudit.pillars.interactionFriction.observedTaskMeanScore !== null ?
+          <InfoRow label="Mean of scored tasks" value={measuredScore(uxAudit.pillars.interactionFriction.observedTaskMeanScore)} /> : null}
+      </> : null}
       <InfoRow label="Standards & accessibility (30%)" value={measuredScore(uxAudit?.pillars.standardsAndAccessibility.score)} />
       <InfoRow label="Fluidity & responsiveness (30%)" value={measuredScore(uxAudit?.pillars.fluidityAndResponsiveness.score)} />
+      {frameCapture && frameCapture !== 'not-applicable' ?
+        <InfoRow label="Android frame timing" value={ANDROID_FRAME_CAPTURE_LABELS[frameCapture]} /> : null}
       <InfoRow label="Automated WCAG / standards" value={wcagSummaryValue} />
-      <InfoRow label="Human usability" value="Not measured" />
       <InfoRow label="SUS / UMUX-Lite / SEQ" value={humanValidationRecorded ? 'Recorded' : 'Not performed'} />
     </View> : null}
     {checkGroup ? <View style={{ gap: 4 }}>
@@ -170,7 +189,6 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
         <InfoRow label="Ready with warnings" value={measuredCount(taskEvidence?.outcomes?.warnings)} />
         <InfoRow label="Action failures" value={measuredCount(taskEvidence?.outcomes?.failure)} />
         <InfoRow label="Indeterminate" value={measuredCount(taskEvidence?.outcomes?.indeterminate)} />
-        <InfoRow label="Human usability" value="Not measured" />
         <InfoRow label="SUS / UMUX-Lite / SEQ" value={humanValidationRecorded ? 'Recorded' : 'Not performed'} />
       </> : <>
         <InfoRow label="Automated WCAG / standards" value={wcagSummaryValue} />

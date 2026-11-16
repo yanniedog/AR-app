@@ -184,7 +184,8 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
     if (parent === '.checks[].metrics' && typeof value === 'object') return alias(value);
     if (Array.isArray(value)) return value.map(item => visit(item, key, `${path}[]`));
     if (typeof value !== 'object') return SCALAR_PATHS[parent]?.has(key) ? value : alias(value);
-    return Object.fromEntries(Object.entries(value).filter(([name]) => name !== 'networkViolations' && !(path === '' && name === 'metricAnalysis'))
+    return Object.fromEntries(Object.entries(value).filter(([name]) => name !== 'networkViolations'
+      && !(path === '' && (name === 'metricAnalysis' || name === 'applicationJournal')))
       .map(([name, child]) => FIELDS.has(name)
         ? [name, visit(child, name, `${path}.${name}`)]
         : [alias(name, 'key'), alias(child)]));

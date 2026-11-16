@@ -38,6 +38,7 @@ interface EntryTrace {
 }
 
 const SETTINGS_PROBE_TIMEOUT_MS = 2_000;
+let screenOpenPressedAt: Mark = null;
 const empty = (): EntryTrace => ({
   screenMountedAt: null, screenReadyAt: null, startPressedAt: null, startFeedbackAt: null,
   startQueuedAt: null, runningAt: null, settingsOpenMs: null, startInterrupted: false,
@@ -54,10 +55,16 @@ const rounded = (value: number) => Math.round(value * 10) / 10;
 const span = (from: Mark, to: Mark): number | null =>
   from != null && to != null && Number.isFinite(from) && Number.isFinite(to) && to >= from ? rounded(to - from) : null;
 
+/** Start before the router dispatch, so deferred route loading is included. */
+export function markAuditEntryScreenOpenPressed(): void {
+  screenOpenPressedAt = clock();
+}
+
 /** A remount is a new visit for the screen and its settings. Marks of a press
  * whose run has not yet recorded its entry checks belong to that run and stay. */
 export function markAuditEntryScreenMounted(): void {
-  trace = { ...trace, screenMountedAt: clock(), screenReadyAt: null, settingsOpenMs: null };
+  trace = { ...trace, screenMountedAt: screenOpenPressedAt ?? clock(), screenReadyAt: null, settingsOpenMs: null };
+  screenOpenPressedAt = null;
 }
 
 /** A pause between the press and the runner is the person's time, not the app's. */
@@ -105,6 +112,7 @@ export function setAuditEntrySettingsProbe(probe: (() => Promise<number | null>)
 
 export function resetAuditEntryTraceForTests(): void {
   trace = empty();
+  screenOpenPressedAt = null;
   settingsProbe = null;
 }
 

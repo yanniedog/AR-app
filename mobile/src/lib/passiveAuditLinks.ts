@@ -49,6 +49,7 @@ export async function preloadPassiveLinks(input: {
   const now = Date.now();
   if (!loaded) {
     const raw = await AsyncStorage.getItem(KEY);
+    if (input.stopped()) return;
     loaded = true;
     if (raw && utf8ToBytes(raw).length <= MAX_BYTES) {
       try {
@@ -118,8 +119,8 @@ export async function preloadPassiveLinks(input: {
     if (Date.now() - start >= 250) break;
     await new Promise<void>(resolve => setTimeout(resolve, 15));
   }
-  if (lastWriteAt === 0 || Date.now() - lastWriteAt >= 30_000 ||
-    active.cursor - lastWrittenCursor >= 64 || (!preparation && active.cursor === active.pending.length)) await flushPassiveLinks();
+  if (!input.stopped() && (lastWriteAt === 0 || Date.now() - lastWriteAt >= 30_000 ||
+    active.cursor - lastWrittenCursor >= 64 || (!preparation && active.cursor === active.pending.length))) await flushPassiveLinks();
 }
 
 /** Checkpoint at most every 30 seconds/64 links, plus background/completion.

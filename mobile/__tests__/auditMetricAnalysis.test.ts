@@ -449,3 +449,23 @@ test('affsScore null emits missing-evidence when appHealth coverage is complete 
     missingEvidence: ['incomplete-health-collection'],
   });
 });
+
+test('friction evidence counts only tasks with all five observed components', () => {
+  const scored = journey('journey-scored', 80);
+  Object.assign(scored.metrics, {
+    minimumJustifiedActions: 2, observedActions: 2, retries: 0, validationFailures: 0,
+    backtracks: 0, repeatedFields: 0, scrollDetours: 0, modalInterruptions: 0,
+    avoidableWaitMs: 0,
+  });
+  const unscored = { ...scored, id: 'journey-unscored', metrics: { ...scored.metrics, backMs: null } };
+  const report = makePerformanceAuditReport('friction-partial', [scored, unscored]);
+  const { metrics, uxAudit } = buildAuditMetricAnalysis(report);
+  expect(uxAudit.pillars.interactionFriction).toMatchObject({
+    score: null, evaluatedTaskCount: 2, scoredTaskCount: 1, observedTaskMeanScore: 100,
+  });
+  expect(metrics.uxInteractionFrictionScore).toMatchObject({
+    value: null, sampleSize: 1, eligibleCount: 2, observedCount: 1, missingCount: 1,
+    missingEvidence: ['partial-samples'],
+  });
+  expect(metrics.affsScore).toMatchObject({ value: null, eligibleCount: 3, observedCount: 1, missingCount: 2 });
+});

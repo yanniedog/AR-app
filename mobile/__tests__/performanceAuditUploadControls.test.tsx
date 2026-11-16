@@ -250,7 +250,7 @@ test('a cold screen restores the completed report and offers upload without publ
   expect(tree!.root.findAllByType('InfoRow').find(row => row.props.label === 'Version')?.props.value).toBe(report.app.appVersion);
   expect(tree!.root.findAllByType('InfoRow').find(row => row.props.label === 'Build')?.props.value).toBe(report.app.buildVersion);
   expect(tree!.root.findByProps({ title: 'Upload report' }).props.disabled).toBe(false);
-  expect(restorePerformanceAuditUpload).toHaveBeenCalledWith(report);
+  expect(restorePerformanceAuditUpload).toHaveBeenCalledWith(report, expect.any(Function));
   expect(uploadCompletedPerformanceAudit).not.toHaveBeenCalled();
   await press('Upload report');
   expect(uploadCompletedPerformanceAudit).toHaveBeenCalledTimes(1);

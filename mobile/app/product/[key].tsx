@@ -14,7 +14,6 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HeaderTitle } from '@react-navigation/elements';
 import {
-  InteractionManager,
   Share,
   useWindowDimensions,
   View,
@@ -84,7 +83,7 @@ import {
   effectiveBankInsights,
   effectiveHistoryRibbon,
 } from '../../src/lib/proAccess';
-import { yieldToPaintFrames, yieldToUi } from '../../src/lib/yieldToUi';
+import { scheduleAfterInteractions, yieldToPaintFrames, yieldToUi } from '../../src/lib/yieldToUi';
 import {
   auditActionString,
 } from '../../src/lib/performanceAuditActionParams';
@@ -219,6 +218,7 @@ export default function ProductDetail() {
   // allowed — eager subscription re-rendered the whole product tree on open.
   const [productHistoryReady, setProductHistoryReady] = useState(false);
   const productHistory = useStore((s) => (productHistoryReady ? s.productHistory : null));
+  const productHistoryInstalled = useStore((s) => s.productHistory != null);
   const ledgerRevision = useRef({ payload: productHistory, version: 0 });
   if (ledgerRevision.current.payload !== productHistory) {
     ledgerRevision.current = { payload: productHistory, version: ledgerRevision.current.version + 1 };
@@ -264,7 +264,7 @@ export default function ProductDetail() {
     // Product-history dated-core fan-out is expensive; wait until the deferred
     // history surface is allowed so open checks never subscribe to the ledger.
     let cancelled = false;
-    const handle = InteractionManager.runAfterInteractions(() => {
+    const cancelSchedule = scheduleAfterInteractions(() => {
       void yieldToUi().then(() => {
         if (cancelled) return;
         setProductHistoryReady(true);
@@ -277,7 +277,7 @@ export default function ProductDetail() {
     });
     return () => {
       cancelled = true;
-      handle.cancel?.();
+      cancelSchedule();
     };
   }, [
     core?.run_date,
@@ -651,14 +651,14 @@ export default function ProductDetail() {
         kind: 'data',
         // History sync is deferred after paint; do not block product readiness on it.
         required: false,
-        status: !historyEnabled || !historySurfaceReady || productHistory
+        status: !historyEnabled || !historySurfaceReady || productHistoryInstalled
           ? 'ready'
           : productHistoryError
             ? 'error'
             : 'pending',
         error: historyEnabled && historySurfaceReady ? productHistoryError : null,
         expectedCount: historyEnabled ? 1 : 0,
-        actualCount: historyEnabled && productHistory ? 1 : 0,
+        actualCount: historyEnabled && productHistoryInstalled ? 1 : 0,
       },
     ],
   });
