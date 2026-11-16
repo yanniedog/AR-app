@@ -18,8 +18,13 @@ test('clearing a restored custom scope reveals the collapsed browse header', () 
   const header = (filters: typeof custom) => (
     <MortgageComparisonControls rows={[]} filters={filters} unverified={0} invalid={false} collapsible />
   );
-  let tree!: ReactTestRenderer;
-  act(() => { tree = TestRenderer.create(header(custom)); });
+  let tree!: ReactTestRenderer & {
+    root: {
+      findAllByProps: (props: object) => unknown[];
+      findByProps: (props: object) => { props: { onPress: () => void } };
+    };
+  };
+  act(() => { tree = TestRenderer.create(header(custom)) as typeof tree; });
   try {
     expect(tree.root.findAllByProps({ testID: 'mortgage-scenario-summary' })).toHaveLength(0);
     act(() => { clearMortgageComparison(); tree.update(header(EMPTY_FILTERS)); });
