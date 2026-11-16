@@ -60,12 +60,19 @@ class AuditFrameMetricsModule : Module() {
         val totalNs = frameMetrics.getMetric(FrameMetrics.TOTAL_DURATION)
         if (totalNs <= 0L) return@OnFrameMetricsAvailableListener
         val totalMs = totalNs / 1_000_000.0
+        val perFrameDeadlineMs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+          val deadlineNs = frameMetrics.getMetric(FrameMetrics.DEADLINE)
+          if (deadlineNs > 0L) deadlineNs / 1_000_000.0 else null
+        } else {
+          null
+        }
         synchronized(lock) {
           if (!active) return@OnFrameMetricsAvailableListener
+          val effectiveDeadlineMs = perFrameDeadlineMs ?: deadlineMs
           totalFrames += 1
-          val overrun = totalMs - deadlineMs
+          val overrun = totalMs - effectiveDeadlineMs
           overrunsMs.add(overrun)
-          if (totalMs > deadlineMs) {
+          if (totalMs > effectiveDeadlineMs) {
             jankFrames += 1
           }
           if (totalMs >= 700.0) {

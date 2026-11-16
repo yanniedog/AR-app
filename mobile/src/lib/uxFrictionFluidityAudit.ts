@@ -710,7 +710,7 @@ function evaluateReportTaskJourney(
         targetForwardResponseMs: measuredAuditValue(check.metrics.targetForwardResponseMs) ?? 400,
       }
       : {}),
-    ...(hasReturn && (measuredAuditValue(check.metrics.backMs) !== null || check.metrics.actionCompleted !== false)
+    ...(hasReturn && (measuredAuditValue(check.metrics.backMs) !== null || check.metrics.actionCompleted !== false || forwardPhaseMs !== null)
       ? {
         observedReturnResponseMs: measuredAuditValue(check.metrics.backMs),
         targetReturnResponseMs: measuredAuditValue(check.metrics.targetBackResponseMs) ?? 400,

@@ -428,6 +428,13 @@ async function waitForRefreshWork(watchdog: PerformanceAuditInactivityWatchdog,
     assertActive: () => assertSessionActive(watchdog), observe, delay });
 }
 
+class PerformanceAuditRouteTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PerformanceAuditRouteTimeoutError';
+  }
+}
+
 async function waitForPath(
   currentPath: () => string,
   expected: string,
@@ -447,7 +454,7 @@ async function waitForPath(
       }
     }
     if (now() >= routeDeadlineMs) {
-      throw new Error(`${label} did not reach ${expected}; current path is ${currentPath()}`);
+      throw new PerformanceAuditRouteTimeoutError(`${label} did not reach ${expected}; current path is ${currentPath()}`);
     }
     await delay(25);
   }
@@ -858,7 +865,8 @@ async function runDeepAuditStep(
     const stepResponsiveness = monitor.metricsSince(stepResponsivenessAt, monitor.snapshot());
     const stepErrors = routeErrorMessages(stepLogCursor);
     const isTimeoutFailure = caught instanceof PerformanceAuditReadinessTimeoutError ||
-      caught instanceof PerformanceAuditStepTimeoutError;
+      caught instanceof PerformanceAuditStepTimeoutError ||
+      caught instanceof PerformanceAuditRouteTimeoutError;
     return {
       id: `deep-${step.id}`,
       label,
