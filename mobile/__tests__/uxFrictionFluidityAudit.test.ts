@@ -391,6 +391,11 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
     expect(audit.pillars.standardsAndAccessibility.score).toBe(95);
     expect(audit.pillars.fluidityAndResponsiveness.telemetryKind).toBe('js-runtime-callbacks');
     expect(audit.pillars.fluidityAndResponsiveness.nativeFrameDeadlineMeasured).toBe(false);
+    expect(buildUxFrictionFluidityAudit(report, undefined, { androidFrameCapture: 'interrupted' })
+      .pillars.fluidityAndResponsiveness).toMatchObject({ androidFrameCapture: 'interrupted', nativeFrameDeadlineMeasured: false });
+    expect(buildUxFrictionFluidityAudit(report, undefined, {
+      androidFrameCapture: 'collected', androidFluidity: { refreshRateHz: 120, frameOverrunP95Ms: -1, jankPercent: 0 },
+    }).pillars.fluidityAndResponsiveness).toMatchObject({ androidFrameCapture: 'observed', nativeFrameDeadlineMeasured: true });
     expect(audit.pillars.fluidityAndResponsiveness.score).toBe(91.9);
     // Composite: 0.4 * 91.7 + 0.3 * 95.0 + 0.3 * 91.9 = 36.68 + 28.5 + 27.57 = 92.8
     expect(audit.affsScore).toBe(92.8);

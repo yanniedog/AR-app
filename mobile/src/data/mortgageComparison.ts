@@ -296,19 +296,36 @@ export async function mortgageComparisonRowsCooperatively(
   await yieldControl();
   if (cancelled()) return null;
   const parsed = inputs(value);
+  if (parsed.invalid) return { rows: [], unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: true };
   if (parsed.incompleteFunds) return { rows: [], unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
   // Empty scope is a cheap identity pass; keep it synchronous after the yield.
-  if (parsed.amount === null && parsed.lvr === null && !parsed.invalid) {
+  if (parsed.amount === null && parsed.lvr === null) {
     return { rows: [...rows], unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
   }
-  const prepared = await prepareMortgageComparisonRowsCooperatively(rows, context, control);
+  // Source wording can narrow an LVR tier, and every admitted row must still
+  // clear its listed tier. Reject impossible rows before reading that wording.
+  const candidates: RateRow[] = parsed.lvr === null ? rows : [];
+  let sliceStarted = now();
+  if (parsed.lvr !== null) {
+    for (let offset = 0; offset < rows.length; offset += 1) {
+      const row = rows[offset];
+      const range = parseLvrRange(row.lvr_tier);
+      if (range && containsLvr(range, parsed)) candidates.push(row);
+      if ((offset + 1) % 16 === 0 && now() - sliceStarted >= 6) {
+        await yieldControl();
+        sliceStarted = now();
+        if (cancelled()) return null;
+      }
+    }
+  }
+  const prepared = await prepareMortgageComparisonRowsCooperatively(candidates, context, control);
   if (!prepared || cancelled()) return null;
   let unverified = 0;
   const unverifiedRows = new WeakSet<RateRow>();
   const selected: RateRow[] = [];
-  let sliceStarted = now();
-  for (let offset = 0; offset < rows.length; offset += 1) {
-    const row = rows[offset];
+  sliceStarted = now();
+  for (let offset = 0; offset < candidates.length; offset += 1) {
+    const row = candidates[offset];
     const state = match(row, parsed, context, prepared.get(row));
     if (state === 'unverified') { unverified += 1; unverifiedRows.add(row); }
     if (state === 'listed' || state === 'unverified') selected.push(row);

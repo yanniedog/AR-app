@@ -204,7 +204,13 @@ function PerformanceAuditScreenInner() {
     return () => { cancelled = true; cancelRecovery(); };
   }, [running, auditPreflightMode, recoveryAttempt]);
   useEffect(() => {
-    if (report) void restorePerformanceAuditUpload(report).catch(() => {});
+    if (!report) return;
+    let cancelled = false;
+    const shouldRestore = () => !cancelled && mounted.current && !auditPreflightLocked.current;
+    const cancelRestore = scheduleAfterInteractions(() => {
+      void yieldToPaintFrames(2).then(() => restorePerformanceAuditUpload(report, shouldRestore)).catch(() => {});
+    });
+    return () => { cancelled = true; cancelRestore(); };
   }, [report]);
   const hangTimeoutSeconds = parsePerformanceAuditHangTimeoutSeconds(hangTimeoutInput);
   const auditActions = useMemo(() => ({
@@ -270,8 +276,8 @@ function PerformanceAuditScreenInner() {
     ).catch(() => {});
   }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
-  // Usable means a start control can be pressed, not only that it is laid out.
-  const entryReady = layoutReady && hangTimeoutLoaded && !state.recoveryRequired && !updateBlocksAudit && !uploadBusy;
+  const auditDisabled = state.recoveryRequired || running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null;
+  const entryReady = layoutReady && !auditDisabled;
   useEffect(() => { if (entryReady) markAuditEntryScreenReady(); }, [entryReady]);
 
   const runAudit = async (mode: 'local' | 'live-source') => {
@@ -367,7 +373,6 @@ function PerformanceAuditScreenInner() {
         : theme.colors.danger
     : theme.colors.textMuted;
 
-  const auditDisabled = state.recoveryRequired || running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null;
   const outcome = (value: 'healthy'|'attention'|'bottleneck'): UiCopy => value === 'healthy' ? 'Healthy' : value === 'attention' ? 'Needs review' : 'Failures found';
   const outcomeLabel = (value: NonNullable<typeof completion>['outcome']): UiLabel =>
     value === 'successful' ? 'Successful' : value === 'failed' ? 'Failed' : value === 'incomplete' ? 'Incomplete' : 'Needs review';

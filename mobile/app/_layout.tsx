@@ -34,7 +34,7 @@ import {
   useAppUpdateBanner,
 } from '../src/components/AppUpdateBanner';
 import { SELF_UPDATE_ENABLED } from '../src/config';
-import { registerPassiveAuditBackground, startPassiveAuditPreloading } from '../src/lib/passiveAudit';
+import { markPassiveAuditForegroundInteraction, registerPassiveAuditBackground, startPassiveAuditPreloading } from '../src/lib/passiveAudit';
 import { ScenarioRecoveryBanner } from '../src/components/ScenarioRecoveryBanner';
 import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
 import { ErrorScreen } from '../src/components/ErrorScreen';
@@ -264,6 +264,8 @@ function RootNavigator() {
           <ScenarioRecoveryBanner />
           <View
             style={{ flex: 1 }}
+            onTouchStart={markPassiveAuditForegroundInteraction}
+            onTouchEnd={markPassiveAuditForegroundInteraction}
             pointerEvents={performanceAuditActive ? 'none' : 'auto'}
             accessibilityElementsHidden={performanceAuditActive}
             importantForAccessibility={

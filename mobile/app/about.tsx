@@ -11,6 +11,7 @@ import {
   SettingsGap,
 } from '../src/components/settings/settingsUi';
 import { uiIdentifier, uiJoin, uiLabel } from '../src/lib/uiCopy';
+import { markAuditEntryScreenOpenPressed } from '../src/lib/auditEntryTrace';
 
 export default function AboutScreen() {
   const appVersion = Application.nativeApplicationVersion?.trim();
@@ -52,7 +53,10 @@ export default function AboutScreen() {
           <NavRow
             icon="speedometer-outline"
             label="App health audit"
-            onPress={() => router.push('/performance-audit')}
+            onPress={() => {
+              markAuditEntryScreenOpenPressed();
+              router.push('/performance-audit');
+            }}
           />
           <SettingsGap size={4} />
           <NavRow

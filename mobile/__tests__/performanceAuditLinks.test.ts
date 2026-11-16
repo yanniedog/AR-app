@@ -1,4 +1,4 @@
-import { externalLinkAuditCheck } from '../src/lib/performanceAuditLinks';
+import { externalLinkAuditCheck, externalLinkAuditCheckId, runExternalLinkAuditCheck } from '../src/lib/performanceAuditLinks';
 import type { ExternalLinkAuditResult } from '../src/lib/externalLinkAudit';
 
 const part = (status: 'pass' | 'fail' | 'unknown') => ({ status, detail: 'Evidence', attempted: true });
@@ -40,4 +40,40 @@ it('keeps each destination independently addressable and omits URL queries', () 
   expect(check.id).toBe('external-link-4');
   expect(check.metrics).toMatchObject({ host: 'www.rba.gov.au', destinationPath: '/statistics/' });
   expect(check.metrics).not.toHaveProperty('url');
+});
+
+it('keeps an indexed policy result for every local destination without transport', async () => {
+  const fetch = jest.fn();
+  const canOpenUrl = jest.fn();
+  const results = await Promise.all([
+    'https://www.rba.gov.au/statistics/',
+    'https://unapproved.example/statistics/',
+  ].map((url, index) => runExternalLinkAuditCheck({
+    url, label: 'Source', purpose: 'official_economic_source',
+  }, index, { platform: 'android', reachability: false, handler: false, fetch, canOpenUrl })));
+
+  expect(results.map(check => check.id)).toEqual([externalLinkAuditCheckId(0), externalLinkAuditCheckId(1)]);
+  expect(results[0]).toMatchObject({ status: 'warn', metrics: {
+    urlValidation: 'pass', httpAttempted: false, handlerAttempted: false,
+  } });
+  expect(results[1]).toMatchObject({ status: 'fail', metrics: {
+    urlValidation: 'fail', host: null, destinationPath: null,
+  } });
+  expect(fetch).not.toHaveBeenCalled();
+  expect(canOpenUrl).not.toHaveBeenCalled();
+});
+
+it('measures a selected local native HTTPS handler without requesting its website', async () => {
+  const fetch = jest.fn();
+  const canOpenUrl = jest.fn(async () => true);
+  const request = { url: 'https://www.rba.gov.au/statistics/', label: 'Source',
+    purpose: 'official_economic_source' as const };
+  const result = await runExternalLinkAuditCheck(request, 0, {
+    platform: 'android', reachability: false, handler: true, fetch, canOpenUrl,
+  });
+  expect(result.metrics).toMatchObject({
+    browserHandler: 'pass', handlerAttempted: true, httpAttempted: false,
+  });
+  expect(canOpenUrl).toHaveBeenCalledWith(request.url);
+  expect(fetch).not.toHaveBeenCalled();
 });

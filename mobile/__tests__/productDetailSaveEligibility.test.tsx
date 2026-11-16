@@ -82,7 +82,10 @@ const mockState: Record<string, any> = {
 const mockRoute: { key: string; ri?: string } = { key: row.product_key };
 
 jest.mock('../src/data/store', () => ({
-  useStore: (selector: (state: typeof mockState) => unknown) => selector(mockState),
+  useStore: Object.assign(
+    (selector: (state: typeof mockState) => unknown) => selector(mockState),
+    { getState: () => mockState },
+  ),
 }));
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },

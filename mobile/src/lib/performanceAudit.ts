@@ -135,6 +135,8 @@ export interface PerformanceAuditReport {
   uxTelemetry?: UxFrictionFluidityTelemetryOptions;
   /** Derived evidence, regenerated from canonical checks for local display/export. */
   metricAnalysis?: AuditMetricAnalysis;
+  /** Deidentified application log captured for this exact run and retained for retries. */
+  applicationJournal?: import('./auditApplicationJournal').AuditApplicationJournal;
 }
 
 export interface PerformanceAuditCoverage {

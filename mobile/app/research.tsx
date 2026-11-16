@@ -251,6 +251,9 @@ export default function Market() {
     setRbaOpen(true);
   }, []);
   const queueEconomyAuditAction = useCallback((action: 'lens' | 'window' | 'date') => {
+    if (economyOpen && economicAuditState?.status === 'error' && economicAuditState.emptyStateRendered) {
+      return { unavailableReason: 'No economic observations are available for this control' };
+    }
     if (!economyOpen) setEconomicAuditState(null);
     setEconomyOpen(true);
     return new Promise<void>((complete, fail) => {
@@ -258,7 +261,7 @@ export default function Market() {
       pendingEconomyAuditActionRef.current = pending;
       setPendingEconomyAuditAction(pending);
     });
-  }, [economyOpen]);
+  }, [economicAuditState, economyOpen]);
   useEffect(() => setRbaGraphicState(null), [datasetRevision]);
   const historyDates = useMemo(
     () => explorerMode === 'pulse' || explorerMode === 'race'

@@ -15,8 +15,8 @@ export async function uploadCompletedPerformanceAudit(report: PerformanceAuditRe
   catch { failPublicReportPreparation(report.sessionId); }
 }
 
-export async function restorePerformanceAuditUpload(report: PerformanceAuditReport): Promise<void> {
-  await restorePublicReportUpload(performanceAuditUploadRequest(report));
+export async function restorePerformanceAuditUpload(report: PerformanceAuditReport, shouldRestore = () => true): Promise<void> {
+  await restorePublicReportUpload(report.sessionId, () => performanceAuditUploadRequest(report), shouldRestore);
 }
 
 /** The request's publication policy applies equally to full and partial reports.

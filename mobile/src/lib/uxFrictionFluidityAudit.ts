@@ -170,10 +170,13 @@ export interface IosFluidityTelemetryInput {
   scrollTransitionP95Ms?: number | null;
 }
 
+type AndroidFrameCaptureFailure = 'start-unavailable' | 'interrupted' | 'no-samples';
+
 export interface UxFrictionFluidityTelemetryOptions {
   safeCheckId?: (value: string) => string | null;
   webVitals?: WebVitalsTelemetryInput;
   androidFluidity?: AndroidFluidityTelemetryInput;
+  androidFrameCapture?: AndroidFrameCaptureFailure | 'collected';
   iosFluidity?: IosFluidityTelemetryInput;
   targetSamples?: readonly TargetSizeSampleInput[] | null;
   wcagActChecks?: WcagActChecksInput | null;
@@ -261,6 +264,8 @@ export interface UxFrictionFluidityAudit {
       score: number | null;
       weight: 0.40;
       evaluatedTaskCount: number;
+      scoredTaskCount: number;
+      observedTaskMeanScore: number | null;
       completedTaskCount: number;
       meanPathEfficiency: number | null;
       meanResponseTimeEfficiency: number | null;
@@ -282,6 +287,7 @@ export interface UxFrictionFluidityAudit {
       weight: 0.30;
       telemetryKind: 'js-runtime-callbacks' | 'android-native-frame-trace' | 'core-web-vitals-p75' | 'ios-hitch-ratio' | 'unmeasured';
       nativeFrameDeadlineMeasured: boolean;
+      androidFrameCapture: AndroidFrameCaptureFailure | 'observed' | 'invalid' | 'unknown' | 'not-applicable';
       components: {
         inpScore: number | null;
         lcpScore: number | null;
@@ -1026,11 +1032,12 @@ export function buildUxFrictionFluidityAudit(
 
   const evaluatedTasks = evaluateReportTaskJourneys(report, completion, sanitizeId);
   const measuredTasks = evaluatedTasks.filter(task => task.score !== null);
-  const interactionFrictionScore = collectionComplete
-    && !hasDuplicateCheckIds
-    && measuredTasks.length > 0
-    && measuredTasks.length === evaluatedTasks.length
+  const observedTaskMeanScore = measuredTasks.length > 0
     ? round1(measuredTasks.reduce((sum, task) => sum + task.score!, 0) / measuredTasks.length)
+    : null;
+  const interactionFrictionScore = collectionComplete
+    && measuredTasks.length === evaluatedTasks.length
+    ? observedTaskMeanScore
     : null;
   const completedTaskCount = evaluatedTasks.filter(task => task.components.taskSuccess === 1).length;
   const pathEfficiencies = evaluatedTasks
@@ -1064,6 +1071,12 @@ export function buildUxFrictionFluidityAudit(
   const androidFrameScore = resolvedOptions?.androidFluidity
     ? scoreAndroidNativeFluidity(resolvedOptions.androidFluidity)
     : null;
+  const reportedFrameCapture = resolvedOptions?.androidFrameCapture;
+  const androidFrameCapture = androidFrameScore !== null ? 'observed'
+    : reportedFrameCapture === 'start-unavailable' || reportedFrameCapture === 'interrupted' || reportedFrameCapture === 'no-samples'
+      ? reportedFrameCapture
+      : resolvedOptions?.androidFluidity || reportedFrameCapture === 'collected' ? 'invalid'
+        : report.environment?.platform === 'android' ? 'unknown' : 'not-applicable';
 
   let jsRuntimeScore: number | null = null;
   const executedJourneyCount = journeys.filter(
@@ -1348,6 +1361,8 @@ export function buildUxFrictionFluidityAudit(
         score: interactionFrictionScore,
         weight: AFFS_PILLAR_WEIGHTS.interactionFriction,
         evaluatedTaskCount: evaluatedTasks.length,
+        scoredTaskCount: measuredTasks.length,
+        observedTaskMeanScore,
         completedTaskCount,
         meanPathEfficiency,
         meanResponseTimeEfficiency,
@@ -1369,6 +1384,7 @@ export function buildUxFrictionFluidityAudit(
         weight: AFFS_PILLAR_WEIGHTS.fluidityAndResponsiveness,
         telemetryKind,
         nativeFrameDeadlineMeasured: telemetryKind === 'android-native-frame-trace',
+        androidFrameCapture,
         components: {
           inpScore,
           lcpScore,

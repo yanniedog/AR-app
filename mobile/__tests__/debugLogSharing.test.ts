@@ -1,6 +1,6 @@
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
 jest.mock('../src/lib/debugLog', () => ({
-  debugLog: { readCompleteText: jest.fn(), warn: jest.fn() },
+  debugLog: { readCompleteText: jest.fn(), warn: jest.fn(), info: jest.fn() },
   debugLogUploadShareUrl: (receipt: { url: string; shareUrl?: string }) => receipt.shareUrl ?? receipt.url,
   deleteDebugLogUpload: jest.fn(),
   formatVersionedLogExport: jest.fn((text: string) => `versioned\n${text}`),

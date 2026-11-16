@@ -45,6 +45,39 @@ test('native focus retries an exhausted detached measurement without a blur rend
   act(() => tree.unmount());
   expect(onFocus).toBeUndefined();
 });
+
+test('a covering stack pop rechecks native visibility when the mounted tab keeps its focus identity', () => {
+  jest.useFakeTimers();
+  let tree!: ReactTestRenderer;
+  let focused = false;
+  let attached = false;
+  const listeners = new Map<string, () => void>();
+  const parent = { addListener: (event: string, listener: () => void) => {
+    listeners.set(event, listener);
+    return () => { listeners.delete(event); };
+  } };
+  const tab = { getParent: () => parent, isFocused: () => focused };
+  function HomeProbe() {
+    hook = usePhysicalListVisibility('a', rows, true, rowKey, measured);
+    useFocusMeasurement(tab, true, hook.measure);
+    return null;
+  }
+  act(() => { tree = TestRenderer.create(<HomeProbe />); });
+  Object.assign(hook.viewport, { current: { measureInWindow: (cb: Measure) => cb(0, 0, 400, 700) } });
+  act(() => {
+    hook.register(rows[0], { measureInWindow: (cb: Measure) => cb(0, attached ? 100 : -1000, 400, 200) } as never);
+    jest.advanceTimersByTime(10_000);
+  });
+  expect(hook.visibleCount).toBe(0);
+  attached = true;
+  act(() => { listeners.get('state')?.(); jest.advanceTimersByTime(40); });
+  expect(hook.visibleCount).toBe(0);
+  focused = true;
+  act(() => { listeners.get('state')?.(); jest.advanceTimersByTime(40); });
+  expect(hook.visibleCount).toBe(1);
+  act(() => tree.unmount());
+  expect(listeners.size).toBe(0);
+});
 test('revokes positive evidence before a delayed or dropped scroll measurement and rejects stale callbacks', () => {
   jest.useFakeTimers(); let tree!: ReactTestRenderer;
   act(() => { tree = TestRenderer.create(<Probe />); jest.runOnlyPendingTimers(); });

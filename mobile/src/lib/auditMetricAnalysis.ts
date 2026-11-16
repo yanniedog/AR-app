@@ -402,21 +402,22 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     add({ source: 'report', field: 'uxStandardsAccessibilityScore', value: uxAudit.pillars.standardsAndAccessibility.score }),
     add({ source: 'report', field: 'uxFluidityResponsivenessScore', value: uxAudit.pillars.fluidityAndResponsiveness.score }),
   ];
+  const scoredPillars = uxRefs.slice(1).filter(ref => numeric(ref) !== null).length;
   put('affsScore', uxRefs, {
-    eligibleCount: uxAudit.evidenceCoverage.representativeTaskCount,
-    observedCount: uxAudit.pillars.interactionFriction.evaluatedTaskCount,
+    sampleUnit: 'component', sampleSize: scoredPillars,
+    eligibleCount: 3, observedCount: scoredPillars, missingCount: 3 - scoredPillars,
   }, uxAudit.affsScore === null
     ? [health?.coverage?.complete === true ? 'missing-evidence' : 'incomplete-health-collection']
     : []);
-  const evaluatedTasks = uxAudit.pillars.interactionFriction.evaluatedTaskCount;
-  const representativeTasks = uxAudit.evidenceCoverage.representativeTaskCount;
+  const { scoredTaskCount, evaluatedTaskCount } = uxAudit.pillars.interactionFriction;
+  const missingTaskScores = evaluatedTaskCount - scoredTaskCount;
   put('uxInteractionFrictionScore', [uxRefs[1]], {
     sampleUnit: 'task',
-    sampleSize: evaluatedTasks,
-    eligibleCount: representativeTasks,
-    observedCount: evaluatedTasks,
-    missingCount: Math.max(0, representativeTasks - evaluatedTasks),
-  });
+    sampleSize: scoredTaskCount,
+    eligibleCount: evaluatedTaskCount,
+    observedCount: scoredTaskCount,
+    missingCount: missingTaskScores,
+  }, missingTaskScores > 0 && scoredTaskCount > 0 ? ['partial-samples'] : []);
   const surfaceSummary = uxAudit.pillars.standardsAndAccessibility.surfaceContractSummary;
   const wcagSummary = uxAudit.pillars.standardsAndAccessibility.wcagSummary;
   const standardsParts = [surfaceSummary, wcagSummary].map(summary => {
