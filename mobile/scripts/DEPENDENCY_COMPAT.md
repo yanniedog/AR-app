@@ -1,5 +1,14 @@
 # Patched dependency export compatibility
 
+## Android native stack header
+
+The mobile postinstall guards header rebuilds during Android screen removal in
+`react-native-screens@4.16.0`. Android can retain a disappearing toolbar child
+after removing it from the toolbar's child array. The adapter finishes that
+toolbar's transition before reattaching the child and preserves ownership by
+any other parent. Review this adapter when changing the pinned screens version.
+The related upstream report is [react-native-screens #3777](https://github.com/software-mansion/react-native-screens/pull/3777).
+
 The app installs the published `decode-uri-component@0.5.0` release, which fixes
 GHSA-vcc3-ghjq-m6fr. `query-string@7.1.3` still calls its decoder as a CommonJS
 function. The mobile postinstall script changes only that caller's require to

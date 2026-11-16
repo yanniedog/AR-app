@@ -28,6 +28,14 @@ test('capture caps entry bytes and reports omitted entries instead of growing wi
   expect(new TextEncoder().encode(JSON.stringify(section.entries)).length).toBeLessThanOrEqual(PUBLIC_JOURNAL_SECTION_MAX_BYTES);
 });
 
+test('keeps a full link-inventory journal larger than the former two MiB limit', () => {
+  capturePreAuditApplicationJournal('full-inventory');
+  for (let i = 0; i < 3_300; i++) emit(`Destination ${i}. ${'x'.repeat(600)}`);
+  const section = auditApplicationJournal().duringAndAfterAudit;
+  expect(new TextEncoder().encode(JSON.stringify(section.entries)).length).toBeGreaterThan(2 * 1024 * 1024);
+  expect(section).toMatchObject({ entryCount: 3_300, omittedEntryCount: 0, complete: true });
+});
+
 test('post-finish overflow cannot contaminate retained interval loss counters', () => {
   capturePreAuditApplicationJournal('finish'); emit('audit interval');
   for (let i = 0; i < 200; i++) emit('x'.repeat(16_000), '2026-10-26T08:00:02.000Z');

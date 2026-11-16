@@ -12,6 +12,30 @@ jest.mock('../src/components/IconAction', () => ({ IconAction: 'IconAction' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Chip: 'Chip', Row: 'Row' }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
 
+test('clearing a restored custom scope reveals the collapsed browse header', () => {
+  useMortgageComparison.setState({ loanAmount: '500000', lvr: '80' });
+  const custom = { ...EMPTY_FILTERS, loanPurposes: ['OO'], repaymentTypes: ['PI'] };
+  const header = (filters: typeof custom) => (
+    <MortgageComparisonControls rows={[]} filters={filters} unverified={0} invalid={false} collapsible />
+  );
+  let tree!: ReactTestRenderer & {
+    root: {
+      findAllByProps: (props: object) => unknown[];
+      findByProps: (props: object) => { props: { onPress: () => void } };
+    };
+  };
+  act(() => { tree = TestRenderer.create(header(custom)) as typeof tree; });
+  try {
+    expect(tree.root.findAllByProps({ testID: 'mortgage-scenario-summary' })).toHaveLength(0);
+    act(() => { clearMortgageComparison(); tree.update(header(EMPTY_FILTERS)); });
+    expect(tree.root.findByProps({ testID: 'mortgage-scenario-summary' })).toBeTruthy();
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
+    act(() => { useMortgageComparison.setState({ loanAmount: '500000', lvr: '80' }); tree.update(header(custom)); });
+    act(() => { clearMortgageComparison(); tree.update(header(EMPTY_FILTERS)); });
+    expect(tree.root.findByProps({ testID: 'mortgage-comparison-controls' })).toBeTruthy();
+  } finally { act(() => tree.unmount()); clearMortgageComparison(); }
+});
+
 test('clearing numerical comparison inputs preserves selected purpose, repayment and provider filters', () => {
   const original = captureRatesSession();
   initializeRatesSession(DEFAULT_PREFS, 'Mortgage');
