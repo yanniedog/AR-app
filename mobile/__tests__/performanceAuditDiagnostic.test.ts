@@ -99,3 +99,11 @@ test('projection diagnostics classify incomplete inputs without publishing missi
 test.each([true, false, 'private scenario text', 123])('malformed classification %p is not exported', errorClass => {
   expect(publicAuditDiagnostic({ errorClass })).toEqual({ errorClass: null });
 });
+
+test('rba.bonds.chart and rba.bond.chart identifiers survive publicAuditDiagnostic', () => {
+  expect(publicAuditDiagnostic({
+    readiness: { surfaces: [{ id: 'rba.bonds.chart', probes: [{ id: 'rba.bond.chart' }] }] },
+  })).toEqual({
+    readiness: { surfaces: [{ id: 'rba.bonds.chart', probes: [{ id: 'rba.bond.chart' }] }] },
+  });
+});

@@ -14,7 +14,10 @@ import {
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { LEDGER_MOTION, ledgerMotionDuration } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
+import { recordAuditTargetLayout, unregisterAuditTargetLayout } from '../lib/auditTargetRegistry';
 import type { UiNativeProps, UiChild } from '../lib/uiCopy';
+
+let nextAuditTargetInstanceId = 1;
 
 export interface PressFeedbackProps extends Omit<UiNativeProps<PressableProps>, 'children'> {
   children?: UiChild | ((state: PressableStateCallbackType) => UiChild);
@@ -29,6 +32,7 @@ export function PressFeedback({
   contentStyle,
   onPressIn,
   onPressOut,
+  onLayout,
   android_ripple,
   disabled,
   ...rest
@@ -36,6 +40,16 @@ export function PressFeedback({
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
   const scale = useRef(new Animated.Value(1)).current;
+  const auditInstanceIdRef = useRef<number | null>(null);
+  if (auditInstanceIdRef.current === null) {
+    auditInstanceIdRef.current = nextAuditTargetInstanceId++;
+  }
+  const auditTargetKey = rest.testID
+    ? `${rest.testID.slice(0, 100)}#${auditInstanceIdRef.current}`
+    : `target#${auditInstanceIdRef.current}`;
+  useEffect(() => () => {
+    unregisterAuditTargetLayout(auditTargetKey);
+  }, [auditTargetKey]);
 
   useEffect(() => {
     if (reducedMotion !== false || disabled) {
@@ -70,6 +84,11 @@ export function PressFeedback({
       style={style}
       onPressIn={(event) => { animate(true); onPressIn?.(event); }}
       onPressOut={(event) => { animate(false); onPressOut?.(event); }}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        recordAuditTargetLayout(auditTargetKey, width, height);
+        onLayout?.(event);
+      }}
     >
       {(state) => {
         // Preserve existing Pressable/TouchTarget flex layouts when they migrate.

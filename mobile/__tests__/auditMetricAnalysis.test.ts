@@ -427,3 +427,25 @@ test('an incomplete health plan cannot assign absent checks to a domain denomina
   expect(buildAuditMetricAnalysis(report).metrics.dataIntegrityPassPercent).toMatchObject({ value: null,
     eligibleCount: null, missingCount: null, missingEvidence: ['incomplete-health-collection', 'missing-denominator'] });
 });
+
+test('affsScore null emits missing-evidence when appHealth coverage is complete and incomplete-health-collection otherwise', () => {
+  const completeReport = makePerformanceAuditReport();
+  const code = APP_HEALTH_CHECK_CODES.CORE_SCHEMA;
+  completeReport.appHealth = finalizeAppHealthReport({ sessionId: completeReport.sessionId, mode: 'local',
+    startedAt: completeReport.startedAt, finishedAt: completeReport.finishedAt, plannedCheckIds: [code],
+    checks: [{ id: code, code, domain: 'data-integrity', label: 'Schema', status: 'pass', metrics: {} }] });
+  expect(buildAuditMetricAnalysis(completeReport).metrics.affsScore).toMatchObject({
+    value: null,
+    missingEvidence: ['missing-evidence'],
+  });
+
+  const incompleteReport = makePerformanceAuditReport();
+  incompleteReport.appHealth = finalizeAppHealthReport({ sessionId: incompleteReport.sessionId, mode: 'local',
+    startedAt: incompleteReport.startedAt, finishedAt: incompleteReport.finishedAt,
+    plannedCheckIds: [code, APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT], incompleteReason: 'Stopped',
+    checks: [{ id: code, code, domain: 'data-integrity', label: 'Schema', status: 'pass', metrics: {} }] });
+  expect(buildAuditMetricAnalysis(incompleteReport).metrics.affsScore).toMatchObject({
+    value: null,
+    missingEvidence: ['incomplete-health-collection'],
+  });
+});

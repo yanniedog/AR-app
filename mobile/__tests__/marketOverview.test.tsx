@@ -73,7 +73,7 @@ function measureMarket(tree: MarketTestRenderer) {
 test('layout and focus-style renders preserve the movement feed, while changing section updates it', async () => {
   readyCalendarState();
   const ready = jest.spyOn(navigationReady, 'useNavigationContentReady').mockReturnValue(true);
-  const projection = jest.spyOn(bankData, 'filterBankInsightsForSuitability').mockImplementation(payload => payload ?? null);
+  const projection = jest.spyOn(bankData, 'filterBankInsightsForSuitabilityCooperatively').mockImplementation(async payload => payload ?? null);
   let tree!: MarketTestRenderer;
   mockFeedRenders.mockClear();
   await act(async () => { tree = TestRenderer.create(<Market />) as MarketTestRenderer; });
@@ -144,7 +144,7 @@ test('late old facts layout cannot erase the current calendar layout', async () 
 test('late old feed callbacks cannot erase current section render evidence', async () => {
   readyCalendarState();
   const ready = jest.spyOn(navigationReady, 'useNavigationContentReady').mockReturnValue(true);
-  const projection = jest.spyOn(bankData, 'filterBankInsightsForSuitability').mockImplementation(payload => payload ?? null);
+  const projection = jest.spyOn(bankData, 'filterBankInsightsForSuitabilityCooperatively').mockImplementation(async payload => payload ?? null);
   let tree!: MarketTestRenderer;
   await act(async () => { tree = TestRenderer.create(<Market />) as MarketTestRenderer; });
   const evidence = { expectedCount: 0, actualCount: 0, emptyStateRendered: true };
@@ -158,4 +158,23 @@ test('late old feed callbacks cannot erase current section render evidence', asy
     expect(probe().status).toBe('ready');
     act(() => old(evidence)); expect(probe().status).toBe('ready');
   } finally { act(() => tree.unmount()); ready.mockRestore(); projection.mockRestore(); }
+});
+
+test('movements data probe stays pending until cooperative suitability filtering resolves', async () => {
+  readyCalendarState();
+  const ready = jest.spyOn(navigationReady, 'useNavigationContentReady').mockReturnValue(true);
+  let resolveFilter!: (value: bankData.BankInsightsPayload | null) => void;
+  const cooperative = jest.spyOn(bankData, 'filterBankInsightsForSuitabilityCooperatively').mockImplementation(
+    () => new Promise((resolve) => { resolveFilter = resolve; }),
+  );
+  let tree!: MarketTestRenderer;
+  await act(async () => { tree = TestRenderer.create(<Market />) as MarketTestRenderer; });
+  try {
+    const pendingProbe = mockSurfaces.get('market.overview').probes.find((item: any) => item.id === 'market.movements.data');
+    expect(pendingProbe.status).toBe('pending');
+    expect(tree.root.findAllByType('AppText').map((n: any) => String(n.props.children)).join(' ')).not.toContain('No movements');
+    await act(async () => { resolveFilter(mockState.bankInsights); });
+    const readyProbe = mockSurfaces.get('market.overview').probes.find((item: any) => item.id === 'market.movements.data');
+    expect(readyProbe.status).toBe('ready');
+  } finally { act(() => tree.unmount()); ready.mockRestore(); cooperative.mockRestore(); }
 });

@@ -253,19 +253,22 @@ export default function RatesWorkspace() {
     if (mortgage.page === 1 && mortgage.scrollOffset === 0) return;
     updateRatesSection('Mortgage', { page: 1, scrollOffset: 0 }, true);
   }, [mortgageInputs, mortgageFilters.loanPurposes, mortgageFilters.repaymentTypes]);
+  const intentContextRef = useRef({ activeSection, params, prefs, subscriptions });
+  intentContextRef.current = { activeSection, params, prefs, subscriptions };
   useReadyNavigationEffect(useCallback(() => {
     if (!hydrated || !isFocused) return;
-    initializeRatesSession(prefs, activeSection);
+    const current = intentContextRef.current;
+    initializeRatesSession(current.prefs, current.activeSection);
     if (!intentKey) { consumedIntent.current = null; return; }
     if (intentKey === consumedIntent.current) return;
-    const intent = resolveRatesIntent(params, useRatesSession.getState().section,
-      subscriptions.filter((item): item is SearchSubscription => item.kind === 'search'));
+    const intent = resolveRatesIntent(current.params, useRatesSession.getState().section,
+      current.subscriptions.filter((item): item is SearchSubscription => item.kind === 'search'));
     consumedIntent.current = intentKey;
     changeRatesSection(intent.section);
     useStore.getState().setActiveSection(intent.section);
     updateRatesSection(intent.section, intent.patch, true);
     router.setParams(Object.fromEntries(RATES_INTENT_KEYS.map(key => [key, undefined])));
-  }, [activeSection, hydrated, intentKey, isFocused, params, prefs, subscriptions]));
+  }, [hydrated, intentKey, isFocused]));
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
@@ -759,6 +762,16 @@ export default function RatesWorkspace() {
   // the same list and decoded logos while its result identities are unchanged.
   const listRevision = uiTracker.current.update([listDataRevision, selectMode, selected]);
   const [emptyCommit, setEmptyCommit] = useState<string | null>(null);
+  const emptyLayoutRevision = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (pageRows.length > 0) {
+      emptyLayoutRevision.current = null;
+      return;
+    }
+    if (!searchPending && emptyLayoutRevision.current === listRevision && emptyCommit !== listRevision) {
+      setEmptyCommit(previous => currentListRevision.current === listRevision ? listRevision : previous);
+    }
+  }, [emptyCommit, listRevision, pageRows.length, searchPending]);
   const listReadiness = useVirtualizedListReadiness(listRevision, pageRows.length);
   const measuredVisibility = useRef(listReadiness.measuredVisibleCount);
   measuredVisibility.current = listReadiness.measuredVisibleCount;
@@ -913,6 +926,7 @@ export default function RatesWorkspace() {
   const surfaceRevision = surfaceTracker.current.update([
     listRevision, auditTarget.cellRevision, auditTarget.viewport,
     filterOpen, sortOpen, toolsOpen, sheetEvidence.filter, sheetEvidence.sort, sheetEvidence.tools,
+    draftFilters,
   ]);
   const selectAuditToken = useCallback((...args: unknown[]) => {
     const token = auditActionString(args, 'selectionToken');
@@ -1011,7 +1025,7 @@ export default function RatesWorkspace() {
   }, []);
   const { refFor: physicalCellRef, measure: measurePhysicalCells } = physicalVisibility;
   const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => <View collapsable={false}
-    ref={target === 'Cell' ? physicalCellRef(item) : undefined}
+    ref={physicalCellRef(item)}
     onLayout={measurePhysicalCells}>{'product_key' in item ? (
     <SearchProductRow row={item} section={section}
       onLogoRenderStateChange={handleLogoRenderStateChange}
@@ -1191,8 +1205,11 @@ export default function RatesWorkspace() {
           renderItem={renderProduct}
           ListEmptyComponent={<View key={`empty:${listRevision}:${searchPending}`} onLayout={event => {
             const { width: emptyWidth, height: emptyHeight } = event.nativeEvent.layout;
-            if (!searchPending && pageRows.length === 0 && Number.isFinite(emptyWidth) && Number.isFinite(emptyHeight) && emptyWidth > 0 && emptyHeight > 0) {
-              setEmptyCommit(previous => currentListRevision.current === listRevision ? listRevision : previous);
+            if (pageRows.length === 0 && Number.isFinite(emptyWidth) && Number.isFinite(emptyHeight) && emptyWidth > 0 && emptyHeight > 0 && currentListRevision.current === listRevision) {
+              emptyLayoutRevision.current = listRevision;
+              if (!searchPending) {
+                setEmptyCommit(previous => currentListRevision.current === listRevision ? listRevision : previous);
+              }
             }
           }}>{
             task.intentError ? <EmptyState title="Scope unavailable" /> : availability === 'unlisted' && !catalogueDetails ? (

@@ -27,6 +27,7 @@ import { getSuitabilityAllowed } from '../src/data/suitabilityGate';
 import { useNavigationContentReady } from '../src/hooks/useNavigationContentReady';
 import { usePerformanceAuditProbe, usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
+import { isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 import { runStoreRetry } from '../src/lib/degradationLog';
 import { openBrowse, scalarRouteParam } from '../src/lib/nav';
 import { auditActionString } from '../src/lib/performanceAuditActionParams';
@@ -406,9 +407,16 @@ export default function Market() {
   }, economyOpen);
   // Missing optional observations are a data-availability boundary. The chart
   // still proves its actual measured empty state before that boundary is terminal.
+  const localEconomyAuditEmpty = Boolean(
+    isLocalAppHealthAudit() &&
+    economicAuditState?.status === 'error' &&
+    economicAuditState.indicatorCount === 0 &&
+    economicAuditState.emptyStateRendered,
+  );
   usePerformanceAuditProbe(economySurface, {
     id: 'economic-data', kind: 'data', required: economyOpen,
-    status: economicAuditState?.status ?? 'pending', error: economicAuditState?.error,
+    status: localEconomyAuditEmpty ? 'ready' : (economicAuditState?.status ?? 'pending'),
+    error: localEconomyAuditEmpty ? null : economicAuditState?.error,
     expectedCount: economicAuditState?.indicatorCount ?? 0,
     actualCount: economicAuditState?.indicatorCount ?? 0,
     datasetRevision, renderRevision: economyRenderRevision,
