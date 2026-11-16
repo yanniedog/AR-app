@@ -218,7 +218,7 @@ export default function ProductDetail() {
   // allowed — eager subscription re-rendered the whole product tree on open.
   const [productHistoryReady, setProductHistoryReady] = useState(false);
   const productHistory = useStore((s) => (productHistoryReady ? s.productHistory : null));
-  const productHistoryInstalled = useStore((s) => s.productHistory != null);
+  const productHistoryInstalled = useStore.getState().productHistory != null;
   const ledgerRevision = useRef({ payload: productHistory, version: 0 });
   if (ledgerRevision.current.payload !== productHistory) {
     ledgerRevision.current = { payload: productHistory, version: ledgerRevision.current.version + 1 };

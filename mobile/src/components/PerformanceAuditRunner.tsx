@@ -3735,6 +3735,7 @@ export function PerformanceAuditRunner() {
         inventoryFailureEvidence = {};
         const plannedLinkCheckIds = externalLinks.map((_, index) => externalLinkAuditCheckId(index));
         const liveLinks = auditMode === 'live-source';
+        const linkTimeoutMs = Math.min(2_500, Math.floor(watchdog.hangTimeoutMs / 3));
         let nextLinkIndex = 0;
         const batchAbort = new AbortController();
         const onLinkAbort = () => batchAbort.abort();
@@ -3746,7 +3747,9 @@ export function PerformanceAuditRunner() {
           const step = recordChain.then(async () => {
             if (workerError) return;
             await record(check, true);
-            if (pendingStoredChecks.length >= 24) {
+            // Slow native/HTTP checks can consume the watchdog's budget before
+            // a full batch accumulates. Flush before admitting another batch.
+            if (pendingStoredChecks.length >= 24 || watchdog.remainingMs() <= 2 * linkTimeoutMs) {
               await flushRecordedChecks();
               await yieldToUi();
             }
@@ -3769,7 +3772,7 @@ export function PerformanceAuditRunner() {
                 platform: Platform.OS,
                 reachability: liveLinks,
                 handler: liveLinks || index < FIXED_EXTERNAL_AUDIT_LINKS.length,
-                timeoutMs: 2_500,
+                timeoutMs: linkTimeoutMs,
                 signal: batchAbort.signal,
               });
               if (!batchAbort.signal.aborted) await enqueueLinkRecord(check);
