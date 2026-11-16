@@ -106,3 +106,26 @@ test('shared features are edited once with both affected categories visible', ()
     expect(tree.root.findAllByType('AppText').some((node: any) => node.props.children === 'Savings accounts / Term deposits')).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
+
+test('LVR options in ProfileEditor are strictly the five canonical bands', () => {
+  mockCore = {
+    sections: {
+      Mortgage: {
+        rates: ['lvr_<=30%', 'lvr_0.01-35%', 'lvr_<=59.99%', 'lvr_<=60%', 'lvr_60-69.9999%', 'lvr_70-80%', 'lvr_85-90%', 'lvr_>=80.01-95%']
+          .map((lvr_tier, index) => ({ lvr_tier, product_key: String(index), product_name: String(index), provider: 'A', rate: '0.05' })),
+      },
+      Savings: { rates: [] },
+      TD: { rates: [] },
+    },
+  };
+  let tree: any;
+  const onChange = jest.fn();
+  act(() => { tree = TestRenderer.create(<ProfileEditor sections={['Mortgage']} value={EMPTY_PROFILE} onChange={onChange} />); });
+  try {
+    const labels = tree.root.findAllByType('Chip').map((node: any) => node.props.label);
+    expect(labels.filter((label: string) => label.includes('60') || label.includes('70') || label.includes('80') || label.includes('90') || label.includes('30')))
+      .toEqual(['<60', '60-70', '70-80', '80-90', '>90']);
+    act(() => tree.root.findAllByType('Chip').find((node: any) => node.props.label === '70-80').props.onPress());
+    expect(onChange).toHaveBeenCalledWith({ ...EMPTY_PROFILE, lvrTiers: ['70-80'] });
+  } finally { act(() => tree.unmount()); }
+});
