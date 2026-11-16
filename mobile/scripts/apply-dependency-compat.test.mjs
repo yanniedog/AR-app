@@ -32,7 +32,7 @@ test('Android stack header postinstall guards disappearing custom header views',
   const file = path.join(directory, 'android/src/main/java/com/swmansion/rnscreens/ScreenStackHeaderConfig.kt');
   const patched = fs.readFileSync(file, 'utf8');
   assert.match(patched, /fun onUpdate\(\) \{\s+if \(hasRemovingScreenAncestor\(\)\) return/);
-  assert.match(patched, /if \(view\.parent === toolbar\) toolbar\.endViewTransition\(view\)\s+if \(view\.parent == null\) toolbar\.addView\(view\)/);
+  assert.match(patched, /if \(view\.parent === toolbar && toolbar\.indexOfChild\(view\) < 0\) \{\s+toolbar\.endViewTransition\(view\)\s+\}\s+if \(view\.parent == null\) toolbar\.addView\(view\)/);
   patchAndroidScreenHeader();
   assert.equal(fs.readFileSync(file, 'utf8'), patched);
 });

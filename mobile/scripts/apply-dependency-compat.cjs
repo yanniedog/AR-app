@@ -59,7 +59,9 @@ function patchAndroidScreenHeader(projectDir = path.resolve(__dirname, '..')) {
     original: '            toolbar.addView(view)\n            i++',
     replacement: [
       '            // removeViewAt can retain a disappearing child as an Android parent.',
-      '            if (view.parent === toolbar) toolbar.endViewTransition(view)',
+      '            if (view.parent === toolbar && toolbar.indexOfChild(view) < 0) {',
+      '                toolbar.endViewTransition(view)',
+      '            }',
       '            if (view.parent == null) toolbar.addView(view)',
       '            i++',
     ].join('\n'),
