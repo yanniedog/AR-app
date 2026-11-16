@@ -7,6 +7,7 @@ import {
   PROFILE_GROUPS,
   type ProfileFilters,
 } from '../data/profile';
+import { PROFILE_LVR_OPTIONS } from '../data/lvrTier';
 import { clearHomeLoanRequirements, otherProfileFeatures, profileAttributeOptions, sharedProfileFeatures } from '../data/profileRequirements';
 import { profileSectionCount } from '../data/profile';
 import { visibleFilterOptions } from '../lib/filterOptions';
@@ -15,7 +16,12 @@ import type { SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Chip, Row } from './ui';
 import { uiListedLvr } from '../lib/financialUiCopy';
-import { uiCount, uiJoin, uiLabel, uiSectionName, type UiLabel } from '../lib/uiCopy';
+import { uiCount, uiJoin, uiLabel, uiSectionName, type UiLabel, type UiText } from '../lib/uiCopy';
+
+function lvrOptionLabel(option: string): UiText {
+  const canonical = PROFILE_LVR_OPTIONS.find((item) => item === option);
+  return canonical ? uiLabel(canonical) : uiListedLvr({ lvr_tier: option });
+}
 
 type EditorGroup = {
   section: SectionKey;
@@ -48,7 +54,9 @@ export function ProfileEditor({
         section: g.section,
         title: g.title,
         key: g.key,
-        options: profileAttributeOptions(core?.sections[g.section].rates ?? [], g.field, []),
+        options: g.key === 'lvrTiers'
+          ? [...PROFILE_LVR_OPTIONS, ...value.lvrTiers.filter(t => !(PROFILE_LVR_OPTIONS as readonly string[]).includes(t))]
+          : profileAttributeOptions(core?.sections[g.section].rates ?? [], g.field, []),
       }));
 
     const featureGroups: EditorGroup[] = sections
@@ -100,7 +108,7 @@ export function ProfileEditor({
               {visible.map((o) => (
                 <Chip
                   key={o}
-                  label={g.key === 'lvrTiers' ? uiListedLvr({ lvr_tier: o }) : humanizeEnum(o)}
+                  label={g.key === 'lvrTiers' ? lvrOptionLabel(o) : humanizeEnum(o)}
                   selected={value[g.key].includes(o)}
                   onPress={() => toggle(g.key, o)}
                 />
