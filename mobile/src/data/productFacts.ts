@@ -194,7 +194,7 @@ function clusterSummary(facts: NormalizedProductFact[]): UiText {
 /**
  * Calm detail-page model. Rate/tier clusters stay associated and collapsed;
  * raw advertised/comparison rate facts remain searchable but are not repeated
- * beside the product hero and legacy ProductRatesList.
+ * beside the product hero.
  */
 export function productFactDisplayModel(
   detail: ProductDetail | null | undefined,

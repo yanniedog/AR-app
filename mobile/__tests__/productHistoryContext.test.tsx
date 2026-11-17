@@ -1,6 +1,7 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
+import { openBank } from '../src/lib/nav';
 import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
 import type { CorePayload, RateRow } from '../src/types';
 
@@ -89,7 +90,6 @@ jest.mock('../src/components/product/ProductDetailParts', () => ({
   SelectedRateConditions: jest.requireActual('../src/components/product/RateConditionsDisclosure').SelectedRateConditions,
   OfficialLinks: 'OfficialLinks',
   ProductFacts: 'ProductFacts',
-  ProductRatesList: 'ProductRatesList',
   ProductSpecs: 'ProductSpecs',
   SectionTitle: 'SectionTitle',
 }));
@@ -118,6 +118,7 @@ jest.mock('../src/hooks/useUserRateScenario', () => ({
     storageStatus: 'ready', saveStatus: 'idle', error: null,
   }),
 }));
+jest.mock('../src/components/PressFeedback', () => ({ PressFeedback: 'PressFeedback' }));
 jest.mock('../src/lib/nav', () => ({ openBank: jest.fn(), openRateReceipt: jest.fn() }));
 jest.mock('../src/lib/yieldToUi', () => ({
   yieldToUi: async () => undefined,
@@ -176,18 +177,25 @@ describe('product-wide history context on an exact-tier page', () => {
     mockSelectLegacyHistory.mockClear();
   });
 
-  it('retains chart and exact-tier inputs across product layout readiness commits', async () => {
+  it('opens the provider from its name while showing only the selected product', async () => {
+    const tree = await renderProduct();
+    try {
+      const link = tree.root.findAllByType('PressFeedback').find(node => node.props.accessibilityRole === 'link');
+      expect(link?.props.accessibilityLabel).toBe(row.provider);
+      act(() => link!.props.onPress());
+      expect(openBank).toHaveBeenCalledWith(row.provider);
+      expect(copy(tree)).not.toMatch(/Rates \(|View.*Products/);
+    } finally { act(() => tree.unmount()); }
+  });
+
+  it('retains chart inputs across product layout readiness commits', async () => {
     mockState.prefs.showHistoryRibbon = true;
     const tree = await renderProduct();
     try {
       const chart = tree.root.findAllByType('BankHistoryChart')[0];
-      const tiers = tree.root.findAllByType('ProductRatesList')[0].props.rows;
       const values = chart.props.highlightSeries;
-      expect(tiers).toContain(row);
-      expect(tiers).toContain(prize);
       act(() => tree.root.findAllByType('ScreenScrollView')[0].props.onLayout());
       expect(tree.root.findAllByType('BankHistoryChart')[0].props.highlightSeries).toBe(values);
-      expect(tree.root.findAllByType('ProductRatesList')[0].props.rows).toBe(tiers);
       expect(tree.root.findAllByType('BankHistoryChart')[0].props.points).toBe(chart.props.points);
     } finally { act(() => tree.unmount()); }
   });

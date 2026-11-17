@@ -13,18 +13,21 @@ import { useDetailsCatalogue } from '../../hooks/useDetailsCatalogue';
 import { ScreenScrollView } from '../Screen';
 import { AppText, Button } from '../ui';
 import { DetailGroup, OfficialLinks, ProductFacts } from './ProductDetailParts';
+import { ProductProviderLink } from './ProductProviderLink';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
-import { uiLabel, uiDate, uiIdentifier, uiJoin, uiProductName, uiProviderName, uiPublicProductName } from '../../lib/uiCopy';
+import { uiLabel, uiDate, uiIdentifier, uiJoin, uiProductName, uiPublicProductName } from '../../lib/uiCopy';
 export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { productKey: string; programmeId?: string; rateScenario?: RateScenario }) {
   const { details, manifest, loading, retry } = useDetailsCatalogue();
   const detail = details && Object.hasOwn(details.products, productKey) ? details.products[productKey] : null;
   const identity = detailsDisplayIdentity(detail);
   const catalogue = usePublicRateCatalogue(manifest);
   const product = catalogue.getProduct(productKey);
+  const provider = identity.provider || product?.providerName;
   return <ScreenScrollView><Stack.Screen options={{ title: 'Product details' }} /><View style={{ gap: 12 }}>
     <AppText weight="700">{product ? uiPublicProductName(product) : identity.name ? uiProductName({ product_name: identity.name }) : uiLabel('Product')}
     </AppText>
-    {(identity.provider || identity.productCategory) && <AppText variant="small">{uiJoin(identity.provider ? uiProviderName({ provider: identity.provider }) : null, identity.productCategory ? uiJoin(' · ', uiIdentifier(identity.productCategory)) : null)}</AppText>}
+    {provider ? <ProductProviderLink provider={provider} /> : null}
+    {identity.productCategory ? <AppText variant="small">{uiIdentifier(identity.productCategory)}</AppText> : null}
     <PublicRateEvidence productKey={productKey} programmeId={programmeId} scenario={rateScenario} />
     {detail ? <>
       <AppText variant="small">{uiJoin('Published', ' · ', uiDate(manifest?.run_date), ' · ', 'Rate', ' · ', 'Unavailable')}</AppText>

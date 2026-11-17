@@ -1,14 +1,11 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import sample from '../assets/sample/details.json';
-import { ProductRatesList } from '../src/components/product/ProductDetailParts';
 import { ProductTermsDisclosure } from '../src/components/product/ProductTermsDisclosure';
 import { uiDetailItem, uiFeeValue } from '../src/lib/productUiFacts';
-import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 import { canonicalTermsJson, TERMS_STAGES, validateProductTerms } from '../src/data/productTerms';
 import { loadProductTerms } from '../src/data/productTermsTransport';
-import { openProduct } from '../src/lib/nav';
-import type { ProductDetail, RateRow } from '../src/types';
+import type { ProductDetail } from '../src/types';
 let mockState: Record<string, any>;
 jest.mock('../src/data/store', () => ({ useStore: (select: (state: typeof mockState) => unknown) => select(mockState) }));
 jest.mock('../src/data/productTermsTransport', () => ({ loadProductTerms: jest.fn() }));
@@ -16,28 +13,11 @@ jest.mock('../src/data/termsReferenceStore', () => ({ previousTermsReference: je
 jest.mock('../src/components/CustomerProfilePanel', () => ({ CustomerProfilePanel: 'CustomerProfilePanel' }));
 jest.mock('../src/components/ExternalLinkConfirmation', () => ({ useTrustedExternalUrl: () => ({ requestExternalUrl: jest.fn() }) }));
 jest.mock('../src/hooks/useAuditExternalLinks', () => ({ useAuditExternalLinks: jest.fn() }));
-jest.mock('../src/lib/nav', () => ({ openProduct: jest.fn() }));
 jest.mock('../src/components/ui', () => {
   const R = jest.requireActual<typeof import('react')>('react');
   return { AppText: 'AppText', Button: 'Button', Row: 'Row', Disclosure: ({ children, open, ...props }: any) => R.createElement('Disclosure', { ...props, open }, open ? children : null) };
 });
 const bodyText = (tree: any) => tree.root.findAllByType('AppText').map((node: any) => String(node.props.children)).join('\n');
-test.each(['unavailable', 'stale'] as const)('alternate mortgage rows retain exact listed bands and Open identities with %s source conditions', state => {
-  const base: RateRow = { provider: 'Bank', product_key: 'loan', product_name: 'Loan', rate: '0.05', repayment_type: 'PRINCIPAL_AND_INTEREST', rate_index: 1, lvr_tier: 'LVR_60_70' };
-  const fixture = selectedConstraintFixture('Mortgage', [base, { ...base, rate_index: 2, lvr_tier: 'LVR_70_80' }], [{ rateIndex: 1, text: 'LVR 60% to 70%.' }, { rateIndex: 2, text: 'LVR 70% to 80%.' }]);
-  mockState = { ...fixture, prefs: { mortgageRateMetric: 'headline' }, manifest: state === 'unavailable' ? null : { ...fixture.manifest, run_date: '2026-10-13' } };
-  jest.mocked(openProduct).mockClear();
-  let tree: any; act(() => { tree = TestRenderer.create(<ProductRatesList rows={fixture.rows} section="Mortgage" accent="#123" defaultOpen />); });
-  try {
-    expect(bodyText(tree)).toContain('Listed LVR >60%–70%'); expect(bodyText(tree)).toContain('Listed LVR >70%–80%');
-    expect(bodyText(tree)).toContain('Unverified'); expect(bodyText(tree)).toContain('Unassessed');
-    expect(bodyText(tree)).not.toContain('LVR 60% to 70%.');
-    const actions = tree.root.findAllByProps({ title: 'Open' });
-    act(() => { actions[0].props.onPress(); actions[1].props.onPress(); });
-    expect(openProduct).toHaveBeenNthCalledWith(1, 'loan', 1); expect(openProduct).toHaveBeenNthCalledWith(2, 'loan', 2);
-    expect(fixture.rows.map(row => row.lvr_tier)).toEqual(['LVR_60_70', 'LVR_70_80']);
-  } finally { act(() => tree.unmount()); }
-});
 test('actual legacy cadence-only fees retain the period and unknown price without source prose', () => {
   const fee = Object.values(sample.products as Record<string, ProductDetail>).flatMap(detail => detail.fees ?? [])
     .find(item => item.name === 'Monthly Admin Fee' && item.value === 'P1M')!;

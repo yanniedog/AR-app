@@ -105,7 +105,6 @@ jest.mock('../src/components/product/ProductDetailParts', () => ({
   HistoryLegend: 'HistoryLegend',
   OfficialLinks: 'OfficialLinks',
   ProductFacts: 'ProductFacts',
-  ProductRatesList: 'ProductRatesList',
   ProductSpecs: 'ProductSpecs',
   SectionTitle: 'SectionTitle',
   SelectedRateConditions: jest.requireActual('../src/components/product/RateConditionsDisclosure').SelectedRateConditions,
@@ -211,7 +210,6 @@ it('opens verified details-only product through the actual route without fabrica
   mockRoute.key = key; delete mockRoute.ri;
   let tree!: InspectableRenderer; await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
   expect(tree.root.findAllByType('AppText').map(node => String(node.props.children ?? '')).join(' ')).not.toContain('Published descriptive text');
-  expect(tree.root.findAllByType('ProductRatesList')).toHaveLength(0);
   expect(tree.root.findAllByType('OfficialLinks')).toHaveLength(1);
   expect(tree.root.findAllByType('ProductTermsDisclosure')[0].props.productKey).toBe(key);
   act(() => tree.unmount()); mockRoute.ri = 'bad';
