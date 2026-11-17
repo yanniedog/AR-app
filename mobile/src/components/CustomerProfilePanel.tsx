@@ -25,6 +25,7 @@ export function CustomerAnswerEditor({ definition: d, answer, productKey, disabl
   }
   const question = useMemo(() => questionSource ? bindCustomerQuestion(d, questionSource) : undefined, [d, questionSource]);
   const label = uiInputDefinitionLabel(d, question);
+  if (label === 'Unverified') return <AppText variant="small" color="textMuted">{uiLabel('Unavailable')}</AppText>;
   return <View style={{ gap: 8 }}>
     <AppText variant="small" weight="700">{label}</AppText>
     {answer ? <AppText variant="small" color="textMuted">{uiCustomerAnswer(answer, d)}</AppText> : null}
@@ -42,6 +43,8 @@ export function CustomerProfileContent({ productKey, contract }: { productKey?: 
   const saveAnswer = (d: InputDefinition, answer: CustomerAnswer) => void update((p: CustomerProfile) => ({ ...p, definitions: { ...p.definitions, [d.id]: d }, answers: { ...p.answers, [d.id]: answer } }));
   if (!profile) return <View style={{ gap: 8 }}><AppText variant="small">{uiLabel(error ? 'Unavailable' : 'Loading')}</AppText>{error ? <Button title="Retry" onPress={() => void retry()} /> : null}</View>;
   const saved = Object.values(profile.definitions).filter(d => Object.prototype.hasOwnProperty.call(profile.answers, d.id));
+  const editable = saved.filter(d => uiInputDefinitionLabel(d) !== 'Unverified');
+  const unavailable = saved.length - editable.length;
   return <View style={{ gap: 16 }}>
     <AppText variant="small" color="textMuted">{uiJoin('Encrypted', ' · ', 'This device', ' · ', 'No upload')}</AppText>
     {error ? <AppText variant="small" color="danger">{uiLabel("Unavailable")}</AppText> : busy ? <AppText variant="tiny">{uiLabel("Saving")}</AppText> : null}
@@ -50,7 +53,10 @@ export function CustomerProfileContent({ productKey, contract }: { productKey?: 
     {requirements?.needed.map(d => <CustomerAnswerEditor key={d.id} definition={d} answer={profile.answers[d.id]} productKey={productKey} disabled={busy} onSave={a => saveAnswer(d, a)} />)}
     {requirements?.deferred.length ? <AppText variant="small">{uiJoin('Unresolved inputs', ': ', uiCount(requirements.deferred.length))}</AppText> : null}
     <Disclosure title={uiJoin('Saved inputs', ' (', uiCount(saved.length), ')')} open={reviewSaved} onToggle={() => setReviewSaved(!reviewSaved)}>
-      <View style={{ gap: 20 }}>{saved.map(d => <CustomerAnswerEditor key={d.id} definition={d} answer={profile.answers[d.id]} disabled={busy} onSave={a => saveAnswer(d, a)} />)}</View>
+      <View style={{ gap: 20 }}>
+        {editable.map(d => <CustomerAnswerEditor key={d.id} definition={d} answer={profile.answers[d.id]} disabled={busy} onSave={a => saveAnswer(d, a)} />)}
+        {unavailable ? <AppText variant="small" color="textMuted">{uiJoin('Unavailable', ': ', uiCount(unavailable))}</AppText> : null}
+      </View>
     </Disclosure>
     <NegotiatedTermsEditor profile={profile} productKey={productKey} disabled={busy} update={update} />
   </View>;

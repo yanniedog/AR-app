@@ -1,21 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
-import type { PublicProgramme, RateScenario } from '../../data/publicRateModel';
+import type { PublicFreshness, PublicProgramme, RateScenario } from '../../data/publicRateModel';
 import { publicRateScenario, resolveProductPublicRate, resolveRowPublicRate } from '../../data/publicRateIntegration';
 import { publicComponentFact, publicConditionFact, publicRateOriginLabel, publicRateReason, publicRateText } from '../../data/publicRatePresentation';
+import { publicRateFreshness } from '../../data/publicRateResolver';
 import { useStore } from '../../data/store';
 import type { RateRow } from '../../types';
 import { useUserRateScenario } from '../../hooks/useUserRateScenario';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText, Button, Disclosure } from '../ui';
-import { uiDate, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiPublicAliasName, uiRate, type UiCopy } from '../../lib/uiCopy';
+import { uiDate, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiPublicAliasName, uiRate, type UiCopy, type UiLabel } from '../../lib/uiCopy';
+
+const freshnessLabels: Record<PublicFreshness['state'], UiLabel> = {
+  current: 'Current', failed: 'Failed', stale: 'Stale', deferred: 'Pending', unknown: 'Unknown',
+};
 
 function programmeLabel(programme: PublicProgramme) {
   return programme.conditions.length ? uiJoin(...programme.conditions.flatMap<UiCopy>((condition, i) => i ? [' · ', publicConditionFact(condition)] : [publicConditionFact(condition)])) : uiLabel('Pricing programme');
 }
 
-/** Public evidence retains its actual source. Private assumptions never leave the device. */
 export function PublicRateEvidence({ productKey, programmeId, row, scenario: suppliedScenario, compact = false, onSelectProgramme }: {
   productKey: string; programmeId?: string; row?: RateRow; scenario?: RateScenario; compact?: boolean;
   onSelectProgramme?: (programmeId: string, offerId: string) => void;
@@ -44,6 +48,12 @@ export function PublicRateEvidence({ productKey, programmeId, row, scenario: sup
     : resolveProductPublicRate(product, catalogue, { ...applicable, allowHistorical }, selected, asOf);
   const resolution = resolve(historical);
   if (!resolution) return null;
+  const discovery = !programmes.length ? product.freshness : undefined;
+  const freshness = discovery ? publicRateFreshness(discovery, asOf) : resolution.freshness;
+  // A failed or deferred check can still have a stale (or absent) last successful result.
+  const freshnessState = discovery?.state === 'failed' || discovery?.state === 'deferred' ? discovery.state : freshness.state;
+  const reasons = [...new Set([...resolution.reasonCodes, ...(!programmes.length ? product.reasonCodes : [])].map(publicRateReason))]
+    .filter(reason => reason !== 'Unknown');
   // Only offer the assumption when freshness is the sole barrier to pricing.
   const historicalResolution = !historical && resolution.reasonCodes.includes('source_not_verified_current') ? resolve(true) : undefined;
   const canAssumeHistorical = historical || historicalResolution !== undefined && historicalResolution.status !== 'unresolved'
@@ -62,11 +72,12 @@ export function PublicRateEvidence({ productKey, programmeId, row, scenario: sup
         accessibilityRole="radio" accessibilityState={{ checked: selected === programme.programmeId }} style={{ minHeight: 48, paddingVertical: 8 }}>
         <AppText variant="small" color="primary">{programmeLabel(programme)}</AppText>
       </Pressable>) : null}
-      {resolution.reasonCodes.map(reason => <AppText key={reason} variant="tiny" color="textMuted">{publicRateReason(reason)}</AppText>)}
+      {reasons.map(reason => <AppText key={reason} variant="tiny" color="textMuted">{reason}</AppText>)}
       {resolution.conditions.unknown.map(condition => <AppText key={condition.conditionId} variant="tiny" color="textMuted">{uiJoin('Unknown', ' · ', publicConditionFact(condition))}</AppText>)}
       {resolution.conditions.unmet.map(condition => <AppText key={condition.conditionId} variant="tiny" color="textMuted">{uiJoin('Unmet', ' · ', publicConditionFact(condition))}</AppText>)}
-      {resolution.freshness.checkedAt ? <AppText variant="tiny" color="textMuted">{uiJoin('Checked', ': ', uiDate(resolution.freshness.checkedAt))}</AppText> : null}
-      {resolution.freshness.lastSuccessAt ? <AppText variant="tiny" color="textMuted">{uiJoin('Last successful check', ': ', uiDate(resolution.freshness.lastSuccessAt))}</AppText> : null}
+      {discovery ? <AppText variant="tiny" color="textMuted">{uiJoin('Freshness', ': ', freshnessLabels[freshnessState])}</AppText> : null}
+      {freshness.checkedAt ? <AppText variant="tiny" color="textMuted">{uiJoin('Checked', ': ', uiDate(freshness.checkedAt))}</AppText> : null}
+      {freshness.lastSuccessAt ? <AppText variant="tiny" color="textMuted">{uiJoin('Last successful check', ': ', uiDate(freshness.lastSuccessAt))}</AppText> : null}
       {resolution.effectiveFrom ? <AppText variant="tiny" color="textMuted">{uiJoin('Effective from', ': ', uiDate(resolution.effectiveFrom), resolution.effectiveTo ? uiJoin(' · ', 'Effective to', ': ', uiDate(resolution.effectiveTo)) : null)}</AppText> : null}
       {!resolution.verifiedCurrent ? <AppText variant="tiny" style={{ color: theme.colors.warning }}>{uiJoin('Current-rate ranking', ': ', 'Excluded', ' · ', 'Complete-cost ranking', ': ', 'Excluded')}</AppText> : null}
       {programmes.length > 0 && canAssumeHistorical && resolution.freshness.lastSuccessAt ? <Button title={historical ? 'Current pricing' : 'Historical pricing assumption'} variant="secondary" onPress={() => setHistorical(value => !value)} /> : null}
