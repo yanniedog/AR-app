@@ -67,7 +67,7 @@ test('fast typing keeps the latest draft and unmount flushes without committing 
     ) as typeof tree;
   });
   try {
-    const amount = tree.root.findByProps({ accessibilityLabel: 'Loan amount' });
+    const amount = tree.root.findByProps({ accessibilityLabel: 'Loan amount, thousands of dollars' });
     act(() => { amount.props.onChangeText('6'); });
     act(() => { amount.props.onChangeText('62'); });
     expect(useMortgageComparison.getState().loanAmount).toBe('');
@@ -96,12 +96,12 @@ test('external store clear discards a pending typed draft instead of restoring i
     ) as typeof tree;
   });
   try {
-    const amount = tree.root.findByProps({ accessibilityLabel: 'Loan amount' });
+    const amount = tree.root.findByProps({ accessibilityLabel: 'Loan amount, thousands of dollars' });
     act(() => { amount.props.onChangeText('625'); });
     act(() => { clearMortgageComparison(); });
     act(() => { jest.advanceTimersByTime(200); });
     expect(useMortgageComparison.getState().loanAmount).toBe('');
-    expect(tree.root.findByProps({ accessibilityLabel: 'Loan amount' }).props.value ?? '').toBe('');
+    expect(tree.root.findByProps({ accessibilityLabel: 'Loan amount, thousands of dollars' }).props.value ?? '').toBe('');
   } finally {
     act(() => { tree.unmount(); });
     jest.useRealTimers();
@@ -120,9 +120,9 @@ test('selecting the final facet flushes the latest amount and offset inputs befo
   let tree!: ReactTestRenderer & { root: { findByProps(props: object): { props: { onChangeText(text: string): void; onPress(): void } }; findAllByType(type: any): { props: { label: string; onPress(): void } }[] } };
   act(() => { tree = TestRenderer.create(<MortgageComparisonControls rows={rows} filters={filters} unverified={0} invalid={false} />) as typeof tree; });
   try {
-    act(() => tree.root.findByProps({ accessibilityLabel: 'Loan amount' }).props.onChangeText('650'));
-    act(() => tree.root.findByProps({ accessibilityLabel: 'Offset balance' }).props.onChangeText('100'));
-    act(() => tree.root.findByProps({ accessibilityLabel: 'Property value' }).props.onChangeText('900'));
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Loan amount, thousands of dollars' }).props.onChangeText('650'));
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Offset balance, thousands of dollars' }).props.onChangeText('100'));
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Property value, thousands of dollars' }).props.onChangeText('900'));
     expect(useMortgageComparison.getState().loanAmount).toBe('');
     const chip = tree.root.findAllByType('Chip' as any).find(item => /principal/i.test(String(item.props.label)))!;
     act(() => chip.props.onPress());

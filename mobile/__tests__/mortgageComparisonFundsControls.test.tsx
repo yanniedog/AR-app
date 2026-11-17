@@ -26,7 +26,8 @@ function mount(): Tree {
   return tree;
 }
 function input(tree: Tree, label: string) {
-  return tree.root.findAllByType(TextInput).find(node => node.props.accessibilityLabel === label);
+  const accessibleLabel = label === 'LVR' ? label : `${label}, thousands of dollars`;
+  return tree.root.findAllByType(TextInput).find(node => node.props.accessibilityLabel === accessibleLabel);
 }
 function tab(tree: Tree, label: string) {
   return tree.root.findAllByType('PressFeedback').find(node => node.props.accessibilityRole === 'tab' && node.props.accessibilityLabel === label)!;
@@ -104,7 +105,7 @@ test('mortgage money fields allow dollar and k input and preserve exact offset a
       ['Loan amount', '650', '650'], ['Offset balance', '$155k', '155'], ['Property value', '$775,000', '775'],
     ]) {
       expect(input(tree, label)?.props.keyboardType).toBe('decimal-pad');
-      expect(input(tree, label)?.props.accessibilityValue).toEqual({ text: 'Thousands of dollars' });
+      expect(input(tree, label)?.props.accessibilityValue).toBeUndefined();
       type(tree, label, value);
       expect(input(tree, label)?.props.value).toBe(digits);
     }
@@ -242,7 +243,7 @@ test('large text retains wrapping fields and both labelled selectable tabs with 
     }
     choose(tree, 'Funds available');
     const inputs = tree.root.findAllByType(TextInput);
-    expect(inputs.map(node => node.props.accessibilityLabel)).toEqual(['Loan amount', 'Offset balance', 'Property value']);
+    expect(inputs.map(node => node.props.accessibilityLabel)).toEqual(['Loan amount, thousands of dollars', 'Offset balance, thousands of dollars', 'Property value, thousands of dollars']);
     expect(inputs.every(node => node.props.style.minHeight >= 48 && node.props.allowFontScaling !== false)).toBe(true);
     expect(tree.root.findAllByType(View).filter(node => node.props.style?.flexBasis === 220)).toHaveLength(3);
     expect(tree.root.findAllByType('Row').some(node => node.props.style?.flexWrap === 'wrap'
@@ -349,7 +350,7 @@ test('offset inputs and type selector retain wrapping accessible controls at lar
   const tree = mount();
   try {
     expect(tree.root.findAllByType(TextInput).map(node => node.props.accessibilityLabel))
-      .toEqual(['Loan amount', 'Offset balance', 'Property value']);
+      .toEqual(['Loan amount, thousands of dollars', 'Offset balance, thousands of dollars', 'Property value, thousands of dollars']);
     expect(tree.root.findAllByType(View).filter(node => node.props.style?.flexBasis === 220)).toHaveLength(3);
     for (const label of ['Deposit', 'Offset account']) {
       const control = tab(tree, label), style = StyleSheet.flatten(control.props.style({ pressed: false }));
@@ -367,7 +368,7 @@ test('untouched inputs default to funds available with an offset account and com
     expect(tab(tree, 'Funds available').props.accessibilityState.selected).toBe(true);
     expect(tab(tree, 'Offset account').props.accessibilityState.selected).toBe(true);
     expect(tree.root.findAllByType(TextInput).map(node => node.props.accessibilityLabel))
-      .toEqual(['Loan amount', 'Offset balance', 'Property value']);
+      .toEqual(['Loan amount, thousands of dollars', 'Offset balance, thousands of dollars', 'Property value, thousands of dollars']);
     type(tree, 'Loan amount', '600');
     type(tree, 'Offset balance', '100');
     type(tree, 'Property value', '750');

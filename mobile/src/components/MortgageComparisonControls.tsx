@@ -357,8 +357,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
           {field !== 'lvr' ? <AppText variant="small" accessible={false}>{uiLabel('$')}</AppText> : null}
           <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)}
             keyboardType="decimal-pad" autoCapitalize="none" autoCorrect={false} maxLength={62}
-            accessibilityLabel={fieldLabel(field)}
-            accessibilityValue={field === 'lvr' ? undefined : { text: uiLabel('Thousands of dollars') }}
+            accessibilityLabel={field === 'lvr' ? fieldLabel(field) : uiJoin(fieldLabel(field), ', ', 'thousands of dollars')}
             placeholder={field === 'lvr' ? uiLabel('%') : undefined}
             style={{ flex: 1, minWidth: 0, minHeight: 48, color: theme.colors.text, padding: 0, fontSize: theme.font.body }} />
           {field !== 'lvr' ? <AppText variant="small" accessible={false}>{uiLabel('k')}</AppText> : null}

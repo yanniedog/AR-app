@@ -162,7 +162,7 @@ export const UI_LABELS = [
   'View ASX market expectations', 'Withdrawal', 'Y-axis', 'Years remaining',
   'Your current balance', 'Your entered rate difference', 'Your entered rates', 'Your rate scenario',
   'Third-party notices', 'Data sources', 'Lender artwork', 'Optional diagnostics', 'Licence notice',
-  ' → ', ' (', 'Up to', 'fixed', 'yrs', 'm', 'k', 'Thousands of dollars', 'today', 'yesterday', 'days ago',
+  ' → ', ' (', 'Up to', 'fixed', 'yrs', 'm', 'k', 'thousands of dollars', 'today', 'yesterday', 'days ago',
   'mo ago', 'yr ago', 'Connection', 'Sample data', 'Update overdue', 'Offset account',
   'Early / extra repayments', 'Redraw facility', 'Guarantor option', 'Cashback offer',
   'PayID', 'Unlimited transactions', 'Free transactions', 'Bill payment', 'Card access', 'Digital banking',
