@@ -10,8 +10,17 @@ const moduleSource = readFileSync(new URL('../src/data/bankLogoAssets.ts', impor
 const references = new Map([...moduleSource.matchAll(/'([^']+)': require\('\.\.\/\.\.\/assets\/banks\/([^']+)'\)/g)]
   .map(([, key, file]) => [key, file]));
 
-test('the offline catalogue contains verified, readable artwork for all 116 register brands', () => {
-  assert.equal(catalogue.brands.length, 116);
+test('all register snapshot and supplemental provider artwork is verified and readable offline', () => {
+  const supplemental = catalogue.brands.filter(brand => brand.source_kind === 'provider-site');
+  assert.equal(catalogue.brands.length - supplemental.length, 116);
+  assert.deepEqual(supplemental.map(brand => brand.provider).sort(), [
+    'Crown Money Management', 'Hejaz Islamic Home Finance', 'MA Money', 'Mortgage Ezy',
+    'Mortgage Mart', 'Pepper Money', 'WLTH',
+  ]);
+  for (const brand of supplemental) {
+    assert.equal(brand.register_id, null);
+    assert.match(brand.retrieved_date, /^\d{4}-\d{2}-\d{2}$/);
+  }
   const files = new Set();
   const providers = new Set();
   for (const brand of catalogue.brands) {
