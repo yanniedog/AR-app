@@ -103,3 +103,21 @@ test('an unreadable encrypted record is retained, and queued edits survive write
   await profile.openMortgageComparisonProfile();
   expect(JSON.parse(mockStored!)).toEqual({ version: 1, inputs: comparison, facets });
 });
+
+test('an explicit clear atomically replaces an unreadable record and restores saving', async () => {
+  mockStored = '{malformed';
+  const { profile } = boot();
+  await profile.openMortgageComparisonProfile();
+  expect(profile.useMortgageComparisonProfile.getState().status).toBe('unavailable');
+  expect(mockWrite).not.toHaveBeenCalled();
+
+  profile.clearSavedMortgageComparison();
+  await profile.openMortgageComparisonProfile();
+  expect(mockRead).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(mockStored!)).toMatchObject({ version: 1, inputs: { loanAmount: '', lvr: '' } });
+  profile.saveMortgageComparisonInputs(comparison);
+  await profile.openMortgageComparisonProfile();
+  const restarted = boot();
+  await restarted.profile.openMortgageComparisonProfile();
+  expect(restarted.profile.useMortgageComparisonProfile.getState().profile.inputs).toEqual(comparison);
+});

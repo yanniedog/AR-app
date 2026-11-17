@@ -23,6 +23,7 @@ export const useMortgageComparisonProfile = create<{ status: StorageStatus; prof
 
 let committed: ComparisonProfile | null = null;
 let pending: Partial<ComparisonProfile> = {};
+let replaceUnreadable = false;
 let work: Promise<void> | null = null;
 
 function publishProfile(): void {
@@ -76,12 +77,20 @@ export function openMortgageComparisonProfile(): Promise<void> {
   work = Promise.resolve().then(async () => {
     if (!committed) {
       useMortgageComparisonProfile.setState({ status: 'loading' });
-      const raw = await readSecureStoreValue(storageKey, { preserveIncomplete: true });
-      committed = raw == null ? emptyProfile : readProfile(raw);
-      if (raw != null) {
-        if (pending.inputs == null) setMortgageComparisonInputs(committed.inputs);
-        if (pending.facets == null) applyFacets(committed.facets);
+      if (!replaceUnreadable) {
+        try {
+          const raw = await readSecureStoreValue(storageKey, { preserveIncomplete: true });
+          committed = raw == null ? emptyProfile : readProfile(raw);
+          if (raw != null) {
+            if (pending.inputs == null) setMortgageComparisonInputs(committed.inputs);
+            if (pending.facets == null) applyFacets(committed.facets);
+          }
+        } catch (error) {
+          // An explicit clear may arrive while the original read is in flight.
+          if (!replaceUnreadable) throw error;
+        }
       }
+      committed ??= emptyProfile;
       publishProfile();
     }
     while (pending.inputs || pending.facets) {
@@ -90,6 +99,7 @@ export function openMortgageComparisonProfile(): Promise<void> {
       const next: ComparisonProfile = { ...committed, ...submitted };
       await writeSecureStoreValue(storageKey, JSON.stringify({ version: 1, ...next }));
       committed = next;
+      replaceUnreadable = false;
       pending = {
         ...(pending.inputs !== submitted.inputs ? { inputs: pending.inputs } : {}),
         ...(pending.facets !== submitted.facets ? { facets: pending.facets } : {}),
@@ -141,6 +151,7 @@ export function clearSavedMortgageComparison(): void {
     publishProfile();
     return;
   }
+  replaceUnreadable = true;
   pending = { ...emptyProfile };
   publishProfile();
   void openMortgageComparisonProfile();
