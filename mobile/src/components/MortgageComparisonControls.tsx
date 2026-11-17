@@ -3,6 +3,7 @@ import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../data/mor
 import { publicCataloguePricingKey, type PublicCatalogueView } from '../data/publicRateIntegration';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TextInput, useWindowDimensions, View } from 'react-native';
+import { mortgageMoneyFromEdit } from '../data/mortgageMoneyInput';
 import { useMortgageComparison, mortgageComparisonValues, type MortgageComparisonInputs } from '../data/mortgageComparison';
 import { openMortgageComparisonProfile, saveMortgageComparisonFacets, saveMortgageComparisonInputs,
   useMortgageComparisonProfile } from '../data/mortgageComparisonProfile';
@@ -262,7 +263,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   })), [rowOptions, facetCatalogueOptions, filters, profile]);
   const change = (field: NumericInputField, text: string) => {
     dirty.current = true;
-    setDraft(current => ({ ...withResolvedMode(current), [field]: text }));
+    setDraft(current => ({ ...withResolvedMode(current), [field]: field === 'lvr' ? text : mortgageMoneyFromEdit(text) }));
   };
   const clearInputs = () => {
     dirty.current = false;
@@ -351,11 +352,16 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
         <AppText variant="small" color={fieldRequired ? 'warning' : 'text'} weight={fieldRequired ? '700' : undefined}>
           {fieldRequired ? uiJoin(fieldLabel(field), ' · ', 'Required') : fieldLabel(field)}
         </AppText>
-        <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)}
-          keyboardType={field === 'lvr' ? 'decimal-pad' : 'default'} autoCapitalize="none" autoCorrect={false} maxLength={64}
-          accessibilityLabel={fieldLabel(field)}
-          placeholder={uiLabel(field === 'lvr' ? '%' : '$')}
-          style={{ minHeight: 48, minWidth: 0, color: theme.colors.text, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 6, padding: 8, fontSize: theme.font.body }} />
+        <View style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 4,
+          borderColor: theme.colors.border, borderWidth: 1, borderRadius: 6, paddingHorizontal: 8 }}>
+          {field !== 'lvr' ? <AppText variant="small" accessible={false}>{uiLabel('$')}</AppText> : null}
+          <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)}
+            keyboardType="decimal-pad" autoCapitalize="none" autoCorrect={false} maxLength={62}
+            accessibilityLabel={field === 'lvr' ? fieldLabel(field) : uiJoin(fieldLabel(field), ', ', 'thousands of dollars')}
+            placeholder={field === 'lvr' ? uiLabel('%') : undefined}
+            style={{ flex: 1, minWidth: 0, minHeight: 48, color: theme.colors.text, padding: 0, fontSize: theme.font.body }} />
+          {field !== 'lvr' ? <AppText variant="small" accessible={false}>{uiLabel('k')}</AppText> : null}
+        </View>
       </View>;
     })}<IconAction icon="close" word="Clear" accessibilityLabel="Clear comparison inputs" onPress={clearInputs} /></Row>
     {mode === 'funds' ? <Row gap={12} style={{ flexWrap: 'wrap' }}>
