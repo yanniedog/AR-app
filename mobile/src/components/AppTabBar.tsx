@@ -26,7 +26,7 @@ function TabItem({ route, focused, onPress, labelLines, fontScale }: {
     animation.start(); return () => animation.stop();
   }, [focused, opacity, reducedMotion]);
   const tint = focused ? theme.colors.primary : theme.colors.textMuted;
-  return <TouchTarget accessibilityRole="tab" accessibilityState={{ selected: focused }} aria-selected={focused}
+  return <TouchTarget auditControlId={`primary-tab:${route}`} accessibilityRole="tab" accessibilityState={{ selected: focused }} aria-selected={focused}
     accessibilityLabel={primaryTabLabel(route)} onPress={onPress} hitSlop={0}
     style={{ flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
     <View style={{ alignItems: 'center', width: '100%', gap: 2 }}>

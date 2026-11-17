@@ -37,6 +37,24 @@ test('changed inputs can cancel a merge without publishing partial results', asy
   expect(yields).toBe(3);
 });
 
+test('a CPU slice does not queue a promise continuation for every merge checkpoint', async () => {
+  const rows: RateRow[] = Array.from({ length: 4096 }, (_, i) => ({
+    provider: `Bank ${4096 - i}`, product_name: 'Loan', product_key: `loan-${i}`, rate: '0.05',
+  }));
+  let settled = false;
+  const yieldControl = jest.fn(async () => undefined);
+  const result = sortRowsCooperatively(rows, 'bank', 'Mortgage', 'base', 'comparison', {
+    now: () => 0, yieldControl,
+  }).then(value => { settled = true; return value; });
+  // The injected clock keeps this work inside one CPU slice. Only the initial
+  // host yield may suspend it; merge checkpoints must not introduce thousands
+  // of resolved-Promise/microtask hops before it can publish a result.
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  expect(settled).toBe(true);
+  expect(yieldControl).toHaveBeenCalledTimes(1);
+  expect(await result).toEqual(sortRows(rows, 'bank', 'Mortgage'));
+});
+
 test('indexed filtering prepares one matching set and keeps corrected index identities', async () => {
   const rows = sample.sections.TD.rates as RateRow[];
   const target = rows[0].product_key;

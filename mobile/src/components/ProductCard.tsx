@@ -317,7 +317,7 @@ function ProductCardView({
     >
       {showLenderAction || selectMode ? (
         <View ref={historyBubble.anchorRef} collapsable={false} style={{ flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap, alignSelf: 'stretch' }}>
-          <PressFeedback onPressIn={() => { historyHeld.current = false; }}
+          <PressFeedback auditControlId={`rate-history:${row.product_key}:${row.rate_index ?? ''}`} onPressIn={() => { historyHeld.current = false; }}
             onLongPress={selectMode ? undefined : () => { historyHeld.current = true; historyBubble.show(); }} delayLongPress={350}
             onPress={() => {
               if (selectMode) { onPress?.(); return; }
@@ -339,6 +339,7 @@ function ProductCardView({
       ) : null}
       <View ref={detailsBubble.anchorRef} collapsable={false} style={{ flex: 1, minWidth: 0 }}>
         <PressFeedback
+          auditControlId={`rate-details:${row.product_key}:${row.rate_index ?? ''}`}
           onPressIn={() => { held.current = false; }}
           onPress={() => { if (!held.current) { detailsBubble.dismiss(); onPress?.(); } held.current = false; }}
           onLongPress={showRowWord}

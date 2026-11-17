@@ -440,6 +440,7 @@ test('preserves the complete dedicated public app-health schema', () => {
 test('hosted diagnostic logs retain bounded work facts and separate return evidence without exposing private fields', () => {
   const report = makePerformanceAuditReport();
   const surface = { id: 'rates.results', work: { pricingStage: 'scope', pricingErrorStage: 'resolution', catalogueStatus: 'ready',
+    candidatePreparationMs: 12.3, pricingResolutionMs: 45.6, mortgageScopeMs: 78.9, pricingMaxSliceMs: 6.2,
     pricingRequestRevision: 3, workerStarts: 2, workerRestarts: 1, workerCancellations: 0,
     sourceRowCount: 8119, candidateCount: null, pricedRowCount: 42, catalogueProductCount: 2813, catalogueProgrammeCount: 16788,
     schedulerNativeScheduleAttempts: 10, schedulerNativeCompleted: 8, schedulerNativeFallbacks: 2,

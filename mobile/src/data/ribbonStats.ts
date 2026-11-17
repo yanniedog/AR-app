@@ -1,6 +1,7 @@
 import { toFraction, visibleAccountRows } from './format';
 import { rankFraction, type MortgageRateMetric, type RankMetric } from './selectors';
-import { statsFor, type RateStats } from './taxonomy';
+import { statsFor, statsForCooperatively, type RateStats } from './taxonomy';
+import { collectRowBatches, rowWork, type RowWorkControl } from './cooperativeRows';
 import type { ProductDetail, RateRow, Ribbon, SectionData, SectionKey } from '../types';
 
 export function ribbonToRateStats(ribbon: Ribbon): RateStats {
@@ -47,6 +48,11 @@ export function resolveSectionRibbonStats(
     ? (row: RateRow) => rankFraction(row, section, depositRankMetric, mortgageRateMetric)
     : undefined;
   const computed = statsFor(rankedRows, true, section, fractionOf);
+  return sectionRibbonFallback(computed, sectionData, includeNonStandard, section, mortgageRateMetric);
+}
+
+function sectionRibbonFallback(computed: RateStats, sectionData: SectionData | undefined,
+  includeNonStandard: boolean, section: SectionKey | null | undefined, mortgageRateMetric: MortgageRateMetric): RateStats {
   if (computed.min != null) return computed;
 
   // An advertised-rate payload ribbon cannot stand in for unpublished
@@ -67,4 +73,20 @@ export function resolveSectionRibbonStats(
     return ribbonToRateStats(sectionData.ribbon);
   }
   return computed;
+}
+
+export async function resolveSectionRibbonStatsCooperatively(sectionData: SectionData | undefined, hierarchyRows: RateRow[],
+  includeNonStandard: boolean, section?: SectionKey | null, detailsProducts?: Record<string, ProductDetail> | null,
+  depositRankMetric: RankMetric = 'base', mortgageRateMetric: MortgageRateMetric = 'comparison',
+  control: RowWorkControl = {}): Promise<RateStats | null> {
+  const work = rowWork(control);
+  const rankedRows = await collectRowBatches(hierarchyRows, batch => {
+    const visible = includeNonStandard ? batch : visibleAccountRows(batch, false, detailsProducts);
+    return section === 'Mortgage' && mortgageRateMetric === 'comparison'
+      ? visible.filter(row => toFraction(row.comparison_rate) !== null) : visible;
+  }, { ...control, cancelled: work.cancelled });
+  if (!rankedRows) return null;
+  const fractionOf = section ? (row: RateRow) => rankFraction(row, section, depositRankMetric, mortgageRateMetric) : undefined;
+  const computed = await statsForCooperatively(rankedRows, true, section, fractionOf, { ...control, cancelled: work.cancelled });
+  return computed ? sectionRibbonFallback(computed, sectionData, includeNonStandard, section, mortgageRateMetric) : null;
 }

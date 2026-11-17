@@ -34,13 +34,12 @@ import {
   useWindowDimensions,
 } from 'react-native';
 
-import { visibleAccountRows } from '../data/format';
-import { resolveSectionRibbonStats } from '../data/ribbonStats';
-import { excludeTokenDepositRates, rankFraction, sortRows } from '../data/selectors';
+import { resolveSectionRibbonStatsCooperatively } from '../data/ribbonStats';
+import { EMPTY_FILTERS, filterRowsCooperatively, rankFraction, sortRowsCooperatively } from '../data/selectors';
 import { useStore } from '../data/store';
 import { captureRatesSession, restoreRatesSession } from '../data/ratesSession';
 import { setMortgageComparisonInputs, useMortgageComparison } from '../data/mortgageComparison';
-import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
+import { childrenFromScopedCooperatively, rowsUnderCooperatively } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
 import { measureAuditBackNavigation, PerformanceAuditNavigationAnchor } from '../lib/performanceAuditNavigation';
@@ -2065,23 +2064,25 @@ async function runSectionModelCheck(
   const responsivenessAt = monitor.snapshot();
   const details = state.details?.products ?? null;
   const { includeNonStandard, depositRankMetric, mortgageRateMetric } = state.prefs;
-  const runModel = () => {
+  const runModel = async () => {
+    const control = { cancelled: () => { assertSessionActive(watchdog); return false; } };
+    const required = <T,>(value: T | null): T => {
+      if (value === null) throw new Error('Section model admission changed during preparation');
+      return value;
+    };
     let at = now();
-    const scoped = rowsUnder(rows, section, []);
+    const scoped = required(await rowsUnderCooperatively(rows, section, [], control));
     const scopeMs = now() - at;
     at = now();
-    const visible = excludeTokenDepositRates(
-      visibleAccountRows(scoped, includeNonStandard, details),
-      section,
-    );
+    const visible = required(await filterRowsCooperatively(scoped, { ...EMPTY_FILTERS, includeNonStandard }, details, null, section, control));
     const filterMs = now() - at;
     const fractionOf = (row: (typeof visible)[number]) =>
       rankFraction(row, section, depositRankMetric, mortgageRateMetric);
     at = now();
-    const children = childrenFromScoped(visible, section, [], fractionOf);
+    const children = required(await childrenFromScopedCooperatively(visible, section, [], fractionOf, control));
     const hierarchyMs = now() - at;
     at = now();
-    const stats = resolveSectionRibbonStats(
+    const stats = required(await resolveSectionRibbonStatsCooperatively(
       sectionData,
       scoped,
       includeNonStandard,
@@ -2089,16 +2090,18 @@ async function runSectionModelCheck(
       details,
       depositRankMetric,
       mortgageRateMetric,
-    );
+      control,
+    ));
     const statsMs = now() - at;
     at = now();
-    const ranked = sortRows(
+    const ranked = required(await sortRowsCooperatively(
       visible,
       'rate',
       section,
       depositRankMetric,
       mortgageRateMetric,
-    ).slice(0, 25);
+      control,
+    )).slice(0, 25);
     const rankMs = now() - at;
     return {
       scopeMs,
@@ -2115,14 +2118,14 @@ async function runSectionModelCheck(
   };
 
   let error: string | undefined;
-  let first: ReturnType<typeof runModel> | null = null;
-  let repeat: ReturnType<typeof runModel> | null = null;
+  let first: Awaited<ReturnType<typeof runModel>> | null = null;
+  let repeat: Awaited<ReturnType<typeof runModel>> | null = null;
   try {
     assertSessionActive(watchdog);
-    first = runModel();
+    first = await runModel();
     await nextFrame();
     assertSessionActive(watchdog);
-    repeat = runModel();
+    repeat = await runModel();
     await nextFrame();
   } catch (caught) {
     rethrowAuditControl(caught);

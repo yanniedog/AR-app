@@ -1,8 +1,8 @@
 import { Platform } from 'react-native';
 import type { TargetSizeSampleInput } from './uxFrictionFluidityAudit';
 
-// Virtualized rows generate new control instances over a whole-app run.
-// Bound retained geometry while allowing more than the initial route's controls.
+// Repeated mounts are equivalent only when control identity, state, platform,
+// role and measured geometry match. Retain every distinct geometry, including failures.
 const MAX_CAPTURED_TARGETS = 4_096;
 
 let collectionActive = false;
@@ -11,19 +11,28 @@ let auditStartControlsMeasured = false;
 const capturedTargets = new Map<string, TargetSizeSampleInput>();
 const mountedTargets = new Map<string, TargetSizeSampleInput>();
 
+function retain(sample: TargetSizeSampleInput): void {
+  const key = sample.id!;
+  const previous = capturedTargets.get(key);
+  if (previous) {
+    previous.layoutObservations = (previous.layoutObservations ?? 1) + 1;
+  } else if (capturedTargets.size < MAX_CAPTURED_TARGETS) {
+    capturedTargets.set(key, { ...sample, layoutObservations: 1 });
+  } else {
+    capacityReached = true;
+  }
+}
+
 export function startAuditTargetCollection(): void {
   capturedTargets.clear();
-  capacityReached = mountedTargets.size > MAX_CAPTURED_TARGETS;
+  capacityReached = false;
   auditStartControlsMeasured = false;
-  for (const [id, sample] of mountedTargets) {
-    if (capturedTargets.size >= MAX_CAPTURED_TARGETS) break;
-    capturedTargets.set(id, sample);
-  }
+  for (const sample of mountedTargets.values()) retain(sample);
   collectionActive = true;
 }
 
-export function getAuditTargetCapture(): { capacityReached: boolean; auditStartControlsMeasured: boolean } {
-  return { capacityReached, auditStartControlsMeasured };
+export function getAuditTargetCapture(): { capacityReached: boolean; auditStartControlsMeasured: boolean; aggregation: 'control-state-geometry' } {
+  return { capacityReached, auditStartControlsMeasured, aggregation: 'control-state-geometry' };
 }
 
 export function isAuditTargetCollectionActive(): boolean {
@@ -39,6 +48,8 @@ export function recordAuditTargetLayout(
   width: number,
   height: number,
   role?: string,
+  state: string = 'default',
+  controlIdentity?: string,
 ): void {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
   const normalizedId = typeof id === 'string' && id.trim().length > 0
@@ -48,18 +59,15 @@ export function recordAuditTargetLayout(
     Platform.OS === 'ios' ? 'ios-hig' : Platform.OS === 'web' ? 'web-wcag-aa' : 'android';
   const roundedW = Math.round(width * 10) / 10;
   const roundedH = Math.round(height * 10) / 10;
-  const sample: TargetSizeSampleInput = { id: normalizedId, width: roundedW, height: roundedH, platform, role };
+  // The instance key remains the mounted-map owner so unmounting one of two
+  // equivalent controls cannot unregister the other. It is not retained evidence.
+  const semantic = controlIdentity ?? (/^target#\d+$/.test(normalizedId) ? normalizedId : normalizedId.replace(/#\d+$/, ''));
+  const sample: TargetSizeSampleInput = {
+    id: `${semantic}#${platform}:${role ?? 'unclassified'}:${state}:${roundedW}x${roundedH}`,
+    width: roundedW, height: roundedH, platform, role,
+  };
   mountedTargets.set(normalizedId, sample);
-  if (!collectionActive) return;
-  if (!capturedTargets.has(normalizedId) && capturedTargets.size >= MAX_CAPTURED_TARGETS) {
-    capacityReached = true;
-    return;
-  }
-  const existing = capturedTargets.get(normalizedId);
-  if (existing && Math.min(existing.width, existing.height) <= Math.min(roundedW, roundedH)) {
-    return;
-  }
-  capturedTargets.set(normalizedId, sample);
+  if (collectionActive) retain(sample);
 }
 
 export function stopAuditTargetCollection(): TargetSizeSampleInput[] {

@@ -64,14 +64,19 @@ const auditEvidenceMetrics = [
   'readinessCoveragePercent', 'linkVerificationPercent',
 ] as const satisfies readonly AuditMetric[];
 
-export const auditMetricMethodVersion = (metric: AuditMetric): 1 | 2 =>
+const geometryAggregatedMetrics: readonly AuditMetric[] = ['affsScore', 'uxStandardsAccessibilityScore'];
+export type AuditMetricMethodVersion = 1 | 2 | 3;
+export const auditMetricMethodVersion = (metric: AuditMetric): AuditMetricMethodVersion =>
+  geometryAggregatedMetrics.includes(metric) ? 3 :
   ['actionP50Ms', 'actionP95Ms', 'displayModelPassPercent', 'displayListPassPercent', 'displayVisiblePassPercent',
     'displayLayoutPassPercent', 'displayEmptyPassPercent', 'displayLogoPassPercent', ...auditEvidenceMetrics].includes(metric) ? 2 : 1;
-/** Stored rendering aggregates cannot be upgraded by recalculating their ratio. */
-export const auditReportMetricMethodVersion = (report: PerformanceAuditReport, metric: AuditMetric): 1 | 2 =>
-  AUDIT_METRIC_DEFINITIONS[metric].group === 'Rendering checks' && report.renderingEvidenceVersion !== 2
-    || (auditEvidenceMetrics as readonly AuditMetric[]).includes(metric) && report.auditEvidenceVersion !== 2
-    ? 1 : auditMetricMethodVersion(metric);
+/** Stored rendering/target aggregates cannot be upgraded by recalculating their ratio. */
+export const auditReportMetricMethodVersion = (report: PerformanceAuditReport, metric: AuditMetric): AuditMetricMethodVersion => {
+  if (AUDIT_METRIC_DEFINITIONS[metric].group === 'Rendering checks' && report.renderingEvidenceVersion !== 2
+    || (auditEvidenceMetrics as readonly AuditMetric[]).includes(metric) && report.auditEvidenceVersion !== 2) return 1;
+  if (geometryAggregatedMetrics.includes(metric)) return report.uxTelemetry?.targetCapture?.aggregation === 'control-state-geometry' ? 3 : 2;
+  return auditMetricMethodVersion(metric);
+};
 export const AUDIT_METRICS: readonly AuditMetric[] = Object.freeze(Object.keys(AUDIT_METRIC_DEFINITIONS) as AuditMetric[]);
 export const LEGACY_AUDIT_METRICS: readonly AuditMetric[] = ['failures', 'coveragePercent', 'durationMs', 'slowestCheckMs', 'maxEventLoopLagMs', 'maxFrameGapMs'];
 export const UX_AUDIT_METRICS: readonly AuditMetric[] = ['affsScore', 'uxInteractionFrictionScore', 'uxStandardsAccessibilityScore', 'uxFluidityResponsivenessScore'];

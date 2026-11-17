@@ -316,7 +316,7 @@ function encodedWithinBudget(value: Record<string, unknown>, header: Record<stri
 /** Omit regenerable analysis before considering the existing repeated-frame fallback. */
 function omitDerivedMetricAnalysis(value: Record<string, unknown>): Record<string, unknown> | null {
   if (!value.metricAnalysis) return null;
-  const omission = { schemaVersion: 1, methodVersions: [1, 2], status: 'omitted', reason: 'export-budget',
+  const omission = { schemaVersion: 1, methodVersions: [1, 2, 3], status: 'omitted', reason: 'export-budget',
     regenerableFrom: 'retained-local-report' };
   const diagnosticLog = value.diagnosticLog;
   return { ...value, metricAnalysis: omission,

@@ -89,6 +89,7 @@ export function SegmentedControl<T extends string>({
         return (
           <TouchTarget
             key={opt.value}
+            auditControlId={`segmented-option:${JSON.stringify(options.map(option => option.value))}:${opt.value}`}
             onPress={() => {
               if (opt.value !== value) hapticSelection();
               onChange(opt.value);
@@ -176,6 +177,7 @@ export function SearchBar({
       />
       {value.length > 0 ? (
         <PressFeedback
+          auditControlId="search-clear"
           onPress={() => onChangeText('')}
           accessibilityRole="button"
           accessibilityLabel="Clear search"

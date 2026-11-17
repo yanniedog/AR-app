@@ -23,6 +23,8 @@ export interface PressFeedbackProps extends Omit<UiNativeProps<PressableProps>, 
   children?: UiChild | ((state: PressableStateCallbackType) => UiChild);
   /** Layout for the animated contents; the target and ripple remain stationary. */
   contentStyle?: StyleProp<ViewStyle>;
+  /** Source-authored semantic control identity; never application prose or labels. */
+  auditControlId?: string;
 }
 
 /** Shared tactile feedback without changing hit geometry or surrounding layout. */
@@ -30,6 +32,7 @@ export function PressFeedback({
   children,
   style,
   contentStyle,
+  auditControlId,
   onPressIn,
   onPressOut,
   onLayout,
@@ -47,6 +50,15 @@ export function PressFeedback({
   const auditTargetKey = rest.testID
     ? `${rest.testID.slice(0, 100)}#${auditInstanceIdRef.current}`
     : `target#${auditInstanceIdRef.current}`;
+  const auditState = JSON.stringify([
+    !!disabled, rest.accessibilityState?.selected ?? null, rest.accessibilityState?.checked ?? null,
+    rest.accessibilityState?.expanded ?? null, rest.accessibilityState?.busy ?? null,
+  ]);
+  const auditLayout = useRef<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const bounds = auditLayout.current;
+    if (bounds) recordAuditTargetLayout(auditTargetKey, bounds.width, bounds.height, rest.accessibilityRole, auditState, auditControlId);
+  }, [auditTargetKey, rest.accessibilityRole, auditState, auditControlId]);
   useEffect(() => () => {
     unregisterAuditTargetLayout(auditTargetKey);
   }, [auditTargetKey]);
@@ -86,7 +98,8 @@ export function PressFeedback({
       onPressOut={(event) => { animate(false); onPressOut?.(event); }}
       onLayout={(event) => {
         const { width, height } = event.nativeEvent.layout;
-        recordAuditTargetLayout(auditTargetKey, width, height, rest.accessibilityRole);
+        auditLayout.current = { width, height };
+        recordAuditTargetLayout(auditTargetKey, width, height, rest.accessibilityRole, auditState, auditControlId);
         onLayout?.(event);
       }}
     >

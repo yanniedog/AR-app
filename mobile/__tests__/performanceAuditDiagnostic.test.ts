@@ -57,12 +57,14 @@ test('deidentification marks bounded diagnostic text with explicit omitted-chara
 test('work diagnostics retain bounded stage/loading facts without financial inputs or identifiers', () => {
   const registry = new PerformanceAuditReadinessRegistry(); registry.beginCapture('work-test');
   registry.registerSurface({ id: 'rates.results', work: { pricingStage: 'scope', pricingRequestRevision: 3,
+    candidatePreparationMs: 12.3, pricingResolutionMs: 45.6, mortgageScopeMs: 78.9, pricingMaxSliceMs: 6.2,
     workerStarts: 1, sourceRowCount: 8119, candidateCount: null, catalogueStatus: 'ready', catalogueAllLoaded: true,
     mortgageCriteriaReady: true, mortgageInputsInvalid: false, suitabilityReady: true, detailsLoading: false,
     loanAmount: 123456, query: 'secret account', generationId: 'private-id' } as never,
     probes: [{ id: 'search.data', kind: 'data', status: 'pending' }] });
   const diagnostic = publicAuditDiagnostic(captureAuditDiagnostic(registry.snapshot(), 'readiness')) as any;
   expect(diagnostic.readiness.surfaces[0].work).toMatchObject({ pricingStage: 'scope', sourceRowCount: 8119,
+    candidatePreparationMs: 12.3, pricingResolutionMs: 45.6, mortgageScopeMs: 78.9, pricingMaxSliceMs: 6.2,
     catalogueStatus: 'ready', mortgageCriteriaReady: true, detailsLoading: false });
   expect(JSON.stringify(diagnostic)).not.toMatch(/loanAmount|123456|secret account|generationId|private-id/);
 });
