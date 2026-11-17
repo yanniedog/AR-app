@@ -96,6 +96,8 @@ export interface BankHistoryChartProps {
   allDates?: string[];
   /** Optional emphasized line (e.g. one product's rate) drawn over the section context. */
   highlightSeries?: HighlightSeries | null;
+  /** Product detail compares the product-wide headline with section statistics and the cash rate. */
+  productHistory?: boolean;
   /** Audit-only bridge to the exact callbacks used by the visible chart controls. */
   auditActionsRef?: MutableRefObject<BankHistoryChartAuditActions | null>;
   /** Content-addressed identity for the source history asset(s). */
@@ -247,6 +249,7 @@ function BankHistoryChartView({
   height = 180,
   allDates,
   highlightSeries,
+  productHistory = false,
   auditActionsRef,
   contentRevision,
   onGraphicReady,
@@ -305,7 +308,7 @@ function BankHistoryChartView({
     setSelectedDate(null);
     setHoverDate(null);
   }, [revision, window]);
-  const showRba = section === 'Mortgage' && !!rba?.length;
+  const showRba = (productHistory || section === 'Mortgage') && !!rba?.length;
 
   const rbaSteps = useMemo(
     () => (showRba && rba ? rbaStepForDates(plotDates, rba) : []),
@@ -314,12 +317,12 @@ function BankHistoryChartView({
   // Single-day fallbacks (e.g. product page before multi-day history warms) must
   // not paint a prior RBA change across the full plot — that reads as a solid block.
   const rbaMarks = useMemo(
-    () => (showRba && rba ? rbaChangesInWindow(plotDates, rba, plotDates.length > 1) : []),
-    [showRba, rba, plotDates],
+    () => (!productHistory && showRba && rba ? rbaChangesInWindow(plotDates, rba, plotDates.length > 1) : []),
+    [productHistory, showRba, rba, plotDates],
   );
   const rbaHoldMarks = useMemo(
-    () => (showRba && rba ? rbaHoldsInWindow(plotDates, rbaHolds, rba) : []),
-    [showRba, rba, rbaHolds, plotDates],
+    () => (!productHistory && showRba && rba ? rbaHoldsInWindow(plotDates, rbaHolds, rba) : []),
+    [productHistory, showRba, rba, rbaHolds, plotDates],
   );
 
   const highlightValues = useMemo(
@@ -485,9 +488,11 @@ function BankHistoryChartView({
   }
 
   const rateInk = SECTIONS[section].lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
-  const ribbonColor = rateInk;
-  const bandFill = withAlpha(rateInk, theme.dark ? 0.35 : 0.28);
-  const rbaInk = theme.colors.rba;
+  const ribbonColor = productHistory ? theme.colors.textFaint : rateInk;
+  const bandFill = withAlpha(ribbonColor, productHistory ? 0.18 : theme.dark ? 0.35 : 0.28);
+  const meanColor = productHistory ? theme.ledger.success : rateInk;
+  const medianColor = productHistory ? theme.colors.textMuted : rateInk;
+  const rbaInk = productHistory ? theme.ledger.warning : theme.colors.rba;
   const rbaBand = withAlpha(rbaInk, 0.42);
   const crosshairColor = withAlpha(theme.colors.primary, theme.dark ? 0.6 : 0.55);
   // Prefer an explicit product color; fall back to warning so the series does not
@@ -576,11 +581,26 @@ function BankHistoryChartView({
     }
   };
 
-  const hasMarketStatistics = (!highlightSeries || activeHighlight != null) && activePoint &&
+  const hasMarketStatistics = (productHistory || !highlightSeries || activeHighlight != null) && activePoint &&
     [activePoint.min, activePoint.median, activePoint.mean, activePoint.max].some(value => value != null && Number.isFinite(value));
+  const activeRange = activePoint && isFiniteNumber(activePoint.min) && isFiniteNumber(activePoint.max)
+    ? uiJoin(pct(activePoint.min), ' ', '–', ' ', pct(activePoint.max)) : uiLabel('Unknown');
+  const hasMarketRange = plotPoints.some((point) => isFiniteNumber(point.min) && isFiniteNumber(point.max));
+  const hasRbaValues = rbaSteps.some(isFiniteNumber);
+  const seriesColors = [ribbonColor, ribbonColor, meanColor, medianColor, highlightColor];
+  const sliceFacts = [
+    ...(productHistory && hasMarketRange ? [{ label: uiLabel('Market rate range'), value: activeRange }] : []),
+    ...(hasMarketStatistics && activePoint ? [
+      { label: uiLabel(productHistory ? 'Market median' : 'Median'), value: uiRate(activePoint.median) },
+      { label: uiLabel(productHistory ? 'Market mean' : 'Mean'), value: uiRate(activePoint.mean) },
+    ] : []),
+    ...(productHistory && hasRbaValues ? [{ label: uiLabel('RBA cash rate'), value: uiRate(activeRbaRate) }] : []),
+  ];
   const chartSummary = uiJoin(uiChartSection(section), ' · ', uiChartWindow(window), ' · ', uiCount(observedPointCount), ' ', 'Observed', ' · ', uiDate(activeDate), ' · ',
     hasMarketStatistics ? uiJoin('Min', ' ', uiRate(activePoint?.min), ' · ', 'Median', ' ', uiRate(activePoint?.median), ' · ', 'Mean', ' ', uiRate(activePoint?.mean), ' · ', 'Max', ' ', uiRate(activePoint?.max)) : uiJoin('Rates', ' · ', 'Unavailable'),
-    highlightSeries && activeHighlight != null ? uiJoin(' · ', highlightSeries.label, ' ', uiRate(activeHighlight)) : null);
+    highlightSeries && activeHighlight != null ? uiJoin(' · ', highlightSeries.label, ' ', uiRate(activeHighlight),
+      productHistory && highlightSeries.valueScope ? uiJoin(' · ', highlightSeries.valueScope) : null) : null,
+    productHistory && hasRbaValues ? uiJoin(' · ', 'RBA cash rate', ' ', uiRate(activeRbaRate)) : null);
 
   return (
     <View>
@@ -676,7 +696,7 @@ function BankHistoryChartView({
                 const nextConnected = isFiniteNumber(values[index + 1]) && isAdjacentDay(plotDates, index, index + 1);
                 return isFiniteNumber(value) && !prevConnected && !nextConnected ? (
                   <Circle key={`isolated-${seriesIndex}-${index}`} cx={xAt(index)} cy={yAt(value)} r={2.5}
-                    fill={seriesIndex === 4 ? highlightColor : ribbonColor} />
+                    fill={seriesColors[seriesIndex]} />
                 ) : null;
               }),
             )}
@@ -709,7 +729,7 @@ function BankHistoryChartView({
               <AnimatedPath
                 animatedProps={lineDrawProps}
                 d={meanLine}
-                stroke={ribbonColor}
+                stroke={meanColor}
                 strokeWidth={2}
                 fill="none"
                 strokeLinecap="round"
@@ -720,14 +740,17 @@ function BankHistoryChartView({
               <AnimatedPath
                 animatedProps={bandDrawProps}
                 d={medianLine}
-                stroke={ribbonColor}
+                stroke={medianColor}
                 strokeWidth={1.6}
                 fill="none"
                 strokeLinecap="round"
                 strokeDasharray="5 4"
               />
             ) : null}
-            {rbaLine ? (
+            {rbaLine && productHistory ? (
+              <AnimatedPath animatedProps={bandDrawProps} d={rbaLine} stroke={rbaInk}
+                strokeWidth={2} fill="none" strokeDasharray="8 4" />
+            ) : rbaLine ? (
               <AnimatedPath
                 animatedProps={lineDrawProps}
                 d={rbaLine}
@@ -830,7 +853,11 @@ function BankHistoryChartView({
             ) : null}
 
             {activePoint?.mean != null && isFiniteNumber(activePoint.mean) ? (
-              <CrossMarker cx={xAt(activeIndex)} cy={yAt(activePoint.mean)} color={ribbonColor} />
+              <CrossMarker cx={xAt(activeIndex)} cy={yAt(activePoint.mean)} color={meanColor} />
+            ) : null}
+            {productHistory && activeRbaRate != null ? (
+              <Circle cx={xAt(activeIndex)} cy={yAt(activeRbaRate)} r={3}
+                fill={theme.colors.surface} stroke={rbaInk} strokeWidth={1.5} />
             ) : null}
             {activeHighlight != null ? (
               <ProductMarker
@@ -842,7 +869,7 @@ function BankHistoryChartView({
             ) : null}
             {/* Single-day product seed: draw a reference level so "today's rate" is
                 visible against the market ribbon while daily history is still warming. */}
-            {highlightValues &&
+            {!productHistory && highlightValues &&
             activeHighlight != null &&
             highlightValues.filter((v) => isFiniteNumber(v)).length === 1 ? (
               <Line
@@ -891,7 +918,7 @@ function BankHistoryChartView({
         ) : null}
       </View>
 
-      {activeRbaRate != null ? (
+      {!productHistory && activeRbaRate != null ? (
         <Row
           accessible
           accessibilityLabel={uiJoin('Cash rate', ' · ', pct(activeRbaRate))}
@@ -919,13 +946,26 @@ function BankHistoryChartView({
           }}
           valueLabel={activeHighlight != null
             ? uiJoin(pct(activeHighlight), highlightSeries?.valueScope ? uiJoin(' · ', highlightSeries.valueScope) : null)
-            : !highlightSeries && activePoint?.min != null && activePoint?.max != null ? uiJoin(pct(activePoint.min), ' ', '–', ' ', pct(activePoint.max)) : 'Unknown'}
-          facts={hasMarketStatistics && activePoint ? [{ label: 'Median', value: uiRate(activePoint.median) }, { label: 'Mean', value: uiRate(activePoint.mean) }] : undefined}
+            : !productHistory && !highlightSeries ? activeRange : 'Unknown'}
+          facts={sliceFacts.length ? sliceFacts : undefined}
         />
       ) : null}
       {missingPointCount > 0 ? <AppText variant="tiny" color="textMuted">
         {uiJoin('Missing observations', ': ', uiCount(missingPointCount), ' · ', 'Unknown')}
       </AppText> : null}
+      {productHistory && pathsReady ? (
+        <Row gap={12} style={{ flexWrap: 'wrap', marginTop: 8 }}>
+          {highlightValues?.some(isFiniteNumber) ? (
+            <HistoryKey color={highlightColor} label={highlightSeries?.valueScope ?? uiLabel('Product')} />
+          ) : null}
+          {hasMarketRange ? (
+            <HistoryKey color={ribbonColor} fill={bandFill} label="Market rate range" />
+          ) : null}
+          {medians.some(isFiniteNumber) ? <HistoryKey color={medianColor} dash="5 4" label="Market median" /> : null}
+          {means.some(isFiniteNumber) ? <HistoryKey color={meanColor} label="Market mean" /> : null}
+          {hasRbaValues ? <HistoryKey color={rbaInk} dash="8 4" label="RBA cash rate" /> : null}
+        </Row>
+      ) : null}
     </View>
   );
 }
@@ -933,6 +973,18 @@ function BankHistoryChartView({
 // Parent layout/logo/audit commits do not change chart data. Keep the SVG and
 // controls mounted; chart state and theme updates still render normally.
 export const BankHistoryChart = React.memo(BankHistoryChartView);
+
+function HistoryKey({ color, fill, dash, label }: { color: string; fill?: string; dash?: string; label: UiCopy }) {
+  return (
+    <Row gap={6}>
+      <Svg width={22} height={10} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
+        {fill ? <Rect x={0.5} y={1} width={21} height={8} fill={fill} stroke={color} />
+          : <Line x1={0} y1={5} x2={22} y2={5} stroke={color} strokeWidth={2} strokeDasharray={dash} />}
+      </Svg>
+      <AppText variant="tiny" color="textMuted">{label}</AppText>
+    </Row>
+  );
+}
 
 function CrossMarker({ cx, cy, color }: { cx: number; cy: number; color: string }) {
   if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;

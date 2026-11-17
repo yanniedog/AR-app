@@ -34,7 +34,6 @@ import { ProductRateChangeLine } from '../../src/components/product/ProductRateC
 import {
   AccessNotice,
   DetailGroup,
-  HistoryLegend,
   OfficialLinks,
   ProductFacts,
   ProductRatesList,
@@ -44,7 +43,6 @@ import {
 } from '../../src/components/product/ProductDetailParts';
 import { ScreenScrollView } from '../../src/components/Screen';
 import { AppText, Button, Card, IconButton, Row } from '../../src/components/ui';
-import { SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability, filterBankInsightsForSuitabilityCooperatively } from '../../src/data/bankInsights';
 import { uiDate, uiJoin, uiLabel, uiProductName, uiProviderName, uiSectionName } from '../../src/lib/uiCopy';
 import { selectedTargetConstraint, targetConstraintContradicted } from '../../src/lib/selectedTargetConstraints';
@@ -700,16 +698,10 @@ export default function ProductDetail() {
   const productWideSaved = savedRates.some(
     (ref) => ref.scope === 'product' && ref.productKey === productKey,
   );
-  const meta = SECTIONS[section];
   const qualifier = rateQualifier(row, section);
   const presentation = ratePresentation(row, section, mortgageRateMetric);
 
-  const sectionInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
-  // Distinct from the market ribbon ink (clay/eucalyptus) and the RBA line (wattle)
-  // in both appearances; `warning` matched clay in light and wattle in dark.
-  const productInk = theme.ledger.info;
   const observedProductPoints = countFiniteSeriesPoints(seededProductValues);
-  const productHasHighlight = observedProductPoints > 0;
   const selectedHistoryContext = currentBest !== null && toFraction(row.rate) !== currentBest
     ? uiJoin('Selected rate', ' ', formatRate(row.rate), ' · ', 'Leading advertised', ' ', formatRate(currentBest), ' · ', 'All tiers')
     : null;
@@ -900,7 +892,7 @@ export default function ProductDetail() {
             ) : historyModel && historyModel.dates.length >= 2 ? (
               <>
                 <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-                  {uiJoin(uiProductName(row), ' · ', uiSectionName(section), ' · ', 'Matching rates')}
+                  {uiJoin(uiProductName(row), ' · ', uiSectionName(section))}
                 </AppText>
                 <ChartErrorBoundary name="ProductHistoryChart">
                   <BankHistoryChart
@@ -913,11 +905,11 @@ export default function ProductDetail() {
                     rbaHolds={core?.rba_holds}
                     section={section}
                     height={210}
-                    highlightSeries={productHasHighlight ? productSeries : null}
+                    productHistory
+                    highlightSeries={productSeries}
                     onGraphicReady={onHistoryGraphicReady}
                   />
                 </ChartErrorBoundary>
-                <HistoryLegend productColor={productInk} sectionColor={sectionInk} />
                 {/* Missing dates are already counted by the chart's own
                     "Missing observations" fact; only surface load state here. */}
                 {rateHistory.updating || rateHistory.failed ? (
