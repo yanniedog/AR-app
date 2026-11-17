@@ -588,6 +588,14 @@ function BankHistoryChartView({
   const hasMarketRange = plotPoints.some((point) => isFiniteNumber(point.min) && isFiniteNumber(point.max));
   const hasRbaValues = rbaSteps.some(isFiniteNumber);
   const seriesColors = [ribbonColor, ribbonColor, meanColor, medianColor, highlightColor];
+  const sliceFacts = [
+    ...(productHistory && hasMarketRange ? [{ label: uiLabel('Market rate range'), value: activeRange }] : []),
+    ...(hasMarketStatistics && activePoint ? [
+      { label: uiLabel(productHistory ? 'Market median' : 'Median'), value: uiRate(activePoint.median) },
+      { label: uiLabel(productHistory ? 'Market mean' : 'Mean'), value: uiRate(activePoint.mean) },
+    ] : []),
+    ...(productHistory && hasRbaValues ? [{ label: uiLabel('RBA cash rate'), value: uiRate(activeRbaRate) }] : []),
+  ];
   const chartSummary = uiJoin(uiChartSection(section), ' · ', uiChartWindow(window), ' · ', uiCount(observedPointCount), ' ', 'Observed', ' · ', uiDate(activeDate), ' · ',
     hasMarketStatistics ? uiJoin('Min', ' ', uiRate(activePoint?.min), ' · ', 'Median', ' ', uiRate(activePoint?.median), ' · ', 'Mean', ' ', uiRate(activePoint?.mean), ' · ', 'Max', ' ', uiRate(activePoint?.max)) : uiJoin('Rates', ' · ', 'Unavailable'),
     highlightSeries && activeHighlight != null ? uiJoin(' · ', highlightSeries.label, ' ', uiRate(activeHighlight),
@@ -939,15 +947,7 @@ function BankHistoryChartView({
           valueLabel={activeHighlight != null
             ? uiJoin(pct(activeHighlight), highlightSeries?.valueScope ? uiJoin(' · ', highlightSeries.valueScope) : null)
             : !productHistory && !highlightSeries ? activeRange : 'Unknown'}
-          facts={[
-            ...(productHistory && hasMarketRange
-              ? [{ label: uiLabel('Market rate range'), value: activeRange }] : []),
-            ...(hasMarketStatistics && activePoint ? [
-              { label: uiLabel(productHistory ? 'Market median' : 'Median'), value: uiRate(activePoint.median) },
-              { label: uiLabel(productHistory ? 'Market mean' : 'Mean'), value: uiRate(activePoint.mean) },
-            ] : []),
-            ...(productHistory && hasRbaValues ? [{ label: uiLabel('RBA cash rate'), value: uiRate(activeRbaRate) }] : []),
-          ]}
+          facts={sliceFacts.length ? sliceFacts : undefined}
         />
       ) : null}
       {missingPointCount > 0 ? <AppText variant="tiny" color="textMuted">
