@@ -19,10 +19,12 @@ import { capturePreAuditApplicationJournal } from './auditApplicationJournal';
 export { PERFORMANCE_AUDIT_SCHEMA_VERSION } from './performanceAuditSchema';
 
 export const PERFORMANCE_AUDIT_LOG_TAG = 'perf-audit';
-export const DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS = PERFORMANCE_AUDIT_STEP_LIMIT_MS;
+export const DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS = 30_000;
 export const MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS = 1;
 export const MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS = 3_600;
 export const PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY =
+  '@ar/performance-audit/stall-timeout-seconds-v3';
+export const LEGACY_PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY =
   '@ar/performance-audit/stall-timeout-seconds-v2';
 
 export type PerformanceAuditStatus =

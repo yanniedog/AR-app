@@ -16,6 +16,7 @@ import { normalizeBankInsightsPayload } from '../src/data/bankInsights';
 import { createEnsureActions } from '../src/data/storeEnsure';
 import * as payloadApi from '../src/data/payload';
 import type { AppState, StoreSet } from '../src/data/storeTypes';
+import { debugLog } from '../src/lib/debugLog';
 
 const files = new Map<string, string>();
 
@@ -81,7 +82,10 @@ describe('cache core-meta sidecar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetFs();
+    // Store diagnostics flush on a timer into the same filesystem mock.
+    jest.spyOn(debugLog, 'info').mockImplementation(() => {});
   });
+  afterEach(() => jest.mocked(debugLog.info).mockRestore());
 
   it('persists a downloaded event-ledger marker through the real cache and ensure read path', async () => {
     const manifest = { ...sampleManifest, files: { ...sampleManifest.files,

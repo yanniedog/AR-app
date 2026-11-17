@@ -40,9 +40,9 @@ export interface Prefs {
   /** @deprecated Legacy combined toggle, retained only so old persisted state can be migrated. */
   diagnosticsEnabled?: boolean;
   wifiOnly: boolean;
-  /** APK downloads are Wi-Fi only by default, independent of daily rates refreshes. */
+  /** APK network policy is independent of daily rates refreshes. */
   apkUpdatesWifiOnly: boolean;
-  /** Explicit standing consent to download verified APK updates after an automatic check. */
+  /** Automatically download verified updates and open Android's installer. */
   apkUpdatesAutoDownload: boolean;
   includeNonStandard: boolean;
   /** Rates pagination only; does not truncate filtering, sorting or comparisons. */
@@ -103,8 +103,8 @@ export const DEFAULT_PREFS: Prefs = {
   privacyChoiceVersion: 0,
   diagnosticsEnabled: false,
   wifiOnly: false,
-  apkUpdatesWifiOnly: true,
-  apkUpdatesAutoDownload: false,
+  apkUpdatesWifiOnly: false,
+  apkUpdatesAutoDownload: true,
   includeNonStandard: false,
   ratesPageSize: 20,
   depositRankMetric: 'base',

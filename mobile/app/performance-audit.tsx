@@ -30,6 +30,7 @@ import {
   MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
   MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
   parsePerformanceAuditHangTimeoutSeconds,
+  LEGACY_PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY,
   PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY,
   requestPerformanceAudit,
   restoreCompletedPerformanceAudit,
@@ -252,9 +253,16 @@ function PerformanceAuditScreenInner() {
   useEffect(() => {
     let active = true;
     void AsyncStorage.getItem(PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY)
-      .then((stored) => {
+      .then(async (stored) => {
+        let parsed = parsePerformanceAuditHangTimeoutSeconds(stored);
+        if (stored == null) {
+          parsed = parsePerformanceAuditHangTimeoutSeconds(
+            await AsyncStorage.getItem(LEGACY_PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY),
+          );
+          // v2 saved the old default even if the user never changed the field.
+          if (parsed === 10) parsed = null;
+        }
         if (!active) return;
-        const parsed = parsePerformanceAuditHangTimeoutSeconds(stored);
         setHangTimeoutInput(
           String(parsed ?? DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS / 1_000),
         );

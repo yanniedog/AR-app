@@ -5,11 +5,11 @@ describe('APK update preferences', () => {
     useStore.setState({ prefs: { ...DEFAULT_PREFS }, hydrated: true });
   });
 
-  it('defaults standing auto-download consent off and stores an explicit opt-in', () => {
-    expect(useStore.getState().prefs.apkUpdatesAutoDownload).toBe(false);
-    expect(useStore.getState().prefs.apkUpdatesWifiOnly).toBe(true);
-
-    useStore.getState().setPref('apkUpdatesAutoDownload', true);
+  it('defaults to automatic updates over cellular and permits opting out', () => {
     expect(useStore.getState().prefs.apkUpdatesAutoDownload).toBe(true);
+    expect(useStore.getState().prefs.apkUpdatesWifiOnly).toBe(false);
+
+    useStore.getState().setPref('apkUpdatesAutoDownload', false);
+    expect(useStore.getState().prefs.apkUpdatesAutoDownload).toBe(false);
   });
 });

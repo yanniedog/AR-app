@@ -3,7 +3,7 @@ import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Network from 'expo-network';
-import { Alert, AppState, Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import {
   completeHandler,
   createDownloadTask,
@@ -55,10 +55,8 @@ let currentProcessVerificationTaskId: string | null = null;
 let ensureInFlight: Promise<void> | null = null;
 let ensureKey: string | null = null;
 let configReady = false;
-let appStateHooked = false;
-let appStateSub: { remove: () => void } | null = null;
-let pendingPromptManifest: ApkManifest | null = null;
-let promptedBuildThisSession: string | null = null;
+let automaticInstallInFlight = false;
+const automaticInstallBuilds = new Set<string>();
 const explicitUpgradeWaiters = new Map<string, number>();
 const listeners = new Set<(s: ApkDownloadSnapshot) => void>();
 
@@ -68,17 +66,6 @@ function assertUpdateDownloadAllowed(): void {
       'App update download was not started because the app health audit owns network activity. Try again after the audit finishes.',
     );
   }
-}
-
-function hookAppStatePrompt(): void {
-  if (appStateHooked || Platform.OS !== 'android') return;
-  appStateHooked = true;
-  appStateSub = AppState.addEventListener('change', (state) => {
-    if (state !== 'active' || !pendingPromptManifest) return;
-    const manifest = pendingPromptManifest;
-    pendingPromptManifest = null;
-    void maybePromptUpgrade(manifest);
-  });
 }
 
 function emit(next: ApkDownloadSnapshot): void {
@@ -355,7 +342,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
             'app-update',
             `background download ready build=${manifest.build_number} bytes=${bytesDownloaded}`,
           );
-          await maybePromptUpgrade(manifest);
+
         } catch (err) {
           if (!isCurrent()) return;
           const message = err instanceof Error ? err.message : String(err);
@@ -489,7 +476,7 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
           verifiedAt: new Date().toISOString(),
           verifiedReceiptVersion: APK_READY_RECEIPT_VERSION,
         });
-        await maybePromptUpgrade(manifest);
+
         return true;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -692,7 +679,7 @@ export async function ensureApkBackgroundDownload(
 
   if (!force) {
     if (isCachedApkReady(snapshot, manifest.build_number, await fileExists(snapshot.localUri))) {
-      await maybePromptUpgrade(manifest);
+
       return snapshot;
     }
   }
@@ -800,7 +787,7 @@ export async function ensureApkBackgroundDownload(
           verifiedAt: new Date().toISOString(),
           verifiedReceiptVersion: APK_READY_RECEIPT_VERSION,
         });
-        await maybePromptUpgrade(manifest);
+
         return snapshot;
       } catch (err) {
         const message = String((err as Error)?.message ?? err);
@@ -959,7 +946,7 @@ export function getApkDownloadPercent(s: ApkDownloadSnapshot = snapshot): number
 }
 
 /** Install the background-downloaded APK for this manifest, if ready. */
-export async function installReadyApkUpdate(manifest: ApkManifest): Promise<void> {
+export async function installReadyApkUpdate(manifest: ApkManifest, canAutoInstall?: () => boolean): Promise<void> {
   await hydrate();
   const readyUri =
     snapshot.phase === 'ready' &&
@@ -1014,7 +1001,8 @@ export async function installReadyApkUpdate(manifest: ApkManifest): Promise<void
     });
   }
   debugLog.info('app-update', `install requested build=${manifest.build_number}`);
-  await installDownloadedApk(localUri);
+  if (canAutoInstall) await installDownloadedApk(localUri, canAutoInstall);
+  else await installDownloadedApk(localUri);
 }
 
 /**
@@ -1027,13 +1015,6 @@ export async function upgradeFromBackgroundDownload(
 ): Promise<void> {
   const buildNumber = String(manifest.build_number);
   explicitUpgradeWaiters.set(buildNumber, (explicitUpgradeWaiters.get(buildNumber) ?? 0) + 1);
-  if (
-    pendingPromptManifest &&
-    String(pendingPromptManifest.build_number) === buildNumber
-  ) {
-    pendingPromptManifest = null;
-  }
-
   try {
     await ensureApkBackgroundDownload(manifest, options);
     const network = options?.wifiOnly && snapshot.phase !== 'ready'
@@ -1115,53 +1096,30 @@ export async function upgradeFromBackgroundDownload(
   }
 }
 
-let promptInFlight = false;
-
-async function maybePromptUpgrade(manifest: ApkManifest): Promise<void> {
-  if (Platform.OS !== 'android') return;
-  if (explicitUpgradeWaiters.has(String(manifest.build_number))) return;
-  hookAppStatePrompt();
-  if (snapshot.phase !== 'ready') return;
-  if (String(snapshot.buildNumber) !== String(manifest.build_number)) return;
-  if (promptInFlight) return;
-
-  if (AppState.currentState !== 'active') {
-    pendingPromptManifest = manifest;
-    return;
+/** Start Android's normal installer at most once per build in this process. */
+export async function autoInstallReadyApkUpdate(manifest: ApkManifest, shouldInstall: () => boolean): Promise<void> {
+  const build = String(manifest.build_number);
+  const canInstall = () => Platform.OS === 'android' && AppState.currentState === 'active' &&
+    !isPerformanceAuditActive() && shouldInstall() && !explicitUpgradeWaiters.has(build) &&
+    snapshot.phase === 'ready' && String(snapshot.buildNumber) === build &&
+    !automaticInstallBuilds.has(build);
+  if (automaticInstallInFlight || !canInstall()) return;
+  automaticInstallInFlight = true;
+  try {
+    await installReadyApkUpdate(manifest, () => {
+      if (!canInstall()) return false;
+      automaticInstallBuilds.add(build);
+      return true;
+    });
+  } catch (error) {
+    automaticInstallBuilds.delete(build);
+    debugLog.warn('app-update', `automatic installer handoff failed build=${build}: ${String(error)}`);
+  } finally {
+    automaticInstallInFlight = false;
   }
-
-  const buildNumber = String(manifest.build_number);
-  if (promptedBuildThisSession === buildNumber) return;
-
-  promptInFlight = true;
-  promptedBuildThisSession = buildNumber;
-
-  Alert.alert(
-    'Update ready to install',
-    'Verified APK',
-    [
-      { text: 'Later', style: 'cancel', onPress: () => { promptInFlight = false; } },
-      {
-        text: 'Install',
-        onPress: () => {
-          promptInFlight = false;
-          void installReadyApkUpdate(manifest).catch((err) => {
-            const message = err instanceof Error ? err.message : String(err);
-            promptedBuildThisSession = null;
-            debugLog.error('app-update', `upgrade prompt install failed: ${message}`);
-            Alert.alert('Update failed');
-          });
-        },
-      },
-    ],
-    { onDismiss: () => { promptInFlight = false; } },
-  );
 }
 
 export async function resetApkDownloadStateForTests(): Promise<void> {
-  appStateSub?.remove();
-  appStateSub = null;
-  appStateHooked = false;
   snapshot = { ...IDLE_APK_DOWNLOAD };
   hydrated = false;
   hydratePromise = null;
@@ -1173,9 +1131,8 @@ export async function resetApkDownloadStateForTests(): Promise<void> {
   ensureKey = null;
   configReady = false;
   listeners.clear();
-  promptInFlight = false;
-  promptedBuildThisSession = null;
-  pendingPromptManifest = null;
+  automaticInstallInFlight = false;
+  automaticInstallBuilds.clear();
   explicitUpgradeWaiters.clear();
 }
 
