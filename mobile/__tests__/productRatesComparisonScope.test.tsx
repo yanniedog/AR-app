@@ -217,6 +217,7 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
   try {
     act(() => { rates = TestRenderer.create(<RatesWorkspace />) as InspectableRenderer; });
     expect(rates.root.findAllByType('ProductCard')).toHaveLength(0);
+    act(() => rates.root.findAllByProps({ accessibilityLabel: 'Edit' })[0].props.onPress());
     act(() => {
       rates.root.findAllByProps({ accessibilityLabel: 'Loan amount' })[0].props.onChangeText('600000');
       rates.root.findAllByProps({ accessibilityLabel: 'LVR' }).find(node => node.props.onChangeText)!.props.onChangeText('75');
@@ -311,6 +312,7 @@ test('Rates 75% offer does not show the saved 90% LVR contradiction; ordinary Pr
   let rates!: InspectableRenderer, detail!: InspectableRenderer;
   try {
     act(() => { rates = TestRenderer.create(<RatesWorkspace />) as InspectableRenderer; });
+    act(() => rates.root.findAllByProps({ accessibilityLabel: 'Edit' })[0].props.onPress());
     act(() => {
       rates.root.findAllByProps({ accessibilityLabel: 'Loan amount' })[0].props.onChangeText('600000');
       rates.root.findAllByProps({ accessibilityLabel: 'LVR' }).find(node => node.props.onChangeText)!.props.onChangeText('75');

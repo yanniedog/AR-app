@@ -12,7 +12,7 @@ jest.mock('../src/components/IconAction', () => ({ IconAction: 'IconAction' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Chip: 'Chip', Row: 'Row' }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
 
-test('clearing a restored custom scope reveals the collapsed browse header', () => {
+test('restored custom scope leaves room for rates and can be edited and hidden', () => {
   useMortgageComparison.setState({ loanAmount: '500000', lvr: '80' });
   const custom = { ...EMPTY_FILTERS, loanPurposes: ['OO'], repaymentTypes: ['PI'] };
   const header = (filters: typeof custom) => (
@@ -26,7 +26,11 @@ test('clearing a restored custom scope reveals the collapsed browse header', () 
   };
   act(() => { tree = TestRenderer.create(header(custom)) as typeof tree; });
   try {
-    expect(tree.root.findAllByProps({ testID: 'mortgage-scenario-summary' })).toHaveLength(0);
+    expect(tree.root.findByProps({ testID: 'mortgage-scenario-summary' })).toBeTruthy();
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
+    expect(tree.root.findByProps({ testID: 'mortgage-comparison-controls' })).toBeTruthy();
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Hide' }).props.onPress());
+    expect(useMortgageComparison.getState().loanAmount).toBe('500000');
     act(() => { clearMortgageComparison(); tree.update(header(EMPTY_FILTERS)); });
     expect(tree.root.findByProps({ testID: 'mortgage-scenario-summary' })).toBeTruthy();
     act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());

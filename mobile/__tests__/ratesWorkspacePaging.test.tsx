@@ -180,6 +180,7 @@ test('widely available mode scopes both control surfaces and clears hidden choic
   const sheet = () => tree.root.findByType('FilterSheet').props;
   const controls = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' });
   try {
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
     expect(sheet().options.groups[0].options).toContain('UNKNOWN');
     act(() => sheet().onDraftChange(allFilters));
     act(() => mockStore.getState().setPref('includeNonStandard', false));
@@ -986,6 +987,7 @@ test.each([false, true])('public-only facet chips reveal an offer with saved leg
   const controls = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' });
   const chips = () => controls().findAllByType('Chip');
   try {
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
     const labels = chips().map((chip: any) => chip.props.label);
     expect(labels.filter((label: string) => label === 'Owner occupied')).toHaveLength(1);
     expect(labels.filter((label: string) => label === 'Principal & interest')).toHaveLength(1);
@@ -1038,6 +1040,7 @@ test('multiple mortgage chips retain both public-only offers with exact row pric
   install();
   const tree = mount();
   try {
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
     const chips = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' }).findAllByType('Chip');
     for (const label of ['Owner occupied', 'Investor', 'Principal & interest', 'Interest only']) {
       act(() => chips().find((chip: any) => chip.props.label === label)!.props.onPress());
