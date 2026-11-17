@@ -13,6 +13,9 @@ export function auditSearchUsesBasicFallback(
 }
 
 export const MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID = 'maximum-safe-coverage-v1' as const;
+export const MAXIMUM_AUDIT_ASSETS = [
+  'core', 'details', 'searchIndex', 'bankHistory', 'bankInsights', 'bankSpreadHistory', 'rbaCalendar', 'productHistory',
+] as const;
 
 /** Read the profile result itself, even when optional assets make its check unmeasurable. */
 export function maximumPerformanceAuditProfileWasEnabled(
