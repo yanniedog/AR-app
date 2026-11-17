@@ -113,6 +113,7 @@ function availableSortOptions(
 }
 
 const EMPTY_RATE_ROWS: RateRow[] = [];
+const SMALL_MORTGAGE_BOOK_ROWS = 128;
 const rowToken = (r: RateRow) => r.public_offer_id ? publicOfferSelectionToken(r.product_key, r.public_offer_id) :
   r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
 
@@ -372,10 +373,12 @@ export default function RatesWorkspace() {
     [sourceRates, mortgageContext, catalogue, indexedScenarioKey, indexedInputsKey, suitabilityRevision]);
   const [settledMortgageWork, setSettledMortgageWork] = useState<typeof mortgageWorkKey | null>(null);
   // This optional full-book warmup was competing with the current scope scan.
-  // Warm only after that request finishes; a completed index remains usable.
+  // Defer large warmups until that request finishes. A small book can finish
+  // its index before the first viewport commits, so later edits settle at once.
   const mortgageIndex = useMortgageResultsIndex(core?.sections.Mortgage.rates ?? EMPTY_RATE_ROWS,
     catalogue, mortgageContext, task.includeNonStandardOverride ?? includeNonStandard, suitabilityRevision,
-    isFocused && section === 'Mortgage', !mortgagePricingReady || settledMortgageWork === mortgageWorkKey);
+    isFocused && section === 'Mortgage',
+    sourceRates.length <= SMALL_MORTGAGE_BOOK_ROWS || !mortgagePricingReady || settledMortgageWork === mortgageWorkKey);
   const indexedPricing = useMemo(() => section === 'Mortgage' && !task.intentError && mortgagePricingReady &&
     pricingMortgageFilters.loanPurposes.length === 1 && pricingMortgageFilters.repaymentTypes.length === 1
     ? mortgageIndex.index?.select(sectionScenario, effectiveMortgageInputs) ?? null : null,
