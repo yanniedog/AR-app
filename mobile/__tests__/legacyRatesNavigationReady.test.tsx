@@ -24,6 +24,7 @@ let mockHydrated = true;
 let mockParams: Record<string, string | string[]> = {};
 const mockListeners = { ready: new Set<() => void>(), state: new Set<() => void>() };
 const mockDismissTo = jest.fn();
+const mockNavigate = jest.fn();
 const mockPush = jest.fn();
 const mockNavigation = {
   isReady: () => mockReady,
@@ -38,6 +39,9 @@ jest.mock('expo-router', () => ({
   router: { dismissTo: (...args: unknown[]) => {
     if (!mockReady) throw new Error('Attempted to navigate before mounting the Root Layout');
     mockDismissTo(...args);
+  }, navigate: (...args: unknown[]) => {
+    if (!mockReady) throw new Error('Attempted to navigate before mounting the Root Layout');
+    mockNavigate(...args);
   }, push: (...args: unknown[]) => {
     if (!mockReady) throw new Error('Attempted to navigate before mounting the Root Layout');
     mockPush(...args);
@@ -47,20 +51,20 @@ jest.mock('../src/data/store', () => ({ useStore: (selector: any) => selector({ 
 const emit = (event: 'ready' | 'state') => [...mockListeners[event]].forEach(listener => listener());
 beforeEach(() => {
   mockReady = false; mockHydrated = true; mockParams = {};
-  mockListeners.ready.clear(); mockListeners.state.clear(); mockDismissTo.mockClear(); mockPush.mockClear();
+  mockListeners.ready.clear(); mockListeners.state.clear(); mockDismissTo.mockClear(); mockNavigate.mockClear(); mockPush.mockClear();
 });
 
 test('cold legacy Home waits for actual container readiness without an intermediate rerender', () => {
   let tree!: ReactTestRenderer;
   act(() => { tree = TestRenderer.create(<LegacyHome />); });
   try {
-    expect(mockDismissTo).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
     // A root state notification alone does not imply a mounted container.
-    act(() => emit('state')); expect(mockDismissTo).not.toHaveBeenCalled();
+    act(() => emit('state')); expect(mockNavigate).not.toHaveBeenCalled();
     act(() => { mockReady = true; emit('ready'); });
-    expect(mockDismissTo).toHaveBeenCalledWith({ pathname: '/(tabs)/browse', params: {} });
+    expect(mockNavigate).toHaveBeenCalledWith({ pathname: '/(tabs)/browse', params: {} });
     act(() => { emit('ready'); emit('state'); tree.update(<LegacyHome />); });
-    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
   } finally { act(() => tree.unmount()); }
 });
 
@@ -92,7 +96,7 @@ test('an unmounted cold entry cancels its pending redirect and unregisters liste
   act(() => tree.unmount());
   expect(mockListeners.ready.size).toBe(0); expect(mockListeners.state.size).toBe(0);
   act(() => { mockReady = true; emit('ready'); emit('state'); });
-  expect(mockDismissTo).not.toHaveBeenCalled();
+  expect(mockNavigate).not.toHaveBeenCalled();
 });
 
 
@@ -100,11 +104,11 @@ test('cold Tools preserves exact calculation parameters and its Rates back desti
   mockParams = { section: 'Savings', target: 'opaque/% key', ri: ['7', '7'], mode: 'project' };
   let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Tools />); });
   try {
-    expect(mockDismissTo).not.toHaveBeenCalled(); expect(mockPush).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled(); expect(mockPush).not.toHaveBeenCalled();
     act(() => { mockReady = true; emit('ready'); });
-    expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/browse');
+    expect(mockNavigate).toHaveBeenCalledWith('/(tabs)/browse');
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/calculator', params: mockParams });
-    expect(mockDismissTo.mock.invocationCallOrder[0]).toBeLessThan(mockPush.mock.invocationCallOrder[0]);
+    expect(mockNavigate.mock.invocationCallOrder[0]).toBeLessThan(mockPush.mock.invocationCallOrder[0]);
     act(() => emit('state')); expect(mockPush).toHaveBeenCalledTimes(1);
   } finally { act(() => tree.unmount()); }
 });
@@ -126,7 +130,7 @@ test('Strict Mode effect replay cannot duplicate an already-ready Tools handoff'
   let tree!: ReactTestRenderer;
   act(() => { tree = TestRenderer.create(<React.StrictMode><Tools /></React.StrictMode>); });
   try {
-    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledTimes(1);
   } finally { act(() => tree.unmount()); }
 });
@@ -148,10 +152,10 @@ test('Strict Mode async schedule still delivers Tools handoff after cancelled fi
   let tree!: ReactTestRenderer;
   try {
     act(() => { tree = TestRenderer.create(<React.StrictMode><Tools /></React.StrictMode>); });
-    expect(mockDismissTo).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
     expect(pending.length).toBeGreaterThan(0);
     act(() => { pending.splice(0).forEach((work) => work()); });
-    expect(mockDismissTo).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledTimes(1);
   } finally {
     scheduleMock.scheduleAfterInteractions = previous;
