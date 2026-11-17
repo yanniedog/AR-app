@@ -583,7 +583,7 @@ test('unlisted entries stay verified product identities without fabricated rates
     const data = tree.root.findByType('FlashList' as any).props.data; expect(data).toHaveLength(1);
     expect(data[0]).not.toHaveProperty('rate'); expect(tree.root.findAllByType('ProductCard' as any)).toHaveLength(0);
     expect(tree.root.findAllByType('AppText' as any).map((node: any) => String(node.props.children)).join(' ')).not.toContain('Unique provider marketing sentence');
-    const row = tree.root.findAllByType('TouchTarget' as any).find((node: any) => node.props.accessibilityLabel === 'Verified Name');
+    const row = tree.root.findAllByType('TouchTarget' as any).find((node: any) => node.props.accessibilityLabel === 'Verified Name, Recorded Bank, No listed rate');
     act(() => row.props.onPress());
     expect(router.push).toHaveBeenCalledWith({ pathname: '/product/[key]', params: { key: 'unlisted-key' } });
   } finally { act(() => tree.unmount()); }

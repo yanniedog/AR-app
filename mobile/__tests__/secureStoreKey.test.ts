@@ -10,6 +10,7 @@ describe('SecureStore key contract', () => {
   it('registers every static key with an Expo-compatible value', () => {
     expect(SECURE_STORE_KEYS).toEqual({
       customerProfile: 'ar.customer-profile.v1',
+      mortgageComparisonProfile: 'ar.mortgage-comparison-profile.v1',
       debugLogUploadReceipt: 'ar.debug-log.public-upload-receipt.v1',
       debugLogUploadRecoveryReceipt: 'ar.debug-log.public-upload-recovery-receipt.v1',
       payloadDecryptionKey: 'ar.payload.deckey',
