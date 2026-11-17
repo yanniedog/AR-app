@@ -1,7 +1,7 @@
-import { formatRate, formatTerm } from '../../data/format';
+import { formatMoneyShort, formatRate, formatTerm } from '../../data/format';
 import type { ScopedFinancialConditionPresentation } from '../../data/scopedFinancialConditionFacts';
 import { uiConditionRange, uiListedLvrRange } from '../../lib/financialUiCopy';
-import { uiCount, uiJoin, uiLabel, uiMoney, type UiCopy, type UiText } from '../../lib/uiCopy';
+import { uiCount, uiJoin, uiLabel, type UiCopy, type UiText } from '../../lib/uiCopy';
 import type { RateRow, SectionKey } from '../../types';
 
 export const COMPACT_ROW = {
@@ -48,9 +48,8 @@ function balanceValue(row: RateRow): UiText {
   if ((row.balance_min != null && row.balance_min !== '' && lower === null)
     || (row.balance_max != null && row.balance_max !== '' && upper === null)
     || (lower !== null && upper !== null && lower > upper)) return uiLabel('Unverified');
-  const money = (value: number) => uiMoney(value, Number.isInteger(value) ? 0 : Math.max(2, Math.min(6, (String(value).split('.')[1] ?? '').length)));
-  return lower !== null && upper !== null ? uiJoin(money(lower), '–', money(upper))
-    : lower !== null ? uiJoin('≥', money(lower)) : upper !== null ? uiJoin('≤', money(upper)) : uiLabel('Unknown');
+  return lower !== null && upper !== null ? uiJoin(formatMoneyShort(lower), '–', formatMoneyShort(upper))
+    : lower !== null ? uiJoin('≥', formatMoneyShort(lower)) : upper !== null ? uiJoin('≤', formatMoneyShort(upper)) : uiLabel('Unknown');
 }
 
 /** Exact admitted source bounds take precedence over the normalized catalogue tier. */
@@ -60,7 +59,7 @@ export function compactProductFacet(row: RateRow, section: SectionKey,
   const source = conditions.facts.filter(fact => kind === 'LVR' ? fact.kind === 'published-lvr-range'
     : kind === 'Term' ? fact.kind === 'published-term-range' : fact.kind === 'published-balance-range'
       && (fact.subject === 'balance' || fact.subject === 'deposit-balance'));
-  const value = source.length > 1 ? uiLabel('Unknown') : source.length ? uiConditionRange(source[0]) : kind === 'LVR' ? uiListedLvrRange(row)
+  const value = source.length > 1 ? uiLabel('Unknown') : source.length ? uiConditionRange(source[0], true) : kind === 'LVR' ? uiListedLvrRange(row)
     : kind === 'Term' ? formatTerm(row) || uiLabel('Unknown') : balanceValue(row);
   return { kind, value, known: !['Unknown', 'Unverified'].includes(value) };
 }

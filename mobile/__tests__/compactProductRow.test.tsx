@@ -163,7 +163,7 @@ test('keeps the normal-size fact baseline when an exact balance cannot fit', () 
   try {
     expect(tree.root.findByProps({ testID: 'compact-product-scroll' }).props.horizontal).toBe(true);
     expect(tree.root.findByProps({ testID: 'compact-product-row' }).props.style.minHeight).toBe(COMPACT_ROW.minHeight);
-    expect(tree.root.findByProps({ testID: 'compact-facet-value' }).props.children).toBe('$123,456,789,012–$987,654,321,012');
+    expect(tree.root.findByProps({ testID: 'compact-facet-value' }).props.children).toBe('$123,456,789.012k–$987,654,321.012k');
   } finally { act(() => tree.unmount()); }
 });
 

@@ -346,7 +346,8 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
         <AppText variant="small" color={fieldRequired ? 'warning' : 'text'} weight={fieldRequired ? '700' : undefined}>
           {fieldRequired ? uiJoin(fieldLabel(field), ' · ', 'Required') : fieldLabel(field)}
         </AppText>
-        <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)} keyboardType="decimal-pad" maxLength={64}
+        <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)}
+          keyboardType={field === 'lvr' ? 'decimal-pad' : 'default'} autoCapitalize="none" autoCorrect={false} maxLength={64}
           accessibilityLabel={fieldLabel(field)}
           placeholder={uiLabel(field === 'lvr' ? '%' : '$')}
           style={{ minHeight: 48, minWidth: 0, color: theme.colors.text, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 6, padding: 8, fontSize: theme.font.body }} />

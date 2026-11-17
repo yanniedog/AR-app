@@ -10,8 +10,8 @@ jest.mock('../src/lib/secureStoreValue', () => ({
 }));
 
 const comparison: MortgageComparisonInputs = {
-  loanAmount: '540k', lvr: '80.0025', lvrMode: 'funds', fundsType: 'offset',
-  fundsAvailable: '52k', propertyValue: '750k',
+  loanAmount: '$650k', lvr: '80.0025', lvrMode: 'funds', fundsType: 'offset',
+  fundsAvailable: '$155k', propertyValue: '$775k',
 };
 const facets = { loanPurposes: ['OWNER_OCCUPIED'], repaymentTypes: ['PRINCIPAL_AND_INTEREST'] };
 
