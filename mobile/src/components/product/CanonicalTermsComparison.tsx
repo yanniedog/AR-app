@@ -8,25 +8,12 @@ import { useStore } from '../../data/store';
 import { AppText, Button, Disclosure } from '../ui';
 import { uiCount, uiDate, uiIdentifier, uiJoin, uiLabel, uiProductName, uiProviderName } from '../../lib/uiCopy';
 import { uiCanonicalTermValue } from './engineComparisonUi';
-import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
-import { useAuditExternalLinks } from '../../hooks/useAuditExternalLinks';
 
-function RevisionCell({ terms, revisions }: { terms: ProductTerms; revisions: TermRevision[] }) {
-  const { requestExternalUrl } = useTrustedExternalUrl();
-  useAuditExternalLinks(revisions.flatMap((revision) => revision.clause_ids.flatMap((id) => {
-    const clause = terms.clauses.find((item) => item.clause_id === id);
-    const document = terms.documents.find((item) => item.document_version_id === clause?.document_version_id);
-    return document ? [{ url: document.source_url, label: uiIdentifier(revision.parameter_key), purpose: 'lender_source' as const }] : [];
-  })));
+function RevisionCell({ revisions }: { revisions: TermRevision[] }) {
   return <View style={{ gap: 6 }}>
-    {revisions.length > 1 && <AppText variant="small">{uiJoin('Revisions', ' · ', uiCount(revisions.length), ' · ', 'Source review required')}</AppText>}
     {revisions.map(revision => <View key={revision.term_revision_id} style={{ gap: 4 }}>
       <AppText variant="small">{uiJoin(uiCanonicalTermValue(revision), ' · ', 'Unit', ' · ', uiIdentifier(revision.unit))}</AppText>
-      <AppText variant="tiny">{uiJoin('Status', ' · ', 'Verified', ' · ', 'Observed', ' · ', uiDate(revision.observed_at), ' · ', 'No approval')}</AppText>
-      {revision.clause_ids.map(id => {
-        const clause = terms.clauses.find(item => item.clause_id === id), document = terms.documents.find(item => item.document_version_id === clause?.document_version_id);
-        return clause ? <View key={id}><AppText variant="small">{uiJoin('Source review required', ' · ', uiIdentifier(clause.clause_id))}</AppText>{document && <Button title="Open source" variant="secondary" onPress={() => requestExternalUrl({ url: document.source_url, label: uiIdentifier(revision.parameter_key), purpose: 'lender_source' })} />}</View> : null;
-      })}
+      <AppText variant="tiny">{uiJoin('Status', ' · ', 'Verified', ' · ', 'Observed', ' · ', uiDate(revision.observed_at))}</AppText>
     </View>)}
   </View>;
 }
@@ -55,7 +42,7 @@ export function CanonicalTermsComparison({ rows }: { rows: RateRow[] }) {
         <AppText variant="small">{uiJoin('Effective from', ' · ', uiDate(group.scope.effective_from), ' · ', 'Effective to', ' · ', uiDate(group.scope.effective_to))}</AppText>
         {products.map(row => { const terms = current.values.find(item => item.productKey === row.product_key)?.terms, revisions = group.cells[row.product_key]; return <View key={row.product_key} style={{ gap: 4 }}>
           <AppText weight="700">{uiJoin(uiProviderName(row), ' · ', uiProductName(row))}</AppText>
-          {terms && revisions ? <RevisionCell terms={terms} revisions={revisions} /> : <AppText variant="small">{uiLabel('Unknown')}</AppText>}
+          {terms && revisions ? <RevisionCell revisions={revisions} /> : <AppText variant="small">{uiLabel('Unknown')}</AppText>}
         </View>; })}
       </Disclosure>)}
       {groups.length > limit && <Button title={uiJoin('More', ' · ', uiCount(groups.length - limit))} variant="secondary" onPress={() => setLimit(limit + 30)} />}

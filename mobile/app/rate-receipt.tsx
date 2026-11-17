@@ -1,3 +1,4 @@
+import { ProductPageLink, ProductPageLinks } from '../src/components/product/ProductPageLink';
 import { useIsFocused } from '@react-navigation/native';
 import { useResolvedPublicRankingRows } from '../src/hooks/useResolvedPublicRankingRows';
 import { useMortgageComparison } from '../src/data/mortgageComparison';
@@ -5,7 +6,6 @@ import { ratesComparisonScenario } from '../src/data/mortgageComparisonScenario'
 import { useRatesSession } from '../src/data/ratesSession';
 import { uiCount, uiDate, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
 import { uiConditionalRateFact } from "../src/lib/financialUiCopy";
-import Ionicons from '../src/components/icons/AppIcon';
 import { usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
 import { bindCurrentPublicRow, publicScenarioForRow, publicRateScenario, publicRecommendationRowsForProduct, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
 import { PublicRateEvidence } from '../src/components/scenario/PublicRateEvidence';
@@ -15,8 +15,6 @@ import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Share, type ScrollView, View } from 'react-native';
 
-import { useTrustedExternalUrl } from '../src/components/ExternalLinkConfirmation';
-import { useAuditExternalLinks } from '../src/hooks/useAuditExternalLinks';
 import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { SectionTitle } from '../src/components/product/ProductDetailParts';
 import { RateConditionsDisclosure } from '../src/components/product/RateConditionsDisclosure';
@@ -38,7 +36,14 @@ import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 
-function Facts({ items, empty }: { items: readonly ReceiptFact[]; empty?: UiCopy }) {
+function FactRow({ fact }: { fact: ReceiptFact }) {
+  return <Row style={{ flexGrow: 1, alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+    <AppText variant="small" color="textMuted" style={{ flex: 1 }}>{fact.label}</AppText>
+    <AppText variant="small" weight="600" style={{ flex: 1.4, textAlign: 'right' }}>{fact.value}</AppText>
+  </Row>;
+}
+
+function Facts({ items, empty, linkToProduct = false }: { items: readonly ReceiptFact[]; empty?: UiCopy; linkToProduct?: boolean }) {
   if (!items.length) {
     return empty ? <AppText variant="small" color="textMuted">{empty}</AppText> : null;
   }
@@ -47,14 +52,9 @@ function Facts({ items, empty }: { items: readonly ReceiptFact[]; empty?: UiCopy
       {items.map((fact, index) => (
         <View key={`${fact.label}-${index}`}>
           {index > 0 ? <Divider style={{ marginVertical: 10 }} /> : null}
-          <Row style={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-            <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
-              {fact.label}
-            </AppText>
-            <AppText variant="small" weight="600" style={{ flex: 1.4, textAlign: 'right' }}>
-              {fact.value}
-            </AppText>
-          </Row>
+          {linkToProduct ? <ProductPageLink label={uiJoin(fact.label, ', ', fact.value)}>
+            <FactRow fact={fact} />
+          </ProductPageLink> : <FactRow fact={fact} />}
         </View>
       ))}
     </>
@@ -83,7 +83,6 @@ export default function RateReceiptScreen() {
   const focused = useIsFocused();
   const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
-  const { requestExternalUrl } = useTrustedExternalUrl();
   const { key, ri, programme: requestedProgramme, origin } = useLocalSearchParams<{ key?: string; ri?: string; programme?: string; origin?: string }>();
   const fromRatesComparison = origin === 'rates-comparison';
   const comparisonInputs = useMortgageComparison();
@@ -199,7 +198,6 @@ export default function RateReceiptScreen() {
     },
     [detailsProducts, found, receipt, calculationScenario, comparisonsAvailable, comparisonPricing.resolution.rows, fromRatesComparison, scenarioFor, selectedRow],
   );
-  useAuditExternalLinks((receipt?.officialSources ?? []).map((source) => ({ url: source.url, purpose: 'lender_source', label: source.label })));
   const shareText = useMemo(() => {
     if (!receipt || !brief) return uiLabel('Unavailable');
     const lines: UiCopy[] = [uiJoin('Bank-call brief', ': ', uiProviderName({ provider: receipt.provider })),
@@ -362,21 +360,13 @@ export default function RateReceiptScreen() {
       <Disclosure title="Your entered scenario" open={scenarioOpen} onToggle={() => setScenarioOpen(!scenarioOpen)}><Card>
         {!scenarioLoaded ? <AppText>{uiLabel('Loading')}</AppText> : brief.scenario.length ? <Facts items={brief.scenario} /> : <Button title="Add scenario" variant="secondary" onPress={() => router.push('/calculator')} />}
       </Card></Disclosure>
-      <Disclosure title="Published evidence" open={evidenceOpen} onToggle={() => setEvidenceOpen(!evidenceOpen)}>
-        <SectionTitle text="Exact published tier" icon="layers-outline" /><Card><Facts items={receipt.tier} /></Card>
-        <SectionTitle text="Conditions recorded" icon="checkmark-done-outline" /><RateConditionsDisclosure model={receipt.rateConditions} /><Card><Facts items={receipt.conditions} empty="Eligibility / constraints unpublished" /></Card>
-        {receipt.fees.length ? <><SectionTitle text="Fees recorded" icon="cash-outline" /><Card><Facts items={receipt.fees} /></Card></> : null}
-        <SectionTitle text="Published source links" icon="link-outline" /><Card>
-          {receipt.officialSources.length ? receipt.officialSources.map((source, index) => <View key={source.url}>
-            {index ? <Divider /> : null}
-            <Pressable accessibilityRole="link" accessibilityLabel={uiJoin(source.label, ' · ', source.hostname, ' · ', 'External link')}
-              onPress={() => requestExternalUrl({ url: source.url, purpose: 'lender_source', label: source.label })}
-              style={({ pressed }) => ({ minHeight: TOUCH_TARGET_MIN, flexDirection: 'row', alignItems: 'center', gap: 10, opacity: pressed ? 0.7 : 1 })}>
-              <Ionicons name="open-outline" size={17} color={theme.colors.primary} /><View style={{ flex: 1 }}><AppText weight="700">{source.label}</AppText><AppText variant="tiny" color="textMuted">{source.hostname}</AppText></View>
-            </Pressable>
-          </View>) : <AppText>{uiLabel('Published source unavailable')}</AppText>}
-        </Card>
-      </Disclosure>
+      <ProductPageLinks overview={detail?.links?.overview}>
+        <Disclosure title="Published evidence" open={evidenceOpen} onToggle={() => setEvidenceOpen(!evidenceOpen)}>
+          <SectionTitle text="Exact published tier" icon="layers-outline" /><Card><Facts linkToProduct items={receipt.tier} /></Card>
+          <SectionTitle text="Conditions recorded" icon="checkmark-done-outline" /><RateConditionsDisclosure model={receipt.rateConditions} /><Card><Facts linkToProduct items={receipt.conditions} empty="Eligibility / constraints unpublished" /></Card>
+          {receipt.fees.length ? <><SectionTitle text="Fees recorded" icon="cash-outline" /><Card><Facts linkToProduct items={receipt.fees} /></Card></> : null}
+        </Disclosure>
+      </ProductPageLinks>
     </ScreenScrollView>
   </>;
 }

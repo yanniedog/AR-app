@@ -66,7 +66,7 @@ export const UI_LABELS = [
   'Outside listed balance tier', 'Current balance and rate required', 'Maturity unknown',
   'Annual simple interest', 'Fees, tax and compounding excluded', 'Interest difference',
   'results', 'rates', 'banks', 'products', 'Selected', 'All', 'Matches', 'Bank', 'Product',
-  'Banks', 'Products', 'Rate details', 'Terms', 'Conditions', 'Source', 'Source review required',
+  'Banks', 'Products', 'Rate details', 'Terms', 'Conditions', 'Source',
   'Source unverified', 'Published', 'Observed', 'Checked', 'As at', 'Cached', 'Offline',
   'Online', 'Live', 'Local', 'Partial', 'Complete', 'Coverage', 'Core', 'Details', 'History', 'Data',
   'LVR', 'Balance', 'Minimum', 'Maximum', 'Term', 'Months', 'Years', 'months', 'years',
@@ -599,11 +599,11 @@ const BACKGROUND_STAGE_NAMES: Readonly<Record<string, UiLabel>> = {
 };
 /** Exact worker/stage identities from the real registry; arbitrary labels stay opaque. */
 export function uiBackgroundWorkName(job: BackgroundWorkSnapshot): UiText {
-  return uiLabel(Object.hasOwn(BACKGROUND_WORK_NAMES, job.label) ? BACKGROUND_WORK_NAMES[job.label] : 'Source review required');
+  return uiLabel(Object.hasOwn(BACKGROUND_WORK_NAMES, job.label) ? BACKGROUND_WORK_NAMES[job.label] : 'Unverified');
 }
 export function uiBackgroundWorkStage(job: BackgroundWorkSnapshot, index?: number): UiText {
   const value = index === undefined ? job.stage : job.stages[index]?.label;
-  if (!value) return uiLabel('Source review required');
+  if (!value) return uiLabel('Unverified');
   if (Object.hasOwn(BACKGROUND_STAGE_NAMES, value)) return uiLabel(BACKGROUND_STAGE_NAMES[value]);
   const progress = /^(manifest|finalize|download|verify|inflate|parse|install): ([A-Za-z0-9][A-Za-z0-9_.-]{0,159})$/.exec(value);
   if (progress) {
@@ -611,7 +611,7 @@ export function uiBackgroundWorkStage(job: BackgroundWorkSnapshot, index?: numbe
     return uiJoin(phases[progress[1]], ' · ', uiIdentifier(progress[2]));
   }
   const metric = /^persist (begin archive_dates|encoded characters)=(\d{1,12})$/.exec(value);
-  return metric ? uiJoin(metric[1] === 'begin archive_dates' ? 'Archive dates' : 'Characters', ': ', uiCount(Number(metric[2]))) : uiLabel('Source review required');
+  return metric ? uiJoin(metric[1] === 'begin archive_dates' ? 'Archive dates' : 'Characters', ': ', uiCount(Number(metric[2]))) : uiLabel('Unverified');
 }
 function identity(value: string | null | undefined): UiText {
   return known(value?.replace(/[\r\n\t]/g, ' ').trim() || 'Unknown');
@@ -653,18 +653,18 @@ export function uiProductReference(row: RateRow): UiText {
 export function uiDetailsProductReference(details: DetailsPayload | null | undefined, productKey: string): UiText {
   const products = details?.products;
   if (!products || typeof products !== 'object' || Array.isArray(products) || !Object.hasOwn(products, productKey)
-    || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(productKey) || productKey.length > 1024) return uiLabel('Source review required');
+    || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(productKey) || productKey.length > 1024) return uiLabel('Unverified');
   const detail = products[productKey], [provider, productId, category, ...nameParts] = productKey.split('|'), name = nameParts.join('|');
   // Closed BankingProductCategory values; legacy section-based keys use the
   // repository's SECTION_KEYS. Unknown categories never become identity copy.
   const categories: readonly string[] = ['BUSINESS_LOANS', 'BUY_NOW_PAY_LATER', 'CRED_AND_CHRG_CARDS', 'LEASES', 'MARGIN_LOANS', 'OVERDRAFTS', 'PERS_LOANS',
     'REGULATED_TRUST_ACCOUNTS', 'RESIDENTIAL_MORTGAGES', 'TERM_DEPOSITS', 'TRADE_FINANCE', 'TRANS_AND_SAVINGS_ACCOUNTS', 'TRAVEL_CARDS', ...SECTION_KEYS];
   if (!detail || typeof detail !== 'object' || Array.isArray(detail) || !provider?.trim() || !/^[A-Za-z0-9_./:@%+\-=#?&]{1,512}$/.test(productId ?? '') || !name.trim()
-    || !categories.includes(category)) return uiLabel('Source review required');
+    || !categories.includes(category)) return uiLabel('Unverified');
   const bound = detail.displayIdentity;
-  if (bound && (typeof bound !== 'object' || Array.isArray(bound))) return uiLabel('Source review required');
+  if (bound && (typeof bound !== 'object' || Array.isArray(bound))) return uiLabel('Unverified');
   if (bound && (bound.name !== undefined && bound.name !== name || bound.provider !== undefined && bound.provider !== provider
-    || bound.productCategory !== undefined && bound.productCategory !== category)) return uiLabel('Source review required');
+    || bound.productCategory !== undefined && bound.productCategory !== category)) return uiLabel('Unverified');
   return identity(productKey);
 }
 export function uiProviderName(row: Pick<RateRow, 'provider'>): UiText { return identity(row.provider); }
@@ -793,19 +793,19 @@ export function useNegotiatedTermDraft() {
     } };
 }
 export function uiInputDefinitionLabel(definition: InputDefinition, question?: CustomerQuestionBinding | null): UiText {
-  if (!validDefinition(definition)) return uiLabel('Source review required');
+  if (!validDefinition(definition)) return uiLabel('Unverified');
   if (question !== undefined) {
     // Load the real transport-bound question verifier only for this capability;
     // pure catalogue labels must not initialize native payload transport.
     const { readBoundCustomerQuestion } = require('./customerQuestionBinding') as typeof import('./customerQuestionBinding');
     const label = readBoundCustomerQuestion(definition, question);
-    return label === null ? uiLabel('Source review required') : known(label);
+    return label === null ? uiLabel('Unverified') : known(label);
   }
   const label = UI_LABELS.find(approved => approved === definition.label);
-  return label ? uiLabel(label) : uiLabel('Source review required');
+  return label ? uiLabel(label) : uiLabel('Unverified');
 }
 function privateLine(value: string, limit: number): UiText {
-  return known(value.trim() && value.length <= limit && !/[\r\n\t]/.test(value) ? value.trim() : 'Source review required');
+  return known(value.trim() && value.length <= limit && !/[\r\n\t]/.test(value) ? value.trim() : 'Unverified');
 }
 export function uiCustomerAnswer(answer: CustomerAnswer, definition: InputDefinition): UiText {
   if (!validDefinition(definition) || !validProvenance(answer.provenance)) return uiLabel('Unverified');
@@ -814,7 +814,7 @@ export function uiCustomerAnswer(answer: CustomerAnswer, definition: InputDefini
   if (!validFact(fact) || fact.type !== definition.type || fact.type === 'decimal' && fact.unit !== definition.unit) return uiLabel('Unverified');
   if (fact.type === 'boolean') return uiLabel(fact.value ? 'Yes' : 'No');
   if (fact.type === 'date') return uiDate(fact.value);
-  if (fact.type === 'text') return answer.provenance.source === 'user_input' ? privateLine(fact.value, 2000) : uiLabel('Source review required');
+  if (fact.type === 'text') return answer.provenance.source === 'user_input' ? privateLine(fact.value, 2000) : uiLabel('Unverified');
   if (fact.type !== 'decimal') return uiLabel('Unknown');
   if (fact.unit === 'AUD') return uiDecimal(fact.value);
   if (fact.unit === 'fraction') return uiDecimal(Decimal.parse(fact.value).mul(Decimal.parse('100')).fixed((fact.value.split('.')[1] ?? '').length), 'percent');

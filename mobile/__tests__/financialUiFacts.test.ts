@@ -52,26 +52,26 @@ test('fee zero, rate-based fees and variable published bounds survive without de
 });
 test('normalized source paragraphs never render as facts; numbers and applicable enums do', () => {
   const fact = uiNormalizedProductFact({ id: 'fact-1', kind: 'constraint', canonicalKey: 'constraint.MIN_BALANCE', label: 'Amazing paragraph here.', value: '100', unit: 'AUD', condition: 'Customer eligibility must be investigated.', appliesTo: ['OWNER_OCCUPIED'] });
-  expect(fact.value).toBe('$100'); expect(fact.conditions).toBe('source-review-required'); expect(fact.scope).toEqual(['Owner occupied']); expect(fact.label).not.toContain('Amazing');
+  expect(fact.value).toBe('$100'); expect(fact.conditionsUnverified).toBe(true); expect(fact.scope).toEqual(['Owner occupied']); expect(fact.label).not.toContain('Amazing');
   expect(uiDetailItem({ label: 'MIN_LIMIT', value: '$150,000' }, 0, 'Constraints').value).toBe('$150k');
 });
 test('validated term decimals remain exact and unrecognized complex/source text is explicit', () => {
   const revision = { value: '123456789.123456789012345678', unit: 'AUD' } as TermRevision;
   expect(uiTermRevisionValue(revision)).toBe('$123456789.123456789012345678');
-  expect(uiTermRevisionValue({ ...revision, value: 'Explanatory source text' })).toBe('Source review required');
-  expect(uiTermRevisionValue({ ...revision, value: { note: 'dynamic explanation' } })).toBe('Source review required');
+  expect(uiTermRevisionValue({ ...revision, value: 'Explanatory source text' })).toBe('Unverified');
+  expect(uiTermRevisionValue({ ...revision, value: { note: 'dynamic explanation' } })).toBe('Unverified');
 });
 test('private answer boundaries admit explicit authored text, reject legacy prose and validate definition labels', () => {
   const definition: InputDefinition = { id: 'agreement', label: 'Term', type: 'text' };
   const answer: CustomerAnswer = { state: 'known', fact: { type: 'text', value: 'Agreed fixed rate' }, provenance: privateProvenance };
   expect(uiCustomerAnswer(answer, definition)).toBe('Agreed fixed rate');
-  expect(uiCustomerAnswer({ ...answer, provenance: { ...privateProvenance, source: 'legacy_user_input' } }, definition)).toBe('Source review required');
-  expect(uiCustomerAnswer({ ...answer, fact: { type: 'text', value: 'First paragraph\nSecond paragraph' } }, definition)).toBe('Source review required');
-  expect(uiInputDefinitionLabel(definition)).toBe('Term'); expect(uiInputDefinitionLabel({ ...definition, label: 'Explanatory source paragraph.' })).toBe('Source review required');
+  expect(uiCustomerAnswer({ ...answer, provenance: { ...privateProvenance, source: 'legacy_user_input' } }, definition)).toBe('Unverified');
+  expect(uiCustomerAnswer({ ...answer, fact: { type: 'text', value: 'First paragraph\nSecond paragraph' } }, definition)).toBe('Unverified');
+  expect(uiInputDefinitionLabel(definition)).toBe('Term'); expect(uiInputDefinitionLabel({ ...definition, label: 'Explanatory source paragraph.' })).toBe('Unverified');
 });
 test('private negotiated facts exclude notes and fail closed outside user provenance', () => {
   const term: NegotiatedTerm = { id: 'user.1', label: 'Fixed rate', value: '5.25', unit: '%', note: 'This note must never render.', provenance: privateProvenance };
-  expect(uiNegotiatedTermField(term, 'value')).toBe('5.25'); expect(uiNegotiatedTermField({ ...term, label: 'Paragraph\nMore' }, 'label')).toBe('Source review required');
+  expect(uiNegotiatedTermField(term, 'value')).toBe('5.25'); expect(uiNegotiatedTermField({ ...term, label: 'Paragraph\nMore' }, 'label')).toBe('Unverified');
 });
 test('private numeric answers retain exact decimal amounts, percentages and durations', () => {
   const fact = { type: 'decimal' as const, value: '123456789.123456789012345678', unit: 'AUD' };

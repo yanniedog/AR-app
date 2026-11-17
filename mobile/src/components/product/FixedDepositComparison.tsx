@@ -4,7 +4,6 @@ import { View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { AppText, Button, Chip, Disclosure } from '../ui';
 import { LedgerField } from '../ledger/LedgerField';
-import { DepositSource } from './DepositSource';
 import { emptyDepositInputs } from './DepositInputFields';
 import { DepositCohorts } from './DepositCohorts';
 import { useCustomerProfile } from '../../hooks/useCustomerProfile';
@@ -15,7 +14,7 @@ import { canonical, hashText } from '../../lib/productTermsEngine/validation';
 import { loadExecutableSelections, type ApprovedSelection, type ContractContext } from '../../data/executableContracts/transport';
 import { compareDeposits, type DepositComparisonResult } from '../../data/executableContracts/depositComparison';
 import type { DepositInputs } from '../../data/executableContracts/instantiate';
-import { uiCount, uiDecimal, uiIdentifier, uiInputIdentifier, uiInputNumber, uiJoin, uiLabel, uiProductName, uiProviderName, type UiLabel } from '../../lib/uiCopy';
+import { uiCount, uiDecimal, uiInputIdentifier, uiInputNumber, uiJoin, uiLabel, uiProductName, uiProviderName, type UiLabel } from '../../lib/uiCopy';
 import { EngineReceiptFacts } from './EngineReceiptFacts';
 
 const rowId = (row: RateRow) => `${row.rate_index}#${row.product_key}`;
@@ -55,11 +54,9 @@ function ComparisonForm({ rows, candidates, context }: { rows: RateRow[]; candid
         {current.rankAvailable ? <AppText variant="small">{uiJoin('Rank', ': ', uiCount(r.rank), ' · ', 'Advantage', ': ', uiDecimal(r.advantage))}</AppText> : null}
       </View>)}
       <Disclosure title={uiJoin('Comparison', ' · ', 'Details')} open={details} onToggle={() => setDetails(!details)}>
-        <AppText variant="tiny">{uiJoin('Receipt', ' · ', uiIdentifier(current.inputSha256))}</AppText>
         {current.results.map((r, i) => <View key={r.id} style={{ gap: 4 }}>
           <AppText weight="700">{uiProductName(rows[i])}</AppText>
           {r.data ? <EngineReceiptFacts receipt={r.data.receipt}/> : <AppText variant="small">{uiLabel('Unavailable')}</AppText>}
-          {selections[i]?.template.evidence.map(source => <DepositSource key={source.id} source={source} />)}
         </View>)}
         <AppText variant="small">{uiJoin('Receipt', ' · ', 'Private', ' · ', 'Entered facts', ' · ', 'Criteria')}</AppText>
         <Button title={uiJoin('Copy', ' ', 'Receipt')} variant="secondary" onPress={() => { try { const items=rows.map((row,i)=>{const selection=selections[i];if(!selection)throw Error();return tdReopenItem(selection,context,row,inputs[i],customer.profile!,rowId(row));});void Clipboard.setStringAsync(JSON.stringify(privateTdExport(current,items,true),null,2)).then(()=>setCopyStatus('Copied'),()=>setCopyStatus('Copy failed')); }catch {setCopyStatus('Source changed');} }} />

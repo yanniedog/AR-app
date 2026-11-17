@@ -11,7 +11,7 @@ import type { PortfolioInput } from '../src/lib/productTermsEngine/portfolioType
 
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Row: 'Row' }));
 
-test('the eligibility comparison reason is already disclosed by the account receipt renderer', () => {
+test('the account receipt shows the comparison outcome without the internal reason code', () => {
   // Deliberately exercise the evaluator's runtime validation branch.
   const rule = { id: 'comparison-test', op: 'compare', field: 'qualification', comparison: 'unsupported',
     expected: { type: 'boolean', value: true }, evidenceIds: [] } as unknown as Rule;
@@ -22,7 +22,7 @@ test('the eligibility comparison reason is already disclosed by the account rece
   expect(receiptIssueFacts(receipt)[0].code).toBe('comparison_unsupported');
   let tree!: ReactTestRenderer & { toJSON(): unknown };
   act(() => { tree = TestRenderer.create(<EngineReceiptFacts receipt={receipt} />) as typeof tree; });
-  try { expect(JSON.stringify(tree.toJSON())).toContain('comparison_unsupported'); }
+  try { const rendered = JSON.stringify(tree.toJSON()); expect(rendered).toContain('Calculation: Unavailable'); expect(rendered).not.toContain('comparison_unsupported'); }
   finally { act(() => tree.unmount()); }
 });
 

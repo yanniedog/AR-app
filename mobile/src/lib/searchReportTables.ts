@@ -56,7 +56,7 @@ function normalized(sheet: ReportSheet, prefix: readonly UiCopy[], fact: Normali
   if (fact.maxValue !== undefined) record(sheet, prefix, 'Maximum value', decimal(fact.maxValue), fact.unit ? humanizeEnum(fact.unit.toUpperCase()) : 'Unknown');
   if (fact.cadence) record(sheet, prefix, 'Cadence', uiIdentifier(fact.cadence));
   if (fact.appliesTo?.length) record(sheet, prefix, 'Applies to', enums(fact.appliesTo));
-  if (view.conditions === 'source-review-required') record(sheet, prefix, 'Conditions', 'Source review required');
+  if (view.conditionsUnverified) record(sheet, prefix, 'Conditions', 'Unverified');
 }
 function detailItems(sheet: ReportSheet, prefix: readonly UiCopy[], group: 'Fees' | 'Features' | 'Eligibility' | 'Constraints', items: DetailItem[] | undefined): void {
   arrayState(sheet, prefix, group, items);
@@ -64,7 +64,7 @@ function detailItems(sheet: ReportSheet, prefix: readonly UiCopy[], group: 'Fees
     const view = uiDetailItem(item, index, group);
     const itemPrefix = [...prefix];
     record(sheet, itemPrefix, uiJoin(group, ' ', uiCount(index + 1), ' · ', view.label), view.value);
-    if (view.conditions === 'source-review-required') record(sheet, itemPrefix, 'Conditions', 'Source review required');
+    if (view.conditionsUnverified) record(sheet, itemPrefix, 'Conditions', 'Unverified');
     const numeric: readonly [UiLabel, unknown][] = [['Value', item.value], ['Amount', item.amount ?? item.fixedAmount?.amount], ['Fee minimum', item.variable?.feeMinimum], ['Fee maximum', item.variable?.feeMaximum], ['Balance rate', item.balanceRate], ['Transaction rate', item.transactionRate], ['Accrued rate', item.accruedRate], ['Rate', item.rateBased?.rate], ['Fee minimum', item.rateBased?.amountRange?.feeMinimum], ['Fee maximum', item.rateBased?.amountRange?.feeMaximum], ['Additional value', item.additionalValue]];
     numeric.forEach(([label, value]) => { if (value !== undefined) record(sheet, itemPrefix, label, decimal(value), item.currency ? uiIdentifier(item.currency) : 'Unknown'); });
     if (item.currency) record(sheet, itemPrefix, 'Currency', uiIdentifier(item.currency));
@@ -76,7 +76,7 @@ function detailItems(sheet: ReportSheet, prefix: readonly UiCopy[], group: 'Fees
       record(sheet, itemPrefix, 'Discount', uiFeeDiscount(discount));
       const values: readonly [UiLabel, unknown][] = [['Amount', discount.amount ?? discount.fixedAmount?.amount], ['Balance rate', discount.balanceRate], ['Transaction rate', discount.transactionRate], ['Accrued rate', discount.accruedRate], ['Rate', discount.feeRate ?? discount.rateBased?.rate], ['Additional value', discount.additionalValue]];
       values.forEach(([label, value]) => { if (value !== undefined) record(sheet, itemPrefix, label, decimal(value)); });
-      discount.eligibility?.forEach(criterion => { record(sheet, itemPrefix, 'Eligibility', humanizeEnum(criterion.discountEligibilityType)); if (criterion.additionalValue !== undefined) record(sheet, itemPrefix, 'Additional value', decimal(criterion.additionalValue)); if (criterion.additionalInfo) record(sheet, itemPrefix, 'Conditions', 'Source review required'); });
+      discount.eligibility?.forEach(criterion => { record(sheet, itemPrefix, 'Eligibility', humanizeEnum(criterion.discountEligibilityType)); if (criterion.additionalValue !== undefined) record(sheet, itemPrefix, 'Additional value', decimal(criterion.additionalValue)); if (criterion.additionalInfo) record(sheet, itemPrefix, 'Conditions', 'Unverified'); });
     });
   });
 }
@@ -95,7 +95,7 @@ function coverage(sheet: ReportSheet, facts: readonly SearchCoverageFact[]): voi
 export function searchReportTables(snapshot: FilteredSearchSnapshot): ReportSheet[] {
   const sheets: ReportSheet[] = REPORT_SHEETS.map(name => ({ name, rows: [['Field', 'State', 'Value', 'Unit']] }));
   const [summary, filterSheet, products, rates, fees, features, eligibility, terms, coverageSheet] = sheets;
-  const metadata: readonly [UiLabel, UiCopy][] = [['Published', uiDate(snapshot.publicationDate)], ['Publication revision', uiCount(snapshot.publicationRevision)], ['Generated', uiIdentifier(snapshot.generatedAt)], ['Australian date', uiDate(snapshot.australianDate)], ['Product count', uiCount(snapshot.products.length)], ['Matching rates', uiCount(snapshot.rows.length)], ['Core SHA256', uiIdentifier(snapshot.coreSha256)], ['Details SHA256', uiIdentifier(snapshot.detailsSha256)], ['Bundle SHA256', uiIdentifier(snapshot.bundleSha256)], ['Query length', uiCount(snapshot.request.query.length)]];
+  const metadata: readonly [UiLabel, UiCopy][] = [['Published', uiDate(snapshot.publicationDate)], ['Publication revision', uiCount(snapshot.publicationRevision)], ['Generated', uiIdentifier(snapshot.generatedAt)], ['Australian date', uiDate(snapshot.australianDate)], ['Product count', uiCount(snapshot.products.length)], ['Matching rates', uiCount(snapshot.rows.length)], ['Query length', uiCount(snapshot.request.query.length)]];
   metadata.forEach(([label, value]) => record(summary, [], label, value));
   record(summary, [], 'Search', snapshot.request.query ? 'Entered' : 'None');
   record(summary, [], 'Sort', snapshot.request.sort === 'bank' ? 'Bank' : snapshot.request.sort === 'comparison' ? 'Comparison rate' : 'Advertised rate');
@@ -118,7 +118,6 @@ export function searchReportTables(snapshot: FilteredSearchSnapshot): ReportShee
     const links: readonly [keyof NonNullable<ProductDetail['links']>, UiLabel][] = [['overview', 'Product'], ['eligibility', 'Eligibility'], ['fees', 'Fees'], ['terms', 'Terms'], ['bundle', 'Package']];
     links.forEach(([field, label]) => { if (detail?.links?.[field]) record(terms, [key], label, uiIdentifier(detail.links[field])); });
     arrayState(terms, [key], 'Sources', detail?.sourceDocuments);
-    detail?.sourceDocuments?.forEach(source => { record(terms, [key], 'Source', uiIdentifier(source.url)); if (source.sourceUrl) record(terms, [key], 'Source', uiIdentifier(source.sourceUrl)); record(terms, [key], 'Source pointer', uiIdentifier(source.sourcePath)); record(terms, [key], 'Reference', uiIdentifier(source.relation)); });
   }
   snapshot.rows.forEach((row: RateRow, index) => {
     const prefix: UiCopy[] = [uiCount(index + 1), uiProductReference(row), uiCount(row.rate_index)];
@@ -132,8 +131,8 @@ export function searchReportTables(snapshot: FilteredSearchSnapshot): ReportShee
     if (qualifier.facts.length) record(rates, prefix, 'Conditions', uiConditionalRateFacts(qualifier));
     record(rates, prefix, 'Listed LVR', row.lvr_tier === undefined ? null : uiIdentifier(row.lvr_tier)); if (row.last_updated) record(rates, prefix, 'Last updated', uiDate(row.last_updated)); if (row.taxonomy_path) record(rates, prefix, 'Path', uiIdentifier(row.taxonomy_path));
     const admitted = snapshot.rateConditions?.[index];
-    if (!admitted) record(rates, prefix, 'Conditions', 'Source unverified');
-    else { const model = scopedFinancialConditionFacts(admitted); model.facts.forEach(fact => record(rates, prefix, 'Conditions', uiConditionTag(fact))); model.unresolved.forEach(fact => { record(rates, prefix, 'Conditions', 'Source review required'); record(rates, prefix, 'Source pointer', uiIdentifier(fact.source.sourcePointer)); }); if (model.state === 'unverified') record(rates, prefix, 'Conditions', 'Source unverified'); if (admitted.sourceSha256) record(rates, prefix, 'Source SHA256', uiIdentifier(admitted.sourceSha256)); }
+    if (!admitted) record(rates, prefix, 'Conditions', 'Unverified');
+    else { const model = scopedFinancialConditionFacts(admitted); model.facts.forEach(fact => record(rates, prefix, 'Conditions', uiConditionTag(fact))); if (model.unresolved.length || model.state === 'unverified') record(rates, prefix, 'Conditions', 'Unverified'); }
     record(rates, prefix, 'Eligibility', 'Unverified');
   });
   coverage(coverageSheet, snapshot.coverage);

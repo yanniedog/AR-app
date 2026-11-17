@@ -120,9 +120,8 @@ test('criteria disclosure preserves AND/OR/NOT structure and failed comparison e
   const text = tree.root.findAllByType('AppText').map((node: any) => node.children.join('')).join('\n');
   expect(text).toContain('AND: Does not meet'); expect(text).toContain('OR: Meets');
   expect(text).toContain('NOT: Does not meet'); expect(text).toContain('protocol_amount ≥ $5,000.00: Does not meet');
-  for (const source of x.t.evidence) expect(text).toContain(source.id);
-  act(() => tree.root.findByProps({ title: 'Sources' }).props.onToggle());
-  expect(tree.root.findAllByType('Button').length).toBeGreaterThan(0);
+  for (const source of x.t.evidence) expect(text).not.toContain(source.id);
+  expect(() => tree.root.findByProps({ title: 'Sources' })).toThrow();
   act(() => tree.unmount());
 });
 
@@ -136,7 +135,7 @@ test('verification error offers Retry and succeeds when reloading completes', as
   let tree!: ReactTestRenderer & { root: any; toJSON: () => unknown };
   await act(async () => { tree = TestRenderer.create(<FixedDepositCalculation row={x.row} />) as typeof tree; });
   await act(async () => { tree.root.findByType('Disclosure' as any).props.onToggle(); });
-  expect(copy(tree)).toContain('Source unverified');
+  expect(copy(tree)).toContain('Unverified');
   await act(async () => { tree.root.findByProps({ title: 'Retry' }).props.onPress(); });
   expect(tree.root.findByProps({ title: 'Calculate' })).toBeDefined();
   act(() => tree.unmount());
