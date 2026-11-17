@@ -34,7 +34,7 @@ export default function AboutScreen() {
           value={versionValue}
         />
         <SettingsGap size={4} />
-        <NavRow icon="qr-code-outline" label="Share app" onPress={() => setShareOpen(true)} />
+        <NavRow icon="share-social-outline" label="Share app" onPress={() => setShareOpen(true)} />
       </Section>
 
       <Section title="Legal">

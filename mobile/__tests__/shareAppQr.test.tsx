@@ -22,7 +22,7 @@ it('opens the app QR from About and shares its exact install link', async () => 
   const platform = jest.replaceProperty(Platform, 'OS', 'android');
   const keyboard = jest.spyOn(Keyboard, 'isVisible').mockReturnValue(false);
   const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' });
-  let tree!: TestRenderer.ReactTestRenderer;
+  let tree!: ReturnType<typeof TestRenderer.create>;
   try {
     act(() => { tree = TestRenderer.create(<AboutScreen />); });
     const control = (label: string) => tree.root.findAll(node => node.props.accessibilityLabel === label
