@@ -157,7 +157,7 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
       auditEvidenceVersion: 2 as const };
     const audit = buildAuditMetricAnalysis(report);
     expect(audit.metrics.automatedTaskFailurePercent).toMatchObject({
-      methodVersion: 2, outcomes: { success: 0, failure: 1, indeterminate: 1 },
+      methodVersion: 2, outcomes: { success: 0, failure: 1, indeterminate: 1, unconfirmedTimeouts: 1 },
     });
     expect(audit.uxAudit.pillars.interactionFriction.taskOutcomes)
       .toEqual({ success: 0, failure: 1, indeterminate: 1, unavailable: 1 });

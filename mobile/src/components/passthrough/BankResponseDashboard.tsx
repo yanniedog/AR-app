@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { sectionSegmentOptions } from '../../data/interests';
 import Ionicons from '../icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
-import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import { FLASH_LIST_DRAW_DISTANCE, FLASH_LIST_VIEWABILITY_CONFIG } from '../../lib/flashListDefaults';
@@ -119,6 +119,7 @@ export function BankResponseDashboard({
     return () => cancelAnimationFrame(frame);
   }, [active, listMounted, listRevision]);
 
+  const openBankRates = useCallback(() => router.push({ pathname: '/bank-rates', params: { section } }), [section]);
   const actions = useMemo(() => ({
     'moves.open': () => undefined,
     'moves.decision.previous': () => {
@@ -138,8 +139,8 @@ export function BankResponseDashboard({
       const index = Math.max(0, sectionOptions.findIndex((option) => option.value === section));
       setSection(sectionOptions[(index + 1) % sectionOptions.length].value);
     },
-    'moves.response-chart.provider.next': () => ({ unavailableReason: 'Matching rate history is unavailable' }),
-  }), [decisionIndex, section, sectionOptions, windows]);
+    'moves.bank-rates.open': openBankRates,
+  }), [decisionIndex, openBankRates, section, sectionOptions, windows]);
   const auditSurface = usePerformanceAuditSurface({
     id: 'moves.response-chart',
     routeKey: '/rba-response',
@@ -175,7 +176,7 @@ export function BankResponseDashboard({
     renderRevision,
     layoutMeasured: layoutReadyRevision === listRevision,
   });
-  const openBankRates = () => router.push({ pathname: '/bank-rates', params: { section } });
+
   if (!active) return <ScrollView contentContainerStyle={{ ...responsiveScreenContentStyle(width), paddingVertical: 24, gap: 28 }}>
     <Row style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
       <AppText variant="h2" accessibilityRole="header">{uiLabel("Response")}</AppText>
