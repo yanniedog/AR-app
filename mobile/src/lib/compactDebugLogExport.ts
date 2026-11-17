@@ -61,7 +61,7 @@ function hasProbeEvidence(check: RecordValue): boolean {
 // New fields are evidence until explicitly reviewed; a suffix such as "Ms" or a
 // scalar value alone never makes an unfamiliar field safe to discard.
 const routineNumberMetrics = new Set([
-  'preloadedAgeMs', 'statusCode', 'rows', 'visibleRows', 'childNodes', 'rankedRows', 'statsCount',
+  'preloadedAgeMs', 'backgroundDurationMs', 'statusCode', 'rows', 'visibleRows', 'childNodes', 'rankedRows', 'statsCount',
   'firstScopeMs', 'firstFilterMs', 'firstHierarchyMs', 'firstStatsMs', 'firstRankMs',
   'repeatScopeMs', 'repeatFilterMs', 'repeatHierarchyMs', 'repeatStatsMs', 'repeatRankMs',
   'payloadChars', 'rateRows', 'stringifyMs', 'parseMs', 'traversalMs',

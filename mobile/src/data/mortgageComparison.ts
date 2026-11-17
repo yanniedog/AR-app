@@ -191,19 +191,24 @@ export async function prepareMortgageComparisonRowsCooperatively(rows: readonly 
   const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
   const now = control.now ?? (() => performance.now());
   const groups = new Map<string, RateRow[]>();
-  for (const row of rows) {
-    const group = groups.get(row.product_key);
-    if (group) group.push(row); else groups.set(row.product_key, [row]);
-  }
-  const prepared = new WeakMap<RateRow, PreparedMortgageComparisonRow>();
   await yieldControl();
   let checkpoint = now();
+  for (const row of rows) {
+    if (cancelled()) return null;
+    const group = groups.get(row.product_key);
+    if (group) group.push(row); else groups.set(row.product_key, [row]);
+    if (now() - checkpoint >= 4) { await yieldControl(); checkpoint = now(); }
+  }
+  const prepared = new WeakMap<RateRow, PreparedMortgageComparisonRow>();
   for (const group of groups.values()) {
     if (cancelled()) return null;
     const scopes = scopedRateConditionsForRows(group.map(sourceRowForPublicRow), 'Mortgage', context);
     for (let index = 0; index < group.length; index++) {
       const row = group[index];
+      if (cancelled()) return null;
       prepared.set(row, prepareComparisonMetadata(row, scopedFinancialConditionFacts(scopes[index])));
+      // Product books can contain thousands of tiers; yield within a product.
+      if (now() - checkpoint >= 4) { await yieldControl(); checkpoint = now(); }
     }
     if (now() - checkpoint >= 4) { await yieldControl(); checkpoint = now(); }
   }

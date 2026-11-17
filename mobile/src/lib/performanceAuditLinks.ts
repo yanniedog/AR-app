@@ -62,14 +62,14 @@ export function externalLinkAuditCheck(result: ExternalLinkAuditResult, index: n
 }
 
 export async function runExternalLinkAuditCheck(request: TrustedExternalUrlRequest, index: number, options: ExternalLinkAuditOptions): Promise<AuditCheck> {
+  const started = globalThis.performance?.now?.() ?? Date.now();
   const prepared = !options.reachability && !options.signal?.aborted ? getPreloadedExternalLink(request) : null;
   if (prepared && (options.handler === false || prepared.result.validation.status === 'fail' ||
     prepared.result.handler.status !== 'unknown')) {
-    const result = externalLinkAuditCheck(prepared.result, index, prepared.durationMs);
-    result.metrics = { ...result.metrics, preloaded: true, preloadedAgeMs: Math.max(0, Date.now() - prepared.checkedAt) };
+    const result = externalLinkAuditCheck(prepared.result, index, (globalThis.performance?.now?.() ?? Date.now()) - started);
+    result.metrics = { ...result.metrics, preloaded: true, backgroundDurationMs: prepared.durationMs, preloadedAgeMs: Math.max(0, Date.now() - prepared.checkedAt) };
     return result;
   }
-  const started = globalThis.performance?.now?.() ?? Date.now();
   try {
     const result = await auditExternalLink(request, options);
     return externalLinkAuditCheck(result, index, (globalThis.performance?.now?.() ?? Date.now()) - started);

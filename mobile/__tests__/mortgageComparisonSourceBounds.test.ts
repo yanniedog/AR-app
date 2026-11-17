@@ -1,4 +1,4 @@
-import { mortgageComparisonMatch, mortgageComparisonRows, mortgageComparisonRowsCooperatively, prepareMortgageComparisonRow, indexedMortgageComparisonRows } from '../src/data/mortgageComparison';
+import { mortgageComparisonMatch, mortgageComparisonRows, mortgageComparisonRowsCooperatively, prepareMortgageComparisonRow, prepareMortgageComparisonRowsCooperatively, indexedMortgageComparisonRows } from '../src/data/mortgageComparison';
 import { catalogue, product, programme } from '../testUtils/publicRateJourney';
 import { publicRecommendationRows, resolvedPublicRankingRows, sourceRowForPublicRow } from '../src/data/publicRateIntegration';
 import { scopedRateConditions } from '../src/data/rateConditions';
@@ -116,4 +116,20 @@ test('batch validates a shared product envelope once while applying each exact t
   expect(mortgageComparisonRows(fixture.rows, comparison, fixture).rows).toEqual(expected);
   expect(expected).toEqual([fixture.rows[1]]);
   expect(readEntries.mock.calls.length).toBeLessThan(readsWithoutBatching);
+});
+
+test('large single-product preparation yields within the tier loop and honours cancellation', async () => {
+  const rows = Array.from({ length: 240 }, (_, i) => ({ ...row, rate_index: i + 1 }));
+  let clock = 0, cancelled = false;
+  const yieldControl = jest.fn(async () => {});
+  const prepared = await prepareMortgageComparisonRowsCooperatively(rows, undefined, {
+    now: () => ++clock, yieldControl,
+  });
+  expect(prepared?.get(rows[239])).toEqual(prepareMortgageComparisonRow(rows[239]));
+  // 60 grouping yields plus the initial yield are insufficient: metadata work
+  // must also yield inside the one large product, before it completes.
+  expect(yieldControl.mock.calls.length).toBeGreaterThan(61);
+  expect(await prepareMortgageComparisonRowsCooperatively(rows, undefined, {
+    cancelled: () => cancelled, yieldControl: async () => { cancelled = true; },
+  })).toBeNull();
 });

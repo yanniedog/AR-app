@@ -14,7 +14,7 @@ export const PUBLIC_AUDIT_METRIC_FIELDS = new Set([
   'expectedCatalogueUnavailable', 'actualCatalogueUnavailable', 'expectedCatalogueAllLoaded', 'actualCatalogueAllLoaded',
   'expectedCatalogueProducts', 'actualCatalogueProducts', 'catalogueGenerationChanged',
   'completedBeforeFailure', 'plannedChecks', 'recoveryRequired', 'rollbackRestored',
-  'durationMs',
+  'durationMs', 'backgroundDurationMs', 'preloaded', 'preloadedAgeMs',
   'forwardMs',
   'preActionWaitMs',
   'preActionQuietWindowReused',

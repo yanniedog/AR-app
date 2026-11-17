@@ -148,3 +148,25 @@ test.each(['rolling-freshness', 'effective-end'] as const)('same-day %s boundary
     expect(tree.root.findAllByType('AppText').some(node => String(node.props.children).includes('Pricing unresolved'))).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
+
+test('large receipt comparison work waits for its current request and shows a loading state', async () => {
+  mockRevision = 0;
+  const core = makeHealthyCore(), selected = core.sections.Savings.rates[0];
+  mockParams = { key: selected.product_key, ri: '0' };
+  core.sections.Savings.rates = Array.from({ length: 80 }, (_, i) => ({ ...selected,
+    product_key: i ? `comparison-${i}` : selected.product_key, rate_index: 0 }));
+  mockState = { ...mockState, core, details: null, manifest: null };
+  let finish!: (value: ReturnType<typeof receipt.buildNegotiationBrief>) => void;
+  const prepare = jest.spyOn(receipt, 'buildNegotiationBriefCooperatively')
+    .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<RateReceiptScreen />) as InspectableRenderer; });
+  try {
+    expect(tree.root.findAllByType('ScreenSkeleton')).toHaveLength(1);
+    expect(tree.root.findAllByType('EmptyState')).toHaveLength(0);
+    const input = prepare.mock.calls[0][0];
+    await act(async () => { finish(receipt.buildNegotiationBrief(input)); });
+    expect(tree.root.findAllByType('ScreenSkeleton')).toHaveLength(0);
+    expect(tree.root.findAllByType('ScreenScrollView')).toHaveLength(1);
+  } finally { act(() => tree.unmount()); }
+});
