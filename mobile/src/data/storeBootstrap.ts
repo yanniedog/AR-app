@@ -1,7 +1,7 @@
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from './storeTypes';
 import { cache } from './cache';
 import { prepareBankRateHistoryAfterPaint } from './storeBankRateHistory';
-import { parseHistoryDatesIndex } from './historyDatesIndex';
+import { parseHistoryDatesIndex, selectedProductEvidenceHead } from './historyDatesIndex';
 import {
   effectiveDeepSearch,
   effectiveHistoryRibbon,
@@ -116,6 +116,7 @@ export function createBootstrapActions(
               ? { status: 'sample', data: bundle.integrity }
               : { status: 'cached', data: bundle.integrity },
             manifest: bundle.meta.manifest,
+            productEvidenceHead: selectedProductEvidenceHead(bundle.meta.historyDatesIndex, bundle.meta.manifest),
             source: bundle.meta.source,
             status: 'ready',
             error: null,
@@ -207,6 +208,7 @@ export function createBootstrapActions(
           coreIntegrity: bundle.integrity,
           coreAssetState: { status: 'cached', data: bundle.integrity },
           manifest: bundle.meta.manifest,
+          productEvidenceHead: selectedProductEvidenceHead(bundle.meta.historyDatesIndex, bundle.meta.manifest),
           source: bundle.meta.source,
         });
       }
@@ -224,6 +226,7 @@ export const bootstrapInitialState = {
   bankRateHistoryLoading: false,
   source: 'sample' as const,
   manifest: null,
+  productEvidenceHead: null,
   core: null,
   coreIntegrity: null,
   coreAssetState: {

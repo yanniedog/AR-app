@@ -1,3 +1,6 @@
+import { useProductCriteria } from '../../hooks/useProductCriteria';
+import { useStore } from '../../data/store';
+import { ProductDocuments } from './ProductDocuments';
 import { ProductPageLinks } from './ProductPageLink';
 import React, { useState } from 'react';
 import { View } from 'react-native';
@@ -5,6 +8,7 @@ import type { ProductDetail } from '../../types';
 import { AppText, Card, Disclosure } from '../ui';
 import { DetailGroup, ProductFacts } from './ProductDetailParts';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
+import { ProductEvidenceDisclosure } from './ProductEvidenceDisclosure';
 import { uiCount, uiJoin, uiLabel, uiProductName, uiProviderName, type UiText } from '../../lib/uiCopy';
 
 export function publishedItemCount(items: unknown[] | undefined): UiText {
@@ -21,8 +25,12 @@ export function ComparisonDisclosures({
   productDetails?: ProductDetail;
   loading: boolean;
 }) {
+  const manifest = useStore(state => state.manifest);
+  const details = useStore(state => state.details);
+  const productCriteria = useProductCriteria(manifest, details?.products, true);
+  const descriptiveDetail = productCriteria.lookup?.[productKey] ?? productDetails;
   return (
-    <ProductPageLinks overview={productDetails?.links?.overview}><Card variant="outlined" style={{ gap: 12 }}>
+    <ProductPageLinks overview={productDetails?.links?.overview} detail={descriptiveDetail}><Card variant="outlined" style={{ gap: 12 }}>
       <View>
         <AppText variant="body" weight="700">{uiProductName({ product_name: name })}</AppText>
         <AppText variant="small" color="textMuted">{uiProviderName({ provider })}</AppText>
@@ -33,8 +41,10 @@ export function ComparisonDisclosures({
       <DetailGroup title="Features" icon="information-circle-outline" items={productDetails?.features} loading={loading} />
       <DetailGroup title="Constraints" icon="information-circle-outline" items={productDetails?.constraints} loading={loading} />
       {!loading && !productDetails ? <AppText variant="small">{uiLabel("Product details unavailable")}</AppText> : null}
-      <ProductFacts productDetails={productDetails ?? null} />
+      <ProductFacts productDetails={descriptiveDetail ?? null} />
+      <ProductDocuments detail={descriptiveDetail} />
       <ProductTermsDisclosure productKey={productKey} />
+      <ProductEvidenceDisclosure productKey={productKey} />
     </Card></ProductPageLinks>
   );
 }

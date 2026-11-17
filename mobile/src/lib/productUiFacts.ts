@@ -4,6 +4,7 @@ import { descriptiveValue } from '../data/descriptiveValue';
 import { uiCount, uiDuration, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiPublishedFeeName, uiRate, type UiCopy, type UiLabel, type UiText } from './uiCopy';
 
 export interface ProductPresentationFact {
+  sourceFact?: NormalizedProductFact;
   label: UiCopy;
   value: UiText;
   reference: UiText;
@@ -100,10 +101,10 @@ function factValue(value: unknown, unit?: string): UiText {
 }
 export function uiNormalizedProductFact(fact: NormalizedProductFact): ProductPresentationFact {
   const lower = fact.minValue, upper = fact.maxValue;
-  const conditionsUnverified = Boolean(fact.condition?.trim());
+  const conditionsUnverified = Boolean(fact.condition?.trim() || fact.evidenceState && fact.evidenceState !== 'observed');
   const value = lower !== undefined && upper !== undefined ? uiJoin(factValue(lower, fact.unit), '–', factValue(upper, fact.unit))
     : lower !== undefined ? uiJoin('≥', factValue(lower, fact.unit)) : upper !== undefined ? uiJoin('≤', factValue(upper, fact.unit)) : factValue(fact.value, fact.unit);
-  return { label: humanizeEnum(fact.sourceType?.toUpperCase() !== 'OTHER' ? fact.sourceType ?? fact.canonicalKey.split(/[.:/]/).at(-1) : fact.canonicalKey.split(/[.:/]/).at(-1)),
+  return { sourceFact: fact, label: humanizeEnum(fact.sourceType?.toUpperCase() !== 'OTHER' ? fact.sourceType ?? fact.canonicalKey.split(/[.:/]/).at(-1) : fact.canonicalKey.split(/[.:/]/).at(-1)),
     value: uiJoin(value, fact.cadence ? uiJoin(' · ', uiCadence(fact.cadence)) : null), reference: uiIdentifier(fact.id),
     conditions: conditionsUnverified ? 'source-review-required' : 'none', conditionsUnverified, scope: fact.appliesTo?.map(humanizeEnum) ?? [] };
 }

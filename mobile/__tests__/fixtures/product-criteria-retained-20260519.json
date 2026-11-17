@@ -1,0 +1,132 @@
+{
+  "source": "runs/2026-05-19/banks product-detail.json",
+  "producer": "app_payload_criteria.criteria_facts; product-filter-facets-v1",
+  "scope": "Retained real business facts; source/manifest descriptors in tests are protocol controls, not publication evidence.",
+  "products": {
+    "up-home": {
+      "facts": [
+        {
+          "kind": "feature",
+          "canonicalKey": "feature.extra_repayments",
+          "label": "Extra Repayments",
+          "groupId": "b2bd8fb739bb49f3",
+          "sourceType": "EXTRA_REPAYMENTS",
+          "unit": "boolean",
+          "condition": "For fixed rate loans, extra repayments are allowed up to $30,000 in total during the fixed rate period. Extra repayments above this limit may incur a prepayment fee. For variable rate loans, extra repayments are unlimited.",
+          "searchTerms": [
+            "Extra Repayments",
+            "extra repayments",
+            "feature"
+          ],
+          "id": "38a34c1255169955228b"
+        },
+        {
+          "kind": "feature",
+          "canonicalKey": "feature.offset",
+          "label": "Offset",
+          "groupId": "22ef7020bb1a8090",
+          "sourceType": "OFFSET",
+          "unit": "boolean",
+          "condition": "Use your Up spending account and Savers as offsets.",
+          "searchTerms": [
+            "Offset",
+            "feature",
+            "offset"
+          ],
+          "id": "96a89c946b861fc04f54"
+        },
+        {
+          "kind": "feature",
+          "canonicalKey": "feature.redraw",
+          "label": "Redraw",
+          "groupId": "50d7fe73dcf7b324",
+          "sourceType": "REDRAW",
+          "unit": "boolean",
+          "condition": "Redraws are limited to the total amount prepaid, less one repayment. Other conditions may apply as per Loan Schedule and Home Loan Booklet.",
+          "searchTerms": [
+            "Redraw",
+            "feature",
+            "redraw"
+          ],
+          "id": "3af0562a8b7a1e3f590b"
+        },
+        {
+          "kind": "eligibility",
+          "canonicalKey": "eligibility.min_age",
+          "sourceType": "MIN_AGE",
+          "sourcePath": "/eligibility/0",
+          "sourcePathBasis": "raw-cdr",
+          "criteriaVersion": 1,
+          "evidenceState": "observed",
+          "groupId": "4630bfead31317df",
+          "unit": "year",
+          "valueType": "decimal",
+          "value": "18",
+          "id": "b1e7e5c09028ac1512e9"
+        },
+        {
+          "kind": "constraint",
+          "canonicalKey": "constraint.max_lvr",
+          "sourceType": "MAX_LVR",
+          "sourcePath": "/constraints/0",
+          "sourcePathBasis": "raw-cdr",
+          "criteriaVersion": 1,
+          "condition": "A maximum 90% Loan to Value Ratio applies. A minimum 10% deposit is required.",
+          "evidenceState": "conditional",
+          "groupId": "81cdea003f3db99b",
+          "unit": "fraction",
+          "valueType": "decimal",
+          "value": "0.90",
+          "id": "2656f71d11f59c00784c"
+        },
+        {
+          "kind": "constraint",
+          "canonicalKey": "constraint.min_limit",
+          "sourceType": "MIN_LIMIT",
+          "sourcePath": "/constraints/1",
+          "sourcePathBasis": "raw-cdr",
+          "criteriaVersion": 1,
+          "condition": "A minimum borrowable amount for the loan.",
+          "evidenceState": "conditional",
+          "groupId": "d5bc3a0d3a9a0048",
+          "unit": "AUD",
+          "valueType": "decimal",
+          "value": "50000.00",
+          "id": "9ae1d0530053f5e23bd0"
+        }
+      ],
+      "sourceDocuments": []
+    },
+    "ac8412c5-9a3c-4e4b-8063-7c81b8aa4049": {
+      "facts": [
+        {
+          "kind": "fee",
+          "canonicalKey": "fee.event",
+          "label": "Visa emergency card/cash overseas fee",
+          "groupId": "d9ae4da2ff2bce52",
+          "sourceType": "EVENT",
+          "value": "175.00",
+          "unit": "USD",
+          "condition": "A fee charged when you need an emergency replacement card or cash delivered to you on an urgent basis to an address overseas.",
+          "searchTerms": [
+            "Visa emergency card/cash overseas fee",
+            "event",
+            "fee",
+            "visa emergency card cash overseas fee"
+          ],
+          "id": "3dd66f498937495a6fbc",
+          "sourcePath": "/fees/0",
+          "sourcePathBasis": "raw-cdr",
+          "criteriaVersion": 1,
+          "evidenceState": "conditional",
+          "valueType": "decimal"
+        }
+      ],
+      "sourceDocuments": []
+    },
+    "8a906e88-5c03-ee11-8f6e-00224814d330": {
+      "facts": [],
+      "sourceDocuments": []
+    }
+  }
+}

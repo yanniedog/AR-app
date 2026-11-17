@@ -1,4 +1,5 @@
 import type { NormalizedProductFact, NormalizedProductFactKind, NormalizedProductFactUnit, ProductDetail, RateRow, SectionKey } from '../types';
+import { Decimal } from '../lib/productTermsEngine/decimal';
 
 
 export type FactCriterionOperator = 'exists' | 'eq' | 'gte' | 'lte';
@@ -13,6 +14,7 @@ export type FactCriterion = FactCriterionIdentity & {
   operator: FactCriterionOperator;
   value?: FactCriterionScalar;
   unit?: NormalizedProductFactUnit;
+  cadence?: string;
 };
 
 const FACT_KINDS = new Set<NormalizedProductFactKind>([
@@ -77,6 +79,16 @@ function isFact(value: unknown): value is NormalizedProductFact {
   if (fact.sourceType !== undefined && typeof fact.sourceType !== 'string') return false;
   if (fact.appliesTo !== undefined && (!Array.isArray(fact.appliesTo) || !fact.appliesTo.every((item) => typeof item === 'string'))) return false;
   if (fact.searchTerms !== undefined && (!Array.isArray(fact.searchTerms) || !fact.searchTerms.every((item) => typeof item === 'string'))) return false;
+  if (fact.evidenceState !== undefined && !['observed', 'conditional', 'unknown', 'conflicting'].includes(fact.evidenceState)) return false;
+  if (fact.valueType !== undefined && !['decimal', 'enum', 'text', 'boolean', 'duration'].includes(fact.valueType)) return false;
+  if (fact.sourcePath !== undefined && (typeof fact.sourcePath !== 'string' || fact.sourcePath.length > 8192)) return false;
+  if (fact.sourcePathBasis !== undefined && !['raw-cdr', 'cleaned-cdr'].includes(fact.sourcePathBasis)) return false;
+  if (fact.criteriaVersion !== undefined && fact.criteriaVersion !== 1) return false;
+  if (fact.criteriaVersion === 1) {
+    if (!fact.evidenceState || !fact.sourcePathBasis || typeof fact.sourcePath !== 'string') return false;
+    if (fact.valueType === 'decimal' && [fact.value, fact.minValue, fact.maxValue].some(value => value !== undefined
+      && (typeof value !== 'string' || !/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value) || decimalComparison(value, '0') === null))) return false;
+  }
   return true;
 }
 
@@ -106,6 +118,10 @@ export function productFactSignature(fact: NormalizedProductFact): string {
     cadence: fact.cadence,
     appliesTo: fact.appliesTo,
     condition: fact.condition,
+    evidenceState: fact.evidenceState,
+    valueType: fact.valueType,
+    sourcePath: fact.sourcePath,
+    sourcePathBasis: fact.sourcePathBasis,
   });
 }
 
@@ -141,7 +157,8 @@ export function featureEvidenceMatches(
     && (!fact.appliesTo?.length || fact.appliesTo.every(value => scope.includes(value.toUpperCase()))));
   return applicable.length > 0 && (!criterion || applicable.some(fact => factIdentityMatches(fact, criterion)))
     && applicable.every(fact => fact.value === expected
-    && fact.unit === 'boolean' && !fact.condition?.trim());
+    && fact.unit === 'boolean' && !fact.condition?.trim()
+    && (!fact.evidenceState || fact.evidenceState === 'observed'));
 }
 
 export function curatedEligibilityFactKey(fact: NormalizedProductFact): string | null {
@@ -163,12 +180,15 @@ function factIdentityMatches(fact: NormalizedProductFact, criterion: FactCriteri
 
 function scalarEquals(left: FactCriterionScalar, right: FactCriterionScalar): boolean {
   if (typeof left === 'number' || typeof right === 'number') {
-    const a = Number(left);
-    const b = Number(right);
-    return Number.isFinite(a) && Number.isFinite(b) && a === b;
+    return decimalComparison(left, right) === 0;
   }
   if (typeof left === 'boolean' || typeof right === 'boolean') return left === right;
   return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+function decimalComparison(left: FactCriterionScalar, right: FactCriterionScalar): number | null {
+  if (typeof left === 'boolean' || typeof right === 'boolean') return null;
+  try { return Decimal.parse(String(left)).compare(Decimal.parse(String(right))); } catch { return null; }
 }
 
 function comparisonFactValue(fact: NormalizedProductFact, operator: 'gte' | 'lte'): FactCriterionScalar | undefined {
@@ -185,32 +205,60 @@ export function productMatchesFactCriterion(
   criterion: FactCriterion,
   scope: readonly string[] = [],
 ): boolean {
+  return productFactCriterionState(detail, criterion, scope) === 'match';
+}
+
+export type FactMatchState = 'match' | 'no-match' | 'unknown';
+
+/** Descriptive matching requires observed, applicable and agreeing evidence.
+ * Unresolved conditions are never silently treated as fulfilled eligibility. */
+export function productFactCriterionState(
+  detail: ProductDetail | null | undefined,
+  criterion: FactCriterion,
+  scope: readonly string[] = [],
+): FactMatchState {
   const key = curatedFeatureIdentityKey({ id: 'criterion', kind: 'feature',
     canonicalKey: criterion.canonicalKey ?? '', sourceType: criterion.sourceType });
   if (key) {
-    if (criterion.unit && criterion.unit !== 'boolean') return false;
+    if (criterion.unit && criterion.unit !== 'boolean') return 'unknown';
     const expected = criterion.operator === 'exists' ? true : criterion.value;
-    if (criterion.operator !== 'exists' && criterion.operator !== 'eq') return false;
-    if (typeof expected !== 'boolean') return false;
-    return featureEvidenceMatches(detail, key, expected, scope, criterion);
+    if (criterion.operator !== 'exists' && criterion.operator !== 'eq') return 'unknown';
+    if (typeof expected !== 'boolean') return 'unknown';
+    if (featureEvidenceMatches(detail, key, expected, scope, criterion)) return 'match';
+    if (featureEvidenceMatches(detail, key, !expected, scope, criterion)) return 'no-match';
+    return 'unknown';
   }
-  return normalizedProductFacts(detail).some((fact) => {
-    if (!factIdentityMatches(fact, criterion)) return false;
-    if (criterion.unit && fact.unit !== criterion.unit) return false;
-    if (criterion.operator === 'exists') return true;
-    if (criterion.value === undefined) return false;
+  const facts = normalizedProductFacts(detail).filter(fact => factIdentityMatches(fact, criterion)
+    && (!fact.appliesTo?.length || fact.appliesTo.every(value => scope.includes(value.toUpperCase()))));
+  if (!facts.length) return 'unknown';
+  const outcomes = facts.map((fact): FactMatchState => {
+    if (fact.condition?.trim() || fact.evidenceState && fact.evidenceState !== 'observed') return 'unknown';
+    if (criterion.unit && fact.unit !== criterion.unit) return 'unknown';
+    if (criterion.cadence && fact.cadence !== criterion.cadence) return 'unknown';
+    if (fact.kind === 'fee' && fact.cadence && !criterion.cadence) return 'unknown';
+    if (criterion.operator === 'exists') return fact.value !== undefined || fact.minValue !== undefined || fact.maxValue !== undefined ? 'match' : 'unknown';
+    if (criterion.value === undefined) return 'unknown';
     if (criterion.operator === 'eq') {
-      return [fact.value, fact.minValue, fact.maxValue]
-        .filter((value): value is FactCriterionScalar => value !== undefined)
-        .some((value) => scalarEquals(value, criterion.value!));
+      const values = [fact.value, fact.minValue, fact.maxValue].filter((value): value is FactCriterionScalar => value !== undefined);
+      if (!values.length) return 'unknown';
+      if (fact.valueType === 'decimal' && values.some(value => decimalComparison(value, criterion.value!) === null)) return 'unknown';
+      return values.some(value => fact.valueType === 'decimal' ? decimalComparison(value, criterion.value!) === 0
+        : scalarEquals(value, criterion.value!)) ? 'match' : 'no-match';
     }
     const factValue = comparisonFactValue(fact, criterion.operator);
-    if (factValue === undefined) return false;
-    const left = Number(factValue);
-    const right = Number(criterion.value);
-    if (!Number.isFinite(left) || !Number.isFinite(right)) return false;
-    return criterion.operator === 'gte' ? left >= right : left <= right;
+    if (factValue === undefined || fact.valueType && fact.valueType !== 'decimal') return 'unknown';
+    const compared = decimalComparison(factValue, criterion.value);
+    if (compared === null) return 'unknown';
+    return (criterion.operator === 'gte' ? compared >= 0 : compared <= 0) ? 'match' : 'no-match';
   });
+  return outcomes.every(value => value === 'match') ? 'match'
+    : outcomes.every(value => value === 'no-match') ? 'no-match' : 'unknown';
+}
+
+export function productFactCriteriaState(detail: ProductDetail | null | undefined,
+  criteria: readonly FactCriterion[] | null | undefined, scope: readonly string[] = []): FactMatchState {
+  const states = (criteria ?? []).map(criterion => productFactCriterionState(detail, criterion, scope));
+  return states.includes('no-match') ? 'no-match' : states.includes('unknown') ? 'unknown' : 'match';
 }
 
 /** AND across criteria, with each criterion checking every preserved fact variant. */
@@ -220,7 +268,7 @@ export function productMatchesAllFactCriteria(
   scope: readonly string[] = [],
 ): boolean {
   if (!criteria?.length) return true;
-  return criteria.every((criterion) => productMatchesFactCriterion(detail, criterion, scope));
+  return productFactCriteriaState(detail, criteria, scope) === 'match';
 }
 
 export function factCriterionId(criterion: FactCriterion): string {
@@ -230,6 +278,7 @@ export function factCriterionId(criterion: FactCriterion): string {
     operator: criterion.operator,
     value: criterion.value,
     unit: criterion.unit,
+    cadence: criterion.cadence,
   });
 }
 
@@ -243,18 +292,25 @@ export function normalizeFactCriterion(value: unknown): FactCriterion | null {
   const operator = input.operator as FactCriterionOperator;
   if (operator !== 'exists' && !isScalar(input.value)) return null;
   if (input.unit !== undefined && !isFactUnit(input.unit)) return null;
+  if (input.cadence !== undefined && (typeof input.cadence !== 'string' || input.cadence.length > 80
+    || !/^P(?:[0-9]+(?:\.[0-9]+)?[YMWD])+(?:T(?:[0-9]+(?:\.[0-9]+)?[HMS])+)?$/i.test(input.cadence))) return null;
   return {
     ...(canonicalKey ? { canonicalKey } : {}),
     ...(sourceType ? { sourceType } : {}),
     operator,
     ...(operator !== 'exists' ? { value: input.value } : {}),
     ...(input.unit ? { unit: input.unit } : {}),
+    ...(input.cadence ? { cadence: input.cadence } : {}),
   } as FactCriterion;
 }
 
 function optionCriterion(fact: NormalizedProductFact): FactCriterion | null {
   const curatedKey = curatedFeatureIdentityKey(fact) ?? curatedEligibilityFactKey(fact);
-  if (!curatedKey) return null;
+  const descriptive = fact.valueType !== undefined && ['fee', 'eligibility', 'constraint', 'attribute', 'bundle'].includes(fact.kind)
+    && /^(?:fee|eligibility|constraint|product|bundle)\.[a-z0-9_.]+$/.test(fact.canonicalKey);
+  if (!curatedKey && !descriptive || fact.condition?.trim() || fact.appliesTo?.length
+    || fact.evidenceState && fact.evidenceState !== 'observed') return null;
+  if (descriptive && fact.valueType === 'text') return null;
   if (fact.kind === 'feature' && (typeof fact.value !== 'boolean'
     || fact.unit !== 'boolean' || fact.condition?.trim() || fact.appliesTo?.length)) return null;
   // The canonical key is the curated identity. Generic source enums such as
@@ -263,16 +319,18 @@ function optionCriterion(fact: NormalizedProductFact): FactCriterion | null {
     canonicalKey: fact.canonicalKey,
     ...(fact.sourceType?.trim() ? { sourceType: fact.sourceType.trim().toUpperCase() } : {}),
   };
-  if (fact.value !== undefined && (typeof fact.value === 'boolean' || isNumericLike(fact.value))) {
-    return { ...identity, operator: 'eq', value: fact.value, unit: fact.unit };
+  if (fact.cadence && !normalizeFactCriterion({ ...identity, operator: 'exists', cadence: fact.cadence })) return null;
+  const timing = fact.cadence ? { cadence: fact.cadence } : {};
+  if (fact.value !== undefined && (typeof fact.value === 'boolean' || isNumericLike(fact.value) || fact.valueType === 'enum')) {
+    return { ...identity, ...timing, operator: 'eq', value: fact.value, unit: fact.unit };
   }
   // A chip represents the exact boundary the bank publishes. Threshold
   // operators are reserved for deliberate applicant-value/range criteria.
   if (fact.minValue !== undefined && fact.maxValue === undefined && isNumericLike(fact.minValue)) {
-    return { ...identity, operator: 'eq', value: fact.minValue, unit: fact.unit };
+    return { ...identity, ...timing, operator: 'eq', value: fact.minValue, unit: fact.unit };
   }
   if (fact.maxValue !== undefined && fact.minValue === undefined && isNumericLike(fact.maxValue)) {
-    return { ...identity, operator: 'eq', value: fact.maxValue, unit: fact.unit };
+    return { ...identity, ...timing, operator: 'eq', value: fact.maxValue, unit: fact.unit };
   }
   // A scalar criterion cannot losslessly encode both ends of one range.
   if (fact.minValue !== undefined && fact.maxValue !== undefined) return null;

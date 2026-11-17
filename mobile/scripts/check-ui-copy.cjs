@@ -75,29 +75,29 @@ function inspectUiCopy({ root, policyFile = 'src/lib/uiCopy.ts', program: provid
         : Boolean(member.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined)));
   }
 
-  const controlledTypes = new Map();
-  function controlled(type, visiting = new Set()) {
-    if (!visiting.size && controlledTypes.has(type)) return controlledTypes.get(type);
-    const result = controlledInner(type, visiting);
-    if (!visiting.size) controlledTypes.set(type, result);
-    return result;
-  }
-  function controlledInner(type, visiting) {
-    if (visiting.has(type) || visiting.size > 8) return false;
-    const next = new Set(visiting).add(type);
-    if (branded(type) || inputBranded(type) || markupBranded(type)) return true;
-    if (type.isUnion()) return type.types.some(member => controlled(member, next));
-    if (type.flags & ts.TypeFlags.Object) {
-      if (checker.getTypeArguments(type).some(member => controlled(member, next))) return true;
-      return type.getProperties().some(property => {
-        const declaration = property.valueDeclaration ?? property.declarations?.[0];
-        // Prototype methods are not text-bearing fields; traversing the full
-        // standard library graph makes every style expression quadratic.
-        return declaration && (ts.isPropertySignature(declaration) || ts.isPropertyDeclaration(declaration) || ts.isPropertyAssignment(declaration))
-          && controlled(checker.getTypeOfSymbolAtLocation(property, declaration), next);
-      });
+  const controlledTypes = Array.from({ length: 9 }, () => new Map());
+  const controlledEdges = new Map();
+  function controlled(type, remainingDepth = 8) {
+    const cache = controlledTypes[remainingDepth];
+    if (cache.has(type)) return cache.get(type);
+    let result = branded(type) || inputBranded(type) || markupBranded(type);
+    if (!result && remainingDepth > 0) {
+      if (!controlledEdges.has(type)) {
+        const edges = type.isUnion() ? type.types : type.flags & ts.TypeFlags.Object
+          ? [...checker.getTypeArguments(type), ...type.getProperties().flatMap(property => {
+            const declaration = property.valueDeclaration ?? property.declarations?.[0];
+            // Prototype methods are not text-bearing fields.
+            return declaration && (ts.isPropertySignature(declaration) || ts.isPropertyDeclaration(declaration) || ts.isPropertyAssignment(declaration))
+              ? [checker.getTypeOfSymbolAtLocation(property, declaration)] : [];
+          })] : [];
+        controlledEdges.set(type, edges);
+      }
+      // Depth is part of the cache key. Cycles terminate at zero; shared React
+      // prop graphs are evaluated once per remaining depth, not once per path.
+      result = controlledEdges.get(type).some(child => controlled(child, remainingDepth - 1));
     }
-    return false;
+    cache.set(type, result);
+    return result;
   }
 
   function admittedTo(source, destination, location, visiting = new Set()) {
@@ -201,6 +201,17 @@ function inspectUiCopy({ root, policyFile = 'src/lib/uiCopy.ts', program: provid
         && nativeMetadata.length === 2 && nativeMetadata.every(symbol => symbol?.getDeclarations()?.some(item => /node_modules[\\/]expo-application[\\/]/.test(item.getSourceFile().fileName)))
         && returned.arguments[3] && ts.isObjectLiteralExpression(returned.arguments[3]) && returned.arguments[3].properties.length === 0
         && returned.arguments[4]?.getText() === '{ fullEvidence }') return true;
+    }
+    if (path.resolve(node.getSourceFile().fileName).toLowerCase() === path.resolve(root, 'src/components/ProductEvidenceText.tsx').toLowerCase()
+      && ts.isCallExpression(node) && node.arguments.length === 1) {
+      const symbol = checker.getSymbolAtLocation(node.expression);
+      const actual = symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+      const sourcePath = path.resolve(root, 'src/data/productEvidenceDocument.ts').toLowerCase();
+      const type = checker.getTypeAtLocation(node.arguments[0]);
+      if (actual?.name === 'productEvidencePageText' && actual.getDeclarations()?.some(declaration =>
+        path.resolve(declaration.getSourceFile().fileName).toLowerCase() === sourcePath)
+        && type.symbol?.name === 'ProductEvidencePage' && type.symbol.getDeclarations()?.some(declaration =>
+          path.resolve(declaration.getSourceFile().fileName).toLowerCase() === sourcePath)) return true;
     }
     if (path.resolve(node.getSourceFile().fileName).toLowerCase() === path.resolve(root, 'src/components/ReceiptEvidenceText.tsx').toLowerCase()
       && ts.isCallExpression(node) && node.expression.getText() === 'JSON.stringify'

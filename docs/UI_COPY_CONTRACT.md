@@ -19,11 +19,19 @@ The interface uses concise headings, field labels, actions, identity, numeric fa
 
 Identity factories receive actual identity fields. Do not fabricate an identity model from a paragraph. Source clauses are parsed only when the existing source admission proves the exact product, variant, publication, hash and pointer. Unsupported wording remains `Source review required` and links to its original evidence.
 
+`uiDocumentFilename` receives the actual source-document descriptor and derives a
+bounded filename from its source URL. It never admits arbitrary provider labels,
+marketing descriptions or extracted legal prose as interface identity.
+`uiDocumentCitationSection` admits only the bounded section locator on an actual
+source-document citation; legal clause bodies retain the original evidence boundary.
+
 Private edited facts keep their real provenance and encryption. Neither a formatting factory nor a result label may strengthen a monetary, eligibility or source claim. Hashed receipts, calculation arithmetic and persisted inputs retain their original contracts.
 
 ## Evidence boundaries
 
 `DocumentText` owns the fixed legal/licence registry. `DebugEvidenceText` owns the bounded local log subscription. `AuditEvidenceText` owns an actual `PerformanceAuditReport`; `ReceiptEvidenceText` owns an admitted `ReplayDocument.original`. The explicit native debug share helper reads the complete local evidence with installed application metadata and accepts only a boolean full-evidence option. These are individual source-bound expressions, not file or route exemptions. All surrounding headings, controls and status remain subject to normal copy rules.
+
+`ProductEvidenceText` owns only `productEvidencePageText` from the admitted product-evidence document module. Its private page registry permits at most 16,384 UTF-16 units per page (plus one unit at a surrogate-safe boundary), derived from the verified current product's acquired facts or original response. Unknown handles fail. It never renders arbitrary text props, executes HTML, or converts source wording into approved pricing/eligibility facts; all surrounding controls and statuses retain the normal copy rules.
 
 ## Enforcement
 

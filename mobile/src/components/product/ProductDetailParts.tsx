@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import type Ionicons from '../icons/AppIcon';
 import { ProductPageLink } from './ProductPageLink';
 import { DetailLoadingLines } from '../feedback';
-import { AppText, Disclosure, Row } from '../ui';
+import { AppText, Button, Disclosure, Row } from '../ui';
 import { formatBalanceRange, formatTerm, humanizeEnum } from '../../data/format';
 import { accessExcludesFromStandard, assessAccess } from '../../data/access';
 import { isNonStandard } from '../../data/format';
@@ -13,8 +13,8 @@ import { scopedRateConditions } from '../../data/rateConditions';
 import { scopedFinancialConditionFacts } from '../../data/scopedFinancialConditionFacts';
 import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
 import { normalizedProductFacts } from '../../data/productFacts';
-import { uiJoin, uiLabel, type UiCopy } from '../../lib/uiCopy';
-import type { DetailItem, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
+import { uiCount, uiJoin, uiLabel, type UiCopy, type UiLabel } from '../../lib/uiCopy';
+import type { DetailItem, NormalizedProductFact, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
 import { FinancialFactRows } from './FinancialFactRows';
 export { SelectedRateConditions } from './RateConditionsDisclosure';
 
@@ -30,7 +30,7 @@ function PublishedFacts({ facts, fees }: { facts: readonly ProductPresentationFa
       tier ? uiJoin(', ', tier) : null,
       cap ? uiJoin(', ', cap) : null,
       ...discounts.map(discount => uiJoin(', ', discount)));
-    return <ProductPageLink key={`${fact.reference}:${index}`} label={label}>
+    return <ProductPageLink key={`${fact.reference}:${index}`} label={label} fact={fact.sourceFact}>
       <View style={{ flex: 1, gap: 4 }}>
         <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <AppText variant="small" weight="600" style={{ flex: 1 }}>{fact.label}</AppText>
@@ -53,12 +53,27 @@ export function DetailGroup({ title, items, loading }: { title: 'Fees' | 'Eligib
   </Disclosure>;
 }
 export function ProductFacts({ productDetails: detail }: { productDetails: ProductDetailData | null }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false), [page, setPage] = useState(0);
   // Rich legacy fee occurrences have their own Fees surface, including caps,
   // discounts and condition references. Transitional normalized copies must
   // not present the same charge a second time.
-  const facts = normalizedProductFacts(detail).filter(fact => !detail?.fees?.length || fact.kind !== 'fee').map(uiNormalizedProductFact); if (!facts.length) return null;
-  return <Disclosure title="Product facts" open={open} onToggle={() => setOpen(v => !v)}><PublishedFacts facts={facts} /></Disclosure>;
+  const groups: readonly [NormalizedProductFact['kind'], UiLabel][] = [['rate', 'Rates'], ['tier', 'Tiers'], ['eligibility', 'Eligibility'],
+    ['constraint', 'Constraints'], ['fee', 'Fees'], ['feature', 'Features'], ['condition', 'Conditions'], ['bundle', 'Bundles'], ['attribute', 'Attributes']];
+  const raw = normalizedProductFacts(detail).filter(fact => !detail?.fees?.length || fact.kind !== 'fee');
+  const ordered = groups.flatMap(([kind]) => raw.filter(fact => fact.kind === kind));
+  if (!ordered.length) return null;
+  const at = Math.min(page, Math.max(0, Math.ceil(ordered.length / 24) - 1));
+  const selected = ordered.slice(at * 24, (at + 1) * 24);
+  return <Disclosure title="Product facts" open={open} onToggle={() => setOpen(v => !v)}><View style={{ gap: 12 }}>
+    {groups.map(([kind, title]) => {
+      const facts = selected.filter(fact => fact.kind === kind);
+      return facts.length ? <View key={kind} style={{ gap: 8 }}><AppText variant="small" weight="600">{uiLabel(title)}</AppText>
+        <PublishedFacts facts={facts.map(uiNormalizedProductFact)} /></View> : null;
+    })}
+    {ordered.length > 24 ? <><AppText variant="tiny">{uiJoin('Product facts', ' · ', uiCount(ordered.length), ' · ', 'Page', ' ', uiCount(at + 1))}</AppText>
+      <Row style={{ gap: 8 }}><Button title="Previous page" disabled={at === 0} variant="secondary" onPress={() => setPage(at - 1)} />
+        <Button title="Next page" disabled={(at + 1) * 24 >= ordered.length} variant="secondary" onPress={() => setPage(at + 1)} /></Row></> : null}
+  </View></Disclosure>;
 }
 export function AccessNotice({ name, productDetails: detail, loading, provider }: { name: string; productDetails: ProductDetailData | null; loading: boolean; provider?: string | null }) {
   const access = assessAccess(name, detail, provider); if (loading && !detail || !access.restricted && !access.verify) return null;

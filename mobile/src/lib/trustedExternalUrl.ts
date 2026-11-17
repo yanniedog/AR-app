@@ -10,6 +10,8 @@ export interface TrustedExternalUrlRequest {
   url: string;
   purpose: TrustedExternalUrlPurpose;
   label: string;
+  /** Physical PDF page supplied by a bound source citation, never free text. */
+  page?: number;
 }
 
 export type TrustedExternalUrlResult =
@@ -176,7 +178,8 @@ export function trustedExternalUrl(
     };
   }
 
-  parsed.hash = '';
+  parsed.hash = request.purpose === 'lender_source' && Number.isSafeInteger(request.page)
+    && request.page! > 0 && request.page! <= 512 ? `page=${request.page}` : '';
   return {
     ok: true,
     url: parsed.toString(),
