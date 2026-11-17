@@ -121,6 +121,74 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
     expect(calculatePathEfficiency(2.5, 4)).toBeNull();
   });
 
+  test('v2 prevents repeated button measurements from masking a visible-content failure', () => {
+    const report = makePerformanceAuditReport('affs-visibility');
+    attachCompleteDisplayHealth(report);
+    const visible = report.appHealth!.checks.find(check => check.code === APP_HEALTH_CHECK_CODES.DISPLAY_VISIBILITY)!;
+    visible.status = 'fail';
+    visible.metrics = { checked: 2, missing: 0, failed: 1, warned: 0, unavailable: 0 };
+    const targets = Array.from({ length: 500 }, (_, index) => ({
+      id: index === 0 ? 'audit-start-local#0' : index === 1 ? 'audit-start-live#1' : `target-${index}`,
+      width: 48, height: 48, platform: 'android' as const,
+    }));
+    const legacy = buildAuditMetricAnalysis({ ...report, uxTelemetry: { targetSamples: targets } });
+    const current = { ...report, auditEvidenceVersion: 2 as const,
+      uxTelemetry: { targetSamples: targets, targetCapture: { capacityReached: false, auditStartControlsMeasured: true } } };
+    const analysis = buildAuditMetricAnalysis(current);
+    expect(legacy.metrics.uxStandardsAccessibilityScore).toMatchObject({ value: 99.3, methodVersion: 1 });
+    expect(analysis.metrics.uxStandardsAccessibilityScore).toMatchObject({ value: 95, methodVersion: 2 });
+    expect(analysis.uxAudit.pillars.standardsAndAccessibility.surfaceChecks?.[visible.code])
+      .toMatchObject({ passed: 1, applicableChecks: 2, failed: 1 });
+    const capped = buildAuditMetricAnalysis({ ...current,
+      uxTelemetry: { targetSamples: targets, targetCapture: { capacityReached: true } } });
+    expect(capped.metrics.uxStandardsAccessibilityScore).toMatchObject({ value: null, missingEvidence: ['partial-samples'] });
+    expect(capped.uxAudit.pillars.standardsAndAccessibility.targetSampleCoverage)
+      .toMatchObject({ retained: 500, capacityReached: true });
+  });
+
+  test('v2 reports timed-out and interrupted tasks independently from proven action failures', () => {
+    const timeout = makeJourneyCheck('deep-first-pass.route.rates.search.open',
+      { actionCompleted: false, stepLimitExceeded: true }, 'fail');
+    const failed = makeJourneyCheck('deep-first-pass.route.rates.search.query.clear',
+      { actionCompleted: false, nonTimingFailure: true }, 'fail');
+    const interrupted = makeJourneyCheck('deep-repeat.route.settings.settings.preferences.restore',
+      { interruptedByBackground: true }, 'skipped');
+    const report = { ...makePerformanceAuditReport('affs-task-outcomes', [timeout, failed, interrupted]),
+      auditEvidenceVersion: 2 as const };
+    const audit = buildAuditMetricAnalysis(report);
+    expect(audit.metrics.automatedTaskFailurePercent).toMatchObject({
+      methodVersion: 2, outcomes: { success: 0, failure: 1, indeterminate: 1 },
+    });
+    expect(audit.uxAudit.pillars.interactionFriction.taskOutcomes)
+      .toEqual({ success: 0, failure: 1, indeterminate: 1, unavailable: 1 });
+    expect(audit.uxAudit.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'task-functional-failure', count: 1, checkIds: [failed.id] }),
+      expect.objectContaining({ code: 'task-evidence-incomplete', checkIds: expect.arrayContaining([timeout.id, interrupted.id]) }),
+    ]));
+  });
+
+  test('v2 records partial foreground frame evidence without substituting JS callbacks for Android native frames', () => {
+    const report = { ...makePerformanceAuditReport('affs-native-capture', [makeJourneyCheck('journey-rates-cold')]),
+      auditEvidenceVersion: 2 as const };
+    const native = { refreshRateHz: 120, frameOverrunP95Ms: 0, jankPercent: 0, totalFrameCount: 120 };
+    const complete = buildUxFrictionFluidityAudit(report, undefined, {
+      androidFrameCapture: 'collected',
+      androidFluidity: native,
+      androidFrameSegments: { attempted: 1, observed: 1, frames: 120, droppedFrames: 0, deadlineFrames: 80 },
+    });
+    expect(complete.pillars.fluidityAndResponsiveness).toMatchObject({
+      score: 100, telemetryKind: 'android-native-frame-trace', androidFrameCapture: 'observed',
+    });
+    const interrupted = buildUxFrictionFluidityAudit(report, undefined, {
+      androidFrameCapture: 'interrupted',
+      androidFrameSegments: { attempted: 2, observed: 1, frames: 120, droppedFrames: 0 },
+    });
+    expect(interrupted.pillars.fluidityAndResponsiveness).toMatchObject({
+      score: null, telemetryKind: 'unmeasured', androidFrameCapture: 'interrupted',
+      androidFrameSegments: { attempted: 2, observed: 1, frames: 120 },
+    });
+  });
+
   test('per-task interaction friction follows Ft = 0.30*(1-St) + 0.20*(1-Et) + 0.20*(1-At) + 0.15*(1-Rt) + 0.15*(1-Wt) and preserves null on missing counters', () => {
     expect(AFFS_TASK_FRICTION_WEIGHTS).toEqual({
       taskSuccess: 0.30,

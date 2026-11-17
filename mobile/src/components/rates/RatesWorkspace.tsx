@@ -1026,6 +1026,7 @@ export default function RatesWorkspace() {
   }), [applyFilters, applyMortgageScope, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
   // Logo decode callbacks can churn during mortgage.scope.apply settle; the
   // logos probe is optional, so wait until search.data/list are no longer pending.
+  const emptyResultsMeasured = pageRows.length === 0 && !searchPending && emptyCommit === listRevision;
   const logoCallbacksActive = physicalVisibility.active && !searchPending && listReadiness.visiblyCommitted;
   const logoCallbacksActiveRef = useRef(logoCallbacksActive);
   logoCallbacksActiveRef.current = logoCallbacksActive;
@@ -1094,8 +1095,7 @@ export default function RatesWorkspace() {
         // seeding alone is not that count: a hidden or pre-restore list can
         // already be committed.
         status: (() => {
-          const settledEmpty = pageRows.length === 0 && !searchPending && emptyCommit === listRevision;
-          if (settledEmpty) return 'ready';
+          if (emptyResultsMeasured) return 'ready';
           return searchPending || (physicalVisibility.active
             ? (physicalVisibility.visibleCount ?? 0) === 0
             : !listReadiness.visiblyCommitted || (listReadiness.measuredVisibleCount ?? 0) === 0) ? 'pending' : 'ready';
@@ -1103,13 +1103,13 @@ export default function RatesWorkspace() {
         expectedCount: pageRows.length,
         actualCount: pageRows.length === 0 && !searchPending ? 0 : listReadiness.committedItemCount,
         visibleCount: pageRows.length === 0 && !searchPending ? 0 : physicalVisibility.active ? physicalVisibility.visibleCount : listReadiness.measuredVisibleCount,
-        emptyStateRendered: pageRows.length === 0 && !searchPending && emptyCommit === listRevision,
+        emptyStateRendered: emptyResultsMeasured,
       },
       {
         id: 'search.layout',
         kind: 'layout',
-        status: pageRows.length === 0 && !searchPending ? 'ready' : listReadiness.ready ? 'ready' : 'pending',
-        layoutMeasured: pageRows.length === 0 && !searchPending ? true : listReadiness.ready,
+        status: (pageRows.length === 0 ? emptyResultsMeasured : listReadiness.ready) ? 'ready' : 'pending',
+        layoutMeasured: pageRows.length === 0 ? emptyResultsMeasured : listReadiness.ready,
         renderRevision: surfaceRevision,
       },
       {

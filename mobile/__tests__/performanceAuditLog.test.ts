@@ -63,6 +63,12 @@ describe('self-contained audit log identity', () => {
 });
 
 describe('bounded audit evidence', () => {
+  it('retains a classified HTTP timeout in a durable link checkpoint', () => {
+    expect(compactAuditCheckCheckpoint({ id: 'external-link-1', label: 'Link', kind: 'network',
+      status: 'warn', durationMs: 12, metrics: { httpAttempted: true, httpIssue: 'timeout' } }))
+      .toMatchObject({ metrics: { httpAttempted: true, httpIssue: 'timeout' } });
+  });
+
   it('references long canonical metrics without truncating their duplicate journal copy', () => {
     const check = { id: 'journey-rates-cold', label: 'Rates', kind: 'journey', status: 'fail', durationMs: 500,
       metrics: { renderRevisionBefore: 'r'.repeat(3000), readinessEvidence: 'p'.repeat(4000), maxFrameGapMs: 350 },

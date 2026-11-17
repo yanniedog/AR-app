@@ -208,7 +208,7 @@ export function compactAuditCheckCheckpoint(check: Parameters<typeof compactAudi
   if (/^external-link-\d+$/.test(check.id)) {
     const metrics: Record<string, unknown> = {};
     for (const key of ['executionAttempted', 'nonTimingFailure', 'urlValidation', 'browserHandler', 'httpReachability',
-      'statusCode', 'handlerAttempted', 'httpAttempted', 'httpSelected', 'handlerResolution']) {
+      'statusCode', 'handlerAttempted', 'httpAttempted', 'httpSelected', 'handlerResolution', 'httpIssue']) {
       if (check.metrics[key] != null) metrics[key] = check.metrics[key];
     }
     const checkpoint = compactAuditCheckForLog({ ...check, metrics });

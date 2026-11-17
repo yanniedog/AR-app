@@ -469,3 +469,23 @@ test('friction evidence counts only tasks with all five observed components', ()
   });
   expect(metrics.affsScore).toMatchObject({ value: null, eligibleCount: 3, observedCount: 1, missingCount: 2 });
 });
+
+test('evidence v2 excludes pending readiness and rejects a local URL failure as HTTP verification', () => {
+  const ready = journey('journey-rates-cold', 10);
+  const pending = journey('journey-rates-warm', 10);
+  ready.diagnostic = { readiness: { ready: true, capturing: true, blockers: [], surfaces: [{ id: 'rates.results', probes: [] }] } } as never;
+  pending.diagnostic = { readiness: { ready: false, capturing: true, blockers: [], surfaces: [{ id: 'rates.results', probes: [] }] } } as never;
+  const link = (id: string, metrics: Record<string, boolean | number | string>) => ({
+    id, label: 'Link', kind: 'network' as const, status: 'warn' as const, durationMs: 1, metrics,
+  });
+  const report = makePerformanceAuditReport('verified-readiness', [ready, pending,
+    link('external-link-inventory', { uniqueDestinations: 2 }),
+    link('external-link-1', { httpAttempted: false, urlValidation: 'fail' }),
+    link('external-link-2', { httpAttempted: false, urlValidation: 'pass' }),
+  ]);
+  const legacy = buildAuditMetricAnalysis(report);
+  const revised = buildAuditMetricAnalysis({ ...report, auditEvidenceVersion: 2 });
+  expect(legacy.metrics.readinessCoveragePercent).toMatchObject({ value: 100, methodVersion: 1 });
+  expect(revised.metrics.readinessCoveragePercent).toMatchObject({ value: 50, methodVersion: 2, missingCount: 1 });
+  expect(revised.metrics.linkVerificationPercent).toMatchObject({ value: 0, methodVersion: 2, denominator: 2 });
+});

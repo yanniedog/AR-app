@@ -86,7 +86,7 @@ export function PressFeedback({
       onPressOut={(event) => { animate(false); onPressOut?.(event); }}
       onLayout={(event) => {
         const { width, height } = event.nativeEvent.layout;
-        recordAuditTargetLayout(auditTargetKey, width, height);
+        recordAuditTargetLayout(auditTargetKey, width, height, rest.accessibilityRole);
         onLayout?.(event);
       }}
     >

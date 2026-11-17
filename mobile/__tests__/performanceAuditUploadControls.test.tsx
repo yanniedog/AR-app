@@ -66,7 +66,10 @@ jest.mock('../src/components/settings/settingsUi', () => ({ InfoRow: 'InfoRow', 
 
 let tree: Renderer | undefined;
 const toggle = () => tree!.root.findByProps({ label: 'Public upload' });
-async function mount() { await act(async () => { tree = TestRenderer.create(<PerformanceAuditScreen />) as Renderer; }); }
+async function mount() {
+  await act(async () => { tree = TestRenderer.create(<PerformanceAuditScreen />) as Renderer; });
+  act(() => tree!.root.findAllByType('Card' as never).find(card => card.props.onLayout)!.props.onLayout());
+}
 async function press(title: string) { await act(async () => { tree!.root.findByProps({ title }).props.onPress(); }); }
 beforeEach(() => { resetPerformanceAuditForTests(); jest.clearAllMocks(); mockResultsReady = true; mockDeferRecovery = false; mockRecoveryWork = null; mockUpload = { sessionId: null, phase: 'idle' }; mockUploadBusy = false; mockMountedDisclosure = false; mockHydratedDownload.mockResolvedValue(mockDownload); });
 afterEach(() => { if (tree) act(() => tree!.unmount()); tree = undefined; resetPerformanceAuditForTests(); });

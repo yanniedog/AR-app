@@ -13,6 +13,7 @@ import type { AppState } from '../src/data/storeTypes';
 import { buildDeepPerformanceAuditPlan, type DeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
 import { evaluateAppHealthDisplayQuality } from '../src/lib/appHealth/displayQuality';
 import { APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth/types';
+import { captureAuditDiagnostic } from '../src/lib/performanceAuditDiagnostic';
 import { makeHealthyDataFixture } from '../__fixtures__/appHealth';
 import { normalizeCoreWithIntegrity } from '../src/data/sectionIntegrity';
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
@@ -93,6 +94,35 @@ describe('integrated app-health display evidence', () => {
     expect(evaluateAppHealthDisplayQuality(contracts, appHealthDisplayObservations([failed, recovered]))
       .find(result => result.code === APP_HEALTH_CHECK_CODES.DISPLAY_VISIBILITY)?.status).toBe('pass');
   });
+  it.each([false, true])('scores a blocked zero-row list only after its model is ready (%s)', dataReady => {
+    const registry = new PerformanceAuditReadinessRegistry();
+    registry.beginCapture('audit-6b5b67044bbe006f');
+    registry.registerSurface({ id: 'rates.results', probes: [
+      { id: 'search.data', kind: 'data', status: dataReady ? 'ready' : 'pending', actualCount: Number(dataReady), expectedCount: 1 },
+      { id: 'search.list', kind: 'list', status: 'pending', expectedCount: 0, actualCount: 0,
+        visibleCount: 0, emptyStateRendered: false },
+    ] });
+    const snapshot = registry.snapshot(['rates.results']);
+    const failed = { ...check(compactPerformanceAuditReadinessEvidence(snapshot)), status: 'fail' as const,
+      diagnostic: captureAuditDiagnostic(snapshot, 'complete') };
+    const observations = appHealthDisplayObservations([failed]);
+    expect(observations[0].listFailureEvidence?.['empty-state'] != null).toBe(dataReady);
+    expect(observations[0].evidence.some(evidence => evidence.role === 'list')).toBe(dataReady);
+  });
+
+  it('does not retain visibility from a list intentionally covered by a sheet', () => {
+    const registry = new PerformanceAuditReadinessRegistry();
+    registry.beginCapture('covered-display');
+    registry.registerSurface({ id: 'rates.results', probes: [
+      { id: 'search.list', kind: 'list', status: 'ready', expectedCount: 20, actualCount: 20,
+        visibleCount: 0, emptyStateRendered: false, coveredBySheet: true },
+    ] });
+    const snapshot = registry.snapshot(['rates.results']);
+    const covered = { ...check(compactPerformanceAuditReadinessEvidence(snapshot)),
+      diagnostic: captureAuditDiagnostic(snapshot, 'complete') };
+    expect(appHealthDisplayObservations([covered])).toEqual([]);
+  });
+
   it('does not infer decoded logos from a ready flag without image counts', () => {
     const observations = appHealthDisplayObservations([check('screen:logo:logo:ready:')]);
     expect(observations[0].evidence).toEqual([{ role: 'logo', expectedCount: null, decodedCount: null, fallbackCount: null, missingCount: null }]);

@@ -205,10 +205,22 @@ export function appHealthDisplayObservations(
       if ((probe.kind === 'logo' || probe.kind === 'layout') && !probe.required && probe.pending) continue;
       // A list that is still loading has not produced empty-state or row evidence.
       // Scoring it as a finished render poisons later settled visits.
-      const terminalRequiredBlocker = check.status === 'fail' && probe.required &&
-        check.diagnostic?.readiness?.blockers.some(blocker =>
-          blocker.surface === probe.surfaceId && blocker.probe === probe.probeId) === true;
-      if (probe.kind === 'list' && probe.pending && !terminalRequiredBlocker) continue;
+      if (probe.kind === 'list') {
+        const readiness = check.diagnostic?.readiness;
+        const measured = readiness?.surfaces.find(surface => surface.id === probe.surfaceId)?.probes ?? [];
+        if (measured.some(entry => entry.id === probe.probeId && entry.coveredBySheet)) continue;
+        if (probe.pending) {
+          const blockers = readiness?.blockers.filter(blocker => blocker.surface === probe.surfaceId) ?? [];
+          const terminalRequiredBlocker = check.status === 'fail' && probe.required &&
+            blockers.some(blocker => blocker.probe === probe.probeId);
+          // A zero-row placeholder while the data probe is blocking is not an
+          // empty model. Keep the data/readiness defect and do not score display
+          // against a population that was never computed.
+          const upstreamBlocked = measured.some(entry => entry.kind === 'data' && !entry.coveredBySheet &&
+            blockers.some(blocker => blocker.probe === entry.id));
+          if (!terminalRequiredBlocker || upstreamBlocked) continue;
+        }
+      }
       if (probe.kind === 'graphic') {
         // Ordinary navigation may finish while an optional chart is preparing.
         // Its transient state is not a completed chart check. Explicit chart
