@@ -17,7 +17,7 @@ import { AppText, Button } from '../ui';
 import { DetailGroup, ProductFacts } from './ProductDetailParts';
 import { ProductProviderLink } from './ProductProviderLink';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
-import { uiLabel, uiProductName, uiPublicProductName } from '../../lib/uiCopy';
+import { uiLabel, uiJoin, uiProductName, uiPublicProductName } from '../../lib/uiCopy';
 export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { productKey: string; programmeId?: string; rateScenario?: RateScenario }) {
   const { details, manifest, loading, retry } = useDetailsCatalogue();
   const detail = details && Object.hasOwn(details.products, productKey) ? details.products[productKey] : null;
@@ -32,6 +32,9 @@ export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { 
     {provider ? <ProductProviderLink provider={provider} /> : null}
     {identity.productCategory ? <AppText variant="small">{humanizeEnum(identity.productCategory)}</AppText> : null}
     {hasProgrammes && <PublicRateEvidence productKey={productKey} programmeId={programmeId} scenario={rateScenario} />}
+    {!hasProgrammes && product?.status === 'legacy' && (
+      <AppText variant="small" color="textMuted">{uiJoin('New applications', ': ', 'Unavailable')}</AppText>
+    )}
     {!hasProgrammes && product?.freshness && <DiscoveryRateStatus freshness={product.freshness} />}
     {detail ? <>
       <AppText variant="small">{uiLabel('No listed rate')}</AppText>

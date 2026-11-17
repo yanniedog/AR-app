@@ -21,9 +21,9 @@ test.each(['HOME_LOANS', undefined, 'TRANS_AND_SAVINGS_ACCOUNTS'])('details-only
   expect(tree.root.findAllByType('SavingsPeriodCalculation')).toHaveLength(productCategory === 'TRANS_AND_SAVINGS_ACCOUNTS' ? 1 : 0);
 });
 
-test('discovery-only details preserve a failed check and its actual dates', async () => {
+test('discovery-only legacy details preserve application availability and actual check dates', async () => {
   mockCatalogue = { details: { products: { product: {} } }, manifest: { run_date: '2026-09-15' }, loading: false };
-  mockPublicProduct = { name: 'Unlisted product', programmeIds: [], freshness: {
+  mockPublicProduct = { name: 'Unlisted product', status: 'legacy', programmeIds: [], freshness: {
     state: 'failed', checkedAt: '2026-09-12', lastSuccessAt: '2026-09-08', reasonCodes: [],
   } };
   let tree: any;
@@ -31,6 +31,7 @@ test('discovery-only details preserve a failed check and its actual dates', asyn
     await act(async () => { tree = TestRenderer.create(<DetailsOnlyProduct productKey="product" />); });
     const text = tree.root.findAllByType('AppText').map((entry: any) => entry.props.children).join(' ');
     expect(text).toContain('No listed rate');
+    expect(text).toContain('New applications: Unavailable');
     expect(text).toContain('Freshness: Failed · Checked 12 Sept 2026 · Last successful check 8 Sept 2026');
     expect(text).not.toContain('15 Sept 2026');
   } finally {
