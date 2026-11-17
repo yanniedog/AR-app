@@ -129,9 +129,3 @@ export function ProductSpecs({ row, section, productDetails }: { row: RateRow; s
       { label: 'Availability', value: availability }, { label: 'Eligibility', value: uiLabel('Unverified') }]} />
   </Disclosure>;
 }
-export function HistoryLegend({ productColor, sectionColor }: { productColor: string; sectionColor: string }) {
-  return <Row gap={16} style={{ flexWrap: 'wrap' }}><LegendItem color={productColor} label="Leading advertised" /><LegendItem color={sectionColor} label="Median" dashed /><LegendItem color={sectionColor} label="Mean" /></Row>;
-}
-export function LegendItem({ color, label, dashed }: { color: string; label: UiCopy; dashed?: boolean }) {
-  return <Row gap={6}><View style={{ width: 16, height: 0, borderTopWidth: 2.4, borderColor: color, borderStyle: dashed ? 'dashed' : 'solid' }} /><AppText variant="tiny" color="textMuted">{label}</AppText></Row>;
-}
