@@ -18,13 +18,21 @@ jest.mock('../src/config', () => ({
   SELF_UPDATE_ENABLED: true,
 }));
 
+type Node = {
+  props: Record<string, any>;
+  findAll: (match: (node: Node) => boolean) => Node[];
+  findByType: (type: unknown) => Node;
+  findByProps: (props: Record<string, unknown>) => Node;
+};
+type Renderer = ReturnType<typeof TestRenderer.create> & { root: Node };
+
 it('opens the app QR from About and shares its exact install link', async () => {
   const platform = jest.replaceProperty(Platform, 'OS', 'android');
   const keyboard = jest.spyOn(Keyboard, 'isVisible').mockReturnValue(false);
   const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' });
-  let tree!: ReturnType<typeof TestRenderer.create>;
+  let tree!: Renderer;
   try {
-    act(() => { tree = TestRenderer.create(<AboutScreen />); });
+    act(() => { tree = TestRenderer.create(<AboutScreen />) as Renderer; });
     const control = (label: string) => tree.root.findAll(node => node.props.accessibilityLabel === label
       && typeof node.props.onPress === 'function')[0];
     expect(tree.root.findByType(SheetSurface).props.visible).toBe(false);
