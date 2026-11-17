@@ -191,6 +191,9 @@ describe('APK update state hydration', () => {
       appState = 'active';
       await autoInstallReadyApkUpdate(remote, () => false);
       expect(installDownloadedApk).not.toHaveBeenCalled();
+      jest.mocked(installDownloadedApk).mockRejectedValueOnce(new Error('URI temporarily unavailable'));
+      await autoInstallReadyApkUpdate(remote, () => true);
+      expect(launch).not.toHaveBeenCalled();
       await Promise.all([
         autoInstallReadyApkUpdate(remote, () => true),
         autoInstallReadyApkUpdate(remote, () => true),

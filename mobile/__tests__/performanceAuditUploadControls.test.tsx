@@ -5,7 +5,7 @@ import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PerformanceAuditScreen from '../app/performance-audit';
-import { getPerformanceAuditState, completePerformanceAudit, failPerformanceAudit, markPerformanceAuditCancelled, clearCompletedPerformanceAuditState, resetPerformanceAuditForTests, PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY } from '../src/lib/performanceAudit';
+import { getPerformanceAuditState, completePerformanceAudit, failPerformanceAudit, markPerformanceAuditCancelled, clearCompletedPerformanceAuditState, resetPerformanceAuditForTests, LEGACY_PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY, PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY } from '../src/lib/performanceAudit';
 import { makePerformanceAuditReport } from '../__fixtures__/performanceAuditReport';
 import { restorePerformanceAuditUpload, uploadCompletedPerformanceAudit } from '../src/lib/performanceAuditSharing';
 import { loadCompletedPerformanceAudit } from '../src/lib/performanceAuditReportStorage';
@@ -78,6 +78,19 @@ test.each([['Local audit', 'local'], ['Live audit', 'live-source']] as const)('%
   await press(title);
   expect(getPerformanceAuditState()).toMatchObject({ status: 'queued', auditMode: mode, uploadLog: true });
   expect(toggle().props.disabled).toBe(true); expect(toggle().props.value).toBe(true);
+});
+
+test.each([['10', 30], ['45', 45]])('migrates the stored v2 timeout %s to %s seconds', async (stored, expected) => {
+  jest.mocked(AsyncStorage.getItem).mockImplementation(async key =>
+    key === LEGACY_PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY ? stored : null);
+  try {
+    await mount();
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY, String(expected));
+    await press('Local audit');
+    expect(getPerformanceAuditState().hangTimeoutMs).toBe(expected * 1_000);
+  } finally {
+    jest.mocked(AsyncStorage.getItem).mockResolvedValue(null);
+  }
 });
 
 test('the current publication choice remains visible after cancellation', async () => {

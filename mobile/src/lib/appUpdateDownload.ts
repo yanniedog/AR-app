@@ -1112,7 +1112,6 @@ export async function autoInstallReadyApkUpdate(manifest: ApkManifest, shouldIns
       return true;
     });
   } catch (error) {
-    automaticInstallBuilds.add(build);
     debugLog.warn('app-update', `automatic installer handoff failed build=${build}: ${String(error)}`);
   } finally {
     automaticInstallInFlight = false;
