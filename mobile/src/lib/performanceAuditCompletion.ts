@@ -81,6 +81,8 @@ export function isJustifiedAvailabilitySkip(
     || evidence === 'an optional required probe reported a terminal error'
     || evidence.startsWith('Optional assets are not cached')
     || CONTRACT_AVAILABILITY_EVIDENCE.has(evidence)) return true;
+  if (check.id === 'maximum-coverage-profile' && check.metrics.skipClassification === 'terminal-availability'
+    && check.metrics.reason === 'Maximum coverage assets unavailable') return true;
   if (typeof check.metrics.reason === 'string' && CONTRACT_AVAILABILITY_REASONS.has(check.metrics.reason)) return true;
   return optionalPlannedStep && check.metrics.skipClassification === 'terminal-availability';
 }
