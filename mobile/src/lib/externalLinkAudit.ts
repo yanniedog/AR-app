@@ -25,6 +25,8 @@ export interface ExternalLinkAuditResult {
   handler: ExternalLinkAuditCheck;
   reachability: ExternalLinkAuditCheck;
   httpStatus: number | null;
+  httpIssue?: 'timeout' | 'cancelled' | 'transport' | 'restricted' | 'redirect-unverified'
+    | 'response-unverified' | 'response-rejected';
 }
 
 export interface ExternalLinkAuditOptions {
@@ -123,6 +125,8 @@ export async function auditExternalLink(
   const handlerExpected = options.handler !== false && options.platform !== 'web';
   let handlerSettled = !handlerExpected;
   let networkSettled = !options.reachability;
+  let fetchStarted = false;
+  let deadlineExpired = false;
   const handler = options.handler === false
     ? Promise.resolve().then(() => {
       result.handler = check('unknown', 'The installed browser handler was not checked within the audit time budget.', false, 'not-selected');
@@ -148,16 +152,20 @@ export async function auditExternalLink(
       .finally(() => { handlerSettled = true; });
   const network = !options.reachability
     ? Promise.resolve()
-    : bounded((signal) => (options.fetch ?? globalThis.fetch)(trusted.url, {
-      method: 'HEAD',
-      redirect: 'manual',
-      credentials: 'omit',
-      cache: 'no-store',
-      signal,
-    }), timeoutMs, deadlineController.signal)
+    : bounded((signal) => {
+      fetchStarted = true;
+      return (options.fetch ?? globalThis.fetch)(trusted.url, {
+        method: 'HEAD',
+        redirect: 'manual',
+        credentials: 'omit',
+        cache: 'no-store',
+        signal,
+      });
+    }, timeoutMs, deadlineController.signal)
       .then((response) => {
         result.httpStatus = response.status;
         if (!response.status || (response.status >= 300 && response.status < 400)) {
+          result.httpIssue = 'redirect-unverified';
           result.reachability = check('unknown', 'The source redirected or hid its response; the destination was not confirmed.');
           return;
         }
@@ -165,15 +173,18 @@ export async function auditExternalLink(
         // The transport guard also validates the final destination; check again
         // here so a standalone checker can never bless an unsafe final URL.
         if (!response.url) {
+          result.httpIssue = 'response-unverified';
           result.reachability = check('unknown', 'HTTP responded without a final destination; reachability was not confirmed.');
           return;
         }
         const final = trustedExternalUrl({ ...request, url: response.url });
         if (!final.ok) {
+          result.httpIssue = 'response-rejected';
           result.reachability = check('fail', 'The response destination does not satisfy the approved source policy.');
           return;
         }
         if ([401, 403, 405, 407, 429, 501].includes(response.status)) {
+          result.httpIssue = 'restricted';
           result.reachability = check('unknown', `HTTP ${response.status}: the source blocked the audit request; browser availability is unverified.`);
         } else if (response.status >= 200 && response.status < 300) {
           result.reachability = check('pass', `HTTP ${response.status}: the approved destination responded to HEAD.`);
@@ -183,8 +194,10 @@ export async function auditExternalLink(
           result.reachability = check('unknown', `HTTP ${response.status}: reachability was not confirmed.`);
         }
       })
-      .catch(() => {
-        result.reachability = check('unknown', 'HTTP reachability could not be verified (offline, blocked, cancelled or timed out).', true, 'selected');
+      .catch((error: unknown) => {
+        result.httpIssue = options.signal?.aborted ? 'cancelled'
+          : deadlineExpired || (error instanceof Error && error.message === 'timeout') ? 'timeout' : 'transport';
+        result.reachability = check('unknown', 'HTTP reachability could not be verified.', fetchStarted, 'selected');
       })
       .finally(() => { networkSettled = true; });
   try {
@@ -192,12 +205,14 @@ export async function auditExternalLink(
       Promise.all([handler, network]),
       new Promise<void>((resolve) => {
         deadlineTimer = setTimeout(() => {
+          deadlineExpired = true;
           deadlineController.abort();
           if (!handlerSettled && !options.signal?.aborted) {
             result.handler = check('unknown', 'The installed browser handler could not be verified.', true, 'selected');
           }
           if (!networkSettled && !options.signal?.aborted) {
-            result.reachability = check('unknown', 'HTTP reachability could not be verified (offline, blocked, cancelled or timed out).', true, 'selected');
+            result.httpIssue = 'timeout';
+            result.reachability = check('unknown', 'HTTP reachability timed out.', fetchStarted, 'selected');
           }
           resolve();
         }, timeoutMs);

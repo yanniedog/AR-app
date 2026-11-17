@@ -24,7 +24,7 @@ export const PUBLIC_AUDIT_METRIC_FIELDS = new Set([
   'firstReadyFrameMs', 'firstReadyFrameObserved',
   'stepBudgetOmittedMs',
   'httpSelected',
-  'handlerResolution',
+  'handlerResolution', 'httpIssue',
   'urlValidation', 'browserHandler', 'httpReachability',
   'backMs',
   'returnFallbackMs',

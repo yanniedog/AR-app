@@ -113,6 +113,8 @@ export interface PerformanceAuditReport {
   schemaVersion: number;
   /** Collector provenance; absent reports retain legacy rendering evidence. */
   renderingEvidenceVersion?: 1 | 2;
+  /** Method lineage for evidence produced by the current audit runner. */
+  auditEvidenceVersion?: 2;
   sessionId: string;
   startedAt: string;
   finishedAt: string;

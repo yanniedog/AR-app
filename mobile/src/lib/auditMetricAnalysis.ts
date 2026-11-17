@@ -1,7 +1,8 @@
+import { auditHttpCheckSummary, verifiedAuditHttpDestination } from './auditHttpCheckSummary';
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion, hasValidPerformanceAuditHealth } from './performanceAuditCompletion';
 import { AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_METHODS, auditReportMetricMethodVersion, type AuditMetric } from './auditMetricHistoryMetrics';
-import { auditMetricValues, auditTaskOutcomePopulation, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount as measuredCount, measuredAuditValue as measured } from './auditMetricHistoryValues';
+import { auditMetricValues, auditTaskOutcomePopulation, hasAuditActionDurationEvidence, hasAuditReturnEvidence, hasAuditReadinessEvidence, measuredAuditCount as measuredCount, measuredAuditValue as measured } from './auditMetricHistoryValues';
 import { buildUxFrictionFluidityAudit, type UxFrictionFluidityAudit, type UxFrictionFluidityTelemetryOptions } from './uxFrictionFluidityAudit';
 
 export type AuditMetricMissingEvidence = 'missing-evidence' | 'missing-denominator' | 'missing-samples'
@@ -131,7 +132,15 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     metrics[metric] = {
       value, unit: AUDIT_METRIC_DEFINITIONS[metric].unit, methodId: `ar.audit.${metric}`,
       methodVersion: auditReportMetricMethodVersion(report, metric),
-      formula: AUDIT_METRIC_METHODS[metric][0], unitOfAnalysis: AUDIT_METRIC_METHODS[metric][1],
+      formula: report.auditEvidenceVersion !== 2 && metric === 'readinessCoveragePercent'
+        ? 'Executed journeys with captured readiness / executed journeys × 100'
+        : report.auditEvidenceVersion !== 2 && metric === 'linkVerificationPercent'
+          ? 'Classified destinations / inventoried destinations × 100'
+          : report.auditEvidenceVersion !== 2 && metric === 'uxStandardsAccessibilityScore'
+            ? 'standardsCompliance × 100'
+            : report.auditEvidenceVersion !== 2 && metric === 'uxFluidityResponsivenessScore'
+              ? 'androidFrameScore ?? cwvComposite ?? iosHitchScore ?? jsRuntimeScore'
+              : AUDIT_METRIC_METHODS[metric][0], unitOfAnalysis: AUDIT_METRIC_METHODS[metric][1],
       numerator: null, denominator: null, sampleSize: observed, sampleUnit: 'evidence-field', eligibleCount: refs.length,
       observedCount: observed, missingCount: missing, excludedCount: 0,
       ...detail, applicability: value !== null ? 'observed' : evidence.some(reason =>
@@ -287,7 +296,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     [reportField('coverage.executedJourneyChecks', coverage?.executedJourneyChecks), reportField('coverage.plannedJourneyChecks', coverage?.plannedJourneyChecks)]);
   for (const metric of ['readinessCoveragePercent', 'responsivenessCoveragePercent'] as const) {
     const measuredChecks = journeys.filter(check => metric === 'readinessCoveragePercent'
-      ? check.diagnostic?.readiness?.capturing === true && typeof check.diagnostic.readiness.ready === 'boolean'
+      ? hasAuditReadinessEvidence(check, report.auditEvidenceVersion === 2)
       : check.metrics.eventLoopMeasurementAvailable === true && check.metrics.frameMeasurementAvailable === true);
     const refs = journeys.flatMap(check => metric === 'readinessCoveragePercent'
       ? [perf(check, 'readinessCapturing', check.diagnostic?.readiness?.capturing), perf(check, 'readinessReady', check.diagnostic?.readiness?.ready)]
@@ -310,8 +319,16 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     ...report.checks.filter(check => check.id === 'external-link-unverified')
       .map(check => perf(check, 'destinationCount', check.metrics.destinationCount)),
   ];
-  ratio('linkVerificationPercent', totalLinks - completion.gaps.unverifiedLinks, totalLinks, linkRefs,
-    { observedCount: totalLinks - completion.gaps.unverifiedLinks, missingCount: completion.gaps.unverifiedLinks });
+  if (report.auditEvidenceVersion === 2) {
+    const http = auditHttpCheckSummary(report.checks);
+    ratio('linkVerificationPercent', http.verified, http.total, [
+      reportField('http.total', http.total),
+      ...links.map(check => perf(check, 'httpVerified', verifiedAuditHttpDestination(check))),
+    ], { observedCount: http.verified, missingCount: http.total == null ? 0 : http.total - http.verified });
+  } else {
+    ratio('linkVerificationPercent', totalLinks - completion.gaps.unverifiedLinks, totalLinks, linkRefs,
+      { observedCount: totalLinks - completion.gaps.unverifiedLinks, missingCount: completion.gaps.unverifiedLinks });
+  }
   put('unverifiedLinks', linkRefs, { sampleSize: totalLinks, sampleUnit: 'destination', observedCount: totalLinks - completion.gaps.unverifiedLinks,
     missingCount: completion.gaps.unverifiedLinks });
   put('missingChecks', [reportField('completion.gaps.missingChecks', completion.gaps.missingChecks),
@@ -434,7 +451,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     eligibleCount: standardsEligible,
     observedCount: standardsObserved,
     missingCount: standardsMissing,
-  });
+  }, uxAudit.pillars.standardsAndAccessibility.targetSampleCoverage?.capacityReached ? ['partial-samples'] : []);
   const fluidity = uxAudit.pillars.fluidityAndResponsiveness;
   const selectedFluidityComponents = fluidity.telemetryKind === 'android-native-frame-trace'
     ? [fluidity.components.androidFrameScore]

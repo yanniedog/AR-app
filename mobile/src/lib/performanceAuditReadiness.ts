@@ -186,6 +186,8 @@ export interface WaitForPerformanceAuditReadinessOptions {
   creditExistingStableTime?: boolean;
   /** Reuse completed stability evidence only for unchanged mounted surfaces. */
   reuseSettledEvidence?: boolean;
+  /** A just-committed route may still be registering its required probes. */
+  waitForProbeRegistration?: boolean;
   timeoutMs?: number;
   /** Suspend the wait budget while backgrounded; resume needs fresh UI stability.
    * The caller's step watchdog and cancellation still bound the overall action. */
@@ -919,7 +921,7 @@ export class PerformanceAuditReadinessRegistry {
         }
         // A pathname can commit before the selected route registers its probes.
         // Only a mounted selected surface can prove a structural kind is absent.
-        if (snapshot.surfaces.length > 0 &&
+        if (!options.waitForProbeRegistration && snapshot.surfaces.length > 0 &&
             snapshot.blockers.some((blocker) => blocker.code === 'required-kind-missing')) {
           const missing = snapshot.blockers
             .filter((blocker) => blocker.code === 'required-kind-missing')

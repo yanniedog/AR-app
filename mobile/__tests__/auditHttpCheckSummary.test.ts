@@ -7,7 +7,7 @@ test('local links record zero HTTP attempts without claiming verified destinatio
   expect(auditHttpCheckSummary([entry('external-link-inventory', { uniqueDestinations: 2 }),
     entry('external-link-1', { httpAttempted: false, httpReachability: 'unknown' }),
     entry('external-link-2', { httpAttempted: false, httpReachability: 'unknown' })]))
-    .toEqual({ total: 2, attempted: 0, notAttempted: 2, missingEvidence: 0 });
+    .toMatchObject({ total: 2, attempted: 0, notAttempted: 2, missingEvidence: 0 });
 });
 
 test('the supplied local audit population remains 0 HTTP attempts out of 2373 destinations', () => {
@@ -16,7 +16,7 @@ test('the supplied local audit population remains 0 HTTP attempts out of 2373 de
   const links = Array.from({ length: 2373 }, (_, index) => entry(`external-link-${index + 1}`,
     { httpAttempted: false, httpReachability: 'unknown' }));
   expect(auditHttpCheckSummary([entry('external-link-inventory', { uniqueDestinations: 2373 }), ...links]))
-    .toEqual({ total: 2373, attempted: 0, notAttempted: 2373, missingEvidence: 0 });
+    .toMatchObject({ total: 2373, attempted: 0, notAttempted: 2373, missingEvidence: 0 });
 });
 
 test('live unknown/failed responses still count as attempts; unrecorded evidence does not count as unattempted', () => {
@@ -24,15 +24,15 @@ test('live unknown/failed responses still count as attempts; unrecorded evidence
     entry('external-link-1', { httpAttempted: true, httpReachability: 'unknown' }),
     entry('external-link-2', { httpAttempted: true, httpReachability: 'fail' }),
     entry('external-link-3', { httpAttempted: false }), entry('external-link-4', {})]))
-    .toEqual({ total: 5, attempted: 2, notAttempted: 1, missingEvidence: 2 });
+    .toMatchObject({ total: 5, attempted: 2, notAttempted: 1, missingEvidence: 2 });
 });
 
 test('missing or inconsistent inventory remains unknown and duplicate rows cannot inflate attempts', () => {
   const attempted = entry('external-link-1', { httpAttempted: true });
-  expect(auditHttpCheckSummary([attempted])).toEqual({ total: null, attempted: 1, notAttempted: 0, missingEvidence: null });
+  expect(auditHttpCheckSummary([attempted])).toMatchObject({ total: null, attempted: 1, notAttempted: 0, missingEvidence: null });
   expect(auditHttpCheckSummary([entry('external-link-inventory', { uniqueDestinations: 0 }), attempted]).total).toBeNull();
   expect(auditHttpCheckSummary([entry('external-link-inventory', { uniqueDestinations: 1 }), attempted, attempted]))
-    .toEqual({ total: 1, attempted: 0, notAttempted: 0, missingEvidence: 1 });
+    .toMatchObject({ total: 1, attempted: 0, notAttempted: 0, missingEvidence: 1 });
 });
 
 test('aggregate unverified link check accounts for remaining not-attempted destinations', () => {
@@ -41,5 +41,16 @@ test('aggregate unverified link check accounts for remaining not-attempted desti
     entry('external-link-1', { httpAttempted: true, httpReachability: 'pass' }),
     entry('external-link-2', { httpAttempted: true, httpReachability: 'fail' }),
     entry('external-link-unverified', { destinationCount: 3, httpAttempted: false, httpReachability: 'unknown' }),
-  ])).toEqual({ total: 5, attempted: 2, notAttempted: 3, missingEvidence: 0 });
+  ])).toMatchObject({ total: 5, attempted: 2, notAttempted: 3, missingEvidence: 0 });
+});
+
+test('a rejected URL and failed HEAD do not verify a destination', () => {
+  const checks = [entry('external-link-inventory', { uniqueDestinations: 4 }),
+    entry('external-link-1', { httpAttempted: false, urlValidation: 'fail' }),
+    entry('external-link-2', { httpAttempted: true, httpReachability: 'pass' }),
+    entry('external-link-3', { httpAttempted: true, httpReachability: 'fail' }),
+    entry('external-link-4', { httpAttempted: true, httpReachability: 'unknown' })];
+  expect(auditHttpCheckSummary(checks)).toMatchObject({
+    total: 4, attempted: 3, verified: 1, failed: 1, unresolved: 1, rejected: 1, notAttempted: 1, missingEvidence: 0,
+  });
 });

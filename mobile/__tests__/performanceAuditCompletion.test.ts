@@ -214,6 +214,32 @@ test.each([{}, { httpReachability: 'pass' }, { browserHandler: 'pass' },
   expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'successful', gaps: { unverifiedLinks: 0 } });
 });
 
+test('v2 requires complete Android frames and the scoped control layout sample for coverage', () => {
+  const report = completeReport();
+  expect(buildPerformanceAuditCompletion(report).coverageComplete).toBe(true);
+  report.auditEvidenceVersion = 2;
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: false,
+    gaps: { uxNativeFrameCaptureIncomplete: true, uxControlLayoutSampleIncomplete: true } });
+  const native = { refreshRateHz: 60, totalFrameCount: 200, frameOverrunP95Ms: 0, jankPercent: 0 };
+  const target = { id: 'audit-start-local#0', width: 48, height: 48, platform: 'android' as const };
+  report.uxTelemetry = {
+    androidFrameCapture: 'collected',
+    androidFluidity: native,
+    androidFrameSegments: { attempted: 1, observed: 1, frames: 200, droppedFrames: 0 },
+    targetSamples: [target],
+    targetCapture: { capacityReached: false, auditStartControlsMeasured: true },
+  };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: false,
+    gaps: { uxNativeFrameCaptureIncomplete: false, uxControlLayoutSampleIncomplete: true } });
+  report.uxTelemetry.targetSamples = [target, { ...target, id: 'audit-start-live#1' }];
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true,
+    gaps: { uxNativeFrameCaptureIncomplete: false, uxControlLayoutSampleIncomplete: false } });
+  report.environment.platform = 'ios';
+  report.uxTelemetry.androidFrameSegments = undefined;
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true,
+    gaps: { uxNativeFrameCaptureIncomplete: false, uxControlLayoutSampleIncomplete: false } });
+});
+
 test('all duplicate, unexpected, pending and missing-readiness gaps identify their source positions', () => {
   const report = completeReport();
   report.checks.push({ ...report.checks[0] });

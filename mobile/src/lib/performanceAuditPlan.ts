@@ -1152,6 +1152,17 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 1, semanticActionId: 'settings.update-status.observe', readiness: ['update-status'], optional: true, ...optionalFeatureSkip },
   ]);
 
+  scenario(templates, 'route.about', {
+    expectedPath: '/about', expectedSurface: 'about.overview', readiness: ['app', 'local-state'],
+  }, [{ depth: 0, semanticActionId: 'about.open' }]);
+  scenario(templates, 'route.notices', {
+    expectedPath: '/third-party-notices', expectedSurface: 'notices.document', readiness: ['app', 'local-state'],
+  }, [{ depth: 0, semanticActionId: 'notices.open' }]);
+  scenario(templates, 'route.calculation-receipt', {
+    expectedPath: '/calculation-receipt', expectedSurface: 'calculations.receipt',
+    readiness: ['app', 'local-state'], unsafeActionsExcluded: ['clipboard.write', 'financial-input.edit'],
+  }, [{ depth: 0, semanticActionId: 'calculation-receipt.open' }]);
+
   scenario(templates, 'route.terms', {
     expectedPath: '/terms',
     expectedSurface: 'terms.notices',
@@ -1209,13 +1220,19 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     optional: true, ...optionalFeatureSkip,
   }, [{ depth: 1, semanticActionId: 'redirect.changes.verify' }]);
 
-  scenario(templates, 'redirect.root', {
-    expectedPath: '/browse',
-    expectedSurface: 'rates.results',
-    readiness: ['app', 'redirect', 'local-state'],
-  }, [
-    { depth: 1, semanticActionId: 'redirect.root.verify' },
-  ]);
+  for (const legacy of ['trends', 'tab-trends']) {
+    scenario(templates, `redirect.${legacy}`, {
+      expectedPath: '/research', expectedSurface: 'outlook.dashboard',
+      readiness: ['app', 'redirect', 'data'], skipReason: missingCore,
+      skipWhen: ['Core data is unavailable'],
+    }, [{ depth: 1, semanticActionId: `redirect.${legacy}.verify` }]);
+  }
+  for (const legacy of ['root', 'tab-index']) {
+    scenario(templates, `redirect.${legacy}`, {
+      expectedPath: '/browse', expectedSurface: 'rates.results',
+      readiness: ['app', 'redirect', 'local-state'],
+    }, [{ depth: 1, semanticActionId: `redirect.${legacy}.verify` }]);
+  }
 
   scenario(templates, 'route.audit', {
     expectedPath: '/performance-audit',

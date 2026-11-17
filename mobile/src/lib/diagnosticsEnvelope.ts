@@ -8,6 +8,7 @@ import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
 import { publicAuditMetricAnalysis } from './publicAuditMetricAnalysis';
 import { auditApplicationJournal } from './auditApplicationJournal';
 import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
+import { buildAuditAppCoverage } from './auditAppCoverage';
 import { measureAuditEvidence } from './auditEvidenceCapacity';
 
 import { PUBLIC_AUDIT_METRIC_FIELDS as METRIC_ALLOWLIST } from './auditDiagnosticFields';
@@ -71,6 +72,8 @@ const OBSERVED_COUNT_KEYS = new Set([
 ]);
 
 const PUBLIC_METRIC_ENUMS: Record<string, ReadonlySet<string>> = {
+  httpIssue: new Set(['timeout', 'cancelled', 'transport', 'restricted', 'redirect-unverified',
+    'response-unverified', 'response-rejected']),
   handlerResolution: new Set(['pass', 'fail', 'not-attempted', 'unresolved']),
   urlValidation: new Set(['pass', 'fail', 'unknown']),
   browserHandler: new Set(['pass', 'fail', 'unknown']),
@@ -181,7 +184,9 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
     schemaVersion: 1,
     kind: 'performance-audit',
     renderingEvidenceVersion: report.renderingEvidenceVersion === 2 ? 2 : 1,
+    auditEvidenceVersion: report.auditEvidenceVersion === 2 ? 2 : 1,
     completion,
+    appCoverage: buildAuditAppCoverage(report),
     metricAnalysis: publicAuditMetricAnalysis(report, safeCheckId),
     app: {
       version: report.app.appVersion,

@@ -206,6 +206,7 @@ describe('deep performance audit plan', () => {
       if (source.includes('usePerformanceAuditSurface(') || source.includes('<NavigationHub ')) {
         for (const match of source.matchAll(pattern)) registered.add(match[1]);
       }
+      for (const match of source.matchAll(/useAuditStaticRoute\(\{\s*action:\s*['"]([a-z][a-z0-9.-]+)['"]/g)) registered.add(match[1]);
       for (const imported of ts.preProcessFile(source, true, true).importedFiles) {
         if (!imported.fileName.startsWith('.')) continue;
         const base = path.resolve(path.dirname(file), imported.fileName);

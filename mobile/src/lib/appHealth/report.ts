@@ -317,7 +317,8 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
     'historyProcessingComparisons', 'historyChartProjectionComparisons',
     'catalogueAvailable', 'exhaustiveLoadedCatalogueScan', 'sourceIdentityInventoryAvailable',
     'allProductsRendered', 'publishedRates', 'publishedProducts', 'publishedProviders',
-    'sourceProducts', 'sourceRates', 'identityMismatches', 'missingDetails', 'missingSearchIndex',
+    'sourceProducts', 'sourceRates', 'explainedSourceRateExclusions', 'explainedSourceProductsWithoutRates',
+    'detailsOnlyProducts', 'identityMismatches', 'missingDetails', 'missingSearchIndex',
     'searchIndexRunMatches',
   ],
   [APP_HEALTH_CHECK_CODES.QUARANTINE]: [
@@ -338,6 +339,7 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
     'matchedProducts',
     'missingProducts',
     'orphanProducts',
+    'explainedOrphanProducts',
     'coveragePercent',
     'runMatches',
     'impossibleCounts',
@@ -428,7 +430,7 @@ const PUBLIC_DISPLAY_SURFACES = new Set([
   'outlook.dashboard', 'outlook.rba-response', 'outlook.economy', 'rba.dashboard', 'saved.list', 'settings.sections',
   'calculator.results', 'projections.lifecycle-chart', 'profile.filters',
   'product.details', 'receipt.evidence', 'lender.details', 'compare.table',
-  'terms.notices', 'debug-log.entries', 'projections.inputs', 'settings.app-update',
+  'about.overview', 'notices.document', 'calculations.receipt', 'terms.notices', 'debug-log.entries', 'projections.inputs', 'settings.app-update',
   'not-found.recovery', 'audit.progress',
 ]);
 
@@ -444,14 +446,17 @@ function publicMetrics(check: AppHealthCheck, sanitizeHistory: ReturnType<typeof
           (typeof value === 'number' && Number.isFinite(value))),
     ),
   );
-  if (check.domain === 'display-completeness' && Array.isArray(check.localEvidence?.failedSurfaceIds)) {
-    const ids = check.localEvidence.failedSurfaceIds;
-    const known = [...new Set(ids.filter((id): id is string =>
-      typeof id === 'string' && PUBLIC_DISPLAY_SURFACES.has(id)))].sort();
-    // Fixed-size role vocabulary bounds this export, even for malformed local evidence.
-    metrics.failedSurfaceRoles = JSON.stringify(known);
-    metrics.unclassifiedFailedSurfaces = ids.filter(id =>
-      typeof id !== 'string' || !PUBLIC_DISPLAY_SURFACES.has(id)).length;
+  if (check.domain === 'display-completeness') {
+    for (const outcome of ['failed', 'warned'] as const) {
+      const ids = check.localEvidence?.[`${outcome}SurfaceIds`];
+      if (!Array.isArray(ids) || !ids.length) continue;
+      const known = [...new Set(ids.filter((id): id is string =>
+        typeof id === 'string' && PUBLIC_DISPLAY_SURFACES.has(id)))].sort();
+      // The source-authored vocabulary bounds the export even for malformed evidence.
+      metrics[`${outcome}SurfaceRoles`] = JSON.stringify(known);
+      metrics[outcome === 'failed' ? 'unclassifiedFailedSurfaces' : 'unclassifiedWarnedSurfaces'] = ids.length
+        - ids.filter(id => typeof id === 'string' && PUBLIC_DISPLAY_SURFACES.has(id)).length;
+    }
   }
   if (check.code === APP_HEALTH_CHECK_CODES.BANK_RESPONSE_COVERAGE) return {
     ...Object.fromEntries(Object.entries(metrics).filter(([, value]) => value == null || typeof value === 'number' || typeof value === 'boolean')),

@@ -217,6 +217,7 @@ export function fullAuditDiagnosticLog(report: PerformanceAuditReport, safeCheck
   // quality counts or findings through a second, unrelated schema boundary.
   return { ...retained, appHealth: annotatedHealth,
     renderingEvidenceVersion: report.renderingEvidenceVersion === 2 ? 2 : 1,
+    auditEvidenceVersion: report.auditEvidenceVersion === 2 ? 2 : 1,
     // Hosted envelopes already contain this exact analysis. Keep one observation
     // table, while a standalone log remains self-contained.
     metricAnalysis: options?.metricAnalysis === 'top-level'

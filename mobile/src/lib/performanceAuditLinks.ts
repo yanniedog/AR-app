@@ -49,6 +49,7 @@ export function externalLinkAuditCheck(result: ExternalLinkAuditResult, index: n
       browserHandler: result.handler.status,
       httpReachability: result.reachability.status,
       statusCode: result.httpStatus,
+      ...(result.httpIssue ? { httpIssue: result.httpIssue } : {}),
       handlerAttempted: result.handler.attempted,
       httpAttempted: result.reachability.attempted,
       ...(httpSelected !== undefined ? { httpSelected } : {}),
