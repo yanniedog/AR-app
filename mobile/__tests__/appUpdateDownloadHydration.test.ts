@@ -194,6 +194,11 @@ describe('APK update state hydration', () => {
       jest.mocked(installDownloadedApk).mockRejectedValueOnce(new Error('URI temporarily unavailable'));
       await autoInstallReadyApkUpdate(remote, () => true);
       expect(launch).not.toHaveBeenCalled();
+      jest.mocked(installDownloadedApk).mockImplementationOnce(async (_uri, permitted) => {
+        expect(permitted?.()).toBe(true);
+        throw new Error('Android installer rejected the activity launch');
+      });
+      await autoInstallReadyApkUpdate(remote, () => true);
       await Promise.all([
         autoInstallReadyApkUpdate(remote, () => true),
         autoInstallReadyApkUpdate(remote, () => true),
