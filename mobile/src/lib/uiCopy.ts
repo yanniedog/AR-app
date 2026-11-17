@@ -47,7 +47,7 @@ export const UI_LABELS = [
   'Updating', 'Previous results',
   'Rates per page', 'Products per page', 'Page', 'First', 'Previous', 'Next', 'Last',
   'First page', 'Previous page', 'Next page', 'Last page',
-  'Freshness', 'Overdue', 'Stale',
+  'Freshness', 'Overdue', 'Stale', 'Icon key', 'Rates controls', 'Advertised or quoted rate', 'Loan-to-value ratio (LVR)', 'Unresolved conditions',
   'Invalid comparison inputs', 'Clear comparison inputs', 'Mortgage comparison', 'Clear saved comparison',
   'Shared requirements',
   'Home loans', 'Savings', 'Savings accounts', 'Term deposits', 'Mortgage', 'TD',

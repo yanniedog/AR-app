@@ -1,5 +1,6 @@
 import * as drillDiagnostics from '../src/lib/degradationLog';
 import React from 'react';
+import { Platform, ScrollView, StyleSheet } from 'react-native';
 import { EMPTY_FILTERS } from '../src/data/selectors';
 import type { RateRow } from '../src/types';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -50,7 +51,7 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => mockIsFocused, useNavigation: () => mockNavigation }));
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ default: () => mockDimensions }));
-jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: mockBottomInset }) }));
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: mockBottomInset, left: 0, right: 0 }) }));
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => jest.requireActual('../src/theme/theme').lightTheme,
 }));
@@ -749,6 +750,56 @@ test.each([[360, 2], [320, 2], [360, 1.3]])('summary metadata reserves a whole l
     expect(useRatesSession.getState().sections.Mortgage.sort).toBe('bank');
     act(() => actions.props.onPress());
     expect(tree.root.findAllByType('SheetSurface' as any).some((node: any) => node.props.visible && node.props.title === 'Search')).toBe(true);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('rotating Android keeps the results and search input mounted beside scrollable controls', () => {
+  const platform = jest.replaceProperty(Platform, 'OS', 'android');
+  let tree: any;
+  try {
+    act(() => { tree = TestRenderer.create(<Search />); });
+    const list = tree.root.findByType('FlashList' as any);
+    const input = tree.root.findByType('SearchBar' as any);
+    const controlsScroll = tree.root.findAllByType(ScrollView).find((node: any) =>
+      node.findAllByProps({ testID: 'rates-task-controls' }).length > 0,
+    );
+    expect(controlsScroll?.props.scrollEnabled).toBe(false);
+
+    mockDimensions = { ...mockDimensions, width: 914, height: 411 };
+    act(() => tree.update(<Search />));
+    expect(controlsScroll?.props.scrollEnabled).toBe(true);
+    expect(StyleSheet.flatten(controlsScroll?.props.style).width).toBeLessThan(mockDimensions.width);
+    expect(tree.root.findByType('FlashList' as any)).toBe(list);
+    expect(tree.root.findByType('SearchBar' as any)).toBe(input);
+
+    mockDimensions = { ...mockDimensions, width: 411, height: 914 };
+    act(() => tree.update(<Search />));
+    expect(controlsScroll?.props.scrollEnabled).toBe(false);
+    expect(tree.root.findByType('FlashList' as any)).toBe(list);
+  } finally {
+    if (tree) act(() => tree.unmount());
+    platform.restore();
+  }
+});
+
+test('the Rates icon key describes Home loan symbols without replacing the results', () => {
+  mockParams = { section: 'Mortgage' };
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const results = tree.root.findByType('FlashList' as any);
+    const more = tree.root.findByProps({ accessibilityLabel: 'Search actions' });
+    act(() => more.props.onPress());
+    const menu = tree.root.findAllByType('SheetSurface' as any).find((node: any) => node.props.visible);
+    act(() => menu.findByProps({ title: 'Icon key' }).props.onPress());
+    expect(menu.props.title).toBe('Icon key');
+    const labels = menu.findAllByType('AppText' as any).map((node: any) => node.props.children);
+    expect(labels).toEqual(expect.arrayContaining([
+      'Advertised or quoted rate', 'Comparison rate', 'Loan-to-value ratio (LVR)', 'Unresolved conditions', 'Freshness', 'Bank A–Z',
+    ]));
+    act(() => menu.props.onClose());
+    expect(tree.root.findByType('FlashList' as any)).toBe(results);
+    act(() => more.props.onPress());
+    expect(menu.props.title).toBe('Search');
   } finally { act(() => tree.unmount()); }
 });
 
