@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import type { Subscription } from '../data/subscriptions';
-import type { CorePayload, DetailItem, DetailsPayload, ProductSourceDocument } from '../types';
+import type { CorePayload, DetailItem, DetailsPayload, ProductSourceDocument, NormalizedProductFact } from '../types';
 import { SECTION_KEYS } from '../types';
 import { StandardUrl } from './standardUrl';
 import type { EligibilityScenario, ScenarioRole } from '../data/eligibilityContracts/facts';
@@ -570,6 +570,22 @@ export function uiDate(value: string | null | undefined): UiText {
 /** Opaque technical references are identifiers, never descriptions or error messages. */
 export function uiIdentifier(value: string | null | undefined): UiText {
   return known(value && /^[A-Za-z0-9_./:@%+\-=#?&]{1,512}$/.test(value) ? value : 'Unknown');
+}
+/** Exact source decimals never pass through IEEE-754 formatting. */
+export function uiExactFactDecimal(fact: NormalizedProductFact, field: 'value' | 'minValue' | 'maxValue'): UiText {
+  const value = fact[field];
+  if (fact.valueType !== 'decimal' || typeof value !== 'string') return uiLabel('Unknown');
+  try {
+    const decimal = Decimal.parse(value);
+    if (fact.unit === 'fraction') return known(decimal.mul(Decimal.parse('100')).fixed(24).replace(/\.?0+$/, '') + '%');
+    if (fact.unit === 'AUD') return uiJoin('AUD', ' ', known(value));
+    if (fact.unit === 'day' || fact.unit === 'month' || fact.unit === 'year') {
+      const singular = decimal.compare(Decimal.parse('1')) === 0;
+      return uiJoin(known(value), ' ', fact.unit === 'day' ? singular ? 'day' : 'days'
+        : fact.unit === 'month' ? singular ? 'month' : 'months' : singular ? 'year' : 'years');
+    }
+    return !fact.unit || fact.unit === 'count' ? known(value) : uiLabel('Unverified');
+  } catch { return uiLabel('Unknown'); }
 }
 /** Document identity is a filename from its source URL, never provider marketing copy. */
 export function uiDocumentFilename(document: ProductSourceDocument): UiText {

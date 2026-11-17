@@ -20,19 +20,19 @@ export async function loadProductCriteria(context: ProductEvidenceContext, produ
       !Object.hasOwn(context.manifest, 'optional_product_evidence_status'))) return keys.map(productKey => ({ productKey, status: 'unavailable' }));
   for (const key of keys) verifyEvidenceProduct(context, key);
   const columns: CriteriaColumn[] = [];
-  let alignment: string | null = null;
+  let alignment: string | null = null, alignmentSelected = false;
   for (const productKey of keys) {
     await checkpoint();
-    if (columns.length && alignment === null) {
-      const first = columns[0]; columns.push(first.status === 'observed' ? { productKey, status: 'unknown' } : { ...first, productKey }); continue;
+    if (alignmentSelected && alignment === null) {
+      columns.push({ productKey, status: 'unknown' }); continue;
     }
     const outcome = await loadProductEvidenceDocument(context, productKey, 'product_evidence_v1', isCurrent, signal);
     try {
       check();
       if (outcome.status !== 'observed') { columns.push({ productKey, status: outcome.status, ...('reason' in outcome ? { reason: outcome.reason } : {}) }); continue; }
       // The first product supplies the exact typed scope. Never align unrelated ordinal records.
-      const criteria = await projectProductEvidenceCriteria(outcome.document, columns.length ? { ...query, text: '', record: 0, alignment: alignment! } : query, checkpoint);
-      if (!columns.length) alignment = criteria.alignment;
+      const criteria = await projectProductEvidenceCriteria(outcome.document, alignmentSelected ? { ...query, text: '', record: 0, alignment: alignment! } : query, checkpoint);
+      if (!alignmentSelected) { alignment = criteria.alignment; alignmentSelected = true; }
       check(); verifyEvidenceProduct(context, productKey);
       columns.push({ productKey, status: 'observed', criteria, observedDate: outcome.document.observedDate,
         observationState: outcome.document.observationState, edition: outcome.document.edition });

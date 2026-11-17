@@ -9,14 +9,14 @@ function semanticIdentity(fact: NormalizedProductFact): string {
  * Only identical source-bound copies can add an original-document pointer. */
 export function projectProductCriteria(legacy: ProductDetail | undefined, descriptive: ProductDetail): ProductDetail {
   const criteria = (descriptive.facts ?? []).filter(fact => fact.kind !== 'feature');
-  const enrichedKeys = new Set(criteria.map(fact => `${fact.kind}:${fact.canonicalKey}`));
+  const legacyIds = new Set((legacy?.facts ?? []).map(fact => fact.id));
   const features = new Map((descriptive.facts ?? []).filter(fact => fact.kind === 'feature').map(fact => [fact.id, fact]));
-  const facts = (legacy?.facts ?? []).filter(fact => fact.kind === 'feature' || !enrichedKeys.has(`${fact.kind}:${fact.canonicalKey}`))
+  const facts = (legacy?.facts ?? [])
     .map(fact => {
       const annotation = fact.kind === 'feature' && features.get(fact.id);
       return annotation && annotation.sourcePathBasis === 'raw-cdr' && annotation.sourcePath
         && semanticIdentity(annotation) === semanticIdentity(fact)
         ? { ...fact, sourcePath: annotation.sourcePath, sourcePathBasis: annotation.sourcePathBasis } : fact;
     });
-  return { ...legacy, ...descriptive, facts: [...facts, ...criteria] };
+  return { ...legacy, ...descriptive, facts: [...facts, ...criteria.filter(fact => !legacyIds.has(fact.id))] };
 }

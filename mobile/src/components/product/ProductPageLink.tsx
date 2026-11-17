@@ -14,7 +14,7 @@ import { uiJoin, type UiLabel } from '../../lib/uiCopy';
 
 const ProductPageContext = createContext<ProductDetail | null>(null);
 
-export function ProductPageLinks({ overview, detail, children }: { overview?: string; detail?: ProductDetail | null; children: UiChild }) {
+export function ProductPageLinks({ overview, productDetails, children }: { overview?: string; productDetails?: ProductDetail | null; children: UiChild }) {
   const link = useMemo(() => {
     if (!overview) return null;
     const result = trustedExternalUrl({ url: overview, purpose: 'lender_source', label: 'Product' });
@@ -34,7 +34,7 @@ export function ProductPageLinks({ overview, detail, children }: { overview?: st
     return result.url;
   }, [overview]);
   useAuditExternalLinks(link ? [{ url: link, purpose: 'lender_source', label: 'Product' }] : []);
-  return <ProductPageContext.Provider value={detail ?? null}>{children}</ProductPageContext.Provider>;
+  return <ProductPageContext.Provider value={productDetails ?? null}>{children}</ProductPageContext.Provider>;
 }
 
 function LinkedFact({ url, action, label, children }: { url: string; action: ProductDocumentAction; label: UiCopy; children: UiChild }) {

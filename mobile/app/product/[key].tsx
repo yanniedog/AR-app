@@ -761,7 +761,7 @@ export default function ProductDetail() {
           ),
         }}
       />
-      <ProductPageLinks overview={detail?.links?.overview} detail={descriptiveDetail}><ScreenScrollView
+      <ProductPageLinks overview={detail?.links?.overview} productDetails={descriptiveDetail}><ScreenScrollView
         onLayout={() => setLayoutReady(true)}
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       >
@@ -957,7 +957,7 @@ export default function ProductDetail() {
         </Card>
 
         <MemoProductFacts productDetails={descriptiveDetail} />
-        <ProductDocuments detail={descriptiveDetail} />
+        <ProductDocuments productDetails={descriptiveDetail} />
         <MemoSelectedRateConditions row={row} section={section} />
         {section === 'TD' ? <MemoFixedDepositCalculation row={row} /> : null}
         <MemoEligibilityAssessment productKey={productKey} row={row} section={section} /><MemoSavingsPeriodCalculation productKey={row.product_key} row={row} section={section} /><MemoActivityPeriodCalculation productKey={row.product_key} row={row} section={section} /><MemoMortgagePeriodCalculation productKey={row.product_key} row={row} section={section} />

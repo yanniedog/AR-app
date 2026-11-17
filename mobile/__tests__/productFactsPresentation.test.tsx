@@ -3,8 +3,16 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { DetailGroup, ProductFacts } from '../src/components/product/ProductDetailParts';
 import { ProductPageLinks } from '../src/components/product/ProductPageLink';
 import type { NormalizedProductFact, ProductDetail } from '../src/types';
+import { uiNormalizedProductFact, uiProductFactValue } from '../src/lib/productUiFacts';
 
 const mockState: Record<string, unknown> = {};
+test('new exact decimals and unresolved evidence retain their financial meaning in presentation', () => {
+  const fact: NormalizedProductFact = { id: 'display-control', kind: 'fee', canonicalKey: 'fee.amount', valueType: 'decimal', value: '9007199254740993.0001', unit: 'AUD' };
+  expect(uiProductFactValue(uiNormalizedProductFact(fact))).toBe('AUD 9007199254740993.0001');
+  expect(uiProductFactValue(uiNormalizedProductFact({ ...fact, evidenceState: 'unknown' }))).toBe('Unknown');
+  expect(uiProductFactValue(uiNormalizedProductFact({ ...fact, evidenceState: 'conflicting' }))).toBe('Conflicting');
+  expect(uiProductFactValue(uiNormalizedProductFact({ ...fact, evidenceState: 'conditional' }))).toContain('Conditional');
+});
 const mockRequestExternalUrl = jest.fn();
 jest.mock('../src/data/store', () => ({ useStore: (selector: (state: typeof mockState) => unknown) => selector(mockState) }));
 jest.mock('../src/components/ExternalLinkConfirmation', () => ({ useTrustedExternalUrl: () => ({ requestExternalUrl: mockRequestExternalUrl }) }));
@@ -127,7 +135,7 @@ test('a fact with verified raw-source applicability opens its exact document pag
     specificity: 'exact-product', relevance: 'verified', citations: [{ page: 4 }],
   }] };
   let tree!: Tree;
-  act(() => { tree = TestRenderer.create(<ProductPageLinks overview="https://up.com.au/" detail={detail}><ProductFacts productDetails={detail} /></ProductPageLinks>) as Tree; });
+  act(() => { tree = TestRenderer.create(<ProductPageLinks overview="https://up.com.au/" productDetails={detail}><ProductFacts productDetails={detail} /></ProductPageLinks>) as Tree; });
   try {
     act(() => tree.root.findByProps({ title: 'Product facts' }).props.onToggle());
     act(() => tree.root.findByProps({ accessibilityRole: 'link' }).props.onPress());

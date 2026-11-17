@@ -46,9 +46,9 @@ function DocumentRow({ action }: { action: ProductDocumentAction }) {
     {!action.url ? <AppText variant="tiny">{uiLabel('Unavailable')}</AppText> : null}
   </View>;
 }
-export function ProductDocuments({ detail }: { detail: ProductDetail | null | undefined }) {
+export function ProductDocuments({ productDetails }: { productDetails: ProductDetail | null | undefined }) {
   const [open, setOpen] = useState(false), [page, setPage] = useState(0);
-  const actions = productDocumentActions(detail);
+  const actions = productDocumentActions(productDetails);
   const selectedPage = Math.min(page, Math.max(0, Math.ceil(actions.length / 12) - 1));
   useAuditExternalLinks(actions.flatMap(action => action.url ? [{ url: action.url, purpose: 'lender_source' as const, label: 'Source' }] : []));
   return <Disclosure title="Documents" open={open} onToggle={() => setOpen(value => !value)}><View style={{ gap: 12 }}>

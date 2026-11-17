@@ -31,7 +31,7 @@ export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { 
   const product = catalogue.getProduct(productKey);
   const provider = identity.provider || product?.providerName;
   const hasProgrammes = (product?.programmeIds.length ?? 0) > 0;
-  return <ProductPageLinks overview={detail?.links?.overview} detail={descriptiveDetail}><ScreenScrollView><Stack.Screen options={{ title: 'Product details' }} /><View style={{ gap: 12 }}>
+  return <ProductPageLinks overview={detail?.links?.overview} productDetails={descriptiveDetail}><ScreenScrollView><Stack.Screen options={{ title: 'Product details' }} /><View style={{ gap: 12 }}>
     <AppText weight="700">{product ? uiPublicProductName(product) : identity.name ? uiProductName({ product_name: identity.name }) : uiLabel('Product')}
     </AppText>
     {provider ? <ProductProviderLink provider={provider} /> : null}
@@ -46,7 +46,7 @@ export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { 
       <DetailGroup loading={false} icon="cash-outline" title="Fees" items={detail.fees} /><DetailGroup loading={false} icon="person-outline" title="Eligibility" items={detail.eligibility} />
       <DetailGroup loading={false} icon="information-circle-outline" title="Features" items={detail.features} /><DetailGroup loading={false} icon="information-circle-outline" title="Constraints" items={detail.constraints} />
       <ProductFacts productDetails={descriptiveDetail} />
-      <ProductDocuments detail={descriptiveDetail} />
+      <ProductDocuments productDetails={descriptiveDetail} />
       <EligibilityAssessment productKey={productKey} />
       {identity.productCategory === 'TRANS_AND_SAVINGS_ACCOUNTS' && <><SavingsPeriodCalculation productKey={productKey} /><ActivityPeriodCalculation productKey={productKey} /></>}
       {identity.productCategory === 'RESIDENTIAL_MORTGAGES' && <MortgagePeriodCalculation productKey={productKey} />}<ProductTermsDisclosure productKey={productKey} />

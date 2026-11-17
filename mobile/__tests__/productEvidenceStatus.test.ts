@@ -10,6 +10,11 @@ import { downloadInflate } from '../src/data/payload';
 
 jest.mock('../src/data/payload', () => ({ downloadInflate: jest.fn(), fetchManifest: jest.fn() }));
 beforeEach(() => jest.mocked(downloadInflate).mockReset());
+test('available cannot claim an unsupported lane capability is declared', () => {
+  const p = statusSelection(); p.manifest.product_evidence_v1!.schema = 'ar-product-evidence-reference-v999'; p.seal();
+  expect(() => validateOptionalEvidencePublication(p.manifest, p.head)).toThrow('contradiction');
+  expect(downloadInflate).not.toHaveBeenCalled();
+});
 
 test.each(Object.keys(EVIDENCE_STATUS_REASONS) as EvidenceDeliveryState[])('%s survives actual finalized/cached metadata admission with no evidence IO', async state => {
   const p = statusSelection(state);

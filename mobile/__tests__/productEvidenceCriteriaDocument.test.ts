@@ -8,6 +8,15 @@ import { claimEvidenceUi } from '../src/data/productEvidenceUiLease';
 const query: CriteriaQuery = { kind: 'all', text: '', record: 0, page: 0 };
 jest.mock('../src/data/payload', () => ({ downloadInflate: jest.fn(), fetchManifest: jest.fn() }));
 afterEach(() => jest.restoreAllMocks());
+test('an unknown first product never prevents acquiring the later independently available column', async () => {
+  const p = evidenceSelection(); jest.mocked(downloadInflate).mockImplementation(p.load);
+  const original = documents.loadProductEvidenceDocument;
+  const load = jest.spyOn(documents, 'loadProductEvidenceDocument').mockImplementation(original).mockResolvedValueOnce({ status: 'unknown' });
+  const keys = Object.keys(p.context.details!.products).slice(0, 2);
+  const columns = await loadProductCriteria(p.context, keys, query, () => true, new AbortController().signal);
+  expect(columns.map(column => column.status)).toEqual(['unknown', 'observed']);
+  expect(load).toHaveBeenCalledTimes(2);
+});
 
 test('real selected products are sequential and release each document before the next acquisition', async () => {
   const p = evidenceSelection(); jest.mocked(downloadInflate).mockImplementation(p.load);

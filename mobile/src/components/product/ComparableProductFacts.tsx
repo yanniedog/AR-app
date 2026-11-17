@@ -25,7 +25,7 @@ export function ComparableProductFacts({ rows }: { rows: readonly RateRow[] }) {
       {comparisons.slice(at * 12, (at + 1) * 12).map(group => <View key={group.key} style={{ gap: 6 }}>
         <AppText weight="600">{uiNormalizedProductFact(group.representative).label}</AppText>
         <Row style={{ gap: 16 }}>{products.map(row => <View key={row.product_key} style={{ width: 220, gap: 4 }}>
-          <ProductPageLinks detail={criteria.lookup?.[row.product_key]}>
+          <ProductPageLinks productDetails={criteria.lookup?.[row.product_key]}>
             {group.cells[row.product_key]?.map(fact => <ProductPageLink key={fact.id} fact={fact} label={uiNormalizedProductFact(fact).label}>
               <AppText variant="small">{uiProductFactValue(uiNormalizedProductFact(fact))}</AppText>
             </ProductPageLink>) ?? <AppText variant="small">{uiLabel('Unknown')}</AppText>}

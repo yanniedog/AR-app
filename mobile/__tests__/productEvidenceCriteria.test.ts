@@ -59,7 +59,7 @@ test('distinct real products align equivalent minimum-balance criteria while pre
   expect(anchor.text).toContain('25000.00'); expect(compared.text).toContain('500.00');
   const nested = { ...second, source_path: 'fees[0].discounts[0].constraintType', source_pattern: 'fees[].discounts[].constraintType' };
   expect((await projectSourceCriteria([nested], query, checkpoint)).alignment).toBeNull();
-  const unknownScope = { ...second, qualifiers_json: second.qualifiers_json.replace('}', ',"unresolved":{"condition":true}}') };
+  const unknownScope = { ...second, qualifiers_json: JSON.stringify({ ...JSON.parse(second.qualifiers_json), unresolved: { condition: true } }) };
   expect((await projectSourceCriteria([unknownScope], query, checkpoint)).alignment).toBeNull();
 });
 test('scalar precision, zero variable fee, raw null/empty and Unicode text retain their exact lexical form', async () => {

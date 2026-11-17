@@ -11,3 +11,8 @@ test('adds only a pointer from a semantically identical feature copy and preserv
   expect(projectProductCriteria(legacy, { facts: [{ ...feature, ...pointer, value: false }] }).facts).toEqual(legacy.facts);
   expect(projectProductCriteria(undefined, { facts: [{ ...feature, ...pointer }] }).facts).toEqual([]);
 });
+test('optional additions never remove or overwrite admitted non-feature facts', () => {
+  const admitted: NormalizedProductFact = { id: 'fee-admitted', kind: 'fee', canonicalKey: 'fee.periodic', value: '5', unit: 'AUD', cadence: 'P1M' };
+  const extra = { ...admitted, id: 'fee-extra', value: '10', cadence: 'P1Y' };
+  expect(projectProductCriteria({ facts: [admitted] }, { facts: [extra, { ...admitted, value: '999' }] }).facts).toEqual([admitted, extra]);
+});

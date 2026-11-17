@@ -30,7 +30,7 @@ export function ComparisonDisclosures({
   const productCriteria = useProductCriteria(manifest, details?.products, true);
   const descriptiveDetail = productCriteria.lookup?.[productKey] ?? productDetails;
   return (
-    <ProductPageLinks overview={productDetails?.links?.overview} detail={descriptiveDetail}><Card variant="outlined" style={{ gap: 12 }}>
+    <ProductPageLinks overview={productDetails?.links?.overview} productDetails={descriptiveDetail}><Card variant="outlined" style={{ gap: 12 }}>
       <View>
         <AppText variant="body" weight="700">{uiProductName({ product_name: name })}</AppText>
         <AppText variant="small" color="textMuted">{uiProviderName({ provider })}</AppText>
@@ -42,7 +42,7 @@ export function ComparisonDisclosures({
       <DetailGroup title="Constraints" icon="information-circle-outline" items={productDetails?.constraints} loading={loading} />
       {!loading && !productDetails ? <AppText variant="small">{uiLabel("Product details unavailable")}</AppText> : null}
       <ProductFacts productDetails={descriptiveDetail ?? null} />
-      <ProductDocuments detail={descriptiveDetail} />
+      <ProductDocuments productDetails={descriptiveDetail} />
       <ProductTermsDisclosure productKey={productKey} />
       <ProductEvidenceDisclosure productKey={productKey} />
     </Card></ProductPageLinks>

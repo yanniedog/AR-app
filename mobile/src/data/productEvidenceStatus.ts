@@ -46,7 +46,7 @@ export function validateEvidenceStatuses(manifest: Manifest, refs: Record<Eviden
     responseRequire(typeof status.state === 'string' && Object.hasOwn(EVIDENCE_STATUS_REASONS, status.state)
       && typeof status.reason === 'string' && (EVIDENCE_STATUS_REASONS[status.state as EvidenceDeliveryState] as readonly string[]).includes(status.reason),
     'Invalid evidence delivery state/reason');
-    responseRequire((status.state === 'available') === (refs[lane].status !== 'absent'), 'Evidence availability/reference contradiction');
+    responseRequire((status.state === 'available') === (refs[lane].status === 'declared'), 'Evidence availability/reference contradiction');
     accepted[lane] = { state: status.state as EvidenceDeliveryState, reason: status.reason as string };
   }
   return accepted;
