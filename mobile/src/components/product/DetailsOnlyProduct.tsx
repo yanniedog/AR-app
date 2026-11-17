@@ -1,7 +1,7 @@
 import { ProductPageLinks } from './ProductPageLink';
 import type { RateScenario } from '../../data/publicRateModel';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
-import { PublicRateEvidence } from '../scenario/PublicRateEvidence';
+import { DiscoveryRateStatus, PublicRateEvidence } from '../scenario/PublicRateEvidence';
 import { ActivityPeriodCalculation } from './ActivityPeriodCalculation';
 import { MortgagePeriodCalculation } from './MortgagePeriodCalculation';
 import { SavingsPeriodCalculation } from './SavingsPeriodCalculation';
@@ -17,7 +17,7 @@ import { AppText, Button } from '../ui';
 import { DetailGroup, ProductFacts } from './ProductDetailParts';
 import { ProductProviderLink } from './ProductProviderLink';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
-import { uiLabel, uiDate, uiJoin, uiProductName, uiPublicProductName } from '../../lib/uiCopy';
+import { uiLabel, uiProductName, uiPublicProductName } from '../../lib/uiCopy';
 export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { productKey: string; programmeId?: string; rateScenario?: RateScenario }) {
   const { details, manifest, loading, retry } = useDetailsCatalogue();
   const detail = details && Object.hasOwn(details.products, productKey) ? details.products[productKey] : null;
@@ -30,9 +30,10 @@ export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { 
     </AppText>
     {provider ? <ProductProviderLink provider={provider} /> : null}
     {identity.productCategory ? <AppText variant="small">{humanizeEnum(identity.productCategory)}</AppText> : null}
-    {product?.programmeIds.length ? <PublicRateEvidence productKey={productKey} programmeId={programmeId} scenario={rateScenario} /> : null}
+    {product ? product.programmeIds.length ? <PublicRateEvidence productKey={productKey} programmeId={programmeId} scenario={rateScenario} />
+      : <DiscoveryRateStatus freshness={product.freshness} /> : null}
     {detail ? <>
-      <AppText variant="small">{uiJoin('No listed rate', manifest?.run_date ? uiJoin(' · ', 'Checked', ' ', uiDate(manifest.run_date)) : null)}</AppText>
+      <AppText variant="small">{uiLabel('No listed rate')}</AppText>
       <DetailGroup loading={false} icon="cash-outline" title="Fees" items={detail.fees} /><DetailGroup loading={false} icon="person-outline" title="Eligibility" items={detail.eligibility} />
       <DetailGroup loading={false} icon="information-circle-outline" title="Features" items={detail.features} /><DetailGroup loading={false} icon="information-circle-outline" title="Constraints" items={detail.constraints} />
       <ProductFacts productDetails={detail} />

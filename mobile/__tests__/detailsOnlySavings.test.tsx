@@ -2,6 +2,8 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { DetailsOnlyProduct } from '../src/components/product/DetailsOnlyProduct';
 let mockCatalogue: any;
+let mockPublicProduct: any;
+jest.mock('../src/data/publicRateCatalogue', () => ({ usePublicRateCatalogue: () => ({ getProduct: () => mockPublicProduct }) }));
 jest.mock('../src/hooks/useDetailsCatalogue', () => ({ useDetailsCatalogue: () => mockCatalogue }));
 jest.mock('expo-router', () => ({ Stack: { Screen: 'StackScreen' } }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
@@ -17,4 +19,22 @@ test.each(['HOME_LOANS', undefined, 'TRANS_AND_SAVINGS_ACCOUNTS'])('details-only
   let tree: any; await act(async () => { tree = TestRenderer.create(<DetailsOnlyProduct productKey="product" />); });
   expect(tree.root.findAllByType('ActivityPeriodCalculation')).toHaveLength(productCategory === 'TRANS_AND_SAVINGS_ACCOUNTS' ? 1 : 0);
   expect(tree.root.findAllByType('SavingsPeriodCalculation')).toHaveLength(productCategory === 'TRANS_AND_SAVINGS_ACCOUNTS' ? 1 : 0);
+});
+
+test('discovery-only details preserve a failed check and its actual dates', async () => {
+  mockCatalogue = { details: { products: { product: {} } }, manifest: { run_date: '2026-09-15' }, loading: false };
+  mockPublicProduct = { name: 'Unlisted product', programmeIds: [], freshness: {
+    state: 'failed', checkedAt: '2026-09-12', lastSuccessAt: '2026-09-08', reasonCodes: [],
+  } };
+  let tree: any;
+  try {
+    await act(async () => { tree = TestRenderer.create(<DetailsOnlyProduct productKey="product" />); });
+    const text = tree.root.findAllByType('AppText').map((entry: any) => entry.props.children).join(' ');
+    expect(text).toContain('No listed rate');
+    expect(text).toContain('Freshness: Failed · Checked 12 Sept 2026 · Last successful check 8 Sept 2026');
+    expect(text).not.toContain('15 Sept 2026');
+  } finally {
+    mockPublicProduct = undefined;
+    if (tree) act(() => tree.unmount());
+  }
 });

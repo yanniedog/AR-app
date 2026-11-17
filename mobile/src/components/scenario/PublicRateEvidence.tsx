@@ -16,6 +16,16 @@ const freshnessLabels: Record<PublicFreshness['state'], UiLabel> = {
   current: 'Current', failed: 'Failed', stale: 'Stale', deferred: 'Pending', unknown: 'Unknown',
 };
 
+export function DiscoveryRateStatus({ freshness }: { freshness: PublicFreshness }) {
+  const state = freshness.state === 'failed' || freshness.state === 'deferred'
+    ? freshness.state : publicRateFreshness(freshness, new Date().toISOString()).state;
+  return <AppText variant="small" color="textMuted">{uiJoin(
+    'Freshness', ': ', freshnessLabels[state],
+    freshness.checkedAt ? uiJoin(' · ', 'Checked', ' ', uiDate(freshness.checkedAt)) : null,
+    freshness.lastSuccessAt ? uiJoin(' · ', 'Last successful check', ' ', uiDate(freshness.lastSuccessAt)) : null,
+  )}</AppText>;
+}
+
 function programmeLabel(programme: PublicProgramme) {
   return programme.conditions.length ? uiJoin(...programme.conditions.flatMap<UiCopy>((condition, i) => i ? [' · ', publicConditionFact(condition)] : [publicConditionFact(condition)])) : uiLabel('Pricing programme');
 }
