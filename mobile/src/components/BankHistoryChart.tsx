@@ -635,7 +635,7 @@ function BankHistoryChartView({
     ...(productHistory && hasRbaValues ? [{ label: uiLabel('RBA cash rate'), value: uiRate(activeRbaRate) }] : []),
   ];
   const productFact = highlightSeries
-    ? uiJoin(' · ', highlightSeries.label, ' · ', uiRate(activeHighlight),
+    ? uiJoin(' · ', highlightSeries.label, ' ', uiRate(activeHighlight),
       productHistory && highlightSeries.valueScope ? uiJoin(' · ', highlightSeries.valueScope) : null) : null;
   const marketFact = hasMarketStatistics
     ? uiJoin(' · ', 'Min', ' ', uiRate(activePoint?.min), ' · ', 'Median', ' ', uiRate(activePoint?.median),
