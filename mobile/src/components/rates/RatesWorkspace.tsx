@@ -44,7 +44,8 @@ import { FLASH_LIST_DRAW_DISTANCE, FLASH_LIST_VIEWABILITY_CONFIG } from '../../l
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FilterSheet } from '../../components/FilterSheet';
 import { SavedRequirementsSummary } from '../SavedRequirementsSummary';
@@ -59,6 +60,7 @@ import {
   clearMortgageComparison,
 } from '../../data/mortgageComparison';
 import { EmptyState, IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../../components/feedback';
+import { RatesIconKey } from './RatesIconKey';
 import { IconAction } from '../../components/IconAction';
 import { Screen, screenScrollContentStyle } from '../../components/Screen';
 import { SearchBar } from '../../components/controls';
@@ -143,7 +145,12 @@ export default function RatesWorkspace() {
   const theme = useTheme();
   const isFocused = useIsFocused();
   const sheetNavigation = useNavigation();
-  const { width, fontScale } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const landscape = Platform.OS === 'android' && width > height;
+  const contentWidth = landscape ? width - insets.left - insets.right : width;
+  // In landscape, give the controls their own scroll area beside the results.
+  const controlsWidth = landscape ? Math.min(360, Math.round(contentWidth * 0.44)) : width;
   const params = useLocalSearchParams() as RatesRouteParams;
   const intentKey = ratesIntentKey(params);
   const session = useRatesSession();
@@ -343,6 +350,7 @@ export default function RatesWorkspace() {
   const [filterOpen, setFilterOpen] = useBackOwnedSheetState(sheetNavigation);
   const [sortOpen, setSortOpen] = useBackOwnedSheetState(sheetNavigation);
   const [toolsOpen, setToolsOpen] = useBackOwnedSheetState(sheetNavigation);
+  const [showIconKey, setShowIconKey] = useState(false);
   const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const [draftAvailability, setDraftAvailability] = useState<RateAvailability>(availability);
   const openFilters = useCallback(() => {
@@ -1171,8 +1179,11 @@ export default function RatesWorkspace() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Rates' }} />
-      <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
-        <View testID="rates-task-controls" style={{ ...screenScrollContentStyle(theme, 0, width), gap: 8, paddingTop: 8, paddingBottom: 8 }}>
+      <View style={landscape ? { flex: 1, flexDirection: 'row', paddingLeft: insets.left, paddingRight: insets.right } : { flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
+        <ScrollView style={landscape ? { flexGrow: 0, width: controlsWidth } : { flexGrow: 0, flexShrink: 0 }}
+          scrollEnabled={landscape} keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ ...screenScrollContentStyle(theme, 0, controlsWidth), paddingTop: 8, paddingBottom: 8 }}>
+          <View testID="rates-task-controls" style={{ gap: 8 }}>
             <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
             <SearchBar value={uiRatesQuery(task)} onChangeText={setQuery} placeholder="Search" accessibilityLabel="Search rates or banks" />
             <Row gap={8} style={{ flexWrap: 'wrap' }}>
@@ -1187,7 +1198,7 @@ export default function RatesWorkspace() {
               <IconAction icon="business-outline" word="Bank" accessibilityLabel="Bank A–Z"
                 active={sortKey === 'bank'} accessibilityState={{ selected: sortKey === 'bank' }}
                 disabled={availability === 'unlisted'} onPress={() => setSortKey(quickSortKey)} />
-              <IconAction icon="ellipsis-horizontal" word="More" onPress={() => setToolsOpen(true)}
+              <IconAction icon="ellipsis-horizontal" word="More" onPress={() => { setShowIconKey(false); setToolsOpen(true); }}
                 accessibilityLabel="Search actions" accessibilityState={{ expanded: toolsOpen }} />
             </Row>
             <View style={{ width: '100%', flexShrink: 0, gap: 2 }}>
@@ -1203,7 +1214,8 @@ export default function RatesWorkspace() {
             {path.length ? <Button title="Clear scope" variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
             {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">{uiLabel("Name search")}</AppText>
               {searchIndexStatus === 'error' ? <Button title="Retry search" variant="ghost" onPress={() => void ensureSearchIndex()} /> : null}</Row> : null}
-        </View>
+          </View>
+        </ScrollView>
         {/* Keep the recycler's native measurement origin at zero beneath the
             fixed controls; a sibling offset otherwise corrupts its visible range. */}
         <View ref={physicalVisibility.viewport} collapsable={false} style={{ flex: 1 }} onLayout={physicalVisibility.measure}>
@@ -1248,7 +1260,7 @@ export default function RatesWorkspace() {
           }}
           scrollEventThrottle={64}
           contentContainerStyle={{
-            ...screenScrollContentStyle(theme, 0, width),
+            ...screenScrollContentStyle(theme, 0, landscape ? contentWidth - controlsWidth : width),
             // Fixed task controls own their spacing; rows stay adjacent.
             gap: 0,
             paddingTop: 0,
@@ -1413,8 +1425,9 @@ export default function RatesWorkspace() {
           </TouchTarget>
         </ScrollView>
       </SheetSurface>
-      <SheetSurface onAuditStateChange={physicalVisibility.active ? toolsEvidence : undefined} visible={toolsOpen} title="Search" onClose={() => setToolsOpen(false)}>
-        <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: 20 }}>
+      <SheetSurface onAuditStateChange={physicalVisibility.active ? toolsEvidence : undefined} visible={toolsOpen} title={showIconKey ? 'Icon key' : 'Search'} onClose={() => setToolsOpen(false)}>
+        {showIconKey ? <RatesIconKey section={section} /> : <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: 20 }}>
+          <Button icon="information-circle-outline" title="Icon key" variant="ghost" onPress={() => setShowIconKey(true)} />
           <Button
             icon={searchSub ? 'notifications' : 'notifications-outline'}
             title={uiLabel(searchSub ? 'Alert off' : 'Alert on')}
@@ -1423,7 +1436,7 @@ export default function RatesWorkspace() {
             onPress={() => void onToggleSearchAlert()}
           />
           <SearchReportExport disabled={availability === 'unlisted' || searchPending || query !== debouncedQuery} request={{ section, path, hierarchyScoped, query: debouncedQuery, filters: effectiveFilters, sort: sortKey, depositMetric: depositRankMetric, mortgageMetric: mortgageRateMetric, deepSearch: deepSearchActive }} />
-        </ScrollView>
+        </ScrollView>}
       </SheetSurface>
     </Screen>
   );
