@@ -1,3 +1,4 @@
+import { collectRowBatches, sortValuesCooperatively, type RowWorkControl } from './cooperativeRows';
 import { StandardUrl } from '../lib/standardUrl';
 import { SECTIONS } from '../constants';
 import { rateQualifier } from '../lib/rateQualifier';
@@ -299,26 +300,23 @@ function scenarioForSection(
   return { facts, balance, currentRateFraction: current > 0 ? current / 100 : null };
 }
 
-function median(values: number[]): number | null {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
+type BriefInput = {
+  receipt: RateReceipt;
+  scenario: UserRateScenario;
+  sectionRows: RateRow[];
+  comparisonsReady?: boolean;
+  detailsProducts?: Record<string, ProductDetail> | null;
+};
+type CohortRate = { row: RateRow; rate: number };
+const cohortRates = (rows: RateRow[], details?: Record<string, ProductDetail> | null): CohortRate[] =>
+  visibleAccountRows(rows, false, details).flatMap(row => {
+    const rate = toFraction(row.rate);
+    return rate === null ? [] : [{ row, rate }];
+  });
+const cohortOrder = (section: SectionKey) => (a: CohortRate, b: CohortRate) =>
+  SECTIONS[section].lowerIsBetter ? a.rate - b.rate : b.rate - a.rate;
 
-function buildComparables(
-  rows: RateRow[],
-  section: SectionKey,
-  selected: RateReceipt,
-  detailsProducts?: Record<string, ProductDetail> | null,
-): NegotiationComparable[] {
-  const lowerIsBetter = SECTIONS[section].lowerIsBetter;
-  const eligible = visibleAccountRows(rows, false, detailsProducts)
-    .flatMap(row => {
-      const rate = toFraction(row.rate);
-      return rate === null ? [] : [{ row, rate }];
-    })
-    .sort((a, b) => lowerIsBetter ? a.rate - b.rate : b.rate - a.rate);
+function buildComparables(eligible: CohortRate[], section: SectionKey, selected: RateReceipt): NegotiationComparable[] {
   const seen = new Set<string>();
   const result: NegotiationComparable[] = [];
   for (const { row } of eligible) {
@@ -342,22 +340,29 @@ function buildComparables(
   return result;
 }
 
-export function buildNegotiationBrief(input: {
-  receipt: RateReceipt;
-  scenario: UserRateScenario;
-  sectionRows: RateRow[];
-  comparisonsReady?: boolean;
-  detailsProducts?: Record<string, ProductDetail> | null;
-}): NegotiationBrief {
-  const { receipt, scenario, sectionRows, detailsProducts } = input;
-  const comparisonsReady = input.comparisonsReady !== false;
+export function buildNegotiationBrief(input: BriefInput): NegotiationBrief {
+  const sorted = input.comparisonsReady === false ? []
+    : cohortRates(input.sectionRows, input.detailsProducts).sort(cohortOrder(input.receipt.section));
+  return briefFromCohort(input, sorted);
+}
+
+/** The full comparison book must never classify and sort inside a route render. */
+export async function buildNegotiationBriefCooperatively(input: BriefInput,
+  control: RowWorkControl = {}): Promise<NegotiationBrief | null> {
+  const candidates = await collectRowBatches(input.comparisonsReady === false ? [] : input.sectionRows,
+    rows => cohortRates(rows, input.detailsProducts), control);
+  if (!candidates) return null;
+  const sorted = await sortValuesCooperatively(candidates, cohortOrder(input.receipt.section), control);
+  return sorted ? briefFromCohort(input, sorted) : null;
+}
+
+function briefFromCohort(input: BriefInput, sorted: CohortRate[]): NegotiationBrief {
+  const { receipt, scenario } = input;
   const scenarioData = scenarioForSection(scenario, receipt.section);
-  const broadlyAvailableRows = comparisonsReady ? visibleAccountRows(sectionRows, false, detailsProducts) : [];
-  const standardRates = broadlyAvailableRows
-    .map((row) => toFraction(row.rate))
-    .filter((rate): rate is number => rate !== null);
-  const typical = median(standardRates);
-  const comparables = buildComparables(broadlyAvailableRows, receipt.section, receipt);
+  const middle = Math.floor(sorted.length / 2);
+  const typical = sorted.length === 0 ? null : sorted.length % 2 ? sorted[middle].rate
+    : (sorted[middle - 1].rate + sorted[middle].rate) / 2;
+  const comparables = buildComparables(sorted, receipt.section, receipt);
   const selectedRate = receipt.advertisedRateFraction;
   let illustration: NegotiationIllustration | null = null;
   if (
@@ -425,7 +430,7 @@ export function buildNegotiationBrief(input: {
     scenario: scenarioData.facts,
     selectedProduct,
     comparables,
-    cohortSummary: uiJoin(uiCount(standardRates.length), ' ', 'rates', ' · ', 'Observed', ' ', uiDate(receipt.evidenceDate)),
+    cohortSummary: uiJoin(uiCount(sorted.length), ' ', 'rates', ' · ', 'Observed', ' ', uiDate(receipt.evidenceDate)),
     typicalAdvertisedRate: typical == null ? null : formatRate(typical),
     illustration,
     topics: ['current-rate', 'selected-tier', 'fees', 'conditions'],
