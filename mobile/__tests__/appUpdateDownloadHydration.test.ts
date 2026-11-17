@@ -2,16 +2,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createDownloadTask, getExistingDownloadTasks } from '@kesha-antonov/react-native-background-downloader';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Network from 'expo-network';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import {
+  autoInstallReadyApkUpdate,
   ensureApkBackgroundDownload,
   getHydratedApkDownloadSnapshot,
   getApkDownloadSnapshot,
   resetApkDownloadStateForTests,
 } from '../src/lib/appUpdateDownload';
 import { apkDestinationPath, apkDownloadTaskId, IDLE_APK_DOWNLOAD } from '../src/lib/appUpdateDownloadLogic';
-import { verifyDownloadedApk } from '../src/lib/appUpdateInstall';
+import { installDownloadedApk, verifyDownloadedApk } from '../src/lib/appUpdateInstall';
 import { TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256 } from '../src/lib/appUpdateLogic';
 
 jest.mock('expo-network', () => ({
@@ -166,6 +167,40 @@ describe('APK update state hydration', () => {
     signing_certificate_sha256: TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
   };
   const destination = apkDestinationPath('file:///docs/', remote.build_number, remote.sha256);
+
+  it('hands off a ready update once while active and still eligible', async () => {
+    const original = Object.getOwnPropertyDescriptor(AppState, 'currentState');
+    let appState = 'background';
+    Object.defineProperty(AppState, 'currentState', { configurable: true, get: () => appState });
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...IDLE_APK_DOWNLOAD, phase: 'ready', buildNumber: remote.build_number,
+      localUri: `file://${destination}`, bytesWritten: remote.bytes,
+    }));
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({
+      exists: true, size: remote.bytes,
+    } as never);
+    jest.mocked(verifyDownloadedApk).mockResolvedValue({ size: remote.bytes, verifiedSha256: true });
+    const launch = jest.fn();
+    jest.mocked(installDownloadedApk).mockImplementation(async (_uri, permitted) => {
+      if (permitted?.()) launch();
+    });
+    try {
+      await getHydratedApkDownloadSnapshot();
+      await autoInstallReadyApkUpdate(remote, () => true);
+      expect(installDownloadedApk).not.toHaveBeenCalled();
+      appState = 'active';
+      await autoInstallReadyApkUpdate(remote, () => false);
+      expect(installDownloadedApk).not.toHaveBeenCalled();
+      await Promise.all([
+        autoInstallReadyApkUpdate(remote, () => true),
+        autoInstallReadyApkUpdate(remote, () => true),
+      ]);
+      await autoInstallReadyApkUpdate(remote, () => true);
+      expect(launch).toHaveBeenCalledTimes(1);
+    } finally {
+      if (original) Object.defineProperty(AppState, 'currentState', original);
+    }
+  });
 
   it.each(['PENDING', 'DOWNLOADING', 'PAUSED', 'DOWNLOADING_AFTER_SUSPEND'])(
     'preserves the partial destination of a restored %s native task',

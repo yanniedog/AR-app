@@ -48,6 +48,7 @@ export {
 } from './changelog';
 export { installDownloadedApk, verifyDownloadedApk, verifyApkSha256 } from './appUpdateInstall';
 export {
+  autoInstallReadyApkUpdate,
   ensureApkBackgroundDownload,
   getApkDownloadPercent,
   getApkDownloadSnapshot,
