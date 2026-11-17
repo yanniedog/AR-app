@@ -35,7 +35,7 @@ const core: CorePayload = {
     TD: { rates: [], ribbon: { ...emptyRibbon, counts: { rates: 0, products: 0, providers: 0 } } },
   },
   brands: {},
-  rba: [],
+  rba: [{ date: '2026-08-01', rate: 3.6 }],
 };
 const mockState: Record<string, any> = {
   core,
@@ -86,7 +86,6 @@ jest.mock('../src/components/product/ProductTermsDisclosure', () => ({ ProductTe
 jest.mock('../src/components/product/ProductDetailParts', () => ({
   AccessNotice: 'AccessNotice',
   DetailGroup: 'DetailGroup',
-  HistoryLegend: jest.requireActual('../src/components/product/ProductDetailParts').HistoryLegend,
   SelectedRateConditions: jest.requireActual('../src/components/product/RateConditionsDisclosure').SelectedRateConditions,
   OfficialLinks: 'OfficialLinks',
   ProductFacts: 'ProductFacts',
@@ -219,7 +218,7 @@ describe('product-wide history context on an exact-tier page', () => {
     act(() => tree.unmount());
   });
 
-  it('labels the unchanged seeded maximum in the legend, accessible series and observed facts', async () => {
+  it('passes the seeded maximum and its all-tier scope to the chart', async () => {
     mockState.prefs.showHistoryRibbon = true;
     const tree = await renderProduct();
     const chart = tree.root.findAllByType('BankHistoryChart')[0];
@@ -260,7 +259,8 @@ describe('product-wide history context on an exact-tier page', () => {
     const chart = tree.root.findAllByType('BankHistoryChart')[0];
     expect(chart.props.dates).toEqual(['2026-08-01', '2026-09-13']);
     expect(chart.props.points[0]).toMatchObject({ mean: 0.05, median: 0.055, count: 4 });
-    expect(copy(tree)).toContain('Matching rates');
+    expect(chart.props.productHistory).toBe(true);
+    expect(chart.props.rba).toBe(core.rba);
     act(() => tree.unmount());
   });
 
