@@ -30,7 +30,7 @@ export interface AuditMetricEvidence {
   value: number | null;
   unit: 'count' | 'percent' | 'ms' | 'score';
   methodId: string;
-  methodVersion: 1 | 2;
+  methodVersion: 1 | 2 | 3;
   formula: string;
   unitOfAnalysis: string;
   numerator: number | null;

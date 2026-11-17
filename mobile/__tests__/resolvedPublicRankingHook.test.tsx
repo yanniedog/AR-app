@@ -147,6 +147,39 @@ test.each(['outputs', 'source owner'] as const)('oversized pricing %s still disp
   finally { act(() => tree.unmount()); }
 });
 
+test('a full published mortgage book shares unchanged candidates and ranking so scoped work survives remounts', async () => {
+  const source = Array.from({ length: 24_868 }, (_, i) => ({ ...row, lvr_tier: i % 2 ? 'lvr_60-80%' : 'lvr_0-60%' }));
+  const core = { ...sample, sections: { ...sample.sections, Mortgage: { ...sample.sections.Mortgage, rates: source } } } as unknown as CorePayload;
+  const context: RateConditionContext = { core, details: null, manifest: null, coreIntegrity: null };
+  const view = { ...catalogue(), status: 'unavailable' as const }, scenario = {};
+  let latest!: ReturnType<typeof useResolvedPublicRankingRows>;
+  function Probe({ input = source }: { input?: typeof source }) {
+    latest = useResolvedPublicRankingRows({ sourceRows: input, catalogue: view, section: 'Mortgage', sectionScenario: scenario,
+      mortgageContext: context, mortgageInputs: { loanAmount: '', lvr: '70' }, applyMortgageScope: true,
+      rowScenario: () => scenario, resolutionContextKey: '{}', focused: true, interactive: true, revision: 1 });
+    return null;
+  }
+  let tree!: ReactTestRenderer;
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  await act(async () => { await jest.advanceTimersByTimeAsync(10_000); });
+  expect(latest.ready).toBe(true);
+  expect(latest.candidates).toBe(source);
+  expect(latest.resolution.rows).toBe(source);
+  expect(latest.mortgageScope.rows).toHaveLength(source.length / 2);
+  expect(latest.resolution.complete).toBe(false);
+  const original = latest.mortgageScope;
+  act(() => tree.unmount());
+  act(() => { tree = TestRenderer.create(<Probe />); });
+  try {
+    expect(latest.ready).toBe(true);
+    expect(latest.mortgageScope).toBe(original);
+    expect(latest.work.workerStarts).toBe(0);
+    expect(latest.work.pricingSnapshotReused).toBe(true);
+    act(() => tree.update(<Probe input={source.slice()} />));
+    expect(latest.ready).toBe(false);
+  } finally { act(() => tree.unmount()); }
+});
+
 test('three warm requests share a 16,728-row publication without evicting each other', async () => {
   const source = Array.from({ length: 128 }, () => row);
   const core = { ...sample, sections: { ...sample.sections, Mortgage: { ...sample.sections.Mortgage,

@@ -178,3 +178,25 @@ test('movements data probe stays pending until cooperative suitability filtering
     expect(readyProbe.status).toBe('ready');
   } finally { act(() => tree.unmount()); ready.mockRestore(); cooperative.mockRestore(); }
 });
+
+
+test('Bank response navigation is available while overview filtering is still pending', async () => {
+  readyCalendarState();
+  const ready = jest.spyOn(navigationReady, 'useNavigationContentReady').mockReturnValue(true);
+  const cooperative = jest.spyOn(bankData, 'filterBankInsightsForSuitabilityCooperatively').mockImplementation(
+    () => new Promise(() => undefined),
+  );
+  const { router } = require('expo-router');
+  router.push.mockClear();
+  let tree!: MarketTestRenderer;
+  await act(async () => { tree = TestRenderer.create(<Market />) as MarketTestRenderer; });
+  try {
+    const surface = mockSurfaces.get('market.overview');
+    expect(surface.probes.find((probe: any) => probe.id === 'market.movements.data').status).toBe('pending');
+    const response = tree.root.findAllByType('Button').find((node: any) => node.props.title === 'Bank response')!;
+    expect((response.props as any).disabled).not.toBe(true);
+    act(() => surface.actions['market.response.open']());
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/rba-response', params: { section: expect.any(String) } });
+    expect(mockSurfaces.get('market.overview').probes.find((probe: any) => probe.id === 'market.movements.data').status).toBe('pending');
+  } finally { act(() => tree.unmount()); ready.mockRestore(); cooperative.mockRestore(); }
+});

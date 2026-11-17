@@ -120,3 +120,23 @@ test('public completion and metric observations redact arbitrary target role IDs
   const hosted = decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report));
   expect(JSON.stringify(hosted)).not.toMatch(/private-borrower-surface|private-account-probe/);
 });
+
+
+test('public and full diagnostic analysis preserve target aggregation methods and counts without target identities', () => {
+  const report = reportFixture(); report.auditEvidenceVersion = 2;
+  report.uxTelemetry = { targetCapture: { capacityReached: false, auditStartControlsMeasured: true, aggregation: 'control-state-geometry' },
+    targetSamples: [
+      { id: 'audit-start-local#android:button:default:48x48', platform: 'android', width: 48, height: 48, role: 'button', layoutObservations: 2 },
+      { id: 'audit-start-live#android:button:default:48x48', platform: 'android', width: 48, height: 48, role: 'button', layoutObservations: 3 },
+      { id: 'private-target-identity', platform: 'android', width: 20, height: 20, role: 'button', layoutObservations: 4 },
+    ] };
+  const publicAnalysis = publicAuditMetricAnalysis(report, id => id);
+  const log = fullAuditDiagnosticLog(report, id => id) as { metricAnalysis: typeof publicAnalysis };
+  for (const analysis of [publicAnalysis, log.metricAnalysis]) {
+    expect(analysis.uxAudit.pillars.standardsAndAccessibility.targetSampleCoverage).toMatchObject({ aggregation: 'control-state-geometry', layoutObservations: 9 });
+    expect(analysis.metrics.affsScore.methodVersion).toBe(3);
+    expect(analysis.metrics.uxStandardsAccessibilityScore.methodVersion).toBe(3);
+    expect(JSON.stringify(analysis)).not.toContain('private-target-identity');
+    expect(JSON.parse(JSON.stringify(analysis))).toEqual(analysis);
+  }
+});

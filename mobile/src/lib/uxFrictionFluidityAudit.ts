@@ -67,6 +67,8 @@ type AuditTargetRole = typeof TARGET_ROLES[number] | 'unclassified';
 
 export interface TargetSizeSampleInput {
   id?: string;
+  /** Equivalent measured layout events; not distinct controls or participants. */
+  layoutObservations?: number;
   width: number;
   height: number;
   platform: 'web-wcag-aa' | 'ios-hig' | 'android';
@@ -188,6 +190,7 @@ export interface AndroidFrameSegmentCoverage {
 
 export interface AuditTargetCaptureCoverage {
   capacityReached: boolean;
+  aggregation?: 'control-state-geometry';
   auditStartControlsMeasured?: boolean;
 }
 
@@ -310,7 +313,7 @@ export interface UxFrictionFluidityAudit {
       wcagSummary: StandardsCheckBreakdown;
       surfaceContractSummary: StandardsCheckBreakdown;
       targetSampleCoverage?: { scope: 'press-feedback-layout'; retained: number; capacityReached: boolean;
-        auditStartControlsMeasured: boolean };
+        auditStartControlsMeasured: boolean; aggregation?: 'control-state-geometry'; layoutObservations?: number };
       targetSizingByRole?: Partial<Record<AuditTargetRole, Pick<StandardsCheckBreakdown, 'passed' | 'failed' | 'unavailable'>>>;
       surfaceChecks?: Record<string, StandardsCheckBreakdown>;
     };
@@ -1519,6 +1522,11 @@ export function buildUxFrictionFluidityAudit(
             retained: resolvedOptions.targetSamples?.length ?? 0,
             capacityReached: resolvedOptions.targetCapture.capacityReached === true,
             auditStartControlsMeasured: resolvedOptions.targetCapture.auditStartControlsMeasured === true,
+            ...(resolvedOptions.targetCapture.aggregation === 'control-state-geometry' ? {
+              aggregation: 'control-state-geometry' as const,
+              layoutObservations: (resolvedOptions.targetSamples ?? []).reduce((sum, sample) =>
+                sum + (Number.isSafeInteger(sample.layoutObservations) && sample.layoutObservations! > 0 ? sample.layoutObservations! : 1), 0),
+            } : {}),
           } } : {}),
         } : {}),
       },

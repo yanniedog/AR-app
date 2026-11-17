@@ -59,7 +59,11 @@ export function prepareHistoricalBankRateReadySources(inputs: readonly ReadyHist
   for (const day of run_dates) if (!selected.has(day)) unavailable[day] = inputs.map(input => input.ready.unavailable_dates[day]).find(Boolean) ?? 'No accepted historical source';
   const catalogue: HistoricalBankRateCatalogue = { schema_version: 2, run_dates, sources, unavailable_dates: unavailable,
     evidence: [{ status: 'unknown' }], sections: { Mortgage: [], Savings: [], TD: [] } };
-  const result = installPrepared(catalogue, { Mortgage: [], Savings: [], TD: [] }, inputs.reduce((sum, input) => sum + input.ready.quarantined_tier_count, 0));
+  // An obsolete fallback with no accepted dates contributes no observations.
+  // Splitting one immutable source into date masks must not count it twice.
+  const contributingSources = new Set(inputs.filter(input => input.acceptedDates.length > 0).map(input => input.ready));
+  const quarantinedTierCount = [...contributingSources].reduce((sum, source) => sum + source.quarantined_tier_count, 0);
+  const result = installPrepared(catalogue, { Mortgage: [], Savings: [], TD: [] }, quarantinedTierCount);
   states.get(result)!.ready = ready;
   return result;
 }

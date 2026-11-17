@@ -191,3 +191,25 @@ test('duplicate health results and unexpected surfaces cannot replace missing pl
   expect(auditMetricRun(report).metrics.healthPassPercent).toBeNull();
   expect(auditMetricRun(report).metrics.dataCompletenessPassPercent).toBeNull();
 });
+
+
+test('geometry aggregation changes only Standards and composite methods and preserves historical series', () => {
+  const legacy = makePerformanceAuditReport('old-targets');
+  const report = makePerformanceAuditReport('geometry-targets');
+  legacy.auditEvidenceVersion = 2; report.auditEvidenceVersion = 2;
+  report.uxTelemetry = { targetCapture: { capacityReached: false, aggregation: 'control-state-geometry' } };
+  const old = auditMetricRun(legacy), current = auditMetricRun(report);
+  for (const metric of ['affsScore', 'uxStandardsAccessibilityScore'] as const) {
+    expect(old.methodVersions[metric]).toBe(2);
+    expect(current.methodVersions[metric]).toBe(3);
+    expect(buildAuditMetricAnalysis(report).metrics[metric].methodVersion).toBe(3);
+    old.metrics[metric] = 80; current.metrics[metric] = 90;
+    old.finishedAt = new Date(Date.parse(current.finishedAt) - 1000).toISOString();
+    expect(auditMetricPlot([old, current], metric).path.match(/M/g)).toHaveLength(2);
+    const recovered = { ...current, sessionId: old.sessionId, finishedAt: old.finishedAt };
+    expect(mergeAuditMetricRuns([old], [recovered])[0].methodVersions[metric]).toBe(2);
+    expect(mergeAuditMetricRuns([old], [recovered])[0].metrics[metric]).toBe(80);
+  }
+  expect(current.methodVersions.uxInteractionFrictionScore).toBe(old.methodVersions.uxInteractionFrictionScore);
+  expect(parseAuditMetricHistory(JSON.stringify({ schemaVersion: AUDIT_METRIC_HISTORY_VERSION, runs: [old, current] }))).toEqual([old, current]);
+});

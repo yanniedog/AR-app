@@ -18,7 +18,7 @@ export interface AuditMetricRun {
   coverageComplete: boolean;
   executed: number;
   metrics: Record<AuditMetric, number | null>;
-  methodVersions: Record<AuditMetric, 1 | 2>;
+  methodVersions: Record<AuditMetric, 1 | 2 | 3>;
 }
 
 

@@ -206,10 +206,11 @@ export default function MarketOverview() {
   const openHistory = useCallback(() => router.push({ pathname: '/bank-rates', params: { section: activeSection } }), [activeSection]);
   const openOutlook = useCallback(() => router.push({ pathname: '/research', params: { section: activeSection } }), [activeSection]);
   const openRba = useCallback(() => router.push('/rba'), []);
+  // The destination loads and measures its own observations. Overview filtering
+  // can still be pending after returning from another screen.
   const openResponse = useCallback(() => {
-    if (!payload) return { unavailableReason: 'Bank observations unavailable' };
     router.push({ pathname: '/rba-response', params: { section: activeSection } });
-  }, [activeSection, payload]);
+  }, [activeSection]);
   const toggleMovers = useCallback(() => {
     if (!payload) return { unavailableReason: 'Bank observations unavailable' };
     setMoversOpen(open => !open);
@@ -299,12 +300,12 @@ export default function MarketOverview() {
         </View>
         <View style={{ gap: 8 }}>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Button title="History" variant="secondary" style={{ flex: 1 }} onPress={openHistory} />
-            <Button title="Outlook" variant="secondary" style={{ flex: 1 }} onPress={openOutlook} />
+            <Button auditControlId="market-history" title="History" variant="secondary" style={{ flex: 1 }} onPress={openHistory} />
+            <Button auditControlId="market-outlook" title="Outlook" variant="secondary" style={{ flex: 1 }} onPress={openOutlook} />
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Button title="RBA" variant="secondary" style={{ flex: 1 }} onPress={openRba} />
-            <Button title="Bank response" variant="secondary" style={{ flex: 1 }} onPress={openResponse} disabled={!payload} />
+            <Button auditControlId="market-rba" title="RBA" variant="secondary" style={{ flex: 1 }} onPress={openRba} />
+            <Button auditControlId="market-bank-response" title="Bank response" variant="secondary" style={{ flex: 1 }} onPress={openResponse} />
           </View>
         </View>
       </View>

@@ -9,6 +9,7 @@ import { estimateEnteredRate, estimateReferenceAdjustment, selectPublicReference
 import { Decimal, decimalText, rateDecimal } from './publicRateDecimal';
 import type { UserRateScenario } from './userRateScenario';
 import { rowsForProductKey } from './rateRowIndex';
+import { parsePublicOfferSelectionToken } from './publicOfferIdentity';
 import { yieldToUi } from '../lib/yieldToUi';
 
 
@@ -329,6 +330,25 @@ export function publicComparisonCore(core: CorePayload, catalogue: PublicCatalog
   for (const section of ['Mortgage', 'Savings', 'TD'] as const) sections[section] = { ...core.sections[section],
     rates: publicRecommendationRows(core.sections[section].rates, catalogue, section, scenarioFor(section), false, asOfForProgramme) };
   return { ...core, sections };
+}
+
+/** Compare needs only the selected products, never pricing every offer in the book. */
+export function publicComparisonCoreForSelections(core: CorePayload, catalogue: PublicCatalogueView,
+  scenarioFor: (section: SectionKey) => RateScenario, tokens: readonly string[]): CorePayload {
+  // The old unescaped format must retain whole-book ambiguity detection.
+  if (tokens.some(token => token.startsWith('offer:'))) return publicComparisonCore(core, catalogue, scenarioFor);
+  const keys = new Set(tokens.flatMap(token => {
+    if (token.startsWith('offer-v2:')) {
+      const parsed = parsePublicOfferSelectionToken(token);
+      return parsed ? [parsed.productKey] : [];
+    }
+    return [/^\d+#([\s\S]+)$/.exec(token)?.[1] ?? token];
+  }));
+  const sections = { ...core.sections };
+  for (const section of ['Mortgage', 'Savings', 'TD'] as const) sections[section] = { ...core.sections[section],
+    rates: [...keys].flatMap(key => rowsForProductKey(core.sections[section].rates, key)) };
+  return publicComparisonCore({ ...core, sections }, { ...catalogue,
+    products: catalogue.products.filter(product => keys.has(product.productKey)) }, scenarioFor);
 }
 
 /** Product discovery requires an explicit choice whenever public pricing is ambiguous. */

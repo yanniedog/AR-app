@@ -397,12 +397,15 @@ export async function sortRowsCooperatively(
   await yieldControl();
   if (cancelled()) return null;
   let sliceStarted = now();
-  const checkpoint = async () => {
-    if (now() - sliceStarted >= 6) {
-      await yieldControl();
-      sliceStarted = now();
-    }
-    return !cancelled();
+  // An already-resolved async checkpoint still queues a microtask. A full
+  // section's merge performs thousands of checkpoints: stay synchronous until
+  // the CPU slice actually expires, then yield to the host rather than merely
+  // cycling through promise continuations.
+  const sliceExpired = () => now() - sliceStarted >= 6;
+  const pause = async () => {
+    await yieldControl();
+    sliceStarted = now();
+    return cancelled();
   };
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   const compare = (a: PreparedSortRow, b: PreparedSortRow) =>
@@ -413,7 +416,7 @@ export async function sortRowsCooperatively(
     for (const row of batch) {
       prepared.push(prepareSortRow(row, prepared.length, sortKey, section, metric, mortgageMetric));
     }
-    if (!await checkpoint()) return null;
+    if (cancelled() || sliceExpired() && await pause()) return null;
   }
   // Bottom-up merging avoids the single native Array.sort burst on a full section.
   let target = new Array<PreparedSortRow>(prepared.length);
@@ -428,7 +431,7 @@ export async function sortRowsCooperatively(
         target[output] = right >= end || (left < middle && compare(prepared[left], prepared[right]) <= 0)
           ? prepared[left++] : prepared[right++];
         operations += 1;
-        if (operations % 32 === 0 && !await checkpoint()) return null;
+        if (operations % 32 === 0 && (cancelled() || sliceExpired() && await pause())) return null;
       }
     }
     [prepared, target] = [target, prepared];
@@ -436,7 +439,7 @@ export async function sortRowsCooperatively(
   const result: RateRow[] = [];
   for (let index = 0; index < prepared.length; index += 32) {
     for (const item of prepared.slice(index, index + 32)) result.push(item.row);
-    if (!await checkpoint()) return null;
+    if (cancelled() || sliceExpired() && await pause()) return null;
   }
   return cancelled() ? null : result;
 }

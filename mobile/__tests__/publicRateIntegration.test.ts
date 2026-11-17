@@ -1,7 +1,7 @@
 import { buildPerformanceAuditSetupPlans } from '../src/lib/performanceAuditSetup';
 import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
 import { matchesLvrTier, parseLvrRange, lvrRangeContains } from '../src/data/lvrRange';
-import { publicComparisonCore, bindCurrentPublicRow, payableRateForRow, publicProductOfferRows, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate,
+import { publicComparisonCoreForSelections, publicComparisonCore, bindCurrentPublicRow, payableRateForRow, publicProductOfferRows, publicRateScenario, publicRecommendationRows, resolveLocalCurrentRate,
   resolveRowPublicRate, resolveProductPublicRate, resolvedPublicRankingRows, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
 import type { UserRateScenario } from '../src/data/userRateScenario';
@@ -252,4 +252,26 @@ it('indexes high-fanout product bindings once and invalidates on replacement wit
   book = [book[0], { ...book[0], programmeId: 'ambiguous' }];
   expect(bindCurrentPublicRow({ ...row, rate_index: 900 }, view).public_offer_id).toBeUndefined();
   expect(resolveRowPublicRate({ ...row, rate_index: 900 }, view, {}, AS_OF)?.status).toBe('unresolved');
+});
+
+
+it('compare resolves selected products with full-view parity without pricing unrelated programmes', () => {
+  const second = { ...product, productId: 'other-product', productKey: 'UNIT|OTHER', programmeIds: ['other-programme'] };
+  const unrelated = { ...product, productId: 'unrelated-product', productKey: 'UNIT|UNRELATED', programmeIds: ['unrelated-programme'] };
+  const programmes = [programme(), programme({ productId: second.productId, programmeId: 'other-programme', offerId: 'other-offer' }),
+    programme({ productId: unrelated.productId, programmeId: 'unrelated-programme', offerId: 'unrelated-offer' })];
+  const source = core([row, { ...row, product_key: second.productKey }, { ...row, product_key: unrelated.productKey }]);
+  const view = catalogue(programmes, [product, second, unrelated]);
+  const tokens = [publicOfferSelectionToken(product.productKey, 'unit-offer'), publicOfferSelectionToken(second.productKey, 'other-offer')];
+  const expected = resolveCompareSelections(publicComparisonCore(source, view, () => ({})), tokens);
+  const getProgrammes = jest.fn(view.getProgrammes);
+  const selected = publicComparisonCoreForSelections(source, { ...view, getProgrammes }, () => ({}), tokens);
+  expect(resolveCompareSelections(selected, tokens)).toEqual(expected);
+  expect(getProgrammes.mock.calls.every(([id]) => id !== unrelated.productId)).toBe(true);
+  expect(source.sections.Mortgage.rates).toHaveLength(3);
+  // Source tier and bare-key selections retain their original sibling choice.
+  for (const picks of [[`0#${product.productKey}`, second.productKey], [`offer:unit-offer#${product.productKey}`, tokens[1]], ['offer-v2:invalid', tokens[1]]]) {
+    expect(resolveCompareSelections(publicComparisonCoreForSelections(source, view, () => ({}), picks), picks))
+      .toEqual(resolveCompareSelections(publicComparisonCore(source, view, () => ({})), picks));
+  }
 });
