@@ -85,8 +85,8 @@ test('a same-content forged handle cannot bind a question', async () => {
   const { source, definitions: [definition] } = await admitted('td');
   const forged = { ...source, selection: structuredClone(source.selection) } as CustomerQuestionSource;
   expect(bindCustomerQuestion(definition, forged)).toBeNull();
-  expect(uiInputDefinitionLabel(definition, bindCustomerQuestion(definition, forged))).toBe('Source review required');
-  expect(uiInputDefinitionLabel(definition, {} as CustomerQuestionBinding)).toBe('Source review required');
+  expect(uiInputDefinitionLabel(definition, bindCustomerQuestion(definition, forged))).toBe('Unverified');
+  expect(uiInputDefinitionLabel(definition, {} as CustomerQuestionBinding)).toBe('Unverified');
 });
 
 test('a removed adoption invalidates an existing binding and cannot be repaired by its SHA-shaped ID', async () => {
@@ -94,7 +94,7 @@ test('a removed adoption invalidates an existing binding and cannot be repaired 
   const binding = bindCustomerQuestion(definition, source);
   expect(uiInputDefinitionLabel(definition, binding)).toBe(questions[0].label);
   delete source.context.manifest!.executable_v3;
-  expect(uiInputDefinitionLabel(definition, binding)).toBe('Source review required');
+  expect(uiInputDefinitionLabel(definition, binding)).toBe('Unverified');
   expect(bindCustomerQuestion(definition, source)).toBeNull();
 });
 
@@ -108,18 +108,18 @@ test('a mutated definition or source invalidates the token before display', asyn
   const { source, definitions: [definition] } = await admitted('td');
   const binding = bindCustomerQuestion(definition, source);
   definition.label = 'Changed locally';
-  expect(uiInputDefinitionLabel(definition, binding)).toBe('Source review required');
+  expect(uiInputDefinitionLabel(definition, binding)).toBe('Unverified');
   const second = await admitted('mortgage');
   const secondBinding = bindCustomerQuestion(second.definitions[0], second.source);
   if (second.source.kind !== 'mortgage') throw new Error('Fixture family mismatch');
   second.source.selection.subject.policy.inputDefinitions[0].label = 'Changed source';
-  expect(uiInputDefinitionLabel(second.definitions[0], secondBinding)).toBe('Source review required');
+  expect(uiInputDefinitionLabel(second.definitions[0], secondBinding)).toBe('Unverified');
 });
 
 test('local-only saved definitions retain their unknown source rather than minting question provenance', async () => {
   const { definitions: [definition] } = await admitted('td');
-  expect(uiInputDefinitionLabel(definition)).toBe('Source review required');
-  expect(uiInputDefinitionLabel({ ...definition, label: 'Recorded customer criterion' })).toBe('Source review required');
+  expect(uiInputDefinitionLabel(definition)).toBe('Unverified');
+  expect(uiInputDefinitionLabel({ ...definition, label: 'Recorded customer criterion' })).toBe('Unverified');
 });
 
 test('scenario bindings and source clause text cannot become customer questions', async () => {
@@ -148,7 +148,7 @@ test('oversized questions fail both the existing transport schema and the displa
   const { source, definitions: [definition] } = await admitted('eligibility');
   const oversized = { ...definition, label: 'x'.repeat(161) };
   expect(bindCustomerQuestion(oversized, source)).toBeNull();
-  expect(uiInputDefinitionLabel(oversized)).toBe('Source review required');
+  expect(uiInputDefinitionLabel(oversized)).toBe('Unverified');
 });
 
 test('actual editor exposes the admitted question in its action label and preserves explicit false with original source identity', async () => {
@@ -160,7 +160,7 @@ test('actual editor exposes the admitted question in its action label and preser
   act(() => { tree = TestRenderer.create(<CustomerAnswerEditor definition={definition} questionSource={source} productKey={source.row.product_key} disabled={false} onSave={onSave} />) as Renderer; });
   try {
     expect(JSON.stringify(tree.toJSON())).toContain(definition.label);
-    expect(JSON.stringify(tree.toJSON())).not.toContain('Source review required');
+    expect(JSON.stringify(tree.toJSON())).not.toContain('Unverified');
     act(() => tree.root.findByProps({ label: 'Entered' }).props.onPress());
     act(() => tree.root.findByProps({ label: 'No' }).props.onPress());
     act(() => tree.root.findByProps({ accessibilityLabel: `Save ${definition.label}` }).props.onPress());

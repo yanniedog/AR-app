@@ -68,7 +68,7 @@ test('holding periods expose ISO syntax and unequal opening totals retain their 
     act(() => tree.root.findByProps({ label: 'No linked effects' }).props.onPress());
     act(() => tree.root.findByProps({ title: 'Calculate Holding set' }).props.onPress());
     expect(JSON.stringify(tree.toJSON())).toContain('Status: Unavailable · Issues: 1');
-    expect(JSON.stringify(tree.toJSON())).toContain('Issue code: comparison_frame_mismatch');
+    expect(JSON.stringify(tree.toJSON())).not.toContain('Issue code: comparison_frame_mismatch');
     expect(tree.root.findAllByType(HoldingsResultDetails)).toHaveLength(0);
     await act(async () => tree.root.findByProps({ title: 'Copy Receipt' }).props.onPress());
     const copied = JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls.at(-1)[0]).receipt;
@@ -113,12 +113,12 @@ test.each([
  let tree:any;act(()=>{tree=TestRenderer.create(<HoldingsResultDetails result={result} referenceId="set-1"/>);});
  expect(JSON.stringify(tree.toJSON())).not.toContain('Interest accrued');
  act(()=>tree.root.findByProps({title:'set-2 · Results'}).props.onToggle());
- const rendered=JSON.stringify(tree.toJSON());expect(rendered).toContain(expected);expect(rendered).toContain('Unknown');expect(rendered).toContain('Known components');expect(rendered).toContain('Claim available: No');expect(rendered).toContain('Status: Partial');expect(rendered).toContain('Unavailable');expect(rendered).toContain('a'.repeat(64));expect(rendered).not.toContain('Opening balance');expect(rendered).not.toContain('Interest accrued');expect(rendered).not.toContain('1000.00');expect(rendered).not.toContain('1.000000000000');
+ const rendered=JSON.stringify(tree.toJSON());expect(rendered).toContain(expected);expect(rendered).toContain('Unknown');expect(rendered).toContain('Known components');expect(rendered).toContain('Claim available: No');expect(rendered).toContain('Status: Partial');expect(rendered).toContain('Unavailable');expect(rendered).not.toContain('a'.repeat(64));expect(rendered).not.toContain('Opening balance');expect(rendered).not.toContain('Interest accrued');expect(rendered).not.toContain('1000.00');expect(rendered).not.toContain('1.000000000000');
  if((breakEven as any)?.tiedDates.length)expect(rendered).toContain('First equality: 1 Jan 2026');
  act(()=>tree.unmount());
 });
 
-test('an actual complete evaluated receipt shows exact totals and its calculation hash', async () => {
+test('an actual complete evaluated receipt shows exact totals without its calculation hash', async () => {
   const h = await savingsHarness(), [selection] = await h.load();
   const account = (accountId: string) => ({ selection, target: h.target, inputs: { ...savingsInputs, accountId } });
   const draft: HoldingsDraft = {
@@ -141,7 +141,7 @@ test('an actual complete evaluated receipt shows exact totals and its calculatio
     expect(rendered).toContain('Claim available: Yes');
     expect(rendered).toContain('Opening balance'); expect(rendered).toContain('$1000.00');
     expect(rendered).toContain('Interest accrued'); expect(rendered).toContain('$1.000000000000');
-    expect(rendered).toContain(receipt.inputSha256);
+    expect(rendered).not.toContain(receipt.inputSha256);
     expect(rendered).not.toContain('Known components');
   } finally { act(() => tree.unmount()); }
 });

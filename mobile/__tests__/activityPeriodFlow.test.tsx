@@ -38,14 +38,14 @@ test('lazy private savings form calculates, exports, and invalidates on input or
   const receipt = JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls.at(-1)[0]);
   expect(receipt.adapterInputs.inputs.openingBalance).toBe('1000.25'); expect(receipt.receipt.claimAvailable).toBe(true);expect(receipt.receipt.ledger[0].savingsContributions[1].status).toBe('does_not_meet');
   const displayed = () => tree.root.findAllByType('AppText').map((node: any) => String(node.props.children));
-  expect(displayed()).toContain('Qualifying withdrawals: 0 · ');
+  expect(displayed()).toContain('Qualifying withdrawals: 0');
   const deposit = activityInputs.activity.events[0];
   act(() => tree.root.findByType(ActivityEvents).props.onChange([deposit, ...['Withdrawal.1', 'Withdrawal.2'].map(id => ({ ...deposit, id, kind: 'withdrawal', amount: '1' }))]));
   expect(tree.root.findAllByProps({ title: 'Copy receipt' })).toHaveLength(0);
   act(() => tree.root.findByProps({ label: 'Confirm details' }).props.onPress());
   act(() => tree.root.findByProps({ title: 'Calculate' }).props.onPress());
-  expect(displayed()).toContain('Qualifying deposits: $100.25 · ');
-  expect(displayed()).toContain('Qualifying withdrawals: 2 · ');
+  expect(displayed()).toContain('Qualifying deposits: $100.25');
+  expect(displayed()).toContain('Qualifying withdrawals: 2');
   expect(displayed().some((text: string) => text.includes('Qualifying withdrawals: $'))).toBe(false);
   await act(async () => tree.root.findByProps({ title: 'Copy receipt' }).props.onPress());
   const updated = JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls.at(-1)[0]);

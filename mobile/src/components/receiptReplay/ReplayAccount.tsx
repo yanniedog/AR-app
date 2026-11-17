@@ -50,13 +50,13 @@ function InputValues({value,onChange,path=[],kind,mortgage,factType}:{value:any;
       const choices=control==='phase'?[{value:'before_accrual',label:'Before daily interest'},{value:'after_accrual',label:'After daily interest'}] as const:[{value:'complete',label:'Complete'},{value:'unknown',label:'Unknown'}] as const;
       return <View style={{gap:6}}><InfoRow label={label} value={choices.find(choice=>choice.value===value)?.label??'Unknown'}/>{choices.map(choice=><Chip key={choice.value} label={uiJoin(label,' · ',choice.label)} selected={value===choice.value} onPress={()=>onChange(choice.value)}/>)}</View>;
     }
-    if(control==='factState')return <InfoRow label={label} value={value==='known'?'Known':value==='unknown'?'Unknown':value==='unavailable'?'Unavailable':value==='not_applicable'?'Not applicable':'Source review required'}/>;
-    if(control==='provenance')return <InfoRow label={label} value={value==='user_reported_bank_offer_and_statement'?'Entered facts':'Source review required'}/>;
-    if(control==='cleared')return <InfoRow label={label} value={value==='cleared'?'Cleared':'Source review required'}/>;
-    if(control==='factType')return <InfoRow label={label} value={value==='boolean'?'Boolean':value==='decimal'?'Decimal':value==='date'?'Date':value==='text'?'Text':'Source review required'}/>;
-    if(control==='unit')return <InfoRow label={label} value={value==='AUD'?'AUD':value==='fraction'?'Fraction':value==='percent'?'Percent':value==='count'?'Count':'Source review required'}/>;
+    if(control==='factState')return <InfoRow label={label} value={value==='known'?'Known':value==='unknown'?'Unknown':value==='unavailable'?'Unavailable':value==='not_applicable'?'Not applicable':'Unverified'}/>;
+    if(control==='provenance')return <InfoRow label={label} value={value==='user_reported_bank_offer_and_statement'?'Entered facts':'Unverified'}/>;
+    if(control==='cleared')return <InfoRow label={label} value={value==='cleared'?'Cleared':'Unverified'}/>;
+    if(control==='factType')return <InfoRow label={label} value={value==='boolean'?'Boolean':value==='decimal'?'Decimal':value==='date'?'Date':value==='text'?'Text':'Unverified'}/>;
+    if(control==='unit')return <InfoRow label={label} value={value==='AUD'?'AUD':value==='fraction'?'Fraction':value==='percent'?'Percent':value==='count'?'Count':'Unverified'}/>;
     const numeric=control!=='identifier'&&(control==='number'||typeof value==='number'||kind!=='mortgage_calculation'&&/^[\d.,+\- $%]*$/.test(value));
-    if(!numeric&&control!=='identifier')return <InfoRow label={label} value="Source review required"/>;
+    if(!numeric&&control!=='identifier')return <InfoRow label={label} value="Unverified"/>;
     return <LedgerField label={label} value={numeric?uiInputNumber(String(value)):uiInputIdentifier(String(value))} keyboardType={numeric?'numbers-and-punctuation':'default'}
       onChangeText={v=>onChange(typeof value==='number'&&/^\d+$/.test(v)?Number(v):v)}/>;
   }

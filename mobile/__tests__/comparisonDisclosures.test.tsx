@@ -41,7 +41,7 @@ test('real Bankwest detail exposes every published fee and eligibility condition
   act(() => root.findByProps({ title: 'Eligibility', open: false }).props.onToggle());
   const eligibility = JSON.stringify(tree.toJSON());
   expect(eligibility).toContain('16 years');
-  expect(eligibility).toContain('Source review required');
+  expect(eligibility).not.toContain('Source review required');
   for (const criterion of detail.eligibility!) if (criterion.info) expect(eligibility).not.toContain(criterion.info);
   act(() => tree.unmount());
 });
@@ -58,7 +58,7 @@ test('retained The Mac mortgage exposes all four fees and all three criteria', (
   expect(detail.fees).toHaveLength(4);
   expect(detail.eligibility).toHaveLength(3);
   expect(text).toContain('$800'); expect(text).toContain('$200'); expect(text).toContain('18 years');
-  expect(text).toContain('Unknown'); expect(text).toContain('Source review required');
+  expect(text).toContain('Unknown'); expect(text).not.toContain('Source review required');
   for (const item of [...detail.fees!, ...detail.eligibility!]) if (item.info) expect(text).not.toContain(item.info);
   act(() => tree.unmount());
 });

@@ -33,6 +33,11 @@ test('same full result set as UI, frozen source copies, exact decimals and expli
   expect(tables.map(sheet => sheet.name)).toEqual(REPORT_SHEETS);
   const workbook = unzipSync(await writeReportWorkbook(tables));
   const pdf = await searchReportHtml(snapshot, () => undefined);
+  const summary = strFromU8(workbook['xl/worksheets/sheet1.xml']);
+  for (const internal of ['Core SHA256', 'Details SHA256', 'Bundle SHA256', 'a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64)]) {
+    expect(pdf).not.toContain(internal);
+    expect(summary).not.toContain(internal);
+  }
   expect(Object.keys(workbook).filter(path => path.startsWith('xl/worksheets/'))).toHaveLength(9);
   const productSheet = strFromU8(workbook['xl/worksheets/sheet3.xml']);
   for (const product of snapshot.products) { expect(productSheet).toContain(`>${product.productKey}<`); expect(pdf).toContain(`>${product.productKey}<`); }
@@ -93,7 +98,7 @@ test('exports exact admitted sibling LVR facts before cloning and keeps missing 
   const html = await searchReportHtml(snapshot, () => undefined);
   expect(html).not.toContain('LVR up to'); expect(html).not.toContain('For LVR'); expect(html).toContain('Unverified');
   const unverified = captureFilteredSearchSnapshot({ ...publication, coreIntegrity: null, request, profile: EMPTY_PROFILE });
-  expect(searchReportTables(unverified).find(sheet => sheet.name === 'Rates and Tiers')!.rows.some(row => row[5] === 'Source unverified')).toBe(true);
+  expect(searchReportTables(unverified).find(sheet => sheet.name === 'Rates and Tiers')!.rows.some(row => row[5] === 'Unverified')).toBe(true);
 });
 
 test('PDF and workbook reject marketing, source labels, error-like prose and private query while retaining numeric source facts', async () => {
@@ -115,6 +120,6 @@ test('PDF and workbook reject marketing, source labels, error-like prose and pri
   for (const prose of [detail.description, detail.fees[0].info!, detail.fees[0].name!, detail.features[0].info!, detail.sourceDocuments[0].label!, publication.details.products[row.product_key].rateConditions!.entries[0].text]) expect(exported).not.toContain(prose);
   expect(exported).toContain('123456789.123456789012345678'); expect(exported).toContain('0.05000000000000000001');
   expect(exported).toContain('Ongoing rate: 0.00%'); expect(exported).toContain('6 months'); expect(exported).toContain('Introductory');
-  expect(exported).toContain('Source review required'); expect(exported).toContain('/data/depositRates/0/additionalInfo');
+  expect(exported).toContain('Unverified'); expect(exported).not.toContain('/data/depositRates/0/additionalInfo');
   expect(exported).toContain('No'); expect(exported).toContain('Bank|id-1|TRANS_AND_SAVINGS_ACCOUNTS|Deposit');
 });

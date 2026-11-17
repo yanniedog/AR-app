@@ -1,3 +1,4 @@
+import { ProductPageLinks } from '../../src/components/product/ProductPageLink';
 import type { RateRow, SectionKey } from '../../src/types';
 import { useRatesSession } from '../../src/data/ratesSession';
 import { useMortgageComparison } from '../../src/data/mortgageComparison';
@@ -35,7 +36,6 @@ import { ProductRateChangeLine } from '../../src/components/product/ProductRateC
 import {
   AccessNotice,
   DetailGroup,
-  OfficialLinks,
   ProductFacts,
   ProductSpecs,
   SectionTitle,
@@ -749,7 +749,7 @@ export default function ProductDetail() {
           ),
         }}
       />
-      <ScreenScrollView
+      <ProductPageLinks overview={detail?.links?.overview}><ScreenScrollView
         onLayout={() => setLayoutReady(true)}
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       >
@@ -952,8 +952,6 @@ export default function ProductDetail() {
         <DetailGroup title="Fees" icon="cash-outline" items={detail?.fees} loading={detailsLoading} />
         <DetailGroup title="Eligibility" icon="person-outline" items={normalizedFactKinds.has('eligibility') ? undefined : detail?.eligibility} loading={detailsLoading && !normalizedFactKinds.has('eligibility')} />
         <DetailGroup title="Constraints" icon="lock-closed-outline" items={normalizedFactKinds.has('constraint') ? undefined : detail?.constraints} loading={detailsLoading && !normalizedFactKinds.has('constraint')} />
-
-        <OfficialLinks links={detail?.links} sourceDocuments={detail?.sourceDocuments} />
         <ProductTermsDisclosure productKey={productKey} />
 
         {exactSaveEligible ? <Button
@@ -969,7 +967,7 @@ export default function ProductDetail() {
             {uiJoin('Source date', ' ', uiDate(row.last_updated))}
           </AppText>
         ) : null}
-      </ScreenScrollView>
+      </ScreenScrollView></ProductPageLinks>
     </>
   );
 }

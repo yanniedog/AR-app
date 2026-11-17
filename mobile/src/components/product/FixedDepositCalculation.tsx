@@ -3,7 +3,6 @@ import React, { useEffect, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { View } from 'react-native';
 import { AppText, Button, Disclosure } from '../ui';
-import { DepositSource } from './DepositSource';
 import { emptyDepositInputs } from './DepositInputFields';
 import { DepositCohorts } from './DepositCohorts';
 import { useCustomerProfile } from '../../hooks/useCustomerProfile';
@@ -43,7 +42,6 @@ function DepositForm({ candidates, context, row }: { candidates: ApprovedSelecti
       <AppText variant="small">{uiJoin('Basis', ': ', 'Maturity return', ' · ', 'Ranking', ': ', 'Not assessed')}</AppText>
       <EngineReceiptFacts receipt={current.data.receipt} />
       <Disclosure title="Calculation" open={trace} onToggle={() => setTrace(!trace)}>
-        {selection?.template.evidence.map(source => <DepositSource key={source.id} source={source} />)}
         <AppText variant="small">{uiJoin('Receipt', ': ', 'Private', ' · ', 'Entered facts', ' · ', 'Source')}</AppText>
         <Button title="Copy receipt" variant="secondary" onPress={() => { try { if (!selection) throw Error(); const exported=privateTdExport(current.data,[tdReopenItem(selection,context,row,inputs,profile)]); void Clipboard.setStringAsync(JSON.stringify(exported,null,2)).then(()=>setCopyStatus('Copied'),()=>setCopyStatus('Copy failed')); } catch { setCopyStatus('Source changed'); } }} />
         {copyStatus ? <AppText variant="small">{uiLabel(copyStatus)}</AppText> : null}
@@ -67,7 +65,7 @@ export function FixedDepositCalculation({ row }: { row: RateRow }) {
   return <Disclosure title="Maturity return" open={open} onToggle={() => setOpen(!open)}>
     {!selected ? <AppText variant="small">{uiLabel("Checking")}</AppText> : !!selected.selections?.length ?
       <DepositForm key={identity} candidates={selected.selections} context={{ manifest, core, coreIntegrity }} row={row} /> : <>
-        <AppText variant="small">{uiLabel(selected.error ? 'Source unverified' : published ? 'Unavailable' : 'Not published')}</AppText>
+        <AppText variant="small">{uiLabel(selected.error ? 'Unverified' : published ? 'Unavailable' : 'Not published')}</AppText>
         {selected.error ? <Button title="Retry" variant="secondary" onPress={() => setRetry(value => value + 1)} /> : null}
       </>}
   </Disclosure>;

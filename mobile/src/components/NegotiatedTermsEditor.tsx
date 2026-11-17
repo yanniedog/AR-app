@@ -2,14 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { type CustomerProfile, type NegotiatedTerm, safeId, userProvenance, validProvenance } from '../data/customerProfile';
 import { useStore } from '../data/store';
-import { uiLabel, uiDate, uiDetailsProductReference, uiIdentifier, uiJoin, uiNegotiatedTermField, useNegotiatedTermDraft } from '../lib/uiCopy';
+import { uiCount, uiLabel, uiDate, uiDetailsProductReference, uiJoin, uiNegotiatedTermField, uiProductName, uiProviderName, useNegotiatedTermDraft } from '../lib/uiCopy';
 import type { DetailsPayload } from '../types';
 import { LedgerField } from './ledger/LedgerField';
 import { AppText, Button, Disclosure } from './ui';
 function termProductReference(term: NegotiatedTerm, details: DetailsPayload | null) {
   if (!safeId(term.id) || !validProvenance(term.provenance) || term.provenance.source !== 'user_input') return uiLabel('Unknown');
-  const reference = uiDetailsProductReference(details, term.provenance.productKey);
-  return reference === 'Source review required' ? uiLabel('Unknown') : reference;
+  const key = term.provenance.productKey;
+  if (uiDetailsProductReference(details, key) === 'Unverified') return uiLabel('Unknown');
+  const [provider, , , ...name] = key.split('|');
+  return uiJoin(uiProductName({ product_name: name.join('|') }), ' · ', uiProviderName({ provider }));
 }
 export function NegotiatedTermsEditor({ profile, productKey, disabled, update }: {
   profile: CustomerProfile; productKey?: string; disabled: boolean; update: (change: (p: CustomerProfile) => CustomerProfile) => Promise<boolean>;
@@ -46,14 +48,19 @@ export function NegotiatedTermsEditor({ profile, productKey, disabled, update }:
   }
   return <Disclosure title="Negotiated terms" open={open} onToggle={() => setOpen(!open)}><View style={{ gap: 12 }}>
     <AppText variant="small" color="textMuted">{uiJoin('User input', ' · ', 'Eligibility unverified', ' · ', 'Fees unverified')}</AppText>
-    {terms.map(t => <View key={t.id} style={{ gap: 4 }}>
-      <AppText variant="small" weight="600">{uiNegotiatedTermField(t, 'label')}</AppText>
-      <AppText variant="small">{uiJoin(uiNegotiatedTermField(t, 'value'), ' ', uiNegotiatedTermField(t, 'unit'))}</AppText>
-      <AppText variant="tiny">{uiJoin('Recorded', ' ', uiDate(t.provenance.recordedAt), ' · ', 'Effective from', ' ', uiDate(t.provenance.effectiveFrom), ' · ', 'Effective to', ' ', uiDate(t.provenance.effectiveToExclusive))}</AppText>
-      {!productKey ? <AppText variant="tiny">{termProductReference(t, details)}</AppText> : null}
-      <Button title="Edit" accessibilityLabel={uiJoin('Edit', ' ', uiNegotiatedTermField(t, 'label'), ' · ', uiIdentifier(t.id), !productKey ? uiJoin(' · ', termProductReference(t, details)) : null)} variant="secondary" disabled={busy} onPress={() => edit(t)} />
-      <Button title="Remove" accessibilityLabel={uiJoin('Remove', ' ', uiNegotiatedTermField(t, 'label'), ' · ', uiIdentifier(t.id), !productKey ? uiJoin(' · ', termProductReference(t, details)) : null)} variant="ghost" disabled={busy} onPress={() => void update(p => ({ ...p, negotiatedTerms: p.negotiatedTerms.filter(v => v.id !== t.id) }))} />
-    </View>)}
+    {terms.map((t, index) => {
+      const title = uiNegotiatedTermField(t, 'label');
+      const product = productKey ? null : termProductReference(t, details);
+      const actionSubject = uiJoin(title, ' · ', 'Term', ' ', uiCount(index + 1), product ? uiJoin(' · ', product) : null);
+      return <View key={t.id} style={{ gap: 4 }}>
+        <AppText variant="small" weight="600">{title}</AppText>
+        <AppText variant="small">{uiJoin(uiNegotiatedTermField(t, 'value'), ' ', uiNegotiatedTermField(t, 'unit'))}</AppText>
+        <AppText variant="tiny">{uiJoin('Recorded', ' ', uiDate(t.provenance.recordedAt), ' · ', 'Effective from', ' ', uiDate(t.provenance.effectiveFrom), ' · ', 'Effective to', ' ', uiDate(t.provenance.effectiveToExclusive))}</AppText>
+        {product ? <AppText variant="tiny">{product}</AppText> : null}
+        <Button title="Edit" accessibilityLabel={uiJoin('Edit', ' ', actionSubject)} variant="secondary" disabled={busy} onPress={() => edit(t)} />
+        <Button title="Remove" accessibilityLabel={uiJoin('Remove', ' ', actionSubject)} variant="ghost" disabled={busy} onPress={() => void update(p => ({ ...p, negotiatedTerms: p.negotiatedTerms.filter(v => v.id !== t.id) }))} />
+      </View>;
+    })}
     {productKey || editing ? <>
       {([['label', 'Term'], ['value', 'Value'], ['unit', 'Unit'], ['from', 'Effective from'], ['to', 'Effective to']] as const).map(([key, label]) => <LedgerField key={key} label={label} value={draft[key]} editable={!busy} maxLength={key === 'value' ? 2000 : key === 'unit' ? 80 : 160} onChangeText={v => termDraft.change(key, v)} autoCorrect={false} />)}
       <LedgerField label="Note" accessibilityLabel="Note" value={draft.note} editable={!busy} maxLength={2000} multiline onChangeText={v => termDraft.change('note', v)} />
