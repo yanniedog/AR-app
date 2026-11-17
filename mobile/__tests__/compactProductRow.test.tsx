@@ -84,6 +84,8 @@ test.each([[320, 1], [360, 1], [411, 1], [320, 2], [360, 3]])('keeps a fixed thr
     expect(mainTarget(tree).props.style.width).toBe('100%');
     expect(mainTarget(tree).props.accessibilityLabel).toContain(exact.product_name);
     expect(mainTarget(tree).props.accessibilityLabel).toContain('Tier #4');
+    expect(tree.root.findAllByProps({ testID: 'compact-tier-index' })).toHaveLength(0);
+    expect(tree.root.findAllByType('BankAvatar')[0].props.size).toBe(56);
     expect(mainTarget(tree).props.accessibilityLabel).toContain('Advertised rate 5.79%');
     const icons = tree.root.findAllByType('Icon');
     expect(icons.every(node => node.props.size === COMPACT_ROW.icon)).toBe(true);
@@ -107,7 +109,7 @@ test('row press opens product and fixed save action preserves exact identity', (
 
 test('preserves unknowns, tier index and conditional warnings in two-line layout at large fontScale', () => {
   mockDimensions = { ...mockDimensions, fontScale: 2 };
-  const tree = render({ ...row, ribbon_deposit_kind: 'BONUS', ongoing_rate: undefined }, { section: 'Savings' });
+  const tree = render({ ...row, ribbon_deposit_kind: 'BONUS', ongoing_rate: undefined }, { section: 'Savings', showTierIndex: true });
   try {
     expect(mainTarget(tree).props.accessibilityLabel).toContain('Ongoing rate: Unknown');
     expect(tree.root.findByProps({ testID: 'compact-product-name' }).props.children).toBe(row.product_name);
@@ -360,7 +362,7 @@ test('equal-metric actual tiers remain visibly distinct even when their long LVR
   const f = fixture();
   mockState = { ...f, isRateSaved: () => false, toggleSavedRate: mockSave, prefs: { mortgageRateMetric: 'comparison' } };
   let tree!: Tree;
-  act(() => { tree = TestRenderer.create(<>{f.rows.map(exact => <ProductCard key={exact.rate_index} row={exact} section="Mortgage" />)}</>) as Tree; });
+  act(() => { tree = TestRenderer.create(<>{f.rows.map(exact => <ProductCard key={exact.rate_index} row={exact} section="Mortgage" showTierIndex />)}</>) as Tree; });
   try {
     expect(tree.root.findAllByType('AppText').filter(node => node.props.testID === 'compact-tier-index').map(node => node.props.children)).toEqual(['#4', '#5']);
     const labels = tree.root.findAllByType('PressFeedback').map(node => String(node.props.accessibilityLabel));

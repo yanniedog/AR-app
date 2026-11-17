@@ -99,6 +99,7 @@ function ProductCardView({
   displayedRate,
   displayedRateLabel,
   showLenderAction = true,
+  showTierIndex = false,
   logoRenderStateId,
   onLogoRenderStateChange,
   comparisonUnverified = false,
@@ -120,6 +121,7 @@ function ProductCardView({
   displayedRateLabel?: UiCopy;
   /** Hide redundant lender navigation when already rendered on that lender's page. */
   showLenderAction?: boolean;
+  showTierIndex?: boolean;
   logoRenderStateId?: string;
   onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
   comparisonUnverified?: boolean;
@@ -187,10 +189,11 @@ function ProductCardView({
   [rateFreshness(row, rowVerificationReceipt(row), Date.now())];
   const openLender = onLongPress ?? (() => openBank(row.provider, { section }));
   const joinFacts = (facts: readonly UiText[]) => uiJoin(...facts.flatMap((fact, index) => index ? [uiLabel(' · '), fact] : [fact]));
-  const tierIndex = compactTierIndex(row);
+  const exactTier = compactTierIndex(row);
+  const tierIndex = showTierIndex ? exactTier : null;
   const cardA11yLabel = uiJoin(uiProductName(row), ', ', uiProviderName(row), ', ', rateLabel, ' ', rateText,
     metadata.length ? uiJoin(', ', joinFacts(metadata)) : null,
-    tierIndex ? uiJoin(', ', 'Tier', ' ', tierIndex) : null,
+    exactTier ? uiJoin(', ', 'Tier', ' ', exactTier) : null,
     access.badge ? uiJoin(', ', uiAccessBadge(access)) : null,
     nonStandard ? uiJoin(', ', 'Non-standard') : null,
     qualifier.conditional ? uiJoin(', ', qualifier.label) : null,
