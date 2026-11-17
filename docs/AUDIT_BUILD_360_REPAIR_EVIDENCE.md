@@ -23,6 +23,8 @@ The report remains local; no private journal or financial inputs are committed.
 - Receipt cohort filtering and stable sorting run in cancellable cooperative
   slices for large books. One sorted cohort supplies both the median and the
   three exact comparable tiers; duplicate classification/sorting is removed.
+- Reopened receipts reuse current comparison pricing only with matching scenario,
+  profile, comparison inputs, filter state, catalogue and validity boundaries.
 - Receipt loading and failed preparation have distinct UI states. A new request
   cannot display a previous request's prepared brief. Readiness requires current
   comparison preparation, with genuine preparation errors retained.

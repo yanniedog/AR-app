@@ -146,6 +146,9 @@ export default function RateReceiptScreen() {
     catalogue: publicCatalogue, section: receiptSection, sectionScenario: comparisonScenario,
     rowScenario: comparisonRowScenario, focused: focused && Boolean(found) && comparisonsReady,
     revision: suitabilityRevision,
+    // Reopening the brief can reuse this exact pricing request. Every input
+    // captured by scenarioFor belongs to the key; inputs stay local to memory.
+    resolutionContextKey: JSON.stringify([scenario, profile, fromRatesComparison, comparisonInputs, mortgageFilters]),
   });
   const comparisonsAvailable = comparisonsReady && comparisonPricing.ready;
   const selectedRow = useMemo(() => found && validRateIndex
