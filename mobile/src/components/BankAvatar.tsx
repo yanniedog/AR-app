@@ -58,8 +58,9 @@ export function BankAvatar({
       brand?.logo,
       remoteLogo,
       auditOwnsNetwork,
+      brand?.logo_source,
     ),
-    [auditOwnsNetwork, provider, brand?.logo, remoteLogo],
+    [auditOwnsNetwork, provider, brand?.logo, brand?.logo_source, remoteLogo],
   );
   const [prevSources, setPrevSources] = useState(sources);
   const [sourceIdx, setSourceIdx] = useState(0);
