@@ -15,10 +15,18 @@ export function ProductPageLinks({ overview, children }: { overview?: string; ch
     if (!overview) return null;
     const result = trustedExternalUrl({ url: overview, purpose: 'lender_source', label: 'Product' });
     if (!result.ok) return null;
-    const path = new StandardUrl(result.url).pathname;
+    const { hostname, pathname } = new StandardUrl(result.url);
+    let path: string;
+    try {
+      path = decodeURIComponent(pathname);
+    } catch {
+      return null;
+    }
     // A published overview can still be a bank landing page, document or API.
     if (/^\/(?:index\.(?:html?|php)\/?|home\/?|(?:en|en-au)\/?)?$/i.test(path)
-      || /\.pdf\/?$/i.test(path) || /(?:^|\/)cds-au(?:\/|$)/i.test(path)) return null;
+      || /\.(?:pdf|json|xml|ya?ml)\/?$/i.test(path)
+      || /^(?:apis?|cdr|cds|open-?banking)[.-]/i.test(hostname)
+      || /(?:^|\/)(?:apis?|cds-au|open-?banking)(?:\/|$)/i.test(path)) return null;
     return result.url;
   }, [overview]);
   useAuditExternalLinks(link ? [{ url: link, purpose: 'lender_source', label: 'Product' }] : []);

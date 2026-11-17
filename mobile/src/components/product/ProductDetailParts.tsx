@@ -13,7 +13,7 @@ import { rateQualifier } from '../../lib/rateQualifier';
 import { uiAccessBadge, uiConditionFact, uiListedLvrRange, uiLoanPurpose, uiRateStructure, uiRepayment } from '../../lib/financialUiCopy';
 import { scopedRateConditions } from '../../data/rateConditions';
 import { scopedFinancialConditionFacts } from '../../data/scopedFinancialConditionFacts';
-import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, type ProductPresentationFact } from '../../lib/productUiFacts';
+import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
 import { normalizedProductFacts } from '../../data/productFacts';
 import { uiCount, uiIdentifier, uiJoin, uiLabel, uiProductName, type UiCopy } from '../../lib/uiCopy';
 import type { DetailItem, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
@@ -39,11 +39,12 @@ export function RateRowLine({ row, section, accent }: { row: RateRow; section: S
 function PublishedFacts({ facts, fees }: { facts: readonly ProductPresentationFact[]; fees?: DetailItem[] }) {
   return <View style={{ gap: 10 }}>{facts.map((fact, index) => {
     const fee = fees?.[index], cap = fee ? uiFeeCap(fee) : null;
-    return <ProductPageLink key={`${fact.reference}:${index}`} label={uiJoin(fact.label, ', ', fact.value)}>
+    const value = uiProductFactValue(fact);
+    return <ProductPageLink key={`${fact.reference}:${index}`} label={uiJoin(fact.label, ', ', value)}>
       <View style={{ flex: 1, gap: 4 }}>
         <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <AppText variant="small" weight="600" style={{ flex: 1 }}>{fact.label}</AppText>
-          <AppText variant="small" color="textMuted" style={{ flex: 1, textAlign: 'right' }}>{fact.value}</AppText>
+          <AppText variant="small" color="textMuted" style={{ flex: 1, textAlign: 'right' }}>{value}</AppText>
         </Row>
         {fact.scope.length ? <AppText variant="tiny" color="textMuted">{uiJoin('Tier', ': ', ...fact.scope.flatMap((scope, i) => i ? [uiLabel(' · '), scope] : [scope]))}</AppText> : null}
         {cap ? <AppText variant="tiny">{cap}</AppText> : null}

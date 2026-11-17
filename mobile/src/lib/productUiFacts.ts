@@ -3,7 +3,18 @@ import { humanizeEnum, toFraction } from '../data/format';
 import { descriptiveValue } from '../data/descriptiveValue';
 import { uiCount, uiDuration, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiPublishedFeeName, uiRate, type UiCopy, type UiLabel, type UiText } from './uiCopy';
 
-export interface ProductPresentationFact { label: UiCopy; value: UiText; reference: UiText; conditions: 'source-review-required' | 'none'; scope: readonly UiText[] }
+export interface ProductPresentationFact {
+  label: UiCopy;
+  value: UiText;
+  reference: UiText;
+  conditions: 'source-review-required' | 'none';
+  conditionsUnverified: boolean;
+  scope: readonly UiText[];
+}
+
+export function uiProductFactValue(fact: ProductPresentationFact): UiText {
+  return uiJoin(fact.value, fact.conditionsUnverified ? uiJoin(' · ', 'Conditions', ': ', 'Unverified') : null);
+}
 const CASHBACK_VALUE_MAX_LENGTH = 80;
 function number(value: unknown): number | null {
   if (typeof value !== 'number' && (typeof value !== 'string' || !/^\s*\$?\s*[+-]?(?:\d+|[1-9]\d{0,2}(?:,\d{3})+)(?:\.\d+)?\s*$/.test(value))) return null;
@@ -67,7 +78,9 @@ export function uiFeeDiscount(discount: FeeDiscount): UiText {
   const amount = number(discount.amount ?? discount.fixedAmount?.amount);
   const rate = ratePart(discount.rateBased?.rate ?? discount.feeRate ?? discount.balanceRate ?? discount.transactionRate ?? discount.accruedRate);
   return uiJoin('Discount', ': ', amount !== null ? money(amount) : rate ?? uiLabel('Unknown'),
-    discount.discountType ? uiJoin(' · ', humanizeEnum(discount.discountType)) : null);
+    discount.discountType ? uiJoin(' · ', humanizeEnum(discount.discountType)) : null,
+    discount.additionalInfo?.trim() || discount.description?.trim() || discount.eligibility?.length
+      ? uiJoin(' · ', 'Conditions', ': ', 'Unverified') : null);
 }
 function factValue(value: unknown, unit?: string): UiText {
   if (unit === 'boolean' || typeof value === 'boolean') return value === true ? uiLabel('Yes') : value === false ? uiLabel('No') : uiLabel('Unknown');
@@ -87,11 +100,12 @@ function factValue(value: unknown, unit?: string): UiText {
 }
 export function uiNormalizedProductFact(fact: NormalizedProductFact): ProductPresentationFact {
   const lower = fact.minValue, upper = fact.maxValue;
+  const conditionsUnverified = Boolean(fact.condition?.trim());
   const value = lower !== undefined && upper !== undefined ? uiJoin(factValue(lower, fact.unit), '–', factValue(upper, fact.unit))
     : lower !== undefined ? uiJoin('≥', factValue(lower, fact.unit)) : upper !== undefined ? uiJoin('≤', factValue(upper, fact.unit)) : factValue(fact.value, fact.unit);
   return { label: humanizeEnum(fact.sourceType?.toUpperCase() !== 'OTHER' ? fact.sourceType ?? fact.canonicalKey.split(/[.:/]/).at(-1) : fact.canonicalKey.split(/[.:/]/).at(-1)),
     value: uiJoin(value, fact.cadence ? uiJoin(' · ', uiCadence(fact.cadence)) : null), reference: uiIdentifier(fact.id),
-    conditions: fact.condition?.trim() ? 'source-review-required' : 'none', scope: fact.appliesTo?.map(humanizeEnum) ?? [] };
+    conditions: conditionsUnverified ? 'source-review-required' : 'none', conditionsUnverified, scope: fact.appliesTo?.map(humanizeEnum) ?? [] };
 }
 function residencyValue(item: DetailItem): UiText | null {
   if (item.label !== 'RESIDENCY_STATUS') return null;
@@ -154,8 +168,17 @@ export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'E
   const value = group === 'Fees' ? uiFeeValue(item) : residencyField ? residency ?? uiLabel('Unknown') : lvr ? lvrValue : numeric !== null ? uiJoin(group === 'Constraints' && /^(?:MIN|MAX)_(?:LIMIT|BALANCE|AMOUNT)$/.test(item.label ?? '') ? uiMoney(numeric, Math.min(2, precision(numeric))) : uiNumber(numeric, precision(numeric)),
     ['Minimum age', 'Maximum age'].includes(controlled ?? '') ? uiJoin(' ', 'years') : null)
     : residency ?? cashback ?? (scalar?.toLowerCase() === 'false' || scalar?.toLowerCase() === 'true' ? uiLabel(scalar.toLowerCase() === 'true' ? 'Yes' : 'No') : group === 'Features' && item.value == null && !item.info ? uiLabel('Included') : scalar ? humanizeEnum(scalar) : uiLabel('Unknown'));
+  const unresolvedInfo = Boolean(item.info?.trim() && !knownInfo);
+  // Unclassified eligibility prose can describe the criterion itself, rather
+  // than an extra condition on a published amount or limit.
+  const conditionsUnverified = unresolvedInfo && (
+    group === 'Fees' || (group === 'Features' && item.label === 'CASHBACK_OFFER' && (cashback !== null || numeric !== null))
+    || (lvr && lvrValue !== 'Unknown')
+  );
   return { label: label || uiJoin(group, ' ', uiCount(index + 1)), value: uiJoin(value || uiLabel('Unknown'), knownInfo && knownInfo !== residency ? uiJoin(' · ', knownInfo) : null),
-    reference: uiCount(index + 1), conditions: item.info?.trim() && !knownInfo || feeName === 'Unknown' && !!item.name?.trim()
+    reference: uiCount(index + 1),
+    conditions: unresolvedInfo || feeName === 'Unknown' && !!item.name?.trim()
       || group === 'Eligibility' && item.label === 'RESIDENCY_STATUS' && !!scalar && !residency
-      || numeric === null && group !== 'Fees' && !item.label ? 'source-review-required' : 'none', scope: [] };
+      || numeric === null && group !== 'Fees' && !item.label ? 'source-review-required' : 'none',
+    conditionsUnverified, scope: [] };
 }

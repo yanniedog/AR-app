@@ -56,7 +56,7 @@ function normalized(sheet: ReportSheet, prefix: readonly UiCopy[], fact: Normali
   if (fact.maxValue !== undefined) record(sheet, prefix, 'Maximum value', decimal(fact.maxValue), fact.unit ? humanizeEnum(fact.unit.toUpperCase()) : 'Unknown');
   if (fact.cadence) record(sheet, prefix, 'Cadence', uiIdentifier(fact.cadence));
   if (fact.appliesTo?.length) record(sheet, prefix, 'Applies to', enums(fact.appliesTo));
-  if (view.conditions === 'source-review-required') record(sheet, prefix, 'Conditions', 'Unverified');
+  if (view.conditionsUnverified) record(sheet, prefix, 'Conditions', 'Unverified');
 }
 function detailItems(sheet: ReportSheet, prefix: readonly UiCopy[], group: 'Fees' | 'Features' | 'Eligibility' | 'Constraints', items: DetailItem[] | undefined): void {
   arrayState(sheet, prefix, group, items);
@@ -64,7 +64,7 @@ function detailItems(sheet: ReportSheet, prefix: readonly UiCopy[], group: 'Fees
     const view = uiDetailItem(item, index, group);
     const itemPrefix = [...prefix];
     record(sheet, itemPrefix, uiJoin(group, ' ', uiCount(index + 1), ' · ', view.label), view.value);
-    if (view.conditions === 'source-review-required') record(sheet, itemPrefix, 'Conditions', 'Unverified');
+    if (view.conditionsUnverified) record(sheet, itemPrefix, 'Conditions', 'Unverified');
     const numeric: readonly [UiLabel, unknown][] = [['Value', item.value], ['Amount', item.amount ?? item.fixedAmount?.amount], ['Fee minimum', item.variable?.feeMinimum], ['Fee maximum', item.variable?.feeMaximum], ['Balance rate', item.balanceRate], ['Transaction rate', item.transactionRate], ['Accrued rate', item.accruedRate], ['Rate', item.rateBased?.rate], ['Fee minimum', item.rateBased?.amountRange?.feeMinimum], ['Fee maximum', item.rateBased?.amountRange?.feeMaximum], ['Additional value', item.additionalValue]];
     numeric.forEach(([label, value]) => { if (value !== undefined) record(sheet, itemPrefix, label, decimal(value), item.currency ? uiIdentifier(item.currency) : 'Unknown'); });
     if (item.currency) record(sheet, itemPrefix, 'Currency', uiIdentifier(item.currency));
@@ -95,7 +95,7 @@ function coverage(sheet: ReportSheet, facts: readonly SearchCoverageFact[]): voi
 export function searchReportTables(snapshot: FilteredSearchSnapshot): ReportSheet[] {
   const sheets: ReportSheet[] = REPORT_SHEETS.map(name => ({ name, rows: [['Field', 'State', 'Value', 'Unit']] }));
   const [summary, filterSheet, products, rates, fees, features, eligibility, terms, coverageSheet] = sheets;
-  const metadata: readonly [UiLabel, UiCopy][] = [['Published', uiDate(snapshot.publicationDate)], ['Publication revision', uiCount(snapshot.publicationRevision)], ['Generated', uiIdentifier(snapshot.generatedAt)], ['Australian date', uiDate(snapshot.australianDate)], ['Product count', uiCount(snapshot.products.length)], ['Matching rates', uiCount(snapshot.rows.length)], ['Core SHA256', uiIdentifier(snapshot.coreSha256)], ['Details SHA256', uiIdentifier(snapshot.detailsSha256)], ['Bundle SHA256', uiIdentifier(snapshot.bundleSha256)], ['Query length', uiCount(snapshot.request.query.length)]];
+  const metadata: readonly [UiLabel, UiCopy][] = [['Published', uiDate(snapshot.publicationDate)], ['Publication revision', uiCount(snapshot.publicationRevision)], ['Generated', uiIdentifier(snapshot.generatedAt)], ['Australian date', uiDate(snapshot.australianDate)], ['Product count', uiCount(snapshot.products.length)], ['Matching rates', uiCount(snapshot.rows.length)], ['Query length', uiCount(snapshot.request.query.length)]];
   metadata.forEach(([label, value]) => record(summary, [], label, value));
   record(summary, [], 'Search', snapshot.request.query ? 'Entered' : 'None');
   record(summary, [], 'Sort', snapshot.request.sort === 'bank' ? 'Bank' : snapshot.request.sort === 'comparison' ? 'Comparison rate' : 'Advertised rate');

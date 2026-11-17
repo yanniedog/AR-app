@@ -33,6 +33,11 @@ test('same full result set as UI, frozen source copies, exact decimals and expli
   expect(tables.map(sheet => sheet.name)).toEqual(REPORT_SHEETS);
   const workbook = unzipSync(await writeReportWorkbook(tables));
   const pdf = await searchReportHtml(snapshot, () => undefined);
+  const summary = strFromU8(workbook['xl/worksheets/sheet1.xml']);
+  for (const internal of ['Core SHA256', 'Details SHA256', 'Bundle SHA256', 'a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64)]) {
+    expect(pdf).not.toContain(internal);
+    expect(summary).not.toContain(internal);
+  }
   expect(Object.keys(workbook).filter(path => path.startsWith('xl/worksheets/'))).toHaveLength(9);
   const productSheet = strFromU8(workbook['xl/worksheets/sheet3.xml']);
   for (const product of snapshot.products) { expect(productSheet).toContain(`>${product.productKey}<`); expect(pdf).toContain(`>${product.productKey}<`); }

@@ -52,7 +52,7 @@ test('fee zero, rate-based fees and variable published bounds survive without de
 });
 test('normalized source paragraphs never render as facts; numbers and applicable enums do', () => {
   const fact = uiNormalizedProductFact({ id: 'fact-1', kind: 'constraint', canonicalKey: 'constraint.MIN_BALANCE', label: 'Amazing paragraph here.', value: '100', unit: 'AUD', condition: 'Customer eligibility must be investigated.', appliesTo: ['OWNER_OCCUPIED'] });
-  expect(fact.value).toBe('$100'); expect(fact.conditions).toBe('source-review-required'); expect(fact.scope).toEqual(['Owner occupied']); expect(fact.label).not.toContain('Amazing');
+  expect(fact.value).toBe('$100'); expect(fact.conditionsUnverified).toBe(true); expect(fact.scope).toEqual(['Owner occupied']); expect(fact.label).not.toContain('Amazing');
   expect(uiDetailItem({ label: 'MIN_LIMIT', value: '$150,000' }, 0, 'Constraints').value).toBe('$150k');
 });
 test('validated term decimals remain exact and unrecognized complex/source text is explicit', () => {

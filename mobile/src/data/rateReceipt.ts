@@ -27,7 +27,7 @@ import {
 } from './format';
 import type { UserRateScenario } from './userRateScenario';
 import { scopedRateConditions, type RateConditionContext, type ScopedRateConditions } from './rateConditions';
-import { uiDetailItem } from '../lib/productUiFacts';
+import { uiDetailItem, uiProductFactValue } from '../lib/productUiFacts';
 import { scopedFinancialConditionFacts } from './scopedFinancialConditionFacts';
 import { uiConditionTag, uiConditionalRateFact, uiListedLvrRange } from '../lib/financialUiCopy';
 import { uiCount, uiDate, uiDuration, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from '../lib/uiCopy';
@@ -177,7 +177,7 @@ export type ReceiptStatusFact =
 function detailFacts(items: DetailItem[] | undefined, group: 'Fees' | 'Eligibility' | 'Features' | 'Constraints'): ReceiptFact[] {
   return (items ?? []).map((item, index) => {
     const fact = uiDetailItem(item, index, group);
-    return { label: fact.label, value: fact.value };
+    return { label: fact.label, value: uiProductFactValue(fact) };
   });
 }
 function addFact(facts: ReceiptFact[], label: UiCopy, value: UiText | null): void {

@@ -26,6 +26,9 @@ test.each([
   ['https://www.bankwest.com.au/?campaign=1', false],
   ['https://www.bankwest.com.au/home', false],
   ['https://www.bankwest.com.au/cds-au/v1/banking/products/123', false],
+  ['https://api.bankwest.com.au/v1/products/123', false],
+  ['https://www.bankwest.com.au/%61pi/products/123', false],
+  ['https://www.bankwest.com.au/products/123.json', false],
   [undefined, false],
 ] as const)('eligibility rows only link to the published product page (%s)', (overview, linked) => {
   mockRequestExternalUrl.mockClear();
@@ -61,8 +64,11 @@ const facts: NormalizedProductFact[] = [
   { id: 'fee-2', kind: 'fee', canonicalKey: 'ANNUAL_FEE', value: 0, unit: 'AUD', condition: 'With package' },
 ];
 
-test('legacy Fees owns every occurrence while Product facts omits normalized fee copies', () => {
-  const detail: ProductDetail = { facts, fees: [{ label: 'ANNUAL_FEE', amount: 100 }, { label: 'ANNUAL_FEE', amount: 0, info: 'With package' }] };
+test('legacy Fees retains conditions without an overview while Product facts omits normalized fee copies', () => {
+  const detail: ProductDetail = { facts, fees: [
+    { label: 'ANNUAL_FEE', amount: 100 },
+    { label: 'ANNUAL_FEE', amount: 0, info: 'With package', discounts: [{ amount: 5, eligibility: [{ additionalInfo: 'With bundle' }] }] },
+  ] };
   const original = JSON.stringify(detail);
   let tree!: Tree;
   act(() => { tree = TestRenderer.create(<><DetailGroup title="Fees" icon="cash-outline" items={detail.fees} loading={false} /><ProductFacts productDetails={detail} /></>) as Tree; });
@@ -71,11 +77,13 @@ test('legacy Fees owns every occurrence while Product facts omits normalized fee
     act(() => tree.root.findByProps({ title: 'Product facts' }).props.onToggle());
     const text = bodyText(tree);
     expect(text.filter(value => value === '$100')).toHaveLength(1);
-    expect(text.filter(value => value === '$0')).toHaveLength(1);
+    expect(text.filter(value => value === '$0 · Conditions: Unverified')).toHaveLength(1);
+    expect(text).toContain('Discount: $5 · Conditions: Unverified');
     expect(text.filter(value => value === 'ANNUAL_FEE')).toHaveLength(2);
     expect(text).not.toContain('Source review required');
     expect(text).toContain('Offset account');
     expect(text).not.toContain('With package');
+    expect(text).not.toContain('With bundle');
     expect(JSON.stringify(detail)).toBe(original);
   } finally { act(() => tree.unmount()); }
 });
@@ -86,7 +94,7 @@ test.each([undefined, []])('normalized fee-only payload preserves both variants 
   try {
     act(() => tree.root.findByProps({ title: 'Product facts' }).props.onToggle());
     expect(bodyText(tree)).toContain('$100');
-    expect(bodyText(tree)).toContain('$0');
+    expect(bodyText(tree)).toContain('$0 · Conditions: Unverified');
     expect(bodyText(tree)).not.toContain('Source fee-2');
     expect(bodyText(tree)).not.toContain('With package');
   } finally { act(() => tree.unmount()); }
