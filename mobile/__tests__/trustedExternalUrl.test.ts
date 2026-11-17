@@ -6,6 +6,9 @@ describe('trustedExternalUrl', () => {
     'https://www.bankofchina.com/au/en/pbservice/',
     'https://www.qantasmoney.com/terms-and-forms/tmd',
     'https://www.racq.com/downloads',
+    'https://assets.ctfassets.net/nbklqgdg5mdx/5p4vmWK5I87rxrERhixDYQ/b2ae8adeead679a4cbcf6649ec5f62ec/RMG_Terms_and_Conditions_Booklet_-_June_2026.pdf',
+    'https://assets.redzed.com/download/d2d89728851911efaaa8368884597301',
+    'https://iezukf.files.cmp.optimizely.com/download/f35d9a70851911efaaa8368884597301',
     'https://cdn.bfldr.com/1R31Y8GR/as/document/Loan_fees_schedule',
     'https://cdn.intelligencebank.com/au/share/e3Gq6M/document/original/TMD',
     'https://cdn.intelligencebank.com/au/share/NZw2/document/original/TMD',
@@ -18,6 +21,13 @@ describe('trustedExternalUrl', () => {
   });
 
   it.each([
+    'https://assets.ctfassets.net/other-space/document/b2ae8adeead679a4cbcf6649ec5f62ec/terms.pdf',
+    'https://assets.ctfassets.net/nbklqgdg5mdx/document/b2ae8adeead679a4cbcf6649ec5f62ec/redirect.html',
+    'https://assets.redzed.com/redirect/d2d89728851911efaaa8368884597301',
+    'https://assets.redzed.com/download/d2d89728851911efaaa8368884597301?signature=temporary',
+    'https://iezukf.files.cmp.optimizely.com/download/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    'https://other.files.cmp.optimizely.com/download/f35d9a70851911efaaa8368884597301',
+    'https://qrco.de/AFGCompilation',
     'https://cdn.bfldr.com/OTHER/as/document',
     'https://cdn.intelligencebank.com/au/share/OTHER/document',
     'https://cdn.mediavalet.com/another/tenant/file.pdf',

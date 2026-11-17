@@ -1,6 +1,6 @@
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
-import { APP_HEALTH_DATA_CHECKS } from './appHealth/dataQuality';
+import { APP_HEALTH_DATA_CHECKS, auditProductDetailGaps } from './appHealth/dataQuality';
 import { CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT } from './appHealth/sourceContract';
 import { APP_HEALTH_SCHEMA_VERSION, type AppHealthCheck, type AppHealthDataSnapshot } from './appHealth/types';
 
@@ -15,6 +15,13 @@ export interface PassiveAuditEntry {
   checkedAt: number;
   durationMs: number;
   check: AppHealthCheck;
+}
+
+/** Keys and resumable metadata must never serialize the raw detail records. */
+function detailsMetadata(details: AppHealthDataSnapshot['details']) {
+  if (!details) return details;
+  const { runDate, productCount, matchedProductCount, orphanProductCount } = details;
+  return { runDate, productCount, matchedProductCount, orphanProductCount };
 }
 
 /** Bind each check only to what it actually reads. Loading an optional history
@@ -34,8 +41,9 @@ export function passiveAuditCheckKey(snapshot: AppHealthDataSnapshot, appBuild: 
     case 'payload-run-identity': observation = [core?.run_date, snapshot.manifest?.run_date, snapshot.details?.runDate, snapshot.datesIndex]; break;
     case 'quarantine-impact': observation = snapshot.quarantine; break;
     case 'freshness-window': observation = snapshot.manifest?.schedule; break;
-    case 'asset-availability': observation = [core?.run_date, snapshot.details, snapshot.assets]; break;
-    case 'details-completeness': observation = [rowIdentity, snapshot.details, snapshot.manifest?.files.details?.sha256]; break;
+    case 'asset-availability': observation = [core?.run_date, Boolean(snapshot.details), snapshot.details?.runDate, snapshot.assets]; break;
+    case 'details-completeness': observation = [rowIdentity, detailsMetadata(snapshot.details), snapshot.manifest?.files.details?.sha256,
+      auditProductDetailGaps(snapshot)]; break;
     case 'catalogue-identity-coverage': observation = [rowIdentity, snapshot.catalogue, snapshot.historyCoverage]; break;
     case 'bank-response-coverage': observation = snapshot.bankResponseCoverage; break;
     default: observation = rowIdentity;
@@ -63,7 +71,8 @@ export function passiveAuditKey(snapshot: AppHealthDataSnapshot, appBuild: strin
     rows: section.rates.length, ribbon: section.ribbon,
   }]));
   const identity = { schema: PASSIVE_AUDIT_SCHEMA, healthSchema: APP_HEALTH_SCHEMA_VERSION,
-    appBuild, ...snapshot, core: { schema_version: snapshot.core.schema_version,
+    appBuild, ...snapshot, details: detailsMetadata(snapshot.details),
+    detailGaps: auditProductDetailGaps(snapshot), core: { schema_version: snapshot.core.schema_version,
       run_date: snapshot.core.run_date, coverage: snapshot.core.coverage, sections } };
   return bytesToHex(sha256(utf8ToBytes(JSON.stringify(identity))));
 }
@@ -73,7 +82,7 @@ function metadataOnly(snapshot: AppHealthDataSnapshot): AppHealthDataSnapshot {
     core: snapshot.core ? { schema_version: snapshot.core.schema_version,
       run_date: snapshot.core.run_date, sections: {} as NonNullable<AppHealthDataSnapshot['core']>['sections'],
       brands: {}, rba: [] } : null,
-    details: snapshot.details, assets: snapshot.assets, quarantine: snapshot.quarantine,
+    details: detailsMetadata(snapshot.details), assets: snapshot.assets, quarantine: snapshot.quarantine,
     datesIndex: snapshot.datesIndex };
 }
 

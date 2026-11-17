@@ -21,7 +21,7 @@ export function selectMandatoryEligibility(
   const active = profileSelectionCount(required) > 0;
   const loading = active && (!core || (!verifiedProducts && SECTION_KEYS.some(section => profileFeaturesForSection(required, section).length > 0)));
   const rows = new WeakSet<RateRow>(), productKeys = new Set<string>();
-  if (core) for (const section of SECTION_KEYS) {
+  if (core && active) for (const section of SECTION_KEYS) {
     for (const row of selectProfileRows(core.sections[section].rates, required, section, verifiedProducts)) {
       rows.add(row); productKeys.add(row.product_key);
     }

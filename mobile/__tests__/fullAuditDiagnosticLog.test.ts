@@ -474,3 +474,21 @@ test('hosted probe errors retain only a fixed causal classification', () => {
   });
   expect(JSON.stringify(log)).not.toMatch(/private account|123456/);
 });
+
+test('audit entry phases and HTTP dispositions survive public export', () => {
+  const phases = { entryRouteMountMs: 12, entryLayoutMs: 25, entryPreferencesMs: 3, entryAdmissionMs: 5, entryFeedbackObserved: false };
+  const report = makePerformanceAuditReport('entry-evidence', [
+    { id: 'audit-entry-screen-open', label: 'Audit open', kind: 'runtime', status: 'pass', durationMs: 30, metrics: phases },
+    { id: 'audit-entry-settings-open', label: 'Audit settings', kind: 'runtime', status: 'fail', durationMs: null,
+      metrics: { entryMeasurementStatus: 'timed-out' } },
+    { id: 'external-link-1', label: 'Link', kind: 'network', status: 'warn', durationMs: 12,
+      metrics: { httpAttempted: true, httpIssue: 'timeout' } },
+  ]);
+  const decoded = decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report)) as
+    { checks: typeof report.checks; diagnosticLog: { checks: typeof report.checks } };
+  for (const checks of [decoded.checks, decoded.diagnosticLog.checks]) {
+    expect(checks[0].metrics).toMatchObject(phases);
+    expect(checks[1].metrics.entryMeasurementStatus).toBe('timed-out');
+    expect(checks[2].metrics.httpIssue).toBe('timeout');
+  }
+});

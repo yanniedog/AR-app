@@ -76,6 +76,7 @@ describe('external link audit', () => {
   it('revalidates a native-followed final destination and does not bless a missing response URL', async () => {
     const escaped = await auditExternalLink(request, options({ fetch: jest.fn(async () => response(200, 'https://attacker.test/redirect')) }));
     expect(escaped.reachability.status).toBe('fail');
+    expect(escaped.httpIssue).toBe('response-rejected');
     const missing = await auditExternalLink(request, options({ fetch: jest.fn(async () => response(200, '')) }));
     expect(missing.reachability.status).toBe('unknown');
   });
@@ -91,6 +92,7 @@ describe('external link audit', () => {
       const result = await task;
       expect(result.handler).toMatchObject({ status: 'unknown', attempted: true, selection: 'selected' });
       expect(result.reachability).toMatchObject({ status: 'unknown', attempted: true, selection: 'selected' });
+      expect(result.httpIssue).toBe('timeout');
       expect(jest.getTimerCount()).toBe(0);
     } finally { jest.useRealTimers(); }
   });

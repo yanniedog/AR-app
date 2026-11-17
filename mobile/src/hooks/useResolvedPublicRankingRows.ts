@@ -195,6 +195,14 @@ export function useResolvedPublicRankingRows(options: {
       };
     }
     const view = catalogueRef.current;
+    // A missing public catalogue leaves every published row unchanged. Avoid
+    // copying the section twice or queueing a pricing job before list filtering.
+    if (view.status === 'unavailable' && request.section !== 'Mortgage' && request.providedCandidates == null && !request.applyMortgageScope) {
+      const rows = request.sourceRows as RateRow[];
+      clock.current.until = Infinity;
+      return { candidates: rows, resolution: { rows, priced: rows.length, unresolved: 0, complete: false },
+        mortgage: { ...EMPTY_MORTGAGE, rows } };
+    }
     const inputCount = request.providedCandidates?.length ?? request.sourceRows.length;
     // publicRecommendationRows walks the whole programme book. A short core
     // section must not do that walk inside render; cooperative pricing yields.

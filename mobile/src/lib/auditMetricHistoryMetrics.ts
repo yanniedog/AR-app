@@ -58,12 +58,19 @@ export const AUDIT_METRIC_DEFINITIONS = {
 } as const satisfies Record<string, { label: UiLabel; group: AuditMetricGroup; unit: 'count' | 'percent' | 'ms' | 'score' }>;
 
 export type AuditMetric = keyof typeof AUDIT_METRIC_DEFINITIONS;
+const auditEvidenceMetrics = [
+  'affsScore', 'uxInteractionFrictionScore', 'uxStandardsAccessibilityScore', 'uxFluidityResponsivenessScore',
+  'automatedTaskSuccessPercent', 'automatedTaskFailurePercent',
+  'readinessCoveragePercent', 'linkVerificationPercent',
+] as const satisfies readonly AuditMetric[];
+
 export const auditMetricMethodVersion = (metric: AuditMetric): 1 | 2 =>
   ['actionP50Ms', 'actionP95Ms', 'displayModelPassPercent', 'displayListPassPercent', 'displayVisiblePassPercent',
-    'displayLayoutPassPercent', 'displayEmptyPassPercent', 'displayLogoPassPercent'].includes(metric) ? 2 : 1;
+    'displayLayoutPassPercent', 'displayEmptyPassPercent', 'displayLogoPassPercent', ...auditEvidenceMetrics].includes(metric) ? 2 : 1;
 /** Stored rendering aggregates cannot be upgraded by recalculating their ratio. */
 export const auditReportMetricMethodVersion = (report: PerformanceAuditReport, metric: AuditMetric): 1 | 2 =>
   AUDIT_METRIC_DEFINITIONS[metric].group === 'Rendering checks' && report.renderingEvidenceVersion !== 2
+    || (auditEvidenceMetrics as readonly AuditMetric[]).includes(metric) && report.auditEvidenceVersion !== 2
     ? 1 : auditMetricMethodVersion(metric);
 export const AUDIT_METRICS: readonly AuditMetric[] = Object.freeze(Object.keys(AUDIT_METRIC_DEFINITIONS) as AuditMetric[]);
 export const LEGACY_AUDIT_METRICS: readonly AuditMetric[] = ['failures', 'coveragePercent', 'durationMs', 'slowestCheckMs', 'maxEventLoopLagMs', 'maxFrameGapMs'];
@@ -85,8 +92,8 @@ export const AUDIT_METRIC_METHODS = {
   slowFramePercent: ['Sum of JavaScript frame gaps over 50 ms / sum of measured frame samples × 100', 'callback'],
   affsScore: ['0.40 × interactionFriction + 0.30 × standardsAndAccessibility + 0.30 × fluidityAndResponsiveness', 'run'],
   uxInteractionFrictionScore: ['mean(taskScore)', 'task'],
-  uxStandardsAccessibilityScore: ['standardsCompliance × 100', 'surface'],
-  uxFluidityResponsivenessScore: ['androidFrameScore ?? cwvComposite ?? iosHitchScore ?? jsRuntimeScore', 'run'],
+  uxStandardsAccessibilityScore: ['50 × (mean pass share across applicable surface check types + automated accessibility pass share)', 'surface'],
+  uxFluidityResponsivenessScore: ['Android frame score requires complete native capture; other platforms use complete web-vitals, iOS hitch, or JS callback evidence', 'run'],
   collectionPercent: ['Unique expected stored performance checks / planned performance checks × 100', 'check'],
   journeyCoveragePercent: ['Executed journeys / planned journeys × 100', 'journey'],
   healthCoveragePercent: ['Executed health checks / planned health checks × 100', 'health-check'],

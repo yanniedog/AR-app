@@ -323,7 +323,7 @@ export function AppUpdateSection({
     <Section title="App update">
       <ToggleRow
         icon="cloud-download-outline"
-        label="Download app updates automatically"
+        label="Automatic app updates"
         value={autoDownload}
         onChange={(value) => setPref('apkUpdatesAutoDownload', value)}
       />

@@ -195,6 +195,16 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
     if (!snapshot.verified) {
       publish({ phase: 'verifying', error: null });
       await verifyDebugLogUpload(pendingReceipt, preparedBody!);
+      if (flightEpoch !== uploadFlightEpoch) return snapshot;
+      if (uploadRequest?.publicReport) {
+        try {
+          await debugLog.startFreshAfterAuditUpload(uploadRequest.publicReport.contentSha256,
+            () => flightEpoch === uploadFlightEpoch);
+        } catch {
+          throw new Error('The audit uploaded, but the previous log could not be cleared. Retry to finish sharing.');
+        }
+      }
+      if (flightEpoch !== uploadFlightEpoch) return snapshot;
       pendingReceipt = await markDebugLogUploadReceiptVerified(pendingReceipt);
       publish({ verified: true });
     }

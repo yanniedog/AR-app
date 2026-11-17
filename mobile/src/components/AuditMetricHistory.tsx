@@ -30,6 +30,8 @@ const ANDROID_FRAME_CAPTURE_LABELS: Record<
   'start-unavailable': 'Unavailable',
   interrupted: 'Interrupted',
   'no-samples': 'No samples',
+  'dropped-callbacks': 'Dropped callbacks',
+  'drop-count-unavailable': 'Drop count unavailable',
   invalid: 'Invalid evidence',
   unknown: 'Unknown',
   'not-applicable': 'Not applicable',
@@ -95,6 +97,9 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
     ? uiJoin(uiNumber(uxAudit.affsScore, 1), ' / ', uiCount(100), ' · ', AFFS_BAND_LABELS[uxAudit.band])
     : uiLabel('Not measured');
   const wcag = uxAudit?.pillars.standardsAndAccessibility.wcagSummary;
+  const surfaceChecks = uxAudit?.pillars.standardsAndAccessibility.surfaceChecks;
+  const targetCapture = uxAudit?.pillars.standardsAndAccessibility.targetSampleCoverage;
+  const frameSegments = uxAudit?.pillars.fluidityAndResponsiveness.androidFrameSegments;
   const wcagSummaryValue = wcag && wcag.applicableChecks > 0
     ? uiJoin(
       uiCount(wcag.passed), ' ', 'Passed', ' · ',
@@ -162,7 +167,22 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
       <InfoRow label="Fluidity & responsiveness (30%)" value={measuredScore(uxAudit?.pillars.fluidityAndResponsiveness.score)} />
       {frameCapture && frameCapture !== 'not-applicable' ?
         <InfoRow label="Android frame timing" value={ANDROID_FRAME_CAPTURE_LABELS[frameCapture]} /> : null}
-      <InfoRow label="Automated WCAG / standards" value={wcagSummaryValue} />
+      <InfoRow label="Automated accessibility checks" value={wcagSummaryValue} />
+      {targetCapture ? <>
+        <InfoRow label="Measured control layouts" value={uiCount(targetCapture.retained)} />
+        {targetCapture.capacityReached ? <InfoRow label="Target coverage" value="Sample limit reached" /> : null}
+      </> : null}
+      {frameSegments ? <>
+        <InfoRow label="Native frame segments" value={uiJoin(uiCount(frameSegments.observed), ' / ', uiCount(frameSegments.attempted))} />
+        <InfoRow label="Native frames" value={uiCount(frameSegments.frames)} />
+        <InfoRow label="Android-provided deadlines" value={measuredCount(frameSegments.deadlineFrames)} />
+        <InfoRow label="Dropped callbacks" value={measuredCount(frameSegments.droppedFrames)} />
+      </> : null}
+      {surfaceChecks ? Object.entries(surfaceChecks).map(([code, result]) => <InfoRow key={code}
+        label={uiIdentifier(code)}
+        value={result.applicableChecks > 0
+          ? uiJoin(uiCount(result.passed), ' / ', uiCount(result.applicableChecks), ' ', 'Passed')
+          : 'Not measured'} />) : null}
       <InfoRow label="SUS / UMUX-Lite / SEQ" value={humanValidationRecorded ? 'Recorded' : 'Not performed'} />
     </View> : null}
     {checkGroup ? <View style={{ gap: 4 }}>

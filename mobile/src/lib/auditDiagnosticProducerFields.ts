@@ -95,6 +95,7 @@ export const AUDIT_PRODUCER_METRIC_FIELDS = new Set<string>([
   "historyExplorerEnabled",
   "host",
   "httpAttempted",
+  "httpIssue",
   "httpReachability",
   "httpSelected",
   "incidentalRuntimeErrorMessages",
@@ -756,6 +757,15 @@ export const AUDIT_PRODUCER_ENUMS: Record<string, readonly string[]> = {
     "not-attempted",
     "pass",
     "unresolved"
+  ],
+  "httpIssue": [
+    "cancelled",
+    "redirect-unverified",
+    "response-rejected",
+    "response-unverified",
+    "restricted",
+    "timeout",
+    "transport"
   ],
   "httpReachability": [
     "fail",

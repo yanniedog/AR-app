@@ -109,10 +109,10 @@ export const useStore = create<AppState>()(
             ? CURRENT_PRIVACY_CHOICE_VERSION
             : 0,
           diagnosticsEnabled: false,
-          apkUpdatesWifiOnly: persistedPrefs?.apkUpdatesWifiOnly !== false,
-          // Automatic APK downloads are opt-in. Older persisted stores never
-          // silently acquire standing consent during migration.
-          apkUpdatesAutoDownload: persistedPrefs?.apkUpdatesAutoDownload === true,
+          apkUpdatesWifiOnly: typeof persistedPrefs?.apkUpdatesWifiOnly === 'boolean'
+            ? persistedPrefs.apkUpdatesWifiOnly : DEFAULT_PREFS.apkUpdatesWifiOnly,
+          apkUpdatesAutoDownload: typeof persistedPrefs?.apkUpdatesAutoDownload === 'boolean'
+            ? persistedPrefs.apkUpdatesAutoDownload : DEFAULT_PREFS.apkUpdatesAutoDownload,
           ...migratedMortgageRatePreference(persistedPrefs),
           interests: normalizeInterests(persistedPrefs?.interests ?? DEFAULT_INTERESTS),
           profileFilters: normalizeProfileFilters(persistedPrefs?.profileFilters),
