@@ -63,6 +63,7 @@ jest.mock('../src/lib/yieldToUi', () => ({
     return () => undefined;
   },
   scheduleAfterNavigation: () => () => undefined,
+  yieldToUi: async () => undefined,
 }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({
   usePerformanceAuditSurface: (surface: any) => mockSurfaces.set(surface.id, surface),
@@ -587,6 +588,24 @@ test('unlisted entries stay verified product identities without fabricated rates
     const row = tree.root.findAllByType('TouchTarget' as any).find((node: any) => node.props.accessibilityLabel === 'Verified Name, Recorded Bank, No listed rate');
     act(() => row.props.onPress());
     expect(router.push).toHaveBeenCalledWith({ pathname: '/product/[key]', params: { key: 'unlisted-key' } });
+  } finally { act(() => tree.unmount()); }
+});
+
+test('listed-rate draft counts are available before applying the catalogue mode switch', async () => {
+  mockState.prefs.includeNonStandard = true;
+  let tree: any; act(() => { tree = TestRenderer.create(<Search />); });
+  const open = () => mockSurfaces.get('rates.results').actions['search.filters.open']();
+  const change = (value: string) => tree.root.findAllByType('SegmentedControl' as any)
+    .find((node: any) => node.props.options.some((option: any) => option.value === 'unlisted')).props.onChange(value);
+  try {
+    act(open);
+    act(() => change('unlisted'));
+    act(() => mockSurfaces.get('rates.results').actions['search.filters.apply']());
+    act(open);
+    act(() => change('listed'));
+    const sheet = tree.root.findByType('FilterSheet' as any);
+    expect(await sheet.props.resultCount(sheet.props.filters)).toBeGreaterThan(0);
+    expect(useRatesSession.getState().sections.TD.availability).toBe('unlisted');
   } finally { act(() => tree.unmount()); }
 });
 

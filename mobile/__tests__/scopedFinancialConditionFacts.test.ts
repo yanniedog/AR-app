@@ -31,6 +31,16 @@ test('explicit AUD grouped values retain balance and borrowing subjects', () => 
   expect(admitted('Loan amount up to $1000000.').facts[0]).toMatchObject({ kind: 'published-balance-range', subject: 'loan-amount', upper: { value: 1000000 } });
 });
 
+test('AAA Portfolio Loan publishes exact LVR and loan amount limits for the selected rate', () => {
+  expect(admitted('This rate is applicable to loans with an LVR from 0% to 90%').facts).toMatchObject([
+    { kind: 'published-lvr-range', lower: { value: 0 }, upper: { value: 90 } },
+  ]);
+  expect(admitted('This rate is applicable to loans from $50,000 to $1,500,000').facts).toMatchObject([
+    { kind: 'published-balance-range', subject: 'loan-amount', lower: { value: 50000 }, upper: { value: 1500000 } },
+  ]);
+  expect(admitted('This rate is applicable to loans from $50,000 to $1,500,000 for existing customers').facts).toHaveLength(0);
+});
+
 test('recognized year terms become whole month facts without guessing mixed units', () => {
   expect(admitted('Fixed term from 1 to 3 years.').facts[0]).toMatchObject({ kind: 'published-term-range',
     unit: 'months', subject: 'fixed-term', lower: { value: 12 }, upper: { value: 36 } });

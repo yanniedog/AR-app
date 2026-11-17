@@ -366,7 +366,7 @@ export const UI_LABELS = [
   'Mortgage metric', 'Include non-standard', 'Result set', 'Absent specifications',
   'Empty arrays', 'Source links', 'Document bodies', 'Independent review',
   'Historical completeness', 'Calculation patterns', 'Publication day', 'Older',
-  'Listed balance', 'Minimum value', 'Maximum value', 'Source pointer', 'Source SHA256',
+  'Listed balance', 'Minimum value', 'Maximum value',
   'Parent fact', 'Group', 'Cadence', 'Applies to', 'Fee minimum', 'Fee maximum',
   'Balance rate', 'Transaction rate', 'Accrued rate', 'Accrual frequency', 'Fee method',
   'Additional value', 'Rate basis', 'Mandatory', 'Screen filters', 'Predicate', 'Equal',

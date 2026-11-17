@@ -67,7 +67,7 @@ export function AccessNotice({ name, productDetails: detail, loading, provider }
 }
 export function SectionTitle({ text }: { text: UiCopy; icon?: keyof typeof Ionicons.glyphMap }) { return <AppText variant="small" weight="700">{text}</AppText>; }
 export function ProductSpecs({ row, section, productDetails }: { row: RateRow; section: SectionKey; productDetails: ProductDetailData | null }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const core = useStore(s => s.core), details = useStore(s => s.details), manifest = useStore(s => s.manifest), coreIntegrity = useStore(s => s.coreIntegrity);
   const conditions = useMemo(() => scopedFinancialConditionFacts(scopedRateConditions(row, section, { core, details, manifest, coreIntegrity })), [row, section, core, details, manifest, coreIntegrity]);
   const sourceLvr = conditions.facts.filter(fact => fact.kind === 'published-lvr-range');

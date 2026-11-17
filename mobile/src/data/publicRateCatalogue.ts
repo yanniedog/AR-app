@@ -142,28 +142,30 @@ export function createPublicRateCatalogueClient(manifest: Manifest,
   const listeners = new Set<() => void>(), loaded = new Map<string, PublicRateShard>(), pending = new Map<string, Promise<void>>();
   const productsByKey = new Map<string, PublicProduct>(), programmesByProduct = new Map<string, PublicProgramme[]>();
   const feeSets = new Map<string, PublicFeeSet>();
+  const programmesById = new Map<string, PublicProgramme>();
+  const evidenceById = new Map<string, PublicRateShard['evidence'][number]>();
   let index: PublicRateIndex | undefined, startPromise: Promise<void> | undefined, discoveryComplete = false;
   const getProduct = (key: string) => productsByKey.get(key);
   const getProgrammes = (productId: string) => programmesByProduct.get(productId) ?? [];
   let state: PublicRateCatalogueState;
   const publish = (error: string | null = null) => {
-    const programmes = [...loaded.values()].flatMap(shard => shard.programmes);
-    const programmeIds = new Set(programmes.map(programme => programme.programmeId));
+    const programmes = [...programmesById.values()];
     const products = [...productsByKey.values()];
     const complete = discoveryComplete && loaded.size === capability.shards.length;
-    const absent = complete && products.some(product => product.programmeIds.some(id => !programmeIds.has(id)));
+    const absent = complete && products.some(product => product.programmeIds.some(id => !programmesById.has(id)));
     const missingFees = complete && programmes.some(programme => programme.feeSetId && !feeSets.has(programme.feeSetId));
     programmesByProduct.clear();
     for (const programme of programmes) {
       const fees = programme.feeSetId ? feeSets.get(programme.feeSetId) : undefined;
       const hydrated = fees ? { ...programme, fees: fees.fees, feeCoverage: fees.feeCoverage } : programme;
       const prior = programmesByProduct.get(programme.productId) ?? [];
-      if (!prior.some(item => item.programmeId === programme.programmeId)) programmesByProduct.set(programme.productId, [...prior, hydrated]);
+      prior.push(hydrated);
+      programmesByProduct.set(programme.productId, prior);
     }
     const references = [...loaded.values()].flatMap(shard => shard.referenceRates);
     state = { ...state, status: error || absent || missingFees ? 'error' : discoveryComplete ? 'ready' : 'loading', products, coverage: index?.coverage ?? [],
       references: [...new Map(references.map(reference => [canonical(reference), reference])).values()],
-      evidence: [...new Map([...products.flatMap(product => product.sourceEvidence ? [product.sourceEvidence] : []), ...[...loaded.values()].flatMap(shard => shard.evidence)].map(item => [item.evidenceId, item])).values()],
+      evidence: [...new Map([...products.flatMap(product => product.sourceEvidence ? [product.sourceEvidence] : []), ...evidenceById.values()].map(item => [item.evidenceId, item])).values()],
       allLoaded: complete && !absent && !missingFees && !error, error: error ?? (absent ? 'Declared public pricing programme is missing' : missingFees ? 'Declared public pricing fees are missing' : null) };
     if (activeClient?.snapshot() === state) mostRecent = state;
     listeners.forEach(listener => listener());
@@ -191,7 +193,6 @@ export function createPublicRateCatalogueClient(manifest: Manifest,
     const task = acquisition(asset, false).then(raw => {
       active();
       const shard = validatePublicRateShard(raw, manifest, index!, asset, [...productsByKey.values()]);
-      const existing = [...loaded.values()];
       const nextProducts = new Map(productsByKey);
       const productIds = new Set([...productsByKey.values()].map(product => product.productId));
       for (const product of shard.products ?? []) {
@@ -199,17 +200,27 @@ export function createPublicRateCatalogueClient(manifest: Manifest,
         nextProducts.set(product.productKey, product); productIds.add(product.productId);
       }
       if (nextProducts.size > 20000) throw new Error('Public product discovery exceeds its identity bound');
-      for (const programme of shard.programmes) if (existing.some(other => other.programmes.some(item => item.programmeId === programme.programmeId && canonical(item) !== canonical(programme)))) throw new Error('Conflicting public programme identity');
-      for (const evidence of shard.evidence) if (existing.some(other => other.evidence.some(item => item.evidenceId === evidence.evidenceId && canonical(item) !== canonical(evidence)))) throw new Error('Conflicting public evidence identity');
+      for (const programme of shard.programmes) {
+        const prior = programmesById.get(programme.programmeId);
+        if (prior && canonical(prior) !== canonical(programme)) throw new Error('Conflicting public programme identity');
+      }
+      for (const evidence of shard.evidence) {
+        const prior = evidenceById.get(evidence.evidenceId);
+        if (prior && canonical(prior) !== canonical(evidence)) throw new Error('Conflicting public evidence identity');
+      }
       const nextFees = new Map(feeSets);
       for (const fees of shard.feeSets ?? []) {
         const prior = nextFees.get(fees.feeSetId);
         if (prior && canonical(prior) !== canonical(fees)) throw new Error('Conflicting public fee set identity');
         nextFees.set(fees.feeSetId, fees);
       }
-      for (const programme of [...existing.flatMap(item => item.programmes), ...shard.programmes]) if (programme.feeSetId && nextFees.has(programme.feeSetId) && nextFees.get(programme.feeSetId)!.productId !== programme.productId) throw new Error('Fee set belongs to another product');
+      for (const programme of [...programmesById.values(), ...shard.programmes]) if (programme.feeSetId && nextFees.has(programme.feeSetId) && nextFees.get(programme.feeSetId)!.productId !== programme.productId) throw new Error('Fee set belongs to another product');
       nextFees.forEach((fees, id) => feeSets.set(id, fees));
       nextProducts.forEach((product, key) => productsByKey.set(key, product));
+      for (const programme of shard.programmes) {
+        if (!programmesById.has(programme.programmeId)) programmesById.set(programme.programmeId, programme);
+      }
+      for (const evidence of shard.evidence) evidenceById.set(evidence.evidenceId, evidence);
       loaded.set(asset.name, shard);
       publish();
     }).catch((error: unknown) => { if (!(error instanceof LocalCatalogueCacheMiss)) publish(error instanceof Error ? error.message : 'Public pricing shard unavailable'); throw error; }).finally(() => { pending.delete(asset.name); });
