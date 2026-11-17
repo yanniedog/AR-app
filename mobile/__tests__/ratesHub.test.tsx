@@ -9,6 +9,7 @@ import Onboarding from '../app/onboarding';
 import Tools from '../app/(tabs)/tools';
 let mockParams: Record<string, string | string[]> = {};
 const mockDismissTo = jest.fn();
+const mockNavigate = jest.fn();
 const mockPush = jest.fn();
 const mockNavigation = { isReady: () => true, addListener: () => () => undefined };
 jest.mock('../src/lib/yieldToUi', () => ({
@@ -18,9 +19,9 @@ jest.mock('../src/lib/yieldToUi', () => ({
   },
 }));
 jest.mock('../src/components/rates/RatesWorkspace', () => ({ __esModule: true, default: () => null }));
-jest.mock('expo-router', () => ({ router: { dismissTo: (...args: unknown[]) => mockDismissTo(...args), push: (...args: unknown[]) => mockPush(...args) },
+jest.mock('expo-router', () => ({ router: { navigate: (...args: unknown[]) => mockNavigate(...args), dismissTo: (...args: unknown[]) => mockDismissTo(...args), push: (...args: unknown[]) => mockPush(...args) },
   useLocalSearchParams: () => mockParams, useNavigationContainerRef: () => mockNavigation, Redirect: 'Redirect' }));
-beforeEach(() => { mockParams = {}; mockDismissTo.mockClear(); mockPush.mockClear(); });
+beforeEach(() => { mockParams = {}; mockDismissTo.mockClear(); mockNavigate.mockClear(); mockPush.mockClear(); });
 it('Rates mounts the sole full results workspace, without a preview hub', () => expect(Rates).toBe(RatesWorkspace));
 it.each([[Search, { query: '', path: '' }], [Categories, { path: '', scope: 'hierarchy', availability: 'listed' }],
   [Catalogue, { availability: 'unlisted', query: '', path: '', scope: '' }], [Onboarding, {}]] as const)(
@@ -35,8 +36,8 @@ it.each([[Search, { query: '', path: '' }], [Categories, { path: '', scope: 'hie
 it('Tools redirects directly to Calculate preserving entered target and exact tier', () => {
   mockParams = { section: 'Savings', target: 'opaque/% product', ri: ['7', '8'], mode: 'project' };
   let tree!: ReactTestRenderer; act(() => { tree = TestRenderer.create(<Tools />); });
-  expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/browse');
+  expect(mockNavigate).toHaveBeenCalledWith('/(tabs)/browse');
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/calculator', params: mockParams });
-  expect(mockDismissTo.mock.invocationCallOrder[0]).toBeLessThan(mockPush.mock.invocationCallOrder[0]);
+  expect(mockNavigate.mock.invocationCallOrder[0]).toBeLessThan(mockPush.mock.invocationCallOrder[0]);
   act(() => tree.unmount());
 });
