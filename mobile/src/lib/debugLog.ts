@@ -41,6 +41,7 @@ export const ANDROID_PACKAGE = 'com.eyex.australianrates';
 export const ANDROID_LOG_PATH_HINT = `Android/data/${ANDROID_PACKAGE}/files/logs/ar-local.log`;
 
 const STORAGE_KEY = 'ar-debug-log-tail';
+const AUDIT_LOG_RESET_KEY = 'ar-debug-log-audit-reset-v1';
 const LOG_DIR = `${FileSystem.documentDirectory ?? ''}logs/`;
 const LOG_FILE = `${LOG_DIR}ar-local.log`;
 /** One bounded previous process log, retained for crashes before a report exists. */
@@ -249,9 +250,32 @@ function nativeAppendFile(): ((path: string, data: string) => Promise<void>) | n
   return (path, data) => append(path, data, 'utf8');
 }
 
+function debugLogFiles(): string[] {
+  return [LOG_FILE, PREVIOUS_LOG_FILE, ...(FileSystem.cacheDirectory ? [DEBUG_LOG_SHARE_FILE] : [])];
+}
+
+async function eraseDebugLogFiles(storageKeys: string[], filePaths: string[]): Promise<void> {
+  await Promise.all(storageKeys.map(key => AsyncStorage.removeItem(key)));
+  await Promise.all(filePaths.map(path => FileSystem.deleteAsync(path, { idempotent: true })));
+  const retained = await Promise.all([
+    ...storageKeys.map(async key => (await AsyncStorage.getItem(key)) != null ? key : null),
+    ...filePaths.map(async path => (await FileSystem.getInfoAsync(path)).exists ? path : null),
+  ]);
+  if (retained.some(Boolean)) throw new Error(`Clear verification found retained diagnostics: ${retained.filter(Boolean).join(', ')}`);
+}
+
 /** Never reuse the previous process file until its archive is durable. */
 async function finishPendingLogRotation(): Promise<void> {
   if (!pendingLogRotation) return;
+  const reset = /^pending:([a-f0-9]{64})$/.exec(await AsyncStorage.getItem(AUDIT_LOG_RESET_KEY) ?? '');
+  if (reset) {
+    // A process can die after confirming the paste but during the local reset.
+    // Finish deleting both old generations before persisting startup entries.
+    await eraseDebugLogFiles([STORAGE_KEY], debugLogFiles());
+    await AsyncStorage.setItem(AUDIT_LOG_RESET_KEY, `done:${reset[1]}`);
+    pendingLogRotation = false;
+    return;
+  }
   const previous = await FileSystem.getInfoAsync(LOG_FILE);
   if (previous.exists) {
     await FileSystem.deleteAsync(PREVIOUS_LOG_FILE, { idempotent: true });
@@ -346,8 +370,8 @@ async function flushPendingToFile(requirePhysical = false): Promise<void> {
   // New-session entries remain queued and are written immediately afterwards.
   if (coldStartResetPromise) await coldStartResetPromise;
   const epochAtRequest = fileWriteEpoch;
-  if (clearState === 'clearing') {
-    if (requirePhysical) throw new Error('Debug log reset is in progress.');
+  if (clearState !== 'ready') {
+    if (requirePhysical) throw new Error('Debug log reset is incomplete.');
     return;
   }
   while (fileFlushPromise) {
@@ -504,6 +528,7 @@ let persistPromise: Promise<void> = Promise.resolve();
 let clearState: 'ready' | 'clearing' | 'failed' = 'ready';
 let clearPromise: Promise<void> | null = null;
 let clearIncludesReports = false;
+let activeAuditResetHash: string | null = null;
 
 function notify(): void {
   for (const fn of listeners) fn();
@@ -515,6 +540,7 @@ function schedulePersist(): void {
     persistTimer = null;
     const epoch = fileWriteEpoch;
     persistPromise = persistPromise.then(async () => {
+      if (coldStartResetPromise) await coldStartResetPromise;
       if (epoch === fileWriteEpoch && clearState === 'ready') await persistTail();
     });
   }, 500);
@@ -755,7 +781,7 @@ function isValidEntry(entry: unknown): entry is LogEntry {
   return true;
 }
 
-function resetDebugLog(clearSavedReports: boolean): Promise<void> {
+function resetDebugLog(clearSavedReports: boolean, auditHash?: string): Promise<void> {
   if (clearPromise) {
     // A manual Clear must still remove saved reports after a log-only reset.
     return clearSavedReports && !clearIncludesReports
@@ -766,11 +792,14 @@ function resetDebugLog(clearSavedReports: boolean): Promise<void> {
   clearState = 'clearing';
   clearIncludesReports = clearSavedReports;
   fileWriteEpoch += 1;
-  buffer.clear();
-  pendingFileLines = [];
-  pendingFileBytes = 0;
-  pendingFileDroppedLines = 0;
-  reportedPendingFileDroppedLines = 0;
+  if (!auditHash || activeAuditResetHash !== auditHash) {
+    buffer.clear();
+    pendingFileLines = [];
+    pendingFileBytes = 0;
+    pendingFileDroppedLines = 0;
+    reportedPendingFileDroppedLines = 0;
+  }
+  activeAuditResetHash = auditHash ?? null;
   fileContentCache = null;
   fileByteLength = null;
   if (persistTimer) {
@@ -788,19 +817,14 @@ function resetDebugLog(clearSavedReports: boolean): Promise<void> {
     await persistPromise;
 
     const storageKeys = [STORAGE_KEY];
-    const filePaths = [LOG_FILE, PREVIOUS_LOG_FILE,
-      ...(FileSystem.cacheDirectory ? [DEBUG_LOG_SHARE_FILE] : [])];
+    const filePaths = debugLogFiles();
+    if (auditHash) await AsyncStorage.setItem(AUDIT_LOG_RESET_KEY, `pending:${auditHash}`);
     if (clearSavedReports) {
-      storageKeys.push(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, ...LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS);
+      storageKeys.push(AUDIT_LOG_RESET_KEY, LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, ...LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS);
       filePaths.push(PERFORMANCE_AUDIT_SIDECAR_FILE, `${LOG_DIR}ar-performance-audit-completed.json`);
     }
-    await Promise.all(storageKeys.map(key => AsyncStorage.removeItem(key)));
-    await Promise.all(filePaths.map(path => FileSystem.deleteAsync(path, { idempotent: true })));
-    const retained = await Promise.all([
-      ...storageKeys.map(async key => (await AsyncStorage.getItem(key)) != null ? key : null),
-      ...filePaths.map(async path => (await FileSystem.getInfoAsync(path)).exists ? path : null),
-    ]);
-    if (retained.some(Boolean)) throw new Error(`Clear verification found retained diagnostics: ${retained.filter(Boolean).join(', ')}`);
+    await eraseDebugLogFiles(storageKeys, filePaths);
+    if (auditHash) await AsyncStorage.setItem(AUDIT_LOG_RESET_KEY, `done:${auditHash}`);
     if (clearSavedReports) clearCompletedPerformanceAuditState();
   };
 
@@ -816,6 +840,7 @@ function resetDebugLog(clearSavedReports: boolean): Promise<void> {
       }
       pendingLogRotation = false;
       clearState = 'ready';
+      activeAuditResetHash = null;
       if (buffer.getEntries().length > 0) schedulePersist();
       if (pendingFileLines.length > 0) scheduleFileFlush();
     } catch (error) {
@@ -894,8 +919,9 @@ export const debugLog = {
     return resetDebugLog(true);
   },
   /** Discard the exported log generations while retaining the report and receipt. */
-  startFreshAfterAuditUpload(): Promise<void> {
-    return resetDebugLog(false);
+  async startFreshAfterAuditUpload(contentSha256: string, isCurrent = () => true): Promise<void> {
+    const reset = await AsyncStorage.getItem(AUDIT_LOG_RESET_KEY);
+    if (isCurrent() && reset !== `done:${contentSha256}`) await resetDebugLog(false, contentSha256);
   },
   getText(): string {
     return buffer.getText();

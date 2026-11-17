@@ -53,7 +53,6 @@ let blockedRequest: UploadRequest | null = null;
 let queuedAuditRequest: UploadRequest | null = null;
 let duplicateRiskAccepted = false;
 let uploadFlightEpoch = 0;
-let pendingAuditLogResetUrl: string | null = null;
 
 export const getDebugLogUploadSnapshot = () => snapshot;
 export function subscribeDebugLogUpload(listener: () => void): () => void {
@@ -196,24 +195,20 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
     if (!snapshot.verified) {
       publish({ phase: 'verifying', error: null });
       await verifyDebugLogUpload(pendingReceipt, preparedBody!);
-      pendingReceipt = await markDebugLogUploadReceiptVerified(pendingReceipt);
-      if (flightEpoch === uploadFlightEpoch && uploadRequest?.publicReport) {
-        pendingAuditLogResetUrl = pendingReceipt.url;
+      if (flightEpoch !== uploadFlightEpoch) return snapshot;
+      if (uploadRequest?.publicReport) {
+        try {
+          await debugLog.startFreshAfterAuditUpload(uploadRequest.publicReport.contentSha256,
+            () => flightEpoch === uploadFlightEpoch);
+        } catch {
+          throw new Error('The audit uploaded, but the previous log could not be cleared. Retry to finish sharing.');
+        }
       }
+      if (flightEpoch !== uploadFlightEpoch) return snapshot;
+      pendingReceipt = await markDebugLogUploadReceiptVerified(pendingReceipt);
       publish({ verified: true });
     }
     if (flightEpoch !== uploadFlightEpoch) { preparedBody = null; pendingReceipt = null; return snapshot; }
-    if (pendingAuditLogResetUrl === pendingReceipt.url) {
-      try {
-        await debugLog.startFreshAfterAuditUpload();
-        pendingAuditLogResetUrl = null;
-      } catch {
-        // Verification already succeeded; retain the URL and allow the next
-        // copy attempt to retry the local reset without posting a duplicate.
-        debugLog.warn('debugLogUpload', 'Verified audit uploaded, but the previous log could not be cleared.');
-      }
-      if (flightEpoch !== uploadFlightEpoch) return snapshot;
-    }
     if (!copyLink && uploadRequest?.publicReport) {
       publish({ phase: 'verified', error: null });
       preparedBody = null;
@@ -366,7 +361,6 @@ export function forgetDeletedDebugLogUpload(url: string): void {
 /** Clear private retry bodies and stale completion callbacks without deleting public-copy capabilities. */
 export function resetClearedPublicReportUpload(): void {
   uploadFlightEpoch += 1;
-  pendingAuditLogResetUrl = null;
   lastRequest = null; lastAuditSession = null; blockedRequest = null; queuedAuditRequest = null;
   preparedBody = null; pendingReceipt = null; duplicateRiskAccepted = false;
   const recovery = snapshot.recoveryReceipt;

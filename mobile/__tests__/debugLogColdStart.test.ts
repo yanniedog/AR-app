@@ -1,15 +1,21 @@
+import type AsyncStorage from '@react-native-async-storage/async-storage';
+
 const LOG = 'file:///docs/logs/ar-local.log';
 const PREVIOUS = 'file:///docs/logs/ar-local-previous.log';
+const AUDIT_RESET = 'ar-debug-log-audit-reset-v1';
+const DIGEST = 'a'.repeat(64);
 const SIDECAR = 'file:///docs/logs/ar-performance-audit-latest.json';
 
 describe('previous process crash evidence', () => {
   let log: typeof import('../src/lib/debugLog').debugLog;
   let fs: typeof import('expo-file-system/legacy');
   let files: Record<string, string>;
+  let storage: typeof AsyncStorage;
   let diagnostics: typeof import('../src/lib/debugLog').getDebugLogFlushDiagnostics;
 
   beforeEach(() => {
     jest.resetModules();
+    storage = jest.requireMock('@react-native-async-storage/async-storage');
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- simulate a new JS process
     fs = require('expo-file-system/legacy');
     files = {};
@@ -72,9 +78,13 @@ describe('previous process crash evidence', () => {
     log.info('audit', 'uploaded evidence');
     await log.flushToFile(true);
 
-    const reset = log.startFreshAfterAuditUpload();
-    expect(log.getEntries()).toEqual([]);
-    log.error('app', 'new failure during log reset');
+    const remove = jest.mocked(fs.deleteAsync).getMockImplementation()!;
+    jest.mocked(fs.deleteAsync).mockImplementationOnce(async (path, options) => {
+      expect(log.getEntries()).toEqual([]);
+      log.error('app', 'new failure during log reset');
+      await remove(path, options);
+    });
+    const reset = log.startFreshAfterAuditUpload(DIGEST);
     await reset;
     await log.flushToFile(true);
 
@@ -82,6 +92,25 @@ describe('previous process crash evidence', () => {
     expect(files[SIDECAR]).toBe('saved report');
     expect(files[LOG]).toContain('new failure during log reset');
     expect(files[LOG]).not.toContain('uploaded evidence');
+  });
+
+  it('completes an interrupted upload reset on startup without erasing new startup entries on retry', async () => {
+    files[LOG] = 'old current session';
+    files[PREVIOUS] = 'old previous session';
+    files[SIDECAR] = 'saved report';
+    await storage.setItem(AUDIT_RESET, `pending:${DIGEST}`);
+
+    const coldStart = log.beginColdStartSession();
+    log.info('app', 'new startup entry');
+    await coldStart;
+    await log.flushToFile(true);
+
+    expect(files[PREVIOUS]).toBeUndefined();
+    expect(files[SIDECAR]).toBe('saved report');
+    expect(files[LOG]).toContain('new startup entry');
+    expect(files[LOG]).not.toContain('old current session');
+    await log.startFreshAfterAuditUpload(DIGEST);
+    expect(log.getText()).toContain('new startup entry');
   });
 
   it('copies a near-budget crash log natively after rename fails and keeps new rollover writes separate', async () => {
