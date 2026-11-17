@@ -281,19 +281,27 @@ describe('deidentified diagnostics privacy boundary', () => {
     }
   });
 
-  it('refuses an envelope above the exact byte cap', () => {
-    const checks = Array.from({ length: 4_000 }, (): AuditCheck => ({
-      id: 'active-data',
-      label: 'not exported',
-      kind: 'data',
-      status: 'pass',
+  it('shares a full report losslessly when its plain JSON exceeds 256 KiB', () => {
+    const checks = Array.from({ length: 2_828 }, (_, index): AuditCheck => ({
+      id: `external-link-${index + 1}`,
+      label: 'private account label',
+      kind: 'network',
+      status: 'warn',
       durationMs: 1,
-      metrics: { executionAttempted: true, parseMs: 1 },
+      metrics: { executionAttempted: true, httpAttempted: false, httpReachability: 'unknown' },
     }));
-
-    expect(() => createDeidentifiedDiagnosticsShare(reportFixture(checks))).toThrow(
-      'above the 262144-byte sharing limit',
-    );
+    const report = reportFixture(checks);
+    const share = createDeidentifiedDiagnosticsShare(report);
+    const envelope = JSON.parse(share.body);
+    expect(envelope).toMatchObject({ format: 'ar-audit-gzip-v1',
+      audit: { performanceCheckCount: checks.length }, sha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    expect(envelope.bytes).toBeGreaterThan(256 * 1024);
+    expect(share.byteLength).toBeLessThanOrEqual(DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES);
+    const decoded = decodeCompactDiagnosticJson(share.body) as ReturnType<typeof buildDeidentifiedPerformanceAudit>;
+    expect(decoded.checks.map(check => check.id)).toEqual(checks.map(check => check.id));
+    expect(decoded.completion.privacyBoundary.generalApplicationJournal).toBe('omitted');
+    expect(decoded).not.toHaveProperty('applicationJournal');
+    expect(JSON.stringify(decoded)).not.toContain('private account label');
   });
 
   it('keeps paste sharing after measurements and retains explicit deidentified sharing', () => {
