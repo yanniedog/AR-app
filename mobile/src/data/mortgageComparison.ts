@@ -18,7 +18,8 @@ export interface MortgageComparisonInputs {
   /** Raw property value required only when the funds stay in an offset account. */
   propertyValue?: string;
 }
-/** Private exploratory inputs stay in memory, separate from saved searches and reports. */
+/** Active comparison inputs, including temporary audit values. Explicit user
+ * edits persist through the encrypted profile store, never through this store. */
 export const useMortgageComparison = create<MortgageComparisonInputs>(() => ({ loanAmount: '', lvr: '' }));
 export const setMortgageComparisonInputs = (value: MortgageComparisonInputs) => useMortgageComparison.setState(value, true);
 export const clearMortgageComparison = () => setMortgageComparisonInputs({ loanAmount: '', lvr: '' });

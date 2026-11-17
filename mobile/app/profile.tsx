@@ -4,8 +4,9 @@ import { View } from 'react-native';
 
 import { ProfileEditor } from '../src/components/ProfileEditor';
 import { CustomerProfilePanel } from '../src/components/CustomerProfilePanel';
+import { MortgageComparisonControls } from '../src/components/MortgageComparisonControls';
 import { ScreenScrollView } from '../src/components/Screen';
-import { AppText, Button, Card } from '../src/components/ui';
+import { AppText, Button, Card, Disclosure } from '../src/components/ui';
 import { SECTION_ORDER } from '../src/constants';
 import {
   EMPTY_PROFILE,
@@ -14,6 +15,9 @@ import {
   type ProfileFilters,
 } from '../src/data/profile';
 import { useStore } from '../src/data/store';
+import { clearSavedMortgageComparison, useMortgageComparisonProfile } from '../src/data/mortgageComparisonProfile';
+import { scopeMortgageFacets } from '../src/data/mortgageFacetScope';
+import { EMPTY_FILTERS } from '../src/data/selectors';
 import { useNavigationContentReady } from '../src/hooks/useNavigationContentReady';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
@@ -24,6 +28,13 @@ export default function Profile() {
   const profileFilters = useStore((s) => s.prefs.profileFilters);
   const hydrated = useStore((s) => s.hydrated);
   const setPref = useStore((s) => s.setPref);
+  const mortgageRows = useStore(s => s.core?.sections.Mortgage.rates);
+  const includeNonStandard = useStore(s => s.prefs.includeNonStandard);
+  const comparison = useMortgageComparisonProfile(state => state.profile);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const comparisonFilters = useMemo(() => scopeMortgageFacets({
+    ...EMPTY_FILTERS, ...comparison.facets, includeNonStandard,
+  }, includeNonStandard), [comparison.facets, includeNonStandard]);
   const count = profileSelectionCount(profileFilters);
   const [layoutReady, setLayoutReady] = useState(false);
   const contentReady = useNavigationContentReady(true);
@@ -112,7 +123,13 @@ export default function Profile() {
           />
         </View>
       ) : null}
-      {contentReady ? <CustomerProfilePanel /> : null}
+      {contentReady ? <>
+        <Disclosure title="Mortgage comparison" open={comparisonOpen} onToggle={() => setComparisonOpen(open => !open)}>
+          <MortgageComparisonControls profile rows={mortgageRows ?? []} filters={comparisonFilters} unverified={0} invalid={false} />
+          <Button title="Clear saved comparison" variant="ghost" onPress={clearSavedMortgageComparison} />
+        </Disclosure>
+        <CustomerProfilePanel />
+      </> : null}
     </ScreenScrollView>
   );
 }

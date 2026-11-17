@@ -2,7 +2,7 @@ import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { MortgageComparisonControls } from '../src/components/MortgageComparisonControls';
-import { clearMortgageComparison, setMortgageComparisonInputs, useMortgageComparison } from '../src/data/mortgageComparison';
+import { clearMortgageComparison, mortgageComparisonValues, setMortgageComparisonInputs, useMortgageComparison } from '../src/data/mortgageComparison';
 import { captureRatesSession, restoreRatesSession } from '../src/data/ratesSession';
 import { EMPTY_FILTERS } from '../src/data/selectors';
 import { catalogue, programme, product, row } from '../testUtils/publicRateJourney';
@@ -71,15 +71,16 @@ test('exclusive accessible modes keep raw direct LVR and show computed facts wit
   try {
     expect(tab(tree, 'LVR').props.accessibilityState).toEqual({ selected: true });
     expect(input(tree, 'LVR')?.props.value).toBe('72');
+    expect(input(tree, 'LVR')?.props.keyboardType).toBe('decimal-pad');
     expect(input(tree, 'Deposit')).toBeUndefined();
     choose(tree, 'Funds available');
     expect(tab(tree, 'Funds available').props.accessibilityState).toEqual({ selected: true });
     expect(tab(tree, 'LVR').props.accessibilityState).toEqual({ selected: false });
     expect(input(tree, 'LVR')).toBeUndefined();
     expect(tab(tree, 'Offset account').props.accessibilityState).toEqual({ selected: true });
-    expect(input(tree, 'Offset balance')?.props.keyboardType).toBe('decimal-pad');
+    expect(input(tree, 'Offset balance')?.props.keyboardType).toBe('default');
     choose(tree, 'Deposit');
-    expect(input(tree, 'Deposit')?.props.keyboardType).toBe('decimal-pad');
+    expect(input(tree, 'Deposit')?.props.keyboardType).toBe('default');
     expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · Unknown');
     type(tree, 'Deposit', '150000');
     expect(fact(tree, 'mortgage-calculated-lvr')).toBe('Calculated LVR · 80%');
@@ -93,6 +94,26 @@ test('exclusive accessible modes keep raw direct LVR and show computed facts wit
     choose(tree, 'Funds available');
     expect(input(tree, 'Deposit')?.props.value).toBe('150000');
     expect(input(tree, 'Loan amount')?.props.value).toBe('600000');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('mortgage money fields allow dollar and k input and preserve exact offset arithmetic', () => {
+  const tree = mount();
+  try {
+    for (const [label, value] of [
+      ['Loan amount', '$650k'], ['Offset balance', '$155k'], ['Property value', '$775k'],
+    ]) {
+      expect(input(tree, label)?.props.keyboardType).toBe('default');
+      type(tree, label, value);
+      expect(input(tree, label)?.props.value).toBe(value);
+    }
+    expect(fact(tree, 'mortgage-loan-less-offset')).toBe('Loan less offset · $495k');
+    act(() => jest.advanceTimersByTime(200));
+    const committed = useMortgageComparison.getState();
+    expect(committed).toMatchObject({ loanAmount: '$650k', fundsAvailable: '$155k', propertyValue: '$775k' });
+    expect(mortgageComparisonValues(committed)).toMatchObject({
+      amount: 650000, propertyValue: 775000, offsetBalance: 155000, interestBearingBalance: 495000, invalid: false,
+    });
   } finally { act(() => tree.unmount()); }
 });
 

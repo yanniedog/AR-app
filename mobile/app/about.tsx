@@ -1,9 +1,10 @@
 import { useAuditStaticRoute } from '../src/hooks/useAuditStaticRoute';
 import * as Application from 'expo-application';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 
 import { ScreenScrollView } from '../src/components/Screen';
+import { ShareQrModal } from '../src/components/ShareQrModal';
 import {
   DisclosureGroup,
   InfoRow,
@@ -15,6 +16,7 @@ import { uiIdentifier, uiJoin, uiLabel } from '../src/lib/uiCopy';
 import { markAuditEntryScreenOpenPressed } from '../src/lib/auditEntryTrace';
 
 export default function AboutScreen() {
+  const [shareOpen, setShareOpen] = useState(false);
   const measureAuditContent = useAuditStaticRoute({ action: 'about.open', surface: 'about.overview', route: '/about' });
   const appVersion = Application.nativeApplicationVersion?.trim();
   const buildVersion = Application.nativeBuildVersion?.trim();
@@ -33,6 +35,8 @@ export default function AboutScreen() {
           label="Version"
           value={versionValue}
         />
+        <SettingsGap size={4} />
+        <NavRow icon="share-social-outline" label="Share app" onPress={() => setShareOpen(true)} />
       </Section>
 
       <Section title="Legal">
@@ -68,6 +72,7 @@ export default function AboutScreen() {
           />
         </DisclosureGroup>
       </Section>
+      <ShareQrModal visible={shareOpen} onClose={() => setShareOpen(false)} />
     </ScreenScrollView>
   );
 }

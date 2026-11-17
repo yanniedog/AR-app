@@ -56,7 +56,7 @@ jest.mock('../src/components/controls', () => ({ SearchBar: 'SearchBar', Segment
 jest.mock('../src/components/icons/AppIcon', () => ({ __esModule: true, default: 'Icon' }));
 jest.mock('../src/components/feedback', () => ({ EmptyState: 'EmptyState', LoadingRows: 'LoadingRows', ScreenSkeleton: 'ScreenSkeleton', IndeterminateProgressBar: 'Progress' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Row: 'Row', Button: 'Button', Chip: 'Chip', Card: 'Card', Disclosure: 'Disclosure' }));
-jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {}, font: { body: 14 }, spacing: (n: number) => n * 4 }) }));
+jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {}, ledger: { rule: '#ddd' }, font: { body: 14 }, spacing: (n: number) => n * 4 }) }));
 let mockPublicCatalogue: any = null;
 const mockUnavailableCatalogue = { status: 'unavailable', generationId: null, products: [], coverage: [], references: [], evidence: [], allLoaded: false,
   getProduct: () => undefined, getProgrammes: () => [], loadAll: async () => undefined };

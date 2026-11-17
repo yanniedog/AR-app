@@ -7,6 +7,7 @@ import { normalizeProfileFilters } from './profile';
 import { normalizeRatesPageSize } from './ratesPagination';
 import { normalizeCalcInputs } from './calc';
 import { migrateLegacyCalculatorInputs } from './userRateScenario';
+import { openMortgageComparisonProfile } from './mortgageComparisonProfile';
 import { bootstrapInitialState, createBootstrapActions } from './storeBootstrap';
 import { createRefreshActions } from './storeRefresh';
 import { createEnsureActions } from './storeEnsure';
@@ -148,6 +149,7 @@ export const useStore = create<AppState>()(
             const state = useStore.getState();
             const savedRatesBeforeLoad = state.savedRates;
             const trackedRatesBeforeLoad = state.trackedRates;
+            const comparisonLoad = openMortgageComparisonProfile();
             let secureLoad = await loadTrackedRatesSecureResult(state.savedRates);
             if (secureLoad.status === 'unavailable') {
               // WHEN_UNLOCKED storage can be temporarily unavailable during a
@@ -165,6 +167,7 @@ export const useStore = create<AppState>()(
             ) {
               useStore.setState({ trackedRates: secureLoad.trackedRates });
             }
+            await comparisonLoad;
           })
           .catch((error) => {
             debugLog.error(

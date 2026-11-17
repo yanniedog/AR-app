@@ -2,6 +2,7 @@ import type { ConditionalRateFact, ConditionalRatePresentation } from '../data/r
 import type { EvidenceFact, EvidencePresentation } from '../data/displayEvidenceFacts';
 import type { NumericConditionBoundary, PublishedNumericConditionFact } from '../data/scopedFinancialConditionFacts';
 import { advertisedTermMonths } from '../data/calc';
+import { formatMoneyShort } from '../data/format';
 import { parseLvrRange } from '../data/lvrRange';
 import type { RateRow } from '../types';
 import type { SelectedTargetConstraint } from './selectedTargetConstraints';
@@ -65,20 +66,22 @@ export function uiEvidenceFact(fact: EvidenceFact): FinancialFactRow {
 }
 
 function numberDigits(value: number): number { return Math.min(6, (String(value).split('.')[1] ?? '').length); }
-function boundValue(value: number, unit: 'percent' | 'AUD' | 'months'): UiText {
+function boundValue(value: number, unit: 'percent' | 'AUD' | 'months', compactMoney: boolean): UiText {
   return unit === 'percent' ? uiJoin(uiNumber(Math.round(value), 0), '%')
-    : unit === 'AUD' ? uiMoney(value, numberDigits(value)) : uiDuration(value, 'months');
+    : unit === 'AUD' ? (compactMoney ? formatMoneyShort(value) : uiMoney(value, numberDigits(value))) : uiDuration(value, 'months');
 }
-function numericRange(lower: NumericConditionBoundary, upper: NumericConditionBoundary, unit: 'percent' | 'AUD' | 'months'): UiText {
+function numericRange(lower: NumericConditionBoundary, upper: NumericConditionBoundary, unit: 'percent' | 'AUD' | 'months', compactMoney = false): UiText {
   if (lower.state === 'known' && upper.state === 'known') {
-    if (lower.value === upper.value && lower.inclusive && upper.inclusive) return boundValue(lower.value, unit);
-    return uiJoin(lower.inclusive ? '' : '>', boundValue(lower.value, unit), '–', upper.inclusive ? '' : '<', boundValue(upper.value, unit));
+    if (lower.value === upper.value && lower.inclusive && upper.inclusive) return boundValue(lower.value, unit, compactMoney);
+    return uiJoin(lower.inclusive ? '' : '>', boundValue(lower.value, unit, compactMoney), '–', upper.inclusive ? '' : '<', boundValue(upper.value, unit, compactMoney));
   }
-  if (lower.state === 'known') return uiJoin(lower.inclusive ? '≥' : '>', boundValue(lower.value, unit));
-  if (upper.state === 'known') return uiJoin(upper.inclusive ? '≤' : '<', boundValue(upper.value, unit));
+  if (lower.state === 'known') return uiJoin(lower.inclusive ? '≥' : '>', boundValue(lower.value, unit, compactMoney));
+  if (upper.state === 'known') return uiJoin(upper.inclusive ? '≤' : '<', boundValue(upper.value, unit, compactMoney));
   return uiLabel('Unknown');
 }
-export function uiConditionRange(fact: PublishedNumericConditionFact): UiText { return numericRange(fact.lower, fact.upper, fact.unit); }
+export function uiConditionRange(fact: PublishedNumericConditionFact, compactMoney = false): UiText {
+  return numericRange(fact.lower, fact.upper, fact.unit, compactMoney);
+}
 export function uiConditionFact(fact: PublishedNumericConditionFact): FinancialFactRow {
   const label: UiLabel = fact.kind === 'published-lvr-range' ? 'LVR'
     : fact.kind === 'published-balance-range' ? fact.subject === 'loan-amount' ? 'Loan amount' : fact.subject === 'borrowing-amount' ? 'Borrowing amount' : fact.subject === 'deposit-balance' ? 'Deposit balance' : 'Balance'
