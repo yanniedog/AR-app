@@ -6,6 +6,7 @@ import { trustedExternalUrl } from '../../lib/trustedExternalUrl';
 import type { UiChild, UiCopy } from '../../lib/uiCopy';
 import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
 import AppIcon from '../icons/AppIcon';
+import { TOUCH_TARGET_MIN } from '../TouchTarget';
 import { Row } from '../ui';
 
 const ProductPageContext = createContext<string | null>(null);
@@ -36,7 +37,7 @@ export function ProductPageLinks({ overview, children }: { overview?: string; ch
 function LinkedFact({ url, label, children }: { url: string; label: UiCopy; children: UiChild }) {
   const { requestExternalUrl } = useTrustedExternalUrl();
   return <Pressable accessibilityRole="link" accessibilityLabel={label}
-    style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1, minHeight: 44, justifyContent: 'center' })}
+    style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1, minHeight: TOUCH_TARGET_MIN, minWidth: TOUCH_TARGET_MIN, justifyContent: 'center' })}
     onPress={() => requestExternalUrl({ url, purpose: 'lender_source', label: 'Product' })}>
     <Row gap={8} style={{ alignItems: 'center' }}>
       <Row style={{ flex: 1 }}>{children}</Row>
