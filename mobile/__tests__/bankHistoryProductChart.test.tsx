@@ -1,7 +1,15 @@
 import React from 'react';
-import TestRenderer, { act } from 'react-test-renderer';
+import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { BankHistoryChart } from '../src/components/BankHistoryChart';
 import { ChartSliceControls } from '../src/components/charts/ChartSliceControls';
+
+type TestNode = {
+  props: Record<string, unknown>;
+  findAllByProps: (props: Record<string, unknown>) => TestNode[];
+  findByType: (type: typeof ChartSliceControls) => { props: React.ComponentProps<typeof ChartSliceControls> };
+  findAllByType: (type: string) => TestNode[];
+  findAll: (predicate: (node: TestNode) => boolean) => TestNode[];
+};
 
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Chip: 'Chip', Row: 'Row' }));
 jest.mock('../src/components/icons/AppIcon', () => ({ __esModule: true, default: 'AppIcon' }));
@@ -14,7 +22,7 @@ jest.mock('../src/theme/ThemeProvider', () => {
 test('savings product chart shows market facts and cash rate across a missing product date', () => {
   const dates = ['2026-11-16', '2026-11-17'];
   const points = dates.map((date) => ({ date, min: 0.01, max: 0.055, mean: 0.025, median: 0.02, count: 4 }));
-  let tree!: TestRenderer.ReactTestRenderer;
+  let tree!: ReactTestRenderer & { root: TestNode };
   act(() => {
     tree = TestRenderer.create(
       <BankHistoryChart
@@ -29,11 +37,11 @@ test('savings product chart shows market facts and cash rate across a missing pr
           values: { [dates[0]]: 0.065, [dates[1]]: null },
         }}
       />,
-    );
+    ) as typeof tree;
   });
   try {
     const plot = () => tree.root.findAllByProps({ accessibilityRole: 'image' })[0];
-    act(() => plot().props.onLayout({ nativeEvent: { layout: { width: 320 } } }));
+    act(() => (plot().props.onLayout as (event: unknown) => void)({ nativeEvent: { layout: { width: 320 } } }));
     const slice = () => tree.root.findByType(ChartSliceControls).props;
     expect(slice().valueLabel).toBe('Unknown');
     expect(slice().facts).toEqual([
@@ -43,7 +51,7 @@ test('savings product chart shows market facts and cash rate across a missing pr
       { label: 'RBA cash rate', value: '4.35%' },
     ]);
     expect(plot().props.accessibilityLabel).toContain('RBA cash rate 4.35%');
-    const labels = tree.root.findAllByType('AppText' as React.ElementType).map(node => node.props.children);
+    const labels = tree.root.findAllByType('AppText').map(node => node.props.children);
     expect(labels).toEqual(expect.arrayContaining(['All tiers', 'Market rate range', 'Market median', 'Market mean', 'RBA cash rate']));
     expect(tree.root.findAll(node => node.props.strokeDasharray === '8 4' && typeof node.props.d === 'string').length).toBeGreaterThan(0);
 
