@@ -174,6 +174,7 @@ test('mortgage comparison pools only offers covering the selected LVR on each da
     { tier: 'lvr_90-99%', rate: 7 },
     { tier: 'lvr_95-98%', rate: 9 },
     { tier: 'lvr_unspecified', rate: 13 },
+    { tier: 'lvr_>99%', rate: 10 },
   ];
   const template = core.sections.Mortgage.rates[0];
   const rows = offers.map(({ tier, rate }, index) => ({
@@ -205,6 +206,10 @@ test('mortgage comparison pools only offers covering the selected LVR on each da
 
   await act(async () => tree.update(<Consumer lvr="lvr_>98-99%" />));
   expect(value.snapshots?.[previous].sectionTotals?.Mortgage).toMatchObject({ min: 7, max: 7, count: 1 });
+  await act(async () => tree.update(<Consumer lvr="lvr_>98%" />));
+  expect(value.snapshots?.[previous].sectionTotals?.Mortgage).toBeUndefined();
+  await act(async () => tree.update(<Consumer lvr="lvr_>99%" />));
+  expect(value.snapshots?.[previous].sectionTotals?.Mortgage).toMatchObject({ min: 10, max: 10, count: 1 });
   await act(async () => tree.update(<Consumer lvr={null} />));
   expect(value.snapshots).toBeNull();
 

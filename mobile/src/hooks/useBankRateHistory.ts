@@ -48,11 +48,12 @@ export function useBankRateHistory(enabled = true, mortgageLvr?: string | null) 
   useEffect(() => {
     if (!scopeInput || !scopePending || scopeFailed) return;
     let active = true;
-    void prepareBankRateHistoryScope(scopeInput, () => yieldToUi(0)).then(result => {
+    const abort = mortgageLvr === undefined ? undefined : new AbortController();
+    void prepareBankRateHistoryScope(scopeInput, () => yieldToUi(0), abort?.signal).then(result => {
       if (active && result) setScopeSettled({ input: scopeInput, failed: false });
     }, () => { if (active) setScopeSettled({ input: scopeInput, failed: true }); });
-    return () => { active = false; };
-  }, [scopeInput, scopePending, scopeFailed]);
+    return () => { active = false; abort?.abort(); };
+  }, [scopeInput, scopePending, scopeFailed, mortgageLvr]);
   useEffect(() => {
     if (enabled && core && !details && (!prefs.includeNonStandard || SECTION_KEYS.some(key => profileFeaturesForSection(prefs.profileFilters, key).length))) void ensureDetails();
   }, [core, details, enabled, ensureDetails, prefs.includeNonStandard, prefs.profileFilters]);

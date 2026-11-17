@@ -379,7 +379,7 @@ function BankHistoryChartView({
 
   const hasPlottableValues = plotPoints.some(
     (p) => isFiniteNumber(p.min) || isFiniteNumber(p.max) || isFiniteNumber(p.mean) || isFiniteNumber(p.median),
-  ) || !!highlightValues?.some(isFiniteNumber);
+  ) || !!highlightValues?.some(isFiniteNumber) || (productHistory && rbaSteps.some(isFiniteNumber));
   useEffect(() => {
     if (plotDates.length && plotPoints.length && !hasPlottableValues) {
       debugLog.warn('BankHistoryChart', 'no finite plot values');
@@ -484,12 +484,37 @@ function BankHistoryChartView({
     highlightLine,
   } = chartPaths;
 
+  const controls = (
+    <>
+      <Row gap={6} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+        {WINDOW_OPTIONS.map((opt) => (
+          <Chip
+            key={opt.value}
+            label={uiChartWindow(opt.value)}
+            selected={window === opt.value}
+            onPress={() => setWindow(opt.value)}
+          />
+        ))}
+      </Row>
+
+      {productHistory ? (
+        <Row style={{ marginBottom: 8 }}>
+          <Chip
+            label={comparisonScope ? uiJoin('Benchmarks', ' · ', comparisonScope) : 'Benchmarks'}
+            selected={showComparison}
+            onPress={() => setShowComparison((visible) => !visible)}
+          />
+        </Row>
+      ) : null}
+    </>
+  );
+
   if (slicePending) {
     return <View style={{ height }}><AppText variant="small" color="textMuted">{uiLabel("Loading")}</AppText></View>;
   }
 
   if (!plotDates.length || !plotPoints.length || !hasPlottableValues) {
-    return <View><AppText key={graphicRevision} variant="small" color="textMuted" onLayout={(event) => {
+    return <View>{productHistory ? controls : null}<AppText key={graphicRevision} variant="small" color="textMuted" onLayout={(event) => {
       onGraphicReady?.({ contentRevision: sourceRevision, graphicRevision, window,
         availability: 'unavailable', expectedCount: expectedPointCount, pointCount: 0,
         accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
@@ -625,26 +650,7 @@ function BankHistoryChartView({
 
   return (
     <View>
-      <Row gap={6} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
-        {WINDOW_OPTIONS.map((opt) => (
-          <Chip
-            key={opt.value}
-            label={uiChartWindow(opt.value)}
-            selected={window === opt.value}
-            onPress={() => setWindow(opt.value)}
-          />
-        ))}
-      </Row>
-
-      {productHistory ? (
-        <Row style={{ marginBottom: 8 }}>
-          <Chip
-            label={comparisonScope ? uiJoin('Benchmarks', ' · ', comparisonScope) : 'Benchmarks'}
-            selected={showComparison}
-            onPress={() => setShowComparison((visible) => !visible)}
-          />
-        </Row>
-      ) : null}
+      {controls}
 
       <View
         accessible

@@ -22,7 +22,7 @@ interface ScopeWork {
   latest?: { input: BankRateHistoryScopeInput; scope: BankRateScope; gateRevision: number };
   activeInput?: BankRateHistoryScopeInput;
   generation: number;
-  pending?: { input: BankRateHistoryScopeInput; work: Promise<BankRateScope | null> };
+  pending?: { input: BankRateHistoryScopeInput; work: Promise<BankRateScope | null>; signal?: AbortSignal };
 }
 const shared: ScopeWork = { generation: 0 };
 // A scoped product can mount over Market or another product in the native stack.
@@ -73,6 +73,7 @@ export function cachedBankRateHistoryScope(input: BankRateHistoryScopeInput): Ba
 export function prepareBankRateHistoryScope(
   input: BankRateHistoryScopeInput,
   yieldControl: () => Promise<void>,
+  signal?: AbortSignal,
 ): Promise<BankRateScope | null> {
   // Only committed consumers may supersede work. A speculative render's cache
   // lookup must not strand a mounted consumer whose request is still current.
@@ -81,9 +82,9 @@ export function prepareBankRateHistoryScope(
   const currentGeneration = state.generation;
   const cached = cachedBankRateHistoryScope(input);
   if (cached) return Promise.resolve(cached);
-  if (state.pending && sameInput(state.pending.input, input)) return state.pending.work;
+  if (state.pending && sameInput(state.pending.input, input) && state.pending.signal === signal) return state.pending.work;
   const gateRevision = getSuitabilityRevision();
-  const isCurrent = () => state.generation === currentGeneration &&
+  const isCurrent = () => !signal?.aborted && state.generation === currentGeneration &&
     getSuitabilityRevision() === gateRevision && getMandatoryEligibilityRevision() === input.mandatoryRevision;
   const work = (async () => {
     // Start after the mounting render/paint, then bound each synchronous slice.
@@ -106,7 +107,7 @@ export function prepareBankRateHistoryScope(
     state.latest = { input, scope, gateRevision };
     return scope;
   })();
-  state.pending = { input, work };
+  state.pending = { input, work, signal };
   void work.finally(() => { if (state.pending?.work === work) state.pending = undefined; }).catch(() => undefined);
   return work;
 }

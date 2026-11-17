@@ -70,3 +70,32 @@ test('savings product chart shows market facts and cash rate across a missing pr
     act(() => tree.unmount());
   }
 });
+
+test('product history can change its window or show benchmarks with no product observations', () => {
+  const dates = ['2026-09-17', '2026-11-17'];
+  const points = dates.map((date) => ({ date, min: 0.04, max: 0.07, mean: 0.05, median: 0.05, count: 4 }));
+  let tree!: ReactTestRenderer & { root: TestNode };
+  act(() => {
+    tree = TestRenderer.create(
+      <BankHistoryChart dates={dates} points={points} section="Mortgage" productHistory
+        highlightSeries={{ label: 'Product', values: { [dates[0]]: 0.06 } }} />,
+    ) as typeof tree;
+  });
+  try {
+    const press = (label: string) => act(() => {
+      const control = tree.root.findAllByProps({ label })[0];
+      (control.props.onPress as () => void)();
+    });
+    const slice = () => tree.root.findByType(ChartSliceControls).props;
+    expect(tree.root.findAllByType('AppText').some(node => node.props.children === 'No observations')).toBe(true);
+    press('Benchmarks');
+    expect(slice().valueLabel).toBe('Unknown');
+    expect(slice().facts).toContainEqual({ label: 'Market median', value: '5.00%' });
+    press('Benchmarks');
+    press('90 days');
+    act(() => slice().onChangeIndex(0));
+    expect(slice().valueLabel).toBe('6.00%');
+  } finally {
+    act(() => tree.unmount());
+  }
+});
