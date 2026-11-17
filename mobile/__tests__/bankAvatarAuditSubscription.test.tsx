@@ -41,13 +41,13 @@ it('does not rerender bank logos for every audit progress event but reacts to ne
   try {
     act(() => { requestPerformanceAudit(); });
     const renders = mockRender.mock.calls.length;
-    expect(mockSources).toHaveBeenLastCalledWith('Example Bank', undefined, undefined, true);
+    expect(mockSources).toHaveBeenLastCalledWith('Example Bank', undefined, undefined, true, undefined);
     for (let check = 1; check <= 320; check += 1) {
       act(() => { updatePerformanceAuditProgress(check, 320, `Check ${check}`); });
     }
     expect(mockRender).toHaveBeenCalledTimes(renders);
     act(() => { markPerformanceAuditCancelled(); });
-    expect(mockSources).toHaveBeenLastCalledWith('Example Bank', undefined, undefined, false);
+    expect(mockSources).toHaveBeenLastCalledWith('Example Bank', undefined, undefined, false, undefined);
   } finally {
     act(() => { tree.unmount(); });
     resetPerformanceAuditForTests();

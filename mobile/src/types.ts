@@ -78,8 +78,9 @@ export interface SectionData {
 export interface Brand {
   short: string;
   color: string;
-  /** Offline-capable canonical logo embedded by the release payload. */
+  /** Offline-capable artwork or monogram embedded by AR-local. */
   logo?: string;
+  logo_source?: 'artwork' | 'monogram';
   /** CDR Register logoUri (regulator-maintained) for brands without embedded art. */
   logo_uri?: string;
   /** Register logoUri in SVG form — rendered via react-native-svg, not <Image>. */

@@ -1,6 +1,7 @@
 import { BUNDLED_BANK_LOGOS, type BundledBankLogoSource } from './bankLogoAssets';
 
 export type BankLogoSource = string | BundledBankLogoSource;
+export type PayloadLogoSource = 'artwork' | 'monogram';
 
 const MAX_EMBEDDED_LOGO_LENGTH = 256 * 1024;
 const MAX_REMOTE_LOGO_URI_LENGTH = 2_048;
@@ -307,7 +308,11 @@ export function resolveBankLogoSourcesForRuntime(
   embeddedLogo: string | undefined,
   registerLogoUri: string | undefined,
   auditOwnsNetwork: boolean,
+  payloadLogoSource?: PayloadLogoSource,
 ): BankLogoSource[] {
+  if (payloadLogoSource === 'artwork' || payloadLogoSource === 'monogram') {
+    return embeddedLogo && safeEmbeddedLogo(embeddedLogo) ? [embeddedLogo] : [];
+  }
   return resolveBankLogoSources(
     provider,
     embeddedLogo,
