@@ -108,7 +108,9 @@ export async function auditExternalLink(
   result.validation = check('pass', 'Approved, credential-free HTTPS destination.');
   result.host = trusted.host;
   result.path = new StandardUrl(trusted.url).pathname;
-  if (options.signal?.aborted) return result;
+  // Local inventories commonly check only the destination policy. Avoid a
+  // timer and asynchronous probe setup for each unselected lender link.
+  if (options.signal?.aborted || (!options.reachability && options.handler === false)) return result;
   const timeoutMs = Math.min(15_000, Math.max(1, options.timeoutMs ?? 5_000));
   const deadlineController = new AbortController();
   let onSignalAbort: (() => void) | undefined;

@@ -1102,7 +1102,10 @@ export class ResponsivenessMonitor {
     const endsAt = until?.capturedAt ?? Infinity;
     if (endsAt <= snapshot.capturedAt) return [];
     return samples
-        .slice(snapshot[field])
+        // One sample delivered after the end can straddle the boundary.
+        // Its successor starts at or after that delivery, so no later
+        // observation can intersect this window.
+        .slice(snapshot[field], until ? until[field] + 1 : undefined)
         .filter((sample) => sample.endsAt > snapshot.capturedAt &&
           (sample.observedFrom ?? sample.startsAt) < endsAt)
         .map((sample) =>

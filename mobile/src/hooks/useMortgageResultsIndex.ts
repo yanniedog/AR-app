@@ -36,7 +36,7 @@ export function clearReusableMortgageIndexes() { completed.length = 0; }
 /** Prepare immutable quotes, source scopes and sort orders before filter taps.
  * Source replacement, gate revision and temporal boundaries fail closed. */
 export function useMortgageResultsIndex(source: readonly RateRow[], catalogue: PublicCatalogueView,
-  context: RateConditionContext, includeNonStandard: boolean, revision: number, enabled: boolean) {
+  context: RateConditionContext, includeNonStandard: boolean, revision: number, enabled: boolean, allowPreparation = true) {
   const mandatoryRevision = useSyncExternalStore(subscribeMandatoryEligibility,
     getMandatoryEligibilityRevision, getMandatoryEligibilityRevision);
   const suitabilityRevision = useSyncExternalStore(subscribeSuitabilityGate,
@@ -54,7 +54,7 @@ export function useMortgageResultsIndex(source: readonly RateRow[], catalogue: P
   const index = current && snapshot.index && Date.now() >= snapshot.index.from && Date.now() < snapshot.index.until ? snapshot.index : reused;
   const hasReuse = reused != null;
   useEffect(() => {
-    if (!enabled || catalogue.status !== 'unavailable' && (catalogue.status !== 'ready' || !catalogue.allLoaded) || current || hasReuse) return;
+    if (!enabled || !allowPreparation || catalogue.status !== 'unavailable' && (catalogue.status !== 'ready' || !catalogue.allLoaded) || current || hasReuse) return;
     let cancelled = false;
     const cancel = scheduleAfterInteractions(() => {
       void prepareMortgageResultsIndex({ source, catalogue, context, includeNonStandard, cancelled: () => cancelled })
@@ -66,7 +66,7 @@ export function useMortgageResultsIndex(source: readonly RateRow[], catalogue: P
         .catch(() => { if (!cancelled) setSnapshot({ owner, index: null, error: true }); });
     });
     return () => { cancelled = true; cancel(); };
-  }, [enabled, catalogue, source, context, includeNonStandard, owner, current, hasReuse, reuseKey]);
+  }, [enabled, allowPreparation, catalogue, source, context, includeNonStandard, owner, current, hasReuse, reuseKey]);
   useEffect(() => {
     if (enabled && expired) setClock(value => value + 1);
   }, [enabled, expired]);

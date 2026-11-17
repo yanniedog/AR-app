@@ -56,3 +56,17 @@ export function rowsForProductKey(rows: RateRow[], productKey: string): RateRow[
 export function rowsForProvider(rows: RateRow[], provider: string): RateRow[] {
   return matchingRows(rows, 'provider', provider);
 }
+
+const sourceIdentities = new WeakMap<RateRow[], WeakSet<RateRow>>();
+
+/** Exact row identity within the original product in an immutable publication. */
+export function isPublishedRateRow(rows: RateRow[], row: RateRow): boolean {
+  const group = indexedRows(rows, 'product_key', row.product_key);
+  if (!group) return false;
+  let identities = sourceIdentities.get(group);
+  if (!identities) {
+    identities = new WeakSet(group);
+    sourceIdentities.set(group, identities);
+  }
+  return identities.has(row);
+}

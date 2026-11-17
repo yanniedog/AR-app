@@ -15,10 +15,10 @@ import { ScreenScrollView } from '../src/components/Screen';
 import { AppText, Button, Disclosure, Divider, Row } from '../src/components/ui';
 import { HistoryExplorer, type HistoryViewMode } from '../src/components/viz/HistoryExplorer';
 import { SECTION_ORDER } from '../src/constants';
-import { filterBankInsightsForSuitability } from '../src/data/bankInsights';
+import { filterBankInsightsForSuitabilityCooperatively } from '../src/data/bankInsights';
 import { formatRate } from '../src/data/format';
 import { rbaSeriesThroughDate, rbaTimelineDates } from '../src/data/bankHistoryTransform';
-import { selectBankHistoryChartModel, shouldEnsurePrebuiltBankHistory } from '../src/data/historySelectors';
+import { selectBankHistoryChartModelCooperatively, shouldEnsurePrebuiltBankHistory } from '../src/data/historySelectors';
 import { orderedInterestSections, resolveInterestSection, sectionSegmentOptions } from '../src/data/interests';
 import { recentDecisions } from '../src/data/rbaCalendar';
 import { resolveSectionRibbonStats } from '../src/data/ribbonStats';
@@ -28,11 +28,11 @@ import { useNavigationContentReady } from '../src/hooks/useNavigationContentRead
 import { usePerformanceAuditProbe, usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
-import { runStoreRetry } from '../src/lib/degradationLog';
+import { logSwallowedError, runStoreRetry } from '../src/lib/degradationLog';
 import { openBrowse, scalarRouteParam } from '../src/lib/nav';
 import { auditActionString } from '../src/lib/performanceAuditActionParams';
 import { effectiveBankInsights, effectiveHistoryRibbon } from '../src/lib/proAccess';
-import { yieldToPaintFrames, yieldToUi } from '../src/lib/yieldToUi';
+import { yieldToPaintFrames } from '../src/lib/yieldToUi';
 import { useTheme } from '../src/theme/ThemeProvider';
 import type { HistoryWindow } from '../src/types';
 
@@ -79,7 +79,6 @@ export default function Market() {
   const [rbaOpen, setRbaOpen] = useState(focus === 'rba');
   const [economyOpen, setEconomyOpen] = useState(false);
   const [historyReady, setHistoryReady] = useState(false);
-  const [paintedInsights, setPaintedInsights] = useState<typeof bankInsights>(null);
   const [retryingHistory, setRetryingHistory] = useState(false);
   const [explorerMode, setExplorerMode] = useState<HistoryViewMode>('edge');
   const [explorerWindow, setExplorerWindow] = useState<HistoryWindow>('90D');
@@ -139,16 +138,6 @@ export default function Market() {
     return () => { active = false; };
   }, [contentReady, core?.run_date, historyInputsReady, isFocused]);
   useEffect(() => {
-    if (!isFocused || !contentReady || !bankInsights) return;
-    let active = true;
-    void (async () => {
-      await yieldToUi(0);
-      if (active) setPaintedInsights(bankInsights);
-    })();
-    return () => { active = false; };
-  }, [bankInsights, contentReady, isFocused]);
-
-  useEffect(() => {
     if (isFocused && contentReady && historyOpen && explorerMode === 'pulse') void ensureProductHistory();
   }, [contentReady, ensureProductHistory, explorerMode, historyOpen, isFocused]);
 
@@ -190,48 +179,75 @@ export default function Market() {
     pendingEconomyAuditActionRef.current = null;
   }, []);
 
-  const explorerInsights = useMemo(() => {
-    if (!contentReady || paintedInsights !== bankInsights) return null;
-    void suitabilityRevision;
-    return filterBankInsightsForSuitability(bankInsights, core, includeNonStandard, detailsProducts, suitabilityRevision, coreIntegrity);
-  }, [bankInsights, contentReady, core, coreIntegrity, detailsProducts, includeNonStandard, paintedInsights, suitabilityRevision]);
+  const insightsInput = useMemo(() => (
+    contentReady && bankInsights && core
+      ? { bankInsights, core, coreIntegrity, detailsProducts, includeNonStandard, suitabilityRevision }
+      : null
+  ), [bankInsights, contentReady, core, coreIntegrity, detailsProducts, includeNonStandard, suitabilityRevision]);
+  const [insightsResult, setInsightsResult] = useState<{
+    input: NonNullable<typeof insightsInput>; value: typeof bankInsights; failed: boolean;
+  } | null>(null);
+  const insightsSettled = insightsResult?.input === insightsInput;
+  const explorerInsights = insightsSettled ? insightsResult.value : null;
+  useEffect(() => {
+    if (!isFocused || !insightsInput || insightsSettled) return;
+    let cancelled = false;
+    const input = insightsInput;
+    void filterBankInsightsForSuitabilityCooperatively(
+      input.bankInsights, input.core, input.includeNonStandard, input.detailsProducts,
+      input.suitabilityRevision, input.coreIntegrity, { cancelled: () => cancelled },
+    ).then(value => {
+      if (!cancelled) setInsightsResult({ input, value, failed: false });
+    }, error => {
+      if (cancelled) return;
+      logSwallowedError('outlook.bankInsights', error);
+      setInsightsResult({ input, value: null, failed: true });
+    });
+    return () => { cancelled = true; };
+  }, [insightsInput, insightsSettled, isFocused]);
 
-  const historyModel = useMemo(() => {
-    void suitabilityRevision;
-    if (!core || !historyReady || !contentReady) return null;
-    return selectBankHistoryChartModel(
-      { core, coreIntegrity, historyBanks, bankInsights: explorerInsights, includeNonStandard, detailsProducts },
-      activeSection,
-      'All',
-    );
-  }, [activeSection, contentReady, core, coreIntegrity, detailsProducts, explorerInsights, historyBanks, historyReady, includeNonStandard, suitabilityRevision]);
+  const historyInput = useMemo(() => (
+    core && historyReady && historyOpen && contentReady && (!insightsInput || insightsSettled)
+      ? { core, coreIntegrity, historyBanks, bankInsights: explorerInsights, includeNonStandard, detailsProducts, activeSection, suitabilityRevision }
+      : null
+  ), [activeSection, contentReady, core, coreIntegrity, detailsProducts, explorerInsights, historyBanks, historyOpen, historyReady, includeNonStandard, insightsInput, insightsSettled, suitabilityRevision]);
+  const [historyResult, setHistoryResult] = useState<{
+    input: NonNullable<typeof historyInput>; value: Awaited<ReturnType<typeof selectBankHistoryChartModelCooperatively>>;
+  } | null>(null);
+  const historySettled = historyResult?.input === historyInput;
+  const historyModel = historySettled ? historyResult.value : null;
+  useEffect(() => {
+    if (!isFocused || !historyInput || historySettled) return;
+    let cancelled = false;
+    const input = historyInput;
+    void selectBankHistoryChartModelCooperatively(
+      input, input.activeSection, 'All', { cancelled: () => cancelled },
+    ).then(value => {
+      if (!cancelled) setHistoryResult({ input, value });
+    }, error => {
+      if (cancelled) return;
+      logSwallowedError('outlook.historyModel', error);
+      setHistoryResult({ input, value: null });
+    });
+    return () => { cancelled = true; };
+  }, [historyInput, historySettled, isFocused]);
 
   const standardFilterWarming = useMemo(() => {
     void suitabilityRevision;
     return !includeNonStandard && getSuitabilityAllowed()?.size === 0;
   }, [includeNonStandard, suitabilityRevision]);
 
-  const marketSnapshots = useMemo(() => {
+  const activeSnapshot = useMemo(() => {
     void suitabilityRevision;
-    if (!core || !contentReady) return [];
-    return interestSections.flatMap((key) => {
-      const data = core.sections[key];
-      if (!data) return [];
-      const stats = resolveSectionRibbonStats(
-        data,
-        data.rates,
-        includeNonStandard,
-        key,
-        detailsProducts,
-        depositRankMetric,
-        mortgageRateMetric,
-      );
-      if (stats.min === null) return [];
-      return [{ key, stats }];
-    });
-  }, [contentReady, core, depositRankMetric, detailsProducts, includeNonStandard, interestSections, mortgageRateMetric, suitabilityRevision]);
+    if (!core || !contentReady) return null;
+    const data = core.sections[activeSection];
+    if (!data) return null;
+    const stats = resolveSectionRibbonStats(
+      data, data.rates, includeNonStandard, activeSection, detailsProducts, depositRankMetric, mortgageRateMetric,
+    );
+    return stats.min === null ? null : { stats };
+  }, [activeSection, contentReady, core, depositRankMetric, detailsProducts, includeNonStandard, mortgageRateMetric, suitabilityRevision]);
 
-  const activeSnapshot = marketSnapshots.find((snapshot) => snapshot.key === activeSection) ?? null;
   const decisions = useMemo(() => recentDecisions(calendar, 5), [calendar]);
   const currentRba = core?.rba.at(-1) ?? null;
   const datasetRevision = core?.run_date ?? null;
@@ -342,7 +358,8 @@ export default function Market() {
   });
   usePerformanceAuditProbe(surface, {
     id: 'bank-insights', kind: 'data', required: showBankInsights,
-    status: explorerInsights ? 'ready' : bankInsightsError ? 'error' : 'pending', error: bankInsightsError,
+    status: explorerInsights ? 'ready' : bankInsightsError || (insightsSettled && insightsResult.failed) ? 'error' : 'pending',
+    error: bankInsightsError ?? (insightsSettled && insightsResult.failed ? 'Bank insights projection failed' : undefined),
     expectedCount: showBankInsights ? 1 : 0, actualCount: showBankInsights && explorerInsights ? 1 : 0,
     datasetRevision, renderRevision,
   });
@@ -534,7 +551,7 @@ export default function Market() {
       >
         {!showHistoryRibbon ? (
           <Button title="Show market history" variant="secondary" onPress={() => setPref('showHistoryRibbon', true)} />
-        ) : historyReady ? (
+        ) : historyReady && historySettled ? (
           <View style={{ gap: 16 }}>
             <HistoryExplorer
               section={activeSection}
