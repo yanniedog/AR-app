@@ -25,13 +25,14 @@ export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { 
   const catalogue = usePublicRateCatalogue(manifest);
   const product = catalogue.getProduct(productKey);
   const provider = identity.provider || product?.providerName;
+  const hasProgrammes = (product?.programmeIds.length ?? 0) > 0;
   return <ProductPageLinks overview={detail?.links?.overview}><ScreenScrollView><Stack.Screen options={{ title: 'Product details' }} /><View style={{ gap: 12 }}>
     <AppText weight="700">{product ? uiPublicProductName(product) : identity.name ? uiProductName({ product_name: identity.name }) : uiLabel('Product')}
     </AppText>
     {provider ? <ProductProviderLink provider={provider} /> : null}
     {identity.productCategory ? <AppText variant="small">{humanizeEnum(identity.productCategory)}</AppText> : null}
-    {product ? product.programmeIds.length ? <PublicRateEvidence productKey={productKey} programmeId={programmeId} scenario={rateScenario} />
-      : <DiscoveryRateStatus freshness={product.freshness} /> : null}
+    {hasProgrammes && <PublicRateEvidence productKey={productKey} programmeId={programmeId} scenario={rateScenario} />}
+    {!hasProgrammes && product?.freshness && <DiscoveryRateStatus freshness={product.freshness} />}
     {detail ? <>
       <AppText variant="small">{uiLabel('No listed rate')}</AppText>
       <DetailGroup loading={false} icon="cash-outline" title="Fees" items={detail.fees} /><DetailGroup loading={false} icon="person-outline" title="Eligibility" items={detail.eligibility} />
