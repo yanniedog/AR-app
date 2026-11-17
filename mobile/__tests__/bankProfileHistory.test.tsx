@@ -134,16 +134,16 @@ describe('bank detail profile-filtered history', () => {
   afterEach(() => installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() }));
 
   it('opens only the exact rendered lender tier and section, with the observed identity retained', () => {
-    const hidden = { ...row, rate_index: 998, rate: '0.01', comparison_rate: '0.01' };
+    const alternate = { ...row, rate_index: 998, rate: '0.01', comparison_rate: '0.01' };
     const visible = { ...row, rate_index: 999, rate: '0.06', comparison_rate: '0.06' };
     mockState.core = { ...core, sections: { ...core.sections,
-      Savings: { ...core.sections.Savings, rates: [hidden, visible] } } };
+      Savings: { ...core.sections.Savings, rates: [alternate, visible] } } };
     const tree = mount();
     try {
-      expect(tree.root.findAllByType('FlashList')[0].props.data.map((item: { row: RateRow }) => item.row)).toEqual([visible]);
+      expect(tree.root.findAllByType('FlashList')[0].props.data.map((item: { row: RateRow }) => item.row)).toEqual([visible, alternate]);
       const surface = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
       const open = surface.actions!['lender.product.first'];
-      expect(open({ productKey: row.product_key, rateIndex: hidden.rate_index, section: 'Savings' }))
+      expect(open({ productKey: row.product_key, rateIndex: 997, section: 'Savings' }))
         .toEqual({ unavailableReason: 'The exact planned lender product is not rendered' });
       expect(open({ productKey: row.product_key, rateIndex: visible.rate_index, section: 'Mortgage' }))
         .toEqual({ unavailableReason: 'The exact planned lender product is not rendered' });
@@ -151,7 +151,11 @@ describe('bank detail profile-filtered history', () => {
       expect(open({ productKey: row.product_key, rateIndex: visible.rate_index, section: 'Savings' }))
         .toEqual({ expectedPath: `/product/${encodeURIComponent(row.product_key)}`,
           productKey: row.product_key, rateIndex: visible.rate_index, section: 'Savings' });
-      expect(openProduct).toHaveBeenCalledWith(row.product_key, visible.rate_index);
+      expect(openProduct).toHaveBeenNthCalledWith(1, row.product_key, visible.rate_index);
+      expect(open({ productKey: row.product_key, rateIndex: alternate.rate_index, section: 'Savings' }))
+        .toEqual({ expectedPath: `/product/${encodeURIComponent(row.product_key)}`,
+          productKey: row.product_key, rateIndex: alternate.rate_index, section: 'Savings' });
+      expect(openProduct).toHaveBeenNthCalledWith(2, row.product_key, alternate.rate_index);
     } finally { act(() => tree.unmount()); }
   });
 
