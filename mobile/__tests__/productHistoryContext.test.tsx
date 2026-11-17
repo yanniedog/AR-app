@@ -124,8 +124,10 @@ jest.mock('../src/lib/yieldToUi', () => ({
   yieldToUi: async () => undefined,
   yieldToPaintFrames: async () => undefined,
   scheduleAfterInteractions: (work: () => void) => {
-    const handle = setTimeout(work, 0);
-    return () => clearTimeout(handle);
+    // Flush deferred work in async act without depending on runner timer timing.
+    let cancelled = false;
+    void Promise.resolve().then(() => { if (!cancelled) work(); });
+    return () => { cancelled = true; };
   },
 }));
 jest.mock('../src/lib/proAccess', () => ({ effectiveBankInsights: () => false, effectiveHistoryRibbon: (prefs: { showHistoryRibbon?: boolean }) => Boolean(prefs.showHistoryRibbon) }));
