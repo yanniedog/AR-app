@@ -471,9 +471,11 @@ export class RingBuffer {
   }
 
   getEntriesAfter(cursor: number): LogEntry[] {
-    return this.entries
-      .filter(({ sequence }) => sequence > cursor)
-      .map(({ entry }) => entry);
+    const first = this.entries[0]?.sequence;
+    if (first == null || Number.isNaN(cursor)) return [];
+    // Entries are contiguous after front eviction or a full reload. Only
+    // copy the suffix emitted during the just-finished audit action.
+    return this.entries.slice(Math.max(0, Math.floor(cursor) - first + 1)).map(({ entry }) => entry);
   }
 
   getText(): string {

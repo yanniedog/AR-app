@@ -327,12 +327,15 @@ export default function ProductDetail() {
       ? 'The selected product does not meet the current mandatory profile requirements'
       : 'The selected exact rate is absent from the eligible current catalogue'
     : null;
+  const selectedConstraint = useMemo(() => row && found && !(fromRatesComparison && found.section === 'Mortgage')
+    ? selectedTargetConstraint(row, found.section, scenario,
+      { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity })
+    : null, [row, found, fromRatesComparison, scenario, core, detailsPayload, rateConditionManifest, coreIntegrity]);
   const staySwitchProjection = useMemo(() => {
     // This legacy model compares the persisted current account and principal.
     // Its assumptions cannot consume a target priced for exploratory inputs.
     if (fromRatesComparison || !row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
-    if (targetConstraintContradicted(selectedTargetConstraint(row, 'Mortgage', scenario,
-      { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity }))) return null;
+    if (selectedConstraint && targetConstraintContradicted(selectedConstraint)) return null;
     const currentRef = scenario.currentProducts.mortgage;
     return buildStaySwitchProjection({
       scenario: calculationScenario,
@@ -340,7 +343,7 @@ export default function ProductDetail() {
       currentDetail: currentRef?.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts[currentRef.productKey] : null,
       targetDetail: detail,
     });
-  }, [fromRatesComparison, detail, detailsProducts, found?.section, row, scenario, calculationScenario, core, detailsPayload, rateConditionManifest, coreIntegrity]);
+  }, [fromRatesComparison, detail, detailsProducts, found?.section, row, scenario, calculationScenario, selectedConstraint]);
   const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
     && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
     ? scenario.currentProducts.mortgage.provider
@@ -868,8 +871,7 @@ export default function ProductDetail() {
         ) : null}
 
         <AccessNotice name={row.product_name} provider={row.provider} productDetails={detail} loading={detailsLoading} />
-        <AppText variant="small" color="textMuted">{fromRatesComparison && section === 'Mortgage' ? uiLabel('Eligibility unverified') : uiTargetConstraint(selectedTargetConstraint(row, section, scenario,
-          { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity }))}</AppText>
+        <AppText variant="small" color="textMuted">{selectedConstraint ? uiTargetConstraint(selectedConstraint) : uiLabel('Eligibility unverified')}</AppText>
 
         <MemoProductSpecs row={row} section={section} productDetails={detail} />
 

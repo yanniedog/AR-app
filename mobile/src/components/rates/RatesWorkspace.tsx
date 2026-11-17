@@ -367,9 +367,15 @@ export default function RatesWorkspace() {
   // Unlisted Mortgage browse has no comparison controls; do not gate it behind LVR/purpose/repayment.
   const mortgageSearchActive = section !== 'Mortgage' || availability === 'unlisted' || mortgageCriteriaReady || isDefaultMortgageBrowse;
   const pricingActive = mortgageSearchActive || section === 'Mortgage' && availability === 'listed' && mortgagePricingReady;
-  const mortgageIndex = useMortgageResultsIndex(core?.sections.Mortgage.rates ?? EMPTY_RATE_ROWS,
-    catalogue, mortgageContext, task.includeNonStandardOverride ?? includeNonStandard, suitabilityRevision, isFocused && section === 'Mortgage');
   const indexedScenarioKey = JSON.stringify(sectionScenario), indexedInputsKey = JSON.stringify(effectiveMortgageInputs);
+  const mortgageWorkKey = useMemo(() => ({ sourceRates, mortgageContext, catalogue, indexedScenarioKey, indexedInputsKey, suitabilityRevision }),
+    [sourceRates, mortgageContext, catalogue, indexedScenarioKey, indexedInputsKey, suitabilityRevision]);
+  const [settledMortgageWork, setSettledMortgageWork] = useState<typeof mortgageWorkKey | null>(null);
+  // This optional full-book warmup was competing with the current scope scan.
+  // Warm only after that request finishes; a completed index remains usable.
+  const mortgageIndex = useMortgageResultsIndex(core?.sections.Mortgage.rates ?? EMPTY_RATE_ROWS,
+    catalogue, mortgageContext, task.includeNonStandardOverride ?? includeNonStandard, suitabilityRevision,
+    isFocused && section === 'Mortgage', !mortgagePricingReady || settledMortgageWork === mortgageWorkKey);
   const indexedPricing = useMemo(() => section === 'Mortgage' && !task.intentError && mortgagePricingReady &&
     pricingMortgageFilters.loanPurposes.length === 1 && pricingMortgageFilters.repaymentTypes.length === 1
     ? mortgageIndex.index?.select(sectionScenario, effectiveMortgageInputs) ?? null : null,
@@ -403,6 +409,11 @@ export default function RatesWorkspace() {
     work: { ...cooperativePricing.work, pricingStage: 'ready' as const, sourceRowCount: sourceRates.length,
       candidateCount: indexedPricing.candidates.length, pricedRowCount: indexedPricing.priced.length },
   } : cooperativePricing;
+  useEffect(() => {
+    if (isFocused && section === 'Mortgage' && mortgagePricingReady && cooperativePricing.ready && !indexedPricing) {
+      setSettledMortgageWork(mortgageWorkKey);
+    }
+  }, [isFocused, section, mortgagePricingReady, cooperativePricing.ready, indexedPricing, mortgageWorkKey]);
   const fullPricingCandidates = publicPricing.candidates;
   const mandatoryActive = hasMandatoryRequirements();
   const discoveryKeys = useMemo(() => {
@@ -456,7 +467,7 @@ export default function RatesWorkspace() {
     (row: RateRow) => publicRateScenario(section, scenario, prefs.profileFilters, row),
     [section, scenario, prefs.profileFilters],
   );
-  const needsProfilePricing = exploratoryMortgageActive && profileSectionCount(prefs.profileFilters, section) > 0 && !task.intentError;
+  const needsProfilePricing = catalogue.status !== 'unavailable' && exploratoryMortgageActive && profileSectionCount(prefs.profileFilters, section) > 0 && !task.intentError;
   const profilePricing = useResolvedPublicRankingRows({
     sourceRows: needsProfilePricing ? sourceRates : EMPTY_RATE_ROWS,
     candidates: needsProfilePricing ? null : EMPTY_RATE_ROWS,
@@ -492,7 +503,8 @@ export default function RatesWorkspace() {
     if (applicable.length !== selected.length || applicable.some((token, index) => token !== selected[index])) setSelected(applicable);
   }, [comparisonCore, selected, catalogue, scenarioFor, mortgageInputs, mortgageCriteriaReady, core, details, manifest, coreIntegrity, suitabilityRevision, setSelected, section, publicPricing.ready]);
   const summaryCatalogueRows = catalogue.status === 'unavailable' || (catalogue.status === 'ready' && catalogue.allLoaded)
-    ? (exploratoryMortgageActive
+    ? (catalogue.status === 'unavailable' ? sourceRates
+      : exploratoryMortgageActive
       ? (profilePricing.ready ? profilePricing.resolution.rows : null)
       : (publicPricing.ready ? resolvedCatalogueRows : null))
     : null;
@@ -843,6 +855,10 @@ export default function RatesWorkspace() {
   useEffect(() => { restoreCommittedScroll(); }, [isFocused, restorationKey, restoreCommittedScroll]);
   const onListCommit = useCallback(() => {
     markListCommit();
+    // A recycler returning from a frozen route can already have a real layout
+    // without firing its initial onLoad callback again.
+    const first = listRef.current?.getLayout?.(0);
+    if (first && first.width > 0 && first.height > 0) listLoaded.current = true;
     restoreCommittedScroll();
   }, [markListCommit, restoreCommittedScroll]);
   const onListLoad = useCallback(() => {
@@ -1025,8 +1041,8 @@ export default function RatesWorkspace() {
   }, []);
   const { refFor: physicalCellRef, measure: measurePhysicalCells } = physicalVisibility;
   const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => <View collapsable={false}
-    ref={physicalCellRef(item)}
-    onLayout={measurePhysicalCells}>{'product_key' in item ? (
+    ref={target === 'Cell' && !retainingPrevious ? physicalCellRef(item) : undefined}
+    onLayout={target === 'Cell' && !retainingPrevious ? measurePhysicalCells : undefined}>{'product_key' in item ? (
     <SearchProductRow row={item} section={section}
       onLogoRenderStateChange={handleLogoRenderStateChange}
       quoteOwner={indexedPricing && !searchPending && !retainingPrevious ? mortgageIndex.index : null}

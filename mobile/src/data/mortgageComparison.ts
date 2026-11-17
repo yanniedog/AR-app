@@ -307,10 +307,16 @@ export async function mortgageComparisonRowsCooperatively(
   const candidates: RateRow[] = parsed.lvr === null ? rows : [];
   let sliceStarted = now();
   if (parsed.lvr !== null) {
+    const matchingTiers = new Map<RateRow['lvr_tier'], boolean>();
     for (let offset = 0; offset < rows.length; offset += 1) {
       const row = rows[offset];
-      const range = parseLvrRange(row.lvr_tier);
-      if (range && containsLvr(range, parsed)) candidates.push(row);
+      let matches = matchingTiers.get(row.lvr_tier);
+      if (matches === undefined) {
+        const range = parseLvrRange(row.lvr_tier);
+        matches = range !== null && containsLvr(range, parsed);
+        matchingTiers.set(row.lvr_tier, matches);
+      }
+      if (matches) candidates.push(row);
       if ((offset + 1) % 16 === 0 && now() - sliceStarted >= 6) {
         await yieldControl();
         sliceStarted = now();

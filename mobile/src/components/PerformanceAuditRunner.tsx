@@ -3146,7 +3146,7 @@ export function PerformanceAuditRunner() {
         pendingStoredChecks.length = 0;
       };
 
-      const record = async (rawCheck: AuditCheck, deferDurability = false) => {
+      const record = async (rawCheck: AuditCheck, deferDurability = false, measuredForeground = false) => {
         assertSessionActive(watchdog);
         // Keep canonical evidence intact. Only the scrolling journal is bounded;
         // a shared diagnosis must never silently inherit its text limits.
@@ -3158,7 +3158,11 @@ export function PerformanceAuditRunner() {
           ? rawCheck.metrics.stepBudgetOmittedMs
           : typeof rawCheck.metrics.backgroundSettleMs === 'number' ? rawCheck.metrics.backgroundSettleMs : 0;
         const foregroundMs = typeof rawCheck.durationMs === 'number' ? Math.max(0, rawCheck.durationMs - outsideBudget) : rawCheck.durationMs;
-        const check = enforcePerformanceAuditStepLimit({ ...rawCheck, diagnostic }, foregroundMs);
+        // runOnce already enforced its foreground watchdog. Reconstructing that
+        // duration from wall time and settle estimates can add a second timeout.
+        const check = measuredForeground
+          ? { ...rawCheck, diagnostic }
+          : enforcePerformanceAuditStepLimit({ ...rawCheck, diagnostic }, foregroundMs);
         evidenceBudget.retain(check);
         checks.push(check);
         logAuditCheck(app, sessionId, check);
@@ -3518,7 +3522,7 @@ export function PerformanceAuditRunner() {
           try {
             // Durable check storage/logging failures remain fatal — only the step
             // body itself is continuable after a recorded fail.
-            await record(check, deferDurability);
+            await record(check, deferDurability, true);
           } catch (caught) {
             rethrowAuditControl(caught);
             throw caught;
