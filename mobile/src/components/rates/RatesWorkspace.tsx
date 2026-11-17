@@ -380,9 +380,11 @@ export default function RatesWorkspace() {
   const mortgageContext = useMemo(() => ({ core, details, manifest, coreIntegrity }),
     [core, details, manifest, coreIntegrity]);
   const sourceRates = core?.sections[section]?.rates ?? EMPTY_RATE_ROWS;
-  // Unlisted Mortgage browse has no comparison controls; do not gate it behind LVR/purpose/repayment.
-  const mortgageSearchActive = section !== 'Mortgage' || availability === 'unlisted' || mortgageCriteriaReady || isDefaultMortgageBrowse;
-  const pricingActive = mortgageSearchActive || section === 'Mortgage' && availability === 'listed' && mortgagePricingReady;
+  // Product discovery does not need pricing or a mortgage comparison index.
+  const mortgageSearchActive = availability === 'listed' &&
+    (section !== 'Mortgage' || mortgageCriteriaReady || isDefaultMortgageBrowse);
+  const pricingActive = mortgageSearchActive ||
+    (availability === 'listed' && section === 'Mortgage' && mortgagePricingReady);
   const indexedScenarioKey = JSON.stringify(sectionScenario), indexedInputsKey = JSON.stringify(effectiveMortgageInputs);
   const mortgageWorkKey = useMemo(() => ({ sourceRates, mortgageContext, catalogue, indexedScenarioKey, indexedInputsKey, suitabilityRevision }),
     [sourceRates, mortgageContext, catalogue, indexedScenarioKey, indexedInputsKey, suitabilityRevision]);
@@ -392,13 +394,13 @@ export default function RatesWorkspace() {
   // its index before the first viewport commits, so later edits settle at once.
   const mortgageIndex = useMortgageResultsIndex(core?.sections.Mortgage.rates ?? EMPTY_RATE_ROWS,
     catalogue, mortgageContext, task.includeNonStandardOverride ?? includeNonStandard, suitabilityRevision,
-    isFocused && section === 'Mortgage',
+    isFocused && section === 'Mortgage' && availability === 'listed',
     sourceRates.length <= SMALL_MORTGAGE_BOOK_ROWS || !mortgagePricingReady || settledMortgageWork === mortgageWorkKey);
-  const indexedPricing = useMemo(() => section === 'Mortgage' && !task.intentError && mortgagePricingReady &&
+  const indexedPricing = useMemo(() => availability === 'listed' && section === 'Mortgage' && !task.intentError && mortgagePricingReady &&
     pricingMortgageFilters.loanPurposes.length === 1 && pricingMortgageFilters.repaymentTypes.length === 1
     ? mortgageIndex.index?.select(sectionScenario, effectiveMortgageInputs) ?? null : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [section, task.intentError, mortgagePricingReady, pricingMortgageFilters.loanPurposes.length, pricingMortgageFilters.repaymentTypes.length,
+  [availability, section, task.intentError, mortgagePricingReady, pricingMortgageFilters.loanPurposes.length, pricingMortgageFilters.repaymentTypes.length,
     mortgageIndex.index, indexedScenarioKey, indexedInputsKey]);
   const cooperativePricing = useResolvedPublicRankingRows({
     sourceRows: task.intentError || !pricingActive || indexedPricing ? EMPTY_RATE_ROWS : sourceRates,
@@ -485,7 +487,7 @@ export default function RatesWorkspace() {
     (row: RateRow) => publicRateScenario(section, scenario, prefs.profileFilters, row),
     [section, scenario, prefs.profileFilters],
   );
-  const needsProfilePricing = catalogue.status !== 'unavailable' && exploratoryMortgageActive && profileSectionCount(prefs.profileFilters, section) > 0 && !task.intentError;
+  const needsProfilePricing = pricingActive && catalogue.status !== 'unavailable' && exploratoryMortgageActive && profileSectionCount(prefs.profileFilters, section) > 0 && !task.intentError;
   const profilePricing = useResolvedPublicRankingRows({
     sourceRows: needsProfilePricing ? sourceRates : EMPTY_RATE_ROWS,
     candidates: needsProfilePricing ? null : EMPTY_RATE_ROWS,
