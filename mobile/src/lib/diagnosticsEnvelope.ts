@@ -336,7 +336,10 @@ export function encodeHostedPerformanceAudit(
   return retry;
 }
 
-function auditExportHeader(report: PerformanceAuditReport, completion: ReturnType<typeof buildDeidentifiedPerformanceAudit>['completion']) {
+function auditExportHeader(
+  report: PerformanceAuditReport,
+  completion: Omit<ReturnType<typeof buildDeidentifiedPerformanceAudit>['completion'], 'privacyBoundary'>,
+) {
   const stallTimeout = stallTimeoutFields(report.watchdog.hangTimeoutMs);
   return { audit: { auditId: completion.auditId, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
     finishedAt: completion.finishedAt,
