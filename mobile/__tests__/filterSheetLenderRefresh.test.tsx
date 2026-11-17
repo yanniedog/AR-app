@@ -7,13 +7,14 @@ import { EMPTY_FILTERS, filterRows } from '../src/data/selectors';
 import { prepareSearchFilterOptions } from '../src/data/searchFilterOptions';
 import bundledCore from '../assets/sample/core.json';
 import type { RateRow } from '../src/types';
+import { scheduleAfterInteractions } from '../src/lib/yieldToUi';
 
 jest.mock('../src/lib/yieldToUi', () => ({
   ...jest.requireActual('../src/lib/yieldToUi'),
-  scheduleAfterInteractions: (work: () => void) => {
+  scheduleAfterInteractions: jest.fn((work: () => void) => {
     work();
     return () => {};
-  },
+  }),
 }));
 jest.mock('../src/components/controls', () => ({ SearchBar: 'SearchBar' }));
 jest.mock('../src/components/icons/AppIcon', () => 'AppIcon');
@@ -67,6 +68,28 @@ test('a stale filter count cannot replace a newer draft or update a closed sheet
     expect(titles()).toContain('Apply');
     await act(async () => pending.at(-1)!.resolve(3));
     expect(titles()).toContain('Show 3 products');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('closing filters cancels a count queued behind the sheet transition', async () => {
+  const options = (await prepareSearchFilterOptions([], null, 'Mortgage', { yieldControl: async () => {} }))!;
+  const cancel = jest.fn();
+  let scheduled: (() => void) | undefined;
+  const resultCount = jest.fn(() => 1);
+  jest.mocked(scheduleAfterInteractions).mockImplementationOnce(work => {
+    scheduled = work;
+    return cancel;
+  });
+  const props = { onClose: jest.fn(), onApply: jest.fn(), options, filters: EMPTY_FILTERS, resultCount };
+  let tree!: InspectableRenderer;
+  await act(async () => { tree = TestRenderer.create(<FilterSheet {...props} visible />) as InspectableRenderer; });
+  try {
+    expect(scheduled).toBeDefined();
+    expect(resultCount).not.toHaveBeenCalled();
+    await act(async () => tree.update(<FilterSheet {...props} visible={false} />));
+    expect(cancel).toHaveBeenCalledTimes(1);
+    await act(async () => scheduled?.());
+    expect(resultCount).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });
 
