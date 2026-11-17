@@ -65,6 +65,25 @@ describe('previous process crash evidence', () => {
     expect(exported).not.toContain('older session to replace');
   });
 
+  it('discards both log generations after audit upload and preserves the saved report and new entries', async () => {
+    files[LOG] = 'older checkpoint';
+    files[SIDECAR] = 'saved report';
+    await log.beginColdStartSession();
+    log.info('audit', 'uploaded evidence');
+    await log.flushToFile(true);
+
+    const reset = log.startFreshAfterAuditUpload();
+    expect(log.getEntries()).toEqual([]);
+    log.error('app', 'new failure during log reset');
+    await reset;
+    await log.flushToFile(true);
+
+    expect(files[PREVIOUS]).toBeUndefined();
+    expect(files[SIDECAR]).toBe('saved report');
+    expect(files[LOG]).toContain('new failure during log reset');
+    expect(files[LOG]).not.toContain('uploaded evidence');
+  });
+
   it('copies a near-budget crash log natively after rename fails and keeps new rollover writes separate', async () => {
     const interrupted = `2026-10-12T06:30:00.000Z [ERROR] app: crash evidence ${'x'.repeat(2 * 1024 * 1024 - 128)}\n`;
     files[LOG] = interrupted;

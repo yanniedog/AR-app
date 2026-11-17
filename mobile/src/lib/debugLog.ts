@@ -345,6 +345,11 @@ async function flushPendingToFile(requirePhysical = false): Promise<void> {
   // The UI cold-start reset owns the file until the previous session is rotated.
   // New-session entries remain queued and are written immediately afterwards.
   if (coldStartResetPromise) await coldStartResetPromise;
+  const epochAtRequest = fileWriteEpoch;
+  if (clearState === 'clearing') {
+    if (requirePhysical) throw new Error('Debug log reset is in progress.');
+    return;
+  }
   while (fileFlushPromise) {
     try {
       await fileFlushPromise;
@@ -356,6 +361,7 @@ async function flushPendingToFile(requirePhysical = false): Promise<void> {
     // An empty queue proves nothing until that writer has also completed.
   }
 
+  if (epochAtRequest !== fileWriteEpoch) return;
   const batch = pendingFileLines.splice(0);
   const batchBytes = pendingFileBytes;
   pendingFileBytes = 0;
@@ -494,8 +500,10 @@ export function subscribeApplicationJournal(listener: (entry: LogEntry) => void)
   return () => applicationJournalListeners.delete(listener);
 }
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let persistPromise: Promise<void> = Promise.resolve();
 let clearState: 'ready' | 'clearing' | 'failed' = 'ready';
 let clearPromise: Promise<void> | null = null;
+let clearIncludesReports = false;
 
 function notify(): void {
   for (const fn of listeners) fn();
@@ -505,7 +513,10 @@ function schedulePersist(): void {
   if (persistTimer) return;
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    void persistTail();
+    const epoch = fileWriteEpoch;
+    persistPromise = persistPromise.then(async () => {
+      if (epoch === fileWriteEpoch && clearState === 'ready') await persistTail();
+    });
   }, 500);
 }
 
@@ -744,6 +755,82 @@ function isValidEntry(entry: unknown): entry is LogEntry {
   return true;
 }
 
+function resetDebugLog(clearSavedReports: boolean): Promise<void> {
+  if (clearPromise) {
+    // A manual Clear must still remove saved reports after a log-only reset.
+    return clearSavedReports && !clearIncludesReports
+      ? clearPromise.catch(() => {}).then(() => resetDebugLog(true))
+      : clearPromise;
+  }
+  const finishUploadAttemptsClear = clearSavedReports ? beginPublicReportUploadAttemptsClear() : null;
+  clearState = 'clearing';
+  clearIncludesReports = clearSavedReports;
+  fileWriteEpoch += 1;
+  buffer.clear();
+  pendingFileLines = [];
+  pendingFileBytes = 0;
+  pendingFileDroppedLines = 0;
+  reportedPendingFileDroppedLines = 0;
+  fileContentCache = null;
+  fileByteLength = null;
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  if (fileFlushTimer) {
+    clearTimeout(fileFlushTimer);
+    fileFlushTimer = null;
+  }
+  const inFlight = fileFlushPromise;
+  const erase = async () => {
+    if (inFlight) await inFlight.catch(() => {});
+    if (coldStartResetPromise) await coldStartResetPromise;
+    await persistPromise;
+
+    const storageKeys = [STORAGE_KEY];
+    const filePaths = [LOG_FILE, PREVIOUS_LOG_FILE,
+      ...(FileSystem.cacheDirectory ? [DEBUG_LOG_SHARE_FILE] : [])];
+    if (clearSavedReports) {
+      storageKeys.push(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, ...LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS);
+      filePaths.push(PERFORMANCE_AUDIT_SIDECAR_FILE, `${LOG_DIR}ar-performance-audit-completed.json`);
+    }
+    await Promise.all(storageKeys.map(key => AsyncStorage.removeItem(key)));
+    await Promise.all(filePaths.map(path => FileSystem.deleteAsync(path, { idempotent: true })));
+    const retained = await Promise.all([
+      ...storageKeys.map(async key => (await AsyncStorage.getItem(key)) != null ? key : null),
+      ...filePaths.map(async path => (await FileSystem.getInfoAsync(path)).exists ? path : null),
+    ]);
+    if (retained.some(Boolean)) throw new Error(`Clear verification found retained diagnostics: ${retained.filter(Boolean).join(', ')}`);
+    if (clearSavedReports) clearCompletedPerformanceAuditState();
+  };
+
+  clearPromise = Promise.resolve().then(async () => {
+    try {
+      if (clearSavedReports) {
+        await clearCompletedPerformanceAudit(async () => {
+          try { await erase(); }
+          finally { await finishUploadAttemptsClear?.(); }
+        });
+      } else {
+        await erase();
+      }
+      pendingLogRotation = false;
+      clearState = 'ready';
+      if (buffer.getEntries().length > 0) schedulePersist();
+      if (pendingFileLines.length > 0) scheduleFileFlush();
+    } catch (error) {
+      clearState = 'failed';
+      throw new Error('Debug log clear is incomplete; exporting is blocked until Clear succeeds. ' +
+        (error instanceof Error ? error.message : String(error)));
+    } finally {
+      clearPromise = null;
+    }
+  });
+  if (clearSavedReports) resetClearedPublicReportUpload();
+  notify();
+  return clearPromise;
+}
+
 export const debugLog = {
   debug(tag: string, message: string): void {
     append('debug', tag, message);
@@ -804,85 +891,11 @@ export const debugLog = {
     return coldStartResetPromise;
   },
   clear(): Promise<void> {
-    if (clearPromise) return clearPromise;
-    const finishUploadAttemptsClear = beginPublicReportUploadAttemptsClear();
-    resetClearedPublicReportUpload();
-    clearState = 'clearing';
-    fileWriteEpoch += 1;
-    buffer.clear();
-    pendingFileLines = [];
-    pendingFileBytes = 0;
-    pendingFileDroppedLines = 0;
-    reportedPendingFileDroppedLines = 0;
-    fileContentCache = null;
-    fileByteLength = null;
-    if (persistTimer) {
-      clearTimeout(persistTimer);
-      persistTimer = null;
-    }
-    if (fileFlushTimer) {
-      clearTimeout(fileFlushTimer);
-      fileFlushTimer = null;
-    }
-    const inFlight = fileFlushPromise;
-    fileFlushPromise = null;
-    notify();
-    clearPromise = (async () => {
-      try {
-        await clearCompletedPerformanceAudit(async () => {
-        try {
-        if (inFlight) await inFlight.catch(() => {});
-        if (coldStartResetPromise) await coldStartResetPromise;
-        const storageKeys = [
-          STORAGE_KEY,
-          LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
-          ...LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS,
-        ];
-        await Promise.all(storageKeys.map((key) => AsyncStorage.removeItem(key)));
-        const filePaths = [
-          LOG_FILE,
-          PREVIOUS_LOG_FILE,
-          PERFORMANCE_AUDIT_SIDECAR_FILE,
-          `${LOG_DIR}ar-performance-audit-completed.json`,
-          ...(FileSystem.cacheDirectory ? [DEBUG_LOG_SHARE_FILE] : []),
-        ];
-        await Promise.all(filePaths.map((path) =>
-          FileSystem.deleteAsync(path, { idempotent: true })));
-
-        const retainedStorageKeys = (
-          await Promise.all(storageKeys.map(async (key) => (
-            (await AsyncStorage.getItem(key)) == null ? null : key
-          )))
-        ).filter((key): key is string => key != null);
-        const retainedFiles = (
-          await Promise.all(filePaths.map(async (path) => (
-            (await FileSystem.getInfoAsync(path)).exists ? path : null
-          )))
-        ).filter((path): path is string => path != null);
-        if (retainedStorageKeys.length || retainedFiles.length) {
-          throw new Error(
-            `Clear verification found retained diagnostics: ` +
-            [...retainedStorageKeys, ...retainedFiles].join(', '),
-          );
-        }
-        clearCompletedPerformanceAuditState();
-        } finally { await finishUploadAttemptsClear(); }
-        });
-        pendingLogRotation = false;
-        clearState = 'ready';
-        if (buffer.getEntries().length > 0) schedulePersist();
-        if (pendingFileLines.length > 0) scheduleFileFlush();
-      } catch (error) {
-        clearState = 'failed';
-        throw new Error(
-          `Debug log clear is incomplete; exporting is blocked until Clear succeeds. ` +
-          `${error instanceof Error ? error.message : String(error)}`,
-        );
-      } finally {
-        clearPromise = null;
-      }
-    })();
-    return clearPromise;
+    return resetDebugLog(true);
+  },
+  /** Discard the exported log generations while retaining the report and receipt. */
+  startFreshAfterAuditUpload(): Promise<void> {
+    return resetDebugLog(false);
   },
   getText(): string {
     return buffer.getText();

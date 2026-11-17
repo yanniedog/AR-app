@@ -1,7 +1,7 @@
 import { FIXTURE_NOW_MS, makeHealthyDataFixture } from '../__fixtures__/appHealth';
 import { APP_HEALTH_DATA_CHECKS } from '../src/lib/appHealth/dataQuality';
 import {
-  newPassiveAuditRecord, parsePassiveAuditRecord, passiveAuditKey, runPassiveAuditCheck,
+  newPassiveAuditRecord, parsePassiveAuditRecord, passiveAuditCheckKey, passiveAuditKey, runPassiveAuditCheck,
   reusePassiveAuditChecks, serializePassiveAuditRecord, PASSIVE_AUDIT_MAX_AGE_MS, PASSIVE_AUDIT_INPUT_MAX_AGE_MS,
 } from '../src/lib/passiveAuditCache';
 
@@ -42,6 +42,23 @@ describe('passive audit evidence', () => {
     expect(raw).not.toContain('private-example');
     expect(JSON.parse(raw).metadata.core.sections).toEqual({});
     expect(JSON.parse(raw).metadata.catalogue).toBeUndefined();
+  });
+
+  it('uses compact detail outcomes for cache keys and omits raw detail records from resumable metadata', () => {
+    const { snapshot } = makeHealthyDataFixture();
+    const detail = { description: 'Published description' };
+    const products = { loan: detail } as NonNullable<NonNullable<typeof snapshot.details>['products']>;
+    Object.defineProperty(products, 'toJSON', { value: () => { throw new Error('Raw details serialized'); } });
+    snapshot.details = { ...snapshot.details!, products };
+    const assetKey = passiveAuditCheckKey(snapshot, build, 'asset-availability');
+    const completenessKey = passiveAuditCheckKey(snapshot, build, 'details-completeness');
+    const record = newPassiveAuditRecord(snapshot, build, FIXTURE_NOW_MS)!;
+    expect(JSON.parse(serializePassiveAuditRecord(record)!).metadata.details.products).toBeUndefined();
+
+    detail.description = '';
+    expect(passiveAuditCheckKey(snapshot, build, 'asset-availability')).toBe(assetKey);
+    expect(passiveAuditCheckKey(snapshot, build, 'details-completeness')).not.toBe(completenessKey);
+    expect(passiveAuditKey(snapshot, build)).not.toBe(record.key);
   });
 
   it('rechecks time-based freshness and rejects expired/future evidence', () => {

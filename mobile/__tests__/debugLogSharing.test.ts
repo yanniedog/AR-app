@@ -1,6 +1,6 @@
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
 jest.mock('../src/lib/debugLog', () => ({
-  debugLog: { readCompleteText: jest.fn(), warn: jest.fn(), info: jest.fn() },
+  debugLog: { readCompleteText: jest.fn(), warn: jest.fn(), info: jest.fn(), startFreshAfterAuditUpload: jest.fn() },
   debugLogUploadShareUrl: (receipt: { url: string; shareUrl?: string }) => receipt.shareUrl ?? receipt.url,
   deleteDebugLogUpload: jest.fn(),
   formatVersionedLogExport: jest.fn((text: string) => `versioned\n${text}`),
@@ -67,6 +67,28 @@ describe('automatic audit log sharing', () => {
       phase: 'copied', verified: true, sessionId: 'audit-1', url: result.shareUrl,
     });
     unsubscribe();
+  });
+
+  it('starts a fresh log after verification and preserves new entries when the audit link is copied', async () => {
+    const audit = { ...request, publicReport: { body: 'audit-body', contentSha256: 'a'.repeat(64) } };
+    jest.mocked(log.verifyDebugLogUpload).mockRejectedValueOnce(new Error('verification failed'));
+    expect(await sharing.startDebugLogUpload(audit)).toMatchObject({ phase: 'failed' });
+    expect(log.debugLog.startFreshAfterAuditUpload).not.toHaveBeenCalled();
+
+    expect(await sharing.retryDebugLogUpload()).toMatchObject({ phase: 'copied', verified: true, url: result.shareUrl });
+    expect(log.debugLog.startFreshAfterAuditUpload).toHaveBeenCalledTimes(1);
+    expect(await sharing.retryDebugLogUpload()).toMatchObject({ phase: 'copied' });
+    expect(log.debugLog.startFreshAfterAuditUpload).toHaveBeenCalledTimes(1);
+    expect(clipboard.setStringAsync).toHaveBeenCalledWith(result.shareUrl);
+  });
+
+  it('starts a fresh log for a verified public audit before the user copies its link', async () => {
+    const audit = { ...request, publicReport: { body: 'audit-body', contentSha256: 'a'.repeat(64) } };
+    expect(await sharing.startDebugLogUpload(audit)).toMatchObject({ phase: 'verified', url: result.shareUrl });
+    expect(log.debugLog.startFreshAfterAuditUpload).toHaveBeenCalledTimes(1);
+    expect(clipboard.setStringAsync).not.toHaveBeenCalled();
+    expect(await sharing.retryDebugLogUpload()).toMatchObject({ phase: 'copied' });
+    expect(log.debugLog.startFreshAfterAuditUpload).toHaveBeenCalledTimes(1);
   });
 
   it('copies the c-net content URL when the paste.rs shortener is absent', async () => {

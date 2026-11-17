@@ -834,7 +834,7 @@ function hasOfficialLink(detail: ProductDetail): boolean {
 const LVR_CONSTRAINT_CODES = new Set(['MIN_LVR', 'MAX_LVR']);
 const BALANCE_CONSTRAINT_CODES = new Set(['MIN_BALANCE', 'MAX_BALANCE']);
 
-function auditProductDetailGaps(snapshot: AppHealthDataSnapshot): {
+export function auditProductDetailGaps(snapshot: AppHealthDataSnapshot): {
   hasGaps: boolean;
   metrics: Record<string, number | boolean | null>;
 } | null {
