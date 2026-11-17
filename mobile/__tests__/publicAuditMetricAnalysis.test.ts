@@ -131,6 +131,7 @@ test('public and full diagnostic analysis preserve target aggregation methods an
       { id: 'private-target-identity', platform: 'android', width: 20, height: 20, role: 'button', layoutObservations: 4 },
     ] };
   const publicAnalysis = publicAuditMetricAnalysis(report, id => id);
+  expect(publicAuditMetricAnalysis({ ...report, uxTelemetry: undefined }, id => id, report.uxTelemetry).metrics.affsScore.methodVersion).toBe(3);
   const log = fullAuditDiagnosticLog(report, id => id) as { metricAnalysis: typeof publicAnalysis };
   for (const analysis of [publicAnalysis, log.metricAnalysis]) {
     expect(analysis.uxAudit.pillars.standardsAndAccessibility.targetSampleCoverage).toMatchObject({ aggregation: 'control-state-geometry', layoutObservations: 9 });

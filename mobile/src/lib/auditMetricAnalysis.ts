@@ -78,6 +78,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   completion = buildPerformanceAuditCompletion(report),
   uxTelemetry?: UxFrictionFluidityTelemetryOptions): AuditMetricAnalysis {
   const uxAudit = buildUxFrictionFluidityAudit(report, completion, uxTelemetry);
+  const methodReport = uxTelemetry ? { ...report, uxTelemetry: { ...report.uxTelemetry, ...uxTelemetry } } : report;
   const values = auditMetricValues(report, completion, uxAudit);
   const observations: AuditMetricObservation[] = [];
   const indices = new Map<string, number>();
@@ -131,7 +132,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     if (value !== null && missing) evidence.push('partial-samples');
     metrics[metric] = {
       value, unit: AUDIT_METRIC_DEFINITIONS[metric].unit, methodId: `ar.audit.${metric}`,
-      methodVersion: auditReportMetricMethodVersion(report, metric),
+      methodVersion: auditReportMetricMethodVersion(methodReport, metric),
       formula: report.auditEvidenceVersion !== 2 && metric === 'readinessCoveragePercent'
         ? 'Executed journeys with captured readiness / executed journeys × 100'
         : report.auditEvidenceVersion !== 2 && metric === 'linkVerificationPercent'
