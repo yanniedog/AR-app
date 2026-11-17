@@ -1,3 +1,4 @@
+import { useAuditStaticRoute } from '../src/hooks/useAuditStaticRoute';
 import { uiLabel } from "../src/lib/uiCopy";
 import React from 'react';
 import { View } from 'react-native';
@@ -19,8 +20,9 @@ function SourceReference({ url }: { url: string }) {
 }
 
 export default function ThirdPartyNoticesScreen() {
+  const measureAuditContent = useAuditStaticRoute({ action: 'notices.open', surface: 'notices.document', route: '/third-party-notices' });
   return (
-    <ScreenScrollView
+    <ScreenScrollView onContentSizeChange={measureAuditContent}
       showDataHealthBanner={false}
       contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 24, paddingBottom: 48, gap: 32 }}
     >

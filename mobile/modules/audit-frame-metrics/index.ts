@@ -6,6 +6,8 @@ export interface AuditNativeFrameMetricsResult {
   maxFrozenFrameMs?: number;
   totalFrameCount?: number;
   totalFrames?: number;
+  droppedFrameCallbackCount?: number;
+  frameDeadlineCount?: number;
 }
 
 export function startAuditNativeFrameMetrics(): boolean {

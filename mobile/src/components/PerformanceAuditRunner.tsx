@@ -30,7 +30,6 @@ import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   BackHandler,
   AppState,
-  InteractionManager,
   Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -157,7 +156,7 @@ import { setPassiveAuditPaused } from '../lib/passiveAudit';
 import { publishPerformanceAuditAfterFinalization } from '../lib/performanceAuditFinalization';
 import { awaitPerformanceAuditWork } from '../lib/performanceAuditWork';
 import { buildPerformanceAuditSetupPlans, measurePerformanceAuditSetupStage, PERFORMANCE_AUDIT_SETUP_STAGES, PERFORMANCE_AUDIT_SETUP_CHECK_IDS } from '../lib/performanceAuditSetup';
-import { AUDIT_ENTRY_CHECK_IDS, buildAuditEntryChecks } from '../lib/auditEntryTrace';
+import { AUDIT_ENTRY_CHECK_IDS, takeAuditEntryChecks } from '../lib/auditEntryTrace';
 import { captureAuditRunTiming, PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, PerformanceAuditStepTimeoutError, estimatePerformanceAuditTime, scoreUserVisibleJourney, userVisibleForwardMs } from '../lib/performanceAuditTiming';
 import {
   buildIntegratedAppHealthReport, buildPartialAppHealthReport,
@@ -166,7 +165,8 @@ import {
 } from '../lib/performanceAuditHealth';
 import { PerformanceAuditOverlay } from './PerformanceAuditOverlay';
 import { startAuditNativeFrameMetrics, stopAuditNativeFrameMetrics } from '../../modules/audit-frame-metrics';
-import { startAuditTargetCollection, stopAuditTargetCollection } from '../lib/auditTargetRegistry';
+import { createAuditNativeFrameCapture } from '../lib/auditNativeFrameCapture';
+import { getAuditTargetCapture, startAuditTargetCollection, stopAuditTargetCollection } from '../lib/auditTargetRegistry';
 
 const AUDIT_HOME_PATH = '/performance-audit';
 const ROUTE_TIMEOUT_MS = 8_000;
@@ -372,13 +372,9 @@ async function awaitAuditWorkWithTimeout<T>(
 }
 
 async function settleUiUnchecked(): Promise<void> {
-  await timeoutAfter(
-    new Promise<void>((resolve) => {
-      InteractionManager.runAfterInteractions(() => resolve());
-    }),
-    3_000,
-    'UI settle',
-  ).catch(() => {});
+  // Navigation commits and the readiness registry validate the destination.
+  // Unrelated animations can hold InteractionManager after that work is done.
+  await yieldToUi();
   await nextFrame();
   await nextFrame();
 }
@@ -558,11 +554,17 @@ export function routeEntryHref(step: DeepAuditStep): Href | null {
     case 'saved.open': return '/watchlist' as Href;
     case 'profile.open': return '/profile' as Href;
     case 'settings.open': return '/settings' as Href;
+    case 'about.open': return '/about' as Href;
+    case 'notices.open': return '/third-party-notices' as Href;
+    case 'calculation-receipt.open': return '/calculation-receipt' as Href;
     case 'terms.open': return '/terms' as Href;
     case 'debug-log.open': return '/debug-log' as Href;
     case 'not-found.open': return '/__audit-not-found__' as Href;
     case 'audit.pass.complete': return AUDIT_HOME_PATH as Href;
+    case 'redirect.trends.verify': return '/trends' as Href;
+    case 'redirect.tab-trends.verify': return '/(tabs)/trends' as Href;
     case 'redirect.root.verify': return '/' as Href;
+    case 'redirect.tab-index.verify': return '/(tabs)' as Href;
     case 'redirect.onboarding.verify': return '/onboarding' as Href;
     case 'redirect.tools.verify': return '/tools' as Href;
     case 'redirect.matches.verify': return '/matches' as Href;
@@ -687,21 +689,13 @@ async function waitForUserVisibleReady(
 ): Promise<UserVisibleReady> {
   const started = now();
   const timeoutMs = readinessTimeoutMs(watchdog);
-  const deadline = started + timeoutMs;
   const previewOf = () => performanceAuditReadinessRegistry.snapshot(
     options.surfaceIds,
     options.requiredKinds,
     options.onlyKinds,
   );
-  while (now() < deadline) {
-    if (watchdog.isExpired()) {
-      return { snapshot: previewOf(), elapsedMs: now() - started, settled: false, stepExpired: true };
-    }
-    const preview = previewOf();
-    const registering = preview.blockers.some((blocker) =>
-      blocker.code === 'required-kind-missing' || blocker.code === 'no-surfaces' || blocker.code === 'no-probes');
-    if (!registering) break;
-    await delay(50);
+  if (watchdog.isExpired()) {
+    return { snapshot: previewOf(), elapsedMs: now() - started, settled: false, stepExpired: true };
   }
   try {
     const snapshot = await performanceAuditReadinessRegistry.waitForReady({
@@ -712,7 +706,8 @@ async function waitForUserVisibleReady(
       changedRender: options.changedRender,
       quietWindowMs: 0,
       creditExistingStableTime: false,
-      timeoutMs: Math.max(1, deadline - now()),
+      waitForProbeRegistration: true,
+      timeoutMs,
       signal: options.signal,
     });
     return { snapshot, elapsedMs: now() - started, settled: true, stepExpired: watchdog.isExpired() };
@@ -724,7 +719,8 @@ async function waitForUserVisibleReady(
         snapshot,
         elapsedMs: now() - started,
         settled: false,
-        stepExpired: watchdog.isExpired() || caught instanceof PerformanceAuditStepTimeoutError,
+        stepExpired: watchdog.isExpired() || caught instanceof PerformanceAuditStepTimeoutError
+          || caught instanceof PerformanceAuditReadinessTimeoutError,
       };
     }
     throw caught;
@@ -2797,9 +2793,7 @@ export async function runJourney(
       minimumJustifiedActions: 2,
       observedActions: 1
         + (backMs != null ? 1 : 0)
-        + (secondBackMs != null ? 1 : 0)
-        + (anchorResetMs != null ? 1 : 0)
-        + (replaceRecoveryMs != null ? 1 : 0),
+        + (secondBackMs != null ? 1 : 0),
       retries: 0,
       validationFailures: 0,
       backtracks: secondBackMs != null ? 1 : 0,
@@ -2923,7 +2917,7 @@ export function PerformanceAuditRunner() {
       const report: PerformanceAuditReport = {
         applicationJournal: auditApplicationJournal(state.startedAt, finishedAt),
         renderingEvidenceVersion: 2,
-        schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION, sessionId: state.sessionId,
+        schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION, auditEvidenceVersion: 2, sessionId: state.sessionId,
         startedAt: state.startedAt, finishedAt, durationMs: 0,
         app, watchdog: { hangTimeoutMs: state.hangTimeoutMs, storedCheckCount: 0, lastStoredCheckAt: null },
         environment: fallbackEnvironment(app, dimensions.width, dimensions.height, dimensions.fontScale),
@@ -2950,24 +2944,19 @@ export function PerformanceAuditRunner() {
     const execute = async () => {
       setPassiveAuditPaused(true);
       startAuditTargetCollection();
-      const nativeFrameMetricsStarted = Platform.OS === 'android' && startAuditNativeFrameMetrics();
-      let nativeFrameMetricsInterrupted = getPerformanceAuditState().paused;
+      const nativeFrameCapture = Platform.OS === 'android'
+        ? createAuditNativeFrameCapture(startAuditNativeFrameMetrics, stopAuditNativeFrameMetrics)
+        : null;
       let collectedUxTelemetry: PerformanceAuditReport['uxTelemetry'] | undefined;
       let uxTelemetryFinalized = false;
       const finalizeUxTelemetry = (): PerformanceAuditReport['uxTelemetry'] | undefined => {
         if (uxTelemetryFinalized) return collectedUxTelemetry;
         uxTelemetryFinalized = true;
         const targetSamples = stopAuditTargetCollection();
-        const androidFluidity = nativeFrameMetricsStarted ? stopAuditNativeFrameMetrics() : null;
-        const validAndroidFluidity = nativeFrameMetricsInterrupted ? undefined : androidFluidity;
         const telemetry: NonNullable<PerformanceAuditReport['uxTelemetry']> = {
+          targetCapture: getAuditTargetCapture(),
           ...(targetSamples.length > 0 ? { targetSamples } : {}),
-          ...(Platform.OS === 'android' ? {
-            androidFrameCapture: !nativeFrameMetricsStarted ? 'start-unavailable'
-              : nativeFrameMetricsInterrupted ? 'interrupted'
-                : androidFluidity ? 'collected' : 'no-samples',
-          } : {}),
-          ...(validAndroidFluidity ? { androidFluidity: validAndroidFluidity } : {}),
+          ...nativeFrameCapture?.finish(),
         };
         collectedUxTelemetry = Object.keys(telemetry).length > 0 ? telemetry : undefined;
         return collectedUxTelemetry;
@@ -3000,7 +2989,7 @@ export function PerformanceAuditRunner() {
       let readinessPaused = getPerformanceAuditState().paused;
       const mirrorPauseToWatchdog = () => {
         const paused = getPerformanceAuditState().paused;
-        if (paused) nativeFrameMetricsInterrupted = true;
+        nativeFrameCapture?.setPaused(paused);
         if (paused !== readinessPaused) {
           performanceAuditReadinessRegistry.invalidateSettledReadiness();
           readinessPaused = paused;
@@ -3535,6 +3524,13 @@ export function PerformanceAuditRunner() {
           return false;
         };
 
+        // Measure each phase in its own scope while the audit screen is the
+        // mounted origin. A slow disclosure cannot become a screen-open failure.
+        for (const measureEntry of takeAuditEntryChecks()) {
+          updatePerformanceAuditProgress(completed, total, 'Measuring audit start path');
+          await recordContinuable('Measuring audit start path', async () => enforcePerformanceAuditStepLimit(await measureEntry()));
+        }
+
         updatePerformanceAuditProgress(
           completed,
           total,
@@ -3595,17 +3591,6 @@ export function PerformanceAuditRunner() {
           'Sampling idle responsiveness',
           (watchdog) => runRuntimeCheck(monitor, watchdog),
         );
-
-        // Recorded while the audit screen is still the mounted origin. The
-        // builder never throws, so each planned id is stored exactly once.
-        let entryChecks: AuditCheck[] | null = null;
-        for (let entryIndex = 0; entryIndex < AUDIT_ENTRY_CHECK_IDS.length; entryIndex++) {
-          updatePerformanceAuditProgress(completed, total, 'Measuring audit start path');
-          await recordContinuable('Measuring audit start path', async () => {
-            entryChecks ??= await buildAuditEntryChecks();
-            return entryChecks[entryIndex];
-          });
-        }
 
         // Deep semantic callbacks deliberately keep their screen mounted so a
         // scenario can continue. They cannot also be honest forward/back route
@@ -4027,6 +4012,7 @@ export function PerformanceAuditRunner() {
           applicationJournal: auditApplicationJournal(startedAt, finishedAt),
           ...(uxTelemetry ? { uxTelemetry } : {}),
           renderingEvidenceVersion: 2,
+          auditEvidenceVersion: 2,
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
           sessionId,
           startedAt,
@@ -4424,6 +4410,7 @@ export function PerformanceAuditRunner() {
             applicationJournal: auditApplicationJournal(startedAt, finishedAt),
             ...(partialUxTelemetry ? { uxTelemetry: partialUxTelemetry } : {}),
             renderingEvidenceVersion: 2,
+            auditEvidenceVersion: 2,
             schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
             sessionId,
             startedAt,

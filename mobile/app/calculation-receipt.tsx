@@ -1,3 +1,4 @@
+import { useAuditStaticRoute } from '../src/hooks/useAuditStaticRoute';
 import React, { useCallback, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { Stack } from 'expo-router';
@@ -47,6 +48,7 @@ function RecordedFacts({document}:{document:ReplayDocument}) {
   </View>;
 }
 export default function CalculationReceipt() {
+  const measureAuditContent = useAuditStaticRoute({ action: 'calculation-receipt.open', surface: 'calculations.receipt', route: '/calculation-receipt' });
   const manifest=useStore(s=>s.manifest), core=useStore(s=>s.core), coreIntegrity=useStore(s=>s.coreIntegrity), details=useStore(s=>s.details), ensureDetails=useStore(s=>s.ensureDetails);
   const receiptInput=useReceiptImportInput();
   const text=receiptInput.raw;
@@ -72,7 +74,7 @@ export default function CalculationReceipt() {
     const selected=document.items.map((_,n)=>choices[n]);
     return selected.every((choice):choice is ReplayChoice=>!!choice) ? selected:null;
   }
-  return <ScreenScrollView><Stack.Screen options={{title:'Open calculation receipt'}}/><View style={{gap:12}}>
+  return <ScreenScrollView onContentSizeChange={measureAuditContent}><Stack.Screen options={{title:'Open calculation receipt'}}/><View style={{gap:12}}>
     <Button title="Paste calculation receipt" onPress={()=>void Clipboard.getStringAsync().then(read,()=>setError('Clipboard unavailable'))}/>
     <LedgerField label="Receipt text" multiline value={receiptInput.value} onChangeText={edit}/>
     <Button title="Read receipt" onPress={()=>read(text)}/>

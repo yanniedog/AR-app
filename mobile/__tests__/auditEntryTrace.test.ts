@@ -1,5 +1,6 @@
 import {
-  AUDIT_ENTRY_CHECK_IDS, buildAuditEntryChecks, markAuditEntryInterrupted, markAuditEntryRunning, markAuditEntryScreenMounted,
+  AUDIT_ENTRY_CHECK_IDS, AUDIT_ENTRY_SETTINGS_TIMEOUT_MS, buildAuditEntryChecks, markAuditEntryInterrupted,
+  markAuditEntryRunning, markAuditEntryScreenMounted, markAuditEntryScreenPhase, takeAuditEntryChecks,
   markAuditEntryScreenOpenPressed, markAuditEntryScreenReady, markAuditEntrySettingsOpened, markAuditEntryStartPressed, markAuditEntryStartQueued,
   resetAuditEntryTraceForTests, setAuditEntrySettingsProbe,
 } from '../src/lib/auditEntryTrace';
@@ -31,6 +32,9 @@ test('a run requested without the screen declares every entry phase unavailable'
 test('measures screen open, settings open and the start response from one visit', async () => {
   markAuditEntryScreenOpenPressed();
   clock = 130; markAuditEntryScreenMounted();
+  clock = 145; markAuditEntryScreenPhase('screenLayoutAt');
+  clock = 155; markAuditEntryScreenPhase('preferencesReadyAt');
+  clock = 170; markAuditEntryScreenPhase('admissionReadyAt');
   clock = 180; markAuditEntryScreenReady();
   clock = 900; markAuditEntryScreenReady();
   clock = 1_000; markAuditEntryStartPressed();
@@ -38,9 +42,38 @@ test('measures screen open, settings open and the start response from one visit'
   clock = 1_300; markAuditEntryRunning();
   setAuditEntrySettingsProbe(async () => 42);
   const [screen, settings, start] = await buildAuditEntryChecks();
-  expect(screen).toMatchObject({ status: 'pass', durationMs: 180, metrics: { forwardWorkMs: 180, measurementAvailable: true } });
-  expect(settings).toMatchObject({ status: 'pass', durationMs: 42, metrics: { maxFrameGapMs: 42 } });
-  expect(start).toMatchObject({ status: 'pass', durationMs: 300, metrics: { actionMs: 40, forwardWorkMs: 300, nonTimingFailure: false } });
+  expect(screen).toMatchObject({ status: 'pass', durationMs: 180, metrics: {
+    forwardWorkMs: 180, measurementAvailable: true, entryRouteMountMs: 130,
+    entryLayoutMs: 15, entryPreferencesMs: 25, entryAdmissionMs: 40,
+  } });
+  expect(settings).toMatchObject({ status: 'pass', durationMs: 42, metrics: { entryFirstCallbackMs: 42 } });
+  expect(start).toMatchObject({ status: 'warn', durationMs: 300, metrics: {
+    actionMs: 40, forwardWorkMs: 300, nonTimingFailure: false, entryFeedbackObserved: false,
+  } });
+});
+
+test('bounds a stuck settings probe in its own check without changing screen-entry time', async () => {
+  markAuditEntryScreenMounted();
+  clock = 180; markAuditEntryScreenReady();
+  const probe = jest.fn(() => new Promise<number>(() => {}));
+  setAuditEntrySettingsProbe(probe);
+  const [screen, settings] = takeAuditEntryChecks();
+  expect(await screen()).toMatchObject({ status: 'pass', durationMs: 180 });
+  expect(probe).not.toHaveBeenCalled();
+  const pending = settings();
+  jest.advanceTimersByTime(AUDIT_ENTRY_SETTINGS_TIMEOUT_MS);
+  expect(await pending).toMatchObject({ status: 'fail', metrics: {
+    executionAttempted: true, measurementAvailable: false, entryMeasurementStatus: 'timed-out',
+  } });
+});
+
+test('screen entry spanning backgrounding has an explicit gap', async () => {
+  markAuditEntryScreenMounted();
+  markAuditEntryInterrupted();
+  clock = 5_000; markAuditEntryScreenReady();
+  expect((await buildAuditEntryChecks())[0]).toMatchObject({ status: 'skipped', durationMs: null,
+    metrics: { entryMeasurementStatus: 'interrupted' },
+  });
 });
 
 test('slow phases are scored with the existing latency limits and a failed probe falls back to the traced open', async () => {
@@ -67,7 +100,9 @@ test('press marks belong to one run, survive a remount and are withheld after an
   clock = 240; markAuditEntryStartQueued();
   markAuditEntryScreenMounted();
   clock = 400; markAuditEntryRunning();
-  expect((await buildAuditEntryChecks())[2]).toMatchObject({ status: 'pass', durationMs: 200 });
+  const [screen, , start] = await buildAuditEntryChecks();
+  expect(screen).toMatchObject({ status: 'pass', durationMs: 100 });
+  expect(start).toMatchObject({ status: 'warn', durationMs: 200 });
   expect((await buildAuditEntryChecks())[2].status).toBe('skipped');
   clock = 500; markAuditEntryStartPressed();
   clock = 520; markAuditEntryStartQueued();

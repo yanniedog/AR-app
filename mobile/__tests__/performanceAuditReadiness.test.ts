@@ -824,6 +824,25 @@ describe('PerformanceAuditReadinessRegistry', () => {
     expect(clock.pendingTimers()).toBe(0);
   });
 
+  it('observes late registration without polling or extending the quiet window', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('pa-route-commit');
+    registry.registerSurface({ id: 'rates.results', probes: [
+      { id: 'layout', kind: 'layout', status: 'ready', layoutMeasured: true },
+    ] });
+    const wait = registry.waitForReady({ surfaceIds: ['rates.results'], requiredKinds: ['list'],
+      waitForProbeRegistration: true, quietWindowMs: 10, timeoutMs: 100 });
+    clock.advanceBy(15);
+    registry.registerSurface({ id: 'rates.results', probes: [
+      { id: 'list', kind: 'list', status: 'ready', expectedCount: 4, actualCount: 4 },
+    ] });
+    clock.advanceBy(10);
+    await expect(wait).resolves.toMatchObject({ ready: true });
+    expect(clock.now()).toBe(25);
+    expect(clock.pendingTimers()).toBe(0);
+  });
+
   it('keeps the original deadline when the selected surface never registers', async () => {
     const clock = new FakeClock();
     const registry = new PerformanceAuditReadinessRegistry(clock);
