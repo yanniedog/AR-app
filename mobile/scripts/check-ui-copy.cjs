@@ -2,6 +2,7 @@ const path = require('node:path');
 const { createRequire } = require('node:module');
 
 const TEXT_PROPS = new Set(['title', 'headerTitle', 'tabBarLabel', 'label', 'text', 'message', 'body', 'children', 'placeholder', 'accessibilityLabel', 'accessibilityValue', 'aria-label', 'aria-valuetext', 'alt', 'promptMessage', 'cancelLabel', 'fallbackLabel', 'dialogTitle', 'buttonTitle', 'actionLabel', 'detail', 'caption', 'html', '__html']);
+const INTERNAL_LABEL = /source (?:review required|verification needed|pointer|sha256)|^\/data\/(?:depositRates|lendingRates)\//i;
 const REMOVED_APIS = new Set(['description', 'subtitle', 'deck', 'helperText', 'accessibilityHint', 'aria-description', 'summary', 'hint', 'sub']);
 
 /** Type provenance, not sentence length, controls every production text sink. */
@@ -17,21 +18,6 @@ function inspectUiCopy({ root, policyFile = 'src/lib/uiCopy.ts', program: provid
   }
   const checker = program.getTypeChecker();
   const approvedLabels = new Set(['']);
-  const policy = program.getSourceFiles().find(file => path.resolve(file.fileName).toLowerCase() === policyPath);
-  if (policy) {
-    function registry(node) {
-      if (ts.isVariableDeclaration(node) && node.name.getText() === 'UI_LABELS') {
-        let value = node.initializer;
-        while (value && (ts.isAsExpression(value) || ts.isSatisfiesExpression(value))) value = value.expression;
-        if (!value || !ts.isArrayLiteralExpression(value) || value.elements.some(item => !ts.isStringLiteral(item))) {
-          throw new Error('UI_LABELS must be an explicitly reviewed literal array');
-        }
-        for (const item of value.elements) approvedLabels.add(item.text);
-      }
-      ts.forEachChild(node, registry);
-    }
-    registry(policy);
-  }
   const violations = [];
   const seen = new Set();
   const sourceRoot = path.resolve(root, 'src').toLowerCase() + path.sep;
@@ -44,6 +30,25 @@ function inspectUiCopy({ root, policyFile = 'src/lib/uiCopy.ts', program: provid
     if (seen.has(key)) return;
     seen.add(key);
     violations.push({ file: path.relative(root, file.fileName).split(path.sep).join('/'), line: position.line + 1, column: position.character + 1, code });
+  }
+
+  const policy = program.getSourceFiles().find(file => path.resolve(file.fileName).toLowerCase() === policyPath);
+  if (policy) {
+    function registry(node) {
+      if (ts.isVariableDeclaration(node) && node.name.getText() === 'UI_LABELS') {
+        let value = node.initializer;
+        while (value && (ts.isAsExpression(value) || ts.isSatisfiesExpression(value))) value = value.expression;
+        if (!value || !ts.isArrayLiteralExpression(value) || value.elements.some(item => !ts.isStringLiteral(item))) {
+          throw new Error('UI_LABELS must be an explicitly reviewed literal array');
+        }
+        for (const item of value.elements) {
+          if (INTERNAL_LABEL.test(item.text)) report(item, 'internal-label');
+          else approvedLabels.add(item.text);
+        }
+      }
+      ts.forEachChild(node, registry);
+    }
+    registry(policy);
   }
 
   function branded(type) {

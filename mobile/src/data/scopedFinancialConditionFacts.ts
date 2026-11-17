@@ -72,7 +72,11 @@ function bounds(text: string, numberPattern: string, suffix: string, parse: (val
 }
 function parseAtomic(text: string, source: ConditionSourceReference): PublishedNumericConditionFact | null {
   if (text.length > 180 || /[\r\n]/.test(text)) return null;
-  const clause = text.trim().replace(/\.$/, '').trim();
+  let clause = text.trim().replace(/\.$/, '').trim();
+  if (source.rateFamily === 'lending') {
+    clause = clause.replace(/^This rate is applicable to loans with an LVR /i, 'LVR ')
+      .replace(/^This rate is applicable to loans from /i, 'Loan amount from ');
+  }
   const lvr = /^(?:For\s+)?LVR\s+(.+)$/i.exec(clause);
   if (lvr) {
     const range = bounds(lvr[1], NUM, '%', Number);

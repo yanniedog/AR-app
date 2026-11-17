@@ -843,6 +843,7 @@ export default function ProductDetail() {
             onPress={openCalculate}
           />
         </Row>
+        <MemoProductSpecs row={row} section={section} productDetails={detail} />
         {publicCatalogue.status !== 'unavailable' && publicProduct ? (
           <PublicRateEvidence productKey={productKey} row={row} programmeId={requestedProgramme}
             scenario={fromRatesComparison ? scenarioFor(section, row) : undefined} />
@@ -865,8 +866,6 @@ export default function ProductDetail() {
 
         <AccessNotice name={row.product_name} provider={row.provider} productDetails={detail} loading={detailsLoading} />
         <AppText variant="small" color="textMuted">{selectedConstraint ? uiTargetConstraint(selectedConstraint) : uiLabel('Eligibility unverified')}</AppText>
-
-        <MemoProductSpecs row={row} section={section} productDetails={detail} />
 
         <Button
           title="Bank-call brief"
