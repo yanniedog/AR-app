@@ -265,7 +265,7 @@ describe('deep performance audit plan', () => {
       ['market.response.open', '/rba-response', 'moves.response-chart'],
     ]) expect(step(id)).toMatchObject({ depth: 1, expectedPath, expectedSurface });
     expect(step('market.response.open')?.readiness).not.toContain('graphics');
-    expect(step('moves.response-chart.provider.next')?.readiness).not.toContain('graphics');
+    expect(step('moves.bank-rates.open')).toMatchObject({ expectedPath: '/bank-rates', expectedSurface: 'bank-rates.dashboard', readiness: expect.arrayContaining(['graphics']) });
     expect(step('calculator.projections.open')).toMatchObject({ expectedPath: '/calculator', expectedSurface: 'projections.inputs' });
     expect(step('redirect.projections.verify')).toMatchObject({ expectedPath: '/calculator', expectedSurface: 'projections.inputs' });
   });

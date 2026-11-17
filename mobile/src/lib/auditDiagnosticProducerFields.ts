@@ -844,7 +844,7 @@ export const AUDIT_PRODUCER_ENUMS: Record<string, readonly string[]> = {
     "Fewer than two distinct exact products are available in one section",
     "Fewer than two distinct exact products match the applied Rates comparison scope",
     "Fewer than two products are loaded",
-    "Maximum coverage is unavailable because optional assets are not cached",
+    "Maximum coverage assets unavailable",
     "No Mortgage rates are available for comparison-scope latency",
     "No active core payload is loaded",
     "No active payload is loaded",

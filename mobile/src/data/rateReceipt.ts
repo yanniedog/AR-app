@@ -315,15 +315,14 @@ function buildComparables(
 ): NegotiationComparable[] {
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   const eligible = visibleAccountRows(rows, false, detailsProducts)
-    .filter((row) => toFraction(row.rate) !== null)
-    .sort((a, b) => {
-      const av = toFraction(a.rate)!;
-      const bv = toFraction(b.rate)!;
-      return lowerIsBetter ? av - bv : bv - av;
-    });
+    .flatMap(row => {
+      const rate = toFraction(row.rate);
+      return rate === null ? [] : [{ row, rate }];
+    })
+    .sort((a, b) => lowerIsBetter ? a.rate - b.rate : b.rate - a.rate);
   const seen = new Set<string>();
   const result: NegotiationComparable[] = [];
-  for (const row of eligible) {
+  for (const { row } of eligible) {
     if (row.product_key === selected.productKey) continue;
     if (seen.has(row.product_key)) continue;
     seen.add(row.product_key);

@@ -503,6 +503,7 @@ function PerformanceAuditScreenInner() {
             <InfoRow label="HTTP unresolved" value={uiCount(httpChecks.unresolved)} />
             <InfoRow label="HTTP timeouts" value={uiCount(httpChecks.timedOut)} />
             <InfoRow label="HTTP restrictions" value={uiCount(httpChecks.restricted)} />
+            <InfoRow label="HTTP redirects" value={uiCount(httpChecks.redirects)} />
             <InfoRow label="Rejected addresses" value={uiCount(httpChecks.rejected)} />
             <InfoRow label="HTTP not attempted" value={uiCount(httpChecks.notAttempted)} />
             <InfoRow label="HTTP attempt evidence missing" value={httpChecks.missingEvidence == null ? 'Unknown' : uiCount(httpChecks.missingEvidence)} />

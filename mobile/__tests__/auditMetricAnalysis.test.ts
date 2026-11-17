@@ -299,7 +299,7 @@ test('functional success is separated from successful readiness within timing li
   const evidence = buildAuditMetricAnalysis(report).metrics.automatedTaskSuccessPercent;
   expect(evidence.value).toBe(100);
   expect(evidence.outcomes).toEqual({ success: 3, failure: 0, indeterminate: 0,
-    withinTimingLimits: 1, timingFailures: 1, warnings: 1 });
+    unconfirmedTimeouts: 0, withinTimingLimits: 1, timingFailures: 1, warnings: 1 });
   expect(evidence.denominator).toBe(3);
 });
 

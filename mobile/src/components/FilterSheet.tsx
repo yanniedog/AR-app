@@ -11,6 +11,7 @@ import {
   factCriterionId,
 } from '../data/productFacts';
 import { matchingLenders, visibleFilterOptions } from '../lib/filterOptions';
+import { scheduleAfterInteractions } from '../lib/yieldToUi';
 import { SearchBar } from './controls';
 import { SheetSurface, type SheetAuditState } from './SheetSurface';
 import { AppText, Button, Chip, Disclosure, Divider, Row } from './ui';
@@ -105,10 +106,12 @@ function FilterSheetInner({
   useEffect(() => {
     if (!visible || !resultCount) return;
     let cancelled = false;
-    void Promise.resolve().then(() => cancelled ? null : resultCount(deferredDraft, () => cancelled)).then(count => {
-      if (!cancelled) setCounted(count == null ? null : { draft: deferredDraft, counter: resultCount, count });
-    }).catch(() => { if (!cancelled) setCounted(null); });
-    return () => { cancelled = true; };
+    const cancelScheduledCount = scheduleAfterInteractions(() => {
+      void Promise.resolve().then(() => cancelled ? null : resultCount(deferredDraft, () => cancelled)).then(count => {
+        if (!cancelled) setCounted(count == null ? null : { draft: deferredDraft, counter: resultCount, count });
+      }).catch(() => { if (!cancelled) setCounted(null); });
+    });
+    return () => { cancelled = true; cancelScheduledCount(); };
   }, [visible, resultCount, deferredDraft]);
   const draftCount = visible && counted?.draft === deferredDraft && counted.counter === resultCount ? counted.count : null;
   const applyTitle = draftCount === null

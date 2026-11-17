@@ -341,6 +341,18 @@ test('a handler the platform could not resolve does not fail coverage, and a mis
   expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true, outcome: 'failed', gaps: { unverifiedLinks: 0 } });
 });
 
+test.each([
+  'Maximum coverage assets unavailable',
+  'Maximum coverage is unavailable because optional assets are not cached',
+])('keeps maximum coverage skips compatible with saved reports (%s)', reason => {
+  const report = completeReport();
+  report.coverage!.complete = false;
+  report.checks[0] = { id: 'maximum-coverage-profile', label: 'Coverage', kind: 'data', status: 'skipped', durationMs: null,
+    metrics: { skipClassification: 'terminal-availability', availabilityFailure: true, reason } };
+  expect(buildPerformanceAuditCompletion(report)).toMatchObject({ coverageComplete: true,
+    gaps: { skippedChecks: 0, unavailableChecks: 0, justifiedAvailabilitySkips: 1 } });
+});
+
 test('optional and contract availability skips do not force coverage incomplete', () => {
   const report = completeReport();
   report.coverage!.complete = false;
