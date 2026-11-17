@@ -163,3 +163,53 @@ test('uncached large scope stays blank while preparing and never publishes a can
   expect(value.snapshots![corrected.run_date].Mortgage!.Alpha.mean).toBeCloseTo(7);
   act(() => tree.unmount());
 });
+
+test('mortgage comparison pools only offers covering the selected LVR on each date', async () => {
+  const core = mockState.core!;
+  const previous = '2026-09-21';
+  const source = { kind: 'retained_legacy_export' as const, banks_sha256: 'a'.repeat(64), bytes: 100 };
+  const offers = [
+    { tier: 'lvr_=95%', rate: 5 },
+    { tier: 'lvr_95-98%', rate: 6 },
+    { tier: 'lvr_90-99%', rate: 7 },
+    { tier: 'lvr_95-98%', rate: 9 },
+    { tier: 'lvr_unspecified', rate: 13 },
+  ];
+  const template = core.sections.Mortgage.rates[0];
+  const rows = offers.map(({ tier, rate }, index) => ({
+    ...template, product_key: `loan-${index}`, lvr_tier: tier, rate: String(rate / 100),
+  }));
+  core.sections.Mortgage.rates = rows;
+  installMandatoryEligibility(selectMandatoryEligibility(core, EMPTY_PROFILE, null));
+  core.bank_rate_history_catalogue = {
+    schema_version: 2, run_dates: [previous, core.run_date],
+    sources: { [previous]: source, [core.run_date]: source }, unavailable_dates: {},
+    evidence: [{ status: 'unknown' }],
+    sections: { Mortgage: rows.map(({ rate: _rate, ...row }, index) => ({
+      row, spans: [[0, 1, [offers[index].rate], 0]],
+    })), Savings: [], TD: [] },
+  };
+  let value!: ReturnType<typeof useBankRateHistory>;
+  function Consumer({ lvr }: { lvr: string | null }) {
+    value = useBankRateHistory(true, lvr);
+    return null;
+  }
+  let tree!: ReactTestRenderer;
+  await act(async () => { tree = TestRenderer.create(<Consumer lvr="lvr_>95-98%" />); });
+  for (const date of [previous, core.run_date]) {
+    const summary = value.snapshots?.[date].sectionTotals?.Mortgage;
+    expect(summary).toMatchObject({ min: 6, max: 9, count: 3 });
+    expect(summary?.median).toBeCloseTo(7);
+    expect(summary?.mean).toBeCloseTo(22 / 3);
+  }
+
+  await act(async () => tree.update(<Consumer lvr="lvr_>98-99%" />));
+  expect(value.snapshots?.[previous].sectionTotals?.Mortgage).toMatchObject({ min: 7, max: 7, count: 1 });
+  await act(async () => tree.update(<Consumer lvr={null} />));
+  expect(value.snapshots).toBeNull();
+
+  mockState.core = { ...core, bank_rate_history_catalogue: undefined };
+  await act(async () => tree.update(<Consumer lvr="lvr_>95-98%" />));
+  expect(value.snapshots).toBeNull();
+  act(() => tree.unmount());
+});

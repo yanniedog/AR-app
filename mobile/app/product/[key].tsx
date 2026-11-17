@@ -55,6 +55,7 @@ import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/
 import { sortRows, findEligibleByKey } from '../../src/data/selectors';
 import { rowsForProductKey } from '../../src/data/rateRowIndex';
 import { selectBankHistoryChartModel, selectBankHistoryChartModelCooperatively } from '../../src/data/historySelectors';
+import { mortgageHistoryLvr, mortgageHistoryLvrLabel } from '../../src/data/mortgageHistoryLvr';
 import { mergeProductHistoryTimeline, rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
 import {
   countFiniteSeriesPoints,
@@ -207,7 +208,6 @@ export default function ProductDetail() {
   // Keep rich history prep + BankHistoryChart off the first product paint so
   // catalogue product.open / product.lender.open chains stay under lag limits.
   const historySurfaceReady = useDeferredHistorySurface(productKey || null);
-  const rateHistory = useBankRateHistory(historyEnabled && !!found && historySurfaceReady);
   const showBankInsights = effectiveBankInsights();
   const historyBanks = useStore((s) => (historySurfaceReady ? s.historyBanks : null));
   const bankInsights = useStore((s) => (historySurfaceReady ? s.bankInsights : null));
@@ -303,6 +303,8 @@ export default function ProductDetail() {
     [boundRow, found, publicCatalogue, scenarioFor]);
   const row = useMemo(() => boundRow && publicResolution ? { ...boundRow, rate: publicResolution.status === 'exact' && publicResolution.verifiedCurrent ? publicResolution.payableRate ?? '' : '' } : boundRow,
     [boundRow, publicResolution]);
+  const mortgageLvr = found?.section === 'Mortgage' ? mortgageHistoryLvr(row?.lvr_tier) : undefined;
+  const rateHistory = useBankRateHistory(historyEnabled && !!found && historySurfaceReady, mortgageLvr);
   const calculationScenario = useMemo(() => found ? scenarioWithLocalCurrentRate(found.section, scenario,
     resolveLocalCurrentRate(found.section, scenario, publicCatalogue.references, undefined, publicCatalogue, profile)) : scenario,
   [found, scenario, publicCatalogue, profile]);
@@ -364,7 +366,7 @@ export default function ProductDetail() {
     && deferredHistory.suitabilityRevision === suitabilityRevision
     ? deferredHistory : null;
   useEffect(() => {
-    if (!heavyHistory || !historySurfaceReady || !historyEnabled || !core || !found || rateHistory.failed || rateHistory.updating) {
+    if (found?.section === 'Mortgage' || !heavyHistory || !historySurfaceReady || !historyEnabled || !core || !found || rateHistory.failed || rateHistory.updating) {
       setDeferredHistory(null);
       return;
     }
@@ -424,6 +426,9 @@ export default function ProductDetail() {
     void suitabilityRevision;
     if (!historySurfaceReady || !historyEnabled || !core || !found) return null;
     if (rateHistory.updating || rateHistory.failed) return null;
+    if (found.section === 'Mortgage') {
+      return mortgageLvr && rateHistory.richHistory ? rateHistoryChartModel(rateHistory.snapshots, 'Mortgage') : null;
+    }
     if (heavyHistory) return currentDeferredHistory?.market ?? null;
     const detailed = rateHistory.historyAvailable ? rateHistoryChartModel(rateHistory.snapshots, found.section) : null;
     if (rateHistory.historyAvailable || rateHistory.richHistory) return detailed;
@@ -452,6 +457,7 @@ export default function ProductDetail() {
     historySurfaceReady,
     includeNonStandard,
     suitabilityRevision,
+    mortgageLvr,
     rateHistory.snapshots,
     rateHistory.historyAvailable,
     rateHistory.richHistory,
@@ -484,6 +490,7 @@ export default function ProductDetail() {
   const historyWaitingForInsights =
     historySurfaceReady &&
     historyEnabled &&
+    found?.section !== 'Mortgage' &&
     !rateHistory.historyAvailable &&
     !rateHistory.updating &&
     !rateHistory.failed &&
@@ -492,7 +499,7 @@ export default function ProductDetail() {
     !explorerInsights &&
     !bankInsightsError &&
     (!historyModel || historyModel.dates.length < 2);
-  const historyPreparing = heavyHistory && historySurfaceReady && historyEnabled && !!found
+  const historyPreparing = heavyHistory && historySurfaceReady && historyEnabled && !!found && found.section !== 'Mortgage'
     && !currentDeferredHistory && !rateHistory.failed;
   const historyContentRevision = [
     rateHistory.revision,
@@ -906,6 +913,7 @@ export default function ProductDetail() {
                     section={section}
                     height={210}
                     productHistory
+                    comparisonScope={section === 'Mortgage' ? mortgageHistoryLvrLabel(mortgageLvr ?? null) : undefined}
                     highlightSeries={productSeries}
                     onGraphicReady={onHistoryGraphicReady}
                   />

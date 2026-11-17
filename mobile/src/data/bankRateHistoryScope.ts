@@ -18,21 +18,28 @@ export interface BankRateHistoryScopeInput {
 
 // Publications/preferences are immutable. Share the latest projection across
 // product/lender/chart mounts without retaining obsolete catalogues.
-let latest: { input: BankRateHistoryScopeInput; scope: BankRateScope; gateRevision: number } | null = null;
-let activeInput: BankRateHistoryScopeInput | null = null;
-let generation = 0;
-let pending: { input: BankRateHistoryScopeInput; work: Promise<BankRateScope | null> } | null = null;
+interface ScopeWork {
+  latest?: { input: BankRateHistoryScopeInput; scope: BankRateScope; gateRevision: number };
+  activeInput?: BankRateHistoryScopeInput;
+  generation: number;
+  pending?: { input: BankRateHistoryScopeInput; work: Promise<BankRateScope | null> };
+}
+const shared: ScopeWork = { generation: 0 };
+// A scoped product can mount over Market or another product in the native stack.
+// Keep its work independent so it cannot cancel the other screen’s projection.
+const mortgageScopes = new WeakMap<BankRateHistoryScopeInput, ScopeWork>();
+function scopeWork(input: BankRateHistoryScopeInput): ScopeWork {
+  if (input.interests.length !== 1 || input.interests[0] !== 'Mortgage') return shared;
+  const work = mortgageScopes.get(input) ?? { generation: 0 };
+  mortgageScopes.set(input, work);
+  return work;
+}
 
 function sameInput(left: BankRateHistoryScopeInput | null | undefined, right: BankRateHistoryScopeInput): boolean {
   return !!left && left.core === right.core && left.details === right.details &&
     left.includeNonStandard === right.includeNonStandard && left.interests === right.interests &&
     left.profileFilters === right.profileFilters &&
     left.suitabilityRevision === right.suitabilityRevision && left.mandatoryRevision === right.mandatoryRevision;
-}
-
-function activate(input: BankRateHistoryScopeInput): number {
-  if (!sameInput(activeInput, input)) { activeInput = input; generation++; }
-  return generation;
 }
 
 function scopedRows(input: BankRateHistoryScopeInput, section: SectionKey, rows: RateRow[]): RateRow[] {
@@ -42,20 +49,22 @@ function scopedRows(input: BankRateHistoryScopeInput, section: SectionKey, rows:
 
 /** Synchronous only for small catalogues and deterministic tooling. */
 export function sharedBankRateHistoryScope(input: BankRateHistoryScopeInput): BankRateScope {
-  if (sameInput(latest?.input, input) && latest!.gateRevision === getSuitabilityRevision()) return latest!.scope;
+  const state = scopeWork(input);
+  if (sameInput(state.latest?.input, input) && state.latest!.gateRevision === getSuitabilityRevision()) return state.latest!.scope;
   const rows = Object.fromEntries(SECTION_KEYS.map(section => [section,
-    scopedRows(input, section, input.core.sections[section].rates),
+    input.interests.includes(section) ? scopedRows(input, section, input.core.sections[section].rates) : [],
   ])) as Record<SectionKey, RateRow[]>;
   const scope = bankRateScope(rows);
-  latest = { input, scope, gateRevision: getSuitabilityRevision() };
+  state.latest = { input, scope, gateRevision: getSuitabilityRevision() };
   return scope;
 }
 
 /** A render may look up prepared work, but never scan a full catalogue. */
 export function cachedBankRateHistoryScope(input: BankRateHistoryScopeInput): BankRateScope | null {
   if (getMandatoryEligibilityRevision() !== input.mandatoryRevision) return null;
-  if (sameInput(latest?.input, input) && latest!.gateRevision === getSuitabilityRevision()) return latest!.scope;
-  const count = SECTION_KEYS.reduce((total, section) => total + input.core.sections[section].rates.length, 0);
+  const state = scopeWork(input);
+  if (sameInput(state.latest?.input, input) && state.latest!.gateRevision === getSuitabilityRevision()) return state.latest!.scope;
+  const count = input.interests.reduce((total, section) => total + input.core.sections[section].rates.length, 0);
   return count <= 64 ? sharedBankRateHistoryScope(input) : null;
 }
 
@@ -67,19 +76,21 @@ export function prepareBankRateHistoryScope(
 ): Promise<BankRateScope | null> {
   // Only committed consumers may supersede work. A speculative render's cache
   // lookup must not strand a mounted consumer whose request is still current.
-  const currentGeneration = activate(input);
+  const state = scopeWork(input);
+  if (!sameInput(state.activeInput, input)) { state.activeInput = input; state.generation++; }
+  const currentGeneration = state.generation;
   const cached = cachedBankRateHistoryScope(input);
   if (cached) return Promise.resolve(cached);
-  if (pending && sameInput(pending.input, input)) return pending.work;
+  if (state.pending && sameInput(state.pending.input, input)) return state.pending.work;
   const gateRevision = getSuitabilityRevision();
-  const isCurrent = () => generation === currentGeneration &&
+  const isCurrent = () => state.generation === currentGeneration &&
     getSuitabilityRevision() === gateRevision && getMandatoryEligibilityRevision() === input.mandatoryRevision;
   const work = (async () => {
     // Start after the mounting render/paint, then bound each synchronous slice.
     await yieldControl();
     const rows: Record<SectionKey, RateRow[]> = { Mortgage: [], Savings: [], TD: [] };
     let sliceStarted = performance.now();
-    for (const section of SECTION_KEYS) {
+    for (const section of input.interests) {
       const source = input.core.sections[section].rates;
       for (let offset = 0; offset < source.length; offset += 32) {
         if (!isCurrent()) return null;
@@ -92,10 +103,10 @@ export function prepareBankRateHistoryScope(
     }
     if (!isCurrent()) return null;
     const scope = bankRateScope(rows);
-    latest = { input, scope, gateRevision };
+    state.latest = { input, scope, gateRevision };
     return scope;
   })();
-  pending = { input, work };
-  void work.finally(() => { if (pending?.work === work) pending = null; }).catch(() => undefined);
+  state.pending = { input, work };
+  void work.finally(() => { if (state.pending?.work === work) state.pending = undefined; }).catch(() => undefined);
   return work;
 }

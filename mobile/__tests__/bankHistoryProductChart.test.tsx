@@ -44,6 +44,11 @@ test('savings product chart shows market facts and cash rate across a missing pr
     act(() => (plot().props.onLayout as (event: unknown) => void)({ nativeEvent: { layout: { width: 320 } } }));
     const slice = () => tree.root.findByType(ChartSliceControls).props;
     expect(slice().valueLabel).toBe('Unknown');
+    expect(slice().facts).toBeUndefined();
+    expect(plot().props.accessibilityLabel).not.toContain('RBA cash rate');
+    const benchmarks = tree.root.findAllByProps({ label: 'Benchmarks' })[0];
+    act(() => (benchmarks.props.onPress as () => void)());
+    expect(slice().valueLabel).toBe('Unknown');
     expect(slice().facts).toEqual([
       { label: 'Market rate range', value: '1.00% – 5.50%' },
       { label: 'Market median', value: '2.00%' },
@@ -52,12 +57,15 @@ test('savings product chart shows market facts and cash rate across a missing pr
     ]);
     expect(plot().props.accessibilityLabel).toContain('RBA cash rate 4.35%');
     const labels = tree.root.findAllByType('AppText').map(node => node.props.children);
-    expect(labels).toEqual(expect.arrayContaining(['All tiers', 'Market rate range', 'Market median', 'Market mean', 'RBA cash rate']));
+    expect(labels).toEqual(expect.arrayContaining(['Product rate', 'Market rate range', 'Market median', 'Market mean', 'RBA cash rate']));
     expect(tree.root.findAll(node => node.props.strokeDasharray === '8 4' && typeof node.props.d === 'string').length).toBeGreaterThan(0);
 
     act(() => slice().onChangeIndex(0));
     expect(slice().valueLabel).toBe('6.50% · All tiers');
     expect(slice().facts).toContainEqual({ label: 'RBA cash rate', value: '4.10%' });
+    act(() => (benchmarks.props.onPress as () => void)());
+    expect(slice().valueLabel).toBe('6.50% · All tiers');
+    expect(slice().facts).toBeUndefined();
   } finally {
     act(() => tree.unmount());
   }
