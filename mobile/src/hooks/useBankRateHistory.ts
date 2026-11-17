@@ -12,12 +12,13 @@ import { yieldToUi } from '../lib/yieldToUi';
 import { useSuitabilityRevision } from './useSuitabilityRevision';
 
 const EMPTY_SCOPE = bankRateScope({ Mortgage: [], Savings: [], TD: [] });
+const MORTGAGE_INTERESTS: typeof SECTION_KEYS = ['Mortgage'];
 const NO_MISSING_DATES: readonly string[] = [];
 let requestRevision = 0;
 
 /** Shared, render-safe history lifecycle. Every snapshot belongs to the current
  * profile request; uncached requests stay blank until their own work completes. */
-export function useBankRateHistory(enabled = true) {
+export function useBankRateHistory(enabled = true, mortgageLvr?: string | null) {
   const core = useStore(s => s.core);
   const historyRevision = useStore(s => s.bankRateHistoryRevision ?? 0);
   const loading = useStore(s => s.bankRateHistoryLoading ?? false);
@@ -26,10 +27,16 @@ export function useBankRateHistory(enabled = true) {
   const ensureDetails = useStore(s => s.ensureDetails);
   const suitabilityRevision = useSuitabilityRevision();
   const mandatoryRevision = getMandatoryEligibilityRevision();
+  // Packed section totals cannot be narrowed to a mortgage band.
+  enabled = enabled && mortgageLvr !== null;
+  const interests = mortgageLvr === undefined ? SECTION_KEYS : MORTGAGE_INTERESTS;
+  const profileFilters = useMemo(() => mortgageLvr
+    ? { ...prefs.profileFilters, lvrTiers: [mortgageLvr] }
+    : prefs.profileFilters, [mortgageLvr, prefs.profileFilters]);
   const historyLoading = enabled && loading;
   const scopeInput = useMemo(() => enabled && core ? { core, details, includeNonStandard: prefs.includeNonStandard,
-    interests: SECTION_KEYS, profileFilters: prefs.profileFilters, suitabilityRevision, mandatoryRevision } : null,
-  [core, details, enabled, prefs.includeNonStandard, prefs.profileFilters, suitabilityRevision, mandatoryRevision]);
+    interests, profileFilters, suitabilityRevision, mandatoryRevision } : null,
+  [core, details, enabled, prefs.includeNonStandard, interests, profileFilters, suitabilityRevision, mandatoryRevision]);
   const [scopeSettled, setScopeSettled] = useState<{ input: typeof scopeInput; failed: boolean } | null>(null);
   const readyScope = useMemo(() => {
     void scopeSettled;
@@ -41,19 +48,20 @@ export function useBankRateHistory(enabled = true) {
   useEffect(() => {
     if (!scopeInput || !scopePending || scopeFailed) return;
     let active = true;
-    void prepareBankRateHistoryScope(scopeInput, () => yieldToUi(0)).then(result => {
+    const abort = mortgageLvr === undefined ? undefined : new AbortController();
+    void prepareBankRateHistoryScope(scopeInput, () => yieldToUi(0), abort?.signal).then(result => {
       if (active && result) setScopeSettled({ input: scopeInput, failed: false });
     }, () => { if (active) setScopeSettled({ input: scopeInput, failed: true }); });
-    return () => { active = false; };
-  }, [scopeInput, scopePending, scopeFailed]);
+    return () => { active = false; abort?.abort(); };
+  }, [scopeInput, scopePending, scopeFailed, mortgageLvr]);
   useEffect(() => {
     if (enabled && core && !details && (!prefs.includeNonStandard || SECTION_KEYS.some(key => profileFeaturesForSection(prefs.profileFilters, key).length))) void ensureDetails();
   }, [core, details, enabled, ensureDetails, prefs.includeNonStandard, prefs.profileFilters]);
   const request = useMemo(() => ({ core, scope, enabled, historyRevision, suitabilityRevision, filters: {
-    profileFilters: prefs.profileFilters,
-    interests: SECTION_KEYS,
+    profileFilters,
+    interests,
     includeNonStandard: prefs.includeNonStandard,
-  } }), [core, scope, enabled, historyRevision, suitabilityRevision, prefs.profileFilters, prefs.includeNonStandard]);
+  } }), [core, scope, enabled, historyRevision, suitabilityRevision, interests, profileFilters, prefs.includeNonStandard]);
   const [settled, setSettled] = useState<{ request: typeof request; failed: boolean } | null>(null);
   const [invalidRich, setInvalidRich] = useState<{ core: CorePayload; value: unknown } | null>(null);
   const catalogue = enabled && core ? cachedHistoricalBankRateCatalogue(core) : null;
@@ -63,8 +71,8 @@ export function useBankRateHistory(enabled = true) {
     void settled;
     if (!enabled || historyLoading || scopePending) return null;
     return core ? richHistory ? catalogue ? cachedHistoricalBankRateSnapshots(catalogue, core, scope, request.filters) : null
-      : packedBankRateSnapshots(core, scope) : {};
-  }, [catalogue, core, enabled, scope, request, richHistory, settled, historyLoading, scopePending]);
+      : mortgageLvr === undefined ? packedBankRateSnapshots(core, scope) : null : {};
+  }, [catalogue, core, enabled, scope, request, richHistory, settled, historyLoading, scopePending, mortgageLvr]);
   useEffect(() => {
     if (!enabled || !core || !richHistory || historyLoading || scopePending) return;
     if (catalogue && cachedHistoricalBankRateSnapshots(catalogue, core, scope, request.filters)) return;

@@ -16,6 +16,7 @@ import {
   rbaChangesInWindow,
   rbaHoldsInWindow,
   rbaStepForDates,
+  sanitizeRibbonPoint,
   sliceChartTimeline,
   sliceIndexFromPlotX,
 } from '../data/bankHistoryTransform';
@@ -36,6 +37,8 @@ import { withAlpha } from '../theme/colors';
 import { useTheme } from '../theme/ThemeProvider';
 import { ChartSliceControls } from './charts/ChartSliceControls';
 import { AppText, Chip, Row } from './ui';
+
+const EMPTY_SLICE = { dates: [] as string[], points: [] as BankHistoryPoint[], issue: null };
 
 const WINDOW_OPTIONS: { value: HistoryWindow; label: string }[] = [
   { value: '30D', label: '30D' },
@@ -98,6 +101,7 @@ export interface BankHistoryChartProps {
   highlightSeries?: HighlightSeries | null;
   /** Product detail compares the product-wide headline with section statistics and the cash rate. */
   productHistory?: boolean;
+  comparisonScope?: UiCopy;
   /** Audit-only bridge to the exact callbacks used by the visible chart controls. */
   auditActionsRef?: MutableRefObject<BankHistoryChartAuditActions | null>;
   /** Content-addressed identity for the source history asset(s). */
@@ -250,12 +254,15 @@ function BankHistoryChartView({
   allDates,
   highlightSeries,
   productHistory = false,
+  comparisonScope,
   auditActionsRef,
   contentRevision,
   onGraphicReady,
 }: BankHistoryChartProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
+  const [showComparison, setShowComparison] = useState(false);
+  const showBenchmarks = !productHistory || showComparison;
   const [window, setWindow] = useState<HistoryWindow>('30D');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [hoverDate, setHoverDate] = useState<string | null>(null);
@@ -277,7 +284,10 @@ function BankHistoryChartView({
     () => timelineIsLarge ? null : sliceHistoryTimeline(dates, points, timeline, window),
     [dates, points, timeline, timelineIsLarge, window],
   );
-  const [deferredSlice, setDeferredSlice] = useState<ReturnType<typeof sliceHistoryTimeline> | null>(null);
+  const [deferredSlice, setDeferredSlice] = useState<{
+    dates: typeof dates; points: typeof points; timeline: typeof timeline; window: HistoryWindow;
+    slice: ReturnType<typeof sliceHistoryTimeline>;
+  } | null>(null);
   useEffect(() => {
     if (!timelineIsLarge) {
       setDeferredSlice(null);
@@ -289,26 +299,29 @@ function BankHistoryChartView({
       await yieldToUi(0);
       if (cancelled) return;
       const next = sliceHistoryTimeline(dates, points, timeline, window);
-      if (!cancelled) setDeferredSlice(next);
+      if (!cancelled) setDeferredSlice({ dates, points, timeline, window, slice: next });
     })();
     return () => { cancelled = true; };
   }, [dates, points, timeline, timelineIsLarge, window]);
-  const sliced = synchronousSlice ?? deferredSlice ?? { dates: [] as string[], points: [] as BankHistoryPoint[], issue: null as string | null };
-  const slicePending = timelineIsLarge && deferredSlice == null;
+  const matchingSlice = deferredSlice?.dates === dates && deferredSlice.points === points
+    && deferredSlice.timeline === timeline && deferredSlice.window === window ? deferredSlice.slice : null;
+  const sliced = synchronousSlice ?? matchingSlice ?? EMPTY_SLICE;
+  const slicePending = timelineIsLarge && matchingSlice == null;
 
   useEffect(() => {
     if (sliced.issue) debugLog.warn('BankHistoryChart', sliced.issue);
   }, [sliced.issue]);
 
   const plotDates = sliced.dates;
-  const plotPoints = sliced.points;
+  const plotPoints = useMemo(() => showBenchmarks ? sliced.points
+    : plotDates.map((date) => sanitizeRibbonPoint(date)), [showBenchmarks, sliced.points, plotDates]);
   const sourceRevision = contentRevision ?? `${section}:${dates.at(-1) ?? ''}:${dates.length}`;
   const revision = `${sourceRevision}:${section}:${dates.at(-1) ?? ''}:${dates.length}`;
   useEffect(() => {
     setSelectedDate(null);
     setHoverDate(null);
   }, [revision, window]);
-  const showRba = (productHistory || section === 'Mortgage') && !!rba?.length;
+  const showRba = showBenchmarks && (productHistory || section === 'Mortgage') && !!rba?.length;
 
   const rbaSteps = useMemo(
     () => (showRba && rba ? rbaStepForDates(plotDates, rba) : []),
@@ -366,7 +379,7 @@ function BankHistoryChartView({
 
   const hasPlottableValues = plotPoints.some(
     (p) => isFiniteNumber(p.min) || isFiniteNumber(p.max) || isFiniteNumber(p.mean) || isFiniteNumber(p.median),
-  ) || !!highlightValues?.some(isFiniteNumber);
+  ) || !!highlightValues?.some(isFiniteNumber) || (productHistory && rbaSteps.some(isFiniteNumber));
   useEffect(() => {
     if (plotDates.length && plotPoints.length && !hasPlottableValues) {
       debugLog.warn('BankHistoryChart', 'no finite plot values');
@@ -471,12 +484,37 @@ function BankHistoryChartView({
     highlightLine,
   } = chartPaths;
 
+  const controls = (
+    <>
+      <Row gap={6} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+        {WINDOW_OPTIONS.map((opt) => (
+          <Chip
+            key={opt.value}
+            label={uiChartWindow(opt.value)}
+            selected={window === opt.value}
+            onPress={() => setWindow(opt.value)}
+          />
+        ))}
+      </Row>
+
+      {productHistory ? (
+        <Row style={{ marginBottom: 8 }}>
+          <Chip
+            label={comparisonScope ? uiJoin('Benchmarks', ' · ', comparisonScope) : 'Benchmarks'}
+            selected={showComparison}
+            onPress={() => setShowComparison((visible) => !visible)}
+          />
+        </Row>
+      ) : null}
+    </>
+  );
+
   if (slicePending) {
     return <View style={{ height }}><AppText variant="small" color="textMuted">{uiLabel("Loading")}</AppText></View>;
   }
 
   if (!plotDates.length || !plotPoints.length || !hasPlottableValues) {
-    return <View><AppText key={graphicRevision} variant="small" color="textMuted" onLayout={(event) => {
+    return <View>{productHistory ? controls : null}<AppText key={graphicRevision} variant="small" color="textMuted" onLayout={(event) => {
       onGraphicReady?.({ contentRevision: sourceRevision, graphicRevision, window,
         availability: 'unavailable', expectedCount: expectedPointCount, pointCount: 0,
         accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
@@ -489,10 +527,10 @@ function BankHistoryChartView({
 
   const rateInk = SECTIONS[section].lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   const ribbonColor = productHistory ? theme.colors.textFaint : rateInk;
-  const bandFill = withAlpha(ribbonColor, productHistory ? 0.18 : theme.dark ? 0.35 : 0.28);
-  const meanColor = productHistory ? theme.ledger.success : rateInk;
+  const bandFill = withAlpha(ribbonColor, productHistory ? 0.09 : theme.dark ? 0.35 : 0.28);
+  const meanColor = productHistory ? theme.colors.textMuted : rateInk;
   const medianColor = productHistory ? theme.colors.textMuted : rateInk;
-  const rbaInk = productHistory ? theme.ledger.warning : theme.colors.rba;
+  const rbaInk = productHistory ? theme.colors.textFaint : theme.colors.rba;
   const rbaBand = withAlpha(rbaInk, 0.42);
   const crosshairColor = withAlpha(theme.colors.primary, theme.dark ? 0.6 : 0.55);
   // Prefer an explicit product color; fall back to warning so the series does not
@@ -589,31 +627,30 @@ function BankHistoryChartView({
   const hasRbaValues = rbaSteps.some(isFiniteNumber);
   const seriesColors = [ribbonColor, ribbonColor, meanColor, medianColor, highlightColor];
   const sliceFacts = [
-    ...(productHistory && hasMarketRange ? [{ label: uiLabel('Market rate range'), value: activeRange }] : []),
+    ...(productHistory && showBenchmarks ? [{ label: uiLabel('Market rate range'), value: activeRange }] : []),
     ...(hasMarketStatistics && activePoint ? [
       { label: uiLabel(productHistory ? 'Market median' : 'Median'), value: uiRate(activePoint.median) },
       { label: uiLabel(productHistory ? 'Market mean' : 'Mean'), value: uiRate(activePoint.mean) },
     ] : []),
     ...(productHistory && hasRbaValues ? [{ label: uiLabel('RBA cash rate'), value: uiRate(activeRbaRate) }] : []),
   ];
-  const chartSummary = uiJoin(uiChartSection(section), ' · ', uiChartWindow(window), ' · ', uiCount(observedPointCount), ' ', 'Observed', ' · ', uiDate(activeDate), ' · ',
-    hasMarketStatistics ? uiJoin('Min', ' ', uiRate(activePoint?.min), ' · ', 'Median', ' ', uiRate(activePoint?.median), ' · ', 'Mean', ' ', uiRate(activePoint?.mean), ' · ', 'Max', ' ', uiRate(activePoint?.max)) : uiJoin('Rates', ' · ', 'Unavailable'),
-    highlightSeries && activeHighlight != null ? uiJoin(' · ', highlightSeries.label, ' ', uiRate(activeHighlight),
-      productHistory && highlightSeries.valueScope ? uiJoin(' · ', highlightSeries.valueScope) : null) : null,
+  const productFact = highlightSeries
+    ? uiJoin(' · ', highlightSeries.label, ' ', uiRate(activeHighlight),
+      productHistory && highlightSeries.valueScope ? uiJoin(' · ', highlightSeries.valueScope) : null) : null;
+  const marketFact = hasMarketStatistics
+    ? uiJoin(' · ', 'Min', ' ', uiRate(activePoint?.min), ' · ', 'Median', ' ', uiRate(activePoint?.median),
+      ' · ', 'Mean', ' ', uiRate(activePoint?.mean), ' · ', 'Max', ' ', uiRate(activePoint?.max))
+    : uiJoin(' · ', 'Rates', ' · ', 'Unavailable');
+  const chartSummary = uiJoin(uiChartSection(section), ' · ', uiChartWindow(window), ' · ', uiCount(observedPointCount),
+    ' ', 'Observed', ' · ', uiDate(activeDate),
+    productHistory ? productFact : marketFact,
+    productHistory ? (showBenchmarks && (hasMarketStatistics || hasMarketRange) ? marketFact : null)
+      : (activeHighlight != null ? productFact : null),
     productHistory && hasRbaValues ? uiJoin(' · ', 'RBA cash rate', ' ', uiRate(activeRbaRate)) : null);
 
   return (
     <View>
-      <Row gap={6} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
-        {WINDOW_OPTIONS.map((opt) => (
-          <Chip
-            key={opt.value}
-            label={uiChartWindow(opt.value)}
-            selected={window === opt.value}
-            onPress={() => setWindow(opt.value)}
-          />
-        ))}
-      </Row>
+      {controls}
 
       <View
         accessible
@@ -690,7 +727,7 @@ function BankHistoryChartView({
               );
             })}
 
-            {[mins, maxs, means, medians, highlightValues ?? []].flatMap((values, seriesIndex) =>
+            {[mins, maxs, means, medians, productHistory ? [] : highlightValues ?? []].flatMap((values, seriesIndex) =>
               values.map((value, index) => {
                 const prevConnected = isFiniteNumber(values[index - 1]) && isAdjacentDay(plotDates, index - 1, index);
                 const nextConnected = isFiniteNumber(values[index + 1]) && isAdjacentDay(plotDates, index, index + 1);
@@ -730,7 +767,7 @@ function BankHistoryChartView({
                 animatedProps={lineDrawProps}
                 d={meanLine}
                 stroke={meanColor}
-                strokeWidth={2}
+                strokeWidth={productHistory ? 1 : 2}
                 fill="none"
                 strokeLinecap="round"
                 strokeDasharray={strokeLength}
@@ -741,7 +778,7 @@ function BankHistoryChartView({
                 animatedProps={bandDrawProps}
                 d={medianLine}
                 stroke={medianColor}
-                strokeWidth={1.6}
+                strokeWidth={productHistory ? 1 : 1.6}
                 fill="none"
                 strokeLinecap="round"
                 strokeDasharray="5 4"
@@ -749,7 +786,7 @@ function BankHistoryChartView({
             ) : null}
             {rbaLine && productHistory ? (
               <AnimatedPath animatedProps={bandDrawProps} d={rbaLine} stroke={rbaInk}
-                strokeWidth={2} fill="none" strokeDasharray="8 4" />
+                strokeWidth={1} fill="none" strokeDasharray="8 4" />
             ) : rbaLine ? (
               <AnimatedPath
                 animatedProps={lineDrawProps}
@@ -792,13 +829,22 @@ function BankHistoryChartView({
                 animatedProps={lineDrawProps}
                 d={highlightLine}
                 stroke={highlightColor}
-                strokeWidth={2.6}
+                strokeWidth={productHistory ? 3.5 : 2.6}
                 fill="none"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeDasharray={strokeLength}
               />
             ) : null}
+
+            {productHistory && highlightValues?.map((value, index) => {
+              if (!isFiniteNumber(value)) return null;
+              const prevConnected = isFiniteNumber(highlightValues[index - 1]) && isAdjacentDay(plotDates, index - 1, index);
+              const nextConnected = isFiniteNumber(highlightValues[index + 1]) && isAdjacentDay(plotDates, index, index + 1);
+              return prevConnected || nextConnected ? null : (
+                <Circle key={plotDates[index]} cx={xAt(index)} cy={yAt(value)} r={3} fill={highlightColor} />
+              );
+            })}
 
             {(() => {
               if (!plotDates.length) return null;
@@ -956,7 +1002,7 @@ function BankHistoryChartView({
       {productHistory && pathsReady ? (
         <Row gap={12} style={{ flexWrap: 'wrap', marginTop: 8 }}>
           {highlightValues?.some(isFiniteNumber) ? (
-            <HistoryKey color={highlightColor} label={highlightSeries?.valueScope ?? uiLabel('Product')} />
+            <HistoryKey color={highlightColor} label="Product rate" />
           ) : null}
           {hasMarketRange ? (
             <HistoryKey color={ribbonColor} fill={bandFill} label="Market rate range" />
@@ -966,6 +1012,7 @@ function BankHistoryChartView({
           {hasRbaValues ? <HistoryKey color={rbaInk} dash="8 4" label="RBA cash rate" /> : null}
         </Row>
       ) : null}
+
     </View>
   );
 }
