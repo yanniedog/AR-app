@@ -3,7 +3,7 @@ import { Platform, View } from 'react-native';
 import { type AnswerState, type CustomerAnswer, type CustomerProfile, type InputDefinition, userProvenance, validFact } from '../data/customerProfile';
 import { customerInputRequirements, localCustomerDate, type CustomerInputContract } from '../data/customerInputRequirements';
 import { useCustomerProfile } from '../hooks/useCustomerProfile';
-import { uiLabel, uiCount, uiDate, uiIdentifier, uiInputIdentifier, uiJoin, uiCustomerAnswer, uiInputDefinitionLabel, useCustomerAnswerInput, type UiLabel } from '../lib/uiCopy';
+import { uiLabel, uiCount, uiDate, uiInputIdentifier, uiJoin, uiCustomerAnswer, uiInputDefinitionLabel, useCustomerAnswerInput, type UiLabel } from '../lib/uiCopy';
 import { LedgerField } from './ledger/LedgerField';
 import { AppText, Button, Chip, Disclosure, Row } from './ui';
 import { NegotiatedTermsEditor } from './NegotiatedTermsEditor';
@@ -24,8 +24,7 @@ export function CustomerAnswerEditor({ definition: d, answer, productKey, disabl
     setError(false); onSave({ state: 'known', fact, provenance });
   }
   const question = useMemo(() => questionSource ? bindCustomerQuestion(d, questionSource) : undefined, [d, questionSource]);
-  const reviewedLabel = uiInputDefinitionLabel(d, question);
-  const label = reviewedLabel === 'Source review required' ? uiJoin(reviewedLabel, ' · ', uiIdentifier(d.id)) : reviewedLabel;
+  const label = uiInputDefinitionLabel(d, question);
   return <View style={{ gap: 8 }}>
     <AppText variant="small" weight="700">{label}</AppText>
     {answer ? <AppText variant="small" color="textMuted">{uiCustomerAnswer(answer, d)}</AppText> : null}

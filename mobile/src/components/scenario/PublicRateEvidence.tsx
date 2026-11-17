@@ -1,17 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Linking, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
 import type { PublicProgramme, RateScenario } from '../../data/publicRateModel';
 import { publicRateScenario, resolveProductPublicRate, resolveRowPublicRate } from '../../data/publicRateIntegration';
 import { publicComponentFact, publicConditionFact, publicRateOriginLabel, publicRateReason, publicRateText } from '../../data/publicRatePresentation';
-import { publicRateFreshness } from '../../data/publicRateResolver';
 import { useStore } from '../../data/store';
 import type { RateRow } from '../../types';
 import { useUserRateScenario } from '../../hooks/useUserRateScenario';
-import { trustedExternalUrl } from '../../lib/trustedExternalUrl';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText, Button, Disclosure } from '../ui';
-import { uiDate, uiIdentifier, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiPublicAliasName, uiPublicEvidenceLocator, uiRate, type UiCopy } from '../../lib/uiCopy';
+import { uiDate, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiPublicAliasName, uiRate, type UiCopy } from '../../lib/uiCopy';
 
 function programmeLabel(programme: PublicProgramme) {
   return programme.conditions.length ? uiJoin(...programme.conditions.flatMap<UiCopy>((condition, i) => i ? [' · ', publicConditionFact(condition)] : [publicConditionFact(condition)])) : uiLabel('Pricing programme');
@@ -30,7 +28,6 @@ export function PublicRateEvidence({ productKey, programmeId, row, scenario: sup
   const [open, setOpen] = useState(false);
   const [selection, setSelection] = useState<string | undefined>();
   const [historical, setHistorical] = useState(false);
-  const [sourceError, setSourceError] = useState(false);
   const product = catalogue.getProduct(productKey);
   const programmes = product ? catalogue.getProgrammes(product.productId) : [];
   const selected = programmeId ?? selection;
@@ -41,7 +38,6 @@ export function PublicRateEvidence({ productKey, programmeId, row, scenario: sup
   if (catalogue.status === 'unavailable') return <AppText variant="tiny" color="textMuted">{uiJoin('Public pricing', ': ', 'Unavailable')}</AppText>;
   if (!product) return <AppText variant="tiny" color="textMuted">{uiJoin('Public products', ': ', catalogue.status === 'loading' ? 'Loading' : 'Unavailable')}</AppText>;
   const applicable = { ...(suppliedScenario ?? publicRateScenario(product.section, scenario, profile, row, 'published')), allowHistorical: historical };
-  const productFreshness = product.freshness ? publicRateFreshness(product.freshness, new Date().toISOString()) : undefined;
   const asOf = new Date().toISOString();
   const resolve = (allowHistorical: boolean) => row && !selected
     ? resolveRowPublicRate(row, catalogue, { ...applicable, allowHistorical }, asOf)
@@ -61,8 +57,6 @@ export function PublicRateEvidence({ productKey, programmeId, row, scenario: sup
       {product.aliases.map(alias => <AppText key={alias.name + ':' + (alias.effectiveFrom ?? '')} variant="tiny" color="textMuted">
         {uiJoin('Aliases', ': ', uiPublicAliasName(alias), alias.effectiveFrom ? uiJoin(' · ', 'Effective from', ': ', uiDate(alias.effectiveFrom)) : null, alias.effectiveTo ? uiJoin(' · ', 'Effective to', ': ', uiDate(alias.effectiveTo)) : null)}
       </AppText>)}
-      {!programmes.length && productFreshness ? <AppText variant="tiny" color="textMuted">{uiJoin('Discovery', ': ', uiOpaqueEnum(productFreshness.state.toUpperCase()), ' · ', 'Checked', ': ', uiDate(productFreshness.checkedAt), ' · ', 'Last successful check', ': ', uiDate(productFreshness.lastSuccessAt))}</AppText> : null}
-      {!programmes.length ? product.reasonCodes.map(reason => <AppText key={'product:' + reason} variant="tiny" color="textMuted">{publicRateReason(reason)}</AppText>) : null}
       {!selected && !row?.public_programme_id && programmes.length > 1 ? programmes.map(programme => <Pressable key={programme.programmeId}
         onPress={() => { setSelection(programme.programmeId); onSelectProgramme?.(programme.programmeId, programme.offerId); }}
         accessibilityRole="radio" accessibilityState={{ checked: selected === programme.programmeId }} style={{ minHeight: 48, paddingVertical: 8 }}>
@@ -78,15 +72,6 @@ export function PublicRateEvidence({ productKey, programmeId, row, scenario: sup
       {programmes.length > 0 && canAssumeHistorical && resolution.freshness.lastSuccessAt ? <Button title={historical ? 'Current pricing' : 'Historical pricing assumption'} variant="secondary" onPress={() => setHistorical(value => !value)} /> : null}
       {resolution.appliedComponents.map(component => <AppText key={component.componentId} variant="tiny" color="textMuted">{publicComponentFact(component)}</AppText>)}
       {resolution.phases.map(phase => <AppText key={phase.phaseId} variant="tiny" color="textMuted">{uiJoin('Months', ': ', uiNumber(phase.startMonth), '–', phase.endMonth == null ? uiLabel('Ongoing') : uiNumber(phase.endMonth), ' · ', uiOpaqueEnum(phase.status.toUpperCase()), phase.payableRate ? uiJoin(' · ', uiRate(Number(phase.payableRate), 4)) : null)}</AppText>)}
-      {[...new Map([...catalogue.evidence.filter(item => resolution.evidenceIds.includes(item.evidenceId)), ...(!programmes.length && product.sourceEvidence ? [product.sourceEvidence] : [])].map(item => [item.evidenceId, item])).values()].map(item => <View key={item.evidenceId} style={{ gap: 3 }}>
-        <AppText variant="tiny" color="textMuted">{uiJoin(uiPublicEvidenceLocator(item), ' · ', 'SHA-256', ': ', uiIdentifier(item.sha256))}</AppText>
-        <Button title="Open source" variant="ghost" onPress={() => {
-          const destination = trustedExternalUrl({ url: item.url, purpose: 'lender_source', label: 'Public rate evidence' });
-          if (!destination.ok) { setSourceError(true); return; }
-          void Linking.openURL(destination.url).catch(() => setSourceError(true));
-        }} />
-      </View>)}
-      {sourceError ? <AppText variant="tiny" color="danger">{uiLabel('Public source unavailable')}</AppText> : null}
     </View>
   </Disclosure>;
 }

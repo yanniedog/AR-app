@@ -9,7 +9,7 @@ import { AppText, Button, Disclosure } from './ui';
 function termProductReference(term: NegotiatedTerm, details: DetailsPayload | null) {
   if (!safeId(term.id) || !validProvenance(term.provenance) || term.provenance.source !== 'user_input') return uiLabel('Unknown');
   const reference = uiDetailsProductReference(details, term.provenance.productKey);
-  return reference === 'Source review required' ? uiLabel('Unknown') : reference;
+  return reference === 'Unverified' ? uiLabel('Unknown') : reference;
 }
 export function NegotiatedTermsEditor({ profile, productKey, disabled, update }: {
   profile: CustomerProfile; productKey?: string; disabled: boolean; update: (change: (p: CustomerProfile) => CustomerProfile) => Promise<boolean>;

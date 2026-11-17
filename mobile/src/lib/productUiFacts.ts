@@ -67,8 +67,7 @@ export function uiFeeDiscount(discount: FeeDiscount): UiText {
   const amount = number(discount.amount ?? discount.fixedAmount?.amount);
   const rate = ratePart(discount.rateBased?.rate ?? discount.feeRate ?? discount.balanceRate ?? discount.transactionRate ?? discount.accruedRate);
   return uiJoin('Discount', ': ', amount !== null ? money(amount) : rate ?? uiLabel('Unknown'),
-    discount.discountType ? uiJoin(' · ', humanizeEnum(discount.discountType)) : null,
-    discount.additionalInfo || discount.description || discount.eligibility?.length ? uiJoin(' · ', 'Source review required') : null);
+    discount.discountType ? uiJoin(' · ', humanizeEnum(discount.discountType)) : null);
 }
 function factValue(value: unknown, unit?: string): UiText {
   if (unit === 'boolean' || typeof value === 'boolean') return value === true ? uiLabel('Yes') : value === false ? uiLabel('No') : uiLabel('Unknown');

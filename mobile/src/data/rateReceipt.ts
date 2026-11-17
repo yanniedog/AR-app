@@ -41,8 +41,7 @@ export interface ReceiptFact {
 export function rateConditionReceiptLines(receipt: RateReceipt): UiText[] {
   const conditions = scopedFinancialConditionFacts(receipt.rateConditions);
   return [...conditions.facts.map(uiConditionTag),
-    ...conditions.unresolved.map(fact => uiJoin('Source review required', ' · ', uiIdentifier(fact.source.sourcePointer))),
-    ...(conditions.state === 'unverified' ? [uiLabel('Source unverified')] : []), uiLabel('Eligibility unverified')];
+    ...(conditions.unresolved.length || conditions.state === 'unverified' ? [uiJoin('Conditions', ': ', 'Unverified')] : []), uiLabel('Eligibility unverified')];
 }
 
 export interface OfficialReceiptSource {
@@ -178,7 +177,7 @@ export type ReceiptStatusFact =
 function detailFacts(items: DetailItem[] | undefined, group: 'Fees' | 'Eligibility' | 'Features' | 'Constraints'): ReceiptFact[] {
   return (items ?? []).map((item, index) => {
     const fact = uiDetailItem(item, index, group);
-    return { label: fact.label, value: uiJoin(fact.value, fact.conditions === 'source-review-required' ? uiJoin(' · ', 'Source review required') : null) };
+    return { label: fact.label, value: fact.value };
   });
 }
 function addFact(facts: ReceiptFact[], label: UiCopy, value: UiText | null): void {

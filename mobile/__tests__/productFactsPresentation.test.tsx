@@ -1,13 +1,16 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { DetailGroup, ProductFacts, ProductRatesList } from '../src/components/product/ProductDetailParts';
+import { ProductPageLinks } from '../src/components/product/ProductPageLink';
 import { rateConditionFixture } from '../testUtils/rateConditions';
 import { openProduct } from '../src/lib/nav';
 import type { NormalizedProductFact, ProductDetail } from '../src/types';
 
 let mockState: Record<string, unknown>;
+const mockRequestExternalUrl = jest.fn();
 jest.mock('../src/data/store', () => ({ useStore: (selector: (state: typeof mockState) => unknown) => selector(mockState) }));
-jest.mock('../src/components/ExternalLinkConfirmation', () => ({ useTrustedExternalUrl: () => ({ requestExternalUrl: jest.fn() }) }));
+jest.mock('../src/components/ExternalLinkConfirmation', () => ({ useTrustedExternalUrl: () => ({ requestExternalUrl: mockRequestExternalUrl }) }));
+jest.mock('../src/components/icons/AppIcon', () => 'AppIcon');
 jest.mock('../src/hooks/useAuditExternalLinks', () => ({ useAuditExternalLinks: jest.fn() }));
 jest.mock('../src/lib/nav', () => ({ openProduct: jest.fn() }));
 jest.mock('../src/components/ui', () => {
@@ -17,6 +20,37 @@ jest.mock('../src/components/ui', () => {
 type Node = { props: Record<string, any>; findAllByType(type: unknown): Node[]; findByProps(props: Record<string, unknown>): Node };
 type Tree = ReactTestRenderer & { root: Node };
 const bodyText = (tree: Tree) => tree.root.findAllByType('AppText').map(node => String(node.props.children));
+
+test.each([
+  ['https://www.bankwest.com.au/savings-accounts/high-interest?s=ba', true],
+  ['https://www.bankwest.com.au/?campaign=1', false],
+  ['https://www.bankwest.com.au/home', false],
+  ['https://www.bankwest.com.au/cds-au/v1/banking/products/123', false],
+  [undefined, false],
+] as const)('eligibility rows only link to the published product page (%s)', (overview, linked) => {
+  mockRequestExternalUrl.mockClear();
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<ProductPageLinks overview={overview}>
+    <DetailGroup title="Eligibility" icon="person-outline" items={[
+      { label: 'MIN_AGE', value: '18' },
+      { label: 'RESIDENCY_STATUS', info: 'A source condition requiring interpretation.' },
+    ]} loading={false} />
+  </ProductPageLinks>) as Tree; });
+  try {
+    act(() => tree.root.findAllByType('Disclosure').find(node => node.props.title === 'Eligibility')!.props.onToggle());
+    expect(bodyText(tree)).toEqual(['Minimum age', '18 years', 'Residency status', 'Unknown']);
+    if (!linked) {
+      expect(() => tree.root.findByProps({ accessibilityRole: 'link' })).toThrow();
+    } else {
+      for (const accessibilityLabel of ['Minimum age, 18 years', 'Residency status, Unknown']) {
+        act(() => tree.root.findByProps({ accessibilityRole: 'link', accessibilityLabel }).props.onPress());
+      }
+      expect(mockRequestExternalUrl.mock.calls).toEqual(Array(2).fill([
+        { url: overview, purpose: 'lender_source', label: 'Product' },
+      ]));
+    }
+  } finally { act(() => tree.unmount()); }
+});
 
 // Existing productFacts.test normalized/legacy compatibility contract, not an
 // observed current publication. Add a second same-key occurrence to verify it
@@ -39,7 +73,7 @@ test('legacy Fees owns every occurrence while Product facts omits normalized fee
     expect(text.filter(value => value === '$100')).toHaveLength(1);
     expect(text.filter(value => value === '$0')).toHaveLength(1);
     expect(text.filter(value => value === 'ANNUAL_FEE')).toHaveLength(2);
-    expect(text).toContain('Source review required · Source 2');
+    expect(text).not.toContain('Source review required');
     expect(text).toContain('Offset account');
     expect(text).not.toContain('With package');
     expect(JSON.stringify(detail)).toBe(original);
@@ -53,7 +87,7 @@ test.each([undefined, []])('normalized fee-only payload preserves both variants 
     act(() => tree.root.findByProps({ title: 'Product facts' }).props.onToggle());
     expect(bodyText(tree)).toContain('$100');
     expect(bodyText(tree)).toContain('$0');
-    expect(bodyText(tree)).toContain('Source review required · Source fee-2');
+    expect(bodyText(tree)).not.toContain('Source fee-2');
     expect(bodyText(tree)).not.toContain('With package');
   } finally { act(() => tree.unmount()); }
 });

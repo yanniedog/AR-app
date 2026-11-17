@@ -11,7 +11,7 @@ test('canonical cells admit represented numeric and boolean facts only', () => {
   expect(uiCanonicalTermValue({ value: '0.000000000001' })).toBe('0.000000000001');
   expect(uiCanonicalTermValue({ value: false })).toBe('No');
   expect(uiCanonicalTermValue({ value: 0 })).toBe('0');
-  for (const value of ['Conditions apply. Read more.', { description: 'Guaranteed return' }, Infinity, null]) expect(uiCanonicalTermValue({ value })).toBe('Source review required');
+  for (const value of ['Conditions apply. Read more.', { description: 'Guaranteed return' }, Infinity, null]) expect(uiCanonicalTermValue({ value })).toBe('Unverified');
 });
 
 test('tier facts preserve exact bounds and whole versus marginal allocation', () => {

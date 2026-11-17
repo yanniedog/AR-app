@@ -99,11 +99,11 @@ jest.mock('../src/components/ChartErrorBoundary', () => ({ ChartErrorBoundary: '
 jest.mock('../src/components/feedback', () => ({ EmptyState: 'EmptyState' }));
 jest.mock('../src/components/product/ProductRateChangeLine', () => ({ ProductRateChangeLine: 'ProductRateChangeLine' }));
 jest.mock('../src/components/product/ProductTermsDisclosure', () => ({ ProductTermsDisclosure: 'ProductTermsDisclosure' }));
+jest.mock('../src/components/product/ProductPageLink', () => ({ ProductPageLinks: 'ProductPageLinks', ProductPageLink: 'ProductPageLink' }));
 jest.mock('../src/components/product/ProductDetailParts', () => ({
   AccessNotice: 'AccessNotice',
   DetailGroup: 'DetailGroup',
   HistoryLegend: 'HistoryLegend',
-  OfficialLinks: 'OfficialLinks',
   ProductFacts: 'ProductFacts',
   ProductRatesList: 'ProductRatesList',
   ProductSpecs: 'ProductSpecs',
@@ -181,8 +181,9 @@ describe('Product detail save eligibility', () => {
     let tree!: InspectableRenderer;
     await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
     const visible = tree.root.findAllByType('AppText').map(node => String(node.props.children ?? '')).join('\n');
-    expect(visible).toContain('Source review required');
-    expect(visible).toContain('/data/depositRates/4/tiers/0/applicabilityConditions/additionalInfo');
+    expect(visible).not.toContain('Source review required');
+    expect(visible).toContain('Unverified');
+    expect(visible).not.toContain('/data/depositRates/4/tiers/0/applicabilityConditions/additionalInfo');
     expect(visible).not.toContain('/data/depositRates/0/tiers/0/applicabilityConditions/additionalInfo');
     expect(visible).not.toContain('For balances of 1 million dollars and under');
     act(() => tree.unmount());
@@ -212,7 +213,7 @@ it('opens verified details-only product through the actual route without fabrica
   let tree!: InspectableRenderer; await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
   expect(tree.root.findAllByType('AppText').map(node => String(node.props.children ?? '')).join(' ')).not.toContain('Published descriptive text');
   expect(tree.root.findAllByType('ProductRatesList')).toHaveLength(0);
-  expect(tree.root.findAllByType('OfficialLinks')).toHaveLength(1);
+  expect(tree.root.findAllByType('ProductPageLinks')[0].props.overview).toBe('https://example.org/product');
   expect(tree.root.findAllByType('ProductTermsDisclosure')[0].props.productKey).toBe(key);
   act(() => tree.unmount()); mockRoute.ri = 'bad';
   await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
@@ -221,7 +222,7 @@ it('opens verified details-only product through the actual route without fabrica
   expect(surface.probes?.find(probe => probe.id === 'product.data')).toMatchObject({
     status: 'error', error: 'The selected exact rate is absent from the eligible current catalogue',
   });
-  expect(tree.root.findAllByType('OfficialLinks')).toHaveLength(0);
+  expect(tree.root.findAllByType('ProductPageLinks')).toHaveLength(0);
   act(() => tree.unmount());
 });
 

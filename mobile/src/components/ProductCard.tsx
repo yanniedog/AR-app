@@ -72,7 +72,7 @@ function chips(row: RateRow, section: SectionKey, conditional: boolean, conditio
     if (term) out.push(term);
   }
   out.push(...sourceBalance.map(uiConditionTag), ...sourceTerm.map(uiConditionTag));
-  if (conditions.unresolved.length) out.push(uiLabel('Source review required'));
+  if (conditions.unresolved.length) out.push(uiJoin('Conditions', ': ', 'Unverified'));
   return [...new Set(out)];
 }
 
