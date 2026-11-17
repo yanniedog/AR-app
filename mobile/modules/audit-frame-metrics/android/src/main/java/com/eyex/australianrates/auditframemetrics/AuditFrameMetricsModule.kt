@@ -26,6 +26,8 @@ class AuditFrameMetricsModule : Module() {
   private var deadlineMs: Double = 1000.0 / 60.0
   private val overrunsMs = ArrayList<Double>(4096)
   private var totalFrames: Int = 0
+  private var droppedFrameCallbacks: Int = 0
+  private var frameDeadlines: Int = 0
   private var jankFrames: Int = 0
   private var frozenFrames: Int = 0
   private var maxFrozenFrameMs: Double = 0.0
@@ -50,15 +52,16 @@ class AuditFrameMetricsModule : Module() {
         deadlineMs = frameDeadlineMs
         overrunsMs.clear()
         totalFrames = 0
+        droppedFrameCallbacks = 0
+        frameDeadlines = 0
         jankFrames = 0
         frozenFrames = 0
         maxFrozenFrameMs = 0.0
         handlerThread = thread
       }
 
-      val frameListener = Window.OnFrameMetricsAvailableListener { _, frameMetrics, _ ->
+      val frameListener = Window.OnFrameMetricsAvailableListener { _, frameMetrics, droppedSinceLast ->
         val totalNs = frameMetrics.getMetric(FrameMetrics.TOTAL_DURATION)
-        if (totalNs <= 0L) return@OnFrameMetricsAvailableListener
         val totalMs = totalNs / 1_000_000.0
         val perFrameDeadlineMs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
           val deadlineNs = frameMetrics.getMetric(FrameMetrics.DEADLINE)
@@ -67,8 +70,14 @@ class AuditFrameMetricsModule : Module() {
           null
         }
         synchronized(lock) {
-          if (!active) return@OnFrameMetricsAvailableListener
+          if (!active || handlerThread !== thread) return@OnFrameMetricsAvailableListener
+          droppedFrameCallbacks += max(0, droppedSinceLast)
+          if (totalNs <= 0L) {
+            droppedFrameCallbacks += 1
+            return@OnFrameMetricsAvailableListener
+          }
           val effectiveDeadlineMs = perFrameDeadlineMs ?: deadlineMs
+          if (perFrameDeadlineMs != null) frameDeadlines += 1
           totalFrames += 1
           val overrun = totalMs - effectiveDeadlineMs
           overrunsMs.add(overrun)
@@ -152,10 +161,12 @@ class AuditFrameMetricsModule : Module() {
     val threadToQuit: HandlerThread?
     val hz: Double
     val frames: Int
+    val drops: Int
+    val deadlines: Int
     val jank: Int
     val frozen: Int
     val maxFrozen: Double
-    val sortedOverruns: List<Double>
+    val capturedOverruns: List<Double>
 
     synchronized(lock) {
       active = false
@@ -168,46 +179,49 @@ class AuditFrameMetricsModule : Module() {
       handlerThread = null
       hz = refreshRateHz
       frames = totalFrames
+      drops = droppedFrameCallbacks
+      deadlines = frameDeadlines
       jank = jankFrames
       frozen = frozenFrames
       maxFrozen = maxFrozenFrameMs
-      sortedOverruns = overrunsMs.sorted()
+      capturedOverruns = overrunsMs.toList()
       overrunsMs.clear()
       totalFrames = 0
+      droppedFrameCallbacks = 0
+      frameDeadlines = 0
       jankFrames = 0
       frozenFrames = 0
       maxFrozenFrameMs = 0.0
     }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && windowToDetach != null && listenerToDetach != null) {
-      val latch = CountDownLatch(1)
       Handler(Looper.getMainLooper()).post {
         try {
           windowToDetach.removeOnFrameMetricsAvailableListener(listenerToDetach)
         } catch (_: Throwable) {
-        } finally {
-          latch.countDown()
         }
       }
-      latch.await(1, TimeUnit.SECONDS)
     }
     threadToQuit?.quitSafely()
 
-    if (frames <= 0 || sortedOverruns.isEmpty()) {
+    if (frames <= 0 || capturedOverruns.isEmpty()) {
       return null
     }
 
+    val sortedOverruns = capturedOverruns.sorted()
     val p95Index = max(0, ceil(sortedOverruns.size * 0.95).toInt() - 1)
     val p95OverrunMs = round(sortedOverruns[p95Index] * 10.0) / 10.0
     val jankPercent = round(((jank * 100.0) / frames) * 10.0) / 10.0
 
-    val result = HashMap<String, Any>(7)
+    val result = HashMap<String, Any>(9)
     result["refreshRateHz"] = hz
     result["frameOverrunP95Ms"] = p95OverrunMs
     result["jankPercent"] = jankPercent
     result["frozenFrameCount"] = frozen
     result["totalFrameCount"] = frames
     result["totalFrames"] = frames
+    result["droppedFrameCallbackCount"] = drops
+    result["frameDeadlineCount"] = deadlines
     if (frozen > 0) {
       result["maxFrozenFrameMs"] = round(maxFrozen * 10.0) / 10.0
     }

@@ -14,6 +14,7 @@ type InspectableRenderer = ReactTestRenderer & { root: TestNode };
 
 const mockRows: RateRow[] = Array.from({ length: 31 }, (_, index) => ({ provider: 'A',
   product_key: `loan-${index}`, product_name: `Loan ${index}`, rate: String(0.04 + index / 1000), rate_index: index }));
+mockRows.push({ ...mockRows[0], rate: '0.0405', rate_index: 99, public_programme_id: 'programme-99' });
 const mockCore = { run_date: '2026-10-13', sections: { Mortgage: { rates: mockRows },
   Savings: { rates: [] }, TD: { rates: [] } }, rba: [] } as unknown as CorePayload;
 const mockState = { core: mockCore, coreIntegrity: null, manifest: null, details: null,
@@ -28,7 +29,7 @@ jest.mock('expo-router', () => ({ Stack: { Screen: 'StackScreen' },
 jest.mock('@shopify/flash-list', () => ({ FlashList: ({ data, renderItem, ListHeaderComponent, ListFooterComponent, ...props }: any) =>
   mockReact.createElement('FlashList', { ...props, data }, ListHeaderComponent,
     ...data.slice(mockStart, mockStart + 4).map((item: any, index: number) =>
-      mockReact.createElement(mockReact.Fragment, { key: item.row.product_key }, renderItem({ item, index }))),
+      mockReact.createElement(mockReact.Fragment, { key: props.keyExtractor(item) }, renderItem({ item, index }))),
     ListFooterComponent) }));
 jest.mock('../src/components/ProductCard', () => ({ ProductCard: (props: any) => {
   mockMountedProducts(props.row.product_key); return mockReact.createElement('ProductCard', props);
@@ -50,16 +51,19 @@ jest.mock('../src/lib/nav', () => ({ openProduct: jest.fn() }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({}) }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 
-test('retains every lender product while mounting viewport cards and measuring the committed list', () => {
+test('retains every lender tier while mounting viewport cards and measuring the committed list', () => {
   installMandatoryEligibility(selectMandatoryEligibility(mockCore, EMPTY_PROFILE, null));
   mockStart = 0;
   mockMountedProducts.mockClear();
   let tree!: InspectableRenderer;
   act(() => { tree = TestRenderer.create(<BankDetail />) as InspectableRenderer; });
   const list = tree.root.findByType('FlashList' as any);
-  expect(list.props.data).toHaveLength(31);
+  expect(list.props.data).toHaveLength(32);
   expect(tree.root.findAllByType('ProductCard' as any)).toHaveLength(4);
-  expect(new Set(mockMountedProducts.mock.calls.map(([key]) => key)).size).toBe(4);
+  expect(new Set(list.props.data.map(list.props.keyExtractor)).size).toBe(32);
+  expect(mockMountedProducts.mock.calls.map(([key]) => key)).toEqual(['loan-0', 'loan-0', 'loan-1', 'loan-2']);
+  act(() => tree.root.findAllByType('ProductCard' as any)[1].props.onPress());
+  expect(openProduct).toHaveBeenLastCalledWith('loan-0', 99, 'programme-99');
   const initialCardRenders = mockMountedProducts.mock.calls.length;
   let audit = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
   expect(audit.probes!.find(probe => probe.id === 'lender.products')!.status).toBe('pending');
@@ -69,12 +73,12 @@ test('retains every lender product while mounting viewport cards and measuring t
   });
   audit = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
   expect(audit.probes!.find(probe => probe.id === 'lender.products')).toMatchObject({
-    status: 'ready', expectedCount: 31, actualCount: 31, visibleCount: 4,
+    status: 'ready', expectedCount: 32, actualCount: 32, visibleCount: 4,
   });
   // Readiness/layout commits retain the same row objects and callbacks, so they
   // must not render all viewport cards again while recording genuine evidence.
   expect(mockMountedProducts).toHaveBeenCalledTimes(initialCardRenders);
-  mockStart = 27;
+  mockStart = 28;
   act(() => tree.update(<BankDetail />));
   const last = tree.root.findAllByType('ProductCard' as any).at(-1)!;
   expect(last.props.row).toBe(mockRows[30]);

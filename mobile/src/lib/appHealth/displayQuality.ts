@@ -15,6 +15,7 @@ interface RoleResult {
   warned: number;
   unavailable: number;
   failedSurfaceIds: string[];
+  warnedSurfaceIds: string[];
 }
 
 function blankRoleResult(): RoleResult {
@@ -25,6 +26,7 @@ function blankRoleResult(): RoleResult {
     warned: 0,
     unavailable: 0,
     failedSurfaceIds: [],
+    warnedSurfaceIds: [],
   };
 }
 
@@ -49,8 +51,11 @@ function check(
       unavailable: result.unavailable,
     },
     summary,
-    ...(result.failedSurfaceIds.length
-      ? { localEvidence: { failedSurfaceIds: result.failedSurfaceIds.slice() } }
+    ...(result.failedSurfaceIds.length || result.warnedSurfaceIds.length
+      ? { localEvidence: {
+          failedSurfaceIds: result.failedSurfaceIds.slice(),
+          warnedSurfaceIds: result.warnedSurfaceIds.slice(),
+        } }
       : {}),
   };
 }
@@ -230,6 +235,7 @@ function evaluateRole(
           result.failedSurfaceIds.push(contract.id);
         } else if (evidence.missingCount > 0 || evidence.fallbackCount > 0) {
           result.warned += 1;
+          result.warnedSurfaceIds.push(contract.id);
         }
         break;
       }

@@ -332,7 +332,7 @@ export const RbaOutlook = React.memo(forwardRef<RbaOutlookAuditHandle, {
           />
           {error ? (
             <AppText variant="tiny" color="warning" style={{ marginTop: 8 }}>
-              {uiJoin('Cached', ' · ', 'Source unverified')}
+              {uiJoin('Cached', ' · ', 'Unverified')}
             </AppText>
           ) : null}
         </>

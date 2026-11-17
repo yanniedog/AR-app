@@ -8,9 +8,11 @@ import { fullAuditDiagnosticLog } from './fullAuditDiagnosticLog';
 import { publicAuditMetricAnalysis } from './publicAuditMetricAnalysis';
 import { auditApplicationJournal } from './auditApplicationJournal';
 import { buildPerformanceAuditCompletion } from './performanceAuditCompletion';
+import { buildAuditAppCoverage } from './auditAppCoverage';
 import { measureAuditEvidence } from './auditEvidenceCapacity';
 
 import { PUBLIC_AUDIT_METRIC_FIELDS as METRIC_ALLOWLIST } from './auditDiagnosticFields';
+import { MAXIMUM_AUDIT_ASSETS } from './performanceAuditProfile';
 
 const FIXED_CHECK_IDS = new Set([
   ...PERFORMANCE_AUDIT_SETUP_CHECK_IDS,
@@ -34,7 +36,8 @@ const JOURNEY_IDS = [
   'lender', 'compare', 'terms', 'debug-log',
 ].join('|');
 
-export const DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES = 256 * 1024;
+const DEIDENTIFIED_DIAGNOSTICS_PLAIN_MAX_BYTES = 256 * 1024;
+export const DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES = MAX_COMPRESSED_DIAGNOSTIC_BYTES;
 export const DEIDENTIFIED_DIAGNOSTICS_DESTINATION =
   'No host selected; the operating-system share sheet chooses the destination';
 export const DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW = [
@@ -71,6 +74,9 @@ const OBSERVED_COUNT_KEYS = new Set([
 ]);
 
 const PUBLIC_METRIC_ENUMS: Record<string, ReadonlySet<string>> = {
+  entryMeasurementStatus: new Set(['not-observed', 'interrupted', 'probe-failed', 'timed-out']),
+  httpIssue: new Set(['timeout', 'cancelled', 'transport', 'restricted', 'redirect-unverified',
+    'response-unverified', 'response-rejected']),
   handlerResolution: new Set(['pass', 'fail', 'not-attempted', 'unresolved']),
   urlValidation: new Set(['pass', 'fail', 'unknown']),
   browserHandler: new Set(['pass', 'fail', 'unknown']),
@@ -80,6 +86,22 @@ const PUBLIC_METRIC_ENUMS: Record<string, ReadonlySet<string>> = {
 function allowlistedMetrics(check: AuditCheck): Record<string, string | number | boolean | null> {
   const metrics = check.metrics;
   const result: Record<string, string | number | boolean | null> = {};
+  if (check.id === 'maximum-coverage-profile') {
+    const missing = typeof metrics.missingAssets === 'string' ? metrics.missingAssets.split(',') : null;
+    if (missing?.length && new Set(missing).size === missing.length
+      && missing.every(name => (MAXIMUM_AUDIT_ASSETS as readonly string[]).includes(name))) {
+      result.missingAssets = missing.join(',');
+    } else if (metrics.missingAssets === null) {
+      result.missingAssets = null;
+    }
+    for (const field of ['localCacheOnly', 'bankInsightsPreparationAttempted', 'bankInsightsCacheOnly', 'maximumSafeFeaturesEnabled']) {
+      if (typeof metrics[field] === 'boolean') result[field] = metrics[field];
+    }
+    for (const field of ['requiredAssets', 'availableAssets']) {
+      const count = metrics[field];
+      if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 && count <= MAXIMUM_AUDIT_ASSETS.length) result[field] = count;
+    }
+  }
   for (const [key, value] of Object.entries(metrics)) {
     if (!METRIC_ALLOWLIST.has(key)) continue;
     if (PUBLIC_METRIC_ENUMS[key]) {
@@ -181,7 +203,9 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
     schemaVersion: 1,
     kind: 'performance-audit',
     renderingEvidenceVersion: report.renderingEvidenceVersion === 2 ? 2 : 1,
+    auditEvidenceVersion: report.auditEvidenceVersion === 2 ? 2 : 1,
     completion,
+    appCoverage: buildAuditAppCoverage(report),
     metricAnalysis: publicAuditMetricAnalysis(report, safeCheckId),
     app: {
       version: report.app.appVersion,
@@ -329,28 +353,38 @@ export function encodeHostedPerformanceAudit(
   return retry;
 }
 
-/** Build the complete, bounded text offered to the OS share sheet. */
+function auditExportHeader(
+  report: PerformanceAuditReport,
+  completion: Omit<ReturnType<typeof buildDeidentifiedPerformanceAudit>['completion'], 'privacyBoundary'>,
+) {
+  const stallTimeout = stallTimeoutFields(report.watchdog.hangTimeoutMs);
+  return { audit: { auditId: completion.auditId, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
+    finishedAt: completion.finishedAt,
+    outcome: completion.outcome, collectionComplete: completion.collectionComplete,
+    coverageComplete: completion.coverageComplete, detailsComplete: completion.detailsComplete,
+    performanceCheckCount: completion.performanceCheckCount, healthCheckCount: completion.healthCheckCount,
+    failureCount: completion.failurePositions.length,
+    timingFailureCount: completion.failurePositions.filter(failure => failure.category === 'timing').length,
+    stallTimeoutMs: stallTimeout.stallTimeoutMs, stallTimeoutSeconds: stallTimeout.stallTimeoutSeconds } };
+}
+
+/** Keep small shares readable. For full audits, use the same bounded, hashed
+ * JSON envelope as hosted exports without collecting the application journal. */
 export function createDeidentifiedDiagnosticsShare(
   report: PerformanceAuditReport,
 ): DeidentifiedDiagnosticsShare {
   const built = buildDeidentifiedPerformanceAudit(report);
-  const body = JSON.stringify({
-    ...built,
-    completion: {
-      ...built.completion,
-      privacyBoundary: { ...built.completion.privacyBoundary, generalApplicationJournal: 'omitted' as const },
-    },
-  }, null, 2);
-  const byteLength = new TextEncoder().encode(body).length;
-  if (byteLength > DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES) {
-    throw new Error(
-      `The deidentified report is ${byteLength} bytes, above the ` +
-      `${DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES}-byte sharing limit.`,
-    );
-  }
+  const completion = {
+    ...built.completion,
+    privacyBoundary: { ...built.completion.privacyBoundary, generalApplicationJournal: 'omitted' as const },
+  };
+  const value = { ...built, completion };
+  const plain = JSON.stringify(value, null, 2);
+  const body = auditUploadBytes(plain) <= DEIDENTIFIED_DIAGNOSTICS_PLAIN_MAX_BYTES ? plain
+    : encodeHostedPerformanceAudit(value, auditExportHeader(report, completion), DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES);
   return {
     body,
-    byteLength,
+    byteLength: auditUploadBytes(body),
     destination: DEIDENTIFIED_DIAGNOSTICS_DESTINATION,
     fields: DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW,
   };
@@ -373,7 +407,6 @@ export function createPublicPerformanceAuditReport(report: PerformanceAuditRepor
       uncertainJournalOmissions: journalSections.reduce((sum, section) => sum + section.uncertainOmittedEntryCount, 0) }),
     },
   };
-  const stallTimeout = stallTimeoutFields(report.watchdog.hangTimeoutMs);
   // Keep the run identity and result readable at the top of the hosted file.
   // Gzip retains every field. Compression runs before the paste host sees the body.
   return encodeHostedPerformanceAudit({
@@ -384,12 +417,5 @@ export function createPublicPerformanceAuditReport(report: PerformanceAuditRepor
     },
     applicationJournal,
     diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId, { metricAnalysis: 'top-level' }),
-  }, { audit: { auditId: completion.auditId, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
-    finishedAt: completion.finishedAt,
-    outcome: completion.outcome, collectionComplete: completion.collectionComplete,
-    coverageComplete: completion.coverageComplete, detailsComplete: completion.detailsComplete,
-    performanceCheckCount: completion.performanceCheckCount, healthCheckCount: completion.healthCheckCount,
-    failureCount: completion.failurePositions.length,
-    timingFailureCount: completion.failurePositions.filter(failure => failure.category === 'timing').length,
-    stallTimeoutMs: stallTimeout.stallTimeoutMs, stallTimeoutSeconds: stallTimeout.stallTimeoutSeconds } });
+  }, auditExportHeader(report, completion));
 }

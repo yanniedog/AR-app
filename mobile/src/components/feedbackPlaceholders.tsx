@@ -125,7 +125,7 @@ function ProductCardSkeleton() {
         flexDirection: 'row',
         alignItems: 'center',
         gap: COMPACT_ROW.gap,
-        paddingVertical: 4,
+        paddingVertical: COMPACT_ROW.inset,
         paddingHorizontal: 0,
         backgroundColor: 'transparent',
         borderRadius: 0,
@@ -134,17 +134,18 @@ function ProductCardSkeleton() {
         minHeight: COMPACT_ROW.minHeight,
       }}
     >
-      <View testID="loading-bank-slot" style={{ width: COMPACT_ROW.action, minHeight: COMPACT_ROW.action, alignItems: 'center', justifyContent: 'center' }}>
-        <ShimmerBox height={24} width={24} borderRadius={6} />
+      <View testID="loading-bank-slot" style={{ width: COMPACT_ROW.lenderSlot, minHeight: COMPACT_ROW.action, justifyContent: 'center' }}>
+        <ShimmerBox height={COMPACT_ROW.bankLogo} width={COMPACT_ROW.bankLogo} borderRadius={12} />
       </View>
-      <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <ShimmerBox height={14} borderRadius={theme.radius.sm} />
-        </View>
-        <ShimmerBox height={14} width={56} borderRadius={theme.radius.sm} />
+      <View style={{ flex: 1, minWidth: 0, paddingHorizontal: COMPACT_ROW.gap }}>
+        {[128, 94, 72].map(width => (
+          <View key={width} style={{ height: COMPACT_ROW.lineHeight, justifyContent: 'center' }}>
+            <ShimmerBox height={12} width={width} borderRadius={theme.radius.sm} />
+          </View>
+        ))}
       </View>
       <View testID="loading-save-slot" style={{ width: COMPACT_ROW.action, minHeight: COMPACT_ROW.action, alignItems: 'center', justifyContent: 'center' }}>
-        <ShimmerBox height={24} width={24} borderRadius={theme.radius.sm} />
+        <ShimmerBox height={COMPACT_ROW.icon} width={COMPACT_ROW.icon} borderRadius={theme.radius.sm} />
       </View>
     </View>
   );

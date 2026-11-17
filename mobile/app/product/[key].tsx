@@ -1,3 +1,4 @@
+import { ProductPageLinks } from '../../src/components/product/ProductPageLink';
 import type { RateRow, SectionKey } from '../../src/types';
 import { useRatesSession } from '../../src/data/ratesSession';
 import { useMortgageComparison } from '../../src/data/mortgageComparison';
@@ -22,6 +23,7 @@ import {
   type TextStyle,
 } from 'react-native';
 
+import { ProductProviderLink } from '../../src/components/product/ProductProviderLink';
 import { BankAvatar } from '../../src/components/BankAvatar';
 import { NavigationMenuButton } from '../../src/components/AppNavigationMenu';
 import {
@@ -34,17 +36,13 @@ import { ProductRateChangeLine } from '../../src/components/product/ProductRateC
 import {
   AccessNotice,
   DetailGroup,
-  HistoryLegend,
-  OfficialLinks,
   ProductFacts,
-  ProductRatesList,
   ProductSpecs,
   SectionTitle,
   SelectedRateConditions,
 } from '../../src/components/product/ProductDetailParts';
 import { ScreenScrollView } from '../../src/components/Screen';
 import { AppText, Button, Card, IconButton, Row } from '../../src/components/ui';
-import { SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability, filterBankInsightsForSuitabilityCooperatively } from '../../src/data/bankInsights';
 import { uiDate, uiJoin, uiLabel, uiProductName, uiProviderName, uiSectionName } from '../../src/lib/uiCopy';
 import { selectedTargetConstraint, targetConstraintContradicted } from '../../src/lib/selectedTargetConstraints';
@@ -54,9 +52,10 @@ import { normalizedProductFacts } from '../../src/data/productFacts';
 import { verifiedDetailsSha } from '../../src/data/detailsIdentity';
 import { isPublicProductEligible } from '../../src/data/publicProductEligibility';
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
-import { sortRows, findEligibleByKey } from '../../src/data/selectors';
+import { findEligibleByKey } from '../../src/data/selectors';
 import { rowsForProductKey } from '../../src/data/rateRowIndex';
 import { selectBankHistoryChartModel, selectBankHistoryChartModelCooperatively } from '../../src/data/historySelectors';
+import { mortgageHistoryLvr, mortgageHistoryLvrLabel } from '../../src/data/mortgageHistoryLvr';
 import { mergeProductHistoryTimeline, rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
 import {
   countFiniteSeriesPoints,
@@ -110,7 +109,6 @@ const HEAVY_OPEN_ROW_LIMIT = 400;
 const MemoProductSpecs = React.memo(ProductSpecs);
 const MemoProductFacts = React.memo(ProductFacts);
 const MemoSelectedRateConditions = React.memo(SelectedRateConditions);
-const MemoProductRatesList = React.memo(ProductRatesList);
 const MemoEligibilityAssessment = React.memo(EligibilityAssessment);
 const MemoFixedDepositCalculation = React.memo(FixedDepositCalculation);
 const MemoSavingsPeriodCalculation = React.memo(SavingsPeriodCalculation);
@@ -203,13 +201,11 @@ export default function ProductDetail() {
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const setPref = useStore((s) => s.setPref);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
-  const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const historyEnabled = useStore((s) => effectiveHistoryRibbon(s.prefs));
   // Keep rich history prep + BankHistoryChart off the first product paint so
   // catalogue product.open / product.lender.open chains stay under lag limits.
   const historySurfaceReady = useDeferredHistorySurface(productKey || null);
-  const rateHistory = useBankRateHistory(historyEnabled && !!found && historySurfaceReady);
   const showBankInsights = effectiveBankInsights();
   const historyBanks = useStore((s) => (historySurfaceReady ? s.historyBanks : null));
   const bankInsights = useStore((s) => (historySurfaceReady ? s.bankInsights : null));
@@ -305,12 +301,11 @@ export default function ProductDetail() {
     [boundRow, found, publicCatalogue, scenarioFor]);
   const row = useMemo(() => boundRow && publicResolution ? { ...boundRow, rate: publicResolution.status === 'exact' && publicResolution.verifiedCurrent ? publicResolution.payableRate ?? '' : '' } : boundRow,
     [boundRow, publicResolution]);
+  const mortgageLvr = found?.section === 'Mortgage' ? mortgageHistoryLvr(row?.lvr_tier) : undefined;
+  const rateHistory = useBankRateHistory(historyEnabled && !!found && historySurfaceReady, mortgageLvr);
   const calculationScenario = useMemo(() => found ? scenarioWithLocalCurrentRate(found.section, scenario,
     resolveLocalCurrentRate(found.section, scenario, publicCatalogue.references, undefined, publicCatalogue, profile)) : scenario,
   [found, scenario, publicCatalogue, profile]);
-  const rateRows = useMemo(() => found
-    ? sortRows(found.siblings, 'rate', found.section, depositRankMetric, mortgageRateMetric)
-    : [], [found, depositRankMetric, mortgageRateMetric]);
   // Product history is explicitly product-wide: preserve the section-best
   // headline across every eligible sibling, independently of the selected tier.
   const currentBest = useMemo(() => {
@@ -327,12 +322,15 @@ export default function ProductDetail() {
       ? 'The selected product does not meet the current mandatory profile requirements'
       : 'The selected exact rate is absent from the eligible current catalogue'
     : null;
+  const selectedConstraint = useMemo(() => row && found && !(fromRatesComparison && found.section === 'Mortgage')
+    ? selectedTargetConstraint(row, found.section, scenario,
+      { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity })
+    : null, [row, found, fromRatesComparison, scenario, core, detailsPayload, rateConditionManifest, coreIntegrity]);
   const staySwitchProjection = useMemo(() => {
     // This legacy model compares the persisted current account and principal.
     // Its assumptions cannot consume a target priced for exploratory inputs.
     if (fromRatesComparison || !row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
-    if (targetConstraintContradicted(selectedTargetConstraint(row, 'Mortgage', scenario,
-      { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity }))) return null;
+    if (selectedConstraint && targetConstraintContradicted(selectedConstraint)) return null;
     const currentRef = scenario.currentProducts.mortgage;
     return buildStaySwitchProjection({
       scenario: calculationScenario,
@@ -340,7 +338,7 @@ export default function ProductDetail() {
       currentDetail: currentRef?.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts[currentRef.productKey] : null,
       targetDetail: detail,
     });
-  }, [fromRatesComparison, detail, detailsProducts, found?.section, row, scenario, calculationScenario, core, detailsPayload, rateConditionManifest, coreIntegrity]);
+  }, [fromRatesComparison, detail, detailsProducts, found?.section, row, scenario, calculationScenario, selectedConstraint]);
   const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
     && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
     ? scenario.currentProducts.mortgage.provider
@@ -363,7 +361,7 @@ export default function ProductDetail() {
     && deferredHistory.suitabilityRevision === suitabilityRevision
     ? deferredHistory : null;
   useEffect(() => {
-    if (!heavyHistory || !historySurfaceReady || !historyEnabled || !core || !found || rateHistory.failed || rateHistory.updating) {
+    if (found?.section === 'Mortgage' || !heavyHistory || !historySurfaceReady || !historyEnabled || !core || !found || rateHistory.failed || rateHistory.updating) {
       setDeferredHistory(null);
       return;
     }
@@ -423,6 +421,9 @@ export default function ProductDetail() {
     void suitabilityRevision;
     if (!historySurfaceReady || !historyEnabled || !core || !found) return null;
     if (rateHistory.updating || rateHistory.failed) return null;
+    if (found.section === 'Mortgage') {
+      return mortgageLvr && rateHistory.richHistory ? rateHistoryChartModel(rateHistory.snapshots, 'Mortgage') : null;
+    }
     if (heavyHistory) return currentDeferredHistory?.market ?? null;
     const detailed = rateHistory.historyAvailable ? rateHistoryChartModel(rateHistory.snapshots, found.section) : null;
     if (rateHistory.historyAvailable || rateHistory.richHistory) return detailed;
@@ -451,6 +452,7 @@ export default function ProductDetail() {
     historySurfaceReady,
     includeNonStandard,
     suitabilityRevision,
+    mortgageLvr,
     rateHistory.snapshots,
     rateHistory.historyAvailable,
     rateHistory.richHistory,
@@ -483,6 +485,7 @@ export default function ProductDetail() {
   const historyWaitingForInsights =
     historySurfaceReady &&
     historyEnabled &&
+    found?.section !== 'Mortgage' &&
     !rateHistory.historyAvailable &&
     !rateHistory.updating &&
     !rateHistory.failed &&
@@ -491,7 +494,7 @@ export default function ProductDetail() {
     !explorerInsights &&
     !bankInsightsError &&
     (!historyModel || historyModel.dates.length < 2);
-  const historyPreparing = heavyHistory && historySurfaceReady && historyEnabled && !!found
+  const historyPreparing = heavyHistory && historySurfaceReady && historyEnabled && !!found && found.section !== 'Mortgage'
     && !currentDeferredHistory && !rateHistory.failed;
   const historyContentRevision = [
     rateHistory.revision,
@@ -697,16 +700,10 @@ export default function ProductDetail() {
   const productWideSaved = savedRates.some(
     (ref) => ref.scope === 'product' && ref.productKey === productKey,
   );
-  const meta = SECTIONS[section];
   const qualifier = rateQualifier(row, section);
   const presentation = ratePresentation(row, section, mortgageRateMetric);
 
-  const sectionInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
-  // Distinct from the market ribbon ink (clay/eucalyptus) and the RBA line (wattle)
-  // in both appearances; `warning` matched clay in light and wattle in dark.
-  const productInk = theme.ledger.info;
   const observedProductPoints = countFiniteSeriesPoints(seededProductValues);
-  const productHasHighlight = observedProductPoints > 0;
   const selectedHistoryContext = currentBest !== null && toFraction(row.rate) !== currentBest
     ? uiJoin('Selected rate', ' ', formatRate(row.rate), ' · ', 'Leading advertised', ' ', formatRate(currentBest), ' · ', 'All tiers')
     : null;
@@ -759,7 +756,7 @@ export default function ProductDetail() {
           ),
         }}
       />
-      <ScreenScrollView
+      <ProductPageLinks overview={detail?.links?.overview}><ScreenScrollView
         onLayout={() => setLayoutReady(true)}
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       >
@@ -772,9 +769,8 @@ export default function ProductDetail() {
           />
           <View style={{ flex: 1 }}>
             <AppText variant="h3">{uiProductName(row)}</AppText>
-            <AppText variant="small" color="textMuted">
-              {uiJoin(uiProviderName(row), ' · ', uiSectionName(section))}
-            </AppText>
+            <ProductProviderLink provider={row.provider} />
+            <AppText variant="small" color="textMuted">{uiSectionName(section)}</AppText>
           </View>
         </Row>
 
@@ -847,6 +843,7 @@ export default function ProductDetail() {
             onPress={openCalculate}
           />
         </Row>
+        <MemoProductSpecs row={row} section={section} productDetails={detail} />
         {publicCatalogue.status !== 'unavailable' && publicProduct ? (
           <PublicRateEvidence productKey={productKey} row={row} programmeId={requestedProgramme}
             scenario={fromRatesComparison ? scenarioFor(section, row) : undefined} />
@@ -868,10 +865,7 @@ export default function ProductDetail() {
         ) : null}
 
         <AccessNotice name={row.product_name} provider={row.provider} productDetails={detail} loading={detailsLoading} />
-        <AppText variant="small" color="textMuted">{fromRatesComparison && section === 'Mortgage' ? uiLabel('Eligibility unverified') : uiTargetConstraint(selectedTargetConstraint(row, section, scenario,
-          { core, details: detailsPayload, manifest: rateConditionManifest, coreIntegrity }))}</AppText>
-
-        <MemoProductSpecs row={row} section={section} productDetails={detail} />
+        <AppText variant="small" color="textMuted">{selectedConstraint ? uiTargetConstraint(selectedConstraint) : uiLabel('Eligibility unverified')}</AppText>
 
         <Button
           title="Bank-call brief"
@@ -898,7 +892,7 @@ export default function ProductDetail() {
             ) : historyModel && historyModel.dates.length >= 2 ? (
               <>
                 <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-                  {uiJoin(uiProductName(row), ' · ', uiSectionName(section), ' · ', 'Matching rates')}
+                  {uiJoin(uiProductName(row), ' · ', uiSectionName(section))}
                 </AppText>
                 <ChartErrorBoundary name="ProductHistoryChart">
                   <BankHistoryChart
@@ -911,11 +905,12 @@ export default function ProductDetail() {
                     rbaHolds={core?.rba_holds}
                     section={section}
                     height={210}
-                    highlightSeries={productHasHighlight ? productSeries : null}
+                    productHistory
+                    comparisonScope={section === 'Mortgage' ? mortgageHistoryLvrLabel(mortgageLvr ?? null) : undefined}
+                    highlightSeries={productSeries}
                     onGraphicReady={onHistoryGraphicReady}
                   />
                 </ChartErrorBoundary>
-                <HistoryLegend productColor={productInk} sectionColor={sectionInk} />
                 {/* Missing dates are already counted by the chart's own
                     "Missing observations" fact; only surface load state here. */}
                 {rateHistory.updating || rateHistory.failed ? (
@@ -964,20 +959,7 @@ export default function ProductDetail() {
         <DetailGroup title="Fees" icon="cash-outline" items={detail?.fees} loading={detailsLoading} />
         <DetailGroup title="Eligibility" icon="person-outline" items={normalizedFactKinds.has('eligibility') ? undefined : detail?.eligibility} loading={detailsLoading && !normalizedFactKinds.has('eligibility')} />
         <DetailGroup title="Constraints" icon="lock-closed-outline" items={normalizedFactKinds.has('constraint') ? undefined : detail?.constraints} loading={detailsLoading && !normalizedFactKinds.has('constraint')} />
-
-        <OfficialLinks links={detail?.links} sourceDocuments={detail?.sourceDocuments} />
         <ProductTermsDisclosure productKey={productKey} />
-
-        <Button
-          title={uiJoin('View', ' ', uiProviderName(row), ' ', 'Products')}
-          icon="business-outline"
-          variant="secondary"
-          style={{ marginTop: 4 }}
-          onPress={() => openBank(row.provider)}
-        />
-
-        <MemoProductRatesList rows={rateRows} section={section} accent={theme.colors.primary}
-          pricingOrigin={fromRatesComparison ? 'rates-comparison' : undefined} />
 
         {exactSaveEligible ? <Button
           title={productWideSaved ? 'Remove all rates' : 'Save all rates'}
@@ -992,7 +974,7 @@ export default function ProductDetail() {
             {uiJoin('Source date', ' ', uiDate(row.last_updated))}
           </AppText>
         ) : null}
-      </ScreenScrollView>
+      </ScreenScrollView></ProductPageLinks>
     </>
   );
 }

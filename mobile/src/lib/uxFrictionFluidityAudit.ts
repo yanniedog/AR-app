@@ -5,7 +5,8 @@ import {
   hasValidPerformanceAuditHealth,
   isJustifiedAvailabilitySkip,
 } from './performanceAuditCompletion';
-import { auditCoreMetricValues, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount, measuredAuditValue } from './auditMetricHistoryValues';
+import { auditCoreMetricValues, auditTaskOutcomePopulation, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount, measuredAuditValue } from './auditMetricHistoryValues';
+import { hasCompleteAndroidFrameCapture, hasCompleteAuditTargetSampleCapture, validAndroidFrameSegments } from './auditUxTelemetryCoverage';
 
 export const AFFS_PILLAR_WEIGHTS = Object.freeze({
   interactionFriction: 0.40,
@@ -61,12 +62,15 @@ export type AffsOperationalBand =
 
 export type TaskComparatorKind = 'product-target' | 'best-known-path' | 'historical-baseline';
 export type FrictionDimension = 'intrinsic' | 'performance' | 'cognitive';
+const TARGET_ROLES = ['button', 'link', 'checkbox', 'radio', 'switch', 'tab', 'adjustable', 'menuitem'] as const;
+type AuditTargetRole = typeof TARGET_ROLES[number] | 'unclassified';
 
 export interface TargetSizeSampleInput {
   id?: string;
   width: number;
   height: number;
   platform: 'web-wcag-aa' | 'ios-hig' | 'android';
+  role?: string;
 }
 
 export interface WcagActChecksInput {
@@ -98,6 +102,7 @@ export interface TaskFrictionInput {
   comparatorKind?: TaskComparatorKind;
   avoidableWaitMs: number | null;
   maxAvoidableWaitBudgetMs?: number;
+  strictOverrunBudget?: boolean;
   probeDefects?: number | null;
 }
 
@@ -170,15 +175,31 @@ export interface IosFluidityTelemetryInput {
   scrollTransitionP95Ms?: number | null;
 }
 
-type AndroidFrameCaptureFailure = 'start-unavailable' | 'interrupted' | 'no-samples';
+type AndroidFrameCaptureFailure = 'start-unavailable' | 'interrupted' | 'no-samples'
+  | 'dropped-callbacks' | 'drop-count-unavailable';
+
+export interface AndroidFrameSegmentCoverage {
+  attempted: number;
+  observed: number;
+  frames: number;
+  droppedFrames?: number;
+  deadlineFrames?: number;
+}
+
+export interface AuditTargetCaptureCoverage {
+  capacityReached: boolean;
+  auditStartControlsMeasured?: boolean;
+}
 
 export interface UxFrictionFluidityTelemetryOptions {
   safeCheckId?: (value: string) => string | null;
   webVitals?: WebVitalsTelemetryInput;
   androidFluidity?: AndroidFluidityTelemetryInput;
   androidFrameCapture?: AndroidFrameCaptureFailure | 'collected';
+  androidFrameSegments?: AndroidFrameSegmentCoverage;
   iosFluidity?: IosFluidityTelemetryInput;
   targetSamples?: readonly TargetSizeSampleInput[] | null;
+  targetCapture?: AuditTargetCaptureCoverage;
   wcagActChecks?: WcagActChecksInput | null;
   humanValidation?: Partial<HumanUxValidationLayer>;
 }
@@ -222,11 +243,16 @@ export interface UxAuditFinding {
   code:
     | 'avoidable-interactions'
     | 'task-functional-failure'
+    | 'task-evidence-incomplete'
+    | 'target-sample-capacity'
     | 'navigation-recovery-required'
     | 'latency-over-budget'
+    | 'task-latency-overrun'
     | 'js-event-loop-stall'
     | 'js-frame-gap-overrun'
     | 'native-frame-deadline-overrun'
+    | 'native-frame-jank'
+    | 'native-input-latency'
     | 'native-frozen-frames'
     | 'cwv-inp-over-threshold'
     | 'cwv-lcp-over-threshold'
@@ -241,6 +267,7 @@ export interface UxAuditFinding {
   value?: number;
   unit?: 'ms' | 'ms-per-s' | 'unitless' | 'percent';
   checkId?: string | null;
+  checkIds?: (string | null)[];
 }
 
 export interface UxFrictionFluidityAudit {
@@ -267,6 +294,7 @@ export interface UxFrictionFluidityAudit {
       scoredTaskCount: number;
       observedTaskMeanScore: number | null;
       completedTaskCount: number;
+      taskOutcomes?: { success: number; failure: number; indeterminate: number; unavailable: number };
       meanPathEfficiency: number | null;
       meanResponseTimeEfficiency: number | null;
       taskFormulaWeights: typeof AFFS_TASK_FRICTION_WEIGHTS;
@@ -281,6 +309,10 @@ export interface UxFrictionFluidityAudit {
       weight: 0.30;
       wcagSummary: StandardsCheckBreakdown;
       surfaceContractSummary: StandardsCheckBreakdown;
+      targetSampleCoverage?: { scope: 'press-feedback-layout'; retained: number; capacityReached: boolean;
+        auditStartControlsMeasured: boolean };
+      targetSizingByRole?: Partial<Record<AuditTargetRole, Pick<StandardsCheckBreakdown, 'passed' | 'failed' | 'unavailable'>>>;
+      surfaceChecks?: Record<string, StandardsCheckBreakdown>;
     };
     fluidityAndResponsiveness: {
       score: number | null;
@@ -288,6 +320,7 @@ export interface UxFrictionFluidityAudit {
       telemetryKind: 'js-runtime-callbacks' | 'android-native-frame-trace' | 'core-web-vitals-p75' | 'ios-hitch-ratio' | 'unmeasured';
       nativeFrameDeadlineMeasured: boolean;
       androidFrameCapture: AndroidFrameCaptureFailure | 'observed' | 'invalid' | 'unknown' | 'not-applicable';
+      androidFrameSegments?: AndroidFrameSegmentCoverage;
       components: {
         inpScore: number | null;
         lcpScore: number | null;
@@ -620,7 +653,9 @@ export function scoreTaskInteractionFriction(input: TaskFrictionInput): TaskFric
     && forwardPhase.overrunMs !== null
     && returnPhase.overrunMs !== null
     && waitMs !== null
-    ? round1(primaryPhase.overrunMs + forwardPhase.overrunMs + returnPhase.overrunMs + waitMs)
+    ? round1(input.strictOverrunBudget
+      ? Math.max(primaryPhase.overrunMs, forwardPhase.overrunMs) + returnPhase.overrunMs + Math.max(0, waitMs - waitBudget)
+      : primaryPhase.overrunMs + forwardPhase.overrunMs + returnPhase.overrunMs + waitMs)
     : null;
 
   return {
@@ -660,6 +695,7 @@ export function scoreTaskInteractionFriction(input: TaskFrictionInput): TaskFric
 function evaluateReportTaskJourney(
   check: AuditCheck,
   defectCheckIds: ReadonlySet<string>,
+  measuredOutcome?: 'success' | 'failure' | 'indeterminate',
 ): TaskFrictionEvaluation {
   const hasReturn = hasAuditReturnEvidence(check);
   const completed = check.metrics.actionInvoked === true
@@ -697,8 +733,11 @@ function evaluateReportTaskJourney(
 
   return scoreTaskInteractionFriction({
     taskId: check.id,
-    completed,
-    functionalFailure: check.metrics.nonTimingFailure === true || check.metrics.actionCompleted === false,
+    completed: measuredOutcome === 'success' ? true : measuredOutcome === 'failure' ? false
+      : measuredOutcome === 'indeterminate' ? null : completed,
+    functionalFailure: measuredOutcome === undefined
+      ? check.metrics.nonTimingFailure === true || check.metrics.actionCompleted === false
+      : measuredOutcome === 'failure',
     minimumJustifiedActions: measuredAuditCount(check.metrics.minimumJustifiedActions),
     observedActions: measuredAuditCount(check.metrics.observedActions),
     errors: measuredAuditCount(check.metrics.runtimeErrors),
@@ -725,6 +764,7 @@ function evaluateReportTaskJourney(
     comparatorKind: 'product-target',
     avoidableWaitMs,
     maxAvoidableWaitBudgetMs: 1_500,
+    strictOverrunBudget: measuredOutcome !== undefined,
     probeDefects: defectCheckIds.has(check.id) ? 1 : 0,
   });
 }
@@ -751,6 +791,9 @@ export function evaluateReportTaskJourneys(
       .filter(gap => gap.source === 'performance' && typeof gap.checkId === 'string')
       .map(gap => gap.checkId!),
   );
+  const outcome = report.auditEvidenceVersion === 2 ? auditTaskOutcomePopulation(report, completion) : null;
+  const successful = outcome ? new Set(outcome.success) : null;
+  const failed = outcome ? new Set(outcome.failure) : null;
   return journeys.map(check => {
     const isUnavailable = check.status === 'skipped'
       || check.metrics.executionAttempted === false
@@ -776,7 +819,8 @@ export function evaluateReportTaskJourneys(
         probeDefects: defectCheckIds.has(check.id) ? 1 : 0,
       });
     }
-    const evaluated = evaluateReportTaskJourney(check, defectCheckIds);
+    const evaluated = evaluateReportTaskJourney(check, defectCheckIds,
+      successful?.has(check) ? 'success' : failed?.has(check) ? 'failure' : outcome ? 'indeterminate' : undefined);
     const isDuplicate = (idCounts.get(check.id) ?? 0) > 1;
     return {
       ...evaluated,
@@ -793,6 +837,8 @@ function evaluateStandardsPillar(
   score: number | null;
   wcagSummary: StandardsCheckBreakdown;
   surfaceContractSummary: StandardsCheckBreakdown;
+  surfaceChecks: Record<string, StandardsCheckBreakdown>;
+  targetSizingByRole: Partial<Record<AuditTargetRole, Pick<StandardsCheckBreakdown, 'passed' | 'failed' | 'unavailable'>>>;
   findings: UxAuditFinding[];
 } {
   const health = hasValidPerformanceAuditHealth(report) ? report.appHealth : undefined;
@@ -818,16 +864,23 @@ function evaluateStandardsPillar(
   let surfaceManual = 0;
   let surfaceUnavailable = 0;
   const findings: UxAuditFinding[] = [];
+  const surfaceChecks: Record<string, StandardsCheckBreakdown> = {};
+  const recordSurfaceCheck = (code: string, applicableChecks: number, passed: number, failed: number,
+    requiresManualReview: number, unavailable: number) => {
+    surfaceChecks[code] = { applicableChecks, passed, failed, requiresManualReview, unavailable, automatedConformityClaimed: false };
+  };
 
   for (const code of displayCodes) {
     const matches = health?.checks.filter(item => item.code === code) ?? [];
     if (matches.length !== 1) {
       surfaceUnavailable += 1;
+      recordSurfaceCheck(code, 0, 0, 0, 0, 1);
       continue;
     }
     const check = matches[0];
     if (check.metrics.partial === true || ['not-run', 'unavailable'].includes(check.status)) {
       surfaceUnavailable += 1;
+      recordSurfaceCheck(code, 0, 0, 0, 0, 1);
       continue;
     }
     if (code === 'display-contract') {
@@ -846,6 +899,7 @@ function evaluateStandardsPillar(
         || planned < missing
       ) {
         surfaceUnavailable += 1;
+        recordSurfaceCheck(code, 0, 0, 0, 0, 1);
         continue;
       }
       const rawDefects = missing + duplicateContracts + duplicateObservations + unexpectedSurfaces;
@@ -855,9 +909,9 @@ function evaluateStandardsPillar(
       surfaceApplicable += total;
       surfacePassed += Math.max(0, total - boundedFailed);
       surfaceFailed += boundedFailed;
-      if (check.status === 'warn' && boundedFailed === 0) {
-        surfaceManual += 1;
-      }
+      const manual = check.status === 'warn' && boundedFailed === 0 ? 1 : 0;
+      surfaceManual += manual;
+      recordSurfaceCheck(code, total, Math.max(0, total - boundedFailed), boundedFailed, manual, 0);
       if (contractDefects > 0) {
         findings.push({
           pillar: 'standards-accessibility',
@@ -881,6 +935,7 @@ function evaluateStandardsPillar(
       || checked < checkFailed + warned + checkUnavailable
     ) {
       surfaceUnavailable += 1;
+      recordSurfaceCheck(code, 0, 0, 0, 0, 1);
       continue;
     }
     const total = checked + missing;
@@ -891,6 +946,7 @@ function evaluateStandardsPillar(
     surfaceFailed += totalFailed;
     surfaceManual += warned;
     surfaceUnavailable += checkUnavailable;
+    recordSurfaceCheck(code, total, checkPassed, totalFailed, warned, checkUnavailable);
     if (totalFailed > 0) {
       findings.push({
         pillar: 'standards-accessibility',
@@ -910,19 +966,25 @@ function evaluateStandardsPillar(
   let wcagUnavailable = 0;
 
   const targetSamples = options?.targetSamples;
+  const targetSizingByRole: Partial<Record<AuditTargetRole, Pick<StandardsCheckBreakdown, 'passed' | 'failed' | 'unavailable'>>> = {};
   if (Array.isArray(targetSamples) && targetSamples.length > 0) {
     let targetFailures = 0;
     for (const sample of targetSamples) {
       const evaluated = evaluateTargetSizing(sample);
+      const role = TARGET_ROLES.find(candidate => candidate === sample?.role) ?? 'unclassified';
+      const roleCounts = targetSizingByRole[role] ??= { passed: 0, failed: 0, unavailable: 0 };
       if (!Number.isFinite(evaluated.observedMinDimension) || evaluated.observedMinDimension <= 0) {
         wcagUnavailable += 1;
+        roleCounts.unavailable += 1;
       } else if (evaluated.passes) {
         wcagApplicable += 1;
         wcagPassed += 1;
+        roleCounts.passed += 1;
       } else {
         wcagApplicable += 1;
         wcagFailed += 1;
         targetFailures += 1;
+        roleCounts.failed += 1;
       }
     }
     if (targetFailures > 0) {
@@ -974,15 +1036,25 @@ function evaluateStandardsPillar(
   const totalApplicable = surfaceApplicable + wcagApplicable;
   const totalPassed = surfacePassed + wcagPassed;
   const totalUnavailable = surfaceUnavailable + wcagUnavailable;
+  const scoredSurfaceChecks = Object.values(surfaceChecks).filter(check => check.applicableChecks > 0);
+  const surfaceMean = scoredSurfaceChecks.length > 0
+    ? scoredSurfaceChecks.reduce((total, check) => total + check.passed / check.applicableChecks, 0) / scoredSurfaceChecks.length
+    : null;
+  const evidenceV2 = report.auditEvidenceVersion === 2;
   const score = healthIdentitiesValid
     && surfaceApplicable > 0
     && wcagApplicable > 0
     && totalUnavailable === 0
-    ? round1(clamp100((totalPassed / totalApplicable) * 100))
+    && (!evidenceV2 || hasCompleteAuditTargetSampleCapture(options) && surfaceMean !== null)
+    ? round1(clamp100(evidenceV2 && surfaceMean !== null
+      ? 50 * (surfaceMean + wcagPassed / wcagApplicable)
+      : (totalPassed / totalApplicable) * 100))
     : null;
 
   return {
     score,
+    surfaceChecks,
+    targetSizingByRole,
     wcagSummary: {
       applicableChecks: wcagApplicable,
       passed: wcagPassed,
@@ -1013,6 +1085,7 @@ export function buildUxFrictionFluidityAudit(
   const resolvedOptions: UxFrictionFluidityTelemetryOptions | undefined = options
     ? { ...report.uxTelemetry, ...options }
     : report.uxTelemetry;
+  const evidenceV2 = report.auditEvidenceVersion === 2;
   const sanitizeId = resolvedOptions?.safeCheckId ?? ((id: string) => id);
   const values = auditCoreMetricValues(report, completion);
   const journeys = selectRequiredReportJourneys(report);
@@ -1023,7 +1096,8 @@ export function buildUxFrictionFluidityAudit(
   const hasDuplicateCheckIds = new Set(report.checks.map(check => check.id)).size !== report.checks.length
     || duplicateCoverageIds.length > 0
     || completion.gaps.duplicateChecks > 0;
-  const collectionComplete = completion.gaps.invalidCoverageReports === 0
+  const collectionComplete = (!evidenceV2 || completion.collectionComplete)
+    && completion.gaps.invalidCoverageReports === 0
     && !hasDuplicateCheckIds
     && missingCoverageIds.length === 0
     && unexpectedCoverageIds.length === 0
@@ -1057,9 +1131,10 @@ export function buildUxFrictionFluidityAudit(
     (sum, task) => sum + (task.frictionTaxonomy.intrinsicExtraActions ?? 0),
     0,
   );
-  const performanceOverrunChecks = evaluatedTasks.filter(
+  const overrunTasks = evaluatedTasks.filter(
     task => (task.frictionTaxonomy.performanceOverrunMs ?? 0) > 0,
-  ).length;
+  );
+  const performanceOverrunChecks = overrunTasks.length;
   const cognitiveProbeFlags = completion.gaps.targetProbeDefects;
 
   const standards = evaluateStandardsPillar(report, resolvedOptions);
@@ -1068,19 +1143,23 @@ export function buildUxFrictionFluidityAudit(
   const lcpScore = scoreWebVitalLcp(resolvedOptions?.webVitals?.lcpP75Ms);
   const clsScore = scoreWebVitalCls(resolvedOptions?.webVitals?.clsP75);
   const iosHitchScore = scoreIosHitchRatio(resolvedOptions?.iosFluidity?.hitchTimeRatioMsPerS);
-  const androidFrameScore = resolvedOptions?.androidFluidity
+  const androidFrameSegments = validAndroidFrameSegments(resolvedOptions?.androidFrameSegments);
+  const androidFrameScore = resolvedOptions?.androidFluidity && (!evidenceV2 || hasCompleteAndroidFrameCapture(resolvedOptions))
     ? scoreAndroidNativeFluidity(resolvedOptions.androidFluidity)
     : null;
   const reportedFrameCapture = resolvedOptions?.androidFrameCapture;
   const androidFrameCapture = androidFrameScore !== null ? 'observed'
-    : reportedFrameCapture === 'start-unavailable' || reportedFrameCapture === 'interrupted' || reportedFrameCapture === 'no-samples'
+    : reportedFrameCapture === 'start-unavailable' || reportedFrameCapture === 'interrupted'
+      || reportedFrameCapture === 'no-samples' || reportedFrameCapture === 'dropped-callbacks'
+      || reportedFrameCapture === 'drop-count-unavailable'
       ? reportedFrameCapture
       : resolvedOptions?.androidFluidity || reportedFrameCapture === 'collected' ? 'invalid'
         : report.environment?.platform === 'android' ? 'unknown' : 'not-applicable';
 
   let jsRuntimeScore: number | null = null;
   const executedJourneyCount = journeys.filter(
-    check => check.status !== 'skipped' && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true,
+    check => check.status !== 'skipped' && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true
+      && (!evidenceV2 || check.metrics.actionInvoked === true),
   ).length;
   const allJourneysHaveCallbacks = executedJourneyCount > 0 && executedJourneyCount === journeys.length
     && journeys.every(check => check.metrics.eventLoopMeasurementAvailable === true && check.metrics.frameMeasurementAvailable === true);
@@ -1097,13 +1176,14 @@ export function buildUxFrictionFluidityAudit(
   }
 
   const cwvScores = [inpScore, lcpScore, clsScore].filter((val): val is number => val !== null);
-  const cwvComposite = cwvScores.length > 0
+  const cwvComposite = cwvScores.length > 0 && (!evidenceV2 || cwvScores.length === 3)
     ? round1(cwvScores.reduce((sum, val) => sum + val, 0) / cwvScores.length)
     : null;
 
+  const androidNativeRequired = evidenceV2 && report.environment?.platform === 'android';
   const telemetryKind = androidFrameScore !== null
     ? 'android-native-frame-trace'
-    : cwvComposite !== null
+    : androidNativeRequired ? 'unmeasured' : cwvComposite !== null
       ? 'core-web-vitals-p75'
       : iosHitchScore !== null
         ? 'ios-hitch-ratio'
@@ -1111,7 +1191,7 @@ export function buildUxFrictionFluidityAudit(
           ? 'js-runtime-callbacks'
           : 'unmeasured';
 
-  const fluidityScore = androidFrameScore ?? cwvComposite ?? iosHitchScore ?? jsRuntimeScore;
+  const fluidityScore = androidFrameScore ?? (androidNativeRequired ? null : cwvComposite ?? iosHitchScore ?? jsRuntimeScore);
 
   const affsScore = collectionComplete
     && interactionFrictionScore !== null
@@ -1126,12 +1206,14 @@ export function buildUxFrictionFluidityAudit(
 
   const findings: UxAuditFinding[] = [];
   if (intrinsicExtraActions > 0) {
+    const contributors = evaluatedTasks.filter(task => (task.frictionTaxonomy.intrinsicExtraActions ?? 0) > 0);
     findings.push({
       pillar: 'interaction-friction',
       dimension: 'intrinsic',
       code: 'avoidable-interactions',
       severity: 'medium',
       count: intrinsicExtraActions,
+      ...(evidenceV2 ? { checkIds: contributors.map(task => task.taskId === 'redacted-task' ? null : task.taskId) } : {}),
     });
   }
   const failedTasks = evaluatedTasks.filter(task => task.components.taskSuccess === 0);
@@ -1143,9 +1225,11 @@ export function buildUxFrictionFluidityAudit(
       severity: 'high',
       count: failedTasks.length,
       checkId: failedTasks[0].taskId === 'redacted-task' ? null : failedTasks[0].taskId,
+      ...(evidenceV2 ? { checkIds: failedTasks.map(task => task.taskId === 'redacted-task' ? null : task.taskId) } : {}),
     });
   }
-  const timingFailureCount = completion.failurePositions.filter(item => item.category === 'timing').length;
+  const timingFailures = completion.failurePositions.filter(item => item.category === 'timing');
+  const timingFailureCount = timingFailures.length;
   if (timingFailureCount > 0) {
     findings.push({
       pillar: 'interaction-friction',
@@ -1153,7 +1237,38 @@ export function buildUxFrictionFluidityAudit(
       code: 'latency-over-budget',
       severity: 'high',
       count: timingFailureCount,
+      ...(evidenceV2 ? { checkIds: timingFailures.map(item => item.checkId) } : {}),
       ...(values.slowestCheckMs !== null ? { valueMs: values.slowestCheckMs, unit: 'ms' as const } : {}),
+    });
+  }
+  if (evidenceV2 && performanceOverrunChecks > 0) {
+    findings.push({
+      pillar: 'interaction-friction',
+      dimension: 'performance',
+      code: 'task-latency-overrun',
+      severity: 'medium',
+      count: performanceOverrunChecks,
+      checkIds: overrunTasks.map(task => task.taskId === 'redacted-task' ? null : task.taskId),
+    });
+  }
+  const incompleteTasks = evaluatedTasks.filter(task => task.score === null);
+  if (evidenceV2 && incompleteTasks.length > 0) {
+    findings.push({
+      pillar: 'interaction-friction',
+      dimension: 'intrinsic',
+      code: 'task-evidence-incomplete',
+      severity: 'medium',
+      count: incompleteTasks.length,
+      checkIds: incompleteTasks.map(task => task.taskId === 'redacted-task' ? null : task.taskId),
+    });
+  }
+  if (evidenceV2 && resolvedOptions?.targetCapture?.capacityReached === true) {
+    findings.push({
+      pillar: 'standards-accessibility',
+      dimension: 'accessibility-standard',
+      code: 'target-sample-capacity',
+      severity: 'medium',
+      count: resolvedOptions.targetSamples?.length ?? 0,
     });
   }
   if (cognitiveProbeFlags > 0) {
@@ -1175,6 +1290,8 @@ export function buildUxFrictionFluidityAudit(
       count: 1,
       valueMs: values.maxEventLoopLagMs,
       unit: 'ms',
+      ...(evidenceV2 ? { checkIds: report.checks.filter(check => check.metrics.eventLoopMeasurementAvailable === true
+        && measuredAuditValue(check.metrics.maxEventLoopLagMs) === values.maxEventLoopLagMs).map(check => sanitizeId(check.id)) } : {}),
     });
   }
   if (values.maxFrameGapMs !== null && values.maxFrameGapMs > 50) {
@@ -1186,6 +1303,8 @@ export function buildUxFrictionFluidityAudit(
       count: 1,
       valueMs: values.maxFrameGapMs,
       unit: 'ms',
+      ...(evidenceV2 ? { checkIds: report.checks.filter(check => check.metrics.frameMeasurementAvailable === true
+        && measuredAuditValue(check.metrics.maxFrameGapMs) === values.maxFrameGapMs).map(check => sanitizeId(check.id)) } : {}),
     });
   }
   const inpVal = measuredAuditValue(resolvedOptions?.webVitals?.inpP75Ms);
@@ -1244,17 +1363,25 @@ export function buildUxFrictionFluidityAudit(
   const overrunBreached = androidDeadline !== null && androidOverrun !== null && androidOverrun > androidDeadline * 0.25;
   const jankBreached = androidJank !== null && androidJank > 2;
   const inputLatencyBreached = androidInputLatency !== null && androidInputLatency > 100;
-  if (overrunBreached || jankBreached || inputLatencyBreached) {
-    const severe = (androidDeadline !== null && androidOverrun !== null && androidOverrun > androidDeadline)
-      || (androidJank !== null && androidJank > 10)
-      || (androidInputLatency !== null && androidInputLatency > 250);
+  if (overrunBreached) {
     findings.push({
-      pillar: 'fluidity-responsiveness',
-      dimension: 'performance',
-      code: 'native-frame-deadline-overrun',
-      severity: severe ? 'high' : 'medium',
-      count: 1,
-      ...(androidOverrun !== null ? { valueMs: androidOverrun, unit: 'ms' as const } : {}),
+      pillar: 'fluidity-responsiveness', dimension: 'performance', code: 'native-frame-deadline-overrun',
+      severity: androidOverrun > androidDeadline ? 'high' : 'medium',
+      count: 1, valueMs: androidOverrun, unit: 'ms',
+    });
+  }
+  if (jankBreached) {
+    findings.push({
+      pillar: 'fluidity-responsiveness', dimension: 'performance', code: 'native-frame-jank',
+      severity: androidJank > 10 ? 'high' : 'medium',
+      count: 1, value: androidJank, unit: 'percent',
+    });
+  }
+  if (inputLatencyBreached) {
+    findings.push({
+      pillar: 'fluidity-responsiveness', dimension: 'performance', code: 'native-input-latency',
+      severity: androidInputLatency > 250 ? 'high' : 'medium',
+      count: 1, valueMs: androidInputLatency, unit: 'ms',
     });
   }
   const frozenResolved = resolveThresholdQualifiedFrozenFrames(resolvedOptions?.androidFluidity);
@@ -1364,6 +1491,12 @@ export function buildUxFrictionFluidityAudit(
         scoredTaskCount: measuredTasks.length,
         observedTaskMeanScore,
         completedTaskCount,
+        ...(evidenceV2 ? { taskOutcomes: {
+          success: completedTaskCount,
+          failure: failedTasks.length,
+          indeterminate: executedJourneyCount - completedTaskCount - failedTasks.length,
+          unavailable: evaluatedTasks.length - executedJourneyCount,
+        } } : {}),
         meanPathEfficiency,
         meanResponseTimeEfficiency,
         taskFormulaWeights: AFFS_TASK_FRICTION_WEIGHTS,
@@ -1378,6 +1511,16 @@ export function buildUxFrictionFluidityAudit(
         weight: AFFS_PILLAR_WEIGHTS.standardsAndAccessibility,
         wcagSummary: standards.wcagSummary,
         surfaceContractSummary: standards.surfaceContractSummary,
+        ...(evidenceV2 ? {
+          surfaceChecks: standards.surfaceChecks,
+          targetSizingByRole: standards.targetSizingByRole,
+          ...(resolvedOptions?.targetCapture ? { targetSampleCoverage: {
+            scope: 'press-feedback-layout' as const,
+            retained: resolvedOptions.targetSamples?.length ?? 0,
+            capacityReached: resolvedOptions.targetCapture.capacityReached === true,
+            auditStartControlsMeasured: resolvedOptions.targetCapture.auditStartControlsMeasured === true,
+          } } : {}),
+        } : {}),
       },
       fluidityAndResponsiveness: {
         score: fluidityScore,
@@ -1385,6 +1528,7 @@ export function buildUxFrictionFluidityAudit(
         telemetryKind,
         nativeFrameDeadlineMeasured: telemetryKind === 'android-native-frame-trace',
         androidFrameCapture,
+        ...(evidenceV2 && androidFrameSegments ? { androidFrameSegments } : {}),
         components: {
           inpScore,
           lcpScore,

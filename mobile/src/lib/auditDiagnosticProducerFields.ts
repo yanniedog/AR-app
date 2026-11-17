@@ -95,6 +95,7 @@ export const AUDIT_PRODUCER_METRIC_FIELDS = new Set<string>([
   "historyExplorerEnabled",
   "host",
   "httpAttempted",
+  "httpIssue",
   "httpReachability",
   "httpSelected",
   "incidentalRuntimeErrorMessages",
@@ -757,6 +758,15 @@ export const AUDIT_PRODUCER_ENUMS: Record<string, readonly string[]> = {
     "pass",
     "unresolved"
   ],
+  "httpIssue": [
+    "cancelled",
+    "redirect-unverified",
+    "response-rejected",
+    "response-unverified",
+    "restricted",
+    "timeout",
+    "transport"
+  ],
   "httpReachability": [
     "fail",
     "pass",
@@ -834,7 +844,7 @@ export const AUDIT_PRODUCER_ENUMS: Record<string, readonly string[]> = {
     "Fewer than two distinct exact products are available in one section",
     "Fewer than two distinct exact products match the applied Rates comparison scope",
     "Fewer than two products are loaded",
-    "Maximum coverage is unavailable because optional assets are not cached",
+    "Maximum coverage assets unavailable",
     "No Mortgage rates are available for comparison-scope latency",
     "No active core payload is loaded",
     "No active payload is loaded",

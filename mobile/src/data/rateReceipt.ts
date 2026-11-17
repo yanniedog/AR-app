@@ -27,7 +27,7 @@ import {
 } from './format';
 import type { UserRateScenario } from './userRateScenario';
 import { scopedRateConditions, type RateConditionContext, type ScopedRateConditions } from './rateConditions';
-import { uiDetailItem } from '../lib/productUiFacts';
+import { uiDetailItem, uiProductFactValue } from '../lib/productUiFacts';
 import { scopedFinancialConditionFacts } from './scopedFinancialConditionFacts';
 import { uiConditionTag, uiConditionalRateFact, uiListedLvrRange } from '../lib/financialUiCopy';
 import { uiCount, uiDate, uiDuration, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from '../lib/uiCopy';
@@ -41,8 +41,7 @@ export interface ReceiptFact {
 export function rateConditionReceiptLines(receipt: RateReceipt): UiText[] {
   const conditions = scopedFinancialConditionFacts(receipt.rateConditions);
   return [...conditions.facts.map(uiConditionTag),
-    ...conditions.unresolved.map(fact => uiJoin('Source review required', ' · ', uiIdentifier(fact.source.sourcePointer))),
-    ...(conditions.state === 'unverified' ? [uiLabel('Source unverified')] : []), uiLabel('Eligibility unverified')];
+    ...(conditions.unresolved.length || conditions.state === 'unverified' ? [uiJoin('Conditions', ': ', 'Unverified')] : []), uiLabel('Eligibility unverified')];
 }
 
 export interface OfficialReceiptSource {
@@ -178,7 +177,7 @@ export type ReceiptStatusFact =
 function detailFacts(items: DetailItem[] | undefined, group: 'Fees' | 'Eligibility' | 'Features' | 'Constraints'): ReceiptFact[] {
   return (items ?? []).map((item, index) => {
     const fact = uiDetailItem(item, index, group);
-    return { label: fact.label, value: uiJoin(fact.value, fact.conditions === 'source-review-required' ? uiJoin(' · ', 'Source review required') : null) };
+    return { label: fact.label, value: uiProductFactValue(fact) };
   });
 }
 function addFact(facts: ReceiptFact[], label: UiCopy, value: UiText | null): void {
@@ -315,15 +314,14 @@ function buildComparables(
 ): NegotiationComparable[] {
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   const eligible = visibleAccountRows(rows, false, detailsProducts)
-    .filter((row) => toFraction(row.rate) !== null)
-    .sort((a, b) => {
-      const av = toFraction(a.rate)!;
-      const bv = toFraction(b.rate)!;
-      return lowerIsBetter ? av - bv : bv - av;
-    });
+    .flatMap(row => {
+      const rate = toFraction(row.rate);
+      return rate === null ? [] : [{ row, rate }];
+    })
+    .sort((a, b) => lowerIsBetter ? a.rate - b.rate : b.rate - a.rate);
   const seen = new Set<string>();
   const result: NegotiationComparable[] = [];
-  for (const row of eligible) {
+  for (const { row } of eligible) {
     if (row.product_key === selected.productKey) continue;
     if (seen.has(row.product_key)) continue;
     seen.add(row.product_key);

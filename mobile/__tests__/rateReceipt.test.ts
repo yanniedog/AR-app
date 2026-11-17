@@ -51,11 +51,16 @@ describe('rate receipt', () => {
     expect(unreviewed.tier).toContainEqual({ label: 'Account type', value: 'Unknown' });
   });
   test('public share facts retain exact identity, known fees and sources without source prose', () => {
-    const receipt = buildRateReceipt({ row: row(), section: 'Mortgage', evidenceDate: '2026-08-04', detail: { ...detail, features: [{ name: 'Marketing', info: 'This paragraph must never appear in sharing.' }] } });
+    const receipt = buildRateReceipt({ row: row(), section: 'Mortgage', evidenceDate: '2026-08-04', detail: {
+      ...detail, fees: [{ name: 'Annual fee', value: '$0', info: 'With package' }],
+      features: [{ name: 'Marketing', info: 'This paragraph must never appear in sharing.' }],
+    } });
     const text = rateReceiptShareText(receipt);
     expect(text).toContain('Example Bank · Clear Variable Loan · Rate index: 4');
     expect(text).toContain('Advertised: 5.50%'); expect(text).toContain('Comparison: 5.70%');
-    expect(text).toContain('Annual fee: $0'); expect(text).toContain('https://examplebank.test/products/clear');
+    expect(text).toContain('Annual fee: $0 · Conditions: Unverified');
+    expect(text).not.toContain('With package');
+    expect(text).toContain('https://examplebank.test/products/clear');
     expect(text).toContain('Eligibility unverified'); expect(text).toContain('Fees unverified');
     expect(text).not.toContain('paragraph'); expect(text).not.toContain('Marketing');
   });

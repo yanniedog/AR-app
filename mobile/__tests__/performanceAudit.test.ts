@@ -1055,11 +1055,11 @@ describe('foreground elapsed budget', () => {
 describe('performance audit inactivity watchdog', () => {
   beforeEach(() => resetPerformanceAuditForTests());
 
-  it('uses the ten-second default and accepts a custom stall timeout', () => {
+  it('uses the thirty-second default and accepts a custom stall timeout', () => {
     let elapsedMs = 0;
     const clock = () => elapsedMs;
     expect(new PerformanceAuditInactivityWatchdog(undefined, clock).hangTimeoutMs).toBe(
-      10_000,
+      30_000,
     );
     expect(new PerformanceAuditInactivityWatchdog(420_000, clock).hangTimeoutMs).toBe(
       420_000,

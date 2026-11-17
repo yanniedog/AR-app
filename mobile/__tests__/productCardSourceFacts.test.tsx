@@ -191,7 +191,7 @@ test('unparsed source qualifiers remain on the row while unresolved actions use 
     expect(targets[1].props.accessibilityLabel).toBe('Save, Budget Home Loan, Maitland Mutual Limited, Rate 5.79%, Rate index 2');
     expect(targets.every(node => !/eligible|explanatory|wording|promotional/.test(node.props.accessibilityLabel))).toBe(true);
     const rowTargets = tree.root.findAllByType('PressFeedback').filter(node => String(node.props.accessibilityLabel).startsWith('Budget Home Loan,'));
-    expect(rowTargets.every(node => node.props.accessibilityLabel.includes('Source review required'))).toBe(true);
+    expect(rowTargets.every(node => node.props.accessibilityLabel.includes('Conditions: Unverified'))).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
 
@@ -226,7 +226,7 @@ test('metric collisions use displayed precision and keep the full row facts out 
     expect(action.props.accessibilityLabel).toBe('Save, Unloan Home Loan, Unloan, Comparison rate 5.80%');
     expect(action.props.accessibilityLabel).not.toMatch(/Rate index|Advertised|LVR|Source review|Principal|Variable/);
     const full = tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith('Unloan Home Loan,'))!;
-    expect(full.props.accessibilityLabel).toMatch(/Advertised rate 5.89%.*Variable.*Principal & interest.*Listed LVR >70%–80%.*Source review required/);
+    expect(full.props.accessibilityLabel).toMatch(/Advertised rate 5.89%.*Variable.*Principal & interest.*Listed LVR >70%–80%.*Conditions: Unverified/);
     expect(action.props.testID).toBe(`rate-save:${encodeURIComponent(unloan.product_key)}:2`);
   } finally { act(() => tree.unmount()); }
   const rounded = selectedConstraintFixture('Mortgage', [

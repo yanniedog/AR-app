@@ -12,7 +12,7 @@ jest.mock('../src/components/IconAction', () => ({ IconAction: 'IconAction' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Chip: 'Chip', Row: 'Row' }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
 
-test('clearing a restored custom scope reveals the collapsed browse header', () => {
+test('restored custom scope leaves room for rates and can be edited and hidden', () => {
   useMortgageComparison.setState({ loanAmount: '500000', lvr: '80' });
   const custom = { ...EMPTY_FILTERS, loanPurposes: ['OO'], repaymentTypes: ['PI'] };
   const header = (filters: typeof custom) => (
@@ -26,7 +26,11 @@ test('clearing a restored custom scope reveals the collapsed browse header', () 
   };
   act(() => { tree = TestRenderer.create(header(custom)) as typeof tree; });
   try {
-    expect(tree.root.findAllByProps({ testID: 'mortgage-scenario-summary' })).toHaveLength(0);
+    expect(tree.root.findByProps({ testID: 'mortgage-scenario-summary' })).toBeTruthy();
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
+    expect(tree.root.findByProps({ testID: 'mortgage-comparison-controls' })).toBeTruthy();
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Hide' }).props.onPress());
+    expect(useMortgageComparison.getState().loanAmount).toBe('500000');
     act(() => { clearMortgageComparison(); tree.update(header(EMPTY_FILTERS)); });
     expect(tree.root.findByProps({ testID: 'mortgage-scenario-summary' })).toBeTruthy();
     act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
@@ -63,16 +67,16 @@ test('fast typing keeps the latest draft and unmount flushes without committing 
     ) as typeof tree;
   });
   try {
-    const amount = tree.root.findByProps({ accessibilityLabel: 'Loan amount' });
+    const amount = tree.root.findByProps({ accessibilityLabel: 'Loan amount, thousands of dollars' });
     act(() => { amount.props.onChangeText('6'); });
     act(() => { amount.props.onChangeText('62'); });
     expect(useMortgageComparison.getState().loanAmount).toBe('');
     act(() => { jest.advanceTimersByTime(200); });
-    expect(useMortgageComparison.getState().loanAmount).toBe('62');
+    expect(useMortgageComparison.getState().loanAmount).toBe('$62k');
     act(() => { amount.props.onChangeText('625'); });
-    expect(useMortgageComparison.getState().loanAmount).toBe('62');
+    expect(useMortgageComparison.getState().loanAmount).toBe('$62k');
     act(() => { tree.unmount(); });
-    expect(useMortgageComparison.getState().loanAmount).toBe('625');
+    expect(useMortgageComparison.getState().loanAmount).toBe('$625k');
   } finally {
     jest.useRealTimers();
     restoreRatesSession(original);
@@ -92,12 +96,12 @@ test('external store clear discards a pending typed draft instead of restoring i
     ) as typeof tree;
   });
   try {
-    const amount = tree.root.findByProps({ accessibilityLabel: 'Loan amount' });
-    act(() => { amount.props.onChangeText('625000'); });
+    const amount = tree.root.findByProps({ accessibilityLabel: 'Loan amount, thousands of dollars' });
+    act(() => { amount.props.onChangeText('625'); });
     act(() => { clearMortgageComparison(); });
     act(() => { jest.advanceTimersByTime(200); });
     expect(useMortgageComparison.getState().loanAmount).toBe('');
-    expect(tree.root.findByProps({ accessibilityLabel: 'Loan amount' }).props.value ?? '').toBe('');
+    expect(tree.root.findByProps({ accessibilityLabel: 'Loan amount, thousands of dollars' }).props.value ?? '').toBe('');
   } finally {
     act(() => { tree.unmount(); });
     jest.useRealTimers();
@@ -116,14 +120,14 @@ test('selecting the final facet flushes the latest amount and offset inputs befo
   let tree!: ReactTestRenderer & { root: { findByProps(props: object): { props: { onChangeText(text: string): void; onPress(): void } }; findAllByType(type: any): { props: { label: string; onPress(): void } }[] } };
   act(() => { tree = TestRenderer.create(<MortgageComparisonControls rows={rows} filters={filters} unverified={0} invalid={false} />) as typeof tree; });
   try {
-    act(() => tree.root.findByProps({ accessibilityLabel: 'Loan amount' }).props.onChangeText('650000'));
-    act(() => tree.root.findByProps({ accessibilityLabel: 'Offset balance' }).props.onChangeText('100000'));
-    act(() => tree.root.findByProps({ accessibilityLabel: 'Property value' }).props.onChangeText('900000'));
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Loan amount, thousands of dollars' }).props.onChangeText('650'));
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Offset balance, thousands of dollars' }).props.onChangeText('100'));
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Property value, thousands of dollars' }).props.onChangeText('900'));
     expect(useMortgageComparison.getState().loanAmount).toBe('');
     const chip = tree.root.findAllByType('Chip' as any).find(item => /principal/i.test(String(item.props.label)))!;
     act(() => chip.props.onPress());
-    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '650000', lvr: '', lvrMode: 'funds', fundsType: 'offset',
-      fundsAvailable: '100000', propertyValue: '900000' });
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '$650k', lvr: '', lvrMode: 'funds', fundsType: 'offset',
+      fundsAvailable: '$100k', propertyValue: '$900k' });
     expect(useRatesSession.getState().sections.Mortgage.filters.repaymentTypes).toEqual(['PRINCIPAL_AND_INTEREST']);
     act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
     act(() => jest.advanceTimersByTime(250));

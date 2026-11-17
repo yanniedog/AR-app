@@ -44,11 +44,15 @@ function preferenceKey(prefs: Prefs, section: SectionKey): string {
     profileFeaturesForSection(prefs.profileFilters, section)]);
 }
 export function initializeRatesSession(prefs: Prefs, section: SectionKey): void {
-  if (useRatesSession.getState().initialized) return;
+  const current = useRatesSession.getState();
+  if (current.initialized) return;
+  const { loanPurposes, repaymentTypes } = current.sections.Mortgage.filters;
   const sections = Object.fromEntries(SECTION_ORDER.map(key => [key, {
     // Saved requirements already apply globally through mandatory eligibility.
     // Copying them here creates stale duplicates that survive profile edits.
-    ...emptySection(), preferenceKey: preferenceKey(prefs, key),
+    ...emptySection(),
+    ...(key === 'Mortgage' ? { filters: { ...EMPTY_FILTERS, loanPurposes, repaymentTypes } } : {}),
+    preferenceKey: preferenceKey(prefs, key),
   }])) as RatesSessionSnapshot['sections'];
   useRatesSession.setState({ initialized: true, section, sections });
 }

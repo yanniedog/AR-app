@@ -1,7 +1,16 @@
+import { auditHttpCheckSummary } from './auditHttpCheckSummary';
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { hasValidPerformanceAuditHealth, type buildPerformanceAuditCompletion } from './performanceAuditCompletion';
 import { AUDIT_METRICS, type AuditMetric } from './auditMetricHistoryMetrics';
 import { buildUxFrictionFluidityAudit, type UxFrictionFluidityAudit } from './uxFrictionFluidityAudit';
+
+export function hasAuditReadinessEvidence(check: AuditCheck, verified: boolean): boolean {
+  const readiness = check.diagnostic?.readiness;
+  if (readiness?.capturing !== true) return false;
+  if (!verified) return typeof readiness.ready === 'boolean';
+  return readiness.ready === true && Array.isArray(readiness.blockers) && readiness.blockers.length === 0
+    && Array.isArray(readiness.surfaces) && readiness.surfaces.length > 0;
+}
 
 export const measuredAuditValue = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
@@ -55,14 +64,20 @@ export function auditTaskOutcomePopulation(report: PerformanceAuditReport,
     && check.metrics.executionAttempted !== false && check.metrics.availabilityFailure !== true && check.metrics.actionInvoked === true);
   const defects = new Set(completion.gapPositions.filter(gap => gap.source === 'performance').map(gap => gap.checkId));
   const success = actions.filter(check => check.metrics.actionCompleted === true && check.metrics.nonTimingFailure === false
-    && check.diagnostic?.readiness?.ready === true && !defects.has(check.id));
-  const failure = actions.filter(check => check.metrics.nonTimingFailure === true || check.metrics.actionCompleted === false);
+    && check.diagnostic?.readiness?.ready === true && !defects.has(check.id)
+    && (report.auditEvidenceVersion !== 2 || check.metrics.interruptedByBackground !== true && hasAuditReadinessEvidence(check, true)));
+  const failure = actions.filter(check => check.metrics.nonTimingFailure === true
+    || check.metrics.actionCompleted === false && (report.auditEvidenceVersion !== 2
+      || check.metrics.stepLimitExceeded !== true && check.metrics.interruptedByBackground !== true));
   const withinTimingLimits = success.filter(check => check.status === 'pass'
     && check.metrics.eventLoopMeasurementAvailable === true && check.metrics.frameMeasurementAvailable === true
     && measuredAuditValue(check.metrics.forwardWorkMs) !== null).length;
   const timingFailures = success.filter(check => check.status === 'fail').length;
+  const resolved = new Set([...success, ...failure]);
+  const unconfirmedTimeouts = actions.filter(check => !resolved.has(check)
+    && (check.metrics.stepLimitExceeded === true)).length;
   return { actions, success, failure, outcomes: { success: success.length, failure: failure.length,
-    indeterminate: actions.length - success.length - failure.length, withinTimingLimits, timingFailures,
+    indeterminate: actions.length - success.length - failure.length, unconfirmedTimeouts, withinTimingLimits, timingFailures,
     warnings: success.length - withinTimingLimits - timingFailures } };
 }
 
@@ -102,6 +117,7 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
     return sum + (typeof count === 'number' && Number.isSafeInteger(count) && count > 0 ? count : 0);
   }, 0);
   const totalLinks = links.length + aggregateUnverifiedCount;
+  const http = report.auditEvidenceVersion === 2 ? auditHttpCheckSummary(report.checks) : null;
   const coverage = completion.gaps.invalidCoverageReports === 0 ? report.coverage : undefined;
   const observedIds = new Set(report.checks.map(check => check.id));
   const unexpected = new Set(coverage?.unexpectedStoredCheckIds ?? []);
@@ -138,11 +154,11 @@ function extendedAuditMetricValues(report: PerformanceAuditReport,
     journeyCoveragePercent: coverage ? percent(coverage.executedJourneyChecks, coverage.plannedJourneyChecks) : null,
     healthCoveragePercent: health && healthIdentityValid ? percent(health.checks.filter(check => !['not-run', 'unavailable'].includes(check.status)).length,
       health.coverage.plannedChecks) : null,
-    readinessCoveragePercent: percent(journeys.filter(check => check.diagnostic?.readiness?.capturing === true
-      && typeof check.diagnostic.readiness.ready === 'boolean').length, journeys.length),
+    readinessCoveragePercent: percent(journeys.filter(check => hasAuditReadinessEvidence(check, report.auditEvidenceVersion === 2)).length, journeys.length),
     responsivenessCoveragePercent: percent(journeys.filter(check => check.metrics.eventLoopMeasurementAvailable === true
       && check.metrics.frameMeasurementAvailable === true).length, journeys.length),
-    linkVerificationPercent: percent(totalLinks - completion.gaps.unverifiedLinks, totalLinks),
+    linkVerificationPercent: http ? (http.total === null ? null : percent(http.verified, http.total))
+      : percent(totalLinks - completion.gaps.unverifiedLinks, totalLinks),
     providerSuccessPercent: healthCheck('coverage-reconciliation')?.metrics.invalidCounts === false
       ? ratio('coverage-reconciliation', 'providersSucceeded', 'providersAttempted') : null,
     detailsCoveragePercent: healthCheck('details-completeness')?.metrics.runMatches === true

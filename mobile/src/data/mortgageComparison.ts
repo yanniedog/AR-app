@@ -18,7 +18,8 @@ export interface MortgageComparisonInputs {
   /** Raw property value required only when the funds stay in an offset account. */
   propertyValue?: string;
 }
-/** Private exploratory inputs stay in memory, separate from saved searches and reports. */
+/** Active comparison inputs, including temporary audit values. Explicit user
+ * edits persist through the encrypted profile store, never through this store. */
 export const useMortgageComparison = create<MortgageComparisonInputs>(() => ({ loanAmount: '', lvr: '' }));
 export const setMortgageComparisonInputs = (value: MortgageComparisonInputs) => useMortgageComparison.setState(value, true);
 export const clearMortgageComparison = () => setMortgageComparisonInputs({ loanAmount: '', lvr: '' });
@@ -307,10 +308,16 @@ export async function mortgageComparisonRowsCooperatively(
   const candidates: RateRow[] = parsed.lvr === null ? rows : [];
   let sliceStarted = now();
   if (parsed.lvr !== null) {
+    const matchingTiers = new Map<RateRow['lvr_tier'], boolean>();
     for (let offset = 0; offset < rows.length; offset += 1) {
       const row = rows[offset];
-      const range = parseLvrRange(row.lvr_tier);
-      if (range && containsLvr(range, parsed)) candidates.push(row);
+      let matches = matchingTiers.get(row.lvr_tier);
+      if (matches === undefined) {
+        const range = parseLvrRange(row.lvr_tier);
+        matches = range !== null && containsLvr(range, parsed);
+        matchingTiers.set(row.lvr_tier, matches);
+      }
+      if (matches) candidates.push(row);
       if ((offset + 1) % 16 === 0 && now() - sliceStarted >= 6) {
         await yieldControl();
         sliceStarted = now();

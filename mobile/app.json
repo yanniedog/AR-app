@@ -113,7 +113,8 @@
         }
       ],
       "@kesha-antonov/react-native-background-downloader",
-      "expo-background-task"
+      "expo-background-task",
+      "./plugins/with-android-rotation"
     ],
     "experiments": {
       "typedRoutes": true

@@ -21,6 +21,8 @@ import { useReadyNavigationEffect } from '../../hooks/useReadyNavigationEffect';
 import { useBackOwnedSheetState } from '../../hooks/useBackOwnedSheetState';
 import { SheetSurface, type SheetAuditState } from '../SheetSurface';
 import { TouchTarget } from '../TouchTarget';
+import { BankAvatar } from '../BankAvatar';
+import { COMPACT_ROW } from '../product/compactProductRow';
 import { SegmentedControl } from '../controls';
 import { sectionSegmentOptions } from '../../data/interests';
 import { verifiedCatalogueDetails, detailsOnlyCatalogue } from '../../data/detailsCatalogue';
@@ -29,6 +31,7 @@ import { initializeRatesSession, syncRatesPreferences, changeRatesSection, updat
 import { normalizeRatesPageSize, ratesPageWindow } from '../../data/ratesPagination';
 import { ratesIntentKey, resolveRatesIntent, RATES_INTENT_KEYS, type RatesRouteParams } from '../../lib/ratesIntent';
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
+import { isPerformanceAuditActive } from '../../lib/performanceAudit';
 import { useRatesAuditTarget } from '../../hooks/useRatesAuditTarget';
 import { usePhysicalListVisibility } from '../../hooks/usePhysicalListVisibility';
 import { measuredRatesViewport } from '../../lib/ratesViewport';
@@ -41,12 +44,14 @@ import { FLASH_LIST_DRAW_DISTANCE, FLASH_LIST_VIEWABILITY_CONFIG } from '../../l
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, useWindowDimensions, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FilterSheet } from '../../components/FilterSheet';
 import { SavedRequirementsSummary } from '../SavedRequirementsSummary';
 import { RatesPagination } from '../RatesPagination';
 import { MortgageComparisonControls } from '../MortgageComparisonControls';
+import { restoreSavedMortgageComparison, saveMortgageComparisonFacets, useMortgageComparisonProfile } from '../../data/mortgageComparisonProfile';
 import {
   useMortgageComparison,
   setMortgageComparisonInputs,
@@ -55,6 +60,7 @@ import {
   clearMortgageComparison,
 } from '../../data/mortgageComparison';
 import { EmptyState, IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../../components/feedback';
+import { RatesIconKey } from './RatesIconKey';
 import { IconAction } from '../../components/IconAction';
 import { Screen, screenScrollContentStyle } from '../../components/Screen';
 import { SearchBar } from '../../components/controls';
@@ -81,7 +87,7 @@ import { useSearchFilterOptions } from '../../hooks/useSearchFilterOptions';
 import { usePreparedSearchRows } from '../../hooks/usePreparedSearchRows';
 import { rowsForSearchScope } from '../../data/taxonomy';
 import { hapticSelection } from '../../lib/haptics';
-import { openCompare, openProduct } from '../../lib/nav';
+import { openCompare, openProduct, scalarRouteParam } from '../../lib/nav';
 import {
   auditActionString,
   auditActionStrings,
@@ -113,6 +119,7 @@ function availableSortOptions(
 }
 
 const EMPTY_RATE_ROWS: RateRow[] = [];
+const SMALL_MORTGAGE_BOOK_ROWS = 128;
 const rowToken = (r: RateRow) => r.public_offer_id ? publicOfferSelectionToken(r.product_key, r.public_offer_id) :
   r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
 
@@ -138,7 +145,12 @@ export default function RatesWorkspace() {
   const theme = useTheme();
   const isFocused = useIsFocused();
   const sheetNavigation = useNavigation();
-  const { width } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const landscape = Platform.OS === 'android' && width > height;
+  const contentWidth = landscape ? width - insets.left - insets.right : width;
+  // In landscape, give the controls their own scroll area beside the results.
+  const controlsWidth = landscape ? Math.min(360, Math.round(contentWidth * 0.44)) : width;
   const params = useLocalSearchParams() as RatesRouteParams;
   const intentKey = ratesIntentKey(params);
   const session = useRatesSession();
@@ -266,6 +278,12 @@ export default function RatesWorkspace() {
     consumedIntent.current = intentKey;
     changeRatesSection(intent.section);
     useStore.getState().setActiveSection(intent.section);
+    if (intent.section === 'Mortgage' && intent.patch.filters && !scalarRouteParam(current.params.sub) && !isPerformanceAuditActive()) {
+      // Provider and reset intents carry no mortgage assumptions of their own.
+      const saved = useMortgageComparisonProfile.getState().profile;
+      intent.patch.filters = { ...intent.patch.filters, ...saved.facets };
+      if (scalarRouteParam(current.params.reset) === '1') setMortgageComparisonInputs(saved.inputs);
+    }
     updateRatesSection(intent.section, intent.patch, true);
     router.setParams(Object.fromEntries(RATES_INTENT_KEYS.map(key => [key, undefined])));
   }, [hydrated, intentKey, isFocused]));
@@ -332,13 +350,14 @@ export default function RatesWorkspace() {
   const [filterOpen, setFilterOpen] = useBackOwnedSheetState(sheetNavigation);
   const [sortOpen, setSortOpen] = useBackOwnedSheetState(sheetNavigation);
   const [toolsOpen, setToolsOpen] = useBackOwnedSheetState(sheetNavigation);
+  const [showIconKey, setShowIconKey] = useState(false);
   const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const [draftAvailability, setDraftAvailability] = useState<RateAvailability>(availability);
   const openFilters = useCallback(() => {
     setDraftAvailability(availability); setDraftFilters({ ...filters, includeNonStandard: task.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard }); setFilterOpen(true);
   }, [availability, filters, setFilterOpen, task.includeNonStandardOverride]);
   const cancelFilters = useCallback(() => setFilterOpen(false), [setFilterOpen]);
-  const applyFilters = useCallback((draft: Filters) => {
+  const applyFilters = useCallback((draft: Filters, userApplied = false) => {
     const current = useRatesSession.getState().sections[section];
     const scopedDraft = section === 'Mortgage'
       ? scopeMortgageFacets(draft, current.includeNonStandardOverride ?? useStore.getState().prefs.includeNonStandard) : draft;
@@ -349,6 +368,11 @@ export default function RatesWorkspace() {
       updateRatesSection(section, { availability: draftAvailability,
         filters: filtersChanged ? nextFilters : current.filters,
         ...(draftAvailability === 'unlisted' ? { path: [], hierarchyScoped: false, selectMode: false, selected: [] } : {}) }, true);
+    }
+    if (userApplied && section === 'Mortgage' && draftAvailability === 'listed'
+      && (JSON.stringify(current.filters.loanPurposes) !== JSON.stringify(nextFilters.loanPurposes)
+        || JSON.stringify(current.filters.repaymentTypes) !== JSON.stringify(nextFilters.repaymentTypes))) {
+      saveMortgageComparisonFacets(nextFilters);
     }
     setFilterOpen(false);
   }, [draftAvailability, section, setFilterOpen]);
@@ -364,17 +388,28 @@ export default function RatesWorkspace() {
   const mortgageContext = useMemo(() => ({ core, details, manifest, coreIntegrity }),
     [core, details, manifest, coreIntegrity]);
   const sourceRates = core?.sections[section]?.rates ?? EMPTY_RATE_ROWS;
-  // Unlisted Mortgage browse has no comparison controls; do not gate it behind LVR/purpose/repayment.
-  const mortgageSearchActive = section !== 'Mortgage' || availability === 'unlisted' || mortgageCriteriaReady || isDefaultMortgageBrowse;
-  const pricingActive = mortgageSearchActive || section === 'Mortgage' && availability === 'listed' && mortgagePricingReady;
-  const mortgageIndex = useMortgageResultsIndex(core?.sections.Mortgage.rates ?? EMPTY_RATE_ROWS,
-    catalogue, mortgageContext, task.includeNonStandardOverride ?? includeNonStandard, suitabilityRevision, isFocused && section === 'Mortgage');
+  // Product discovery does not need pricing or a mortgage comparison index.
+  const draftingListed = filterOpen && draftAvailability === 'listed';
+  const mortgageSearchActive = draftingListed || (availability === 'listed' &&
+    (section !== 'Mortgage' || mortgageCriteriaReady || isDefaultMortgageBrowse));
+  const pricingActive = mortgageSearchActive ||
+    (availability === 'listed' && section === 'Mortgage' && mortgagePricingReady);
   const indexedScenarioKey = JSON.stringify(sectionScenario), indexedInputsKey = JSON.stringify(effectiveMortgageInputs);
-  const indexedPricing = useMemo(() => section === 'Mortgage' && !task.intentError && mortgagePricingReady &&
+  const mortgageWorkKey = useMemo(() => ({ sourceRates, mortgageContext, catalogue, indexedScenarioKey, indexedInputsKey, suitabilityRevision }),
+    [sourceRates, mortgageContext, catalogue, indexedScenarioKey, indexedInputsKey, suitabilityRevision]);
+  const [settledMortgageWork, setSettledMortgageWork] = useState<typeof mortgageWorkKey | null>(null);
+  // This optional full-book warmup was competing with the current scope scan.
+  // Defer large warmups until that request finishes. A small book can finish
+  // its index before the first viewport commits, so later edits settle at once.
+  const mortgageIndex = useMortgageResultsIndex(core?.sections.Mortgage.rates ?? EMPTY_RATE_ROWS,
+    catalogue, mortgageContext, task.includeNonStandardOverride ?? includeNonStandard, suitabilityRevision,
+    isFocused && section === 'Mortgage' && availability === 'listed',
+    sourceRates.length <= SMALL_MORTGAGE_BOOK_ROWS || !mortgagePricingReady || settledMortgageWork === mortgageWorkKey);
+  const indexedPricing = useMemo(() => availability === 'listed' && section === 'Mortgage' && !task.intentError && mortgagePricingReady &&
     pricingMortgageFilters.loanPurposes.length === 1 && pricingMortgageFilters.repaymentTypes.length === 1
     ? mortgageIndex.index?.select(sectionScenario, effectiveMortgageInputs) ?? null : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [section, task.intentError, mortgagePricingReady, pricingMortgageFilters.loanPurposes.length, pricingMortgageFilters.repaymentTypes.length,
+  [availability, section, task.intentError, mortgagePricingReady, pricingMortgageFilters.loanPurposes.length, pricingMortgageFilters.repaymentTypes.length,
     mortgageIndex.index, indexedScenarioKey, indexedInputsKey]);
   const cooperativePricing = useResolvedPublicRankingRows({
     sourceRows: task.intentError || !pricingActive || indexedPricing ? EMPTY_RATE_ROWS : sourceRates,
@@ -403,6 +438,11 @@ export default function RatesWorkspace() {
     work: { ...cooperativePricing.work, pricingStage: 'ready' as const, sourceRowCount: sourceRates.length,
       candidateCount: indexedPricing.candidates.length, pricedRowCount: indexedPricing.priced.length },
   } : cooperativePricing;
+  useEffect(() => {
+    if (isFocused && section === 'Mortgage' && mortgagePricingReady && cooperativePricing.ready && !indexedPricing) {
+      setSettledMortgageWork(mortgageWorkKey);
+    }
+  }, [isFocused, section, mortgagePricingReady, cooperativePricing.ready, indexedPricing, mortgageWorkKey]);
   const fullPricingCandidates = publicPricing.candidates;
   const mandatoryActive = hasMandatoryRequirements();
   const discoveryKeys = useMemo(() => {
@@ -456,7 +496,7 @@ export default function RatesWorkspace() {
     (row: RateRow) => publicRateScenario(section, scenario, prefs.profileFilters, row),
     [section, scenario, prefs.profileFilters],
   );
-  const needsProfilePricing = exploratoryMortgageActive && profileSectionCount(prefs.profileFilters, section) > 0 && !task.intentError;
+  const needsProfilePricing = pricingActive && catalogue.status !== 'unavailable' && exploratoryMortgageActive && profileSectionCount(prefs.profileFilters, section) > 0 && !task.intentError;
   const profilePricing = useResolvedPublicRankingRows({
     sourceRows: needsProfilePricing ? sourceRates : EMPTY_RATE_ROWS,
     candidates: needsProfilePricing ? null : EMPTY_RATE_ROWS,
@@ -492,7 +532,8 @@ export default function RatesWorkspace() {
     if (applicable.length !== selected.length || applicable.some((token, index) => token !== selected[index])) setSelected(applicable);
   }, [comparisonCore, selected, catalogue, scenarioFor, mortgageInputs, mortgageCriteriaReady, core, details, manifest, coreIntegrity, suitabilityRevision, setSelected, section, publicPricing.ready]);
   const summaryCatalogueRows = catalogue.status === 'unavailable' || (catalogue.status === 'ready' && catalogue.allLoaded)
-    ? (exploratoryMortgageActive
+    ? (catalogue.status === 'unavailable' ? sourceRates
+      : exploratoryMortgageActive
       ? (profilePricing.ready ? profilePricing.resolution.rows : null)
       : (publicPricing.ready ? resolvedCatalogueRows : null))
     : null;
@@ -725,9 +766,9 @@ export default function RatesWorkspace() {
       includeNonStandardOverride: null }, true);
   }, [includeNonStandard, section]);
   const resetRatesView = useCallback(() => {
-    if (section === 'Mortgage') clearMortgageComparison();
     updateRatesSection(section, { query: '', path: [], hierarchyScoped: false, intentError: null,
       filters: { ...EMPTY_FILTERS, includeNonStandard }, includeNonStandardOverride: null }, true);
+    if (section === 'Mortgage') restoreSavedMortgageComparison();
   }, [includeNonStandard, section]);
   const intentPending = Boolean(intentKey && consumedIntent.current !== intentKey) || !session.initialized;
   const searchPending = intentPending || (availability === 'unlisted' ? !catalogueDetails
@@ -843,6 +884,10 @@ export default function RatesWorkspace() {
   useEffect(() => { restoreCommittedScroll(); }, [isFocused, restorationKey, restoreCommittedScroll]);
   const onListCommit = useCallback(() => {
     markListCommit();
+    // A recycler returning from a frozen route can already have a real layout
+    // without firing its initial onLoad callback again.
+    const first = listRef.current?.getLayout?.(0);
+    if (first && first.width > 0 && first.height > 0) listLoaded.current = true;
     restoreCommittedScroll();
   }, [markListCommit, restoreCommittedScroll]);
   const onListLoad = useCallback(() => {
@@ -1007,6 +1052,7 @@ export default function RatesWorkspace() {
   }), [applyFilters, applyMortgageScope, cancelFilters, changeSection, clearSearchFilters, draftFilters, filterOpen, openFilters, prepareAuditComparePage, section, selected, selectAuditToken, setQuery, setSortKey, setSortOpen, sortOptions, toggleCompareMode]);
   // Logo decode callbacks can churn during mortgage.scope.apply settle; the
   // logos probe is optional, so wait until search.data/list are no longer pending.
+  const emptyResultsMeasured = pageRows.length === 0 && !searchPending && emptyCommit === listRevision;
   const logoCallbacksActive = physicalVisibility.active && !searchPending && listReadiness.visiblyCommitted;
   const logoCallbacksActiveRef = useRef(logoCallbacksActive);
   logoCallbacksActiveRef.current = logoCallbacksActive;
@@ -1025,8 +1071,8 @@ export default function RatesWorkspace() {
   }, []);
   const { refFor: physicalCellRef, measure: measurePhysicalCells } = physicalVisibility;
   const renderProduct = useCallback(({ item, target }: { item: ResultRow; target?: string }) => <View collapsable={false}
-    ref={physicalCellRef(item)}
-    onLayout={measurePhysicalCells}>{'product_key' in item ? (
+    ref={target === 'Cell' && !retainingPrevious ? physicalCellRef(item) : undefined}
+    onLayout={target === 'Cell' && !retainingPrevious ? measurePhysicalCells : undefined}>{'product_key' in item ? (
     <SearchProductRow row={item} section={section}
       onLogoRenderStateChange={handleLogoRenderStateChange}
       quoteOwner={indexedPricing && !searchPending && !retainingPrevious ? mortgageIndex.index : null}
@@ -1034,11 +1080,23 @@ export default function RatesWorkspace() {
       auditCell={target === 'Cell' && !retainingPrevious} auditRevision={listRevision} onAuditCellCommit={auditTarget.onCellCommit}
       selectMode={selectMode} selectionToken={selectionTokenFor(item)} selected={selected.includes(selectionTokenFor(item))} onToggleSelect={toggleSelect} />
   ) : <TouchTarget fill onPress={() => openProduct(item.key)} accessibilityRole="button"
-      accessibilityLabel={uiProductName({product_name:item.name??''})} style={{ paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-      <AppText variant="body" weight="600">{uiProductName({product_name:item.name??''})}</AppText>
-      <AppText variant="small" color="textMuted">{uiJoin(uiProviderName({provider:item.provider??''}),' · ',humanizeEnum(item.productCategory??''))}</AppText>
-      <AppText variant="small" color="textMuted">{uiLabel("No listed rate")}</AppText>
-    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, auditTarget.onCellCommit, listRevision, section, handleLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.colors.border, displayedUnverified, displayedScenario, retainingPrevious, indexedPricing, searchPending, mortgageIndex.index]);
+      accessibilityLabel={uiJoin(uiProductName({ product_name: item.name ?? '' }),
+        item.provider ? uiJoin(', ', uiProviderName({ provider: item.provider })) : null,
+        item.productCategory ? uiJoin(', ', humanizeEnum(item.productCategory)) : null, ', ', 'No listed rate')}
+      style={{ minHeight: COMPACT_ROW.minHeight, height: fontScale > 1 ? undefined : COMPACT_ROW.minHeight,
+        paddingVertical: COMPACT_ROW.inset, borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: theme.ledger.rule }}
+      contentStyle={{ flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap }}>
+      <View style={{ width: COMPACT_ROW.lenderSlot }} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        {item.provider ? <BankAvatar size={COMPACT_ROW.bankLogo} inset={COMPACT_ROW.inset} provider={item.provider} /> : null}
+      </View>
+      <View style={{ flex: 1, minWidth: 0, paddingHorizontal: COMPACT_ROW.gap, paddingVertical: 2 }}>
+        <AppText variant="small" weight="600" numberOfLines={fontScale > 1 ? 2 : 1} style={{ minHeight: COMPACT_ROW.lineHeight }}>{uiProductName({ product_name: item.name ?? '' })}</AppText>
+        <AppText variant="small" color="textMuted" numberOfLines={fontScale > 1 ? 2 : 1} style={{ minHeight: COMPACT_ROW.lineHeight }}>{humanizeEnum(item.productCategory ?? '')}</AppText>
+        <AppText variant="small" color="textMuted" style={{ minHeight: COMPACT_ROW.lineHeight }}>{uiLabel('No listed rate')}</AppText>
+      </View>
+      <View style={{ width: COMPACT_ROW.action }} />
+    </TouchTarget>}</View>, [physicalCellRef, measurePhysicalCells, auditTarget.onCellCommit, listRevision, section, handleLogoRenderStateChange, selectMode, selected, selectionTokenFor, toggleSelect, theme.ledger.rule, fontScale, displayedUnverified, displayedScenario, retainingPrevious, indexedPricing, searchPending, mortgageIndex.index]);
   usePerformanceAuditSurface({
     id: 'rates.results',
     work: { ...publicPricing.work, mortgageCriteriaReady, mortgageInputsInvalid, preparingMortgageDefaults,
@@ -1075,8 +1133,7 @@ export default function RatesWorkspace() {
         // seeding alone is not that count: a hidden or pre-restore list can
         // already be committed.
         status: (() => {
-          const settledEmpty = pageRows.length === 0 && !searchPending && emptyCommit === listRevision;
-          if (settledEmpty) return 'ready';
+          if (emptyResultsMeasured) return 'ready';
           return searchPending || (physicalVisibility.active
             ? (physicalVisibility.visibleCount ?? 0) === 0
             : !listReadiness.visiblyCommitted || (listReadiness.measuredVisibleCount ?? 0) === 0) ? 'pending' : 'ready';
@@ -1084,13 +1141,13 @@ export default function RatesWorkspace() {
         expectedCount: pageRows.length,
         actualCount: pageRows.length === 0 && !searchPending ? 0 : listReadiness.committedItemCount,
         visibleCount: pageRows.length === 0 && !searchPending ? 0 : physicalVisibility.active ? physicalVisibility.visibleCount : listReadiness.measuredVisibleCount,
-        emptyStateRendered: pageRows.length === 0 && !searchPending && emptyCommit === listRevision,
+        emptyStateRendered: emptyResultsMeasured,
       },
       {
         id: 'search.layout',
         kind: 'layout',
-        status: pageRows.length === 0 && !searchPending ? 'ready' : listReadiness.ready ? 'ready' : 'pending',
-        layoutMeasured: pageRows.length === 0 && !searchPending ? true : listReadiness.ready,
+        status: (pageRows.length === 0 ? emptyResultsMeasured : listReadiness.ready) ? 'ready' : 'pending',
+        layoutMeasured: pageRows.length === 0 ? emptyResultsMeasured : listReadiness.ready,
         renderRevision: surfaceRevision,
       },
       {
@@ -1125,8 +1182,11 @@ export default function RatesWorkspace() {
   return (
     <Screen>
       <Stack.Screen options={{ title: 'Rates' }} />
-      <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
-        <View testID="rates-task-controls" style={{ ...screenScrollContentStyle(theme, 0, width), gap: 8, paddingTop: 8, paddingBottom: 8 }}>
+      <View style={landscape ? { flex: 1, flexDirection: 'row', paddingLeft: insets.left, paddingRight: insets.right } : { flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
+        <ScrollView style={landscape ? { flexGrow: 0, width: controlsWidth } : { flexGrow: 0, flexShrink: 0 }}
+          scrollEnabled={landscape} keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ ...screenScrollContentStyle(theme, 0, controlsWidth), paddingTop: 8, paddingBottom: 8 }}>
+          <View testID="rates-task-controls" style={{ gap: 8 }}>
             <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
             <SearchBar value={uiRatesQuery(task)} onChangeText={setQuery} placeholder="Search" accessibilityLabel="Search rates or banks" />
             <Row gap={8} style={{ flexWrap: 'wrap' }}>
@@ -1141,17 +1201,24 @@ export default function RatesWorkspace() {
               <IconAction icon="business-outline" word="Bank" accessibilityLabel="Bank A–Z"
                 active={sortKey === 'bank'} accessibilityState={{ selected: sortKey === 'bank' }}
                 disabled={availability === 'unlisted'} onPress={() => setSortKey(quickSortKey)} />
-              <IconAction icon="ellipsis-horizontal" word="More" onPress={() => setToolsOpen(true)}
+              <IconAction icon="ellipsis-horizontal" word="More" onPress={() => { setShowIconKey(false); setToolsOpen(true); }}
                 accessibilityLabel="Search actions" accessibilityState={{ expanded: toolsOpen }} />
             </Row>
             <View style={{ width: '100%', flexShrink: 0, gap: 2 }}>
-              <AppText variant="tiny" color="textMuted">{uiJoin(searchPending ? uiJoin('Updating', retainingPrevious ? ' · ' : null, retainingPrevious ? 'Previous results' : null):uiJoin(uiCount(resultRows.length),' ',availability === 'listed' ? 'rates' : 'products'),searchSub?uiJoin(' · ','Alert on'):null)}</AppText>
+              {searchPending || availability !== 'listed' || searchSub ? (
+                <AppText variant="tiny" color="textMuted">{uiJoin(
+                  searchPending ? uiJoin('Updating', retainingPrevious ? uiJoin(' · ', 'Previous results') : null)
+                    : availability !== 'listed' ? uiJoin(uiCount(resultRows.length), ' ', 'products') : null,
+                  searchSub ? uiJoin(searchPending || availability !== 'listed' ? ' · ' : null, 'Alert on') : null,
+                )}</AppText>
+              ) : null}
               <AppText variant="tiny" color="textMuted" accessibilityLabel={sortLabel}>{compactSortLabel}</AppText>
             </View>
             {path.length ? <Button title="Clear scope" variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}
             {searchIndexUnavailable ? <Row><AppText variant="tiny" color="textMuted">{uiLabel("Name search")}</AppText>
               {searchIndexStatus === 'error' ? <Button title="Retry search" variant="ghost" onPress={() => void ensureSearchIndex()} /> : null}</Row> : null}
-        </View>
+          </View>
+        </ScrollView>
         {/* Keep the recycler's native measurement origin at zero beneath the
             fixed controls; a sibling offset otherwise corrupts its visible range. */}
         <View ref={physicalVisibility.viewport} collapsable={false} style={{ flex: 1 }} onLayout={physicalVisibility.measure}>
@@ -1196,7 +1263,7 @@ export default function RatesWorkspace() {
           }}
           scrollEventThrottle={64}
           contentContainerStyle={{
-            ...screenScrollContentStyle(theme, 0, width),
+            ...screenScrollContentStyle(theme, 0, landscape ? contentWidth - controlsWidth : width),
             // Fixed task controls own their spacing; rows stay adjacent.
             gap: 0,
             paddingTop: 0,
@@ -1285,7 +1352,7 @@ export default function RatesWorkspace() {
         filters={effectiveFilters}
         controlledDraft={effectiveDraftFilters}
         onDraftChange={setDraftFilters}
-        onApply={applyFilters}
+        onApply={draft => applyFilters(draft, true)}
         preserveOnReset={section === 'Mortgage' ? {
           loanPurposes: effectiveFilters.loanPurposes,
           repaymentTypes: effectiveFilters.repaymentTypes,
@@ -1361,8 +1428,9 @@ export default function RatesWorkspace() {
           </TouchTarget>
         </ScrollView>
       </SheetSurface>
-      <SheetSurface onAuditStateChange={physicalVisibility.active ? toolsEvidence : undefined} visible={toolsOpen} title="Search" onClose={() => setToolsOpen(false)}>
-        <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: 20 }}>
+      <SheetSurface onAuditStateChange={physicalVisibility.active ? toolsEvidence : undefined} visible={toolsOpen} title={showIconKey ? 'Icon key' : 'Search'} onClose={() => setToolsOpen(false)}>
+        {showIconKey ? <RatesIconKey section={section} /> : <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: 20 }}>
+          <Button icon="information-circle-outline" title="Icon key" variant="ghost" onPress={() => setShowIconKey(true)} />
           <Button
             icon={searchSub ? 'notifications' : 'notifications-outline'}
             title={uiLabel(searchSub ? 'Alert off' : 'Alert on')}
@@ -1371,7 +1439,7 @@ export default function RatesWorkspace() {
             onPress={() => void onToggleSearchAlert()}
           />
           <SearchReportExport disabled={availability === 'unlisted' || searchPending || query !== debouncedQuery} request={{ section, path, hierarchyScoped, query: debouncedQuery, filters: effectiveFilters, sort: sortKey, depositMetric: depositRankMetric, mortgageMetric: mortgageRateMetric, deepSearch: deepSearchActive }} />
-        </ScrollView>
+        </ScrollView>}
       </SheetSurface>
     </Screen>
   );

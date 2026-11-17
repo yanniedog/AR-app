@@ -1,6 +1,7 @@
 // SDK 54 replaced the classic file API with a File/Directory API; the classic
 // functions we use (documentDirectory, read/write/move/delete) live under /legacy.
 import * as FileSystem from 'expo-file-system/legacy';
+import { strToU8 } from 'fflate';
 import { bindCachedDetails, detailsCacheIdentity, verifiedDetailsSha } from './detailsIdentity';
 import { readDetailsCacheText } from './detailsCacheText';
 import { Platform } from 'react-native';
@@ -246,9 +247,50 @@ async function readText(path: string): Promise<string> {
   return FileSystem.readAsStringAsync(path);
 }
 
+const ANDROID_CACHE_WRITE_CHUNK = 128 * 1024;
+let nextCacheWrite = 0;
+
+/** Keep native UTF-8 allocations bounded and publish only a complete file. */
+async function writeLargeAndroidCacheText(path: string, value: string): Promise<void> {
+  const temporary = `${path}.write-${Date.now()}-${++nextCacheWrite}`;
+  // Load the modern file handle only for large Android writes.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { File } = require('expo-file-system') as typeof import('expo-file-system');
+  const file = new File(temporary);
+  try {
+    file.create();
+    const handle = file.open();
+    try {
+      let written = 0;
+      for (let start = 0; start < value.length;) {
+        let end = Math.min(value.length, start + ANDROID_CACHE_WRITE_CHUNK);
+        const finalCodeUnit = value.charCodeAt(end - 1);
+        // UTF-8 encoding must see both halves of a surrogate pair.
+        if (end < value.length && finalCodeUnit >= 0xd800 && finalCodeUnit <= 0xdbff) end--;
+        const bytes = strToU8(value.slice(start, end));
+        handle.writeBytes(bytes);
+        written += bytes.byteLength;
+        if (handle.offset !== written) throw new Error('Incomplete Android cache file write');
+        start = end;
+        if (start < value.length) await yieldToUi(0);
+      }
+    } finally {
+      handle.close();
+    }
+    await movePath(temporary, path);
+  } catch (error) {
+    await deletePath(temporary).catch(() => undefined);
+    throw error;
+  }
+}
+
 async function writeText(path: string, value: string): Promise<void> {
   if (IS_WEB) {
     await webSet(path, value);
+    return;
+  }
+  if (Platform.OS === 'android' && value.length >= 1024 * 1024) {
+    await writeLargeAndroidCacheText(path, value);
     return;
   }
   await FileSystem.writeAsStringAsync(path, value);
