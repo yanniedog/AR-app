@@ -251,6 +251,8 @@ export interface UxAuditFinding {
     | 'js-event-loop-stall'
     | 'js-frame-gap-overrun'
     | 'native-frame-deadline-overrun'
+    | 'native-frame-jank'
+    | 'native-input-latency'
     | 'native-frozen-frames'
     | 'cwv-inp-over-threshold'
     | 'cwv-lcp-over-threshold'
@@ -1361,17 +1363,25 @@ export function buildUxFrictionFluidityAudit(
   const overrunBreached = androidDeadline !== null && androidOverrun !== null && androidOverrun > androidDeadline * 0.25;
   const jankBreached = androidJank !== null && androidJank > 2;
   const inputLatencyBreached = androidInputLatency !== null && androidInputLatency > 100;
-  if (overrunBreached || jankBreached || inputLatencyBreached) {
-    const severe = (androidDeadline !== null && androidOverrun !== null && androidOverrun > androidDeadline)
-      || (androidJank !== null && androidJank > 10)
-      || (androidInputLatency !== null && androidInputLatency > 250);
+  if (overrunBreached) {
     findings.push({
-      pillar: 'fluidity-responsiveness',
-      dimension: 'performance',
-      code: 'native-frame-deadline-overrun',
-      severity: severe ? 'high' : 'medium',
-      count: 1,
-      ...(androidOverrun !== null ? { valueMs: androidOverrun, unit: 'ms' as const } : {}),
+      pillar: 'fluidity-responsiveness', dimension: 'performance', code: 'native-frame-deadline-overrun',
+      severity: androidOverrun > androidDeadline ? 'high' : 'medium',
+      count: 1, valueMs: androidOverrun, unit: 'ms',
+    });
+  }
+  if (jankBreached) {
+    findings.push({
+      pillar: 'fluidity-responsiveness', dimension: 'performance', code: 'native-frame-jank',
+      severity: androidJank > 10 ? 'high' : 'medium',
+      count: 1, value: androidJank, unit: 'percent',
+    });
+  }
+  if (inputLatencyBreached) {
+    findings.push({
+      pillar: 'fluidity-responsiveness', dimension: 'performance', code: 'native-input-latency',
+      severity: androidInputLatency > 250 ? 'high' : 'medium',
+      count: 1, valueMs: androidInputLatency, unit: 'ms',
     });
   }
   const frozenResolved = resolveThresholdQualifiedFrozenFrames(resolvedOptions?.androidFluidity);

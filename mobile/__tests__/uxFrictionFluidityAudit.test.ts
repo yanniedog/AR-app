@@ -167,6 +167,18 @@ describe('AR Friction & Fluidity Score (AFFS) framework', () => {
     ]));
   });
 
+  test('native responsiveness findings retain the measurement that crossed its threshold', () => {
+    const report = makePerformanceAuditReport('affs-native-thresholds', []);
+    const audit = buildUxFrictionFluidityAudit(report, undefined, {
+      androidFluidity: { refreshRateHz: 120, frameOverrunP95Ms: -1, jankPercent: 12, inputLatencyP95Ms: 120 },
+    });
+    expect(audit.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'native-frame-jank', value: 12, unit: 'percent', severity: 'high' }),
+      expect.objectContaining({ code: 'native-input-latency', valueMs: 120, unit: 'ms', severity: 'medium' }),
+    ]));
+    expect(audit.findings.some(finding => finding.code === 'native-frame-deadline-overrun')).toBe(false);
+  });
+
   test('v2 records partial foreground frame evidence without substituting JS callbacks for Android native frames', () => {
     const report = { ...makePerformanceAuditReport('affs-native-capture', [makeJourneyCheck('journey-rates-cold')]),
       auditEvidenceVersion: 2 as const };

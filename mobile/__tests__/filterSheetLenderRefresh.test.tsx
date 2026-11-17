@@ -8,6 +8,13 @@ import { prepareSearchFilterOptions } from '../src/data/searchFilterOptions';
 import bundledCore from '../assets/sample/core.json';
 import type { RateRow } from '../src/types';
 
+jest.mock('../src/lib/yieldToUi', () => ({
+  ...jest.requireActual('../src/lib/yieldToUi'),
+  scheduleAfterInteractions: (work: () => void) => {
+    work();
+    return () => {};
+  },
+}));
 jest.mock('../src/components/controls', () => ({ SearchBar: 'SearchBar' }));
 jest.mock('../src/components/icons/AppIcon', () => 'AppIcon');
 jest.mock('../src/components/TouchTarget', () => ({ TouchTarget: 'TouchTarget' }));

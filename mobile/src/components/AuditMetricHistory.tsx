@@ -209,6 +209,7 @@ export function AuditMetricHistoryChart({ runs, report }: { runs: AuditMetricRun
         <InfoRow label="Ready with warnings" value={measuredCount(taskEvidence?.outcomes?.warnings)} />
         <InfoRow label="Action failures" value={measuredCount(taskEvidence?.outcomes?.failure)} />
         <InfoRow label="Indeterminate" value={measuredCount(taskEvidence?.outcomes?.indeterminate)} />
+        <InfoRow label="Unconfirmed timeouts" value={measuredCount(taskEvidence?.outcomes?.unconfirmedTimeouts)} />
         <InfoRow label="SUS / UMUX-Lite / SEQ" value={humanValidationRecorded ? 'Recorded' : 'Not performed'} />
       </> : <>
         <InfoRow label="Automated WCAG / standards" value={wcagSummaryValue} />
