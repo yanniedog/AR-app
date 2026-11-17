@@ -304,30 +304,35 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   );
   const hasCustomFacets = filters.loanPurposes.length > 0 || filters.repaymentTypes.length > 0;
   const hasAnyCustom = hasCustomInputs || hasCustomFacets;
-  // Custom criteria force the editor open only while they exist. Remember
-  // explicit Edit separately so clearing restored criteria reveals the rates.
   const [openedForEdit, setOpenedForEdit] = useState(false);
-  const isExpanded = !collapsible || openedForEdit || hasAnyCustom;
-  const defaultScenarioLabel = uiJoin('Owner occupied', ' · ', 'Principal & interest', ' · ', 'LVR', ' ', '≤', uiCount(80), '%');
+  const isExpanded = !collapsible || openedForEdit;
+  const scenarioLabel = hasAnyCustom
+    ? uiJoin('Mortgage comparison', values.lvr === null ? null : uiJoin(' · ', 'LVR', ' ', uiRate(values.lvr / 100, 0)))
+    : uiJoin('Owner occupied', ' · ', 'Principal & interest', ' · ', 'LVR', ' ', '≤', uiCount(80), '%');
+  const scopeStatus = (profile || pending ? values.invalid : invalid)
+    ? <AppText color="danger">{uiLabel('Invalid comparison inputs')}</AppText>
+    : unverified > 0 ? <AppText variant="small">{uiJoin('Eligibility unverified', ' · ', uiCount(unverified))}</AppText> : null;
   if (!isExpanded) {
     return (
-      <Row
-        testID="mortgage-scenario-summary"
-        gap={8}
-        style={{ justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 }}
-      >
-        <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
-          {defaultScenarioLabel}
-        </AppText>
-        <Button title="Edit" variant="secondary" accessibilityLabel="Edit" onPress={() => setOpenedForEdit(true)} />
-      </Row>
+      <View testID="mortgage-scenario-summary">
+        <Row
+          gap={8}
+          style={{ justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 }}
+        >
+          <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
+            {scenarioLabel}
+          </AppText>
+          <Button title="Edit" variant="secondary" accessibilityLabel="Edit" onPress={() => setOpenedForEdit(true)} />
+        </Row>
+        {scopeStatus}
+      </View>
     );
   }
   return <View style={{ gap: 8 }} testID="mortgage-comparison-controls">
-    {collapsible && !hasAnyCustom ? (
+    {collapsible ? (
       <Row gap={8} style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
-          {defaultScenarioLabel}
+          {scenarioLabel}
         </AppText>
         <Button title="Hide" variant="ghost" accessibilityLabel="Hide" onPress={() => setOpenedForEdit(false)} />
       </Row>
@@ -386,7 +391,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     </Row>
     {!profile ? <SegmentedControl value={metric} options={[{ value: 'headline', label: uiLabel('Advertised rate') }, { value: 'comparison', label: uiLabel('Comparison rate') }]}
       onChange={next => useStore.getState().setPref('mortgageRateMetric', next)} /> : null}
-    {(profile || pending ? values.invalid : invalid) ? <AppText color="danger">{uiLabel('Invalid comparison inputs')}</AppText> : unverified > 0 ? <AppText variant="small">{uiJoin('Eligibility unverified', ' · ', uiCount(unverified))}</AppText> : null}
+    {scopeStatus}
     {storageStatus === 'unavailable' ? <Row gap={8}>
       <AppText variant="small" color="warning">{uiJoin('Saved inputs', ' · ', 'Unavailable')}</AppText>
       <Button title="Retry" onPress={() => void openMortgageComparisonProfile()} />

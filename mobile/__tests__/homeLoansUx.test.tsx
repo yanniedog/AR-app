@@ -97,6 +97,7 @@ describe('home-loans-ux improvements', () => {
       );
     });
     try {
+      act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
       const text = JSON.stringify(tree.toJSON());
       expect(text).toContain('Loan purpose · Required');
       expect(text).toContain('Repayment · Required');

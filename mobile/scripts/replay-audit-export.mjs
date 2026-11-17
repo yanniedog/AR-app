@@ -7,25 +7,29 @@ if (!input) {
   throw new Error('Usage: node mobile/scripts/replay-audit-export.mjs <local-envelope.json|->');
 }
 const envelope = JSON.parse(readFileSync(input === '-' ? 0 : input, 'utf8').replace(/^\uFEFF/, ''));
-if (envelope.format !== 'ar-audit-gzip-v1' || typeof envelope.gzip_base64 !== 'string'
-  || !/^[a-f0-9]{64}$/i.test(envelope.sha256) || envelope.gzip_base64.length > 3 * 1024 * 1024) {
-  throw new Error('Invalid diagnostic envelope');
+let report = envelope;
+if (envelope.format != null) {
+  if (envelope.format !== 'ar-audit-gzip-v1' || typeof envelope.gzip_base64 !== 'string'
+    || !/^[a-f0-9]{64}$/i.test(envelope.sha256) || envelope.gzip_base64.length > 3 * 1024 * 1024) {
+    throw new Error('Invalid diagnostic envelope');
+  }
+  const bytes = gunzipSync(Buffer.from(envelope.gzip_base64, 'base64'), { maxOutputLength: 32 * 1024 * 1024 });
+  if (bytes.length !== envelope.bytes || createHash('sha256').update(bytes).digest('hex') !== envelope.sha256.toLowerCase()) {
+    throw new Error('Diagnostic checksum or length mismatch');
+  }
+  report = JSON.parse(bytes.toString('utf8'));
 }
-const bytes = gunzipSync(Buffer.from(envelope.gzip_base64, 'base64'), { maxOutputLength: 32 * 1024 * 1024 });
-if (bytes.length !== envelope.bytes || createHash('sha256').update(bytes).digest('hex') !== envelope.sha256.toLowerCase()) {
-  throw new Error('Diagnostic checksum or length mismatch');
-}
-const report = JSON.parse(bytes.toString('utf8'));
 const { completion, checks, appHealth, diagnostics, metricAnalysis } = report;
 const performance = checks.length;
-const health = appHealth.checks.length;
+const healthChecks = appHealth?.checks ?? [];
+const health = healthChecks.length;
 const failures = completion.failurePositions;
 const timings = failures.filter(item => item.category === 'timing').length;
 const gapCounts = Object.create(null);
 for (const item of completion.gapPositions) {
   gapCounts[item.reason] = (gapCounts[item.reason] ?? 0) + 1;
 }
-const populations = { performance: checks, health: appHealth.checks };
+const populations = { performance: checks, health: healthChecks };
 const independentlyFailed = Object.entries(populations).flatMap(([source, records]) =>
   records.flatMap((item, index) => item.status === 'fail' ? [`${source}:${index + 1}`] : []));
 const failureKeys = new Set(failures.map(({ source, position }) => `${source}:${position}`));
@@ -39,8 +43,8 @@ for (const entry of [...failures, ...completion.gapPositions]) {
 }
 if (completion.performanceCheckCount !== performance || completion.healthCheckCount !== health
   || failures.length !== failureKeys.size || failureKeys.size !== independentlyFailed.length
-  || independentlyFailed.some(key => !failureKeys.has(key)) || envelope.audit.failureCount !== failures.length
-  || envelope.audit.timingFailureCount !== timings) {
+  || independentlyFailed.some(key => !failureKeys.has(key)) || envelope.audit && (envelope.audit.failureCount !== failures.length
+    || envelope.audit.timingFailureCount !== timings)) {
   throw new Error('Completion, envelope, and recorded checks disagree');
 }
 const exceptionGroups = new Map();
@@ -60,6 +64,6 @@ process.stdout.write(JSON.stringify({
   failurePositions: failures,
   gapPositions: completion.gapPositions,
   nonPassingPerformanceChecks: exceptions,
-  nonPassingHealthChecks: appHealth.checks.filter(check => check.status !== 'pass').map(({ code, status }) => ({ code, status })),
+  nonPassingHealthChecks: healthChecks.filter(check => check.status !== 'pass').map(({ code, status }) => ({ code, status })),
   uxFindings: metricAnalysis?.uxAudit?.findings ?? null,
 }, null, 2) + '\n');

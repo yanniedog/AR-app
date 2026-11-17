@@ -36,7 +36,8 @@ const JOURNEY_IDS = [
   'lender', 'compare', 'terms', 'debug-log',
 ].join('|');
 
-export const DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES = 256 * 1024;
+const DEIDENTIFIED_DIAGNOSTICS_PLAIN_MAX_BYTES = 256 * 1024;
+export const DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES = MAX_COMPRESSED_DIAGNOSTIC_BYTES;
 export const DEIDENTIFIED_DIAGNOSTICS_DESTINATION =
   'No host selected; the operating-system share sheet chooses the destination';
 export const DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW = [
@@ -352,28 +353,38 @@ export function encodeHostedPerformanceAudit(
   return retry;
 }
 
-/** Build the complete, bounded text offered to the OS share sheet. */
+function auditExportHeader(
+  report: PerformanceAuditReport,
+  completion: Omit<ReturnType<typeof buildDeidentifiedPerformanceAudit>['completion'], 'privacyBoundary'>,
+) {
+  const stallTimeout = stallTimeoutFields(report.watchdog.hangTimeoutMs);
+  return { audit: { auditId: completion.auditId, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
+    finishedAt: completion.finishedAt,
+    outcome: completion.outcome, collectionComplete: completion.collectionComplete,
+    coverageComplete: completion.coverageComplete, detailsComplete: completion.detailsComplete,
+    performanceCheckCount: completion.performanceCheckCount, healthCheckCount: completion.healthCheckCount,
+    failureCount: completion.failurePositions.length,
+    timingFailureCount: completion.failurePositions.filter(failure => failure.category === 'timing').length,
+    stallTimeoutMs: stallTimeout.stallTimeoutMs, stallTimeoutSeconds: stallTimeout.stallTimeoutSeconds } };
+}
+
+/** Keep small shares readable. For full audits, use the same bounded, hashed
+ * JSON envelope as hosted exports without collecting the application journal. */
 export function createDeidentifiedDiagnosticsShare(
   report: PerformanceAuditReport,
 ): DeidentifiedDiagnosticsShare {
   const built = buildDeidentifiedPerformanceAudit(report);
-  const body = JSON.stringify({
-    ...built,
-    completion: {
-      ...built.completion,
-      privacyBoundary: { ...built.completion.privacyBoundary, generalApplicationJournal: 'omitted' as const },
-    },
-  }, null, 2);
-  const byteLength = new TextEncoder().encode(body).length;
-  if (byteLength > DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES) {
-    throw new Error(
-      `The deidentified report is ${byteLength} bytes, above the ` +
-      `${DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES}-byte sharing limit.`,
-    );
-  }
+  const completion = {
+    ...built.completion,
+    privacyBoundary: { ...built.completion.privacyBoundary, generalApplicationJournal: 'omitted' as const },
+  };
+  const value = { ...built, completion };
+  const plain = JSON.stringify(value, null, 2);
+  const body = auditUploadBytes(plain) <= DEIDENTIFIED_DIAGNOSTICS_PLAIN_MAX_BYTES ? plain
+    : encodeHostedPerformanceAudit(value, auditExportHeader(report, completion), DEIDENTIFIED_DIAGNOSTICS_MAX_BYTES);
   return {
     body,
-    byteLength,
+    byteLength: auditUploadBytes(body),
     destination: DEIDENTIFIED_DIAGNOSTICS_DESTINATION,
     fields: DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW,
   };
@@ -396,7 +407,6 @@ export function createPublicPerformanceAuditReport(report: PerformanceAuditRepor
       uncertainJournalOmissions: journalSections.reduce((sum, section) => sum + section.uncertainOmittedEntryCount, 0) }),
     },
   };
-  const stallTimeout = stallTimeoutFields(report.watchdog.hangTimeoutMs);
   // Keep the run identity and result readable at the top of the hosted file.
   // Gzip retains every field. Compression runs before the paste host sees the body.
   return encodeHostedPerformanceAudit({
@@ -407,12 +417,5 @@ export function createPublicPerformanceAuditReport(report: PerformanceAuditRepor
     },
     applicationJournal,
     diagnosticLog: fullAuditDiagnosticLog(report, safeCheckId, { metricAnalysis: 'top-level' }),
-  }, { audit: { auditId: completion.auditId, appVersion: report.app.appVersion, buildVersion: report.app.buildVersion,
-    finishedAt: completion.finishedAt,
-    outcome: completion.outcome, collectionComplete: completion.collectionComplete,
-    coverageComplete: completion.coverageComplete, detailsComplete: completion.detailsComplete,
-    performanceCheckCount: completion.performanceCheckCount, healthCheckCount: completion.healthCheckCount,
-    failureCount: completion.failurePositions.length,
-    timingFailureCount: completion.failurePositions.filter(failure => failure.category === 'timing').length,
-    stallTimeoutMs: stallTimeout.stallTimeoutMs, stallTimeoutSeconds: stallTimeout.stallTimeoutSeconds } });
+  }, auditExportHeader(report, completion));
 }
