@@ -1191,7 +1191,13 @@ export default function RatesWorkspace() {
                 accessibilityLabel="Search actions" accessibilityState={{ expanded: toolsOpen }} />
             </Row>
             <View style={{ width: '100%', flexShrink: 0, gap: 2 }}>
-              <AppText variant="tiny" color="textMuted">{uiJoin(searchPending ? uiJoin('Updating', retainingPrevious ? ' · ' : null, retainingPrevious ? 'Previous results' : null):uiJoin(uiCount(resultRows.length),' ',availability === 'listed' ? 'rates' : 'products'),searchSub?uiJoin(' · ','Alert on'):null)}</AppText>
+              {searchPending || availability !== 'listed' || searchSub ? (
+                <AppText variant="tiny" color="textMuted">{uiJoin(
+                  searchPending ? uiJoin('Updating', retainingPrevious ? uiJoin(' · ', 'Previous results') : null)
+                    : availability !== 'listed' ? uiJoin(uiCount(resultRows.length), ' ', 'products') : null,
+                  searchSub ? uiJoin(searchPending || availability !== 'listed' ? ' · ' : null, 'Alert on') : null,
+                )}</AppText>
+              ) : null}
               <AppText variant="tiny" color="textMuted" accessibilityLabel={sortLabel}>{compactSortLabel}</AppText>
             </View>
             {path.length ? <Button title="Clear scope" variant="ghost" onPress={() => updateRatesSection(section, { path: [], hierarchyScoped: false }, true)} /> : null}

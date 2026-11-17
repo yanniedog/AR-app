@@ -5,38 +5,20 @@ import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
 import { useAuditExternalLinks } from '../../hooks/useAuditExternalLinks';
 import { DetailLoadingLines } from '../feedback';
 import { AppText, Button, Disclosure, Row } from '../ui';
-import { formatBalanceRange, formatRate, formatTerm, humanizeEnum } from '../../data/format';
+import { formatBalanceRange, formatTerm, humanizeEnum } from '../../data/format';
 import { accessExcludesFromStandard, assessAccess } from '../../data/access';
 import { isNonStandard } from '../../data/format';
-import { ratePresentation } from '../../data/ratePresentation';
 import { useStore } from '../../data/store';
-import { rateQualifier } from '../../lib/rateQualifier';
 import { uiAccessBadge, uiConditionFact, uiListedLvrRange, uiLoanPurpose, uiRateStructure, uiRepayment } from '../../lib/financialUiCopy';
 import { scopedRateConditions } from '../../data/rateConditions';
 import { scopedFinancialConditionFacts } from '../../data/scopedFinancialConditionFacts';
 import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, type ProductPresentationFact } from '../../lib/productUiFacts';
 import { normalizedProductFacts } from '../../data/productFacts';
-import { uiCount, uiIdentifier, uiJoin, uiLabel, uiProductName, type UiCopy, type UiLabel } from '../../lib/uiCopy';
+import { uiCount, uiJoin, uiLabel, type UiCopy, type UiLabel } from '../../lib/uiCopy';
 import type { DetailItem, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
-import { openProduct, type ProductPricingOrigin } from '../../lib/nav';
 import { FinancialFactRows } from './FinancialFactRows';
-import { SelectedRateConditions } from './RateConditionsDisclosure';
 export { SelectedRateConditions } from './RateConditionsDisclosure';
 
-export function RateRowLine({ row, section, accent }: { row: RateRow; section: SectionKey; accent: string }) {
-  const metric = useStore(s => s.prefs.mortgageRateMetric);
-  const presentation = ratePresentation(row, section, metric), qualifier = rateQualifier(row, section);
-  return <View style={{ gap: 6 }}>
-    <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-      <AppText variant="small">{uiJoin(presentation.primaryLabel, ' ', formatRate(presentation.primary))}</AppText>
-      {presentation.secondary !== null && presentation.secondaryLabel ? <AppText variant="small" color="textMuted">{uiJoin(presentation.secondaryLabel, ' ', formatRate(presentation.secondary))}</AppText> : null}
-    </Row>
-    <AppText variant="small" color="textMuted">{uiJoin(section === 'Mortgage' ? uiRepayment(row) : formatBalanceRange(row.balance_min, row.balance_max), ' · ', formatTerm(row),
-      section === 'Mortgage' ? uiJoin(' · ', 'Listed LVR', ' ', uiListedLvrRange(row)) : null)}</AppText>
-    {qualifier.conditional ? <AppText variant="small" color="warning">{qualifier.label}</AppText> : null}
-    <SelectedRateConditions row={row} section={section} />
-  </View>;
-}
 function PublishedFacts({ facts }: { facts: readonly ProductPresentationFact[] }) {
   return <View style={{ gap: 10 }}>{facts.map((fact, index) => <View key={`${fact.reference}:${index}`} style={{ gap: 4 }}>
     <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -92,27 +74,6 @@ export function OfficialLinks({ links, sourceDocuments }: { links?: ProductDetai
   </View></Disclosure>;
 }
 export function SectionTitle({ text }: { text: UiCopy; icon?: keyof typeof Ionicons.glyphMap }) { return <AppText variant="small" weight="700">{text}</AppText>; }
-export function ProductRatesList({ rows, section, accent, defaultOpen = false, pricingOrigin }: { rows: RateRow[]; section: SectionKey; accent: string; defaultOpen?: boolean; pricingOrigin?: ProductPricingOrigin }) {
-  const metric = useStore(s => s.prefs.mortgageRateMetric);
-  const [open, setOpen] = useState(defaultOpen); if (!rows.length) return null;
-  return <Disclosure title={uiJoin('Rates', ' (', uiCount(rows.length), ')')} open={open} onToggle={() => setOpen(v => !v)}>
-    {open ? <View style={{ gap: 12 }}>{rows.map((row, i) => {
-      const presentation = ratePresentation(row, section, metric), term = formatTerm(row);
-      const balance = section === 'Mortgage' ? null : formatBalanceRange(row.balance_min, row.balance_max);
-      const actionLabel = uiJoin('Open', ', ', uiProductName(row), ', ', presentation.primaryLabel, ' ', formatRate(presentation.primary),
-        section === 'Mortgage' ? uiJoin(', ', 'Listed LVR', ' ', uiListedLvrRange(row), ', ', uiRepayment(row)) : balance ? uiJoin(', ', balance) : null,
-        term ? uiJoin(', ', term) : null, ', ', 'Rate index', ' ', row.rate_index == null ? uiLabel('Unknown') : uiIdentifier(String(row.rate_index)));
-      return <View key={`${row.rate_index}:${i}`} style={{ gap: 6 }}>
-      <RateRowLine row={row} section={section} accent={accent} />
-      <Button title="Open" variant="ghost" accessibilityLabel={actionLabel}
-        onPress={() => pricingOrigin
-          ? openProduct(row.product_key, row.rate_index, row.public_programme_id, pricingOrigin)
-          : row.public_programme_id
-          ? openProduct(row.product_key, row.rate_index, row.public_programme_id)
-          : openProduct(row.product_key, row.rate_index)} />
-    </View>; })}</View> : null}
-  </Disclosure>;
-}
 export function ProductSpecs({ row, section, productDetails }: { row: RateRow; section: SectionKey; productDetails: ProductDetailData | null }) {
   const [open, setOpen] = useState(false);
   const core = useStore(s => s.core), details = useStore(s => s.details), manifest = useStore(s => s.manifest), coreIntegrity = useStore(s => s.coreIntegrity);

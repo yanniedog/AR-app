@@ -5,7 +5,7 @@ import { uiCount, uiJoin, uiLabel, type UiCopy, type UiText } from '../../lib/ui
 import type { RateRow, SectionKey } from '../../types';
 
 export const COMPACT_ROW = {
-  action: 48, bankLogo: 48, lenderSlot: 64, gap: 4, fontSize: 14,
+  action: 48, bankLogo: 56, lenderSlot: 72, gap: 4, fontSize: 14,
   icon: 16, lineHeight: 20, minHeight: 72, inset: 3,
 } as const;
 

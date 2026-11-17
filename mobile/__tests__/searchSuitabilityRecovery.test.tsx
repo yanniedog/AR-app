@@ -649,7 +649,7 @@ test.each([
     expect(actions.props.icon).toBe('ellipsis-horizontal');
     expect(tree.root.findByProps({ testID: 'rates-task-controls' }).findAllByType('AppText' as any).map((node: any) =>
       React.Children.toArray(node.props.children).join(''))).toEqual([
-        tree.root.findByType('FlashList' as any).props.data.length + ' rates', 'Advertised',
+        'Advertised',
       ]);
     expect(tree.root.findByType('FlashList' as any).props.contentContainerStyle.paddingTop).toBe(0);
     act(() => controls[0].props.onPress());

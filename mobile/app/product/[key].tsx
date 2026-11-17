@@ -22,6 +22,7 @@ import {
   type TextStyle,
 } from 'react-native';
 
+import { ProductProviderLink } from '../../src/components/product/ProductProviderLink';
 import { BankAvatar } from '../../src/components/BankAvatar';
 import { NavigationMenuButton } from '../../src/components/AppNavigationMenu';
 import {
@@ -36,7 +37,6 @@ import {
   DetailGroup,
   OfficialLinks,
   ProductFacts,
-  ProductRatesList,
   ProductSpecs,
   SectionTitle,
   SelectedRateConditions,
@@ -52,7 +52,7 @@ import { normalizedProductFacts } from '../../src/data/productFacts';
 import { verifiedDetailsSha } from '../../src/data/detailsIdentity';
 import { isPublicProductEligible } from '../../src/data/publicProductEligibility';
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
-import { sortRows, findEligibleByKey } from '../../src/data/selectors';
+import { findEligibleByKey } from '../../src/data/selectors';
 import { rowsForProductKey } from '../../src/data/rateRowIndex';
 import { selectBankHistoryChartModel, selectBankHistoryChartModelCooperatively } from '../../src/data/historySelectors';
 import { mortgageHistoryLvr, mortgageHistoryLvrLabel } from '../../src/data/mortgageHistoryLvr';
@@ -109,7 +109,6 @@ const HEAVY_OPEN_ROW_LIMIT = 400;
 const MemoProductSpecs = React.memo(ProductSpecs);
 const MemoProductFacts = React.memo(ProductFacts);
 const MemoSelectedRateConditions = React.memo(SelectedRateConditions);
-const MemoProductRatesList = React.memo(ProductRatesList);
 const MemoEligibilityAssessment = React.memo(EligibilityAssessment);
 const MemoFixedDepositCalculation = React.memo(FixedDepositCalculation);
 const MemoSavingsPeriodCalculation = React.memo(SavingsPeriodCalculation);
@@ -202,7 +201,6 @@ export default function ProductDetail() {
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const setPref = useStore((s) => s.setPref);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
-  const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const historyEnabled = useStore((s) => effectiveHistoryRibbon(s.prefs));
   // Keep rich history prep + BankHistoryChart off the first product paint so
@@ -308,9 +306,6 @@ export default function ProductDetail() {
   const calculationScenario = useMemo(() => found ? scenarioWithLocalCurrentRate(found.section, scenario,
     resolveLocalCurrentRate(found.section, scenario, publicCatalogue.references, undefined, publicCatalogue, profile)) : scenario,
   [found, scenario, publicCatalogue, profile]);
-  const rateRows = useMemo(() => found
-    ? sortRows(found.siblings, 'rate', found.section, depositRankMetric, mortgageRateMetric)
-    : [], [found, depositRankMetric, mortgageRateMetric]);
   // Product history is explicitly product-wide: preserve the section-best
   // headline across every eligible sibling, independently of the selected tier.
   const currentBest = useMemo(() => {
@@ -774,9 +769,8 @@ export default function ProductDetail() {
           />
           <View style={{ flex: 1 }}>
             <AppText variant="h3">{uiProductName(row)}</AppText>
-            <AppText variant="small" color="textMuted">
-              {uiJoin(uiProviderName(row), ' · ', uiSectionName(section))}
-            </AppText>
+            <ProductProviderLink provider={row.provider} />
+            <AppText variant="small" color="textMuted">{uiSectionName(section)}</AppText>
           </View>
         </Row>
 
@@ -969,17 +963,6 @@ export default function ProductDetail() {
 
         <OfficialLinks links={detail?.links} sourceDocuments={detail?.sourceDocuments} />
         <ProductTermsDisclosure productKey={productKey} />
-
-        <Button
-          title={uiJoin('View', ' ', uiProviderName(row), ' ', 'Products')}
-          icon="business-outline"
-          variant="secondary"
-          style={{ marginTop: 4 }}
-          onPress={() => openBank(row.provider)}
-        />
-
-        <MemoProductRatesList rows={rateRows} section={section} accent={theme.colors.primary}
-          pricingOrigin={fromRatesComparison ? 'rates-comparison' : undefined} />
 
         {exactSaveEligible ? <Button
           title={productWideSaved ? 'Remove all rates' : 'Save all rates'}
