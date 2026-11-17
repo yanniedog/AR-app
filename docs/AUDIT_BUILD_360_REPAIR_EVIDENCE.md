@@ -28,8 +28,10 @@ The report remains local; no private journal or financial inputs are committed.
 - Receipt loading and failed preparation have distinct UI states. A new request
   cannot display a previous request's prepared brief. Readiness requires current
   comparison preparation, with genuine preparation errors retained.
-- Mortgage metadata preparation yields during grouping and within large product
-  tier loops. Per-product condition-envelope validation remains synchronous and
+- Mortgage metadata preparation yields during source mapping and within large product
+  tier loops, including exact-row condition-scope preparation. The envelope
+  validation/index cache lasts for one preparation call; every row still proves
+  its source identity. Individual envelope validation remains synchronous and
   fail closed; the change does not claim to eliminate every long slice.
 - Passive URL lookup uses exact purpose/URL string identities in memory, avoiding
   thousands of cryptographic hashes when its lookup map is first populated.

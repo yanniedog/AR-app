@@ -186,19 +186,20 @@ export default function RateReceiptScreen() {
     comparisonsReady: comparisonsAvailable, detailsProducts,
   }) : null;
   }, [receipt, calculationScenario, comparisonsAvailable, comparisonPricing.resolution.rows, detailsProducts, suitabilityRevision]);
+  const [briefAttempt, setBriefAttempt] = useState(0);
   const [preparedBrief, setPreparedBrief] = useState<{
     input: typeof briefInput; value: ReturnType<typeof buildNegotiationBrief> | null; error: boolean;
   } | null>(null);
-  const smallBrief = useMemo(() => briefInput && briefInput.sectionRows.length <= 48
+  const smallBrief = useMemo(() => briefInput && briefInput.comparisonsReady && briefInput.sectionRows.length <= 48
     ? buildNegotiationBrief(briefInput) : null, [briefInput]);
   useEffect(() => {
-    if (!focused || !briefInput || smallBrief) return;
+    if (!focused || !briefInput?.comparisonsReady || smallBrief) return;
     let cancelled = false;
     void buildNegotiationBriefCooperatively(briefInput, { cancelled: () => cancelled }).then(value => {
       if (!cancelled) setPreparedBrief({ input: briefInput, value, error: value == null });
     }, () => { if (!cancelled) setPreparedBrief({ input: briefInput, value: null, error: true }); });
     return () => { cancelled = true; };
-  }, [focused, briefInput, smallBrief]);
+  }, [focused, briefInput, smallBrief, briefAttempt]);
   const cohortBrief = smallBrief ?? (preparedBrief?.input === briefInput ? preparedBrief.value : null);
   const briefError = !smallBrief && preparedBrief?.input === briefInput && preparedBrief.error;
   const brief = useMemo(
@@ -326,16 +327,21 @@ export default function RateReceiptScreen() {
   });
 
   if (!core) return <ScreenSkeleton />;
+  if (briefError || comparisonPricing.error || catalogueStatus === 'error') return <><Stack.Screen options={{ title: 'Bank-call brief' }} />
+    <EmptyState icon="receipt-outline" title="Unavailable" fill />
+    <Button title="Retry" onPress={() => {
+      setPreparedBrief(null); setBriefAttempt(value => value + 1); comparisonPricing.retry();
+      if (catalogueStatus === 'error') void loadAll().catch(() => undefined);
+    }} />
+  </>;
+
   if (publicProduct && (!found || !row) || publicResolution && (publicResolution.status !== 'exact' || !publicResolution.verifiedCurrent)) return <>
     <Stack.Screen options={{ title: 'Pricing evidence' }} />
     <ScreenScrollView><AppText variant="small">{uiJoin('Bank-call brief', ': ', 'Unavailable', ' · ', 'Pricing unresolved')}</AppText>
       <PublicRateEvidence productKey={productKey} row={selectedRow ?? undefined} programmeId={requestedProgramme} scenario={publicProduct ? scenarioFor(publicProduct.section, selectedRow ?? undefined) : undefined} />
     </ScreenScrollView>
   </>;
-  if (found && row && receipt && !brief && !briefError) return <ScreenSkeleton />;
-  if (briefError) return <><Stack.Screen options={{ title: 'Bank-call brief' }} />
-    <EmptyState icon="receipt-outline" title="Unavailable" fill />
-  </>;
+  if (found && row && receipt && !brief) return <ScreenSkeleton />;
   if (!found || !row || !receipt || !brief) {
     return (
       <>
@@ -370,7 +376,7 @@ export default function RateReceiptScreen() {
       <SectionTitle text="Comparable observed rates" icon="git-compare-outline" />
       <Card style={{ gap: 8 }}>
         {comparisonsAvailable ? <AppText variant="tiny" color="textMuted">{uiJoin(brief.cohortSummary, brief.typicalAdvertisedRate ? uiJoin(' · ', 'Median', ': ', brief.typicalAdvertisedRate) : null)}</AppText> : null}
-        {!comparisonsAvailable ? <Row><AppText>{uiLabel(comparisonPricing.error || catalogueStatus === 'error' ? 'Unavailable' : 'Loading')}</AppText>
+        {!comparisonsAvailable ? <Row><AppText>{uiLabel(comparisonPricing.error ? 'Unavailable' : 'Loading')}</AppText>
           {comparisonPricing.error ? <Button title="Retry" variant="secondary" onPress={comparisonPricing.retry} /> : null}</Row> : brief.comparables.length ? brief.comparables.map((comparable, index) => <Pressable key={`${comparable.productKey}#${comparable.rateIndex ?? 'default'}`}
             accessibilityRole="button" accessibilityLabel={uiJoin('Open', ' ', uiProviderName({ provider: comparable.provider }), ' · ', uiProductName({ product_name: comparable.productName }))}
             onPress={() => router.push({ pathname: '/product/[key]', params: { key: comparable.productKey, ...(comparable.programmeId ? { programme: comparable.programmeId } : comparable.rateIndex != null ? { ri: String(comparable.rateIndex) } : {}), ...(fromRatesComparison ? { origin: 'rates-comparison' } : {}) } } as Href)}

@@ -170,3 +170,23 @@ test('large receipt comparison work waits for its current request and shows a lo
     expect(tree.root.findAllByType('ScreenScrollView')).toHaveLength(1);
   } finally { act(() => tree.unmount()); }
 });
+
+test.each(['loading', 'error'] as const)('comparison catalogue %s cannot render a completed empty brief', status => {
+  mockRevision = 0;
+  jest.useFakeTimers(); jest.setSystemTime(new Date(AS_OF));
+  const core = publicCore();
+  mockParams = { key: publicRow.product_key, ri: '0' };
+  mockState = { ...mockState, core, details: null, manifest: null };
+  mockCatalogueView = Object.assign({ ...catalogue(), status: status === 'loading' ? 'ready' as const : 'error' as const, allLoaded: false },
+    { loadAll: jest.fn(async () => {}) });
+  const sync = jest.spyOn(receipt, 'buildNegotiationBrief');
+  const asyncBuild = jest.spyOn(receipt, 'buildNegotiationBriefCooperatively');
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<RateReceiptScreen />) as InspectableRenderer; });
+  try {
+    expect(sync).not.toHaveBeenCalled(); expect(asyncBuild).not.toHaveBeenCalled();
+    expect(tree.root.findAllByType('ScreenScrollView')).toHaveLength(0);
+    if (status === 'loading') expect(tree.root.findAllByType('ScreenSkeleton')).toHaveLength(1);
+    else expect(tree.root.findByProps({ title: 'Unavailable' })).toBeDefined();
+  } finally { act(() => tree.unmount()); }
+});
