@@ -69,13 +69,17 @@ test('saved analysis cannot forge derived scores or leak private labels and iden
 
 test('budget fallback omits only regenerable analysis and retains complete source evidence', () => {
   const report = reportFixture();
+  report.auditEvidenceVersion = 2;
+  report.uxTelemetry = { targetCapture: { aggregation: 'control-state-geometry', capacityReached: false,
+    auditStartControlsMeasured: true } };
   report.checks = Array.from({ length: 100 }, (_, index) => ({ ...report.checks[0],
     id: `external-link-${index + 1}`, metrics: { ...report.checks[0].metrics, actionMs: index + .125 } }));
   const source = { ...buildDeidentifiedPerformanceAudit(report),
     diagnosticLog: fullAuditDiagnosticLog(report, id => id, { metricAnalysis: 'top-level' }),
     applicationJournal: { beforeAudit: { entries: [{ message: 'retained', count: 0 }] },
       duringAndAfterAudit: { entries: [{ failed: false, unknown: null }] } } };
-  const omission = { schemaVersion: 1, methodVersions: [1, 2], status: 'omitted', reason: 'export-budget',
+  expect(source.metricAnalysis.metrics.uxStandardsAccessibilityScore.methodVersion).toBe(3);
+  const omission = { schemaVersion: 1, methodVersions: [1, 2, 3], status: 'omitted', reason: 'export-budget',
     regenerableFrom: 'retained-local-report' };
   const expected = { ...source, metricAnalysis: omission,
     diagnosticLog: { ...(source.diagnosticLog as Record<string, unknown>), metricAnalysis: omission } };
