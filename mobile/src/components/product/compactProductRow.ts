@@ -4,16 +4,11 @@ import { uiConditionRange, uiListedLvrRange } from '../../lib/financialUiCopy';
 import { uiCount, uiJoin, uiLabel, uiMoney, type UiCopy, type UiText } from '../../lib/uiCopy';
 import type { RateRow, SectionKey } from '../../types';
 
-export const COMPACT_ROW = { action: 48, gap: 4, fontSize: 14, icon: 16, minHeight: 56 } as const;
-/** The row's text determines its height. Artwork fits inside that height, never grows it. */
-export function compactBankLogoFrame(width: number, rowHeight: number, fontScale: number, border = 0) {
-  const inset = 3;
-  const height = Math.max(0, rowHeight - 2 * inset - border);
-  // Preserve a full metric rail on narrow/large-text screens. Wide marks remain
-  // contained (letterboxed when necessary), rather than cropped or distorted.
-  const maximum = Math.max(48, Math.min(112, width - 232 * Math.max(1, fontScale)));
-  return { width: Math.min(maximum, Math.max(48, height * 2)), height, inset };
-}
+export const COMPACT_ROW = {
+  action: 48, bankLogo: 48, lenderSlot: 64, gap: 4, fontSize: 14,
+  icon: 16, lineHeight: 20, minHeight: 72, inset: 3,
+} as const;
+
 const peerCache = new WeakMap<readonly RateRow[], Map<string, Set<RateRow>>>();
 
 /** One index per immutable source section/metric, never a section scan per row. */

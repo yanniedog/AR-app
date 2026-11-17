@@ -141,7 +141,7 @@ describe('bankBrand', () => {
   });
 
   it('has offline artwork for every registered brand and supported historical provider label', () => {
-    expect(logoSources.brands).toHaveLength(116);
+    expect(logoSources.brands).toHaveLength(123);
     // Family First has left the register; retain initials rather than assign
     // Beyond Bank's successor logo to historical Family First records.
     const historicalProviders = Object.keys(sample.brands ?? {}).filter(provider => provider !== 'Family First');
@@ -170,6 +170,9 @@ describe('bankBrand', () => {
       ['Bank of Queensland Limited', 'bank-of-queensland-limited'],
       ['Greater Bank Limited', 'greater-bank'],
       ['MOVE Bank', 'movebank'],
+      ['Aussie Activate', 'aussie-home-loans'],
+      ['Aussie Select', 'aussie-home-loans'],
+      ['Mortgage Ezy_public_cdr_mezy_mamoney_com_au', 'mortgage-ezy'],
       ['Newcastle Permanent Building Society', 'newcastle-permanent'],
       ['Qantas Money Home Loans', 'qantas-money-basic-offset-home-loans'],
     ]) {

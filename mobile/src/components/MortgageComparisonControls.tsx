@@ -3,13 +3,15 @@ import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../data/mor
 import { publicCataloguePricingKey, type PublicCatalogueView } from '../data/publicRateIntegration';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TextInput, useWindowDimensions, View } from 'react-native';
-import { useMortgageComparison, clearMortgageComparison, mortgageComparisonValues, setMortgageComparisonInputs, type MortgageComparisonInputs } from '../data/mortgageComparison';
+import { useMortgageComparison, mortgageComparisonValues, type MortgageComparisonInputs } from '../data/mortgageComparison';
+import { openMortgageComparisonProfile, saveMortgageComparisonFacets, saveMortgageComparisonInputs,
+  useMortgageComparisonProfile } from '../data/mortgageComparisonProfile';
 import { profileAttributeOptions } from '../data/profileRequirements';
 import { humanizeEnum } from '../data/format';
 import type { Filters } from '../data/selectors';
 import type { RateRow } from '../types';
 import { useStore } from '../data/store';
-import { updateRatesSection } from '../data/ratesSession';
+import { updateRatesSection, useRatesSession } from '../data/ratesSession';
 import { uiCount, uiJoin, uiLabel, uiMoney, uiMortgageComparisonInput, uiRate } from '../lib/uiCopy';
 import { yieldToUi } from '../lib/yieldToUi';
 import { useTheme } from '../theme/ThemeProvider';
@@ -19,6 +21,10 @@ import { SegmentedControl } from './controls';
 
 const TYPING_DEBOUNCE_MS = 200;
 const EMPTY_FACETS = { loanPurposes: [], repaymentTypes: [] };
+const STANDARD_FACETS = {
+  loanPurposes: ['OWNER_OCCUPIED', 'INVESTMENT'],
+  repaymentTypes: ['PRINCIPAL_AND_INTEREST', 'INTEREST_ONLY'],
+};
 
 // Untouched inputs default to funds available with an offset account. A
 // direct LVR (for example from an audit scope) keeps the LVR mode, and a saved
@@ -132,12 +138,17 @@ function mergeFacetOptions(
   return merged;
 }
 
-export function MortgageComparisonControls({ rows, catalogue, filters, unverified, invalid, collapsible = false }: {
-  rows: RateRow[]; catalogue?: PublicCatalogueView; filters: Filters; unverified: number; invalid: boolean; collapsible?: boolean;
+export function MortgageComparisonControls({ rows, catalogue, filters, unverified, invalid, collapsible = false, profile = false }: {
+  rows: RateRow[]; catalogue?: PublicCatalogueView; filters: Filters; unverified: number; invalid: boolean;
+  collapsible?: boolean; profile?: boolean;
 }) {
-  const theme = useTheme(), storeValue = useMortgageComparison();
+  const theme = useTheme();
+  const liveValue = useMortgageComparison();
+  const profileValue = useMortgageComparisonProfile(state => profile ? state.profile.inputs : null);
+  const storeValue = profileValue ?? liveValue;
   const { fontScale } = useWindowDimensions();
   const metric = useStore(state => state.prefs.mortgageRateMetric);
+  const storageStatus = useMortgageComparisonProfile(state => state.status);
   // Keep keystrokes local so Rates can leave catalogue work until typing pauses.
   // Audit/programmatic store writes still apply immediately (dirty stays false).
   const [draft, setDraft] = useState(storeValue);
@@ -147,18 +158,23 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   draftRef.current = draft;
   const commitDraft = useCallback((next: MortgageComparisonInputs) => {
     writing.current = true;
-    setMortgageComparisonInputs(next);
+    saveMortgageComparisonInputs(next);
     dirty.current = false;
     writing.current = false;
   }, []);
-  useEffect(() => useMortgageComparison.subscribe((state) => {
+  useEffect(() => {
+    function onExternalChange(state: MortgageComparisonInputs) {
     // External writes (clear / audit apply / Reset Rates view) must win over an
     // in-progress draft, including same-value clears that leave loanAmount/lvr
     // unchanged. Own commits set writing so they do not abandon themselves.
-    if (writing.current) return;
-    if (dirty.current) dirty.current = false;
-    setDraft(state);
-  }), []);
+      if (writing.current) return;
+      if (dirty.current) dirty.current = false;
+      setDraft(state);
+    }
+    return profile ? useMortgageComparisonProfile.subscribe((state, previous) => {
+      if (state.profile.inputs !== previous.profile.inputs) onExternalChange(state.profile.inputs);
+    }) : useMortgageComparison.subscribe(onExternalChange);
+  }, [profile]);
   useEffect(() => {
     if (!dirty.current) return;
     if (sameInputs(draft, storeValue)) {
@@ -239,11 +255,11 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     canonicalize: group.canonicalize,
     options: mergeFacetOptions(
       rowOptions[group.key],
-      facetCatalogueOptions[group.key],
+      profile ? [...facetCatalogueOptions[group.key], ...STANDARD_FACETS[group.key]] : facetCatalogueOptions[group.key],
       filters[group.key],
       group.canonicalize,
     ).filter(option => filters.includeNonStandard || isWidelyAvailableMortgageFacet(group.key, option)),
-  })), [rowOptions, facetCatalogueOptions, filters]);
+  })), [rowOptions, facetCatalogueOptions, filters, profile]);
   const change = (field: NumericInputField, text: string) => {
     dirty.current = true;
     setDraft(current => ({ ...withResolvedMode(current), [field]: text }));
@@ -251,7 +267,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
   const clearInputs = () => {
     dirty.current = false;
     setDraft({ loanAmount: '', lvr: '' });
-    clearMortgageComparison();
+    saveMortgageComparisonInputs({ loanAmount: '', lvr: '' });
     updateRatesSection('Mortgage', { page: 1 }, true);
   };
   const mode = resolvedMode(draft);
@@ -330,7 +346,7 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
         <AppText variant="small" color={fieldRequired ? 'warning' : 'text'} weight={fieldRequired ? '700' : undefined}>
           {fieldRequired ? uiJoin(fieldLabel(field), ' · ', 'Required') : fieldLabel(field)}
         </AppText>
-        <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)} keyboardType="decimal-pad"
+        <TextInput value={uiMortgageComparisonInput(draft, field)} onChangeText={text => change(field, text)} keyboardType="decimal-pad" maxLength={64}
           accessibilityLabel={fieldLabel(field)}
           placeholder={uiLabel(field === 'lvr' ? '%' : '$')}
           style={{ minHeight: 48, minWidth: 0, color: theme.colors.text, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 6, padding: 8, fontSize: theme.font.body }} />
@@ -355,18 +371,26 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
         const meaningOf = (value: string) => group.canonicalize(value) ?? value;
         const selected = filters[group.key].some(item => meaningOf(item) === option);
         return <Chip key={option} label={humanizeEnum(option)} selected={selected}
-          onPress={() => { if (dirty.current) commitDraft(draftRef.current); updateRatesSection('Mortgage', current => {
-            const scoped = scopeMortgageFacets(current.filters, filters.includeNonStandard);
-            return { filters: { ...scoped, [group.key]: selected
-              ? scoped[group.key].filter(item => meaningOf(item) !== option)
-              : [...scoped[group.key], option] } };
-          }, true); }} />;
+          onPress={() => {
+            if (dirty.current) commitDraft(draftRef.current);
+            const scoped = profile ? filters : scopeMortgageFacets(useRatesSession.getState().sections.Mortgage.filters, filters.includeNonStandard);
+            saveMortgageComparisonFacets({
+              loanPurposes: scoped.loanPurposes, repaymentTypes: scoped.repaymentTypes,
+              [group.key]: selected ? scoped[group.key].filter(item => meaningOf(item) !== option) : [...scoped[group.key], option],
+            });
+          }} />;
       })}</Row>
     </View>;
     })}
     </Row>
-    <SegmentedControl value={metric} options={[{ value: 'headline', label: uiLabel('Advertised rate') }, { value: 'comparison', label: uiLabel('Comparison rate') }]}
-      onChange={next => useStore.getState().setPref('mortgageRateMetric', next)} />
-    {(pending ? values.invalid : invalid) ? <AppText color="danger">{uiLabel('Invalid comparison inputs')}</AppText> : unverified > 0 ? <AppText variant="small">{uiJoin('Eligibility unverified', ' · ', uiCount(unverified))}</AppText> : null}
+    {!profile ? <SegmentedControl value={metric} options={[{ value: 'headline', label: uiLabel('Advertised rate') }, { value: 'comparison', label: uiLabel('Comparison rate') }]}
+      onChange={next => useStore.getState().setPref('mortgageRateMetric', next)} /> : null}
+    {(profile || pending ? values.invalid : invalid) ? <AppText color="danger">{uiLabel('Invalid comparison inputs')}</AppText> : unverified > 0 ? <AppText variant="small">{uiJoin('Eligibility unverified', ' · ', uiCount(unverified))}</AppText> : null}
+    {storageStatus === 'unavailable' ? <Row gap={8}>
+      <AppText variant="small" color="warning">{uiJoin('Saved inputs', ' · ', 'Unavailable')}</AppText>
+      <Button title="Retry" onPress={() => void openMortgageComparisonProfile()} />
+    </Row> : profile ? <AppText variant="small" color="textMuted">
+      {storageStatus === 'memory-only' ? uiJoin('This tab', ' · ', 'Until close') : uiJoin('Saved inputs', ' · ', storageStatus === 'saving' ? 'Saving' : storageStatus === 'loading' ? 'Loading' : 'This device')}
+    </AppText> : null}
   </View>;
 }

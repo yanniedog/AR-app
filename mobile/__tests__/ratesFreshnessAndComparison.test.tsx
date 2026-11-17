@@ -8,7 +8,7 @@ import { mortgageComparisonMatch, mortgageComparisonRows } from '../src/data/mor
 import { queryAndSort, EMPTY_FILTERS } from '../src/data/selectors';
 import { ratesPageWindow } from '../src/data/ratesPagination';
 import type { RateRow } from '../src/types';
-import { compactBankLogoFrame } from '../src/components/product/compactProductRow';
+import { COMPACT_ROW } from '../src/components/product/compactProductRow';
 
 jest.mock('../src/components/icons/AppIcon', () => ({ __esModule: true, default: 'Icon' }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: { success: 'green', warning: 'amber', danger: 'red', textMuted: 'grey' } }) }));
@@ -64,11 +64,8 @@ test('filter and sort operate on all candidates before either page size slices t
   }
   expect(JSON.stringify(rows)).toBe(before);
 });
-test('logo frames follow varied row heights with a 3px inset, preserve a metric rail and never impose row height', () => {
-  for (const width of [288, 328, 448]) for (const height of [56, 72, 112]) for (const scale of [1, 2, 3.2]) {
-    const frame = compactBankLogoFrame(width, height, scale, 0.5);
-    expect(frame.height + 2 * frame.inset + 0.5).toBe(height);
-    expect(frame.inset).toBe(3); expect(frame.width).toBeGreaterThanOrEqual(48); expect(frame.width).toBeLessThanOrEqual(112);
-    expect(width - frame.width - 48 - 16 - 3 * 4).toBeGreaterThan(0);
-  }
+test('logo frames leave a fixed freshness-symbol slot and a compact text rail', () => {
+  expect(COMPACT_ROW.lenderSlot - COMPACT_ROW.bankLogo).toBe(COMPACT_ROW.icon);
+  expect(COMPACT_ROW.bankLogo).toBe(48);
+  expect(288 - COMPACT_ROW.lenderSlot - COMPACT_ROW.action - 3 * COMPACT_ROW.gap).toBeGreaterThan(0);
 });
