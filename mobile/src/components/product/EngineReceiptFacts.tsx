@@ -37,13 +37,11 @@ const TOPICS: Readonly<Record<ReceiptFactTopic, UiLabel>> = {
 };
 const STATES: Readonly<Record<ReceiptFactState, UiLabel>> = {
   unknown: 'Unknown', unverified: 'Unverified', unsupported: 'Unsupported', unavailable: 'Unavailable', needs_information: 'Needs information',
-  does_not_meet: 'Does not meet', unpaid: 'Unpaid', partial: 'Partial', acknowledged: 'Acknowledged', 'source-review-required': 'Source review required',
+  does_not_meet: 'Does not meet', unpaid: 'Unpaid', partial: 'Partial', acknowledged: 'Acknowledged', 'source-review-required': 'Unverified',
 };
 function IssueFact({ fact, assumption = false }: { fact: ReceiptIssueFact; assumption?: boolean }) {
   return <>
-    <AppText variant="small">{uiJoin(assumption ? 'Assumption' : 'Issues', ' ', uiCount(fact.index + 1), ' · ', TOPICS[fact.topic], ': ', STATES[fact.state],
-      ...fact.references.flatMap(reference => [uiLabel(' · '), uiIdentifier(reference)]))}</AppText>
-    {fact.code ? <AppText variant="tiny">{uiJoin('Issue code', ': ', uiIdentifier(fact.code))}</AppText> : null}
+    <AppText variant="small">{uiJoin(assumption ? 'Assumption' : 'Issues', ' ', uiCount(fact.index + 1), ' · ', TOPICS[fact.topic], ': ', STATES[fact.state])}</AppText>
   </>;
 }
 
@@ -58,15 +56,12 @@ export function EngineReceiptFacts({ receipt }: { receipt: CalculationReceipt })
     <AppText>{uiJoin('Issues', ': ', uiCount(receipt.issues.length), ' · ', 'Assumption count', ': ', uiCount(receipt.assumptions.length))}</AppText>
     {receiptIssueFacts(receipt).map(fact => <IssueFact key={`issue-${fact.index}`} fact={fact} />)}
     {receiptAssumptionFacts(receipt).map(fact => <IssueFact key={`assumption-${fact.index}`} fact={fact} assumption />)}
-    {receiptCriterionFacts(receipt).map((fact, index) => <AppText key={`criterion-${index}`} variant="small">{uiJoin('Recorded criteria', ' · ', uiIdentifier(fact.ruleId), ': ', uiEngineStatus(fact.state),
-      fact.field ? uiJoin(' · ', fact.inputState === 'missing' ? 'Missing input' : 'Invalid input', ': ', uiIdentifier(fact.field)) : fact.state === 'needs_information' ? uiJoin(' · ', 'Source review required') : null,
-      ...fact.references.flatMap(reference => [uiLabel(' · '), uiIdentifier(reference)]))}</AppText>)}
-    {receipt.loan?.obligations.filter(obligation => obligation.status !== 'paid').map(obligation => <AppText key={obligation.id} variant="small">{uiJoin('Payment obligation', ' · ', uiIdentifier(obligation.id), ': ',
+    {receiptCriterionFacts(receipt).map((fact, index) => <AppText key={`criterion-${index}`} variant="small">{uiJoin('Recorded criteria', ': ', uiEngineStatus(fact.state),
+      fact.field ? uiJoin(' · ', fact.inputState === 'missing' ? 'Missing input' : 'Invalid input') : null)}</AppText>)}
+    {receipt.loan?.obligations.filter(obligation => obligation.status !== 'paid').map(obligation => <AppText key={obligation.id} variant="small">{uiJoin('Payment obligation', ': ',
       obligation.status === 'unpaid' ? 'Unpaid' : obligation.status === 'partial' ? 'Partial' : 'Unknown', ' · ', uiDate(obligation.dueDate),
       ' · ', 'Repayment due', ': ', uiDecimal(obligation.due), ' · ', 'Paid', ': ', uiDecimal(obligation.paid))}</AppText>)}
     {receipt.loan ? <AppText variant="small">{uiJoin('Basis', ': ', uiIdentifier(receipt.loan.perspective), ' · ', 'Known components', ': ', uiLabel(receipt.loan.componentStatus === 'known' ? 'Known' : 'Partial'))}</AppText> : null}
-    <AppText variant="small">{uiJoin('Contract scope', ': ', uiIdentifier(receipt.contractId))}</AppText>
-    <AppText variant="small">{uiJoin('Receipt', ': ', uiIdentifier(receipt.inputSha256))}</AppText>
     {receipt.claimAvailable && receipt.totals ? TOTAL_FIELDS.map(([key, label]) => <Row key={key} style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
       <AppText variant="small">{label}</AppText><AppText variant="small">{uiDecimal(receipt.totals![key])}</AppText>
     </Row>) : <AppText>{uiLabel("Unavailable")}</AppText>}

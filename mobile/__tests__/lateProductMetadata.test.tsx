@@ -30,7 +30,7 @@ test('actual legacy cadence-only fees retain the period and unknown price withou
   expect(JSON.stringify(uiDetailItem(fee, 0, 'Fees'))).not.toContain(fee.info!);
   expect(uiFeeValue({ name: 'P1M', info: 'P1M' })).toBe('Unknown');
 });
-test('same-date term changes identify exact canonical fields and source references without mutating or displaying clauses', async () => {
+test('same-date term changes retain financial facts without exposing evidence references', async () => {
   const sha = (letter: string) => letter.repeat(64), key = 'protocol-fixture', observed = '2026-10-15T00:00:00Z', clause = 'Explanatory source clause body.';
   const revision = (id: string, parameter: string, value: string) => ({ term_revision_id: sha(id), parameter_key: parameter, value, unit: 'AUD', applicability: { product_key: key, tier: null, package: null, cohort: null, effective_from: null, effective_to: null }, clause_ids: [sha('d')], rule_set_id: null, status: 'validated', observed_at: observed });
   const terms = validateProductTerms({ schema_version: 1, product_key: key, identity_sha256: sha('a'),
@@ -47,7 +47,7 @@ test('same-date term changes identify exact canonical fields and source referenc
     await act(async () => tree.root.findByProps({ title: 'Terms' }).props.onToggle());
     act(() => tree.root.findByProps({ title: 'Changes' }).props.onToggle());
     expect(bodyText(tree)).toContain('fee.annual'); expect(bodyText(tree)).toContain('rate.annual'); expect(bodyText(tree)).toContain('Field');
-    expect(bodyText(tree)).toContain(`Reference: ${sha('2')}`); expect(bodyText(tree)).toContain(`Source ${sha('d')}`);
+    expect(bodyText(tree)).not.toContain(sha('2')); expect(bodyText(tree)).not.toContain(sha('d'));
     expect(bodyText(tree)).not.toContain(clause); expect(canonicalTermsJson(terms)).toBe(original);
   } finally { act(() => tree.unmount()); }
 });

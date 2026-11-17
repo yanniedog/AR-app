@@ -1,3 +1,4 @@
+import { ProductPageLinks } from './ProductPageLink';
 import type { RateScenario } from '../../data/publicRateModel';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
 import { PublicRateEvidence } from '../scenario/PublicRateEvidence';
@@ -12,7 +13,7 @@ import { Stack } from 'expo-router';
 import { useDetailsCatalogue } from '../../hooks/useDetailsCatalogue';
 import { ScreenScrollView } from '../Screen';
 import { AppText, Button } from '../ui';
-import { DetailGroup, OfficialLinks, ProductFacts } from './ProductDetailParts';
+import { DetailGroup, ProductFacts } from './ProductDetailParts';
 import { ProductProviderLink } from './ProductProviderLink';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
 import { uiLabel, uiDate, uiIdentifier, uiJoin, uiProductName, uiPublicProductName } from '../../lib/uiCopy';
@@ -23,7 +24,7 @@ export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { 
   const catalogue = usePublicRateCatalogue(manifest);
   const product = catalogue.getProduct(productKey);
   const provider = identity.provider || product?.providerName;
-  return <ScreenScrollView><Stack.Screen options={{ title: 'Product details' }} /><View style={{ gap: 12 }}>
+  return <ProductPageLinks overview={detail?.links?.overview}><ScreenScrollView><Stack.Screen options={{ title: 'Product details' }} /><View style={{ gap: 12 }}>
     <AppText weight="700">{product ? uiPublicProductName(product) : identity.name ? uiProductName({ product_name: identity.name }) : uiLabel('Product')}
     </AppText>
     {provider ? <ProductProviderLink provider={provider} /> : null}
@@ -33,7 +34,7 @@ export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { 
       <AppText variant="small">{uiJoin('Published', ' · ', uiDate(manifest?.run_date), ' · ', 'Rate', ' · ', 'Unavailable')}</AppText>
       <DetailGroup loading={false} icon="cash-outline" title="Fees" items={detail.fees} /><DetailGroup loading={false} icon="person-outline" title="Eligibility" items={detail.eligibility} />
       <DetailGroup loading={false} icon="information-circle-outline" title="Features" items={detail.features} /><DetailGroup loading={false} icon="information-circle-outline" title="Constraints" items={detail.constraints} />
-      <ProductFacts productDetails={detail} /><OfficialLinks links={detail.links} sourceDocuments={detail.sourceDocuments} />
+      <ProductFacts productDetails={detail} />
       <EligibilityAssessment productKey={productKey} />
       {identity.productCategory === 'TRANS_AND_SAVINGS_ACCOUNTS' && <><SavingsPeriodCalculation productKey={productKey} /><ActivityPeriodCalculation productKey={productKey} /></>}
       {identity.productCategory === 'RESIDENTIAL_MORTGAGES' && <MortgagePeriodCalculation productKey={productKey} />}<ProductTermsDisclosure productKey={productKey} />
@@ -41,5 +42,5 @@ export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { 
       <AppText variant="small">{uiLabel(details ? 'Unavailable' : 'Unverified')}</AppText>
       <Button title="Retry" variant="secondary" onPress={retry} />
     </>}
-  </View></ScreenScrollView>;
+  </View></ScreenScrollView></ProductPageLinks>;
 }

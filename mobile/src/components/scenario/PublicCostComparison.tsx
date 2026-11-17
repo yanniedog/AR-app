@@ -42,7 +42,7 @@ function assumptionFact(value: string) {
     'Quoted principal: fixed until maturity': uiJoin('Principal', ': ', 'Fixed', ' · ', 'Quoted maturity'),
     'Reinvestment/renewal rates: separate local assumptions': uiJoin('Renewal rate', ': ', 'Local', ' ', 'Assumptions'),
   };
-  return uiJoin(facts[value] ?? uiLabel('Source review required'));
+  return uiJoin(facts[value] ?? uiLabel('Unverified'));
 }
 
 export function PublicCostComparison({ section, target, scenario, rateScenario }: { section: SectionKey; target: RateRow; scenario: UserRateScenario; rateScenario?: RateScenario }) {

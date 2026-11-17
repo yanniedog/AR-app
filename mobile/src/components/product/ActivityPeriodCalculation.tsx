@@ -23,6 +23,6 @@ export function ActivityPeriodCalculation({ productKey, row, section }: { produc
   }, [open, retry, identity, manifest, core, coreIntegrity, details, productKey, row, section]);
   if (row && section !== 'Savings') return null;
   return <Disclosure title="Prior activity" open={open} onToggle={() => setOpen(!open)}>
-    {!current ? <AppText variant="small">{uiLabel("Checking")}</AppText> : current.selections?.length && current.target ? <ActivityPeriodForm key={identity} selections={current.selections} context={{ manifest, core, coreIntegrity, details }} target={current.target} /> : <><AppText variant="small">{uiLabel(current.error ? 'Source unverified' : published ? 'Unavailable' : 'Not published')}</AppText>{current.error ? <Button title="Retry" variant="secondary" onPress={() => void ensureDetails({ forProductView: true }).catch(() => undefined).finally(() => setRetry(r => r + 1))} /> : null}</>}
+    {!current ? <AppText variant="small">{uiLabel("Checking")}</AppText> : current.selections?.length && current.target ? <ActivityPeriodForm key={identity} selections={current.selections} context={{ manifest, core, coreIntegrity, details }} target={current.target} /> : <><AppText variant="small">{uiLabel(current.error ? 'Unverified' : published ? 'Unavailable' : 'Not published')}</AppText>{current.error ? <Button title="Retry" variant="secondary" onPress={() => void ensureDetails({ forProductView: true }).catch(() => undefined).finally(() => setRetry(r => r + 1))} /> : null}</>}
   </Disclosure>;
 }

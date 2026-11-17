@@ -21,7 +21,7 @@ test('all8 real Macquarie rows select their original wording, never the same-ter
     expect(result.entries[0].sourcePointer).toContain(`/depositRates/${i}/`);
     const receipt = buildRateReceipt({ row, section: 'TD', evidenceDate: f.core.run_date, detail: f.details.products[f.productKey], rateConditionContext: f });
     expect(receipt.rateConditions.entries).toEqual(result.entries);
-    expect(rateConditionReceiptLines(receipt)).toContain(`Source review required · ${result.entries[0].sourcePointer}`);
+    expect(rateConditionReceiptLines(receipt)).toContain('Conditions: Unverified');
     expect(rateConditionReceiptLines(receipt).join('\n')).not.toContain(result.entries[0].text);
   });
   const receipt = buildRateReceipt({ row: f.rows[4], section: 'TD', evidenceDate: f.core.run_date, detail: f.details.products[f.productKey], rateConditionContext: f });
