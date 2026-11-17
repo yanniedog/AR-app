@@ -1069,8 +1069,9 @@ export default function RatesWorkspace() {
       auditCell={target === 'Cell' && !retainingPrevious} auditRevision={listRevision} onAuditCellCommit={auditTarget.onCellCommit}
       selectMode={selectMode} selectionToken={selectionTokenFor(item)} selected={selected.includes(selectionTokenFor(item))} onToggleSelect={toggleSelect} />
   ) : <TouchTarget fill onPress={() => openProduct(item.key)} accessibilityRole="button"
-      accessibilityLabel={uiJoin(uiProductName({ product_name: item.name ?? '' }), ', ',
-        uiProviderName({ provider: item.provider ?? '' }), ', ', humanizeEnum(item.productCategory ?? ''), ', ', 'No listed rate')}
+      accessibilityLabel={uiJoin(uiProductName({ product_name: item.name ?? '' }),
+        item.provider ? uiJoin(', ', uiProviderName({ provider: item.provider })) : null,
+        item.productCategory ? uiJoin(', ', humanizeEnum(item.productCategory)) : null, ', ', 'No listed rate')}
       style={{ minHeight: COMPACT_ROW.minHeight, height: fontScale > 1 ? undefined : COMPACT_ROW.minHeight,
         paddingVertical: COMPACT_ROW.inset, borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: theme.ledger.rule }}
