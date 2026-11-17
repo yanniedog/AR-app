@@ -556,10 +556,10 @@ describe('deep performance audit plan', () => {
       for (const data of Object.values(core.sections)) data.rates = [];
       const rows = section === 'Mortgage' ? [
         rate({ provider: 'Bank', product_key: 'same-product', rate_index: 0, rate: '0.04', comparison_rate: '0.08' }),
-        rate({ provider: 'Bank', product_key: 'same-product', rate_index: 2, rate: '0.06', comparison_rate: '0.07' }),
+        rate({ provider: 'Bank', product_key: 'same-product', rate_index: 2, rate: '0.06', comparison_rate: '0.07', public_programme_id: 'preferred-tier' }),
       ] : [
         rate({ provider: 'Bank', product_key: 'same-product', rate_index: 0, rate: '0.045', ribbon_deposit_kind: 'base' }),
-        rate({ provider: 'Bank', product_key: 'same-product', rate_index: 2, rate: '0.06', ongoing_rate: '0.01', ribbon_deposit_kind: 'bonus' }),
+        rate({ provider: 'Bank', product_key: 'same-product', rate_index: 2, rate: '0.06', ongoing_rate: '0.01', ribbon_deposit_kind: 'bonus', public_programme_id: 'preferred-tier' }),
       ];
       core.sections[section].rates = rows;
       const options = { seed: 'pre-profile', includeNonStandard: true };
@@ -573,7 +573,7 @@ describe('deep performance audit plan', () => {
       expect(actual.inputs.primaryProduct).toEqual(before.inputs.primaryProduct);
       expect(actual.inputs.sampledProducts).toEqual(before.inputs.sampledProducts);
       expect(actual.passes[0].steps.find(step => step.semanticActionId === 'lender.product.first'))
-        .toMatchObject({ parameters: { section, productKey: rendered[0].product_key, rateIndex: rendered[0].rate_index } });
+        .toMatchObject({ parameters: { section, productKey: rendered[0].product_key, rateIndex: rendered[0].rate_index, programmeId: 'preferred-tier' } });
     }
     expect(original).toMatchObject({ depositRankMetric: 'base', mortgageRateMetric: 'headline' });
   });

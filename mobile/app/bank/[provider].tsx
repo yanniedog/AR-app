@@ -61,12 +61,14 @@ import {
 import type { RateRow, SectionKey } from '../../src/types';
 import { SECTION_KEYS } from '../../src/types';
 import { useTheme } from '../../src/theme/ThemeProvider';
-interface LenderProductItem { row: RateRow; section: SectionKey; firstInSection: boolean }
+interface LenderProductItem { row: RateRow; section: SectionKey; firstInSection: boolean; id: string }
 
 const LenderProductRow = React.memo(function LenderProductRow({ item }: {
   item: LenderProductItem;
 }) {
-  const onPress = useCallback(() => openProduct(item.row.product_key, item.row.rate_index), [item.row]);
+  const onPress = useCallback(() => item.row.public_programme_id
+    ? openProduct(item.row.product_key, item.row.rate_index, item.row.public_programme_id)
+    : openProduct(item.row.product_key, item.row.rate_index), [item.row]);
   return <View>
     {item.firstInSection ? <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8, marginLeft: 4 }}>
       {uiSectionName(item.section)}
@@ -75,6 +77,7 @@ const LenderProductRow = React.memo(function LenderProductRow({ item }: {
       row={item.row}
       section={item.section}
       showLenderAction={false}
+      showTierIndex
       onPress={onPress}
     />
   </View>;
@@ -253,7 +256,7 @@ export default function BankDetail() {
     showBankInsights,
   ]);
 
-  const bySection = useMemo(() => {
+  const rateGroups = useCallback((allTiers: boolean) => {
     void suitabilityRevision;
     const out: { section: SectionKey; rows: RateRow[] }[] = [];
     if (!core) return out;
@@ -263,7 +266,7 @@ export default function BankDetail() {
       const sectionRates = core.sections[section]?.rates;
       const rows = lenderProductRows(
         sectionRates ? stableRowsForProvider(sectionRates, provider) : [],
-        section, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts,
+        section, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts, allTiers,
       );
       if (rows.length) out.push({ section, rows });
     }
@@ -277,7 +280,7 @@ export default function BankDetail() {
     // base/bonus or comparison-selected rows rather than misattribute a move.
     const out: Partial<Record<SectionKey, ProductMoveCatalogEntry[]>> = {};
     if (!showBankInsights || !hasProductHistory) return out;
-    for (const { section, rows } of bySection) {
+    for (const { section, rows } of rateGroups(false)) {
       out[section] = rows.flatMap((row) => {
         if (!productHistoryRepresentsRateRow(core, row)) return [];
         return [{
@@ -288,7 +291,7 @@ export default function BankDetail() {
       });
     }
     return out;
-  }, [bySection, core, hasProductHistory, showBankInsights]);
+  }, [rateGroups, core, hasProductHistory, showBankInsights]);
 
   const heavyHistory =
     (core?.sections.Mortgage.rates.length ?? 0) > 400 ||
@@ -537,9 +540,10 @@ export default function BankDetail() {
 
   const recentMoveBreakdowns = focusSourceEvent ? [] : eventBreakdowns.slice(0, 3);
 
-  const productItems = useMemo(() => bySection.flatMap(({ section, rows }) => rows.map((row, index) => ({
+  const productItems = useMemo(() => rateGroups(true).flatMap(({ section, rows }) => rows.map((row, index) => ({
+    id: JSON.stringify([section, row.product_key, row.rate_index, index]),
     row, section, firstInSection: index === 0,
-  }))), [bySection]);
+  }))), [rateGroups]);
   const productCount = productItems.length;
   const productListRevision = useRef({ items: productItems, version: 0 });
   if (productListRevision.current.items !== productItems) {
@@ -563,11 +567,14 @@ export default function BankDetail() {
         const productKey = auditActionString(args, 'productKey');
         const rateIndex = auditActionInteger(args, 'rateIndex');
         const plannedSection = auditActionString(args, 'section');
+        const programmeId = auditActionString(args, 'programmeId');
         const exact = productItems.find(({ row, section }) => row.product_key === productKey &&
           (plannedSection == null || section === plannedSection) &&
-          (rateIndex == null || row.rate_index === rateIndex));
+          (rateIndex == null || row.rate_index === rateIndex) &&
+          (row.public_programme_id || null) === programmeId);
         if (!exact) return { unavailableReason: 'The exact planned lender product is not rendered' };
-        openProduct(exact.row.product_key, exact.row.rate_index);
+        if (exact.row.public_programme_id) openProduct(exact.row.product_key, exact.row.rate_index, exact.row.public_programme_id);
+        else openProduct(exact.row.product_key, exact.row.rate_index);
         return { expectedPath: `/product/${encodeURIComponent(exact.row.product_key)}`,
           section: exact.section, productKey: exact.row.product_key, rateIndex: exact.row.rate_index ?? null };
       },
@@ -747,7 +754,7 @@ export default function BankDetail() {
           onContentSizeChange={listReadiness.onContentSizeChange}
           onViewableItemsChanged={listReadiness.onViewableItemsChanged}
           viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
-          keyExtractor={item => `${item.section}:${item.row.product_key}`}
+          keyExtractor={item => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 + insets.bottom }}
           renderItem={renderProductItem}
           ListEmptyComponent={<EmptyState title="No current products" />}
@@ -762,9 +769,7 @@ export default function BankDetail() {
           />
           <View style={{ flex: 1 }}>
             <AppText variant="h3">{lenderName}</AppText>
-            <AppText variant="small" color="textMuted">
-              {uiJoin(uiCount(productCount),' ','Products',!includeNonStandard?uiJoin(' · ','Widely available'):null)}
-            </AppText>
+            {!includeNonStandard ? <AppText variant="small" color="textMuted">{uiLabel('Widely available')}</AppText> : null}
           </View>
         </Row>
 
@@ -777,7 +782,7 @@ export default function BankDetail() {
           </Card>
         ) : null}
 
-        <AppText variant="h3" style={{ marginBottom: 10 }}>{uiLabel("Current products")}</AppText>
+        <AppText variant="h3" style={{ marginBottom: 10 }}>{uiLabel("Rates")}</AppText>
 
           </View>}
           ListFooterComponent={<View>

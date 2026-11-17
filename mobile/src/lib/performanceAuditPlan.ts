@@ -428,8 +428,8 @@ export function deriveDeepAuditInputs(
     ?? sections.find(section => samples.get(section)!.length > 0) ?? null;
   const primaryProduct = chosenSection ? samples.get(chosenSection)![0] ?? null : null;
   const secondaryProduct = chosenSection ? samples.get(chosenSection)![1] ?? null : null;
-  // Other journeys retain the random exact tier. A lender card deduplicates its
-  // tiers under the mounted ranking, so pin that distinct return target too.
+  // Other journeys retain the random exact tier. Pin the lender return to
+  // the highest-ranked tier of the sampled product under the mounted ranking.
   const lenderReturnRow = core && primaryProduct ? lenderProductRows(
     rowsForProductKey(core.sections[primaryProduct.section].rates, primaryProduct.productKey)
       .filter(row => row.provider === primaryProduct.provider),
@@ -553,6 +553,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   const lenderReturnParameters: Record<string, DeepAuditParameter> = lenderReturn ? {
     section: lenderReturn.section, provider: lenderReturn.provider,
     productKey: lenderReturn.productKey, rateIndex: lenderReturn.rateIndex,
+    ...(lenderReturn.programmeId ? { programmeId: lenderReturn.programmeId } : {}),
   } : {};
   const compareParameters: Record<string, DeepAuditParameter> = {
     section: section ?? null,

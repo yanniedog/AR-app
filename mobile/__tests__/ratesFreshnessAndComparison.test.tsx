@@ -66,6 +66,6 @@ test('filter and sort operate on all candidates before either page size slices t
 });
 test('logo frames leave a fixed freshness-symbol slot and a compact text rail', () => {
   expect(COMPACT_ROW.lenderSlot - COMPACT_ROW.bankLogo).toBe(COMPACT_ROW.icon);
-  expect(COMPACT_ROW.bankLogo).toBe(48);
+  expect(COMPACT_ROW.bankLogo).toBe(56);
   expect(288 - COMPACT_ROW.lenderSlot - COMPACT_ROW.action - 3 * COMPACT_ROW.gap).toBeGreaterThan(0);
 });
