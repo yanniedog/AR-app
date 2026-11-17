@@ -57,6 +57,14 @@ describe('bankBrand', () => {
     )).toEqual([]);
   });
 
+  it.each(['artwork', 'monogram'] as const)('renders producer %s without bundle or network dependencies', (source) => {
+    const embedded = 'data:image/png;base64,abc';
+    const remote = 'https://register.test/logo.png';
+    expect(resolveBankLogoSourcesForRuntime('ANZ', embedded, remote, true, source)).toEqual([embedded]);
+    expect(resolveBankLogoSourcesForRuntime('New Lender', embedded, remote, false, source)).toEqual([embedded]);
+    expect(resolveBankLogoSourcesForRuntime('ANZ', remote, remote, false, source)).toEqual([]);
+  });
+
   it('prefers verified bundled logos over stale payload artwork', () => {
     const embedded = 'data:image/png;base64,abc';
     const sources = resolveBankLogoSources('ANZ', embedded);
