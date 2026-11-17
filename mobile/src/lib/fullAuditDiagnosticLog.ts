@@ -37,6 +37,8 @@ const FIXED_TEXT: Record<string, ReadonlySet<string>> = Object.fromEntries(Objec
   status: 'pass warn fail skipped unavailable pending ready error waiting settled interrupted',
   platform: 'android ios web', osName: 'Android iOS', jsEngine: 'Hermes hermes jsc SpiderMonkey V8 JavaScriptCore unknown',
   payloadSource: 'remote local bundled cache unknown sample',
+  entryMeasurementStatus: 'not-observed interrupted probe-failed timed-out',
+  httpIssue: 'timeout cancelled transport restricted redirect-unverified response-unverified response-rejected',
   overall: 'healthy attention bottleneck', auditCoverageProfile: 'basic maximum-safe maximum-safe-coverage-v1',
   measurementMode: 'basic deep route-round-trip semantic-action segmented-payload-capacity',
   // Historical reports still contain this retired producer's classification.
@@ -84,7 +86,7 @@ const SCALAR_PATHS: Record<string, ReadonlySet<string>> = Object.fromEntries(Obj
 SCALAR_PATHS['.checks[].metrics'] = new Set([...PUBLIC_AUDIT_METRIC_FIELDS, ...AUDIT_PRODUCER_SCALARS]);
 
 function enumContext(key: string, parent: string): boolean {
-  if (parent === '.checks[].metrics' && AUDIT_PRODUCER_ENUMS[key]) return true;
+  if (parent === '.checks[].metrics' && (AUDIT_PRODUCER_ENUMS[key] || key === 'entryMeasurementStatus' || key === 'httpIssue')) return true;
   if (['platform', 'osName', 'jsEngine', 'payloadSource', 'auditCoverageProfile'].includes(key)) return parent === '.environment';
   if (key === 'overall') return parent === '.summary';
   if (['measurementMode', 'returnNavigationKind', 'iteration'].includes(key)) return parent === '.checks[].metrics';

@@ -72,6 +72,7 @@ const OBSERVED_COUNT_KEYS = new Set([
 ]);
 
 const PUBLIC_METRIC_ENUMS: Record<string, ReadonlySet<string>> = {
+  entryMeasurementStatus: new Set(['not-observed', 'interrupted', 'probe-failed', 'timed-out']),
   httpIssue: new Set(['timeout', 'cancelled', 'transport', 'restricted', 'redirect-unverified',
     'response-unverified', 'response-rejected']),
   handlerResolution: new Set(['pass', 'fail', 'not-attempted', 'unresolved']),

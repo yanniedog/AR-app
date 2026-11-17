@@ -1,7 +1,8 @@
 export const PUBLIC_AUDIT_METRIC_FIELDS = new Set([
   'updateMetadataTransportCalls', 'durationMayUseTtlCache', 'manifestMetadataValidated', 'manifestPackageMatches',
   'manifestBytes', 'manifestHasSha256', 'downloadedBytes', 'downloadTotalBytes', 'cachedReady',
-  'actionMs', 'readinessMs', 'forwardWorkMs', 'readinessQuietWindowMs', 'destinationReadinessMs',
+  'actionMs', 'entryFeedbackObserved', 'entryFirstCallbackMs', 'entryRouteMountMs', 'entryLayoutMs',
+  'entryPreferencesMs', 'entryAdmissionMs', 'entryMeasurementStatus', 'readinessMs', 'forwardWorkMs', 'readinessQuietWindowMs', 'destinationReadinessMs',
   'originReadinessMs', 'firstBackMs', 'secondBackMs', 'replaceRecoveryMs', 'anchorResetMs',
   'actionRevisionBefore', 'actionRevisionAfter', 'readinessProbeCount', 'readinessRequiredProbeCount',
   'readinessPendingRequiredProbeCount', 'depth', 'optional', 'continuedAfterFailure',

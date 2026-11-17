@@ -38,7 +38,7 @@ test('missing or inconsistent inventory remains unknown and duplicate rows canno
 test('aggregate unverified link check accounts for remaining not-attempted destinations', () => {
   expect(auditHttpCheckSummary([
     entry('external-link-inventory', { uniqueDestinations: 5 }),
-    entry('external-link-1', { httpAttempted: true, httpReachability: 'pass' }),
+    entry('external-link-1', { httpAttempted: true, httpReachability: 'pass', urlValidation: 'pass' }),
     entry('external-link-2', { httpAttempted: true, httpReachability: 'fail' }),
     entry('external-link-unverified', { destinationCount: 3, httpAttempted: false, httpReachability: 'unknown' }),
   ])).toMatchObject({ total: 5, attempted: 2, notAttempted: 3, missingEvidence: 0 });
@@ -47,10 +47,19 @@ test('aggregate unverified link check accounts for remaining not-attempted desti
 test('a rejected URL and failed HEAD do not verify a destination', () => {
   const checks = [entry('external-link-inventory', { uniqueDestinations: 4 }),
     entry('external-link-1', { httpAttempted: false, urlValidation: 'fail' }),
-    entry('external-link-2', { httpAttempted: true, httpReachability: 'pass' }),
+    entry('external-link-2', { httpAttempted: true, httpReachability: 'pass', urlValidation: 'pass' }),
     entry('external-link-3', { httpAttempted: true, httpReachability: 'fail' }),
     entry('external-link-4', { httpAttempted: true, httpReachability: 'unknown' })];
   expect(auditHttpCheckSummary(checks)).toMatchObject({
     total: 4, attempted: 3, verified: 1, failed: 1, unresolved: 1, rejected: 1, notAttempted: 1, missingEvidence: 0,
   });
+});
+
+test('HTTP pass without URL approval is unresolved and rejected responses are not HTTP restrictions', () => {
+  expect(auditHttpCheckSummary([
+    entry('external-link-inventory', { uniqueDestinations: 3 }),
+    entry('external-link-1', { httpAttempted: true, httpReachability: 'pass' }),
+    entry('external-link-2', { httpAttempted: true, httpReachability: 'fail', httpIssue: 'response-rejected' }),
+    entry('external-link-3', { httpAttempted: true, httpReachability: 'unknown', httpIssue: 'restricted' }),
+  ])).toMatchObject({ attempted: 3, verified: 0, failed: 1, unresolved: 2, restricted: 1 });
 });

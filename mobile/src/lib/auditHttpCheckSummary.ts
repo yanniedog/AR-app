@@ -2,7 +2,7 @@ import type { AuditCheck } from './performanceAudit';
 
 export const verifiedAuditHttpDestination = (check: AuditCheck): boolean =>
   check.metrics.httpAttempted === true && check.metrics.httpReachability === 'pass'
-  && check.metrics.urlValidation !== 'fail';
+  && check.metrics.urlValidation === 'pass';
 
 /** Transport attempts are independent of a destination's verified outcome. */
 export function auditHttpCheckSummary(checks: readonly AuditCheck[]) {
@@ -26,7 +26,7 @@ export function auditHttpCheckSummary(checks: readonly AuditCheck[]) {
     if (check?.metrics?.httpAttempted === true) {
       attempted += 1;
       if (check.metrics.httpIssue === 'timeout') timedOut += 1;
-      if (['restricted', 'response-rejected'].includes(String(check.metrics.httpIssue))) restricted += 1;
+      if (check.metrics.httpIssue === 'restricted') restricted += 1;
       if (verifiedAuditHttpDestination(check)) verified += 1;
       else if (check.metrics.httpReachability === 'fail') failed += 1;
     }
