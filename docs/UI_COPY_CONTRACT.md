@@ -17,7 +17,7 @@ The interface uses concise headings, field labels, actions, identity, numeric fa
 
 `UiCopy` and `UiChild` close normal display APIs. Native props close titles, placeholders and accessibility text. Description, subtitle, deck, summary, helper, hint and secondary explanatory APIs are removed. Do not add a general `label(string)`, `fact(string)` or cast to bypass admission. New registry entries require semantic review as actions, headings, labels, statuses or facts; never explanatory prose.
 
-Identity factories receive actual identity fields. Do not fabricate an identity model from a paragraph. Source clauses are parsed only when the existing source admission proves the exact product, variant, publication, hash and pointer. Unsupported wording remains `Source review required` and links to its original evidence.
+Identity factories receive actual identity fields. Do not fabricate an identity model from a paragraph. Source clauses are parsed only when the existing source admission proves the exact product, variant, publication, hash and pointer. Unsupported wording remains `Unverified` and links to its original evidence.
 
 `uiDocumentFilename` receives the actual source-document descriptor and derives a
 bounded filename from its source URL. It never admits arbitrary provider labels,

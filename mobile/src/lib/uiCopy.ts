@@ -55,7 +55,6 @@ export const UI_LABELS = [
   'Exact product', 'Product variant', 'Product family', 'Shared provider terms', 'Background',
   'Supplementary', 'Superseded', 'Document type', 'Open document', 'Provider website', 'Documents',
   'Specificity unknown',
-  'Source review required',
   'Equal to', 'At least', 'At most', 'Filter value', 'Invalid value',
   'Search criteria', 'Show more',
   'Fields',

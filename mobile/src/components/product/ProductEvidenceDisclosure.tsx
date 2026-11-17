@@ -19,7 +19,7 @@ function EvidencePages({ document }: { document: ProductEvidenceDocument }) {
     <AppText variant="small" color="textMuted">{uiJoin('Coverage', ' · ', 'Unverified', ' · ', 'Calculation', ' · ', 'No approval')}</AppText>
     <AppText variant="small">{uiJoin('Status', ' · ', document.availability === 'available' ? 'Ready' : 'Unknown')}</AppText>
     {document.responseState && document.responseState !== 'matched' ? <AppText variant="small">{uiLabel(document.responseState === 'ambiguous' ? 'Ambiguous'
-      : document.responseState === 'index_only' ? 'Index only' : 'Source review required')}</AppText> : null}
+      : document.responseState === 'index_only' ? 'Index only' : 'Unverified')}</AppText> : null}
     {document.facts !== null ? <>
       <AppText variant="small">{uiJoin('Product facts', ' · ', uiCount(document.facts), ' · ', uiCount(record + 1), ' / ', uiCount(document.records))}</AppText>
       <Row style={{ gap: 8, flexWrap: 'wrap' }}><Button title="First fact" disabled={record === 0} onPress={() => recordAt(0)} variant="secondary" />
@@ -73,7 +73,7 @@ export function ProductEvidenceDisclosure({ productKey }: { productKey: string }
     : state.status === 'pending' ? 'Pending' : state.status === 'disabled' ? 'Disabled' : producerFailure ? 'Failed'
     : state.status === 'unavailable' ? 'Unavailable' : state.status === 'paused' ? 'Paused'
     : state.status === 'unknown' ? state.routeState === 'ambiguous' ? 'Ambiguous' : state.routeState === 'index_only' ? 'Index only'
-    : state.routeState === 'projection_unverified' ? 'Source review required' : 'Unknown' : 'Unverified';
+    : state.routeState === 'projection_unverified' ? 'Unverified' : 'Unknown' : 'Unverified';
   return <><ProductEvidenceCriteria productKeys={[productKey]} /><Disclosure title="Source evidence" open={open} onToggle={() => setOpen(value => !value)}>
     <View style={{ gap: 12 }}>
       <Row style={{ gap: 8 }}><Button title="Product facts" variant="secondary" disabled={lane === 'product_evidence_v1'} onPress={() => setLane('product_evidence_v1')} />
