@@ -134,8 +134,8 @@ describe('bank detail profile-filtered history', () => {
   afterEach(() => installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() }));
 
   it('opens only the exact rendered lender tier and section, with the observed identity retained', () => {
-    const alternate = { ...row, rate_index: 998, rate: '0.01', comparison_rate: '0.01' };
-    const visible = { ...row, rate_index: 999, rate: '0.06', comparison_rate: '0.06' };
+    const alternate = { ...row, rate_index: 999, rate: '0.01', comparison_rate: '0.01', public_programme_id: 'basic' };
+    const visible = { ...row, rate_index: 999, rate: '0.06', comparison_rate: '0.06', public_programme_id: 'premium' };
     mockState.core = { ...core, sections: { ...core.sections,
       Savings: { ...core.sections.Savings, rates: [alternate, visible] } } };
     const tree = mount();
@@ -145,17 +145,17 @@ describe('bank detail profile-filtered history', () => {
       const open = surface.actions!['lender.product.first'];
       expect(open({ productKey: row.product_key, rateIndex: 997, section: 'Savings' }))
         .toEqual({ unavailableReason: 'The exact planned lender product is not rendered' });
-      expect(open({ productKey: row.product_key, rateIndex: visible.rate_index, section: 'Mortgage' }))
+      expect(open({ productKey: row.product_key, rateIndex: visible.rate_index, section: 'Mortgage', programmeId: 'premium' }))
         .toEqual({ unavailableReason: 'The exact planned lender product is not rendered' });
       expect(openProduct).not.toHaveBeenCalled();
-      expect(open({ productKey: row.product_key, rateIndex: visible.rate_index, section: 'Savings' }))
+      expect(open({ productKey: row.product_key, rateIndex: visible.rate_index, section: 'Savings', programmeId: 'premium' }))
         .toEqual({ expectedPath: `/product/${encodeURIComponent(row.product_key)}`,
           productKey: row.product_key, rateIndex: visible.rate_index, section: 'Savings' });
-      expect(openProduct).toHaveBeenNthCalledWith(1, row.product_key, visible.rate_index);
-      expect(open({ productKey: row.product_key, rateIndex: alternate.rate_index, section: 'Savings' }))
+      expect(openProduct).toHaveBeenNthCalledWith(1, row.product_key, visible.rate_index, 'premium');
+      expect(open({ productKey: row.product_key, rateIndex: alternate.rate_index, section: 'Savings', programmeId: 'basic' }))
         .toEqual({ expectedPath: `/product/${encodeURIComponent(row.product_key)}`,
           productKey: row.product_key, rateIndex: alternate.rate_index, section: 'Savings' });
-      expect(openProduct).toHaveBeenNthCalledWith(2, row.product_key, alternate.rate_index);
+      expect(openProduct).toHaveBeenNthCalledWith(2, row.product_key, alternate.rate_index, 'basic');
     } finally { act(() => tree.unmount()); }
   });
 

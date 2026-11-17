@@ -567,9 +567,11 @@ export default function BankDetail() {
         const productKey = auditActionString(args, 'productKey');
         const rateIndex = auditActionInteger(args, 'rateIndex');
         const plannedSection = auditActionString(args, 'section');
+        const programmeId = auditActionString(args, 'programmeId');
         const exact = productItems.find(({ row, section }) => row.product_key === productKey &&
           (plannedSection == null || section === plannedSection) &&
-          (rateIndex == null || row.rate_index === rateIndex));
+          (rateIndex == null || row.rate_index === rateIndex) &&
+          (row.public_programme_id || null) === programmeId);
         if (!exact) return { unavailableReason: 'The exact planned lender product is not rendered' };
         if (exact.row.public_programme_id) openProduct(exact.row.product_key, exact.row.rate_index, exact.row.public_programme_id);
         else openProduct(exact.row.product_key, exact.row.rate_index);
