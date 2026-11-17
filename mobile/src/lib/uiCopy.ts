@@ -13,6 +13,7 @@ import { LENDER_ARTWORK_TERMS, OPTIONAL_DIAGNOSTICS_TERMS } from './privacyPolic
 import { Decimal } from './productTermsEngine/decimal';
 import type { CustomerQuestionBinding } from './customerQuestionBinding';
 import type { BackgroundWorkSnapshot } from './backgroundPayloadWork';
+import { mortgageMoneyDigits } from '../data/mortgageMoneyInput';
 import type { MortgageComparisonInputs } from '../data/mortgageComparison';
 import type { PublicProduct, PublicReferenceRate, PublicCoverage, PublicEvidence } from '../data/publicRateModel';
 import type { CurrentProductOption } from '../data/scenarioCatalog';
@@ -161,7 +162,7 @@ export const UI_LABELS = [
   'View ASX market expectations', 'Withdrawal', 'Y-axis', 'Years remaining',
   'Your current balance', 'Your entered rate difference', 'Your entered rates', 'Your rate scenario',
   'Third-party notices', 'Data sources', 'Lender artwork', 'Optional diagnostics', 'Licence notice',
-  ' → ', ' (', 'Up to', 'fixed', 'yrs', 'm', 'k', 'today', 'yesterday', 'days ago',
+  ' → ', ' (', 'Up to', 'fixed', 'yrs', 'm', 'k', 'Thousands of dollars', 'today', 'yesterday', 'days ago',
   'mo ago', 'yr ago', 'Connection', 'Sample data', 'Update overdue', 'Offset account',
   'Early / extra repayments', 'Redraw facility', 'Guarantor option', 'Cashback offer',
   'PayID', 'Unlimited transactions', 'Free transactions', 'Bill payment', 'Card access', 'Digital banking',
@@ -470,7 +471,9 @@ export function useReceiptImportInput() { return useInputController(); }
 export function useSetupKeyInput() { return useInputController(); }
 export function useProviderSearchInput() { return useInputController(); }
 export function uiRatesQuery(session: Pick<RatesSectionState, 'query'>): UiInputText { return inputText(session.query); }
-export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr' | 'fundsAvailable' | 'propertyValue'): UiInputText { return inputText(model[field] ?? ''); }
+export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr' | 'fundsAvailable' | 'propertyValue'): UiInputText {
+  return inputText(field === 'lvr' ? model.lvr : mortgageMoneyDigits(model[field] ?? ''));
+}
 export function uiPrivateOfferInput(model: Pick<MortgageInputs, 'confirmedOfferFacts' | 'provenance'>, field: 'purpose' | 'security' | 'repaymentType'): UiInputText {
   const value = model.confirmedOfferFacts[field] ?? '';
   return inputText(model.provenance === 'user_reported_bank_offer_and_statement' && value.length <= 2000 && !/[\r\n\t]/.test(value) ? value : '');
