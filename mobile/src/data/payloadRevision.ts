@@ -12,26 +12,28 @@ export interface PayloadRevisionHead {
 
 const SHA = /^[a-f0-9]{64}$/;
 
-export function revisionTag(date: string, revision: number): string {
-  return `app-payload-${date}-r${String(revision).padStart(6, '0')}`;
+export type PayloadRevisionChannel = 'legacy' | 'observed-population-v1';
+export function revisionTag(date: string, revision: number, channel: PayloadRevisionChannel = 'legacy'): string {
+  if (channel !== 'legacy' && channel !== 'observed-population-v1') throw new Error('Unknown payload channel');
+  return `${channel === 'legacy' ? 'app-payload-' : 'app-payload-observed-v1-'}${date}-r${String(revision).padStart(6, '0')}`;
 }
 
 /** A revision head grants access to one exact immutable GitHub manifest. */
-export function validateRevisionHead(value: unknown, date: string, repo: string): PayloadRevisionHead {
+export function validateRevisionHead(value: unknown, date: string, repo: string, channel: PayloadRevisionChannel = 'legacy'): PayloadRevisionHead {
   const head = value as PayloadRevisionHead | null;
   if (!isValidCalendarDate(date) || !head || !Number.isSafeInteger(head.revision) || head.revision < 1 ||
       typeof head.generation_id !== 'string' || !head.generation_id ||
       typeof head.manifest_sha256 !== 'string' || !SHA.test(head.manifest_sha256) ||
       typeof head.bundle_sha256 !== 'string' || !SHA.test(head.bundle_sha256) ||
-      head.manifest_url !== `https://github.com/${repo}/releases/download/${revisionTag(date, head.revision)}/manifest.json`) {
+      head.manifest_url !== `https://github.com/${repo}/releases/download/${revisionTag(date, head.revision, channel)}/manifest.json`) {
     throw new Error(`Invalid selected payload revision for ${date}`);
   }
   return head;
 }
 
-export function assertRevisionManifest(manifest: Manifest, head: PayloadRevisionHead, date: string, repo: string): void {
+export function assertRevisionManifest(manifest: Manifest, head: PayloadRevisionHead, date: string, repo: string, channel: PayloadRevisionChannel = 'legacy'): void {
   const revision = manifest.payload_revision;
-  if (manifest.run_date !== date || manifest.repo !== repo || manifest.tag !== revisionTag(date, head.revision) ||
+  if (manifest.run_date !== date || manifest.repo !== repo || manifest.tag !== revisionTag(date, head.revision, channel) ||
       revision?.schema_version !== 1 || revision.revision !== head.revision ||
       revision.generation_id !== head.generation_id || revision.bundle_sha256 !== head.bundle_sha256 ||
       !(revision.parent_revision === null || (Number.isSafeInteger(revision.parent_revision) &&

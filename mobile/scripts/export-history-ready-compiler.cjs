@@ -11,7 +11,17 @@ const sourceFiles = {};
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const readSource = file => fs.readFileSync(file, 'utf8').replaceAll('\r\n', '\n');
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-const idOf = file => path.relative(root, file).replaceAll('\\', '/');
+const dependencyRoot = fs.realpathSync(path.join(root, 'node_modules'));
+const inside = relative => relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+// Worktrees can share dependencies through a junction. Keep generated module IDs
+// identical to a physical node_modules install in CI, never a host-relative path.
+const idOf = file => {
+  const dependency = path.relative(dependencyRoot, file);
+  if (inside(dependency)) return `node_modules/${dependency.replaceAll('\\', '/')}`;
+  const source = path.relative(root, file);
+  if (!inside(source)) throw Error('Compiler dependency is outside the source or installed dependency roots');
+  return source.replaceAll('\\', '/');
+};
 function visit(file) {
   const id = idOf(file);
   if (modules.has(id)) return id;

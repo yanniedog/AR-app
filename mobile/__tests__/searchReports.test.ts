@@ -20,6 +20,29 @@ const profile = { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] };
 const capture = () => { installMandatoryEligibility(selectMandatoryEligibility(core, profile, details.products)); return captureFilteredSearchSnapshot({ core, manifest, details, profile, request, now: new Date('2026-09-16T02:00:00Z') }); };
 afterEach(() => installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null)));
 
+test('partial population remains explicit in captured PDF and workbook facts without changing matching counts', async () => {
+  const subset: CorePayload = { ...core, coverage: { population_assessment: {
+    schema_version: 1, scope: 'observed-products', observed_on: core.run_date, total_population: null, missing_product_count: null,
+    observed_counts: { products: rows.length, rates: rows.length, providers: 1 },
+    affected_providers: [{ provider_id: 'wise', provider_name: 'Wise', register_status: 'registered', membership_status: 'unknown',
+      reason: 'register-endpoint-conflict', missing_product_count: null, register_url: 'https://register.example/providers', endpoint_url: 'https://wise.example/products' }],
+  } } };
+  installMandatoryEligibility(selectMandatoryEligibility(subset, profile, details.products));
+  const snapshot = captureFilteredSearchSnapshot({ core: subset, manifest, details, profile, request });
+  expect(snapshot.rows).toHaveLength(60);
+  const tables = searchReportTables(snapshot);
+  for (const name of ['Summary', 'Coverage']) {
+    const facts = tables.find(s => s.name === name)!.rows;
+    expect(facts).toContainEqual(['Total population', 'Unknown', 'Unknown', '']);
+    expect(facts).toContainEqual(['Missing products', 'Unknown', 'Unknown', '']);
+    expect(facts).toContainEqual(['Coverage', 'Known', 'Partial', '']);
+  }
+  const html = await searchReportHtml(snapshot, () => undefined);
+  expect(html).toContain('Wise'); expect(html).toContain('Observed products'); expect(html).toContain('Total population');
+  const workbook = unzipSync(await writeReportWorkbook(tables));
+  expect(Object.values(workbook).map(value => strFromU8(value)).join(' ')).toContain('Missing products');
+});
+
 test('same full result set as UI, frozen source copies, exact decimals and explicit older date', async () => {
   const snapshot = capture();
   const ui = filterRows(sortRows(rows, request.sort, request.section, request.depositMetric, request.mortgageMetric), request.filters, details.products, null, request.section);

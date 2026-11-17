@@ -2,6 +2,7 @@ import type { CorePayload, RateRow, Ribbon, RibbonProvider, RibbonStats, Section
 import { attachBankRateHistoryTiers } from './bankRateHistoryWire';
 import { withBundledBankRateHistory } from './bundledBankRateHistory';
 import { jsonContentHash } from '../lib/jsonContentHash';
+import { validatePopulationAssessment } from './populationAssessment';
 
 interface CoreContents { digest: string; history: CorePayload['bank_rate_history_catalogue']; detachedHistory: boolean }
 const coreContents = new WeakMap<CoreIntegrityContext, CoreContents>();
@@ -209,6 +210,7 @@ export function normalizeCoreWithIntegrity(
   core: CorePayload,
   provenance: CoreIntegrityProvenance = {},
 ): { core: CorePayload; integrity: CoreIntegrityContext } {
+  validatePopulationAssessment(core);
   core = attachBankRateHistoryTiers(withBundledBankRateHistory(core, provenance.coreSha256));
   const savings = core?.sections?.Savings;
   const contaminated = savings && Array.isArray(savings.rates)

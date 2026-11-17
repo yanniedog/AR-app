@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "fixture_archive_sha256": "ed218cc09de20ea09b5950c5d890d58093eb0c5949cf355003829f2533c07bd1",
+  "fixture_entries_sha256": {
+    "core-2026-11-03-e0d8bee49149.json.gz": "e0d8bee491492ccdb3aead63bf70c2d0df0791efec1d43f1507434be3e1a953d",
+    "dates-index.json": "5244f2a48e687eea94ec984bce815472be7e91109eedf6818011c9ceb68a86a5",
+    "details-2026-11-03-f240b8fc7401.json.gz": "f240b8fc7401a96e9dd057706a62644c4c726d605ff815babaedc91060c8bc74",
+    "manifest.json": "12179b17c754334bef04afb17c4c7a160164206aea619fab8ecf752e14b84192",
+    "UNACCEPTED.json": "6d0023b1498e831795198933278a16e2a9a7b0276f0d0a20a2a85e0e9bcb7cde"
+  },
+  "before_fix": {
+    "consumer_commit": "8ddbeba5ad55ec1f2c777fceaf7cca311ca36918",
+    "error": "Invalid observed population assessment"
+  },
+  "observed_at_original": "2026-11-02T14:00:00Z",
+  "observed_on": "2026-11-03",
+  "observation_timezone": "Australia/Hobart",
+  "core_input_unchanged": true,
+  "normalized_counts": {
+    "rates": 16117
+  },
+  "normalization_quarantines": {
+    "bankHistoryPairs": [],
+    "rowsByReason": {
+      "explicit_term_deposit_in_savings": 0
+    },
+    "countImpacts": {
+      "rates": 0,
+      "products": 0,
+      "providers": 0
+    }
+  },
+  "live_status": "partial",
+  "cached_status": "partial",
+  "disclosure_facts": [
+    {
+      "kind": "source",
+      "value": "remote"
+    },
+    {
+      "kind": "observed",
+      "state": "known",
+      "day": "2026-11-03"
+    },
+    {
+      "kind": "coverage",
+      "value": "partial"
+    },
+    {
+      "kind": "connection",
+      "value": "online"
+    },
+    {
+      "kind": "population",
+      "assessment": {
+        "schema_version": 1,
+        "scope": "observed-products",
+        "observed_on": "2026-11-03",
+        "total_population": null,
+        "missing_product_count": null,
+        "observed_counts": {
+          "products": 2795,
+          "rates": 16117,
+          "providers": 103
+        },
+        "affected_providers": [
+          {
+            "provider_id": "Wise",
+            "provider_name": "Wise",
+            "register_status": "registered",
+            "membership_status": "unknown",
+            "reason": "register-endpoint-conflict",
+            "missing_product_count": null,
+            "register_url": "https://api.cdr.gov.au/cdr-register/v1/all/data-holders/brands/summary",
+            "endpoint_url": "https://au-cdrbanking-pub.wise.com/cds-au/v1/banking/products"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "population-scope"
+    },
+    {
+      "kind": "missing-products"
+    },
+    {
+      "kind": "published-products",
+      "count": 2795
+    },
+    {
+      "kind": "published-rates",
+      "count": 16117
+    },
+    {
+      "kind": "published-providers",
+      "count": 103
+    },
+    {
+      "kind": "registered-provider",
+      "provider": "Wise"
+    },
+    {
+      "kind": "providers-attempted",
+      "state": "known",
+      "count": 116
+    },
+    {
+      "kind": "providers-succeeded",
+      "state": "known",
+      "count": 115
+    },
+    {
+      "kind": "providers-partial",
+      "state": "known",
+      "count": 11
+    },
+    {
+      "kind": "providers-failed",
+      "state": "known",
+      "count": 1
+    },
+    {
+      "kind": "provider-issue",
+      "ordinal": 0,
+      "provider": "Aussie Home Loans",
+      "state": "unknown"
+    },
+    {
+      "kind": "provider-issue",
+      "ordinal": 1,
+      "provider": "Bank of Melbourne",
+      "state": "unknown"
+    },
+    {
+      "kind": "provider-issue",
+      "ordinal": 2,
+      "provider": "Bank of Queensland Limited",
+      "state": "unknown"
+    },
+    {
+      "kind": "provider-issue",
+      "ordinal": 3,
+      "provider": "Bank of Sydney",
+      "state": "unknown"
+    },
+    {
+      "kind": "provider-issue",
+      "ordinal": 4,
+      "provider": "BankSA",
+      "state": "unknown"
+    },
+    {
+      "kind": "provider-issue",
+      "ordinal": 5,
+      "provider": "CommFCU",
+      "state": "unknown"
+    },
+    {
+      "kind": "provider-issue",
+      "ordinal": 6,
+      "provider": "DDH Graham",
+      "state": "unknown"
+    },
+    {
+      "kind": "provider-issue",
+      "ordinal": 7,
+      "provider": "ME Bank - ME Go",
+      "state": "unknown"
+    },
+    {
+      "kind": "provider-issue",
+      "ordinal": 8,
+      "provider": "Thriday",
+      "state": "unknown"
+    },
+    {
+      "kind": "provider-issue",
+      "ordinal": 9,
+      "provider": "Tyro Banking",
+      "state": "unknown"
+    },
+    {
+      "kind": "provider-issue",
+      "ordinal": 10,
+      "provider": "Westpac",
+      "state": "unknown"
+    },
+    {
+      "kind": "provider-issue",
+      "ordinal": 11,
+      "provider": "Wise",
+      "state": "unknown"
+    },
+    {
+      "kind": "update-deadline",
+      "state": "unknown"
+    }
+  ],
+  "candidate_verification": {
+    "schema_version": 1,
+    "listed_asset_bytes_verified": true,
+    "publication_verified": false,
+    "detached_capabilities_verified": false,
+    "service_isolation_verified": false,
+    "runtime_verified": false,
+    "channel": "observed-population-v1",
+    "run_date": "2026-11-03",
+    "tag": "app-payload-observed-v1-2026-11-03-r000001",
+    "manifest_sha256": "12179b17c754334bef04afb17c4c7a160164206aea619fab8ecf752e14b84192",
+    "bundle_sha256": "e81e2e7bdfe99e054ec4636ea8643918d63f3557d9d2b96196551a850873840f",
+    "cache_key": "ar-rates:observed-population-v1/app-payload-observed-v1-2026-11-03-r000001/12179b17c754334bef04afb17c4c7a160164206aea619fab8ecf752e14b84192",
+    "population_scope": "observed-products",
+    "total_population": null,
+    "missing_product_count": null,
+    "observed_counts": {
+      "products": 2795,
+      "rates": 16117,
+      "providers": 103
+    },
+    "affected_provider_ids": [
+      "Wise"
+    ],
+    "assets": [
+      {
+        "key": "core",
+        "name": "core-2026-11-03-e0d8bee49149.json.gz",
+        "bytes": 336859,
+        "sha256": "e0d8bee491492ccdb3aead63bf70c2d0df0791efec1d43f1507434be3e1a953d",
+        "candidate_transport_url": "https://ar-app-data.jkokavec.workers.dev/v1/capabilities/observed-population-v1/release/app-payload-observed-v1-2026-11-03-r000001/core-2026-11-03-e0d8bee49149.json.gz"
+      },
+      {
+        "key": "details",
+        "name": "details-2026-11-03-f240b8fc7401.json.gz",
+        "bytes": 2657094,
+        "sha256": "f240b8fc7401a96e9dd057706a62644c4c726d605ff815babaedc91060c8bc74",
+        "candidate_transport_url": "https://ar-app-data.jkokavec.workers.dev/v1/capabilities/observed-population-v1/release/app-payload-observed-v1-2026-11-03-r000001/details-2026-11-03-f240b8fc7401.json.gz"
+      }
+    ]
+  }
+}

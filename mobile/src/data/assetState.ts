@@ -5,6 +5,8 @@
  * freshly verified in-memory value exists. Callers must inspect `status`
  * before making freshness or completeness claims.
  */
+import { parsePopulationAssessment } from './populationAssessment';
+
 export type AssetState<T> =
   | { status: 'loading'; data: T | null }
   | { status: 'live'; data: T }
@@ -33,12 +35,17 @@ export function replaceAssetData<T>(state: AssetState<T>, data: T): AssetState<T
 export function liveAssetStateForProviderCoverage<T>(
   data: T,
   coverage: {
+    population_assessment?: import('./populationAssessment').PopulationAssessmentV1;
     counts?: {
       providers_partial?: number;
       providers_failed?: number;
     };
   } | null | undefined,
 ): AssetState<T> {
+  if (coverage?.population_assessment !== undefined) {
+    parsePopulationAssessment(coverage.population_assessment);
+    return { status: 'partial', data, reason: 'Observed products only; total population and missing products unknown.' };
+  }
   const partial = coverage?.counts?.providers_partial ?? 0;
   const failed = coverage?.counts?.providers_failed ?? 0;
   if (partial + failed === 0) return { status: 'live', data };

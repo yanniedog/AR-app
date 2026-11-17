@@ -19,6 +19,8 @@ import type { CurrentProductOption } from '../data/scenarioCatalog';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
+  'Observed products', 'Total population', 'Missing products', 'Membership', 'Registered',
+  'Published products', 'Published rates', 'Published providers',
   'Recorded move', 'No recorded move', 'Filtered history', 'Quarantined history', 'Baseline unavailable', 'History gaps', 'No products',
   'Bank response coverage', 'Decision windows', 'Unknown changes', 'Unknown timing', 'Unverified first moves',
   'Metric evidence', 'Method', 'Numerator', 'Denominator', 'Sample size', 'Eligible', 'Missing evidence',

@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "verified_at_utc": "2026-11-03T00:09:35.295Z",
+  "consumer_runtime_commit": "f6fab1c89de7b2bacf2e75850386fdbde0dfd4f1",
+  "result": "PASS_PRIVATE_R2_DOMAIN_ADOPTION",
+  "candidate": {
+    "archive_sha256": "e7053a1e8901b111888423ff37b01b4fe07592bfc683af915dfe62848a958435",
+    "entries_unchanged": 5,
+    "entries": {
+      "core-2026-11-03-e0d8bee49149.json.gz": "e0d8bee491492ccdb3aead63bf70c2d0df0791efec1d43f1507434be3e1a953d",
+      "dates-index.json": "ed3a14dd5599c19ab9fa303c64034dfd258e89633ef58dc2f9cb7305509299b5",
+      "details-2026-11-03-f240b8fc7401.json.gz": "f240b8fc7401a96e9dd057706a62644c4c726d605ff815babaedc91060c8bc74",
+      "manifest.json": "1e171689f3e0a3492ed748ffcd41b31fe79c3f33c94051120190cf6aa8767281",
+      "UNACCEPTED.json": "0ca0736d2067e4ae50883b5ed10d57abdb8d1879d7191e3ffd07c0b56d332fc9"
+    }
+  },
+  "original": {
+    "archive_sha256": "ed218cc09de20ea09b5950c5d890d58093eb0c5949cf355003829f2533c07bd1",
+    "entries_unchanged": 5,
+    "entries": {
+      "UNACCEPTED.json": "6d0023b1498e831795198933278a16e2a9a7b0276f0d0a20a2a85e0e9bcb7cde",
+      "core-2026-11-03-e0d8bee49149.json.gz": "e0d8bee491492ccdb3aead63bf70c2d0df0791efec1d43f1507434be3e1a953d",
+      "dates-index.json": "5244f2a48e687eea94ec984bce815472be7e91109eedf6818011c9ceb68a86a5",
+      "details-2026-11-03-f240b8fc7401.json.gz": "f240b8fc7401a96e9dd057706a62644c4c726d605ff815babaedc91060c8bc74",
+      "manifest.json": "12179b17c754334bef04afb17c4c7a160164206aea619fab8ecf752e14b84192"
+    }
+  },
+  "financial_asset_bytes_identical_to_r1": true,
+  "verification": {
+    "schema_version": 1,
+    "listed_asset_bytes_verified": true,
+    "publication_verified": false,
+    "detached_capabilities_verified": false,
+    "service_isolation_verified": false,
+    "runtime_verified": false,
+    "channel": "observed-population-v1",
+    "run_date": "2026-11-03",
+    "tag": "app-payload-observed-v1-2026-11-03-r000002",
+    "manifest_sha256": "1e171689f3e0a3492ed748ffcd41b31fe79c3f33c94051120190cf6aa8767281",
+    "bundle_sha256": "47b7d45e94e53f6bb407675051f73119fa716a446d93f13069f2ad2df0ec5010",
+    "cache_key": "ar-rates:observed-population-v1/app-payload-observed-v1-2026-11-03-r000002/1e171689f3e0a3492ed748ffcd41b31fe79c3f33c94051120190cf6aa8767281",
+    "population_scope": "observed-products",
+    "total_population": null,
+    "missing_product_count": null,
+    "observed_counts": {
+      "products": 2795,
+      "rates": 16117,
+      "providers": 103
+    },
+    "affected_provider_ids": [
+      "Wise"
+    ],
+    "assets": [
+      {
+        "key": "core",
+        "name": "core-2026-11-03-e0d8bee49149.json.gz",
+        "bytes": 336859,
+        "sha256": "e0d8bee491492ccdb3aead63bf70c2d0df0791efec1d43f1507434be3e1a953d",
+        "candidate_transport_url": "https://ar-app-data.jkokavec.workers.dev/v1/capabilities/observed-population-v1/release/app-payload-observed-v1-2026-11-03-r000002/core-2026-11-03-e0d8bee49149.json.gz"
+      },
+      {
+        "key": "details",
+        "name": "details-2026-11-03-f240b8fc7401.json.gz",
+        "bytes": 2657094,
+        "sha256": "f240b8fc7401a96e9dd057706a62644c4c726d605ff815babaedc91060c8bc74",
+        "candidate_transport_url": "https://ar-app-data.jkokavec.workers.dev/v1/capabilities/observed-population-v1/release/app-payload-observed-v1-2026-11-03-r000002/details-2026-11-03-f240b8fc7401.json.gz"
+      }
+    ]
+  },
+  "generation_time": "2026-11-02T23:25:24.644291Z",
+  "schedule": {
+    "label": "01:00 Australia/Hobart daily",
+    "next_due_utc": "2026-11-03T14:00:00Z"
+  },
+  "observed_at": "2026-11-02T14:00:00Z",
+  "observed_on": "2026-11-03",
+  "focused_tests": {
+    "passed": 136,
+    "suites": 7,
+    "skipped": 0,
+    "private_r1_and_r2_tests_included": true
+  },
+  "tests": [
+    "exact core/details adoption and compressed-byte persistence",
+    "matching suitability and details hash identity",
+    "partial/unknown coverage facts and exact counts",
+    "calculator/profile/saved/navigation state preserved",
+    "fresh-owner offline restoration without transport",
+    "candidate audit contract and read-only live fixture audit",
+    "failed refresh retains visible edition and suitability",
+    "corrupted committed core rejected without store replacement",
+    "r1 missing metadata still rejected",
+    "all original and r2 archive entries remain unchanged"
+  ],
+  "injected_adapters": [
+    "local fixture transport",
+    "in-memory binary storage",
+    "fflate test codec; platform/legacy dependencies use existing Jest mocks"
+  ],
+  "source_modules_match_existing_hermes_compilation": true,
+  "native_acceptance_preparation": "Existing compiler receipt still binds unchanged runtime source. Private r1/r2 reproduction commands documented. No runtime or ADB probe repeated.",
+  "hosted_isolation_verified": false,
+  "android_runtime_verified": false,
+  "rendered_ui_verified": false,
+  "canonical_feed_changed": false,
+  "released": false,
+  "producer_push_attempted": false,
+  "pi_mutated": false
+}

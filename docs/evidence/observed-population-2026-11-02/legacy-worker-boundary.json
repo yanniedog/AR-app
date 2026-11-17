@@ -1,0 +1,33 @@
+{
+  "worker_sha256": "dd2d08e221a9e30afe6625951f63bb0e0f87e3993bc6cde4de2c6c80fcfb89fa",
+  "network_requests": 0,
+  "hosted_verified": false,
+  "results": [
+    {
+      "id": "legacy-versionless",
+      "accepted": true,
+      "tag": "app-payload-latest",
+      "cache_identity": "https://ar-app-data.jkokavec.workers.dev/v1/release/app-payload-latest/manifest.json"
+    },
+    {
+      "id": "legacy-version-header",
+      "accepted": true,
+      "tag": "app-payload-latest",
+      "cache_identity": "https://ar-app-data.jkokavec.workers.dev/v1/release/app-payload-latest/manifest.json"
+    },
+    {
+      "id": "legacy-capability-header",
+      "accepted": true,
+      "tag": "app-payload-latest",
+      "cache_identity": "https://ar-app-data.jkokavec.workers.dev/v1/release/app-payload-latest/manifest.json"
+    },
+    {
+      "id": "candidate-through-legacy",
+      "accepted": false
+    },
+    {
+      "id": "candidate-new-path-not-yet-supported",
+      "accepted": false
+    }
+  ]
+}

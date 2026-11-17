@@ -3,6 +3,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { bindCachedDetails, detailsCacheIdentity, verifiedDetailsSha } from './detailsIdentity';
 import { readDetailsCacheText } from './detailsCacheText';
+import { validatePopulationEdition } from './populationAssessment';
 import { Platform } from 'react-native';
 
 import type { CorePayload, DetailsPayload, Manifest, PayloadSource } from '../types';
@@ -424,9 +425,11 @@ export const cache = {
     const normalized = normalizeCoreWithIntegrity(b.core, {
       coreSha256: b.meta.coreSha,
     });
+    validatePopulationEdition(normalized.core, b.meta.manifest);
     if (sidecar && sidecar.coreSha === b.meta.coreSha &&
         (!(sidecar.manifest.payload_revision || b.meta.manifest.payload_revision) ||
           samePayloadIdentity(sidecar.manifest, b.meta.manifest))) {
+      validatePopulationEdition(normalized.core, sidecar.manifest);
       return { meta: sidecar, core: normalized.core, integrity: normalized.integrity };
     }
     return { ...b, meta: await recoverHistoryReceipt(b.meta), core: normalized.core, integrity: normalized.integrity };

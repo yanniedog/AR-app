@@ -36,6 +36,7 @@ import {
 import { SELF_UPDATE_ENABLED } from '../src/config';
 import { markPassiveAuditForegroundInteraction, registerPassiveAuditBackground, startPassiveAuditPreloading } from '../src/lib/passiveAudit';
 import { ScenarioRecoveryBanner } from '../src/components/ScenarioRecoveryBanner';
+import { PopulationCoverageBanner } from '../src/components/PopulationCoverageBanner';
 import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
 import { ErrorScreen } from '../src/components/ErrorScreen';
 import { TrustedExternalUrlProvider } from '../src/components/ExternalLinkConfirmation';
@@ -116,6 +117,7 @@ function RootNavigator() {
   const theme = useTheme();
   const status = useStore((s) => s.status);
   const core = useStore((s) => s.core);
+  const populationVisible = core?.coverage?.population_assessment !== undefined;
   const hydrated = useStore((s) => s.hydrated);
   const dataUnavailable = hydrated && status === 'error';
   const crashReportsEnabled = useStore((s) => s.prefs.crashReportsEnabled);
@@ -276,7 +278,8 @@ function RootNavigator() {
             <NavigationMenuProvider>
             <BreadcrumbRouteProbe hydrated={hydrated} enabled={breadcrumbsFitWidth(shellWidth)} onChange={setBreadcrumbRoute} />
             {breadcrumbVisible ? <AppBreadcrumbBar /> : null}
-            <NavigatorSafeArea topInsetConsumed={showUpdateBanner || breadcrumbVisible}>
+            <PopulationCoverageBanner core={core} topInsetConsumed={showUpdateBanner || breadcrumbVisible} />
+            <NavigatorSafeArea topInsetConsumed={showUpdateBanner || breadcrumbVisible || populationVisible}>
             <View style={{ flex: 1 }}>
               <Stack
                 screenOptions={{
@@ -293,7 +296,7 @@ function RootNavigator() {
                   ...androidHeader,
                   // Native Android toolbars force a window-level top inset in
                   // edge-to-edge mode. A JS header respects the consumed inset.
-                  header: showUpdateBanner || breadcrumbVisible
+                  header: showUpdateBanner || breadcrumbVisible || populationVisible
                     ? ({ options, route, back }) => (
                       <RouteFallbackHeader navigationOptions={options} back={back} core={core} routeName={route.name} />
                     )

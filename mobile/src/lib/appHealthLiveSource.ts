@@ -5,6 +5,7 @@ import { parseDatesIndex } from '../data/historyDaily';
 import { gunzipCooperatively } from '../data/payload';
 import { inflatePayloadOffThread } from '../data/payloadInflation';
 import { normalizeCoreWithIntegrity, sealCoreHistoryAsync } from '../data/sectionIntegrity';
+import { validatePopulationEdition } from '../data/populationAssessment';
 import { parseJsonHeavy, yieldToUi } from './yieldToUi';
 import type { CorePayload, DetailsPayload, Manifest, ManifestFile } from '../types';
 import type { AppHealthDataSnapshot, AppHealthSourceContract } from './appHealth';
@@ -162,6 +163,7 @@ export async function readLiveAppHealthSnapshot(options: {
   );
   const detailKeys = Object.keys(details.products ?? {});
   const manifest = manifestRaw as Manifest;
+  validatePopulationEdition(coreResult.core, manifest);
   const optionalAssets = Object.fromEntries(
     contract.optionalAssets.map((key) => [key, {
       state: files[key] ? 'not-requested' as const : 'missing' as const,

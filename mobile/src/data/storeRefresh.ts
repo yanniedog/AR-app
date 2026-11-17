@@ -1,4 +1,5 @@
 import { cache } from './cache';
+import { validatePopulationEdition } from './populationAssessment';
 import { prepareBankRateHistoryAfterPaint } from './storeBankRateHistory';
 import { parseHistoryDatesIndex } from './historyDatesIndex';
 import type { PayloadProgressSnapshot } from './downloadProgress';
@@ -452,17 +453,6 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               JSON.stringify(meta.manifest.bank_rate_history_ready) !== JSON.stringify(remote.bank_rate_history_ready));
           const historyIndexChanged = historyDatesIndex &&
             JSON.stringify(historyDatesIndex) !== JSON.stringify(meta.historyDatesIndex);
-          if (cachedOptionalChanged || historyIndexChanged) {
-            await cache.updateMeta({
-              coreSha: remote.files.core.sha256,
-              manifest: remote,
-              ...(historyDatesIndex ? { historyDatesIndex } : {}),
-            });
-            debugLog.info(
-              'store',
-              `refresh persisted assets and history selection onto cached manifest run_date=${remote.run_date}`,
-            );
-          }
           const liveMatches =
             samePayloadIdentity(live.manifest, remote) &&
             live.core?.run_date === remote.run_date &&
@@ -483,6 +473,12 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           }
           const bundle = liveMatches ? null : await cache.readBundle();
           if (liveMatches || bundle) {
+            validatePopulationEdition(liveMatches ? live.core! : bundle!.core, remote);
+            if (cachedOptionalChanged || historyIndexChanged) {
+              await cache.updateMeta({ coreSha: remote.files.core.sha256, manifest: remote,
+                ...(historyDatesIndex ? { historyDatesIndex } : {}) });
+              debugLog.info('store', `refresh persisted assets and history selection onto cached manifest run_date=${remote.run_date}`);
+            }
             const adoptingRevision = !!remote.payload_revision && !samePayloadIdentity(live.manifest, remote);
             if (adoptingRevision) closeSuitabilityGateUntilRebuild();
             if (bundle) {
@@ -573,6 +569,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           },
         );
         if (core.run_date !== remote.run_date) throw new Error('Core publication date mismatch');
+        validatePopulationEdition(core, remote);
         // Verify the entire immutable edition before advertising it. Staging
         // details by content hash keeps the installed offline edition usable if
         // any subsequent asset download or cache write fails.
