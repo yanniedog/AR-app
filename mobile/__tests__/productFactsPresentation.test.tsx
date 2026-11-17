@@ -37,18 +37,19 @@ test.each([
     <DetailGroup title="Eligibility" icon="person-outline" items={[
       { label: 'MIN_AGE', value: '18' },
       { label: 'RESIDENCY_STATUS', info: 'A source condition requiring interpretation.' },
+      { label: 'OTHER', info: 'A published requirement.' },
     ]} loading={false} />
   </ProductPageLinks>) as Tree; });
   try {
     act(() => tree.root.findAllByType('Disclosure').find(node => node.props.title === 'Eligibility')!.props.onToggle());
-    expect(bodyText(tree)).toEqual(['Minimum age', '18 years', 'Residency status', 'Unknown']);
+    expect(bodyText(tree)).toEqual(['Minimum age', '18 years', 'Residency status', 'Unknown', 'Other', 'Unknown']);
     if (!linked) {
       expect(() => tree.root.findByProps({ accessibilityRole: 'link' })).toThrow();
     } else {
-      for (const accessibilityLabel of ['Minimum age, 18 years', 'Residency status, Unknown']) {
+      for (const accessibilityLabel of ['Minimum age, 18 years', 'Residency status, Unknown', 'Other, Unknown']) {
         act(() => tree.root.findByProps({ accessibilityRole: 'link', accessibilityLabel }).props.onPress());
       }
-      expect(mockRequestExternalUrl.mock.calls).toEqual(Array(2).fill([
+      expect(mockRequestExternalUrl.mock.calls).toEqual(Array(3).fill([
         { url: overview, purpose: 'lender_source', label: 'Product' },
       ]));
     }
@@ -97,6 +98,31 @@ test.each([undefined, []])('normalized fee-only payload preserves both variants 
     expect(bodyText(tree)).toContain('$0 · Conditions: Unverified');
     expect(bodyText(tree)).not.toContain('Source fee-2');
     expect(bodyText(tree)).not.toContain('With package');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('linked published facts preserve fee caps, discounts, tier and conditions in the accessible labels', () => {
+  let tree!: Tree;
+  act(() => {
+    tree = TestRenderer.create(<ProductPageLinks overview="https://www.bankwest.com.au/savings-accounts/high-interest">
+      <DetailGroup title="Fees" icon="cash-outline" loading={false} items={[{
+        label: 'ANNUAL_FEE', amount: 0, info: 'With package', feeCap: 25, feeCapPeriod: 'P1Y',
+        discounts: [{ amount: 5, eligibility: [{ additionalInfo: 'With bundle' }] }],
+      }]} />
+      <ProductFacts productDetails={{ facts: [{ ...facts[2], appliesTo: ['OWNER_OCCUPIED'] }] }} />
+    </ProductPageLinks>) as Tree;
+  });
+  try {
+    act(() => tree.root.findAllByType('Disclosure').find(node => node.props.title === 'Fees')!.props.onToggle());
+    act(() => tree.root.findByProps({ title: 'Product facts' }).props.onToggle());
+    expect(tree.root.findByProps({
+      accessibilityRole: 'link',
+      accessibilityLabel: 'ANNUAL_FEE, $0 · Conditions: Unverified, Fee cap: $25 · per year, Discount: $5 · Conditions: Unverified',
+    })).toBeDefined();
+    expect(tree.root.findByProps({
+      accessibilityRole: 'link',
+      accessibilityLabel: 'ANNUAL_FEE, $0 · Conditions: Unverified, Tier: Owner occupied',
+    })).toBeDefined();
   } finally { act(() => tree.unmount()); }
 });
 

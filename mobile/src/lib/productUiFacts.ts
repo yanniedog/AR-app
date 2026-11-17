@@ -142,7 +142,7 @@ function residencyValue(item: DetailItem): UiText | null {
   }
 }
 export function uiDetailItem(item: DetailItem, index: number, group: 'Fees' | 'Eligibility' | 'Features' | 'Constraints'): ProductPresentationFact {
-  const codes: Readonly<Record<string, UiLabel>> = { MIN_AGE: 'Minimum age', MAX_AGE: 'Maximum age', MIN_LIMIT: 'Minimum limit', MAX_LIMIT: 'Maximum limit', MIN_BALANCE: 'Minimum balance', MAX_BALANCE: 'Maximum balance' };
+  const codes: Readonly<Record<string, UiLabel>> = { MIN_AGE: 'Minimum age', MAX_AGE: 'Maximum age', MIN_LIMIT: 'Minimum limit', MAX_LIMIT: 'Maximum limit', MIN_BALANCE: 'Minimum balance', MAX_BALANCE: 'Maximum balance', OTHER: 'Other' };
   const names: Readonly<Record<string, UiLabel>> = { 'minimum age': 'Minimum age', 'maximum age': 'Maximum age', 'annual fee': 'Annual fee', 'monthly fee': 'Monthly fee' };
   const controlled = codes[item.label ?? ''] ?? names[(item.name ?? '').toLowerCase()];
   const category = controlled ? uiLabel(controlled) : humanizeEnum(item.label);

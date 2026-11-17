@@ -40,15 +40,23 @@ function PublishedFacts({ facts, fees }: { facts: readonly ProductPresentationFa
   return <View style={{ gap: 10 }}>{facts.map((fact, index) => {
     const fee = fees?.[index], cap = fee ? uiFeeCap(fee) : null;
     const value = uiProductFactValue(fact);
-    return <ProductPageLink key={`${fact.reference}:${index}`} label={uiJoin(fact.label, ', ', value)}>
+    const tier = fact.scope.length
+      ? uiJoin('Tier', ': ', ...fact.scope.flatMap((scope, i) => i ? [uiLabel(' · '), scope] : [scope]))
+      : null;
+    const discounts = fee?.discounts?.map(uiFeeDiscount) ?? [];
+    const label = uiJoin(fact.label, ', ', value,
+      tier ? uiJoin(', ', tier) : null,
+      cap ? uiJoin(', ', cap) : null,
+      ...discounts.map(discount => uiJoin(', ', discount)));
+    return <ProductPageLink key={`${fact.reference}:${index}`} label={label}>
       <View style={{ flex: 1, gap: 4 }}>
         <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <AppText variant="small" weight="600" style={{ flex: 1 }}>{fact.label}</AppText>
           <AppText variant="small" color="textMuted" style={{ flex: 1, textAlign: 'right' }}>{value}</AppText>
         </Row>
-        {fact.scope.length ? <AppText variant="tiny" color="textMuted">{uiJoin('Tier', ': ', ...fact.scope.flatMap((scope, i) => i ? [uiLabel(' · '), scope] : [scope]))}</AppText> : null}
+        {tier ? <AppText variant="tiny" color="textMuted">{tier}</AppText> : null}
         {cap ? <AppText variant="tiny">{cap}</AppText> : null}
-        {fee?.discounts?.map((discount, d) => <AppText key={d} variant="tiny">{uiFeeDiscount(discount)}</AppText>)}
+        {discounts.map((discount, d) => <AppText key={d} variant="tiny">{discount}</AppText>)}
       </View>
     </ProductPageLink>;
   })}</View>;
