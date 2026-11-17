@@ -83,6 +83,17 @@ describe('deidentified diagnostics privacy boundary', () => {
     }
   });
 
+  it('exports maximum coverage gaps using closed asset identifiers', () => {
+    const check: AuditCheck = { id: 'maximum-coverage-profile', label: 'Coverage', kind: 'data', status: 'skipped',
+      durationMs: 10, metrics: { localCacheOnly: true, maximumSafeFeaturesEnabled: true, requiredAssets: 8,
+        availableAssets: 6, missingAssets: 'bankInsights,productHistory' } };
+    const output = () => buildDeidentifiedPerformanceAudit(reportFixture([check])).checks[0].metrics;
+    expect(output()).toMatchObject({ localCacheOnly: true, maximumSafeFeaturesEnabled: true, requiredAssets: 8,
+      availableAssets: 6, missingAssets: 'bankInsights,productHistory' });
+    check.metrics.missingAssets = 'bankInsights,private-provider';
+    expect(output()).not.toHaveProperty('missingAssets');
+  });
+
   it('preserves observed zero progress and empty catalogue counts when no measurement ran', () => {
     const failed: AuditCheck = { id: 'fatal-1', label: 'Private label', kind: 'runtime', status: 'fail', durationMs: null,
       metrics: { executionAttempted: false, completedBeforeFailure: 0, plannedChecks: 355,

@@ -1033,7 +1033,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 0, semanticActionId: 'moves.open' },
     { depth: 1, semanticActionId: 'moves.decision.previous', readiness: ['rba-calendar'], stateImpact: 'local-only' },
     { depth: 1, semanticActionId: 'moves.section.next', stateImpact: 'local-only' },
-    { depth: 2, semanticActionId: 'moves.response-chart.provider.next', stateImpact: 'local-only' },
+    { depth: 2, semanticActionId: 'moves.bank-rates.open', expectedPath: '/bank-rates', expectedSurface: 'bank-rates.dashboard', readiness: ['graphics'], stateImpact: 'local-only' },
   ]);
 
   scenario(templates, 'route.rba', {

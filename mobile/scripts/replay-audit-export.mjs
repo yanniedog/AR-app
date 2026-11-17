@@ -29,20 +29,38 @@ const gapCounts = Object.create(null);
 for (const item of completion.gapPositions) {
   gapCounts[item.reason] = (gapCounts[item.reason] ?? 0) + 1;
 }
-const independentlyFailed = [...checks, ...healthChecks].filter(item => item.status === 'fail').length;
+const populations = { performance: checks, health: healthChecks };
+const independentlyFailed = Object.entries(populations).flatMap(([source, records]) =>
+  records.flatMap((item, index) => item.status === 'fail' ? [`${source}:${index + 1}`] : []));
+const failureKeys = new Set(failures.map(({ source, position }) => `${source}:${position}`));
+for (const entry of [...failures, ...completion.gapPositions]) {
+  const record = Object.hasOwn(populations, entry.source) && Number.isSafeInteger(entry.position)
+    ? populations[entry.source][entry.position - 1] : undefined;
+  const checkId = entry.source === 'health' ? record?.code : record?.id;
+  if (!record || (entry.checkId != null && checkId != null && entry.checkId !== checkId)) {
+    throw new Error('Diagnostic position does not match a recorded check');
+  }
+}
 if (completion.performanceCheckCount !== performance || completion.healthCheckCount !== health
-  || failures.length !== independentlyFailed || envelope.audit && (envelope.audit.failureCount !== failures.length
+  || failures.length !== failureKeys.size || failureKeys.size !== independentlyFailed.length
+  || independentlyFailed.some(key => !failureKeys.has(key)) || envelope.audit && (envelope.audit.failureCount !== failures.length
     || envelope.audit.timingFailureCount !== timings)) {
   throw new Error('Completion, envelope, and recorded checks disagree');
 }
-const exceptions = checks.flatMap(({ id, kind, status }, index) => status === 'pass' ? [] : [{ id, kind, status, position: index + 1 }]);
+const exceptionGroups = new Map();
+const exceptions = checks.flatMap(({ id, kind, status, failureCode, diagnostic }, index) => {
+  if (status === 'pass') return [];
+  const key = [kind, status, failureCode ?? 'unclassified'].join(' / ');
+  exceptionGroups.set(key, (exceptionGroups.get(key) ?? 0) + 1);
+  return [{ id, kind, status, failureCode, stage: diagnostic?.stage ?? null, position: index + 1 }];
+});
 process.stdout.write(JSON.stringify({
   auditId: completion.auditId,
   app: report.app,
   performance, health, failures: failures.length, timings,
   plannedPerformanceChecks: diagnostics.plannedChecks,
   wallClockMs: diagnostics.wallClockMs,
-  gapCounts, gaps: completion.gaps,
+  gapCounts, gaps: completion.gaps, exceptionCounts: Object.fromEntries(exceptionGroups),
   failurePositions: failures,
   gapPositions: completion.gapPositions,
   nonPassingPerformanceChecks: exceptions,

@@ -48,7 +48,7 @@ export interface AuditMetricEvidence {
   contributors: number[];
   distribution?: AuditMetricDistribution;
   outcomes?: { success: number; failure: number; indeterminate: number;
-    withinTimingLimits: number; timingFailures: number; warnings: number };
+    unconfirmedTimeouts?: number; withinTimingLimits: number; timingFailures: number; warnings: number };
   uncertainty: { interval: null; reason: 'deterministic-inventory' | 'correlated-observations' };
 }
 export interface AuditMetricAnalysis {
@@ -193,6 +193,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   const actionRefs = actions.flatMap(check => [perf(check, 'actionInvoked'), perf(check, 'actionCompleted'), perf(check, 'nonTimingFailure'),
     perf(check, 'readinessReady', check.diagnostic?.readiness?.ready), perf(check, 'completionGap', gaps.has(check.id)),
     perf(check, 'statusPass', check.status === 'pass'), perf(check, 'statusFail', check.status === 'fail'),
+    perf(check, 'stepLimitExceeded', check.metrics.stepLimitExceeded === true),
     perf(check, 'eventLoopMeasurementAvailable'), perf(check, 'frameMeasurementAvailable'), perf(check, 'forwardWorkMs')]);
   for (const metric of ['automatedTaskSuccessPercent', 'automatedTaskFailurePercent'] as const) {
     ratio(metric, metric === 'automatedTaskSuccessPercent' ? success.length : failure.length, actions.length,

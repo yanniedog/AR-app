@@ -73,8 +73,11 @@ export function auditTaskOutcomePopulation(report: PerformanceAuditReport,
     && check.metrics.eventLoopMeasurementAvailable === true && check.metrics.frameMeasurementAvailable === true
     && measuredAuditValue(check.metrics.forwardWorkMs) !== null).length;
   const timingFailures = success.filter(check => check.status === 'fail').length;
+  const resolved = new Set([...success, ...failure]);
+  const unconfirmedTimeouts = actions.filter(check => !resolved.has(check)
+    && (check.metrics.stepLimitExceeded === true)).length;
   return { actions, success, failure, outcomes: { success: success.length, failure: failure.length,
-    indeterminate: actions.length - success.length - failure.length, withinTimingLimits, timingFailures,
+    indeterminate: actions.length - success.length - failure.length, unconfirmedTimeouts, withinTimingLimits, timingFailures,
     warnings: success.length - withinTimingLimits - timingFailures } };
 }
 

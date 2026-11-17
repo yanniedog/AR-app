@@ -57,9 +57,10 @@ test('a rejected URL and failed HEAD do not verify a destination', () => {
 
 test('HTTP pass without URL approval is unresolved and rejected responses are not HTTP restrictions', () => {
   expect(auditHttpCheckSummary([
-    entry('external-link-inventory', { uniqueDestinations: 3 }),
+    entry('external-link-inventory', { uniqueDestinations: 4 }),
     entry('external-link-1', { httpAttempted: true, httpReachability: 'pass' }),
     entry('external-link-2', { httpAttempted: true, httpReachability: 'fail', httpIssue: 'response-rejected' }),
     entry('external-link-3', { httpAttempted: true, httpReachability: 'unknown', httpIssue: 'restricted' }),
-  ])).toMatchObject({ attempted: 3, verified: 0, failed: 1, unresolved: 2, restricted: 1 });
+    entry('external-link-4', { httpAttempted: true, httpReachability: 'unknown', httpIssue: 'redirect-unverified' }),
+  ])).toMatchObject({ attempted: 4, verified: 0, failed: 1, unresolved: 3, restricted: 1, redirects: 1 });
 });

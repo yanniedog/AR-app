@@ -12,6 +12,7 @@ import { buildAuditAppCoverage } from './auditAppCoverage';
 import { measureAuditEvidence } from './auditEvidenceCapacity';
 
 import { PUBLIC_AUDIT_METRIC_FIELDS as METRIC_ALLOWLIST } from './auditDiagnosticFields';
+import { MAXIMUM_AUDIT_ASSETS } from './performanceAuditProfile';
 
 const FIXED_CHECK_IDS = new Set([
   ...PERFORMANCE_AUDIT_SETUP_CHECK_IDS,
@@ -85,6 +86,22 @@ const PUBLIC_METRIC_ENUMS: Record<string, ReadonlySet<string>> = {
 function allowlistedMetrics(check: AuditCheck): Record<string, string | number | boolean | null> {
   const metrics = check.metrics;
   const result: Record<string, string | number | boolean | null> = {};
+  if (check.id === 'maximum-coverage-profile') {
+    const missing = typeof metrics.missingAssets === 'string' ? metrics.missingAssets.split(',') : null;
+    if (missing?.length && new Set(missing).size === missing.length
+      && missing.every(name => (MAXIMUM_AUDIT_ASSETS as readonly string[]).includes(name))) {
+      result.missingAssets = missing.join(',');
+    } else if (metrics.missingAssets === null) {
+      result.missingAssets = null;
+    }
+    for (const field of ['localCacheOnly', 'bankInsightsPreparationAttempted', 'bankInsightsCacheOnly', 'maximumSafeFeaturesEnabled']) {
+      if (typeof metrics[field] === 'boolean') result[field] = metrics[field];
+    }
+    for (const field of ['requiredAssets', 'availableAssets']) {
+      const count = metrics[field];
+      if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 && count <= MAXIMUM_AUDIT_ASSETS.length) result[field] = count;
+    }
+  }
   for (const [key, value] of Object.entries(metrics)) {
     if (!METRIC_ALLOWLIST.has(key)) continue;
     if (PUBLIC_METRIC_ENUMS[key]) {

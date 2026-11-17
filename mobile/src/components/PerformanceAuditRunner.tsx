@@ -80,6 +80,7 @@ import {
   type DeepAuditStep,
 } from '../lib/performanceAuditPlan';
 import {
+  MAXIMUM_AUDIT_ASSETS,
   MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
   maximumPerformanceAuditPrefs,
   maximumPerformanceAuditProfileWasEnabled,
@@ -1641,9 +1642,7 @@ async function runMaximumCoverageProfileCheck(
     rbaCalendar: state.rbaCalendar != null,
     productHistory: state.productHistory != null,
   };
-  const missingAssets = Object.entries(requiredAssets)
-    .filter(([, available]) => !available)
-    .map(([name]) => name);
+  const missingAssets = MAXIMUM_AUDIT_ASSETS.filter(name => !requiredAssets[name]);
   const dataErrors = [
     state.historyBanksError,
     state.bankInsightsError,
@@ -1661,7 +1660,8 @@ async function runMaximumCoverageProfileCheck(
     state.prefs.rateIntelligencePro &&
     state.prefs.depositRankMetric === 'max' &&
     state.prefs.mortgageRateMetric === 'comparison';
-  const assetsUnavailableWithoutPreparation = missingAssets.length > 0 && errors.length === 0;
+  const assetsUnavailableWithoutPreparation = maximumSafeFeaturesEnabled && requiredAssets.core
+    && missingAssets.length > 0 && errors.length === 0;
   const ok = maximumSafeFeaturesEnabled && missingAssets.length === 0 && errors.length === 0;
   const responsiveness = monitor.metricsSince(responsiveAt);
   return {
@@ -1694,8 +1694,8 @@ async function runMaximumCoverageProfileCheck(
       ...(assetsUnavailableWithoutPreparation ? {
         skipClassification: 'terminal-availability',
         availabilityFailure: true,
-        availabilityEvidence: `Optional assets are not cached: ${missingAssets.join(', ')}`,
-        reason: 'Maximum coverage is unavailable because optional assets are not cached',
+        availabilityEvidence: `Optional audit assets unavailable: ${missingAssets.join(', ')}`,
+        reason: 'Maximum coverage assets unavailable',
       } : {}),
       nonTimingFailure: !ok && !assetsUnavailableWithoutPreparation,
       ...responsivenessRecord(responsiveness),
