@@ -30,7 +30,7 @@ export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { 
     </AppText>
     {provider ? <ProductProviderLink provider={provider} /> : null}
     {identity.productCategory ? <AppText variant="small">{humanizeEnum(identity.productCategory)}</AppText> : null}
-    {product ? <PublicRateEvidence productKey={productKey} programmeId={programmeId} scenario={rateScenario} /> : null}
+    {product?.programmeIds.length ? <PublicRateEvidence productKey={productKey} programmeId={programmeId} scenario={rateScenario} /> : null}
     {detail ? <>
       <AppText variant="small">{uiJoin('No listed rate', manifest?.run_date ? uiJoin(' · ', 'Checked', ' ', uiDate(manifest.run_date)) : null)}</AppText>
       <DetailGroup loading={false} icon="cash-outline" title="Fees" items={detail.fees} /><DetailGroup loading={false} icon="person-outline" title="Eligibility" items={detail.eligibility} />

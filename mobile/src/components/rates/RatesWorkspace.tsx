@@ -381,8 +381,9 @@ export default function RatesWorkspace() {
     [core, details, manifest, coreIntegrity]);
   const sourceRates = core?.sections[section]?.rates ?? EMPTY_RATE_ROWS;
   // Product discovery does not need pricing or a mortgage comparison index.
-  const mortgageSearchActive = availability === 'listed' &&
-    (section !== 'Mortgage' || mortgageCriteriaReady || isDefaultMortgageBrowse);
+  const draftingListed = filterOpen && draftAvailability === 'listed';
+  const mortgageSearchActive = draftingListed || (availability === 'listed' &&
+    (section !== 'Mortgage' || mortgageCriteriaReady || isDefaultMortgageBrowse));
   const pricingActive = mortgageSearchActive ||
     (availability === 'listed' && section === 'Mortgage' && mortgagePricingReady);
   const indexedScenarioKey = JSON.stringify(sectionScenario), indexedInputsKey = JSON.stringify(effectiveMortgageInputs);
