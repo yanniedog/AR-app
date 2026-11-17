@@ -26,6 +26,10 @@ const MORTGAGE_CRITERIA_FILTERS = {
   repaymentTypes: ['PRINCIPAL_AND_INTEREST'],
 };
 
+jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context'),
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
 jest.mock('../src/data/store', () => ({ useStore: jest.requireActual('zustand').create(() => ({})) }));
 jest.mock('../src/lib/nav', () => ({ ...jest.requireActual('../src/lib/nav'), openCompare: jest.fn(), openProduct: jest.fn() }));
 jest.mock('expo-router', () => ({ Stack: { Screen: 'StackScreen' }, router: { push: jest.fn() }, useLocalSearchParams: () => ({}) }));

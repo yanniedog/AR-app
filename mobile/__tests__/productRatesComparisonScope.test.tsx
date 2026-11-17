@@ -89,6 +89,10 @@ const mockState: Record<string, any> = {
 };
 const mockRoute: { key: string; ri?: string; programme?: string; origin?: string } = { key: row.product_key };
 
+jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context'),
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
 jest.mock('../src/data/store', () => ({
   useStore: jest.requireActual('zustand').create(() => mockState),
 }));
