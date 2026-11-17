@@ -384,7 +384,7 @@ export const UI_LABELS = [
   'Crash reports unchanged', 'Native state unconfirmed', 'Clear cached data?', 'Offline data removed',
   'Invalid date', 'Date not saved', 'Storage unavailable · Previous date retained',
   'Share report', 'Not found',
-  'Product details', 'Product unavailable', 'Product rate unavailable', 'Rate kind',
+  'Product details', 'Product rate', 'Benchmarks', 'Product unavailable', 'Product rate unavailable', 'Rate kind',
   'Currency', 'Current', 'Section', 'Path',
   'Monthly equivalent', 'Conversion', 'Repayment', 'Note', 'Missing input', 'Invalid input',
   'Obligation reference', 'Fee occurrence reference', 'External account role', 'Customer field', 'Customer facts', 'Offer facts', 'Payment order',
