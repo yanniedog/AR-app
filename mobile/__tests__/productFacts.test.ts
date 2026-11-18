@@ -61,7 +61,7 @@ describe('productFacts', () => {
     expect(new Set(grouped[0].facts.map(productFactSignature)).size).toBe(2);
   });
 
-  test('matches typed criteria against every same-key variant without overwriting', () => {
+  test('conditional same-key variants do not establish a product-wide match', () => {
     const detail: ProductDetail = { facts: [
       { id: 'age-1', kind: 'eligibility', canonicalKey: 'eligibility.min_age', sourceType: 'MIN_AGE', value: 21, unit: 'year', condition: 'Online applications' },
       { id: 'age-2', kind: 'eligibility', canonicalKey: 'eligibility.min_age', sourceType: 'MIN_AGE', value: 18, unit: 'year', condition: 'Branch applications' },
@@ -71,7 +71,7 @@ describe('productFacts', () => {
     expect(productMatchesAllFactCriteria(detail, [
       { sourceType: 'MIN_AGE', operator: 'eq', value: 18, unit: 'year' },
       { sourceType: 'MAX_LIMIT', operator: 'gte', value: 400000, unit: 'AUD' },
-    ])).toBe(true);
+    ])).toBe(false);
     expect(productMatchesAllFactCriteria(detail, [
       { sourceType: 'MIN_AGE', operator: 'eq', value: 19, unit: 'year' },
     ])).toBe(false);

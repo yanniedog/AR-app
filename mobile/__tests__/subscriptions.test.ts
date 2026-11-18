@@ -6,6 +6,7 @@ import {
   computeSubscriptionChanges,
   isProductSubscribed,
   makeProductSubscription,
+  findSearchSubscription,
   makeSearchSubscription,
   migrateProductSubscriptionAliases,
   normalizeFilterSnapshot,
@@ -191,6 +192,20 @@ describe('filter matching helpers', () => {
       { canonicalKey: 'feature.offset', operator: 'eq', value: true, unit: 'boolean' },
       { sourceType: 'MIN_AGE', operator: 'lte', value: 18, unit: 'year' },
     ]);
+  });
+
+  test('match mode is part of a saved search identity', () => {
+    const base = {
+      providers: [], rateTypes: [], lvrTiers: [], repaymentTypes: [], loanPurposes: [],
+      depositKinds: [], interestPayments: [], accountFeatures: [], eligibilityCriteria: [],
+      factCriteria: [{ canonicalKey: 'feature.offset', operator: 'exists' as const }], includeNonStandard: false,
+    };
+    const input = { section: 'Mortgage' as const, path: [], hierarchyScoped: false, query: '', sort: 'rate' as const };
+    const matching = makeSearchSubscription({ ...input, filters: normalizeFilterSnapshot(base) });
+    const unknown = makeSearchSubscription({ ...input, filters: normalizeFilterSnapshot({ ...base, factMatchMode: 'unknown' }) });
+    expect(unknown.id).not.toBe(matching.id);
+    expect(findSearchSubscription([matching], { ...input, filters: { ...base, factMatchMode: 'unknown' } })).toBeUndefined();
+    expect(findSearchSubscription([unknown], { ...input, filters: { ...base, factMatchMode: 'unknown' } })?.id).toBe(unknown.id);
   });
 
   test('buildSearchLabel is compact', () => {

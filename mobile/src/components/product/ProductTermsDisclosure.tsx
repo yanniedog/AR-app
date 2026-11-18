@@ -1,4 +1,6 @@
 import { ProductPageLink } from './ProductPageLink';
+import { ProductDocuments } from './ProductDocuments';
+import { termsSourceDocuments } from '../../data/productDocuments';
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useStore } from '../../data/store';
@@ -15,6 +17,7 @@ function EvidenceRows({ terms }: { terms: ProductTerms }) {
   const [termsOpen, setTermsOpen] = useState(false), [changesOpen, setChangesOpen] = useState(false);
   useAuditExternalLinks(terms.documents.map(document => ({ url: document.source_url, purpose: 'lender_source', label: 'Source' })));
   return <View style={{ gap: 12 }}>
+    <ProductDocuments productDetails={{ sourceDocuments: termsSourceDocuments(terms) }} />
     <Disclosure title="Terms" open={termsOpen} onToggle={() => setTermsOpen(!termsOpen)}><View style={{ gap: 12 }}>
       {terms.revisions.map(revision => <View key={revision.term_revision_id} style={{ gap: 4 }}>
         <AppText variant="small" weight="600">{uiIdentifier(revision.parameter_key)}</AppText>

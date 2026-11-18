@@ -3,8 +3,16 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { DetailGroup, ProductFacts } from '../src/components/product/ProductDetailParts';
 import { ProductPageLinks } from '../src/components/product/ProductPageLink';
 import type { NormalizedProductFact, ProductDetail } from '../src/types';
+import { uiNormalizedProductFact, uiProductFactValue } from '../src/lib/productUiFacts';
 
 const mockState: Record<string, unknown> = {};
+test('new exact decimals and unresolved evidence retain their financial meaning in presentation', () => {
+  const fact: NormalizedProductFact = { id: 'display-control', kind: 'fee', canonicalKey: 'fee.amount', valueType: 'decimal', value: '9007199254740993.0001', unit: 'AUD' };
+  expect(uiProductFactValue(uiNormalizedProductFact(fact))).toBe('AUD 9007199254740993.0001');
+  expect(uiProductFactValue(uiNormalizedProductFact({ ...fact, evidenceState: 'unknown' }))).toBe('Unknown');
+  expect(uiProductFactValue(uiNormalizedProductFact({ ...fact, evidenceState: 'conflicting' }))).toBe('Conflicting');
+  expect(uiProductFactValue(uiNormalizedProductFact({ ...fact, evidenceState: 'conditional' }))).toContain('Conditional');
+});
 const mockRequestExternalUrl = jest.fn();
 jest.mock('../src/data/store', () => ({ useStore: (selector: (state: typeof mockState) => unknown) => selector(mockState) }));
 jest.mock('../src/components/ExternalLinkConfirmation', () => ({ useTrustedExternalUrl: () => ({ requestExternalUrl: mockRequestExternalUrl }) }));
@@ -19,7 +27,7 @@ type Tree = ReactTestRenderer & { root: Node };
 const bodyText = (tree: Tree) => tree.root.findAllByType('AppText').map(node => String(node.props.children));
 
 test.each([
-  ['https://www.bankwest.com.au/savings-accounts/high-interest?s=ba', true],
+  ['https://www.bankwest.com.au/savings-accounts/high-interest?s=ba', false],
   ['https://www.bankwest.com.au/?campaign=1', false],
   ['https://www.bankwest.com.au/home', false],
   ['https://www.bankwest.com.au/cds-au/v1/banking/products/123', false],
@@ -27,7 +35,7 @@ test.each([
   ['https://www.bankwest.com.au/%61pi/products/123', false],
   ['https://www.bankwest.com.au/products/123.json', false],
   [undefined, false],
-] as const)('eligibility rows only link to the published product page (%s)', (overview, linked) => {
+] as const)('an overview never substitutes for an eligibility citation (%s)', (overview, linked) => {
   mockRequestExternalUrl.mockClear();
   let tree!: Tree;
   act(() => { tree = TestRenderer.create(<ProductPageLinks overview={overview}>
@@ -98,7 +106,7 @@ test.each([undefined, []])('normalized fee-only payload preserves both variants 
   } finally { act(() => tree.unmount()); }
 });
 
-test('linked published facts preserve fee caps, discounts, tier and conditions in the accessible labels', () => {
+test('unlinked published facts preserve caps, discounts, tier and conditions without fabricated citations', () => {
   let tree!: Tree;
   act(() => {
     tree = TestRenderer.create(<ProductPageLinks overview="https://www.bankwest.com.au/savings-accounts/high-interest">
@@ -112,13 +120,25 @@ test('linked published facts preserve fee caps, discounts, tier and conditions i
   try {
     act(() => tree.root.findAllByType('Disclosure').find(node => node.props.title === 'Fees')!.props.onToggle());
     act(() => tree.root.findByProps({ title: 'Product facts' }).props.onToggle());
-    expect(tree.root.findByProps({
-      accessibilityRole: 'link',
-      accessibilityLabel: 'ANNUAL_FEE, $0 · Conditions: Unverified, Fee cap: $25 · per year, Discount: $5 · Conditions: Unverified',
-    })).toBeDefined();
-    expect(tree.root.findByProps({
-      accessibilityRole: 'link',
-      accessibilityLabel: 'ANNUAL_FEE, $0 · Conditions: Unverified, Tier: Owner occupied',
-    })).toBeDefined();
+    expect(bodyText(tree)).toContain('Fee cap: $25 · per year');
+    expect(bodyText(tree)).toContain('Discount: $5 · Conditions: Unverified');
+    expect(() => tree.root.findByProps({ accessibilityRole: 'link' })).toThrow();
+  } finally { act(() => tree.unmount()); }
+});
+
+
+test('a fact with verified raw-source applicability opens its exact document page', () => {
+  mockRequestExternalUrl.mockClear();
+  const fact: NormalizedProductFact = { ...facts[0], sourcePath: '/features/0', sourcePathBasis: 'raw-cdr' };
+  const detail: ProductDetail = { facts: [fact], sourceDocuments: [{
+    url: 'https://up.com.au/docs/Up-Home-Loan-Booklet.pdf', sourcePath: '/features/0/additionalInfoUri', relation: 'terms',
+    specificity: 'exact-product', relevance: 'verified', citations: [{ page: 4 }],
+  }] };
+  let tree!: Tree;
+  act(() => { tree = TestRenderer.create(<ProductPageLinks overview="https://up.com.au/" productDetails={detail}><ProductFacts productDetails={detail} /></ProductPageLinks>) as Tree; });
+  try {
+    act(() => tree.root.findByProps({ title: 'Product facts' }).props.onToggle());
+    act(() => tree.root.findByProps({ accessibilityRole: 'link' }).props.onPress());
+    expect(mockRequestExternalUrl).toHaveBeenCalledWith({ url: detail.sourceDocuments![0].url, purpose: 'lender_source', label: 'Source', page: 4 });
   } finally { act(() => tree.unmount()); }
 });

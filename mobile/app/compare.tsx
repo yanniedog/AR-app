@@ -13,6 +13,8 @@ import { BankAvatar } from '../src/components/BankAvatar';
 import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { ComparisonDisclosures, PersonalCostComparisonDisclosure, publishedItemCount } from '../src/components/product/ComparisonDisclosures';
 import { CanonicalTermsComparison } from '../src/components/product/CanonicalTermsComparison';
+import { ProductEvidenceCriteriaComparison } from '../src/components/product/ProductEvidenceCriteriaComparison';
+import { ComparableProductFacts } from '../src/components/product/ComparableProductFacts';
 import { FixedDepositComparison } from '../src/components/product/FixedDepositComparison';
 import { MortgageComparison } from '../src/components/product/MortgageComparison';
 import { PortfolioComparison } from '../src/components/product/PortfolioComparison';
@@ -548,11 +550,14 @@ export default function Compare() {
         </Card>)}
         {/* Differences first; calculations and document terms are follow-up detail. */}
         <CanonicalTermsComparison rows={calculationRows} />
+        <ProductEvidenceCriteriaComparison rows={calculationRows} />
+        <ComparableProductFacts rows={calculationRows} />
         {entries.map(entry => <View key={`public:${entry.row.product_key}:${entry.row.public_offer_id ?? entry.row.rate_index}`}>
           <PublicRateEvidence productKey={entry.row.product_key} row={entry.row} scenario={scenarioFor(entry.section, entry.row)} />
           <PublicCostComparison section={entry.section} target={entry.row} scenario={scenario} rateScenario={scenarioFor(entry.section, entry.row)} />
         </View>)}
         {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : entries.every(entry => entry.section === 'Savings') ? <PortfolioComparison rows={entries} /> : entries.every(entry => entry.section === 'Mortgage') ? <MortgageComparison rows={entries} /> : <PersonalCostComparisonDisclosure />}
+
 
         <AppText variant="h3">{uiLabel("Published product details")}</AppText>
         {entries.map((entry, index) => (
