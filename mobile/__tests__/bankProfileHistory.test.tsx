@@ -17,6 +17,7 @@ type TestNode = {
   props: Record<string, any>;
   children: (TestNode | string)[];
   findAllByType: (type: string) => TestNode[];
+  findByProps: (props: Record<string, unknown>) => TestNode;
 };
 type Renderer = ReactTestRenderer & { root: TestNode };
 
