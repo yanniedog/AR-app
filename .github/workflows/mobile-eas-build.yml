@@ -86,7 +86,7 @@ jobs:
           ALLOW_HISTORY_COMPILER_MISMATCH: ${{ inputs.allow_history_compiler_mismatch && 'true' || 'false' }}
         run: node scripts/verify-live-history-compiler.mjs
 
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         if: inputs.profile == 'preview' && (inputs.platform == 'android' || inputs.platform == 'all')
         with:
           distribution: temurin
