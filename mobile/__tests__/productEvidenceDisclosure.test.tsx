@@ -31,13 +31,12 @@ function render(p: ReturnType<typeof evidenceSelection>) {
 const button = (tree: Tree, title: string) => tree.root.findByProps({ title }).props.onPress();
 afterEach(() => { for (const tree of trees.splice(0)) act(() => tree.unmount()); });
 
-test('closed disclosure makes no request; explicit opening pages through captured facts', async () => {
+test('closed disclosure makes no request; explicit opening shows structured fact counts', async () => {
   const p = evidenceSelection(), tree = render(p); expect(downloadInflate).not.toHaveBeenCalled();
   act(() => tree.root.findByProps({ title: 'Source evidence' }).props.onToggle());
-  await until(() => rendered(tree).includes('Last fact'));
-  expect(rendered(tree)).toContain('No approval'); expect(rendered(tree)).toContain('Unverified');
-  act(() => button(tree, 'Last fact')); expect(tree.root.findByProps({ title: 'Next fact' }).props.disabled).toBe(true);
-  act(() => button(tree, 'First fact')); expect(tree.root.findByProps({ title: 'Previous fact' }).props.disabled).toBe(true);
+  await until(() => rendered(tree).includes('Coverage'));
+  expect(rendered(tree)).toContain('No approval'); expect(rendered(tree)).toContain('Unverified'); expect(rendered(tree)).toContain('Product facts');
+  expect(() => tree.root.findByProps({ title: 'Last fact' })).toThrow(); expect(() => tree.root.findByProps({ title: 'First page' })).toThrow();
   act(() => tree.root.findByProps({ title: 'Source evidence' }).props.onToggle());
   expect(rendered(tree)).not.toContain('fact_id');
 });
@@ -49,7 +48,7 @@ test('raw body and declared alternative are separate explicit actions', async ()
   const calls = jest.mocked(downloadInflate).mock.calls.length;
   act(() => button(tree, 'Last response')); expect(downloadInflate).toHaveBeenCalledTimes(calls);
   expect(rendered(tree)).toContain('Product index');
-  act(() => button(tree, 'Open response')); await until(() => rendered(tree).includes('First page'));
+  act(() => button(tree, 'Open response')); await until(() => rendered(tree).includes('Coverage'));
   expect(rendered(tree)).toContain('No approval'); expect(rendered(tree)).toContain('Product index');
 });
 test('closing cancels an in-flight acquisition and a new open may retry', async () => {
@@ -61,7 +60,7 @@ test('closing cancels an in-flight acquisition and a new open may retry', async 
   act(() => tree.root.findByProps({ title: 'Source evidence' }).props.onToggle()); expect(signal?.aborted).toBe(true);
   await act(async () => { finish(await p.load(jest.mocked(downloadInflate).mock.calls[0][0])); });
   expect(downloadInflate).toHaveBeenCalledTimes(1); expect(rendered(tree)).not.toContain('fact_id');
-  act(() => tree.root.findByProps({ title: 'Source evidence' }).props.onToggle()); await until(() => rendered(tree).includes('First fact'));
+  act(() => tree.root.findByProps({ title: 'Source evidence' }).props.onToggle()); await until(() => rendered(tree).includes('Coverage'));
 });
 test('source identity change hides prior data immediately and cannot adopt a late result', async () => {
   const p = evidenceSelection(), tree = render(p); let finish!: (text: string) => void;
@@ -77,10 +76,10 @@ test('source identity change hides prior data immediately and cannot adopt a lat
 });
 test('only one comparison disclosure retains a full source document', async () => {
   const p = evidenceSelection(), first = render(p), second = render(p);
-  act(() => first.root.findByProps({ title: 'Source evidence' }).props.onToggle()); await until(() => rendered(first).includes('First fact'));
-  act(() => second.root.findByProps({ title: 'Source evidence' }).props.onToggle()); await until(() => rendered(second).includes('First fact'));
+  act(() => first.root.findByProps({ title: 'Source evidence' }).props.onToggle()); await until(() => rendered(first).includes('Coverage'));
+  act(() => second.root.findByProps({ title: 'Source evidence' }).props.onToggle()); await until(() => rendered(second).includes('Coverage'));
   expect(rendered(first)).toContain('Paused'); expect(rendered(first)).not.toContain('fact_id');
-  act(() => button(first, 'Retry')); await until(() => rendered(first).includes('First fact'));
+  act(() => button(first, 'Retry')); await until(() => rendered(first).includes('Coverage'));
   expect(rendered(second)).toContain('Paused'); expect(rendered(second)).not.toContain('fact_id');
 });
 
@@ -110,7 +109,7 @@ test('new selected ready revision with unchanged financial bytes acquires only o
   mockState={...p.context,manifest:{...p.manifest},productEvidenceHead:{...p.head},refresh:mockRefresh};
   act(()=>tree.update(<ProductEvidenceDisclosure productKey={p.key}/>));expect(downloadInflate).not.toHaveBeenCalled();
   expect(mockState.core).toBe(core);expect(mockState.details).toBe(details);
-  act(()=>tree.root.findByProps({title:'Source evidence'}).props.onToggle());await until(()=>rendered(tree).includes('Last fact'));
+  act(()=>tree.root.findByProps({title:'Source evidence'}).props.onToggle());await until(()=>rendered(tree).includes('Coverage'));
   expect(rendered(tree)).toContain('Ready');expect(jest.mocked(downloadInflate).mock.calls[0][0]).toContain('-r000002/');
 });
 test('edition availability change aborts an older capability and cannot adopt its late result', async () => {
