@@ -1,4 +1,5 @@
 import { LocalRateEditor } from '../scenario/LocalRateEditor';
+import { CurrencyInput } from '../CurrencyInput';
 import { PublicRateEvidence } from '../scenario/PublicRateEvidence';
 import { PublicCostComparison } from '../scenario/PublicCostComparison';
 import { SavingsQualificationEditor } from '../scenario/SavingsQualificationEditor';
@@ -25,7 +26,7 @@ import { StaySwitchChart } from '../../components/scenario/StaySwitchChart';
 import { ScreenScrollView } from '../../components/Screen';
 import { CompactToggle, SegmentedControl } from '../../components/controls';
 import { AppText, Badge, Button, Card, Chip, Row } from '../../components/ui';
-import { computeLvr, type CalcInputs } from '../../data/calc';
+import { calculatorAmount, computeLvr, type CalcInputs } from '../../data/calc';
 import type { ProjectionFrequency, ProjectionInputs } from '../../data/projectionScenario';
 import {
   buildLifecycleProjection,
@@ -66,14 +67,9 @@ const FREQUENCY_OPTIONS: { label: UiCopy; value: ProjectionFrequency }[] = [
 function enteredNumber(value: string, allowK = false): number | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
-  const cleaned = trimmed.replace(/[$,%\s,]/g, '');
-  if (allowK) {
-    const kMatch = cleaned.match(/^([+-]?\d+(?:\.\d+)?)[kK]$/);
-    if (kMatch) {
-      const parsed = Number(kMatch[1]) * 1_000;
-      return Number.isFinite(parsed) ? parsed : null;
-    }
-  }
+  if (allowK) return calculatorAmount(trimmed, Number.MAX_SAFE_INTEGER);
+  const cleaned = trimmed.replace(/\s*%$/, '');
+  if (!/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(cleaned)) return null;
   const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -140,6 +136,10 @@ function NumericField({
   error?: UiCopy;
 }) {
   const theme = useTheme();
+  if (prefix === '$') return <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 160, minWidth: 0 }}>
+    <CurrencyInput label={label} value={value} onChangeText={onChangeText} editable={editable} error={error} />
+    {suffix ? <AppText variant="small" color="textMuted">{suffix}</AppText> : null}
+  </View>;
   return (
     <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 160, minWidth: 0, gap: 5 }}>
       <AppText variant="tiny" color="textMuted" weight="700">{label}</AppText>
@@ -1080,12 +1080,6 @@ export function ProjectionWorkspace() {
           <SelectedCalculationTarget target={target} scenario={scenario} constraint={targetConstraint} rateConditionContext={rateConditionContext} />
         </Card>
       ) : null}
-      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-        <AppText variant="tiny" color="textMuted">{uiLabel("Storage")}</AppText>
-        <AppText variant="tiny">{Platform.OS === 'web' ? uiJoin('This tab',' · ','Until close') : uiJoin('This device',' · ','Encrypted')}</AppText>
-        <AppText variant="tiny" color="textMuted">{uiLabel("Session replay")}</AppText>
-        <AppText variant="tiny">{uiLabel("Blocked")}</AppText>
-      </Row>
       {saveStatus === 'saving' || saveStatus === 'saved' ? <AppText variant="tiny" color="textMuted">{uiLabel(saveStatus === 'saving' ? 'Saving':'Saved')}</AppText>:null}
       {result.ready ? (
         <Card style={{ gap: 8 }}>

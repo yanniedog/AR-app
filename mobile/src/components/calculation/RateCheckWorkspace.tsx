@@ -1,11 +1,12 @@
 import { LocalRateEditor } from '../scenario/LocalRateEditor';
+import { CurrencyInput } from '../CurrencyInput';
 import { PublicPricingCoverage } from '../scenario/PublicPricingCoverage';
 import { PublicCostComparison } from '../scenario/PublicCostComparison';
 import { SavingsQualificationEditor } from '../scenario/SavingsQualificationEditor';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
 import { publicRateScenario, resolveLocalCurrentRate, scenarioWithLocalCurrentRate, resolveRowPublicRate, payableRateForRow } from '../../data/publicRateIntegration';
 import { useResolvedPublicRankingRows } from '../../hooks/useResolvedPublicRankingRows';
-import { uiCount, uiDuration, uiInputNumber, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../lib/uiCopy";
+import { uiCount, uiDuration, uiInputNumber, uiJoin, uiLabel, uiMoney, uiPercentage, uiProductName, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../lib/uiCopy";
 import { uiAccessBadge, uiListedLvr, uiTargetConstraint } from "../../lib/financialUiCopy";
 import { fontStyle } from '../../theme/fonts';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -695,7 +696,12 @@ export function RateCheckWorkspace() {
     onChangeText: (t: string) => void,
     a11y: UiCopy,
     explicitWidth?: number,
-  ) => (
+  ) => label.includes('($)') ? (
+    <View style={explicitWidth && !compactFields ? { width: explicitWidth } : { flex: 1, width: compactFields ? '100%' : undefined }}>
+      <CurrencyInput label={label} value={value} onChangeText={onChangeText} accessibilityLabel={a11y}
+        editable={scenarioStorageStatus === 'ready'} onBlur={() => setLeftFields(prev => prev.has(a11y) ? prev : new Set(prev).add(a11y))} />
+    </View>
+  ) : (
     <View style={explicitWidth && !compactFields ? { width: explicitWidth } : { flex: 1, width: compactFields ? '100%' : undefined }}>
       <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
         {label}
@@ -703,7 +709,7 @@ export function RateCheckWorkspace() {
       <TextInput
         value={uiInputNumber(value)}
         onChangeText={onChangeText}
-        keyboardType="numeric"
+        keyboardType="decimal-pad"
         editable={scenarioStorageStatus === 'ready'}
         maxLength={20}
         style={[fontStyle('400'), inputStyle]}
@@ -775,7 +781,7 @@ export function RateCheckWorkspace() {
             {lvr !== null ? (
               <View style={{ marginTop: 12 }}>
                 <Row gap={8} style={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                  <AppText variant="small" weight="800">{uiJoin("Scenario LVR",": ",uiNumber(Math.round(lvr),0),"%")}</AppText>
+                  <AppText variant="small" weight="800">{uiJoin("Scenario LVR",": ",uiPercentage(lvr))}</AppText>
                   {lvrBand ? (
                     <Badge label={uiListedLvr({lvr_tier:lvrBand})} tone="success" />
                   ) : (
@@ -784,7 +790,7 @@ export function RateCheckWorkspace() {
                 </Row>
                 {nextBandHint ? (
                   <Row style={{ justifyContent: 'space-between', marginTop: 4, flexWrap: 'wrap' }}>
-                    <AppText variant="tiny" color="textMuted">{uiJoin('Deposit to LVR',' ','≤',uiNumber(nextBandHint.targetPct),'%')}</AppText>
+                    <AppText variant="tiny" color="textMuted">{uiJoin('Deposit to LVR',' ','≤',uiPercentage(nextBandHint.targetPct))}</AppText>
                     <AppText variant="tiny">{formatDollars(nextBandHint.extra)}</AppText>
                   </Row>
                 ) : null}

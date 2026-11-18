@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { AppText, Button, Chip, Disclosure } from '../ui';
 import { LedgerField } from '../ledger/LedgerField';
+import { CurrencyInput } from '../CurrencyInput';
 import { emptyDepositInputs } from './DepositInputFields';
 import { DepositCohorts } from './DepositCohorts';
 import { useCustomerProfile } from '../../hooks/useCustomerProfile';
@@ -14,7 +15,7 @@ import { canonical, hashText } from '../../lib/productTermsEngine/validation';
 import { loadExecutableSelections, type ApprovedSelection, type ContractContext } from '../../data/executableContracts/transport';
 import { compareDeposits, type DepositComparisonResult } from '../../data/executableContracts/depositComparison';
 import type { DepositInputs } from '../../data/executableContracts/instantiate';
-import { uiCount, uiDecimal, uiInputIdentifier, uiInputNumber, uiJoin, uiLabel, uiProductName, uiProviderName, type UiLabel } from '../../lib/uiCopy';
+import { uiCount, uiDecimal, uiInputIdentifier, uiJoin, uiLabel, uiProductName, uiProviderName, type UiLabel } from '../../lib/uiCopy';
 import { EngineReceiptFacts } from './EngineReceiptFacts';
 
 const rowId = (row: RateRow) => `${row.rate_index}#${row.product_key}`;
@@ -36,8 +37,8 @@ function ComparisonForm({ rows, candidates, context }: { rows: RateRow[]; candid
     catch (e) { setResult(null); setError(e instanceof Error ? e.message : 'Comparison unavailable.'); }
   }
   return <View style={{ gap: 12 }}>
-    <AppText variant="small">{uiJoin('Basis', ' · ', 'Confirmed', ' · ', 'Common amount', ' · ', 'Common funding date', ' · ', 'Tax', ' · ', 'Excluded', ' · ', 'Local storage')}</AppText>
-    <LedgerField label="Comparison amount (AUD)" value={uiInputNumber(inputs[0].principal)} keyboardType="decimal-pad" onChangeText={value => shared('principal', value)} />
+    <AppText variant="small">{uiJoin('Basis', ' · ', 'Confirmed', ' · ', 'Common amount', ' · ', 'Common funding date', ' · ', 'Tax', ' · ', 'Excluded')}</AppText>
+    <CurrencyInput label="Comparison amount (AUD)" value={inputs[0].principal} onChangeText={value => shared('principal', value)} />
     <LedgerField label={uiJoin('Comparison funding date', ' · ', 'YYYY-MM-DD')} value={uiInputIdentifier(inputs[0].fundedDate)} onChangeText={value => shared('fundedDate', value)} />
     {rows.map((row, i) => <View key={rowId(row)} style={{ gap: 8 }}>
       <AppText weight="700">{uiJoin(uiProviderName(row), ': ', uiProductName(row))}</AppText>

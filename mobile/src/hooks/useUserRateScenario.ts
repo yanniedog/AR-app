@@ -1,9 +1,12 @@
 import { useEffect, useSyncExternalStore } from 'react';
+import { AppState } from 'react-native';
+import { subscribeCustomerProfile } from '../data/customerProfileStorage';
 
 import {
   consumeUserRateScenarioRecoveryWarning,
   loadUserRateScenario,
   normalizeUserRateScenario,
+  mergeScenarioChanges,
   saveUserRateScenario,
   type UserRateScenario,
 } from '../data/userRateScenario';
@@ -33,6 +36,7 @@ let writeChain: Promise<void> = Promise.resolve();
 let revision = 0;
 let enqueuedRevision = 0;
 let persistedRevision = 0;
+let persistedScenario = snapshot.scenario;
 
 function emit(next: Partial<UserRateScenarioSnapshot>): void {
   snapshot = { ...snapshot, ...next };
@@ -47,6 +51,13 @@ function subscribe(listener: () => void): () => void {
 function getSnapshot(): UserRateScenarioSnapshot {
   return snapshot;
 }
+subscribeCustomerProfile(profile => {
+  if (!profile.inputState || snapshot.storageStatus !== 'ready') return;
+  const incoming = normalizeUserRateScenario(profile.inputState.scenario);
+  const scenario = revision === persistedRevision ? incoming : mergeScenarioChanges(incoming, persistedScenario, snapshot.scenario);
+  persistedScenario = incoming;
+  emit({ scenario });
+});
 
 export function ensureUserRateScenarioLoaded(): Promise<void> {
   if (snapshot.storageStatus === 'ready') return Promise.resolve();
@@ -54,6 +65,7 @@ export function ensureUserRateScenarioLoaded(): Promise<void> {
   emit({ storageStatus: 'loading', error: null, warning: null });
   loadPromise = loadUserRateScenario()
     .then((scenario) => {
+      persistedScenario = scenario;
       revision = 0;
       enqueuedRevision = 0;
       persistedRevision = 0;
@@ -83,11 +95,12 @@ function enqueueLatestScenario(): Promise<void> {
   if (revision <= enqueuedRevision || snapshot.storageStatus !== 'ready') return writeChain;
   const queuedRevision = revision;
   const queuedScenario = snapshot.scenario;
+  const queuedBase = persistedScenario;
   enqueuedRevision = queuedRevision;
   emit({ saveStatus: 'saving', error: null });
   writeChain = writeChain
     .catch(() => undefined)
-    .then(() => saveUserRateScenario(queuedScenario))
+    .then(() => saveUserRateScenario(queuedScenario, queuedBase))
     .then(() => {
       persistedRevision = Math.max(persistedRevision, queuedRevision);
       if (persistedRevision === revision) emit({ saveStatus: 'saved', error: null });
@@ -107,7 +120,7 @@ function scheduleSave(): void {
   saveTimer = setTimeout(() => {
     saveTimer = null;
     void enqueueLatestScenario();
-  }, 400);
+  }, 0);
 }
 
 export function updateUserRateScenario(
@@ -149,7 +162,8 @@ export function useUserRateScenario(): UserRateScenarioSnapshot & {
   const current = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   useEffect(() => {
     void ensureUserRateScenarioLoaded();
-    return () => { void flushUserRateScenario(); };
+    const listener = AppState.addEventListener('change', state => { if (state !== 'active') void flushUserRateScenario(); });
+    return () => { listener.remove(); void flushUserRateScenario(); };
   }, []);
   return {
     ...current,
@@ -175,6 +189,7 @@ export function resetUserRateScenarioStoreForTests(): void {
     error: null,
     warning: null,
   };
+  persistedScenario = snapshot.scenario;
   listeners.clear();
 }
 

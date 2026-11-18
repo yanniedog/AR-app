@@ -3,8 +3,9 @@ import { Platform, View } from 'react-native';
 import { type AnswerState, type CustomerAnswer, type CustomerProfile, type InputDefinition, userProvenance, validFact } from '../data/customerProfile';
 import { customerInputRequirements, localCustomerDate, type CustomerInputContract } from '../data/customerInputRequirements';
 import { useCustomerProfile } from '../hooks/useCustomerProfile';
-import { uiLabel, uiCount, uiDate, uiInputIdentifier, uiJoin, uiCustomerAnswer, uiInputDefinitionLabel, useCustomerAnswerInput, type UiLabel } from '../lib/uiCopy';
+import { uiLabel, uiCount, uiInputIdentifier, uiJoin, uiCustomerAnswer, uiInputDefinitionLabel, useCustomerAnswerInput, type UiLabel } from '../lib/uiCopy';
 import { LedgerField } from './ledger/LedgerField';
+import { CurrencyInput } from './CurrencyInput';
 import { AppText, Button, Chip, Disclosure, Row } from './ui';
 import { NegotiatedTermsEditor } from './NegotiatedTermsEditor';
 import { bindCustomerQuestion, type CustomerQuestionSource } from '../lib/customerQuestionBinding';
@@ -31,8 +32,8 @@ export function CustomerAnswerEditor({ definition: d, answer, productKey, disabl
     {answer ? <AppText variant="small" color="textMuted">{uiCustomerAnswer(answer, d)}</AppText> : null}
     <Row gap={6} style={{ flexWrap: 'wrap' }}>{STATES.map(([key, text]) => <Chip key={key} label={text} selected={state === key} onPress={disabled ? undefined : () => setState(key)} />)}</Row>
     {state === 'known' ? d.type === 'boolean' ? <Row gap={6}>{([['true', 'Yes'], ['false', 'No']] as const).map(([v, text]) => <Chip key={v} label={text} selected={value === v} onPress={disabled ? undefined : () => setValue(v)} />)}</Row>
-      : <LedgerField label={label} accessibilityLabel={label} value={value} onChangeText={setValue} editable={!disabled} autoCorrect={false} keyboardType={d.type === 'decimal' ? 'decimal-pad' : 'default'} /> : null}
-    {answer ? <AppText variant="tiny" color="textMuted">{uiJoin(answer.provenance.source === 'legacy_user_input' ? 'Legacy input' : 'User input', ' · ', 'Recorded', ' ', uiDate(answer.provenance.recordedAt))}</AppText> : null}
+      : d.type === 'decimal' && d.unit === 'AUD' ? <CurrencyInput label={label} value={value} onChangeText={setValue} editable={!disabled} />
+        : <LedgerField label={label} accessibilityLabel={label} value={value} onChangeText={setValue} editable={!disabled} autoCorrect={false} keyboardType={d.type === 'decimal' ? 'decimal-pad' : 'default'} /> : null}
     {error ? <AppText variant="small" color="danger">{uiLabel("Invalid value")}</AppText> : null}
     <Button title="Save" accessibilityLabel={uiJoin('Save', ' ', label)} variant="secondary" disabled={disabled} onPress={save} />
   </View>;
@@ -46,7 +47,6 @@ export function CustomerProfileContent({ productKey, contract }: { productKey?: 
   const editable = saved.filter(d => uiInputDefinitionLabel(d) !== 'Unverified');
   const unavailable = saved.length - editable.length;
   return <View style={{ gap: 16 }}>
-    <AppText variant="small" color="textMuted">{uiJoin('Encrypted', ' · ', 'This device', ' · ', 'No upload')}</AppText>
     {error ? <AppText variant="small" color="danger">{uiLabel("Unavailable")}</AppText> : busy ? <AppText variant="tiny">{uiLabel("Saving")}</AppText> : null}
     <AppText variant="small">{uiLabel(requirements?.status === 'needs_inputs' ? 'Inputs incomplete' : 'Eligibility unverified')}</AppText>
     {reviewed ? <LedgerField label="Assessment date" value={uiInputIdentifier(assessmentDate)} onChangeText={setAssessmentDate} /> : null}

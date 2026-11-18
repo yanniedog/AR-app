@@ -4,7 +4,8 @@ import type { ProjectionInputs } from '../../data/projectionScenario';
 import { useTheme } from '../../theme/ThemeProvider';
 import { SegmentedControl } from '../controls';
 import { AppText, Disclosure } from '../ui';
-import { uiJoin, uiInputNumber } from '../../lib/uiCopy';
+import { CurrencyInput } from '../CurrencyInput';
+import { uiLabel, uiInputNumber } from '../../lib/uiCopy';
 
 export function SavingsQualificationEditor({ inputs, onChange, editable }: {
   inputs: ProjectionInputs; onChange: (patch: Partial<ProjectionInputs>) => void; editable: boolean;
@@ -14,11 +15,13 @@ export function SavingsQualificationEditor({ inputs, onChange, editable }: {
   const fields = [['monthlyDeposit', 'Monthly deposits ($)'], ['withdrawals', 'Monthly withdrawals'], ['balanceGrowth', 'Balance growth ($)'], ['cardTransactions', 'Card purchases']] as const;
   return <Disclosure title="Bonus qualification" open={open} onToggle={() => setOpen(value => !value)}>
     {open ? <View style={{ gap: 10 }}>
-      <AppText variant="tiny" color="textMuted">{uiJoin('Storage', ': ', 'Private', ' · ', 'Eligibility', ': ', 'Unverified')}</AppText>
+      <AppText variant="tiny" color="textMuted">{uiLabel('Eligibility unverified')}</AppText>
       <SegmentedControl options={[
         { value: 'unknown', label: 'Unknown' }, { value: 'met', label: 'Meets' }, { value: 'unmet', label: 'Unmet' },
       ]} value={inputs.bonusQualification} onChange={bonusQualification => { if (editable) onChange({ bonusQualification, bonusConditionsMet: bonusQualification === 'met' }); }} />
-      {fields.map(([field, label]) => <View key={field} style={{ gap: 3 }}>
+      {fields.map(([field, label]) => field === 'monthlyDeposit' || field === 'balanceGrowth'
+        ? <CurrencyInput key={field} label={label} value={inputs[field]} onChangeText={value => { if (editable) onChange({ [field]: value }); }} editable={editable} />
+        : <View key={field} style={{ gap: 3 }}>
         <AppText variant="tiny" color="textMuted">{label}</AppText>
         <TextInput value={uiInputNumber(inputs[field])} keyboardType="decimal-pad" accessibilityLabel={label} editable={editable}
           onChangeText={value => { if (editable) onChange({ [field]: value }); }}

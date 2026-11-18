@@ -28,7 +28,7 @@ describe('ScenarioRecoveryBanner', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOs });
   });
 
-  it('shows the reset status at the navigation root and can be acknowledged', async () => {
+  it('shows unavailable saved inputs without deleting them and provides retry', async () => {
     jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key) => (
       key === 'user-rate-scenario-v1'
         ? JSON.stringify({ kind: 'ar.secure-value', schemaVersion: 1, generation: 'missing', chunks: 1 })
@@ -37,16 +37,22 @@ describe('ScenarioRecoveryBanner', () => {
     await ensureUserRateScenarioLoaded();
 
     let tree!: InspectableRenderer;
-    act(() => {
+    await act(async () => {
       tree = TestRenderer.create(<ScenarioRecoveryBanner />) as InspectableRenderer;
+      await ensureUserRateScenarioLoaded();
     });
     expect(tree.root.findByProps({ accessibilityRole: 'alert' })).toBeTruthy();
     const dismiss = tree.root.findByProps({
-      accessibilityLabel: 'Dismiss',
+      accessibilityLabel: 'Retry',
     });
-    act(() => {
+    const values = new Map<string, string>();
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(async key => values.get(key) ?? null);
+    jest.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => { values.set(key, value); });
+    await act(async () => {
       (dismiss.props.onPress as () => void)();
+      await ensureUserRateScenarioLoaded();
     });
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
     expect(() => tree.root.findByProps({ accessibilityRole: 'alert' })).toThrow();
     act(() => tree.unmount());
   });

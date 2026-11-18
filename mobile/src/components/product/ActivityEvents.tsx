@@ -3,9 +3,10 @@ import React,{useState} from 'react';
 import { View } from 'react-native';
 import { AppText,Button,Chip,Disclosure } from '../ui';
 import { LedgerField } from '../ledger/LedgerField';
+import { CurrencyInput } from '../CurrencyInput';
 import type { ActivityAssessment } from '../../data/activityContracts/types';
 import type { SavingsActivityEvent } from '../../lib/productTermsEngine/savingsActivityTypes';
-import { uiCount, uiDate, uiIdentifier, uiInputIdentifier, uiInputNumber, uiJoin } from '../../lib/uiCopy';
+import { uiCount, uiDate, uiIdentifier, uiInputIdentifier, uiJoin } from '../../lib/uiCopy';
 export function ActivityEvents({assessment,accountId,events,complete,onChange,onCoverage}:{assessment:ActivityAssessment;accountId:string;events:SavingsActivityEvent[];complete:boolean;onChange:(events:SavingsActivityEvent[])=>void;onCoverage:(complete:boolean)=>void}){
  const [page,setPage]=useState(0),[open,setOpen]=useState(false),last=Math.max(0,Math.ceil(events.length/25)-1),current=Math.min(page,last);
  const classes=[...new Set(assessment.metrics.flatMap(m=>[...m.includedClassifications,...m.excludedClassifications]))];
@@ -15,7 +16,7 @@ export function ActivityEvents({assessment,accountId,events,complete,onChange,on
   <Chip label="Coverage complete" selected={complete} onPress={()=>onCoverage(!complete)}/>
   <Disclosure title={uiJoin('Prior activity', ' (', uiCount(events.length), ')')} open={open} onToggle={()=>setOpen(!open)}>
    {events.slice(current*25,current*25+25).map((e,n)=>{const index=current*25+n;return <View key={e.id} style={{gap:6}}><AppText weight="700">{uiJoin('Entry', ' ', uiCount(index+1))}</AppText>
-    <LedgerField label="Date" placeholder="YYYY-MM-DD" value={uiInputIdentifier(e.date)} onChangeText={date=>edit(index,{date})}/><LedgerField label={uiJoin('Amount', ' (', 'AUD', ')')} value={uiInputNumber(e.amount)} keyboardType="decimal-pad" onChangeText={amount=>edit(index,{amount})}/>
+    <LedgerField label="Date" placeholder="YYYY-MM-DD" value={uiInputIdentifier(e.date)} onChangeText={date=>edit(index,{date})}/><CurrencyInput label={uiJoin('Amount', ' (', 'AUD', ')')} value={e.amount} onChangeText={amount=>edit(index,{amount})}/>
     <View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>{(['deposit','withdrawal','unknown'] as const).map(kind=><Chip key={kind} label={kind==='deposit'?'Deposit amount':kind==='withdrawal'?'Withdrawal':'Unknown'} selected={e.kind===kind} onPress={()=>edit(index,{kind})}/>)}</View>
     <View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>{(['settled','pending','unknown'] as const).map(status=><Chip key={status} label={status==='settled'?'Settled':status==='pending'?'Pending':'Unknown'} selected={e.status===status} onPress={()=>edit(index,{status})}/>)}</View>
     <AppText variant="small">{uiLabel("Source category")}</AppText><View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>{classes.map(classification=><Chip key={classification} label={uiIdentifier(classification)} selected={e.classification===classification} onPress={()=>edit(index,{classification})}/>)}<Chip label="Unknown category" selected={e.classification===null} onPress={()=>edit(index,{classification:null})}/></View>

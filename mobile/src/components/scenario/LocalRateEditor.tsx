@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
-import { publicRateOriginLabel, publicRateReason, publicRateText, publicReferenceScope } from '../../data/publicRatePresentation';
+import { publicRateReason, publicRateText, publicReferenceScope } from '../../data/publicRatePresentation';
 import { publicRateScenario, resolveLocalCurrentRate } from '../../data/publicRateIntegration';
 import { rateDecimal, decimalText } from '../../data/publicRateDecimal';
 import { selectPublicReference } from '../../data/publicRateLocal';
@@ -51,7 +51,8 @@ export function LocalRateEditor({ section, scenario, onChange, editable, childre
     <SegmentedControl options={[{ value: 'entered', label: 'Current rate' }, { value: 'reference', label: 'Reference + adjustment' }]}
       value={local.mode} onChange={mode => { if (editable) onChange({ mode }); }} />
     {local.mode === 'entered' ? children : <>
-      <Button title={selected ? uiPublicReferenceName(selected) : uiLabel('Select reference')} variant="secondary" onPress={() => editable && setSelecting(true)} disabled={!editable} />
+      <Button title={selected ? uiPublicReferenceName(selected) : uiLabel('Select reference')} variant="secondary" onPress={() => editable && references.length > 0 && setSelecting(true)} disabled={!editable || !references.length} />
+      {!references.length ? <Button title="Current rate" variant="secondary" disabled={!editable} onPress={() => onChange({ mode: 'entered' })} /> : null}
       {selected ? <AppText variant="tiny" color="textMuted">{publicReferenceScope(selected)}</AppText> : null}
       {fields.length ? <View style={{ gap: 8 }}>
         <AppText variant="small" weight="600">{uiLabel('Reference scope')}</AppText>
@@ -75,7 +76,6 @@ export function LocalRateEditor({ section, scenario, onChange, editable, childre
           </View>;
         })}
       </View> : null}
-      <AppText variant="tiny" color="textMuted">{uiJoin('Discount sign', ': ', '−', ' · ', 'Public discounts', ': ', 'Included', ' · ', 'Total adjustment')}</AppText>
       <View style={{ gap: 4 }}>
         <AppText variant="tiny" color="textMuted">{uiLabel('Total adjustment (pp)')}</AppText>
         <TextInput value={uiInputNumber(local.totalAdjustment)} onChangeText={totalAdjustment => { if (editable) onChange({ totalAdjustment }); }} editable={editable}
@@ -88,12 +88,11 @@ export function LocalRateEditor({ section, scenario, onChange, editable, childre
         if (!referenceChangeAlerts) { onChange({ referenceChangeAlerts }); return; }
         void ensurePermissions().then(allowed => { if (allowed) { useStore.getState().setPref('notificationsEnabled', true); onChange({ referenceChangeAlerts: true }); } });
       }} />
-      {result.reasonCodes.map(reason => <AppText variant="tiny" color="textMuted" key={reason}>{publicRateReason(reason)}</AppText>)}
+      {result.status !== 'exact' && catalogue.status === 'ready' && catalogue.allLoaded ? result.reasonCodes.map(reason => <AppText variant="tiny" color="textMuted" key={reason}>{publicRateReason(reason)}</AppText>) : null}
       {selected?.freshness.lastSuccessAt ? <AppText variant="tiny" color="textMuted">{uiJoin('Last successful check', ': ', uiDate(selected.freshness.lastSuccessAt))}</AppText> : null}
       {catalogue.status === 'loading' || !catalogue.allLoaded && catalogue.status === 'ready' ? <AppText variant="tiny" color="textMuted">{uiJoin('Public reference', ': ', 'Loading')}</AppText> : null}
       {catalogue.status === 'unavailable' ? <AppText variant="tiny" color="textMuted">{uiJoin('Public reference', ': ', 'Unavailable')}</AppText> : null}
     </>}
-    {result.status === 'exact' ? <AppText variant="tiny" color="textMuted">{uiJoin(publicRateOriginLabel(result), ' · ', publicRateText(result), ' · ', 'Storage', ': ', 'Protected on device')}</AppText> : null}
     <Modal transparent visible={selecting} onRequestClose={() => setSelecting(false)} animationType="none">
       <View style={{ flex: 1, padding: 18, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.64)' }}>
         <Card accessibilityViewIsModal style={{ maxHeight: '82%', gap: 10 }}>

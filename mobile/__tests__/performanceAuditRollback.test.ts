@@ -321,7 +321,7 @@ describe('performance audit rollback journal', () => {
     const realWrite = jest.mocked(SecureStore.setItemAsync).getMockImplementation()!;
     let failures = 0;
     jest.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value, options) => {
-      if (key.startsWith('user-rate-scenario-v1.chunk.') && failures++ === 0) {
+      if (key.startsWith('ar.customer-profile.v1.chunk.') && failures++ === 0) {
         throw new Error('keystore temporarily unavailable');
       }
       return realWrite(key, value, options);
@@ -342,7 +342,7 @@ describe('performance audit rollback journal', () => {
     resetUserRateScenarioStoreForTests();
     let failures = 0;
     jest.mocked(SecureStore.setItemAsync).mockImplementation(async (key) => {
-      if (key.startsWith('user-rate-scenario-v1.chunk.')) {
+      if (key.startsWith('ar.customer-profile.v1.chunk.')) {
         failures += 1;
         throw new Error('native keystore write rejected');
       }

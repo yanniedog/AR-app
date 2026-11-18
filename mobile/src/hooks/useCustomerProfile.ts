@@ -1,11 +1,12 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { CustomerProfile } from '../data/customerProfile';
-import { loadCustomerProfile, updateCustomerProfile } from '../data/customerProfileStorage';
+import { loadCustomerProfile, updateCustomerProfile, subscribeCustomerProfile } from '../data/customerProfileStorage';
 
 type Snapshot = { profile: CustomerProfile | null; busy: boolean; error: string | null };
 let snapshot: Snapshot = { profile: null, busy: false, error: null };
 const listeners = new Set<() => void>();
 function emit(value: Snapshot): void { snapshot = value; listeners.forEach(fn => fn()); }
+subscribeCustomerProfile(profile => emit({ ...snapshot, profile }));
 async function load(): Promise<void> {
   if (snapshot.busy) return;
   emit({ ...snapshot, busy: true, error: null });

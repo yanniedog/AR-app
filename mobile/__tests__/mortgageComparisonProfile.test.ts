@@ -1,11 +1,11 @@
 import type { MortgageComparisonInputs } from '../src/data/mortgageComparison';
 import { SECURE_STORE_KEYS } from '../src/lib/secureStoreKey';
 
-let mockStored: string | null = null;
-const mockRead = jest.fn(async () => mockStored);
-const mockWrite = jest.fn(async (_key: string, value: string) => { mockStored = value; });
+const mockValues = new Map<string, string>();
+const mockRead = jest.fn(async (key: string) => mockValues.get(key) ?? null);
+const mockWrite = jest.fn(async (key: string, value: string) => { mockValues.set(key, value); });
 jest.mock('../src/lib/secureStoreValue', () => ({
-  readSecureStoreValue: () => mockRead(),
+  readSecureStoreValue: (key: string) => mockRead(key),
   writeSecureStoreValue: (key: string, value: string) => mockWrite(key, value),
 }));
 
@@ -36,7 +36,7 @@ function boot() {
 }
 
 beforeEach(() => {
-  mockStored = null;
+  mockValues.clear();
   jest.clearAllMocks();
 });
 
@@ -46,7 +46,7 @@ test('restores exact saved inputs and purpose/repayment through a cold start and
   first.profile.saveMortgageComparisonInputs(comparison);
   first.profile.saveMortgageComparisonFacets(facets);
   await first.profile.openMortgageComparisonProfile();
-  expect(mockWrite).toHaveBeenLastCalledWith(SECURE_STORE_KEYS.mortgageComparisonProfile, expect.any(String));
+  expect(mockWrite).toHaveBeenLastCalledWith(SECURE_STORE_KEYS.customerProfile, expect.any(String));
 
   const restarted = boot();
   await restarted.profile.openMortgageComparisonProfile();
@@ -61,17 +61,17 @@ test('audit scope writes and rollback affect active inputs without rewriting sav
   profile.saveMortgageComparisonInputs(comparison);
   profile.saveMortgageComparisonFacets(facets);
   await profile.openMortgageComparisonProfile();
-  const durable = mockStored;
+  const durable = mockValues.get(SECURE_STORE_KEYS.customerProfile);
   const active = session.captureRatesSession();
   live.setMortgageComparisonInputs({ loanAmount: '400000', lvr: '65' });
   session.updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: ['INVESTMENT'] } }));
   live.setMortgageComparisonInputs(comparison);
   session.restoreRatesSession(active);
-  expect(mockStored).toBe(durable);
+  expect(mockValues.get(SECURE_STORE_KEYS.customerProfile)).toBe(durable);
   expect(profile.useMortgageComparisonProfile.getState().profile).toEqual({ inputs: comparison, facets });
 });
 
-test('clearing the saved comparison remains cleared after reopening', async () => {
+test('clearing Rates comparison preserves shared loan details after reopening', async () => {
   const { profile } = boot();
   profile.saveMortgageComparisonInputs(comparison);
   profile.saveMortgageComparisonFacets(facets);
@@ -82,30 +82,30 @@ test('clearing the saved comparison remains cleared after reopening', async () =
   const restarted = boot();
   await restarted.profile.openMortgageComparisonProfile();
   expect(restarted.profile.useMortgageComparisonProfile.getState().profile).toEqual({
-    inputs: { loanAmount: '', lvr: '' },
+    inputs: { ...comparison, lvr: '' },
     facets: { loanPurposes: [], repaymentTypes: [] },
   });
 });
 
 test('an unreadable encrypted record is retained, and queued edits survive write retry', async () => {
-  mockStored = '{malformed';
+  mockValues.set(SECURE_STORE_KEYS.mortgageComparisonProfile, '{malformed');
   const { profile } = boot();
   profile.saveMortgageComparisonInputs(comparison);
   await profile.openMortgageComparisonProfile();
   expect(mockWrite).not.toHaveBeenCalled();
   expect(profile.useMortgageComparisonProfile.getState().status).toBe('unavailable');
-  expect(mockStored).toBe('{malformed');
+  expect(mockValues.get(SECURE_STORE_KEYS.mortgageComparisonProfile)).toBe('{malformed');
 
-  mockStored = JSON.stringify({ version: 1, inputs: { loanAmount: '', lvr: '' }, facets });
+  mockValues.set(SECURE_STORE_KEYS.mortgageComparisonProfile, JSON.stringify({ version: 1, inputs: { loanAmount: '', lvr: '' }, facets }));
   mockWrite.mockRejectedValueOnce(new Error('Locked'));
   await profile.openMortgageComparisonProfile();
   expect(profile.useMortgageComparisonProfile.getState().status).toBe('unavailable');
   await profile.openMortgageComparisonProfile();
-  expect(JSON.parse(mockStored!)).toEqual({ version: 1, inputs: comparison, facets });
+  expect(profile.useMortgageComparisonProfile.getState().profile).toEqual({ inputs: comparison, facets });
 });
 
-test('an explicit clear atomically replaces an unreadable record and restores saving', async () => {
-  mockStored = '{malformed';
+test('Rates clear never replaces an unreadable personal record', async () => {
+  mockValues.set(SECURE_STORE_KEYS.mortgageComparisonProfile, '{malformed');
   const { profile } = boot();
   await profile.openMortgageComparisonProfile();
   expect(profile.useMortgageComparisonProfile.getState().status).toBe('unavailable');
@@ -113,11 +113,35 @@ test('an explicit clear atomically replaces an unreadable record and restores sa
 
   profile.clearSavedMortgageComparison();
   await profile.openMortgageComparisonProfile();
-  expect(mockRead).toHaveBeenCalledTimes(1);
-  expect(JSON.parse(mockStored!)).toMatchObject({ version: 1, inputs: { loanAmount: '', lvr: '' } });
+  expect(mockValues.get(SECURE_STORE_KEYS.mortgageComparisonProfile)).toBe('{malformed');
+  expect(mockWrite).not.toHaveBeenCalled();
+  expect(profile.useMortgageComparisonProfile.getState().status).toBe('unavailable');
+});
+
+
+test('clearing Rates scope preserves a buying scenario exactly, including costs and offset', async () => {
+  mockValues.set(SECURE_STORE_KEYS.userRateScenario, JSON.stringify({ version: 4,
+    mortgage: { mode: 'buy', propertyValue: '900000', deposit: '250000', costs: '10000', currentRate: '6.74', years: '25' },
+    projections: { mortgage: { offsetBalance: '45000' } },
+  }));
+  const { profile } = boot();
+  await profile.openMortgageComparisonProfile();
+  const before = JSON.parse(mockValues.get(SECURE_STORE_KEYS.customerProfile)!).inputState.scenario;
+  expect(before.mortgage.mode).toBe('buy');
+  profile.clearSavedMortgageComparison();
+  await profile.openMortgageComparisonProfile();
+  const after = JSON.parse(mockValues.get(SECURE_STORE_KEYS.customerProfile)!).inputState.scenario;
+  expect(after).toEqual(before);
+});
+
+test('clearing Rates scope retains a newer pending loan edit instead of replaying the committed amount', async () => {
+  const { profile } = boot();
   profile.saveMortgageComparisonInputs(comparison);
+  await profile.openMortgageComparisonProfile();
+  profile.saveMortgageComparisonInputs({ ...comparison, loanAmount: '700000' });
+  profile.clearSavedMortgageComparison();
   await profile.openMortgageComparisonProfile();
   const restarted = boot();
   await restarted.profile.openMortgageComparisonProfile();
-  expect(restarted.profile.useMortgageComparisonProfile.getState().profile.inputs).toEqual(comparison);
+  expect(restarted.profile.useMortgageComparisonProfile.getState().profile.inputs).toEqual({ ...comparison, loanAmount: '700000', lvr: '' });
 });

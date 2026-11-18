@@ -1,5 +1,6 @@
 import { rateConditionality } from './rateConditionalFacts';
 import type { RateRow, SectionKey } from '../types';
+import { currencyAmount } from './currencyInput';
 
 /**
  * Mortgage calculator inputs — persisted on the user profile so the calculator
@@ -44,10 +45,9 @@ export const MAX_CALCULATOR_YEARS = 50;
 export function calculatorAmount(value: string, maximum: number): number | null {
   const raw = String(value ?? '').trim();
   if (!raw || !Number.isFinite(maximum) || maximum <= 0) return null;
-  const match = raw.match(/^\$?\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,5})?)\s*([kK])?$/);
-  if (!match || (!match[2] && (match[1].split('.')[1]?.length ?? 0) > 2)) return null;
-  const base = Number(match[1].replace(/,/g, ''));
-  const parsed = match[2] ? Math.round(base * 1_000 * 100) / 100 : base;
+  const canonical = currencyAmount(raw);
+  if (canonical === null || !/^\d+(?:\.\d{1,2})?$/.test(canonical)) return null;
+  const parsed = Number(canonical);
   return Number.isFinite(parsed) && parsed >= 0 && parsed <= maximum ? parsed : null;
 }
 
@@ -96,7 +96,9 @@ export function quickEstimateUnavailableReason(row: RateRow, section: SectionKey
 
 export function normalizeCalcInputs(value?: Partial<CalcInputs> | null): CalcInputs {
   const str = (v: unknown): string => (typeof v === 'string' ? v : '');
-  const mode: CalcMode = value?.mode === 'refi' ? 'refi' : 'buy';
+  // Older saved scenarios may contain the refi-only field without a mode.
+  // An explicitly selected buying mode must never reuse that old loan balance.
+  const mode: CalcMode = value?.mode === 'refi' || value?.mode === undefined && str(value?.loanBalance).trim() ? 'refi' : 'buy';
   return {
     mode,
     propertyValue: str(value?.propertyValue),

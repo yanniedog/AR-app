@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { AppText, Chip, Disclosure } from '../ui';
 import { LedgerField } from '../ledger/LedgerField';
+import { CurrencyInput } from '../CurrencyInput';
 import { CustomerAnswerEditor } from '../CustomerProfilePanel';
 import type { useCustomerProfile } from '../../hooks/useCustomerProfile';
 import { Decimal } from '../../lib/productTermsEngine/decimal';
@@ -32,7 +33,7 @@ export function DepositInputFields({ selection, context, row, inputs, onChange, 
   if (!profile) return <AppText variant="small">{uiLabel(error ? 'Unavailable' : 'Loading')}</AppText>;
   const requirements = depositInputRequirements(selection, inputs, profile);
   return <View style={{ gap: 12 }}>
-    {!shared && <LedgerField label="Deposit amount (AUD)" value={uiInputNumber(inputs.principal)} keyboardType="decimal-pad" onChangeText={principal => onChange({ ...inputs, principal, confirmed: false })} />}
+    {!shared && <CurrencyInput label="Deposit amount (AUD)" value={inputs.principal} onChangeText={principal => onChange({ ...inputs, principal, confirmed: false })} />}
     {!shared && <LedgerField label="Bank-confirmed funding date" placeholder="YYYY-MM-DD" value={uiInputIdentifier(inputs.fundedDate)} onChangeText={fundedDate => onChange({ ...inputs, fundedDate, confirmed: false })} />}
     <LedgerField label="Bank-confirmed maturity date" placeholder="YYYY-MM-DD" value={uiInputIdentifier(inputs.maturityDate)} onChangeText={maturityDate => onChange({ ...inputs, maturityDate, confirmed: false })} />
     <ConfirmedRateField inputs={inputs} onChange={onChange} />

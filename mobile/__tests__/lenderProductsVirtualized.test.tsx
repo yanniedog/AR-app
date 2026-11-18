@@ -41,14 +41,14 @@ jest.mock('../src/components/ChartErrorBoundary', () => ({ ChartErrorBoundary: '
 jest.mock('../src/components/feedback', () => ({ EmptyState: 'EmptyState', ScreenSkeleton: 'ScreenSkeleton' }));
 jest.mock('../src/components/Screen', () => ({ Screen: 'Screen', DataHealthBannerStrip: 'DataHealthBannerStrip', responsiveScreenContentStyle: () => ({}) }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
-jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Chip: 'Chip', Divider: 'Divider', Row: 'Row' }));
+jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Chip: 'Chip', Divider: 'Divider', Row: 'Row', Button: 'Button' }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 1 }));
 jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: () => ({ snapshots: null,
   updating: false, failed: false, historyAvailable: false, revision: 'disabled', missingDates: [] }) }));
 jest.mock('../src/lib/proAccess', () => ({ effectiveBankInsights: () => false }));
 jest.mock('../src/lib/nav', () => ({ openProduct: jest.fn() }));
-jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({}) }));
+jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {} }) }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 
 test('retains every lender tier while mounting viewport cards and measuring the committed list', () => {
@@ -63,6 +63,8 @@ test('retains every lender tier while mounting viewport cards and measuring the 
   expect(new Set(list.props.data.map(list.props.keyExtractor)).size).toBe(32);
   expect(mockMountedProducts.mock.calls.map(([key]) => key)).toEqual(['loan-0', 'loan-0', 'loan-1', 'loan-2']);
   act(() => tree.root.findAllByType('ProductCard' as any)[1].props.onPress());
+  expect(openProduct).not.toHaveBeenCalled();
+  act(() => tree.root.findAllByType('Button' as any).find(node => node.props.title === 'Product details')!.props.onPress());
   expect(openProduct).toHaveBeenLastCalledWith('loan-0', 99, 'programme-99');
   const initialCardRenders = mockMountedProducts.mock.calls.length;
   let audit = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
@@ -83,6 +85,7 @@ test('retains every lender tier while mounting viewport cards and measuring the 
   const last = tree.root.findAllByType('ProductCard' as any).at(-1)!;
   expect(last.props.row).toBe(mockRows[30]);
   act(() => last.props.onPress());
+  act(() => tree.root.findAllByType('Button' as any).find(node => node.props.title === 'Product details')!.props.onPress());
   expect(openProduct).toHaveBeenLastCalledWith('loan-30', 30);
   act(() => tree.unmount());
   installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null));

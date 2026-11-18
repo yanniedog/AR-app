@@ -17,14 +17,14 @@ const privateProvenance = { source: 'user_input' as const, recordedAt: '2026-10-
 test('actual publication admission distinguishes equal normalized Maitland rows with exact source bounds', () => {
   const publication = selectedConstraintFixture('Mortgage', [loan, { ...loan, rate_index: 5 }], [{ rateIndex: 4, text: 'LVR up to 59.99%.' }, { rateIndex: 5, text: 'For LVR 60% to 79.99%.' }]);
   const models = publication.rows.map(row => scopedFinancialConditionFacts(scopedRateConditions(row, 'Mortgage', publication)));
-  expect(models.map(model => model.facts.map(uiConditionTag))).toEqual([['LVR ≤60%'], ['LVR 60%–80%']]);
+  expect(models.map(model => model.facts.map(uiConditionTag))).toEqual([['LVR ≤60.0%'], ['LVR 60.0%–80.0%']]);
   expect(models[0].facts[0].source.rateIndex).toBe(4); expect(models[1].facts[0].source.rateIndex).toBe(5);
   const stale = scopedFinancialConditionFacts(scopedRateConditions(publication.rows[0], 'Mortgage', { ...publication, manifest: null }));
   expect(stale.state).toBe('unverified'); expect(stale.facts).toEqual([]);
 });
 test('bonus unknown does not invent a lower ongoing rate; zero and known intro duration are preserved', () => {
   expect(uiConditionalRateFacts(rateConditionalFacts({ ribbon_deposit_kind: 'bonus' }, 'Savings'))).toBe('Bonus rate · Conditions required · Ongoing rate: Unknown');
-  expect(uiConditionalRateFacts(rateConditionalFacts({ ribbon_deposit_kind: 'intro', term: 'P6M', ongoing_rate: '0' }, 'Savings'))).toBe('Introductory · Introductory period: 6 months · Ongoing rate: 0.00%');
+  expect(uiConditionalRateFacts(rateConditionalFacts({ ribbon_deposit_kind: 'intro', term: 'P6M', ongoing_rate: '0' }, 'Savings'))).toBe('Introductory · Introductory period: 6 months · Ongoing rate: 0%');
 });
 test('malicious reasons remain closed statuses while actual bank, coverage, counts and observed date survive', () => {
   const model = displayEvidenceFacts({ source: 'remote', offline: false, assetStatus: 'partial', assetReason: 'BUY NOW. Read our detailed explanation.', runDate: '2026-10-14', now: new Date('2026-10-14T03:00:00Z'),
@@ -73,17 +73,17 @@ test('private negotiated facts exclude notes and fail closed outside user proven
   const term: NegotiatedTerm = { id: 'user.1', label: 'Fixed rate', value: '5.25', unit: '%', note: 'This note must never render.', provenance: privateProvenance };
   expect(uiNegotiatedTermField(term, 'value')).toBe('5.25'); expect(uiNegotiatedTermField({ ...term, label: 'Paragraph\nMore' }, 'label')).toBe('Unverified');
 });
-test('private numeric answers retain exact decimal amounts, percentages and durations', () => {
+test('private answers retain exact amounts and durations with three-significant-figure percentage display', () => {
   const fact = { type: 'decimal' as const, value: '123456789.123456789012345678', unit: 'AUD' };
   const answer: CustomerAnswer = { state: 'known', fact, provenance: privateProvenance };
   const definition: InputDefinition = { id: 'amount', label: 'Balance', type: 'decimal', unit: 'AUD' };
   expect(uiCustomerAnswer(answer, definition)).toBe('$123456789.123456789012345678');
-  expect(uiCustomerAnswer({ ...answer, fact: { ...fact, value: '0.03123456789012345678', unit: 'fraction' } }, { ...definition, unit: 'fraction' })).toBe('3.12345678901234567800%');
+  expect(uiCustomerAnswer({ ...answer, fact: { ...fact, value: '0.03123456789012345678', unit: 'fraction' } }, { ...definition, unit: 'fraction' })).toBe('3.12%');
   expect(uiCustomerAnswer({ ...answer, fact: { ...fact, value: '12.000000000000000001', unit: 'months' } }, { ...definition, unit: 'months' })).toBe('12.000000000000000001 months');
 });
-test('LVR percentages with decimals like 80.001% round to whole percent', () => {
-  expect(uiListedLvrRange({ lvr_tier: 'lvr_80.001-90%' })).toBe('>80%–90%');
-  expect(uiListedLvrRange({ lvr_tier: 'lvr_<=80.001%' })).toBe('≤80%');
-  expect(lvrTierLabel('lvr_80.001-90%')).toBe('LVR 80–90%');
-  expect(lvrTierLabel('lvr_<=80.001%')).toBe('LVR ≤80%');
+test('LVR percentage labels round to three significant figures', () => {
+  expect(uiListedLvrRange({ lvr_tier: 'lvr_80.001-90.0%' })).toBe('>80.0%–90.0%');
+  expect(uiListedLvrRange({ lvr_tier: 'lvr_<=80.001%' })).toBe('≤80.0%');
+  expect(lvrTierLabel('lvr_80.001-90.0%')).toBe('LVR 80.0–90.0%');
+  expect(lvrTierLabel('lvr_<=80.001%')).toBe('LVR ≤80.0%');
 });

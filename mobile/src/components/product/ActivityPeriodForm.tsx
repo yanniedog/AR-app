@@ -13,6 +13,7 @@ import type { ActivityInputs } from '../../data/activityContracts/types';
 import type { SavingsActivityEvent } from '../../lib/productTermsEngine/savingsActivityTypes';
 import { CustomerAnswerEditor } from '../CustomerProfilePanel';
 import { LedgerField } from '../ledger/LedgerField';
+import { CurrencyInput } from '../CurrencyInput';
 import { AppText, Chip, Button, Disclosure } from '../ui';
 import { ReviewedCriteria } from './DepositCriteria';
 import { savingsRatePercent } from './savingsRateLabels';
@@ -39,12 +40,12 @@ export function ActivityPeriodForm({ selections, context, target }: { selections
     catch (e) { setResult({ identity, error: e instanceof Error ? e.message : 'Savings calculation unavailable' }); }
   }
   return <View style={{ gap: 12 }}>
-    <AppText variant="small">{uiJoin('Basis', ': ', 'History', ' · ', 'Tax', ': ', 'Excluded', ' · ', 'Local storage')}</AppText>
+    <AppText variant="small">{uiJoin('Basis', ': ', 'History', ' · ', 'Tax', ': ', 'Excluded', ' · ')}</AppText>
     <AppText variant="small">{uiJoin('Published', ': ', uiDate(context.manifest?.run_date))}</AppText>
     {criteria.map(({ selection: s, result: r }) => <View key={s.subject.id} style={{ gap: 4 }}><Chip label={uiJoin(uiEngineScope(s.subject.scope.cohortKey), ' / ', uiEngineScope(s.subject.scope.tierKey), ' / ', uiEngineScope(s.subject.scope.packageKey))} selected={selectedId === s.subject.id} onPress={() => { setSelectedId(s.subject.id);setEvents([]);setCoverage(false);setRateTexts({}); change({startDate:s.subject.scope.from,endDateExclusive:s.subject.scope.toExclusive}); }} /><AppText variant="small">{uiJoin('Recorded criteria', ': ', uiEngineStatus(r.status), ' · ', 'Bank approval', ': ', 'Not assessed')}</AppText></View>)}
     {criteria.filter(c => c.result.status === 'meets').length > 1 && <AppText variant="small">{uiJoin('Scopes', ': ', uiCount(criteria.filter(c => c.result.status === 'meets').length))}</AppText>}
     <LedgerField label="Local account reference" value={uiInputIdentifier(values.accountId)} onChangeText={accountId => change({ accountId })} />
-    <LedgerField label="Opening balance (AUD)" value={uiInputNumber(values.openingBalance)} keyboardType="decimal-pad" onChangeText={openingBalance => change({ openingBalance })} />
+    <CurrencyInput label="Opening balance (AUD)" value={values.openingBalance} onChangeText={openingBalance => change({ openingBalance })} />
     <LedgerField label={uiJoin('Period start', ' · ', 'Included')} placeholder="YYYY-MM-DD" value={uiInputIdentifier(values.startDate)} onChangeText={startDate => change({ startDate })} />
     <LedgerField label={uiJoin('Period end', ' · ', 'Excluded')} placeholder="YYYY-MM-DD" value={uiInputIdentifier(values.endDateExclusive)} onChangeText={endDateExclusive => change({ endDateExclusive })} />
     {selection && <>

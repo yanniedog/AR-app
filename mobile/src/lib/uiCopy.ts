@@ -428,6 +428,11 @@ export const UI_LABELS = [
   'Quoted maturity', 'Periodic interest', 'Paid outside deposit', 'Reinvestment return', 'Charges',
   'Recurring fees', 'Frequency interval start',
   '<60', '60-70', '70-80', '80-90', '>90',
+  'K', 'M', 'Amount unit', 'millions of dollars', 'dollars',
+  'Carousel', 'List', 'Product details', 'Google Drive', 'Connect Google', 'Disconnect', 'Sync now',
+  'Last synced', 'Sync', 'Conflict', 'Keep device', 'Keep Google', 'Connected', 'Not connected', 'Pending approval',
+  'Keep current', 'Use saved', 'Choose saved value',
+  'All product variants',
 ] as const;
 
 export type UiLabel = typeof UI_LABELS[number];
@@ -470,6 +475,7 @@ function useInputController() {
 export function useReceiptImportInput() { return useInputController(); }
 export function useSetupKeyInput() { return useInputController(); }
 export function useProviderSearchInput() { return useInputController(); }
+export function useCurrencyAmountInput() { return useInputController(); }
 export function uiRatesQuery(session: Pick<RatesSectionState, 'query'>): UiInputText { return inputText(session.query); }
 export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr' | 'fundsAvailable' | 'propertyValue'): UiInputText {
   return inputText(field === 'lvr' ? model.lvr : mortgageMoneyDigits(model[field] ?? ''));
@@ -511,8 +517,17 @@ export function uiMoney(value: number | null | undefined, digits = 0): UiText {
   }
   return known(formatter.format(value));
 }
-export function uiRate(value: number | null | undefined, digits = 2): UiText {
-  return finite(value) ? uiJoin(uiNumber(value * 100, digits), '%') : uiLabel('Unknown');
+const PERCENT_FORMATTER = new Intl.NumberFormat('en-AU', { minimumSignificantDigits: 3, maximumSignificantDigits: 3, useGrouping: false });
+/** Percentage value, with three significant figures. Arithmetic retains its original precision. */
+export function uiPercentage(value: number | null | undefined): UiText {
+  return finite(value) ? known(`${value === 0 ? '0' : PERCENT_FORMATTER.format(value)}%`) : uiLabel('Unknown');
+}
+export function uiPercentageDigits(value: number | null | undefined): UiText {
+  return finite(value) ? known(value === 0 ? '0' : PERCENT_FORMATTER.format(value)) : uiLabel('Unknown');
+}
+/** Fractions use one app-wide display precision; the legacy argument is retained for callers. */
+export function uiRate(value: number | null | undefined, _digits = 2): UiText {
+  return finite(value) ? uiPercentage(value * 100) : uiLabel('Unknown');
 }
 const NUMBER_FORMATTERS = new Map<number, Intl.NumberFormat>();
 export function uiNumber(value: number | null | undefined, digits = 0): UiText {
@@ -733,7 +748,7 @@ export function uiSectionName(section: SectionKey, short = false): UiText {
 }
 /** Editable calculator number text remains user input; payload prose is rejected. */
 export function uiInputNumber(value: string): UiText {
-  return known(/^[\d.,+\- $%kK]*$/.test(value) ? value : '');
+  return known(/^[\d.,+\- $%kKmM]*$/.test(value) ? value : '');
 }
 export function uiInputIdentifier(value: string): UiText {
   return known(/^[A-Za-z0-9_./:@%+\-=#?&]*$/.test(value) ? value : '');
@@ -741,7 +756,7 @@ export function uiInputIdentifier(value: string): UiText {
 /** Exact decimal fact representation; source prose and non-finite placeholders cannot enter. */
 export function uiDecimal(value: string | null | undefined, unit: 'AUD' | 'count' | 'percent' = 'AUD'): UiText {
   if (value == null || !/^-?\d+(?:\.\d+)?$/.test(value)) return uiLabel('Unknown');
-  return known(unit === 'AUD' ? `$${value}` : unit === 'percent' ? `${value}%` : value);
+  return unit === 'percent' ? uiPercentage(Number(value)) : known(unit === 'AUD' ? `$${value}` : value);
 }
 /** Unknown machine enum identities cannot carry source paragraphs. */
 export function uiOpaqueEnum(value: string): UiText {

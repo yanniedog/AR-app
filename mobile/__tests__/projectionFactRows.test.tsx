@@ -42,7 +42,7 @@ test('known zero ongoing rate and entered unmet bonus remain distinct from unkno
   const value = render(projectionFacts({ section: 'Savings', months: 60, horizonYears: 5, rateRange: [0, 0, 0.01], history: null,
     contribution: { monthlyAmount: 0, enteredAmount: 0, annualPeriods: 52, enteredFrequency: 'weekly' }, withdrawal: { monthlyAmount: 0, enteredAmount: 0, annualPeriods: 12, enteredFrequency: 'monthly' },
     bonus: { conditionsMet: false, months: 6, conditionalRateFraction: 0.05, ongoingRateFraction: 0 } }));
-  for (const expected of ['Conditional / ongoing rate', '5.00%', '0.00%', 'Entered · Does not meet', 'Starting rate', 'Ongoing rate', 'Provider timing / bonus eligibility', 'Unverified']) expect(value).toContain(expected);
+  for (const expected of ['Conditional / ongoing rate', '5.00%', '0%', 'Entered · Does not meet', 'Starting rate', 'Ongoing rate', 'Provider timing / bonus eligibility', 'Unverified']) expect(value).toContain(expected);
 });
 test('paid-out deposit interest, unknown renewal and unverified provider timing remain explicit', () => {
   const value = render(projectionFacts({ section: 'TD', months: 18, rateRange: [0.03, 0.04, 0.05], history: null,

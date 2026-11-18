@@ -73,7 +73,7 @@ export function ProductSpecs({ row, section, productDetails }: { row: RateRow; s
   const sourceLvr = conditions.facts.filter(fact => fact.kind === 'published-lvr-range');
   const access = productDetails ? assessAccess(row.product_name, productDetails, row.provider) : null;
   const availability = access && accessExcludesFromStandard(access) ? uiJoin('Restricted', ' · ', uiAccessBadge(access))
-    : isNonStandard(row) ? uiJoin('Listed rate', ' · ', 'Unverified') : access ? uiJoin('Widely available', ' · ', 'Eligibility unverified') : uiLabel('Unverified');
+    : isNonStandard(row) ? uiJoin('Listed rate', ' · ', 'Unverified') : access ? uiLabel('Eligibility unverified') : uiLabel('Unverified');
   return <Disclosure title="Rate details" open={open} onToggle={() => setOpen(v => !v)}>
     <FinancialFactRows linkToProduct rows={[{ label: 'Rate type', value: humanizeEnum(row.rate_type) }, { label: 'Term', value: formatTerm(row) || uiLabel('Unknown') },
       ...(section === 'Mortgage' ? [{ label: 'Rate structure' as const, value: uiRateStructure(row) }, { label: 'Repayment' as const, value: uiRepayment(row) },

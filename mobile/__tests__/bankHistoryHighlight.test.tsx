@@ -176,7 +176,7 @@ test('captured fallback-only gaps recover when the verified archive replaces the
     expect(chart().props.accessibilityLabel).toContain('27 Observed');
     expect(facts()).toContain('Missing observations: 4 · Unknown');
     act(() => tree.root.findAllByType('ChartSliceControls')[0].props.onChangeIndex(29));
-    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('5.94% – 13.75%');
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('5.94% – 13.8%');
   } finally { act(() => tree.unmount()); }
 });
 

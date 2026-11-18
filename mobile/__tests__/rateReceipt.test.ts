@@ -85,7 +85,7 @@ describe('rate receipt', () => {
     });
     expect(receipt.tier).toEqual(expect.arrayContaining([
       { label: 'Rate index', value: '4' },
-      { label: 'Listed LVR', value: '>70%–80%' },
+      { label: 'Listed LVR', value: '>70.0%–80.0%' },
     ]));
     expect(receipt.conditions).toEqual(expect.arrayContaining([
       { label: 'Minimum age', value: '18 years · Australian resident' },
@@ -111,7 +111,7 @@ describe('rate receipt', () => {
       section: 'Savings',
       evidenceDate: '2026-08-04',
     });
-    expect(receipt.ongoingRate).toBe('0.00%');
+    expect(receipt.ongoingRate).toBe('0%');
     expect(receipt.facts).toEqual(expect.arrayContaining([{ kind: 'source', state: 'unavailable' }, { kind: 'detailed-eligibility', state: 'unavailable' }]));
   });
 });

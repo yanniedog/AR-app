@@ -93,8 +93,8 @@ test('exports exact admitted sibling LVR facts before cloning and keeps missing 
   installMandatoryEligibility(selectMandatoryEligibility(publication.core, EMPTY_PROFILE, publication.details.products));
   const snapshot = captureFilteredSearchSnapshot({ ...publication, request, profile: EMPTY_PROFILE });
   const rateRows = searchReportTables(snapshot).find(sheet => sheet.name === 'Rates and Tiers')!.rows;
-  expect(rateRows.some(row => row[2] === '4' && row[3] === 'Conditions' && row[5] === 'LVR ≤60%')).toBe(true);
-  expect(rateRows.some(row => row[2] === '5' && row[3] === 'Conditions' && row[5] === 'LVR 60%–80%')).toBe(true);
+  expect(rateRows.some(row => row[2] === '4' && row[3] === 'Conditions' && row[5] === 'LVR ≤60.0%')).toBe(true);
+  expect(rateRows.some(row => row[2] === '5' && row[3] === 'Conditions' && row[5] === 'LVR 60.0%–80.0%')).toBe(true);
   const html = await searchReportHtml(snapshot, () => undefined);
   expect(html).not.toContain('LVR up to'); expect(html).not.toContain('For LVR'); expect(html).toContain('Unverified');
   const unverified = captureFilteredSearchSnapshot({ ...publication, coreIntegrity: null, request, profile: EMPTY_PROFILE });
@@ -119,7 +119,7 @@ test('PDF and workbook reject marketing, source labels, error-like prose and pri
   const exported = Object.values(workbook).map(bytes => strFromU8(bytes)).join('\n') + await searchReportHtml(snapshot, () => undefined);
   for (const prose of [detail.description, detail.fees[0].info!, detail.fees[0].name!, detail.features[0].info!, detail.sourceDocuments[0].label!, publication.details.products[row.product_key].rateConditions!.entries[0].text]) expect(exported).not.toContain(prose);
   expect(exported).toContain('123456789.123456789012345678'); expect(exported).toContain('0.05000000000000000001');
-  expect(exported).toContain('Ongoing rate: 0.00%'); expect(exported).toContain('6 months'); expect(exported).toContain('Introductory');
+  expect(exported).toContain('Ongoing rate: 0%'); expect(exported).toContain('6 months'); expect(exported).toContain('Introductory');
   expect(exported).toContain('Unverified'); expect(exported).not.toContain('/data/depositRates/0/additionalInfo');
   expect(exported).toContain('No'); expect(exported).toContain('Bank|id-1|TRANS_AND_SAVINGS_ACCOUNTS|Deposit');
 });

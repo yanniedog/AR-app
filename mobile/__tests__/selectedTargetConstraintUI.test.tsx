@@ -252,7 +252,7 @@ test('failed same-publication details admission stays rate-only without a siblin
 });
 
 function numericField(tree: InspectableRenderer, label: string) {
-  const field = tree.root.findAllByType(TextInput).find(node => node.props.accessibilityLabel === label);
+  const field = tree.root.findAllByType(TextInput).find(node => node.props.accessibilityLabel === label || String(node.props.accessibilityLabel).startsWith(`${label}, `));
   if (!field) throw new Error(`Missing input: ${label}`);
   return field.props;
 }
@@ -268,7 +268,7 @@ test.each([
     for (const field of fields) {
       expect(field.props.value).toBe('');
       expect(field.props.placeholder).toBeUndefined();
-      expect(field.props.keyboardType).toBe('numeric');
+      expect(field.props.keyboardType).toBe('decimal-pad');
       expect(field.props.accessibilityLabel).toEqual(expect.any(String));
     }
     expect(texts(tree)).toContain('Inputs incomplete');
@@ -281,7 +281,7 @@ test('actual entered buying amounts including zero still derive the identical lo
   let tree!: InspectableRenderer; act(() => { tree = TestRenderer.create(<RateCheckWorkspace />) as InspectableRenderer; });
   try {
     for (const [label, value] of [
-      ['Property price in dollars', '650000'], ['Savings available as deposit', '130000'],
+      ['Property price in dollars', '650'], ['Savings available as deposit', '130'],
       ['Upfront costs paid from savings', '0'], ['Current interest rate percent', '6.00'], ['Years remaining on loan', '25'],
     ]) {
       act(() => { (numericField(tree, label).onChangeText as (value: string) => void)(value); tree.update(<RateCheckWorkspace />); });
@@ -291,7 +291,7 @@ test('actual entered buying amounts including zero still derive the identical lo
     expect(mockScenario.mortgage).toMatchObject({ propertyValue: '650000', deposit: '130000', costs: '0', currentRate: '6.00', years: '25' });
     expect(computeLvr(mockScenario.mortgage)).toEqual({ loan: 520000, lvr: 80, depositApplied: 130000 });
     expect(texts(tree)).toContain('$520k');
-    expect(texts(tree)).toContain('Scenario LVR: 80%');
+    expect(texts(tree)).toContain('Scenario LVR: 80.0%');
     act(() => { (numericField(tree, 'Property price in dollars').onChangeText as (value: string) => void)(''); tree.update(<RateCheckWorkspace />); });
     expect(numericField(tree, 'Property price in dollars').value).toBe('');
     expect(texts(tree)).not.toContain('$520,000');
@@ -327,16 +327,16 @@ test('entered projection zero and positive amounts still reach the unchanged lif
   prepare('Mortgage', [loan], [], mortgageScenario('450000'), '4');
   let tree!: InspectableRenderer; act(() => { tree = TestRenderer.create(<ProjectionWorkspace />) as InspectableRenderer; });
   try {
-    for (const [label, value] of [['Current offset balance', '0'], ['Amount added to offset', '99.50']]) {
+    for (const [label, value] of [['Current offset balance', '0'], ['Amount added to offset', '0.0995']]) {
       act(() => { (numericField(tree, label).onChangeText as (value: string) => void)(value); tree.update(<ProjectionWorkspace />); });
       expect(numericField(tree, label).value).toBe(value);
       expect(numericField(tree, label).placeholder).toBeUndefined();
     }
     const actual = buildLifecycleProjection('Mortgage', mockScenario);
     expect(actual.ready).toBe(true);
-    expect(mockScenario.projections.mortgage).toMatchObject({ offsetBalance: '0', offsetContributionAmount: '99.50' });
+    expect(mockScenario.projections.mortgage).toMatchObject({ offsetBalance: '0', offsetContributionAmount: '99.5' });
     expect(tree.root.findAllByType('LifecycleChart')[0].props.series).toEqual(actual.rateSeries);
-    expect(numericField(tree, 'Current loan balance').value).toBe('450000');
+    expect(numericField(tree, 'Current loan balance').value).toBe('450');
     expect(numericField(tree, 'Current interest rate').value).toBe('8');
     expect(numericField(tree, 'Years remaining').value).toBe('25');
   } finally { act(() => tree.unmount()); }

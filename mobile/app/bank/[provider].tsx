@@ -1,31 +1,34 @@
-import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiProductName, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../src/lib/uiCopy";
+import { uiCount, uiDate, uiJoin, uiLabel, uiNumber, uiProviderName, uiSectionName, type UiCopy, type UiText } from "../../src/lib/uiCopy";
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { FLASH_LIST_DRAW_DISTANCE } from '../../src/lib/flashListDefaults';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { InteractionManager, Pressable, useWindowDimensions, View } from 'react-native';
+import { InteractionManager, ScrollView, useWindowDimensions, View } from 'react-native';
 
+import { ProviderRateFilters } from '../../src/components/ProviderRateFilters';
+import { normalizeProfileFilters, profileFilterRows, type ProfileFilters } from '../../src/data/profile';
+import { providerRowIdentity, providerTierSeries } from '../../src/data/providerRateWorkspace';
+import { uiProductName as selectedProductName } from '../../src/lib/uiCopy';
+import { bankRateScope } from '../../src/data/bankRateOverview';
+import { packedBankRateSnapshots } from '../../src/data/bankRateHistory';
 import { BankAvatar } from '../../src/components/BankAvatar';
 import {
   BankHistoryChart,
   type BankHistoryChartAuditActions,
 } from '../../src/components/BankHistoryChart';
-import { BankMoveRow } from '../../src/components/BankInsights';
 import { ChartErrorBoundary } from '../../src/components/ChartErrorBoundary';
 import { EmptyState, ScreenSkeleton } from '../../src/components/feedback';
 import { ProductCard } from '../../src/components/ProductCard';
 import { DataHealthBannerStrip, responsiveScreenContentStyle, Screen } from '../../src/components/Screen';
 import { SegmentedControl } from '../../src/components/controls';
-import { AppText, Card, Chip, Divider, Row } from '../../src/components/ui';
+import { AppText, Button, Card, Chip, Row } from '../../src/components/ui';
 import { SECTION_ORDER } from '../../src/constants';
 import {
   bankEventMedianContext,
-  bankTrendChartModel,
   filterBankInsightsForSuitability,
   filterBankInsightsForSuitabilityCooperatively,
   recentBankEvents,
-  type BankEventRateContext,
   type BankRateEvent,
 } from '../../src/data/bankInsights';
 import { formatRate } from '../../src/data/format';
@@ -50,7 +53,6 @@ import {
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useBankRateHistory } from '../../src/hooks/useBankRateHistory';
 import { useDeferredHistorySurface } from '../../src/hooks/useDeferredHistorySurface';
-import { moveTone } from '../../src/lib/moveSemantics';
 import { effectiveBankInsights } from '../../src/lib/proAccess';
 import { yieldToUi } from '../../src/lib/yieldToUi';
 import {
@@ -60,11 +62,11 @@ import {
 } from '../../src/lib/historyGraphicEvidence';
 import type { RateRow, SectionKey } from '../../src/types';
 import { SECTION_KEYS } from '../../src/types';
-import { useTheme } from '../../src/theme/ThemeProvider';
+const providerSessions = new Map<string, { profile: ProfileFilters; view: 'carousel' | 'list'; selected: string | null; offset: number }>();
 interface LenderProductItem { row: RateRow; section: SectionKey; firstInSection: boolean; id: string }
 
-const LenderProductRow = React.memo(function LenderProductRow({ item }: {
-  item: LenderProductItem;
+const LenderProductRow = React.memo(function LenderProductRow({ item, selected, onSelect }: {
+  item: LenderProductItem; selected: boolean; onSelect: (id: string) => void;
 }) {
   const onPress = useCallback(() => item.row.public_programme_id
     ? openProduct(item.row.product_key, item.row.rate_index, item.row.public_programme_id)
@@ -77,9 +79,10 @@ const LenderProductRow = React.memo(function LenderProductRow({ item }: {
       row={item.row}
       section={item.section}
       showLenderAction={false}
-      showTierIndex
-      onPress={onPress}
+      selected={selected}
+      onPress={() => onSelect(item.id)}
     />
+    {selected ? <Button title="Product details" variant="secondary" onPress={onPress} /> : null}
   </View>;
 });
 
@@ -88,11 +91,6 @@ function bpsLabel(bps: number): UiText {
   return uiJoin(rounded>0?'+':rounded<0?'−':'',uiNumber(Math.abs(rounded),1),' ','bps');
 }
 
-function percentagePointLabel(bps: number): UiText {
-  const points = Math.abs(bps / 100);
-  const sign = bps > 0 ? '+' : bps < 0 ? '−' : '';
-  return uiJoin(sign,uiNumber(points,2),' ','percentage points');
-}
 
 function isSectionKey(value: string | undefined): value is SectionKey {
   return !!value && (SECTION_KEYS as readonly string[]).includes(value);
@@ -116,39 +114,6 @@ function eventForVisibleProducts(
   };
 }
 
-const ProductMoveRow = React.memo(function ProductMoveRow({
-  move,
-  section,
-}: {
-  move: ProductRateMove;
-  section: SectionKey;
-}) {
-  const theme = useTheme();
-  const tone = moveTone(section, move.bps);
-  const color =
-    tone === 'danger' ? theme.colors.danger : tone === 'success' ? theme.colors.success : theme.colors.textMuted;
-  return (
-    <Pressable
-      onPress={() => openProduct(move.productKey, move.rateIndex ?? undefined)}
-      accessibilityRole="button"
-      accessibilityLabel={uiJoin(uiProductName({product_name:move.productName}),' · ',bpsLabel(move.bps),' · ',formatRate(move.fromRate),' → ',formatRate(move.toRate),' · ',uiDate(move.date))}
-    >
-      <Row gap={10} style={{ paddingVertical: 8 }}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <AppText variant="small" weight="700" numberOfLines={2}>
-            {uiProductName({product_name:move.productName})}
-          </AppText>
-          <AppText variant="tiny" color="textFaint" numberOfLines={1}>
-            {uiJoin(uiDate(move.date),' · ',formatRate(move.fromRate),' → ',formatRate(move.toRate))}
-          </AppText>
-        </View>
-        <AppText variant="small" weight="800" style={{ color }}>
-          {bpsLabel(move.bps)}
-        </AppText>
-      </Row>
-    </Pressable>
-  );
-});
 
 export default function BankDetail() {
   // Already decoded by expo-router — decoding again would throw on a literal '%'.
@@ -174,7 +139,16 @@ export default function BankDetail() {
   // Keep rich history prep + BankHistoryChart off the synchronous lender mount
   // that product.lender.open measures as actionMs / event-loop lag.
   const historySurfaceReady = useDeferredHistorySurface(provider);
-  const rateHistory = useBankRateHistory(showBankInsights && historySurfaceReady);
+  const savedProfile = useStore(s => s.prefs.profileFilters);
+  const [providerProfile, setProviderProfile] = useState(() => providerSessions.get(provider)?.profile ?? normalizeProfileFilters(savedProfile));
+  const [productView, setProductView] = useState<'carousel' | 'list'>(() => providerSessions.get(provider)?.view ?? 'carousel');
+  const [selectedProduct, setSelectedProduct] = useState<string | null>(() => providerSessions.get(provider)?.selected ?? null);
+  const listOffset = useRef(providerSessions.get(provider)?.offset ?? 0);
+  useEffect(() => {
+    providerSessions.set(provider, { profile: providerProfile, view: productView, selected: selectedProduct, offset: listOffset.current });
+    if (providerSessions.size > 32) providerSessions.delete(providerSessions.keys().next().value!);
+  }, [provider, providerProfile, productView, selectedProduct]);
+  const rateHistory = useBankRateHistory(showBankInsights && historySurfaceReady, undefined, providerProfile);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const suitabilityRevision = useSuitabilityRevision();
   const bankInsights = useStore((s) => s.bankInsights);
@@ -190,7 +164,9 @@ export default function BankDetail() {
   const historyRequestKey = useRef<string | null>(null);
   const scrollRef = useRef<FlashListRef<LenderProductItem>>(null);
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height: screenHeight, fontScale } = useWindowDimensions();
+  const [contentWidth, setContentWidth] = useState(width);
+  const cardWidth = Math.max(160, contentWidth - 32);
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [historyGraphicEvidence, setHistoryGraphicEvidence] =
@@ -264,14 +240,14 @@ export default function BankDetail() {
       // Stable input identity: the ranked list is cached per edition and lender,
       // so reopening a lender does not filter and rank its whole book again.
       const sectionRates = core.sections[section]?.rates;
-      const rows = lenderProductRows(
+      const rows = profileFilterRows(lenderProductRows(
         sectionRates ? stableRowsForProvider(sectionRates, provider) : [],
         section, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts, allTiers,
-      );
+      ), providerProfile, section, detailsProducts);
       if (rows.length) out.push({ section, rows });
     }
     return out;
-  }, [core, provider, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts, suitabilityRevision]);
+  }, [core, provider, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts, suitabilityRevision, providerProfile]);
 
   const catalogsBySection = useMemo(() => {
     // Keep event denominators and product names in the exact same scope as the
@@ -394,21 +370,15 @@ export default function BankDetail() {
   );
 
   const chartSections = useMemo(() => {
-    if (!historySurfaceReady || rateHistory.updating || rateHistory.failed) return [] as SectionKey[];
+    if (!core) return [] as SectionKey[];
     return SECTION_ORDER.filter((section) => {
       if (rateHistory.historyAvailable) {
-        return hasRateHistoryChartSection(rateHistory.snapshots, section, provider);
+        return !!core.sections[section].rates.some(row => row.provider === provider) || hasRateHistoryChartSection(rateHistory.snapshots, section, provider);
       }
-      return !!bankTrendChartModel(visibleBankInsights, provider, section);
+      return !!core?.sections[section].rates.some(row => row.provider === provider);
     });
   }, [
-    historySurfaceReady,
-    provider,
-    rateHistory.failed,
-    rateHistory.historyAvailable,
-    rateHistory.snapshots,
-    rateHistory.updating,
-    visibleBankInsights,
+    provider, rateHistory.historyAvailable, rateHistory.snapshots, core,
   ]);
   const [chartSection, setChartSection] = useState<SectionKey | null>(null);
   const activeChartSection =
@@ -424,7 +394,9 @@ export default function BankDetail() {
     }
     return rateHistory.historyAvailable
       ? rateHistoryChartModel(rateHistory.snapshots, activeChartSection, provider)
-      : bankTrendChartModel(visibleBankInsights, provider, activeChartSection);
+      : core ? rateHistoryChartModel(packedBankRateSnapshots(core, bankRateScope(Object.fromEntries(
+          SECTION_ORDER.map(section => [section, rateGroups(true).find(group => group.section === section)?.rows ?? []]),
+        ) as Record<SectionKey, RateRow[]>)), activeChartSection, provider) : null;
   }, [
     activeChartSection,
     historySurfaceReady,
@@ -433,7 +405,7 @@ export default function BankDetail() {
     rateHistory.historyAvailable,
     rateHistory.snapshots,
     rateHistory.updating,
-    visibleBankInsights,
+    core, rateGroups,
   ]);
   const historyContentRevision = [
     rateHistory.revision,
@@ -517,33 +489,22 @@ export default function BankDetail() {
     return focusEvent ? 'matched' as const : 'none' as const;
   }, [catalogsBySection, focusBreakdown?.matched, focusEvent, focusSection, focusSourceEvent, productHistory]);
 
-  const displayBankEvents = useMemo(
-    () => (productHistory ? bankEvents : visibleBankEvents.slice(0, 8)),
-    [bankEvents, productHistory, visibleBankEvents],
-  );
-
-  const bankEventContexts = useMemo(() => {
-    const map = new Map<string, BankEventRateContext | null>();
-    for (const event of displayBankEvents) {
-      map.set(
-        `${event.date}:${event.section}`,
-        bankEventMedianContext(visibleBankInsights, event),
-      );
-    }
-    return map;
-  }, [displayBankEvents, visibleBankInsights]);
-
   const focusRateCtx = useMemo(
     () => (focusEvent ? bankEventMedianContext(visibleBankInsights, focusEvent) : null),
     [focusEvent, visibleBankInsights],
   );
 
-  const recentMoveBreakdowns = focusSourceEvent ? [] : eventBreakdowns.slice(0, 3);
 
-  const productItems = useMemo(() => rateGroups(true).flatMap(({ section, rows }) => rows.map((row, index) => ({
-    id: JSON.stringify([section, row.product_key, row.rate_index, index]),
-    row, section, firstInSection: index === 0,
+  const allProductItems = useMemo(() => rateGroups(true).flatMap(({ section, rows }) => rows.map((row, index) => ({
+    id: providerRowIdentity(section, row), row, section, firstInSection: index === 0,
   }))), [rateGroups]);
+  const productItems = useMemo(() => activeChartSection ? allProductItems.filter(item => item.section === activeChartSection) : allProductItems,
+    [allProductItems, activeChartSection]);
+  const activeProduct = productItems.find(item => item.id === selectedProduct) ?? productItems[0];
+  const selectedSeries = useMemo(() => core && activeProduct ? {
+    values: providerTierSeries(core, activeProduct.row, activeProduct.section), label: selectedProductName(activeProduct.row),
+  } : null, [core, activeProduct]);
+  const mortgageFilterRows = useMemo(() => core ? stableRowsForProvider(core.sections.Mortgage.rates, provider) : [], [core, provider]);
   const productCount = productItems.length;
   const productListRevision = useRef({ items: productItems, version: 0 });
   if (productListRevision.current.items !== productItems) {
@@ -624,8 +585,8 @@ export default function BankDetail() {
   // (audit saw 25+) and kept open settle waiting on recycled list logos.
   const logoReadiness = useLogoReadiness(listRevision, lenderLogoIds);
   const renderProductItem = useCallback(({ item }: { item: LenderProductItem }) => (
-    <LenderProductRow item={item} />
-  ), []);
+    <View style={productView === 'carousel' ? { width: cardWidth, paddingRight: 12 } : undefined}><LenderProductRow item={item} selected={activeProduct?.id === item.id} onSelect={setSelectedProduct} /></View>
+  ), [activeProduct?.id, productView, cardWidth]);
   const moveHistoryRequired = showBankInsights && historySurfaceReady && !!(focusDate && focusSection);
   const currentHistoryGraphicEvidence = isCurrentHistoryGraphicEvidence(
     historyGraphicEvidence,
@@ -742,50 +703,87 @@ export default function BankDetail() {
     <>
       <Stack.Screen options={{ title: lenderName }} />
       <Screen showDataHealthBanner={false}>
-        <View style={{ ...responsiveScreenContentStyle(width), paddingHorizontal: 0, flex: 1 }}>
+        <View style={{ ...responsiveScreenContentStyle(width), paddingHorizontal: 0, flex: 1 }} onLayout={event => setContentWidth(event.nativeEvent.layout.width)}>
+        <ScrollView style={{ flexGrow: 0, maxHeight: screenHeight * (fontScale > 1.3 ? 0.58 : 0.64) }}
+          contentContainerStyle={{ paddingHorizontal: 16 }} nestedScrollEnabled>
+          <DataHealthBannerStrip />
+          <Row gap={8} style={{ marginVertical: 6 }}>
+            <BankAvatar provider={provider} size={28} renderStateId={lenderLogoIds[0]}
+              onRenderStateChange={logoReadiness.onLogoRenderStateChange} />
+            <AppText variant="small" weight="700">{uiJoin("Rate history", " \u00b7 ", "Advertised")}</AppText>
+          </Row>
+              {chartSections.length > 1 ? (
+                <SegmentedControl
+                  options={chartSections.map((s) => ({ value: s, label: uiSectionName(s,true) }))}
+                  value={activeChartSection}
+                  onChange={setChartSection}
+                />
+              ) : null}
+        {showBankInsights && historySurfaceReady && (rateHistory.updating || rateHistory.failed) ? (
+          <Card style={{ marginBottom: 6 }}>
+            <AppText variant="h3">{uiLabel("Rate history")}</AppText>
+            <AppText variant="small" color="textMuted" accessibilityRole="alert">
+              {uiLabel(rateHistory.failed ? 'History unavailable':'Loading')}
+            </AppText>
+          </Card>
+        ) : null}
+        {showBankInsights && historySurfaceReady ? (
+          chartModel && activeChartSection ? (
+            <View style={{ marginBottom: 6 }}>
+              <ChartErrorBoundary name="BankTrendChart">
+                <BankHistoryChart
+                  key={`${provider}:${activeChartSection}`}
+                  auditActionsRef={historyAuditActionsRef}
+                  contentRevision={historyContentRevision}
+                  dates={chartModel.dates}
+                  points={chartModel.points}
+                  allDates={chartModel.allDates}
+                  rba={core.rba}
+                  rbaHolds={core.rba_holds}
+                  section={activeChartSection}
+                  height={screenHeight < 700 ? 115 : 145}
+                  compactStatistics
+                  stateKey={`${provider}:${activeChartSection}`}
+                  highlightSeries={selectedSeries}
+                  onGraphicReady={onHistoryGraphicReady}
+                />
+              </ChartErrorBoundary>
+            </View>
+          ) : !rateHistory.updating && !rateHistory.failed ? <View style={{ height: screenHeight < 700 ? 115 : 145, justifyContent: 'center' }}>
+            <AppText variant="small" color="textMuted">{uiLabel('No observations')}</AppText>
+          </View> : null
+        ) : null}
+          <Row gap={8} style={{ paddingVertical: 4 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              {activeChartSection === 'Mortgage' ? <ProviderRateFilters rows={mortgageFilterRows} profile={providerProfile} onChange={setProviderProfile} />
+                : <AppText variant="tiny">{uiJoin(uiCount(productCount), ' ', 'Products')}</AppText>}
+            </View>
+            <Chip label={productView === 'carousel' ? 'List' : 'Carousel'} onPress={() => setProductView(productView === 'carousel' ? 'list' : 'carousel')} />
+          </Row>
+        </ScrollView>
         <FlashList
-          key={listRevision}
+          key={`${productView}:${provider}`}
+          horizontal={productView === 'carousel'}
+          snapToInterval={productView === 'carousel' ? cardWidth : undefined}
+          decelerationRate={productView === 'carousel' ? 'fast' : 'normal'}
+          disableIntervalMomentum={productView === 'carousel'}
+          initialScrollIndex={productView === 'carousel' ? Math.max(0, productItems.findIndex(item => item.id === activeProduct?.id)) : undefined}
+          onScroll={event => { if (productView === 'list') { listOffset.current = event.nativeEvent.contentOffset.y;
+            const session = providerSessions.get(provider); if (session) session.offset = listOffset.current; } }}
           ref={scrollRef}
           drawDistance={FLASH_LIST_DRAW_DISTANCE}
           data={productItems}
           onLayout={() => { setLayoutReady(true); listReadiness.onRevisionLayout(); }}
           onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
-          onLoad={listReadiness.onLoad}
+          onLoad={() => { listReadiness.onLoad(); if (productView === 'list' && listOffset.current) scrollRef.current?.scrollToOffset({ offset: listOffset.current, animated: false }); }}
           onContentSizeChange={listReadiness.onContentSizeChange}
-          onViewableItemsChanged={listReadiness.onViewableItemsChanged}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
+          onViewableItemsChanged={info => { listReadiness.onViewableItemsChanged(info); if (productView === 'carousel') { const item = info.viewableItems.find(token => token.isViewable)?.item; if (item) setSelectedProduct(item.id); } }}
+          viewabilityConfig={{ itemVisiblePercentThreshold: productView === 'carousel' ? 51 : 1, minimumViewTime: 16 }}
           keyExtractor={item => item.id}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 + insets.bottom }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12 + insets.bottom }}
           renderItem={renderProductItem}
           ListEmptyComponent={<EmptyState title="No current products" />}
-          ListHeaderComponent={<View>
-        <DataHealthBannerStrip />
-        <Row gap={14} style={{ marginBottom: 20 }}>
-          <BankAvatar
-            provider={provider}
-            size={56}
-            renderStateId={lenderLogoIds[0]}
-            onRenderStateChange={logoReadiness.onLogoRenderStateChange}
-          />
-          <View style={{ flex: 1 }}>
-            <AppText variant="h3">{lenderName}</AppText>
-            {!includeNonStandard ? <AppText variant="small" color="textMuted">{uiLabel('Widely available')}</AppText> : null}
-          </View>
-        </Row>
-
-        {showBankInsights && historySurfaceReady && displayBankEvents[0] ? (
-          <Card variant="outlined" style={{ marginBottom: 16, gap: 4 }}>
-            <AppText variant="small" color="textMuted">{uiLabel("Latest observed move")}</AppText>
-            <AppText variant="body" weight="700">
-              {uiJoin(uiSectionName(displayBankEvents[0].section),' · ',direction(displayBankEvents[0].dir),' · ','Average',': ',percentagePointLabel(displayBankEvents[0].avg_bps),' · ',uiDate(displayBankEvents[0].date))}
-            </AppText>
-          </Card>
-        ) : null}
-
-        <AppText variant="h3" style={{ marginBottom: 10 }}>{uiLabel("Rates")}</AppText>
-
-          </View>}
-          ListFooterComponent={<View>
+          ListFooterComponent={productView === 'list' ? <View>
 
 
         {showBankInsights && historySurfaceReady && focusEvent && focusSection ? (
@@ -810,24 +808,9 @@ export default function BankDetail() {
                 selected
               />
             </Row>
-            {focusedMoves.length ? (
-              <>
-                <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>{uiLabel("Products that moved")}</AppText>
-                {focusedMoves.map((move, i) => (
-                  <React.Fragment key={move.productKey}>
-                    {i > 0 ? <Divider /> : null}
-                    <ProductMoveRow move={move} section={focusSection} />
-                  </React.Fragment>
-                ))}
-                <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-                  {uiJoin('Exact matches',': ',uiCount(focusedMoves.length),' / ',uiCount(focusEvent.moved),' · ','Available history')}
-                </AppText>
-              </>
-            ) : (
-              <AppText variant="small" color="textMuted">
-                {uiLabel(productHistory ? 'No exact matches':productHistoryError?'History unavailable':'Loading')}
-              </AppText>
-            )}
+            {!focusedMoves.length ? <AppText variant="small" color="textMuted">
+              {uiLabel(productHistory ? 'No exact matches' : productHistoryError ? 'History unavailable' : 'Loading')}
+            </AppText> : null}
           </Card>
         ) : null}
 
@@ -843,111 +826,22 @@ export default function BankDetail() {
           </Card>
         ) : null}
 
-        {showBankInsights && historySurfaceReady && recentMoveBreakdowns.length ? (
-          <Card style={{ marginBottom: 16 }}>
-            <AppText variant="h3" style={{ marginBottom: 4 }}>{uiLabel("Products that changed")}</AppText>
-            <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-              {uiLabel('Exact matches · Available history')}
-            </AppText>
-            {recentMoveBreakdowns.map(({ event, moves }, bi) => (
-              <View
-                key={`${event.date}-${event.section}`}
-                style={{ marginBottom: bi < recentMoveBreakdowns.length - 1 ? 12 : 0 }}
-              >
-                <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>
-                  {uiJoin(uiDate(event.date),' · ',uiSectionName(event.section,true),' · ',uiCount(event.moved),' / ',uiCount(event.total))}
-                </AppText>
-                {moves.slice(0, 5).map((move, i) => (
-                  <React.Fragment key={move.productKey}>
-                    {i > 0 ? <Divider /> : null}
-                    <ProductMoveRow move={move} section={event.section} />
-                  </React.Fragment>
-                ))}
-                {moves.length > 5 ? (
-                  <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>{uiJoin('+',uiCount(moves.length-5),' ','Products')}
-                  </AppText>
-                ) : null}
-              </View>
-            ))}
-          </Card>
-        ) : null}
-
-        {showBankInsights && historySurfaceReady && (rateHistory.updating || rateHistory.failed) ? (
-          <Card style={{ marginBottom: 16 }}>
-            <AppText variant="h3">{uiLabel("Rate history")}</AppText>
-            <AppText variant="small" color="textMuted" accessibilityRole="alert">
-              {uiLabel(rateHistory.failed ? 'History unavailable':'Loading')}
-            </AppText>
-          </Card>
-        ) : null}
-        {showBankInsights && historySurfaceReady ? (
-          chartModel && activeChartSection ? (
-            <Card style={{ marginBottom: 16 }}>
-              <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-                <AppText variant="h3">{uiLabel("Rate history")}</AppText>
-              </Row>
-              {chartSections.length > 1 ? (
-                <SegmentedControl
-                  options={chartSections.map((s) => ({ value: s, label: uiSectionName(s,true) }))}
-                  value={activeChartSection}
-                  onChange={setChartSection}
-                />
-              ) : null}
-              <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, marginBottom: 4 }}>
-                {uiLabel(rateHistory.historyAvailable
-                  ? 'Advertised range / mean / median':'Leading / median advertised')}
-              </AppText>
-              <ChartErrorBoundary name="BankTrendChart">
-                <BankHistoryChart
-                  auditActionsRef={historyAuditActionsRef}
-                  contentRevision={historyContentRevision}
-                  dates={chartModel.dates}
-                  points={chartModel.points}
-                  allDates={chartModel.allDates}
-                  rba={core.rba}
-                  rbaHolds={core.rba_holds}
-                  section={activeChartSection}
-                  height={200}
-                  onGraphicReady={onHistoryGraphicReady}
-                />
-              </ChartErrorBoundary>
-              {rawBankEvents.length ? (
-                <>
-                  <Divider style={{ marginVertical: 10 }} />
-                  <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>{uiLabel("Recent moves")}</AppText>
-                  <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
-                    {uiLabel(productHistory
-                      ? 'Exact product matches':'Available lender sections')}
-                  </AppText>
-                  {displayBankEvents.length ? (
-                    displayBankEvents.map((event) => (
-                      <BankMoveRow
-                        key={`${event.date}-${event.section}`}
-                        event={event}
-                        rateContext={bankEventContexts.get(`${event.date}:${event.section}`) ?? null}
-                        focused={
-                          !!focusEvent &&
-                          event.date === focusEvent.date &&
-                          event.section === focusEvent.section
-                        }
-                        showProductHint
-                        onSelect={handleMoveSelect}
-                      />
-                    ))
-                  ) : (
-                    <AppText variant="small" color="textMuted" style={{ paddingVertical: 8 }}>
-                      {uiLabel('No exact compatible matches')}
-                    </AppText>
-                  )}
-                </>
-              ) : null}
-            </Card>
-          ) : null
-        ) : null}
 
 
-          </View>}
+
+          </View> : null}
         />
+        {productView === 'carousel' && productItems.length > 1 ? <Row gap={8} style={{ padding: 8, justifyContent: 'space-between' }}>
+          <Chip label="Previous" icon="chevron-back" onPress={() => {
+            const index = Math.max(0, productItems.findIndex(item => item.id === activeProduct?.id) - 1);
+            setSelectedProduct(productItems[index].id); scrollRef.current?.scrollToIndex({ index, animated: true });
+          }} />
+          <AppText variant="tiny">{uiJoin(uiCount(productItems.findIndex(item => item.id === activeProduct?.id) + 1), ' / ', uiCount(productItems.length))}</AppText>
+          <Chip label="Next" icon="chevron-forward" onPress={() => {
+            const index = Math.min(productItems.length - 1, productItems.findIndex(item => item.id === activeProduct?.id) + 1);
+            setSelectedProduct(productItems[index].id); scrollRef.current?.scrollToIndex({ index, animated: true });
+          }} />
+        </Row> : null}
         </View>
       </Screen>
     </>

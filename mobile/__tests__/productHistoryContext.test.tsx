@@ -211,10 +211,10 @@ describe('product-wide history context on an exact-tier page', () => {
     mockState.prefs.showHistoryRibbon = enabled;
     const tree = await renderProduct();
     const renderedCopy = copy(tree);
-    expect(renderedCopy).toContain('Selected rate 5.00% · Leading advertised 11.50% · All tiers');
+    expect(renderedCopy).toContain('Selected rate 5.00% · Leading advertised 11.5% · All tiers');
     expect(renderedCopy).not.toMatch(/Leading advertised 11\.50% today/);
     if (enabled) {
-      expect(renderedCopy).toContain('Leading advertised 11.50% · All tiers');
+      expect(renderedCopy).toContain('Leading advertised 11.5% · All tiers');
       expect(tree.root.findAllByType('BankHistoryChart')[0].props.highlightSeries.values['2026-09-12']).toBe(0.115);
     }
     act(() => tree.unmount());
@@ -224,7 +224,7 @@ describe('product-wide history context on an exact-tier page', () => {
     const tree = await renderProduct();
     expect(tree.root.findByProps({ text: 'Published product history' })).toBeTruthy();
     expect(copy(tree)).toContain('All tiers · Conditional rate / Restricted');
-    expect(copy(tree)).toContain('Selected rate 5.00% · Leading advertised 11.50% · All tiers');
+    expect(copy(tree)).toContain('Selected rate 5.00% · Leading advertised 11.5% · All tiers');
     expect(tree.root.findByProps({ title: 'Show market history' })).toBeTruthy();
     act(() => tree.unmount());
   });
@@ -237,7 +237,7 @@ describe('product-wide history context on an exact-tier page', () => {
     expect(chart.props.highlightSeries.valueScope).toBe('Leading advertised · All tiers');
     expect(chart.props.highlightSeries.values['2026-09-13']).toBe(0.115);
     expect(copy(tree)).toContain('Leading advertised · All tiers');
-    expect(copy(tree)).toContain('Leading advertised 11.50% · All tiers');
+    expect(copy(tree)).toContain('Leading advertised 11.5% · All tiers');
     expect(tree.root.findAllByType('ProductSpecs')[0].props.row.rate).toBe('0.05');
     act(() => tree.unmount());
   });
@@ -252,7 +252,7 @@ describe('product-wide history context on an exact-tier page', () => {
     expect(chart.props.highlightSeries.values).toEqual({ '2026-09-12': 0.115, '2026-09-13': 0.115 });
     expect(chart.props.highlightSeries.valueScope).toBe('Leading advertised · All tiers');
     expect(copy(tree)).toContain('All tiers · Conditional rate / Restricted');
-    expect(copy(tree)).not.toContain('Selected rate 11.50%');
+    expect(copy(tree)).not.toContain('Selected rate 11.5%');
     expect(JSON.stringify(mockState.productHistory)).toBe(before);
     act(() => tree.unmount());
   });

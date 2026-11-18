@@ -33,18 +33,18 @@ describe('format', () => {
     expect(formatRate('0.045', 2)).toBe('4.50%');
     expect(formatRate(null)).toBe('—');
     expect(formatRate(4.35)).toBe('4.35%');
-    expect(formatRate(0)).toBe('0.00%');
+    expect(formatRate(0)).toBe('0%');
   });
 
-  test('rate formatter digits are normalized and cached by normalized precision', () => {
-    expect(formatRate('0.045', -4)).toBe('5%');
+  test('rate formatter shares three significant figures regardless of legacy precision arguments', () => {
+    expect(formatRate('0.045', -4)).toBe('4.50%');
     expect(formatRate('0.045', Number.NaN)).toBe('4.50%');
     const formatter = jest.spyOn(Intl, 'NumberFormat');
     formatRate('0.045', 13.9);
     formatRankedFraction(0.045, 13);
     formatRateDigits('0.045', 13.1);
 
-    expect(formatter).toHaveBeenCalledTimes(1);
+    expect(formatter).not.toHaveBeenCalled();
     formatter.mockRestore();
   });
 
@@ -63,7 +63,7 @@ describe('format', () => {
   });
 
   test('formatRankedFraction preserves published 0%', () => {
-    expect(formatRankedFraction(0)).toBe('0.00%');
+    expect(formatRankedFraction(0)).toBe('0%');
     expect(formatRankedFraction(0.045)).toBe('4.50%');
     expect(formatRankedFraction(null)).toBe('—');
     expect(formatRankedFraction(-0.01)).toBe('—');

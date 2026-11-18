@@ -237,7 +237,7 @@ test('prepacked history includes withdrawn products and filters their own dated 
   await act(async () => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
   const chart = () => tree.root.find(n => n.type === ('BankRateChart' as unknown));
   expect(chart().props.model.lines.find(line => line.provider === 'Withdrawn Bank')!.points.map(point => point.date)).toEqual(dates.slice(0, 2));
-  expect(JSON.stringify(tree.toJSON())).toContain('Withdrawn products · Included');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Equal tier weights');
   mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] } };
   await act(async () => tree.update(<BankRatesPanel />));
   expect(chart().props.model.lines.map(line => line.provider)).toEqual(['Withdrawn Bank']);

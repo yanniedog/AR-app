@@ -20,6 +20,26 @@ function constantRateScenario(value: unknown) {
 }
 
 describe('lifecycle projections', () => {
+  it('parses explicit K/M principal exactly and never uses a stale refi balance for invalid buying inputs', () => {
+    const refi = constantRateScenario({ mortgage: { mode: 'refi', loanBalance: '$0.65M', currentRate: '6', years: '25' } });
+    const valid = buildLifecycleProjection('Mortgage', refi, NOW);
+    expect(valid.ready).toBe(true);
+    expect(valid.rateSeries[1].points[0].balance).toBe(650000);
+    refi.mortgage.mode = 'buy'; refi.mortgage.propertyValue = 'invalid';
+    expect(buildLifecycleProjection('Mortgage', refi, NOW).ready).toBe(false);
+    refi.mortgage.mode = 'refi'; refi.mortgage.loanBalance = '650e3';
+    expect(buildLifecycleProjection('Mortgage', refi, NOW).ready).toBe(false);
+  });
+
+  it('preserves an explicit zero repayment rather than silently substituting an automatic payment', () => {
+    const value = constantRateScenario({ mortgage: { mode: 'refi', loanBalance: '100000', currentRate: '6', years: '1' }, projections: { mortgage: { periodicAmount: '0' } } });
+    const result = buildLifecycleProjection('Mortgage', value, NOW);
+    expect(result.ready).toBe(true);
+    expect(result.rateSeries[1].points[1].balance).toBe(100500);
+    expect(result.rateSeries[1].points[1].periodPrincipal).toBe(0);
+    expect(result.rateSeries[1].payoffDate).toBeNull();
+  });
+
   it('models mortgage rate and offset scenarios through payoff', () => {
     const scenario = constantRateScenario({
       mortgage: {

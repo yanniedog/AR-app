@@ -1,12 +1,11 @@
 import { humanizeEnum } from './format';
 import { parseLvrTier } from './profile';
-import { uiDecimal, uiJoin, uiNumber, type UiText } from '../lib/uiCopy';
+import { uiDecimal, uiJoin, uiPercentage, uiPercentageDigits, type UiText } from '../lib/uiCopy';
 
 function roundedLvr(raw: string, unit: 'count' | 'percent'): UiText {
   const n = Number(raw);
   if (!Number.isFinite(n)) return uiDecimal(raw, unit);
-  const rounded = uiNumber(Math.round(n), 0);
-  return unit === 'percent' ? uiJoin(rounded, '%') : rounded;
+  return unit === 'percent' ? uiPercentage(n) : uiPercentageDigits(n);
 }
 
 // Kept outside format.ts/profile.ts: those files are pinned inside the

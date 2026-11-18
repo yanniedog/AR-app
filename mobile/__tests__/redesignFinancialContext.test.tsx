@@ -18,23 +18,23 @@ jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: { bo
 type Tree = ReactTestRenderer & { root: { findAllByType(type: string): { props: Record<string, any> }[]; findAll(predicate: (node: { props: Record<string, any> }) => boolean): { props: Record<string, any> }[] } };
 const texts = (tree: Tree) => tree.root.findAllByType('AppText').map(node => String(node.props.children)).join('\n');
 test('listed LVR preserves known catalogue spellings and rejects invalid or explanatory input', () => {
-  for (const value of ['LVR_70_80', 'lvr_70-80%', '70–80%']) expect(uiListedLvrRange({ lvr_tier: value })).toBe('>70%–80%');
-  for (const value of ['lvr_=60%', 'LVR_LE60', '≤60%']) expect(uiListedLvrRange({ lvr_tier: value })).toBe('≤60%');
-  expect(uiListedLvrRange({ lvr_tier: 'lvr_>95%' })).toBe('>95%');
+  for (const value of ['LVR_70_80', 'lvr_70-80%', '70–80%']) expect(uiListedLvrRange({ lvr_tier: value })).toBe('>70.0%–80.0%');
+  for (const value of ['lvr_=60%', 'LVR_LE60', '≤60%']) expect(uiListedLvrRange({ lvr_tier: value })).toBe('≤60.0%');
+  expect(uiListedLvrRange({ lvr_tier: 'lvr_>95%' })).toBe('>95.0%');
   for (const value of ['LVR_80_70', 'LVR_70_101', 'LVR_70_80. Please read our conditions.', 'lvr_70%%%–80%', 'lvr_unspecified', '']) expect(uiListedLvrRange({ lvr_tier: value })).toBe('Unverified');
 });
 
 test('listed public NAB bounds remain structured inclusive facts', () => {
   const row = nabCapture.rates.find(rate => rate.lvr_tier === 'lvr_>=80.01-95%')!;
-  expect(uiListedLvrRange(row)).toBe('80%–95%');
+  expect(uiListedLvrRange(row)).toBe('80.0%–95.0%');
 });
 
 test.each([
-  ['lvr_>=80.01%', '≥80%'],
-  ['LVR_GE80p01_95', '80%–95%'],
-  ['LVR_GT80p01_95', '>80%–95%'],
-  ['LVR_LT95', '<95%'],
-  ['lvr_<95%', '<95%'],
+  ['lvr_>=80.01%', '≥80.0%'],
+  ['LVR_GE80p01_95', '80.0%–95.0%'],
+  ['LVR_GT80p01_95', '>80.0%–95.0%'],
+  ['LVR_LT95', '<95.0%'],
+  ['lvr_<95%', '<95.0%'],
 ] as const)('listed %s preserves its endpoint flags', (lvr_tier, expected) => {
   expect(uiListedLvrRange({ lvr_tier })).toBe(expected);
 });

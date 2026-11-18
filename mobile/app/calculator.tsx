@@ -10,6 +10,7 @@ import { calculationMode } from '../src/lib/calculationTarget';
 import { destinationSectionFromParam } from '../src/lib/appDestinations';
 import { useStore } from '../src/data/store';
 import { useTheme } from '../src/theme/ThemeProvider';
+import { SharedInputConflicts } from '../src/components/SharedInputConflicts';
 
 /** One task destination and one persisted scenario, with two calculation modes. */
 export default function Calculate() {
@@ -27,6 +28,7 @@ export default function Calculate() {
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <Stack.Screen options={{ title: 'Calculate' }} />
       <View style={{ paddingHorizontal: 16 }}>
+        <SharedInputConflicts />
         <SegmentedControl
           options={[{ label: uiLabel("Rate check"), value: 'check' }, { label: uiLabel("Projection"), value: 'project' }]}
           value={mode}

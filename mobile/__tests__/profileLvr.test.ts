@@ -56,15 +56,15 @@ describe('compareLvrTiers', () => {
 
 describe('lvrTierLabel', () => {
   it('labels payload tiers for display', () => {
-    expect(lvrTierLabel('lvr_=60%')).toBe('LVR ≤60%');
-    expect(lvrTierLabel('lvr_85-90%')).toBe('LVR 85–90%');
+    expect(lvrTierLabel('lvr_=60%')).toBe('LVR ≤60.0%');
+    expect(lvrTierLabel('lvr_85-90%')).toBe('LVR 85.0–90.0%');
     expect(lvrTierLabel('lvr_unspecified')).toBe('LVR · Unknown');
-    expect(lvrTierLabel('lvr_>95%')).toBe('LVR >95%');
+    expect(lvrTierLabel('lvr_>95%')).toBe('LVR >95.0%');
     expect(lvrTierLabel('VARIABLE')).toBeNull();
   });
 
   it('falls back to the generic enum label for unrecognised values', () => {
-    expect(lvrTierDisplay('lvr_=60%')).toBe('LVR ≤60%');
+    expect(lvrTierDisplay('lvr_=60%')).toBe('LVR ≤60.0%');
     expect(lvrTierDisplay('PRINCIPAL_AND_INTEREST')).toBe('Principal & interest');
     expect(lvrTierDisplay(undefined)).toBe('');
   });
@@ -72,10 +72,10 @@ describe('lvrTierLabel', () => {
 
 describe('refreshLvrLabelText', () => {
   it('rewrites only percentage LVR tokens in the trailing suffix and is idempotent', () => {
-    expect(refreshLvrLabelText('Bank · Loan (Variable · LVR =60%)')).toBe('Bank · Loan (Variable · LVR ≤60%)');
-    expect(refreshLvrLabelText('Bank · Loan (Fixed · LVR >95%)')).toBe('Bank · Loan (Fixed · LVR >95%)');
+    expect(refreshLvrLabelText('Bank · Loan (Variable · LVR =60%)')).toBe('Bank · Loan (Variable · LVR ≤60.0%)');
+    expect(refreshLvrLabelText('Bank · Loan (Fixed · LVR >95%)')).toBe('Bank · Loan (Fixed · LVR >95.0%)');
     expect(refreshLvrLabelText('Bank · Loan (Variable · LVR unspecified)')).toBe('Bank · Loan (Variable · LVR unspecified)');
-    expect(refreshLvrLabelText('Bank · Loan (Variable · LVR ≤60%)')).toBe('Bank · Loan (Variable · LVR ≤60%)');
+    expect(refreshLvrLabelText('Bank · Loan (Variable · LVR ≤60%)')).toBe('Bank · Loan (Variable · LVR ≤60.0%)');
     expect(refreshLvrLabelText('Bank · LVR 60% Special')).toBe('Bank · LVR 60% Special');
   });
 });

@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { AppText, Chip, Disclosure } from '../ui';
 import { ReviewedCriteria } from './DepositCriteria';
 import { LedgerField } from '../ledger/LedgerField';
+import { CurrencyInput } from '../CurrencyInput';
 import { CustomerAnswerEditor } from '../CustomerProfilePanel';
 import { useCustomerProfile } from '../../hooks/useCustomerProfile';
 import { savingsRequirements, savingsFacts } from '../../data/monetaryContracts/facts';
@@ -34,7 +35,7 @@ export function PortfolioAccountEditor({ value, options, context, start, end, on
   return <View style={{ gap: 6 }}>
     {options.map(o => <Chip key={o.id} label={o.label} selected={o.id === value.optionId} onPress={() => change({ optionId: o.id, rates: {} })} />)}
     <LedgerField label="Local account reference" value={uiInputIdentifier(value.accountId)} onChangeText={accountId => change({ accountId })} />
-    <LedgerField label="Opening balance (AUD)" value={uiInputNumber(value.openingBalance)} keyboardType="decimal-pad" onChangeText={openingBalance => change({ openingBalance })} />
+    <CurrencyInput label="Opening balance (AUD)" value={value.openingBalance} onChangeText={openingBalance => change({ openingBalance })} />
     {holding?.inputs.confirmedAnnualRates.map(r => { const key = `${r.intervalId}:${r.tierId}`; return <LedgerField key={key} label={uiJoin('Confirmed annual rate (%)', ' · ', uiIdentifier(key))} value={uiInputNumber(value.rates[key] ?? '')} keyboardType="decimal-pad" onChangeText={text => change({ rates: { ...value.rates, [key]: text } })} />; })}
     {definitions.map(d => <CustomerAnswerEditor key={d.id} definition={d} questionSource={{ kind: 'savings', selection: option!.selection, context, target: option!.target }} answer={customer.profile!.answers[d.id]} productKey={option!.target.productKey} disabled={customer.busy} onSave={answer => void customer.update(p => ({ ...p, definitions: { ...p.definitions, [d.id]: d }, answers: { ...p.answers, [d.id]: answer } }))} />)}
     {option && trace && <Disclosure title="Criteria" open={evidenceOpen} onToggle={() => setEvidenceOpen(!evidenceOpen)}><ReviewedCriteria contract={{ eligibility: option.selection.subject.policy.eligibility, evidence: option.selection.subject.evidence, inputDefinitions: option.selection.subject.policy.inputDefinitions }} trace={trace} /><AppText variant="small">{uiJoin('Coverage', ': ', uiDate(option.selection.subject.scope.from), ' – ', uiDate(option.selection.subject.scope.toExclusive), ' · ', 'End excluded', ' · ', 'User input')}</AppText></Disclosure>}

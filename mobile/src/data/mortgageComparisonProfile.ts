@@ -1,16 +1,19 @@
 import { Platform } from 'react-native';
 import { create } from 'zustand';
 
-import { SECURE_STORE_KEYS } from '../lib/secureStoreKey';
-import { readSecureStoreValue, writeSecureStoreValue } from '../lib/secureStoreValue';
-import { setMortgageComparisonInputs, type MortgageComparisonInputs } from './mortgageComparison';
+import { loadCustomerProfile, subscribeCustomerProfile, updateCustomerProfile } from './customerProfileStorage';
+import { applyComparisonInputs, comparisonInputs } from './customerInputState';
+import { setMortgageComparisonInputs, useMortgageComparison, type MortgageComparisonInputs } from './mortgageComparison';
 import { updateRatesSection } from './ratesSession';
+import { currencyAmount } from './currencyInput';
+import { Decimal } from '../lib/productTermsEngine/decimal';
 
 export type MortgageComparisonFacets = { loanPurposes: string[]; repaymentTypes: string[] };
 type ComparisonProfile = { inputs: MortgageComparisonInputs; facets: MortgageComparisonFacets };
 type StorageStatus = 'loading' | 'saving' | 'saved' | 'unavailable' | 'memory-only';
+type InputChanges = Partial<Record<keyof MortgageComparisonInputs, { value: string | undefined }>>;
+const inputKeys: (keyof MortgageComparisonInputs)[] = ['loanAmount', 'lvr', 'lvrMode', 'fundsAvailable', 'fundsType', 'propertyValue'];
 
-const storageKey = SECURE_STORE_KEYS.mortgageComparisonProfile;
 const emptyProfile: ComparisonProfile = {
   inputs: { loanAmount: '', lvr: '' },
   facets: { loanPurposes: [], repaymentTypes: [] },
@@ -22,12 +25,13 @@ export const useMortgageComparisonProfile = create<{ status: StorageStatus; prof
 }));
 
 let committed: ComparisonProfile | null = null;
-let pending: Partial<ComparisonProfile> = {};
-let replaceUnreadable = false;
+let pending: Partial<ComparisonProfile> & { clearScope?: boolean; changes?: InputChanges } = {};
 let work: Promise<void> | null = null;
 
 function publishProfile(): void {
-  useMortgageComparisonProfile.setState({ profile: { ...(committed ?? emptyProfile), ...pending } });
+  const profile = { inputs: pending.inputs ?? (committed ?? emptyProfile).inputs, facets: pending.facets ?? (committed ?? emptyProfile).facets };
+  if (pending.clearScope) profile.inputs = { ...profile.inputs, lvr: '' };
+  useMortgageComparisonProfile.setState({ profile });
 }
 
 function inputText(value: unknown): string {
@@ -55,19 +59,17 @@ function normalizeFacets(value: Partial<MortgageComparisonFacets>): MortgageComp
   return { loanPurposes: normalizeFacet(value.loanPurposes), repaymentTypes: normalizeFacet(value.repaymentTypes) };
 }
 
-function readProfile(text: string): ComparisonProfile {
-  const value = JSON.parse(text) as { version?: number; inputs?: Partial<MortgageComparisonInputs>; facets?: Partial<MortgageComparisonFacets> } | null;
-  if (value?.version !== 1 || !value.inputs || !value.facets
-    || typeof value.inputs.loanAmount !== 'string' || typeof value.inputs.lvr !== 'string'
-    || !Array.isArray(value.facets.loanPurposes) || !Array.isArray(value.facets.repaymentTypes)) {
-    throw new Error('Invalid saved mortgage comparison');
-  }
-  return { inputs: normalizeInputs(value.inputs), facets: normalizeFacets(value.facets) };
-}
-
 function applyFacets(facets: MortgageComparisonFacets) {
   updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, ...facets } }), true);
 }
+subscribeCustomerProfile(profile => {
+  if (!profile.inputState) return;
+  const previousFacets = committed?.facets;
+  committed = { inputs: comparisonInputs(profile.inputState), facets: profile.inputState.comparison.facets };
+  if (!pending.inputs) setMortgageComparisonInputs(committed.inputs);
+  if (!pending.facets && previousFacets && JSON.stringify(previousFacets) !== JSON.stringify(committed.facets)) applyFacets(committed.facets);
+  publishProfile();
+});
 
 /** Read the saved comparison before initializing the Rates session. A failed
  * encrypted read is retryable and must never be treated as an empty record. */
@@ -77,40 +79,54 @@ export function openMortgageComparisonProfile(): Promise<void> {
   work = Promise.resolve().then(async () => {
     if (!committed) {
       useMortgageComparisonProfile.setState({ status: 'loading' });
-      if (!replaceUnreadable) {
-        try {
-          const raw = await readSecureStoreValue(storageKey, { preserveIncomplete: true });
-          committed = raw == null ? emptyProfile : readProfile(raw);
-          if (raw != null) {
-            if (pending.inputs == null) setMortgageComparisonInputs(committed.inputs);
-            if (pending.facets == null) applyFacets(committed.facets);
-          }
-        } catch (error) {
-          // An explicit clear may arrive while the original read is in flight.
-          if (!replaceUnreadable) throw error;
-        }
-      }
+      const profile = await loadCustomerProfile();
+      committed = { inputs: comparisonInputs(profile.inputState!), facets: profile.inputState!.comparison.facets };
+      if (pending.inputs == null) setMortgageComparisonInputs(committed.inputs);
+      if (pending.facets == null && (committed.facets.loanPurposes.length || committed.facets.repaymentTypes.length)) applyFacets(committed.facets);
       committed ??= emptyProfile;
       publishProfile();
     }
-    while (pending.inputs || pending.facets) {
+    while (pending.inputs || pending.facets || pending.clearScope) {
       useMortgageComparisonProfile.setState({ status: 'saving' });
       const submitted = pending;
-      const next: ComparisonProfile = { ...committed, ...submitted };
-      await writeSecureStoreValue(storageKey, JSON.stringify({ version: 1, ...next }));
-      committed = next;
-      replaceUnreadable = false;
+      const saved = await updateCustomerProfile(profile => {
+        const changed = Object.fromEntries(Object.entries(submitted.changes ?? {}).map(([key, change]) => [key, change!.value])) as Partial<MortgageComparisonInputs>;
+        const latest = comparisonInputs(profile.inputState!);
+        const financialEdit = (['loanAmount', 'propertyValue', 'fundsAvailable'] as const).some(key => Object.hasOwn(changed, key) && changed[key] !== undefined);
+        const inputState = financialEdit ? applyComparisonInputs(profile.inputState!, { ...latest, ...changed }) : {
+          ...profile.inputState!, comparison: { ...profile.inputState!.comparison,
+            ...(Object.hasOwn(changed, 'lvr') ? { lvr: changed.lvr! } : {}),
+            ...(Object.hasOwn(changed, 'lvrMode') ? { lvrMode: changed.lvrMode } : {}),
+            ...(Object.hasOwn(changed, 'fundsType') ? { fundsType: changed.fundsType } : {}),
+          },
+        };
+        // Property/offset edits do not change a deliberately selected buying mode.
+        if (financialEdit && !Object.hasOwn(changed, 'loanAmount')) {
+          inputState.scenario.mortgage.mode = profile.inputState!.scenario.mortgage.mode;
+          if (inputState.scenario.mortgage.mode === 'buy' && inputState.comparison.fundsType === 'deposit' && Object.hasOwn(changed, 'fundsAvailable')) {
+            const net = currencyAmount(changed.fundsAvailable ?? ''), costs = currencyAmount(profile.inputState!.scenario.mortgage.costs || '0');
+            try { if (net && costs) inputState.scenario.mortgage.deposit = Decimal.parse(net).add(Decimal.parse(costs)).fixed(2); }
+            catch { /* Retain the invalid draft; financial validation remains unresolved. */ }
+          }
+        }
+        return { ...profile, inputState: { ...inputState, comparison: { ...inputState.comparison, ...(submitted.facets ? { facets: submitted.facets } : {}), ...(submitted.clearScope ? { lvr: '' } : {}) } } };
+      });
+      committed = { inputs: comparisonInputs(saved.inputState!), facets: saved.inputState!.comparison.facets };
+      const remainingChanges = Object.fromEntries(Object.entries(pending.changes ?? {}).filter(([key, change]) => change !== submitted.changes?.[key as keyof MortgageComparisonInputs])) as InputChanges;
       pending = {
         ...(pending.inputs !== submitted.inputs ? { inputs: pending.inputs } : {}),
+        ...(Object.keys(remainingChanges).length ? { changes: remainingChanges } : {}),
         ...(pending.facets !== submitted.facets ? { facets: pending.facets } : {}),
+        ...(pending.clearScope !== submitted.clearScope ? { clearScope: pending.clearScope } : {}),
       };
     }
+    publishProfile();
     useMortgageComparisonProfile.setState({ status: 'saved' });
   }).catch(() => {
     useMortgageComparisonProfile.setState({ status: 'unavailable' });
   }).finally(() => {
     work = null;
-    if ((pending.inputs || pending.facets) && useMortgageComparisonProfile.getState().status !== 'unavailable') {
+    if ((pending.inputs || pending.facets || pending.clearScope) && useMortgageComparisonProfile.getState().status !== 'unavailable') {
       void openMortgageComparisonProfile();
     }
   });
@@ -119,13 +135,16 @@ export function openMortgageComparisonProfile(): Promise<void> {
 
 export function saveMortgageComparisonInputs(value: MortgageComparisonInputs): void {
   const inputs = normalizeInputs(value);
+  const previous = useMortgageComparison.getState();
   setMortgageComparisonInputs(inputs);
   if (Platform.OS === 'web') {
     committed = { ...(committed ?? emptyProfile), inputs };
     publishProfile();
     return;
   }
-  pending = { ...pending, inputs };
+  const changes: InputChanges = { ...pending.changes };
+  for (const key of inputKeys) if (inputs[key] !== previous[key]) changes[key] = { value: inputs[key] };
+  pending = { ...pending, inputs, changes, ...(inputs.lvr !== previous.lvr ? { clearScope: false } : {}) };
   publishProfile();
   void openMortgageComparisonProfile();
 }
@@ -144,15 +163,19 @@ export function saveMortgageComparisonFacets(value: MortgageComparisonFacets): v
 }
 
 export function clearSavedMortgageComparison(): void {
-  setMortgageComparisonInputs(emptyProfile.inputs);
+  // Clearing Rates filters must never delete the user's loan details.
+  const inputs = { ...useMortgageComparison.getState(), lvr: '' };
+  setMortgageComparisonInputs(inputs);
   applyFacets(emptyProfile.facets);
   if (Platform.OS === 'web') {
-    committed = emptyProfile;
+    committed = { inputs, facets: emptyProfile.facets };
     publishProfile();
     return;
   }
-  replaceUnreadable = true;
-  pending = { ...emptyProfile };
+  // Clear scope metadata only. Reapplying a comparison would turn a saved
+  // buying scenario into refinancing and can replace newer task edits.
+  pending = { ...pending, ...(pending.inputs ? { inputs: { ...pending.inputs, lvr: '' } } : {}),
+    facets: emptyProfile.facets, clearScope: true };
   publishProfile();
   void openMortgageComparisonProfile();
 }
@@ -162,4 +185,10 @@ export function restoreSavedMortgageComparison(): void {
   const profile = { ...(committed ?? emptyProfile), ...pending };
   setMortgageComparisonInputs(profile.inputs);
   applyFacets(profile.facets);
+}
+
+export function resetMortgageComparisonProfileForTests(): void {
+  committed = null; pending = {}; work = null;
+  setMortgageComparisonInputs(emptyProfile.inputs);
+  useMortgageComparisonProfile.setState({ status: 'loading', profile: emptyProfile });
 }

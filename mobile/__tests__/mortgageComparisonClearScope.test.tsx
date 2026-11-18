@@ -72,11 +72,11 @@ test('fast typing keeps the latest draft and unmount flushes without committing 
     act(() => { amount.props.onChangeText('62'); });
     expect(useMortgageComparison.getState().loanAmount).toBe('');
     act(() => { jest.advanceTimersByTime(200); });
-    expect(useMortgageComparison.getState().loanAmount).toBe('$62k');
+    expect(useMortgageComparison.getState().loanAmount).toBe('62000');
     act(() => { amount.props.onChangeText('625'); });
-    expect(useMortgageComparison.getState().loanAmount).toBe('$62k');
+    expect(useMortgageComparison.getState().loanAmount).toBe('62000');
     act(() => { tree.unmount(); });
-    expect(useMortgageComparison.getState().loanAmount).toBe('$625k');
+    expect(useMortgageComparison.getState().loanAmount).toBe('625000');
   } finally {
     jest.useRealTimers();
     restoreRatesSession(original);
@@ -126,8 +126,8 @@ test('selecting the final facet flushes the latest amount and offset inputs befo
     expect(useMortgageComparison.getState().loanAmount).toBe('');
     const chip = tree.root.findAllByType('Chip' as any).find(item => /principal/i.test(String(item.props.label)))!;
     act(() => chip.props.onPress());
-    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '$650k', lvr: '', lvrMode: 'funds', fundsType: 'offset',
-      fundsAvailable: '$100k', propertyValue: '$900k' });
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '650000', lvr: '', lvrMode: 'funds', fundsType: 'offset',
+      fundsAvailable: '100000', propertyValue: '900000' });
     expect(useRatesSession.getState().sections.Mortgage.filters.repaymentTypes).toEqual(['PRINCIPAL_AND_INTEREST']);
     act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
     act(() => jest.advanceTimersByTime(250));

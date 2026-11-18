@@ -38,6 +38,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { ChartSliceControls } from './charts/ChartSliceControls';
 import { AppText, Chip, Row } from './ui';
 
+const chartSessions = new Map<string, { window: HistoryWindow; date: string | null }>();
 const EMPTY_SLICE = { dates: [] as string[], points: [] as BankHistoryPoint[], issue: null };
 
 const WINDOW_OPTIONS: { value: HistoryWindow; label: string }[] = [
@@ -101,6 +102,9 @@ export interface BankHistoryChartProps {
   highlightSeries?: HighlightSeries | null;
   /** Product detail compares the product-wide headline with section statistics and the cash rate. */
   productHistory?: boolean;
+  /** Compact provider workspace: four statistics remain visible together. */
+  compactStatistics?: boolean;
+  stateKey?: string;
   comparisonScope?: UiCopy;
   /** Audit-only bridge to the exact callbacks used by the visible chart controls. */
   auditActionsRef?: MutableRefObject<BankHistoryChartAuditActions | null>;
@@ -254,6 +258,8 @@ function BankHistoryChartView({
   allDates,
   highlightSeries,
   productHistory = false,
+  compactStatistics = false,
+  stateKey,
   comparisonScope,
   auditActionsRef,
   contentRevision,
@@ -263,8 +269,13 @@ function BankHistoryChartView({
   const [width, setWidth] = useState(0);
   const [showComparison, setShowComparison] = useState(false);
   const showBenchmarks = !productHistory || showComparison;
-  const [window, setWindow] = useState<HistoryWindow>('30D');
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [window, setWindow] = useState<HistoryWindow>(() => stateKey ? chartSessions.get(stateKey)?.window ?? '30D' : '30D');
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => stateKey ? chartSessions.get(stateKey)?.date ?? null : null);
+  useEffect(() => {
+    if (!stateKey) return;
+    chartSessions.set(stateKey, { window, date: selectedDate });
+    if (chartSessions.size > 64) chartSessions.delete(chartSessions.keys().next().value!);
+  }, [stateKey, window, selectedDate]);
   const [hoverDate, setHoverDate] = useState<string | null>(null);
   const touchModeRef = useRef<'h' | 'v' | null>(null);
   const touchStartRef = useRef({ x: 0, y: 0 });
@@ -318,9 +329,9 @@ function BankHistoryChartView({
   const sourceRevision = contentRevision ?? `${section}:${dates.at(-1) ?? ''}:${dates.length}`;
   const revision = `${sourceRevision}:${section}:${dates.at(-1) ?? ''}:${dates.length}`;
   useEffect(() => {
-    setSelectedDate(null);
+    if (!stateKey) setSelectedDate(null);
     setHoverDate(null);
-  }, [revision, window]);
+  }, [revision, window, stateKey]);
   const showRba = showBenchmarks && (productHistory || section === 'Mortgage') && !!rba?.length;
 
   const rbaSteps = useMemo(
@@ -529,7 +540,7 @@ function BankHistoryChartView({
   const ribbonColor = productHistory ? theme.colors.textFaint : rateInk;
   const bandFill = withAlpha(ribbonColor, productHistory ? 0.09 : theme.dark ? 0.35 : 0.28);
   const meanColor = productHistory ? theme.colors.textMuted : rateInk;
-  const medianColor = productHistory ? theme.colors.textMuted : rateInk;
+  const medianColor = productHistory ? theme.colors.textMuted : theme.colors.primary;
   const rbaInk = productHistory ? theme.colors.textFaint : theme.colors.rba;
   const rbaBand = withAlpha(rbaInk, 0.42);
   const crosshairColor = withAlpha(theme.colors.primary, theme.dark ? 0.6 : 0.55);
@@ -619,7 +630,7 @@ function BankHistoryChartView({
     }
   };
 
-  const hasMarketStatistics = (productHistory || !highlightSeries || activeHighlight != null) && activePoint &&
+  const hasMarketStatistics = (compactStatistics || productHistory || !highlightSeries || activeHighlight != null) && activePoint &&
     [activePoint.min, activePoint.median, activePoint.mean, activePoint.max].some(value => value != null && Number.isFinite(value));
   const activeRange = activePoint && isFiniteNumber(activePoint.min) && isFiniteNumber(activePoint.max)
     ? uiJoin(pct(activePoint.min), ' ', '–', ' ', pct(activePoint.max)) : uiLabel('Unknown');
@@ -898,6 +909,9 @@ function BankHistoryChartView({
               />
             ) : null}
 
+            {compactStatistics && activePoint ? [activePoint.min, activePoint.max, activePoint.mean, activePoint.median].map((value, index) =>
+              isFiniteNumber(value) ? <Circle key={`statistic-${index}`} cx={xAt(activeIndex)} cy={yAt(value)} r={index < 2 ? 3 : 4}
+                stroke={index === 3 ? medianColor : meanColor} strokeWidth={1.5} fill={theme.colors.surface} /> : null) : null}
             {activePoint?.mean != null && isFiniteNumber(activePoint.mean) ? (
               <CrossMarker cx={xAt(activeIndex)} cy={yAt(activePoint.mean)} color={meanColor} />
             ) : null}
@@ -982,6 +996,15 @@ function BankHistoryChartView({
         </Row>
       ) : null}
 
+      {compactStatistics ? <Row gap={8} style={{ flexWrap: 'wrap', marginTop: 6 }}>
+        {([
+          ['Min', activePoint?.min, ribbonColor], ['Max', activePoint?.max, ribbonColor],
+          ['Mean', activePoint?.mean, meanColor], ['Median', activePoint?.median, medianColor],
+        ] as const).map(([label, value, color]) => <View key={label} style={{ flex: 1, minWidth: 62 }}>
+          <AppText variant="tiny" style={{ color }}>{uiLabel(label)}</AppText>
+          <AppText variant="small" weight="700">{uiRate(value)}</AppText>
+        </View>)}
+      </Row> : null}
       {plotDates.length ? (
         <ChartSliceControls
           dates={plotDates}
@@ -993,7 +1016,7 @@ function BankHistoryChartView({
           valueLabel={activeHighlight != null
             ? uiJoin(pct(activeHighlight), highlightSeries?.valueScope ? uiJoin(' · ', highlightSeries.valueScope) : null)
             : !productHistory && !highlightSeries ? activeRange : 'Unknown'}
-          facts={sliceFacts.length ? sliceFacts : undefined}
+          facts={!compactStatistics && sliceFacts.length ? sliceFacts : undefined}
         />
       ) : null}
       {missingPointCount > 0 ? <AppText variant="tiny" color="textMuted">

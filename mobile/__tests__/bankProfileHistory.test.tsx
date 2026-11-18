@@ -10,6 +10,7 @@ import type { ProductHistoryPayload } from '../src/data/productHistory';
 import type { CorePayload, RateRow } from '../src/types';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { useBankRateHistory } from '../src/hooks/useBankRateHistory';
 import { openProduct } from '../src/lib/nav';
 
 type TestNode = {
@@ -85,17 +86,17 @@ jest.mock('../src/components/ProductCard', () => ({ ProductCard: 'ProductCard' }
 jest.mock('@shopify/flash-list', () => ({ FlashList: ({ data, renderItem, ListHeaderComponent, ListFooterComponent, ...props }: any) =>
   mockReact.createElement('FlashList', { ...props, data }, ListHeaderComponent,
     ...data.map((item: any, index: number) => mockReact.createElement(mockReact.Fragment,
-      { key: item.row.product_key }, renderItem({ item, index }))), ListFooterComponent) }));
+      { key: item.id }, renderItem({ item, index }))), ListFooterComponent) }));
 jest.mock('../src/components/Screen', () => ({ Screen: 'Screen', DataHealthBannerStrip: 'DataHealthBannerStrip',
   responsiveScreenContentStyle: () => ({}) }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
-jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Chip: 'Chip', Divider: 'Divider', Row: 'Row' }));
+jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Chip: 'Chip', Divider: 'Divider', Row: 'Row', Button: 'Button' }));
 jest.mock('../src/data/bankInsights', () => ({
   ...jest.requireActual('../src/data/bankInsights'),
   filterBankInsightsForSuitability: () => mockTodayInsights,
 }));
-jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: () => mockRateHistory }));
+jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: jest.fn(() => mockRateHistory) }));
 jest.mock('../src/hooks/useDeferredHistorySurface', () => ({ useDeferredHistorySurface: () => true }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/hooks/useLogoReadiness', () => ({
@@ -211,7 +212,8 @@ describe('bank detail profile-filtered history', () => {
         { date: '2026-09-27', min: null, max: null, mean: null, median: null, count: 0 },
         { date: '2026-09-28', min: 0.035, max: 0.055, mean: 0.045, median: 0.0475, count: 4 },
       ]);
-      expect(copy(tree)).toContain('Advertised range / mean / median');
+      expect(copy(tree)).not.toContain('Advertised range / mean / median');
+      expect(chart.props.compactStatistics).toBe(true);
       expect(copy(tree)).not.toContain('sharpest offer to its typical rate');
     } finally { act(() => tree.unmount()); }
   });
@@ -237,4 +239,44 @@ describe('bank detail profile-filtered history', () => {
       expect(tree.root.findAllByType('BankHistoryChart')).toHaveLength(0);
     } finally { act(() => tree.unmount()); }
   });
+  it('keeps one chart outside the single product list and retains selected tier across view switches', () => {
+    const sibling = { ...row, rate_index: 42, rate: '0.035', product_name: 'Second tier' };
+    mockState.core = { ...core, sections: { ...core.sections, Savings: { ...core.sections.Savings, rates: [row, sibling] } } };
+    const tree = mount();
+    try {
+      const list = tree.root.findAllByType('FlashList')[0];
+      expect(list.props.horizontal).toBe(true);
+      expect(list.props.viewabilityConfig.itemVisiblePercentThreshold).toBe(51);
+      expect(list.findAllByType('BankHistoryChart')).toHaveLength(0);
+      expect(tree.root.findAllByType('BankHistoryChart')).toHaveLength(1);
+      const cards = tree.root.findAllByType('ProductCard');
+      expect(cards).toHaveLength(2);
+      act(() => cards[1].props.onPress());
+      expect(tree.root.findAllByType('BankHistoryChart')[0].props.highlightSeries.label).toBe('Second tier');
+      const switchView = tree.root.findAllByType('Chip').find(node => node.props.label === 'List')!;
+      act(() => switchView.props.onPress());
+      expect(tree.root.findAllByType('FlashList')).toHaveLength(1);
+      expect(tree.root.findAllByType('FlashList')[0].props.horizontal).toBe(false);
+      expect(tree.root.findAllByType('ProductCard')).toHaveLength(2);
+      expect(tree.root.findAllByType('BankHistoryChart')[0].props.highlightSeries.label).toBe('Second tier');
+      expect(openProduct).not.toHaveBeenCalled();
+      act(() => tree.root.findAllByType('Button').find(node => node.props.title === 'Product details')!.props.onPress());
+      expect(openProduct).toHaveBeenCalledWith(sibling.product_key, sibling.rate_index);
+    } finally { act(() => tree.unmount()); }
+  });
+
+  it('uses the same selected LVR profile for the product list and historical chart request', () => {
+    const low = { ...row, product_key: 'low-band', rate_index: 0, rate: '0.04', lvr_tier: 'lvr_0-60%', account_class: 'standard' };
+    const high = { ...low, product_key: 'high-band', rate_index: 1, rate: '0.05', lvr_tier: 'lvr_60-80%' };
+    mockState.core = { ...core, sections: { ...core.sections, Mortgage: { ...core.sections.Mortgage, rates: [low, high] } } };
+    const tree = mount();
+    try {
+      act(() => tree.root.findAllByType('Chip').find(node => String(node.props.label).startsWith('LVR'))!.props.onPress());
+      const options = tree.root.findAllByType('Chip').filter(node => /60(?:\.0)?%/.test(String(node.props.label)));
+      act(() => options[0].props.onPress());
+      expect(tree.root.findAllByType('FlashList')[0].props.data.map((item: { row: RateRow }) => item.row.product_key)).toEqual(['low-band']);
+      expect(jest.mocked(useBankRateHistory).mock.calls.at(-1)?.[2]?.lvrTiers).toEqual(['lvr_0-60%']);
+    } finally { act(() => tree.unmount()); }
+  });
+
 });

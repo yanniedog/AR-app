@@ -7,15 +7,14 @@ import { AppText, androidRipple } from './ui';
 import { uiLabel } from '../lib/uiCopy';
 
 /**
- * Root-level notice for the rare case where an interrupted encrypted write had
- * to be recovered as editable defaults. Keeping this above navigation means a
- * user gets the explanation on whichever scenario-backed screen opens first.
+ * A failed encrypted read is retained and retryable, never reset to blank inputs.
  */
 export function ScenarioRecoveryBanner() {
   const theme = useTheme();
-  const { warning, dismissWarning } = useUserRateScenario();
+  const { warning, dismissWarning, storageStatus, retryLoad } = useUserRateScenario();
+  const failed = storageStatus === 'error';
 
-  if (!warning) return null;
+  if (!warning && !failed) return null;
 
   return (
     <View
@@ -36,16 +35,16 @@ export function ScenarioRecoveryBanner() {
     >
       <View style={{ flex: 1, gap: 2 }}>
         <AppText variant="tiny" weight="700" color="warning">
-          {uiLabel('Saved scenario reset')}
+          {uiLabel('Saved inputs')}
         </AppText>
         <AppText variant="small" color="text">
-          {uiLabel('Current values')}
+          {uiLabel(failed ? 'Unavailable' : 'Current values')}
         </AppText>
       </View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-        onPress={dismissWarning}
+        accessibilityLabel={uiLabel(failed ? 'Retry' : 'Dismiss')}
+        onPress={failed ? () => void retryLoad() : dismissWarning}
         hitSlop={4}
         android_ripple={androidRipple(theme.colors.primaryMuted, true)}
         style={({ pressed }) => ({
@@ -59,7 +58,7 @@ export function ScenarioRecoveryBanner() {
         })}
       >
         <AppText variant="small" weight="700" color="primary">
-          {uiLabel('Done')}
+          {uiLabel(failed ? 'Retry' : 'Done')}
         </AppText>
       </Pressable>
     </View>

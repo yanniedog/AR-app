@@ -1,5 +1,6 @@
 import { SECTIONS } from '../constants';
 import { formatRate } from '../data/format';
+import { uiPercentageDigits, uiRate } from './uiCopy';
 import type { RateStats } from '../data/taxonomy';
 import type { MortgageRateMetric } from '../data/selectors';
 import type { BankHistoryPoint, HistoryWindow, RbaEntry, SectionKey } from '../types';
@@ -52,15 +53,15 @@ export function rbaChartA11ySummary(data: RbaEntry[], holdCount = 0): string {
   const parts = [
     'RBA cash rate chart',
     `from ${first.date} to ${last.date}`,
-    `current ${last.rate.toFixed(2)} percent`,
-    `range ${minR.toFixed(2)} to ${maxR.toFixed(2)} percent`,
+    `current ${uiPercentageDigits(last.rate)} percent`,
+    `range ${uiPercentageDigits(minR)} to ${uiPercentageDigits(maxR)} percent`,
   ];
   if (holdCount > 0) parts.push(`${holdCount} on-hold meeting${holdCount === 1 ? '' : 's'} marked`);
   return parts.join(', ');
 }
 
 function pct(v: number): string {
-  return `${(v * 100).toFixed(2)}%`;
+  return uiRate(v);
 }
 
 /** Plain-language TalkBack summary for the bank history ribbon chart. */
@@ -99,5 +100,5 @@ export function bankHistoryChartA11ySummary(opts: {
 /** RBA decision row label for TalkBack (direction + values). */
 export function rbaDecisionA11yLabel(prior: number, rate: number, date: string): string {
   const direction = rate > prior ? 'Increased' : rate < prior ? 'Decreased' : 'Unchanged';
-  return `${direction} on ${date}, from ${prior.toFixed(2)} percent to ${rate.toFixed(2)} percent`;
+  return `${direction} on ${date}, from ${uiPercentageDigits(prior)} percent to ${uiPercentageDigits(rate)} percent`;
 }
