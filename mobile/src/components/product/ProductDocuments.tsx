@@ -41,14 +41,14 @@ function DocumentRow({ action }: { action: ProductDocumentAction }) {
       <Button title="Previous page" variant="secondary" disabled={selectedCitationPage === 0} onPress={() => setCitationPage(selectedCitationPage - 1)} />
       <Button title="Next page" variant="secondary" disabled={(selectedCitationPage + 1) * 8 >= locators.length} onPress={() => setCitationPage(selectedCitationPage + 1)} />
     </Row> : null}
-    <Row><Button title={action.specificity === 'background' ? 'Provider website' : 'Open document'} variant="secondary" disabled={!action.url}
+    <Row><Button title="Open document" variant="secondary" disabled={!action.url}
       onPress={() => { if (action.url) requestExternalUrl({ url: action.url, purpose: 'lender_source', label: 'Source', page: action.page }); }} /></Row>
     {!action.url ? <AppText variant="tiny">{uiLabel('Unavailable')}</AppText> : null}
   </View>;
 }
 export function ProductDocuments({ productDetails }: { productDetails: ProductDetail | null | undefined }) {
   const [open, setOpen] = useState(false), [page, setPage] = useState(0);
-  const actions = productDocumentActions(productDetails);
+  const actions = productDocumentActions(productDetails).filter(action => action.specificity !== 'background');
   const selectedPage = Math.min(page, Math.max(0, Math.ceil(actions.length / 12) - 1));
   useAuditExternalLinks(actions.flatMap(action => action.url ? [{ url: action.url, purpose: 'lender_source' as const, label: 'Source' }] : []));
   return <Disclosure title="Documents" open={open} onToggle={() => setOpen(value => !value)}><View style={{ gap: 12 }}>

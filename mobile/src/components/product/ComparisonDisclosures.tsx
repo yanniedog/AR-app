@@ -27,7 +27,7 @@ export function ComparisonDisclosures({
 }) {
   const manifest = useStore(state => state.manifest);
   const details = useStore(state => state.details);
-  const productCriteria = useProductCriteria(manifest, details?.products, true);
+  const productCriteria = useProductCriteria(manifest, details?.products, true, [productKey]);
   const descriptiveDetail = productCriteria.lookup?.[productKey] ?? productDetails;
   return (
     <ProductPageLinks overview={productDetails?.links?.overview} productDetails={descriptiveDetail}><Card variant="outlined" style={{ gap: 12 }}>

@@ -12,8 +12,8 @@ import { ProductPageLink, ProductPageLinks } from './ProductPageLink';
 export function ComparableProductFacts({ rows }: { rows: readonly RateRow[] }) {
   const [open, setOpen] = useState(false), [page, setPage] = useState(0);
   const manifest = useStore(state => state.manifest), details = useStore(state => state.details);
-  const criteria = useProductCriteria(manifest, details?.products, open);
   const products = useMemo(() => [...new Map(rows.map(row => [row.product_key, row])).values()], [rows]);
+  const criteria = useProductCriteria(manifest, details?.products, open, products.map(row => row.product_key));
   const comparisons = useMemo(() => comparableProductFacts(products.map(row => ({ key: row.product_key, detail: criteria.lookup?.[row.product_key] }))), [products, criteria.lookup]);
   const at = Math.min(page, Math.max(0, Math.ceil(comparisons.length / 12) - 1));
   return <Disclosure title="Product facts" open={open} onToggle={() => setOpen(value => !value)}><View style={{ gap: 12 }}>

@@ -1,4 +1,5 @@
 import retained from './fixtures/product-criteria-retained-20260519.json';
+import pair from './fixtures/product-criteria-wire-v2-real-20260519.json';
 import { createProductCriteriaReader } from '../src/data/productCriteriaTransport';
 import { revisionManifest } from '../testUtils/payloadRevision';
 import type { ManifestFile } from '../src/types';
@@ -22,6 +23,15 @@ function controls() {
     url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/criteria-shard.json.gz` };
   return { manifest, index, shard, bodies, load: jest.fn(async (file: ManifestFile) => bodies[file.name as keyof typeof bodies]) };
 }
+test.each([false, true])('transport adopts the exact retained v2 semantics and rejects mixed versions=%s', async mixed => {
+  const c = controls();
+  c.bodies['criteria-index.json.gz'] = JSON.stringify({ ...c.index, schema_version: 2,
+    products: Object.fromEntries(Object.keys(pair.products).map(key => [key, 'product_criteria_shard_000'])) });
+  c.bodies['criteria-shard.json.gz'] = JSON.stringify({ ...c.shard, schema_version: mixed ? 1 : 2, ...pair.encoded });
+  const result = createProductCriteriaReader(c.manifest, { isCurrent: () => true, load: c.load }).read();
+  if (mixed) await expect(result).rejects.toThrow();
+  else await expect(result).resolves.toEqual(pair.products);
+});
 test('loads all routed retained fact groups without changing the bound details', async () => {
   const c = controls(), before = JSON.stringify(c.manifest);
   const result = await createProductCriteriaReader(c.manifest, { isCurrent: () => true, load: c.load }).read();

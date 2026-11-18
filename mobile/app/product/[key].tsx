@@ -192,7 +192,7 @@ export default function ProductDetail() {
   const ensureDetails = useStore((s) => s.ensureDetails);
   const detailsPayload = useStore((s) => s.details);
   const detail = detailsPayload?.products[productKey] ?? null;
-  const productCriteria = useProductCriteria(manifest, detailsPayload?.products, true);
+  const productCriteria = useProductCriteria(manifest, detailsPayload?.products, true, [productKey]);
   const descriptiveDetail = productCriteria.lookup?.[productKey] ?? detail;
   const normalizedFactKinds = useMemo(
     () => new Set(normalizedProductFacts(detail).map((fact) => fact.kind)),

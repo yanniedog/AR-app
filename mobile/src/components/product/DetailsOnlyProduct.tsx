@@ -24,7 +24,7 @@ import { uiLabel, uiJoin, uiProductName, uiPublicProductName } from '../../lib/u
 export function DetailsOnlyProduct({ productKey, programmeId, rateScenario }: { productKey: string; programmeId?: string; rateScenario?: RateScenario }) {
   const { details, manifest, loading, retry } = useDetailsCatalogue();
   const detail = details && Object.hasOwn(details.products, productKey) ? details.products[productKey] : null;
-  const productCriteria = useProductCriteria(manifest, details?.products, true);
+  const productCriteria = useProductCriteria(manifest, details?.products, true, [productKey]);
   const descriptiveDetail = productCriteria.lookup?.[productKey] ?? detail;
   const identity = detailsDisplayIdentity(detail);
   const catalogue = usePublicRateCatalogue(manifest);
