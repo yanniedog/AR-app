@@ -395,7 +395,7 @@ export const UI_LABELS = [
   'Disable alerts', 'Enable alerts', 'Add term deposit maturity date', 'Add fixed rate end date',
   'Published maturity · Non-conditional rate', 'Simple annual interest · Non-conditional rate',
   'This tab', 'Until close',
-  'Notifications disabled', 'Alert already saved', 'Four-rate limit', 'Different rate types',
+  'Notifications disabled', 'Alert unavailable', 'Alert already saved', 'Four-rate limit', 'Different rate types',
   'Crash reports unchanged', 'Native state unconfirmed', 'Clear cached data?', 'Offline data removed',
   'Invalid date', 'Date not saved', 'Storage unavailable · Previous date retained',
   'Share report', 'Not found',

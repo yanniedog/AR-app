@@ -1,3 +1,4 @@
+import type { FactCriterion } from '../../data/productFactsCore';
 import { useProductCriteria } from '../../hooks/useProductCriteria';
 import { PreparedProductCard } from './PreparedProductCard';
 import { useFocusMeasurement } from '../../hooks/useFocusMeasurement';
@@ -701,6 +702,7 @@ export default function RatesWorkspace() {
         accountFeatures: effectiveFilters.accountFeatures,
         eligibilityCriteria: effectiveFilters.eligibilityCriteria,
         factCriteria: effectiveFilters.factCriteria,
+        ...(effectiveFilters.factMatchMode === 'unknown' ? { factMatchMode: 'unknown' as const } : {}),
         includeNonStandard: effectiveFilters.includeNonStandard,
       },
     }),
@@ -725,6 +727,15 @@ export default function RatesWorkspace() {
   const onToggleSearchAlert = async () => {
     if (searchSub) {
       unsubscribeSearch(searchSub.id);
+      return;
+    }
+    // Alert evaluation reads only the admitted details; a criterion supplied by
+    // the optional criteria sidecar alone would silently match nothing.
+    const evaluable = (criterion: FactCriterion) => Object.values(details?.products ?? {}).some(product => product.facts?.some(fact =>
+      (criterion.canonicalKey === undefined || fact.canonicalKey === criterion.canonicalKey)
+      && (criterion.sourceType === undefined || fact.sourceType?.trim().toUpperCase() === criterion.sourceType.trim().toUpperCase())));
+    if (!effectiveFilters.factCriteria.every(evaluable)) {
+      Alert.alert('Alert unavailable');
       return;
     }
     const ok = await ensurePermissions();

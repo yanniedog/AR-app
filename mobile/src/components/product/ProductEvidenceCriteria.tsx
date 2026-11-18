@@ -46,7 +46,7 @@ export function ProductEvidenceCriteria({ productKeys }: { productKeys: readonly
   };
   const updateStatus = update?.identity === identity ? update.status : 'idle';
   const canRefresh = columns.some(column => column.status === 'pending' || column.status === 'unavailable' || (column.status === 'failed' && Boolean(column.reason)));
-  const anchor = columns[0], matches = anchor?.status === 'observed' ? anchor.criteria.matching : 0;
+  const anchor = columns.find(column => column.status === 'observed'), matches = anchor?.status === 'observed' ? anchor.criteria.matching : 0;
   const pages = Math.max(0, ...columns.map(c => c.status === 'observed' ? c.criteria.pages : 0));
   const selectRecord = (value: number) => { setRecord(value); setPage(0); };
   return <Disclosure title="Source criteria" open={open} onToggle={() => setOpen(value => !value)}><View style={{ gap: 12 }}>
