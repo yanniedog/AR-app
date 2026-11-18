@@ -263,9 +263,9 @@ describe('stored product alert labels', () => {
     const refreshed = refreshProductSubscriptionLabels([legacy, range, search]);
 
     expect(refreshed.map((sub) => sub.label)).toEqual([
-      'Bank A · Home loan (Variable · LVR ≤60%)',
+      'Bank A · Home loan (Variable · LVR ≤60.0%)',
       // Product names outside the generated suffix keep their own wording.
-      'Bank A · LVR 80 Saver (Variable · LVR 70–80%)',
+      'Bank A · LVR 80 Saver (Variable · LVR 70.0–80.0%)',
       search.label,
     ]);
     expect(refreshed.map((sub) => sub.id)).toEqual([legacy.id, range.id, search.id]);
@@ -282,7 +282,7 @@ describe('stored product alert labels', () => {
 
   test('current labels are returned unchanged, including the list identity', () => {
     const current = [makeProductSubscription(mk({ lvr_tier: 'lvr_=60%' }), 1)];
-    expect(current[0].label).toBe('Bank A · Home loan (Variable · LVR ≤60%)');
+    expect(current[0].label).toBe('Bank A · Home loan (Variable · LVR ≤60.0%)');
     expect(refreshProductSubscriptionLabels(current)).toBe(current);
   });
 });

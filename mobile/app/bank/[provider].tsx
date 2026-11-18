@@ -166,6 +166,8 @@ export default function BankDetail() {
   const insets = useSafeAreaInsets();
   const { width, height: screenHeight, fontScale } = useWindowDimensions();
   const [contentWidth, setContentWidth] = useState(width);
+  const [contentHeight, setContentHeight] = useState(Math.max(320, screenHeight - 160));
+  const chartHeight = fontScale >= 1.2 || screenHeight < 700 ? 100 : 145;
   const cardWidth = Math.max(160, contentWidth - 32);
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
@@ -703,8 +705,8 @@ export default function BankDetail() {
     <>
       <Stack.Screen options={{ title: lenderName }} />
       <Screen showDataHealthBanner={false}>
-        <View style={{ ...responsiveScreenContentStyle(width), paddingHorizontal: 0, flex: 1 }} onLayout={event => setContentWidth(event.nativeEvent.layout.width)}>
-        <ScrollView style={{ flexGrow: 0, maxHeight: screenHeight * (fontScale > 1.3 ? 0.58 : 0.64) }}
+        <View style={{ ...responsiveScreenContentStyle(width), paddingHorizontal: 0, flex: 1 }} onLayout={event => { setContentWidth(event.nativeEvent.layout.width); setContentHeight(event.nativeEvent.layout.height); }}>
+        <ScrollView testID="provider-chart-viewport" style={{ flexGrow: 0, flexShrink: 1, maxHeight: Math.max(160, contentHeight * (fontScale >= 1.2 ? 0.61 : 0.62)) }}
           contentContainerStyle={{ paddingHorizontal: 16 }} nestedScrollEnabled>
           <DataHealthBannerStrip />
           <Row gap={8} style={{ marginVertical: 6 }}>
@@ -741,7 +743,7 @@ export default function BankDetail() {
                   rba={core.rba}
                   rbaHolds={core.rba_holds}
                   section={activeChartSection}
-                  height={screenHeight < 700 ? 115 : 145}
+                  height={chartHeight}
                   compactStatistics
                   stateKey={`${provider}:${activeChartSection}`}
                   highlightSeries={selectedSeries}
@@ -749,18 +751,18 @@ export default function BankDetail() {
                 />
               </ChartErrorBoundary>
             </View>
-          ) : !rateHistory.updating && !rateHistory.failed ? <View style={{ height: screenHeight < 700 ? 115 : 145, justifyContent: 'center' }}>
+          ) : !rateHistory.updating && !rateHistory.failed ? <View style={{ height: chartHeight, justifyContent: 'center' }}>
             <AppText variant="small" color="textMuted">{uiLabel('No observations')}</AppText>
           </View> : null
         ) : null}
-          <Row gap={8} style={{ paddingVertical: 4 }}>
+        </ScrollView>
+          <Row testID="provider-browse-controls" gap={8} style={{ paddingVertical: 4, paddingHorizontal: 16 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
               {activeChartSection === 'Mortgage' ? <ProviderRateFilters rows={mortgageFilterRows} profile={providerProfile} onChange={setProviderProfile} />
                 : <AppText variant="tiny">{uiJoin(uiCount(productCount), ' ', 'Products')}</AppText>}
             </View>
             <Chip label={productView === 'carousel' ? 'List' : 'Carousel'} onPress={() => setProductView(productView === 'carousel' ? 'list' : 'carousel')} />
           </Row>
-        </ScrollView>
         <FlashList
           key={`${productView}:${provider}`}
           horizontal={productView === 'carousel'}

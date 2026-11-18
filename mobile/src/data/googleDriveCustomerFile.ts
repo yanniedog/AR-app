@@ -1,5 +1,6 @@
 import { assertGoogleRecoveryAvailable } from './googleRecovery';
 import { customerSyncValuesEqual, validateSyncDocument, type SyncDocument } from './customerSyncMerge';
+import { strToU8 } from 'fflate';
 
 const API = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
@@ -39,7 +40,7 @@ export function createGoogleCustomerFile(deps: CustomerDriveDependencies) {
     const etag = response.headers.get('etag');
     if (!etag || Number(response.headers.get('content-length') ?? 0) > MAX_BYTES) throw new Error('Invalid Google inputs.');
     const text = await response.text();
-    if (new TextEncoder().encode(text).length > MAX_BYTES) throw new Error('Google inputs exceed the size limit.');
+    if (strToU8(text).length > MAX_BYTES) throw new Error('Google inputs exceed the size limit.');
     let value: { version?: unknown; accountId?: unknown; data?: unknown };
     try { value = JSON.parse(text); } catch { throw new Error('Invalid Google inputs.'); }
     if (!value || value.version !== 1 || value.accountId !== accountId) throw new Error('Invalid Google inputs.');
@@ -48,7 +49,7 @@ export function createGoogleCustomerFile(deps: CustomerDriveDependencies) {
   async function write(accountId: string, document: SyncDocument, previous: GoogleCustomerFile | null): Promise<GoogleCustomerFile> {
     validateSyncDocument(document);
     const body = JSON.stringify({ version: 1, accountId, data: document });
-    if (new TextEncoder().encode(body).length > MAX_BYTES) throw new Error('Customer inputs exceed the size limit.');
+    if (strToU8(body).length > MAX_BYTES) throw new Error('Customer inputs exceed the size limit.');
     if (previous) {
       if (!/^[A-Za-z0-9_-]+$/.test(previous.id) || !previous.etag) throw new Error('Invalid Google file identity.');
       await request(accountId, `${UPLOAD}/${previous.id}?uploadType=media`, {

@@ -279,4 +279,15 @@ describe('bank detail profile-filtered history', () => {
     } finally { act(() => tree.unmount()); }
   });
 
+  it('keeps List and parameter controls outside the capped chart scroll area', () => {
+    const tree = mount();
+    try {
+      const viewport = tree.root.findByProps({ testID: 'provider-chart-viewport' });
+      const controls = tree.root.findByProps({ testID: 'provider-browse-controls' });
+      expect(viewport.findAllByType('Chip').some(node => ['List', 'Carousel'].includes(node.props.label))).toBe(false);
+      expect(controls.findAllByType('Chip').some(node => ['List', 'Carousel'].includes(node.props.label))).toBe(true);
+      expect(viewport.findAllByType('FlashList')).toHaveLength(0);
+    } finally { act(() => tree.unmount()); }
+  });
+
 });

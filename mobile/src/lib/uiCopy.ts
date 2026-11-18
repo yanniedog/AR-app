@@ -429,10 +429,8 @@ export const UI_LABELS = [
   'Recurring fees', 'Frequency interval start',
   '<60', '60-70', '70-80', '80-90', '>90',
   'K', 'M', 'Amount unit', 'millions of dollars', 'dollars',
-  'Carousel', 'List', 'Product details', 'Google Drive', 'Connect Google', 'Disconnect', 'Sync now',
-  'Last synced', 'Sync', 'Conflict', 'Keep device', 'Keep Google', 'Connected', 'Not connected', 'Pending approval',
+  'Carousel', 'List',
   'Keep current', 'Use saved', 'Choose saved value',
-  'All product variants',
 ] as const;
 
 export type UiLabel = typeof UI_LABELS[number];

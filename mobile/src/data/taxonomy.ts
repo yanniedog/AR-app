@@ -1,5 +1,5 @@
 import { mandatoryEligibleRows } from './eligibilityGate';
-import { uiDecimal, uiDuration, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiSectionName, type UiCopy, type UiText } from '../lib/uiCopy';
+import { uiDuration, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiPercentageDigits, uiSectionName, type UiCopy, type UiText } from '../lib/uiCopy';
 import { isMeaningfulDepositRate } from '../config';
 import type { RateRow, SectionKey } from '../types';
 import { effectiveFraction, isBroadlyAvailable, visibleAccountRows } from './format';
@@ -71,24 +71,21 @@ function months(seg: string): number | null {
 
 function lvrLabel(seg: string): UiText {
   const v = seg.replace(/^LVR_/, '');
-  if (v === 'LE60') return uiJoin('≤', uiNumber(60), '%', ' ', 'LVR');
+  if (v === 'LE60') return uiJoin('≤', uiPercentageDigits(60), '%', ' ', 'LVR');
   if (v === 'UNSP' || v === 'UNSPECIFIED' || v === 'NA') return uiJoin('LVR', ' · ', 'Unknown');
   let m = /^GT?(\d+)$/.exec(v);
-  if (m) return uiJoin(uiNumber(Number(m[1])), '%', '+', ' ', 'LVR');
+  if (m) return uiJoin(uiPercentageDigits(Number(m[1])), '%', '+', ' ', 'LVR');
   const exact = /^(GE|GT|LE)(\d+(?:p\d+)?)(?:_(\d+(?:p\d+)?))?$/.exec(v);
   if (exact) {
     const operator = exact[1] === 'GE' ? '≥' : exact[1] === 'GT' ? '>' : '≤';
-    const roundLvr = (raw: string) => {
-      const n = Number(raw.replace('p', '.'));
-      return Number.isFinite(n) ? uiNumber(Math.round(n), 0) : uiDecimal(raw.replace('p', '.'), 'count');
-    };
+    const roundLvr = (raw: string) => uiPercentageDigits(Number(raw.replace('p', '.')));
     return uiJoin(operator, roundLvr(exact[2]),
       exact[3] ? uiJoin('–', roundLvr(exact[3])) : '', '%', ' ', 'LVR');
   }
   m = /^(\d+)_(\d+)$/.exec(v);
-  if (m) return uiJoin(uiNumber(Number(m[1])), '–', uiNumber(Number(m[2])), '%', ' ', 'LVR');
+  if (m) return uiJoin(uiPercentageDigits(Number(m[1])), '–', uiPercentageDigits(Number(m[2])), '%', ' ', 'LVR');
   m = /^(\d+)$/.exec(v);
-  if (m) return uiJoin('≤', uiNumber(Number(m[1])), '%', ' ', 'LVR');
+  if (m) return uiJoin('≤', uiPercentageDigits(Number(m[1])), '%', ' ', 'LVR');
   return uiJoin('LVR', ' · ', 'Unknown');
 }
 

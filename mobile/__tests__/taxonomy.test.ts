@@ -20,8 +20,8 @@ describe('taxonomy', () => {
     expect(segLabel('OO')).toBe('Owner-occupied');
     expect(segLabel('INV')).toBe('Investor');
     expect(segLabel('VARIABLE')).toBe('Variable rate');
-    expect(segLabel('LVR_LE60')).toBe('≤60% LVR');
-    expect(segLabel('LVR_70_80')).toBe('70–80% LVR');
+    expect(segLabel('LVR_LE60')).toBe('≤60.0% LVR');
+    expect(segLabel('LVR_70_80')).toBe('70.0–80.0% LVR');
     expect(segLabel('36M')).toBe('3 years');
     expect(segLabel('6M')).toBe('6 months');
   });
@@ -30,9 +30,9 @@ describe('taxonomy', () => {
     expect(segLabel('LVR_UNSP')).toBe('LVR · Unknown');
     expect(segLabel('LVR_UNSPECIFIED')).toBe('LVR · Unknown');
     expect(segLabel('LVR_NA')).toBe('LVR · Unknown');
-    expect(segLabel('LVR_GT95')).toBe('95%+ LVR');
-    expect(segLabel('LVR_GT80')).toBe('80%+ LVR');
-    expect(segLabel('LVR_90')).toBe('≤90% LVR');
+    expect(segLabel('LVR_GT95')).toBe('95.0%+ LVR');
+    expect(segLabel('LVR_GT80')).toBe('80.0%+ LVR');
+    expect(segLabel('LVR_90')).toBe('≤90.0% LVR');
     expect(segLabel('')).toBe('Other');
     expect(segLabel('OTHER_TERM_TYPE')).toBe('Source category · OTHER_TERM_TYPE');
     expect(segLabel('Tap here to discover products.')).toBe('Source category · Unknown');
