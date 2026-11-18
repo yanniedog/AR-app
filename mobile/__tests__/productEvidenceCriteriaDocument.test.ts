@@ -29,12 +29,10 @@ test('real selected products are sequential and release each document before the
   const keys = Object.keys(p.context.details!.products).sort((a, b) => Number(b.startsWith('Up|')) - Number(a.startsWith('Up|')));
   const columns = await loadProductCriteria(p.context, keys, { ...query, kind: 'feature', text: 'features[1].featureType' }, () => true, new AbortController().signal);
   expect(columns).toHaveLength(3); expect(release).toHaveBeenCalledTimes(3);
-  let textBytes = 0;
   for (const column of columns) { expect(column.status).toBe('observed'); if (column.status !== 'observed') continue;
     expect(column.edition).toBe(p.head.bundle_sha256);
-    if (column.criteria.sourcePage) textBytes += new TextEncoder().encode(documents.productEvidencePageText(column.criteria.sourcePage)).length;
-    else expect(column.criteria.state).toBe('unknown'); }
-  expect(textBytes).toBeLessThanOrEqual(65536);
+    expect(column.criteria).not.toHaveProperty('sourcePage'); expect(column.criteria).not.toHaveProperty('text');
+    if (column.criteria.sourceRecord === null) expect(column.criteria.state).toBe('unknown'); }
   for (const document of retained) await expect(documents.projectProductEvidenceCriteria(document, query, async () => {})).rejects.toThrow('admitted');
 });
 test('cancelled acquired document is released; a changed member/edition never returns partial columns', async () => {

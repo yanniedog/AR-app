@@ -34,14 +34,15 @@ const press = (tree: Tree, title: string) => tree.root.findByProps({ title }).pr
 const toggle = (tree: Tree, title = 'Source criteria') => tree.root.findByProps({ title }).props.onToggle();
 afterEach(() => { for (const tree of trees.splice(0)) act(() => tree.unmount()); });
 
-test('criteria is opt-in, search is selected-product literal text, and every matching record remains reachable', async () => {
+test('criteria is opt-in, search is selected-product literal text, and no source text reaches the interface', async () => {
   const tree = render(); expect(downloadInflate).not.toHaveBeenCalled();
-  act(() => toggle(tree)); await until(() => rendered(tree).includes('fact_id'));
+  act(() => toggle(tree)); await until(() => rendered(tree).includes('Matching records'));
   expect(rendered(tree)).toContain('Selected products only'); expect(rendered(tree)).toContain('Eligibility unverified');
-  act(() => press(tree, 'Last record')); await until(() => tree.root.findByProps({ title: 'Next record' }).props.disabled === true);
+  expect(rendered(tree)).not.toContain('fact_id'); expect(rendered(tree)).not.toContain('source_path');
+  expect(() => tree.root.findByProps({ title: 'Next record' })).toThrow(); expect(() => tree.root.findByProps({ title: 'Next page' })).toThrow();
   act(() => { tree.root.findByProps({ accessibilityLabel: 'Search selected products' }).props.onChangeText('[not a regex'); });
-  act(() => press(tree, 'Search')); await until(() => rendered(tree).includes('Not observed'));
-  expect(rendered(tree)).not.toContain('fact_id'); expect(tree.root.findByProps({ title: 'Next record' }).props.disabled).toBe(true);
+  act(() => press(tree, 'Search')); await until(() => rendered(tree).includes('Matching records') && rendered(tree).includes(': 0 / '));
+  expect(rendered(tree)).not.toContain('fact_id');
 });
 
 test.each(['pending', 'unavailable', 'failed'] as const)('%s performs no evidence IO and offers ordinary Refresh only', async status => {
@@ -58,8 +59,8 @@ test('closing aborts acquisition; a late response cannot repopulate closed crite
   jest.mocked(downloadInflate).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   act(() => toggle(tree)); await until(() => jest.mocked(downloadInflate).mock.calls.length === 1);
   const [url, , options] = jest.mocked(downloadInflate).mock.calls[0]; act(() => toggle(tree)); expect(options?.signal?.aborted).toBe(true);
-  await act(async () => { finish(await p.load(url)); }); expect(rendered(tree)).not.toContain('fact_id');
-  act(() => toggle(tree)); await until(() => rendered(tree).includes('fact_id'));
+  await act(async () => { finish(await p.load(url)); }); expect(rendered(tree)).not.toContain('Matching records');
+  act(() => toggle(tree)); await until(() => rendered(tree).includes('Matching records'));
 });
 
 test('a new selected edition cancels old criteria and never adopts its delayed bytes', async () => {
@@ -71,16 +72,16 @@ test('a new selected edition cancels old criteria and never adopts its delayed b
   mockState = { ...p.context, manifest: { ...p.manifest }, productEvidenceHead: { ...p.head }, refresh: mockRefresh };
   act(() => tree.update(<ProductEvidenceCriteria productKeys={[p.key]} />)); expect(options?.signal?.aborted).toBe(true);
   await act(async () => { finish(await p.load(url)); }); await until(() => rendered(tree).includes('Pending'));
-  expect(rendered(tree)).not.toContain('fact_id'); expect(downloadInflate).toHaveBeenCalledTimes(1);
+  expect(rendered(tree)).not.toContain('Matching records'); expect(downloadInflate).toHaveBeenCalledTimes(1);
 });
 
 test('criteria relinquishes a retained source document and releases its shared lease after completion or error', async () => {
   const tree = render(evidenceSelection(), true);
-  act(() => toggle(tree, 'Source evidence')); await until(() => rendered(tree).includes('First fact'));
+  act(() => toggle(tree, 'Source evidence')); await until(() => rendered(tree).includes('Product facts'));
   act(() => toggle(tree)); await until(() => rendered(tree).includes('Paused') && rendered(tree).includes('Matching records'));
   // The source view can acquire again; stale criteria cleanup must not clear its lease.
-  act(() => press(tree, 'Retry')); await until(() => rendered(tree).includes('First fact'));
-  act(() => toggle(tree)); expect(rendered(tree)).toContain('First fact');
+  act(() => press(tree, 'Retry')); await until(() => rendered(tree).includes('Product facts'));
+  act(() => toggle(tree)); expect(rendered(tree)).toContain('Product facts');
   act(() => toggle(tree, 'Source evidence'));
   jest.mocked(downloadInflate).mockRejectedValueOnce(new Error('transport unavailable'));
   // Use a different selected capability to avoid the bounded capability cache.

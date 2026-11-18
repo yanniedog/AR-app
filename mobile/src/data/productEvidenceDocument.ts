@@ -1,4 +1,4 @@
-/** Private admitted source documents, with bounded literal pages and no calculation authority. */
+/** Private admitted source documents; provider text is never exposed to the interface and carries no calculation authority. */
 import { SECTION_KEYS } from '../types';
 import type { AppState } from './storeTypes';
 import type { EvidenceLane } from './productEvidencePublication';
@@ -6,7 +6,6 @@ import { createPublishedProductEvidence } from './productEvidencePublicationTran
 import { EvidenceError, type EvidenceFact } from './productEvidenceWire';
 import { verifiedCoreContents } from './sectionIntegrity';
 import { verifiedCatalogueDetails } from './detailsCatalogue';
-import { productEvidenceTextSlice } from './productEvidencePagination';
 import { projectSourceCriteria, type CriteriaProjection, type CriteriaQuery } from './productEvidenceCriteria';
 
 export type ProductEvidenceContext = Pick<AppState, 'manifest' | 'core' | 'coreIntegrity' | 'details' | 'productEvidenceHead' | 'source'>;
@@ -19,10 +18,8 @@ export interface ProductEvidenceDocument {
   readonly responseState: string | null;
   readonly availability: 'available' | 'unreported';
 }
-export interface ProductEvidencePage { readonly record: number; readonly records: number; readonly page: number;
-  readonly pages: number; readonly start: number; readonly end: number; readonly characters: number }
-type Contents = { facts?: EvidenceFact[]; text?: string; current?: { record: number; text: string } };
-const documents = new WeakMap<ProductEvidenceDocument, Contents>(), pages = new WeakMap<ProductEvidencePage, string>();
+type Contents = { facts?: EvidenceFact[]; text?: string };
+const documents = new WeakMap<ProductEvidenceDocument, Contents>();
 export interface ProductEvidenceBodyChoice { sha256: string; role: 'detail' | 'index'; matchesExport: boolean }
 export type ProductEvidenceOutcome = { status: 'observed'; document: ProductEvidenceDocument; bodies: ProductEvidenceBodyChoice[] }
   | { status: 'disabled' | 'pending' | 'failed' | 'unavailable' | 'unsupported' | 'unknown'; reason?: string; routeState?: string; bodies?: ProductEvidenceBodyChoice[] };
@@ -63,34 +60,14 @@ export async function loadProductEvidenceDocument(context: ProductEvidenceContex
   return { status: 'observed', document, bodies };
 }
 
-/** No strings enter this boundary without an admitted private document. */
-export function productEvidencePage(document: ProductEvidenceDocument, record = 0, page = 0): ProductEvidencePage {
-  const content = documents.get(document);
-  if (!content || !Number.isSafeInteger(record) || record < 0 || record >= document.records) throw new EvidenceError('invalid', 'Evidence record is not admitted');
-  if (content.facts && content.current?.record !== record) content.current = { record, text: JSON.stringify(content.facts[record] ?? [], null, 2) };
-  const text = content.facts ? content.current!.text : content.text!;
-  const slice = productEvidenceTextSlice(text, page), { text: contentText, ...position } = slice;
-  const handle = Object.freeze({ record, records: document.records, ...position });
-  pages.set(handle, contentText); return handle;
-}
-export function productEvidencePageText(page: ProductEvidencePage): string {
-  const text = pages.get(page);
-  if (text === undefined) throw new EvidenceError('invalid', 'Evidence page is not admitted');
-  return text;
-}
-
 /** Explicit lifecycle release; existing admitted bounded pages remain readable. */
 export function releaseProductEvidenceDocument(document: ProductEvidenceDocument): void { documents.delete(document); }
 
 export async function projectProductEvidenceCriteria(document: ProductEvidenceDocument, query: CriteriaQuery,
-  checkpoint: () => Promise<void>): Promise<Omit<CriteriaProjection, 'text'> & { sourcePage: ProductEvidencePage | null }> {
+  checkpoint: () => Promise<void>): Promise<Omit<CriteriaProjection, 'text'>> {
   const content = documents.get(document);
   if (!content?.facts) throw new EvidenceError('invalid', 'Criteria requires an admitted facts document');
-  const { text, ...projection } = await projectSourceCriteria(content.facts, query, checkpoint);
+  const { text: _text, ...projection } = await projectSourceCriteria(content.facts, query, checkpoint);
   if (documents.get(document) !== content) throw new EvidenceError('cancelled', 'Evidence document released');
-  if (projection.sourceRecord === null || projection.page >= projection.pages) return { ...projection, sourcePage: null };
-  const sourcePage = Object.freeze({ record: projection.sourceRecord, records: document.records,
-    page: projection.page, pages: projection.pages, start: projection.start, end: projection.end, characters: projection.characters });
-  pages.set(sourcePage, text);
-  return { ...projection, sourcePage };
+  return projection;
 }

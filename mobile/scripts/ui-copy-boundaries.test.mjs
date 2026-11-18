@@ -72,11 +72,6 @@ import type {ReplayDocument} from '../data/receiptReplay/types';
 export function ReceiptEvidenceText({document}:{document:ReplayDocument}) {
   return <Text>{JSON.stringify(document.original,null,2)}</Text>;
 }`;
-const productEvidenceRenderer = `${rendererImports}
-import {productEvidencePageText,type ProductEvidencePage} from '../data/productEvidenceDocument';
-export function ProductEvidenceText({page}:{page:ProductEvidencePage}) {
-  return <Text>{productEvidencePageText(page)}</Text>;
-}`;
 const debugRenderer = `${rendererImports}
 import {useSyncExternalStore} from 'react'; import {debugLog} from '../lib/debugLog';
 export function DebugEvidenceText() {
@@ -175,14 +170,7 @@ rejected('audit-arbitrary-prop',{'src/components/AuditEvidenceText.tsx':`${rende
 rejected('audit-no-whole-file-exemption',{'src/components/AuditEvidenceText.tsx':auditRenderer+`declare const raw:string; <Text>{raw}</Text>`},'src/components/AuditEvidenceText.tsx');
 
 permitted('receipt-actual-model',{'src/components/ReceiptEvidenceText.tsx':receiptRenderer});
-permitted('product-evidence-admitted-page', {'src/components/ProductEvidenceText.tsx':productEvidenceRenderer});
 rejected('product-evidence-arbitrary-text', {'src/components/ProductEvidenceText.tsx':`${rendererImports} export function ProductEvidenceText({text}:{text:string}) {return <Text>{text}</Text>;}`}, 'src/components/ProductEvidenceText.tsx');
-rejected('product-evidence-lookalike-source', {'src/data/fakeEvidence.ts':`export interface ProductEvidencePage {page:number;pages:number;} export declare function productEvidencePageText(page:ProductEvidencePage):string;`,
-  'src/components/ProductEvidenceText.tsx':productEvidenceRenderer.replace('../data/productEvidenceDocument','../data/fakeEvidence')}, 'src/components/ProductEvidenceText.tsx');
-rejected('product-evidence-local-factory', {'src/components/ProductEvidenceText.tsx':productEvidenceRenderer.replace("import {productEvidencePageText,type ProductEvidencePage} from '../data/productEvidenceDocument';",
-  "import type {ProductEvidencePage} from '../data/productEvidenceDocument'; declare function productEvidencePageText(page:ProductEvidencePage):string;")}, 'src/components/ProductEvidenceText.tsx');
-rejected('product-evidence-outside-renderer', {'app/source.tsx':productEvidenceRenderer.replace('../data/productEvidenceDocument','../src/data/productEvidenceDocument')}, 'app/source.tsx');
-rejected('product-evidence-no-file-exemption', {'src/components/ProductEvidenceText.tsx':productEvidenceRenderer+`declare const text:string; <Text>{text}</Text>`}, 'src/components/ProductEvidenceText.tsx');
 rejected('receipt-local-same-name-model',{'src/components/ReceiptEvidenceText.tsx':receiptRenderer.replace("import type {ReplayDocument} from '../data/receiptReplay/types';",`interface ReplayDocument {original:unknown;}`)},'src/components/ReceiptEvidenceText.tsx');
 rejected('receipt-imported-same-name-model',{'src/data/fakeModels.ts':`export interface ReplayDocument {original:unknown;}`,'src/components/ReceiptEvidenceText.tsx':receiptRenderer.replace("'../data/receiptReplay/types'","'../data/fakeModels'")},'src/components/ReceiptEvidenceText.tsx');
 rejected('receipt-outside-renderer',{'app/receipt.tsx':receiptRenderer.replace("'../data/receiptReplay/types'","'../src/data/receiptReplay/types'")},'app/receipt.tsx');

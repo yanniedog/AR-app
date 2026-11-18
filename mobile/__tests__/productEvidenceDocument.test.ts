@@ -1,7 +1,7 @@
 import { downloadInflate } from '../src/data/payload';
 import { evidenceSelection } from '../testUtils/productEvidenceSelection';
-import { loadProductEvidenceDocument, productEvidencePage, productEvidencePageText, verifyEvidenceProduct,
-  type ProductEvidenceDocument, type ProductEvidencePage } from '../src/data/productEvidenceDocument';
+import * as evidenceModule from '../src/data/productEvidenceDocument';
+import { loadProductEvidenceDocument, verifyEvidenceProduct } from '../src/data/productEvidenceDocument';
 import { selectedProductEvidenceHead } from '../src/data/historyDatesIndex';
 import { resolveFinalizedManifest } from '../src/data/ingestFinalized';
 import { productEvidenceTextSlice } from '../src/data/productEvidencePagination';
@@ -21,26 +21,18 @@ test('real finalized-resolution path checks optional metadata without fetching e
   p.ref.core_sha256 = 'd'.repeat(64);
   await expect(resolveFinalizedManifest(p.manifest, { fetchIndex: async () => p.dates, fetchRevision: async () => p.manifest })).rejects.toThrow();
 });
-test('captured facts remain reachable in admitted individual records with no string renderer bypass', async () => {
+test('admitted facts expose counts only and the module has no string renderer path', async () => {
   const p = evidenceSelection(); jest.mocked(downloadInflate).mockImplementation(p.load);
   const result = await loadProductEvidenceDocument(p.context, p.key, 'product_evidence_v1', () => true, new AbortController().signal);
   expect(result.status).toBe('observed'); if (result.status !== 'observed') return;
-  expect(result.document.facts).toBeGreaterThan(0);
-  for (let record = 0; record < result.document.records; record++) {
-    const page = productEvidencePage(result.document, record), fact = JSON.parse(productEvidencePageText(page));
-    expect(fact.fact_id).toBeTruthy(); expect(fact.source_path).toBeTruthy();
-  }
-  expect(() => productEvidencePage({} as ProductEvidenceDocument)).toThrow('not admitted');
-  expect(() => productEvidencePageText({} as ProductEvidencePage)).toThrow('not admitted');
-  expect(() => productEvidencePage(result.document, result.document.records)).toThrow('not admitted');
+  expect(result.document.facts).toBeGreaterThan(0); expect(result.document.records).toBeGreaterThan(0);
+  expect(evidenceModule).not.toHaveProperty('productEvidencePage'); expect(evidenceModule).not.toHaveProperty('productEvidencePageText');
 });
-test('original body pages reconstruct exact source including empty/null fields; alternate index stays unverified', async () => {
+test('original body is bound to its export hash; alternate index stays unverified', async () => {
   const p = evidenceSelection('product_response_evidence_v1'); jest.mocked(downloadInflate).mockImplementation(p.load);
   const result = await loadProductEvidenceDocument(p.context, p.key, 'product_response_evidence_v1', () => true, new AbortController().signal);
   expect(result.status).toBe('observed'); if (result.status !== 'observed') return;
-  const first = productEvidencePage(result.document), pieces = Array.from({ length: first.pages }, (_, page) => productEvidencePageText(productEvidencePage(result.document, 0, page)));
-  const text = pieces.join(''); expect(text.length).toBe(first.characters); expect(() => JSON.parse(text)).not.toThrow();
-  expect(pieces.every(piece => piece.length <= 16385)).toBe(true); expect(result.document.bodyMatchesExport).toBe(true);
+  expect(result.document.bodyMatchesExport).toBe(true);
   const alternative = result.bodies.find(choice => choice.role === 'index')!;
   const alternate = await loadProductEvidenceDocument(p.context, p.key, 'product_response_evidence_v1', () => true, new AbortController().signal, alternative.sha256);
   expect(alternate.status).toBe('observed'); if (alternate.status === 'observed') expect(alternate.document).toMatchObject({ bodyRole: 'index', bodyMatchesExport: false });

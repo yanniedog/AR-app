@@ -1,18 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useProductEvidence } from '../../hooks/useProductEvidence';
 import { useStore } from '../../data/store';
 import type { EvidenceLane } from '../../data/productEvidencePublication';
-import { productEvidencePage, type ProductEvidenceDocument, type ProductEvidenceBodyChoice } from '../../data/productEvidenceDocument';
+import { type ProductEvidenceDocument, type ProductEvidenceBodyChoice } from '../../data/productEvidenceDocument';
 import { uiCount, uiDate, uiIdentifier, uiJoin, uiLabel, type UiLabel } from '../../lib/uiCopy';
 import { AppText, Button, Disclosure, Row } from '../ui';
-import { ProductEvidenceText } from '../ProductEvidenceText';
 import { ProductEvidenceCriteria } from './ProductEvidenceCriteria';
 
-function EvidencePages({ document }: { document: ProductEvidenceDocument }) {
-  const [record, setRecord] = useState(0), [page, setPage] = useState(0);
-  const selected = useMemo(() => productEvidencePage(document, record, page), [document, record, page]);
-  const recordAt = (next: number) => { setRecord(next); setPage(0); };
+function EvidenceSummary({ document }: { document: ProductEvidenceDocument }) {
   return <View style={{ gap: 10 }}>
     <AppText variant="small">{uiJoin('Observed', ' · ', uiDate(document.observedDate), ' · ',
       document.observationState === 'partial' ? 'Partial' : document.observationState === 'failed' ? 'Unverified' : 'Observed')}</AppText>
@@ -20,20 +16,9 @@ function EvidencePages({ document }: { document: ProductEvidenceDocument }) {
     <AppText variant="small">{uiJoin('Status', ' · ', document.availability === 'available' ? 'Ready' : 'Unknown')}</AppText>
     {document.responseState && document.responseState !== 'matched' ? <AppText variant="small">{uiLabel(document.responseState === 'ambiguous' ? 'Ambiguous'
       : document.responseState === 'index_only' ? 'Index only' : 'Unverified')}</AppText> : null}
-    {document.facts !== null ? <>
-      <AppText variant="small">{uiJoin('Product facts', ' · ', uiCount(document.facts), ' · ', uiCount(record + 1), ' / ', uiCount(document.records))}</AppText>
-      <Row style={{ gap: 8, flexWrap: 'wrap' }}><Button title="First fact" disabled={record === 0} onPress={() => recordAt(0)} variant="secondary" />
-        <Button title="Previous fact" disabled={record === 0} onPress={() => recordAt(record - 1)} variant="secondary" />
-        <Button title="Next fact" disabled={record + 1 >= document.records} onPress={() => recordAt(record + 1)} variant="secondary" />
-        <Button title="Last fact" disabled={record + 1 >= document.records} onPress={() => recordAt(document.records - 1)} variant="secondary" /></Row>
-    </> : <AppText variant="tiny">{uiJoin(document.bodyRole === 'index' ? 'Product index' : 'Product detail', ' · ',
-      'Reference', ' · ', uiIdentifier(document.bodySha256), ' · ', document.bodyMatchesExport ? 'Matching' : 'Unverified')}</AppText>}
-    <AppText variant="small">{uiJoin('Page', ' · ', uiCount(page + 1), ' / ', uiCount(selected.pages), ' · ', 'Characters', ' · ', uiCount(selected.start), '–', uiCount(selected.end), ' / ', uiCount(selected.characters))}</AppText>
-    <Row style={{ gap: 8, flexWrap: 'wrap' }}><Button title="First page" disabled={page === 0} onPress={() => setPage(0)} variant="secondary" />
-      <Button title="Previous page" disabled={page === 0} onPress={() => setPage(page - 1)} variant="secondary" />
-      <Button title="Next page" disabled={page + 1 >= selected.pages} onPress={() => setPage(page + 1)} variant="secondary" />
-      <Button title="Last page" disabled={page + 1 >= selected.pages} onPress={() => setPage(selected.pages - 1)} variant="secondary" /></Row>
-    <ProductEvidenceText page={selected} />
+    {document.facts !== null ? <AppText variant="small">{uiJoin('Product facts', ' · ', uiCount(document.facts))}</AppText>
+      : <AppText variant="tiny">{uiJoin(document.bodyRole === 'index' ? 'Product index' : 'Product detail', ' · ',
+        'Reference', ' · ', uiIdentifier(document.bodySha256), ' · ', document.bodyMatchesExport ? 'Matching' : 'Unverified')}</AppText>}
   </View>;
 }
 function ResponseChoices({ choices, open }: { choices: ProductEvidenceBodyChoice[]; open: (sha: string) => void }) {
@@ -79,7 +64,7 @@ export function ProductEvidenceDisclosure({ productKey }: { productKey: string }
       <Row style={{ gap: 8 }}><Button title="Product facts" variant="secondary" disabled={lane === 'product_evidence_v1'} onPress={() => setLane('product_evidence_v1')} />
         <Button title="Original response" variant="secondary" disabled={lane === 'product_response_evidence_v1'} onPress={() => setLane('product_response_evidence_v1')} /></Row>
       {'bodies' in state && state.bodies?.length ? <ResponseChoices key={identity} choices={state.bodies} open={sha256 => setSelectedBody({ identity, sha256 })} /> : null}
-      {state.status === 'observed' ? <EvidencePages key={lane + state.document.productKey + state.document.edition + state.document.bodySha256 + retry} document={state.document} /> : <>
+      {state.status === 'observed' ? <EvidenceSummary key={lane + state.document.productKey + state.document.edition + state.document.bodySha256 + retry} document={state.document} /> : <>
         <AppText variant="small">{uiLabel(status)}</AppText>
         {(['failed', 'paused', 'unknown'].includes(state.status) && !producerFailure) ? <Button title="Retry" variant="secondary" onPress={() => setRetry(value => value + 1)} /> : null}
         {(state.status === 'pending' || state.status === 'unavailable' || producerFailure) ? <>
