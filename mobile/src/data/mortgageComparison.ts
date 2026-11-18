@@ -3,7 +3,7 @@ import { sourceRowForPublicRow } from './publicRateIntegration';
 import type { RateRow } from '../types';
 import { calculatorAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT } from './calc';
 import { lvrRangeContains, parseLvrRange } from './lvrRange';
-import { scopedRateConditions, scopedRateConditionsForRows, type RateConditionContext } from './rateConditions';
+import { scopedRateConditions, scopedRateConditionsForRows, scopedRateConditionsForRowsCooperatively, type RateConditionContext } from './rateConditions';
 import { scopedFinancialConditionFacts, type PublishedNumericConditionFact, type NumericConditionBoundary } from './scopedFinancialConditionFacts';
 import { yieldToUi } from '../lib/yieldToUi';
 import { Decimal, decimalText } from './publicRateDecimal';
@@ -190,21 +190,23 @@ export async function prepareMortgageComparisonRowsCooperatively(rows: readonly 
   const cancelled = control.cancelled ?? (() => false);
   const yieldControl = control.yieldControl ?? (() => yieldToUi(0));
   const now = control.now ?? (() => performance.now());
-  const groups = new Map<string, RateRow[]>();
-  for (const row of rows) {
-    const group = groups.get(row.product_key);
-    if (group) group.push(row); else groups.set(row.product_key, [row]);
-  }
-  const prepared = new WeakMap<RateRow, PreparedMortgageComparisonRow>();
   await yieldControl();
   let checkpoint = now();
-  for (const group of groups.values()) {
+  const sources: RateRow[] = [];
+  for (const row of rows) {
     if (cancelled()) return null;
-    const scopes = scopedRateConditionsForRows(group.map(sourceRowForPublicRow), 'Mortgage', context);
-    for (let index = 0; index < group.length; index++) {
-      const row = group[index];
-      prepared.set(row, prepareComparisonMetadata(row, scopedFinancialConditionFacts(scopes[index])));
-    }
+    sources.push(sourceRowForPublicRow(row));
+    if (now() - checkpoint >= 4) { await yieldControl(); checkpoint = now(); }
+  }
+  // One reader caches each product envelope within this call. Avoid a forced
+  // native yield per product: a catalogue can contain thousands of products.
+  const scopes = await scopedRateConditionsForRowsCooperatively(sources, 'Mortgage', context, control);
+  if (!scopes || cancelled()) return null;
+  const prepared = new WeakMap<RateRow, PreparedMortgageComparisonRow>();
+  checkpoint = now();
+  for (let index = 0; index < rows.length; index++) {
+    if (cancelled()) return null;
+    prepared.set(rows[index], prepareComparisonMetadata(rows[index], scopedFinancialConditionFacts(scopes[index])));
     if (now() - checkpoint >= 4) { await yieldControl(); checkpoint = now(); }
   }
   return cancelled() ? null : prepared;

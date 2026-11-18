@@ -23,6 +23,7 @@ import { TOUCH_TARGET_MIN } from '../src/components/TouchTarget';
 import { AppText, Button, Card, Disclosure, Divider, Row } from '../src/components/ui';
 import {
   buildNegotiationBrief,
+  buildNegotiationBriefCooperatively,
   buildRateReceipt,
   rateConditionReceiptLines,
   type ReceiptFact,
@@ -145,6 +146,9 @@ export default function RateReceiptScreen() {
     catalogue: publicCatalogue, section: receiptSection, sectionScenario: comparisonScenario,
     rowScenario: comparisonRowScenario, focused: focused && Boolean(found) && comparisonsReady,
     revision: suitabilityRevision,
+    // Reopening the brief can reuse this exact pricing request. Every input
+    // captured by scenarioFor belongs to the key; inputs stay local to memory.
+    resolutionContextKey: JSON.stringify([scenario, profile, fromRatesComparison, comparisonInputs, mortgageFilters]),
   });
   const comparisonsAvailable = comparisonsReady && comparisonPricing.ready;
   const selectedRow = useMemo(() => found && validRateIndex
@@ -175,16 +179,34 @@ export default function RateReceiptScreen() {
       : null,
     [core, detail, details, manifest, coreIntegrity, found, row],
   );
+  const briefInput = useMemo(() => {
+    void suitabilityRevision;
+    return receipt ? ({ receipt, scenario: calculationScenario,
+    sectionRows: comparisonsAvailable ? comparisonPricing.resolution.rows : EMPTY_RECEIPT_ROWS,
+    comparisonsReady: comparisonsAvailable, detailsProducts,
+  }) : null;
+  }, [receipt, calculationScenario, comparisonsAvailable, comparisonPricing.resolution.rows, detailsProducts, suitabilityRevision]);
+  const [briefAttempt, setBriefAttempt] = useState(0);
+  const [preparedBrief, setPreparedBrief] = useState<{
+    input: typeof briefInput; value: ReturnType<typeof buildNegotiationBrief> | null; error: boolean;
+  } | null>(null);
+  const smallBrief = useMemo(() => briefInput && briefInput.comparisonsReady && briefInput.sectionRows.length <= 48
+    ? buildNegotiationBrief(briefInput) : null, [briefInput]);
+  useEffect(() => {
+    if (!focused || !briefInput?.comparisonsReady || smallBrief) return;
+    let cancelled = false;
+    void buildNegotiationBriefCooperatively(briefInput, { cancelled: () => cancelled }).then(value => {
+      if (!cancelled) setPreparedBrief({ input: briefInput, value, error: value == null });
+    }, () => { if (!cancelled) setPreparedBrief({ input: briefInput, value: null, error: true }); });
+    return () => { cancelled = true; };
+  }, [focused, briefInput, smallBrief, briefAttempt]);
+  const cohortBrief = smallBrief ?? (preparedBrief?.input === briefInput ? preparedBrief.value : null);
+  const briefError = !smallBrief && preparedBrief?.input === briefInput && preparedBrief.error;
   const brief = useMemo(
     () => {
       if (!receipt || !found) return null;
-      const brief = buildNegotiationBrief({
-        receipt,
-        scenario: calculationScenario,
-        sectionRows: comparisonsAvailable ? comparisonPricing.resolution.rows : EMPTY_RECEIPT_ROWS,
-        comparisonsReady: comparisonsAvailable,
-        detailsProducts,
-      });
+      if (!cohortBrief) return null;
+      const brief = cohortBrief;
       if (!fromRatesComparison || found.section !== 'Mortgage') return brief;
       const scoped = scenarioFor(found.section, selectedRow ?? undefined);
       // Rates inputs describe offer applicability, not the saved current loan.
@@ -196,7 +218,7 @@ export default function RateReceiptScreen() {
         facts.push({ label: uiLabel('Scenario LVR'), value: uiJoin(uiNumber(Number(scoped.lvr) * 100, 1), '%') });
       return { ...brief, illustration: null, scenario: facts };
     },
-    [detailsProducts, found, receipt, calculationScenario, comparisonsAvailable, comparisonPricing.resolution.rows, fromRatesComparison, scenarioFor, selectedRow],
+    [found, receipt, cohortBrief, fromRatesComparison, scenarioFor, selectedRow],
   );
   const shareText = useMemo(() => {
     if (!receipt || !brief) return uiLabel('Unavailable');
@@ -253,10 +275,10 @@ export default function RateReceiptScreen() {
     probes: [
       {
         id: 'receipt.comparisons', kind: 'data',
-        status: comparisonPricing.error || catalogueStatus === 'error' ? 'error' : comparisonsAvailable ? 'ready' : 'pending',
-        error: comparisonPricing.error ?? (catalogueStatus === 'error' ? 'Public comparison pricing unavailable' : null),
+        status: comparisonPricing.error || briefError || catalogueStatus === 'error' ? 'error' : comparisonsAvailable && cohortBrief ? 'ready' : 'pending',
+        error: comparisonPricing.error ?? (briefError ? 'Receipt comparison preparation failed' : catalogueStatus === 'error' ? 'Public comparison pricing unavailable' : null),
         expectedCount: 1,
-        actualCount: !comparisonPricing.error && catalogueStatus !== 'error' && comparisonsAvailable ? 1 : 0
+        actualCount: !comparisonPricing.error && !briefError && catalogueStatus !== 'error' && comparisonsAvailable && cohortBrief ? 1 : 0
       },
       {
         id: 'receipt.data',
@@ -305,12 +327,21 @@ export default function RateReceiptScreen() {
   });
 
   if (!core) return <ScreenSkeleton />;
+  if (briefError || comparisonPricing.error || catalogueStatus === 'error') return <><Stack.Screen options={{ title: 'Bank-call brief' }} />
+    <EmptyState icon="receipt-outline" title="Unavailable" fill />
+    <Button title="Retry" onPress={() => {
+      setPreparedBrief(null); setBriefAttempt(value => value + 1); comparisonPricing.retry();
+      if (catalogueStatus === 'error') void loadAll().catch(() => undefined);
+    }} />
+  </>;
+
   if (publicProduct && (!found || !row) || publicResolution && (publicResolution.status !== 'exact' || !publicResolution.verifiedCurrent)) return <>
     <Stack.Screen options={{ title: 'Pricing evidence' }} />
     <ScreenScrollView><AppText variant="small">{uiJoin('Bank-call brief', ': ', 'Unavailable', ' · ', 'Pricing unresolved')}</AppText>
       <PublicRateEvidence productKey={productKey} row={selectedRow ?? undefined} programmeId={requestedProgramme} scenario={publicProduct ? scenarioFor(publicProduct.section, selectedRow ?? undefined) : undefined} />
     </ScreenScrollView>
   </>;
+  if (found && row && receipt && !brief) return <ScreenSkeleton />;
   if (!found || !row || !receipt || !brief) {
     return (
       <>
@@ -345,7 +376,7 @@ export default function RateReceiptScreen() {
       <SectionTitle text="Comparable observed rates" icon="git-compare-outline" />
       <Card style={{ gap: 8 }}>
         {comparisonsAvailable ? <AppText variant="tiny" color="textMuted">{uiJoin(brief.cohortSummary, brief.typicalAdvertisedRate ? uiJoin(' · ', 'Median', ': ', brief.typicalAdvertisedRate) : null)}</AppText> : null}
-        {!comparisonsAvailable ? <Row><AppText>{uiLabel(comparisonPricing.error || catalogueStatus === 'error' ? 'Unavailable' : 'Loading')}</AppText>
+        {!comparisonsAvailable ? <Row><AppText>{uiLabel(comparisonPricing.error ? 'Unavailable' : 'Loading')}</AppText>
           {comparisonPricing.error ? <Button title="Retry" variant="secondary" onPress={comparisonPricing.retry} /> : null}</Row> : brief.comparables.length ? brief.comparables.map((comparable, index) => <Pressable key={`${comparable.productKey}#${comparable.rateIndex ?? 'default'}`}
             accessibilityRole="button" accessibilityLabel={uiJoin('Open', ' ', uiProviderName({ provider: comparable.provider }), ' · ', uiProductName({ product_name: comparable.productName }))}
             onPress={() => router.push({ pathname: '/product/[key]', params: { key: comparable.productKey, ...(comparable.programmeId ? { programme: comparable.programmeId } : comparable.rateIndex != null ? { ri: String(comparable.rateIndex) } : {}), ...(fromRatesComparison ? { origin: 'rates-comparison' } : {}) } } as Href)}

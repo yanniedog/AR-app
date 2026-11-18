@@ -1,3 +1,4 @@
+import { rowWork, type RowWorkControl } from './cooperativeRows';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import type { CorePayload, DetailsPayload, Manifest, RateConditionEntry, RateConditions, RateRow, SectionKey } from '../types';
@@ -101,6 +102,11 @@ export function scopedRateConditions(row: RateRow, section: SectionKey, context?
  * pass validation again, and every row still proves its exact source identity. */
 export function scopedRateConditionsForRows(rows: readonly RateRow[], section: SectionKey,
   context?: RateConditionContext): ScopedRateConditions[] {
+  return rows.map(scopedRateConditionsReader(section, context));
+}
+
+/** Cache lifetime is one preparation call, never a later publication/read. */
+function scopedRateConditionsReader(section: SectionKey, context?: RateConditionContext) {
   const validated = new Map<unknown, boolean>();
   const validate = (value: unknown): value is RateConditions => {
     let result = validated.get(value);
@@ -123,5 +129,19 @@ export function scopedRateConditionsForRows(rows: readonly RateRow[], section: S
     // Preserve independently owned result arrays even for repeated exact rows.
     return tiers.get(index)?.slice() ?? [];
   };
-  return rows.map(row => readScopedRateConditions(row, section, context, validate, byTier));
+  return (row: RateRow) => readScopedRateConditions(row, section, context, validate, byTier);
+}
+
+/** Yield within a large product while retaining its envelope validation/index. */
+export async function scopedRateConditionsForRowsCooperatively(rows: readonly RateRow[], section: SectionKey,
+  context?: RateConditionContext, control: RowWorkControl = {}): Promise<ScopedRateConditions[] | null> {
+  const work = rowWork(control), read = scopedRateConditionsReader(section, context);
+  const result: ScopedRateConditions[] = [];
+  await work.pause();
+  for (const row of rows) {
+    if (work.cancelled()) return null;
+    result.push(read(row));
+    if (work.expired()) await work.pause();
+  }
+  return work.cancelled() ? null : result;
 }

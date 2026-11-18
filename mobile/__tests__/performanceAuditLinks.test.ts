@@ -1,3 +1,5 @@
+jest.mock('../src/lib/passiveAudit', () => ({ getPreloadedExternalLink: jest.fn(() => null) }));
+import { getPreloadedExternalLink } from '../src/lib/passiveAudit';
 import { externalLinkAuditCheck, externalLinkAuditCheckId, runExternalLinkAuditCheck } from '../src/lib/performanceAuditLinks';
 import type { ExternalLinkAuditResult } from '../src/lib/externalLinkAudit';
 
@@ -76,4 +78,16 @@ it('measures a selected local native HTTPS handler without requesting its websit
   });
   expect(canOpenUrl).toHaveBeenCalledWith(request.url);
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it('scores current retrieval separately from a slow passive observation', async () => {
+  jest.mocked(getPreloadedExternalLink).mockReturnValueOnce({ result: {
+    ...result, reachability: { status: 'unknown', detail: 'Not tested', attempted: false, selection: 'not-selected' },
+  }, durationMs: 15305, checkedAt: Date.now() - 480000 });
+  const check = await runExternalLinkAuditCheck({ url: 'https://www.rba.gov.au/statistics/',
+    label: 'Source', purpose: 'official_economic_source' }, 32, { platform: 'android', reachability: false });
+  expect(check.status).toBe('warn');
+  expect(check.durationMs).toBeLessThan(10000);
+  expect(check.metrics).toMatchObject({ preloaded: true, backgroundDurationMs: 15305,
+    handlerAttempted: true, httpAttempted: false });
 });

@@ -1,6 +1,7 @@
 import placeholders from './fixtures/published-descriptive-placeholders-20260915.json';
 import {
   buildNegotiationBrief,
+  buildNegotiationBriefCooperatively,
   buildRateReceipt,
   officialReceiptSources,
   rateReceiptShareText,
@@ -337,4 +338,20 @@ test('published label-only eligibility survives descriptive placeholder suppress
   expect(JSON.stringify(eligibility)).toBe(original);
   const explicit = buildRateReceipt({ row: row(), section: 'Mortgage', evidenceDate: '2026-09-15', detail: { constraints: [{ label: 'Zero', value: 0 }, { label: 'False', value: 'false' }] } });
   expect(explicit.conditions.map(fact => fact.value)).toEqual(['0', 'No']);
+});
+
+test.each(['Mortgage', 'Savings', 'TD'] as const)('cooperative %s brief preserves cohort, median and exact comparable tiers', async section => {
+  const selected = row();
+  const rows = Array.from({ length: 1200 }, (_, i) => row({ product_key: `product-${i % 150}`,
+    rate_index: i, rate: String(0.02 + (i % 20) / 1000), account_class: i % 7 === 0 ? 'restricted' : 'standard' }));
+  const input = { receipt: buildRateReceipt({ row: selected, section, evidenceDate: '2026-11-18' }),
+    scenario: EMPTY_USER_RATE_SCENARIO, sectionRows: rows };
+  const original = JSON.stringify(rows);
+  const yieldControl = jest.fn(async () => {});
+  expect(await buildNegotiationBriefCooperatively(input, { yieldControl })).toEqual(buildNegotiationBrief(input));
+  expect(yieldControl.mock.calls.length).toBeGreaterThan(1);
+  expect(JSON.stringify(rows)).toBe(original);
+  let cancelled = false;
+  expect(await buildNegotiationBriefCooperatively(input, { cancelled: () => cancelled,
+    yieldControl: async () => { cancelled = true; } })).toBeNull();
 });
