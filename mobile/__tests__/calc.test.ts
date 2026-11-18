@@ -55,6 +55,10 @@ describe('depositToReachLvr', () => {
 });
 
 describe('normalizeCalcInputs', () => {
+  it('recognises a legacy existing balance only when no mode was recorded', () => {
+    expect(normalizeCalcInputs({ loanBalance: '500000' }).mode).toBe('refi');
+    expect(normalizeCalcInputs({ mode: 'buy', loanBalance: '500000' }).mode).toBe('buy');
+  });
   it('coerces partial/garbage input to a safe shape', () => {
     expect(normalizeCalcInputs(null)).toEqual(EMPTY_CALC);
     expect(normalizeCalcInputs({ mode: 'refi', propertyValue: 5 as unknown as string }).mode).toBe('refi');

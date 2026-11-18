@@ -1,5 +1,5 @@
 /** Pure helpers for background APK update downloads (unit-testable). */
-import { uiJoin, uiIdentifier, uiNumber, type UiCopy } from './uiCopy';
+import { uiJoin, uiIdentifier, uiPercentage, type UiCopy } from './uiCopy';
 
 export type ApkDownloadPhase =
   | 'idle'
@@ -240,7 +240,7 @@ export function updateBannerCopy(
   }
   if (phase === 'downloading') {
     return {
-      title: uiJoin('Downloading', ' · ', uiIdentifier(version), downloadPct != null ? uiJoin(' · ', uiNumber(downloadPct), '%') : ''),
+      title: uiJoin('Downloading', ' · ', uiIdentifier(version), downloadPct != null ? uiJoin(' · ', uiPercentage(downloadPct)) : ''),
       actionLabel: 'Upgrade',
       actionEnabled: false,
     };

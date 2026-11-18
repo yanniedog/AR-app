@@ -1,6 +1,6 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
-import { Platform } from 'react-native';
+import { Platform, TextInput } from 'react-native';
 import { migrateCustomerProfile } from '../src/data/customerProfileMigration';
 import type { CustomerProfile } from '../src/data/customerProfile';
 jest.mock('../src/hooks/useCustomerProfile', () => ({ useCustomerProfile: jest.fn() }));
@@ -29,7 +29,7 @@ test('answer UI saves explicit false and zero separately from unavailable', () =
   expect(onSave.mock.calls[1][0].state).toBe('unavailable');
   act(() => tree.update(<CustomerAnswerEditor key="amount" definition={{ id: 'amount', label: 'Balance', type: 'decimal', unit: 'AUD' }} disabled={false} onSave={onSave} />));
   act(() => tree.root.findByProps({ label: 'Entered' }).props.onPress());
-  act(() => tree.root.findByProps({ accessibilityLabel: 'Balance' }).props.onChangeText('0'));
+  act(() => tree.root.findByProps({ accessibilityLabel: 'Balance, thousands of dollars' }).props.onChangeText('0'));
   act(() => tree.root.findByProps({ accessibilityLabel: 'Save Balance' }).props.onPress());
   expect(onSave.mock.calls[2][0]).toMatchObject({ state: 'known', fact: { value: '0', unit: 'AUD' } });
 });
@@ -87,7 +87,7 @@ test('saved inputs without admitted labels appear as an unavailable count and st
   const accessibleActions = tree.root.findAllByType('Button').map((node: any) => node.props.accessibilityLabel);
   expect(accessibleActions).toContain('Save Savings balance');
   expect(accessibleActions).not.toContain('Save Unverified');
-  expect(tree.root.findAllByType('LedgerField')).toHaveLength(1);
+  expect(tree.root.findAllByType(TextInput).filter((node: any) => node.props.accessibilityLabel === 'Savings balance, thousands of dollars')).toHaveLength(1);
   const rendered = JSON.stringify(tree.toJSON());
   expect(rendered).toContain('Unavailable: 2');
   expect(rendered).not.toContain('internal.old_');

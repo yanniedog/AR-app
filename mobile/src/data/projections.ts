@@ -1,4 +1,4 @@
-import { calculatorAmount, computeLvr, num } from './calc';
+import { calculatorAmount, calculatorYears, computeLvr } from './calc';
 import { estimateEnteredRate } from './publicRateLocal';
 import type { ProjectionFrequency, ProjectionInputs } from './projectionScenario';
 import type { UserRateScenario } from './userRateScenario';
@@ -78,14 +78,10 @@ export const MAX_DEPOSIT_BALANCE = 20_000_000;
 export const MAX_PERIODIC_AMOUNT = 1_000_000;
 
 function cleanNumber(value: string): number {
-  const parsed = Number(String(value ?? '').replace(/[$,%\s,]/g, ''));
+  const raw = String(value ?? '').trim();
+  if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw)) return 0;
+  const parsed = Number(raw);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-}
-
-function rawNumber(value: string): number | null {
-  if (!value.trim()) return null;
-  const parsed = Number(value.replace(/[$,%\s,]/g, ''));
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function cleanAmount(value: string): number {
@@ -498,9 +494,11 @@ export function buildLifecycleProjection(
 
   if (section === 'Mortgage') {
     const lvr = computeLvr(scenario.mortgage);
-    const balance = lvr.loan ?? num(scenario.mortgage.loanBalance);
+    const balance = scenario.mortgage.mode === 'refi'
+      ? calculatorAmount(scenario.mortgage.loanBalance, MAX_MORTGAGE_BALANCE) ?? 0
+      : lvr.loan ?? 0;
     const annualRate = percentageFraction(scenario.mortgage.currentRate);
-    const enteredYears = cleanNumber(scenario.mortgage.years);
+    const enteredYears = calculatorYears(scenario.mortgage.years) ?? 0;
     const remainingMonths = Math.round(enteredYears * 12);
     const fixedRate = inputs.mortgageRateStructure === 'fixed';
     const fixedPeriodMonths = Math.round(cleanNumber(inputs.fixedPeriodMonths));
@@ -522,7 +520,7 @@ export function buildLifecycleProjection(
     if (missing.length) return emptyProjection(section, today, missing);
 
     const enteredRepayment = monthlyAmount(inputs.periodicAmount, inputs.periodicFrequency);
-    const repayment = enteredRepayment || repaymentFor(balance, annualRate!, remainingMonths);
+    const repayment = inputs.periodicAmount.trim() ? enteredRepayment : repaymentFor(balance, annualRate!, remainingMonths);
     const extraRepayment = monthlyAmount(inputs.extraRepaymentAmount, inputs.extraRepaymentFrequency);
     const offsetBalance = Math.min(balance, cleanAmount(inputs.offsetBalance));
     const offsetGrowth = monthlyAmount(inputs.offsetContributionAmount, inputs.offsetContributionFrequency);

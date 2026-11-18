@@ -67,7 +67,7 @@ export function SavedRateActions({ row, section }: { row: RateRow; section: Sect
     <Row style={{ alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
       <View style={{ flex: 1 }}>
         <AppText variant="small" weight="700">{uiLabel('Saved rates')}</AppText>
-        <AppText variant="tiny" color="textMuted">{ref.scope === 'product' ? uiLabel('All product variants · Legacy save')
+        <AppText variant="tiny" color="textMuted">{ref.scope === 'product' ? uiLabel('All product variants')
           : changeBps ? uiJoin(changeBps > 0 ? 'Increase' : 'Decrease', ': ', uiNumber(Math.abs(changeBps) / 100, 2), ' ', 'percentage points', ' · ', 'Since saved')
             : uiJoin('Last updated', ': ', uiDate(row.last_updated ?? runDate))}</AppText>
       </View>
@@ -85,10 +85,6 @@ export function SavedRateActions({ row, section }: { row: RateRow; section: Sect
         <Card accessibilityViewIsModal style={{ gap: 14 }}>
           <View>
             <AppText variant="h3">{section === 'TD' ? uiLabel('Term deposit maturity') : uiLabel('Fixed-rate end')}</AppText>
-            <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-              <AppText variant="tiny" color="textMuted">{uiLabel('Storage')}</AppText>
-              <AppText variant="tiny">{uiJoin('This device', ' · ', 'Private')}</AppText>
-            </Row>
           </View>
           <TextInput value={uiInputNumber(dateValue)} onChangeText={setDateValue} placeholder="YYYY-MM-DD"
             placeholderTextColor={theme.colors.textFaint} autoFocus autoCapitalize="none" autoCorrect={false}

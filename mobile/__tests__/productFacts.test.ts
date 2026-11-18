@@ -90,7 +90,7 @@ describe('productFacts', () => {
 
     expect(publishedFactFilterOptions(rows, lookup).map((option) => option.label)).toEqual([
       'Maximum balance: $250k',
-      'Maximum LVR: 80.00%',
+      'Maximum LVR: 80.0%',
       'Minimum age: 18 years',
       'No Redraw facility',
       'Offset account',

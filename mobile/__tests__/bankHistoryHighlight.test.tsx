@@ -176,7 +176,7 @@ test('captured fallback-only gaps recover when the verified archive replaces the
     expect(chart().props.accessibilityLabel).toContain('27 Observed');
     expect(facts()).toContain('Missing observations: 4 · Unknown');
     act(() => tree.root.findAllByType('ChartSliceControls')[0].props.onChangeIndex(29));
-    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('5.94% – 13.75%');
+    expect(tree.root.findAllByType('ChartSliceControls')[0].props.valueLabel).toBe('5.94% – 13.8%');
   } finally { act(() => tree.unmount()); }
 });
 
@@ -221,4 +221,22 @@ test('a long timeline does not publish a graphic until the slice has yielded', a
     yieldToUi.mockImplementation(async () => undefined);
     act(() => tree.unmount());
   }
+});
+
+
+test('external statistics follow date selection and retain null observations', () => {
+  const onStatisticsChange = jest.fn();
+  const points = dates.map((date, index) => ({ date, min: index === 1 ? null : 0.03, max: index === 1 ? null : 0.07,
+    mean: index === 1 ? null : 0.05, median: index === 1 ? null : 0.06, count: index === 1 ? 0 : 4 }));
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankHistoryChart section="Mortgage" dates={dates} points={points}
+    compactStatistics statisticsInline={false} onStatisticsChange={onStatisticsChange} />) as Renderer; });
+  try {
+    expect(onStatisticsChange).toHaveBeenLastCalledWith(expect.objectContaining({ date: dates[3], min: 0.03, mean: 0.05 }));
+    act(() => tree.root.findAllByType('ChartSliceControls')[0].props.onChangeIndex(0));
+    expect(onStatisticsChange).toHaveBeenLastCalledWith(expect.objectContaining({ date: dates[0], min: 0.03, median: 0.06 }));
+    act(() => tree.root.findAllByType('ChartSliceControls')[0].props.onChangeIndex(1));
+    expect(onStatisticsChange).toHaveBeenLastCalledWith(expect.objectContaining({ date: dates[1], min: null, max: null, mean: null, median: null }));
+    expect(tree.root.findAllByType('AppText').map(node => node.props.children)).not.toContain('Min');
+  } finally { act(() => tree.unmount()); }
 });

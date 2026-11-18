@@ -1,6 +1,8 @@
 import { dayNumber } from '../lib/productTermsEngine/calendar';
 import { Decimal } from '../lib/productTermsEngine/decimal';
 import type { Fact } from '../lib/productTermsEngine/types';
+import type { CustomerInputState } from './customerInputState';
+import { validateCustomerInputState } from './customerInputState';
 
 export type AnswerState = 'known' | 'unknown' | 'unavailable' | 'not_applicable';
 export interface InputDefinition {
@@ -27,6 +29,7 @@ export interface CustomerProfile {
   negotiatedTerms: NegotiatedTerm[];
   /** Exact original retained, never fed to published facts or financial rules. */
   legacyScenario: unknown;
+  inputState?: CustomerInputState;
 }
 export const own = (value: object, key: string): boolean => Object.prototype.hasOwnProperty.call(value, key);
 export const safeId = (value: unknown): value is string => typeof value === 'string' &&
@@ -73,6 +76,7 @@ export function validateProfile(value: unknown): CustomerProfile {
           (a.fact.type === 'decimal' && a.fact.unit !== d.unit)))) throw new Error('Invalid customer answer.');
   }
   const ids = new Set<string>();
+  if (p.inputState !== undefined) validateCustomerInputState(p.inputState);
   for (const t of p.negotiatedTerms) {
     if (!t || !safeId(t.id) || ids.has(t.id) || !text(t.label, 160) || !t.label.trim() ||
         !text(t.value) || !t.value.trim() || !text(t.unit, 80) || !t.unit.trim() || !text(t.note) ||
@@ -81,6 +85,4 @@ export function validateProfile(value: unknown): CustomerProfile {
   }
   return p;
 }
-export function userProvenance(productKey: string | null = null): InputProvenance {
-  return { source: 'user_input', recordedAt: new Date().toISOString(), productKey, effectiveFrom: null, effectiveToExclusive: null };
-}
+export { userProvenance } from './customerProfileProvenance';

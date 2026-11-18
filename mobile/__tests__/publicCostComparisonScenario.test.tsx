@@ -24,7 +24,7 @@ test('the rendered cost disclosure uses the same amount and LVR as the selected 
   try {
     const facts = tree.root.findAllByType('AppText').map(node => String(node.props.children));
     expect(facts).toContain('Loan amount: $600000');
-    expect(facts).toContain('LVR: 75.0000%');
+    expect(facts).toContain('LVR: 75.0%');
     expect(facts).toContain('Interest cost: $30000.00');
     expect(saved.mortgage.loanBalance).toBe('100000');
   } finally { act(() => tree.unmount()); }

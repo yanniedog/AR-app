@@ -1,4 +1,4 @@
-import { uiLabel } from "../src/lib/uiCopy";
+import { uiLabel, uiPercentage } from "../src/lib/uiCopy";
 import { useIsFocused } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -12,7 +12,7 @@ import { RateOutlookChart } from '../src/components/rba/RateOutlookChart';
 import { ScreenScrollView } from '../src/components/Screen';
 import { Disclosure } from '../src/components/ui';
 import { InfoRow } from '../src/components/settings/settingsUi';
-import { uiDate, uiJoin, uiNumber, type UiCopy } from '../src/lib/uiCopy';
+import { uiDate, uiJoin, type UiCopy } from '../src/lib/uiCopy';
 import { currentCashRate, nextMeeting, rbaCalendarCoverage, sydneyYmd } from '../src/data/rbaCalendar';
 import { loadRbaMarketOutlook, RBA_F17_FORWARD_URL, RBA_J1_FORECAST_URL, subscribeRbaMarketOutlookCacheReset, type RbaMarketOutlook } from '../src/data/rbaMarketOutlook';
 import { useStore } from '../src/data/store';
@@ -192,7 +192,7 @@ export default function RbaRates() {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 24 }}>
           <View style={{ flexGrow: 1, gap: 4 }}>
             <LedgerText variant="label" tone="mutedInk">{uiLabel('Last confirmed cash rate')}</LedgerText>
-            <LedgerText variant="rateLarge">{cashRate == null ? uiLabel("—") : uiJoin(uiNumber(cashRate, 2), '%')}</LedgerText>
+            <LedgerText variant="rateLarge">{cashRate == null ? uiLabel("—") : uiPercentage(cashRate)}</LedgerText>
             <LedgerText variant="caption" tone="mutedInk">{core?.run_date ? uiJoin('Checked', ' ', uiDate(core.run_date)) : uiLabel("Official RBA decisions")}</LedgerText>
           </View>
           <View style={{ flexGrow: 1, justifyContent: 'center', gap: 4 }}>

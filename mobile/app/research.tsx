@@ -1,4 +1,4 @@
-import { uiDate, uiJoin, uiLabel, uiNumber, uiSectionName } from "../src/lib/uiCopy";
+import { uiDate, uiJoin, uiLabel, uiPercentage, uiSectionName } from "../src/lib/uiCopy";
 import type { ChartRenderEvidence } from '../src/lib/chartRenderEvidence';
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
@@ -629,7 +629,7 @@ export default function Market() {
           {decisions.map((decision) => (
             <Row key={decision.date} style={{ justifyContent: 'space-between', paddingVertical: 8, flexWrap: 'wrap' }}>
               <AppText variant="small" color="textMuted">{uiDate(decision.date)}</AppText>
-              <AppText variant="small" weight="700">{uiJoin(decision.outcome==='hike'?'Increase':decision.outcome==='cut'?'Decrease':'Held',' · ',uiJoin(uiNumber(decision.rate,2),'%'))}</AppText>
+              <AppText variant="small" weight="700">{uiJoin(decision.outcome==='hike'?'Increase':decision.outcome==='cut'?'Decrease':'Held',' · ',uiPercentage(decision.rate))}</AppText>
             </Row>
           ))}
           </View>

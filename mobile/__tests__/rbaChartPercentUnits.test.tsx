@@ -47,9 +47,9 @@ test('percent presentation keeps observed zero distinct from a missing observati
   act(() => { tree = TestRenderer.create(<RbaChart data={data} selectedDate={data[0].date} />); });
   try {
     layout(tree);
-    expect(tree.root.findByType(ChartSliceControls).props.valueLabel).toBe('0.00%');
-    expect(plot(tree).props.accessibilityLabel).toContain('0.00%');
-    expect(tree.root.findAllByType(ChartText).map((node: any) => node.props.children)).toEqual(['0.10%', '0.00%', '0.00%']);
+    expect(tree.root.findByType(ChartSliceControls).props.valueLabel).toBe('0%');
+    expect(plot(tree).props.accessibilityLabel).toContain('0%');
+    expect(tree.root.findAllByType(ChartText).map((node: any) => node.props.children)).toEqual(['0.100%', '0%', '0%']);
     act(() => tree.update(<RbaChart data={[{ date: 'invalid', rate: 0 }]} />));
     expect(tree.root.findByType(ChartSliceControls).props.valueLabel).toBe('Unknown');
     expect(plot(tree).props.accessibilityLabel).toContain('Unknown');

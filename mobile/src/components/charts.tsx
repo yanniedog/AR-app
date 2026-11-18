@@ -17,7 +17,7 @@ import {
 } from '../data/bankHistoryTransform';
 import { useFirstMountDrawIn } from '../hooks/useFirstMountDrawIn';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { uiLabel,  uiCount, uiDate, uiJoin, uiNumber } from '../lib/uiCopy';
+import { uiLabel,  uiCount, uiDate, uiJoin, uiPercentage } from '../lib/uiCopy';
 import { hasFiniteChartDate, hasFiniteChartPath, hasPositiveChartLayout, type ChartRenderEvidence } from '../lib/chartRenderEvidence';
 import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
@@ -30,7 +30,7 @@ const DRAW_MS = 800;
 
 // RbaEntry.rate is published in percent; product-rate series use fractions.
 function rbaPercent(rate: RbaEntry['rate'] | null) {
-  return rate !== null && Number.isFinite(rate) ? uiJoin(uiNumber(rate, 2), '%') : uiLabel('Unknown');
+  return rate !== null && Number.isFinite(rate) ? uiPercentage(rate) : uiLabel('Unknown');
 }
 
 function estimateStepPathLength(data: RbaEntry[], x: (i: number) => number, y: (rate: number) => number): number {

@@ -4,7 +4,7 @@ import { useResolvedPublicRankingRows } from '../src/hooks/useResolvedPublicRank
 import { useMortgageComparison } from '../src/data/mortgageComparison';
 import { ratesComparisonScenario } from '../src/data/mortgageComparisonScenario';
 import { useRatesSession } from '../src/data/ratesSession';
-import { uiCount, uiDate, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
+import { uiCount, uiDate, uiJoin, uiLabel, uiMoney, uiPercentage, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
 import { uiConditionalRateFact } from "../src/lib/financialUiCopy";
 import { usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
 import { bindCurrentPublicRow, publicScenarioForRow, publicRateScenario, publicRecommendationRowsForProduct, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
@@ -215,7 +215,7 @@ export default function RateReceiptScreen() {
       if (typeof scoped.amount === 'string' && Number(scoped.amount) > 0)
         facts.push({ label: uiLabel('Loan amount'), value: uiMoney(Number(scoped.amount)) });
       if (typeof scoped.lvr === 'string' && Number.isFinite(Number(scoped.lvr)))
-        facts.push({ label: uiLabel('Scenario LVR'), value: uiJoin(uiNumber(Number(scoped.lvr) * 100, 1), '%') });
+        facts.push({ label: uiLabel('Scenario LVR'), value: uiPercentage(Number(scoped.lvr) * 100) });
       return { ...brief, illustration: null, scenario: facts };
     },
     [found, receipt, cohortBrief, fromRatesComparison, scenarioFor, selectedRow],

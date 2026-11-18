@@ -104,6 +104,7 @@ jest.mock('../src/components/ui', () => ({
   Chip: 'Chip',
   Divider: 'Divider',
   Row: 'Row',
+  Button: 'Button',
 }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({
   usePerformanceAuditSurface: jest.fn(),
@@ -117,7 +118,7 @@ jest.mock('../src/hooks/useBankRateHistory', () => ({
 }));
 jest.mock('../src/lib/proAccess', () => ({ effectiveBankInsights: () => true }));
 jest.mock('../src/lib/nav', () => ({ openProduct: jest.fn() }));
-jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({}) }));
+jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {} }) }));
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ bottom: 0 }),
 }));

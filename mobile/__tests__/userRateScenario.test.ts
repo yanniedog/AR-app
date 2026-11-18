@@ -105,15 +105,15 @@ describe('UserRateScenario', () => {
     const value = normalizeUserRateScenario({ savings: { balance: '12345', currentRate: '4.1' } });
     await saveUserRateScenario(value);
     const baseCall = jest.mocked(SecureStore.setItemAsync).mock.calls.find(
-      ([key]) => key === 'user-rate-scenario-v1',
+      ([key]) => key === 'ar.customer-profile.v1',
     );
     expect(baseCall).toEqual([
-      'user-rate-scenario-v1',
+      'ar.customer-profile.v1',
       expect.stringContaining('ar.secure-value'),
       expect.objectContaining({ keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }),
     ]);
     expect(jest.mocked(SecureStore.setItemAsync).mock.calls.some(
-      ([key, chunk]) => key.startsWith('user-rate-scenario-v1.chunk.') && chunk.includes('12345'),
+      ([key, chunk]) => key.startsWith('ar.customer-profile.v1.chunk.') && chunk.includes('12345'),
     )).toBe(true);
     await expect(loadUserRateScenario()).resolves.toEqual(value);
   });
@@ -130,7 +130,7 @@ describe('UserRateScenario', () => {
     jest.mocked(SecureStore.getItemAsync).mockResolvedValueOnce(null);
     await migrateLegacyCalculatorInputs({ propertyValue: '750000', currentRate: '6.2' });
     expect(jest.mocked(SecureStore.setItemAsync).mock.calls.some(
-      ([key, chunk]) => key.startsWith('user-rate-scenario-v1.chunk.') && chunk.includes('750000'),
+      ([key, chunk]) => key.startsWith('ar.customer-profile.v1.chunk.') && chunk.includes('750000'),
     )).toBe(true);
   });
 });

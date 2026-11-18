@@ -80,7 +80,7 @@ test.each([[320, 1], [360, 1], [411, 1], [320, 2], [360, 3]])('keeps a fixed thr
     expect(primary.props).toMatchObject({ weight: '700', children: '5.80%' });
     expect(primary.props.style).toMatchObject({ fontVariant: ['tabular-nums'] });
     expect(tree.root.findByProps({ testID: 'compact-secondary-rate' }).props.children).toBe('5.79%');
-    expect(tree.root.findByProps({ testID: 'compact-facet-value' }).props.children).toBe('≤60%');
+    expect(tree.root.findByProps({ testID: 'compact-facet-value' }).props.children).toBe('≤60.0%');
     expect(mainTarget(tree).props.style.width).toBe('100%');
     expect(mainTarget(tree).props.accessibilityLabel).toContain(exact.product_name);
     expect(mainTarget(tree).props.accessibilityLabel).toContain('Tier #4');
@@ -123,7 +123,7 @@ test('preserves unknowns, tier index and conditional warnings in two-line layout
 test('preserves exact source ranges with all statuses, tier and rates at large text size', () => {
   const f = fixture();
   const facets = f.rows.map(exact => compactProductFacet(exact, 'Mortgage', scopedFinancialConditionFacts(scopedRateConditions(exact, 'Mortgage', f))));
-  expect(facets.map(facet => facet.value)).toEqual(['≤60%', '60%–80%']);
+  expect(facets.map(facet => facet.value)).toEqual(['≤60.0%', '60.0%–80.0%']);
   for (const facet of facets) {
     const layout = compactProductRowLayout(280, 3, uiRate(0.058), uiRate(0.0579), facet, 3, 500, 400, compactTierIndex(row));
     expect(layout).toMatchObject({ showSecondary: true, showFacetValue: true, showStatuses: true, showTier: true, combinedStatus: false, warningOnly: false });
@@ -351,7 +351,7 @@ test('distinguishes unknown comparison, conditional ongoing unknown and publishe
     expect(full.props.accessibilityLabel).toContain('Ongoing rate: Unknown');
   } finally { act(() => conditional.unmount()); }
   const zero = render({ ...savings, ongoing_rate: '0' }, { section: 'Savings', displayedRate: 0, displayedRateLabel: 'Ongoing rate' });
-  try { expect(zero.root.findByProps({ testID: 'compact-primary-rate' }).props.children).toBe('0.00%'); }
+  try { expect(zero.root.findByProps({ testID: 'compact-primary-rate' }).props.children).toBe('0%'); }
   finally { act(() => zero.unmount()); }
   expect(compactProductFacet(savings, 'Savings', { state: 'unverified', eligibility: 'unassessed', facts: [], unresolved: [] }).value).toBe('≥$99.50');
   expect(compactProductFacet({ ...savings, balance_min: 'bad' }, 'Savings', { state: 'unverified', eligibility: 'unassessed', facts: [], unresolved: [] }).value).toBe('Unverified');
@@ -366,8 +366,8 @@ test('equal-metric actual tiers remain visibly distinct even when their long LVR
   try {
     expect(tree.root.findAllByType('AppText').filter(node => node.props.testID === 'compact-tier-index').map(node => node.props.children)).toEqual(['#4', '#5']);
     const labels = tree.root.findAllByType('PressFeedback').map(node => String(node.props.accessibilityLabel));
-    expect(labels.some(value => value.includes('LVR ≤60%'))).toBe(true);
-    expect(labels.some(value => value.includes('LVR 60%–80%'))).toBe(true);
+    expect(labels.some(value => value.includes('LVR ≤60.0%'))).toBe(true);
+    expect(labels.some(value => value.includes('LVR 60.0%–80.0%'))).toBe(true);
     expect(compactTierIndex({ ...row, rate_index: undefined })).toBeNull();
     expect(compactTierIndex({ ...row, rate_index: 0 })).toBe('#0');
     expect(compactTierIndex({ ...row, rate_index: -1 })).toBeNull();

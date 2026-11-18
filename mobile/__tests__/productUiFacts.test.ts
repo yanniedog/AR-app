@@ -118,7 +118,7 @@ test.each(['Australian citizen and Australian permanent resident', 'Australian c
   });
 });
 
-test.each([['MAX_LVR', '0.8', '80.00%'], ['MAX_LVR', '98.00', '98.00%'], ['MIN_LVR', '0.00', '0.00%']])('bundled %s=%s retains its actual LVR unit', (label, value, expected) => {
+test.each([['MAX_LVR', '0.8', '80.0%'], ['MAX_LVR', '98.00', '98.0%'], ['MIN_LVR', '0.00', '0%']])('bundled %s=%s retains its actual LVR unit', (label, value, expected) => {
   const item = Object.values(sample.products as Record<string, ProductDetail>).flatMap(product => product.constraints ?? [])
     .find(item => item.label === label && item.value === value)!;
   expect(item).toBeDefined();
@@ -132,10 +132,10 @@ test('LVR unit recognition is restricted to numeric, in-domain MIN/MAX LVR const
   for (const value of ['-0.8', '101', '$80', '98%', 'LVR up to 80%', '', 'Infinity', Number.NaN]) {
     expect(uiDetailItem({ label: 'MAX_LVR', value }, 0, 'Constraints').value).toBe('Unknown');
   }
-  expect(uiDetailItem({ label: 'MIN_LVR', value: '0.6001' }, 0, 'Constraints').value).toBe('60.01%');
-  expect(uiDetailItem({ label: 'MIN_LVR', value: '0.60001' }, 0, 'Constraints').value).toBe('60.001%');
-  expect(uiDetailItem({ label: 'MAX_LVR', value: '98.123' }, 0, 'Constraints').value).toBe('98.123%');
-  expect(uiDetailItem({ label: 'MAX_LVR', value: '1' }, 0, 'Constraints').value).toBe('100.00%');
+  expect(uiDetailItem({ label: 'MIN_LVR', value: '0.6001' }, 0, 'Constraints').value).toBe('60.0%');
+  expect(uiDetailItem({ label: 'MIN_LVR', value: '0.60001' }, 0, 'Constraints').value).toBe('60.0%');
+  expect(uiDetailItem({ label: 'MAX_LVR', value: '98.123' }, 0, 'Constraints').value).toBe('98.1%');
+  expect(uiDetailItem({ label: 'MAX_LVR', value: '1' }, 0, 'Constraints').value).toBe('100%');
   expect(uiDetailItem({ label: 'OTHER', value: '0.8', info: 'Maximum LVR is 80%' }, 0, 'Constraints')).toMatchObject({ value: '0.8', conditions: 'source-review-required' });
   expect(uiDetailItem({ label: 'MAX_BALANCE', value: '98' }, 0, 'Constraints').value).toBe('$98');
 });

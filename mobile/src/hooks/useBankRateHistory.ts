@@ -4,7 +4,7 @@ import { bankRateScope, type BankRateSnapshot } from '../data/bankRateOverview';
 import { availableBankRateHistory, missingBankRateHistoryDates, packedBankRateSnapshots } from '../data/bankRateHistory';
 import { cachedHistoricalBankRateSnapshots, historicalBankRateSnapshotsAsync } from '../data/historicalBankRateCatalogue';
 import { cachedHistoricalBankRateCatalogue, missingHistoricalCatalogueDates, prepareAvailableHistoricalBankRateCatalogue } from '../data/historicalBankRateCatalogueStore';
-import { profileFeaturesForSection } from '../data/profile';
+import { profileFeaturesForSection, type ProfileFilters } from '../data/profile';
 import { cachedBankRateHistoryScope, prepareBankRateHistoryScope } from '../data/bankRateHistoryScope';
 import { getMandatoryEligibilityRevision } from '../data/eligibilityGate';
 import { useStore } from '../data/store';
@@ -18,7 +18,7 @@ let requestRevision = 0;
 
 /** Shared, render-safe history lifecycle. Every snapshot belongs to the current
  * profile request; uncached requests stay blank until their own work completes. */
-export function useBankRateHistory(enabled = true, mortgageLvr?: string | null) {
+export function useBankRateHistory(enabled = true, mortgageLvr?: string | null, profileOverride?: ProfileFilters) {
   const core = useStore(s => s.core);
   const historyRevision = useStore(s => s.bankRateHistoryRevision ?? 0);
   const loading = useStore(s => s.bankRateHistoryLoading ?? false);
@@ -29,14 +29,17 @@ export function useBankRateHistory(enabled = true, mortgageLvr?: string | null) 
   const mandatoryRevision = getMandatoryEligibilityRevision();
   // Packed section totals cannot be narrowed to a mortgage band.
   enabled = enabled && mortgageLvr !== null;
-  const interests = mortgageLvr === undefined ? SECTION_KEYS : MORTGAGE_INTERESTS;
+  const interests = useMemo(() => {
+    const sections = mortgageLvr === undefined ? SECTION_KEYS : MORTGAGE_INTERESTS;
+    return profileOverride ? [...sections] : sections;
+  }, [mortgageLvr, profileOverride]);
   const profileFilters = useMemo(() => mortgageLvr
-    ? { ...prefs.profileFilters, lvrTiers: [mortgageLvr] }
-    : prefs.profileFilters, [mortgageLvr, prefs.profileFilters]);
+    ? { ...(profileOverride ?? prefs.profileFilters), lvrTiers: [mortgageLvr] }
+    : profileOverride ?? prefs.profileFilters, [mortgageLvr, prefs.profileFilters, profileOverride]);
   const historyLoading = enabled && loading;
   const scopeInput = useMemo(() => enabled && core ? { core, details, includeNonStandard: prefs.includeNonStandard,
-    interests, profileFilters, suitabilityRevision, mandatoryRevision } : null,
-  [core, details, enabled, prefs.includeNonStandard, interests, profileFilters, suitabilityRevision, mandatoryRevision]);
+    interests, profileFilters, suitabilityRevision, mandatoryRevision, isolationKey: profileOverride } : null,
+  [core, details, enabled, prefs.includeNonStandard, interests, profileFilters, suitabilityRevision, mandatoryRevision, profileOverride]);
   const [scopeSettled, setScopeSettled] = useState<{ input: typeof scopeInput; failed: boolean } | null>(null);
   const readyScope = useMemo(() => {
     void scopeSettled;
@@ -48,15 +51,15 @@ export function useBankRateHistory(enabled = true, mortgageLvr?: string | null) 
   useEffect(() => {
     if (!scopeInput || !scopePending || scopeFailed) return;
     let active = true;
-    const abort = mortgageLvr === undefined ? undefined : new AbortController();
+    const abort = mortgageLvr === undefined && !profileOverride ? undefined : new AbortController();
     void prepareBankRateHistoryScope(scopeInput, () => yieldToUi(0), abort?.signal).then(result => {
       if (active && result) setScopeSettled({ input: scopeInput, failed: false });
     }, () => { if (active) setScopeSettled({ input: scopeInput, failed: true }); });
     return () => { active = false; abort?.abort(); };
-  }, [scopeInput, scopePending, scopeFailed, mortgageLvr]);
+  }, [scopeInput, scopePending, scopeFailed, mortgageLvr, profileOverride]);
   useEffect(() => {
-    if (enabled && core && !details && (!prefs.includeNonStandard || SECTION_KEYS.some(key => profileFeaturesForSection(prefs.profileFilters, key).length))) void ensureDetails();
-  }, [core, details, enabled, ensureDetails, prefs.includeNonStandard, prefs.profileFilters]);
+    if (enabled && core && !details && (!prefs.includeNonStandard || SECTION_KEYS.some(key => profileFeaturesForSection(profileFilters, key).length))) void ensureDetails();
+  }, [core, details, enabled, ensureDetails, prefs.includeNonStandard, profileFilters]);
   const request = useMemo(() => ({ core, scope, enabled, historyRevision, suitabilityRevision, filters: {
     profileFilters,
     interests,

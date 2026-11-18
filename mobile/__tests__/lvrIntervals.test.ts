@@ -93,8 +93,8 @@ test('inclusive, exclusive and legacy endpoints retain their individual meanings
   expect(lvrRangeContains(parseLvrRange('lvr_>80-95%')!, 80)).toBe(false);
   expect(lvrRangeContains(parseLvrRange('lvr_80-85%')!, 80)).toBe(false);
   expect(lvrRangeContains(parseLvrRange('lvr_80-85%')!, 85)).toBe(true);
-  expect(lvrTierLabel(high[0].lvr_tier!)).toBe('LVR ≥80–95%');
-  expect(segLabel('LVR_GE80p01_95')).toBe('≥80–95% LVR');
+  expect(lvrTierLabel(high[0].lvr_tier!)).toBe('LVR ≥80.0–95.0%');
+  expect(segLabel('LVR_GE80p01_95')).toBe('≥80.0–95.0% LVR');
 });
 
 test.each([

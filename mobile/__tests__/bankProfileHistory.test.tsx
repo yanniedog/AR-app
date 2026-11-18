@@ -10,12 +10,14 @@ import type { ProductHistoryPayload } from '../src/data/productHistory';
 import type { CorePayload, RateRow } from '../src/types';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { useBankRateHistory } from '../src/hooks/useBankRateHistory';
 import { openProduct } from '../src/lib/nav';
 
 type TestNode = {
   props: Record<string, any>;
   children: (TestNode | string)[];
   findAllByType: (type: string) => TestNode[];
+  findByProps: (props: Record<string, unknown>) => TestNode;
 };
 type Renderer = ReactTestRenderer & { root: TestNode };
 
@@ -85,17 +87,17 @@ jest.mock('../src/components/ProductCard', () => ({ ProductCard: 'ProductCard' }
 jest.mock('@shopify/flash-list', () => ({ FlashList: ({ data, renderItem, ListHeaderComponent, ListFooterComponent, ...props }: any) =>
   mockReact.createElement('FlashList', { ...props, data }, ListHeaderComponent,
     ...data.map((item: any, index: number) => mockReact.createElement(mockReact.Fragment,
-      { key: item.row.product_key }, renderItem({ item, index }))), ListFooterComponent) }));
+      { key: item.id }, renderItem({ item, index }))), ListFooterComponent) }));
 jest.mock('../src/components/Screen', () => ({ Screen: 'Screen', DataHealthBannerStrip: 'DataHealthBannerStrip',
   responsiveScreenContentStyle: () => ({}) }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
-jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Chip: 'Chip', Divider: 'Divider', Row: 'Row' }));
+jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Chip: 'Chip', Divider: 'Divider', Row: 'Row', Button: 'Button' }));
 jest.mock('../src/data/bankInsights', () => ({
   ...jest.requireActual('../src/data/bankInsights'),
   filterBankInsightsForSuitability: () => mockTodayInsights,
 }));
-jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: () => mockRateHistory }));
+jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: jest.fn(() => mockRateHistory) }));
 jest.mock('../src/hooks/useDeferredHistorySurface', () => ({ useDeferredHistorySurface: () => true }));
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({ usePerformanceAuditSurface: jest.fn() }));
 jest.mock('../src/hooks/useLogoReadiness', () => ({
@@ -211,7 +213,8 @@ describe('bank detail profile-filtered history', () => {
         { date: '2026-09-27', min: null, max: null, mean: null, median: null, count: 0 },
         { date: '2026-09-28', min: 0.035, max: 0.055, mean: 0.045, median: 0.0475, count: 4 },
       ]);
-      expect(copy(tree)).toContain('Advertised range / mean / median');
+      expect(copy(tree)).not.toContain('Advertised range / mean / median');
+      expect(chart.props.compactStatistics).toBe(true);
       expect(copy(tree)).not.toContain('sharpest offer to its typical rate');
     } finally { act(() => tree.unmount()); }
   });
@@ -237,4 +240,85 @@ describe('bank detail profile-filtered history', () => {
       expect(tree.root.findAllByType('BankHistoryChart')).toHaveLength(0);
     } finally { act(() => tree.unmount()); }
   });
+  it('shows the move detail for a dated deep link in the default carousel view, not only in the list', () => {
+    mockTodayInsights.events = [{ date: '2026-09-27', provider: row.provider, section: 'Savings', dir: 'cut', moved: 1, total: 1, avg_bps: -10 }];
+    mockParams.date = '2026-09-27'; mockParams.section = 'Savings';
+    const tree = mount();
+    try {
+      expect(tree.root.findAllByType('FlashList')[0].props.horizontal).toBe(true);
+      expect(copy(tree)).toContain('Move detail');
+      act(() => tree.root.findAllByType('Chip').find(node => node.props.label === 'List')!.props.onPress());
+      expect(copy(tree)).toContain('Move detail');
+      // Provider view state outlives the screen; restore the default for later tests.
+      act(() => tree.root.findAllByType('Chip').find(node => node.props.label === 'Carousel')!.props.onPress());
+    } finally { act(() => tree.unmount()); mockTodayInsights.events = []; delete mockParams.date; delete mockParams.section; }
+  });
+
+  it('keeps one chart outside the single product list and retains selected tier across view switches', () => {
+    const sibling = { ...row, rate_index: 42, rate: '0.035', product_name: 'Second tier' };
+    mockState.core = { ...core, sections: { ...core.sections, Savings: { ...core.sections.Savings, rates: [row, sibling] } } };
+    const tree = mount();
+    try {
+      const list = tree.root.findAllByType('FlashList')[0];
+      expect(list.props.horizontal).toBe(true);
+      expect(list.props.viewabilityConfig.itemVisiblePercentThreshold).toBe(51);
+      expect(list.findAllByType('BankHistoryChart')).toHaveLength(0);
+      expect(tree.root.findAllByType('BankHistoryChart')).toHaveLength(1);
+      const cards = tree.root.findAllByType('ProductCard');
+      expect(cards).toHaveLength(2);
+      act(() => cards[1].props.onPress());
+      expect(tree.root.findAllByType('BankHistoryChart')[0].props.highlightSeries.label).toBe('Second tier');
+      const switchView = tree.root.findAllByType('Chip').find(node => node.props.label === 'List')!;
+      act(() => switchView.props.onPress());
+      expect(tree.root.findAllByType('FlashList')).toHaveLength(1);
+      expect(tree.root.findAllByType('FlashList')[0].props.horizontal).toBe(false);
+      expect(tree.root.findAllByType('ProductCard')).toHaveLength(2);
+      expect(tree.root.findAllByType('BankHistoryChart')[0].props.highlightSeries.label).toBe('Second tier');
+      expect(openProduct).not.toHaveBeenCalled();
+      act(() => tree.root.findAllByType('Button').find(node => node.props.title === 'Product details')!.props.onPress());
+      expect(openProduct).toHaveBeenCalledWith(sibling.product_key, sibling.rate_index);
+    } finally { act(() => tree.unmount()); }
+  });
+
+  it('uses the same selected LVR profile for the product list and historical chart request', () => {
+    const low = { ...row, product_key: 'low-band', rate_index: 0, rate: '0.04', lvr_tier: 'lvr_0-60%', account_class: 'standard' };
+    const high = { ...low, product_key: 'high-band', rate_index: 1, rate: '0.05', lvr_tier: 'lvr_60-80%' };
+    mockState.core = { ...core, sections: { ...core.sections, Mortgage: { ...core.sections.Mortgage, rates: [low, high] } } };
+    const tree = mount();
+    try {
+      act(() => tree.root.findAllByType('Chip').find(node => String(node.props.label).startsWith('LVR'))!.props.onPress());
+      const options = tree.root.findAllByType('Chip').filter(node => /60(?:\.0)?%/.test(String(node.props.label)));
+      act(() => options[0].props.onPress());
+      expect(tree.root.findAllByType('FlashList')[0].props.data.map((item: { row: RateRow }) => item.row.product_key)).toEqual(['low-band']);
+      expect(jest.mocked(useBankRateHistory).mock.calls.at(-1)?.[2]?.lvrTiers).toEqual(['lvr_0-60%']);
+    } finally { act(() => tree.unmount()); }
+  });
+
+  it('keeps List and parameter controls outside the capped chart scroll area', () => {
+    const tree = mount();
+    try {
+      const viewport = tree.root.findByProps({ testID: 'provider-chart-viewport' });
+      const controls = tree.root.findByProps({ testID: 'provider-browse-controls' });
+      expect(viewport.findAllByType('Chip').some(node => ['List', 'Carousel'].includes(node.props.label))).toBe(false);
+      expect(controls.findAllByType('Chip').some(node => ['List', 'Carousel'].includes(node.props.label))).toBe(true);
+      expect(viewport.findAllByType('FlashList')).toHaveLength(0);
+      expect(viewport.findAllByType('AppText').some(node => node.props.children === 'Min')).toBe(false);
+      expect(tree.root.findByProps({ testID: 'provider-statistics' })).toBeTruthy();
+    } finally { act(() => tree.unmount()); }
+  });
+
+  it('keeps all four external statistics matched to the chart selected date', () => {
+    const tree = mount();
+    try {
+      const chart = tree.root.findAllByType('BankHistoryChart')[0];
+      expect(chart.props.statisticsInline).toBe(false);
+      act(() => chart.props.onStatisticsChange(chart.props.points[0]));
+      const facts = tree.root.findByProps({ testID: 'provider-statistics' }).findAllByType('AppText').map(node => node.children.join(''));
+      expect(facts).toEqual(expect.arrayContaining(['Min', 'Max', 'Mean', 'Median', '3.00%', '5.00%', '4.00%', '4.25%']));
+      act(() => chart.props.onStatisticsChange(chart.props.points[1]));
+      const missing = tree.root.findByProps({ testID: 'provider-statistics' }).findAllByType('AppText').map(node => node.children.join(''));
+      expect(missing.filter(value => value === 'Unknown')).toHaveLength(4);
+    } finally { act(() => tree.unmount()); }
+  });
+
 });

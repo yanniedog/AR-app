@@ -155,7 +155,7 @@ describe('appUpdateDownloadLogic', () => {
       actionLabel: 'Install',
       actionEnabled: true,
     });
-    expect(updateBannerCopy('downloading', '1.0.44', 37).title).toContain('37%');
+    expect(updateBannerCopy('downloading', '1.0.44', 37).title).toContain('37.0%');
     expect(updateBannerCopy('downloading', '1.0.44', 37).actionEnabled).toBe(false);
     expect(updateBannerCopy('error', '1.0.44', null).actionLabel).toBe('Retry');
     expect(updateBannerCopy('cancelled', '1.0.44', null)).toEqual({

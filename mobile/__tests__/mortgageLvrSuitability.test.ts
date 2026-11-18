@@ -51,7 +51,7 @@ test('legacy hierarchy bands work and deposits without LVR remain available', ()
 
 test('observed zero-rate fee-assistance loan is opt-in across lists, best rates, banks and statistics', async () => {
   const rows = [observed, ordinary];
-  expect(formatRate(observed.rate)).toBe('0.00%'); // Preserve the published value.
+  expect(formatRate(observed.rate)).toBe('0%'); // Preserve the published value.
   const check = () => {
     expect(visibleAccountRows(rows)).toEqual([ordinary]);
     expect(filterRows(rows, EMPTY_FILTERS, null, null, 'Mortgage')).toEqual([ordinary]);

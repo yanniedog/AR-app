@@ -1,4 +1,4 @@
-import { uiCount, uiDate, uiJoin, uiLabel, uiNumber } from "../../lib/uiCopy";
+import { uiCount, uiDate, uiJoin, uiLabel, uiPercentage } from "../../lib/uiCopy";
 import { useIsFocused } from '@react-navigation/native';
 import { currentCashRate, nextMeeting, rbaCalendarCoverage, sydneyYmd } from '../../data/rbaCalendar';
 import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAuditReadiness';
@@ -290,7 +290,7 @@ export default function MarketOverview() {
         if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) setFactsLayout(current => activeFactsRevision.current === factsRevision ? factsRevision : current);
       }} style={{ gap: 16 }}>
         <AppText variant="small" color="textMuted">{uiLabel(verifiedCalendarRate == null || coverage.unresolvedMeeting ? 'Last confirmed cash rate' : 'Cash rate')}</AppText>
-        <AppText variant="rateHero">{cashRate == null ? uiLabel("Unavailable") : uiJoin(uiNumber(cashRate,2),'%')}</AppText>
+        <AppText variant="rateHero">{cashRate == null ? uiLabel("Unavailable") : uiPercentage(cashRate)}</AppText>
         {cashRate != null ? <AppText variant="small" color="textMuted">
           {uiJoin(uiDate(cashRateDate),source==='cache'||offline?uiJoin(' · ','Cached'):null,coverage.unresolvedMeeting?uiJoin(' · ','Awaiting decision'):null)}
         </AppText> : null}

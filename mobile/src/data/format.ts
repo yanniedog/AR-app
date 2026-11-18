@@ -3,7 +3,7 @@ import { toFraction, isoDurationMonths } from './rateNumbers';
 import { isBroadlyAvailable, isConditionalDepositRate, isNonStandard } from './rateClassification';
 import { getSuitabilityAllowed } from './suitabilityGate';
 import { mandatoryEligibleRows } from './eligibilityGate';
-import { uiDate, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiRate, type UiLabel, type UiText } from '../lib/uiCopy';
+import { uiDate, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiRate, uiPercentageDigits, type UiLabel, type UiText } from '../lib/uiCopy';
 
 export { toFraction, effectiveRate, effectiveFraction, ratePercentValue, bpsBetween, isoDurationMonths } from './rateNumbers';
 export { isNonStandard, isConditionalDepositRate, isBroadlyAvailable } from './rateClassification';
@@ -24,9 +24,9 @@ export function formatRankedFraction(fraction: number | null | undefined, digits
 }
 
 /** Percent digits only (no suffix) — chart axis labels. */
-export function formatRateDigits(rate: string | number | null | undefined, digits = 2): UiText {
+export function formatRateDigits(rate: string | number | null | undefined, _digits = 2): UiText {
   const f = toFraction(rate);
-  return f === null ? uiLabel('—') : uiNumber(f * 100, digits);
+  return f === null ? uiLabel('—') : uiPercentageDigits(f * 100);
 }
 
 const ENUM_LABEL_OVERRIDES: Readonly<Record<string, UiLabel>> = {

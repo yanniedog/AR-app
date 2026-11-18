@@ -1,4 +1,4 @@
-import { uiCount, uiDate, uiDurationClock, uiIdentifier, uiInputNumber, uiJoin, uiLabel, uiNumber, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
+import { uiCount, uiDate, uiDurationClock, uiIdentifier, uiInputNumber, uiJoin, uiLabel, uiNumber, uiPercentage, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
 import { fontStyle } from '../src/theme/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -545,7 +545,7 @@ function PerformanceAuditScreenInner() {
           <InfoRow label="Unavailable" value={uiCount(completion.gaps.unavailableChecks)} />
           <InfoRow label="Not run" value={uiCount(completion.gaps.notRunChecks)} />
           <InfoRow label="Pending" value={uiCount(completion.gaps.pendingProbes)} />
-          <InfoRow label="Check completion" value={report.summary.coveragePercent == null ? 'Unknown':uiJoin(uiNumber(report.summary.coveragePercent,1),'%')} />
+          <InfoRow label="Check completion" value={uiPercentage(report.summary.coveragePercent)} />
           <InfoRow label="Executed" value={uiCount(report.summary.executed)} />
           <InfoRow label="Declared unavailable" value={uiCount(report.summary.justifiedSkipped)} />
           <InfoRow label="Unexpected" value={uiCount(report.summary.unexpectedSkipped)} />
@@ -574,7 +574,7 @@ function PerformanceAuditScreenInner() {
         {reportHealth ? <Card style={{gap:8}}>
           <AppText variant="h3">{uiLabel('Data and display health')}</AppText>
           <InfoRow label="Mode" value={uiLabel(reportHealth.mode === 'local' ? 'Local checks':'Live checks')} />
-          <InfoRow label="Check completion" value={reportHealth.summary.coveragePercent == null ? 'Unknown':uiJoin(uiNumber(reportHealth.summary.coveragePercent,1),'%')}/>
+          <InfoRow label="Check completion" value={uiPercentage(reportHealth.summary.coveragePercent)}/>
           {reportHealth.domains.filter(domain => domain.total > 0).map(domain => <View key={domain.domain}>
             <InfoRow label={DOMAIN_LABELS[domain.domain]} value={outcome(domain.overall)} />
             <AppText variant="tiny">{uiJoin('Good',': ',uiCount(domain.pass),' · ','Needs review',': ',uiCount(domain.warn),' · ','Failed',': ',uiCount(domain.fail),' · ','Unavailable',': ',uiCount(domain.unavailable),' · ','Not run',': ',uiCount(domain.notRun))}</AppText>

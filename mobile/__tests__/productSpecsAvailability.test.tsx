@@ -55,7 +55,7 @@ describe('exact-tier availability in Rate details', () => {
   });
 
   it('retains the real ordinary sibling as widely available', () => {
-    expect(displayedAvailability(ordinary, detail)).toBe('Widely available · Eligibility unverified');
+    expect(displayedAvailability(ordinary, detail)).toBe('Eligibility unverified');
   });
 
   it('keeps the non-standard tier caveat while shared details are still loading', () => {
@@ -69,7 +69,7 @@ describe('exact-tier availability in Rate details', () => {
   it('does not infer special eligibility from an introductory period alone', () => {
     // Controlled presentation variant, not a claim about a published Bankwest tier.
     const introductory = { ...ordinary, rate_type: 'INTRODUCTORY', ribbon_deposit_kind: 'introductory', term_months: '4' };
-    expect(displayedAvailability(introductory, detail)).toBe('Widely available · Eligibility unverified');
+    expect(displayedAvailability(introductory, detail)).toBe('Eligibility unverified');
   });
 
   it('continues to respect restricted product-level eligibility on a standard row', () => {

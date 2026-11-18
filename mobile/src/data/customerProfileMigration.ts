@@ -14,7 +14,7 @@ function lookup(value: unknown, path: string): unknown {
 export function migrateCustomerProfile(legacy: unknown): CustomerProfile {
   if (legacy != null && (typeof legacy !== 'object' || Array.isArray(legacy))) throw new Error('Invalid legacy scenario; retained unchanged.');
   const version = legacy == null ? undefined : (legacy as { version?: unknown }).version;
-  if (version !== undefined && ![1, 2, 3].includes(version as number)) throw new Error('Unsupported legacy scenario version; retained unchanged.');
+  if (version !== undefined && ![1, 2, 3, 4].includes(version as number)) throw new Error('Unsupported legacy scenario version; retained unchanged.');
   const p: CustomerProfile = { version: 1, revision: 0, answers: {}, definitions: {}, negotiatedTerms: [], legacyScenario: legacy ?? null };
   const provenance = { source: 'legacy_user_input' as const, recordedAt: null, productKey: null, effectiveFrom: null, effectiveToExclusive: null };
   for (const [path, label, unit] of LEGACY_FIELDS) {

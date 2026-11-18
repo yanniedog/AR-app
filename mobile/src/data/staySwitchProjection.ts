@@ -1,5 +1,5 @@
 import type { DetailItem, ProductDetail, RateRow } from '../types';
-import { advertisedTermMonths, computeLvr, num } from './calc';
+import { advertisedTermMonths, calculatorAmount, calculatorYears, computeLvr } from './calc';
 import { percentageInputFraction } from './decisionInsights';
 import { toFraction } from './format';
 import { normalizedProductFacts } from './productFactsCore';
@@ -120,9 +120,7 @@ export const UNVERIFIED_SWITCH_TERMS_REASON =
   'Complete bank terms, customer applicability and cost calculation have not been verified.';
 
 function cleanAmount(value: string): number | null {
-  if (!value.trim()) return null;
-  const parsed = Number(value.replace(/[$,\s]/g, ''));
-  return Number.isFinite(parsed) && parsed >= 0 && parsed <= MAX_AMOUNT ? parsed : null;
+  return calculatorAmount(value, MAX_AMOUNT);
 }
 
 function hasConditionalApplicability(item: DetailItem): boolean {
@@ -447,12 +445,14 @@ export function buildStaySwitchProjection({
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const asAt = isoDate(today);
   const fees = resolveSwitchCosts(scenario.mortgageSwitch, currentDetail, targetDetail);
-  const balance = computeLvr(scenario.mortgage).loan ?? num(scenario.mortgage.loanBalance);
+  const balance = scenario.mortgage.mode === 'refi'
+    ? calculatorAmount(scenario.mortgage.loanBalance, MAX_AMOUNT) ?? 0
+    : computeLvr(scenario.mortgage).loan ?? 0;
   const currentRate = percentageInputFraction(scenario.mortgage.currentRate);
   // Projection cash flow always uses the target's advertised rate. Comparison
   // rate remains a ranking and disclosure measure elsewhere in the app.
   const targetRate = toFraction(target.rate);
-  const years = Number(scenario.mortgage.years.replace(/[,\s]/g, ''));
+  const years = calculatorYears(scenario.mortgage.years) ?? 0;
   const months = Math.round(years * 12);
   const targetIsFixed = target.ribbon_rate_structure?.toLowerCase() === 'fixed'
     || target.rate_type?.toLowerCase().includes('fixed') === true;
@@ -489,7 +489,7 @@ export function buildStaySwitchProjection({
 
   const enteredRepayment = monthlyAmount(projectionInputs.periodicAmount, projectionInputs.periodicFrequency);
   const stayRequired = requiredMonthlyRepayment(balance, currentRate!, months);
-  const stayScheduled = enteredRepayment || stayRequired;
+  const stayScheduled = projectionInputs.periodicAmount.trim() ? enteredRepayment : stayRequired;
   const extraRepayment = monthlyAmount(projectionInputs.extraRepaymentAmount, projectionInputs.extraRepaymentFrequency);
   const enteredOffsetContribution = monthlyAmount(
     projectionInputs.offsetContributionAmount,

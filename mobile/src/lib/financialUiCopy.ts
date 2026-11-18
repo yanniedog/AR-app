@@ -7,7 +7,7 @@ import { parseLvrRange } from '../data/lvrRange';
 import type { RateRow } from '../types';
 import type { SelectedTargetConstraint } from './selectedTargetConstraints';
 import type { AccessAssessment, AccessCategory } from '../data/access';
-import { uiCount, uiDate, uiDuration, uiJoin, uiLabel, uiMoney, uiNumber, uiProviderName, uiRate, type UiLabel, type UiText } from './uiCopy';
+import { uiCount, uiDate, uiDuration, uiJoin, uiLabel, uiMoney, uiPercentage, uiProviderName, uiRate, type UiLabel, type UiText } from './uiCopy';
 
 export interface FinancialFactRow { readonly label: UiLabel; readonly value: UiText }
 const ACCESS_LABELS: Readonly<Record<AccessCategory, UiLabel>> = {
@@ -67,7 +67,7 @@ export function uiEvidenceFact(fact: EvidenceFact): FinancialFactRow {
 
 function numberDigits(value: number): number { return Math.min(6, (String(value).split('.')[1] ?? '').length); }
 function boundValue(value: number, unit: 'percent' | 'AUD' | 'months', compactMoney: boolean): UiText {
-  return unit === 'percent' ? uiJoin(uiNumber(Math.round(value), 0), '%')
+  return unit === 'percent' ? uiPercentage(value)
     : unit === 'AUD' ? (compactMoney ? formatMoneyShort(value) : uiMoney(value, numberDigits(value))) : uiDuration(value, 'months');
 }
 function numericRange(lower: NumericConditionBoundary, upper: NumericConditionBoundary, unit: 'percent' | 'AUD' | 'months', compactMoney = false): UiText {

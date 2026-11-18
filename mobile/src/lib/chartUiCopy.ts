@@ -3,7 +3,7 @@ import type { BankMoveDir } from '../data/bankInsights';
 import type { SectionKey } from '../types';
 import type { BankResponseReason } from '../data/bankResponseEvidence';
 import type { CompactBankResponseRow } from '../data/bankResponseModel';
-import { uiDate, uiDuration, uiJoin, uiLabel, uiNumber, type UiText } from './uiCopy';
+import { uiDate, uiDuration, uiJoin, uiLabel, uiNumber, uiPercentage, type UiText } from './uiCopy';
 
 export function uiBankResponseReason(reason: BankResponseReason): UiText {
   switch (reason) {
@@ -64,8 +64,8 @@ export function uiChartBps(value: number | null | undefined): UiText {
     : uiJoin(value > 0 ? '+' : value < 0 ? '−' : '', uiNumber(Math.abs(value), 1), ' ', 'bps');
 }
 /** Economic/RBA source values are percentages, not decimal rate fractions. */
-export function uiChartPercent(value: number | null | undefined, digits = 2): UiText {
-  return value == null || !Number.isFinite(value) ? uiLabel('Unknown') : uiJoin(uiNumber(value, digits), '%');
+export function uiChartPercent(value: number | null | undefined, _digits = 2): UiText {
+  return uiPercentage(value);
 }
 export function uiChartPp(value: number | null | undefined): UiText {
   return value == null || !Number.isFinite(value) ? uiLabel('Unknown')

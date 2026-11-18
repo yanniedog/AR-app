@@ -14,6 +14,7 @@ export interface BankRateHistoryScopeInput {
   profileFilters: ProfileFilters;
   suitabilityRevision: number;
   mandatoryRevision: number;
+  isolationKey?: object;
 }
 
 // Publications/preferences are immutable. Share the latest projection across
@@ -27,11 +28,12 @@ interface ScopeWork {
 const shared: ScopeWork = { generation: 0 };
 // A scoped product can mount over Market or another product in the native stack.
 // Keep its work independent so it cannot cancel the other screen’s projection.
-const mortgageScopes = new WeakMap<BankRateHistoryScopeInput, ScopeWork>();
+const mortgageScopes = new WeakMap<object, ScopeWork>();
 function scopeWork(input: BankRateHistoryScopeInput): ScopeWork {
-  if (input.interests.length !== 1 || input.interests[0] !== 'Mortgage') return shared;
-  const work = mortgageScopes.get(input) ?? { generation: 0 };
-  mortgageScopes.set(input, work);
+  if (!input.isolationKey && (input.interests.length !== 1 || input.interests[0] !== 'Mortgage')) return shared;
+  const key = input.isolationKey ?? input;
+  const work = mortgageScopes.get(key) ?? { generation: 0 };
+  mortgageScopes.set(key, work);
   return work;
 }
 

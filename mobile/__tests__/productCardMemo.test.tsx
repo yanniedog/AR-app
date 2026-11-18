@@ -95,7 +95,7 @@ test('shows the whole financial variant and saves the exact tier without opening
     expect(serialized).toContain('Fixed');
     expect(serialized).toContain('3 yrs');
     expect(serialized).toContain('Principal & interest');
-    expect(serialized).toContain('LVR >60%–70%');
+    expect(serialized).toContain('LVR >60.0%–70.0%');
     const target = tree.root.findAllByProps({ accessibilityRole: 'button' }).find(node => String(node.props.accessibilityLabel).startsWith('Loan,'))!;
     expect(target.props.accessibilityLabel).toContain('Advertised rate 4.00% · Fixed');
     const save = tree.root.findAllByProps({ testID: 'rate-save:loan:7' })[0];

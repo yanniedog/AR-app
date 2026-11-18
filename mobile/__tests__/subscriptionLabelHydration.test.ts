@@ -33,7 +33,7 @@ describe('product alert labels on rehydrate', () => {
     expect(useStore.getState().subscriptions).toEqual([
       expect.objectContaining({
         id: 'product:Bank A|1#1',
-        label: 'Bank A · Home loan (Variable · LVR ≤60%)',
+        label: 'Bank A · Home loan (Variable · LVR ≤60.0%)',
       }),
     ]);
   });

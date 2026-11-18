@@ -25,7 +25,7 @@ test.each([undefined, '', 'bad', '-1'])('missing ongoing %s stays unknown, never
 });
 test('known zero ongoing and absence of an intro period remain distinct', () => {
   const q = rateQualifier(row({ ribbon_deposit_kind: 'intro', ongoing_rate: '0' }), 'Savings');
-  expect(q.ongoingRate).toBe('0.00%'); expect(q.facts).toContainEqual({ kind: 'ongoing-rate', state: 'known', fraction: 0 });
+  expect(q.ongoingRate).toBe('0%'); expect(q.facts).toContainEqual({ kind: 'ongoing-rate', state: 'known', fraction: 0 });
   expect(q.facts).toContainEqual({ kind: 'intro-period', state: 'unknown' });
 });
 test('bonus facts require conditions without inventing monthly eligibility or a lower rate', () => {

@@ -85,7 +85,7 @@ describe('rate receipt', () => {
     });
     expect(receipt.tier).toEqual(expect.arrayContaining([
       { label: 'Rate index', value: '4' },
-      { label: 'Listed LVR', value: '>70%–80%' },
+      { label: 'Listed LVR', value: '>70.0%–80.0%' },
     ]));
     expect(receipt.conditions).toEqual(expect.arrayContaining([
       { label: 'Minimum age', value: '18 years · Australian resident' },
@@ -111,7 +111,7 @@ describe('rate receipt', () => {
       section: 'Savings',
       evidenceDate: '2026-08-04',
     });
-    expect(receipt.ongoingRate).toBe('0.00%');
+    expect(receipt.ongoingRate).toBe('0%');
     expect(receipt.facts).toEqual(expect.arrayContaining([{ kind: 'source', state: 'unavailable' }, { kind: 'detailed-eligibility', state: 'unavailable' }]));
   });
 });
@@ -354,4 +354,41 @@ test.each(['Mortgage', 'Savings', 'TD'] as const)('cooperative %s brief preserve
   let cancelled = false;
   expect(await buildNegotiationBriefCooperatively(input, { cancelled: () => cancelled,
     yieldControl: async () => { cancelled = true; } })).toBeNull();
+});
+
+test('brief retains exact loan arithmetic and displays LVR to three significant figures', () => {
+  const selected = row();
+  const receipt = buildRateReceipt({ row: selected, section: 'Mortgage', evidenceDate: '2026-11-18' });
+  const scenario = normalizeUserRateScenario({ mortgage: { mode: 'refi', propertyValue: '775000', loanBalance: '650000', currentRate: '6.74', years: '25' } });
+  const brief = buildNegotiationBrief({ receipt, scenario, sectionRows: [selected] });
+  expect(brief.scenario).toContainEqual({ label: 'Scenario LVR', value: '83.9%' });
+  expect(brief.illustration?.balance).toBe(650000);
+});
+
+test.each(['-6.74', 'invalid6.74'])('invalid entered rate %s cannot become a positive receipt illustration', currentRate => {
+  const selected = row();
+  const receipt = buildRateReceipt({ row: selected, section: 'Mortgage', evidenceDate: '2026-11-18' });
+  const scenario = normalizeUserRateScenario({ mortgage: { mode: 'refi', propertyValue: '775000', loanBalance: '650000', currentRate } });
+  const brief = buildNegotiationBrief({ receipt, scenario, sectionRows: [selected] });
+  expect(brief.illustration).toBeNull();
+  expect(brief.scenario).toContainEqual({ label: 'Current entered rate', value: 'Unknown' });
+});
+
+test('invalid buying input cannot borrow an old refinancing principal in a receipt', () => {
+  const selected = row();
+  const receipt = buildRateReceipt({ row: selected, section: 'Mortgage', evidenceDate: '2026-11-18' });
+  const scenario = normalizeUserRateScenario({ mortgage: { mode: 'buy', propertyValue: 'invalid', loanBalance: '650000', currentRate: '6.74' } });
+  const brief = buildNegotiationBrief({ receipt, scenario, sectionRows: [selected] });
+  expect(brief.illustration).toBeNull();
+  expect(brief.scenario.some(fact => fact.label === 'Loan amount')).toBe(false);
+});
+
+test('known zero savings rate remains zero in a receipt illustration', () => {
+  const selected = row({ account_class: 'standard', ribbon_deposit_kind: 'basic' });
+  const receipt = buildRateReceipt({ row: selected, section: 'Savings', evidenceDate: '2026-11-18' });
+  const scenario = normalizeUserRateScenario({ savings: { balance: '1000', currentRate: '0' } });
+  const brief = buildNegotiationBrief({ receipt, scenario, sectionRows: [selected] });
+  expect(brief.scenario).toContainEqual({ label: 'Current entered rate', value: '0%' });
+  expect(brief.illustration?.currentRate).toBe('0%');
+  expect(brief.illustration?.annualDifference).toBe(55);
 });
