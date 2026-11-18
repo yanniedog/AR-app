@@ -24,7 +24,11 @@ export function mergeScenarioChanges(current: UserRateScenario, previous: UserRa
     if (before && after && live && typeof before === 'object' && typeof after === 'object' && typeof live === 'object'
       && !Array.isArray(before) && !Array.isArray(after)) {
       const result = { ...live as Record<string, unknown> };
-      for (const key of Object.keys(after)) result[key] = merge(result[key], (before as Record<string, unknown>)[key], (after as Record<string, unknown>)[key]);
+      for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+        const value = merge(result[key], (before as Record<string, unknown>)[key], (after as Record<string, unknown>)[key]);
+        if (value === undefined) delete result[key];
+        else result[key] = value;
+      }
       return result;
     }
     return after;

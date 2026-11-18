@@ -11,11 +11,12 @@ import type {
 } from '../types';
 import {
   calculatorAmount,
+  calculatorYears,
   computeLvr,
   MAX_CALCULATOR_DEPOSIT_AMOUNT,
   MAX_CALCULATOR_MORTGAGE_AMOUNT,
-  num,
 } from './calc';
+import { estimateEnteredRate } from './publicRateLocal';
 import {
   formatBalanceRange,
   formatRate,
@@ -31,7 +32,7 @@ import { scopedRateConditions, type RateConditionContext, type ScopedRateConditi
 import { uiDetailItem, uiProductFactValue } from '../lib/productUiFacts';
 import { scopedFinancialConditionFacts } from './scopedFinancialConditionFacts';
 import { uiConditionTag, uiConditionalRateFact, uiListedLvrRange } from '../lib/financialUiCopy';
-import { uiCount, uiDate, uiDuration, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from '../lib/uiCopy';
+import { uiCount, uiDate, uiDuration, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiPercentage, uiRate, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from '../lib/uiCopy';
 import type { ConditionalRateFact } from './rateConditionalFacts';
 
 export interface ReceiptFact {
@@ -273,6 +274,10 @@ function scenarioForSection(
   section: SectionKey,
 ): { facts: ReceiptFact[]; balance: number; currentRateFraction: number | null } {
   const facts: ReceiptFact[] = [];
+  const enteredRate = (value: string): number | null => {
+    const result = estimateEnteredRate(value);
+    return result.status === 'exact' && result.payableRate != null ? Number(result.payableRate) : null;
+  };
   if (section === 'Mortgage') {
     const mortgage = scenario.mortgage;
     const hasEnteredValue = Object.entries(mortgage).some(
@@ -280,24 +285,24 @@ function scenarioForSection(
     );
     if (!hasEnteredValue) return { facts, balance: 0, currentRateFraction: null };
     const lvr = computeLvr(mortgage);
-    const balance = lvr.loan ?? (calculatorAmount(mortgage.loanBalance, MAX_CALCULATOR_MORTGAGE_AMOUNT) ?? 0);
+    const balance = mortgage.mode === 'buy' ? lvr.loan ?? 0 : calculatorAmount(mortgage.loanBalance, MAX_CALCULATOR_MORTGAGE_AMOUNT) ?? 0;
     addFact(facts, 'Your rate scenario', uiLabel(mortgage.mode === 'refi' ? 'Refinancing' : 'Buying'));
     if (balance > 0) addFact(facts, 'Loan amount', uiMoney(balance));
     const propertyValue = calculatorAmount(mortgage.propertyValue, MAX_CALCULATOR_MORTGAGE_AMOUNT) ?? 0;
     if (propertyValue > 0) addFact(facts, 'Property value ($)', uiMoney(propertyValue));
-    if (lvr.lvr != null) addFact(facts, 'Scenario LVR', uiJoin(uiNumber(Math.round(lvr.lvr), 0), '%'));
-    if (mortgage.currentRate.trim()) addFact(facts, 'Current entered rate', formatRate(num(mortgage.currentRate) / 100));
-    if (mortgage.years.trim()) addFact(facts, 'Years remaining', uiDuration(num(mortgage.years), 'years'));
-    const current = num(mortgage.currentRate);
-    return { facts, balance, currentRateFraction: current > 0 ? current / 100 : null };
+    if (lvr.lvr != null) addFact(facts, 'Scenario LVR', uiPercentage(lvr.lvr));
+    const current = enteredRate(mortgage.currentRate);
+    if (mortgage.currentRate.trim()) addFact(facts, 'Current entered rate', uiRate(current));
+    if (mortgage.years.trim()) addFact(facts, 'Years remaining', uiDuration(calculatorYears(mortgage.years), 'years'));
+    return { facts, balance, currentRateFraction: current };
   }
 
   const deposit = section === 'Savings' ? scenario.savings : scenario.termDeposit;
   const balance = calculatorAmount(deposit.balance, MAX_CALCULATOR_DEPOSIT_AMOUNT) ?? 0;
   if (balance > 0) addFact(facts, 'Current entered balance', uiMoney(balance));
-  if (deposit.currentRate.trim()) addFact(facts, 'Current entered rate', formatRate(num(deposit.currentRate) / 100));
-  const current = num(deposit.currentRate);
-  return { facts, balance, currentRateFraction: current > 0 ? current / 100 : null };
+  const current = enteredRate(deposit.currentRate);
+  if (deposit.currentRate.trim()) addFact(facts, 'Current entered rate', uiRate(current));
+  return { facts, balance, currentRateFraction: current };
 }
 
 type BriefInput = {
@@ -385,7 +390,7 @@ function briefFromCohort(input: BriefInput, sorted: CohortRate[]): NegotiationBr
 
       illustration = {
         balance: scenarioData.balance,
-        currentRate: formatRate(scenarioData.currentRateFraction),
+        currentRate: uiRate(scenarioData.currentRateFraction),
         selectedRate: receipt.advertisedRate,
         annualDifference,
         periodDifference,

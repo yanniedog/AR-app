@@ -1,7 +1,9 @@
 import { loadCustomerProfile, updateCustomerProfile } from '../src/data/customerProfileStorage';
 import { comparisonInputs, withInput } from '../src/data/customerInputState';
 import { mortgageComparisonValues } from '../src/data/mortgageComparison';
-import { loadUserRateScenario, normalizeUserRateScenario, saveUserRateScenario } from '../src/data/userRateScenario';
+import { computeLvr } from '../src/data/calc';
+import { Decimal } from '../src/data/publicRateDecimal';
+import { loadUserRateScenario, normalizeUserRateScenario, saveUserRateScenario, mergeScenarioChanges } from '../src/data/userRateScenario';
 import { openMortgageComparisonProfile, saveMortgageComparisonInputs, saveMortgageComparisonFacets, resetMortgageComparisonProfileForTests } from '../src/data/mortgageComparisonProfile';
 import { ensureUserRateScenarioLoaded, flushUserRateScenario, getUserRateScenarioSnapshotForTests, resetUserRateScenarioStoreForTests, updateUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { readSecureStoreValue, writeSecureStoreValue } from '../src/lib/secureStoreValue';
@@ -94,6 +96,62 @@ test('buying funds exclude upfront costs exactly once in the shared Rates LVR', 
   await updateCustomerProfile(profile => ({ ...profile, inputState: { ...profile.inputState!, comparison: { ...profile.inputState!.comparison, lvrMode: 'funds', fundsType: 'deposit' } } }));
   const inputs = comparisonInputs((await loadCustomerProfile()).inputState!);
   expect(mortgageComparisonValues(inputs)).toMatchObject({ amount: 670000, propertyValue: 800000, lvr: 83.75 });
+});
+
+test('editing buying net deposit restores gross savings and keeps Rates and Calculate on the same exact LVR', async () => {
+  await saveUserRateScenario(normalizeUserRateScenario({ mortgage: { mode: 'buy', propertyValue: '800000', deposit: '150000', costs: '20000' } }));
+  await updateCustomerProfile(profile => ({ ...profile, inputState: { ...profile.inputState!, comparison: { ...profile.inputState!.comparison, lvrMode: 'funds', fundsType: 'deposit' } } }));
+  const before = comparisonInputs((await loadCustomerProfile()).inputState!);
+  expect(mortgageComparisonValues(before)).toMatchObject({ amount: 670000, propertyValue: 800000 });
+  saveMortgageComparisonInputs({ ...before, fundsAvailable: '150000' });
+  await openMortgageComparisonProfile();
+  const saved = (await loadCustomerProfile()).inputState!;
+  expect(saved.scenario.mortgage).toMatchObject({ mode: 'buy', propertyValue: '820000.00', deposit: '170000.00', costs: '20000' });
+  expect(computeLvr(saved.scenario.mortgage).loan).toBe(670000);
+  const rates = comparisonInputs(saved), parsed = mortgageComparisonValues(rates);
+  expect(rates.loanAmount).toBe('670000');
+  expect(parsed).toMatchObject({ amount: 670000, propertyValue: 820000 });
+  const exact = Decimal.parse('670000').div(Decimal.parse('820000')).mul(Decimal.parse('100'));
+  expect(parsed.exactLvr?.compare(exact)).toBe(0);
+  expect(computeLvr(saved.scenario.mortgage).lvr).toBeCloseTo(parsed.lvr!, 12);
+});
+
+test('a funds-type-only toggle persists the displayed money and preserves the saved buying property', async () => {
+  await saveUserRateScenario(normalizeUserRateScenario({ mortgage: { mode: 'buy', propertyValue: '800000', deposit: '150000', costs: '20000' } }));
+  await updateCustomerProfile(profile => ({ ...profile, inputState: { ...profile.inputState!, comparison: { ...profile.inputState!.comparison, lvrMode: 'funds', fundsType: 'deposit' } } }));
+  const deposit = comparisonInputs((await loadCustomerProfile()).inputState!);
+  saveMortgageComparisonInputs({ ...deposit, fundsType: 'offset' });
+  await openMortgageComparisonProfile();
+  let saved = (await loadCustomerProfile()).inputState!;
+  expect(saved.scenario.mortgage).toMatchObject({ mode: 'buy', propertyValue: '800000', deposit: '150000', costs: '20000' });
+  expect(comparisonInputs(saved)).toMatchObject({ fundsType: 'offset', fundsAvailable: '130000.00', loanAmount: '670000' });
+  saveMortgageComparisonInputs({ ...comparisonInputs(saved), fundsType: 'deposit' });
+  await openMortgageComparisonProfile();
+  saved = (await loadCustomerProfile()).inputState!;
+  expect(computeLvr(saved.scenario.mortgage).loan).toBe(670000);
+  expect(comparisonInputs(saved)).toMatchObject({ fundsType: 'deposit', fundsAvailable: '130000.00', loanAmount: '670000' });
+  expect(saved.scenario.mortgage).toMatchObject({ mode: 'buy', propertyValue: '800000.00', deposit: '150000.00', costs: '20000' });
+});
+
+test('toggling an empty offset to deposit never deletes known buying savings or property', async () => {
+  await saveUserRateScenario(normalizeUserRateScenario({ mortgage: { mode: 'buy', propertyValue: '800000', deposit: '150000', costs: '20000' } }));
+  const before = comparisonInputs((await loadCustomerProfile()).inputState!);
+  expect(before.fundsAvailable).toBe('');
+  saveMortgageComparisonInputs({ ...before, fundsType: 'deposit' });
+  await openMortgageComparisonProfile();
+  expect((await loadUserRateScenario()).mortgage).toMatchObject({ mode: 'buy', propertyValue: '800000', deposit: '150000', costs: '20000' });
+});
+
+test('rebasing a selected product removes omitted semantic identities while preserving concurrent edits', () => {
+  const previous = normalizeUserRateScenario({ currentProducts: { mortgage: { provider: 'Bank', productKey: 'old', rateIndex: 1, offerId: 'old-offer', programmeId: 'old-programme' } },
+    localRates: { mortgage: { referenceScenario: { package: 'OLD', channel: 'ONLINE' } } } });
+  const current = normalizeUserRateScenario({ ...previous, mortgage: { ...previous.mortgage, currentRate: '6.74' } });
+  const next = normalizeUserRateScenario({ ...previous, currentProducts: { ...previous.currentProducts, mortgage: { provider: 'Bank', productKey: 'new', rateIndex: 2 } },
+    localRates: { ...previous.localRates, mortgage: { ...previous.localRates.mortgage, referenceScenario: { channel: 'ONLINE' } } } });
+  const merged = mergeScenarioChanges(current, previous, next);
+  expect(merged.currentProducts.mortgage).toEqual({ provider: 'Bank', productKey: 'new', rateIndex: 2 });
+  expect(merged.localRates.mortgage.referenceScenario).toEqual({ channel: 'ONLINE' });
+  expect(merged.mortgage.currentRate).toBe('6.74');
 });
 
 test('a queued comparison edit then revert preserves the final explicit value', async () => {

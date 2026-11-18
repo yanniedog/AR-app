@@ -10,7 +10,7 @@ import { buildPayloadProgressViewModel } from '../data/downloadProgress';
 import { useTheme } from '../theme/ThemeProvider';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { AppText, Row } from './ui';
-import { uiJoin, uiNumber, type UiCopy, type UiLabel } from '../lib/uiCopy';
+import { uiJoin, uiPercentage, type UiCopy, type UiLabel } from '../lib/uiCopy';
 const PHASE_LABELS: Record<PayloadProgressSnapshot['phase'], UiLabel> = {
   manifest: 'Checking', finalize: 'Pending', download: 'Downloading', verify: 'Verifying',
   inflate: 'Preparing', parse: 'Preparing', install: 'Install',
@@ -94,7 +94,7 @@ export function PayloadProgressBar({
           {PHASE_LABELS[progress.phase]}
         </AppText>
         <AppText variant="tiny" weight="700" color="primary">
-          {uiJoin(uiNumber(vm.overallPercent), '%', vm.softMotion ? '…' : '')}
+          {uiJoin(uiPercentage(vm.overallPercent), vm.softMotion ? '…' : '')}
         </AppText>
       </Row>
       <View

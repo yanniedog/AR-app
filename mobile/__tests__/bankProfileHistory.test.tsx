@@ -288,6 +288,22 @@ describe('bank detail profile-filtered history', () => {
       expect(viewport.findAllByType('Chip').some(node => ['List', 'Carousel'].includes(node.props.label))).toBe(false);
       expect(controls.findAllByType('Chip').some(node => ['List', 'Carousel'].includes(node.props.label))).toBe(true);
       expect(viewport.findAllByType('FlashList')).toHaveLength(0);
+      expect(viewport.findAllByType('AppText').some(node => node.props.children === 'Min')).toBe(false);
+      expect(tree.root.findByProps({ testID: 'provider-statistics' })).toBeTruthy();
+    } finally { act(() => tree.unmount()); }
+  });
+
+  it('keeps all four external statistics matched to the chart selected date', () => {
+    const tree = mount();
+    try {
+      const chart = tree.root.findAllByType('BankHistoryChart')[0];
+      expect(chart.props.statisticsInline).toBe(false);
+      act(() => chart.props.onStatisticsChange(chart.props.points[0]));
+      const facts = tree.root.findByProps({ testID: 'provider-statistics' }).findAllByType('AppText').map(node => node.children.join(''));
+      expect(facts).toEqual(expect.arrayContaining(['Min', 'Max', 'Mean', 'Median', '3.00%', '5.00%', '4.00%', '4.25%']));
+      act(() => chart.props.onStatisticsChange(chart.props.points[1]));
+      const missing = tree.root.findByProps({ testID: 'provider-statistics' }).findAllByType('AppText').map(node => node.children.join(''));
+      expect(missing.filter(value => value === 'Unknown')).toHaveLength(4);
     } finally { act(() => tree.unmount()); }
   });
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { useCustomerProfile } from '../hooks/useCustomerProfile';
-import { withInput, type SharedInputPath } from '../data/customerInputState';
+import { inputAt, withInput, type SharedInputPath } from '../data/customerInputState';
 import { calculatorAmount, MAX_CALCULATOR_MORTGAGE_AMOUNT } from '../data/calc';
 import { uiJoin, uiMoney, uiNumber, uiRate, type UiCopy } from '../lib/uiCopy';
 import { AppText, Button, Row } from './ui';
@@ -36,7 +36,7 @@ export function SharedInputConflicts() {
   return <View style={{ gap: 8 }}>
     <AppText weight="700">{uiJoin('Choose saved value', ' · ', labels[path])}</AppText>
     <Row gap={8} style={{ flexWrap: 'wrap' }}>
-      <Button title={uiJoin('Keep current', ' · ', fact(path, conflict.current))} disabled={busy} variant="secondary" onPress={() => choose(false)} />
+      <Button title={uiJoin('Keep current', ' · ', fact(path, inputAt(profile!.inputState!.scenario, path)))} disabled={busy} variant="secondary" onPress={() => choose(false)} />
       <Button title={uiJoin('Use saved', ' · ', fact(path, conflict.incoming))} disabled={busy} variant="secondary" onPress={() => choose(true)} />
     </Row>
   </View>;

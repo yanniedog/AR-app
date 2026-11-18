@@ -87,6 +87,20 @@ test('clearing Rates comparison preserves shared loan details after reopening', 
   });
 });
 
+test('numeric Clear persists direct LVR reset while retaining personal inputs and selected facets', async () => {
+  const first = boot();
+  first.profile.saveMortgageComparisonInputs(comparison);
+  first.profile.saveMortgageComparisonFacets(facets);
+  await first.profile.openMortgageComparisonProfile();
+  first.profile.clearSavedMortgageComparison({ preserveFacets: true });
+  await first.profile.openMortgageComparisonProfile();
+  const restarted = boot();
+  await restarted.profile.openMortgageComparisonProfile();
+  expect(restarted.profile.useMortgageComparisonProfile.getState().profile).toEqual({
+    inputs: { ...comparison, lvr: '' }, facets,
+  });
+});
+
 test('an unreadable encrypted record is retained, and queued edits survive write retry', async () => {
   mockValues.set(SECURE_STORE_KEYS.mortgageComparisonProfile, '{malformed');
   const { profile } = boot();

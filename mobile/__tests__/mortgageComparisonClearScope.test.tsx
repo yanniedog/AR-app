@@ -50,7 +50,7 @@ test('clearing numerical comparison inputs preserves selected purpose, repayment
   act(() => { tree = TestRenderer.create(<MortgageComparisonControls rows={[]} filters={filters} unverified={0} invalid={false} />) as typeof tree; });
   try {
     act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
-    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '', lvr: '' });
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '500000', lvr: '' });
     expect(useRatesSession.getState().sections.Mortgage).toMatchObject({ filters, page: 1, scrollOffset: 0 });
   } finally { act(() => tree.unmount()); restoreRatesSession(original); clearMortgageComparison(); }
 });
@@ -131,6 +131,6 @@ test('selecting the final facet flushes the latest amount and offset inputs befo
     expect(useRatesSession.getState().sections.Mortgage.filters.repaymentTypes).toEqual(['PRINCIPAL_AND_INTEREST']);
     act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
     act(() => jest.advanceTimersByTime(250));
-    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '', lvr: '' });
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '650000', lvr: '', lvrMode: 'funds', fundsType: 'offset', fundsAvailable: '100000', propertyValue: '900000' });
   } finally { act(() => tree.unmount()); jest.useRealTimers(); restoreRatesSession(original); clearMortgageComparison(); }
 });

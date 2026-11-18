@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, ScrollView, useWindowDimensions, View } from 'react-native';
 
+import { BankHistoryStatistics } from '../../src/components/BankHistoryStatistics';
 import { ProviderRateFilters } from '../../src/components/ProviderRateFilters';
 import { normalizeProfileFilters, profileFilterRows, type ProfileFilters } from '../../src/data/profile';
 import { providerRowIdentity, providerTierSeries } from '../../src/data/providerRateWorkspace';
@@ -60,7 +61,7 @@ import {
   isMeasuredEmptyHistoryGraphic,
   type HistoryGraphicEvidence,
 } from '../../src/lib/historyGraphicEvidence';
-import type { RateRow, SectionKey } from '../../src/types';
+import type { BankHistoryPoint, RateRow, SectionKey } from '../../src/types';
 import { SECTION_KEYS } from '../../src/types';
 const providerSessions = new Map<string, { profile: ProfileFilters; view: 'carousel' | 'list'; selected: string | null; offset: number }>();
 interface LenderProductItem { row: RateRow; section: SectionKey; firstInSection: boolean; id: string }
@@ -168,6 +169,12 @@ export default function BankDetail() {
   const [contentWidth, setContentWidth] = useState(width);
   const [contentHeight, setContentHeight] = useState(Math.max(320, screenHeight - 160));
   const chartHeight = fontScale >= 1.2 || screenHeight < 700 ? 100 : 145;
+  const [statisticsHeight, setStatisticsHeight] = useState(80);
+  const [browseControlsHeight, setBrowseControlsHeight] = useState(56);
+  const [carouselNavigationHeight, setCarouselNavigationHeight] = useState(64);
+  const productMinimumHeight = fontScale >= 1.2 ? 180 : 150;
+  const chartViewportHeight = Math.max(100, Math.min(contentHeight * 0.55,
+    contentHeight - statisticsHeight - browseControlsHeight - (productView === 'carousel' ? carouselNavigationHeight : 0) - productMinimumHeight));
   const cardWidth = Math.max(160, contentWidth - 32);
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
@@ -417,6 +424,11 @@ export default function BankDetail() {
     chartModel?.dates.at(-1) ?? 'none',
     chartModel?.dates.length ?? 0,
   ].join(':');
+  const [chartStatistics, setChartStatistics] = useState<{ revision: string; point: BankHistoryPoint | null } | null>(null);
+  const onStatisticsChange = useCallback((point: BankHistoryPoint | null) => {
+    setChartStatistics(current => current?.revision === historyContentRevision && current.point === point ? current : { revision: historyContentRevision, point });
+  }, [historyContentRevision]);
+  const selectedStatistics = chartStatistics?.revision === historyContentRevision ? chartStatistics.point : chartModel?.points.at(-1) ?? null;
   const onHistoryGraphicReady = useCallback((evidence: HistoryGraphicEvidence) => {
     setHistoryGraphicEvidence((current) => {
       return current?.graphicRevision === evidence.graphicRevision &&
@@ -706,7 +718,7 @@ export default function BankDetail() {
       <Stack.Screen options={{ title: lenderName }} />
       <Screen showDataHealthBanner={false}>
         <View style={{ ...responsiveScreenContentStyle(width), paddingHorizontal: 0, flex: 1 }} onLayout={event => { setContentWidth(event.nativeEvent.layout.width); setContentHeight(event.nativeEvent.layout.height); }}>
-        <ScrollView testID="provider-chart-viewport" style={{ flexGrow: 0, flexShrink: 1, maxHeight: Math.max(160, contentHeight * (fontScale >= 1.2 ? 0.61 : 0.62)) }}
+        <ScrollView testID="provider-chart-viewport" style={{ flexGrow: 0, flexShrink: 0, height: chartViewportHeight }}
           contentContainerStyle={{ paddingHorizontal: 16 }} nestedScrollEnabled>
           <DataHealthBannerStrip />
           <Row gap={8} style={{ marginVertical: 6 }}>
@@ -745,6 +757,8 @@ export default function BankDetail() {
                   section={activeChartSection}
                   height={chartHeight}
                   compactStatistics
+                  statisticsInline={false}
+                  onStatisticsChange={onStatisticsChange}
                   stateKey={`${provider}:${activeChartSection}`}
                   highlightSeries={selectedSeries}
                   onGraphicReady={onHistoryGraphicReady}
@@ -756,7 +770,9 @@ export default function BankDetail() {
           </View> : null
         ) : null}
         </ScrollView>
-          <Row testID="provider-browse-controls" gap={8} style={{ paddingVertical: 4, paddingHorizontal: 16 }}>
+        {activeChartSection ? <BankHistoryStatistics point={chartModel ? selectedStatistics : null} section={activeChartSection}
+          onLayout={event => setStatisticsHeight(event.nativeEvent.layout.height)} /> : null}
+          <Row testID="provider-browse-controls" onLayout={event => setBrowseControlsHeight(event.nativeEvent.layout.height)} gap={8} style={{ flexShrink: 0, paddingVertical: 4, paddingHorizontal: 16 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
               {activeChartSection === 'Mortgage' ? <ProviderRateFilters rows={mortgageFilterRows} profile={providerProfile} onChange={setProviderProfile} />
                 : <AppText variant="tiny">{uiJoin(uiCount(productCount), ' ', 'Products')}</AppText>}
@@ -833,7 +849,7 @@ export default function BankDetail() {
 
           </View> : null}
         />
-        {productView === 'carousel' && productItems.length > 1 ? <Row gap={8} style={{ padding: 8, justifyContent: 'space-between' }}>
+        {productView === 'carousel' && productItems.length > 1 ? <Row onLayout={event => setCarouselNavigationHeight(event.nativeEvent.layout.height)} gap={8} style={{ flexShrink: 0, padding: 8, justifyContent: 'space-between' }}>
           <Chip label="Previous" icon="chevron-back" onPress={() => {
             const index = Math.max(0, productItems.findIndex(item => item.id === activeProduct?.id) - 1);
             setSelectedProduct(productItems[index].id); scrollRef.current?.scrollToIndex({ index, animated: true });

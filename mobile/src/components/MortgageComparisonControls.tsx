@@ -3,9 +3,9 @@ import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../data/mor
 import { publicCataloguePricingKey, type PublicCatalogueView } from '../data/publicRateIntegration';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TextInput, useWindowDimensions, View } from 'react-native';
-import { useMortgageComparison, clearMortgageComparison, mortgageComparisonValues, type MortgageComparisonInputs } from '../data/mortgageComparison';
+import { useMortgageComparison, mortgageComparisonValues, type MortgageComparisonInputs } from '../data/mortgageComparison';
 import { openMortgageComparisonProfile, saveMortgageComparisonFacets, saveMortgageComparisonInputs,
-  useMortgageComparisonProfile } from '../data/mortgageComparisonProfile';
+  clearSavedMortgageComparison, useMortgageComparisonProfile } from '../data/mortgageComparisonProfile';
 import { profileAttributeOptions } from '../data/profileRequirements';
 import { humanizeEnum } from '../data/format';
 import type { Filters } from '../data/selectors';
@@ -267,9 +267,11 @@ export function MortgageComparisonControls({ rows, catalogue, filters, unverifie
     setDraft(current => ({ ...withResolvedMode(current), [field]: text }));
   };
   const clearInputs = () => {
+    if (dirty.current) commitDraft(draftRef.current);
     dirty.current = false;
-    setDraft({ loanAmount: '', lvr: '' });
-    clearMortgageComparison();
+    // Reset comparison scope durably; financial inputs remain entered once.
+    clearSavedMortgageComparison({ preserveFacets: true });
+    setDraft({ ...useMortgageComparison.getState(), lvr: '' });
     updateRatesSection('Mortgage', { page: 1 }, true);
   };
   const mode = resolvedMode(draft);

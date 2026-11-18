@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { loadUserRateScenario } from '../src/data/userRateScenario';
+import { loadCustomerProfile } from '../src/data/customerProfileStorage';
 
 import {
   ensureUserRateScenarioLoaded,
@@ -58,6 +59,25 @@ describe('shared user rate scenario store', () => {
 
     await expect(flushUserRateScenario()).resolves.toBe(true);
     expect((await loadUserRateScenario()).savings.balance).toBe('250');
+  });
+
+  it('coalesces rapid keystrokes into one verified profile write and flushes before the timer', async () => {
+    await ensureUserRateScenarioLoaded();
+    const initialRevision = (await loadCustomerProfile()).revision;
+    jest.useFakeTimers();
+    try {
+      jest.mocked(SecureStore.setItemAsync).mockClear();
+      updateUserRateScenario(value => ({ ...value, savings: { ...value.savings, balance: '1' } }));
+      jest.advanceTimersByTime(100);
+      updateUserRateScenario(value => ({ ...value, savings: { ...value.savings, balance: '12' } }));
+      jest.advanceTimersByTime(100);
+      updateUserRateScenario(value => ({ ...value, savings: { ...value.savings, balance: '125' } }));
+      expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+      await expect(flushUserRateScenario()).resolves.toBe(true);
+      expect((await loadCustomerProfile()).revision).toBe(initialRevision + 1);
+      expect((await loadUserRateScenario()).savings.balance).toBe('125');
+      expect(jest.getTimerCount()).toBe(0);
+    } finally { jest.useRealTimers(); }
   });
 
   it('retries a failed save without requiring another edit', async () => {

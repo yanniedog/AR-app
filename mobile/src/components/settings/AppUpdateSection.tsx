@@ -27,7 +27,7 @@ import { OpaquePerformanceAuditRenderRevision } from '../../lib/performanceAudit
 import { usePerformanceAuditSurface } from '../../hooks/usePerformanceAuditReadiness';
 import { ANDROID_UPDATE_READINESS_AUDIT } from '../../lib/performanceAuditCheckInventory';
 import { DisclosureGroup, InfoRow, Section, SettingsGap, ToggleRow } from './settingsUi';
-import { uiJoin, uiIdentifier, uiNumber, type UiCopy } from '../../lib/uiCopy';
+import { uiJoin, uiIdentifier, uiPercentage, type UiCopy } from '../../lib/uiCopy';
 
 export interface AppUpdateSurfaceStatus {
   terminal: boolean;
@@ -347,7 +347,7 @@ export function AppUpdateSection({
       <InfoRow label="Consent" value="Optional" />
       <InfoRow label="Install" value="Android installation permission" />
       {downloadPct !== null && phase === 'downloading' ? (
-        <InfoRow label="Download" value={uiJoin(uiNumber(downloadPct), '%')} />
+        <InfoRow label="Download" value={uiPercentage(downloadPct)} />
       ) : null}
       {error || (phase === 'error' && download.error) ? (
         <AppText variant="tiny" color="danger" style={{ marginTop: 4 }}>{uiLabel("Update failed")}</AppText>

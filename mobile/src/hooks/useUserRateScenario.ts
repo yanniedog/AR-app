@@ -37,6 +37,7 @@ let revision = 0;
 let enqueuedRevision = 0;
 let persistedRevision = 0;
 let persistedScenario = snapshot.scenario;
+const SCENARIO_SAVE_DEBOUNCE_MS = 200;
 
 function emit(next: Partial<UserRateScenarioSnapshot>): void {
   snapshot = { ...snapshot, ...next };
@@ -120,7 +121,7 @@ function scheduleSave(): void {
   saveTimer = setTimeout(() => {
     saveTimer = null;
     void enqueueLatestScenario();
-  }, 0);
+  }, SCENARIO_SAVE_DEBOUNCE_MS);
 }
 
 export function updateUserRateScenario(

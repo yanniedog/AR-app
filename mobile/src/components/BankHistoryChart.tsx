@@ -104,6 +104,8 @@ export interface BankHistoryChartProps {
   productHistory?: boolean;
   /** Compact provider workspace: four statistics remain visible together. */
   compactStatistics?: boolean;
+  statisticsInline?: boolean;
+  onStatisticsChange?: (point: BankHistoryPoint | null) => void;
   stateKey?: string;
   comparisonScope?: UiCopy;
   /** Audit-only bridge to the exact callbacks used by the visible chart controls. */
@@ -259,6 +261,8 @@ function BankHistoryChartView({
   highlightSeries,
   productHistory = false,
   compactStatistics = false,
+  statisticsInline = true,
+  onStatisticsChange,
   stateKey,
   comparisonScope,
   auditActionsRef,
@@ -364,6 +368,8 @@ function BankHistoryChartView({
   const activeDate =
     hoverDate && plotDates.includes(hoverDate) ? hoverDate : pinnedDate;
   const activeIndex = Math.max(0, plotDates.indexOf(activeDate));
+  const activePoint = plotPoints.find((point) => point.date === activeDate);
+  useEffect(() => { onStatisticsChange?.(activePoint ?? null); }, [activePoint, onStatisticsChange]);
   const handleSlicePress = useCallback((date: string) => {
     setSelectedDate(date);
     onDateSelect?.(date);
@@ -549,7 +555,6 @@ function BankHistoryChartView({
   const highlightColor = highlightSeries?.color ?? theme.colors.warning;
 
   const labelEvery = axisLabelInterval(plotDates.length);
-  const activePoint = plotPoints.find((p) => p.date === activeDate);
   const activeHighlight =
     highlightValues && isFiniteNumber(highlightValues[activeIndex])
       ? highlightValues[activeIndex]
@@ -996,7 +1001,7 @@ function BankHistoryChartView({
         </Row>
       ) : null}
 
-      {compactStatistics ? <Row gap={8} style={{ flexWrap: 'wrap', marginTop: 6 }}>
+      {compactStatistics && statisticsInline ? <Row gap={8} style={{ flexWrap: 'wrap', marginTop: 6 }}>
         {([
           ['Min', activePoint?.min, ribbonColor], ['Max', activePoint?.max, ribbonColor],
           ['Mean', activePoint?.mean, meanColor], ['Median', activePoint?.median, medianColor],

@@ -92,8 +92,14 @@ export function openMortgageComparisonProfile(): Promise<void> {
       const saved = await updateCustomerProfile(profile => {
         const changed = Object.fromEntries(Object.entries(submitted.changes ?? {}).map(([key, change]) => [key, change!.value])) as Partial<MortgageComparisonInputs>;
         const latest = comparisonInputs(profile.inputState!);
-        const financialEdit = (['loanAmount', 'propertyValue', 'fundsAvailable'] as const).some(key => Object.hasOwn(changed, key) && changed[key] !== undefined);
-        const inputState = financialEdit ? applyComparisonInputs(profile.inputState!, { ...latest, ...changed }) : {
+        const nextInputs = { ...latest, ...changed };
+        const fundsTypeEdit = nextInputs.lvrMode === 'funds' && Object.hasOwn(changed, 'fundsType') && changed.fundsType !== undefined;
+        const transferFunds = fundsTypeEdit && !!nextInputs.fundsAvailable?.trim();
+        // A deposit view hides property value. Switching back to offset must
+        // retain the saved property rather than replacing that hidden field.
+        if (fundsTypeEdit && nextInputs.fundsType === 'offset' && nextInputs.propertyValue === undefined) nextInputs.propertyValue = profile.inputState!.scenario.mortgage.propertyValue;
+        const financialEdit = transferFunds || (['loanAmount', 'propertyValue', 'fundsAvailable'] as const).some(key => Object.hasOwn(changed, key) && changed[key] !== undefined);
+        const inputState = financialEdit ? applyComparisonInputs(profile.inputState!, nextInputs) : {
           ...profile.inputState!, comparison: { ...profile.inputState!.comparison,
             ...(Object.hasOwn(changed, 'lvr') ? { lvr: changed.lvr! } : {}),
             ...(Object.hasOwn(changed, 'lvrMode') ? { lvrMode: changed.lvrMode } : {}),
@@ -103,8 +109,8 @@ export function openMortgageComparisonProfile(): Promise<void> {
         // Property/offset edits do not change a deliberately selected buying mode.
         if (financialEdit && !Object.hasOwn(changed, 'loanAmount')) {
           inputState.scenario.mortgage.mode = profile.inputState!.scenario.mortgage.mode;
-          if (inputState.scenario.mortgage.mode === 'buy' && inputState.comparison.fundsType === 'deposit' && Object.hasOwn(changed, 'fundsAvailable')) {
-            const net = currencyAmount(changed.fundsAvailable ?? ''), costs = currencyAmount(profile.inputState!.scenario.mortgage.costs || '0');
+          if (inputState.scenario.mortgage.mode === 'buy' && inputState.comparison.fundsType === 'deposit' && (transferFunds || Object.hasOwn(changed, 'fundsAvailable'))) {
+            const net = currencyAmount(nextInputs.fundsAvailable ?? ''), costs = currencyAmount(profile.inputState!.scenario.mortgage.costs || '0');
             try { if (net && costs) inputState.scenario.mortgage.deposit = Decimal.parse(net).add(Decimal.parse(costs)).fixed(2); }
             catch { /* Retain the invalid draft; financial validation remains unresolved. */ }
           }
@@ -162,20 +168,21 @@ export function saveMortgageComparisonFacets(value: MortgageComparisonFacets): v
   void openMortgageComparisonProfile();
 }
 
-export function clearSavedMortgageComparison(): void {
+export function clearSavedMortgageComparison({ preserveFacets = false }: { preserveFacets?: boolean } = {}): void {
   // Clearing Rates filters must never delete the user's loan details.
   const inputs = { ...useMortgageComparison.getState(), lvr: '' };
   setMortgageComparisonInputs(inputs);
-  applyFacets(emptyProfile.facets);
+  const facets = preserveFacets ? (pending.facets ?? committed?.facets ?? emptyProfile.facets) : emptyProfile.facets;
+  if (!preserveFacets) applyFacets(facets);
   if (Platform.OS === 'web') {
-    committed = { inputs, facets: emptyProfile.facets };
+    committed = { inputs, facets };
     publishProfile();
     return;
   }
   // Clear scope metadata only. Reapplying a comparison would turn a saved
   // buying scenario into refinancing and can replace newer task edits.
   pending = { ...pending, ...(pending.inputs ? { inputs: { ...pending.inputs, lvr: '' } } : {}),
-    facets: emptyProfile.facets, clearScope: true };
+    ...(preserveFacets ? {} : { facets }), clearScope: true };
   publishProfile();
   void openMortgageComparisonProfile();
 }

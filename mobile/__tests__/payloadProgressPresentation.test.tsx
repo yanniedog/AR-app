@@ -37,7 +37,7 @@ test.each(['finalize', 'download'] as const)('ordinary %s progress contains only
   let tree: any; act(() => { tree = TestRenderer.create(<PayloadProgressBar progress={snapshot} caption={caption} />); });
   try {
     const labels = tree.root.findAllByType('AppText' as any).map((node: any) => React.Children.toArray(node.props.children).join(''));
-    expect(labels).toEqual([caption, phase === 'finalize' ? 'Pending' : 'Downloading', `${vm.overallPercent}%…`]);
+    expect(labels).toEqual([caption, phase === 'finalize' ? 'Pending' : 'Downloading', `${vm.overallPercent.toPrecision(3)}%…`]);
     expect(tree.root.findByProps({ accessibilityRole: 'progressbar' }).props.accessibilityValue)
       .toEqual({ min: 0, max: 100, now: vm.overallPercent });
     const rendered = JSON.stringify(tree.toJSON());

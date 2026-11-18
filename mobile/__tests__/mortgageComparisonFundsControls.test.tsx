@@ -168,7 +168,7 @@ test.each(['clear', 'replace'])('external %s discards pending funds and wins ove
   expect(useMortgageComparison.getState()).toEqual(expected);
 });
 
-test('remount retains both drafts and mode; Clear removes both drafts and resets to the offset default', () => {
+test('remount retains both drafts and mode; Clear retains personal amounts and removes direct comparison LVR', () => {
   setMortgageComparisonInputs({ loanAmount: '600000', lvr: '71', lvrMode: 'funds' });
   let tree = mount();
   type(tree, 'Deposit', '200');
@@ -185,13 +185,13 @@ test('remount retains both drafts and mode; Clear removes both drafts and resets
     type(tree, 'Deposit', '250');
     act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
     act(() => jest.advanceTimersByTime(500));
-    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '', lvr: '' });
-    expect(input(tree, 'Deposit')).toBeUndefined();
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '', lvrMode: 'funds', fundsType: 'deposit', fundsAvailable: '250000' });
+    expect(input(tree, 'Deposit')?.props.value).toBe('250');
     expect(input(tree, 'LVR')).toBeUndefined();
-    expect(input(tree, 'Loan amount')?.props.value).toBe('');
-    expect(input(tree, 'Offset balance')?.props.value).toBe('');
+    expect(input(tree, 'Loan amount')?.props.value).toBe('600');
+    expect(input(tree, 'Offset balance')).toBeUndefined();
     expect(tab(tree, 'Funds available').props.accessibilityState.selected).toBe(true);
-    expect(tab(tree, 'Offset account').props.accessibilityState.selected).toBe(true);
+    expect(tab(tree, 'Deposit').props.accessibilityState.selected).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
 
@@ -339,9 +339,9 @@ test('property edits debounce and survive remount; external replacement clears e
     type(tree, 'Offset balance', '100');
     act(() => tree.root.findByProps({ accessibilityLabel: 'Clear comparison inputs' }).props.onPress());
     act(() => jest.advanceTimersByTime(500));
-    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '', lvr: '' });
+    expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '', lvrMode: 'funds', fundsType: 'offset', fundsAvailable: '100000', propertyValue: '800000' });
   } finally { act(() => tree.unmount()); }
-  expect(useMortgageComparison.getState()).toEqual({ loanAmount: '', lvr: '' });
+  expect(useMortgageComparison.getState()).toEqual({ loanAmount: '600000', lvr: '', lvrMode: 'funds', fundsType: 'offset', fundsAvailable: '100000', propertyValue: '800000' });
 });
 
 test('offset inputs and type selector retain wrapping accessible controls at large text sizes', () => {
