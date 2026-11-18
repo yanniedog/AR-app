@@ -426,4 +426,161 @@ describe('app-health data quality', () => {
       },
     });
   });
+
+  it('passes details-completeness when product detail records have complete internal fields', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    const mortgageKey = snapshot.core!.sections.Mortgage.rates[0].product_key;
+    const savingsKey = snapshot.core!.sections.Savings.rates[0].product_key;
+    const tdKey = snapshot.core!.sections.TD.rates[0].product_key;
+    const baseDetail = {
+      description: 'Complete product description',
+      last_updated: '2026-09-01T00:00:00Z',
+      fees: [{ name: 'Account fee', amountStatus: 'fixed' as const, amount: '0' }],
+      features: [{ label: 'OFFSET', value: 'Yes' }],
+      eligibility: [{ label: 'RESIDENCY', value: 'Australian resident' }],
+      links: { overview: 'https://example.com/overview' },
+      sourceDocuments: [{ url: 'https://example.com/doc', sourcePath: 'doc.json', relation: 'overview' }],
+      rateConditions: {
+        schemaVersion: 1 as const,
+        sourceSha256: 'a'.repeat(64),
+        entries: [{ id: 'rc-1', rateFamily: 'lending' as const, rateIndex: 0, rateSourcePointer: '/0', sourcePointer: '/0', text: 'Standard' }],
+      },
+    };
+    snapshot.details!.products = {
+      [mortgageKey]: {
+        ...baseDetail,
+        constraints: [{ label: 'MAX_LVR', value: '80' }],
+        facts: [{ id: 'f-1', kind: 'constraint', canonicalKey: 'MAX_LVR', value: 80 }],
+      },
+      [savingsKey]: {
+        ...baseDetail,
+        constraints: [{ label: 'MIN_BALANCE', value: '0' }],
+        facts: [{ id: 'f-2', kind: 'constraint', canonicalKey: 'MIN_BALANCE', value: 0 }],
+      },
+      [tdKey]: {
+        ...baseDetail,
+        constraints: [{ label: 'MIN_BALANCE', value: '1000' }],
+        facts: [{ id: 'f-3', kind: 'constraint', canonicalKey: 'MIN_BALANCE', value: 1000 }],
+      },
+    };
+
+    const detailsCheck = byCode(
+      evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS,
+    );
+    expect(detailsCheck.status).toBe('pass');
+    expect(detailsCheck.metrics).toMatchObject({
+      internalDetailsAudited: true,
+      auditedDetailProducts: 3,
+      missingDescriptionProducts: 0,
+      descriptionCoveragePercent: 100,
+      missingFeesProducts: 0,
+      unpublishedFeeCount: 0,
+      productsWithUnpublishedFees: 0,
+      missingFeaturesProducts: 0,
+      missingEligibilityProducts: 0,
+      missingConstraintsProducts: 0,
+      mortgageDetailProducts: 1,
+      missingMortgageLvrProducts: 0,
+      mortgageLvrCoveragePercent: 100,
+      depositDetailProducts: 2,
+      missingDepositBalanceProducts: 0,
+      depositBalanceCoveragePercent: 100,
+      missingFactsProducts: 0,
+      missingRateConditionsProducts: 0,
+      missingLinksProducts: 0,
+      missingSourceDocumentsProducts: 0,
+      missingLastUpdatedProducts: 0,
+    });
+  });
+
+  it('warns and records internal product detail gaps and unpublished fees', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    const mortgageKey = snapshot.core!.sections.Mortgage.rates[0].product_key;
+    const savingsKey = snapshot.core!.sections.Savings.rates[0].product_key;
+    const tdKey = snapshot.core!.sections.TD.rates[0].product_key;
+    snapshot.details!.products = {
+      [mortgageKey]: {
+        description: '   ',
+        fees: [
+          { name: 'Establishment fee', amountStatus: 'unpublished' },
+          { name: 'Valuation fee', amountStatus: 'unpublished' },
+        ],
+        links: { bundle: 'https://example.com/bundle-only' },
+      },
+      [savingsKey]: {
+        description: 'Saver account',
+        last_updated: '2026-09-01T00:00:00Z',
+        fees: [],
+        features: [{ label: 'ONLINE', value: 'Yes' }],
+        eligibility: [{ label: 'MIN_AGE', value: '18' }],
+        constraints: [{ label: 'MIN_AGE', value: '18' }],
+        facts: [{ id: 'f-1', kind: 'feature', canonicalKey: 'ONLINE', value: true }],
+        rateConditions: {
+          schemaVersion: 1,
+          sourceSha256: 'b'.repeat(64),
+          entries: [{ id: 'rc-1', rateFamily: 'deposit', rateIndex: 0, rateSourcePointer: '/0', sourcePointer: '/0', text: 'Bonus' }],
+        },
+        links: { terms: 'https://example.com/terms' },
+        sourceDocuments: [{ url: 'https://example.com/doc', sourcePath: 'doc.json', relation: 'terms' }],
+      },
+      [tdKey]: {
+        description: 'Term deposit',
+        last_updated: '2026-09-01T00:00:00Z',
+        fees: [{ name: 'Early withdrawal', amountStatus: 'fixed', amount: '30' }],
+        features: [{ label: 'FIXED', value: 'Yes' }],
+        eligibility: [{ label: 'RESIDENCY', value: 'AU' }],
+        constraints: [{ label: 'MIN_BALANCE', value: '5000' }],
+        facts: [{ id: 'f-2', kind: 'constraint', canonicalKey: 'MIN_BALANCE', value: 5000 }],
+        rateConditions: {
+          schemaVersion: 1,
+          sourceSha256: 'c'.repeat(64),
+          entries: [{ id: 'rc-2', rateFamily: 'deposit', rateIndex: 0, rateSourcePointer: '/0', sourcePointer: '/0', text: 'Fixed' }],
+        },
+        links: { fees: 'https://example.com/fees' },
+        sourceDocuments: [{ url: 'https://example.com/doc2', sourcePath: 'doc2.json', relation: 'fees' }],
+      },
+    };
+
+    const detailsCheck = byCode(
+      evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS,
+    );
+    expect(detailsCheck.status).toBe('warn');
+    expect(detailsCheck.metrics).toMatchObject({
+      internalDetailsAudited: true,
+      auditedDetailProducts: 3,
+      missingDescriptionProducts: 1,
+      descriptionCoveragePercent: 66.67,
+      missingFeesProducts: 1,
+      feesCoveragePercent: 66.67,
+      unpublishedFeeCount: 2,
+      productsWithUnpublishedFees: 1,
+      missingFeaturesProducts: 1,
+      featuresCoveragePercent: 66.67,
+      missingEligibilityProducts: 1,
+      eligibilityCoveragePercent: 66.67,
+      missingConstraintsProducts: 1,
+      constraintsCoveragePercent: 66.67,
+      mortgageDetailProducts: 1,
+      missingMortgageLvrProducts: 1,
+      mortgageLvrCoveragePercent: 0,
+      depositDetailProducts: 2,
+      missingDepositBalanceProducts: 1,
+      depositBalanceCoveragePercent: 50,
+      missingFactsProducts: 1,
+      factsCoveragePercent: 66.67,
+      missingRateConditionsProducts: 1,
+      rateConditionsCoveragePercent: 66.67,
+      missingLinksProducts: 1,
+      linksCoveragePercent: 66.67,
+      missingSourceDocumentsProducts: 1,
+      sourceDocumentsCoveragePercent: 66.67,
+      missingLastUpdatedProducts: 1,
+      lastUpdatedCoveragePercent: 66.67,
+    });
+    expect(detailsCheck.summary).toBe(
+      'Some product detail records have missing fields, constraints, documents, or unpublished fees.',
+    );
+  });
 });

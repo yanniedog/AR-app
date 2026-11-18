@@ -1,5 +1,6 @@
 import { createPublicRateResolverIndex } from '../data/publicRateResolverIndex';
 import type { AuditWorkDiagnostic } from '../lib/performanceAuditWorkDiagnostic';
+import { createPricingWorkTiming } from '../lib/pricingWorkTiming';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { MortgageComparisonInputs } from '../data/mortgageComparison';
@@ -137,6 +138,7 @@ export function useResolvedPublicRankingRows(options: {
   const requestVersion = useRef({ request, attempt, version: 1 });
   if (requestVersion.current.request !== request || requestVersion.current.attempt !== attempt) requestVersion.current = { request, attempt, version: requestVersion.current.version + 1 };
   const workerStats = useRef({ starts: 0, restarts: 0, cancellations: 0 });
+  const timingRef = useRef<{ request: typeof request; attempt: number; timing: ReturnType<typeof createPricingWorkTiming> } | null>(null);
   const [progress, setProgress] = useState<{ request: typeof request; attempt: number; stage: 'candidates' | 'resolution' | 'scope' } | null>(null);
   const preparedWhileFocused = useRef(false);
   const requestRef = useRef(request);
@@ -195,6 +197,14 @@ export function useResolvedPublicRankingRows(options: {
       };
     }
     const view = catalogueRef.current;
+    // A missing public catalogue leaves every published row unchanged. Avoid
+    // copying the section twice or queueing a pricing job before list filtering.
+    if (view.status === 'unavailable' && request.section !== 'Mortgage' && request.providedCandidates == null && !request.applyMortgageScope) {
+      const rows = request.sourceRows as RateRow[];
+      clock.current.until = Infinity;
+      return { candidates: rows, resolution: { rows, priced: rows.length, unresolved: 0, complete: false },
+        mortgage: { ...EMPTY_MORTGAGE, rows } };
+    }
     const inputCount = request.providedCandidates?.length ?? request.sourceRows.length;
     // publicRecommendationRows walks the whole programme book. A short core
     // section must not do that walk inside render; cooperative pricing yields.
@@ -237,9 +247,12 @@ export function useResolvedPublicRankingRows(options: {
         while (!cancelled && flightRef.current === flight) {
           const req = requestRef.current;
           const retainedKey = reusableRef.current;
+          const timing = createPricingWorkTiming();
+          timingRef.current = { request: req, attempt, timing };
           try {
           setProgress({ request: req, attempt, stage: 'candidates' });
           const control = {
+            yieldControl: timing.yieldControl,
             cancelled: () => cancelled || flightRef.current !== flight || requestRef.current !== req ||
               getMandatoryEligibilityRevision() !== req.mandatoryRevision || getSuitabilityRevision() !== req.suitabilityGateRevision,
           };
@@ -249,24 +262,31 @@ export function useResolvedPublicRankingRows(options: {
           const view = catalogueRef.current;
           const validity = collectValidity(view);
           const resolve = resolverIndexRef.current.resolveForPublication(view);
-          const candidates = req.providedCandidates
+          // Without a catalogue the published source is already the candidate
+          // and ranking book. Borrow its immutable array just as the synchronous
+          // deposit path does. Copying it twice retained 49,736 redundant row
+          // slots for the audit's mortgage book, preventing bounded warm reuse.
+          const publishedOnly = view.status === 'unavailable' && req.providedCandidates == null;
+          const candidates = await timing.measure('candidatePreparationMs', async () => publishedOnly ? req.sourceRows as RateRow[] : req.providedCandidates
             ? [...req.providedCandidates]
             : await publicRecommendationRowsCooperatively(
-              req.sourceRows, view, req.section, sectionScenarioRef.current, control, false, validity.asOf, resolve);
+              req.sourceRows, view, req.section, sectionScenarioRef.current, control, false, validity.asOf, resolve));
           if (cancelled || flightRef.current !== flight) return;
           if (requestRef.current !== req) { stats.restarts++; continue; }
           if (!candidates) return;
           setProgress({ request: req, attempt, stage: 'resolution' });
-          const resolution = await resolvedPublicRankingRowsCooperatively(
-            candidates, view, validity.rowScenario, control, resolve);
+          const resolution = await timing.measure('pricingResolutionMs', async () => publishedOnly
+            ? { rows: candidates, priced: candidates.length, unresolved: 0, complete: false }
+            : await resolvedPublicRankingRowsCooperatively(
+              candidates, view, validity.rowScenario, control, resolve));
           if (cancelled || flightRef.current !== flight) return;
           if (requestRef.current !== req) { stats.restarts++; continue; }
           if (!resolution) return;
           setProgress({ request: req, attempt, stage: 'scope' });
-          const mortgage = req.applyMortgageScope && req.mortgageInputs
+          const mortgage = await timing.measure('mortgageScopeMs', async () => req.applyMortgageScope && req.mortgageInputs
             ? await mortgageComparisonRowsCooperatively(
               resolution.rows, req.mortgageInputs, req.mortgageContext, control)
-            : { rows: resolution.rows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false };
+            : { rows: resolution.rows, unverified: 0, unverifiedRows: new WeakSet<RateRow>(), invalid: false });
           if (cancelled || flightRef.current !== flight) return;
           if (requestRef.current !== req) { stats.restarts++; continue; }
           if (!mortgage || control.cancelled()) return;
@@ -332,6 +352,7 @@ export function useResolvedPublicRankingRows(options: {
     return () => clearTimeout(timer);
   }, [focused, nextBoundary, clockRevision]);
   const work: AuditWorkDiagnostic = {
+    ...(timingRef.current?.request === request && timingRef.current.attempt === attempt ? timingRef.current.timing.snapshot() : {}),
     pricingStage: ready ? 'ready' : current && snapshot!.error ? 'error' : progress?.request === request && progress.attempt === attempt ? progress.stage : 'queued',
     ...(current && snapshot!.error && progress?.request === request && progress.attempt === attempt ? { pricingErrorStage: progress.stage } : {}),
     pricingIndexHits: resolverIndex.stats.hits, pricingIndexMisses: resolverIndex.stats.misses,

@@ -49,13 +49,14 @@ export function publicRateReason(reason: string): UiText {
     reference_conditions_unmet: uiJoin('Reference scope', ': ', 'Unmet'),
     selected_reference_product_mismatch: uiJoin('Reference scope', ': ', 'Unmet'),
     unknown_condition: uiJoin('Eligibility', ': ', 'Unknown'),
-    source_conflict: uiJoin('Source', ': ', 'Needs review'),
-    source_stale: uiJoin('Source', ': ', 'Stale'),
-    source_failed: uiJoin('Latest', ' ', 'Source', ': ', 'Failed'),
+    source_conflict: uiJoin('Public pricing', ': ', 'Unverified'),
+    source_stale: uiJoin('Public pricing', ': ', 'Stale'),
+    source_failed: uiJoin('Public pricing', ': ', 'Unavailable'),
+    source_not_verified_current: uiJoin('Public pricing', ': ', 'Unverified'),
     unsupported_rate_type: uiJoin('Rate type', ': ', 'Unavailable'),
     future_effective: uiJoin('Rate', ': ', 'Pending'),
   };
-  return uiJoin(messages[reason] ?? uiOpaqueEnum(reason.toUpperCase()));
+  return uiJoin(Object.hasOwn(messages, reason) ? messages[reason] : 'Unknown');
 }
 
 /** Resolver amounts carry explicit fractions; comparison rates remain separate. */

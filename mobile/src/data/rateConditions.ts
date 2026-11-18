@@ -1,9 +1,10 @@
+import { rowWork, type RowWorkControl } from './cooperativeRows';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import type { CorePayload, DetailsPayload, Manifest, RateConditionEntry, RateConditions, RateRow, SectionKey } from '../types';
 import type { CoreIntegrityContext } from './sectionIntegrity';
 import { verifiedDetailsSha } from './detailsIdentity';
-import { rowsForProductKey } from './rateRowIndex';
+import { isPublishedRateRow } from './rateRowIndex';
 
 export interface RateConditionContext { core: CorePayload | null; details: DetailsPayload | null; manifest: Manifest | null; coreIntegrity: CoreIntegrityContext | null }
 export interface ScopedRateConditions {
@@ -12,6 +13,11 @@ export interface ScopedRateConditions {
 }
 const hex = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const pointer = (value: unknown): value is string => typeof value === 'string' && value.length <= 512 && /^\/[A-Za-z0-9/]+$/.test(value);
+const ratePointerPattern = {
+  deposit: /^((?:\/data)?)\/depositRates\/(?:0|[1-9][0-9]*)$/,
+  lending: /^((?:\/data)?)\/lendingRates\/(?:0|[1-9][0-9]*)$/,
+};
+const tierPointerSuffix = /^\/tiers\/(?:0|[1-9][0-9]*)$/;
 const keys = (value: object, allowed: string[]) => Object.keys(value).every(key => allowed.includes(key));
 // Hashes are pure functions of these two strings. Reusing the hash never caches
 // validation or provenance: mutations still pass every admission check below.
@@ -43,8 +49,7 @@ export function validRateConditions(value: unknown): value is RateConditions {
   for (const row of e.entries) {
     if (!row || !keys(row, ['id', 'rateFamily', 'rateIndex', 'rateSourcePointer', 'tierSourcePointer', 'sourcePointer', 'text']) || !hex(row.id) || ids.has(row.id) || !['deposit', 'lending'].includes(row.rateFamily) || !Number.isSafeInteger(row.rateIndex) || row.rateIndex < 1 ||
         !pointer(row.rateSourcePointer) || !pointer(row.sourcePointer) || typeof row.text !== 'string' || !row.text.trim() || utf8ToBytes(row.text).length > 16384) return false;
-    const family = row.rateFamily === 'deposit' ? 'depositRates' : 'lendingRates';
-    const match = row.rateSourcePointer.match(new RegExp(`^(/data)?/${family}/(?:0|[1-9][0-9]*)$`));
+    const match = row.rateSourcePointer.match(ratePointerPattern[row.rateFamily]);
     if (!match) return false;
     const root = match[1] ?? '';
     if (sourceRoot !== undefined && sourceRoot !== root) return false;
@@ -55,7 +60,7 @@ export function validRateConditions(value: unknown): value is RateConditions {
     ordinalPointers.set(ordinal, row.rateSourcePointer); pointerOrdinals.set(row.rateSourcePointer, row.rateIndex);
     let base = row.rateSourcePointer;
     if (row.tierSourcePointer !== undefined) {
-      if (!pointer(row.tierSourcePointer) || !new RegExp(`^${base}/tiers/(?:0|[1-9][0-9]*)$`).test(row.tierSourcePointer)) return false;
+      if (!pointer(row.tierSourcePointer) || !row.tierSourcePointer.startsWith(base) || !tierPointerSuffix.test(row.tierSourcePointer.slice(base.length))) return false;
       base = row.tierSourcePointer;
     }
     const suffix = row.sourcePointer.slice(base.length);
@@ -67,19 +72,21 @@ export function validRateConditions(value: unknown): value is RateConditions {
 }
 
 function readScopedRateConditions(row: RateRow, section: SectionKey, context: RateConditionContext | undefined,
-  validate: typeof validRateConditions): ScopedRateConditions {
+  validate: typeof validRateConditions,
+  lookup?: (value: RateConditions, family: RateConditionEntry['rateFamily'], index: number) => RateConditionEntry[]): ScopedRateConditions {
   const unavailable = (reason: string): ScopedRateConditions => ({ status: 'unavailable', reason, entries: [], sourceSha256: null, generationId: null, coreSha256: null, detailsSha256: null });
   if (!Number.isSafeInteger(row.rate_index) || row.rate_index! < 1) return unavailable('Rate conditions unavailable: an exact published rate index is required.');
   const { core, details, manifest, coreIntegrity } = context ?? {};
   if (!core || !details || !manifest || !coreIntegrity || coreIntegrity.core !== core || coreIntegrity.runDate !== core.run_date || coreIntegrity.coreSha256 !== manifest.files.core.sha256 ||
       !hex(manifest.files.core.sha256) || !hex(manifest.files.details.sha256) || verifiedDetailsSha(details) !== manifest.files.details.sha256 ||
       core.run_date !== details.run_date || core.run_date !== manifest.run_date || !core.sections[section] ||
-      !rowsForProductKey(core.sections[section].rates, row.product_key).includes(row)) return unavailable('Rate conditions unavailable: this rate and details are not verified from the same publication.');
+      !isPublishedRateRow(core.sections[section].rates, row)) return unavailable('Rate conditions unavailable: this rate and details are not verified from the same publication.');
   const value = details.products[row.product_key]?.rateConditions;
   if (value === undefined) return unavailable('Rate conditions unavailable in this publication. This does not mean the rate is unconditional.');
   if (!validate(value)) return unavailable('Rate conditions unavailable: the published condition record is invalid.');
   const family = section === 'Mortgage' ? 'lending' : 'deposit';
-  const entries = value.entries.filter(entry => entry.rateFamily === family && entry.rateIndex === row.rate_index);
+  const entries = lookup ? lookup(value, family, row.rate_index!)
+    : value.entries.filter(entry => entry.rateFamily === family && entry.rateIndex === row.rate_index);
   if (!entries.length) return unavailable('No rate-condition wording was supplied for this exact row. Eligibility remains unassessed.');
   return { status: 'available', reason: 'Published wording for this exact rate row. This is not an eligibility decision.', entries,
     sourceSha256: value.sourceSha256, generationId: manifest.payload_revision?.generation_id ?? null,
@@ -95,11 +102,46 @@ export function scopedRateConditions(row: RateRow, section: SectionKey, context?
  * pass validation again, and every row still proves its exact source identity. */
 export function scopedRateConditionsForRows(rows: readonly RateRow[], section: SectionKey,
   context?: RateConditionContext): ScopedRateConditions[] {
+  return rows.map(scopedRateConditionsReader(section, context));
+}
+
+/** Cache lifetime is one preparation call, never a later publication/read. */
+function scopedRateConditionsReader(section: SectionKey, context?: RateConditionContext) {
   const validated = new Map<unknown, boolean>();
   const validate = (value: unknown): value is RateConditions => {
     let result = validated.get(value);
     if (result === undefined) { result = validRateConditions(value); validated.set(value, result); }
     return result;
   };
-  return rows.map(row => readScopedRateConditions(row, section, context, validate));
+  const byEnvelope = new WeakMap<RateConditions, Map<number, RateConditionEntry[]>>();
+  const byTier = (value: RateConditions, family: RateConditionEntry['rateFamily'], index: number) => {
+    let tiers = byEnvelope.get(value);
+    if (!tiers) {
+      tiers = new Map();
+      for (const entry of value.entries) {
+        if (entry.rateFamily !== family) continue;
+        const group = tiers.get(entry.rateIndex);
+        if (group) group.push(entry);
+        else tiers.set(entry.rateIndex, [entry]);
+      }
+      byEnvelope.set(value, tiers);
+    }
+    // Preserve independently owned result arrays even for repeated exact rows.
+    return tiers.get(index)?.slice() ?? [];
+  };
+  return (row: RateRow) => readScopedRateConditions(row, section, context, validate, byTier);
+}
+
+/** Yield within a large product while retaining its envelope validation/index. */
+export async function scopedRateConditionsForRowsCooperatively(rows: readonly RateRow[], section: SectionKey,
+  context?: RateConditionContext, control: RowWorkControl = {}): Promise<ScopedRateConditions[] | null> {
+  const work = rowWork(control), read = scopedRateConditionsReader(section, context);
+  const result: ScopedRateConditions[] = [];
+  await work.pause();
+  for (const row of rows) {
+    if (work.cancelled()) return null;
+    result.push(read(row));
+    if (work.expired()) await work.pause();
+  }
+  return work.cancelled() ? null : result;
 }

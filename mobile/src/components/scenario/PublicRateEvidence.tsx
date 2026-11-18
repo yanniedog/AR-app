@@ -1,23 +1,35 @@
 import React, { useEffect, useState } from 'react';
-import { Linking, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { usePublicRateCatalogue } from '../../data/publicRateCatalogue';
-import type { PublicProgramme, RateScenario } from '../../data/publicRateModel';
+import type { PublicFreshness, PublicProgramme, RateScenario } from '../../data/publicRateModel';
 import { publicRateScenario, resolveProductPublicRate, resolveRowPublicRate } from '../../data/publicRateIntegration';
 import { publicComponentFact, publicConditionFact, publicRateOriginLabel, publicRateReason, publicRateText } from '../../data/publicRatePresentation';
 import { publicRateFreshness } from '../../data/publicRateResolver';
 import { useStore } from '../../data/store';
 import type { RateRow } from '../../types';
 import { useUserRateScenario } from '../../hooks/useUserRateScenario';
-import { trustedExternalUrl } from '../../lib/trustedExternalUrl';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText, Button, Disclosure } from '../ui';
-import { uiDate, uiIdentifier, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiPublicAliasName, uiPublicEvidenceLocator, uiRate, type UiCopy } from '../../lib/uiCopy';
+import { uiDate, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiPublicAliasName, uiRate, type UiCopy, type UiLabel } from '../../lib/uiCopy';
+
+const freshnessLabels: Record<PublicFreshness['state'], UiLabel> = {
+  current: 'Current', failed: 'Failed', stale: 'Stale', deferred: 'Pending', unknown: 'Unknown',
+};
+
+export function DiscoveryRateStatus({ freshness }: { freshness: PublicFreshness }) {
+  const state = freshness.state === 'failed' || freshness.state === 'deferred'
+    ? freshness.state : publicRateFreshness(freshness, new Date().toISOString()).state;
+  return <AppText variant="small" color="textMuted">{uiJoin(
+    'Freshness', ': ', freshnessLabels[state],
+    freshness.checkedAt ? uiJoin(' · ', 'Checked', ' ', uiDate(freshness.checkedAt)) : null,
+    freshness.lastSuccessAt ? uiJoin(' · ', 'Last successful check', ' ', uiDate(freshness.lastSuccessAt)) : null,
+  )}</AppText>;
+}
 
 function programmeLabel(programme: PublicProgramme) {
   return programme.conditions.length ? uiJoin(...programme.conditions.flatMap<UiCopy>((condition, i) => i ? [' · ', publicConditionFact(condition)] : [publicConditionFact(condition)])) : uiLabel('Pricing programme');
 }
 
-/** Public evidence retains its actual source. Private assumptions never leave the device. */
 export function PublicRateEvidence({ productKey, programmeId, row, scenario: suppliedScenario, compact = false, onSelectProgramme }: {
   productKey: string; programmeId?: string; row?: RateRow; scenario?: RateScenario; compact?: boolean;
   onSelectProgramme?: (programmeId: string, offerId: string) => void;
@@ -30,7 +42,6 @@ export function PublicRateEvidence({ productKey, programmeId, row, scenario: sup
   const [open, setOpen] = useState(false);
   const [selection, setSelection] = useState<string | undefined>();
   const [historical, setHistorical] = useState(false);
-  const [sourceError, setSourceError] = useState(false);
   const product = catalogue.getProduct(productKey);
   const programmes = product ? catalogue.getProgrammes(product.productId) : [];
   const selected = programmeId ?? selection;
@@ -41,13 +52,18 @@ export function PublicRateEvidence({ productKey, programmeId, row, scenario: sup
   if (catalogue.status === 'unavailable') return <AppText variant="tiny" color="textMuted">{uiJoin('Public pricing', ': ', 'Unavailable')}</AppText>;
   if (!product) return <AppText variant="tiny" color="textMuted">{uiJoin('Public products', ': ', catalogue.status === 'loading' ? 'Loading' : 'Unavailable')}</AppText>;
   const applicable = { ...(suppliedScenario ?? publicRateScenario(product.section, scenario, profile, row, 'published')), allowHistorical: historical };
-  const productFreshness = product.freshness ? publicRateFreshness(product.freshness, new Date().toISOString()) : undefined;
   const asOf = new Date().toISOString();
   const resolve = (allowHistorical: boolean) => row && !selected
     ? resolveRowPublicRate(row, catalogue, { ...applicable, allowHistorical }, asOf)
     : resolveProductPublicRate(product, catalogue, { ...applicable, allowHistorical }, selected, asOf);
   const resolution = resolve(historical);
   if (!resolution) return null;
+  const discovery = !programmes.length ? product.freshness : undefined;
+  const freshness = discovery ? publicRateFreshness(discovery, asOf) : resolution.freshness;
+  // A failed or deferred check can still have a stale (or absent) last successful result.
+  const freshnessState = discovery?.state === 'failed' || discovery?.state === 'deferred' ? discovery.state : freshness.state;
+  const reasons = [...new Set([...resolution.reasonCodes, ...(!programmes.length ? product.reasonCodes : [])].map(publicRateReason))]
+    .filter(reason => reason !== 'Unknown');
   // Only offer the assumption when freshness is the sole barrier to pricing.
   const historicalResolution = !historical && resolution.reasonCodes.includes('source_not_verified_current') ? resolve(true) : undefined;
   const canAssumeHistorical = historical || historicalResolution !== undefined && historicalResolution.status !== 'unresolved'
@@ -61,32 +77,22 @@ export function PublicRateEvidence({ productKey, programmeId, row, scenario: sup
       {product.aliases.map(alias => <AppText key={alias.name + ':' + (alias.effectiveFrom ?? '')} variant="tiny" color="textMuted">
         {uiJoin('Aliases', ': ', uiPublicAliasName(alias), alias.effectiveFrom ? uiJoin(' · ', 'Effective from', ': ', uiDate(alias.effectiveFrom)) : null, alias.effectiveTo ? uiJoin(' · ', 'Effective to', ': ', uiDate(alias.effectiveTo)) : null)}
       </AppText>)}
-      {!programmes.length && productFreshness ? <AppText variant="tiny" color="textMuted">{uiJoin('Discovery', ': ', uiOpaqueEnum(productFreshness.state.toUpperCase()), ' · ', 'Checked', ': ', uiDate(productFreshness.checkedAt), ' · ', 'Last successful check', ': ', uiDate(productFreshness.lastSuccessAt))}</AppText> : null}
-      {!programmes.length ? product.reasonCodes.map(reason => <AppText key={'product:' + reason} variant="tiny" color="textMuted">{publicRateReason(reason)}</AppText>) : null}
       {!selected && !row?.public_programme_id && programmes.length > 1 ? programmes.map(programme => <Pressable key={programme.programmeId}
         onPress={() => { setSelection(programme.programmeId); onSelectProgramme?.(programme.programmeId, programme.offerId); }}
         accessibilityRole="radio" accessibilityState={{ checked: selected === programme.programmeId }} style={{ minHeight: 48, paddingVertical: 8 }}>
         <AppText variant="small" color="primary">{programmeLabel(programme)}</AppText>
       </Pressable>) : null}
-      {resolution.reasonCodes.map(reason => <AppText key={reason} variant="tiny" color="textMuted">{publicRateReason(reason)}</AppText>)}
+      {reasons.map(reason => <AppText key={reason} variant="tiny" color="textMuted">{reason}</AppText>)}
       {resolution.conditions.unknown.map(condition => <AppText key={condition.conditionId} variant="tiny" color="textMuted">{uiJoin('Unknown', ' · ', publicConditionFact(condition))}</AppText>)}
       {resolution.conditions.unmet.map(condition => <AppText key={condition.conditionId} variant="tiny" color="textMuted">{uiJoin('Unmet', ' · ', publicConditionFact(condition))}</AppText>)}
-      {resolution.freshness.checkedAt ? <AppText variant="tiny" color="textMuted">{uiJoin('Checked', ': ', uiDate(resolution.freshness.checkedAt))}</AppText> : null}
-      {resolution.freshness.lastSuccessAt ? <AppText variant="tiny" color="textMuted">{uiJoin('Last successful check', ': ', uiDate(resolution.freshness.lastSuccessAt))}</AppText> : null}
+      {discovery ? <AppText variant="tiny" color="textMuted">{uiJoin('Freshness', ': ', freshnessLabels[freshnessState])}</AppText> : null}
+      {freshness.checkedAt ? <AppText variant="tiny" color="textMuted">{uiJoin('Checked', ': ', uiDate(freshness.checkedAt))}</AppText> : null}
+      {freshness.lastSuccessAt ? <AppText variant="tiny" color="textMuted">{uiJoin('Last successful check', ': ', uiDate(freshness.lastSuccessAt))}</AppText> : null}
       {resolution.effectiveFrom ? <AppText variant="tiny" color="textMuted">{uiJoin('Effective from', ': ', uiDate(resolution.effectiveFrom), resolution.effectiveTo ? uiJoin(' · ', 'Effective to', ': ', uiDate(resolution.effectiveTo)) : null)}</AppText> : null}
       {!resolution.verifiedCurrent ? <AppText variant="tiny" style={{ color: theme.colors.warning }}>{uiJoin('Current-rate ranking', ': ', 'Excluded', ' · ', 'Complete-cost ranking', ': ', 'Excluded')}</AppText> : null}
       {programmes.length > 0 && canAssumeHistorical && resolution.freshness.lastSuccessAt ? <Button title={historical ? 'Current pricing' : 'Historical pricing assumption'} variant="secondary" onPress={() => setHistorical(value => !value)} /> : null}
       {resolution.appliedComponents.map(component => <AppText key={component.componentId} variant="tiny" color="textMuted">{publicComponentFact(component)}</AppText>)}
       {resolution.phases.map(phase => <AppText key={phase.phaseId} variant="tiny" color="textMuted">{uiJoin('Months', ': ', uiNumber(phase.startMonth), '–', phase.endMonth == null ? uiLabel('Ongoing') : uiNumber(phase.endMonth), ' · ', uiOpaqueEnum(phase.status.toUpperCase()), phase.payableRate ? uiJoin(' · ', uiRate(Number(phase.payableRate), 4)) : null)}</AppText>)}
-      {[...new Map([...catalogue.evidence.filter(item => resolution.evidenceIds.includes(item.evidenceId)), ...(!programmes.length && product.sourceEvidence ? [product.sourceEvidence] : [])].map(item => [item.evidenceId, item])).values()].map(item => <View key={item.evidenceId} style={{ gap: 3 }}>
-        <AppText variant="tiny" color="textMuted">{uiJoin(uiPublicEvidenceLocator(item), ' · ', 'SHA-256', ': ', uiIdentifier(item.sha256))}</AppText>
-        <Button title="Open source" variant="ghost" onPress={() => {
-          const destination = trustedExternalUrl({ url: item.url, purpose: 'lender_source', label: 'Public rate evidence' });
-          if (!destination.ok) { setSourceError(true); return; }
-          void Linking.openURL(destination.url).catch(() => setSourceError(true));
-        }} />
-      </View>)}
-      {sourceError ? <AppText variant="tiny" color="danger">{uiLabel('Public source unavailable')}</AppText> : null}
     </View>
   </Disclosure>;
 }

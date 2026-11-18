@@ -65,9 +65,9 @@ test('unreviewed worker or stage paragraphs never become interface copy', () => 
   const registry = new BackgroundPayloadWorkRegistry(() => 1_000);
   const worker = registry.begin('An explanatory worker description.', null, 'A generated stage explanation.');
   let job = registry.snapshot()[0];
-  expect(uiBackgroundWorkName(job)).toBe('Source review required'); expect(uiBackgroundWorkStage(job)).toBe('Source review required');
+  expect(uiBackgroundWorkName(job)).toBe('Unverified'); expect(uiBackgroundWorkStage(job)).toBe('Unverified');
   for (const stage of ['download: Explanatory source paragraph.', 'persist encoded characters=303035 extra words', 'constructor']) {
-    worker.stage(stage); job = registry.snapshot()[0]; expect(uiBackgroundWorkStage(job)).toBe('Source review required');
+    worker.stage(stage); job = registry.snapshot()[0]; expect(uiBackgroundWorkStage(job)).toBe('Unverified');
   }
-  expect(uiBackgroundWorkStage(job, 1000)).toBe('Source review required');
+  expect(uiBackgroundWorkStage(job, 1000)).toBe('Unverified');
 });

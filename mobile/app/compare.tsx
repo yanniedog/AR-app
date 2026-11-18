@@ -33,7 +33,7 @@ import {
 } from '../src/data/compareSelection';
 import { useStore } from '../src/data/store';
 import { usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
-import { publicComparisonCore, publicRateScenario, resolveRowPublicRate, rowWithPublicResolution } from '../src/data/publicRateIntegration';
+import { publicComparisonCoreForSelections, publicRateScenario, resolveRowPublicRate, rowWithPublicResolution } from '../src/data/publicRateIntegration';
 import { publicRateText } from '../src/data/publicRatePresentation';
 import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { PublicRateEvidence } from '../src/components/scenario/PublicRateEvidence';
@@ -120,8 +120,8 @@ export default function Compare() {
     } catch {
       list = keys ? keys.split(',') : [];
     }
-    return validateCompareSelections(publicComparisonCore(core, catalogue,
-      section => scenarioFor(section)), list);
+    return validateCompareSelections(publicComparisonCoreForSelections(core, catalogue,
+      section => scenarioFor(section), list), list);
   }, [core, keys, suitabilityRevision, catalogue, scenarioFor]);
   const entries = useMemo<Entry[]>(
     () => comparison && comparison.issue == null ? comparison.entries.map(entry => {

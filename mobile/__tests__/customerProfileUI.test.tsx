@@ -72,6 +72,29 @@ test('saving one field preserves another editor draft across profile revisions',
   expect(tree.root.findByProps({ accessibilityLabel: 'Savings rate' }).props.value).toBe('4.25');
 });
 
+test('saved inputs without admitted labels appear as an unavailable count and stay intact', () => {
+  const profile = migrateCustomerProfile({ version: 3, savings: { balance: '10' } });
+  const saved = Object.values(profile.answers)[0];
+  for (const id of ['internal.old_one', 'internal.old_two']) {
+    profile.definitions[id] = { id, label: id, type: 'decimal', unit: 'AUD' };
+    profile.answers[id] = saved;
+  }
+  const stored = structuredClone(profile);
+  const update = jest.fn();
+  jest.mocked(useCustomerProfile).mockReturnValue({ profile, busy: false, error: null, retry: jest.fn(), update });
+  act(() => { tree = TestRenderer.create(<CustomerProfileContent />) as Tree; });
+  act(() => tree.root.findByProps({ title: 'Saved inputs (3)' }).props.onToggle());
+  const accessibleActions = tree.root.findAllByType('Button').map((node: any) => node.props.accessibilityLabel);
+  expect(accessibleActions).toContain('Save Savings balance');
+  expect(accessibleActions).not.toContain('Save Unverified');
+  expect(tree.root.findAllByType('LedgerField')).toHaveLength(1);
+  const rendered = JSON.stringify(tree.toJSON());
+  expect(rendered).toContain('Unavailable: 2');
+  expect(rendered).not.toContain('internal.old_');
+  expect(update).not.toHaveBeenCalled();
+  expect(profile).toEqual(stored);
+});
+
 test('negotiated draft survives failure and clears only after a confirmed successful save', async () => {
   const profile = migrateCustomerProfile(null);
   let attempts = 0;

@@ -236,7 +236,8 @@ test('empty Saved with no entered rate does not expand unused position catalogue
   mockCatalogueOverride = { ...catalogue([], products), getProgrammes: books };
   const tree = mount(<MyRates />);
   try {
-    await act(async () => { await jest.advanceTimersByTimeAsync(2000); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(500); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(500); });
     expect(tree.root.findAllByType(ProductCard)).toHaveLength(0);
     // Pricing identity may read programme cardinality; no offer expansion or
     // resolution job is needed when there is no entered rate to compare.
@@ -258,4 +259,25 @@ test('a same-day reference freshness expiry removes the unverified current-rate 
     act(() => tree.update(<WordBubbleProvider><MyRates /></WordBubbleProvider>));
     expect(copy(tree)).not.toContain('Current entered rate');
   } finally { act(() => tree.unmount()); }
+});
+
+test('entered rate position pricing is deferred until after initial mount interactions', async () => {
+  jest.useFakeTimers(); jest.setSystemTime(new Date('2026-10-26T11:59:00Z'));
+  mockState.savedRates = []; mockState.trackedRates = [];
+  const products = Array.from({ length: 100 }, (_, index) => ({ ...product, productId: `p-${index}`, productKey: `k-${index}` }));
+  const synchronousExpansion = jest.spyOn(pricing, 'publicRecommendationRows');
+  const cooperativeExpansion = jest.spyOn(pricing, 'publicRecommendationRowsCooperatively');
+  mockCatalogueOverride = catalogue([], products, [reference({ freshness: { state: 'current', checkedAt: '2026-10-24T12:00:00Z', lastSuccessAt: '2026-10-24T12:00:00Z', reasonCodes: [] } })]);
+  mockScenario = { ...mockScenario, localRates: { ...mockScenario.localRates, mortgage: { ...mockScenario.localRates.mortgage, mode: 'reference', referenceId: 'unit-reference', totalAdjustment: '0' } },
+    currentProducts: { ...mockScenario.currentProducts, mortgage: { ...mockScenario.currentProducts.mortgage, productKey: product.productKey } } };
+  const tree = mount(<MyRates />);
+  try {
+    expect(copy(tree)).toContain('Current entered rate');
+    expect(synchronousExpansion).not.toHaveBeenCalled();
+    expect(cooperativeExpansion).not.toHaveBeenCalled();
+    await act(async () => { await jest.advanceTimersByTimeAsync(500); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(500); });
+    expect(synchronousExpansion).not.toHaveBeenCalled();
+    expect(cooperativeExpansion).toHaveBeenCalledTimes(1);
+  } finally { act(() => tree.unmount()); synchronousExpansion.mockRestore(); cooperativeExpansion.mockRestore(); }
 });

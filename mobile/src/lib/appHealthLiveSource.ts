@@ -181,6 +181,7 @@ export async function readLiveAppHealthSnapshot(options: {
       productCount: detailKeys.length,
       matchedProductCount: detailKeys.filter((key) => coreKeys.has(key)).length,
       orphanProductCount: detailKeys.filter((key) => !coreKeys.has(key)).length,
+      products: details.products,
     },
     assets: {
       ...optionalAssets,

@@ -440,6 +440,7 @@ test('preserves the complete dedicated public app-health schema', () => {
 test('hosted diagnostic logs retain bounded work facts and separate return evidence without exposing private fields', () => {
   const report = makePerformanceAuditReport();
   const surface = { id: 'rates.results', work: { pricingStage: 'scope', pricingErrorStage: 'resolution', catalogueStatus: 'ready',
+    candidatePreparationMs: 12.3, pricingResolutionMs: 45.6, mortgageScopeMs: 78.9, pricingMaxSliceMs: 6.2,
     pricingRequestRevision: 3, workerStarts: 2, workerRestarts: 1, workerCancellations: 0,
     sourceRowCount: 8119, candidateCount: null, pricedRowCount: 42, catalogueProductCount: 2813, catalogueProgrammeCount: 16788,
     schedulerNativeScheduleAttempts: 10, schedulerNativeCompleted: 8, schedulerNativeFallbacks: 2,
@@ -473,4 +474,22 @@ test('hosted probe errors retain only a fixed causal classification', () => {
     errorClass: 'incomplete-scenario', errorPresent: true,
   });
   expect(JSON.stringify(log)).not.toMatch(/private account|123456/);
+});
+
+test('audit entry phases and HTTP dispositions survive public export', () => {
+  const phases = { entryRouteMountMs: 12, entryLayoutMs: 25, entryPreferencesMs: 3, entryAdmissionMs: 5, entryFeedbackObserved: false };
+  const report = makePerformanceAuditReport('entry-evidence', [
+    { id: 'audit-entry-screen-open', label: 'Audit open', kind: 'runtime', status: 'pass', durationMs: 30, metrics: phases },
+    { id: 'audit-entry-settings-open', label: 'Audit settings', kind: 'runtime', status: 'fail', durationMs: null,
+      metrics: { entryMeasurementStatus: 'timed-out' } },
+    { id: 'external-link-1', label: 'Link', kind: 'network', status: 'warn', durationMs: 12,
+      metrics: { httpAttempted: true, httpIssue: 'timeout' } },
+  ]);
+  const decoded = decodeCompactDiagnosticJson(createPublicPerformanceAuditReport(report)) as
+    { checks: typeof report.checks; diagnosticLog: { checks: typeof report.checks } };
+  for (const checks of [decoded.checks, decoded.diagnosticLog.checks]) {
+    expect(checks[0].metrics).toMatchObject(phases);
+    expect(checks[1].metrics.entryMeasurementStatus).toBe('timed-out');
+    expect(checks[2].metrics.httpIssue).toBe('timeout');
+  }
 });

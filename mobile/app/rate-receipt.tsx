@@ -1,3 +1,4 @@
+import { ProductPageLink, ProductPageLinks } from '../src/components/product/ProductPageLink';
 import { useIsFocused } from '@react-navigation/native';
 import { useResolvedPublicRankingRows } from '../src/hooks/useResolvedPublicRankingRows';
 import { useMortgageComparison } from '../src/data/mortgageComparison';
@@ -5,7 +6,6 @@ import { ratesComparisonScenario } from '../src/data/mortgageComparisonScenario'
 import { useRatesSession } from '../src/data/ratesSession';
 import { uiCount, uiDate, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from "../src/lib/uiCopy";
 import { uiConditionalRateFact } from "../src/lib/financialUiCopy";
-import Ionicons from '../src/components/icons/AppIcon';
 import { usePublicRateCatalogue } from '../src/data/publicRateCatalogue';
 import { bindCurrentPublicRow, publicScenarioForRow, publicRateScenario, publicRecommendationRowsForProduct, resolveLocalCurrentRate, resolveRowPublicRate, scenarioWithLocalCurrentRate } from '../src/data/publicRateIntegration';
 import { PublicRateEvidence } from '../src/components/scenario/PublicRateEvidence';
@@ -15,8 +15,6 @@ import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Share, type ScrollView, View } from 'react-native';
 
-import { useTrustedExternalUrl } from '../src/components/ExternalLinkConfirmation';
-import { useAuditExternalLinks } from '../src/hooks/useAuditExternalLinks';
 import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { SectionTitle } from '../src/components/product/ProductDetailParts';
 import { RateConditionsDisclosure } from '../src/components/product/RateConditionsDisclosure';
@@ -25,6 +23,7 @@ import { TOUCH_TARGET_MIN } from '../src/components/TouchTarget';
 import { AppText, Button, Card, Disclosure, Divider, Row } from '../src/components/ui';
 import {
   buildNegotiationBrief,
+  buildNegotiationBriefCooperatively,
   buildRateReceipt,
   rateConditionReceiptLines,
   type ReceiptFact,
@@ -38,7 +37,14 @@ import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 
-function Facts({ items, empty }: { items: readonly ReceiptFact[]; empty?: UiCopy }) {
+function FactRow({ fact }: { fact: ReceiptFact }) {
+  return <Row style={{ flexGrow: 1, alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+    <AppText variant="small" color="textMuted" style={{ flex: 1 }}>{fact.label}</AppText>
+    <AppText variant="small" weight="600" style={{ flex: 1.4, textAlign: 'right' }}>{fact.value}</AppText>
+  </Row>;
+}
+
+function Facts({ items, empty, linkToProduct = false }: { items: readonly ReceiptFact[]; empty?: UiCopy; linkToProduct?: boolean }) {
   if (!items.length) {
     return empty ? <AppText variant="small" color="textMuted">{empty}</AppText> : null;
   }
@@ -47,14 +53,9 @@ function Facts({ items, empty }: { items: readonly ReceiptFact[]; empty?: UiCopy
       {items.map((fact, index) => (
         <View key={`${fact.label}-${index}`}>
           {index > 0 ? <Divider style={{ marginVertical: 10 }} /> : null}
-          <Row style={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-            <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
-              {fact.label}
-            </AppText>
-            <AppText variant="small" weight="600" style={{ flex: 1.4, textAlign: 'right' }}>
-              {fact.value}
-            </AppText>
-          </Row>
+          {linkToProduct ? <ProductPageLink label={uiJoin(fact.label, ', ', fact.value)}>
+            <FactRow fact={fact} />
+          </ProductPageLink> : <FactRow fact={fact} />}
         </View>
       ))}
     </>
@@ -83,7 +84,6 @@ export default function RateReceiptScreen() {
   const focused = useIsFocused();
   const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
-  const { requestExternalUrl } = useTrustedExternalUrl();
   const { key, ri, programme: requestedProgramme, origin } = useLocalSearchParams<{ key?: string; ri?: string; programme?: string; origin?: string }>();
   const fromRatesComparison = origin === 'rates-comparison';
   const comparisonInputs = useMortgageComparison();
@@ -146,6 +146,9 @@ export default function RateReceiptScreen() {
     catalogue: publicCatalogue, section: receiptSection, sectionScenario: comparisonScenario,
     rowScenario: comparisonRowScenario, focused: focused && Boolean(found) && comparisonsReady,
     revision: suitabilityRevision,
+    // Reopening the brief can reuse this exact pricing request. Every input
+    // captured by scenarioFor belongs to the key; inputs stay local to memory.
+    resolutionContextKey: JSON.stringify([scenario, profile, fromRatesComparison, comparisonInputs, mortgageFilters]),
   });
   const comparisonsAvailable = comparisonsReady && comparisonPricing.ready;
   const selectedRow = useMemo(() => found && validRateIndex
@@ -176,16 +179,34 @@ export default function RateReceiptScreen() {
       : null,
     [core, detail, details, manifest, coreIntegrity, found, row],
   );
+  const briefInput = useMemo(() => {
+    void suitabilityRevision;
+    return receipt ? ({ receipt, scenario: calculationScenario,
+    sectionRows: comparisonsAvailable ? comparisonPricing.resolution.rows : EMPTY_RECEIPT_ROWS,
+    comparisonsReady: comparisonsAvailable, detailsProducts,
+  }) : null;
+  }, [receipt, calculationScenario, comparisonsAvailable, comparisonPricing.resolution.rows, detailsProducts, suitabilityRevision]);
+  const [briefAttempt, setBriefAttempt] = useState(0);
+  const [preparedBrief, setPreparedBrief] = useState<{
+    input: typeof briefInput; value: ReturnType<typeof buildNegotiationBrief> | null; error: boolean;
+  } | null>(null);
+  const smallBrief = useMemo(() => briefInput && briefInput.comparisonsReady && briefInput.sectionRows.length <= 48
+    ? buildNegotiationBrief(briefInput) : null, [briefInput]);
+  useEffect(() => {
+    if (!focused || !briefInput?.comparisonsReady || smallBrief) return;
+    let cancelled = false;
+    void buildNegotiationBriefCooperatively(briefInput, { cancelled: () => cancelled }).then(value => {
+      if (!cancelled) setPreparedBrief({ input: briefInput, value, error: value == null });
+    }, () => { if (!cancelled) setPreparedBrief({ input: briefInput, value: null, error: true }); });
+    return () => { cancelled = true; };
+  }, [focused, briefInput, smallBrief, briefAttempt]);
+  const cohortBrief = smallBrief ?? (preparedBrief?.input === briefInput ? preparedBrief.value : null);
+  const briefError = !smallBrief && preparedBrief?.input === briefInput && preparedBrief.error;
   const brief = useMemo(
     () => {
       if (!receipt || !found) return null;
-      const brief = buildNegotiationBrief({
-        receipt,
-        scenario: calculationScenario,
-        sectionRows: comparisonsAvailable ? comparisonPricing.resolution.rows : EMPTY_RECEIPT_ROWS,
-        comparisonsReady: comparisonsAvailable,
-        detailsProducts,
-      });
+      if (!cohortBrief) return null;
+      const brief = cohortBrief;
       if (!fromRatesComparison || found.section !== 'Mortgage') return brief;
       const scoped = scenarioFor(found.section, selectedRow ?? undefined);
       // Rates inputs describe offer applicability, not the saved current loan.
@@ -197,9 +218,8 @@ export default function RateReceiptScreen() {
         facts.push({ label: uiLabel('Scenario LVR'), value: uiJoin(uiNumber(Number(scoped.lvr) * 100, 1), '%') });
       return { ...brief, illustration: null, scenario: facts };
     },
-    [detailsProducts, found, receipt, calculationScenario, comparisonsAvailable, comparisonPricing.resolution.rows, fromRatesComparison, scenarioFor, selectedRow],
+    [found, receipt, cohortBrief, fromRatesComparison, scenarioFor, selectedRow],
   );
-  useAuditExternalLinks((receipt?.officialSources ?? []).map((source) => ({ url: source.url, purpose: 'lender_source', label: source.label })));
   const shareText = useMemo(() => {
     if (!receipt || !brief) return uiLabel('Unavailable');
     const lines: UiCopy[] = [uiJoin('Bank-call brief', ': ', uiProviderName({ provider: receipt.provider })),
@@ -255,10 +275,10 @@ export default function RateReceiptScreen() {
     probes: [
       {
         id: 'receipt.comparisons', kind: 'data',
-        status: comparisonPricing.error || catalogueStatus === 'error' ? 'error' : comparisonsAvailable ? 'ready' : 'pending',
-        error: comparisonPricing.error ?? (catalogueStatus === 'error' ? 'Public comparison pricing unavailable' : null),
+        status: comparisonPricing.error || briefError || catalogueStatus === 'error' ? 'error' : comparisonsAvailable && cohortBrief ? 'ready' : 'pending',
+        error: comparisonPricing.error ?? (briefError ? 'Receipt comparison preparation failed' : catalogueStatus === 'error' ? 'Public comparison pricing unavailable' : null),
         expectedCount: 1,
-        actualCount: !comparisonPricing.error && catalogueStatus !== 'error' && comparisonsAvailable ? 1 : 0
+        actualCount: !comparisonPricing.error && !briefError && catalogueStatus !== 'error' && comparisonsAvailable && cohortBrief ? 1 : 0
       },
       {
         id: 'receipt.data',
@@ -307,12 +327,21 @@ export default function RateReceiptScreen() {
   });
 
   if (!core) return <ScreenSkeleton />;
+  if (briefError || comparisonPricing.error || catalogueStatus === 'error') return <><Stack.Screen options={{ title: 'Bank-call brief' }} />
+    <EmptyState icon="receipt-outline" title="Unavailable" fill />
+    <Button title="Retry" onPress={() => {
+      setPreparedBrief(null); setBriefAttempt(value => value + 1); comparisonPricing.retry();
+      if (catalogueStatus === 'error') void loadAll().catch(() => undefined);
+    }} />
+  </>;
+
   if (publicProduct && (!found || !row) || publicResolution && (publicResolution.status !== 'exact' || !publicResolution.verifiedCurrent)) return <>
     <Stack.Screen options={{ title: 'Pricing evidence' }} />
     <ScreenScrollView><AppText variant="small">{uiJoin('Bank-call brief', ': ', 'Unavailable', ' · ', 'Pricing unresolved')}</AppText>
       <PublicRateEvidence productKey={productKey} row={selectedRow ?? undefined} programmeId={requestedProgramme} scenario={publicProduct ? scenarioFor(publicProduct.section, selectedRow ?? undefined) : undefined} />
     </ScreenScrollView>
   </>;
+  if (found && row && receipt && !brief) return <ScreenSkeleton />;
   if (!found || !row || !receipt || !brief) {
     return (
       <>
@@ -347,7 +376,7 @@ export default function RateReceiptScreen() {
       <SectionTitle text="Comparable observed rates" icon="git-compare-outline" />
       <Card style={{ gap: 8 }}>
         {comparisonsAvailable ? <AppText variant="tiny" color="textMuted">{uiJoin(brief.cohortSummary, brief.typicalAdvertisedRate ? uiJoin(' · ', 'Median', ': ', brief.typicalAdvertisedRate) : null)}</AppText> : null}
-        {!comparisonsAvailable ? <Row><AppText>{uiLabel(comparisonPricing.error || catalogueStatus === 'error' ? 'Unavailable' : 'Loading')}</AppText>
+        {!comparisonsAvailable ? <Row><AppText>{uiLabel(comparisonPricing.error ? 'Unavailable' : 'Loading')}</AppText>
           {comparisonPricing.error ? <Button title="Retry" variant="secondary" onPress={comparisonPricing.retry} /> : null}</Row> : brief.comparables.length ? brief.comparables.map((comparable, index) => <Pressable key={`${comparable.productKey}#${comparable.rateIndex ?? 'default'}`}
             accessibilityRole="button" accessibilityLabel={uiJoin('Open', ' ', uiProviderName({ provider: comparable.provider }), ' · ', uiProductName({ product_name: comparable.productName }))}
             onPress={() => router.push({ pathname: '/product/[key]', params: { key: comparable.productKey, ...(comparable.programmeId ? { programme: comparable.programmeId } : comparable.rateIndex != null ? { ri: String(comparable.rateIndex) } : {}), ...(fromRatesComparison ? { origin: 'rates-comparison' } : {}) } } as Href)}
@@ -362,21 +391,13 @@ export default function RateReceiptScreen() {
       <Disclosure title="Your entered scenario" open={scenarioOpen} onToggle={() => setScenarioOpen(!scenarioOpen)}><Card>
         {!scenarioLoaded ? <AppText>{uiLabel('Loading')}</AppText> : brief.scenario.length ? <Facts items={brief.scenario} /> : <Button title="Add scenario" variant="secondary" onPress={() => router.push('/calculator')} />}
       </Card></Disclosure>
-      <Disclosure title="Published evidence" open={evidenceOpen} onToggle={() => setEvidenceOpen(!evidenceOpen)}>
-        <SectionTitle text="Exact published tier" icon="layers-outline" /><Card><Facts items={receipt.tier} /></Card>
-        <SectionTitle text="Conditions recorded" icon="checkmark-done-outline" /><RateConditionsDisclosure model={receipt.rateConditions} /><Card><Facts items={receipt.conditions} empty="Eligibility / constraints unpublished" /></Card>
-        {receipt.fees.length ? <><SectionTitle text="Fees recorded" icon="cash-outline" /><Card><Facts items={receipt.fees} /></Card></> : null}
-        <SectionTitle text="Published source links" icon="link-outline" /><Card>
-          {receipt.officialSources.length ? receipt.officialSources.map((source, index) => <View key={source.url}>
-            {index ? <Divider /> : null}
-            <Pressable accessibilityRole="link" accessibilityLabel={uiJoin(source.label, ' · ', source.hostname, ' · ', 'External link')}
-              onPress={() => requestExternalUrl({ url: source.url, purpose: 'lender_source', label: source.label })}
-              style={({ pressed }) => ({ minHeight: TOUCH_TARGET_MIN, flexDirection: 'row', alignItems: 'center', gap: 10, opacity: pressed ? 0.7 : 1 })}>
-              <Ionicons name="open-outline" size={17} color={theme.colors.primary} /><View style={{ flex: 1 }}><AppText weight="700">{source.label}</AppText><AppText variant="tiny" color="textMuted">{source.hostname}</AppText></View>
-            </Pressable>
-          </View>) : <AppText>{uiLabel('Published source unavailable')}</AppText>}
-        </Card>
-      </Disclosure>
+      <ProductPageLinks overview={detail?.links?.overview}>
+        <Disclosure title="Published evidence" open={evidenceOpen} onToggle={() => setEvidenceOpen(!evidenceOpen)}>
+          <SectionTitle text="Exact published tier" icon="layers-outline" /><Card><Facts linkToProduct items={receipt.tier} /></Card>
+          <SectionTitle text="Conditions recorded" icon="checkmark-done-outline" /><RateConditionsDisclosure model={receipt.rateConditions} /><Card><Facts linkToProduct items={receipt.conditions} empty="Eligibility / constraints unpublished" /></Card>
+          {receipt.fees.length ? <><SectionTitle text="Fees recorded" icon="cash-outline" /><Card><Facts linkToProduct items={receipt.fees} /></Card></> : null}
+        </Disclosure>
+      </ProductPageLinks>
     </ScreenScrollView>
   </>;
 }

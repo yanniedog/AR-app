@@ -1,8 +1,10 @@
+import { useAuditStaticRoute } from '../src/hooks/useAuditStaticRoute';
 import * as Application from 'expo-application';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 
 import { ScreenScrollView } from '../src/components/Screen';
+import { ShareQrModal } from '../src/components/ShareQrModal';
 import {
   DisclosureGroup,
   InfoRow,
@@ -11,8 +13,11 @@ import {
   SettingsGap,
 } from '../src/components/settings/settingsUi';
 import { uiIdentifier, uiJoin, uiLabel } from '../src/lib/uiCopy';
+import { markAuditEntryScreenOpenPressed } from '../src/lib/auditEntryTrace';
 
 export default function AboutScreen() {
+  const [shareOpen, setShareOpen] = useState(false);
+  const measureAuditContent = useAuditStaticRoute({ action: 'about.open', surface: 'about.overview', route: '/about' });
   const appVersion = Application.nativeApplicationVersion?.trim();
   const buildVersion = Application.nativeBuildVersion?.trim();
   const versionValue = appVersion && buildVersion
@@ -24,12 +29,14 @@ export default function AboutScreen() {
         : uiLabel('Unavailable');
 
   return (
-    <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+    <ScreenScrollView onContentSizeChange={measureAuditContent} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
       <Section title="Australian Rates">
         <InfoRow
           label="Version"
           value={versionValue}
         />
+        <SettingsGap size={4} />
+        <NavRow icon="share-social-outline" label="Share app" onPress={() => setShareOpen(true)} />
       </Section>
 
       <Section title="Legal">
@@ -52,7 +59,10 @@ export default function AboutScreen() {
           <NavRow
             icon="speedometer-outline"
             label="App health audit"
-            onPress={() => router.push('/performance-audit')}
+            onPress={() => {
+              markAuditEntryScreenOpenPressed();
+              router.push('/performance-audit');
+            }}
           />
           <SettingsGap size={4} />
           <NavRow
@@ -62,6 +72,7 @@ export default function AboutScreen() {
           />
         </DisclosureGroup>
       </Section>
+      <ShareQrModal visible={shareOpen} onClose={() => setShareOpen(false)} />
     </ScreenScrollView>
   );
 }

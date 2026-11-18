@@ -43,7 +43,6 @@ function displayedAvailability(row: RateRow, productDetail: ProductDetail | null
   act(() => {
     tree = TestRenderer.create(<ProductSpecs row={row} section="Savings" productDetails={productDetail} />) as InspectableRenderer;
   });
-  act(() => tree.root.findByProps({ open: false }).props.onToggle());
   const texts = tree.root.findAllByType('AppText').map((node) => node.children.join(''));
   const availability = texts[texts.indexOf('Availability') + 1];
   act(() => tree.unmount());

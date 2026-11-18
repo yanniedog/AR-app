@@ -153,6 +153,8 @@ export interface AppHealthDetailsObservation {
   matchedProductCount?: number;
   /** Detail records that do not correspond to a core product key. */
   orphanProductCount?: number;
+  /** Product detail records keyed by product_key for internal completeness auditing. */
+  products?: Readonly<Record<string, import('../../types').ProductDetail>>;
 }
 
 export interface AppHealthQuarantineObservation {

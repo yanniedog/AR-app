@@ -6,6 +6,7 @@ import { APP_HEALTH_CHECK_CODES, APP_HEALTH_DOMAINS } from './appHealth';
 import { publicAuditDiagnosticStage } from './performanceAuditDiagnostic';
 import { publicHistoryCoverageSanitizer } from './appHealth/publicHistoryCoverage';
 import { publicBankResponseCoverage } from './appHealth/publicBankResponseCoverage';
+import { hasCompleteAndroidFrameCapture, hasCompleteAuditTargetSampleCapture } from './auditUxTelemetryCoverage';
 
 /** Only machine-authored ISO instants are public; arbitrary saved text is not. */
 export function publicAuditTimestamp(value: unknown): string | null {
@@ -80,6 +81,8 @@ export function isJustifiedAvailabilitySkip(
     || evidence === 'an optional required probe reported a terminal error'
     || evidence.startsWith('Optional assets are not cached')
     || CONTRACT_AVAILABILITY_EVIDENCE.has(evidence)) return true;
+  if (check.id === 'maximum-coverage-profile' && check.metrics.skipClassification === 'terminal-availability'
+    && check.metrics.reason === 'Maximum coverage assets unavailable') return true;
   if (typeof check.metrics.reason === 'string' && CONTRACT_AVAILABILITY_REASONS.has(check.metrics.reason)) return true;
   return optionalPlannedStep && check.metrics.skipClassification === 'terminal-availability';
 }
@@ -222,6 +225,10 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
       && (check.metrics.coverageComplete !== true || invalidBankResponseChecks.has(check))).length,
     invalidBankResponseEvidenceChecks: invalidBankResponseChecks.size,
     evidenceCapacityFailures: report.checks.filter(check => check.metrics.evidenceCapacityExceeded === true).length,
+    ...(report.auditEvidenceVersion === 2 ? {
+      uxNativeFrameCaptureIncomplete: report.environment?.platform === 'android' && !hasCompleteAndroidFrameCapture(report.uxTelemetry),
+      uxControlLayoutSampleIncomplete: !hasCompleteAuditTargetSampleCapture(report.uxTelemetry),
+    } : {}),
     truncatedEvidenceFields, omittedEvidenceChars,
   };
   const collectionComplete = coverage != null && coverage.storedChecks === report.checks.length
@@ -231,7 +238,9 @@ export function buildPerformanceAuditCompletion(report: PerformanceAuditReport,
   const coverageComplete = collectionComplete && health?.coverage.complete !== false
     && gaps.skippedChecks === 0 && gaps.unavailableChecks === 0 && gaps.notRunChecks === 0 && gaps.pendingProbes === 0
     && gaps.targetProbeDefects === 0 && gaps.unverifiedLinks === 0 && gaps.unavailableResponsivenessChecks === 0 && gaps.missingHealthReports === 0 && gaps.invalidHistoryEvidenceChecks === 0
-    && gaps.bankResponseCoverageGaps === 0;
+    && gaps.bankResponseCoverageGaps === 0
+    && gaps.uxNativeFrameCaptureIncomplete !== true && gaps.uxControlLayoutSampleIncomplete !== true
+    && (report.auditEvidenceVersion !== 2 || gaps.missingReadinessChecks === 0);
   const startedAt = publicAuditTimestamp(report.startedAt);
   const finishedAt = publicAuditTimestamp(report.finishedAt);
   const timestampsValid = startedAt != null && finishedAt != null && startedAt <= finishedAt;

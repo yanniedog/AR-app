@@ -29,19 +29,19 @@ test('production result cards show each exact admitted LVR and preserve each sav
   try {
     const texts = tree.root.findAllByType('AppText').map(n => String(n.props.children));
     const rowLabels = tree.root.findAllByType('PressFeedback').map(n => String(n.props.accessibilityLabel));
-    expect(rowLabels.some(text => text.includes('LVR ≤59.99%'))).toBe(true); expect(rowLabels.some(text => text.includes('LVR 60%–79.99%'))).toBe(true);
+    expect(rowLabels.some(text => text.includes('LVR ≤60%'))).toBe(true); expect(rowLabels.some(text => text.includes('LVR 60%–80%'))).toBe(true);
     expect(texts.some(text => text.includes('For LVR') || text.includes('LVR up to'))).toBe(false);
     const saves = tree.root.findAllByType('PressFeedback').filter(n => String(n.props.testID).startsWith('rate-save:'));
     expect(saves[0].props.accessibilityLabel).toContain('Save, Budget Home Loan, Maitland Mutual Limited, Advertised rate 5.79%');
-    expect(saves[0].props.accessibilityLabel).toContain('LVR ≤59.99%');
+    expect(saves[0].props.accessibilityLabel).toContain('LVR ≤60%');
     expect(saves[1].props.accessibilityLabel).toContain('Save, Budget Home Loan, Maitland Mutual Limited, Advertised rate 5.79%');
-    expect(saves[1].props.accessibilityLabel).toContain('LVR 60%–79.99%');
+    expect(saves[1].props.accessibilityLabel).toContain('LVR 60%–80%');
     expect(saves.every(n => !n.props.accessibilityLabel.includes('Rate index'))).toBe(true);
     expect(saves.map(n => n.props.testID)).toEqual(['rate-save:maitland-budget:4', 'rate-save:maitland-budget:5']);
     act(() => { saves[0].props.onPress(); saves[1].props.onPress(); });
     expect(mockSave).toHaveBeenNthCalledWith(1, f.rows[0], 'rate'); expect(mockSave).toHaveBeenNthCalledWith(2, f.rows[1], 'rate');
     const nav = tree.root.findAllByType('PressFeedback').filter(n => String(n.props.accessibilityLabel).startsWith('Budget Home Loan,'));
-    expect(nav[0].props.accessibilityLabel).toContain('LVR ≤59.99%'); expect(nav[1].props.accessibilityLabel).toContain('LVR 60%–79.99%');
+    expect(nav[0].props.accessibilityLabel).toContain('LVR ≤60%'); expect(nav[1].props.accessibilityLabel).toContain('LVR 60%–80%');
   } finally { act(() => tree.unmount()); }
 });
 
@@ -145,7 +145,7 @@ test('a single visible source-bound tier keeps its discriminator against nonvisi
   const tree = renderRows(f, 'Mortgage', [f.rows[0]]);
   try {
     const target = saveTargets(tree)[0];
-    expect(target.props.accessibilityLabel).toBe('Save, Budget Home Loan, Maitland Mutual Limited, Advertised rate 5.79%, LVR ≤59.99%');
+    expect(target.props.accessibilityLabel).toBe('Save, Budget Home Loan, Maitland Mutual Limited, Advertised rate 5.79%, LVR ≤60%');
     expect(target.props.accessibilityLabel).not.toMatch(/Rate index|Eligibility|Source review|For LVR/);
     act(() => target.props.onPress());
     expect(mockSave).toHaveBeenCalledWith(f.rows[0], 'rate');
@@ -191,7 +191,7 @@ test('unparsed source qualifiers remain on the row while unresolved actions use 
     expect(targets[1].props.accessibilityLabel).toBe('Save, Budget Home Loan, Maitland Mutual Limited, Rate 5.79%, Rate index 2');
     expect(targets.every(node => !/eligible|explanatory|wording|promotional/.test(node.props.accessibilityLabel))).toBe(true);
     const rowTargets = tree.root.findAllByType('PressFeedback').filter(node => String(node.props.accessibilityLabel).startsWith('Budget Home Loan,'));
-    expect(rowTargets.every(node => node.props.accessibilityLabel.includes('Source review required'))).toBe(true);
+    expect(rowTargets.every(node => node.props.accessibilityLabel.includes('Conditions: Unverified'))).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
 
@@ -226,7 +226,7 @@ test('metric collisions use displayed precision and keep the full row facts out 
     expect(action.props.accessibilityLabel).toBe('Save, Unloan Home Loan, Unloan, Comparison rate 5.80%');
     expect(action.props.accessibilityLabel).not.toMatch(/Rate index|Advertised|LVR|Source review|Principal|Variable/);
     const full = tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith('Unloan Home Loan,'))!;
-    expect(full.props.accessibilityLabel).toMatch(/Advertised rate 5.89%.*Variable.*Principal & interest.*Listed LVR >70%–80%.*Source review required/);
+    expect(full.props.accessibilityLabel).toMatch(/Advertised rate 5.89%.*Variable.*Principal & interest.*Listed LVR >70%–80%.*Conditions: Unverified/);
     expect(action.props.testID).toBe(`rate-save:${encodeURIComponent(unloan.product_key)}:2`);
   } finally { act(() => tree.unmount()); }
   const rounded = selectedConstraintFixture('Mortgage', [
@@ -344,7 +344,7 @@ test('same-name different-key peers use each own admitted source rather than mix
     expect(targets[1].props.accessibilityLabel).toContain('Rate index 2');
     expect(targets.every(node => !node.props.accessibilityLabel.includes('LVR'))).toBe(true);
     const fullRows = tree.root.findAllByType('PressFeedback').filter(node => String(node.props.accessibilityLabel).startsWith('Budget Home Loan,'));
-    expect(fullRows.every(node => node.props.accessibilityLabel.includes('LVR ≤59.99%'))).toBe(true);
+    expect(fullRows.every(node => node.props.accessibilityLabel.includes('LVR ≤60%'))).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
 

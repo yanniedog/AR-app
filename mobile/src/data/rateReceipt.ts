@@ -1,3 +1,4 @@
+import { collectRowBatches, sortValuesCooperatively, type RowWorkControl } from './cooperativeRows';
 import { StandardUrl } from '../lib/standardUrl';
 import { SECTIONS } from '../constants';
 import { rateQualifier } from '../lib/rateQualifier';
@@ -8,7 +9,13 @@ import type {
   RateRow,
   SectionKey,
 } from '../types';
-import { computeLvr, num } from './calc';
+import {
+  calculatorAmount,
+  computeLvr,
+  MAX_CALCULATOR_DEPOSIT_AMOUNT,
+  MAX_CALCULATOR_MORTGAGE_AMOUNT,
+  num,
+} from './calc';
 import {
   formatBalanceRange,
   formatRate,
@@ -21,7 +28,7 @@ import {
 } from './format';
 import type { UserRateScenario } from './userRateScenario';
 import { scopedRateConditions, type RateConditionContext, type ScopedRateConditions } from './rateConditions';
-import { uiDetailItem } from '../lib/productUiFacts';
+import { uiDetailItem, uiProductFactValue } from '../lib/productUiFacts';
 import { scopedFinancialConditionFacts } from './scopedFinancialConditionFacts';
 import { uiConditionTag, uiConditionalRateFact, uiListedLvrRange } from '../lib/financialUiCopy';
 import { uiCount, uiDate, uiDuration, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiProductName, uiProviderName, type UiCopy, type UiLabel, type UiText } from '../lib/uiCopy';
@@ -35,8 +42,7 @@ export interface ReceiptFact {
 export function rateConditionReceiptLines(receipt: RateReceipt): UiText[] {
   const conditions = scopedFinancialConditionFacts(receipt.rateConditions);
   return [...conditions.facts.map(uiConditionTag),
-    ...conditions.unresolved.map(fact => uiJoin('Source review required', ' · ', uiIdentifier(fact.source.sourcePointer))),
-    ...(conditions.state === 'unverified' ? [uiLabel('Source unverified')] : []), uiLabel('Eligibility unverified')];
+    ...(conditions.unresolved.length || conditions.state === 'unverified' ? [uiJoin('Conditions', ': ', 'Unverified')] : []), uiLabel('Eligibility unverified')];
 }
 
 export interface OfficialReceiptSource {
@@ -172,7 +178,7 @@ export type ReceiptStatusFact =
 function detailFacts(items: DetailItem[] | undefined, group: 'Fees' | 'Eligibility' | 'Features' | 'Constraints'): ReceiptFact[] {
   return (items ?? []).map((item, index) => {
     const fact = uiDetailItem(item, index, group);
-    return { label: fact.label, value: uiJoin(fact.value, fact.conditions === 'source-review-required' ? uiJoin(' · ', 'Source review required') : null) };
+    return { label: fact.label, value: uiProductFactValue(fact) };
   });
 }
 function addFact(facts: ReceiptFact[], label: UiCopy, value: UiText | null): void {
@@ -274,12 +280,12 @@ function scenarioForSection(
     );
     if (!hasEnteredValue) return { facts, balance: 0, currentRateFraction: null };
     const lvr = computeLvr(mortgage);
-    const balance = lvr.loan ?? num(mortgage.loanBalance);
+    const balance = lvr.loan ?? (calculatorAmount(mortgage.loanBalance, MAX_CALCULATOR_MORTGAGE_AMOUNT) ?? 0);
     addFact(facts, 'Your rate scenario', uiLabel(mortgage.mode === 'refi' ? 'Refinancing' : 'Buying'));
     if (balance > 0) addFact(facts, 'Loan amount', uiMoney(balance));
-    const propertyValue = num(mortgage.propertyValue);
+    const propertyValue = calculatorAmount(mortgage.propertyValue, MAX_CALCULATOR_MORTGAGE_AMOUNT) ?? 0;
     if (propertyValue > 0) addFact(facts, 'Property value ($)', uiMoney(propertyValue));
-    if (lvr.lvr != null) addFact(facts, 'Scenario LVR', uiJoin(uiNumber(Number(lvr.lvr.toFixed(1)), 1), '%'));
+    if (lvr.lvr != null) addFact(facts, 'Scenario LVR', uiJoin(uiNumber(Math.round(lvr.lvr), 0), '%'));
     if (mortgage.currentRate.trim()) addFact(facts, 'Current entered rate', formatRate(num(mortgage.currentRate) / 100));
     if (mortgage.years.trim()) addFact(facts, 'Years remaining', uiDuration(num(mortgage.years), 'years'));
     const current = num(mortgage.currentRate);
@@ -287,37 +293,33 @@ function scenarioForSection(
   }
 
   const deposit = section === 'Savings' ? scenario.savings : scenario.termDeposit;
-  const balance = num(deposit.balance);
+  const balance = calculatorAmount(deposit.balance, MAX_CALCULATOR_DEPOSIT_AMOUNT) ?? 0;
   if (balance > 0) addFact(facts, 'Current entered balance', uiMoney(balance));
   if (deposit.currentRate.trim()) addFact(facts, 'Current entered rate', formatRate(num(deposit.currentRate) / 100));
   const current = num(deposit.currentRate);
   return { facts, balance, currentRateFraction: current > 0 ? current / 100 : null };
 }
 
-function median(values: number[]): number | null {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
+type BriefInput = {
+  receipt: RateReceipt;
+  scenario: UserRateScenario;
+  sectionRows: RateRow[];
+  comparisonsReady?: boolean;
+  detailsProducts?: Record<string, ProductDetail> | null;
+};
+type CohortRate = { row: RateRow; rate: number };
+const cohortRates = (rows: RateRow[], details?: Record<string, ProductDetail> | null): CohortRate[] =>
+  visibleAccountRows(rows, false, details).flatMap(row => {
+    const rate = toFraction(row.rate);
+    return rate === null ? [] : [{ row, rate }];
+  });
+const cohortOrder = (section: SectionKey) => (a: CohortRate, b: CohortRate) =>
+  SECTIONS[section].lowerIsBetter ? a.rate - b.rate : b.rate - a.rate;
 
-function buildComparables(
-  rows: RateRow[],
-  section: SectionKey,
-  selected: RateReceipt,
-  detailsProducts?: Record<string, ProductDetail> | null,
-): NegotiationComparable[] {
-  const lowerIsBetter = SECTIONS[section].lowerIsBetter;
-  const eligible = visibleAccountRows(rows, false, detailsProducts)
-    .filter((row) => toFraction(row.rate) !== null)
-    .sort((a, b) => {
-      const av = toFraction(a.rate)!;
-      const bv = toFraction(b.rate)!;
-      return lowerIsBetter ? av - bv : bv - av;
-    });
+function buildComparables(eligible: CohortRate[], section: SectionKey, selected: RateReceipt): NegotiationComparable[] {
   const seen = new Set<string>();
   const result: NegotiationComparable[] = [];
-  for (const row of eligible) {
+  for (const { row } of eligible) {
     if (row.product_key === selected.productKey) continue;
     if (seen.has(row.product_key)) continue;
     seen.add(row.product_key);
@@ -338,22 +340,29 @@ function buildComparables(
   return result;
 }
 
-export function buildNegotiationBrief(input: {
-  receipt: RateReceipt;
-  scenario: UserRateScenario;
-  sectionRows: RateRow[];
-  comparisonsReady?: boolean;
-  detailsProducts?: Record<string, ProductDetail> | null;
-}): NegotiationBrief {
-  const { receipt, scenario, sectionRows, detailsProducts } = input;
-  const comparisonsReady = input.comparisonsReady !== false;
+export function buildNegotiationBrief(input: BriefInput): NegotiationBrief {
+  const sorted = input.comparisonsReady === false ? []
+    : cohortRates(input.sectionRows, input.detailsProducts).sort(cohortOrder(input.receipt.section));
+  return briefFromCohort(input, sorted);
+}
+
+/** The full comparison book must never classify and sort inside a route render. */
+export async function buildNegotiationBriefCooperatively(input: BriefInput,
+  control: RowWorkControl = {}): Promise<NegotiationBrief | null> {
+  const candidates = await collectRowBatches(input.comparisonsReady === false ? [] : input.sectionRows,
+    rows => cohortRates(rows, input.detailsProducts), control);
+  if (!candidates) return null;
+  const sorted = await sortValuesCooperatively(candidates, cohortOrder(input.receipt.section), control);
+  return sorted ? briefFromCohort(input, sorted) : null;
+}
+
+function briefFromCohort(input: BriefInput, sorted: CohortRate[]): NegotiationBrief {
+  const { receipt, scenario } = input;
   const scenarioData = scenarioForSection(scenario, receipt.section);
-  const broadlyAvailableRows = comparisonsReady ? visibleAccountRows(sectionRows, false, detailsProducts) : [];
-  const standardRates = broadlyAvailableRows
-    .map((row) => toFraction(row.rate))
-    .filter((rate): rate is number => rate !== null);
-  const typical = median(standardRates);
-  const comparables = buildComparables(broadlyAvailableRows, receipt.section, receipt);
+  const middle = Math.floor(sorted.length / 2);
+  const typical = sorted.length === 0 ? null : sorted.length % 2 ? sorted[middle].rate
+    : (sorted[middle - 1].rate + sorted[middle].rate) / 2;
+  const comparables = buildComparables(sorted, receipt.section, receipt);
   const selectedRate = receipt.advertisedRateFraction;
   let illustration: NegotiationIllustration | null = null;
   if (
@@ -421,7 +430,7 @@ export function buildNegotiationBrief(input: {
     scenario: scenarioData.facts,
     selectedProduct,
     comparables,
-    cohortSummary: uiJoin(uiCount(standardRates.length), ' ', 'rates', ' · ', 'Observed', ' ', uiDate(receipt.evidenceDate)),
+    cohortSummary: uiJoin(uiCount(sorted.length), ' ', 'rates', ' · ', 'Observed', ' ', uiDate(receipt.evidenceDate)),
     typicalAdvertisedRate: typical == null ? null : formatRate(typical),
     illustration,
     topics: ['current-rate', 'selected-tier', 'fees', 'conditions'],

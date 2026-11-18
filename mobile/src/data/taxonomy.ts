@@ -3,6 +3,7 @@ import { uiDecimal, uiDuration, uiJoin, uiLabel, uiNumber, uiOpaqueEnum, uiSecti
 import { isMeaningfulDepositRate } from '../config';
 import type { RateRow, SectionKey } from '../types';
 import { effectiveFraction, isBroadlyAvailable, visibleAccountRows } from './format';
+import { collectRowBatches, rowWork, sortValuesCooperatively, type RowWorkControl } from './cooperativeRows';
 
 // The Pi packages a dot-delimited `taxonomy_path` per rate row, e.g.
 //   HOME_LOAN.OO.PI.VARIABLE.LVR_70_80
@@ -77,8 +78,12 @@ function lvrLabel(seg: string): UiText {
   const exact = /^(GE|GT|LE)(\d+(?:p\d+)?)(?:_(\d+(?:p\d+)?))?$/.exec(v);
   if (exact) {
     const operator = exact[1] === 'GE' ? '≥' : exact[1] === 'GT' ? '>' : '≤';
-    return uiJoin(operator, uiDecimal(exact[2].replace('p', '.'), 'count'),
-      exact[3] ? uiJoin('–', uiDecimal(exact[3].replace('p', '.'), 'count')) : '', '%', ' ', 'LVR');
+    const roundLvr = (raw: string) => {
+      const n = Number(raw.replace('p', '.'));
+      return Number.isFinite(n) ? uiNumber(Math.round(n), 0) : uiDecimal(raw.replace('p', '.'), 'count');
+    };
+    return uiJoin(operator, roundLvr(exact[2]),
+      exact[3] ? uiJoin('–', roundLvr(exact[3])) : '', '%', ' ', 'LVR');
   }
   m = /^(\d+)_(\d+)$/.exec(v);
   if (m) return uiJoin(uiNumber(Number(m[1])), '–', uiNumber(Number(m[2])), '%', ' ', 'LVR');
@@ -187,6 +192,48 @@ export function rowsUnder(rows: RateRow[], section: SectionKey, path: string[]):
   });
 }
 
+export function rowsUnderCooperatively(rows: RateRow[], section: SectionKey, path: string[], control: RowWorkControl = {}) {
+  return collectRowBatches(rows, batch => rowsUnder(batch, section, path), control);
+}
+
+/** Exact aggregate semantics, including ascending-order summation, with bounded
+ * collection and median sorting for whole-day catalogues. */
+export async function statsForCooperatively(rows: RateRow[], includeNonStandard = false,
+  section?: SectionKey | null, fractionOf: (row: RateRow) => number | null = effectiveFraction,
+  control: RowWorkControl = {}): Promise<RateStats | null> {
+  const work = rowWork(control);
+  const providers = new Set<string>(), products = new Set<string>();
+  const fractions = await collectRowBatches(rows, batch => {
+    const values: number[] = [];
+    for (const row of mandatoryEligibleRows(batch)) {
+      if (!row || !includeNonStandard && !isBroadlyAvailable(row)) continue;
+      const membership = effectiveFraction(row);
+      if (membership === null || section && !isMeaningfulDepositRate(membership, section)) continue;
+      const value = fractionOf(row);
+      if (value === null) continue;
+      values.push(value); providers.add(row.provider); products.add(row.product_key);
+    }
+    return values;
+  }, { ...control, cancelled: work.cancelled });
+  if (!fractions) return null;
+  const sorted = await sortValuesCooperatively(fractions, (a, b) => a - b, { ...control, cancelled: work.cancelled });
+  if (!sorted) return null;
+  let sum = 0;
+  await work.pause();
+  for (let index = 0; index < sorted.length; index++) {
+    sum += sorted[index];
+    if (index % 32 === 0) {
+      if (work.cancelled()) return null;
+      if (work.expired()) await work.pause();
+    }
+  }
+  if (work.cancelled()) return null;
+  const n = sorted.length, mid = n >> 1;
+  return { min: n ? sorted[0] : null, max: n ? sorted[n - 1] : null, mean: n ? sum / n : null,
+    median: n ? n % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2 : null,
+    count: n, products: products.size, providers: providers.size };
+}
+
 export interface TaxoNode {
   seg: string;
   label: UiCopy;
@@ -267,6 +314,30 @@ export function childrenFromScoped(
   }
   nodes.sort((a, b) => compareSeg(a.seg, b.seg, section));
   return nodes;
+}
+
+export async function childrenFromScopedCooperatively(scopedRows: RateRow[], section: SectionKey, path: string[],
+  fractionOf?: (row: RateRow) => number | null, control: RowWorkControl = {}): Promise<TaxoNode[] | null> {
+  const work = rowWork(control), root = ROOT[section], depth = path.length + 1;
+  const buckets = new Map<string, RateRow[]>(), deeper = new Set<string>();
+  const scanned = await collectRowBatches(scopedRows, batch => {
+    for (const row of mandatoryEligibleRows(batch)) {
+      const segments = pathSegs(row.taxonomy_path), next = segments[depth];
+      if (segments[0] !== root || next === undefined) continue;
+      const bucket = buckets.get(next);
+      if (bucket) bucket.push(row); else buckets.set(next, [row]);
+      if (segments[depth + 1] !== undefined) deeper.add(next);
+    }
+    return [];
+  }, { ...control, cancelled: work.cancelled });
+  if (!scanned) return null;
+  const nodes: TaxoNode[] = [];
+  for (const [seg, rows] of buckets) {
+    const stats = await statsForCooperatively(rows, true, section, fractionOf, { ...control, cancelled: work.cancelled });
+    if (!stats) return null;
+    nodes.push({ seg, label: segLabel(seg), rows, stats, hasChildren: deeper.has(seg) });
+  }
+  return sortValuesCooperatively(nodes, (a, b) => compareSeg(a.seg, b.seg, section), { ...control, cancelled: work.cancelled });
 }
 
 function childHasDeeper(rows: RateRow[], root: string, depth: number): boolean {

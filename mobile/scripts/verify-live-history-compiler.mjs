@@ -111,12 +111,63 @@ export async function readBounded(body, limit) {
   return Buffer.concat(chunks);
 }
 
-async function fetchBytes(url, limit) {
-  const response = await fetch(url, { cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(60_000) });
-  if (!response.ok || !response.body) { await response.body?.cancel?.().catch(() => {}); throw new Error(`HTTP ${response.status}: ${url}`); }
-  const declared = Number(response.headers.get('content-length'));
-  if (Number.isFinite(declared) && declared > limit) { await response.body.cancel().catch(() => {}); throw new Error(`Response exceeds ${limit} bytes: ${url}`); }
-  return readBounded(response.body, limit);
+const TRANSIENT_HTTP = new Set([429, 502, 503, 504]);
+const TRANSIENT_NETWORK = new Set(['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ENETUNREACH',
+  'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_SOCKET']);
+function transientNetwork(error) {
+  // Explicit codes avoid retrying redirect refusal, TLS/authentication errors,
+  // malformed URLs or deterministic validation failures as generic fetch errors.
+  for (let cause = error, depth = 0; cause && depth < 4; cause = cause.cause, depth++) {
+    if (TRANSIENT_NETWORK.has(cause.code)) return true;
+  }
+  return error instanceof TypeError && error.message === 'fetch failed' && error.cause == null;
+}
+
+/** Retries share the original request's deadline and byte ceiling. Validation
+ * remains outside this transport function and is never retried. */
+export async function fetchBytes(url, limit, { fetchImpl = fetch, now = () => performance.now(),
+  sleep = (ms, signal) => new Promise((resolve, reject) => {
+    const finish = () => { signal.removeEventListener('abort', abort); resolve(); };
+    const timer = setTimeout(finish, ms);
+    const abort = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(signal.reason); };
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+  }) } = {}) {
+  const deadline = now() + 60_000, signal = AbortSignal.timeout(60_000), nonce = Date.now();
+  const delays = [250, 1_000];
+  for (let attempt = 0; ; attempt++) {
+    signal.throwIfAborted();
+    if (now() >= deadline) throw new Error('Live prepared-history request timed out after 60000ms');
+    const requestUrl = new URL(url);
+    requestUrl.searchParams.set('_', `${nonce}-${attempt}`);
+    let transientHttp = false;
+    let retryDelay = delays[attempt];
+    try {
+      const response = await fetchImpl(requestUrl.href, { cache: 'no-store', redirect: 'error', signal });
+      if (!response.ok || !response.body) {
+        transientHttp = TRANSIENT_HTTP.has(response.status);
+        const retryAfter = response.headers?.get?.('retry-after');
+        if (transientHttp && typeof retryAfter === 'string' && /^\d+$/.test(retryAfter.trim())) {
+          retryDelay = Math.max(retryDelay, Number(retryAfter) * 1000);
+        }
+        await response.body?.cancel?.().catch(() => {});
+        throw new Error(`HTTP ${response.status}: ${url}`);
+      }
+      const declared = Number(response.headers.get('content-length'));
+      if (Number.isFinite(declared) && declared > limit) {
+        await response.body.cancel().catch(() => {});
+        throw new Error(`Response exceeds ${limit} bytes: ${url}`);
+      }
+      const bytes = await readBounded(response.body, limit);
+      signal.throwIfAborted();
+      if (now() >= deadline) throw new Error('Live prepared-history request timed out after 60000ms');
+      return bytes;
+    } catch (error) {
+      if (signal.aborted || !(transientHttp || transientNetwork(error)) || attempt >= delays.length ||
+          now() + retryDelay >= deadline) throw error;
+      await sleep(retryDelay, signal);
+    }
+  }
 }
 
 export async function verifyLiveHistoryCompiler({ pinned, compatible = [], origin, get = fetchBytes }) {

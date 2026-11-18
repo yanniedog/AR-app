@@ -13,6 +13,7 @@ import { LENDER_ARTWORK_TERMS, OPTIONAL_DIAGNOSTICS_TERMS } from './privacyPolic
 import { Decimal } from './productTermsEngine/decimal';
 import type { CustomerQuestionBinding } from './customerQuestionBinding';
 import type { BackgroundWorkSnapshot } from './backgroundPayloadWork';
+import { mortgageMoneyDigits } from '../data/mortgageMoneyInput';
 import type { MortgageComparisonInputs } from '../data/mortgageComparison';
 import type { PublicProduct, PublicReferenceRate, PublicCoverage, PublicEvidence } from '../data/publicRateModel';
 import type { CurrentProductOption } from '../data/scenarioCatalog';
@@ -23,14 +24,16 @@ export const UI_LABELS = [
   'Bank response coverage', 'Decision windows', 'Unknown changes', 'Unknown timing', 'Unverified first moves',
   'Metric evidence', 'Method', 'Numerator', 'Denominator', 'Sample size', 'Eligible', 'Missing evidence',
   'Worst observations', 'Median absolute deviation', 'Interquartile range', 'p50', 'p90', 'p95', 'p99',
-  'Evidence references', 'Evidence status', 'Not observed', 'Invalid evidence', 'Measurement scope',
-  'Indeterminate', 'Measurement groups',
+  'Evidence references', 'Evidence status', 'Not observed', 'Invalid evidence', 'Measurement scope', 'Android frame timing', 'Interrupted', 'No samples',
+  'Indeterminate', 'Unconfirmed timeouts', 'Measurement groups',
   'Sample unit', 'Contributing journeys', 'Unmeasured journeys',
   'UX & fluidity', 'Friction & Fluidity Score', 'Composite basis', 'Proprietary · Non-normative',
   'Interaction friction', 'Standards & accessibility', 'Fluidity & responsiveness', 'Score',
   'Interaction friction (40%)', 'Standards & accessibility (30%)', 'Fluidity & responsiveness (30%)',
   'Exemplary', 'Moderate friction', 'Material friction', 'High friction',
-  'SUS / UMUX-Lite / SEQ', 'Not performed', 'Automated WCAG / standards', 'Manual review', 'Manual review required', 'WCAG 2.2 conformance',
+  'SUS / UMUX-Lite / SEQ', 'Not performed', 'Automated WCAG / standards', 'Manual review', 'Manual review required', 'WCAG 2.2 conformance', 'Scored tasks', 'Mean of scored tasks',
+  'Automated accessibility checks', 'Measured control layouts', 'Target coverage', 'Sample limit reached',
+  'Native frame segments', 'Native frames', 'Android-provided deadlines', 'Dropped callbacks', 'Drop count unavailable',
   'Rendering checks', 'Performance checks passed', 'Health checks passed', 'Integrity checks passed', 'Completeness checks passed', 'Observed surface contracts', 'Model-count checks passed', 'List-presence checks passed', 'Viewport-count checks passed', 'Layout-callback checks passed', 'Chart-contract checks passed', 'Empty-state checks passed', 'Logo-load checks passed', 'Human usability', 'Visual design', 'Pixel correctness', 'Invoked actions', 'Ready within timing limits', 'Ready with timing failures', 'Ready with warnings', 'Action failures', 'Not passed',
   'Journey time p50', 'Journey time p95', 'JS stalls over 100 ms', 'JS frames over 50 ms', 'Collected checks', 'Journey execution', 'Health check execution', 'Readiness evidence', 'Responsiveness evidence', 'Verified destinations', 'Provider fetch success', 'Product detail coverage', 'History source coverage', 'Target probe defects', 'Unverified destinations', 'Automated task success', 'Automated task failures', 'Action time p50', 'Action time p95', 'Back time p95', 'Navigation recoveries', 'Runtime errors', 'Check pass rate', 'Health pass rate', 'Data integrity pass rate', 'Data completeness pass rate', 'Timing failures', 'History processing mismatches', 'History projection mismatches', 'Observed surfaces', 'Display model pass rate', 'List rendering pass rate', 'Visible content pass rate', 'Layout pass rate', 'Chart rendering pass rate', 'Empty state pass rate', 'Logo rendering pass rate', 'Task outcomes', 'App quality', 'Display quality',
   'Audit history', 'No audit history', 'History unavailable', 'Retained runs', 'Audit settings', 'Recorded results',
@@ -44,14 +47,15 @@ export const UI_LABELS = [
   'Updating', 'Previous results',
   'Rates per page', 'Products per page', 'Page', 'First', 'Previous', 'Next', 'Last',
   'First page', 'Previous page', 'Next page', 'Last page',
-  'Freshness', 'Overdue', 'Stale',
-  'Invalid comparison inputs', 'Clear comparison inputs',
+  'Freshness', 'Overdue', 'Stale', 'Icon key', 'Rates controls', 'Advertised or quoted rate', 'Loan-to-value ratio (LVR)', 'Unresolved conditions',
+  'Invalid comparison inputs', 'Clear comparison inputs', 'Mortgage comparison', 'Clear saved comparison',
   'Shared requirements',
   'Home loans', 'Savings', 'Savings accounts', 'Term deposits', 'Mortgage', 'TD',
   'Calculate', 'Rate check', 'Projection', 'Compare', 'Filter', 'Sort', 'Search', 'More', 'Bonus', 'Conditional',
   'Search rates or banks', 'Search actions', 'Clear search', 'Clear', 'Reset', 'Apply',
   'Cancel', 'Close', 'Back', 'Navigate up', 'Done', 'Save', 'Saved rate', 'Remove',
   'Share', 'Copy', 'Copied', 'Export', 'Import', 'Retry', 'Refresh', 'Open', 'View',
+  'Share app', 'Share link', 'App install QR code',
   'Edit', 'Add', 'Delete', 'Continue', 'Allow', 'Decline', 'Not now', 'Yes', 'No',
   'On', 'Off', 'Enabled', 'Disabled', 'Unknown', 'Unavailable', 'Loading', 'Loading rates',
   'Loading content', 'Loading product details', 'No results', 'No saved rates',
@@ -62,7 +66,7 @@ export const UI_LABELS = [
   'Outside listed balance tier', 'Current balance and rate required', 'Maturity unknown',
   'Annual simple interest', 'Fees, tax and compounding excluded', 'Interest difference',
   'results', 'rates', 'banks', 'products', 'Selected', 'All', 'Matches', 'Bank', 'Product',
-  'Banks', 'Products', 'Rate details', 'Terms', 'Conditions', 'Source', 'Source review required',
+  'Banks', 'Products', 'Rate details', 'Terms', 'Conditions', 'Source',
   'Source unverified', 'Published', 'Observed', 'Checked', 'As at', 'Cached', 'Offline',
   'Online', 'Live', 'Local', 'Partial', 'Complete', 'Coverage', 'Core', 'Details', 'History', 'Data',
   'LVR', 'Balance', 'Minimum', 'Maximum', 'Term', 'Months', 'Years', 'months', 'years',
@@ -87,7 +91,7 @@ export const UI_LABELS = [
   'Newest', 'Oldest', 'Name', 'Date', 'Version', 'Build', 'Update', 'Install',
   'Download', 'Downloaded', 'Download failed', 'Update available', 'Up to date',
   'Pause', 'Resume', 'Stop', 'Start', 'Local audit', 'Live audit', 'Public upload', 'Next audit upload', 'Next destination', 'Audit', 'Performance audit',
-  'HTTP attempts / destinations', 'HTTP not attempted', 'HTTP attempt evidence missing', 'Unverified links',
+  'HTTP verified', 'HTTP failed', 'HTTP unresolved', 'HTTP timeouts', 'HTTP restrictions', 'HTTP redirects', 'Rejected addresses', 'HTTP attempts / destinations', 'HTTP not attempted', 'HTTP attempt evidence missing', 'Unverified links',
   'Debug log', 'Report', 'Upload', 'Upload report', 'Uploaded', 'Upload failed', 'Upload status', 'Clear cache',
   'Reset app', 'Delete local data', 'Data deleted', 'Authentication required', 'Unlock',
   'Authenticate', 'Export data key', 'Import data key', 'Share data key', 'External link',
@@ -136,7 +140,7 @@ export const UI_LABELS = [
   'Interest accrual / payment', 'Interest at maturity', 'Interest reduction',
   'Lender quote / approval', 'Limits', 'Loan growth · Interest exceeds repayment',
   'Lower / base / higher', 'Lower scenario', 'LVR · Balance · Repayment · Term · Bonus · Package',
-  'Market research', 'Match / gap basis', 'Matched observed rate', 'Matching details unavailable',
+  'Market research', 'Market rate range', 'Market median', 'Market mean', 'Match / gap basis', 'Matched observed rate', 'Matching details unavailable',
   'Matching rates', 'Missing details', 'Model facts', 'Monthly', 'Monthly nominal / maturity',
   'Monthly repayment', 'Monthly household allocation', 'Refinancing timing', 'Not published', 'Net offset difference', 'No comparable rates observed',
   'No other differences', 'No saved tiers', 'Observed dataset', 'Offset as repayment',
@@ -158,11 +162,11 @@ export const UI_LABELS = [
   'View ASX market expectations', 'Withdrawal', 'Y-axis', 'Years remaining',
   'Your current balance', 'Your entered rate difference', 'Your entered rates', 'Your rate scenario',
   'Third-party notices', 'Data sources', 'Lender artwork', 'Optional diagnostics', 'Licence notice',
-  ' → ', ' (', 'Up to', 'fixed', 'yrs', 'm', 'k', 'today', 'yesterday', 'days ago',
+  ' → ', ' (', 'Up to', 'fixed', 'yrs', 'm', 'k', 'thousands of dollars', 'today', 'yesterday', 'days ago',
   'mo ago', 'yr ago', 'Connection', 'Sample data', 'Update overdue', 'Offset account',
   'Early / extra repayments', 'Redraw facility', 'Guarantor option', 'Cashback offer',
   'PayID', 'Unlimited transactions', 'Free transactions', 'Bill payment', 'Card access', 'Digital banking',
-  'Status', 'App update', 'Managed by Google Play', 'Download app updates automatically',
+  'Status', 'App update', 'Managed by Google Play', 'Automatic app updates',
   'Download APKs on Wi-Fi only', 'Waiting for Wi-Fi', 'Cancelled', 'Downloading',
   'Incompatible device', 'Checking', 'Check failed', 'Download update', 'Verified APK', 'APK',
   'GitHub', 'Wi-Fi only', 'Current network', 'Android installation permission', 'Update failed',
@@ -214,6 +218,7 @@ export const UI_LABELS = [
   'Total interest ÷ principal', 'Net deposits / month', 'Total net deposits', 'Next month',
   'Previous month', '×', 'Solid', 'Long-dashed', 'Dotted', 'Open source',
   'Timed', 'Good', 'Needs review', 'Not run', 'Healthy', 'Failures found', 'Diagnosis',
+  'Routes verified', 'Semantic actions verified', 'Route coverage',
   'Results', 'Checks', 'Executed', 'Declared unavailable', 'Unexpected', 'Not measured',
   'ms', 'seconds', 'bytes', 'Step limit', 'Stall timeout', 'Invalid timeout', 'Paused',
   'Background checks', 'Links', 'System restricted', 'Foreground only', 'Preparation pending',
@@ -361,7 +366,7 @@ export const UI_LABELS = [
   'Mortgage metric', 'Include non-standard', 'Result set', 'Absent specifications',
   'Empty arrays', 'Source links', 'Document bodies', 'Independent review',
   'Historical completeness', 'Calculation patterns', 'Publication day', 'Older',
-  'Listed balance', 'Minimum value', 'Maximum value', 'Source pointer', 'Source SHA256',
+  'Listed balance', 'Minimum value', 'Maximum value',
   'Parent fact', 'Group', 'Cadence', 'Applies to', 'Fee minimum', 'Fee maximum',
   'Balance rate', 'Transaction rate', 'Accrued rate', 'Accrual frequency', 'Fee method',
   'Additional value', 'Rate basis', 'Mandatory', 'Screen filters', 'Predicate', 'Equal',
@@ -379,7 +384,7 @@ export const UI_LABELS = [
   'Crash reports unchanged', 'Native state unconfirmed', 'Clear cached data?', 'Offline data removed',
   'Invalid date', 'Date not saved', 'Storage unavailable · Previous date retained',
   'Share report', 'Not found',
-  'Product details', 'Product unavailable', 'Product rate unavailable', 'Rate kind',
+  'Product details', 'Product rate', 'Benchmarks', 'Product unavailable', 'Product rate unavailable', 'Rate kind',
   'Currency', 'Current', 'Section', 'Path',
   'Monthly equivalent', 'Conversion', 'Repayment', 'Note', 'Missing input', 'Invalid input',
   'Obligation reference', 'Fee occurrence reference', 'External account role', 'Customer field', 'Customer facts', 'Offer facts', 'Payment order',
@@ -466,7 +471,9 @@ export function useReceiptImportInput() { return useInputController(); }
 export function useSetupKeyInput() { return useInputController(); }
 export function useProviderSearchInput() { return useInputController(); }
 export function uiRatesQuery(session: Pick<RatesSectionState, 'query'>): UiInputText { return inputText(session.query); }
-export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr' | 'fundsAvailable' | 'propertyValue'): UiInputText { return inputText(model[field] ?? ''); }
+export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr' | 'fundsAvailable' | 'propertyValue'): UiInputText {
+  return inputText(field === 'lvr' ? model.lvr : mortgageMoneyDigits(model[field] ?? ''));
+}
 export function uiPrivateOfferInput(model: Pick<MortgageInputs, 'confirmedOfferFacts' | 'provenance'>, field: 'purpose' | 'security' | 'repaymentType'): UiInputText {
   const value = model.confirmedOfferFacts[field] ?? '';
   return inputText(model.provenance === 'user_reported_bank_offer_and_statement' && value.length <= 2000 && !/[\r\n\t]/.test(value) ? value : '');
@@ -493,6 +500,9 @@ let countFormatter: Intl.NumberFormat | undefined;
 const MONEY_FORMATTERS = new Map<number, Intl.NumberFormat>();
 export function uiMoney(value: number | null | undefined, digits = 0): UiText {
   if (!finite(value)) return uiLabel('Unknown');
+  if (digits === 0 && value !== 0 && Math.abs(value) >= 1_000 && value % 1_000 === 0) {
+    return known(`${value < 0 ? '-' : ''}$${uiNumber(Math.abs(value) / 1_000, 0)}k`);
+  }
   let formatter = MONEY_FORMATTERS.get(digits);
   if (!formatter) {
     formatter = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -589,11 +599,11 @@ const BACKGROUND_STAGE_NAMES: Readonly<Record<string, UiLabel>> = {
 };
 /** Exact worker/stage identities from the real registry; arbitrary labels stay opaque. */
 export function uiBackgroundWorkName(job: BackgroundWorkSnapshot): UiText {
-  return uiLabel(Object.hasOwn(BACKGROUND_WORK_NAMES, job.label) ? BACKGROUND_WORK_NAMES[job.label] : 'Source review required');
+  return uiLabel(Object.hasOwn(BACKGROUND_WORK_NAMES, job.label) ? BACKGROUND_WORK_NAMES[job.label] : 'Unverified');
 }
 export function uiBackgroundWorkStage(job: BackgroundWorkSnapshot, index?: number): UiText {
   const value = index === undefined ? job.stage : job.stages[index]?.label;
-  if (!value) return uiLabel('Source review required');
+  if (!value) return uiLabel('Unverified');
   if (Object.hasOwn(BACKGROUND_STAGE_NAMES, value)) return uiLabel(BACKGROUND_STAGE_NAMES[value]);
   const progress = /^(manifest|finalize|download|verify|inflate|parse|install): ([A-Za-z0-9][A-Za-z0-9_.-]{0,159})$/.exec(value);
   if (progress) {
@@ -601,7 +611,7 @@ export function uiBackgroundWorkStage(job: BackgroundWorkSnapshot, index?: numbe
     return uiJoin(phases[progress[1]], ' · ', uiIdentifier(progress[2]));
   }
   const metric = /^persist (begin archive_dates|encoded characters)=(\d{1,12})$/.exec(value);
-  return metric ? uiJoin(metric[1] === 'begin archive_dates' ? 'Archive dates' : 'Characters', ': ', uiCount(Number(metric[2]))) : uiLabel('Source review required');
+  return metric ? uiJoin(metric[1] === 'begin archive_dates' ? 'Archive dates' : 'Characters', ': ', uiCount(Number(metric[2]))) : uiLabel('Unverified');
 }
 function identity(value: string | null | undefined): UiText {
   return known(value?.replace(/[\r\n\t]/g, ' ').trim() || 'Unknown');
@@ -643,18 +653,18 @@ export function uiProductReference(row: RateRow): UiText {
 export function uiDetailsProductReference(details: DetailsPayload | null | undefined, productKey: string): UiText {
   const products = details?.products;
   if (!products || typeof products !== 'object' || Array.isArray(products) || !Object.hasOwn(products, productKey)
-    || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(productKey) || productKey.length > 1024) return uiLabel('Source review required');
+    || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(productKey) || productKey.length > 1024) return uiLabel('Unverified');
   const detail = products[productKey], [provider, productId, category, ...nameParts] = productKey.split('|'), name = nameParts.join('|');
   // Closed BankingProductCategory values; legacy section-based keys use the
   // repository's SECTION_KEYS. Unknown categories never become identity copy.
   const categories: readonly string[] = ['BUSINESS_LOANS', 'BUY_NOW_PAY_LATER', 'CRED_AND_CHRG_CARDS', 'LEASES', 'MARGIN_LOANS', 'OVERDRAFTS', 'PERS_LOANS',
     'REGULATED_TRUST_ACCOUNTS', 'RESIDENTIAL_MORTGAGES', 'TERM_DEPOSITS', 'TRADE_FINANCE', 'TRANS_AND_SAVINGS_ACCOUNTS', 'TRAVEL_CARDS', ...SECTION_KEYS];
   if (!detail || typeof detail !== 'object' || Array.isArray(detail) || !provider?.trim() || !/^[A-Za-z0-9_./:@%+\-=#?&]{1,512}$/.test(productId ?? '') || !name.trim()
-    || !categories.includes(category)) return uiLabel('Source review required');
+    || !categories.includes(category)) return uiLabel('Unverified');
   const bound = detail.displayIdentity;
-  if (bound && (typeof bound !== 'object' || Array.isArray(bound))) return uiLabel('Source review required');
+  if (bound && (typeof bound !== 'object' || Array.isArray(bound))) return uiLabel('Unverified');
   if (bound && (bound.name !== undefined && bound.name !== name || bound.provider !== undefined && bound.provider !== provider
-    || bound.productCategory !== undefined && bound.productCategory !== category)) return uiLabel('Source review required');
+    || bound.productCategory !== undefined && bound.productCategory !== category)) return uiLabel('Unverified');
   return identity(productKey);
 }
 export function uiProviderName(row: Pick<RateRow, 'provider'>): UiText { return identity(row.provider); }
@@ -723,7 +733,7 @@ export function uiSectionName(section: SectionKey, short = false): UiText {
 }
 /** Editable calculator number text remains user input; payload prose is rejected. */
 export function uiInputNumber(value: string): UiText {
-  return known(/^[\d.,+\- $%]*$/.test(value) ? value : '');
+  return known(/^[\d.,+\- $%kK]*$/.test(value) ? value : '');
 }
 export function uiInputIdentifier(value: string): UiText {
   return known(/^[A-Za-z0-9_./:@%+\-=#?&]*$/.test(value) ? value : '');
@@ -783,19 +793,19 @@ export function useNegotiatedTermDraft() {
     } };
 }
 export function uiInputDefinitionLabel(definition: InputDefinition, question?: CustomerQuestionBinding | null): UiText {
-  if (!validDefinition(definition)) return uiLabel('Source review required');
+  if (!validDefinition(definition)) return uiLabel('Unverified');
   if (question !== undefined) {
     // Load the real transport-bound question verifier only for this capability;
     // pure catalogue labels must not initialize native payload transport.
     const { readBoundCustomerQuestion } = require('./customerQuestionBinding') as typeof import('./customerQuestionBinding');
     const label = readBoundCustomerQuestion(definition, question);
-    return label === null ? uiLabel('Source review required') : known(label);
+    return label === null ? uiLabel('Unverified') : known(label);
   }
   const label = UI_LABELS.find(approved => approved === definition.label);
-  return label ? uiLabel(label) : uiLabel('Source review required');
+  return label ? uiLabel(label) : uiLabel('Unverified');
 }
 function privateLine(value: string, limit: number): UiText {
-  return known(value.trim() && value.length <= limit && !/[\r\n\t]/.test(value) ? value.trim() : 'Source review required');
+  return known(value.trim() && value.length <= limit && !/[\r\n\t]/.test(value) ? value.trim() : 'Unverified');
 }
 export function uiCustomerAnswer(answer: CustomerAnswer, definition: InputDefinition): UiText {
   if (!validDefinition(definition) || !validProvenance(answer.provenance)) return uiLabel('Unverified');
@@ -804,7 +814,7 @@ export function uiCustomerAnswer(answer: CustomerAnswer, definition: InputDefini
   if (!validFact(fact) || fact.type !== definition.type || fact.type === 'decimal' && fact.unit !== definition.unit) return uiLabel('Unverified');
   if (fact.type === 'boolean') return uiLabel(fact.value ? 'Yes' : 'No');
   if (fact.type === 'date') return uiDate(fact.value);
-  if (fact.type === 'text') return answer.provenance.source === 'user_input' ? privateLine(fact.value, 2000) : uiLabel('Source review required');
+  if (fact.type === 'text') return answer.provenance.source === 'user_input' ? privateLine(fact.value, 2000) : uiLabel('Unverified');
   if (fact.type !== 'decimal') return uiLabel('Unknown');
   if (fact.unit === 'AUD') return uiDecimal(fact.value);
   if (fact.unit === 'fraction') return uiDecimal(Decimal.parse(fact.value).mul(Decimal.parse('100')).fixed((fact.value.split('.')[1] ?? '').length), 'percent');

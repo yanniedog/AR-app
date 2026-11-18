@@ -1,5 +1,9 @@
 import type { AuditCheck } from './performanceAudit';
 
+export const verifiedAuditHttpDestination = (check: AuditCheck): boolean =>
+  check.metrics.httpAttempted === true && check.metrics.httpReachability === 'pass'
+  && check.metrics.urlValidation === 'pass';
+
 /** Transport attempts are independent of a destination's verified outcome. */
 export function auditHttpCheckSummary(checks: readonly AuditCheck[]) {
   const inventories = checks.filter(check => check.id === 'external-link-inventory');
@@ -16,11 +20,19 @@ export function auditHttpCheckSummary(checks: readonly AuditCheck[]) {
   }
   const total = typeof declared === 'number' && Number.isSafeInteger(declared)
     && declared >= destinations.size + aggregateNotAttempted ? declared : null;
-  let attempted = 0, notAttempted = aggregateNotAttempted;
+  let attempted = 0, notAttempted = aggregateNotAttempted, verified = 0, failed = 0, rejected = 0, timedOut = 0, restricted = 0, redirects = 0;
   for (const check of destinations.values()) {
-    if (check?.metrics?.httpAttempted === true) attempted += 1;
+    if (check?.metrics?.urlValidation === 'fail') rejected += 1;
+    if (check?.metrics?.httpAttempted === true) {
+      attempted += 1;
+      if (check.metrics.httpIssue === 'timeout') timedOut += 1;
+      if (check.metrics.httpIssue === 'restricted') restricted += 1;
+      if (check.metrics.httpIssue === 'redirect-unverified') redirects += 1;
+      if (verifiedAuditHttpDestination(check)) verified += 1;
+      else if (check.metrics.httpReachability === 'fail') failed += 1;
+    }
     else if (check?.metrics?.httpAttempted === false) notAttempted += 1;
   }
-  return { total, attempted, notAttempted,
+  return { total, attempted, verified, failed, unresolved: attempted - verified - failed, timedOut, restricted, redirects, rejected, notAttempted,
     missingEvidence: total == null ? null : total - attempted - notAttempted };
 }

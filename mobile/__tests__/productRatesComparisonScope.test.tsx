@@ -89,6 +89,10 @@ const mockState: Record<string, any> = {
 };
 const mockRoute: { key: string; ri?: string; programme?: string; origin?: string } = { key: row.product_key };
 
+jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context'),
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
 jest.mock('../src/data/store', () => ({
   useStore: jest.requireActual('zustand').create(() => mockState),
 }));
@@ -217,8 +221,9 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
   try {
     act(() => { rates = TestRenderer.create(<RatesWorkspace />) as InspectableRenderer; });
     expect(rates.root.findAllByType('ProductCard')).toHaveLength(0);
+    act(() => rates.root.findAllByProps({ accessibilityLabel: 'Edit' })[0].props.onPress());
     act(() => {
-      rates.root.findAllByProps({ accessibilityLabel: 'Loan amount' })[0].props.onChangeText('600000');
+      rates.root.findAllByProps({ accessibilityLabel: 'Loan amount, thousands of dollars' })[0].props.onChangeText('600');
       rates.root.findAllByProps({ accessibilityLabel: 'LVR' }).find(node => node.props.onChangeText)!.props.onChangeText('75');
     });
     act(() => { jest.advanceTimersByTime(500); });
@@ -245,8 +250,8 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     await act(async () => { detail = TestRenderer.create(<RateReceiptScreen />) as InspectableRenderer; });
     expect(detail.root.findAllByProps({ title: 'Copy' })).toHaveLength(1);
     const texts = detail.root.findAllByType('AppText').map(node => node.props.children);
-    expect(texts).toContain('$600,000');
-    expect(texts).not.toContain('$100,000');
+    expect(texts).toContain('$600k');
+    expect(texts).not.toContain('$100k');
     expect(texts).not.toContain('Simple interest-rate difference');
     const surface = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
     act(() => { surface.actions!['receipt.back-to-product']({ productKey: product.productKey, rateIndex: 0 }); });
@@ -276,9 +281,9 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     act(() => detail.unmount());
     await act(async () => { detail = TestRenderer.create(<RateReceiptScreen />) as InspectableRenderer; });
     const normalTexts = detail.root.findAllByType('AppText').map(node => node.props.children);
-    expect(normalTexts).toContain('$100,000');
+    expect(normalTexts).toContain('$100k');
     expect(normalTexts).toContain('Simple interest-rate difference');
-    expect(normalTexts).not.toContain('$600,000');
+    expect(normalTexts).not.toContain('$600k');
     expect(JSON.stringify(mockScenario)).toBe(saved);
   } finally {
     act(() => { rates?.unmount(); detail?.unmount(); clearMortgageComparison(); restoreRatesSession(previous); });
@@ -311,8 +316,9 @@ test('Rates 75% offer does not show the saved 90% LVR contradiction; ordinary Pr
   let rates!: InspectableRenderer, detail!: InspectableRenderer;
   try {
     act(() => { rates = TestRenderer.create(<RatesWorkspace />) as InspectableRenderer; });
+    act(() => rates.root.findAllByProps({ accessibilityLabel: 'Edit' })[0].props.onPress());
     act(() => {
-      rates.root.findAllByProps({ accessibilityLabel: 'Loan amount' })[0].props.onChangeText('600000');
+      rates.root.findAllByProps({ accessibilityLabel: 'Loan amount, thousands of dollars' })[0].props.onChangeText('600');
       rates.root.findAllByProps({ accessibilityLabel: 'LVR' }).find(node => node.props.onChangeText)!.props.onChangeText('75');
     });
     act(() => { jest.advanceTimersByTime(500); });

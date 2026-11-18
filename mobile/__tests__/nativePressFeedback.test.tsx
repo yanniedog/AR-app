@@ -1,3 +1,4 @@
+import { startAuditTargetCollection, stopAuditTargetCollection } from '../src/lib/auditTargetRegistry';
 import React from 'react';
 import mockReact from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
@@ -61,5 +62,20 @@ test('a chip keeps intrinsic width instead of expanding its contents across the 
     const bounds = StyleSheet.flatten(target.props.style({ pressed: false }));
     expect(bounds.minWidth).toBe(48);
     expect(bounds.width).toBeUndefined();
+  } finally { act(() => tree.unmount()); }
+});
+
+
+test('semantic controls retain changed selected state without requiring another native layout', () => {
+  let tree!: Renderer;
+  startAuditTargetCollection();
+  act(() => { tree = TestRenderer.create(<PressFeedback auditControlId="primary-tab:rates" accessibilityRole="tab" accessibilityState={{ selected: false }}><Text>Rates</Text></PressFeedback>) as Renderer; });
+  try {
+    act(() => tree.root.findByType(Pressable).props.onLayout({ nativeEvent: { layout: { width: 80, height: 48 } } }));
+    act(() => tree.update(<PressFeedback auditControlId="primary-tab:rates" accessibilityRole="tab" accessibilityState={{ selected: true }}><Text>Rates</Text></PressFeedback>));
+    const samples = stopAuditTargetCollection();
+    expect(samples).toHaveLength(2);
+    expect(samples.every(sample => sample.id?.startsWith('primary-tab:rates#'))).toBe(true);
+    expect(tree.root.findByType(Pressable).props.auditControlId).toBeUndefined();
   } finally { act(() => tree.unmount()); }
 });

@@ -107,6 +107,7 @@ export function appHealthDataSnapshot(
           productCount: detailKeys.length,
           matchedProductCount: detailKeys.filter((key) => coreKeys.has(key)).length,
           orphanProductCount: detailKeys.filter((key) => !coreKeys.has(key)).length,
+          products: state.details.products,
         }
       : null,
     assets,

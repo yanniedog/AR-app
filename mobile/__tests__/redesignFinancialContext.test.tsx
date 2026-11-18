@@ -26,13 +26,13 @@ test('listed LVR preserves known catalogue spellings and rejects invalid or expl
 
 test('listed public NAB bounds remain structured inclusive facts', () => {
   const row = nabCapture.rates.find(rate => rate.lvr_tier === 'lvr_>=80.01-95%')!;
-  expect(uiListedLvrRange(row)).toBe('80.01%–95%');
+  expect(uiListedLvrRange(row)).toBe('80%–95%');
 });
 
 test.each([
-  ['lvr_>=80.01%', '≥80.01%'],
-  ['LVR_GE80p01_95', '80.01%–95%'],
-  ['LVR_GT80p01_95', '>80.01%–95%'],
+  ['lvr_>=80.01%', '≥80%'],
+  ['LVR_GE80p01_95', '80%–95%'],
+  ['LVR_GT80p01_95', '>80%–95%'],
   ['LVR_LT95', '<95%'],
   ['lvr_<95%', '<95%'],
 ] as const)('listed %s preserves its endpoint flags', (lvr_tier, expected) => {
@@ -61,12 +61,12 @@ test('actual detail product identities preserve pipe-containing names while miss
   const key = 'Example Bank|id-1|Mortgage|Loan | package', paragraph = 'Please read this explanatory source paragraph.';
   const details: DetailsPayload = { schema_version: 1, run_date: '2026-10-15', products: { [key]: { displayIdentity: { provider: 'Example Bank', name: 'Loan | package', productCategory: 'Mortgage' } }, [paragraph]: {} } };
   expect(uiDetailsProductReference(details, key)).toBe(key);
-  expect(uiDetailsProductReference(null, key)).toBe('Source review required');
-  expect(uiDetailsProductReference({ ...details, products: {} }, key)).toBe('Source review required');
-  expect(uiDetailsProductReference(details, paragraph)).toBe('Source review required');
-  expect(uiDetailsProductReference({ ...details, products: { [key]: { displayIdentity: { name: 'Other loan' } } } }, key)).toBe('Source review required');
+  expect(uiDetailsProductReference(null, key)).toBe('Unverified');
+  expect(uiDetailsProductReference({ ...details, products: {} }, key)).toBe('Unverified');
+  expect(uiDetailsProductReference(details, paragraph)).toBe('Unverified');
+  expect(uiDetailsProductReference({ ...details, products: { [key]: { displayIdentity: { name: 'Other loan' } } } }, key)).toBe('Unverified');
   for (const malformed of ['Read this|explanatory product id|SAVINGS|paragraph.', 'Bank|id-1|UNREVIEWED_CATEGORY|Loan', 'Bank|id 1|RESIDENTIAL_MORTGAGES|Loan']) {
-    expect(uiDetailsProductReference({ ...details, products: { [malformed]: {} } }, malformed)).toBe('Source review required');
+    expect(uiDetailsProductReference({ ...details, products: { [malformed]: {} } }, malformed)).toBe('Unverified');
   }
 });
 test('expanded details-only audit rows use current catalogue identity and exclude source paragraphs', () => {
@@ -76,8 +76,8 @@ test('expanded details-only audit rows use current catalogue identity and exclud
   let tree!: Tree; act(() => { tree = TestRenderer.create(<AuditCatalogueCoverage check={check} />) as Tree; });
   try {
     act(() => tree.root.findAllByType('Button').find(node => node.props.title === 'Show')!.props.onPress());
-    expect(texts(tree)).toContain(key); expect(texts(tree)).toContain('Source review required'); expect(texts(tree)).not.toContain(paragraph);
+    expect(texts(tree)).toContain(key); expect(texts(tree)).toContain('Unverified'); expect(texts(tree)).not.toContain(paragraph);
     mockDetails = null; act(() => tree.update(<AuditCatalogueCoverage check={check} />));
-    expect(texts(tree)).not.toContain(key); expect(texts(tree)).toContain('Source review required');
+    expect(texts(tree)).not.toContain(key); expect(texts(tree)).toContain('Unverified');
   } finally { act(() => tree.unmount()); }
 });

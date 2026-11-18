@@ -80,6 +80,25 @@ it('reports native read/write failures and retries dirty completed work without 
   } finally { now.mockRestore(); }
 });
 
+it('defers optional foreground work when a touch arrives during passive storage loading', async () => {
+  jest.resetModules(); mockStorage.clear();
+  const now = jest.spyOn(Date, 'now').mockReturnValue(FIXTURE_NOW_MS);
+  const runtime = jest.requireActual<typeof import('../src/lib/passiveAudit')>('../src/lib/passiveAudit');
+  const storage = jest.requireMock('@react-native-async-storage/async-storage') as { getItem: jest.Mock };
+  let releaseRead!: (value: null) => void;
+  storage.getItem.mockImplementationOnce(() => new Promise<null>(resolve => { releaseRead = resolve; }));
+  try {
+    const initial = runtime.runPassiveAuditSlice();
+    runtime.markPassiveAuditForegroundInteraction();
+    releaseRead(null);
+    await initial;
+    expect(storage.getItem.mock.calls.some(([key]) => key === 'ar-passive-links-v1')).toBe(false);
+    now.mockReturnValue(FIXTURE_NOW_MS + 600);
+    await runtime.runPassiveAuditSlice();
+    expect(storage.getItem.mock.calls.some(([key]) => key === 'ar-passive-links-v1')).toBe(true);
+  } finally { now.mockRestore(); }
+});
+
 it.each([false, true])('keeps compact native work independent of a refresh starting during storage load (native=%s)', async native => {
   jest.resetModules(); mockStorage.clear();
   const now = jest.spyOn(Date, 'now').mockReturnValue(FIXTURE_NOW_MS);

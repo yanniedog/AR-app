@@ -21,22 +21,27 @@ function recordedHandlerResolution(handler: ExternalLinkAuditCheck): 'pass' | 'f
   return handler.status === 'unknown' ? 'unresolved' : undefined;
 }
 
+export function externalLinkAuditCheckId(index: number): string {
+  return `external-link-${index + 1}`;
+}
+
 /** Each destination remains independently inspectable in the durable report. */
 export function externalLinkAuditCheck(result: ExternalLinkAuditResult, index: number, durationMs: number): AuditCheck {
   const parts = [result.validation, result.handler, result.reachability];
-  const failed = parts.some((part) => part.status === 'fail');
+  const failure = parts.find((part) => part.status === 'fail');
   const unknown = parts.some((part) => part.status === 'unknown');
   const httpSelected = recordedHttpSelected(result.reachability);
   const handlerResolution = recordedHandlerResolution(result.handler);
   return {
-    id: `external-link-${index + 1}`,
+    id: externalLinkAuditCheckId(index),
     label: `Link: ${result.label.slice(0, 120)}`,
     kind: 'network',
-    status: failed ? 'fail' : unknown ? 'warn' : 'pass',
+    status: failure ? 'fail' : unknown ? 'warn' : 'pass',
     durationMs,
+    ...(failure ? { error: failure.detail || 'External destination verification failed.' } : {}),
     metrics: {
       executionAttempted: true,
-      nonTimingFailure: failed,
+      nonTimingFailure: failure != null,
       host: result.host,
       destinationPath: result.path,
       purpose: result.purpose,
@@ -44,6 +49,7 @@ export function externalLinkAuditCheck(result: ExternalLinkAuditResult, index: n
       browserHandler: result.handler.status,
       httpReachability: result.reachability.status,
       statusCode: result.httpStatus,
+      ...(result.httpIssue ? { httpIssue: result.httpIssue } : {}),
       handlerAttempted: result.handler.attempted,
       httpAttempted: result.reachability.attempted,
       ...(httpSelected !== undefined ? { httpSelected } : {}),
@@ -56,19 +62,20 @@ export function externalLinkAuditCheck(result: ExternalLinkAuditResult, index: n
 }
 
 export async function runExternalLinkAuditCheck(request: TrustedExternalUrlRequest, index: number, options: ExternalLinkAuditOptions): Promise<AuditCheck> {
+  const started = globalThis.performance?.now?.() ?? Date.now();
   const prepared = !options.reachability && !options.signal?.aborted ? getPreloadedExternalLink(request) : null;
-  if (prepared) {
-    const result = externalLinkAuditCheck(prepared.result, index, prepared.durationMs);
-    result.metrics = { ...result.metrics, preloaded: true, preloadedAgeMs: Math.max(0, Date.now() - prepared.checkedAt) };
+  if (prepared && (options.handler === false || prepared.result.validation.status === 'fail' ||
+    prepared.result.handler.status !== 'unknown')) {
+    const result = externalLinkAuditCheck(prepared.result, index, (globalThis.performance?.now?.() ?? Date.now()) - started);
+    result.metrics = { ...result.metrics, preloaded: true, backgroundDurationMs: prepared.durationMs, preloadedAgeMs: Math.max(0, Date.now() - prepared.checkedAt) };
     return result;
   }
-  const started = globalThis.performance?.now?.() ?? Date.now();
   try {
     const result = await auditExternalLink(request, options);
     return externalLinkAuditCheck(result, index, (globalThis.performance?.now?.() ?? Date.now()) - started);
   } catch {
     return {
-      id: `external-link-${index + 1}`,
+      id: externalLinkAuditCheckId(index),
       label: 'External link verification',
       kind: 'network',
       status: 'fail',

@@ -95,7 +95,7 @@ test('check results expose timely task outcomes and never imply measured usabili
   expect(tree.root.findByProps({ label: 'Ready within timing limits' }).props.value).toBe('0');
   expect(tree.root.findByProps({ label: 'Ready with timing failures' }).props.value).toBe('1');
   expect(tree.root.findByProps({ label: 'Composite basis' }).props.value).toBe('Proprietary · Non-normative');
-  expect(tree.root.findByProps({ label: 'Human usability' }).props.value).toBe('Not measured');
+  expect(tree.root.findAllByProps({ label: 'Human usability' })).toHaveLength(0);
   expect(tree.root.findByProps({ label: 'SUS / UMUX-Lite / SEQ' }).props.value).toBe('Not performed');
   act(() => tree.root.findByProps({ title: 'Rendering checks' }).props.onPress());
   expect(tree.root.findByProps({ label: 'WCAG 2.2 conformance' }).props.value).toBe('Manual review required');
@@ -112,14 +112,14 @@ test('UX & fluidity tab exposes AFFS score metrics, plots 0-100, and keeps chart
   act(() => { tree = TestRenderer.create(<AuditMetricHistoryChart runs={[run]} report={report} />); });
   act(() => tree.root.findByProps({ title: 'UX & fluidity' }).props.onPress());
   const affsRows = tree.root.findAllByProps({ label: 'Friction & Fluidity Score' });
-  expect(affsRows).toHaveLength(2);
+  expect(affsRows).toHaveLength(1);
   expect(affsRows[0].props.value).toBe('84.5 / 100');
-  expect(affsRows[1].props.value).toBe('Not measured');
   expect(tree.root.findAllByType('Svg')).toHaveLength(1);
   const rendered = JSON.stringify(tree.toJSON());
   expect(rendered.indexOf('"type":"Svg"')).toBeLessThan(rendered.indexOf('"label":"Composite basis"'));
   expect(tree.root.findByProps({ label: 'Composite basis' }).props.value).toBe('Proprietary · Non-normative');
-  expect(tree.root.findByProps({ label: 'Human usability' }).props.value).toBe('Not measured');
+  expect(tree.root.findByProps({ label: 'Scored tasks' }).props.value).toBe('0 / 0');
+  expect(tree.root.findByProps({ label: 'SUS / UMUX-Lite / SEQ' }).props.value).toBe('Not performed');
   act(() => tree.root.findByProps({ title: 'Interaction friction' }).props.onPress());
   expect(tree.root.findAllByProps({ label: 'Interaction friction' })[0].props.value).toBe('90.0 / 100');
 });

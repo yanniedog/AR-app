@@ -1,7 +1,8 @@
 import * as Clipboard from 'expo-clipboard';
+import { auditEntryClock } from './auditEntryTrace';
 import { publicDebugLogUploadText } from './publicDebugLogUploadText';
 import { loadDebugLogUploadRecoveryReceipt, saveDebugLogUploadRecoveryReceipt, removeDebugLogUploadRecoveryReceipt } from './debugLogUploadRecovery';
-import { publicReportUploadAttempt, publicReportUploadUncertain, recordPublicReportUploadAttempt, publicReportUploadAttemptEpoch, publicReportUploadAttemptIsCurrent } from './publicReportUploadAttempt';
+import { loadPublicReportUploadAttempts, publicReportUploadUncertain, recordPublicReportUploadAttempt, publicReportUploadAttemptEpoch, publicReportUploadAttemptIsCurrent } from './publicReportUploadAttempt';
 
 import {
   debugLog,
@@ -80,6 +81,9 @@ function update(patch: Partial<DebugLogUploadSnapshot>): void {
 }
 
 async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> {
+  // Start before notifying subscribers so the sample includes UI contention
+  // during an explicit copy of an already verified link.
+  const copyStartedAt = copyLink && snapshot.verified && pendingReceipt && !snapshot.recoveryReceipt ? auditEntryClock() : null;
   const attemptEpoch = publicReportUploadAttemptEpoch();
   const flightEpoch = uploadFlightEpoch;
   const uploadRequest = lastRequest;
@@ -191,6 +195,16 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
     if (!snapshot.verified) {
       publish({ phase: 'verifying', error: null });
       await verifyDebugLogUpload(pendingReceipt, preparedBody!);
+      if (flightEpoch !== uploadFlightEpoch) return snapshot;
+      if (uploadRequest?.publicReport) {
+        try {
+          await debugLog.startFreshAfterAuditUpload(uploadRequest.publicReport.contentSha256,
+            () => flightEpoch === uploadFlightEpoch);
+        } catch {
+          throw new Error('The audit uploaded, but the previous log could not be cleared. Retry to finish sharing.');
+        }
+      }
+      if (flightEpoch !== uploadFlightEpoch) return snapshot;
       pendingReceipt = await markDebugLogUploadReceiptVerified(pendingReceipt);
       publish({ verified: true });
     }
@@ -200,10 +214,13 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
       preparedBody = null;
       return snapshot;
     }
+    // Dispatch the native clipboard write before waking subscribers.
+    const copy = Clipboard.setStringAsync(debugLogUploadShareUrl(pendingReceipt));
     publish({ phase: 'copying', error: null });
-    const copied = await Clipboard.setStringAsync(debugLogUploadShareUrl(pendingReceipt));
+    const copied = await copy;
     if (copied === false) throw new Error('Clipboard write was refused.');
     publish({ phase: 'copied' });
+    if (copyStartedAt != null) debugLog.info('diagnostics-clipboard', `Verified link copy completed in ${Math.round(auditEntryClock() - copyStartedAt)} ms`);
     preparedBody = null;
   } catch (error) {
     if (flightEpoch !== uploadFlightEpoch) { preparedBody = null; pendingReceipt = null; return snapshot; }
@@ -219,6 +236,7 @@ async function executeUpload(copyLink = false): Promise<DebugLogUploadSnapshot> 
         : error instanceof Error ? error.message : 'The compact log could not be uploaded. Try again or share the local log.',
     });
     debugLog.warn('debugLogUpload', snapshot.error ?? 'Upload failed');
+    if (copyStartedAt != null) debugLog.info('diagnostics-clipboard', `Verified link copy failed in ${Math.round(auditEntryClock() - copyStartedAt)} ms`);
   }
   return snapshot;
 }
@@ -276,26 +294,35 @@ export function retryDebugLogUpload(options: { acceptDuplicateRisk?: boolean } =
   if (!lastRequest) return Promise.resolve(snapshot);
   if (snapshot.mayHaveUploaded && !options.acceptDuplicateRisk) return Promise.resolve(snapshot);
   duplicateRiskAccepted = options.acceptDuplicateRisk === true;
-  update({ mayHaveUploaded: false });
+  if (snapshot.mayHaveUploaded) update({ mayHaveUploaded: false });
   return run(true);
 }
 
 /** Restore known report status without network or clipboard writes. */
-export async function restorePublicReportUpload(request: UploadRequest): Promise<void> {
-  if (!request.publicReport || inFlight || snapshot.phase !== 'idle') return;
+export async function restorePublicReportUpload(sessionId: string, prepare: () => UploadRequest, shouldRestore: () => boolean): Promise<void> {
+  if (inFlight || snapshot.phase !== 'idle' || !shouldRestore()) return;
   const initial = snapshot;
+  const isCurrent = () => snapshot === initial && !inFlight && shouldRestore();
   const recovery = await loadDebugLogUploadRecoveryReceipt();
+  if (!isCurrent()) return;
   if (recovery) {
-    if (snapshot === initial && !inFlight) update({ sessionId: request.sessionId, phase: 'failed', url: debugLogUploadShareUrl(recovery), recoveryReceipt: recovery,
+    update({ sessionId, phase: 'failed', url: debugLogUploadShareUrl(recovery), recoveryReceipt: recovery,
       error: 'Delete the upload using the securely saved recovery receipt in Debug log.' });
     return;
   }
-  const receipts = await loadDebugLogUploadReceipts();
-  const receipt = receipts.find(item => item.contentSha256 === request.publicReport!.contentSha256);
-  const attempt = receipt ? null : await publicReportUploadAttempt(request.publicReport.contentSha256);
+  const receipts = (await loadDebugLogUploadReceipts()).filter(item => item.contentSha256);
+  const attempts = receipts.length === 0 ? await loadPublicReportUploadAttempts() : null;
+  if (!isCurrent()) return;
+  // Preparing a report performs synchronous redaction, compression and hashing.
+  // Fresh/local results and ordinary raw-log receipts have nothing to match.
+  if (attempts && Object.keys(attempts).length === 0) return;
+  const request = prepare();
+  if (!request.publicReport) return;
+  const { contentSha256 } = request.publicReport;
+  const receipt = receipts.find(item => item.contentSha256 === contentSha256);
+  const attempt = receipt ? null : (attempts ?? await loadPublicReportUploadAttempts())[contentSha256];
   const uncertain = attempt === 'pending';
-  if (snapshot !== initial || inFlight) return;
-  if (!receipt && !attempt) return;
+  if (!isCurrent() || (!receipt && !attempt)) return;
   lastRequest = request;
   lastAuditSession = request.sessionId;
   preparedBody = request.publicReport.body;

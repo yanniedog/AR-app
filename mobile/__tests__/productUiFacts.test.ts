@@ -16,7 +16,7 @@ test('bundled structured cashback ranges retain both AUD bounds and their origin
   expect(rows.some(({ key }) => key.startsWith('Newcastle Permanent Building Society|'))).toBe(true);
   for (const { item, index } of rows) {
     const original = JSON.stringify(item), fact = uiDetailItem(item, index, 'Features');
-    expect(fact).toMatchObject({ value: '$2,500–$3,000', reference: String(index + 1), conditions: 'source-review-required' });
+    expect(fact).toMatchObject({ value: '$2,500–$3k', reference: String(index + 1), conditions: 'source-review-required', conditionsUnverified: true });
     expect(JSON.stringify(fact)).not.toContain(item.info);
     expect(JSON.stringify(item)).toBe(original);
   }

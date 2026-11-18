@@ -58,13 +58,25 @@ export const AUDIT_METRIC_DEFINITIONS = {
 } as const satisfies Record<string, { label: UiLabel; group: AuditMetricGroup; unit: 'count' | 'percent' | 'ms' | 'score' }>;
 
 export type AuditMetric = keyof typeof AUDIT_METRIC_DEFINITIONS;
-export const auditMetricMethodVersion = (metric: AuditMetric): 1 | 2 =>
+const auditEvidenceMetrics = [
+  'affsScore', 'uxInteractionFrictionScore', 'uxStandardsAccessibilityScore', 'uxFluidityResponsivenessScore',
+  'automatedTaskSuccessPercent', 'automatedTaskFailurePercent',
+  'readinessCoveragePercent', 'linkVerificationPercent',
+] as const satisfies readonly AuditMetric[];
+
+const geometryAggregatedMetrics: readonly AuditMetric[] = ['affsScore', 'uxStandardsAccessibilityScore'];
+export type AuditMetricMethodVersion = 1 | 2 | 3;
+export const auditMetricMethodVersion = (metric: AuditMetric): AuditMetricMethodVersion =>
+  geometryAggregatedMetrics.includes(metric) ? 3 :
   ['actionP50Ms', 'actionP95Ms', 'displayModelPassPercent', 'displayListPassPercent', 'displayVisiblePassPercent',
-    'displayLayoutPassPercent', 'displayEmptyPassPercent', 'displayLogoPassPercent'].includes(metric) ? 2 : 1;
-/** Stored rendering aggregates cannot be upgraded by recalculating their ratio. */
-export const auditReportMetricMethodVersion = (report: PerformanceAuditReport, metric: AuditMetric): 1 | 2 =>
-  AUDIT_METRIC_DEFINITIONS[metric].group === 'Rendering checks' && report.renderingEvidenceVersion !== 2
-    ? 1 : auditMetricMethodVersion(metric);
+    'displayLayoutPassPercent', 'displayEmptyPassPercent', 'displayLogoPassPercent', ...auditEvidenceMetrics].includes(metric) ? 2 : 1;
+/** Stored rendering/target aggregates cannot be upgraded by recalculating their ratio. */
+export const auditReportMetricMethodVersion = (report: PerformanceAuditReport, metric: AuditMetric): AuditMetricMethodVersion => {
+  if (AUDIT_METRIC_DEFINITIONS[metric].group === 'Rendering checks' && report.renderingEvidenceVersion !== 2
+    || (auditEvidenceMetrics as readonly AuditMetric[]).includes(metric) && report.auditEvidenceVersion !== 2) return 1;
+  if (geometryAggregatedMetrics.includes(metric)) return report.uxTelemetry?.targetCapture?.aggregation === 'control-state-geometry' ? 3 : 2;
+  return auditMetricMethodVersion(metric);
+};
 export const AUDIT_METRICS: readonly AuditMetric[] = Object.freeze(Object.keys(AUDIT_METRIC_DEFINITIONS) as AuditMetric[]);
 export const LEGACY_AUDIT_METRICS: readonly AuditMetric[] = ['failures', 'coveragePercent', 'durationMs', 'slowestCheckMs', 'maxEventLoopLagMs', 'maxFrameGapMs'];
 export const UX_AUDIT_METRICS: readonly AuditMetric[] = ['affsScore', 'uxInteractionFrictionScore', 'uxStandardsAccessibilityScore', 'uxFluidityResponsivenessScore'];
@@ -85,8 +97,8 @@ export const AUDIT_METRIC_METHODS = {
   slowFramePercent: ['Sum of JavaScript frame gaps over 50 ms / sum of measured frame samples × 100', 'callback'],
   affsScore: ['0.40 × interactionFriction + 0.30 × standardsAndAccessibility + 0.30 × fluidityAndResponsiveness', 'run'],
   uxInteractionFrictionScore: ['mean(taskScore)', 'task'],
-  uxStandardsAccessibilityScore: ['standardsCompliance × 100', 'surface'],
-  uxFluidityResponsivenessScore: ['androidFrameScore ?? cwvComposite ?? iosHitchScore ?? jsRuntimeScore', 'run'],
+  uxStandardsAccessibilityScore: ['50 × (mean pass share across applicable surface check types + automated accessibility pass share)', 'surface'],
+  uxFluidityResponsivenessScore: ['Android frame score requires complete native capture; other platforms use complete web-vitals, iOS hitch, or JS callback evidence', 'run'],
   collectionPercent: ['Unique expected stored performance checks / planned performance checks × 100', 'check'],
   journeyCoveragePercent: ['Executed journeys / planned journeys × 100', 'journey'],
   healthCoveragePercent: ['Executed health checks / planned health checks × 100', 'health-check'],

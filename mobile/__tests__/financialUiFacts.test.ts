@@ -1,4 +1,5 @@
-import { uiConditionalRateFacts, uiConditionTag, uiEvidenceFact, uiEvidenceStatus } from '../src/lib/financialUiCopy';
+import { uiConditionalRateFacts, uiConditionTag, uiEvidenceFact, uiEvidenceStatus, uiListedLvrRange } from '../src/lib/financialUiCopy';
+import { lvrTierLabel } from '../src/data/lvrTier';
 import { rateConditionalFacts } from '../src/data/rateConditionalFacts';
 import { displayEvidenceFacts } from '../src/data/displayEvidenceFacts';
 import { uiDetailItem, uiNormalizedProductFact, uiFeeValue } from '../src/lib/productUiFacts';
@@ -16,7 +17,7 @@ const privateProvenance = { source: 'user_input' as const, recordedAt: '2026-10-
 test('actual publication admission distinguishes equal normalized Maitland rows with exact source bounds', () => {
   const publication = selectedConstraintFixture('Mortgage', [loan, { ...loan, rate_index: 5 }], [{ rateIndex: 4, text: 'LVR up to 59.99%.' }, { rateIndex: 5, text: 'For LVR 60% to 79.99%.' }]);
   const models = publication.rows.map(row => scopedFinancialConditionFacts(scopedRateConditions(row, 'Mortgage', publication)));
-  expect(models.map(model => model.facts.map(uiConditionTag))).toEqual([['LVR ≤59.99%'], ['LVR 60%–79.99%']]);
+  expect(models.map(model => model.facts.map(uiConditionTag))).toEqual([['LVR ≤60%'], ['LVR 60%–80%']]);
   expect(models[0].facts[0].source.rateIndex).toBe(4); expect(models[1].facts[0].source.rateIndex).toBe(5);
   const stale = scopedFinancialConditionFacts(scopedRateConditions(publication.rows[0], 'Mortgage', { ...publication, manifest: null }));
   expect(stale.state).toBe('unverified'); expect(stale.facts).toEqual([]);
@@ -51,26 +52,26 @@ test('fee zero, rate-based fees and variable published bounds survive without de
 });
 test('normalized source paragraphs never render as facts; numbers and applicable enums do', () => {
   const fact = uiNormalizedProductFact({ id: 'fact-1', kind: 'constraint', canonicalKey: 'constraint.MIN_BALANCE', label: 'Amazing paragraph here.', value: '100', unit: 'AUD', condition: 'Customer eligibility must be investigated.', appliesTo: ['OWNER_OCCUPIED'] });
-  expect(fact.value).toBe('$100'); expect(fact.conditions).toBe('source-review-required'); expect(fact.scope).toEqual(['Owner occupied']); expect(fact.label).not.toContain('Amazing');
-  expect(uiDetailItem({ label: 'MIN_LIMIT', value: '$150,000' }, 0, 'Constraints').value).toBe('$150,000');
+  expect(fact.value).toBe('$100'); expect(fact.conditionsUnverified).toBe(true); expect(fact.scope).toEqual(['Owner occupied']); expect(fact.label).not.toContain('Amazing');
+  expect(uiDetailItem({ label: 'MIN_LIMIT', value: '$150,000' }, 0, 'Constraints').value).toBe('$150k');
 });
 test('validated term decimals remain exact and unrecognized complex/source text is explicit', () => {
   const revision = { value: '123456789.123456789012345678', unit: 'AUD' } as TermRevision;
   expect(uiTermRevisionValue(revision)).toBe('$123456789.123456789012345678');
-  expect(uiTermRevisionValue({ ...revision, value: 'Explanatory source text' })).toBe('Source review required');
-  expect(uiTermRevisionValue({ ...revision, value: { note: 'dynamic explanation' } })).toBe('Source review required');
+  expect(uiTermRevisionValue({ ...revision, value: 'Explanatory source text' })).toBe('Unverified');
+  expect(uiTermRevisionValue({ ...revision, value: { note: 'dynamic explanation' } })).toBe('Unverified');
 });
 test('private answer boundaries admit explicit authored text, reject legacy prose and validate definition labels', () => {
   const definition: InputDefinition = { id: 'agreement', label: 'Term', type: 'text' };
   const answer: CustomerAnswer = { state: 'known', fact: { type: 'text', value: 'Agreed fixed rate' }, provenance: privateProvenance };
   expect(uiCustomerAnswer(answer, definition)).toBe('Agreed fixed rate');
-  expect(uiCustomerAnswer({ ...answer, provenance: { ...privateProvenance, source: 'legacy_user_input' } }, definition)).toBe('Source review required');
-  expect(uiCustomerAnswer({ ...answer, fact: { type: 'text', value: 'First paragraph\nSecond paragraph' } }, definition)).toBe('Source review required');
-  expect(uiInputDefinitionLabel(definition)).toBe('Term'); expect(uiInputDefinitionLabel({ ...definition, label: 'Explanatory source paragraph.' })).toBe('Source review required');
+  expect(uiCustomerAnswer({ ...answer, provenance: { ...privateProvenance, source: 'legacy_user_input' } }, definition)).toBe('Unverified');
+  expect(uiCustomerAnswer({ ...answer, fact: { type: 'text', value: 'First paragraph\nSecond paragraph' } }, definition)).toBe('Unverified');
+  expect(uiInputDefinitionLabel(definition)).toBe('Term'); expect(uiInputDefinitionLabel({ ...definition, label: 'Explanatory source paragraph.' })).toBe('Unverified');
 });
 test('private negotiated facts exclude notes and fail closed outside user provenance', () => {
   const term: NegotiatedTerm = { id: 'user.1', label: 'Fixed rate', value: '5.25', unit: '%', note: 'This note must never render.', provenance: privateProvenance };
-  expect(uiNegotiatedTermField(term, 'value')).toBe('5.25'); expect(uiNegotiatedTermField({ ...term, label: 'Paragraph\nMore' }, 'label')).toBe('Source review required');
+  expect(uiNegotiatedTermField(term, 'value')).toBe('5.25'); expect(uiNegotiatedTermField({ ...term, label: 'Paragraph\nMore' }, 'label')).toBe('Unverified');
 });
 test('private numeric answers retain exact decimal amounts, percentages and durations', () => {
   const fact = { type: 'decimal' as const, value: '123456789.123456789012345678', unit: 'AUD' };
@@ -79,4 +80,10 @@ test('private numeric answers retain exact decimal amounts, percentages and dura
   expect(uiCustomerAnswer(answer, definition)).toBe('$123456789.123456789012345678');
   expect(uiCustomerAnswer({ ...answer, fact: { ...fact, value: '0.03123456789012345678', unit: 'fraction' } }, { ...definition, unit: 'fraction' })).toBe('3.12345678901234567800%');
   expect(uiCustomerAnswer({ ...answer, fact: { ...fact, value: '12.000000000000000001', unit: 'months' } }, { ...definition, unit: 'months' })).toBe('12.000000000000000001 months');
+});
+test('LVR percentages with decimals like 80.001% round to whole percent', () => {
+  expect(uiListedLvrRange({ lvr_tier: 'lvr_80.001-90%' })).toBe('>80%–90%');
+  expect(uiListedLvrRange({ lvr_tier: 'lvr_<=80.001%' })).toBe('≤80%');
+  expect(lvrTierLabel('lvr_80.001-90%')).toBe('LVR 80–90%');
+  expect(lvrTierLabel('lvr_<=80.001%')).toBe('LVR ≤80%');
 });

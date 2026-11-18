@@ -148,3 +148,45 @@ test.each(['rolling-freshness', 'effective-end'] as const)('same-day %s boundary
     expect(tree.root.findAllByType('AppText').some(node => String(node.props.children).includes('Pricing unresolved'))).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
+
+test('large receipt comparison work waits for its current request and shows a loading state', async () => {
+  mockRevision = 0;
+  const core = makeHealthyCore(), selected = core.sections.Savings.rates[0];
+  mockParams = { key: selected.product_key, ri: '0' };
+  core.sections.Savings.rates = Array.from({ length: 80 }, (_, i) => ({ ...selected,
+    product_key: i ? `comparison-${i}` : selected.product_key, rate_index: 0 }));
+  mockState = { ...mockState, core, details: null, manifest: null };
+  let finish!: (value: ReturnType<typeof receipt.buildNegotiationBrief>) => void;
+  const prepare = jest.spyOn(receipt, 'buildNegotiationBriefCooperatively')
+    .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<RateReceiptScreen />) as InspectableRenderer; });
+  try {
+    expect(tree.root.findAllByType('ScreenSkeleton')).toHaveLength(1);
+    expect(tree.root.findAllByType('EmptyState')).toHaveLength(0);
+    const input = prepare.mock.calls[0][0];
+    await act(async () => { finish(receipt.buildNegotiationBrief(input)); });
+    expect(tree.root.findAllByType('ScreenSkeleton')).toHaveLength(0);
+    expect(tree.root.findAllByType('ScreenScrollView')).toHaveLength(1);
+  } finally { act(() => tree.unmount()); }
+});
+
+test.each(['loading', 'error'] as const)('comparison catalogue %s cannot render a completed empty brief', status => {
+  mockRevision = 0;
+  jest.useFakeTimers(); jest.setSystemTime(new Date(AS_OF));
+  const core = publicCore();
+  mockParams = { key: publicRow.product_key, ri: '0' };
+  mockState = { ...mockState, core, details: null, manifest: null };
+  mockCatalogueView = Object.assign({ ...catalogue(), status: status === 'loading' ? 'ready' as const : 'error' as const, allLoaded: false },
+    { loadAll: jest.fn(async () => {}) });
+  const sync = jest.spyOn(receipt, 'buildNegotiationBrief');
+  const asyncBuild = jest.spyOn(receipt, 'buildNegotiationBriefCooperatively');
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<RateReceiptScreen />) as InspectableRenderer; });
+  try {
+    expect(sync).not.toHaveBeenCalled(); expect(asyncBuild).not.toHaveBeenCalled();
+    expect(tree.root.findAllByType('ScreenScrollView')).toHaveLength(0);
+    if (status === 'loading') expect(tree.root.findAllByType('ScreenSkeleton')).toHaveLength(1);
+    else expect(tree.root.findByProps({ title: 'Unavailable' })).toBeDefined();
+  } finally { act(() => tree.unmount()); }
+});

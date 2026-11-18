@@ -306,3 +306,16 @@ test('source coverage stops at the earliest removed event before a later retaine
   expect(coverage.rows.find(row => row.section === 'Savings' && row.decisionDate === '2026-11-03'))
     .toMatchObject({ sourceReason: 'recorded-move', displayReason: 'filtered-history' });
 });
+
+test('a recorded move requires display, timing, and verified first-move evidence', () => {
+  const f = fixture();
+  const coverage = bankResponseCoverage(f.source, f.source, f.calendar, f.core)!;
+  const row = coverage.rows[0];
+  Object.assign(row, { displayReason: 'recorded-move', displayed: true, moveKnown: true, timingKnown: false, firstMoveVerified: false });
+  const evaluate = () => evaluateBankResponseCoverage({ ...f.snapshot, bankResponseCoverage: coverage });
+  expect(evaluate()).toMatchObject({ status: 'warn', metrics: { coverageComplete: false, unknownTiming: 1 } });
+  row.timingKnown = true;
+  expect(evaluate().metrics.coverageComplete).toBe(false);
+  row.firstMoveVerified = true;
+  expect(evaluate().metrics.coverageComplete).toBe(true);
+});

@@ -1,6 +1,7 @@
 import placeholders from './fixtures/published-descriptive-placeholders-20260915.json';
 import {
   buildNegotiationBrief,
+  buildNegotiationBriefCooperatively,
   buildRateReceipt,
   officialReceiptSources,
   rateReceiptShareText,
@@ -51,11 +52,16 @@ describe('rate receipt', () => {
     expect(unreviewed.tier).toContainEqual({ label: 'Account type', value: 'Unknown' });
   });
   test('public share facts retain exact identity, known fees and sources without source prose', () => {
-    const receipt = buildRateReceipt({ row: row(), section: 'Mortgage', evidenceDate: '2026-08-04', detail: { ...detail, features: [{ name: 'Marketing', info: 'This paragraph must never appear in sharing.' }] } });
+    const receipt = buildRateReceipt({ row: row(), section: 'Mortgage', evidenceDate: '2026-08-04', detail: {
+      ...detail, fees: [{ name: 'Annual fee', value: '$0', info: 'With package' }],
+      features: [{ name: 'Marketing', info: 'This paragraph must never appear in sharing.' }],
+    } });
     const text = rateReceiptShareText(receipt);
     expect(text).toContain('Example Bank · Clear Variable Loan · Rate index: 4');
     expect(text).toContain('Advertised: 5.50%'); expect(text).toContain('Comparison: 5.70%');
-    expect(text).toContain('Annual fee: $0'); expect(text).toContain('https://examplebank.test/products/clear');
+    expect(text).toContain('Annual fee: $0 · Conditions: Unverified');
+    expect(text).not.toContain('With package');
+    expect(text).toContain('https://examplebank.test/products/clear');
     expect(text).toContain('Eligibility unverified'); expect(text).toContain('Fees unverified');
     expect(text).not.toContain('paragraph'); expect(text).not.toContain('Marketing');
   });
@@ -83,7 +89,7 @@ describe('rate receipt', () => {
     ]));
     expect(receipt.conditions).toEqual(expect.arrayContaining([
       { label: 'Minimum age', value: '18 years · Australian resident' },
-      { label: 'Minimum limit', value: '$150,000' },
+      { label: 'Minimum limit', value: '$150k' },
     ]));
     expect(receipt.fees).toContainEqual({ label: 'Annual fee', value: '$0' });
     expect(receipt.officialSources.map((source) => source.kind)).toEqual(['overview', 'eligibility']);
@@ -142,7 +148,7 @@ describe('local negotiation brief', () => {
 
     expect(brief.scenario).toEqual(expect.arrayContaining([
       { label: 'Your rate scenario', value: 'Refinancing' },
-      { label: 'Loan amount', value: '$500,000' },
+      { label: 'Loan amount', value: '$500k' },
       { label: 'Current entered rate', value: '6.00%' },
     ]));
     expect(brief.comparables.map((item) => item.productKey)).toEqual(['best|1', 'other|1']);
@@ -332,4 +338,20 @@ test('published label-only eligibility survives descriptive placeholder suppress
   expect(JSON.stringify(eligibility)).toBe(original);
   const explicit = buildRateReceipt({ row: row(), section: 'Mortgage', evidenceDate: '2026-09-15', detail: { constraints: [{ label: 'Zero', value: 0 }, { label: 'False', value: 'false' }] } });
   expect(explicit.conditions.map(fact => fact.value)).toEqual(['0', 'No']);
+});
+
+test.each(['Mortgage', 'Savings', 'TD'] as const)('cooperative %s brief preserves cohort, median and exact comparable tiers', async section => {
+  const selected = row();
+  const rows = Array.from({ length: 1200 }, (_, i) => row({ product_key: `product-${i % 150}`,
+    rate_index: i, rate: String(0.02 + (i % 20) / 1000), account_class: i % 7 === 0 ? 'restricted' : 'standard' }));
+  const input = { receipt: buildRateReceipt({ row: selected, section, evidenceDate: '2026-11-18' }),
+    scenario: EMPTY_USER_RATE_SCENARIO, sectionRows: rows };
+  const original = JSON.stringify(rows);
+  const yieldControl = jest.fn(async () => {});
+  expect(await buildNegotiationBriefCooperatively(input, { yieldControl })).toEqual(buildNegotiationBrief(input));
+  expect(yieldControl.mock.calls.length).toBeGreaterThan(1);
+  expect(JSON.stringify(rows)).toBe(original);
+  let cancelled = false;
+  expect(await buildNegotiationBriefCooperatively(input, { cancelled: () => cancelled,
+    yieldControl: async () => { cancelled = true; } })).toBeNull();
 });

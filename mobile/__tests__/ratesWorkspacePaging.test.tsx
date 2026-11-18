@@ -26,6 +26,10 @@ const MORTGAGE_CRITERIA_FILTERS = {
   repaymentTypes: ['PRINCIPAL_AND_INTEREST'],
 };
 
+jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context'),
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
 jest.mock('../src/data/store', () => ({ useStore: jest.requireActual('zustand').create(() => ({})) }));
 jest.mock('../src/lib/nav', () => ({ ...jest.requireActual('../src/lib/nav'), openCompare: jest.fn(), openProduct: jest.fn() }));
 jest.mock('expo-router', () => ({ Stack: { Screen: 'StackScreen' }, router: { push: jest.fn() }, useLocalSearchParams: () => ({}) }));
@@ -56,7 +60,7 @@ jest.mock('../src/components/controls', () => ({ SearchBar: 'SearchBar', Segment
 jest.mock('../src/components/icons/AppIcon', () => ({ __esModule: true, default: 'Icon' }));
 jest.mock('../src/components/feedback', () => ({ EmptyState: 'EmptyState', LoadingRows: 'LoadingRows', ScreenSkeleton: 'ScreenSkeleton', IndeterminateProgressBar: 'Progress' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Row: 'Row', Button: 'Button', Chip: 'Chip', Card: 'Card', Disclosure: 'Disclosure' }));
-jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {}, font: { body: 14 }, spacing: (n: number) => n * 4 }) }));
+jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ colors: {}, ledger: { rule: '#ddd' }, font: { body: 14 }, spacing: (n: number) => n * 4 }) }));
 let mockPublicCatalogue: any = null;
 const mockUnavailableCatalogue = { status: 'unavailable', generationId: null, products: [], coverage: [], references: [], evidence: [], allLoaded: false,
   getProduct: () => undefined, getProgrammes: () => [], loadAll: async () => undefined };
@@ -180,6 +184,7 @@ test('widely available mode scopes both control surfaces and clears hidden choic
   const sheet = () => tree.root.findByType('FilterSheet').props;
   const controls = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' });
   try {
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
     expect(sheet().options.groups[0].options).toContain('UNKNOWN');
     act(() => sheet().onDraftChange(allFilters));
     act(() => mockStore.getState().setPref('includeNonStandard', false));
@@ -986,6 +991,7 @@ test.each([false, true])('public-only facet chips reveal an offer with saved leg
   const controls = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' });
   const chips = () => controls().findAllByType('Chip');
   try {
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
     const labels = chips().map((chip: any) => chip.props.label);
     expect(labels.filter((label: string) => label === 'Owner occupied')).toHaveLength(1);
     expect(labels.filter((label: string) => label === 'Principal & interest')).toHaveLength(1);
@@ -1038,6 +1044,7 @@ test('multiple mortgage chips retain both public-only offers with exact row pric
   install();
   const tree = mount();
   try {
+    act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
     const chips = () => tree.root.findByProps({ testID: 'mortgage-comparison-controls' }).findAllByType('Chip');
     for (const label of ['Owner occupied', 'Investor', 'Principal & interest', 'Interest only']) {
       act(() => chips().find((chip: any) => chip.props.label === label)!.props.onPress());

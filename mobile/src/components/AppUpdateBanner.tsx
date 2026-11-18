@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../data/store';
 import {
+  autoInstallReadyApkUpdate,
   checkForAppUpdate,
   ensureApkBackgroundDownload,
   getApkDownloadPercent,
@@ -51,7 +52,7 @@ export function useAppUpdateBannerVisible(): boolean {
 
 /**
  * Root-scoped update check. It checks again whenever the app becomes active and
- * starts a background download only when the user enabled standing consent.
+ * starts the verified update flow when automatic updates are enabled.
  * Banner dismissal is per build_number, so a later release is shown again.
  */
 export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
@@ -113,6 +114,17 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
   }, [auditOwnsNetwork, autoDownload, enabled, wifiOnly]);
 
   const available = result?.status === 'available' ? result : null;
+  const readyManifest = download.phase === 'ready' && available &&
+    String(download.buildNumber) === String(available.remote.build_number) ? available.remote : null;
+  useEffect(() => {
+    if (!enabled || !autoDownload || auditOwnsNetwork || !readyManifest || Platform.OS !== 'android') return;
+    let cancelled = false;
+    const install = () => { void autoInstallReadyApkUpdate(readyManifest, () => !cancelled); };
+    const onActive = AppState.addEventListener('change', state => { if (state === 'active') install(); });
+    install();
+    return () => { cancelled = true; onActive.remove(); };
+  }, [enabled, autoDownload, auditOwnsNetwork, readyManifest]);
+
   return {
     visible: !auditOwnsNetwork && shouldShowUpdateBanner(result, dismissedBuild),
     remote: available?.remote ?? null,

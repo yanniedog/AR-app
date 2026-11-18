@@ -42,6 +42,10 @@ const APPROVED_GLOBAL_LENDER_HOSTS = [
 // Tenant paths from the published CDR source-document inventory. Shared CDN
 // domains are not lender domains: never approve an entire multi-tenant host.
 const LENDER_DOCUMENT_PATHS: Readonly<Record<string, RegExp>> = {
+  // Aussie Select's published Contentful space and RedZed's published document endpoints.
+  'assets.ctfassets.net': /^\/nbklqgdg5mdx\/[A-Za-z0-9]+\/[a-f0-9]{32}\/[^/]+\.pdf$/i,
+  'assets.redzed.com': /^\/download\/[a-f0-9]{32}$/,
+  'iezukf.files.cmp.optimizely.com': /^\/download\/f35d9a70851911efaaa8368884597301$/,
   'd9a7lp1kie9ya.cloudfront.net': /^\/\d{4}\/\d{2}\/[^/]+\.pdf$/i,
   'cdn.bfldr.com': /^\/1R31Y8GR\/as\//,
   'cdn.intelligencebank.com': /^\/au\/share\/(?:e3Gq6M|NZw2|w8gXkZ)\//,

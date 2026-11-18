@@ -10,7 +10,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(async () => true) }));
 jest.mock('../src/lib/debugLog', () => ({
-  debugLog: { readCompleteText: jest.fn(async () => 'RAW SECRET MUST NEVER LEAVE'), warn: jest.fn(), getEntries: () => [] },
+  debugLog: { readCompleteText: jest.fn(async () => 'RAW SECRET MUST NEVER LEAVE'), warn: jest.fn(), info: jest.fn(), startFreshAfterAuditUpload: jest.fn(), getEntries: () => [] },
   debugLogUploadShareUrl: (receipt: { url: string; shareUrl?: string }) => receipt.shareUrl ?? receipt.url,
   deleteDebugLogUpload: jest.fn(), formatVersionedLogExport: jest.fn(),
   loadDebugLogUploadReceipts: jest.fn(), markDebugLogUploadReceiptVerified: jest.fn(),
@@ -84,6 +84,23 @@ test('a recovered malformed health report uploads its incomplete evidence instea
   expect(recovered.appHealth).toBe(malformed);
 });
 
+test('a recovered report uploads the journal captured for that run', async () => {
+  const journal = jest.requireActual('../src/lib/auditApplicationJournal') as typeof import('../src/lib/auditApplicationJournal');
+  const applicationJournal = journal.auditApplicationJournal(report.startedAt, report.finishedAt);
+  const section = applicationJournal.duringAndAfterAudit;
+  section.entries.push({ ts: report.startedAt, level: 'info', tag: 'audit', message: 'Run finished' });
+  section.entryCount = section.entries.length;
+  const recovered = JSON.parse(JSON.stringify({ ...report, applicationJournal })) as typeof report;
+
+  await delivery.uploadCompletedPerformanceAudit(recovered);
+
+  const body = jest.mocked(log.uploadDebugLog).mock.calls[0][0];
+  const decoded = decodeCompactDiagnosticJson(body) as any;
+  expect(decoded.applicationJournal).toEqual(applicationJournal);
+  expect(decoded.diagnosticLog).not.toHaveProperty('applicationJournal');
+  expect(log.verifyDebugLogUpload).toHaveBeenCalledWith(expect.any(Object), body);
+});
+
 test('concurrent manual post-completion requests share one upload', async () => {
   await Promise.all([delivery.uploadCompletedPerformanceAudit(report), delivery.uploadCompletedPerformanceAudit(report)]);
   expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
@@ -119,6 +136,17 @@ test('restart restores a verified URL and copies it without another POST', async
   expect(jest.requireMock('expo-clipboard').setStringAsync).not.toHaveBeenCalled();
   await sharing.retryDebugLogUpload();
   expect(log.uploadDebugLog).not.toHaveBeenCalled();
+  expect(log.debugLog.info).toHaveBeenCalledWith('diagnostics-clipboard', expect.stringMatching(/^Verified link copy completed in \d+ ms$/));
+});
+
+test('report restore avoids preparing public bytes without a saved public upload', async () => {
+  const envelope = jest.requireActual<typeof import('../src/lib/diagnosticsEnvelope')>('../src/lib/diagnosticsEnvelope');
+  const prepare = jest.spyOn(envelope, 'createPublicPerformanceAuditReport');
+  try {
+    await delivery.restorePerformanceAuditUpload(report);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(sharing.getDebugLogUploadSnapshot().phase).toBe('idle');
+  } finally { prepare.mockRestore(); }
 });
 
 test('an ambiguous response survives restart and blocks duplicate upload until explicitly acknowledged', async () => {

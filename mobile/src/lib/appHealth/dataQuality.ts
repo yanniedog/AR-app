@@ -1,4 +1,4 @@
-import type { ManifestFile, RateRow, SectionData, SectionKey } from '../../types';
+import type { ManifestFile, ProductDetail, RateRow, SectionData, SectionKey } from '../../types';
 import { evaluateAppHealthCatalogueCoverage } from './catalogueCoverage';
 import { evaluateBankResponseCoverage } from './bankResponseCoverage';
 import { versionLt } from '../versionCompare';
@@ -807,6 +807,147 @@ function evaluateFreshness(
   );
 }
 
+function coveragePct(covered: number, total: number): number | null {
+  return total > 0 ? Math.min(100, Math.round((covered / total) * 10_000) / 100) : null;
+}
+
+function hasConstraintCode(detail: ProductDetail, codes: ReadonlySet<string>): boolean {
+  for (const item of detail.constraints ?? []) {
+    const code = (item.label ?? item.name ?? '').trim().toUpperCase();
+    if (codes.has(code)) return true;
+  }
+  for (const fact of detail.facts ?? []) {
+    const key = fact.canonicalKey.trim().toUpperCase();
+    const sourceType = fact.sourceType?.trim().toUpperCase();
+    if (codes.has(key) || (sourceType && codes.has(sourceType))) return true;
+  }
+  return false;
+}
+
+function hasOfficialLink(detail: ProductDetail): boolean {
+  const links = detail.links;
+  if (!links) return false;
+  return [links.overview, links.eligibility, links.fees, links.terms]
+    .some(url => typeof url === 'string' && url.trim().length > 0);
+}
+
+const LVR_CONSTRAINT_CODES = new Set(['MIN_LVR', 'MAX_LVR']);
+const BALANCE_CONSTRAINT_CODES = new Set(['MIN_BALANCE', 'MAX_BALANCE']);
+
+export function auditProductDetailGaps(snapshot: AppHealthDataSnapshot): {
+  hasGaps: boolean;
+  metrics: Record<string, number | boolean | null>;
+} | null {
+  const products = snapshot.details?.products;
+  if (!products) return null;
+  const entries = Object.entries(products);
+  const total = entries.length;
+  const mortgageKeys = new Set(
+    (snapshot.core?.sections?.Mortgage?.rates ?? []).map(row => row.product_key).filter(Boolean),
+  );
+  const depositKeys = new Set([
+    ...(snapshot.core?.sections?.Savings?.rates ?? []).map(row => row.product_key),
+    ...(snapshot.core?.sections?.TD?.rates ?? []).map(row => row.product_key),
+  ].filter(Boolean));
+
+  let missingDescription = 0;
+  let missingFees = 0;
+  let unpublishedFeeCount = 0;
+  let productsWithUnpublishedFees = 0;
+  let missingFeatures = 0;
+  let missingEligibility = 0;
+  let missingConstraints = 0;
+  let mortgageDetailProducts = 0;
+  let missingMortgageLvr = 0;
+  let depositDetailProducts = 0;
+  let missingDepositBalance = 0;
+  let missingFacts = 0;
+  let missingRateConditions = 0;
+  let missingLinks = 0;
+  let missingSourceDocuments = 0;
+  let missingLastUpdated = 0;
+
+  for (const [key, detail] of entries) {
+    if (!(typeof detail.description === 'string' && detail.description.trim().length > 0)) missingDescription += 1;
+    const fees = detail.fees ?? [];
+    if (fees.length === 0) {
+      missingFees += 1;
+    } else {
+      const unpublished = fees.filter(fee => fee.amountStatus === 'unpublished').length;
+      if (unpublished > 0) {
+        unpublishedFeeCount += unpublished;
+        productsWithUnpublishedFees += 1;
+      }
+    }
+    if (!detail.features?.length) missingFeatures += 1;
+    if (!detail.eligibility?.length) missingEligibility += 1;
+    if (!detail.constraints?.length) missingConstraints += 1;
+    if (mortgageKeys.has(key)) {
+      mortgageDetailProducts += 1;
+      if (!hasConstraintCode(detail, LVR_CONSTRAINT_CODES)) missingMortgageLvr += 1;
+    }
+    if (depositKeys.has(key)) {
+      depositDetailProducts += 1;
+      if (!hasConstraintCode(detail, BALANCE_CONSTRAINT_CODES)) missingDepositBalance += 1;
+    }
+    if (!detail.facts?.length) missingFacts += 1;
+    if (!detail.rateConditions?.entries?.length) missingRateConditions += 1;
+    if (!hasOfficialLink(detail)) missingLinks += 1;
+    if (!detail.sourceDocuments?.length) missingSourceDocuments += 1;
+    if (!(typeof detail.last_updated === 'string' && detail.last_updated.trim().length > 0)) missingLastUpdated += 1;
+  }
+
+  const hasGaps = missingDescription > 0
+    || missingFees > 0
+    || unpublishedFeeCount > 0
+    || missingFeatures > 0
+    || missingEligibility > 0
+    || missingConstraints > 0
+    || missingMortgageLvr > 0
+    || missingDepositBalance > 0
+    || missingFacts > 0
+    || missingRateConditions > 0
+    || missingLinks > 0
+    || missingSourceDocuments > 0
+    || missingLastUpdated > 0;
+
+  return {
+    hasGaps,
+    metrics: {
+      internalDetailsAudited: true,
+      auditedDetailProducts: total,
+      missingDescriptionProducts: missingDescription,
+      descriptionCoveragePercent: coveragePct(total - missingDescription, total),
+      missingFeesProducts: missingFees,
+      feesCoveragePercent: coveragePct(total - missingFees, total),
+      unpublishedFeeCount,
+      productsWithUnpublishedFees,
+      missingFeaturesProducts: missingFeatures,
+      featuresCoveragePercent: coveragePct(total - missingFeatures, total),
+      missingEligibilityProducts: missingEligibility,
+      eligibilityCoveragePercent: coveragePct(total - missingEligibility, total),
+      missingConstraintsProducts: missingConstraints,
+      constraintsCoveragePercent: coveragePct(total - missingConstraints, total),
+      mortgageDetailProducts,
+      missingMortgageLvrProducts: missingMortgageLvr,
+      mortgageLvrCoveragePercent: coveragePct(mortgageDetailProducts - missingMortgageLvr, mortgageDetailProducts),
+      depositDetailProducts,
+      missingDepositBalanceProducts: missingDepositBalance,
+      depositBalanceCoveragePercent: coveragePct(depositDetailProducts - missingDepositBalance, depositDetailProducts),
+      missingFactsProducts: missingFacts,
+      factsCoveragePercent: coveragePct(total - missingFacts, total),
+      missingRateConditionsProducts: missingRateConditions,
+      rateConditionsCoveragePercent: coveragePct(total - missingRateConditions, total),
+      missingLinksProducts: missingLinks,
+      linksCoveragePercent: coveragePct(total - missingLinks, total),
+      missingSourceDocumentsProducts: missingSourceDocuments,
+      sourceDocumentsCoveragePercent: coveragePct(total - missingSourceDocuments, total),
+      missingLastUpdatedProducts: missingLastUpdated,
+      lastUpdatedCoveragePercent: coveragePct(total - missingLastUpdated, total),
+    },
+  };
+}
+
 function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealthCheck {
   if (!snapshot.core) {
     return check(
@@ -857,9 +998,10 @@ function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealth
   const impossibleCounts = [snapshot.details.productCount, snapshot.details.matchedProductCount,
     snapshot.details.orphanProductCount].some(value => !Number.isSafeInteger(value) || value < 0)
     || matchedProducts > coreProducts || matchedProducts + orphanProducts !== detailProducts;
+  const internalGaps = auditProductDetailGaps(snapshot);
   const status: AppHealthStatus = !runMatches || impossibleCounts || (coreProducts > 0 && matchedProducts === 0)
     ? 'fail'
-    : (coveragePercent != null && coveragePercent < 100) || orphanProducts !== explainedOrphans
+    : (coveragePercent != null && coveragePercent < 100) || orphanProducts !== explainedOrphans || internalGaps?.hasGaps
       ? 'warn'
       : 'pass';
   return check(
@@ -877,14 +1019,19 @@ function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealth
       coveragePercent,
       runMatches,
       impossibleCounts,
+      ...(internalGaps ? internalGaps.metrics : { internalDetailsAudited: false }),
     },
     status === 'fail'
       ? 'The details asset is empty or belongs to a different publication run.'
       : status === 'warn'
         ? missingProducts > 0
           ? 'Some core products have no corresponding detail record.'
-          : 'The details asset contains records that are not present in the active core snapshot.'
-        : 'This checks product record coverage only. Document and clause completeness are not established by these counts.',
+          : orphanProducts !== explainedOrphans
+            ? 'The details asset contains records that are not present in the active core snapshot.'
+            : 'Some product detail records have missing fields, constraints, documents, or unpublished fees.'
+        : internalGaps
+          ? 'Product detail records and internal fields are complete for this snapshot.'
+          : 'This checks product record coverage only. Document and clause completeness are not established by these counts.',
   );
 }
 

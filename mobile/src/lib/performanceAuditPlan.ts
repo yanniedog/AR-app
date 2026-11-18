@@ -428,8 +428,8 @@ export function deriveDeepAuditInputs(
     ?? sections.find(section => samples.get(section)!.length > 0) ?? null;
   const primaryProduct = chosenSection ? samples.get(chosenSection)![0] ?? null : null;
   const secondaryProduct = chosenSection ? samples.get(chosenSection)![1] ?? null : null;
-  // Other journeys retain the random exact tier. A lender card deduplicates its
-  // tiers under the mounted ranking, so pin that distinct return target too.
+  // Other journeys retain the random exact tier. Pin the lender return to
+  // the highest-ranked tier of the sampled product under the mounted ranking.
   const lenderReturnRow = core && primaryProduct ? lenderProductRows(
     rowsForProductKey(core.sections[primaryProduct.section].rates, primaryProduct.productKey)
       .filter(row => row.provider === primaryProduct.provider),
@@ -553,6 +553,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   const lenderReturnParameters: Record<string, DeepAuditParameter> = lenderReturn ? {
     section: lenderReturn.section, provider: lenderReturn.provider,
     productKey: lenderReturn.productKey, rateIndex: lenderReturn.rateIndex,
+    ...(lenderReturn.programmeId ? { programmeId: lenderReturn.programmeId } : {}),
   } : {};
   const compareParameters: Record<string, DeepAuditParameter> = {
     section: section ?? null,
@@ -1033,7 +1034,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 0, semanticActionId: 'moves.open' },
     { depth: 1, semanticActionId: 'moves.decision.previous', readiness: ['rba-calendar'], stateImpact: 'local-only' },
     { depth: 1, semanticActionId: 'moves.section.next', stateImpact: 'local-only' },
-    { depth: 2, semanticActionId: 'moves.response-chart.provider.next', stateImpact: 'local-only' },
+    { depth: 2, semanticActionId: 'moves.bank-rates.open', expectedPath: '/bank-rates', expectedSurface: 'bank-rates.dashboard', readiness: ['graphics'], stateImpact: 'local-only' },
   ]);
 
   scenario(templates, 'route.rba', {
@@ -1152,6 +1153,17 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 1, semanticActionId: 'settings.update-status.observe', readiness: ['update-status'], optional: true, ...optionalFeatureSkip },
   ]);
 
+  scenario(templates, 'route.about', {
+    expectedPath: '/about', expectedSurface: 'about.overview', readiness: ['app', 'local-state'],
+  }, [{ depth: 0, semanticActionId: 'about.open' }]);
+  scenario(templates, 'route.notices', {
+    expectedPath: '/third-party-notices', expectedSurface: 'notices.document', readiness: ['app', 'local-state'],
+  }, [{ depth: 0, semanticActionId: 'notices.open' }]);
+  scenario(templates, 'route.calculation-receipt', {
+    expectedPath: '/calculation-receipt', expectedSurface: 'calculations.receipt',
+    readiness: ['app', 'local-state'], unsafeActionsExcluded: ['clipboard.write', 'financial-input.edit'],
+  }, [{ depth: 0, semanticActionId: 'calculation-receipt.open' }]);
+
   scenario(templates, 'route.terms', {
     expectedPath: '/terms',
     expectedSurface: 'terms.notices',
@@ -1209,13 +1221,19 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     optional: true, ...optionalFeatureSkip,
   }, [{ depth: 1, semanticActionId: 'redirect.changes.verify' }]);
 
-  scenario(templates, 'redirect.root', {
-    expectedPath: '/browse',
-    expectedSurface: 'rates.results',
-    readiness: ['app', 'redirect', 'local-state'],
-  }, [
-    { depth: 1, semanticActionId: 'redirect.root.verify' },
-  ]);
+  for (const legacy of ['trends', 'tab-trends']) {
+    scenario(templates, `redirect.${legacy}`, {
+      expectedPath: '/research', expectedSurface: 'outlook.dashboard',
+      readiness: ['app', 'redirect', 'data'], skipReason: missingCore,
+      skipWhen: ['Core data is unavailable'],
+    }, [{ depth: 1, semanticActionId: `redirect.${legacy}.verify` }]);
+  }
+  for (const legacy of ['root', 'tab-index']) {
+    scenario(templates, `redirect.${legacy}`, {
+      expectedPath: '/browse', expectedSurface: 'rates.results',
+      readiness: ['app', 'redirect', 'local-state'],
+    }, [{ depth: 1, semanticActionId: `redirect.${legacy}.verify` }]);
+  }
 
   scenario(templates, 'route.audit', {
     expectedPath: '/performance-audit',

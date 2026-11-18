@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Alert, TextInput, View } from 'react-native';
+import { Alert, AppState, TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
 import { InfoRow, ToggleRow } from '../src/components/settings/settingsUi';
@@ -15,6 +15,7 @@ import { BackgroundWorkDiagnosis } from '../src/components/BackgroundWorkDiagnos
 import { AuditCatalogueCoverage } from '../src/components/AuditCatalogueCoverage';
 import { AuditBankResponseCoverage } from '../src/components/AuditBankResponseCoverage';
 import { AuditHistoryCoverage } from '../src/components/AuditHistoryCoverage';
+import { AuditAppCoverage } from '../src/components/AuditAppCoverage';
 import { AuditMetricHistory } from '../src/components/AuditMetricHistory';
 import { AuditCheckSymbol, AuditOutcomeSymbols } from '../src/components/AuditOutcomeSymbols';
 import {
@@ -30,6 +31,7 @@ import {
   MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
   MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
   parsePerformanceAuditHangTimeoutSeconds,
+  LEGACY_PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY,
   PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY,
   requestPerformanceAudit,
   restoreCompletedPerformanceAudit,
@@ -53,8 +55,9 @@ import { loadCompletedPerformanceAudit } from '../src/lib/performanceAuditReport
 import { buildPerformanceAuditCompletion } from '../src/lib/performanceAuditCompletion';
 import { auditHttpCheckSummary } from '../src/lib/auditHttpCheckSummary';
 import {
-  auditEntryClock, markAuditEntryScreenMounted, markAuditEntryScreenReady, markAuditEntrySettingsOpened,
-  markAuditEntryStartPressed, setAuditEntrySettingsProbe,
+  AUDIT_ENTRY_SETTINGS_TIMEOUT_MS, auditEntryClock, markAuditEntryInterrupted, markAuditEntryScreenMounted,
+  markAuditEntryScreenPhase, markAuditEntryScreenReady, markAuditEntrySettingsOpened,
+  markAuditEntryStartPressed, setAuditEntrySettingsProbe, type AuditEntrySettingsProbeResult,
 } from '../src/lib/auditEntryTrace';
 import { PERFORMANCE_AUDIT_TYPICAL_DURATION_MS } from '../src/lib/performanceAuditTiming';
 
@@ -128,39 +131,54 @@ function PerformanceAuditScreenInner() {
   const settingsOpenRef = useRef(settingsOpen);
   settingsOpenRef.current = settingsOpen;
   const settingsOpenStarted = useRef<number | null>(null);
-  const settingsOpenWaiter = useRef<((elapsedMs: number | null) => void) | null>(null);
+  const settingsOpenWaiter = useRef<((result: AuditEntrySettingsProbeResult) => void) | null>(null);
   const openSettings = () => { settingsOpenStarted.current = auditEntryClock(); setSettingsOpen(true); };
   const onSettingsLayout = () => {
     const started = settingsOpenStarted.current;
     if (started == null) return;
-    settingsOpenStarted.current = null;
-    // The layout pass precedes the paint; the next frame is what a person sees.
     requestAnimationFrame(() => {
+      if (!mounted.current || settingsOpenStarted.current !== started) return;
+      settingsOpenStarted.current = null;
       const elapsedMs = auditEntryClock() - started;
-      markAuditEntrySettingsOpened(elapsedMs);
-      settingsOpenWaiter.current?.(elapsedMs);
+      const finish = settingsOpenWaiter.current;
+      if (finish) finish(elapsedMs);
+      else markAuditEntrySettingsOpened(elapsedMs);
     });
   };
+  const toggleSettings = () => {
+    if (settingsOpenRef.current) {
+      settingsOpenStarted.current = null;
+      settingsOpenWaiter.current?.('interrupted');
+      setSettingsOpen(false);
+    } else openSettings();
+  };
   useEffect(() => {
-    setAuditEntrySettingsProbe(() => new Promise<number | null>(resolve => {
+    setAuditEntrySettingsProbe(() => new Promise<AuditEntrySettingsProbeResult>(resolve => {
       // Already open: the trace keeps the timing of the person's own open.
       if (settingsOpenRef.current || settingsOpenWaiter.current) { resolve(null); return; }
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const finish = (elapsedMs: number | null) => {
+      const finish = (result: AuditEntrySettingsProbeResult) => {
         if (settingsOpenWaiter.current !== finish) return;
         settingsOpenWaiter.current = null;
         if (timer) clearTimeout(timer);
         settingsOpenStarted.current = null;
         if (mounted.current) setSettingsOpen(false);
-        resolve(elapsedMs);
+        resolve(result);
       };
       settingsOpenWaiter.current = finish;
-      timer = setTimeout(() => finish(null), 1_500);
+      timer = setTimeout(() => finish('timed-out'), AUDIT_ENTRY_SETTINGS_TIMEOUT_MS);
       openSettings();
     }));
+    const appState = AppState.addEventListener('change', next => {
+      if (next === 'active') return;
+      markAuditEntryInterrupted();
+      settingsOpenStarted.current = null;
+      settingsOpenWaiter.current?.('interrupted');
+    });
     return () => {
+      appState.remove();
       setAuditEntrySettingsProbe(null);
-      settingsOpenWaiter.current?.(null);
+      settingsOpenWaiter.current?.('interrupted');
     };
   }, []);
   const auditPreflightLocked = useRef(false);
@@ -168,7 +186,9 @@ function PerformanceAuditScreenInner() {
   const [auditPreflightMode, setAuditPreflightMode] = useState<'local' | 'live-source' | null>(null);
   const [visibleCheckLimit, setVisibleCheckLimit] = useState(MAX_REPORTED_AUDIT_CHECKS);
   const running = state.status === 'queued' || state.status === 'running';
-  const resultsReady = useDeferredHistorySurface(running || auditPreflightMode ? null : 'audit-results');
+  const resultsReady = useDeferredHistorySurface(
+    !layoutReady || !hangTimeoutLoaded || running || auditPreflightMode ? null : 'audit-results',
+  );
   const report = running || auditPreflightMode || !resultsReady ? null : state.report;
   const orderedChecks = useMemo(
     () => (report && detailsOpen ? selectReportedAuditChecks(report.checks) : []),
@@ -204,7 +224,13 @@ function PerformanceAuditScreenInner() {
     return () => { cancelled = true; cancelRecovery(); };
   }, [running, auditPreflightMode, recoveryAttempt]);
   useEffect(() => {
-    if (report) void restorePerformanceAuditUpload(report).catch(() => {});
+    if (!report) return;
+    let cancelled = false;
+    const shouldRestore = () => !cancelled && mounted.current && !auditPreflightLocked.current;
+    const cancelRestore = scheduleAfterInteractions(() => {
+      void yieldToPaintFrames(2).then(() => restorePerformanceAuditUpload(report, shouldRestore)).catch(() => {});
+    });
+    return () => { cancelled = true; cancelRestore(); };
   }, [report]);
   const hangTimeoutSeconds = parsePerformanceAuditHangTimeoutSeconds(hangTimeoutInput);
   const auditActions = useMemo(() => ({
@@ -246,16 +272,26 @@ function PerformanceAuditScreenInner() {
   useEffect(() => {
     let active = true;
     void AsyncStorage.getItem(PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY)
-      .then((stored) => {
+      .then(async (stored) => {
+        let parsed = parsePerformanceAuditHangTimeoutSeconds(stored);
+        if (stored == null) {
+          parsed = parsePerformanceAuditHangTimeoutSeconds(
+            await AsyncStorage.getItem(LEGACY_PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY),
+          );
+          // v2 saved the old default even if the user never changed the field.
+          if (parsed === 10) parsed = null;
+        }
         if (!active) return;
-        const parsed = parsePerformanceAuditHangTimeoutSeconds(stored);
         setHangTimeoutInput(
           String(parsed ?? DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS / 1_000),
         );
       })
       .catch(() => {})
       .finally(() => {
-        if (active) setHangTimeoutLoaded(true);
+        if (active) {
+          markAuditEntryScreenPhase('preferencesReadyAt');
+          setHangTimeoutLoaded(true);
+        }
       });
     return () => {
       active = false;
@@ -270,8 +306,11 @@ function PerformanceAuditScreenInner() {
     ).catch(() => {});
   }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
-  // Usable means a start control can be pressed, not only that it is laid out.
-  const entryReady = layoutReady && hangTimeoutLoaded && !state.recoveryRequired && !updateBlocksAudit && !uploadBusy;
+  const auditDisabled = state.recoveryRequired || running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null;
+  const entryReady = layoutReady && !auditDisabled;
+  useEffect(() => {
+    if (!state.recoveryRequired && !updateBlocksAudit && !uploadBusy) markAuditEntryScreenPhase('admissionReadyAt');
+  }, [state.recoveryRequired, updateBlocksAudit, uploadBusy]);
   useEffect(() => { if (entryReady) markAuditEntryScreenReady(); }, [entryReady]);
 
   const runAudit = async (mode: 'local' | 'live-source') => {
@@ -367,20 +406,22 @@ function PerformanceAuditScreenInner() {
         : theme.colors.danger
     : theme.colors.textMuted;
 
-  const auditDisabled = state.recoveryRequired || running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null;
   const outcome = (value: 'healthy'|'attention'|'bottleneck'): UiCopy => value === 'healthy' ? 'Healthy' : value === 'attention' ? 'Needs review' : 'Failures found';
   const outcomeLabel = (value: NonNullable<typeof completion>['outcome']): UiLabel =>
     value === 'successful' ? 'Successful' : value === 'failed' ? 'Failed' : value === 'incomplete' ? 'Incomplete' : 'Needs review';
   // One value: the last measured run on this device, or the typical duration before a first run.
   const nextEstimate = uiDurationClock(state.report && state.report.durationMs > 0 ? state.report.durationMs : PERFORMANCE_AUDIT_TYPICAL_DURATION_MS);
-  const controls = <Card style={{ gap: 10 }}>
+  const controls = <Card style={{ gap: 10 }} collapsable={false} onLayout={() => {
+    markAuditEntryScreenPhase('screenLayoutAt');
+    setLayoutReady(true);
+  }}>
         <AppText variant="h2">{uiLabel('App health audit')}</AppText>
         {!running ? <>
           <InfoRow label="Last audit" value={completion ? uiJoin(outcomeLabel(completion.outcome), ' · ', uiDate(completion.finishedAt)) : uiLabel(state.report ? 'Loading' : recoveryFailed ? 'Report unavailable' : 'No audit history')} />
           <InfoRow label="Estimated time" value={nextEstimate} />
         </> : null}
-        <Button title="Local audit" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
-        <Button title="Live audit" icon="cloud-download-outline" variant="secondary" loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'} disabled={auditDisabled} onPress={() => void runAudit('live-source')} />
+        <Button title="Local audit" testID="audit-start-local" icon="pulse-outline" loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'} disabled={auditDisabled} onPress={() => void runAudit('local')} />
+        <Button title="Live audit" testID="audit-start-live" icon="cloud-download-outline" variant="secondary" loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'} disabled={auditDisabled} onPress={() => void runAudit('live-source')} />
         <ToggleRow icon="cloud-upload-outline" label="Public upload" value={running ? state.uploadLog : publicUpload} onChange={setPublicUpload} disabled={auditDisabled} />
         <InfoRow label={uiLabel(running ? 'Destination' : 'Next destination')} value={uiLabel((running ? state.uploadLog : publicUpload) ? 'Public hosting' : 'Debug log')} />
         <Disclosure title="Upload details" open={uploadOpen} onToggle={() => setUploadOpen(!uploadOpen)}>
@@ -389,8 +430,8 @@ function PerformanceAuditScreenInner() {
           <InfoRow label="Excluded" value="Private inputs / identifiers / credentials" />
           <InfoRow label="Public hosting" value={uiJoin(uiIdentifier('paste.rs'), ' / ', uiIdentifier('paste.c-net.org'))} />
         </Disclosure>
-        <Disclosure title="Audit settings" open={settingsOpen} onToggle={() => settingsOpen ? setSettingsOpen(false) : openSettings()}>
-        <View onLayout={onSettingsLayout}>
+        <Disclosure title="Audit settings" open={settingsOpen} onToggle={toggleSettings}>
+        <View onLayout={onSettingsLayout} collapsable={false}>
         <InfoRow label="Step limit" value={measuredMs(10_000)} />
         <View style={{ gap: 6 }}>
           <AppText variant="small" weight="700">{uiLabel('Stall timeout')}</AppText>
@@ -423,7 +464,7 @@ function PerformanceAuditScreenInner() {
         </Disclosure>
       </Card>;
   return (
-    <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }} onLayout={() => setLayoutReady(true)}>
+    <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}>
       {controls}
       {!running && !auditPreflightMode && !state.report && recoveryFailed ?
         <Button title="Retry saved report" onPress={() => setRecoveryAttempt(attempt => attempt + 1)} /> : null}
@@ -457,6 +498,13 @@ function PerformanceAuditScreenInner() {
           {httpChecks ? <>
             <InfoRow label="HTTP attempts / destinations" value={httpChecks.total == null
               ? uiJoin(uiCount(httpChecks.attempted), ' / ', 'Unknown') : countPair(httpChecks.attempted, httpChecks.total)} />
+            <InfoRow label="HTTP verified" value={uiCount(httpChecks.verified)} />
+            <InfoRow label="HTTP failed" value={uiCount(httpChecks.failed)} />
+            <InfoRow label="HTTP unresolved" value={uiCount(httpChecks.unresolved)} />
+            <InfoRow label="HTTP timeouts" value={uiCount(httpChecks.timedOut)} />
+            <InfoRow label="HTTP restrictions" value={uiCount(httpChecks.restricted)} />
+            <InfoRow label="HTTP redirects" value={uiCount(httpChecks.redirects)} />
+            <InfoRow label="Rejected addresses" value={uiCount(httpChecks.rejected)} />
             <InfoRow label="HTTP not attempted" value={uiCount(httpChecks.notAttempted)} />
             <InfoRow label="HTTP attempt evidence missing" value={httpChecks.missingEvidence == null ? 'Unknown' : uiCount(httpChecks.missingEvidence)} />
             <InfoRow label="Unverified links" value={uiCount(completion.gaps.unverifiedLinks)} />
@@ -469,6 +517,7 @@ function PerformanceAuditScreenInner() {
           }} /> : null}
         </Card>
         <AuditMetricHistory report={report} />
+        <AuditAppCoverage report={report} />
         <AuditHistoryCoverage report={report} />
         {completion.failurePositions.length ? <Disclosure title="Failure positions" open={failuresOpen} onToggle={() => setFailuresOpen(!failuresOpen)}>
           {failuresOpen ? completion.failurePositions.map((failure, index) => <Card key={`${failure.source}:${failure.position}:${index}`} style={{gap:4}}>
@@ -487,6 +536,8 @@ function PerformanceAuditScreenInner() {
           <InfoRow label="Duplicate checks" value={uiCount(completion.gaps.duplicateChecks)} />
           <InfoRow label="Unexpected checks" value={uiCount(completion.gaps.unexpectedChecks)} />
           <InfoRow label="Missing readiness" value={uiCount(completion.gaps.missingReadinessChecks)} />
+          {completion.gaps.uxNativeFrameCaptureIncomplete ? <InfoRow label="Android frame timing" value="Incomplete" /> : null}
+          {completion.gaps.uxControlLayoutSampleIncomplete ? <InfoRow label="Target coverage" value="Incomplete" /> : null}
           {completion.gaps.missingHealthReports > 0 ? <InfoRow label="Data and display health" value="Not run" /> : null}
           <InfoRow label="Truncated fields" value={uiCount(completion.gaps.truncatedEvidenceFields)} />
           <InfoRow label="Omitted characters" value={uiCount(completion.gaps.omittedEvidenceChars)} />

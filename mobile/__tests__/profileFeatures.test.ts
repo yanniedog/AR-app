@@ -39,6 +39,21 @@ test('batch feature matching reuses exact scopes while preserving variants and c
   expect(selectProfileRows(rows, profile, 'Mortgage', null)).toEqual([]);
 });
 
+test('unscoped product facts share one eligibility result across different tiers', () => {
+  const tierType = jest.fn(() => 'VARIABLE');
+  const rows: RateRow[] = Array.from({ length: 100 }, (_, rate_index) => ({
+    product_key: 'bank', provider: 'Bank', product_name: 'Offer', rate: '0.05', rate_index,
+    get rate_type() { return tierType(); },
+  }));
+  const profile = { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] };
+  const lookup: Record<string, ProductDetail> = {
+    bank: { facts: [{ id: 'offset', kind: 'feature', canonicalKey: 'OFFSET', value: true, unit: 'boolean' }] },
+  };
+
+  expect(selectProfileRows(rows, profile, 'Mortgage', lookup)).toEqual(rows);
+  expect(tierType).not.toHaveBeenCalled();
+});
+
 test.each(['Mortgage', 'Savings', 'TD'] as const)('app selection preserves canonical attributes and feature intersections for %s', section => {
   const key = PROFILE_FEATURE_OPTIONS[section][0];
   const rows: RateRow[] = ['one', 'two', 'unknown'].map((product_key, index) => ({

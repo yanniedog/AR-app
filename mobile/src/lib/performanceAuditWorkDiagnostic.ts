@@ -4,6 +4,7 @@ export const AUDIT_WORK_BOOLEAN_FIELDS = ['catalogueAllLoaded', 'mortgageCriteri
   'suitabilityReady', 'detailsLoading', 'searchIndexLoading', 'intentPending', 'filterReady', 'focused', 'pricingSnapshotReused', 'filterRowsReused', 'preparingMortgageDefaults', 'mortgageIndexReady'] as const;
 export const AUDIT_WORK_COUNT_FIELDS = ['pricingRequestRevision', 'workerStarts', 'workerRestarts', 'workerCancellations',
   'mortgageIndexRows', 'pricingIndexHits', 'pricingIndexMisses', 'pricingIndexPrepared', 'sourceRowCount', 'candidateCount', 'pricedRowCount', 'catalogueProductCount', 'catalogueProgrammeCount', 'schedulerNativeScheduleAttempts', 'schedulerNativeCompleted', 'schedulerNativeFallbacks'] as const;
+export const AUDIT_WORK_DURATION_FIELDS = ['candidatePreparationMs', 'pricingResolutionMs', 'mortgageScopeMs', 'pricingMaxSliceMs'] as const;
 export const AUDIT_WORK_STAGES = ['queued', 'candidates', 'resolution', 'scope', 'ready', 'error'] as const;
 export interface AuditWorkDiagnostic {
   pricingStage?: typeof AUDIT_WORK_STAGES[number];
@@ -16,6 +17,7 @@ export interface AuditWorkDiagnostic {
   sourceRowCount?: number; candidateCount?: number | null; pricedRowCount?: number | null;
   catalogueProductCount?: number; catalogueProgrammeCount?: number;
   schedulerNativeScheduleAttempts?: number; schedulerNativeCompleted?: number; schedulerNativeFallbacks?: number;
+  candidatePreparationMs?: number; pricingResolutionMs?: number; mortgageScopeMs?: number; pricingMaxSliceMs?: number;
   catalogueAllLoaded?: boolean; mortgageCriteriaReady?: boolean; mortgageInputsInvalid?: boolean;
   suitabilityReady?: boolean; detailsLoading?: boolean; searchIndexLoading?: boolean; intentPending?: boolean;
   filterReady?: boolean; focused?: boolean;
@@ -28,6 +30,12 @@ export function publicAuditWorkDiagnostic(value: unknown): AuditWorkDiagnostic |
     const count = source[field];
     if (count === null && (field === 'candidateCount' || field === 'pricedRowCount') ||
       typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 && count <= 10_000_000) result[field] = count;
+  }
+  for (const field of AUDIT_WORK_DURATION_FIELDS) {
+    const duration = source[field];
+    if (typeof duration === 'number' && Number.isFinite(duration) && duration >= 0 && duration <= 3_600_000) {
+      result[field] = Math.round(duration * 10) / 10;
+    }
   }
   for (const field of ['pricingStage', 'pricingErrorStage'] as const) if (AUDIT_WORK_STAGES.includes(source[field] as typeof AUDIT_WORK_STAGES[number])) result[field] = source[field];
   if (typeof source.catalogueStatus === 'string' && ['unavailable', 'loading', 'ready', 'error'].includes(source.catalogueStatus)) result.catalogueStatus = source.catalogueStatus;

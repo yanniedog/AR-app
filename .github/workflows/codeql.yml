@@ -87,6 +87,7 @@ jobs:
             :ar-history-codec:compileReleaseKotlin \
             :ar-history-codec:compileReleaseJavaWithJavac \
             :ar-audit-screen-awake:compileReleaseKotlin \
+            :ar-audit-frame-metrics:compileReleaseKotlin \
             :expo-task-manager:compileReleaseJavaWithJavac \
             :expo-background-task:compileReleaseKotlin \
             --no-daemon --no-build-cache --rerun-tasks --info --stacktrace \

@@ -52,23 +52,28 @@ function mainTarget(tree: Tree) {
 
 beforeEach(() => { mockDimensions = { width: 360, height: 800, scale: 3, fontScale: 1 }; jest.clearAllMocks(); });
 
-test.each([[320, 1], [360, 1], [411, 1], [320, 2], [360, 3]])('renders a scannable two-line layout without horizontal ScrollView at %sdp/font%s', (width, fontScale) => {
+test.each([[320, 1], [360, 1], [411, 1], [320, 2], [360, 3]])('keeps a fixed three-line baseline, with reflow at enlarged text sizes at %sdp/font%s', (width, fontScale) => {
   mockDimensions = { ...mockDimensions, width, fontScale };
   const exact = { ...row, product_name: 'An exceptionally long product name with every qualifier preserved' };
   const tree = render(exact);
   try {
+    expect(tree.root.findByProps({ testID: 'compact-product-row' }).props.style.height)
+      .toBe(fontScale > 1 ? undefined : COMPACT_ROW.minHeight);
     expect(tree.root.findAllByType(ScrollView)).toHaveLength(0);
     expect(tree.root.findAllByProps({ testID: 'compact-product-scroll' })).toHaveLength(0);
     const name = tree.root.findByProps({ testID: 'compact-product-name' });
     const line2 = tree.root.findByProps({ testID: 'compact-product-line2' });
     const metrics = tree.root.findByProps({ testID: 'compact-product-metrics' });
     const facts = tree.root.findByProps({ testID: 'compact-product-facts' });
-    expect(name.props).toMatchObject({ numberOfLines: 2, weight: '600', children: exact.product_name });
-    expect(line2.props.style).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
-    expect(metrics.props.style).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1 });
-    expect(facts.props.style).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1, maxWidth: '100%' });
-    expect(tree.root.findByProps({ testID: 'compact-facet-cell' }).props.style).toMatchObject({ flexDirection: 'row', flexShrink: 1, maxWidth: '100%' });
-    expect(tree.root.findByProps({ testID: 'compact-facet-value' }).props.style).toMatchObject({ flexShrink: 1 });
+    expect(name.props).toMatchObject({ numberOfLines: fontScale > 1 ? 2 : 1, weight: '600', children: exact.product_name });
+    expect(line2.props.style).toMatchObject({ flexDirection: 'column' });
+    for (const line of [metrics, facts]) {
+      expect(line.props.style).toMatchObject({
+        flexDirection: 'row', flexWrap: fontScale > 1 ? 'wrap' : 'nowrap', minHeight: COMPACT_ROW.lineHeight,
+      });
+    }
+    expect(tree.root.findByProps({ testID: 'compact-facet-cell' }).props.style.flexShrink).toBe(fontScale > 1 ? 1 : 0);
+    expect(tree.root.findByProps({ testID: 'compact-facet-value' }).props.style.flexShrink).toBe(fontScale > 1 ? 1 : 0);
     expect(line2.findByProps({ testID: 'compact-product-metrics' })).toBe(metrics);
     expect(line2.findByProps({ testID: 'compact-product-facts' })).toBe(facts);
     const primary = tree.root.findByProps({ testID: 'compact-primary-rate' });
@@ -77,8 +82,13 @@ test.each([[320, 1], [360, 1], [411, 1], [320, 2], [360, 3]])('renders a scannab
     expect(tree.root.findByProps({ testID: 'compact-secondary-rate' }).props.children).toBe('5.79%');
     expect(tree.root.findByProps({ testID: 'compact-facet-value' }).props.children).toBe('≤60%');
     expect(mainTarget(tree).props.style.width).toBe('100%');
+    expect(mainTarget(tree).props.accessibilityLabel).toContain(exact.product_name);
+    expect(mainTarget(tree).props.accessibilityLabel).toContain('Tier #4');
+    expect(tree.root.findAllByProps({ testID: 'compact-tier-index' })).toHaveLength(0);
+    expect(tree.root.findAllByType('BankAvatar')[0].props.size).toBe(56);
     expect(mainTarget(tree).props.accessibilityLabel).toContain('Advertised rate 5.79%');
     const icons = tree.root.findAllByType('Icon');
+    expect(icons.every(node => node.props.size === COMPACT_ROW.icon)).toBe(true);
     expect(icons.find(node => node.props.name === 'calculator-outline')!.props.color).toBe('#123');
     expect(icons.find(node => node.props.name === 'cash-outline')!.props.color).toBe('#087');
     expect(icons.some(node => node.props.name === 'home')).toBe(true);
@@ -99,7 +109,7 @@ test('row press opens product and fixed save action preserves exact identity', (
 
 test('preserves unknowns, tier index and conditional warnings in two-line layout at large fontScale', () => {
   mockDimensions = { ...mockDimensions, fontScale: 2 };
-  const tree = render({ ...row, ribbon_deposit_kind: 'BONUS', ongoing_rate: undefined }, { section: 'Savings' });
+  const tree = render({ ...row, ribbon_deposit_kind: 'BONUS', ongoing_rate: undefined }, { section: 'Savings', showTierIndex: true });
   try {
     expect(mainTarget(tree).props.accessibilityLabel).toContain('Ongoing rate: Unknown');
     expect(tree.root.findByProps({ testID: 'compact-product-name' }).props.children).toBe(row.product_name);
@@ -113,7 +123,7 @@ test('preserves unknowns, tier index and conditional warnings in two-line layout
 test('preserves exact source ranges with all statuses, tier and rates at large text size', () => {
   const f = fixture();
   const facets = f.rows.map(exact => compactProductFacet(exact, 'Mortgage', scopedFinancialConditionFacts(scopedRateConditions(exact, 'Mortgage', f))));
-  expect(facets.map(facet => facet.value)).toEqual(['≤59.99%', '60%–79.99%']);
+  expect(facets.map(facet => facet.value)).toEqual(['≤60%', '60%–80%']);
   for (const facet of facets) {
     const layout = compactProductRowLayout(280, 3, uiRate(0.058), uiRate(0.0579), facet, 3, 500, 400, compactTierIndex(row));
     expect(layout).toMatchObject({ showSecondary: true, showFacetValue: true, showStatuses: true, showTier: true, combinedStatus: false, warningOnly: false });
@@ -131,27 +141,31 @@ test('holding does not open the row and checkbox preserves selection behavior', 
     expect(main.props.accessibilityState).toEqual({ selected: false });
     act(() => tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith('View '))!.props.onPress());
     expect(open).toHaveBeenCalledTimes(1);
-    expect(tree.root.findByProps({ testID: 'rate-save:maitland-budget:4' }).props.disabled).toBe(true);
+    expect(tree.root.findAllByProps({ testID: 'rate-save:maitland-budget:4' })).toHaveLength(0);
     expect(mockSave).not.toHaveBeenCalled();
   } finally { act(() => tree.unmount()); }
 });
 
-test.each([false, true])('logo height follows content shrinking independently of the old outer row with embedded=%s', embedded => {
+test.each([false, true])('badge and action sizes never change as content grows (embedded=%s)', embedded => {
   const tree = render(row, { embedded });
   const outer = () => tree.root.findByProps({ testID: 'compact-product-row' });
   const avatar = () => tree.root.findAllByType('BankAvatar')[0].props;
-  const layout = (height: number) => ({ nativeEvent: { layout: { width: 328, height } } });
-  const normal = COMPACT_ROW.minHeight - 6 - (embedded ? 0 : StyleSheet.hairlineWidth);
   try {
-    act(() => outer().props.onLayout(layout(119)));
-    expect(avatar().height).toBeCloseTo(normal);
-    act(() => mainTarget(tree).props.onLayout(layout(112)));
-    expect(avatar().height).toBeCloseTo(112);
-    act(() => outer().props.onLayout(layout(119)));
-    act(() => mainTarget(tree).props.onLayout(layout(48)));
-    expect(avatar().height).toBeCloseTo(normal);
-    act(() => outer().props.onLayout(layout(119)));
-    expect(avatar().height).toBeCloseTo(normal);
+    expect(outer().props.style.minHeight).toBe(COMPACT_ROW.minHeight);
+    expect(avatar().size).toBe(COMPACT_ROW.bankLogo);
+    act(() => mainTarget(tree).props.onLayout({ nativeEvent: { layout: { width: 328, height: 112 } } }));
+    expect(avatar().size).toBe(COMPACT_ROW.bankLogo);
+    expect(tree.root.findByProps({ testID: 'rate-save:maitland-budget:4' }).props.size).toBe(COMPACT_ROW.icon);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('keeps the normal-size fact baseline when an exact balance cannot fit', () => {
+  mockDimensions = { ...mockDimensions, width: 320 };
+  const tree = render({ ...row, balance_min: '123456789012', balance_max: '987654321012' }, { section: 'Savings' });
+  try {
+    expect(tree.root.findByProps({ testID: 'compact-product-scroll' }).props.horizontal).toBe(true);
+    expect(tree.root.findByProps({ testID: 'compact-product-row' }).props.style.minHeight).toBe(COMPACT_ROW.minHeight);
+    expect(tree.root.findByProps({ testID: 'compact-facet-value' }).props.children).toBe('$123,456,789.012k–$987,654,321.012k');
   } finally { act(() => tree.unmount()); }
 });
 
@@ -208,7 +222,7 @@ test('width corrections keep facts and product name mounted without remounting',
 
 
 
-test.each([false, true])('loading rows keep the same56dp single baseline and noninteractive action slots with screen wrapper=%s', wholeScreen => {
+test.each([false, true])('loading rows keep the listing baseline and noninteractive action slots with screen wrapper=%s', wholeScreen => {
   let tree!: Tree;
   act(() => { tree = TestRenderer.create(wholeScreen ? <ScreenSkeleton rows={3} /> : <LoadingRows count={3} />) as Tree; });
   try {
@@ -217,8 +231,8 @@ test.each([false, true])('loading rows keep the same56dp single baseline and non
     expect(rows).toHaveLength(3);
     for (const row of rows) {
       expect(row.props.style).toMatchObject({ flexDirection: 'row', alignItems: 'center', gap: COMPACT_ROW.gap,
-        paddingVertical: 4, paddingHorizontal: 0, minHeight: COMPACT_ROW.minHeight });
-      expect(row.props.style.minHeight).toBe(56);
+        paddingVertical: COMPACT_ROW.inset, paddingHorizontal: 0, minHeight: COMPACT_ROW.minHeight });
+      expect(row.props.style.minHeight).toBe(COMPACT_ROW.minHeight);
       expect(row.props.style.borderBottomWidth).toBe(StyleSheet.hairlineWidth);
       expect(row.props).toMatchObject({ accessible: false, accessibilityElementsHidden: true,
         importantForAccessibility: 'no-hide-descendants', pointerEvents: 'none' });
@@ -226,11 +240,12 @@ test.each([false, true])('loading rows keep the same56dp single baseline and non
     for (const id of ['loading-bank-slot', 'loading-save-slot']) {
       const slots = views.filter(node => node.props.testID === id);
       expect(slots).toHaveLength(3);
-      expect(slots.every(node => node.props.style.width === 48 && node.props.style.minHeight === 48)).toBe(true);
+      expect(slots.every(node => node.props.style.width === (id === 'loading-bank-slot'
+        ? COMPACT_ROW.lenderSlot : COMPACT_ROW.action) && node.props.style.minHeight === COMPACT_ROW.action)).toBe(true);
     }
     expect(views.filter(node => {
       const style = StyleSheet.flatten(node.props.style);
-      return style?.width === 24 && style?.height === 24;
+      return [COMPACT_ROW.bankLogo, COMPACT_ROW.icon].some(size => style?.width === size && style?.height === size);
     })).toHaveLength(6);
     expect(views.some(node => node.props.accessibilityRole === 'button' || node.props.onPress)).toBe(false);
     expect(views.some(node => node.props.accessibilityRole === 'progressbar' && node.props.accessibilityLabel === 'Loading content')).toBe(true);
@@ -254,11 +269,11 @@ test('the compact skeleton retains native shimmer timing and stops each animatio
   let tree!: Tree;
   act(() => { tree = TestRenderer.create(<LoadingRows count={1} />) as Tree; });
   try {
-    expect(loop).toHaveBeenCalledTimes(4);
-    expect(start).toHaveBeenCalledTimes(4);
+    expect(loop).toHaveBeenCalledTimes(5);
+    expect(start).toHaveBeenCalledTimes(5);
     expect(timing.mock.calls.every(call => call[1].duration === 1500 && call[1].useNativeDriver)).toBe(true);
   } finally { act(() => tree.unmount()); }
-  expect(stop).toHaveBeenCalledTimes(4);
+  expect(stop).toHaveBeenCalledTimes(5);
 });
 
 test('has independent exact Save/History actions and holding the row only names Details', () => {
@@ -300,10 +315,12 @@ test.each([true, false])('tapping the visible selection checkbox toggles its exa
   }
   let tree!: Tree; act(() => { tree = TestRenderer.create(<Selection />) as Tree; });
   try {
-    const checkbox = () => tree.root.findAllByType('PressFeedback').find(node => node.props.accessibilityLabel === 'View Maitland Mutual Limited · History · Freshness · Unknown')!;
+    const checkbox = () => showLenderAction
+      ? tree.root.findByProps({ testID: 'compact-select-cell' })
+      : tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith('View '))!;
     const main = () => tree.root.findAllByType('PressFeedback').find(node => String(node.props.accessibilityLabel).startsWith('Budget Home Loan,'))!;
-    expect(checkbox().props.disabled).toBe(false);
-    expect(checkbox().props.style).toMatchObject({ width: 48, minHeight: 48 });
+    expect(checkbox().props.disabled).not.toBe(true);
+    expect(checkbox().props.style).toMatchObject({ width: COMPACT_ROW.action, minHeight: COMPACT_ROW.action });
     expect(checkbox().props.accessibilityElementsHidden).toBe(true);
     expect(checkbox().props.importantForAccessibility).toBe('no-hide-descendants');
     expect(checkbox().props.onLongPress).toBeUndefined();
@@ -312,7 +329,7 @@ test.each([true, false])('tapping the visible selection checkbox toggles its exa
     expect(select).toHaveBeenCalledTimes(1); expect(select).toHaveBeenCalledWith(f.rows[0]);
     expect(main().props.accessibilityState).toEqual({ selected: true });
     expect(tree.root.findAllByType('Icon').some(node => node.props.name === 'checkbox')).toBe(true);
-    expect(tree.root.findAllByType('PressFeedback').find(node => String(node.props.testID).startsWith('rate-save:'))!.props.disabled).toBe(true);
+    expect(tree.root.findAllByType('PressFeedback').some(node => String(node.props.testID).startsWith('rate-save:'))).toBe(false);
     expect(mockHistory).not.toHaveBeenCalled(); expect(mockShow).not.toHaveBeenCalled(); expect(mockSave).not.toHaveBeenCalled();
     act(() => checkbox().props.onPress());
     expect(select).toHaveBeenCalledTimes(2); expect(main().props.accessibilityState).toEqual({ selected: false });
@@ -345,12 +362,12 @@ test('equal-metric actual tiers remain visibly distinct even when their long LVR
   const f = fixture();
   mockState = { ...f, isRateSaved: () => false, toggleSavedRate: mockSave, prefs: { mortgageRateMetric: 'comparison' } };
   let tree!: Tree;
-  act(() => { tree = TestRenderer.create(<>{f.rows.map(exact => <ProductCard key={exact.rate_index} row={exact} section="Mortgage" />)}</>) as Tree; });
+  act(() => { tree = TestRenderer.create(<>{f.rows.map(exact => <ProductCard key={exact.rate_index} row={exact} section="Mortgage" showTierIndex />)}</>) as Tree; });
   try {
     expect(tree.root.findAllByType('AppText').filter(node => node.props.testID === 'compact-tier-index').map(node => node.props.children)).toEqual(['#4', '#5']);
     const labels = tree.root.findAllByType('PressFeedback').map(node => String(node.props.accessibilityLabel));
-    expect(labels.some(value => value.includes('LVR ≤59.99%'))).toBe(true);
-    expect(labels.some(value => value.includes('LVR 60%–79.99%'))).toBe(true);
+    expect(labels.some(value => value.includes('LVR ≤60%'))).toBe(true);
+    expect(labels.some(value => value.includes('LVR 60%–80%'))).toBe(true);
     expect(compactTierIndex({ ...row, rate_index: undefined })).toBeNull();
     expect(compactTierIndex({ ...row, rate_index: 0 })).toBe('#0');
     expect(compactTierIndex({ ...row, rate_index: -1 })).toBeNull();
@@ -372,7 +389,7 @@ test('equal-metric actual tiers remain visibly distinct even when their long LVR
 
 afterEach(() => { jest.restoreAllMocks(); mockReducedMotion = true; });
 
-test('holds measured icons in the two-line coordinate space and ignores stale geometry', () => {
+test('holds measured icons in the fixed-row coordinate space and ignores stale geometry', () => {
   const tree = render();
   try {
     const main = mainTarget(tree);
@@ -386,16 +403,16 @@ test('holds measured icons in the two-line coordinate space and ignores stale ge
     const layout = (node: { props: Record<string, any> }, x: number, y: number, width: number, height: number) =>
       node.props.onLayout({ nativeEvent: { layout: { x, y, width, height } } });
     act(() => {
-      layout(main, 0, 0, 260, 56);
+      layout(main, 0, 0, 260, 72);
       layout(name, 4, 6, 250, 20);
-      layout(line2, 4, 30, 250, 20);
+      layout(line2, 4, 30, 250, 40);
       layout(metrics, 0, 0, 120, 20);
       layout(primary, 0, 0, 56, 20);
       layout(secondary, 62, 0, 56, 20);
-      layout(facts, 126, 0, 110, 20);
+      layout(facts, 0, 20, 110, 20);
       layout(facet, 0, 0, 60, 20);
     });
-    for (const [x, y, word] of [[20, 12, 'Details'], [14, 38, 'Comparison'], [76, 38, 'Advertised'], [140, 38, 'LVR']] as const) {
+    for (const [x, y, word] of [[20, 12, 'Details'], [14, 38, 'Comparison'], [76, 38, 'Advertised'], [14, 58, 'LVR']] as const) {
       act(() => { main.props.onPressIn(); main.props.onLongPress({ nativeEvent: { locationX: x, locationY: y } }); });
       expect(mockShow).toHaveBeenLastCalledWith(word);
     }

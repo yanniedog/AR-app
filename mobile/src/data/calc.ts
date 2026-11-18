@@ -40,12 +40,14 @@ export const MAX_CALCULATOR_DEPOSIT_AMOUNT = 20_000_000;
 export const MAX_CALCULATOR_RATE_PERCENT = 100;
 export const MAX_CALCULATOR_YEARS = 50;
 
-/** Parse a user-entered dollar amount without silently stripping signs or letters. */
+/** Parse a user-entered dollar amount (including $750k / 750k shorthand) without silently stripping signs or letters. */
 export function calculatorAmount(value: string, maximum: number): number | null {
   const raw = String(value ?? '').trim();
   if (!raw || !Number.isFinite(maximum) || maximum <= 0) return null;
-  if (!/^\$?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/.test(raw)) return null;
-  const parsed = Number(raw.replace(/[$,\s]/g, ''));
+  const match = raw.match(/^\$?\s*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,5})?)\s*([kK])?$/);
+  if (!match || (!match[2] && (match[1].split('.')[1]?.length ?? 0) > 2)) return null;
+  const base = Number(match[1].replace(/,/g, ''));
+  const parsed = match[2] ? Math.round(base * 1_000 * 100) / 100 : base;
   return Number.isFinite(parsed) && parsed >= 0 && parsed <= maximum ? parsed : null;
 }
 

@@ -14,12 +14,17 @@ import {
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { LEDGER_MOTION, ledgerMotionDuration } from '../theme/motion';
 import { useTheme } from '../theme/ThemeProvider';
+import { recordAuditTargetLayout, unregisterAuditTargetLayout } from '../lib/auditTargetRegistry';
 import type { UiNativeProps, UiChild } from '../lib/uiCopy';
+
+let nextAuditTargetInstanceId = 1;
 
 export interface PressFeedbackProps extends Omit<UiNativeProps<PressableProps>, 'children'> {
   children?: UiChild | ((state: PressableStateCallbackType) => UiChild);
   /** Layout for the animated contents; the target and ripple remain stationary. */
   contentStyle?: StyleProp<ViewStyle>;
+  /** Source-authored semantic control identity; never application prose or labels. */
+  auditControlId?: string;
 }
 
 /** Shared tactile feedback without changing hit geometry or surrounding layout. */
@@ -27,8 +32,10 @@ export function PressFeedback({
   children,
   style,
   contentStyle,
+  auditControlId,
   onPressIn,
   onPressOut,
+  onLayout,
   android_ripple,
   disabled,
   ...rest
@@ -36,6 +43,25 @@ export function PressFeedback({
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
   const scale = useRef(new Animated.Value(1)).current;
+  const auditInstanceIdRef = useRef<number | null>(null);
+  if (auditInstanceIdRef.current === null) {
+    auditInstanceIdRef.current = nextAuditTargetInstanceId++;
+  }
+  const auditTargetKey = rest.testID
+    ? `${rest.testID.slice(0, 100)}#${auditInstanceIdRef.current}`
+    : `target#${auditInstanceIdRef.current}`;
+  const auditState = JSON.stringify([
+    !!disabled, rest.accessibilityState?.selected ?? null, rest.accessibilityState?.checked ?? null,
+    rest.accessibilityState?.expanded ?? null, rest.accessibilityState?.busy ?? null,
+  ]);
+  const auditLayout = useRef<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const bounds = auditLayout.current;
+    if (bounds) recordAuditTargetLayout(auditTargetKey, bounds.width, bounds.height, rest.accessibilityRole, auditState, auditControlId);
+  }, [auditTargetKey, rest.accessibilityRole, auditState, auditControlId]);
+  useEffect(() => () => {
+    unregisterAuditTargetLayout(auditTargetKey);
+  }, [auditTargetKey]);
 
   useEffect(() => {
     if (reducedMotion !== false || disabled) {
@@ -70,6 +96,12 @@ export function PressFeedback({
       style={style}
       onPressIn={(event) => { animate(true); onPressIn?.(event); }}
       onPressOut={(event) => { animate(false); onPressOut?.(event); }}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout;
+        auditLayout.current = { width, height };
+        recordAuditTargetLayout(auditTargetKey, width, height, rest.accessibilityRole, auditState, auditControlId);
+        onLayout?.(event);
+      }}
     >
       {(state) => {
         // Preserve existing Pressable/TouchTarget flex layouts when they migrate.

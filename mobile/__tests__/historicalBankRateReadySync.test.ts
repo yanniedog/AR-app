@@ -74,6 +74,15 @@ test('a stale detached publication cannot replace a newer bundled revision', asy
   expect(cachedHistoricalBankRateCatalogue(core)?.catalogue.sources[day]).toEqual(mockBaseline.sources[day]);
 });
 
+test('a fully superseded fallback contributes no quarantined tiers', async () => {
+  const { core, manifest } = current();
+  mockBaseline = { ...ready(), quarantined_tier_count: 58 };
+  const detached = { ...ready(), quarantined_tier_count: 58 };
+  expect(await prepareReadyBankRateHistory(core, manifest, index(), detached)).toBe(true);
+  expect(cachedHistoricalBankRateCatalogue(core)?.quarantinedTierCount).toBe(58);
+  expect(cachedHistoricalBankRateCatalogue(core)?.catalogue.sources[day]).toEqual(detached.sources[day]);
+});
+
 test('equal-revision equivocation becomes a gap', async () => {
   const { core, manifest } = current();
   await prepareReadyBankRateHistory(core, manifest, index('b'.repeat(64)), ready('b'.repeat(64)));

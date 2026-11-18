@@ -86,7 +86,12 @@ export function evaluateBankResponseCoverage(snapshot: AppHealthDataSnapshot): A
     summary: 'Unavailable' };
   const count = (reason: BankResponseReason) => evidence.rows.filter(row => row.displayReason === reason).length;
   const complete = evidence.runMatches && evidence.projectionAvailable && evidence.windows > 0 && evidence.rows.length > 0 &&
-    evidence.rows.every(row => ['recorded-move', 'no-recorded-move', 'no-products'].includes(row.displayReason));
+    evidence.rows.every(row => {
+      if (row.displayReason === 'recorded-move') {
+        return row.displayed && row.moveKnown && row.timingKnown && row.firstMoveVerified;
+      }
+      return row.displayReason === 'no-recorded-move' || row.displayReason === 'no-products';
+    });
   return { ...base, status: !evidence.runMatches ? 'fail' : complete ? 'pass' : 'warn', metrics: {
     coverageAvailable: true, runMatches: evidence.runMatches, projectionAvailable: evidence.projectionAvailable,
     windows: evidence.windows, checked: evidence.rows.length, displayed: evidence.rows.filter(row => row.displayed).length,

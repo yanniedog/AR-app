@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const staticConfig = require('../app.json');
@@ -191,4 +192,18 @@ test('sideload and Play register the font-scale plugin once while preserving exi
     assert.equal(config.plugins.filter(entry => (Array.isArray(entry) ? entry[0] : entry) === plugin).length, 1);
     assert.ok(configFor(channel).plugins.includes(plugin));
   }
+});
+
+test('the Expo Android build follows device rotation after built-in plugins have run', async () => {
+  const { getPrebuildConfigAsync } = require('@expo/prebuild-config');
+  const { compileModsAsync } = require('expo/config-plugins');
+  const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+  const platforms = ['android'];
+  const { exp } = await getPrebuildConfigAsync(projectRoot, { platforms });
+  const config = await compileModsAsync(exp, { projectRoot, introspect: true, platforms });
+  const { manifest } = config._internal.modResults.android.manifest;
+  const main = manifest.application[0].activity.find(activity => activity.$['android:name'] === '.MainActivity');
+  assert.equal(main.$['android:screenOrientation'], 'user');
+  const handled = main.$['android:configChanges'].split('|');
+  assert.ok(handled.includes('orientation') && handled.includes('screenSize'));
 });

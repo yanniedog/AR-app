@@ -7,6 +7,7 @@ import { normalizeProfileFilters } from './profile';
 import { normalizeRatesPageSize } from './ratesPagination';
 import { normalizeCalcInputs } from './calc';
 import { migrateLegacyCalculatorInputs } from './userRateScenario';
+import { openMortgageComparisonProfile } from './mortgageComparisonProfile';
 import { bootstrapInitialState, createBootstrapActions } from './storeBootstrap';
 import { createRefreshActions } from './storeRefresh';
 import { createEnsureActions } from './storeEnsure';
@@ -109,10 +110,10 @@ export const useStore = create<AppState>()(
             ? CURRENT_PRIVACY_CHOICE_VERSION
             : 0,
           diagnosticsEnabled: false,
-          apkUpdatesWifiOnly: persistedPrefs?.apkUpdatesWifiOnly !== false,
-          // Automatic APK downloads are opt-in. Older persisted stores never
-          // silently acquire standing consent during migration.
-          apkUpdatesAutoDownload: persistedPrefs?.apkUpdatesAutoDownload === true,
+          apkUpdatesWifiOnly: typeof persistedPrefs?.apkUpdatesWifiOnly === 'boolean'
+            ? persistedPrefs.apkUpdatesWifiOnly : DEFAULT_PREFS.apkUpdatesWifiOnly,
+          apkUpdatesAutoDownload: typeof persistedPrefs?.apkUpdatesAutoDownload === 'boolean'
+            ? persistedPrefs.apkUpdatesAutoDownload : DEFAULT_PREFS.apkUpdatesAutoDownload,
           ...migratedMortgageRatePreference(persistedPrefs),
           interests: normalizeInterests(persistedPrefs?.interests ?? DEFAULT_INTERESTS),
           profileFilters: normalizeProfileFilters(persistedPrefs?.profileFilters),
@@ -148,6 +149,7 @@ export const useStore = create<AppState>()(
             const state = useStore.getState();
             const savedRatesBeforeLoad = state.savedRates;
             const trackedRatesBeforeLoad = state.trackedRates;
+            const comparisonLoad = openMortgageComparisonProfile();
             let secureLoad = await loadTrackedRatesSecureResult(state.savedRates);
             if (secureLoad.status === 'unavailable') {
               // WHEN_UNLOCKED storage can be temporarily unavailable during a
@@ -165,6 +167,7 @@ export const useStore = create<AppState>()(
             ) {
               useStore.setState({ trackedRates: secureLoad.trackedRates });
             }
+            await comparisonLoad;
           })
           .catch((error) => {
             debugLog.error(

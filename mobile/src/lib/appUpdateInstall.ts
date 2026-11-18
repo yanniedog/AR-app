@@ -99,25 +99,36 @@ export async function verifyApkSha256(
   await verifyDownloadedApk(path, manifest);
 }
 
-export async function installDownloadedApk(localUri: string): Promise<void> {
+let installerActive = false;
+
+export async function installDownloadedApk(localUri: string, canAutoInstall?: () => boolean): Promise<void> {
   if (Platform.OS !== 'android') {
     throw new Error('APK install is Android-only');
   }
+  if (installerActive) return;
+  installerActive = true;
 
-  debugLog.info('app-update', 'install permission check begin');
-  const allowed = await ensureInstallPermission();
-  if (!allowed) {
-    debugLog.warn('app-update', 'install paused: Android install-source permission not granted');
-    throw new Error('Android did not allow this app to install the update. Tap Install to try again.');
+  try {
+    debugLog.info('app-update', 'install permission check begin');
+    const allowed = canAutoInstall
+      ? await ensureInstallPermission({ openSettings: false })
+      : await ensureInstallPermission();
+    if (!allowed) {
+      if (canAutoInstall) return;
+      debugLog.warn('app-update', 'install paused: Android install-source permission not granted');
+      throw new Error('Android did not allow this app to install the update. Tap Install to try again.');
+    }
+
+    const contentUri = await FileSystem.getContentUriAsync(localUri);
+    if (canAutoInstall && !canAutoInstall()) return;
+    debugLog.info('app-update', 'install permission ready; launching Android package installer');
+    await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+      data: contentUri,
+      flags: 1,
+      type: 'application/vnd.android.package-archive',
+    });
+    debugLog.info('app-update', 'Android package installer returned to app');
+  } finally {
+    installerActive = false;
   }
-
-  const contentUri = await FileSystem.getContentUriAsync(localUri);
-  debugLog.info('app-update', 'install permission ready; launching Android package installer');
-
-  await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-    data: contentUri,
-    flags: 1,
-    type: 'application/vnd.android.package-archive',
-  });
-  debugLog.info('app-update', 'Android package installer returned to app');
 }

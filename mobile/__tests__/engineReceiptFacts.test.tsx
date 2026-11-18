@@ -34,10 +34,10 @@ test('actual incomplete engine receipt identifies missing input and unverified c
   const receipt = missingReceipt(), original = canonical(receipt), text = render(receipt);
   expect(receipt.status).toBe('incomplete'); expect(receipt.claimAvailable).toBe(false); expect(receipt.totals).not.toBeNull();
   expect(text).toContain('Applicability: Unverified'); expect(text).toContain('Material terms: Unverified'); expect(text).toContain('Fee inventory: Unavailable');
-  expect(text).toContain('customer-criterion: Needs information · Missing input: qualification');
+  expect(text).toContain('Recorded criteria: Needs information · Missing input');
   expect(text).toContain('Claim available: No'); expect(text).toContain('Completeness: Partial');
   expect(text).not.toContain('$'); expect(text).not.toContain(receipt.assumptions[0]);
-  expect(text).toContain('Assumption 1 · Calculation: Source review required');
+  expect(text).toContain('Assumption 1 · Calculation: Unverified');
   expect(canonical(receipt)).toBe(original);
 });
 test('known condition codes retain exact fee and savings references; arbitrary errors and assumptions never render', () => {
@@ -46,8 +46,8 @@ test('known condition codes retain exact fee and savings references; arbitrary e
   const facts = receiptIssueFacts(receipt), original = canonical(receipt), text = render(receipt);
   expect(facts[0]).toMatchObject({ topic: 'fee-timing', state: 'unknown', references: ['fee.one'] });
   expect(facts[1]).toMatchObject({ topic: 'bonus-qualification', references: ['interval.one', 'bonus.one'] });
-  expect(text).toContain('Tax treatment: Unknown'); expect(text).toContain('Fee timing: Unknown · fee.one');
-  expect(text).toContain('Bonus qualification: Unknown · interval.one · bonus.one');
+  expect(text).toContain('Tax treatment: Unknown'); expect(text).toContain('Fee timing: Unknown');
+  expect(text).toContain('Bonus qualification: Unknown');
   expect(facts[3]).toMatchObject({ state: 'source-review-required', code: null, references: [] });
   expect(facts[4]).toMatchObject({ state: 'source-review-required', code: null, references: [] });
   expect(facts[5]).toMatchObject({ state: 'source-review-required', code: null, references: [] });
@@ -59,7 +59,7 @@ test('known condition codes retain exact fee and savings references; arbitrary e
 test('projected payment acknowledgement requires the actual issue index and code, retaining assumption ID and completeness', () => {
   const receipt = { ...missingReceipt(), issues: ['loan_projected_executions_assumption'], issueDetails: [{ index: 0, code: 'loan_projected_executions_assumption', kind: 'acknowledged_assumption' as const, assumptionId: 'assumption.one' }], completeness: 'conditional_complete' as const };
   expect(receiptIssueFacts(receipt)[0]).toMatchObject({ state: 'acknowledged', references: ['assumption.one'] });
-  expect(render(receipt)).toContain('Projected payments: Acknowledged · assumption.one');
+  expect(render(receipt)).toContain('Projected payments: Acknowledged');
   expect(render(receipt)).toContain('Completeness: Conditions required'); expect(render(receipt)).toContain('Claim available: No');
   expect(receiptIssueFacts({ ...receipt, issueDetails: [{ ...receipt.issueDetails[0], index: 1 }] })[0].state).not.toBe('acknowledged');
   expect(receiptIssueFacts({ ...receipt, issueDetails: [{ ...receipt.issueDetails[0], code: 'fee_timing_unknown' }] })[0].state).not.toBe('acknowledged');
@@ -71,13 +71,13 @@ test('nested fee and bonus criteria preserve actual fields and deduplicate repea
   receipt.ledger = [1, 2].map(index => ({ id: `day.${index}`, date: `2026-09-1${index}`, type: 'interest_accrual', amount: null, balance: '0', evidenceIds: [], savingsContributions: [contribution] }));
   const facts = receiptCriterionFacts(receipt);
   expect(facts.filter(fact => fact.ruleId === 'bonus-input')).toEqual([{ ruleId: 'bonus-input', state: 'needs_information', field: 'deposit_total', inputState: 'missing', references: ['interval.one', 'bonus.one'] }]);
-  expect(render(receipt)).toContain('Missing input: deposit_total · interval.one · bonus.one');
+  expect(render(receipt)).toContain('Missing input');
 });
 test('unpaid obligation facts retain exact due, paid, date and perspective while computed totals remain withheld', () => {
   const receipt = missingReceipt();
   receipt.loan = { componentStatus: 'partial', outstandingDebt: null, knownComponentDebt: '100.00', opening: { principal: '100', capitalizedCharges: '0', postedInterest: '0', accruedInterest: '0', otherDebt: '0' }, closing: { principal: '100', capitalizedCharges: '0', postedInterest: '0', accruedInterest: '0', otherDebt: '0' }, principalAdvanced: '0', principalRepaid: null, interestPaid: '0', chargesPaid: '0', redrawAvailable: '0', redrawUsed: '0', obligations: [{ id: 'payment.one', dueDate: '2026-10-15', due: '25.10', paid: '0.00', status: 'unpaid' }], perspective: 'product_account_with_external_fees_separate' };
   const original = canonical(receipt), text = render(receipt);
-  expect(text).toContain('payment.one: Unpaid'); expect(text).toContain('Repayment due: $25.10 · Paid: $0.00');
+  expect(text).toContain('Payment obligation: Unpaid'); expect(text).toContain('Repayment due: $25.10 · Paid: $0.00');
   expect(text).toContain('Basis: product_account_with_external_fees_separate · Known components: Partial');
   expect(text).not.toContain('Closing balance:'); expect(text).not.toContain('100.00'); expect(canonical(receipt)).toBe(original);
 });
@@ -94,7 +94,7 @@ test('actual failed portfolio execution retains its closed blocker, unavailable 
   expect(receiptIssueFacts(receipt).find(fact => fact.code === 'portfolio_execution_incomplete'))
     .toMatchObject({ topic: 'portfolio', state: 'unavailable', references: [] });
   const original = canonical(receipt), digest = receipt.inputSha256, text = render(receipt);
-  expect(text).toContain('Holdings: Unavailable'); expect(text).toContain('Issue code: portfolio_execution_incomplete');
+  expect(text).toContain('Holdings: Unavailable'); expect(text).not.toContain('Issue code: portfolio_execution_incomplete');
   expect(text).toContain('Claim available: No'); expect(text).not.toContain('$');
   expect(canonical(receipt)).toBe(original); expect(receipt.inputSha256).toBe(digest); expect(digest).toMatch(/^[a-f0-9]{64}$/);
   expect(canonical(input)).toBe(inputBytes);
@@ -109,7 +109,7 @@ test('the producer non-Error fallback is admitted exactly while unknown portfoli
   const receipt = { ...missingReceipt(), issues: result.issues }, original = canonical(receipt);
   expect(receiptIssueFacts(receipt)).toEqual([{ index: 0, topic: 'portfolio', state: 'unavailable', code: 'portfolio_input_invalid', references: [] }]);
   const text = render(receipt);
-  expect(text).toContain('Holdings: Unavailable'); expect(text).toContain('Issue code: portfolio_input_invalid');
+  expect(text).toContain('Holdings: Unavailable'); expect(text).not.toContain('Issue code: portfolio_input_invalid');
   expect(text).toContain('Claim available: No'); expect(text).not.toContain('$'); expect(canonical(receipt)).toBe(original);
   const unknown = { ...receipt, issues: ['portfolio_future_unreviewed_error', 'portfolio_execution_incomplete:source prose', 'portfolio_input_invalid.', 'Explanatory private error text.'] };
   expect(receiptIssueFacts(unknown).every(fact => fact.code === null && fact.state === 'source-review-required')).toBe(true);

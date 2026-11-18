@@ -57,6 +57,14 @@ describe('bankBrand', () => {
     )).toEqual([]);
   });
 
+  it.each(['artwork', 'monogram'] as const)('renders producer %s without bundle or network dependencies', (source) => {
+    const embedded = 'data:image/png;base64,abc';
+    const remote = 'https://register.test/logo.png';
+    expect(resolveBankLogoSourcesForRuntime('ANZ', embedded, remote, true, source)).toEqual([embedded]);
+    expect(resolveBankLogoSourcesForRuntime('New Lender', embedded, remote, false, source)).toEqual([embedded]);
+    expect(resolveBankLogoSourcesForRuntime('ANZ', remote, remote, false, source)).toEqual([]);
+  });
+
   it('prefers verified bundled logos over stale payload artwork', () => {
     const embedded = 'data:image/png;base64,abc';
     const sources = resolveBankLogoSources('ANZ', embedded);
@@ -141,7 +149,7 @@ describe('bankBrand', () => {
   });
 
   it('has offline artwork for every registered brand and supported historical provider label', () => {
-    expect(logoSources.brands).toHaveLength(116);
+    expect(logoSources.brands).toHaveLength(123);
     // Family First has left the register; retain initials rather than assign
     // Beyond Bank's successor logo to historical Family First records.
     const historicalProviders = Object.keys(sample.brands ?? {}).filter(provider => provider !== 'Family First');
@@ -170,6 +178,9 @@ describe('bankBrand', () => {
       ['Bank of Queensland Limited', 'bank-of-queensland-limited'],
       ['Greater Bank Limited', 'greater-bank'],
       ['MOVE Bank', 'movebank'],
+      ['Aussie Activate', 'aussie-home-loans'],
+      ['Aussie Select', 'aussie-home-loans'],
+      ['Mortgage Ezy_public_cdr_mezy_mamoney_com_au', 'mortgage-ezy'],
       ['Newcastle Permanent Building Society', 'newcastle-permanent'],
       ['Qantas Money Home Loans', 'qantas-money-basic-offset-home-loans'],
     ]) {

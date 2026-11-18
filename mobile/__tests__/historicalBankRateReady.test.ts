@@ -53,6 +53,7 @@ test('ready sources assign dates without replaying a masked cohort twice; caches
   const combined = prepareHistoricalBankRateReadySources([{ ready, acceptedDates: dates.slice(0, midpoint) }, { ready, acceptedDates: dates.slice(midpoint) }])!;
   expect(observations(combined, settings())).toEqual(observations(prepareHistoricalBankRateReady(ready), settings()));
   expect(preparedReadySources(combined)).toHaveLength(2);
+  expect(combined.quarantinedTierCount).toBe(ready.quarantined_tier_count);
   expect(prepareHistoricalBankRateReady(ready)).toBe(prepareHistoricalBankRateReady(ready));
   expect(prepareHistoricalBankRateReadySources([{ ready, acceptedDates: [dates[0]] }, { ready, acceptedDates: [dates[0]] }])).toBeNull();
   expect(prepareHistoricalBankRateReadySources([{ ready, acceptedDates: ['1900-01-01'] }])).toBeNull();

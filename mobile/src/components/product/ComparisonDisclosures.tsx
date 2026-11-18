@@ -1,8 +1,9 @@
+import { ProductPageLinks } from './ProductPageLink';
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import type { ProductDetail } from '../../types';
 import { AppText, Card, Disclosure } from '../ui';
-import { DetailGroup, OfficialLinks, ProductFacts } from './ProductDetailParts';
+import { DetailGroup, ProductFacts } from './ProductDetailParts';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
 import { uiCount, uiJoin, uiLabel, uiProductName, uiProviderName, type UiText } from '../../lib/uiCopy';
 
@@ -21,7 +22,7 @@ export function ComparisonDisclosures({
   loading: boolean;
 }) {
   return (
-    <Card variant="outlined" style={{ gap: 12 }}>
+    <ProductPageLinks overview={productDetails?.links?.overview}><Card variant="outlined" style={{ gap: 12 }}>
       <View>
         <AppText variant="body" weight="700">{uiProductName({ product_name: name })}</AppText>
         <AppText variant="small" color="textMuted">{uiProviderName({ provider })}</AppText>
@@ -33,9 +34,8 @@ export function ComparisonDisclosures({
       <DetailGroup title="Constraints" icon="information-circle-outline" items={productDetails?.constraints} loading={loading} />
       {!loading && !productDetails ? <AppText variant="small">{uiLabel("Product details unavailable")}</AppText> : null}
       <ProductFacts productDetails={productDetails ?? null} />
-      <OfficialLinks links={productDetails?.links} sourceDocuments={productDetails?.sourceDocuments} />
       <ProductTermsDisclosure productKey={productKey} />
-    </Card>
+    </Card></ProductPageLinks>
   );
 }
 

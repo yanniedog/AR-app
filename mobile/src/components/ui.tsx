@@ -180,6 +180,8 @@ export function Button({
   hapticOnPress,
   accessibilityState,
   accessibilityLabel,
+  testID,
+  auditControlId,
 }: {
   title: UiCopy;
   onPress?: () => void;
@@ -192,6 +194,8 @@ export function Button({
   hapticOnPress?: boolean;
   accessibilityState?: PressableProps['accessibilityState'];
   accessibilityLabel?: UiCopy;
+  testID?: string;
+  auditControlId?: string;
 }) {
   const theme = useTheme();
   const bg = variant === 'primary' ? theme.ledger.primary : variant === 'secondary' ? theme.colors.surfaceAlt : 'transparent';
@@ -200,7 +204,9 @@ export function Button({
     variant === 'primary' ? theme.colors.onPrimary : theme.colors.primaryMuted;
   return (
     <PressFeedback
+      auditControlId={auditControlId}
       accessibilityRole="button"
+      testID={testID}
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityState={{
         ...accessibilityState,

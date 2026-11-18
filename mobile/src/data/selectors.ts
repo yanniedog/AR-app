@@ -341,7 +341,7 @@ export function sortRows(
 const lenderProductCache = new WeakMap<RateRow[], WeakMap<object, Map<string, RateRow[]>>>();
 const NO_LENDER_DETAILS = {};
 
-/** The actual lender cards: one visible ranked tier per product, in display order. */
+/** Ranked lender rates; by default select one tier per product for product-level history. */
 export function lenderProductRows(
   rows: RateRow[],
   section: SectionKey,
@@ -349,13 +349,14 @@ export function lenderProductRows(
   mortgageMetric: MortgageRateMetric = 'comparison',
   includeNonStandard = false,
   detailsProducts?: Record<string, ProductDetail> | null,
+  allTiers = false,
 ): RateRow[] {
   let byDetails = lenderProductCache.get(rows);
   if (!byDetails) { byDetails = new WeakMap(); lenderProductCache.set(rows, byDetails); }
   const detailKey = detailsProducts ?? NO_LENDER_DETAILS;
   let cached = byDetails.get(detailKey);
   if (!cached) { cached = new Map(); byDetails.set(detailKey, cached); }
-  const key = `${section}:${metric}:${mortgageMetric}:${includeNonStandard}:${getMandatoryEligibilityRevision()}:${getSuitabilityRevision()}`;
+  const key = `${section}:${metric}:${mortgageMetric}:${includeNonStandard}:${allTiers}:${getMandatoryEligibilityRevision()}:${getSuitabilityRevision()}`;
   const previous = cached.get(key);
   if (previous) return previous;
   const visible = mandatoryEligibleRows(excludeTokenDepositRates(
@@ -365,13 +366,16 @@ export function lenderProductRows(
     comparePreparedRows(a, b, 'rate', section, SECTIONS[section].lowerIsBetter, mortgageMetric);
   // Choose the best tier in one pass, then sort only the product winners.
   // Sorting every tier first repeated needless comparisons on large banks.
-  const products = new Map<string, PreparedSortRow>();
-  visible.forEach((row, index) => {
-    const prepared = prepareSortRow(row, index, 'rate', section, metric, mortgageMetric);
-    const prior = products.get(row.product_key);
-    if (!prior || compare(prepared, prior) < 0) products.set(row.product_key, prepared);
-  });
-  const result = [...products.values()].sort(compare).map(item => item.row);
+  const ranked = allTiers ? visible.map((row, index) => prepareSortRow(row, index, 'rate', section, metric, mortgageMetric)) : (() => {
+    const products = new Map<string, PreparedSortRow>();
+    visible.forEach((row, index) => {
+      const prepared = prepareSortRow(row, index, 'rate', section, metric, mortgageMetric);
+      const prior = products.get(row.product_key);
+      if (!prior || compare(prepared, prior) < 0) products.set(row.product_key, prepared);
+    });
+    return [...products.values()];
+  })();
+  const result = ranked.sort(compare).map(item => item.row);
   // Bound preference/gate variants while the immutable source book remains live.
   if (cached.size >= 8) cached.delete(cached.keys().next().value!);
   cached.set(key, result);
@@ -393,12 +397,15 @@ export async function sortRowsCooperatively(
   await yieldControl();
   if (cancelled()) return null;
   let sliceStarted = now();
-  const checkpoint = async () => {
-    if (now() - sliceStarted >= 6) {
-      await yieldControl();
-      sliceStarted = now();
-    }
-    return !cancelled();
+  // An already-resolved async checkpoint still queues a microtask. A full
+  // section's merge performs thousands of checkpoints: stay synchronous until
+  // the CPU slice actually expires, then yield to the host rather than merely
+  // cycling through promise continuations.
+  const sliceExpired = () => now() - sliceStarted >= 6;
+  const pause = async () => {
+    await yieldControl();
+    sliceStarted = now();
+    return cancelled();
   };
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   const compare = (a: PreparedSortRow, b: PreparedSortRow) =>
@@ -409,7 +416,7 @@ export async function sortRowsCooperatively(
     for (const row of batch) {
       prepared.push(prepareSortRow(row, prepared.length, sortKey, section, metric, mortgageMetric));
     }
-    if (!await checkpoint()) return null;
+    if (cancelled() || sliceExpired() && await pause()) return null;
   }
   // Bottom-up merging avoids the single native Array.sort burst on a full section.
   let target = new Array<PreparedSortRow>(prepared.length);
@@ -424,7 +431,7 @@ export async function sortRowsCooperatively(
         target[output] = right >= end || (left < middle && compare(prepared[left], prepared[right]) <= 0)
           ? prepared[left++] : prepared[right++];
         operations += 1;
-        if (operations % 32 === 0 && !await checkpoint()) return null;
+        if (operations % 32 === 0 && (cancelled() || sliceExpired() && await pause())) return null;
       }
     }
     [prepared, target] = [target, prepared];
@@ -432,7 +439,7 @@ export async function sortRowsCooperatively(
   const result: RateRow[] = [];
   for (let index = 0; index < prepared.length; index += 32) {
     for (const item of prepared.slice(index, index + 32)) result.push(item.row);
-    if (!await checkpoint()) return null;
+    if (cancelled() || sliceExpired() && await pause()) return null;
   }
   return cancelled() ? null : result;
 }

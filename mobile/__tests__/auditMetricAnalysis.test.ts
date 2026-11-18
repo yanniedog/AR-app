@@ -299,7 +299,7 @@ test('functional success is separated from successful readiness within timing li
   const evidence = buildAuditMetricAnalysis(report).metrics.automatedTaskSuccessPercent;
   expect(evidence.value).toBe(100);
   expect(evidence.outcomes).toEqual({ success: 3, failure: 0, indeterminate: 0,
-    withinTimingLimits: 1, timingFailures: 1, warnings: 1 });
+    unconfirmedTimeouts: 0, withinTimingLimits: 1, timingFailures: 1, warnings: 1 });
   expect(evidence.denominator).toBe(3);
 });
 
@@ -426,4 +426,66 @@ test('an incomplete health plan cannot assign absent checks to a domain denomina
     incompleteReason: 'Stopped', checks: [{ id: code, code, domain: 'data-integrity', label: 'Schema', status: 'pass', metrics: {} }] });
   expect(buildAuditMetricAnalysis(report).metrics.dataIntegrityPassPercent).toMatchObject({ value: null,
     eligibleCount: null, missingCount: null, missingEvidence: ['incomplete-health-collection', 'missing-denominator'] });
+});
+
+test('affsScore null emits missing-evidence when appHealth coverage is complete and incomplete-health-collection otherwise', () => {
+  const completeReport = makePerformanceAuditReport();
+  const code = APP_HEALTH_CHECK_CODES.CORE_SCHEMA;
+  completeReport.appHealth = finalizeAppHealthReport({ sessionId: completeReport.sessionId, mode: 'local',
+    startedAt: completeReport.startedAt, finishedAt: completeReport.finishedAt, plannedCheckIds: [code],
+    checks: [{ id: code, code, domain: 'data-integrity', label: 'Schema', status: 'pass', metrics: {} }] });
+  expect(buildAuditMetricAnalysis(completeReport).metrics.affsScore).toMatchObject({
+    value: null,
+    missingEvidence: ['missing-evidence'],
+  });
+
+  const incompleteReport = makePerformanceAuditReport();
+  incompleteReport.appHealth = finalizeAppHealthReport({ sessionId: incompleteReport.sessionId, mode: 'local',
+    startedAt: incompleteReport.startedAt, finishedAt: incompleteReport.finishedAt,
+    plannedCheckIds: [code, APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT], incompleteReason: 'Stopped',
+    checks: [{ id: code, code, domain: 'data-integrity', label: 'Schema', status: 'pass', metrics: {} }] });
+  expect(buildAuditMetricAnalysis(incompleteReport).metrics.affsScore).toMatchObject({
+    value: null,
+    missingEvidence: ['incomplete-health-collection'],
+  });
+});
+
+test('friction evidence counts only tasks with all five observed components', () => {
+  const scored = journey('journey-scored', 80);
+  Object.assign(scored.metrics, {
+    minimumJustifiedActions: 2, observedActions: 2, retries: 0, validationFailures: 0,
+    backtracks: 0, repeatedFields: 0, scrollDetours: 0, modalInterruptions: 0,
+    avoidableWaitMs: 0,
+  });
+  const unscored = { ...scored, id: 'journey-unscored', metrics: { ...scored.metrics, backMs: null } };
+  const report = makePerformanceAuditReport('friction-partial', [scored, unscored]);
+  const { metrics, uxAudit } = buildAuditMetricAnalysis(report);
+  expect(uxAudit.pillars.interactionFriction).toMatchObject({
+    score: null, evaluatedTaskCount: 2, scoredTaskCount: 1, observedTaskMeanScore: 100,
+  });
+  expect(metrics.uxInteractionFrictionScore).toMatchObject({
+    value: null, sampleSize: 1, eligibleCount: 2, observedCount: 1, missingCount: 1,
+    missingEvidence: ['partial-samples'],
+  });
+  expect(metrics.affsScore).toMatchObject({ value: null, eligibleCount: 3, observedCount: 1, missingCount: 2 });
+});
+
+test('evidence v2 excludes pending readiness and rejects a local URL failure as HTTP verification', () => {
+  const ready = journey('journey-rates-cold', 10);
+  const pending = journey('journey-rates-warm', 10);
+  ready.diagnostic = { readiness: { ready: true, capturing: true, blockers: [], surfaces: [{ id: 'rates.results', probes: [] }] } } as never;
+  pending.diagnostic = { readiness: { ready: false, capturing: true, blockers: [], surfaces: [{ id: 'rates.results', probes: [] }] } } as never;
+  const link = (id: string, metrics: Record<string, boolean | number | string>) => ({
+    id, label: 'Link', kind: 'network' as const, status: 'warn' as const, durationMs: 1, metrics,
+  });
+  const report = makePerformanceAuditReport('verified-readiness', [ready, pending,
+    link('external-link-inventory', { uniqueDestinations: 2 }),
+    link('external-link-1', { httpAttempted: false, urlValidation: 'fail' }),
+    link('external-link-2', { httpAttempted: false, urlValidation: 'pass' }),
+  ]);
+  const legacy = buildAuditMetricAnalysis(report);
+  const revised = buildAuditMetricAnalysis({ ...report, auditEvidenceVersion: 2 });
+  expect(legacy.metrics.readinessCoveragePercent).toMatchObject({ value: 100, methodVersion: 1 });
+  expect(revised.metrics.readinessCoveragePercent).toMatchObject({ value: 50, methodVersion: 2, missingCount: 1 });
+  expect(revised.metrics.linkVerificationPercent).toMatchObject({ value: 0, methodVersion: 2, denominator: 2 });
 });

@@ -97,9 +97,19 @@ function toNumber(value: string | number | null | undefined): number | null {
 export function formatMoneyShort(value: string | number | null | undefined): UiText {
   const n = toNumber(value);
   if (n === null) return uiLabel('');
-  if (n >= 1_000_000) return uiJoin('$', uiNumber(Number((n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0)), n % 1_000_000 ? 1 : 0), 'm');
-  if (n >= 1_000) return uiJoin('$', uiNumber(Number((n / 1_000).toFixed(n % 1_000 ? 1 : 0)), n % 1_000 ? 1 : 0), 'k');
-  return uiJoin('$', uiNumber(n, Math.min(3, (String(n).split('.')[1] ?? '').length)));
+  // Published tiers often use cent-offset boundaries. This affects display
+  // only; calculations and eligibility still consume the original amounts.
+  const nearestThousand = Math.round(n / 1_000) * 1_000;
+  const nearestDollar = Math.round(n);
+  const cents = Math.round(n * 100);
+  const amount = Math.abs(cents - nearestThousand * 100) <= 100
+    && (nearestThousand !== 0 || Math.abs(cents) <= 1) ? nearestThousand
+    : Math.abs(cents - nearestDollar * 100) <= 1 ? nearestDollar : n;
+  if (Math.abs(amount) >= 1_000) {
+    const thousands = Number((amount / 1_000).toFixed(5));
+    return uiJoin('$', uiNumber(thousands, (String(thousands).split('.')[1] ?? '').length), 'k');
+  }
+  return uiJoin('$', uiNumber(amount, Number.isInteger(amount) ? 0 : Math.max(2, Math.min(6, (String(amount).split('.')[1] ?? '').length))));
 }
 
 export function formatBalanceRange(

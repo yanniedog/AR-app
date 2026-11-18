@@ -1,11 +1,28 @@
-import { mortgageComparisonMatch, mortgageComparisonRows, prepareMortgageComparisonRow, indexedMortgageComparisonRows } from '../src/data/mortgageComparison';
+import { mortgageComparisonMatch, mortgageComparisonRows, mortgageComparisonRowsCooperatively, prepareMortgageComparisonRow, prepareMortgageComparisonRowsCooperatively, indexedMortgageComparisonRows } from '../src/data/mortgageComparison';
 import { catalogue, product, programme } from '../testUtils/publicRateJourney';
 import { publicRecommendationRows, resolvedPublicRankingRows, sourceRowForPublicRow } from '../src/data/publicRateIntegration';
-import { scopedRateConditions } from '../src/data/rateConditions';
+import { scopedRateConditions, scopedRateConditionsForRows, scopedRateConditionsForRowsCooperatively } from '../src/data/rateConditions';
 import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
 import type { RateRow } from '../src/types';
 const row: RateRow = { product_key: 'loan', provider: 'Bank', product_name: 'Loan', rate_index: 4,
   rate: '0.05', lvr_tier: 'lvr_=80%', balance_min: 100000, balance_max: 900000 };
+
+test('cooperative pricing skips condition parsing for rows outside the listed LVR', async () => {
+  const fixture = selectedConstraintFixture('Mortgage', [row], [{ rateIndex: 4, text: 'LVR up to 90%.' }]);
+  const rateConditions = fixture.details.products[row.product_key].rateConditions!;
+  const entries = rateConditions.entries;
+  const readEntries = jest.fn(() => entries);
+  Object.defineProperty(rateConditions, 'entries', { get: readEntries });
+  const control = { yieldControl: async () => {} };
+
+  const excluded = await mortgageComparisonRowsCooperatively(fixture.rows, { loanAmount: '', lvr: '85' }, fixture, control);
+  expect(excluded?.rows).toEqual([]);
+  expect(readEntries).not.toHaveBeenCalled();
+
+  const included = await mortgageComparisonRowsCooperatively(fixture.rows, { loanAmount: '', lvr: '80' }, fixture, control);
+  expect(included?.rows).toEqual(fixture.rows);
+  expect(readEntries).toHaveBeenCalled();
+});
 
 test('verified source LVR overrides a conflicting normalized tier with exact inclusive/exclusive edges', () => {
   const f = selectedConstraintFixture('Mortgage', [row], [{ rateIndex: 4, text: 'LVR up to 70%.' }]);
@@ -81,4 +98,57 @@ test('prepared source matching preserves admitted alternatives, unknown wording 
       }
     }
   }
+});
+
+test('batch validates a shared product envelope once while applying each exact tier condition', () => {
+  const fixture = selectedConstraintFixture('Mortgage', [row, { ...row, rate_index: 5 }], [
+    { rateIndex: 4, text: 'LVR up to 70%.' },
+    { rateIndex: 5, text: 'LVR up to 80%.' },
+  ]);
+  const envelope = fixture.details.products[row.product_key].rateConditions!;
+  const entries = envelope.entries;
+  const readEntries = jest.fn(() => entries);
+  Object.defineProperty(envelope, 'entries', { get: readEntries });
+  const comparison = { loanAmount: '', lvr: '75' };
+  const expected = fixture.rows.filter(value => mortgageComparisonMatch(value, comparison, fixture) === 'listed');
+  const readsWithoutBatching = readEntries.mock.calls.length;
+  readEntries.mockClear();
+  expect(mortgageComparisonRows(fixture.rows, comparison, fixture).rows).toEqual(expected);
+  expect(expected).toEqual([fixture.rows[1]]);
+  expect(readEntries.mock.calls.length).toBeLessThan(readsWithoutBatching);
+});
+
+test('large single-product preparation yields within the tier loop and honours cancellation', async () => {
+  const rows = Array.from({ length: 240 }, (_, i) => ({ ...row, rate_index: i + 1 }));
+  let clock = 0, cancelled = false;
+  const yieldControl = jest.fn(async () => {});
+  const prepared = await prepareMortgageComparisonRowsCooperatively(rows, undefined, {
+    now: () => ++clock, yieldControl,
+  });
+  expect(prepared?.get(rows[239])).toEqual(prepareMortgageComparisonRow(rows[239]));
+  // 60 grouping yields plus the initial yield are insufficient: metadata work
+  // must also yield inside the one large product, before it completes.
+  expect(yieldControl.mock.calls.length).toBeGreaterThan(61);
+  expect(await prepareMortgageComparisonRowsCooperatively(rows, undefined, {
+    cancelled: () => cancelled, yieldControl: async () => { cancelled = true; },
+  })).toBeNull();
+});
+
+test('cooperative scopes yield inside one product and reuse its validated envelope only within the call', async () => {
+  const rows = Array.from({ length: 80 }, (_, i) => ({ ...row, rate_index: i + 1 }));
+  const fixture = selectedConstraintFixture('Mortgage', rows, rows.map(row => ({ rateIndex: row.rate_index!, text: 'LVR up to 80%.' })));
+  const envelope = fixture.details.products[row.product_key].rateConditions!;
+  const entries = envelope.entries, reads = jest.fn(() => entries);
+  Object.defineProperty(envelope, 'entries', { get: reads, configurable: true });
+  let clock = 0;
+  const yieldControl = jest.fn(async () => {});
+  const scoped = await scopedRateConditionsForRowsCooperatively(fixture.rows, 'Mortgage', fixture, {
+    yieldControl, now: () => ++clock,
+  });
+  expect(yieldControl.mock.calls.length).toBeGreaterThan(3);
+  expect(reads.mock.calls.length).toBeLessThan(10);
+  expect(scoped).toEqual(scopedRateConditionsForRows(fixture.rows, 'Mortgage', fixture));
+  Object.defineProperty(envelope, 'entries', { value: [], configurable: true });
+  const invalid = await scopedRateConditionsForRowsCooperatively(fixture.rows, 'Mortgage', fixture, { yieldControl });
+  expect(invalid?.every(value => value.status === 'unavailable')).toBe(true);
 });

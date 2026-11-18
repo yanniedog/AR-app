@@ -24,6 +24,9 @@ export async function publicReportUploadUncertain(hash: string): Promise<boolean
 export async function publicReportUploadAttempt(hash: string): Promise<'pending' | 'failed' | null> {
   return (await load())[hash] ?? null;
 }
+export async function loadPublicReportUploadAttempts(): Promise<Readonly<Attempts>> {
+  return load();
+}
 export async function recordPublicReportUploadAttempt(hash: string, phase: 'pending' | 'failed' | null, startedEpoch = epoch): Promise<void> {
   if (!publicReportUploadAttemptIsCurrent(startedEpoch)) return;
   const write = writes.catch(() => {}).then(async () => {

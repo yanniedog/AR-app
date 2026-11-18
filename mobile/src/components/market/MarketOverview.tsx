@@ -12,7 +12,7 @@ import { SegmentedControl } from '../../components/controls';
 import { ScreenSkeleton } from '../../components/feedback';
 import { AppText, Button, Disclosure, SectionHeading } from '../../components/ui';
 import {
-  filterBankInsightsForSuitability,
+  filterBankInsightsForSuitabilityCooperatively,
   marketPulse,
   recentBankEvents,
 } from '../../data/bankInsights';
@@ -106,21 +106,63 @@ export default function MarketOverview() {
     void ensureDetails({ force: true });
   }, [core, ensureDetails, includeNonStandard]);
 
-  const payload = useMemo(() => {
-    if (!contentReady) return null;
-    void suitabilityRevision;
-    return filterBankInsightsForSuitability(
+  const [filteredInsights, setFilteredInsights] = useState<{
+    rawPayload: typeof rawPayload;
+    core: typeof core;
+    coreIntegrity: typeof coreIntegrity;
+    detailsProducts: typeof detailsProducts;
+    includeNonStandard: boolean;
+    suitabilityRevision: number;
+    payload: Awaited<ReturnType<typeof filterBankInsightsForSuitabilityCooperatively>>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!contentReady || !rawPayload || !core) {
+      setFilteredInsights(null);
+      return;
+    }
+    let cancelled = false;
+    void filterBankInsightsForSuitabilityCooperatively(
       rawPayload,
       core,
       includeNonStandard,
       detailsProducts,
       suitabilityRevision,
       coreIntegrity,
-    );
+      { cancelled: () => cancelled },
+    ).then((nextPayload) => {
+      if (cancelled) return;
+      setFilteredInsights({
+        rawPayload,
+        core,
+        coreIntegrity,
+        detailsProducts,
+        includeNonStandard,
+        suitabilityRevision,
+        payload: nextPayload,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [contentReady, core, coreIntegrity, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
+
+  const filterMatchesCurrent =
+    contentReady &&
+    rawPayload !== null &&
+    core !== null &&
+    filteredInsights !== null &&
+    filteredInsights.rawPayload === rawPayload &&
+    filteredInsights.core === core &&
+    filteredInsights.coreIntegrity === coreIntegrity &&
+    filteredInsights.detailsProducts === detailsProducts &&
+    filteredInsights.includeNonStandard === includeNonStandard &&
+    filteredInsights.suitabilityRevision === suitabilityRevision;
+  const payload = filterMatchesCurrent ? filteredInsights.payload : null;
+  const filteringPending = contentReady && rawPayload !== null && core !== null && !filterMatchesCurrent;
   const pulse = useMemo(() => marketPulse(payload, 7, feedSections), [feedSections, payload]);
   const suitabilityWarming = rawPayload !== null && payload === null && !error && (!suitabilityReady || !contentReady);
-  const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady && contentReady;
+  const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady && contentReady && !filteringPending;
   const feedExpectedCount = useMemo(
     () => payload ? recentBankEvents(payload, { sections: feedSections, limit: 14 }).length : 0,
     [feedSections, payload],
@@ -164,10 +206,11 @@ export default function MarketOverview() {
   const openHistory = useCallback(() => router.push({ pathname: '/bank-rates', params: { section: activeSection } }), [activeSection]);
   const openOutlook = useCallback(() => router.push({ pathname: '/research', params: { section: activeSection } }), [activeSection]);
   const openRba = useCallback(() => router.push('/rba'), []);
+  // The destination loads and measures its own observations. Overview filtering
+  // can still be pending after returning from another screen.
   const openResponse = useCallback(() => {
-    if (!payload) return { unavailableReason: 'Bank observations unavailable' };
     router.push({ pathname: '/rba-response', params: { section: activeSection } });
-  }, [activeSection, payload]);
+  }, [activeSection]);
   const toggleMovers = useCallback(() => {
     if (!payload) return { unavailableReason: 'Bank observations unavailable' };
     setMoversOpen(open => !open);
@@ -257,12 +300,12 @@ export default function MarketOverview() {
         </View>
         <View style={{ gap: 8 }}>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Button title="History" variant="secondary" style={{ flex: 1 }} onPress={openHistory} />
-            <Button title="Outlook" variant="secondary" style={{ flex: 1 }} onPress={openOutlook} />
+            <Button auditControlId="market-history" title="History" variant="secondary" style={{ flex: 1 }} onPress={openHistory} />
+            <Button auditControlId="market-outlook" title="Outlook" variant="secondary" style={{ flex: 1 }} onPress={openOutlook} />
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Button title="RBA" variant="secondary" style={{ flex: 1 }} onPress={openRba} />
-            <Button title="Bank response" variant="secondary" style={{ flex: 1 }} onPress={openResponse} disabled={!payload} />
+            <Button auditControlId="market-rba" title="RBA" variant="secondary" style={{ flex: 1 }} onPress={openRba} />
+            <Button auditControlId="market-bank-response" title="Bank response" variant="secondary" style={{ flex: 1 }} onPress={openResponse} />
           </View>
         </View>
       </View>

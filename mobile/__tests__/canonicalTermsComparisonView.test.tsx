@@ -3,10 +3,8 @@ import TestRenderer, { act } from 'react-test-renderer';
 import { CanonicalTermsComparison } from '../src/components/product/CanonicalTermsComparison';
 import { loadProductTerms } from '../src/data/productTermsTransport';
 let mockState: any;
-const mockOpen = jest.fn();
 jest.mock('../src/data/store', () => ({ useStore: (selector: any) => selector(mockState) }));
 jest.mock('../src/data/productTermsTransport', () => ({ loadProductTerms: jest.fn() }));
-jest.mock('../src/components/ExternalLinkConfirmation', () => ({ useTrustedExternalUrl: () => ({ requestExternalUrl: mockOpen }) }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Disclosure: ({ children, open, ...props }: any) => jest.requireActual('react').createElement('Disclosure', { ...props, open }, open ? children : null) }));
 test('lazy comparison exposes source-bound cells and invalidates old edition before replacement', async () => {
   const rows: any = ['a', 'b'].map(product_key => ({ product_key, product_name: product_key, provider: product_key }));
@@ -17,8 +15,8 @@ test('lazy comparison exposes source-bound cells and invalidates old edition bef
   expect(loadProductTerms).not.toHaveBeenCalled();
   await act(async () => tree.root.findByProps({ title: 'Compare terms and conditions' }).props.onToggle());
   act(() => tree.root.findByProps({ title: 'fee.amount' }).props.onToggle());
-  const rendered = JSON.stringify(tree.toJSON()); expect(rendered).not.toContain('Technical clause'); expect(rendered).toContain('Source review required'); expect(rendered).toContain('Unknown'); expect(rendered).toContain('AUD'); expect(rendered).toContain('standard');
-  act(() => tree.root.findByProps({ title: 'Open source' }).props.onPress()); expect(mockOpen).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://example.org/terms' }));
+  const rendered = JSON.stringify(tree.toJSON()); expect(rendered).not.toContain('Technical clause'); expect(rendered).not.toContain('Source review required'); expect(rendered).toContain('Unknown'); expect(rendered).toContain('AUD'); expect(rendered).toContain('standard');
+  expect(tree.root.findAllByProps({ title: 'Open source' })).toHaveLength(0);
   mockState = { manifest: { ...mockState.manifest, payload_revision: { bundle_sha256: 'new' } } };
   (loadProductTerms as jest.Mock).mockImplementation(() => new Promise(() => undefined));
   await act(async () => tree.update(<CanonicalTermsComparison rows={rows} />));

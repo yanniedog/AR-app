@@ -1,7 +1,8 @@
+import { auditHttpCheckSummary, verifiedAuditHttpDestination } from './auditHttpCheckSummary';
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
 import { buildPerformanceAuditCompletion, hasValidPerformanceAuditHealth } from './performanceAuditCompletion';
 import { AUDIT_METRIC_DEFINITIONS, AUDIT_METRIC_METHODS, auditReportMetricMethodVersion, type AuditMetric } from './auditMetricHistoryMetrics';
-import { auditMetricValues, auditTaskOutcomePopulation, hasAuditActionDurationEvidence, hasAuditReturnEvidence, measuredAuditCount as measuredCount, measuredAuditValue as measured } from './auditMetricHistoryValues';
+import { auditMetricValues, auditTaskOutcomePopulation, hasAuditActionDurationEvidence, hasAuditReturnEvidence, hasAuditReadinessEvidence, measuredAuditCount as measuredCount, measuredAuditValue as measured } from './auditMetricHistoryValues';
 import { buildUxFrictionFluidityAudit, type UxFrictionFluidityAudit, type UxFrictionFluidityTelemetryOptions } from './uxFrictionFluidityAudit';
 
 export type AuditMetricMissingEvidence = 'missing-evidence' | 'missing-denominator' | 'missing-samples'
@@ -29,7 +30,7 @@ export interface AuditMetricEvidence {
   value: number | null;
   unit: 'count' | 'percent' | 'ms' | 'score';
   methodId: string;
-  methodVersion: 1 | 2;
+  methodVersion: 1 | 2 | 3;
   formula: string;
   unitOfAnalysis: string;
   numerator: number | null;
@@ -47,7 +48,7 @@ export interface AuditMetricEvidence {
   contributors: number[];
   distribution?: AuditMetricDistribution;
   outcomes?: { success: number; failure: number; indeterminate: number;
-    withinTimingLimits: number; timingFailures: number; warnings: number };
+    unconfirmedTimeouts?: number; withinTimingLimits: number; timingFailures: number; warnings: number };
   uncertainty: { interval: null; reason: 'deterministic-inventory' | 'correlated-observations' };
 }
 export interface AuditMetricAnalysis {
@@ -77,6 +78,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   completion = buildPerformanceAuditCompletion(report),
   uxTelemetry?: UxFrictionFluidityTelemetryOptions): AuditMetricAnalysis {
   const uxAudit = buildUxFrictionFluidityAudit(report, completion, uxTelemetry);
+  const methodReport = uxTelemetry ? { ...report, uxTelemetry: { ...report.uxTelemetry, ...uxTelemetry } } : report;
   const values = auditMetricValues(report, completion, uxAudit);
   const observations: AuditMetricObservation[] = [];
   const indices = new Map<string, number>();
@@ -130,8 +132,16 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     if (value !== null && missing) evidence.push('partial-samples');
     metrics[metric] = {
       value, unit: AUDIT_METRIC_DEFINITIONS[metric].unit, methodId: `ar.audit.${metric}`,
-      methodVersion: auditReportMetricMethodVersion(report, metric),
-      formula: AUDIT_METRIC_METHODS[metric][0], unitOfAnalysis: AUDIT_METRIC_METHODS[metric][1],
+      methodVersion: auditReportMetricMethodVersion(methodReport, metric),
+      formula: report.auditEvidenceVersion !== 2 && metric === 'readinessCoveragePercent'
+        ? 'Executed journeys with captured readiness / executed journeys × 100'
+        : report.auditEvidenceVersion !== 2 && metric === 'linkVerificationPercent'
+          ? 'Classified destinations / inventoried destinations × 100'
+          : report.auditEvidenceVersion !== 2 && metric === 'uxStandardsAccessibilityScore'
+            ? 'standardsCompliance × 100'
+            : report.auditEvidenceVersion !== 2 && metric === 'uxFluidityResponsivenessScore'
+              ? 'androidFrameScore ?? cwvComposite ?? iosHitchScore ?? jsRuntimeScore'
+              : AUDIT_METRIC_METHODS[metric][0], unitOfAnalysis: AUDIT_METRIC_METHODS[metric][1],
       numerator: null, denominator: null, sampleSize: observed, sampleUnit: 'evidence-field', eligibleCount: refs.length,
       observedCount: observed, missingCount: missing, excludedCount: 0,
       ...detail, applicability: value !== null ? 'observed' : evidence.some(reason =>
@@ -184,6 +194,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
   const actionRefs = actions.flatMap(check => [perf(check, 'actionInvoked'), perf(check, 'actionCompleted'), perf(check, 'nonTimingFailure'),
     perf(check, 'readinessReady', check.diagnostic?.readiness?.ready), perf(check, 'completionGap', gaps.has(check.id)),
     perf(check, 'statusPass', check.status === 'pass'), perf(check, 'statusFail', check.status === 'fail'),
+    perf(check, 'stepLimitExceeded', check.metrics.stepLimitExceeded === true),
     perf(check, 'eventLoopMeasurementAvailable'), perf(check, 'frameMeasurementAvailable'), perf(check, 'forwardWorkMs')]);
   for (const metric of ['automatedTaskSuccessPercent', 'automatedTaskFailurePercent'] as const) {
     ratio(metric, metric === 'automatedTaskSuccessPercent' ? success.length : failure.length, actions.length,
@@ -287,7 +298,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     [reportField('coverage.executedJourneyChecks', coverage?.executedJourneyChecks), reportField('coverage.plannedJourneyChecks', coverage?.plannedJourneyChecks)]);
   for (const metric of ['readinessCoveragePercent', 'responsivenessCoveragePercent'] as const) {
     const measuredChecks = journeys.filter(check => metric === 'readinessCoveragePercent'
-      ? check.diagnostic?.readiness?.capturing === true && typeof check.diagnostic.readiness.ready === 'boolean'
+      ? hasAuditReadinessEvidence(check, report.auditEvidenceVersion === 2)
       : check.metrics.eventLoopMeasurementAvailable === true && check.metrics.frameMeasurementAvailable === true);
     const refs = journeys.flatMap(check => metric === 'readinessCoveragePercent'
       ? [perf(check, 'readinessCapturing', check.diagnostic?.readiness?.capturing), perf(check, 'readinessReady', check.diagnostic?.readiness?.ready)]
@@ -310,8 +321,16 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     ...report.checks.filter(check => check.id === 'external-link-unverified')
       .map(check => perf(check, 'destinationCount', check.metrics.destinationCount)),
   ];
-  ratio('linkVerificationPercent', totalLinks - completion.gaps.unverifiedLinks, totalLinks, linkRefs,
-    { observedCount: totalLinks - completion.gaps.unverifiedLinks, missingCount: completion.gaps.unverifiedLinks });
+  if (report.auditEvidenceVersion === 2) {
+    const http = auditHttpCheckSummary(report.checks);
+    ratio('linkVerificationPercent', http.verified, http.total, [
+      reportField('http.total', http.total),
+      ...links.map(check => perf(check, 'httpVerified', verifiedAuditHttpDestination(check))),
+    ], { observedCount: http.verified, missingCount: http.total == null ? 0 : http.total - http.verified });
+  } else {
+    ratio('linkVerificationPercent', totalLinks - completion.gaps.unverifiedLinks, totalLinks, linkRefs,
+      { observedCount: totalLinks - completion.gaps.unverifiedLinks, missingCount: completion.gaps.unverifiedLinks });
+  }
   put('unverifiedLinks', linkRefs, { sampleSize: totalLinks, sampleUnit: 'destination', observedCount: totalLinks - completion.gaps.unverifiedLinks,
     missingCount: completion.gaps.unverifiedLinks });
   put('missingChecks', [reportField('completion.gaps.missingChecks', completion.gaps.missingChecks),
@@ -402,19 +421,22 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     add({ source: 'report', field: 'uxStandardsAccessibilityScore', value: uxAudit.pillars.standardsAndAccessibility.score }),
     add({ source: 'report', field: 'uxFluidityResponsivenessScore', value: uxAudit.pillars.fluidityAndResponsiveness.score }),
   ];
+  const scoredPillars = uxRefs.slice(1).filter(ref => numeric(ref) !== null).length;
   put('affsScore', uxRefs, {
-    eligibleCount: uxAudit.evidenceCoverage.representativeTaskCount,
-    observedCount: uxAudit.pillars.interactionFriction.evaluatedTaskCount,
-  }, uxAudit.affsScore === null ? ['incomplete-health-collection'] : []);
-  const evaluatedTasks = uxAudit.pillars.interactionFriction.evaluatedTaskCount;
-  const representativeTasks = uxAudit.evidenceCoverage.representativeTaskCount;
+    sampleUnit: 'component', sampleSize: scoredPillars,
+    eligibleCount: 3, observedCount: scoredPillars, missingCount: 3 - scoredPillars,
+  }, uxAudit.affsScore === null
+    ? [health?.coverage?.complete === true ? 'missing-evidence' : 'incomplete-health-collection']
+    : []);
+  const { scoredTaskCount, evaluatedTaskCount } = uxAudit.pillars.interactionFriction;
+  const missingTaskScores = evaluatedTaskCount - scoredTaskCount;
   put('uxInteractionFrictionScore', [uxRefs[1]], {
     sampleUnit: 'task',
-    sampleSize: evaluatedTasks,
-    eligibleCount: representativeTasks,
-    observedCount: evaluatedTasks,
-    missingCount: Math.max(0, representativeTasks - evaluatedTasks),
-  });
+    sampleSize: scoredTaskCount,
+    eligibleCount: evaluatedTaskCount,
+    observedCount: scoredTaskCount,
+    missingCount: missingTaskScores,
+  }, missingTaskScores > 0 && scoredTaskCount > 0 ? ['partial-samples'] : []);
   const surfaceSummary = uxAudit.pillars.standardsAndAccessibility.surfaceContractSummary;
   const wcagSummary = uxAudit.pillars.standardsAndAccessibility.wcagSummary;
   const standardsParts = [surfaceSummary, wcagSummary].map(summary => {
@@ -431,7 +453,7 @@ export function buildAuditMetricAnalysis(report: PerformanceAuditReport,
     eligibleCount: standardsEligible,
     observedCount: standardsObserved,
     missingCount: standardsMissing,
-  });
+  }, uxAudit.pillars.standardsAndAccessibility.targetSampleCoverage?.capacityReached ? ['partial-samples'] : []);
   const fluidity = uxAudit.pillars.fluidityAndResponsiveness;
   const selectedFluidityComponents = fluidity.telemetryKind === 'android-native-frame-trace'
     ? [fluidity.components.androidFrameScore]

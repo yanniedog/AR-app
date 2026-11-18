@@ -15,5 +15,5 @@ export function uiCanonicalTermValue(revision: Pick<TermRevision, 'value'>): UiT
   if (typeof revision.value === 'boolean') return uiLabel(revision.value ? 'Yes' : 'No');
   if (typeof revision.value === 'string' && /^-?\d+(?:\.\d+)?$/.test(revision.value)) return uiDecimal(revision.value, 'count');
   if (typeof revision.value === 'number' && Number.isFinite(revision.value)) return uiDecimal(String(revision.value), 'count');
-  return uiLabel('Source review required');
+  return uiLabel('Unverified');
 }

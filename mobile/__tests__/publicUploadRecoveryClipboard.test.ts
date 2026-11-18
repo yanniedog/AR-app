@@ -8,7 +8,7 @@ jest.mock('expo-secure-store', () => ({
 }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(async () => true) }));
 jest.mock('../src/lib/debugLog', () => ({
-  debugLog: { readCompleteText: jest.fn(), warn: jest.fn(), getEntries: () => [] },
+  debugLog: { readCompleteText: jest.fn(), warn: jest.fn(), info: jest.fn(), startFreshAfterAuditUpload: jest.fn(), getEntries: () => [] },
   debugLogUploadShareUrl: (receipt: { url: string; shareUrl?: string }) => receipt.shareUrl ?? receipt.url,
   deleteDebugLogUpload: jest.fn(), formatVersionedLogExport: jest.fn(), loadDebugLogUploadReceipts: jest.fn(),
   markDebugLogUploadReceiptVerified: jest.fn(), saveDebugLogUploadReceipt: jest.fn(), uploadDebugLog: jest.fn(), verifyDebugLogUpload: jest.fn(),
