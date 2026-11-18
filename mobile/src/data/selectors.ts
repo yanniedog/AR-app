@@ -23,7 +23,7 @@ import {
 import { rateConditionality } from './rateConditionalFacts';
 import {
   featureEvidenceScope,
-  productMatchesAllFactCriteria,
+  productFactCriteriaState,
   type FactCriterion,
 } from './productFactsCore';
 
@@ -51,6 +51,7 @@ export interface Filters {
   eligibilityCriteria: string[];
   /** Structured normalized-fact predicates (AND across selected criteria). */
   factCriteria: FactCriterion[];
+  factMatchMode?: 'matching' | 'unknown';
   includeNonStandard: boolean;
 }
 
@@ -506,8 +507,8 @@ export function prepareRowFilter(
     }
     if (
       filters.factCriteria?.length > 0 &&
-      !productMatchesAllFactCriteria(detailsProducts?.[row.product_key], filters.factCriteria,
-        featureEvidenceScope(row.product_key, row, section ?? undefined))
+      productFactCriteriaState(detailsProducts?.[row.product_key], filters.factCriteria,
+        featureEvidenceScope(row.product_key, row, section ?? undefined)) !== (filters.factMatchMode === 'unknown' ? 'unknown' : 'match')
     ) {
       return false;
     }

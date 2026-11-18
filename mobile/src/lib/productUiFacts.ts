@@ -1,9 +1,10 @@
 import type { DetailItem, FeeDiscount, NormalizedProductFact } from '../types';
 import { humanizeEnum, toFraction } from '../data/format';
 import { descriptiveValue } from '../data/descriptiveValue';
-import { uiCount, uiDuration, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiPublishedFeeName, uiRate, type UiCopy, type UiLabel, type UiText } from './uiCopy';
+import { uiCount, uiDuration, uiExactFactDecimal, uiIdentifier, uiJoin, uiLabel, uiMoney, uiNumber, uiPublishedFeeName, uiRate, type UiCopy, type UiLabel, type UiText } from './uiCopy';
 
 export interface ProductPresentationFact {
+  sourceFact?: NormalizedProductFact;
   label: UiCopy;
   value: UiText;
   reference: UiText;
@@ -13,6 +14,9 @@ export interface ProductPresentationFact {
 }
 
 export function uiProductFactValue(fact: ProductPresentationFact): UiText {
+  if (fact.sourceFact?.evidenceState === 'unknown') return uiLabel('Unknown');
+  if (fact.sourceFact?.evidenceState === 'conflicting') return uiLabel('Conflicting');
+  if (fact.sourceFact?.evidenceState === 'conditional') return uiJoin(fact.value, ' · ', 'Conditional');
   return uiJoin(fact.value, fact.conditionsUnverified ? uiJoin(' · ', 'Conditions', ': ', 'Unverified') : null);
 }
 const CASHBACK_VALUE_MAX_LENGTH = 80;
@@ -100,10 +104,13 @@ function factValue(value: unknown, unit?: string): UiText {
 }
 export function uiNormalizedProductFact(fact: NormalizedProductFact): ProductPresentationFact {
   const lower = fact.minValue, upper = fact.maxValue;
-  const conditionsUnverified = Boolean(fact.condition?.trim());
-  const value = lower !== undefined && upper !== undefined ? uiJoin(factValue(lower, fact.unit), '–', factValue(upper, fact.unit))
-    : lower !== undefined ? uiJoin('≥', factValue(lower, fact.unit)) : upper !== undefined ? uiJoin('≤', factValue(upper, fact.unit)) : factValue(fact.value, fact.unit);
-  return { label: humanizeEnum(fact.sourceType?.toUpperCase() !== 'OTHER' ? fact.sourceType ?? fact.canonicalKey.split(/[.:/]/).at(-1) : fact.canonicalKey.split(/[.:/]/).at(-1)),
+  const conditionsUnverified = Boolean(fact.condition?.trim() || fact.evidenceState && fact.evidenceState !== 'observed');
+  const render = (field: 'value' | 'minValue' | 'maxValue') => fact.valueType === 'decimal'
+    ? uiExactFactDecimal(fact, field) : factValue(fact[field], fact.unit);
+  const value = fact.evidenceState === 'unknown' ? uiLabel('Unknown') : fact.evidenceState === 'conflicting' ? uiLabel('Conflicting')
+    : lower !== undefined && upper !== undefined ? uiJoin(render('minValue'), '–', render('maxValue'))
+      : lower !== undefined ? uiJoin('≥', render('minValue')) : upper !== undefined ? uiJoin('≤', render('maxValue')) : render('value');
+  return { sourceFact: fact, label: humanizeEnum(fact.sourceType?.toUpperCase() !== 'OTHER' ? fact.sourceType ?? fact.canonicalKey.split(/[.:/]/).at(-1) : fact.canonicalKey.split(/[.:/]/).at(-1)),
     value: uiJoin(value, fact.cadence ? uiJoin(' · ', uiCadence(fact.cadence)) : null), reference: uiIdentifier(fact.id),
     conditions: conditionsUnverified ? 'source-review-required' : 'none', conditionsUnverified, scope: fact.appliesTo?.map(humanizeEnum) ?? [] };
 }

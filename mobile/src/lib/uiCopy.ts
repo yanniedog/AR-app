@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import type { Subscription } from '../data/subscriptions';
-import type { CorePayload, DetailItem, DetailsPayload } from '../types';
+import type { CorePayload, DetailItem, DetailsPayload, ProductSourceDocument, NormalizedProductFact } from '../types';
 import { SECTION_KEYS } from '../types';
+import { StandardUrl } from './standardUrl';
 import type { EligibilityScenario, ScenarioRole } from '../data/eligibilityContracts/facts';
 import { resolveBrandShort } from '../data/bankBrand';
 import type { RatesSectionState } from '../data/ratesSession';
@@ -20,6 +21,10 @@ import type { CurrentProductOption } from '../data/scenarioCatalog';
 
 /** Reviewed actions, field names, statuses and fact units. Never explanatory prose. */
 export const UI_LABELS = [
+  'Reference product', 'Exact scope',
+  'Source criteria', 'Selected products only', 'Search selected products', 'Matching records', 'Typed records', 'Source-only records',
+  'Record', 'First record', 'Previous record', 'Next record', 'Last record',
+  'Conditional', 'Conflicting', 'Attributes', 'Bundles', 'Tiers', 'All', 'Coverage unverified',
   'Recorded move', 'No recorded move', 'Filtered history', 'Quarantined history', 'Baseline unavailable', 'History gaps', 'No products',
   'Bank response coverage', 'Decision windows', 'Unknown changes', 'Unknown timing', 'Unverified first moves',
   'Metric evidence', 'Method', 'Numerator', 'Denominator', 'Sample size', 'Eligible', 'Missing evidence',
@@ -46,6 +51,16 @@ export const UI_LABELS = [
   'Reset temporary filters', 'Reset Rates view', 'Other saved selections',
   'Updating', 'Previous results',
   'Rates per page', 'Products per page', 'Page', 'First', 'Previous', 'Next', 'Last',
+  'Source evidence', 'Original response', 'Ambiguous', 'Index only',
+  'Exact product', 'Product variant', 'Product family', 'Shared provider terms', 'Background',
+  'Supplementary', 'Superseded', 'Document type', 'Open document', 'Provider website', 'Documents',
+  'Specificity unknown',
+  'Equal to', 'At least', 'At most', 'Filter value', 'Invalid value',
+  'Search criteria', 'Show more',
+  'Fields',
+  'Retrieval', 'Declared', 'Candidate', 'Deferred', 'Captured',
+  'First fact', 'Previous fact', 'Next fact', 'Last fact', 'First page', 'Previous page', 'Next page', 'Last page',
+  'Product detail', 'Product index', 'Responses', 'First response', 'Previous response', 'Next response', 'Last response', 'Open response', 'Export match',
   'First page', 'Previous page', 'Next page', 'Last page',
   'Freshness', 'Overdue', 'Stale', 'Icon key', 'Rates controls', 'Advertised or quoted rate', 'Loan-to-value ratio (LVR)', 'Unresolved conditions',
   'Invalid comparison inputs', 'Clear comparison inputs', 'Mortgage comparison', 'Clear saved comparison',
@@ -380,7 +395,7 @@ export const UI_LABELS = [
   'Disable alerts', 'Enable alerts', 'Add term deposit maturity date', 'Add fixed rate end date',
   'Published maturity · Non-conditional rate', 'Simple annual interest · Non-conditional rate',
   'This tab', 'Until close',
-  'Notifications disabled', 'Alert already saved', 'Four-rate limit', 'Different rate types',
+  'Notifications disabled', 'Alert unavailable', 'Alert already saved', 'Four-rate limit', 'Different rate types',
   'Crash reports unchanged', 'Native state unconfirmed', 'Clear cached data?', 'Offline data removed',
   'Invalid date', 'Date not saved', 'Storage unavailable · Previous date retained',
   'Share report', 'Not found',
@@ -470,6 +485,8 @@ function useInputController() {
 export function useReceiptImportInput() { return useInputController(); }
 export function useSetupKeyInput() { return useInputController(); }
 export function useProviderSearchInput() { return useInputController(); }
+export function useEvidenceCriteriaInput() { return useInputController(); }
+export function useFactCriterionInput() { return useInputController(); }
 export function uiRatesQuery(session: Pick<RatesSectionState, 'query'>): UiInputText { return inputText(session.query); }
 export function uiMortgageComparisonInput(model: MortgageComparisonInputs, field: 'loanAmount' | 'lvr' | 'fundsAvailable' | 'propertyValue'): UiInputText {
   return inputText(field === 'lvr' ? model.lvr : mortgageMoneyDigits(model[field] ?? ''));
@@ -553,6 +570,35 @@ export function uiDate(value: string | null | undefined): UiText {
 /** Opaque technical references are identifiers, never descriptions or error messages. */
 export function uiIdentifier(value: string | null | undefined): UiText {
   return known(value && /^[A-Za-z0-9_./:@%+\-=#?&]{1,512}$/.test(value) ? value : 'Unknown');
+}
+/** Exact source decimals never pass through IEEE-754 formatting. */
+export function uiExactFactDecimal(fact: NormalizedProductFact, field: 'value' | 'minValue' | 'maxValue'): UiText {
+  const value = fact[field];
+  if (fact.valueType !== 'decimal' || typeof value !== 'string') return uiLabel('Unknown');
+  try {
+    const decimal = Decimal.parse(value);
+    if (fact.unit === 'fraction') return known(decimal.mul(Decimal.parse('100')).fixed(24).replace(/\.?0+$/, '') + '%');
+    if (fact.unit === 'AUD') return uiJoin('AUD', ' ', known(value));
+    if (fact.unit === 'day' || fact.unit === 'month' || fact.unit === 'year') {
+      const singular = decimal.compare(Decimal.parse('1')) === 0;
+      return uiJoin(known(value), ' ', fact.unit === 'day' ? singular ? 'day' : 'days'
+        : fact.unit === 'month' ? singular ? 'month' : 'months' : singular ? 'year' : 'years');
+    }
+    return !fact.unit || fact.unit === 'count' ? known(value) : uiLabel('Unverified');
+  } catch { return uiLabel('Unknown'); }
+}
+/** Document identity is a filename from its source URL, never provider marketing copy. */
+export function uiDocumentFilename(document: ProductSourceDocument): UiText {
+  try {
+    const pathname = new StandardUrl(document.sourceUrl || document.url).pathname;
+    const filename = decodeURIComponent(pathname.split('/').filter(Boolean).pop() || '');
+    return known(filename && filename.length <= 240 && !/[\u0000-\u001f\u007f]/.test(filename) ? filename : 'Unknown');
+  } catch { return uiLabel('Unknown'); }
+}
+/** An actual document locator, separate from its unparsed legal clause body. */
+export function uiDocumentCitationSection(citation: NonNullable<ProductSourceDocument['citations']>[number]): UiText {
+  const section = citation.section;
+  return known(section && section.length <= 240 && !/[\u0000-\u001f\u007f]/.test(section) ? section : 'Unknown');
 }
 const BACKGROUND_WORK_NAMES: Readonly<Record<string, UiLabel>> = {
   'Payload refresh': 'Payload refresh', 'Prepared bank history': 'Prepared bank history',

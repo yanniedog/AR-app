@@ -7,7 +7,7 @@ jest.mock('../src/data/publicRateCatalogue', () => ({ usePublicRateCatalogue: ()
 jest.mock('../src/hooks/useDetailsCatalogue', () => ({ useDetailsCatalogue: () => mockCatalogue }));
 jest.mock('expo-router', () => ({ Stack: { Screen: 'StackScreen' } }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
-jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button' }));
+jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Row: 'Row', Disclosure: 'Disclosure' }));
 jest.mock('../src/components/product/ProductDetailParts', () => ({ DetailGroup: 'DetailGroup', OfficialLinks: 'OfficialLinks', ProductFacts: 'ProductFacts' }));
 jest.mock('../src/components/product/ProductTermsDisclosure', () => ({ ProductTermsDisclosure: 'ProductTermsDisclosure' }));
 jest.mock('../src/components/product/EligibilityAssessment', () => ({ EligibilityAssessment: 'EligibilityAssessment' }));

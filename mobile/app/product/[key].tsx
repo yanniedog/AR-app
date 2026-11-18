@@ -1,3 +1,5 @@
+import { useProductCriteria } from '../../src/hooks/useProductCriteria';
+import { ProductDocuments } from '../../src/components/product/ProductDocuments';
 import { ProductPageLinks } from '../../src/components/product/ProductPageLink';
 import type { RateRow, SectionKey } from '../../src/types';
 import { useRatesSession } from '../../src/data/ratesSession';
@@ -10,6 +12,7 @@ import { EligibilityAssessment } from '../../src/components/product/EligibilityA
 import { DetailsOnlyProduct } from '../../src/components/product/DetailsOnlyProduct';
 import { FixedDepositCalculation } from '../../src/components/product/FixedDepositCalculation';
 import { ProductTermsDisclosure } from '../../src/components/product/ProductTermsDisclosure';
+import { ProductEvidenceDisclosure } from '../../src/components/product/ProductEvidenceDisclosure';
 import { SavedRateActions } from '../../src/components/product/SavedRateActions';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -189,6 +192,8 @@ export default function ProductDetail() {
   const ensureDetails = useStore((s) => s.ensureDetails);
   const detailsPayload = useStore((s) => s.details);
   const detail = detailsPayload?.products[productKey] ?? null;
+  const productCriteria = useProductCriteria(manifest, detailsPayload?.products, true, [productKey]);
+  const descriptiveDetail = productCriteria.lookup?.[productKey] ?? detail;
   const normalizedFactKinds = useMemo(
     () => new Set(normalizedProductFacts(detail).map((fact) => fact.kind)),
     [detail],
@@ -756,7 +761,7 @@ export default function ProductDetail() {
           ),
         }}
       />
-      <ProductPageLinks overview={detail?.links?.overview}><ScreenScrollView
+      <ProductPageLinks overview={detail?.links?.overview} productDetails={descriptiveDetail}><ScreenScrollView
         onLayout={() => setLayoutReady(true)}
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       >
@@ -951,7 +956,8 @@ export default function ProductDetail() {
           )}
         </Card>
 
-        <MemoProductFacts productDetails={detail} />
+        <MemoProductFacts productDetails={descriptiveDetail} />
+        <ProductDocuments productDetails={descriptiveDetail} />
         <MemoSelectedRateConditions row={row} section={section} />
         {section === 'TD' ? <MemoFixedDepositCalculation row={row} /> : null}
         <MemoEligibilityAssessment productKey={productKey} row={row} section={section} /><MemoSavingsPeriodCalculation productKey={row.product_key} row={row} section={section} /><MemoActivityPeriodCalculation productKey={row.product_key} row={row} section={section} /><MemoMortgagePeriodCalculation productKey={row.product_key} row={row} section={section} />
@@ -960,6 +966,7 @@ export default function ProductDetail() {
         <DetailGroup title="Eligibility" icon="person-outline" items={normalizedFactKinds.has('eligibility') ? undefined : detail?.eligibility} loading={detailsLoading && !normalizedFactKinds.has('eligibility')} />
         <DetailGroup title="Constraints" icon="lock-closed-outline" items={normalizedFactKinds.has('constraint') ? undefined : detail?.constraints} loading={detailsLoading && !normalizedFactKinds.has('constraint')} />
         <ProductTermsDisclosure productKey={productKey} />
+        <ProductEvidenceDisclosure productKey={productKey} />
 
         {exactSaveEligible ? <Button
           title={productWideSaved ? 'Remove all rates' : 'Save all rates'}

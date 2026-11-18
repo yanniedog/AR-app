@@ -112,10 +112,11 @@ function selectedCriterionOption(criterion: FactCriterion): PublishedFactFilterO
     label,
     value: criterion.value,
     unit: criterion.unit,
+    cadence: criterion.cadence,
   });
   return {
     id,
-    label: displayValue ? uiJoin(label, ': ', displayValue) : label,
+    label: displayValue ? uiJoin(label, ': ', criterion.operator === 'gte' ? '≥' : criterion.operator === 'lte' ? '≤' : '', displayValue) : label,
     criterion,
   };
 }

@@ -17,13 +17,21 @@ The interface uses concise headings, field labels, actions, identity, numeric fa
 
 `UiCopy` and `UiChild` close normal display APIs. Native props close titles, placeholders and accessibility text. Description, subtitle, deck, summary, helper, hint and secondary explanatory APIs are removed. Do not add a general `label(string)`, `fact(string)` or cast to bypass admission. New registry entries require semantic review as actions, headings, labels, statuses or facts; never explanatory prose.
 
-Identity factories receive actual identity fields. Do not fabricate an identity model from a paragraph. Source clauses are parsed only when the existing source admission proves the exact product, variant, publication, hash and pointer. Unsupported wording remains `Source review required` and links to its original evidence.
+Identity factories receive actual identity fields. Do not fabricate an identity model from a paragraph. Source clauses are parsed only when the existing source admission proves the exact product, variant, publication, hash and pointer. Unsupported wording remains `Unverified` and links to its original evidence.
+
+`uiDocumentFilename` receives the actual source-document descriptor and derives a
+bounded filename from its source URL. It never admits arbitrary provider labels,
+marketing descriptions or extracted legal prose as interface identity.
+`uiDocumentCitationSection` admits only the bounded section locator on an actual
+source-document citation; legal clause bodies retain the original evidence boundary.
 
 Private edited facts keep their real provenance and encryption. Neither a formatting factory nor a result label may strengthen a monetary, eligibility or source claim. Hashed receipts, calculation arithmetic and persisted inputs retain their original contracts.
 
 ## Evidence boundaries
 
 `DocumentText` owns the fixed legal/licence registry. `DebugEvidenceText` owns the bounded local log subscription. `AuditEvidenceText` owns an actual `PerformanceAuditReport`; `ReceiptEvidenceText` owns an admitted `ReplayDocument.original`. The explicit native debug share helper reads the complete local evidence with installed application metadata and accepts only a boolean full-evidence option. These are individual source-bound expressions, not file or route exemptions. All surrounding headings, controls and status remain subject to normal copy rules.
+
+Product source evidence has no text boundary: acquired provider responses and fact bodies are never rendered. The interface shows only structured facts, counts, states, dates and identifiers.
 
 ## Enforcement
 

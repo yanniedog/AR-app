@@ -93,6 +93,7 @@ function inspectFixture(name, sources) {
     'src/lib/debugLog.ts': debugSource,
     'src/lib/performanceAudit.ts': `export interface PerformanceAuditReport {schemaVersion:1;records:readonly {id:string;reason:string}[];}`,
     'src/data/receiptReplay/types.ts': `export interface ReplayDocument {digest:string;original:unknown;}`,
+    'src/data/productEvidenceDocument.ts': `export interface ProductEvidencePage {readonly page:number;readonly pages:number;} export declare function productEvidencePageText(page:ProductEvidencePage):string;`,
     'src/lib/searchReportTables.ts': reportContract,
     'src/lib/searchReportWorkbook.ts': reportMarkup,
     'node_modules/@types/react/index.d.ts': `export interface ReactElement {type:any;props:any;key:string|null;}
@@ -169,6 +170,7 @@ rejected('audit-arbitrary-prop',{'src/components/AuditEvidenceText.tsx':`${rende
 rejected('audit-no-whole-file-exemption',{'src/components/AuditEvidenceText.tsx':auditRenderer+`declare const raw:string; <Text>{raw}</Text>`},'src/components/AuditEvidenceText.tsx');
 
 permitted('receipt-actual-model',{'src/components/ReceiptEvidenceText.tsx':receiptRenderer});
+rejected('product-evidence-arbitrary-text', {'src/components/ProductEvidenceText.tsx':`${rendererImports} export function ProductEvidenceText({text}:{text:string}) {return <Text>{text}</Text>;}`}, 'src/components/ProductEvidenceText.tsx');
 rejected('receipt-local-same-name-model',{'src/components/ReceiptEvidenceText.tsx':receiptRenderer.replace("import type {ReplayDocument} from '../data/receiptReplay/types';",`interface ReplayDocument {original:unknown;}`)},'src/components/ReceiptEvidenceText.tsx');
 rejected('receipt-imported-same-name-model',{'src/data/fakeModels.ts':`export interface ReplayDocument {original:unknown;}`,'src/components/ReceiptEvidenceText.tsx':receiptRenderer.replace("'../data/receiptReplay/types'","'../data/fakeModels'")},'src/components/ReceiptEvidenceText.tsx');
 rejected('receipt-outside-renderer',{'app/receipt.tsx':receiptRenderer.replace("'../data/receiptReplay/types'","'../src/data/receiptReplay/types'")},'app/receipt.tsx');

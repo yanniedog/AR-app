@@ -1,5 +1,5 @@
 import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, TextInput, View } from 'react-native';
 
 import type { Filters } from '../data/selectors';
 import type { SearchFilterOptions } from '../data/searchFilterOptions';
@@ -13,9 +13,10 @@ import {
 import { matchingLenders, visibleFilterOptions } from '../lib/filterOptions';
 import { scheduleAfterInteractions } from '../lib/yieldToUi';
 import { SearchBar } from './controls';
+import { FactCriterionEditor } from './product/FactCriterionEditor';
 import { SheetSurface, type SheetAuditState } from './SheetSurface';
 import { AppText, Button, Chip, Disclosure, Divider, Row } from './ui';
-import { uiCount, uiJoin, uiLabel, uiProviderName, useProviderSearchInput, type UiCopy, type UiChild } from '../lib/uiCopy';
+import { uiCount, uiJoin, uiLabel, uiProviderName, useProviderSearchInput, useFactCriterionInput, type UiCopy, type UiChild } from '../lib/uiCopy';
 
 function filterGroupTitle(field: string): UiCopy {
   switch (field) {
@@ -89,15 +90,19 @@ function FilterSheetInner({
   }, [visible, filters, isControlledDraft, setDraft, setLenderQuery]);
 
   const { groups: groupOptions, providers, accountFeatures, eligibilityCriteria } = options;
+  const criterionQuery = useFactCriterionInput();
+  const [criterionLimit, setCriterionLimit] = useState(32);
+  const matchingCriteria = useMemo(() => options.publishedDetails.filter(option =>
+    option.label.toLocaleLowerCase().includes(criterionQuery.raw.toLocaleLowerCase())), [options.publishedDetails, criterionQuery.raw]);
   const publishedDetails = useMemo(
     () => everOpened
       ? boundedPublishedFactFilterOptions(
-          options.publishedDetails,
+          matchingCriteria,
           draft.factCriteria,
-          32,
+          criterionLimit,
         )
       : [],
-    [everOpened, options.publishedDetails, draft.factCriteria],
+    [everOpened, matchingCriteria, draft.factCriteria, criterionLimit],
   );
 
   // Counting re-runs the list filter, so let chip presses paint first.
@@ -271,7 +276,14 @@ function FilterSheetInner({
                 open={publishedOpen}
                 onToggle={() => setPublishedOpen((open) => !open)}
               >
+                <TextInput value={criterionQuery.value} onChangeText={value => { criterionQuery.onChangeText(value); setCriterionLimit(32); }}
+                  maxLength={256} accessibilityLabel="Search criteria" placeholder="Search criteria" />
+                <AppText variant="small">{uiJoin('Criteria', ' · ', uiCount(matchingCriteria.length))}</AppText>
                 {!!draft.factCriteria.length && <AppText variant="small">{uiJoin('Selected', ' · ', uiCount(draft.factCriteria.length))}</AppText>}
+                {!!draft.factCriteria.length && <Row gap={8}>
+                  <Chip label="Matches" selected={draft.factMatchMode !== 'unknown'} onPress={() => setDraft(value => ({ ...value, factMatchMode: 'matching' }))} />
+                  <Chip label="Unknown" selected={draft.factMatchMode === 'unknown'} onPress={() => setDraft(value => ({ ...value, factMatchMode: 'unknown' }))} />
+                </Row>}
                 <Row gap={8} style={{ flexWrap: 'wrap' }}>
                   {publishedDetails.map((option) => (
                     <Chip
@@ -284,6 +296,10 @@ function FilterSheetInner({
                     />
                   ))}
                 </Row>
+                {draft.factCriteria.map((criterion, index) => <FactCriterionEditor key={`${index}:${criterion.canonicalKey}:${criterion.sourceType}`}
+                  criterion={criterion} onChange={value => setDraft(current => ({ ...current,
+                    factCriteria: current.factCriteria.map((item, at) => at === index ? value : item) }))} />)}
+                {publishedDetails.length < matchingCriteria.length ? <Button title="Show more" variant="secondary" onPress={() => setCriterionLimit(value => value + 32)} /> : null}
               </Disclosure>
             ) : null}
 

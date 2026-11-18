@@ -1,3 +1,5 @@
+import type { FactCriterion } from '../../data/productFactsCore';
+import { useProductCriteria } from '../../hooks/useProductCriteria';
 import { PreparedProductCard } from './PreparedProductCard';
 import { useFocusMeasurement } from '../../hooks/useFocusMeasurement';
 import { isWidelyAvailableMortgageFacet, scopeMortgageFacets } from '../../data/mortgageFacetScope';
@@ -389,6 +391,8 @@ export default function RatesWorkspace() {
     [core, details, manifest, coreIntegrity]);
   const sourceRates = core?.sections[section]?.rates ?? EMPTY_RATE_ROWS;
   // Product discovery does not need pricing or a mortgage comparison index.
+  const productCriteria = useProductCriteria(manifest, details?.products, filterOpen || filters.factCriteria.length > 0);
+  const filterDetails = productCriteria.lookup;
   const draftingListed = filterOpen && draftAvailability === 'listed';
   const mortgageSearchActive = draftingListed || (availability === 'listed' &&
     (section !== 'Mortgage' || mortgageCriteriaReady || isDefaultMortgageBrowse));
@@ -585,16 +589,18 @@ export default function RatesWorkspace() {
   const indexedRows = useMemo(() => indexedPricing && !path.length && !hierarchyScoped
     ? indexedPricing.filtered(resultFilters, sortKey, mortgageRateMetric) : null,
   [indexedPricing, path.length, hierarchyScoped, resultFilters, sortKey, mortgageRateMetric]);
+  const criteriaPending = effectiveFilters.factCriteria.length > 0 && (productCriteria.status === 'idle' || productCriteria.status === 'loading');
   const cooperativeResults = usePreparedSearchRows(indexedRows ? EMPTY_RATE_ROWS : mortgageScope.rows, resultFilters, sortKey, section,
-    details?.products, resultSearchIndex, depositRankMetric, mortgageRateMetric,
-    suitabilityRevision, isFocused && !indexedRows);
-  const preparedResults = indexedRows ? { ...cooperativeResults, rows: indexedRows, ready: true, error: null } : cooperativeResults;
+    filterDetails, resultSearchIndex, depositRankMetric, mortgageRateMetric,
+    suitabilityRevision, isFocused && !indexedRows && !criteriaPending);
+  const preparedResults = criteriaPending ? { ...cooperativeResults, rows: EMPTY_RATE_ROWS, ready: false, error: null }
+    : indexedRows ? { ...cooperativeResults, rows: indexedRows, ready: true, error: null } : cooperativeResults;
   const rows = preparedResults.rows;
   // Ancillary facet inventories must not compete with the matching-result
   // pipeline while the current pricing/filter request is still unresolved.
   const filterOptions = useSearchFilterOptions(
     mortgageSearchActive ? baseRows : EMPTY_RATE_ROWS,
-    mortgageSearchActive ? details?.products : undefined,
+    mortgageSearchActive ? filterDetails : undefined,
     section, suitabilityRevision, publicPricing.ready && preparedResults.ready,
   );
   const unverifiedResultCount = useMemo(
@@ -647,6 +653,7 @@ export default function RatesWorkspace() {
 
   const draftResultCount = useCallback(
     async (draft: Filters, cancelled?: () => boolean) => {
+      if (draft.factCriteria.length && (productCriteria.status === 'loading' || productCriteria.status === 'idle')) return null;
       // Suitability rebuilds can keep the same row array; count against the gate the list uses.
       void suitabilityRevision;
       if (indexedPricing && !path.length && !hierarchyScoped) {
@@ -660,13 +667,13 @@ export default function RatesWorkspace() {
       return (await filterRowsCooperatively(
         mortgageScope.rows,
         { ...draft, query: debouncedQuery },
-        details?.products ?? null,
+        filterDetails ?? null,
         resultSearchIndex,
         section,
         { cancelled },
       ))?.length ?? null;
     },
-    [indexedPricing, path.length, hierarchyScoped, effectiveFilters.includeNonStandard, sortKey, mortgageRateMetric, mortgageScope.rows, debouncedQuery, details?.products, resultSearchIndex, section, suitabilityRevision],
+    [indexedPricing, path.length, hierarchyScoped, effectiveFilters.includeNonStandard, sortKey, mortgageRateMetric, mortgageScope.rows, debouncedQuery, filterDetails, resultSearchIndex, section, suitabilityRevision, productCriteria.status],
   );
   const unlistedResultCount = useCallback((draft: Filters, cancelled?: () => boolean) => {
     void suitabilityRevision;
@@ -695,6 +702,7 @@ export default function RatesWorkspace() {
         accountFeatures: effectiveFilters.accountFeatures,
         eligibilityCriteria: effectiveFilters.eligibilityCriteria,
         factCriteria: effectiveFilters.factCriteria,
+        ...(effectiveFilters.factMatchMode === 'unknown' ? { factMatchMode: 'unknown' as const } : {}),
         includeNonStandard: effectiveFilters.includeNonStandard,
       },
     }),
@@ -719,6 +727,15 @@ export default function RatesWorkspace() {
   const onToggleSearchAlert = async () => {
     if (searchSub) {
       unsubscribeSearch(searchSub.id);
+      return;
+    }
+    // Alert evaluation reads only the admitted details; a criterion supplied by
+    // the optional criteria sidecar alone would silently match nothing.
+    const evaluable = (criterion: FactCriterion) => Object.values(details?.products ?? {}).some(product => product.facts?.some(fact =>
+      (criterion.canonicalKey === undefined || fact.canonicalKey === criterion.canonicalKey)
+      && (criterion.sourceType === undefined || fact.sourceType?.trim().toUpperCase() === criterion.sourceType.trim().toUpperCase())));
+    if (!effectiveFilters.factCriteria.every(evaluable)) {
+      Alert.alert('Alert unavailable');
       return;
     }
     const ok = await ensurePermissions();
@@ -1346,9 +1363,9 @@ export default function RatesWorkspace() {
         visible={filterOpen}
         onClose={cancelFilters}
         options={activeFilterOptions}
-        optionsPending={draftAvailability === 'listed' && !filterOptions.ready && !filterOptions.error}
-        optionsError={filterOptions.error}
-        onRetryOptions={filterOptions.retry}
+        optionsPending={draftAvailability === 'listed' && (!filterOptions.ready && !filterOptions.error || productCriteria.status === 'loading' || productCriteria.status === 'idle')}
+        optionsError={productCriteria.status === 'failed' ? uiJoin('Source', ' · ', 'Unavailable') : filterOptions.error}
+        onRetryOptions={() => { filterOptions.retry(); productCriteria.retry(); }}
         filters={effectiveFilters}
         controlledDraft={effectiveDraftFilters}
         onDraftChange={setDraftFilters}

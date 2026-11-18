@@ -244,6 +244,32 @@ export interface NormalizedProductFact {
   condition?: string;
   /** Curated aliases only; descriptions and URLs are excluded by contract. */
   searchTerms?: string[];
+  criteriaVersion?: 1;
+  valueType?: 'decimal' | 'enum' | 'text' | 'boolean' | 'duration';
+  evidenceState?: 'observed' | 'conditional' | 'unknown' | 'conflicting';
+  sourcePath?: string;
+  sourcePathBasis?: 'raw-cdr' | 'cleaned-cdr';
+}
+
+export interface ProductSourceDocument {
+  url: string;
+  sourceUrl?: string;
+  sourcePath: string;
+  relation: string;
+  label?: string;
+  specificity?: 'exact-product' | 'product-variant' | 'product-family' | 'provider-general' | 'background';
+  relevance?: 'verified' | 'conditional' | 'supplementary' | 'candidate' | 'superseded';
+  documentType?: string;
+  checkedAt?: string;
+  capturedAt?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  verification?: 'declared-reference' | 'discovery-candidate' | 'pending' | 'failed' | 'deferred' | 'captured';
+  finalUrl?: string;
+  contentSha256?: string;
+  mediaType?: string;
+  documentVersionId?: string;
+  citations?: { page?: number; section?: string; sourcePath?: string; relation?: string; sourceUrl?: string }[];
 }
 
 /** Authoritative lender document URIs (CDR additionalInformation). */
@@ -270,7 +296,7 @@ export interface ProductDetail {
   /** Links to the lender's official overview / eligibility / fees / terms pages. */
   links?: ProductLinks;
   /** Original references retained before generic URL cleaning. */
-  sourceDocuments?: { url: string; sourceUrl?: string; sourcePath: string; relation: string; label?: string }[];
+  sourceDocuments?: ProductSourceDocument[];
 }
 
 export interface RateConditions {
@@ -304,6 +330,10 @@ export interface ManifestFile {
 }
 
 export interface Manifest {
+  /** Lazy, detached descriptive evidence; never a pricing or eligibility authority. */
+  product_evidence_v1?: import('./data/productEvidencePublication').EvidenceReference;
+  product_response_evidence_v1?: import('./data/productEvidencePublication').EvidenceReference;
+  optional_product_evidence_status?: import('./data/productEvidenceStatus').EvidenceDeliveryStatus;
   /** Public pricing is lazy, independently hashed and bound to the selected ingest. */
   public_rate_catalogue?: import('./data/publicRateModel').PublicRateCapability;
   /** Verified full history loaded after first paint, outside legacy eager files. */
