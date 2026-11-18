@@ -429,7 +429,7 @@ export const UI_LABELS = [
   'Recurring fees', 'Frequency interval start',
   '<60', '60-70', '70-80', '80-90', '>90',
   'K', 'M', 'Amount unit', 'millions of dollars', 'dollars',
-  'Carousel', 'List',
+  'Carousel', 'List', 'Clear filters',
   'Keep current', 'Use saved', 'Choose saved value',
   'All product variants',
 ] as const;

@@ -7,12 +7,13 @@ import { LEDGER_RADIUS } from '../theme/layout';
 import { AppText } from './ui';
 
 /** The public value and callback always use dollars. Unit changes affect display only. */
-export function CurrencyInput({ label, value, onChangeText, editable = true, error, accessibilityLabel, testID, onBlur }: {
-  label: UiCopy; value: string; onChangeText: (value: string) => void; editable?: boolean;
+export function CurrencyInput({ label, value, onChangeText, editable = true, error, accessibilityLabel, testID, onBlur, defaultUnit = 'K' }: {
+  /** Ledger-style entries use '$'; mortgage-scale amounts keep thousands. */
+  defaultUnit?: CurrencyUnit; label: UiCopy; value: string; onChangeText: (value: string) => void; editable?: boolean;
   error?: UiCopy; accessibilityLabel?: UiCopy; testID?: string; onBlur?: () => void;
 }) {
   const theme = useTheme();
-  const [unit, setUnit] = useState<CurrencyUnit>('K');
+  const [unit, setUnit] = useState<CurrencyUnit>(defaultUnit);
   const input = useCurrencyAmountInput(), draft = input.value, setDraft = input.onChangeText;
   const emitted = useRef<string | null>(null);
   useEffect(() => {

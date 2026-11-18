@@ -8,7 +8,7 @@ import { InteractionManager, ScrollView, useWindowDimensions, View } from 'react
 
 import { BankHistoryStatistics } from '../../src/components/BankHistoryStatistics';
 import { ProviderRateFilters } from '../../src/components/ProviderRateFilters';
-import { normalizeProfileFilters, profileFilterRows, type ProfileFilters } from '../../src/data/profile';
+import { normalizeProfileFilters, profileFeaturesForSection, profileFilterRows, type ProfileFilters } from '../../src/data/profile';
 import { providerRowIdentity, providerTierSeries } from '../../src/data/providerRateWorkspace';
 import { uiProductName as selectedProductName } from '../../src/lib/uiCopy';
 import { bankRateScope } from '../../src/data/bankRateOverview';
@@ -93,6 +93,17 @@ function bpsLabel(bps: number): UiText {
 }
 
 
+/** Saved-profile dimensions apply to every section but only Mortgage has controls here. */
+function sectionFiltered(p: ProfileFilters, section: SectionKey): boolean {
+  return profileFeaturesForSection(p, section).length > 0
+    || (section === 'Savings' && p.depositKinds.length > 0) || (section === 'TD' && p.interestPayments.length > 0);
+}
+function clearSectionFilters(p: ProfileFilters, section: SectionKey): ProfileFilters {
+  const features = new Set(profileFeaturesForSection(p, section));
+  return { ...p, accountFeatures: p.accountFeatures.filter(feature => !features.has(feature)),
+    depositKinds: section === 'Savings' ? [] : p.depositKinds, interestPayments: section === 'TD' ? [] : p.interestPayments };
+}
+
 function isSectionKey(value: string | undefined): value is SectionKey {
   return !!value && (SECTION_KEYS as readonly string[]).includes(value);
 }
@@ -172,9 +183,8 @@ export default function BankDetail() {
   const [statisticsHeight, setStatisticsHeight] = useState(80);
   const [browseControlsHeight, setBrowseControlsHeight] = useState(56);
   const [carouselNavigationHeight, setCarouselNavigationHeight] = useState(64);
+  const [moveDetailHeight, setMoveDetailHeight] = useState(0);
   const productMinimumHeight = fontScale >= 1.2 ? 180 : 150;
-  const chartViewportHeight = Math.max(100, Math.min(contentHeight * 0.55,
-    contentHeight - statisticsHeight - browseControlsHeight - (productView === 'carousel' ? carouselNavigationHeight : 0) - productMinimumHeight));
   const cardWidth = Math.max(160, contentWidth - 32);
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
@@ -530,9 +540,9 @@ export default function BankDetail() {
   const handleMoveSelect = useCallback(
     (event: BankRateEvent) => {
       router.setParams({ date: event.date, section: event.section });
-      requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }));
+      if (productView === 'list') requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }));
     },
-    [router],
+    [productView, router],
   );
   const auditActions = useMemo(() => {
     const actions: Record<string, (...args: unknown[]) => unknown> = {
@@ -712,6 +722,51 @@ export default function BankDetail() {
   if (!core) return <ScreenSkeleton />;
   const lenderName=lenderRow?uiProviderName(lenderRow):uiLabel('Bank');
   const direction=(value:BankRateEvent['dir']):UiCopy=>value==='hike'?'Increase':value==='cut'?'Decrease':'Mixed';
+  const moveDetail = <>
+        {showBankInsights && historySurfaceReady && focusEvent && focusSection ? (
+          <Card
+            style={{ marginBottom: 16 }}
+            accessibilityLiveRegion="polite"
+            accessibilityLabel={uiJoin(lenderName,' · ','Move detail',' · ',uiDate(focusEvent.date))}
+          >
+            <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+              <AppText variant="h3">{uiLabel("Move detail")}</AppText>
+            </Row>
+            <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
+              {uiJoin(direction(focusEvent.dir),' · ',uiSectionName(focusSection),' · ',uiDate(focusEvent.date),focusRateCtx?uiJoin(' · ','Median',': ',formatRate(focusRateCtx.before),' → ',formatRate(focusRateCtx.after)):null)}
+            </AppText>
+            <Row gap={8} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+              <Chip
+                label={uiJoin(uiCount(focusEvent.moved),' / ',uiCount(focusEvent.total),' ','Products')}
+                selected={false}
+              />
+              <Chip
+                label={uiJoin('Average',': ',bpsLabel(focusEvent.avg_bps))}
+                selected
+              />
+            </Row>
+            {!focusedMoves.length ? <AppText variant="small" color="textMuted">
+              {uiLabel(productHistory ? 'No exact matches' : productHistoryError ? 'History unavailable' : 'Loading')}
+            </AppText> : null}
+          </Card>
+        ) : null}
+
+        {showBankInsights && historySurfaceReady && focusSourceEvent && focusSection && !focusEvent ? (
+          <Card style={{ marginBottom: 16 }} accessibilityLiveRegion="polite">
+            <AppText variant="h3" style={{ marginBottom: 6 }}>{uiLabel("Move detail")}</AppText>
+            <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
+              {uiJoin(uiSectionName(focusSection),' · ',uiDate(focusSourceEvent.date))}
+            </AppText>
+            <AppText variant="small" color="textMuted">
+              {uiLabel(productHistoryError && focusHistoryState === 'loading' ? 'History unavailable':focusHistoryState === 'loading' ? 'Loading':focusHistoryState === 'unsafe' ? 'Exact rate attribution unsafe':focusHistoryState === 'incomplete' ? 'Prior observation missing':'No exact compatible matches')}
+            </AppText>
+          </Card>
+        ) : null}
+  </>;
+  const moveDetailShown = productView === 'carousel' && showBankInsights && historySurfaceReady && !!focusSection && !!focusSourceEvent;
+  const chartViewportHeight = Math.max(100, Math.min(contentHeight * 0.55,
+    contentHeight - statisticsHeight - browseControlsHeight - (productView === 'carousel' ? carouselNavigationHeight : 0) - (moveDetailShown ? moveDetailHeight : 0) - productMinimumHeight));
+
 
   return (
     <>
@@ -775,10 +830,16 @@ export default function BankDetail() {
           <Row testID="provider-browse-controls" onLayout={event => setBrowseControlsHeight(event.nativeEvent.layout.height)} gap={8} style={{ flexShrink: 0, paddingVertical: 4, paddingHorizontal: 16 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
               {activeChartSection === 'Mortgage' ? <ProviderRateFilters rows={mortgageFilterRows} profile={providerProfile} onChange={setProviderProfile} />
-                : <AppText variant="tiny">{uiJoin(uiCount(productCount), ' ', 'Products')}</AppText>}
+                : <Row gap={8}>
+                  <AppText variant="tiny">{uiJoin(uiCount(productCount), ' ', 'Products')}</AppText>
+                  {activeChartSection && sectionFiltered(providerProfile, activeChartSection)
+                    ? <Chip label="Clear filters" selected onPress={() => setProviderProfile(clearSectionFilters(providerProfile, activeChartSection))} /> : null}
+                </Row>}
             </View>
             <Chip label={productView === 'carousel' ? 'List' : 'Carousel'} onPress={() => setProductView(productView === 'carousel' ? 'list' : 'carousel')} />
           </Row>
+        {moveDetailShown ? <ScrollView testID="provider-move-detail" nestedScrollEnabled style={{ flexGrow: 0, flexShrink: 0, maxHeight: 180 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4 }} onLayout={event => setMoveDetailHeight(Math.min(180, event.nativeEvent.layout.height))}>{moveDetail}</ScrollView> : null}
         <FlashList
           key={`${productView}:${provider}`}
           horizontal={productView === 'carousel'}
@@ -801,53 +862,7 @@ export default function BankDetail() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12 + insets.bottom }}
           renderItem={renderProductItem}
           ListEmptyComponent={<EmptyState title="No current products" />}
-          ListFooterComponent={productView === 'list' ? <View>
-
-
-        {showBankInsights && historySurfaceReady && focusEvent && focusSection ? (
-          <Card
-            style={{ marginBottom: 16 }}
-            accessibilityLiveRegion="polite"
-            accessibilityLabel={uiJoin(lenderName,' · ','Move detail',' · ',uiDate(focusEvent.date))}
-          >
-            <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-              <AppText variant="h3">{uiLabel("Move detail")}</AppText>
-            </Row>
-            <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
-              {uiJoin(direction(focusEvent.dir),' · ',uiSectionName(focusSection),' · ',uiDate(focusEvent.date),focusRateCtx?uiJoin(' · ','Median',': ',formatRate(focusRateCtx.before),' → ',formatRate(focusRateCtx.after)):null)}
-            </AppText>
-            <Row gap={8} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
-              <Chip
-                label={uiJoin(uiCount(focusEvent.moved),' / ',uiCount(focusEvent.total),' ','Products')}
-                selected={false}
-              />
-              <Chip
-                label={uiJoin('Average',': ',bpsLabel(focusEvent.avg_bps))}
-                selected
-              />
-            </Row>
-            {!focusedMoves.length ? <AppText variant="small" color="textMuted">
-              {uiLabel(productHistory ? 'No exact matches' : productHistoryError ? 'History unavailable' : 'Loading')}
-            </AppText> : null}
-          </Card>
-        ) : null}
-
-        {showBankInsights && historySurfaceReady && focusSourceEvent && focusSection && !focusEvent ? (
-          <Card style={{ marginBottom: 16 }} accessibilityLiveRegion="polite">
-            <AppText variant="h3" style={{ marginBottom: 6 }}>{uiLabel("Move detail")}</AppText>
-            <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
-              {uiJoin(uiSectionName(focusSection),' · ',uiDate(focusSourceEvent.date))}
-            </AppText>
-            <AppText variant="small" color="textMuted">
-              {uiLabel(productHistoryError && focusHistoryState === 'loading' ? 'History unavailable':focusHistoryState === 'loading' ? 'Loading':focusHistoryState === 'unsafe' ? 'Exact rate attribution unsafe':focusHistoryState === 'incomplete' ? 'Prior observation missing':'No exact compatible matches')}
-            </AppText>
-          </Card>
-        ) : null}
-
-
-
-
-          </View> : null}
+          ListFooterComponent={productView === 'list' ? <View>{moveDetail}</View> : null}
         />
         {productView === 'carousel' && productItems.length > 1 ? <Row onLayout={event => setCarouselNavigationHeight(event.nativeEvent.layout.height)} gap={8} style={{ flexShrink: 0, padding: 8, justifyContent: 'space-between' }}>
           <Chip label="Previous" icon="chevron-back" onPress={() => {

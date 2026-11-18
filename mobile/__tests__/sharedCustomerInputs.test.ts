@@ -221,3 +221,17 @@ test('a loan-only Rates edit cannot replay stale property and offset values over
   expect((await loadUserRateScenario()).mortgage).toMatchObject({ loanBalance: '700000', propertyValue: '800000' });
   expect((await loadUserRateScenario()).projections.mortgage.offsetBalance).toBe('75000');
 });
+
+test('the stored v4 scenario shape is idempotent under normalisation (bump the version and migrate before changing it)', () => {
+  const stored = {
+    version: 4,
+    mortgage: { mode: 'refi', propertyValue: '', deposit: '', costs: '', loanBalance: '', currentRate: '', years: '', savingsBalance: '' },
+    savings: { balance: '', currentRate: '' },
+    termDeposit: { balance: '', currentRate: '' },
+    projections: JSON.parse(JSON.stringify(normalizeUserRateScenario({}).projections)),
+    currentProducts: { mortgage: { provider: '', productKey: '', rateIndex: null }, savings: { provider: '', productKey: '', rateIndex: null }, termDeposit: { provider: '', productKey: '', rateIndex: null } },
+    mortgageSwitch: { currentBankExitFees: '', applicationFees: '', valuationFees: '', settlementFees: '', governmentAndLegalFees: '', otherUpfrontFees: '', cashback: '', fundingMethod: 'cash-or-offset', targetOffsetAvailable: 'auto' },
+    localRates: Object.fromEntries(['mortgage', 'savings', 'termDeposit'].map(key => [key, { mode: 'entered', referenceId: '', totalAdjustment: '', allowHistorical: false, referenceChangeAlerts: false, referenceScenario: {} }])),
+  };
+  expect(JSON.parse(JSON.stringify(normalizeUserRateScenario({ ...stored, mortgage: { ...stored.mortgage, mode: 'refi' } })))).toEqual(stored);
+});
