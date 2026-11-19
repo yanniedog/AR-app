@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 18396)
-Total output lines: 894
-
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import type { Subscription } from '../data/subscriptions';
 import type { CorePayload, DetailItem, DetailsPayload, ProductSourceDocument, NormalizedProductFact } from '../types';
@@ -392,7 +389,24 @@ export const UI_LABELS = [
   'Alerts on', 'Alert me', 'Add maturity date', 'Add fixed-rate end date',
   'Term deposit maturity', 'Fixed-rate end', 'Schedule unavailable', 'Awaiting decision result',
   'Next RBA decision', 'Official RBA decisions', 'Partial refresh', 'Forecast unavailable',
-  'Bond data unavailable'…396 tokens truncated…ion',
+  'Bond data unavailable', 'No compatible observations', 'Observations unavailable',
+  'Invalid inputs', 'Matches unavailable', 'Lower matched rates', 'Higher matched rates',
+  'Current rate required', 'Loan inputs incomplete', 'No better comparable rates',
+  'Disable alerts', 'Enable alerts', 'Add term deposit maturity date', 'Add fixed rate end date',
+  'Published maturity · Non-conditional rate', 'Simple annual interest · Non-conditional rate',
+  'This tab', 'Until close',
+  'Notifications disabled', 'Alert unavailable', 'Alert already saved', 'Four-rate limit', 'Different rate types',
+  'Crash reports unchanged', 'Native state unconfirmed', 'Clear cached data?', 'Offline data removed',
+  'Invalid date', 'Date not saved', 'Storage unavailable · Previous date retained',
+  'Share report', 'Not found',
+  'Product details', 'Product rate', 'Benchmarks', 'Product unavailable', 'Product rate unavailable', 'Rate kind',
+  'Currency', 'Current', 'Section', 'Path',
+  'Monthly equivalent', 'Conversion', 'Repayment', 'Note', 'Missing input', 'Invalid input',
+  'Obligation reference', 'Fee occurrence reference', 'External account role', 'Customer field', 'Customer facts', 'Offer facts', 'Payment order',
+  'Boolean', 'Decimal', 'Text', 'Fraction', 'Percent', 'Count',
+  'Payload refresh', 'Prepared bank history', 'Historical catalogue', 'Bank history preparation',
+  'Details / matching', 'Post-refresh warming', 'Bank summary history', 'Bank insights', 'Bank spread history', 'RBA calendar',
+  'Asset cache', 'History envelope', 'Prepared chart data', 'Catalogue decoding', 'Catalogue validation',
   'Cached asset validation', 'History inflation', 'History download', 'Cache encoding', 'Cache saving',
   'Source dates', 'Fallback', 'Superseded', 'Suitability index', 'Details cache', 'Details download',
   'History checkpoint', 'Baseline receipts', 'Catalogue edition', 'Catalogue merge', 'Preparation queue',
