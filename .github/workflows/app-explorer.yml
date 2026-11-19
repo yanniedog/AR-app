@@ -11,8 +11,11 @@ on:
         description: Release tag or latest
         default: latest
       mode:
-        description: crawl or script
+        description: crawl, script or audit
         default: crawl
+      audit:
+        description: Audit kind for audit mode (live or local)
+        default: live
       script:
         description: JSON array of steps (script mode)
         default: ''
@@ -45,13 +48,14 @@ jobs:
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 150
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ inputs.tag || 'latest' }}
       MODE: ${{ inputs.mode || 'crawl' }}
       SCRIPT_JSON: ${{ inputs.script }}
       ROUTES: ${{ inputs.routes }}
+      AUDIT: ${{ inputs.audit || 'live' }}
       FRESH: ${{ github.event_name != 'workflow_dispatch' || inputs.fresh }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

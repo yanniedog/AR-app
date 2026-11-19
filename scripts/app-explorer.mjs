@@ -2,6 +2,7 @@
 // Local client for .github/workflows/app-explorer.yml.
 //   node scripts/app-explorer.mjs run [--tag latest] [--mode crawl|script] [--script steps.json]
 //                                     [--routes /browse,/market] [--keep-data] [--no-wait]
+//   node scripts/app-explorer.mjs run --audit [live|local]   full in-app audit; log saved as audit-log.txt
 //   node scripts/app-explorer.mjs fetch <runId|latest>
 //   node scripts/app-explorer.mjs list
 // Results land in .explorer/<runId>/ (report.md, report.json, screens/, ui/, logcat.txt).
@@ -37,7 +38,8 @@ function runs(limit = 10) {
 }
 
 async function dispatch(o) {
-  const inputs = { tag: o.tag || 'latest', mode: o.mode || (o.script ? 'script' : 'crawl'), fresh: o['keep-data'] ? 'false' : 'true' };
+  const inputs = { tag: o.tag || 'latest', mode: o.mode || (o.audit ? 'audit' : o.script ? 'script' : 'crawl'), fresh: o['keep-data'] ? 'false' : 'true' };
+  if (o.audit) inputs.audit = o.audit === true ? 'live' : o.audit;
   if (o.script) {
     const steps = JSON.parse(fs.readFileSync(o.script, 'utf8'));
     inputs.script = JSON.stringify(steps);

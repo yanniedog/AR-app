@@ -15,6 +15,8 @@ It runs automatically after every successful `mobile-android-apk` release (full 
 node scripts/app-explorer.mjs run                         # crawl every route on the latest release (~12-18 min)
 node scripts/app-explorer.mjs run --routes /market,/rba   # crawl selected routes only
 node scripts/app-explorer.mjs run --script steps.json     # scripted interaction
+node scripts/app-explorer.mjs run --audit                  # full in-app live audit, as on a phone (30-120 min)
+node scripts/app-explorer.mjs run --audit local            # local audit
 node scripts/app-explorer.mjs run --tag app-v1.0.300      # a specific release
 node scripts/app-explorer.mjs fetch latest                # newest results (e.g. the post-release crawl)
 node scripts/app-explorer.mjs list                        # recent runs
@@ -28,6 +30,7 @@ node scripts/app-explorer.mjs list                        # recent runs
 - `ui/NNN-step.json`: visible labels with tap coordinates and flags (`tap`, `scroll`, `on`, `sel`, `off`). Read these first; they are cheap.
 - `screens/NNN-step.png`: open with the Read tool when layout or visual quality matters.
 - `logcat.txt`: ReactNativeJS and crash output per step.
+- Audit mode: `audit-log.txt` is the exact log the app uploaded to public hosting (paste.rs or paste.c-net.org), fetched by the runner; `audit.json` has the URL, outcome and duration; `screens/*audit-N-min*` show progression once a minute and `*audit-result-N*` the final result screen top to bottom. The audit is started from About > Diagnostics > App health audit with Public upload on, exactly as on a phone.
 
 ## Script steps
 
@@ -49,6 +52,7 @@ JSON array. A `launch` step (cold: force-stop first; `"warm"`: Home then resume)
   { "back": true },
   { "key": 82 },
   { "wait": 2000 },
+  { "audit": "live", "timeoutMin": 90 },
   { "shot": "final" }
 ]
 ```

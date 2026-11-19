@@ -31,6 +31,8 @@ function parseArgs(argv) {
     else if (key === '--baseline') args.baseline = next();
     else if (key === '--routes') args.routes = next().split(',').map(s => s.trim()).filter(Boolean);
     else if (key === '--fresh') args.fresh = true;
+    else if (key === '--audit') args.audit = next();
+    else if (key === '--audit-timeout-min') args.auditTimeoutMin = Number(next());
     else throw new Error(`Unknown argument ${key}`);
   }
   return args;
@@ -377,7 +379,125 @@ class Explorer {
     sh(`input swipe ${x} ${y1} ${x} ${y2} 300`);
   }
 
+  /** One immediate capture with no settle wait, for screens that never stop changing. */
+  async snapshot(name, extra = {}) {
+    const index = String(this.steps.length + 1).padStart(3, '0');
+    const slug = `${index}-${String(name).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 50).toLowerCase()}`;
+    const { nodes } = await dumpUi();
+    dismissSystemDialog(nodes);
+    const png = adb(['exec-out', 'screencap', '-p'], { encoding: 'buffer', allowFail: true });
+    if (png && png.length) fs.writeFileSync(path.join(this.out, 'screens', `${slug}.png`), png);
+    const screen = summarize(nodes);
+    fs.writeFileSync(path.join(this.out, 'ui', `${slug}.json`), JSON.stringify(screen, null, 1));
+    const log = drainLogcat();
+    this.logAll += `\n===== ${slug} =====\n${log}`;
+    const step = { n: this.steps.length + 1, name, slug, settleMs: 0, alive: Boolean(appPid()), frames: frameStats(), memKb: memoryKb(), log: classifyLog(log), visible: screen.slice(0, 40).map(i => i.label).filter(Boolean), ...extra };
+    sh(`dumpsys gfxinfo ${PKG} reset`, { allowFail: true });
+    this.steps.push(step);
+    console.log(`[${slug}] snapshot${step.alive ? '' : ' CRASHED'}`);
+    return { step, nodes };
+  }
+
+  /** Open the in-app audit exactly as a person would and start it. */
+  async openAudit() {
+    await this.open('/about', 'about');
+    let row = await this.scrollUntil('App health audit', 6);
+    if (!row) {
+      const diag = await this.scrollUntil('Diagnostics', 6);
+      if (diag) { sh(`input tap ${centre(diag).join(' ')}`); await sleep(800); }
+      row = await this.scrollUntil('App health audit', 6);
+    }
+    if (!row) return this.record('audit entry', { error: 'App health audit row not found' });
+    const t0 = Date.now();
+    sh(`input tap ${centre(row).join(' ')}`);
+    return this.record('audit screen', {}, 60000, t0);
+  }
+
+  /** Run the full audit (live or local), follow it to the end and collect the uploaded log. */
+  async runAudit(kind = 'live', timeoutMin = 90) {
+    sh('svc power stayon true', { allowFail: true });
+    sh('settings put system screen_off_timeout 2147483647', { allowFail: true });
+    const entry = await this.openAudit();
+    if (entry.error) return;
+    const upload = findNode(this.current.nodes, 'Public upload');
+    if (upload && !upload.checked) {
+      const sw = this.current.nodes.find(n => /Switch/.test(n.cls) && Math.abs(centre(n)[1] - centre(upload)[1]) < 60);
+      if (sw && !sw.checked) { sh(`input tap ${centre(sw).join(' ')}`); await sleep(500); }
+    }
+    const startSel = kind === 'local' ? [{ id: 'audit-start-local' }, 'Local audit'] : [{ id: 'audit-start-live' }, 'Live audit'];
+    let start = null;
+    for (const sel of startSel) start = start || await this.find(sel, 3000);
+    if (!start) return this.record('audit start', { error: `${kind} audit button not found` });
+    const t0 = Date.now();
+    sh(`input tap ${centre(start).join(' ')}`);
+    console.log(`Audit (${kind}) started`);
+    const deadline = t0 + timeoutMin * 60000;
+    let lastShot = 0;
+    let url = null;
+    let outcome = null;
+    let idleAtHome = 0;
+    while (Date.now() < deadline) {
+      await sleep(5000);
+      const { nodes } = await dumpUi();
+      if (dismissSystemDialog(nodes)) continue;
+      if (!appPid()) {
+        await this.snapshot('audit crashed', { error: 'app process died during audit' });
+        await this.relaunch();
+        continue;
+      }
+      const texts = nodes.map(n => `${n.text} ${n.desc}`);
+      const found = texts.join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/);
+      if (found) url = found[0];
+      if (texts.some(t => /Audit runner failed/.test(t))) outcome = 'runner failed';
+      if (texts.some(t => /Audit cancelled/.test(t))) outcome = 'cancelled';
+      const uploading = texts.some(t => /^(Preparing|Uploading|Verifying) ?$/.test(t.trim()));
+      const failedUpload = texts.some(t => /Upload failed|Upload uncertain/.test(t));
+      if (Date.now() - lastShot > 60000) {
+        lastShot = Date.now();
+        await this.snapshot(`audit ${Math.round((Date.now() - t0) / 60000)} min`, { auditElapsedMs: Date.now() - t0 });
+      }
+      if (url && !uploading) break;
+      if (outcome) break;
+      // Completed on the audit screen without a visible URL: look for it lower down.
+      const onAuditHome = texts.some(t => /App health audit/.test(t)) && texts.some(t => /Last audit/.test(t));
+      const runningNow = nodes.some(n => n.id === 'audit-start-live' && !n.enabled) || texts.some(t => /^(Loading|Running)/.test(t.trim()));
+      if (onAuditHome && !runningNow && Date.now() - t0 > 30000) {
+        idleAtHome += 1;
+        const hit = await this.scrollUntil({ contains: 'paste.' }, 10);
+        if (hit) url = (hit.text.match(/https:\/\/\S+/) || [])[0] || url;
+        if (url) break;
+        if (failedUpload || idleAtHome > 6) break;
+        this.swipe('up', 0.9); this.swipe('up', 0.9);
+      }
+    }
+    const elapsedMs = Date.now() - t0;
+    const final = await this.snapshot('audit finished', { auditElapsedMs: elapsedMs, auditUrl: url, auditOutcome: outcome, error: url ? undefined : `no uploaded log URL (${outcome || 'timeout or upload failure'})` });
+    // Capture the result screen top to bottom.
+    this.swipe('up', 0.9); this.swipe('up', 0.9);
+    for (let i = 0; i < 12; i += 1) {
+      await this.snapshot(`audit result ${i + 1}`);
+      this.swipe('down', 0.7);
+      await sleep(400);
+    }
+    const audit = { kind, url, outcome, elapsedMs, visibleOutcome: final.step.visible.slice(0, 20) };
+    if (url) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+        const body = await res.text();
+        fs.writeFileSync(path.join(this.out, 'audit-log.txt'), body);
+        audit.logStatus = res.status;
+        audit.logBytes = Buffer.byteLength(body);
+      } catch (error) {
+        audit.logError = String(error.message || error);
+      }
+    }
+    this.audit = audit;
+    fs.writeFileSync(path.join(this.out, 'audit.json'), JSON.stringify(audit, null, 2));
+    console.log(`Audit ${kind}: ${url ? `log ${audit.logBytes ?? '?'} bytes from ${url}` : 'no log URL'} after ${Math.round(elapsedMs / 1000)} s`);
+  }
+
   async run(step) {
+    if (step.audit) return this.runAudit(step.audit === true ? 'live' : step.audit, step.timeoutMin ?? 90);
     const label = step.name || Object.entries(step).map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' ');
     if (step.launch !== undefined) return this.launch(label, { warm: step.launch === 'warm' });
     if (step.open) return this.open(step.open, label);
@@ -451,7 +571,7 @@ class Explorer {
   finish(meta) {
     fs.writeFileSync(path.join(this.out, 'logcat.txt'), this.logAll);
     const baseline = loadBaseline(this.args.baseline);
-    const report = { schemaVersion: 1, ...meta, systemDialogs, finishedAt: new Date().toISOString(), steps: this.steps };
+    const report = { schemaVersion: 1, ...meta, audit: this.audit, systemDialogs, finishedAt: new Date().toISOString(), steps: this.steps };
     fs.writeFileSync(path.join(this.out, 'report.json'), JSON.stringify(report, null, 2));
     fs.writeFileSync(path.join(this.out, 'report.md'), renderMarkdown(report, baseline));
     return report;
@@ -482,6 +602,7 @@ function renderMarkdown(report, baseline) {
     '',
     `Mode ${report.mode} | ${report.steps.length} steps | crashes ${crashed.length} | step failures ${failed.length} | settle timeouts ${slow.length} | steps with JS/native errors ${withErrors.length}`,
     baseline ? `Baseline ${baseline.version}` : '',
+    report.audit ? `Audit ${report.audit.kind}: ${report.audit.url ? `log ${report.audit.logBytes ?? '?'} bytes (audit-log.txt) from ${report.audit.url}` : 'NO LOG'} | ${Math.round(report.audit.elapsedMs / 1000)} s | outcome ${report.audit.outcome ?? 'completed'}` : '',
     '',
     '| # | step | settle ms | Δ vs base | jank | p90 ms | mem MB | notes |',
     '|---|---|---:|---:|---:|---:|---:|---|',
@@ -537,6 +658,8 @@ async function main() {
     script = JSON.parse(raw);
     if (!Array.isArray(script)) throw new Error('Script must be a JSON array of steps');
     if (!script.some(s => s.launch !== undefined)) script.unshift({ launch: true, name: 'cold start' });
+  } else if (args.mode === 'audit') {
+    script = [{ launch: true, name: 'cold start' }, { audit: args.audit || 'live', timeoutMin: args.auditTimeoutMin || 90 }];
   } else {
     script = [{ launch: true, name: 'cold start' }, ...(args.routes || CRAWL_ROUTES).map(r => ({ open: r, name: r }))];
     script.push({ launch: 'warm', name: 'warm resume' }, { launch: true, name: 'cold relaunch' });
