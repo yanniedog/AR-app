@@ -85,6 +85,10 @@ export function BrandLockup({
     <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 10 }, style]}>
       <View
         ref={markRef}
+        // The adjacent brand text already names the app; the mark is decorative here.
+        accessible={false}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
         style={{
           width: markSize,
           height: markSize,
