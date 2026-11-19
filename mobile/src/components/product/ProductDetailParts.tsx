@@ -12,7 +12,7 @@ import { uiAccessBadge, uiConditionFact, uiListedLvrRange, uiLoanPurpose, uiRate
 import { scopedRateConditions } from '../../data/rateConditions';
 import { scopedFinancialConditionFacts } from '../../data/scopedFinancialConditionFacts';
 import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
-import { curatedFeatureIdentityKey, featureAppliesToScope, featureEvidenceScope, normalizedProductFacts } from '../../data/productFacts';
+import { curatedFeatureIdentityKey, featureEvidenceScope, normalizedProductFacts } from '../../data/productFacts';
 import { uiCount, uiJoin, uiLabel, type UiCopy, type UiLabel, type UiText } from '../../lib/uiCopy';
 import type { DetailItem, NormalizedProductFact, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
 import { FinancialFactRows } from './FinancialFactRows';
@@ -93,7 +93,8 @@ function offsetValue(detail: ProductDetailData | null, row?: RateRow): UiText {
   const normalized = normalizedProductFacts(detail).filter(fact => curatedFeatureIdentityKey(fact) === 'OFFSET');
   const scope = featureEvidenceScope(row?.product_key ?? '', row, 'Mortgage');
   const values = normalized.length
-    ? normalized.filter(fact => featureAppliesToScope(fact, scope))
+    ? normalized.filter(fact => !fact.appliesTo?.length
+      || fact.appliesTo.every(value => scope.includes(value.toUpperCase())))
       .map(fact => uiProductFactValue(uiNormalizedProductFact(fact)))
     : (detail?.features ?? []).filter(item => isOffset(item.label ?? item.name))
       .map((item, index) => uiProductFactValue(uiDetailItem(item, index, 'Features')));

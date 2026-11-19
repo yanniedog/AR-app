@@ -148,17 +148,13 @@ export function featureEvidenceScope(productKey: string, row?: RateRow, section?
     .filter((value): value is string => typeof value === 'string').map(value => value.toUpperCase());
 }
 
-export function featureAppliesToScope(fact: NormalizedProductFact, scope: readonly string[]): boolean {
-  return !fact.appliesTo?.length || fact.appliesTo.every(value => scope.includes(value.toUpperCase()));
-}
-
 /** All applicable variants must agree; missing values and conditions stay unknown. */
 export function featureEvidenceMatches(
   detail: ProductDetail | null | undefined, key: string, expected: boolean, scope: readonly string[] = [],
   criterion?: FactCriterion,
 ): boolean {
   const applicable = normalizedProductFacts(detail).filter(fact => curatedFeatureIdentityKey(fact) === key
-    && featureAppliesToScope(fact, scope));
+    && (!fact.appliesTo?.length || fact.appliesTo.every(value => scope.includes(value.toUpperCase()))));
   return applicable.length > 0 && (!criterion || applicable.some(fact => factIdentityMatches(fact, criterion)))
     && applicable.every(fact => fact.value === expected
     && fact.unit === 'boolean' && !fact.condition?.trim()
@@ -233,7 +229,7 @@ export function productFactCriterionState(
     return 'unknown';
   }
   const facts = normalizedProductFacts(detail).filter(fact => factIdentityMatches(fact, criterion)
-    && featureAppliesToScope(fact, scope));
+    && (!fact.appliesTo?.length || fact.appliesTo.every(value => scope.includes(value.toUpperCase()))));
   if (!facts.length) return 'unknown';
   const outcomes = facts.map((fact): FactMatchState => {
     if (fact.condition?.trim() || fact.evidenceState && fact.evidenceState !== 'observed') return 'unknown';
