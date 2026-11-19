@@ -660,6 +660,10 @@ async function main() {
     if (!script.some(s => s.launch !== undefined)) script.unshift({ launch: true, name: 'cold start' });
   } else if (args.mode === 'audit') {
     script = [{ launch: true, name: 'cold start' }, { audit: args.audit || 'live', timeoutMin: args.auditTimeoutMin || 90 }];
+  } else if (args.mode === 'full') {
+    script = [{ launch: true, name: 'cold start' }, ...(args.routes || CRAWL_ROUTES).map(r => ({ open: r, name: r })),
+      { launch: 'warm', name: 'warm resume' }, { launch: true, name: 'cold relaunch' },
+      { audit: args.audit || 'live', timeoutMin: args.auditTimeoutMin || 90 }];
   } else {
     script = [{ launch: true, name: 'cold start' }, ...(args.routes || CRAWL_ROUTES).map(r => ({ open: r, name: r }))];
     script.push({ launch: 'warm', name: 'warm resume' }, { launch: true, name: 'cold relaunch' });

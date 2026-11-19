@@ -4,6 +4,8 @@ name: app-explorer
 # screen: screenshots, visible UI, settle time, jank, memory, JS/native errors.
 # Results are pushed to the orphan branch explorer/run-<run_id> so they can be
 # fetched with plain git (scripts/app-explorer.mjs). No secrets, no publication.
+# Cost: standard GitHub-hosted runner on a public repo only (free); no larger
+# runners, no paid services. Every APK release triggers crawl + full audit.
 on:
   workflow_dispatch:
     inputs:
@@ -11,7 +13,7 @@ on:
         description: Release tag or latest
         default: latest
       mode:
-        description: crawl, script or audit
+        description: crawl, script, audit or full (crawl then audit)
         default: crawl
       audit:
         description: Audit kind for audit mode (live or local)
@@ -52,7 +54,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ inputs.tag || 'latest' }}
-      MODE: ${{ inputs.mode || 'crawl' }}
+      # Releases get the full crawl plus audit; PR self-tests stay a short crawl.
+      MODE: ${{ inputs.mode || (github.event_name == 'workflow_run' && 'full') || 'crawl' }}
       SCRIPT_JSON: ${{ inputs.script }}
       ROUTES: ${{ inputs.routes }}
       AUDIT: ${{ inputs.audit || 'live' }}

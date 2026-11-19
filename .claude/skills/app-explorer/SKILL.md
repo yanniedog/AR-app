@@ -7,7 +7,18 @@ description: Run the latest (or any) released AR-app APK on a real Android emula
 
 A cloud Android emulator (API 34, x86_64, KVM, 720x1600 @ 320dpi) runs the released `app-preview.apk` and drives it with adb. Every step records a screenshot, the visible UI as JSON, settle time, jank frames, memory and logcat errors. Results go to the orphan branch `explorer/run-<runId>`, fetched with plain git (Actions artifacts are not reachable from the Claude workspace; git and release assets are).
 
-It runs automatically after every successful `mobile-android-apk` release (full route crawl, compared with the previous run), and on demand.
+It runs automatically after every successful `mobile-android-apk` release (full route crawl plus a full live audit, compared with the previous run), and on demand. Cost: standard runner on a public repo, so free; never switch to larger runners or paid services.
+
+## Token discipline (important)
+
+Emulator runs take 10-120 minutes. Never poll in the conversation. Start any `run` or `watch` with Bash `run_in_background: true` and a long timeout (up to 7,200,000 ms), then do other work or end the turn; you are notified when it exits. Read `report.md` and `ui/*.json` first and open PNGs only for screens that matter.
+
+## Autonomous iteration loop
+
+1. Fix bugs or UX in a PR; it merges and `mobile-android-apk` releases the APK.
+2. The release automatically triggers `app-explorer` in `full` mode (crawl + live audit).
+3. `node scripts/app-explorer.mjs watch` in the background returns when that run's results branch appears.
+4. Read `report.md`, `audit-log.txt` (the exact uploaded audit log) and relevant screens; plan the next fixes; repeat.
 
 ## Commands (repo root)
 
@@ -18,7 +29,9 @@ node scripts/app-explorer.mjs run --script steps.json     # scripted interaction
 node scripts/app-explorer.mjs run --audit                  # full in-app live audit, as on a phone (30-120 min)
 node scripts/app-explorer.mjs run --audit local            # local audit
 node scripts/app-explorer.mjs run --tag app-v1.0.300      # a specific release
-node scripts/app-explorer.mjs fetch latest                # newest results (e.g. the post-release crawl)
+node scripts/app-explorer.mjs run --mode full             # crawl then full audit
+node scripts/app-explorer.mjs watch                       # wait for the next results (post-release run)
+node scripts/app-explorer.mjs fetch latest                # newest results
 node scripts/app-explorer.mjs list                        # recent runs
 ```
 

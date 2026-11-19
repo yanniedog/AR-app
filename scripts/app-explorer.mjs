@@ -4,6 +4,8 @@
 //                                     [--routes /browse,/market] [--keep-data] [--no-wait]
 //   node scripts/app-explorer.mjs run --audit [live|local]   full in-app audit; log saved as audit-log.txt
 //   node scripts/app-explorer.mjs fetch <runId|latest>
+//   node scripts/app-explorer.mjs watch [--after <runId>] [--timeout-min 115]
+//        waits quietly for the next results branch (e.g. the automatic post-release run), then prints it
 //   node scripts/app-explorer.mjs list
 // Results land in .explorer/<runId>/ (report.md, report.json, screens/, ui/, logcat.txt).
 import { execFileSync } from 'node:child_process';
@@ -56,18 +58,18 @@ async function dispatch(o) {
   throw new Error('Dispatched, but the run did not appear within 90 s');
 }
 
-async function wait(runId) {
+async function wait(runId, quiet) {
   const t0 = Date.now();
   let last = '';
   while (true) {
     const run = JSON.parse(gh(['api', `repos/${REPO}/actions/runs/${runId}`]));
     const state = `${run.status}${run.conclusion ? `/${run.conclusion}` : ''}`;
-    if (state !== last) {
+    if (state !== last && !quiet) {
       console.error(`[${Math.round((Date.now() - t0) / 1000)}s] run ${runId}: ${state}`);
       last = state;
     }
     if (run.status === 'completed') return run;
-    await sleep(20000);
+    await sleep(60000);
   }
 }
 
@@ -101,6 +103,20 @@ async function main() {
     for (const r of runs(15)) console.log(`${r.id}  ${r.event.padEnd(17)} ${r.status}/${r.conclusion ?? ''}  ${r.created_at}`);
     return;
   }
+  if (cmd === 'watch') {
+    let after = o.after ? Number(o.after) : 0;
+    if (!after) { try { after = latestRunId(); } catch { after = 0; } }
+    const deadline = Date.now() + Number(o['timeout-min'] || 115) * 60000;
+    while (Date.now() < deadline) {
+      let newest = 0;
+      try { newest = latestRunId(); } catch { newest = 0; }
+      if (newest > after) { show(fetchResults(newest)); return; }
+      await sleep(60000);
+    }
+    console.error(`No results newer than run ${after} yet; re-run watch --after ${after}`);
+    process.exitCode = 2;
+    return;
+  }
   if (cmd === 'fetch') {
     const id = !o._[1] || o._[1] === 'latest' ? latestRunId() : Number(o._[1]);
     show(fetchResults(id));
@@ -110,7 +126,7 @@ async function main() {
     const id = await dispatch(o);
     console.error(`Run ${id}: https://github.com/${REPO}/actions/runs/${id}`);
     if (o['no-wait']) return;
-    const run = await wait(id);
+    const run = await wait(id, o.quiet);
     try {
       show(fetchResults(id));
     } catch (error) {
