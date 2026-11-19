@@ -26,6 +26,7 @@ import { BankAvatar } from './BankAvatar';
 import { RateFreshnessSymbol } from './RateFreshnessSymbol';
 import { rateFreshness, rowVerificationReceipt } from '../data/rateFreshness';
 import { mortgageMonthlyRepayment } from '../data/mortgageRepayment';
+import { productHasAllFeatures } from '../data/featuresCore';
 import {
   productRateChangeText,
   useProductRateChangeSummary,
@@ -185,7 +186,11 @@ function ProductCardView({
   const payableFraction = hasDisplayedRateOverride ? toFraction(row.rate)
     : resolution ? resolution.status === 'exact' && resolution.payableRate != null ? toFraction(resolution.payableRate) : null
       : toFraction(row.rate);
-  const monthlyRepayment = section === 'Mortgage' ? mortgageMonthlyRepayment(row, repaymentAmount, payableFraction) : null;
+  const enteredOffset = Number(rateScenario?.offsetBalance ?? 0);
+  const applicableOffset = section === 'Mortgage' && repaymentAmount !== null && enteredOffset > 0
+    && productHasAllFeatures(row.product_key, ['OFFSET'], details?.products, boundRow, section) ? enteredOffset : 0;
+  const monthlyRepayment = section === 'Mortgage'
+    ? mortgageMonthlyRepayment(row, repaymentAmount, payableFraction, applicableOffset) : null;
   const repaymentText = monthlyRepayment === null ? null : uiJoin(uiMoney(monthlyRepayment), '/', 'month');
   const metadata = [
     ...(secondaryLabel

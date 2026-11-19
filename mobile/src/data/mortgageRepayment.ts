@@ -16,10 +16,11 @@ export function mortgageMonthlyRepayment(
   row: Pick<RateRow, 'ribbon_repayment_type' | 'repayment_type'>,
   amount: number | null | undefined,
   annualRate: number | null | undefined,
+  applicableOffset = 0,
 ): number | null {
   if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) return null;
   if (typeof annualRate !== 'number' || !Number.isFinite(annualRate) || annualRate < 0 || annualRate >= 1) return null;
-  const payment = interestOnly(row) ? amount * annualRate / 12
+  const payment = interestOnly(row) ? Math.max(0, amount - applicableOffset) * annualRate / 12
     : requiredMonthlyRepayment(amount, annualRate, LIST_REPAYMENT_TERM_YEARS * 12);
   return Number.isFinite(payment) ? Math.round(payment) : null;
 }
