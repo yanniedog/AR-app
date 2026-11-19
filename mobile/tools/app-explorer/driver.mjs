@@ -15,7 +15,8 @@ const SCHEME = 'arrates';
 export const CRAWL_ROUTES = [
   '/browse', '/watchlist', '/market', '/tools', '/trends', '/search', '/banks', '/bank-rates',
   '/categories', '/catalogue', '/compare', '/matches', '/calculator', '/projections', '/profile',
-  '/research', '/rba', '/rba-response', '/settings', '/about', '/terms', '/third-party-notices',
+  '/research', '/rba', '/rba-response', '/settings', '/about', '/terms', '/privacy', '/third-party-notices',
+  '/node', '/passthrough', '/calculation-receipt', '/rate-receipt',
 ];
 
 function parseArgs(argv) {
@@ -301,8 +302,9 @@ class Explorer {
     await sleep(3000);
   }
 
-  async launch(name = 'launch') {
-    sh(`am force-stop ${PKG}`, { allowFail: true });
+  async launch(name = 'launch', { warm = false } = {}) {
+    if (warm) sh('input keyevent 3', { allowFail: true });
+    else sh(`am force-stop ${PKG}`, { allowFail: true });
     adb(['logcat', '-c'], { allowFail: true });
     const t0 = Date.now();
     const component = (sh(`cmd package resolve-activity --brief ${PKG} | tail -n 1`, { allowFail: true }) || '').trim();
@@ -377,7 +379,7 @@ class Explorer {
 
   async run(step) {
     const label = step.name || Object.entries(step).map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' ');
-    if (step.launch !== undefined) return this.launch(label);
+    if (step.launch !== undefined) return this.launch(label, { warm: step.launch === 'warm' });
     if (step.open) return this.open(step.open, label);
     if (step.tap || step.longPress) {
       const sel = step.tap || step.longPress;
@@ -537,7 +539,7 @@ async function main() {
     if (!script.some(s => s.launch !== undefined)) script.unshift({ launch: true, name: 'cold start' });
   } else {
     script = [{ launch: true, name: 'cold start' }, ...(args.routes || CRAWL_ROUTES).map(r => ({ open: r, name: r }))];
-    script.push({ launch: true, name: 'warm relaunch' });
+    script.push({ launch: 'warm', name: 'warm resume' }, { launch: true, name: 'cold relaunch' });
   }
   for (const step of script) {
     try {

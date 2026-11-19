@@ -32,7 +32,7 @@ on:
       - 'mobile/tools/app-explorer/**'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: app-explorer-${{ github.event.pull_request.number || github.run_id }}
@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: true
+          persist-credentials: false
       - name: Resolve and download APK
         id: apk
         run: |
@@ -104,7 +104,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 900
           script: bash mobile/tools/app-explorer/ci-run.sh
-      - name: Publish results branch
+      - name: Write run facts
         if: always()
         env:
           TAG_RESOLVED: ${{ steps.apk.outputs.tag }}
@@ -112,20 +112,43 @@ jobs:
           set -euo pipefail
           test -f explorer-out/report.json || { echo 'No report produced'; exit 1; }
           cat explorer-out/report.md >> "$GITHUB_STEP_SUMMARY"
+          printf '{"runId":%s,"tag":"%s","event":"%s","mode":"%s"}\n' "$GITHUB_RUN_ID" "$TAG_RESOLVED" "$GITHUB_EVENT_NAME" "$MODE" > explorer-out/run.json
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: explorer-out
+          path: explorer-out/
+          retention-days: 3
+          if-no-files-found: error
+
+  # Publishes results as data only: no repository code is checked out or run here.
+  publish:
+    needs: explore
+    if: always() && needs.explore.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: explorer-out
+          path: explorer-out
+      - name: Push results branch and prune old ones
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           branch="explorer/run-$GITHUB_RUN_ID"
           cd explorer-out
-          printf '{"runId":%s,"tag":"%s","event":"%s","mode":"%s"}\n' "$GITHUB_RUN_ID" "$TAG_RESOLVED" "$GITHUB_EVENT_NAME" "$MODE" > run.json
           git init -q -b "$branch"
           git config user.name github-actions
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
-          git commit -qm "app-explorer run $GITHUB_RUN_ID ($TAG_RESOLVED)"
-          git remote add origin "$(git -C .. remote get-url origin)"
-          git -c http.extraheader="$(git -C .. config --get http.https://github.com/.extraheader)" push -q origin "HEAD:refs/heads/$branch"
+          git commit -qm "app-explorer run $GITHUB_RUN_ID"
+          git push -q "$remote" "HEAD:refs/heads/$branch"
           echo "Results: branch $branch"
-      - name: Prune old results branches
-        if: always()
-        run: |
-          set -uo pipefail
-          git ls-remote --heads origin 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' \
-            | sort -t- -k2 -n | head -n -20 | while read -r b; do git push -q origin --delete "$b" || true; done
+          git ls-remote --heads "$remote" 'explorer/run-*' | awk '{print $2}' | sed 's#refs/heads/##' \
+            | sort -t- -k2 -n | head -n -20 | while read -r b; do git push -q "$remote" --delete "$b" || true; done

@@ -31,11 +31,12 @@ node scripts/app-explorer.mjs list                        # recent runs
 
 ## Script steps
 
-JSON array. A `launch` step is prepended if absent. Selectors are a string (exact text or accessibility label, case-insensitive) or an object `{ "text"|"desc"|"id"|"contains"|"label": ..., "index": n }`.
+JSON array. A `launch` step (cold: force-stop first; `"warm"`: Home then resume) is prepended if absent. Selectors are a string (exact text or accessibility label, case-insensitive) or an object `{ "text"|"desc"|"id"|"contains"|"label": ..., "index": n }`.
 
 ```json
 [
   { "launch": true },
+  { "launch": "warm" },
   { "open": "/bank-rates" },
   { "tap": "Saved" },
   { "tap": { "contains": "Fixed" }, "scroll": true },
