@@ -4,7 +4,7 @@ import * as Crypto from 'expo-crypto';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import { automaticDataUrl, trustedPayloadReleaseUrl, MissingPublicPayloadError, APP_DATA_ORIGIN } from '../src/lib/automaticDataAccess';
-import { downloadInflate, fetchManifest } from '../src/data/payload';
+import { downloadInflate, fetchManifest, PAYLOAD_FETCH_ATTEMPTS, setPayloadRetrySleepForTests } from '../src/data/payload';
 
 jest.mock('expo-crypto', () => ({ ...jest.requireActual('expo-crypto'), digest: jest.fn() }));
 jest.mock('../src/lib/yieldToUi', () => ({
@@ -150,15 +150,17 @@ it('refuses unopened ARE2 service bytes without asking for a key', async () => {
 it.each([404, 429, 503])('does not fall back to encrypted releases or another service on HTTP %s', async status => {
   const download = mockDownload(new Uint8Array(), status);
   jest.mocked(SecureStore.getItemAsync).mockClear();
+  setPayloadRetrySleepForTests(async () => {});
   try {
     const failed = fetchManifest(source);
     await expect(failed).rejects.toThrow(status === 404 ? 'Refresh data to load the current edition' : `HTTP ${status}`);
     if (status === 404) await expect(failed).rejects.toBeInstanceOf(MissingPublicPayloadError);
     else await expect(failed).rejects.not.toBeInstanceOf(MissingPublicPayloadError);
-    expect(download.requests).toHaveLength(1);
-    expect(download.requests[0].split('?')[0]).toBe(companion);
+    // Transient 429/503 retry the same companion service only; 404 is final.
+    expect(download.requests).toHaveLength(status === 404 ? 1 : PAYLOAD_FETCH_ATTEMPTS);
+    expect(download.requests.every(request => request.split('?')[0] === companion)).toBe(true);
     expect(SecureStore.getItemAsync).not.toHaveBeenCalled();
-  } finally { download.restore(); }
+  } finally { download.restore(); setPayloadRetrySleepForTests(null); }
 });
 
 it('does not label unrelated HTTP 404 failures as missing readable history', async () => {

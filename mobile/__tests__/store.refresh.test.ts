@@ -328,7 +328,33 @@ describe('store refresh lifecycle', () => {
     expect(state.refreshing).toBe(false);
     expect(state.payloadProgress).toBeNull();
     expect(state.offline).toBe(false);
-    expect(state.refreshOutcome).toBe('success');
+    // Automatic unchanged checks do not raise a snackbar.
+    expect(state.refreshOutcome).toBeNull();
+  });
+
+  it('confirms an unchanged edition only to an explicit refresh', async () => {
+    mockReadMeta.mockResolvedValue({
+      manifest: remoteManifest,
+      source: 'remote',
+      savedAt: '2026-06-09T00:00:00Z',
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: null,
+    });
+    mockReadBundle.mockResolvedValue({
+      meta: {
+        manifest: remoteManifest,
+        source: 'remote',
+        savedAt: '2026-06-09T00:00:00Z',
+        coreSha: remoteManifest.files.core.sha256,
+        detailsSha: null,
+      },
+      core: remoteCore,
+    });
+    await useStore.getState().refresh({ manual: true });
+    expect(useStore.getState().refreshOutcome).toBe('success');
+    useStore.setState({ refreshOutcome: null });
+    await useStore.getState().refresh({ background: true });
+    expect(useStore.getState().refreshOutcome).toBeNull();
   });
 
   it('preserves failed-provider partial truth on unchanged live and cached cores', async () => {
@@ -1007,7 +1033,7 @@ describe('store refresh lifecycle', () => {
     expect(changed).toBe(false);
     expect(mockFetchManifest).toHaveBeenCalledTimes(1);
     expect(useStore.getState().manifest?.files.bank_history).toEqual(bankHistory);
-    expect(useStore.getState().refreshOutcome).toBe('success');
+    expect(useStore.getState().refreshOutcome).toBeNull();
     expect(mockUpdateMeta).toHaveBeenCalledWith(
       expect.objectContaining({
         coreSha,
@@ -1174,7 +1200,7 @@ describe('store refresh lifecycle', () => {
     });
   });
 
-  it('clears refreshing and flags offline on downloadCore failure', async () => {
+  it('clears refreshing without claiming offline on a non-network downloadCore failure', async () => {
     mockDownloadCore.mockRejectedValueOnce(new Error('download failure'));
 
     const changed = await useStore.getState().refresh({});
@@ -1183,7 +1209,8 @@ describe('store refresh lifecycle', () => {
     const state = useStore.getState();
     expect(state.refreshing).toBe(false);
     expect(state.payloadProgress).toBeNull();
-    expect(state.offline).toBe(true);
+    expect(state.offline).toBe(false);
+    expect(state.loadFailure?.kind).toBe('error');
     expect(state.source).toBe('sample');
     expect(state.refreshOutcome).toBe('failure');
     expect(state.coreAssetState).toEqual({

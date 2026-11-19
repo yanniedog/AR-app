@@ -43,6 +43,7 @@ import {
 import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision';
 import { bindStagedSpread, normalizeStagedOptionalAsset, type StagedOptionalAssets } from './stagedOptionalAssets';
 import { verifiedDetailsSha } from './detailsIdentity';
+import { classifyLoadFailure, failureMeansOffline } from './loadFailure';
 
 type NotifyContext = {
   previousCore: CorePayload | null;
@@ -535,7 +536,9 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               { warm: !background, readCachedDetails: true },
             );
             deferWarm = true;
-            set({ refreshOutcome: pendingIngestRunDate ? null : 'success' });
+            // An unchanged edition only confirms itself to an explicit request;
+            // automatic and background checks keep the banner alone.
+            set({ loadFailure: null, refreshOutcome: pendingIngestRunDate || !manual ? null : 'success' });
             return false;
           }
           debugLog.warn('store', 'matching cache metadata had no readable core; repairing');
@@ -579,7 +582,12 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         // any subsequent asset download or cache write fails.
         let stagedDetails: DetailsPayload | null = null;
         const stagedOptional: StagedOptionalAssets = {};
-        if (remote.payload_revision) {
+        // A cold install has no edition to protect: adopt the verified core
+        // first and let details and optional assets load after first paint
+        // through their own verified ensure paths, so an optional asset
+        // failure cannot leave the first run without rates.
+        const coldInstall = !previousCore;
+        if (remote.payload_revision && !coldInstall) {
           const downloaded = await downloadDetails(remote.files.details.url, remote.files.details.sha256, {
             expectedBytes: remote.files.details.bytes, requireExactBytes: true,
             maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024,
@@ -708,7 +716,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           'store',
           `refresh ok run_date=${core.run_date} changed=true pending=${pendingIngestRunDate ?? 'none'}`,
         );
-        set({ refreshOutcome: pendingIngestRunDate ? null : 'success' });
+        set({ loadFailure: null, refreshOutcome: pendingIngestRunDate || background ? null : 'success' });
         return true;
       } catch (err) {
         workOutcome = 'failed';
@@ -716,12 +724,16 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         debugLog.error('store', `refresh failed: ${msg}`);
         const hasData = !!get().core;
         const retainedIntegrity = get().coreIntegrity;
+        const attemptedAt = new Date().toISOString();
+        const loadFailure = classifyLoadFailure(err, attemptedAt, { coldStart: !hasData });
         set({
-          offline: true,
+          // An HTTP 500 or integrity failure is not a connectivity loss.
+          offline: failureMeansOffline(loadFailure),
+          loadFailure,
           status: hasData ? 'ready' : 'error',
           error: hasData ? null : msg,
           coreAssetState: { status: 'error', data: retainedIntegrity, error: msg },
-          lastCheckedAt: new Date().toISOString(),
+          lastCheckedAt: attemptedAt,
           refreshOutcome: 'failure',
           ...(get().manifest?.payload_revision ? { pendingIngestRunDate: get().manifest?.run_date } : {}),
         });

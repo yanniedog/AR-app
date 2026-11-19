@@ -340,4 +340,52 @@ describe('store error recovery', () => {
     expect(state.error).toContain('disk full');
     expect(state.core).toBeNull();
   });
+
+  it('retryDataLoad holds one steady error state while a cold retry runs', async () => {
+    mockReadBundle.mockResolvedValue(null);
+    mockFetchManifest.mockRejectedValue(new Error('network error'));
+    const statuses: string[] = [];
+    const retrying: boolean[] = [];
+    const unsubscribe = useStore.subscribe((state) => {
+      statuses.push(state.status);
+      retrying.push(state.retrying);
+    });
+    try {
+      await useStore.getState().retryDataLoad({ automatic: true });
+    } finally {
+      unsubscribe();
+    }
+    expect(new Set(statuses)).toEqual(new Set(['error']));
+    expect(retrying[0]).toBe(true);
+    expect(useStore.getState().retrying).toBe(false);
+    expect(useStore.getState().loadFailure).toEqual(expect.objectContaining({ kind: 'network' }));
+    expect(useStore.getState().offline).toBe(true);
+  });
+
+  it('a server failure is not reported as offline', async () => {
+    const { PayloadTransportError } = jest.requireActual('../src/data/loadFailure');
+    mockReadBundle.mockResolvedValue(null);
+    mockFetchManifest.mockRejectedValue(new PayloadTransportError('http', 500));
+    await useStore.getState().retryDataLoad();
+    const state = useStore.getState();
+    expect(state.status).toBe('error');
+    expect(state.offline).toBe(false);
+    expect(state.loadFailure).toEqual(expect.objectContaining({ kind: 'server', httpStatus: 500 }));
+  });
+
+  it('a successful retry clears the load failure', async () => {
+    mockReadBundle.mockResolvedValue(null);
+    useStore.setState({ loadFailure: { kind: 'network', httpStatus: null, at: '2026-11-19T00:00:00Z' } });
+    await useStore.getState().retryDataLoad();
+    expect(useStore.getState().status).toBe('ready');
+    expect(useStore.getState().loadFailure).toBeNull();
+  });
+
+  it('bootstrap does not fail a load that another refresh already owns', async () => {
+    useStore.setState({ status: 'idle', core: null, error: null, refreshing: true });
+    mockReadBundle.mockResolvedValue(null);
+    await useStore.getState().bootstrap();
+    expect(useStore.getState().status).not.toBe('error');
+    expect(mockFetchManifest).not.toHaveBeenCalled();
+  });
 });

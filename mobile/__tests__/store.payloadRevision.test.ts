@@ -215,6 +215,24 @@ describe('selected immutable payload refresh', () => {
     expect(useStore.getState().productEvidenceHead).toBeNull();
   });
 
+  it('a cold install adopts the verified core first and defers details and optional assets', async () => {
+    const historyFile = { name: 'history-banks.json.gz', bytes: 100, sha256: 'd'.repeat(64), url: '' };
+    const nextWithHistory = revisionManifest(2, { files: { ...next.files, history_banks: historyFile } });
+    useStore.setState({ status: 'error', manifest: null, core: null, coreIntegrity: null, productEvidenceHead: null });
+    mockReadMeta.mockResolvedValue(null); mockReadBundle.mockResolvedValue(null);
+    mockFetchDatesIndexJson.mockResolvedValue({ dates: [next.run_date], latest_date: next.run_date,
+      revision_protocol: 1, revision_heads: { [next.run_date]: revisionHead(nextWithHistory) } });
+    mockFetchManifest.mockImplementation(async (url?: string) => url ? nextWithHistory : nextWithHistory);
+    mockDownloadDetails.mockRejectedValue(new Error('asset HTTP 503'));
+    mockDownloadInflate.mockRejectedValue(new Error('asset HTTP 503'));
+    expect(await useStore.getState().refresh({ manual: true })).toBe(true);
+    expect(useStore.getState().status).toBe('ready');
+    expect(useStore.getState().core).toBe(sampleCore);
+    expect(mockDownloadDetails).not.toHaveBeenCalled();
+    expect(mockDownloadInflate).not.toHaveBeenCalled();
+    expect(mockWriteBundle).toHaveBeenCalledWith(expect.objectContaining({ manifest: nextWithHistory, detailsSha: null }), expect.any(String));
+  });
+
   it('keeps the installed edition if a selected asset fails hash verification', async () => {
     mockDownloadDetails.mockRejectedValueOnce(new Error('asset sha256 mismatch'));
     expect(await useStore.getState().refresh({ manual: true })).toBe(false);

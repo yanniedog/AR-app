@@ -12,7 +12,7 @@ import { resolveOfflineBanner } from './bannerState';
 import { PayloadProgressBar } from './feedbackProgress';
 import { AppText, Row } from './ui';
 import { LedgerIcon, type LedgerIconName } from './icons/LedgerIcon';
-import { uiJoin, uiDate, type UiLabel } from '../lib/uiCopy';
+import { uiJoin, uiDate, uiLabel, type UiLabel } from '../lib/uiCopy';
 const STATUS_LABELS: Record<BannerSurface, UiLabel> = {
   offline: 'Offline', connecting: 'Loading', syncing: 'Loading', success: 'Updated', pending: 'Pending',
 };
@@ -137,10 +137,13 @@ export function OfflineBanner({
     pendingIngestRunDate,
     showingRunDate,
   );
-  if (!bannerView || !hasUsableData) return null;
+  // The first download has no edition to describe, but its stage and bytes
+  // are still progress facts.
+  const firstLoad = !hasUsableData && refreshing && payloadProgress != null;
+  if (!bannerView || (!hasUsableData && !firstLoad)) return null;
 
   const { surface, showProgress } = bannerView;
-  const message = uiJoin(STATUS_LABELS[surface], ' · ', source === 'sample' ? 'Sample data' : 'Observed', ': ', uiDate(showingRunDate),
+  const message = firstLoad ? uiLabel('Loading rates') : uiJoin(STATUS_LABELS[surface], ' · ', source === 'sample' ? 'Sample data' : 'Observed', ': ', uiDate(showingRunDate),
     pendingIngestRunDate ? uiJoin(' · ', 'Pending', ': ', uiDate(pendingIngestRunDate)) : '');
   const sampleTone = surface === 'connecting' || surface === 'success';
   const pendingTone = surface === 'pending';
