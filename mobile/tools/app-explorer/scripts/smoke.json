@@ -1,0 +1,10 @@
+[
+  { "launch": true, "name": "cold start" },
+  { "tap": "Saved", "name": "tab Saved" },
+  { "tap": "Market", "name": "tab Market" },
+  { "tap": "Rates", "name": "tab Rates" },
+  { "scroll": "down", "times": 3, "name": "scroll rates" },
+  { "scroll": "up", "times": 3, "name": "scroll back" },
+  { "tap": "Account", "name": "open account menu" },
+  { "back": true, "name": "close menu" }
+]
