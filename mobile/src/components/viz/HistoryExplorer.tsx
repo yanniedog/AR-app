@@ -1,11 +1,13 @@
 import Ionicons from '../icons/AppIcon';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import type { BankInsightsPayload } from '../../data/bankInsights';
 import type { BankHistoryChartModel, Brand, HistoryWindow, RbaEntry, SectionKey } from '../../types';
 import { SECTIONS } from '../../constants';
 import type { ChartRenderEvidence } from '../../lib/chartRenderEvidence';
+import type { HistoryGraphicEvidence } from '../../lib/historyGraphicEvidence';
+import { BankHistoryChart } from '../BankHistoryChart';
 import { ChartErrorBoundary } from '../ChartErrorBoundary';
 import { AppText, Chip, Row } from '../ui';
 import { uiLabel,  uiJoin, type UiCopy } from '../../lib/uiCopy';
@@ -15,9 +17,10 @@ import { MarketSeismograph } from './MarketSeismograph';
 import { RateHeatCalendar } from './RateHeatCalendar';
 import { SwitcherEdgeChart } from './SwitcherEdgeChart';
 
-export type HistoryViewMode = 'edge' | 'calendar' | 'pulse' | 'race';
+export type HistoryViewMode = 'trend' | 'edge' | 'calendar' | 'pulse' | 'race';
 
 const MODE_META: Record<HistoryViewMode, { label: UiCopy; icon: keyof typeof Ionicons.glyphMap }> = {
+  trend: { label: 'Trend', icon: 'trending-up-outline' },
   edge: { label: 'Spread', icon: 'flash-outline' },
   calendar: { label: 'Calendar', icon: 'calendar-outline' },
   pulse: { label: 'Pulse', icon: 'pulse-outline' },
@@ -76,7 +79,7 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
   /** Keeps the default Market view calm; advanced lenses can be disclosed on demand. */
   showModePicker?: boolean;
 }) {
-  const [localMode, setLocalMode] = useState<HistoryViewMode>(controlledMode ?? 'edge');
+  const [localMode, setLocalMode] = useState<HistoryViewMode>(controlledMode ?? 'trend');
   const [localWindow, setLocalWindow] = useState<HistoryWindow>('90D');
   const window = controlledWindow ?? localWindow;
   const changeWindow = (next: HistoryWindow) => {
@@ -93,8 +96,16 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
     onModeChange?.(next);
   };
 
-  const modes: HistoryViewMode[] = ['edge', 'calendar', 'pulse', 'race'];
-  const activeMode = modes.includes(localMode) ? localMode : 'edge';
+  const modes: HistoryViewMode[] = ['trend', 'edge', 'calendar', 'pulse', 'race'];
+  const activeMode = modes.includes(localMode) ? localMode : 'trend';
+  const trendGraphicReady = useCallback((evidence: HistoryGraphicEvidence) => onGraphicReadiness?.({
+    revision: auditRevision ?? evidence.graphicRevision,
+    expectedCount: evidence.expectedCount,
+    pointCount: evidence.pointCount,
+    accessibleSummary: evidence.accessibleSummary,
+    layoutMeasured: evidence.layoutMeasured,
+    emptyStateRendered: evidence.emptyStateRendered,
+  }), [auditRevision, onGraphicReadiness]);
   const needsInsights = activeMode === 'race' || activeMode === 'pulse';
   const showWindowChips = activeMode === 'race' || activeMode === 'pulse' || activeMode === 'edge';
 
@@ -130,7 +141,7 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
       ) : null}
       {standardOnly &&
       !standardFilterWarming &&
-      (activeMode === 'calendar' || activeMode === 'edge') &&
+      (activeMode === 'trend' || activeMode === 'calendar' || activeMode === 'edge') &&
       (historyModel?.dates.length ?? 0) <= 1 ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
           {uiJoin('History', ' · ', 'Partial')}
@@ -156,6 +167,21 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
           {uiLabel("Loading")}</AppText>
       ) : (
         <>
+          {activeMode === 'trend' && historyModel ? (
+            <ChartErrorBoundary key={`trend:${auditRevision ?? 'none'}`} name="MarketTrendChart">
+              <BankHistoryChart
+                dates={historyModel.dates}
+                points={historyModel.points}
+                allDates={historyModel.allDates}
+                rba={section === 'Mortgage' ? rba : undefined}
+                rbaHolds={section === 'Mortgage' ? rbaHolds : undefined}
+                section={section}
+                stateKey={`market-trend:${section}`}
+                contentRevision={auditRevision}
+                onGraphicReady={trendGraphicReady}
+              />
+            </ChartErrorBoundary>
+          ) : null}
           {activeMode === 'calendar' && historyModel ? (
             <ChartErrorBoundary key={`calendar:${auditRevision ?? 'none'}`} name="RateHeatCalendar">
               <RateHeatCalendar
@@ -214,7 +240,7 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
               />
             </ChartErrorBoundary>
           ) : null}
-          {(activeMode === 'calendar' || activeMode === 'edge') && !historyModel ? (
+          {(activeMode === 'trend' || activeMode === 'calendar' || activeMode === 'edge') && !historyModel ? (
             <AppText variant="small" color="textMuted">
               {uiLabel("Loading")}</AppText>
           ) : null}

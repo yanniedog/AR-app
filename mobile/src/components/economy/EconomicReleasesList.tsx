@@ -31,7 +31,7 @@ function vsPriorLabel(row: EconomicReleaseRow): UiText {
   return uiJoin('Prior', ' · ', uiChartPp(row.delta));
 }
 function leanLabel(lean: MeetingLean): UiText {
-  return uiLabel(lean === 'raise' ? 'Hike' : lean === 'cut' ? 'Cut' : 'Held');
+  return uiLabel(lean === 'raise' ? 'Increase' : lean === 'cut' ? 'Decrease' : 'Held');
 }
 
 function ReleaseRow({

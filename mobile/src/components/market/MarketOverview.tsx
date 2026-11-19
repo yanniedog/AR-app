@@ -32,6 +32,9 @@ import {
   type FeedRenderEvidence,
 } from '../../lib/feedRenderEvidence';
 
+const FEED_PREVIEW = 5;
+const FEED_FULL = 14;
+
 export default function MarketOverview() {
   const focused = useIsFocused();
   // Latch so blur does not clear payload / unmount feeds and clamp scroll offset.
@@ -62,6 +65,7 @@ export default function MarketOverview() {
   const [activeSection, setActiveSection] = useState(() => resolveInterestSection(interests, defaultSection));
   const [retrying, setRetrying] = useState(false);
   const [moversOpen, setMoversOpen] = useState(false);
+  const [feedLimit, setFeedLimit] = useState(FEED_PREVIEW);
   const [layoutReady, setLayoutReady] = useState(false);
   const [feedEvidence, setFeedEvidence] = useState<FeedRenderEvidence>(() =>
     resetFeedRenderEvidence('uninitialised', 0));
@@ -164,10 +168,14 @@ export default function MarketOverview() {
   const suitabilityWarming = rawPayload !== null && payload === null && !error && (!suitabilityReady || !contentReady);
   const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady && contentReady && !filteringPending;
   const feedExpectedCount = useMemo(
-    () => payload ? recentBankEvents(payload, { sections: feedSections, limit: 14 }).length : 0,
+    () => payload ? recentBankEvents(payload, { sections: feedSections, limit: feedLimit }).length : 0,
+    [feedLimit, feedSections, payload],
+  );
+  const feedRenderRevision = `${payload?.run_date ?? core?.run_date ?? 'none'}:${bankInsightsSha ?? 'no-bank-history'}:${activeSection}:${suitabilityRevision}:${feedLimit}`;
+  const feedHasMore = useMemo(
+    () => payload ? recentBankEvents(payload, { sections: feedSections, limit: FEED_PREVIEW + 1 }).length > FEED_PREVIEW : false,
     [feedSections, payload],
   );
-  const feedRenderRevision = `${payload?.run_date ?? core?.run_date ?? 'none'}:${bankInsightsSha ?? 'no-bank-history'}:${activeSection}:${suitabilityRevision}`;
 
   const activeFeedIdentity = useRef({ revision: feedRenderRevision, count: feedExpectedCount });
   activeFeedIdentity.current = { revision: feedRenderRevision, count: feedExpectedCount };
@@ -204,7 +212,7 @@ export default function MarketOverview() {
     if (next) setActiveSection(next.value);
   }, [activeSection, sectionOptions]);
   const openHistory = useCallback(() => router.push({ pathname: '/bank-rates', params: { section: activeSection } }), [activeSection]);
-  const openOutlook = useCallback(() => router.push({ pathname: '/research', params: { section: activeSection } }), [activeSection]);
+  const openTrends = useCallback(() => router.push({ pathname: '/research', params: { section: activeSection } }), [activeSection]);
   const openRba = useCallback(() => router.push('/rba'), []);
   // The destination loads and measures its own observations. Overview filtering
   // can still be pending after returning from another screen.
@@ -220,10 +228,10 @@ export default function MarketOverview() {
     'changes.section.next': changeSection,
     'changes.movers.toggle': toggleMovers,
     'market.history.open': openHistory,
-    'market.outlook.open': openOutlook,
+    'market.outlook.open': openTrends,
     'market.rba.open': openRba,
     'market.response.open': openResponse,
-  }), [changeSection, openHistory, openOutlook, openRba, openResponse, toggleMovers]);
+  }), [changeSection, openHistory, openRba, openResponse, openTrends, toggleMovers]);
   const asOfDate = sydneyYmd(now);
   const history = core?.rba.filter(point => point.date <= asOfDate) ?? [];
   const verifiedCalendarRate = currentCashRate(calendar, now);
@@ -289,40 +297,37 @@ export default function MarketOverview() {
       <View key={factsRevision} onLayout={event => {
         if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) setFactsLayout(current => activeFactsRevision.current === factsRevision ? factsRevision : current);
       }} style={{ gap: 16 }}>
-        <AppText variant="small" color="textMuted">{uiLabel(verifiedCalendarRate == null || coverage.unresolvedMeeting ? 'Last confirmed cash rate' : 'Cash rate')}</AppText>
-        <AppText variant="rateHero">{cashRate == null ? uiLabel("Unavailable") : uiPercentage(cashRate)}</AppText>
-        {cashRate != null ? <AppText variant="small" color="textMuted">
-          {uiJoin(uiDate(cashRateDate),source==='cache'||offline?uiJoin(' · ','Cached'):null,coverage.unresolvedMeeting?uiJoin(' · ','Awaiting decision'):null)}
-        </AppText> : null}
-        <View style={{ gap: 4 }}>
-          <AppText variant="small" color="textMuted">{uiLabel(coverage.unresolvedMeeting ? 'Awaiting decision' : 'Next decision')}</AppText>
-          <AppText variant="body" weight="600">{meeting ? uiDate(meeting.date) : calendarAttempted ? uiLabel("Unavailable") : uiLabel("Loading")}</AppText>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
+          <View style={{ flexGrow: 1, gap: 2 }}>
+            <AppText variant="small" color="textMuted">{uiLabel(verifiedCalendarRate == null || coverage.unresolvedMeeting ? 'Last confirmed cash rate' : 'Cash rate')}</AppText>
+            <AppText variant="h1">{cashRate == null ? uiLabel("Unavailable") : uiPercentage(cashRate)}</AppText>
+            {cashRate != null ? <AppText variant="tiny" color="textMuted">
+              {uiJoin(uiDate(cashRateDate),source==='cache'||offline?uiJoin(' · ','Cached'):null,coverage.unresolvedMeeting?uiJoin(' · ','Awaiting decision'):null)}
+            </AppText> : null}
+          </View>
+          <View style={{ flexGrow: 1, gap: 2 }}>
+            <AppText variant="small" color="textMuted">{uiLabel(coverage.unresolvedMeeting ? 'Awaiting decision' : 'Next decision')}</AppText>
+            <AppText variant="body" weight="600">{meeting ? uiDate(meeting.date) : calendarAttempted ? uiLabel("Unavailable") : uiLabel("Loading")}</AppText>
+          </View>
         </View>
         <View style={{ gap: 8 }}>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Button auditControlId="market-history" title="History" variant="secondary" style={{ flex: 1 }} onPress={openHistory} />
-            <Button auditControlId="market-outlook" title="Outlook" variant="secondary" style={{ flex: 1 }} onPress={openOutlook} />
+            <Button auditControlId="market-bank-response" title="Bank response" variant="secondary" style={{ flex: 1 }} onPress={openResponse} />
+            <Button auditControlId="market-history" title="Bank rates" variant="secondary" style={{ flex: 1 }} onPress={openHistory} />
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button auditControlId="market-rba" title="RBA" variant="secondary" style={{ flex: 1 }} onPress={openRba} />
-            <Button auditControlId="market-bank-response" title="Bank response" variant="secondary" style={{ flex: 1 }} onPress={openResponse} />
+            <Button auditControlId="market-outlook" title="Trends" variant="secondary" style={{ flex: 1 }} onPress={openTrends} />
           </View>
         </View>
       </View>
       <SegmentedControl options={sectionOptions} value={activeSection} onChange={setActiveSection} />
       <View style={{ gap: 12 }}>
-        <SectionHeading title="Last 7 days" />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 24 }}>
-          {([{label:uiLabel("Banks"),value:pulse?.banksMoved},{label:uiLabel("Increases"),value:pulse?.hikes},{label:uiLabel("Cuts"),value:pulse?.cuts}] as const).map(({label,value}) =>
-            <View key={String(label)} style={{ gap: 4 }}><AppText variant="h2">{uiCount(value)}</AppText><AppText variant="small" color="textMuted">{label}</AppText></View>)}
-        </View>
-      </View>
-      <View style={{ gap: 12 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
-          <SectionHeading title="Recent movements" />
-          <AppText variant="small" color="textMuted">{payload ? uiDate(payload.run_date) : uiLabel("Unavailable")}</AppText>
-        </View>
-        {payload ? <BankMovesFeed payload={payload} error={error} sections={feedSections} limit={14}
+        <SectionHeading title="Recent movements" action={<AppText variant="small" color="textMuted">{payload ? uiDate(payload.run_date) : uiLabel("Unavailable")}</AppText>} />
+        {pulse ? <AppText variant="small" color="textMuted" testID="market-pulse">
+          {uiJoin('Last 7 days', ' · ', uiCount(pulse.banksMoved), ' ', 'banks', ' · ', '↑', ' ', uiCount(pulse.banksUp), ' · ', '↓', ' ', uiCount(pulse.banksDown), pulse.banksMixed ? uiJoin(' · ', 'Mixed', ' ', uiCount(pulse.banksMixed)) : null)}
+        </AppText> : null}
+        {payload ? <BankMovesFeed payload={payload} error={error} sections={feedSections} limit={feedLimit}
           contentRevision={feedRenderRevision} onRenderEvidence={recordFeedEvidence} /> : suitabilityWarming ? (
           <View style={{ gap: 8 }}><AppText variant="small">{uiLabel("Loading")}</AppText><Button title="Retry" variant="secondary" onPress={() => void ensureDetails({ force: true, abandonInFlight: true })} /></View>
         ) : filteredEmpty ? (
@@ -332,6 +337,8 @@ export default function MarketOverview() {
         ) : error ? <View style={{ gap: 8 }}><AppText variant="small">{uiLabel("Movements unavailable")}</AppText>
           <Button title="Retry" loading={retrying} onPress={() => { setRetrying(true); void retryBankInsights().finally(() => setRetrying(false)); }} />
         </View> : <AppText variant="small">{uiLabel("Loading")}</AppText>}
+        {payload && feedHasMore ? <Button title={feedLimit > FEED_PREVIEW ? 'Show fewer' : 'Show more'} variant="ghost"
+          onPress={() => setFeedLimit(limit => limit > FEED_PREVIEW ? FEED_PREVIEW : FEED_FULL)} /> : null}
         {payload && error ? <AppText variant="small" color="textMuted">{uiLabel("Cached observations")}</AppText> : null}
       </View>
       {payload ? <Disclosure title="30-day movers" open={moversOpen} onToggle={toggleMovers}>

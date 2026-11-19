@@ -170,6 +170,18 @@ export function buildCompactBankResponseWindows(
   });
 }
 
+export type BankResponseStatus = 'full' | 'partial' | 'none' | 'opposite';
+
+/** Pass-through of the bank's first move against the RBA change, in basis points. */
+export function bankResponseStatus(row: CompactBankResponseRow, decisionBps: number): BankResponseStatus | null {
+  if (!decisionBps) return null;
+  if (row.movePp == null) return row.evidence.reason === 'no-recorded-move' ? 'none' : null;
+  const moveBps = row.movePp * 100;
+  if (moveBps === 0) return 'none';
+  if (Math.sign(moveBps) !== Math.sign(decisionBps)) return 'opposite';
+  return Math.abs(moveBps) + 0.5 >= Math.abs(decisionBps) ? 'full' : 'partial';
+}
+
 export function bankResponseDecisionLabel(decision: RbaDecisionEntry): string {
   if (decision.outcome === 'hold') return `RBA held at ${decision.rate.toFixed(2)}%`;
   const move = `${decision.delta_bps > 0 ? '+' : '−'}${Math.abs(decision.delta_bps)} bp`;

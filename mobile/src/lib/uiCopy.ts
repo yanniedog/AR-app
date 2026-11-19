@@ -448,7 +448,7 @@ export const UI_LABELS = [
   'Carousel', 'List', 'Clear filters',
   'Keep current', 'Use saved', 'Choose saved value',
   'All product variants',
-  'Best gap', 'Browse rates',
+  'Trends', 'Decreases', 'Big four', 'All banks', 'Search banks', 'Full', 'Show fewer', 'Best gap', 'Browse rates',
 ] as const;
 
 export type UiLabel = typeof UI_LABELS[number];

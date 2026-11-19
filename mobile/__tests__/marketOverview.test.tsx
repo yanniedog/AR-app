@@ -89,6 +89,8 @@ test('layout and focus-style renders preserve the movement feed, while changing 
 
 test.each(['a'.repeat(64), null])('calendar data uses publication identity for the real pre-action wait (%s)', async coreSha => {
   readyCalendarState(coreSha);
+  const ready = jest.spyOn(navigationReady, 'useNavigationContentReady').mockReturnValue(true);
+  const projection = jest.spyOn(bankData, 'filterBankInsightsForSuitabilityCooperatively').mockImplementation(async payload => payload ?? null);
   let tree: MarketTestRenderer;
   await act(async () => { tree = TestRenderer.create(<Market />) as MarketTestRenderer; });
   const registry = new PerformanceAuditReadinessRegistry();
@@ -106,7 +108,12 @@ test.each(['a'.repeat(64), null])('calendar data uses publication identity for t
     await act(async () => { await registry.invokeAction('market.overview', 'changes.section.next'); });
     expect(tree!.root.findByType('SegmentedControl').props.value).not.toBe(before);
     expect(registry.snapshot().surfaces[0]).toMatchObject({ lastCompletedAction: 'changes.section.next', actionRevision: 1 });
-  } finally { registry.endCapture(capture); act(() => tree!.unmount()); }
+  } finally {
+    registry.endCapture(capture);
+    act(() => tree!.unmount());
+    ready.mockRestore();
+    projection.mockRestore();
+  }
 });
 
 test('a changed calendar asset invalidates facts layout even with unchanged publication and values', async () => {

@@ -7,7 +7,5 @@ import { scalarRouteParam } from '../src/lib/nav';
 export default function LegacyTrendsRedirect() {
   const { focus: focusRaw } = useLocalSearchParams<{ focus?: string | string[] }>();
   const focus = scalarRouteParam(focusRaw);
-  return <Redirect href={focus === 'rba'
-    ? { pathname: '/research', params: { focus: 'rba' } }
-    : '/research'} />;
+  return <Redirect href={focus === 'rba' ? '/rba' : '/research'} />;
 }

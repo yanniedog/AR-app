@@ -240,25 +240,29 @@ describe('bank detail profile-filtered history', () => {
       expect(tree.root.findAllByType('BankHistoryChart')).toHaveLength(0);
     } finally { act(() => tree.unmount()); }
   });
-  it('shows the move detail for a dated deep link in the default carousel view, not only in the list', () => {
+  it('shows the move detail for a dated deep link in both List and Carousel', () => {
     mockTodayInsights.events = [{ date: '2026-09-27', provider: row.provider, section: 'Savings', dir: 'cut', moved: 1, total: 1, avg_bps: -10 }];
     mockParams.date = '2026-09-27'; mockParams.section = 'Savings';
     const tree = mount();
     try {
+      expect(tree.root.findAllByType('FlashList')[0].props.horizontal).toBe(false);
+      expect(copy(tree)).toContain('Move detail');
+      act(() => tree.root.findAllByType('Chip').find(node => node.props.label === 'Carousel')!.props.onPress());
       expect(tree.root.findAllByType('FlashList')[0].props.horizontal).toBe(true);
       expect(copy(tree)).toContain('Move detail');
       act(() => tree.root.findAllByType('Chip').find(node => node.props.label === 'List')!.props.onPress());
-      expect(copy(tree)).toContain('Move detail');
-      // Provider view state outlives the screen; restore the default for later tests.
-      act(() => tree.root.findAllByType('Chip').find(node => node.props.label === 'Carousel')!.props.onPress());
     } finally { act(() => tree.unmount()); mockTodayInsights.events = []; delete mockParams.date; delete mockParams.section; }
   });
 
-  it('keeps one chart outside the single product list and retains selected tier across view switches', () => {
+  it('keeps one chart and retains the selected tier across view switches', () => {
     const sibling = { ...row, rate_index: 42, rate: '0.035', product_name: 'Second tier' };
     mockState.core = { ...core, sections: { ...core.sections, Savings: { ...core.sections.Savings, rates: [row, sibling] } } };
     const tree = mount();
     try {
+      const defaultList = tree.root.findAllByType('FlashList')[0];
+      expect(defaultList.props.horizontal).toBe(false);
+      expect(defaultList.findAllByType('BankHistoryChart')).toHaveLength(1);
+      act(() => tree.root.findAllByType('Chip').find(node => node.props.label === 'Carousel')!.props.onPress());
       const list = tree.root.findAllByType('FlashList')[0];
       expect(list.props.horizontal).toBe(true);
       expect(list.props.viewabilityConfig.itemVisiblePercentThreshold).toBe(51);
@@ -297,6 +301,7 @@ describe('bank detail profile-filtered history', () => {
   it('keeps List and parameter controls outside the capped chart scroll area', () => {
     const tree = mount();
     try {
+      act(() => tree.root.findAllByType('Chip').find(node => node.props.label === 'Carousel')!.props.onPress());
       const viewport = tree.root.findByProps({ testID: 'provider-chart-viewport' });
       const controls = tree.root.findByProps({ testID: 'provider-browse-controls' });
       expect(viewport.findAllByType('Chip').some(node => ['List', 'Carousel'].includes(node.props.label))).toBe(false);
@@ -304,6 +309,7 @@ describe('bank detail profile-filtered history', () => {
       expect(viewport.findAllByType('FlashList')).toHaveLength(0);
       expect(viewport.findAllByType('AppText').some(node => node.props.children === 'Min')).toBe(false);
       expect(tree.root.findByProps({ testID: 'provider-statistics' })).toBeTruthy();
+      act(() => tree.root.findAllByType('Chip').find(node => node.props.label === 'List')!.props.onPress());
     } finally { act(() => tree.unmount()); }
   });
 

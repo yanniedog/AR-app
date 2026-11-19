@@ -123,7 +123,7 @@ export const BankMoveRow = React.memo(function BankMoveRow({
             </AppText>
           </Row>
           <AppText variant="tiny" color="textFaint">
-            {uiJoin('Average', ' · ', 'Movers')}
+            {uiLabel('Average')}
           </AppText>
         </View>
       </Row>
@@ -147,10 +147,10 @@ export const MarketPulseStrip = React.memo(function MarketPulseStrip({ payload }
         tone={quiet ? 'muted' : 'primary'}
       />
       {loanPulse?.cuts ? (
-        <Badge label={uiJoin('Home loans', ' · ', 'Cut', ' ', uiCount(loanPulse.cuts))} tone="success" />
+        <Badge label={uiJoin('Home loans', ' · ', 'Decrease', ' ', uiCount(loanPulse.cuts))} tone="success" />
       ) : null}
       {loanPulse?.hikes ? (
-        <Badge label={uiJoin('Home loans', ' · ', 'Hike', ' ', uiCount(loanPulse.hikes))} tone="danger" />
+        <Badge label={uiJoin('Home loans', ' · ', 'Increase', ' ', uiCount(loanPulse.hikes))} tone="danger" />
       ) : null}
       {depositPulse?.hikes ? (
         <Badge
@@ -287,8 +287,8 @@ export const MoversLeaderboard = React.memo(function MoversLeaderboard({
   // Good news first: cuts for loans, increases for savings/TD.
   const groups = loan
     ? [
-        { heading: uiLabel('Cut'), rows: downs },
-        { heading: uiLabel('Hike'), rows: ups },
+        { heading: uiLabel('Decrease'), rows: downs },
+        { heading: uiLabel('Increase'), rows: ups },
       ]
     : [
         { heading: uiLabel('Increase'), rows: ups },

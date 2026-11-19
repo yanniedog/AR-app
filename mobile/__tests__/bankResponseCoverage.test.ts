@@ -192,9 +192,10 @@ test('event-only providers retain the known move without claiming verified first
   f.source.events.push({ date: '2026-11-04', provider: 'Event Only', section: 'Savings', dir: 'hike', moved: 1, total: 1, avg_bps: 25 });
   const row = buildCompactBankResponseWindows(f.source, f.calendar, 'Savings')[1].rows.find(row => row.provider === 'Event Only');
   expect(row).toMatchObject({ movePp: 0.25, daysAfter: 1, evidence: { reason: 'missing-history', firstMoveVerified: false } });
-  expect(uiBankResponseMove(row!)).toContain('Unverified');
+  // Verification is a separate badge on the row; the formatters carry only the move and timing.
   expect(uiBankResponseMove(row!)).toContain('0.25');
-  expect(uiBankResponseTiming(row!)).toContain('Unverified');
+  expect(uiBankResponseMove(row!)).not.toContain('Unverified');
+  expect(uiBankResponseTiming(row!)).not.toContain('Unverified');
   const verified = { ...row!, evidence: { ...row!.evidence, firstMoveVerified: true, reason: 'recorded-move' as const } };
   expect(uiBankResponseMove(verified)).not.toContain('Unverified');
   expect(uiBankResponseTiming(verified)).not.toContain('Unverified');
