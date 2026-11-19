@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 19895)
-Total output lines: 1155
-
 import { catalogue as publicCatalogueFixture, programme as publicProgramme, product as publicProduct, row as publicRow } from '../testUtils/publicRateJourney';
 import { publicOfferSelectionToken } from '../src/data/publicOfferIdentity';
 import { selectedConstraintFixture } from '../testUtils/selectedTargetConstraints';
@@ -509,7 +506,126 @@ test('cancelled page preparation restores page, selection and scroll; absent or 
   recordRatesScroll('Mortgage', 219);
   updateRatesSection('Savings', { query: 'retained', page: 2 });
   updateRatesSection('Savings', { page: 2 });
-  const before = captureRatesSession(), pref…1895 tokens truncated…Token: '35#p-35' }))); });
+  const before = captureRatesSession(), preferences = JSON.parse(JSON.stringify(mockStore.getState().prefs));
+  let tree = mount();
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  try {
+    let pending: unknown; act(() => { pending = surface().actions!['search.compare.page.0']({ selectionToken: '35#p-35' }); });
+    await act(async () => { await pending; });
+    expect(useRatesSession.getState().sections.Mortgage.page).toBe(2);
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(before.sections.Mortgage.selected);
+    const prepared = captureRatesSession();
+    expect(surface().actions!['search.compare.page.1']({ selectionToken: '35#missing' })).toHaveProperty('unavailableReason');
+    expect(captureRatesSession()).toEqual(prepared);
+    act(() => updateRatesSection('Mortgage', { filters: { ...MORTGAGE_CRITERIA_FILTERS, includeNonStandard: true, providers: ['A'] } }));
+    const filtered = captureRatesSession();
+    // p-35 exists in core but is outside these actual results.
+    expect(surface().actions!['search.compare.page.0']({ selectionToken: '35#p-35' })).toHaveProperty('unavailableReason');
+    expect(captureRatesSession()).toEqual(filtered);
+    act(() => tree.unmount());
+    restoreRatesSession(before);
+    tree = mount();
+    expect(captureRatesSession()).toEqual(before);
+    expect(tree.root.findByType('FlashList').props.data[0].rate_index).toBe(40);
+    expect(mockStore.getState().prefs).toEqual(preferences);
+    expect(mockStore.getState().setPref).not.toHaveBeenCalled();
+  } finally { act(() => tree.unmount()); }
+});
+
+test('offscreen measurement rows cannot be selected; exact Cell, settled scroll and fresh viewport evidence are all required', async () => {
+  updateRatesSection('Mortgage', { page: 2, selectMode: true });
+  mockHoldScroll = true;
+  const tree = mount();
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  const probe = () => surface().probes!.find(p => p.id === 'search.audit-target')!;
+  const action = (name: string) => surface().actions![name]({ selectionToken: '35#p-35' });
+  const emit = (indices: number[], patch: object = {}) => {
+    const list = tree.root.findByType('FlashList').props;
+    act(() => list.onViewableItemsChanged({ viewableItems: indices.map(index => ({ item: list.data[index], index,
+      key: list.keyExtractor(list.data[index], index), isViewable: true, ...patch })) }));
+  };
+  try {
+    // Five actual Cells plus one Measurement: never all twenty page rows.
+    expect(tree.root.findAllByType('ProductCard')).toHaveLength(6);
+    expect(tree.root.findAllByType('ProductCard').some((card: any) => card.props.row.rate_index === 35)).toBe(true);
+    expect(action('search.compare.select.1')).toEqual({ unavailableReason: 'The selected exact rate is not committed and visible' });
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
+    let pending: any;
+    act(() => { pending = action('search.compare.page.1'); });
+    await act(async () => { await Promise.resolve(); });
+    expect(mockScrollCalls).toEqual([15]);
+    expect(probe()).toMatchObject({ actualCount: 1, visibleCount: 0, status: 'pending' });
+    expect(surface().probes!.find(p => p.id === 'search.list')!.status).toBe('ready');
+    expect(action('search.compare.select.1')).toHaveProperty('unavailableReason');
+    // A projected native window before Promise completion is insufficient.
+    mockAutoViewability = false;
+    let receipt: unknown;
+    await act(async () => { mockScrollResolutions.shift()!(); receipt = await pending; });
+    expect(probe().status).toBe('pending');
+    emit([13]); // Another visible row still cannot stand in for the exact target.
+    expect(probe().status).toBe('pending');
+    emit([15], { key: 'wrong-key' });
+    expect(action('search.compare.select.1')).toHaveProperty('unavailableReason');
+    emit([15]);
+    await act(async () => { await pending; });
+    expect(receipt).toMatchObject({ renderedSelectionToken: null, committedSelectionToken: null, viewableSelectionToken: null });
+    expect(probe()).toMatchObject({ actualCount: 1, visibleCount: 1, status: 'ready' });
+    act(() => { action('search.compare.select.1'); });
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['35#p-35']);
+    emit([15]);
+    const revision = surface().renderRevision;
+    let repeated: unknown;
+    act(() => { pending = action('search.compare.page.1'); });
+    await act(async () => { repeated = await pending; });
+    expect(isVerifiedRatesPagePreparation('search.compare.page.1', '35#p-35', repeated)).toBe(true);
+    expect(mockScrollCalls).toEqual([15]);
+    expect(surface().renderRevision).toBe(revision); // No fabricated render for a real no-op.
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual(['35#p-35']);
+    // The actual selection remains the visible checkbox toggle, including a repeated action.
+    act(() => { action('search.compare.select.1'); });
+    expect(useRatesSession.getState().sections.Mortgage.selected).toEqual([]);
+    act(() => mockNative.scrollToOffset({ offset: 0 }));
+    emit([15]); // Delayed exact token is outside current geometry and no longer a Cell.
+    expect(probe().required).toBe(false);
+    expect(action('search.compare.select.1')).toHaveProperty('unavailableReason');
+    act(() => { surface().actions!['search.section.next'](); });
+    expect(surface().probes!.find(p => p.id === 'search.audit-target')!.required).toBe(false);
+    expect(surface().probes!.filter(p => p.required && p.status === 'error')).toEqual([]);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('cancellation before list restoration prevents an unissued target scroll and preserves the snapshot', async () => {
+  updateRatesSection('Mortgage', { page: 2, selectMode: true, selected: ['21#p-21'] });
+  recordRatesScroll('Mortgage', 137);
+  const before = captureRatesSession(), prefs = JSON.parse(JSON.stringify(mockStore.getState().prefs));
+  mockEmitLoad = false;
+  const tree = mount();
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  const staleLoad = tree.root.findByType('FlashList').props.onLoad;
+  let pending: any;
+  act(() => { pending = surface().actions!['search.compare.page.1']({ selectionToken: '35#p-35' }); });
+  act(() => { mockAuditCancelled = true; mockCancelListeners.forEach(listener => listener()); });
+  await expect(pending).resolves.toHaveProperty('unavailableReason');
+  expect(mockScrollCalls).toEqual([]);
+  act(() => tree.unmount());
+  act(() => { restoreRatesSession(before); staleLoad(); });
+  expect(mockScrollCalls).toEqual([]);
+  expect(captureRatesSession()).toEqual(before);
+  expect(mockStore.getState().prefs).toEqual(prefs);
+});
+
+test('issued native scrolling drains before same-page rollback restores viewport, selection and private inputs', async () => {
+  updateRatesSection('Mortgage', { page: 2, selectMode: true, selected: ['21#p-21'] });
+  recordRatesScroll('Mortgage', 137);
+  useMortgageComparison.setState({ loanAmount: '345678', lvr: '72' });
+  const before = captureRatesSession(), inputs = { ...useMortgageComparison.getState() };
+  const prefs = JSON.parse(JSON.stringify(mockStore.getState().prefs));
+  mockHoldScroll = true;
+  const tree = mount(), barrier = new PerformanceAuditMutationBarrier();
+  const surface = () => jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  try {
+    let pending: any, finished = false;
+    act(() => { pending = barrier.track(Promise.resolve(surface().actions!['search.compare.page.1']({ selectionToken: '35#p-35' }))); });
     void pending.then(() => { finished = true; });
     await act(async () => { await Promise.resolve(); });
     act(() => { mockAuditCancelled = true; mockCancelListeners.forEach(listener => listener()); });
