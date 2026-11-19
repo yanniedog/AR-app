@@ -78,3 +78,16 @@ test('ratesComparisonScenario keeps each unreplaced default, including LVR 80% b
   expect(invalidMortgageComparisonField({ loanAmount: '600000', lvr: '', lvrMode: 'funds', fundsType: 'deposit', fundsAvailable: 'x' })).toBe('Deposit');
   expect(invalidMortgageComparisonField({ loanAmount: '600000', lvr: '80' })).toBeNull();
 });
+
+test('Rates pricing distinguishes a blank offset from an explicit zero balance', () => {
+  const inputs = { loanAmount: '600000', lvr: '', lvrMode: 'funds', fundsType: 'offset', propertyValue: '750000' } as const;
+  const saved = { offsetBalance: '50000' };
+
+  const incomplete = ratesComparisonScenario('Mortgage', saved, inputs);
+  expect(Object.hasOwn(incomplete, 'offsetBalance')).toBe(true);
+  expect(incomplete.offsetBalance).toBeUndefined();
+
+  expect(ratesComparisonScenario('Mortgage', saved, { ...inputs, fundsAvailable: '0' })).toMatchObject({
+    amount: '600000', lvr: '0.8', offsetBalance: '0',
+  });
+});

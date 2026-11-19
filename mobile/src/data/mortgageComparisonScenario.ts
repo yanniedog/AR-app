@@ -85,7 +85,10 @@ export function ratesComparisonScenario(
     inputs,
     temporary ?? { loanPurposes: [], repaymentTypes: [] },
   );
-  return mortgageComparisonScenario(section, scenario, effective.inputs, effective.facets);
+  // Funds-mode pricing must retain explicitly missing inputs, even when Rates
+  // can use a fallback LVR to display products.
+  const pricingInputs = inputs.lvrMode === 'funds' ? inputs : effective.inputs;
+  return mortgageComparisonScenario(section, scenario, pricingInputs, effective.facets);
 }
 
 /** Ephemeral comparison inputs override pricing assumptions without saving them. */
