@@ -103,8 +103,20 @@ function looksLoading(nodes) {
 }
 
 /** Wait until two consecutive hierarchies match and no loading indicator remains. */
-async function settle(timeoutMs) {
-  const start = Date.now();
+const systemDialogs = [];
+/** Dismiss system "isn't responding" dialogs; an ANR in this app is recorded as a finding. */
+function dismissSystemDialog(nodes) {
+  const anr = nodes.find(n => /isn.t responding/i.test(n.text));
+  if (!anr) return false;
+  const ours = /australian ?rates|ar app/i.test(anr.text);
+  const button = findNode(nodes, ours ? 'Wait' : 'Close app') || findNode(nodes, 'Wait');
+  systemDialogs.push({ at: new Date().toISOString(), text: anr.text, ours });
+  if (button) sh(`input tap ${centre(button).join(' ')}`);
+  return true;
+}
+
+async function settle(timeoutMs, since = Date.now()) {
+  const start = since;
   let prev = null;
   let last = { nodes: [] };
   let stableSince = null;
@@ -112,6 +124,11 @@ async function settle(timeoutMs) {
   while (Date.now() - start < timeoutMs) {
     const dumpStarted = Date.now();
     last = await dumpUi();
+    if (dismissSystemDialog(last.nodes)) {
+      prev = null;
+      await sleep(800);
+      continue;
+    }
     const fp = fingerprint(last.nodes);
     const loading = looksLoading(last.nodes);
     if (fp !== prev) firstSeen = dumpStarted;
@@ -242,10 +259,12 @@ class Explorer {
     this.current = { nodes: [] };
   }
 
-  async record(name, extra = {}, settleTimeout = this.args.settleTimeoutMs) {
+  async record(name, extra = {}, settleTimeout = this.args.settleTimeoutMs, since = Date.now()) {
     const index = String(this.steps.length + 1).padStart(3, '0');
     const slug = `${index}-${String(name).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 50).toLowerCase()}`;
-    const settled = await settle(settleTimeout);
+    const anrBefore = systemDialogs.filter(d => d.ours).length;
+    const settled = await settle(settleTimeout, since);
+    const appAnr = systemDialogs.filter(d => d.ours).length > anrBefore;
     this.current = settled;
     const png = adb(['exec-out', 'screencap', '-p'], { encoding: 'buffer', allowFail: true });
     if (png && png.length) fs.writeFileSync(path.join(this.out, 'screens', `${slug}.png`), png);
@@ -263,6 +282,7 @@ class Explorer {
       settleMs: settled.settleMs,
       settleTimedOut: settled.timedOut,
       alive: Boolean(pid),
+      anr: appAnr || undefined,
       frames,
       memKb: memoryKb(),
       log: classifyLog(log),
@@ -284,10 +304,11 @@ class Explorer {
   async launch(name = 'launch') {
     sh(`am force-stop ${PKG}`, { allowFail: true });
     adb(['logcat', '-c'], { allowFail: true });
+    const t0 = Date.now();
     const component = (sh(`cmd package resolve-activity --brief ${PKG} | tail -n 1`, { allowFail: true }) || '').trim();
     const out = sh(`am start -W -n ${component.includes('/') ? component : `${PKG}/.MainActivity`}`, { allowFail: true }) || '';
     const total = Number((/TotalTime: (\d+)/.exec(out) || [])[1] || 0);
-    const step = await this.record(name, { activityStartMs: total }, this.args.coldTimeoutMs);
+    const step = await this.record(name, { activityStartMs: total }, this.args.coldTimeoutMs, t0);
     await this.recoverData();
     return step;
   }
@@ -313,7 +334,7 @@ class Explorer {
     const uri = `${SCHEME}://${route.replace(/^\//, '')}`;
     const t0 = Date.now();
     sh(`am start -W -a android.intent.action.VIEW -d '${uri}' ${PKG}`, { allowFail: true });
-    return this.record(name || `open ${route}`, { route, intentMs: Date.now() - t0 });
+    return this.record(name || `open ${route}`, { route, intentMs: Date.now() - t0 }, undefined, t0);
   }
 
   async find(sel, timeoutMs = 8000) {
@@ -366,7 +387,7 @@ class Explorer {
       const t0 = Date.now();
       if (step.longPress) sh(`input swipe ${x} ${y} ${x} ${y} 900`);
       else sh(`input tap ${x} ${y}`);
-      return this.record(label, { tapped: node.text || node.desc || node.id, at: [x, y], inputAt: t0 });
+      return this.record(label, { tapped: node.text || node.desc || node.id, at: [x, y] }, undefined, t0);
     }
     if (step.tapXY) {
       sh(`input tap ${step.tapXY[0]} ${step.tapXY[1]}`);
@@ -428,7 +449,7 @@ class Explorer {
   finish(meta) {
     fs.writeFileSync(path.join(this.out, 'logcat.txt'), this.logAll);
     const baseline = loadBaseline(this.args.baseline);
-    const report = { schemaVersion: 1, ...meta, finishedAt: new Date().toISOString(), steps: this.steps };
+    const report = { schemaVersion: 1, ...meta, systemDialogs, finishedAt: new Date().toISOString(), steps: this.steps };
     fs.writeFileSync(path.join(this.out, 'report.json'), JSON.stringify(report, null, 2));
     fs.writeFileSync(path.join(this.out, 'report.md'), renderMarkdown(report, baseline));
     return report;
@@ -468,6 +489,7 @@ function renderMarkdown(report, baseline) {
     const delta = base ? s.settleMs - base.settleMs : null;
     const notes = [
       !s.alive && 'CRASH',
+      s.anr && 'ANR',
       s.settleTimedOut && 'no settle',
       s.error,
       s.log.errors.length && `${s.log.errors.length} errors`,
@@ -498,6 +520,11 @@ async function main() {
   }
   sh(`pm grant ${PKG} android.permission.POST_NOTIFICATIONS`, { allowFail: true });
   if (args.fresh) sh(`pm clear ${PKG}`, { allowFail: true });
+  sh('input keyevent 3', { allowFail: true });
+  for (let i = 0; i < 10; i += 1) {
+    if (!dismissSystemDialog((await dumpUi()).nodes)) break;
+    await sleep(1500);
+  }
   const ex = new Explorer(args);
   let network;
   try { network = JSON.parse(fs.readFileSync('payload-check.json', 'utf8')); } catch { network = undefined; }

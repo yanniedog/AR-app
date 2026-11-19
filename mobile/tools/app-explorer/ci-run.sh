@@ -3,6 +3,7 @@
 set -euo pipefail
 adb wait-for-device
 adb shell 'while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 1; done'
+sleep 20
 adb shell wm size 720x1600
 adb shell wm density 320
 adb install -r -g app.apk
