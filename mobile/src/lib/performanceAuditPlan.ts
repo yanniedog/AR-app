@@ -1067,7 +1067,6 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 2, semanticActionId: 'outlook.history.window.30d', readiness: ['graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.history.window.all', readiness: ['graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 3, semanticActionId: 'outlook.history.date.previous', readiness: ['graphics'], optional: true, ...optionalFeatureSkip },
-    { depth: 2, semanticActionId: 'outlook.rba-response.decision.previous', expectedSurface: 'outlook.rba-response', readiness: ['rba-calendar', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.economy.lens.next', expectedSurface: 'outlook.economy', readiness: ['economic-data', 'graphics'], stateImpact: 'local-only', optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.economy.window.next', expectedSurface: 'outlook.economy', readiness: ['economic-data', 'graphics'], stateImpact: 'local-only', optional: true, ...optionalFeatureSkip },
     { depth: 3, semanticActionId: 'outlook.economy.date.previous', expectedSurface: 'outlook.economy', readiness: ['economic-data', 'graphics'], stateImpact: 'local-only', optional: true, ...optionalFeatureSkip },

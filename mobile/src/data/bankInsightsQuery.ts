@@ -3,6 +3,7 @@ import { parseYmd } from './bankHistoryTransform';
 import {
   DAY_MS,
   type BankInsightsPayload,
+  type BankMoveDir,
   type BankRateEvent,
 } from './bankInsightsTypes';
 
@@ -307,6 +308,12 @@ export interface MarketPulse {
   cuts: number;
   hikes: number;
   mixed: number;
+  /** Distinct providers whose moves in the window were all increases. */
+  banksUp: number;
+  /** Distinct providers whose moves in the window were all decreases. */
+  banksDown: number;
+  /** Distinct providers with both directions, or a mixed move, in the window. */
+  banksMixed: number;
   sinceDate: string;
 }
 
@@ -320,7 +327,7 @@ export function marketPulse(
   const anchor = parseYmd(payload.run_dates[payload.run_dates.length - 1]);
   if (anchor == null) return null;
   const cutoffTs = anchor - sinceDays * DAY_MS;
-  const movers = new Set<string>();
+  const movers = new Map<string, BankMoveDir>();
   let cuts = 0;
   let hikes = 0;
   let mixed = 0;
@@ -329,11 +336,21 @@ export function marketPulse(
     if (sections && !sections.includes(event.section)) continue;
     const ts = parseYmd(event.date);
     if (ts == null || ts < cutoffTs) continue;
-    movers.add(event.provider);
+    const previous = movers.get(event.provider);
+    movers.set(event.provider, previous && previous !== event.dir ? 'mixed' : event.dir);
     if (event.dir === 'cut') cuts += 1;
     else if (event.dir === 'hike') hikes += 1;
     else mixed += 1;
     if (event.date < sinceDate) sinceDate = event.date;
   }
-  return { banksMoved: movers.size, cuts, hikes, mixed, sinceDate };
+  let banksUp = 0;
+  let banksDown = 0;
+  for (const dir of movers.values()) {
+    if (dir === 'hike') banksUp += 1;
+    else if (dir === 'cut') banksDown += 1;
+  }
+  return {
+    banksMoved: movers.size, cuts, hikes, mixed,
+    banksUp, banksDown, banksMixed: movers.size - banksUp - banksDown, sinceDate,
+  };
 }

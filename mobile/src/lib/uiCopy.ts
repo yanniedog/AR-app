@@ -447,7 +447,7 @@ export const UI_LABELS = [
   'K', 'M', 'Amount unit', 'millions of dollars', 'dollars',
   'Carousel', 'List', 'Clear filters',
   'Keep current', 'Use saved', 'Choose saved value',
-  'All product variants', 'Upfront fee', 'Best gap', 'Browse rates',
+  'All product variants', 'Upfront fee', 'Best gap', 'Browse rates', 'Trends', 'Decreases', 'Big four', 'All banks', 'Search banks', 'Full', 'Show fewer',
 ] as const;
 
 export type UiLabel = typeof UI_LABELS[number];

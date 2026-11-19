@@ -153,7 +153,7 @@ export default function BankDetail() {
   const historySurfaceReady = useDeferredHistorySurface(provider);
   const savedProfile = useStore(s => s.prefs.profileFilters);
   const [providerProfile, setProviderProfile] = useState(() => providerSessions.get(provider)?.profile ?? normalizeProfileFilters(savedProfile));
-  const [productView, setProductView] = useState<'carousel' | 'list'>(() => providerSessions.get(provider)?.view ?? 'carousel');
+  const [productView, setProductView] = useState<'carousel' | 'list'>(() => providerSessions.get(provider)?.view ?? 'list');
   const [selectedProduct, setSelectedProduct] = useState<string | null>(() => providerSessions.get(provider)?.selected ?? null);
   const listOffset = useRef(providerSessions.get(provider)?.offset ?? 0);
   useEffect(() => {
@@ -768,13 +768,7 @@ export default function BankDetail() {
     contentHeight - statisticsHeight - browseControlsHeight - (productView === 'carousel' ? carouselNavigationHeight : 0) - (moveDetailShown ? moveDetailHeight : 0) - productMinimumHeight));
 
 
-  return (
-    <>
-      <Stack.Screen options={{ title: lenderName }} />
-      <Screen showDataHealthBanner={false}>
-        <View style={{ ...responsiveScreenContentStyle(width), paddingHorizontal: 0, flex: 1 }} onLayout={event => { setContentWidth(event.nativeEvent.layout.width); setContentHeight(event.nativeEvent.layout.height); }}>
-        <ScrollView testID="provider-chart-viewport" style={{ flexGrow: 0, flexShrink: 0, height: chartViewportHeight }}
-          contentContainerStyle={{ paddingHorizontal: 16 }} nestedScrollEnabled>
+  const chartContent = <>
           <DataHealthBannerStrip />
           <Row gap={8} style={{ marginVertical: 6 }}>
             <BankAvatar provider={provider} size={28} renderStateId={lenderLogoIds[0]}
@@ -815,6 +809,7 @@ export default function BankDetail() {
                   statisticsInline={false}
                   onStatisticsChange={onStatisticsChange}
                   stateKey={`${provider}:${activeChartSection}`}
+                  windowMemory="lender"
                   highlightSeries={selectedSeries}
                   onGraphicReady={onHistoryGraphicReady}
                 />
@@ -824,7 +819,8 @@ export default function BankDetail() {
             <AppText variant="small" color="textMuted">{uiLabel('No observations')}</AppText>
           </View> : null
         ) : null}
-        </ScrollView>
+  </>;
+  const statisticsAndControls = <>
         {activeChartSection ? <BankHistoryStatistics point={chartModel ? selectedStatistics : null} section={activeChartSection}
           onLayout={event => setStatisticsHeight(event.nativeEvent.layout.height)} /> : null}
           <Row testID="provider-browse-controls" onLayout={event => setBrowseControlsHeight(event.nativeEvent.layout.height)} gap={8} style={{ flexShrink: 0, paddingVertical: 4, paddingHorizontal: 16 }}>
@@ -838,6 +834,20 @@ export default function BankDetail() {
             </View>
             <Chip label={productView === 'carousel' ? 'List' : 'Carousel'} onPress={() => setProductView(productView === 'carousel' ? 'list' : 'carousel')} />
           </Row>
+  </>;
+
+  return (
+    <>
+      <Stack.Screen options={{ title: lenderName }} />
+      <Screen showDataHealthBanner={false}>
+        <View style={{ ...responsiveScreenContentStyle(width), paddingHorizontal: 0, flex: 1 }} onLayout={event => { setContentWidth(event.nativeEvent.layout.width); setContentHeight(event.nativeEvent.layout.height); }}>
+        {productView === 'carousel' ? <>
+        <ScrollView testID="provider-chart-viewport" style={{ flexGrow: 0, flexShrink: 0, height: chartViewportHeight }}
+          contentContainerStyle={{ paddingHorizontal: 16 }} nestedScrollEnabled>
+          {chartContent}
+        </ScrollView>
+        {statisticsAndControls}
+        </> : null}
         {moveDetailShown ? <ScrollView testID="provider-move-detail" nestedScrollEnabled style={{ flexGrow: 0, flexShrink: 0, maxHeight: 180 }}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4 }} onLayout={event => setMoveDetailHeight(Math.min(180, event.nativeEvent.layout.height))}>{moveDetail}</ScrollView> : null}
         <FlashList
@@ -862,6 +872,10 @@ export default function BankDetail() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12 + insets.bottom }}
           renderItem={renderProductItem}
           ListEmptyComponent={<EmptyState title="No current products" />}
+          ListHeaderComponent={productView === 'list' ? <View testID="provider-list-header" style={{ marginHorizontal: -16, paddingBottom: 8 }}>
+            <View style={{ paddingHorizontal: 16 }}>{chartContent}</View>
+            {statisticsAndControls}
+          </View> : null}
           ListFooterComponent={productView === 'list' ? <View>{moveDetail}</View> : null}
         />
         {productView === 'carousel' && productItems.length > 1 ? <Row onLayout={event => setCarouselNavigationHeight(event.nativeEvent.layout.height)} gap={8} style={{ flexShrink: 0, padding: 8, justifyContent: 'space-between' }}>

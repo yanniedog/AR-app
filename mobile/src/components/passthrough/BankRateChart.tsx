@@ -9,6 +9,8 @@ import { uiChartDate, uiChartPercent, uiChartPp } from '../../lib/chartUiCopy';
 import { useTheme } from '../../theme/ThemeProvider';
 import { ChartText } from '../charts/ChartText';
 import { BankAvatar } from '../BankAvatar';
+import { BankPickerSheet } from './BankPickerSheet';
+import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import Ionicons from '../icons/AppIcon';
 import { AppText, Row } from '../ui';
 
@@ -16,6 +18,10 @@ const W = 340, H = 225, L = 44, R = 12, T = 12, B = 40;
 /** Small fixtures stay on the render path. A full bank-day book does not. */
 const SYNCHRONOUS_CHART_POINTS = 256;
 const timestamp = (date: string) => Date.parse(`${date}T00:00:00Z`);
+/** Comparison lines stay grey; dash patterns tell them apart without colour. */
+const COMPARISON_DASHES = ['6 3', '2 3', '8 3 2 3', '4 4', '1 4'];
+const EMPTY_SAVED: ReadonlySet<string> = new Set();
+const NO_COMPARISON: { provider: string; i: number; dash: string | undefined }[] = [];
 
 type ChartPaths = { path: string; coordinates: { x: number; y: number }[]; background: string; pointCount: number }[];
 
@@ -56,12 +62,22 @@ function buildChartPaths(model: BankRateChartModel, gap: boolean): ChartPaths {
     return { path, coordinates, background: `${path} ${isolatedMarkers.join(' ')}`, pointCount: line.points.length };
   });
 }
-export function BankRateChart({ model, provider, onProviderChange, label, gap, auditRevision, onGraphicReady }: {
+export function BankRateChart({ model, provider, onProviderChange, label, gap, auditRevision, onGraphicReady,
+  providers, saved = EMPTY_SAVED, labelledComparison = false }: {
   model: BankRateChartModel; provider: string; onProviderChange: (provider: string) => void; label: UiCopy; gap: boolean;
   auditRevision?: string;
   onGraphicReady?: (evidence: ChartRenderEvidence) => void;
+  /** Every selectable bank; defaults to the plotted lines. */
+  providers?: readonly string[];
+  saved?: ReadonlySet<string>;
+  /** Draw each comparison bank with its own dash pattern and legend entry. */
+  labelledComparison?: boolean;
 }) {
   const theme = useTheme();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Mount the sheet on first use; keep it mounted so its close animation runs.
+  const [pickerMounted, setPickerMounted] = useState(false);
+  const choices = useMemo(() => providers ?? model.lines.map(line => line.provider), [model.lines, providers]);
   const index = Math.max(0, model.lines.findIndex(line => line.provider === provider));
   const selected = model.lines[index];
   const latest = selected?.points.at(-1);
@@ -105,25 +121,36 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap, a
     `M${(point.x - 2).toFixed(1)},${point.y.toFixed(1)}a2,2 0 1,0 4,0a2,2 0 1,0 -4,0Z`).join(' ') ?? '', [index, paths]);
   // The context stays mounted unchanged when selecting another bank. The
   // selected bank is drawn over it with just two paths.
-  const background = useMemo(() => paths ? <Path testID="bank-rate-background" d={paths.map(item => item.background).join(' ')}
-    fill="none" stroke={theme.colors.textFaint} strokeOpacity={0.28} strokeWidth={0.8} /> : null,
-  [paths, theme.colors.textFaint]);
+  const labelledIndex = labelledComparison ? index : -1;
+  const comparison = useMemo(() => labelledIndex < 0 ? NO_COMPARISON
+    : model.lines.map((line, i) => ({ provider: line.provider, i })).filter(item => item.i !== labelledIndex)
+      .map((item, n) => ({ ...item, dash: COMPARISON_DASHES[n % COMPARISON_DASHES.length] })),
+  [labelledIndex, model.lines]);
+  const background = useMemo(() => !paths ? null : labelledComparison
+    ? <>{comparison.map(item => <Path key={item.provider} testID="bank-rate-comparison" d={paths[item.i]?.background ?? ''}
+      fill="none" stroke={theme.colors.textMuted} strokeOpacity={0.8} strokeWidth={1.2} strokeDasharray={item.dash} />)}</>
+    : <Path testID="bank-rate-background" d={paths.map(item => item.background).join(' ')}
+      fill="none" stroke={theme.colors.textFaint} strokeOpacity={0.28} strokeWidth={0.8} />,
+  [comparison, labelledComparison, paths, theme.colors.textFaint, theme.colors.textMuted]);
   if (!selected || !latest) return null;
   const coverage = uiJoin('Observed', ' · ', uiCount(selected.points.length), ' ', 'days', ' · ', uiDate(selected.points[0].date), ' ', '–', ' ', uiDate(latest.date), selected.points.length === 1 ? uiJoin(' · ', 'Partial') : null);
   const selectedValue = gap ? uiChartPp(latest.value) : uiChartPercent(latest.value);
   const basis = gap ? uiJoin('Home loans', ' ', '−', ' ', 'Savings', ' · ', 'Mean') : uiJoin(label, ' · ', 'Advertised rate');
   const summary = uiJoin(uiProviderName(selected), ' · ', basis, ' · ', selectedValue, ' · ', uiDate(latest.date), ' · ', uiCount(latest.count), ' ', 'rates', ' · ', uiCount(model.lines.length), ' ', 'banks', ' · ', coverage);
   const graphicRevision = `${auditRevision ?? ''}:${selected.provider}`;
-  const move = (offset: number) => onProviderChange(model.lines[(index + offset + model.lines.length) % model.lines.length].provider);
+  const choiceIndex = Math.max(0, choices.indexOf(selected.provider));
+  const move = (offset: number) => onProviderChange(choices[(choiceIndex + offset + choices.length) % choices.length]);
   return <View style={{ gap: 16 }}>
     <Row gap={8} style={{ alignItems: 'center' }}>
       <Pressable accessibilityRole="button" accessibilityLabel="Previous bank" onPress={() => move(-1)} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="chevron-back" size={20} color={theme.colors.text} /></Pressable>
-      <View style={{ flex: 1, minWidth: 0 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={uiJoin('Choose bank', ' · ', uiProviderName(selected))}
+        testID="bank-rate-picker" onPress={() => { setPickerMounted(true); setPickerOpen(true); }} style={{ flex: 1, minWidth: 0, minHeight: 48, justifyContent: 'center' }}>
         <Row gap={8} style={{ alignItems: 'center' }}>
           <BankAvatar provider={selected.provider} size={28} />
-          <AppText variant="body" weight="600" style={{ flex: 1 }}>{uiProviderName(selected)}</AppText>
+          <AppText variant="body" weight="600" numberOfLines={1} style={{ flex: 1 }}>{uiProviderName(selected)}</AppText>
+          <Ionicons name="chevron-down" size={18} color={theme.colors.textMuted} />
         </Row>
-      </View>
+      </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Next bank" onPress={() => move(1)} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="chevron-forward" size={20} color={theme.colors.text} /></Pressable>
     </Row>
     <View style={{ gap: 4 }}>
@@ -155,9 +182,19 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap, a
         {model.dates.length > 1 ? <ChartText x={W - R} y={H - 5} textAnchor="end" fontSize={10} fill={theme.colors.textMuted}>{uiChartDate(model.dates.at(-1))}</ChartText> : null}
       </Svg> : <View style={{ height: H }} />}
     </View>
+    {comparison.length ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }} testID="bank-rate-legend">
+      <Row gap={6}><Svg width={22} height={10} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}><Line x1={0} x2={22} y1={5} y2={5} stroke={theme.colors.primary} strokeWidth={2.6} /></Svg>
+        <AppText variant="tiny" color="textMuted">{uiProviderName(selected)}</AppText></Row>
+      {comparison.map(item => <Row key={item.provider} gap={6}>
+        <Svg width={22} height={10} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}><Line x1={0} x2={22} y1={5} y2={5} stroke={theme.colors.textMuted} strokeWidth={1.2} strokeDasharray={item.dash} /></Svg>
+        <AppText variant="tiny" color="textMuted">{uiProviderName(item)}</AppText>
+      </Row>)}
+    </View> : null}
     <View style={{ gap: 4 }}>
       <AppText variant="tiny" color="textMuted">{coverage}</AppText>
-      <AppText variant="tiny" color="textMuted">{uiJoin(uiCount(model.lines.length), ' ', 'banks', ' · ', gap ? 'Gap' : 'Advertised rate', ' · ', '↑', ' ', 'Hike', ' · ', '·', ' ', 'Held', ' · ', '↓', ' ', 'Cut')}</AppText>
+      <AppText variant="tiny" color="textMuted">{uiJoin(uiCount(model.lines.length), ' ', 'banks', ' · ', gap ? 'Gap' : 'Advertised rate', ' · ', '↑', ' ', 'Increase', ' · ', '·', ' ', 'Held', ' · ', '↓', ' ', 'Decrease')}</AppText>
     </View>
+    {pickerMounted ? <BankPickerSheet visible={pickerOpen} providers={choices} selected={selected.provider} saved={saved}
+      onSelect={onProviderChange} onClose={() => setPickerOpen(false)} /> : null}
   </View>;
 }
