@@ -40,6 +40,25 @@ function parseArgs(argv) {
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+/** Fetch an uploaded log, following paste.rs share pointers whose body is only the canonical URL. */
+async function fetchUploadedLog(url) {
+  let current = url;
+  const hops = [];
+  for (let i = 0; i < 3; i += 1) {
+    const res = await fetch(current, { signal: AbortSignal.timeout(60000) });
+    if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+    const body = await res.text();
+    const pointer = body.trim();
+    if (/^https:\/\/\S+$/.test(pointer) && pointer.length < 300) {
+      hops.push(current);
+      current = pointer;
+      continue;
+    }
+    return { body, status: res.status, contentUrl: current, hops };
+  }
+  throw new Error('too many share-link hops');
+}
+
 function adb(args, { allowFail = false, timeout = 60000, encoding = 'utf8' } = {}) {
   const res = spawnSync('adb', args, { encoding, timeout, maxBuffer: 64 * 1024 * 1024 });
   if (res.status !== 0 && !allowFail) {
@@ -243,7 +262,7 @@ function drainLogcat() {
 function classifyLog(text) {
   const lines = text.split('\n').filter(Boolean);
   return {
-    errors: lines.filter(l => /\s(E|F)\/|FATAL EXCEPTION|ReactNativeJS.*(Error|Exception)/.test(l)).slice(0, 30),
+    errors: lines.filter(l => /\s(E|F)\/|FATAL EXCEPTION|ReactNativeJS.*(Error|Exception)/.test(l)).slice(0, 80),
     warnings: lines.filter(l => /\bW\//.test(l)).length,
   };
 }
@@ -413,6 +432,69 @@ class Explorer {
     return this.record('audit screen', {}, 60000, t0);
   }
 
+  /** Cancel a running audit so its overlay releases the UI; force-stop and relaunch if it will not end. */
+  async cancelAudit() {
+    const cancel = await this.find('Cancel', 3000);
+    if (cancel) sh(`input tap ${centre(cancel).join(' ')}`);
+    const t0 = Date.now();
+    while (Date.now() - t0 < 60000) {
+      await sleep(2000);
+      const text = (await dumpUi()).nodes.map(n => n.text).join(' ');
+      if (!/[\d,]+ \/ [\d,]+/.test(text)) return;
+    }
+    sh(`am force-stop ${PKG}`, { allowFail: true });
+    await this.relaunch();
+    await sleep(10000);
+  }
+
+  /** About > Debug log > Upload and copy link, then fetch the uploaded text into debug-log.txt. */
+  async uploadDebugLog() {
+    if (!appPid()) { await this.relaunch(); await sleep(10000); }
+    await this.open('/about', 'about for debug log');
+    let row = await this.scrollUntil('Debug log', 6);
+    if (!row) {
+      const diag = await this.scrollUntil('Diagnostics', 6);
+      if (diag) { sh(`input tap ${centre(diag).join(' ')}`); await sleep(800); }
+      row = await this.scrollUntil('Debug log', 6);
+    }
+    if (!row) return { error: 'Debug log row not found' };
+    sh(`input tap ${centre(row).join(' ')}`);
+    await this.record('debug log screen', {}, 60000);
+    const urlsIn = nodes => nodes.map(n => `${n.text} ${n.desc}`).join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/g) || [];
+    const priorUrls = new Set(urlsIn(this.current.nodes));
+    const upload = await this.scrollUntil('Upload and copy link', 8);
+    if (!upload) return { error: 'Upload and copy link not found' };
+    for (const u of urlsIn((await dumpUi()).nodes)) priorUrls.add(u);
+    sh(`input tap ${centre(upload).join(' ')}`);
+    await sleep(1500);
+    const dialog = (await dumpUi()).nodes;
+    const confirm = findNode(dialog, { id: 'button1' }) || findNode(dialog, 'Upload') || findNode(dialog, 'Continue') || findNode(dialog, 'OK');
+    if (confirm) sh(`input tap ${centre(confirm).join(' ')}`);
+    const t0 = Date.now();
+    let url = null;
+    while (!url && Date.now() - t0 < 5 * 60000) {
+      await sleep(3000);
+      const nodes = (await dumpUi()).nodes;
+      const busy = nodes.some(n => /^(Preparing|Uploading|Verifying)/.test(n.text.trim()));
+      const fresh = urlsIn(nodes).find(u => !priorUrls.has(u));
+      if (fresh && !busy) url = fresh;
+    }
+    await this.snapshot('debug log uploaded', { debugLogUrl: url, error: url ? undefined : 'debug log upload URL not shown' });
+    const result = { url, uploadMs: Date.now() - t0 };
+    if (url) {
+      try {
+        const { body, status, contentUrl } = await fetchUploadedLog(url);
+        result.status = status;
+        result.contentUrl = contentUrl;
+        fs.writeFileSync(path.join(this.out, 'debug-log.txt'), body);
+        result.bytes = Buffer.byteLength(body);
+      } catch (error) {
+        result.error = String(error.message || error);
+      }
+    }
+    return result;
+  }
+
   /** Run the full audit (live or local), follow it to the end and collect the uploaded log. */
   async runAudit(kind = 'live', timeoutMin = 90) {
     sh('svc power stayon true', { allowFail: true });
@@ -428,6 +510,7 @@ class Explorer {
     let start = null;
     for (const sel of startSel) start = start || await this.find(sel, 3000);
     if (!start) return this.record('audit start', { error: `${kind} audit button not found` });
+    const priorUrls = new Set(this.current.nodes.map(n => `${n.text} ${n.desc}`).join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/g) || []);
     const t0 = Date.now();
     sh(`input tap ${centre(start).join(' ')}`);
     console.log(`Audit (${kind}) started`);
@@ -436,20 +519,34 @@ class Explorer {
     let url = null;
     let outcome = null;
     let idleAtHome = 0;
+    let lastCounter = null;
+    let lastProgressAt = Date.now();
+    const stallMs = 12 * 60000;
     while (Date.now() < deadline) {
       await sleep(5000);
       const { nodes } = await dumpUi();
       if (dismissSystemDialog(nodes)) continue;
       if (!appPid()) {
-        await this.snapshot('audit crashed', { error: 'app process died during audit' });
+        outcome = 'app crashed';
+        await this.snapshot('audit crashed', { error: 'app process died during audit', auditElapsedMs: Date.now() - t0 });
         await this.relaunch();
-        continue;
+        await this.record('relaunch after audit crash', {}, 60000);
+        await this.openAudit();
+        break;
       }
       const texts = nodes.map(n => `${n.text} ${n.desc}`);
-      const found = texts.join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/);
-      if (found) url = found[0];
+      const found = (texts.join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/g) || []).find(u => !priorUrls.has(u));
+      if (found) url = found;
       if (texts.some(t => /Audit runner failed/.test(t))) outcome = 'runner failed';
       if (texts.some(t => /Audit cancelled/.test(t))) outcome = 'cancelled';
+      const counter = texts.join(' ').match(/([\d,]+) \/ ([\d,]+)/);
+      if (counter && counter[0] !== lastCounter) { lastCounter = counter[0]; lastProgressAt = Date.now(); }
+      if (Date.now() - lastProgressAt > stallMs) {
+        outcome = `stalled at ${lastCounter ?? 'start'}`;
+        await this.snapshot('audit stalled', { error: outcome, auditElapsedMs: Date.now() - t0 });
+        await this.cancelAudit();
+        break;
+      }
       const uploading = texts.some(t => /^(Preparing|Uploading|Verifying) ?$/.test(t.trim()));
       const failedUpload = texts.some(t => /Upload failed|Upload uncertain/.test(t));
       if (Date.now() - lastShot > 60000) {
@@ -464,7 +561,8 @@ class Explorer {
       if (onAuditHome && !runningNow && Date.now() - t0 > 30000) {
         idleAtHome += 1;
         const hit = await this.scrollUntil({ contains: 'paste.' }, 10);
-        if (hit) url = (hit.text.match(/https:\/\/\S+/) || [])[0] || url;
+        const candidate = hit ? (hit.text.match(/https:\/\/\S+/) || [])[0] : null;
+        if (candidate && !priorUrls.has(candidate)) url = candidate;
         if (url) break;
         if (failedUpload || idleAtHome > 6) break;
         this.swipe('up', 0.9); this.swipe('up', 0.9);
@@ -482,15 +580,16 @@ class Explorer {
     const audit = { kind, url, outcome, elapsedMs, visibleOutcome: final.step.visible.slice(0, 20) };
     if (url) {
       try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
-        const body = await res.text();
+        const { body, status, contentUrl } = await fetchUploadedLog(url);
+        audit.logStatus = status;
+        audit.logContentUrl = contentUrl;
         fs.writeFileSync(path.join(this.out, 'audit-log.txt'), body);
-        audit.logStatus = res.status;
         audit.logBytes = Buffer.byteLength(body);
       } catch (error) {
         audit.logError = String(error.message || error);
       }
     }
+    audit.debugLog = await this.uploadDebugLog();
     this.audit = audit;
     fs.writeFileSync(path.join(this.out, 'audit.json'), JSON.stringify(audit, null, 2));
     console.log(`Audit ${kind}: ${url ? `log ${audit.logBytes ?? '?'} bytes from ${url}` : 'no log URL'} after ${Math.round(elapsedMs / 1000)} s`);
@@ -602,7 +701,7 @@ function renderMarkdown(report, baseline) {
     '',
     `Mode ${report.mode} | ${report.steps.length} steps | crashes ${crashed.length} | step failures ${failed.length} | settle timeouts ${slow.length} | steps with JS/native errors ${withErrors.length}`,
     baseline ? `Baseline ${baseline.version}` : '',
-    report.audit ? `Audit ${report.audit.kind}: ${report.audit.url ? `log ${report.audit.logBytes ?? '?'} bytes (audit-log.txt) from ${report.audit.url}` : 'NO LOG'} | ${Math.round(report.audit.elapsedMs / 1000)} s | outcome ${report.audit.outcome ?? 'completed'}` : '',
+    report.audit ? `**Audit ${report.audit.kind}: outcome ${report.audit.outcome ?? 'completed'} | ${Math.round(report.audit.elapsedMs / 1000)} s | audit log ${report.audit.url ? (report.audit.logBytes ? `${report.audit.logBytes} bytes (audit-log.txt) ${report.audit.url}` : `fetch failed (${report.audit.logError ?? report.audit.logStatus}) ${report.audit.url}`) : 'not uploaded'} | debug log ${report.audit.debugLog?.url ? (report.audit.debugLog.bytes ? `${report.audit.debugLog.bytes} bytes (debug-log.txt) ${report.audit.debugLog.url}` : `fetch failed (${report.audit.debugLog.error ?? report.audit.debugLog.status}) ${report.audit.debugLog.url}`) : report.audit.debugLog?.error ?? 'none'}**` : '',
     '',
     '| # | step | settle ms | Δ vs base | jank | p90 ms | mem MB | notes |',
     '|---|---|---:|---:|---:|---:|---:|---|',
@@ -620,6 +719,8 @@ function renderMarkdown(report, baseline) {
     ].filter(Boolean).join('; ');
     lines.push(`| ${s.n} | ${s.name} | ${s.settleMs} | ${delta == null ? '' : (delta > 0 ? '+' : '') + delta} | ${s.frames.frames ? `${s.frames.janky}/${s.frames.frames}` : ''} | ${s.frames.frames ? s.frames.p90 : ''} | ${s.memKb ? Math.round(s.memKb / 1024) : ''} | ${notes} |`);
   }
+  const fatal = report.steps.flatMap(st => st.log.errors.filter(l => /FATAL EXCEPTION|Caused by|IllegalStateException|Error:/.test(l)).map(l => `${st.n} ${l.replace(/^\S+ \S+ /, '')}`));
+  if (fatal.length) lines.push('', '## Fatal lines', '```', ...[...new Set(fatal)].slice(0, 15), '```');
   if (withErrors.length) {
     lines.push('', '## Errors');
     for (const s of withErrors) lines.push('', `### ${s.n} ${s.name}`, '```', ...s.log.errors.slice(0, 8), '```');
