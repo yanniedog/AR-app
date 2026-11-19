@@ -6,7 +6,8 @@ run-name: app-explorer ${{ inputs.nonce || github.event_name }}
 # Results are pushed to the orphan branch explorer/run-<run_id> so they can be
 # fetched with plain git (scripts/app-explorer.mjs). No secrets, no publication.
 # Cost: standard GitHub-hosted runner on a public repo only (free); no larger
-# runners, no paid services. Every APK release triggers crawl + full audit.
+# runners, no paid services. Every APK release dispatches crawl + full audit
+# (mobile-android-apk explore job).
 on:
   workflow_dispatch:
     inputs:
@@ -32,9 +33,6 @@ on:
         description: Clear app data before the run
         type: boolean
         default: true
-  workflow_run:
-    workflows: [mobile-android-apk]
-    types: [completed]
   pull_request:
     paths:
       - '.github/workflows/app-explorer.yml'
@@ -51,15 +49,14 @@ jobs:
   explore:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 150
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ inputs.tag || 'latest' }}
-      # Releases get the full crawl plus audit; PR self-tests stay a short crawl.
-      MODE: ${{ inputs.mode || (github.event_name == 'workflow_run' && 'full') || 'crawl' }}
+      # Releases dispatch mode full (mobile-android-apk explore job); PR self-tests stay a short crawl.
+      MODE: ${{ inputs.mode || 'crawl' }}
       SCRIPT_JSON: ${{ inputs.script }}
       ROUTES: ${{ inputs.routes }}
       AUDIT: ${{ inputs.audit || 'live' }}
