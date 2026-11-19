@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { Linking, Platform } from 'react-native';
 
-import { PLAY_STORE_URL, SELF_UPDATE_ENABLED } from '../config';
+import { IOS_INSTALL_URL, PLAY_STORE_URL, SELF_UPDATE_ENABLED } from '../config';
 import { useStore } from '../data/store';
 import { checkForAppUpdate, upgradeFromBackgroundDownload } from './appUpdate';
 import { debugLog } from './debugLog';
@@ -23,6 +23,14 @@ export async function startAppUpdate(): Promise<void> {
       }
       debugLog.info('app-update', `update action check status=${result.status}`);
       router.push('/settings');
+      return;
+    }
+    if (Platform.OS === 'ios') {
+      if (IOS_INSTALL_URL) {
+        await Linking.openURL(IOS_INSTALL_URL);
+      } else {
+        router.push('/settings');
+      }
       return;
     }
     await Linking.openURL(PLAY_STORE_URL);
