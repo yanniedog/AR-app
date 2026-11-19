@@ -73,9 +73,9 @@ test.each(['lvr', 'funds', 'offset'] as const)('Compare retains amount/LVR eligi
     expect(costs.every(node => node.props.rateScenario.amount === '600000' && node.props.rateScenario.lvr === '0.75')).toBe(true);
     if (mode === 'lvr') {
       Object.assign(mockScenario.mortgage, { mode: 'refi', loanBalance: '600000', propertyValue: '800000' });
+      // A cleared LVR falls back to the 80% default rather than the saved property.
       act(() => useMortgageComparison.setState({ lvr: '' }));
-      expect(tree.root.findAllByType('PublicRateEvidence')).toHaveLength(0);
-      expect(tree.root.findAllByType('PublicCostComparison')).toHaveLength(0);
+      expect(tree.root.findAllByType('PublicRateEvidence').map(node => node.props.scenario.lvr)).toEqual(['0.8', '0.8']);
       act(() => useMortgageComparison.setState({ lvr: '75' }));
       expect(tree.root.findAllByType('PublicCostComparison')).toHaveLength(2);
     }

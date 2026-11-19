@@ -208,6 +208,30 @@ function resolveBrandKey(provider: string): string | null {
   return null;
 }
 
+const PROVIDER_BRAND_KEYS = new Map<string, string | null>();
+/** Canonical brand key for a provider label, or null when it is not a known brand. */
+export function brandKeyForProvider(provider: string): string | null {
+  let key = PROVIDER_BRAND_KEYS.get(provider);
+  if (key === undefined) {
+    key = resolveBrandKey(provider);
+    if (PROVIDER_BRAND_KEYS.size >= 512) PROVIDER_BRAND_KEYS.clear();
+    PROVIDER_BRAND_KEYS.set(provider, key);
+  }
+  return key;
+}
+
+// Search terms: canonical names, aliases and short names (CBA, NAB, WBC ...).
+const SEARCH_TERM_TO_KEY = new Map<string, string>(ALIAS_TO_KEY);
+for (const [key, entry] of Object.entries(BRAND_MAP)) {
+  const short = normalize(entry.short);
+  if (short.length >= 2 && !SEARCH_TERM_TO_KEY.has(short)) SEARCH_TERM_TO_KEY.set(short, key);
+}
+
+/** Exact lender name, alias or short name typed as a search term. */
+export function brandKeyForSearchTerm(term: string): string | null {
+  return SEARCH_TERM_TO_KEY.get(normalize(term)) ?? null;
+}
+
 export function resolveBrandShort(provider: string, payloadShort?: string): string {
   const fromPayload = String(payloadShort ?? '').trim();
   if (fromPayload) return fromPayload;

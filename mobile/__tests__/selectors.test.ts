@@ -58,6 +58,11 @@ function referenceSortRows(
     .map((row, index) => ({ row, index }))
     .sort((a, b) => {
       if (sortKey !== 'bank') {
+        if (section === 'Mortgage' && (sortKey === 'comparison' || mortgageMetric === 'comparison')) {
+          const ka = toFraction(a.row.comparison_rate) !== null;
+          const kb = toFraction(b.row.comparison_rate) !== null;
+          if (ka !== kb) return ka ? -1 : 1;
+        }
         const va = sortRankFraction(a.row, sortKey, section, metric, mortgageMetric);
         const vb = sortRankFraction(b.row, sortKey, section, metric, mortgageMetric);
         if (va === null && vb !== null) return 1;
@@ -527,29 +532,25 @@ describe('selectors', () => {
     ]);
   });
 
-  test('sortRows mortgage rate key uses advertised fallback when comparison is missing', () => {
+  test('sortRows mortgage comparison ranking places unknown comparison rates after known ones', () => {
     const loans = [
       mk({ product_key: 'HAS', product_name: 'Has Cmp', rate: '0.060', comparison_rate: '0.061' }),
-      mk({ product_key: 'MISS', product_name: 'Missing Cmp', rate: '0.060' }),
+      mk({ product_key: 'MISS', product_name: 'Missing Cmp', rate: '0.050' }),
+      mk({ product_key: 'MISS2', product_name: 'Missing Cmp 2', rate: '0.049' }),
       mk({ product_key: 'BETTER', product_name: 'Better Cmp', rate: '0.060', comparison_rate: '0.059' }),
     ];
-    expect(sortRows(loans, 'rate', 'Mortgage').map((r) => r.product_key)).toEqual([
-      'BETTER',
-      'MISS',
-      'HAS',
-    ]);
-    // Comparison metric ranks purely by comparison/effective rate (no headline tie-break).
-    // MISS falls back to its headline (6.0%), so it sorts between BETTER (5.9%) and HAS (6.1%).
-    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'comparison').map((r) => r.product_key)).toEqual([
-      'BETTER',
-      'MISS',
-      'HAS',
-    ]);
-    // Explicit comparison sort key uses the same effective-rate ordering.
-    expect(sortRows(loans, 'comparison', 'Mortgage').map((r) => r.product_key)).toEqual([
-      'BETTER',
-      'MISS',
-      'HAS',
+    // A lower advertised fallback never outranks a published comparison rate;
+    // unknown rows keep their own advertised-rate order after the known ones.
+    for (const ordered of [
+      sortRows(loans, 'rate', 'Mortgage'),
+      sortRows(loans, 'rate', 'Mortgage', 'base', 'comparison'),
+      sortRows(loans, 'comparison', 'Mortgage'),
+    ]) {
+      expect(ordered.map((r) => r.product_key)).toEqual(['BETTER', 'HAS', 'MISS2', 'MISS']);
+    }
+    // Advertised ranking is unchanged.
+    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'headline').map((r) => r.product_key)).toEqual([
+      'MISS2', 'MISS', 'BETTER', 'HAS',
     ]);
   });
 

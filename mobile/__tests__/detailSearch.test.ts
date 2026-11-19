@@ -213,3 +213,32 @@ describe('detailSearch', () => {
   });
 
 });
+
+describe('lender-aware search', () => {
+  afterEach(() => resetDetailSearchIndexCache());
+  const cba = { provider: 'Commonwealth Bank of Australia', product_name: 'Standard Variable', product_key: 'CBA|1' };
+  const ing = { provider: 'ING', product_name: 'Mortgage Simplifier', product_key: 'ING|1' };
+  const lending = { provider: 'Example Mutual', product_name: 'Lending Plus', product_key: 'EX|1' };
+  const rows = [cba, ing, lending];
+  const keys = (query: string, index?: SearchIndexPayload | null) =>
+    rows.filter(row => rowMatchesSearchQuery(row, query, index)).map(row => row.product_key);
+
+  test('lender short names and aliases scope results to that lender', () => {
+    expect(keys('CBA')).toEqual(['CBA|1']);
+    expect(keys('commbank')).toEqual(['CBA|1']);
+    expect(keys('Commonwealth Bank')).toEqual(['CBA|1']);
+    expect(keys('ING')).toEqual(['ING|1']);
+    expect(keys('cba variable')).toEqual(['CBA|1']);
+    expect(keys('cba simplifier')).toEqual([]);
+  });
+
+  test('other terms match word starts, not substrings', () => {
+    expect(keys('lend')).toEqual(['EX|1']);
+    expect(keys('ending')).toEqual([]);
+    const index: SearchIndexPayload = { schema_version: 1, run_date: '2026-11-01',
+      products: { 'CBA|1': 'commonwealth bank standard variable', 'ING|1': 'ing mortgage simplifier', 'EX|1': 'example mutual lending plus' } };
+    expect(keys('ING', index)).toEqual(['ING|1']);
+    expect(keys('ending', index)).toEqual([]);
+    expect(keys('simpl', index)).toEqual(['ING|1']);
+  });
+});

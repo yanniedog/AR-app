@@ -4,7 +4,7 @@ import type { CorePayload, DetailItem, DetailsPayload, ProductSourceDocument, No
 import { SECTION_KEYS } from '../types';
 import { StandardUrl } from './standardUrl';
 import type { EligibilityScenario, ScenarioRole } from '../data/eligibilityContracts/facts';
-import { resolveBrandShort } from '../data/bankBrand';
+import { brandKeyForProvider, resolveBrandShort } from '../data/bankBrand';
 import type { RatesSectionState } from '../data/ratesSession';
 import type { MortgageInputs } from '../data/mortgageContracts/types';
 import type { RateRow, SectionKey } from '../types';
@@ -97,7 +97,7 @@ export const UI_LABELS = [
   'Diagnostics', 'Crash reports', 'Firebase Crashlytics', 'Device details', 'Crash traces',
   'Anonymous', 'Redacted', 'Maintainer access', 'Private', 'Consent', 'Optional',
   'Data key', 'Encryption', 'Encrypted', 'Local storage', 'Receipts', 'Receipt',
-  'Open calculation receipt', 'Bank-call brief', 'Fees', 'Costs', 'Tax', 'Compounding',
+  'Open calculation receipt', 'Negotiation summary', 'Bank-call brief', 'Fees', 'Costs', 'Tax', 'Compounding',
   'Included', 'Excluded', 'Payments', 'Repayment', 'Payment', 'Offset', 'Reversion',
   'Bonus conditions', 'Bonus actions required', 'Introductory', 'Ongoing', 'Standard', 'Annually', 'Basic',
   'Restricted', 'Non-standard', 'Pending', 'Ready', 'Failed', 'Error', 'Required',
@@ -446,7 +446,7 @@ export const UI_LABELS = [
   'K', 'M', 'Amount unit', 'millions of dollars', 'dollars',
   'Carousel', 'List', 'Clear filters',
   'Keep current', 'Use saved', 'Choose saved value',
-  'All product variants',
+  'All product variants', 'Upfront fee',
 ] as const;
 
 export type UiLabel = typeof UI_LABELS[number];
@@ -728,6 +728,10 @@ export function uiDetailsProductReference(details: DetailsPayload | null | undef
   return identity(productKey);
 }
 export function uiProviderName(row: Pick<RateRow, 'provider'>): UiText { return identity(row.provider); }
+/** Known brands use their reviewed short name; other lenders keep their full name. */
+export function uiProviderShort(row: Pick<RateRow, 'provider'>): UiText {
+  return identity(brandKeyForProvider(row.provider) ? resolveBrandShort(row.provider) : row.provider);
+}
 export function uiPublicProductName(product: PublicProduct | CurrentProductOption): UiText { return identity(product.name); }
 export function uiPublicAliasName(alias: PublicProduct['aliases'][number]): UiText { return identity(alias.name); }
 export function uiPublicReferenceName(reference: PublicReferenceRate): UiText { return identity(reference.name); }

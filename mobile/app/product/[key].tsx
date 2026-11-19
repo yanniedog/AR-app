@@ -797,7 +797,7 @@ export default function ProductDetail() {
             current={{ date: core?.run_date, rate: currentBest }}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-            {uiJoin('Checked', ' ', uiDate(core?.run_date))}
+            {row.last_updated ? uiJoin('Source date', ' ', uiDate(row.last_updated)) : uiJoin('Checked', ' ', uiDate(core?.run_date))}
           </AppText>
           {isNonStandard(row) ? (
             <View
@@ -873,13 +873,14 @@ export default function ProductDetail() {
         <AppText variant="small" color="textMuted">{selectedConstraint ? uiTargetConstraint(selectedConstraint) : uiLabel('Eligibility unverified')}</AppText>
 
         <Button
-          title="Bank-call brief"
+          title="Negotiation summary"
           icon="receipt-outline"
           variant="secondary"
           style={{ marginBottom: 16 }}
           onPress={() => openRateReceipt(productKey, row.rate_index, row.public_programme_id, fromRatesComparison ? 'rates-comparison' : undefined)}
         />
 
+        <DetailGroup title="Fees" icon="cash-outline" items={detail?.fees} loading={detailsLoading} />
         <SectionTitle text="Published product history" icon="trending-up-outline" />
         <Card style={{ marginBottom: 16 }}>
           <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
@@ -962,7 +963,6 @@ export default function ProductDetail() {
         {section === 'TD' ? <MemoFixedDepositCalculation row={row} /> : null}
         <MemoEligibilityAssessment productKey={productKey} row={row} section={section} /><MemoSavingsPeriodCalculation productKey={row.product_key} row={row} section={section} /><MemoActivityPeriodCalculation productKey={row.product_key} row={row} section={section} /><MemoMortgagePeriodCalculation productKey={row.product_key} row={row} section={section} />
         <DetailGroup title="Features" icon="checkmark-circle-outline" items={normalizedFactKinds.has('feature') ? undefined : detail?.features} loading={detailsLoading && !normalizedFactKinds.has('feature')} />
-        <DetailGroup title="Fees" icon="cash-outline" items={detail?.fees} loading={detailsLoading} />
         <DetailGroup title="Eligibility" icon="person-outline" items={normalizedFactKinds.has('eligibility') ? undefined : detail?.eligibility} loading={detailsLoading && !normalizedFactKinds.has('eligibility')} />
         <DetailGroup title="Constraints" icon="lock-closed-outline" items={normalizedFactKinds.has('constraint') ? undefined : detail?.constraints} loading={detailsLoading && !normalizedFactKinds.has('constraint')} />
         <ProductTermsDisclosure productKey={productKey} />
@@ -976,11 +976,6 @@ export default function ProductDetail() {
           onPress={() => toggleSavedRate(row, 'product')}
         /> : null}
 
-        {row.last_updated ? (
-          <AppText variant="tiny" color="textFaint" style={{ textAlign: 'center', marginTop: 14 }}>
-            {uiJoin('Source date', ' ', uiDate(row.last_updated))}
-          </AppText>
-        ) : null}
       </ScreenScrollView></ProductPageLinks>
     </>
   );

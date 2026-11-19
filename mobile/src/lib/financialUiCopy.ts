@@ -71,6 +71,10 @@ function boundValue(value: number, unit: 'percent' | 'AUD' | 'months', compactMo
     : unit === 'AUD' ? (compactMoney ? formatMoneyShort(value) : uiMoney(value, numberDigits(value))) : uiDuration(value, 'months');
 }
 function numericRange(lower: NumericConditionBoundary, upper: NumericConditionBoundary, unit: 'percent' | 'AUD' | 'months', compactMoney = false): UiText {
+  // A ratio cannot fall below zero: an inclusive 0% floor states only the cap.
+  if (unit === 'percent' && lower.state === 'known' && lower.value === 0 && lower.inclusive && upper.state === 'known' && upper.value > 0) {
+    return uiJoin(upper.inclusive ? '≤' : '<', boundValue(upper.value, unit, compactMoney));
+  }
   if (lower.state === 'known' && upper.state === 'known') {
     if (lower.value === upper.value && lower.inclusive && upper.inclusive) return boundValue(lower.value, unit, compactMoney);
     return uiJoin(lower.inclusive ? '' : '>', boundValue(lower.value, unit, compactMoney), '–', upper.inclusive ? '' : '<', boundValue(upper.value, unit, compactMoney));

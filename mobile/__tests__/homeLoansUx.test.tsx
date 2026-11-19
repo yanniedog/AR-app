@@ -76,7 +76,7 @@ describe('home-loans-ux improvements', () => {
     try {
       const summary = tree.root.findByProps({ testID: 'mortgage-scenario-summary' });
       expect(summary).toBeTruthy();
-      expect(JSON.stringify(tree.toJSON())).toContain('Owner occupied · Principal & interest · LVR ≤80%');
+      for (const fact of ['Owner occupied', 'Principal & interest', 'LVR ≤80%']) expect(JSON.stringify(tree.toJSON())).toContain(`"${fact}"`);
       const editBtn = tree.root.findByProps({ accessibilityLabel: 'Edit' });
       act(() => editBtn.props.onPress());
       expect(tree.root.findByProps({ testID: 'mortgage-comparison-controls' })).toBeTruthy();
@@ -88,7 +88,7 @@ describe('home-loans-ux improvements', () => {
     }
   });
 
-  test('MortgageComparisonControls marks incomplete required chip groups and LVR when partially filled', () => {
+  test('MortgageComparisonControls keeps defaults in force when only a loan amount is entered', () => {
     useMortgageComparison.setState({ loanAmount: '500000', lvr: '', lvrMode: 'lvr' });
     let tree: any;
     act(() => {
@@ -99,9 +99,8 @@ describe('home-loans-ux improvements', () => {
     try {
       act(() => tree.root.findByProps({ accessibilityLabel: 'Edit' }).props.onPress());
       const text = JSON.stringify(tree.toJSON());
-      expect(text).toContain('Loan purpose · Required');
-      expect(text).toContain('Repayment · Required');
-      expect(text).toContain('LVR · Required');
+      expect(text).not.toContain('Required');
+      expect(text).toContain('"placeholder":"80%"');
     } finally {
       act(() => tree.unmount());
     }

@@ -257,6 +257,8 @@ interface PreparedSortRow {
   originalIndex: number;
   rank: number | null;
   comparisonTie: number | null;
+  /** Comparison ranking only: false when the row publishes no comparison rate. */
+  comparisonKnown: boolean;
 }
 
 // Reuse one comparator for large product lists. Calling String#localeCompare
@@ -283,7 +285,15 @@ function prepareSortRow(
       section === 'Mortgage' && sortKey === 'rate' && mortgageMetric === 'headline'
         ? toFraction(row.comparison_rate)
         : null,
+    comparisonKnown: !ranksByComparison(sortKey, section, mortgageMetric)
+      || toFraction(row.comparison_rate) !== null,
   };
+}
+
+/** Mortgage orders whose rank value is the comparison rate. */
+function ranksByComparison(sortKey: SortKey, section: SectionKey, mortgageMetric: MortgageRateMetric): boolean {
+  return section === 'Mortgage'
+    && (sortKey === 'comparison' || (sortKey === 'rate' && mortgageMetric === 'comparison'));
 }
 
 function comparePreparedRows(
@@ -295,6 +305,9 @@ function comparePreparedRows(
   mortgageMetric: MortgageRateMetric,
 ): number {
   if (sortKey !== 'bank') {
+    // An advertised-rate fallback is not comparable with a fee-inclusive
+    // comparison rate: unknown comparison rates follow every known one.
+    if (a.comparisonKnown !== b.comparisonKnown) return a.comparisonKnown ? -1 : 1;
     const va = a.rank;
     const vb = b.rank;
     if (va === null && vb !== null) return 1;

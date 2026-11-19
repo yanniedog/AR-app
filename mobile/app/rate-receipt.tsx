@@ -222,7 +222,7 @@ export default function RateReceiptScreen() {
   );
   const shareText = useMemo(() => {
     if (!receipt || !brief) return uiLabel('Unavailable');
-    const lines: UiCopy[] = [uiJoin('Bank-call brief', ': ', uiProviderName({ provider: receipt.provider })),
+    const lines: UiCopy[] = [uiJoin('Negotiation summary', ': ', uiProviderName({ provider: receipt.provider })),
     uiJoin(uiProductName({ product_name: receipt.productName }), ' · ', receipt.advertisedRate, ' · ', 'Observed', ': ', uiDate(receipt.evidenceDate)),
     ...rateConditionReceiptLines(receipt), ...brief.facts.map(fact => { const row = statusFact(fact); return uiJoin(row.label, ': ', row.value); })];
     if (brief.illustration) lines.push(uiJoin('Simple interest-rate difference', ': ', money(brief.illustration.periodDifference), ' · ', brief.illustration.periodLabel),
@@ -327,7 +327,7 @@ export default function RateReceiptScreen() {
   });
 
   if (!core) return <ScreenSkeleton />;
-  if (briefError || comparisonPricing.error || catalogueStatus === 'error') return <><Stack.Screen options={{ title: 'Bank-call brief' }} />
+  if (briefError || comparisonPricing.error || catalogueStatus === 'error') return <><Stack.Screen options={{ title: 'Negotiation summary' }} />
     <EmptyState icon="receipt-outline" title="Unavailable" fill />
     <Button title="Retry" onPress={() => {
       setPreparedBrief(null); setBriefAttempt(value => value + 1); comparisonPricing.retry();
@@ -337,7 +337,7 @@ export default function RateReceiptScreen() {
 
   if (publicProduct && (!found || !row) || publicResolution && (publicResolution.status !== 'exact' || !publicResolution.verifiedCurrent)) return <>
     <Stack.Screen options={{ title: 'Pricing evidence' }} />
-    <ScreenScrollView><AppText variant="small">{uiJoin('Bank-call brief', ': ', 'Unavailable', ' · ', 'Pricing unresolved')}</AppText>
+    <ScreenScrollView><AppText variant="small">{uiJoin('Negotiation summary', ': ', 'Unavailable', ' · ', 'Pricing unresolved')}</AppText>
       <PublicRateEvidence productKey={productKey} row={selectedRow ?? undefined} programmeId={requestedProgramme} scenario={publicProduct ? scenarioFor(publicProduct.section, selectedRow ?? undefined) : undefined} />
     </ScreenScrollView>
   </>;
@@ -345,7 +345,7 @@ export default function RateReceiptScreen() {
   if (!found || !row || !receipt || !brief) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Bank-call brief' }} />
+        <Stack.Screen options={{ title: 'Negotiation summary' }} />
         <EmptyState
           icon="receipt-outline"
           title="Exact rate no longer available"
@@ -355,7 +355,7 @@ export default function RateReceiptScreen() {
     );
   }
 
-  return <><Stack.Screen options={{ title: 'Bank-call brief' }} />
+  return <><Stack.Screen options={{ title: 'Negotiation summary' }} />
     <ScreenScrollView ref={scrollRef} onLayout={() => setLayoutReady(true)} contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 12 }}>
       <Card style={{ gap: 8 }}>
         <AppText variant="small" color="textMuted">{uiProviderName(row)}</AppText>
@@ -387,7 +387,7 @@ export default function RateReceiptScreen() {
             {comparable.conditionalFacts.map((fact, i) => <AppText key={i} variant="tiny" color="textMuted">{uiConditionalRateFact(fact)}</AppText>)}
           </Pressable>) : <AppText>{uiLabel('No comparable rates observed')}</AppText>}
       </Card>
-      <Row gap={8}><Button title="Copy" disabled={!comparisonsAvailable} variant="secondary" icon="copy-outline" style={{ flex: 1 }} onPress={() => void Clipboard.setStringAsync(shareText)} /><Button title="Share" disabled={!comparisonsAvailable} icon="share-outline" style={{ flex: 1 }} onPress={() => void Share.share({ title: 'Bank-call brief', message: shareText })} /></Row>
+      <Row gap={8}><Button title="Copy" disabled={!comparisonsAvailable} variant="secondary" icon="copy-outline" style={{ flex: 1 }} onPress={() => void Clipboard.setStringAsync(shareText)} /><Button title="Share" disabled={!comparisonsAvailable} icon="share-outline" style={{ flex: 1 }} onPress={() => void Share.share({ title: 'Negotiation summary', message: shareText })} /></Row>
       <Disclosure title="Your entered scenario" open={scenarioOpen} onToggle={() => setScenarioOpen(!scenarioOpen)}><Card>
         {!scenarioLoaded ? <AppText>{uiLabel('Loading')}</AppText> : brief.scenario.length ? <Facts items={brief.scenario} /> : <Button title="Add scenario" variant="secondary" onPress={() => router.push('/calculator')} />}
       </Card></Disclosure>

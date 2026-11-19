@@ -8,12 +8,12 @@ import { formatBalanceRange, formatTerm, humanizeEnum } from '../../data/format'
 import { accessExcludesFromStandard, assessAccess } from '../../data/access';
 import { isNonStandard } from '../../data/format';
 import { useStore } from '../../data/store';
-import { uiAccessBadge, uiConditionFact, uiListedLvrRange, uiLoanPurpose, uiRateStructure, uiRepayment } from '../../lib/financialUiCopy';
+import { uiAccessBadge, uiConditionFact, uiListedLvrRange, uiLoanPurpose, uiRateStructure, uiRepayment, type FinancialFactRow } from '../../lib/financialUiCopy';
 import { scopedRateConditions } from '../../data/rateConditions';
 import { scopedFinancialConditionFacts } from '../../data/scopedFinancialConditionFacts';
-import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
+import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiFeeValue, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
 import { normalizedProductFacts } from '../../data/productFacts';
-import { uiCount, uiJoin, uiLabel, type UiCopy, type UiLabel } from '../../lib/uiCopy';
+import { uiCount, uiJoin, uiLabel, type UiCopy, type UiLabel, type UiText } from '../../lib/uiCopy';
 import type { DetailItem, NormalizedProductFact, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
 import { FinancialFactRows } from './FinancialFactRows';
 export { SelectedRateConditions } from './RateConditionsDisclosure';
@@ -81,6 +81,21 @@ export function AccessNotice({ name, productDetails: detail, loading, provider }
   return <ProductPageLink label={badge}><AppText variant="small" color="warning">{badge}</AppText></ProductPageLink>;
 }
 export function SectionTitle({ text }: { text: UiCopy; icon?: keyof typeof Ionicons.glyphMap }) { return <AppText variant="small" weight="700">{text}</AppText>; }
+function feeValues(items: readonly DetailItem[]): UiText {
+  return items.length ? uiJoin(...items.flatMap((item, index) => index ? [uiLabel(' · '), uiFeeValue(item)] : [uiFeeValue(item)])) : uiLabel('Unknown');
+}
+/** Headline cost facts from the published fee and feature lists. An absent fee is Unknown, never zero. */
+export function mortgageHeadlineFacts(detail: ProductDetailData | null): FinancialFactRow[] {
+  const fees = detail?.fees ?? [];
+  const annual = fees.filter(fee => /\bannual\b/i.test(fee.name ?? '')
+    || (fee.label ?? '').toUpperCase() === 'PERIODIC' && String(fee.additionalValue ?? fee.accrualFrequency ?? '') === 'P1Y');
+  const upfront = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'UPFRONT');
+  const offset = (detail?.features ?? []).some(item => (item.label ?? item.name ?? '').trim().toUpperCase() === 'OFFSET')
+    || normalizedProductFacts(detail).some(fact => fact.kind === 'feature' && fact.value === true
+      && (fact.sourceType?.trim().toUpperCase() === 'OFFSET' || fact.canonicalKey.split(/[.:/]/).at(-1)?.toUpperCase() === 'OFFSET'));
+  return [{ label: 'Annual fee', value: feeValues(annual) }, { label: 'Upfront fee', value: feeValues(upfront) },
+    { label: 'Offset account', value: uiLabel(offset ? 'Yes' : 'Unknown') }];
+}
 export function ProductSpecs({ row, section, productDetails }: { row: RateRow; section: SectionKey; productDetails: ProductDetailData | null }) {
   const [open, setOpen] = useState(true);
   const core = useStore(s => s.core), details = useStore(s => s.details), manifest = useStore(s => s.manifest), coreIntegrity = useStore(s => s.coreIntegrity);
@@ -92,7 +107,8 @@ export function ProductSpecs({ row, section, productDetails }: { row: RateRow; s
   return <Disclosure title="Rate details" open={open} onToggle={() => setOpen(v => !v)}>
     <FinancialFactRows linkToProduct rows={[{ label: 'Rate type', value: humanizeEnum(row.rate_type) }, { label: 'Term', value: formatTerm(row) || uiLabel('Unknown') },
       ...(section === 'Mortgage' ? [{ label: 'Rate structure' as const, value: uiRateStructure(row) }, { label: 'Repayment' as const, value: uiRepayment(row) },
-        { label: 'Loan purpose' as const, value: uiLoanPurpose(row) }, ...(sourceLvr.length ? sourceLvr.map(uiConditionFact) : [{ label: 'Listed LVR' as const, value: uiListedLvrRange(row) }])]
+        { label: 'Loan purpose' as const, value: uiLoanPurpose(row) }, ...(sourceLvr.length ? sourceLvr.map(uiConditionFact) : [{ label: 'Listed LVR' as const, value: uiListedLvrRange(row) }]),
+        ...(productDetails ? mortgageHeadlineFacts(productDetails) : [])]
         : [{ label: 'Balance' as const, value: formatBalanceRange(row.balance_min, row.balance_max) || uiLabel('Unknown') }, { label: 'Interest paid' as const, value: humanizeEnum(row.interest_payment) || uiLabel('Unknown') }]),
       { label: 'Availability', value: availability }, { label: 'Eligibility', value: uiLabel('Unverified') }]} />
   </Disclosure>;

@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 
 import type { Filters } from '../data/selectors';
@@ -48,7 +48,10 @@ function FilterSheetInner({
   controlledDraft,
   onDraftChange,
   preserveOnReset,
+  focusLenders = false,
 }: {
+  /** Open scrolled to the Lenders group. */
+  focusLenders?: boolean;
   children?: UiChild;
   controlledDraft?: Filters;
   onDraftChange?: React.Dispatch<React.SetStateAction<Filters>>;
@@ -78,6 +81,20 @@ function FilterSheetInner({
 
   const isControlledDraft = Boolean(controlledDraft && onDraftChange);
   const wasVisibleRef = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const lendersY = useRef<number | null>(null);
+  const pendingLenderScroll = useRef(false);
+  const scrollToLenders = useCallback(() => {
+    if (!pendingLenderScroll.current || lendersY.current === null) return;
+    pendingLenderScroll.current = false;
+    scrollRef.current?.scrollTo({ y: lendersY.current, animated: false });
+  }, []);
+  useEffect(() => {
+    if (visible && !wasVisibleRef.current) {
+      pendingLenderScroll.current = focusLenders;
+      scrollToLenders();
+    }
+  }, [visible, focusLenders, scrollToLenders]);
   useEffect(() => {
     const wasVisible = wasVisibleRef.current;
     wasVisibleRef.current = visible;
@@ -214,7 +231,7 @@ function FilterSheetInner({
     >
           {everOpened ? <>
           <Divider />
-          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 16, gap: 24, paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
+          <ScrollView ref={scrollRef} style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 16, gap: 24, paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
             {optionsPending ? <AppText variant="small" color="textMuted">{uiJoin('Filter', ' · ', 'Loading')}</AppText> : null}
             {optionsError ? <View style={{ gap: 8 }}>
               <AppText variant="small" color="textMuted">{uiJoin('Filter', ' · ', 'Unavailable')}</AppText>
@@ -303,7 +320,7 @@ function FilterSheetInner({
               </Disclosure>
             ) : null}
 
-            <View>
+            <View onLayout={event => { lendersY.current = event.nativeEvent.layout.y; scrollToLenders(); }}>
               <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
                 {uiLabel('Lenders')}
               </AppText>

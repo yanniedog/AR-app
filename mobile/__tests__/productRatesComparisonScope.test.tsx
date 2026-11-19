@@ -242,7 +242,7 @@ test.each([false, true])('Rates opens a public-only mortgage with private pricin
     expect(evidence.props.scenario).toMatchObject({ amount: '600000', lvr: '0.75',
       ...(useOr ? { purpose: 'INVESTMENT', repayment: 'INTEREST_ONLY' } : {}) });
     expect(detail.root.findAllByType('PublicCostComparison')[0].props.rateScenario).toMatchObject({ amount: '600000', lvr: '0.75' });
-    act(() => detail.root.findAllByProps({ title: 'Bank-call brief' })[0].props.onPress());
+    act(() => detail.root.findAllByProps({ title: 'Negotiation summary' })[0].props.onPress());
     const receiptDestination = jest.mocked(router.push).mock.calls.at(-1)![0] as unknown as { params: typeof mockRoute };
     expect(receiptDestination.params).toEqual({ key: product.productKey, programme: p.programmeId, origin: 'rates-comparison' });
     Object.assign(mockRoute, receiptDestination.params);

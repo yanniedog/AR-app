@@ -206,13 +206,13 @@ test('widely available mode scopes both control surfaces and clears hidden choic
   } finally { act(() => tree.unmount()); }
 });
 
-test('unknown-only selections do not make mortgage comparison criteria ready in widely available mode', () => {
+test('unknown-only selections are scoped away and the default owner-occupied P&I browse applies', () => {
   mockStore.getState().setPref('includeNonStandard', false);
   updateRatesSection('Mortgage', { filters: { ...EMPTY_FILTERS, loanPurposes: ['UNCONSTRAINED'], repaymentTypes: ['UNKNOWN'] } });
   const tree = mount();
   try {
     expect(useRatesSession.getState().sections.Mortgage.filters).toMatchObject({ loanPurposes: [], repaymentTypes: [] });
-    expect(tree.root.findByType('FlashList').props.data).toHaveLength(0);
+    expect(tree.root.findByType('FlashList').props.data.every((row: any) => row.loan_purpose === 'OWNER_OCCUPIED')).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
 function currentProgramme(row: (typeof rows)[number], programmeId: string, offerId: string) {
@@ -934,8 +934,9 @@ test('temporary purpose and repayment chips resolve public offers before filteri
     expect(list().data).toEqual([]);
     act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, loanPurposes: ['INVESTMENT'] } })));
     expect(list().data).toEqual([]);
+    // The default 80% LVR applies until an LVR is entered.
     act(() => updateRatesSection('Mortgage', current => ({ filters: { ...current.filters, repaymentTypes: ['INTEREST_ONLY'] } })));
-    expect(list().data).toEqual([]);
+    expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
     act(() => useMortgageComparison.setState({ loanAmount: '', lvr: '75' }));
     expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
     expect(tree.root.findByType('ProductCard').props.rateScenario).toMatchObject({ purpose: 'INVESTMENT', repayment: 'INTEREST_ONLY' });
@@ -1006,14 +1007,10 @@ test.each([false, true])('public-only facet chips reveal an offer with saved leg
     // Re-query chips after each press — criteria-gate remounts replace the instances.
     const purposeChip = () => chips().find((chip: any) => chip.props.label === 'Owner occupied')!;
     const repaymentChip = () => chips().find((chip: any) => chip.props.label === 'Principal & interest')!;
-    act(() => purposeChip().props.onPress());
-    expect(purposeChip().props.selected).toBe(false);
-    expect(list().data.map((row: any) => row.public_offer_id)).toEqual([]);
+    // Clearing the last choice restores the default, which stays selected.
     act(() => purposeChip().props.onPress());
     expect(purposeChip().props.selected).toBe(true);
-    act(() => repaymentChip().props.onPress());
-    expect(repaymentChip().props.selected).toBe(false);
-    expect(list().data.map((row: any) => row.public_offer_id)).toEqual([]);
+    expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);
     act(() => repaymentChip().props.onPress());
     expect(repaymentChip().props.selected).toBe(true);
     expect(list().data.map((row: any) => row.public_offer_id)).toEqual(['unit-offer']);

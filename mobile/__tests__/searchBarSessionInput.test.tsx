@@ -181,7 +181,8 @@ test('ordinary filter, sort and scroll changes preserve the live input; Clear re
     act(() => sheet.props.onApply(sheet.props.controlledDraft));
     expect(useRatesSession.getState().sections.TD.filters.providers).toEqual(['Macquarie']);
     expectInput(tree, input, native, 'Unloa');
-    act(() => tree.root.findByProps({ testID: 'rates-task-controls' }).findByProps({ word: 'Bank' }).props.onPress());
+    act(() => tree.root.findByProps({ testID: 'rates-task-controls' }).findByProps({ word: 'Sort' }).props.onPress());
+    act(() => (tree.root as any).findAll((node: any) => node.props.accessibilityLabel === 'Bank A–Z' && typeof node.props.onPress === 'function')[0].props.onPress());
     expect(useRatesSession.getState().sections.TD.sort).toBe('bank');
     act(() => recordRatesScroll('TD', 240));
     act(() => updateRatesSection('TD', current => ({ filters: { ...current.filters, providers: [] } })));

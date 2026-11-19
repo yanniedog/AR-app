@@ -6,6 +6,7 @@ import type { Palette } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import AppIcon, { type AppIconName } from '../icons/AppIcon';
 import { RATE_FRESHNESS_SYMBOLS } from '../RateFreshnessSymbol';
+import { ROW_VERIFICATION_RECEIPTS_AVAILABLE } from '../../data/rateFreshness';
 import { AppText } from '../ui';
 
 type Entry = { icon: AppIconName | '—'; label: UiLabel; color?: keyof Palette };
@@ -26,7 +27,6 @@ const PRODUCT_FACTS: Record<SectionKey, readonly Entry[]> = {
   ],
 };
 const PRODUCT_STATUS: readonly Entry[] = [
-  { icon: '—', label: 'Rate unavailable' },
   { icon: 'help-circle-outline', label: 'Unknown', color: 'warning' },
   { icon: 'warning-outline', label: 'Unresolved conditions', color: 'warning' },
   { icon: 'flash-outline', label: 'Conditional', color: 'warning' },
@@ -43,7 +43,7 @@ const CONTROLS: readonly Entry[] = [
   { icon: 'swap-vertical', label: 'Sort' },
   { icon: 'git-compare', label: 'Compare' },
   { icon: 'checkmark-circle', label: 'Done' },
-  { icon: 'business-outline', label: 'Bank A–Z' },
+  { icon: 'business-outline', label: 'Lenders' },
   { icon: 'ellipsis-horizontal', label: 'More' },
   { icon: 'profile', label: 'Account' },
 ];
@@ -52,7 +52,7 @@ export function RatesIconKey({ section }: { section: SectionKey }) {
   const theme = useTheme();
   const groups: { title: UiLabel; entries: readonly Entry[] }[] = [
     { title: 'Product facts', entries: [...PRODUCT_FACTS[section], ...PRODUCT_STATUS] },
-    { title: 'Freshness', entries: Object.values(RATE_FRESHNESS_SYMBOLS) },
+    ...(ROW_VERIFICATION_RECEIPTS_AVAILABLE ? [{ title: 'Freshness' as const, entries: Object.values(RATE_FRESHNESS_SYMBOLS) }] : []),
     { title: 'Rates controls', entries: CONTROLS },
   ];
   return (

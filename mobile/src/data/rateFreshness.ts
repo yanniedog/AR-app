@@ -31,3 +31,5 @@ export function rateFreshness(row: Pick<RateRow, 'provider' | 'product_key'>,
  * Its last_updated and observation/package dates cannot establish bank freshness.
  * Keep this adapter closed until a reviewed source contract supplies that evidence. */
 export function rowVerificationReceipt(_row: RateRow): SuccessfulVerification | null { return null; }
+/** False while {@link rowVerificationReceipt} is closed: every row would read Unknown. */
+export const ROW_VERIFICATION_RECEIPTS_AVAILABLE: boolean = false;

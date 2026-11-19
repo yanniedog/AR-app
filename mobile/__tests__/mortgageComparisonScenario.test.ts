@@ -1,4 +1,4 @@
-import { mortgageComparisonScenario, ratesComparisonScenario } from '../src/data/mortgageComparisonScenario';
+import { invalidMortgageComparisonField, mortgageComparisonScenario, ratesComparisonScenario } from '../src/data/mortgageComparisonScenario';
 import { scopeMortgageFacets } from '../src/data/mortgageFacetScope';
 
 test('comparison amount and percentage LVR override saved pricing assumptions without changing them', () => {
@@ -58,13 +58,23 @@ test.each(['OWNER_OCCUPIER', 'INVESTOR'])('recognised %s display alias retains i
   expect(scopeMortgageFacets(factual, false)).toEqual({ loanPurposes: [], repaymentTypes: [] });
 });
 
-test('ratesComparisonScenario preserves cold-launch browse defaults without inventing partial inputs', () => {
+test('ratesComparisonScenario keeps each unreplaced default, including LVR 80% beside an entered amount', () => {
   const emptyFilters = { loanPurposes: [], repaymentTypes: [] };
   expect(ratesComparisonScenario('Mortgage', {}, { loanAmount: '', lvr: '' }, emptyFilters)).toMatchObject({
     lvr: '0.8',
     purpose: 'OWNER_OCCUPIED',
     repayment: 'PRINCIPAL_AND_INTEREST',
   });
-  expect(ratesComparisonScenario('Mortgage', {}, { loanAmount: '600000', lvr: '' }, emptyFilters).lvr).toBeUndefined();
-  expect(ratesComparisonScenario('Mortgage', {}, { loanAmount: '', lvr: '' }, { loanPurposes: ['INVESTMENT'], repaymentTypes: [] }).lvr).toBeUndefined();
+  expect(ratesComparisonScenario('Mortgage', {}, { loanAmount: '600000', lvr: '' }, emptyFilters)).toMatchObject({
+    amount: '600000', lvr: '0.8', purpose: 'OWNER_OCCUPIED', repayment: 'PRINCIPAL_AND_INTEREST',
+  });
+  expect(ratesComparisonScenario('Mortgage', {}, { loanAmount: '', lvr: '' }, { loanPurposes: ['INVESTMENT'], repaymentTypes: [] })).toMatchObject({
+    lvr: '0.8', purpose: 'INVESTMENT', repayment: 'PRINCIPAL_AND_INTEREST',
+  });
+  // Invalid entries never receive defaults.
+  expect(ratesComparisonScenario('Mortgage', {}, { loanAmount: '600000', lvr: '120' }, emptyFilters).lvr).toBeUndefined();
+  expect(invalidMortgageComparisonField({ loanAmount: '600000', lvr: '120' })).toBe('LVR');
+  expect(invalidMortgageComparisonField({ loanAmount: 'abc', lvr: '' })).toBe('Loan amount');
+  expect(invalidMortgageComparisonField({ loanAmount: '600000', lvr: '', lvrMode: 'funds', fundsType: 'deposit', fundsAvailable: 'x' })).toBe('Deposit');
+  expect(invalidMortgageComparisonField({ loanAmount: '600000', lvr: '80' })).toBeNull();
 });
