@@ -125,7 +125,8 @@ test.each([['local', false], ['local', true], ['live-source', false], ['live-sou
   let reject!: (error: Error) => void;
   const originalXhr = globalThis.XMLHttpRequest;
   class PendingXhr {
-    status = 500; onload?: () => void; onloadend?: () => void;
+    // A non-retryable failure: transient 5xx would be retried by the shared download path.
+    status = 400; onload?: () => void; onloadend?: () => void;
     open() {} setRequestHeader() {} abort() {}
     send() { reject = () => { this.onload?.(); this.onloadend?.(); }; }
   }

@@ -36,7 +36,7 @@ import {
 import { SELF_UPDATE_ENABLED } from '../src/config';
 import { markPassiveAuditForegroundInteraction, registerPassiveAuditBackground, startPassiveAuditPreloading } from '../src/lib/passiveAudit';
 import { ScenarioRecoveryBanner } from '../src/components/ScenarioRecoveryBanner';
-import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
+import { DataUnavailableOverlay } from '../src/components/DataUnavailableOverlay';
 import { ErrorScreen } from '../src/components/ErrorScreen';
 import { TrustedExternalUrlProvider } from '../src/components/ExternalLinkConfirmation';
 import {
@@ -117,7 +117,11 @@ function RootNavigator() {
   const status = useStore((s) => s.status);
   const core = useStore((s) => s.core);
   const hydrated = useStore((s) => s.hydrated);
-  const dataUnavailable = hydrated && status === 'error';
+  const refreshing = useStore((s) => s.refreshing);
+  const retrying = useStore((s) => s.retrying);
+  const hasCore = useStore((s) => s.core != null);
+  // A recovery attempt keeps the unavailable state steady until it settles.
+  const dataUnavailable = hydrated && (status === 'error' || (retrying && !hasCore));
   const crashReportsEnabled = useStore((s) => s.prefs.crashReportsEnabled);
   const sessionReplayEnabled = useStore((s) => s.prefs.sessionReplayEnabled);
   const privacyChoiceVersion = useStore((s) => s.prefs.privacyChoiceVersion);
@@ -130,6 +134,9 @@ function RootNavigator() {
   const coldStartChecked = useRef(false);
 
   const appReady = hydrated && (status === 'ready' || status === 'error');
+  // Settings are loaded: show the shell (Rates skeleton with download progress)
+  // instead of holding the splash through the whole first download.
+  const firstPaintReady = appReady || (hydrated && refreshing);
   const updateBanner = useAppUpdateBanner(appReady && SELF_UPDATE_ENABLED);
   const showUpdateBanner = updateBanner.visible && updateBanner.remote != null;
   const { width: shellWidth } = useWindowDimensions();
@@ -194,15 +201,16 @@ function RootNavigator() {
   }, [performanceAuditActive]);
 
   useEffect(() => {
-    if (!appReady) return;
+    if (!firstPaintReady) return;
     SplashScreen.hideAsync().catch((err) => logSwallowedError('splash.hide', err));
-  }, [appReady]);
+  }, [firstPaintReady]);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const queueRoute = (href: Href | null) => {
       if (!href) return;
-      if (hydrated && (status === 'ready' || status === 'error')) {
+      // Without rates a data route has nothing to show; hold the tap until ready.
+      if (hydrated && status === 'ready') {
         navigateFromNotification(href);
         return;
       }
@@ -224,31 +232,12 @@ function RootNavigator() {
   }, [hydrated, status]);
 
   useEffect(() => {
-    if (!hydrated || (status !== 'ready' && status !== 'error')) return;
+    if (!hydrated || status !== 'ready') return;
     const href = pendingNotificationRoute.current;
     if (!href) return;
     pendingNotificationRoute.current = null;
     navigateFromNotification(href);
   }, [hydrated, status]);
-
-  if (dataUnavailable) {
-    return (
-      <AppUpdateBannerLayoutProvider visible={showUpdateBanner}>
-        <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
-          <StatusBar style={theme.dark ? 'light' : 'dark'} />
-          {showUpdateBanner ? (
-            <AppUpdateBanner
-              remote={updateBanner.remote!}
-              download={updateBanner.download}
-              onDismiss={updateBanner.dismiss}
-            />
-          ) : null}
-          <ScenarioRecoveryBanner />
-          <DataUnavailableScreen />
-        </View>
-      </AppUpdateBannerLayoutProvider>
-    );
-  }
 
   return (
       <WordBubbleProvider scopeKey={performanceAuditActive ? 'audit' : 'app'}>
@@ -343,6 +332,7 @@ function RootNavigator() {
               <Stack.Screen name="debug-log" options={{ title: 'Debug log', animation: 'fade' }} />
               <Stack.Screen name="terms" options={{ title: 'Terms', animation: 'fade' }} />
               </Stack>
+              {dataUnavailable ? <DataUnavailableOverlay /> : null}
             </View>
             </NavigatorSafeArea>
             <AppTabBar />

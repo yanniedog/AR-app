@@ -557,6 +557,38 @@ async function persistTail(): Promise<void> {
   }
 }
 
+const CONSOLE_MIRROR_MAX_LINES = 400;
+const CONSOLE_MIRROR_MAX_CHARS = 1_000;
+let consoleMirroredLines = 0;
+
+/**
+ * Release builds mirror warn/error lines to the console so logcat (tag
+ * ReactNativeJS) carries them for device harnesses. Bounded per process and
+ * per line; already redacted. Development builds skip this so LogBox is not
+ * flooded by expected recoverable failures.
+ */
+function mirrorToConsole(level: LogLevel, tag: string, messageRedacted: string): void {
+  if (level !== 'warn' && level !== 'error') return;
+  if (typeof __DEV__ === 'undefined' || __DEV__) return;
+  if (consoleMirroredLines >= CONSOLE_MIRROR_MAX_LINES) return;
+  consoleMirroredLines += 1;
+  const text = messageRedacted.length > CONSOLE_MIRROR_MAX_CHARS
+    ? `${messageRedacted.slice(0, CONSOLE_MIRROR_MAX_CHARS)}…`
+    : messageRedacted;
+  const line = consoleMirroredLines === CONSOLE_MIRROR_MAX_LINES
+    ? `[AR ${level}] ${tag}: ${text} (console mirror limit reached)`
+    : `[AR ${level}] ${tag}: ${text}`;
+  try {
+    if (level === 'error') console.error(line);
+    else console.warn(line);
+  } catch { /* Console mirroring is best-effort. */ }
+}
+
+/** Test hook. */
+export function resetConsoleMirrorForTests(): void {
+  consoleMirroredLines = 0;
+}
+
 function append(level: LogLevel, tag: string, message: string): void {
   // Collapse real newlines so stack traces and audit dumps stay one parseable
   // physical line (callers may also pre-escape via formatErrorTrace).
@@ -570,6 +602,7 @@ function append(level: LogLevel, tag: string, message: string): void {
     message: messageRedacted,
   };
   buffer.append(entry);
+  mirrorToConsole(level, tag, messageRedacted);
   for (const listener of applicationJournalListeners) {
     try { listener(entry); } catch { /* Journal capture must not drop the log line. */ }
   }

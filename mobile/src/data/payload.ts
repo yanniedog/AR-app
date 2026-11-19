@@ -21,6 +21,7 @@ import { normalizeBankSpreadHistoryPayload } from './bankSpreadHistory';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import { normalizeRbaCalendar } from './rbaCalendar';
 import { decodePayloadUtf8, inflatePayloadOffThread, MAX_PAYLOAD_INFLATED_BYTES } from './payloadInflation';
+import { isRetryableTransportError, PayloadTransportError } from './loadFailure';
 import { payloadDownloadTimeoutMs } from './payloadNetworkBudget';
 import {
   fileNameFromUrl,
@@ -107,7 +108,45 @@ function manifestFetchUrl(url: string): string {
   return `${url}${sep}_=${Date.now()}`;
 }
 
+export const PAYLOAD_FETCH_ATTEMPTS = 3;
+
+/** Jittered exponential backoff between attempts of one download (0-based). */
+export function payloadRetryBackoffMs(attempt: number, random: () => number = Math.random): number {
+  const base = 500 * 2 ** Math.max(0, attempt);
+  return Math.round(base * (0.5 + random()));
+}
+
+let retrySleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/** Test seam: replace the backoff sleep. */
+export function setPayloadRetrySleepForTests(sleep: ((ms: number) => Promise<void>) | null): void {
+  retrySleep = sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+}
+
+/**
+ * Shared download path with bounded retries for transient failures: network
+ * errors, timeouts, HTTP 5xx and 429. Integrity, size and 404 failures are
+ * never retried.
+ */
 async function downloadWireBytes(
+  url: string,
+  opts: DownloadOpts & { phase?: PayloadProgressPhase; legacySha?: string } = {},
+): Promise<ArrayBuffer> {
+  // Audit transport measures one deterministic attempt per request.
+  if (hasAppHealthFetchGuard()) return downloadWireBytesOnce(url, opts);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await downloadWireBytesOnce(url, opts);
+    } catch (err) {
+      if (attempt + 1 >= PAYLOAD_FETCH_ATTEMPTS || opts.signal?.aborted || !isRetryableTransportError(err)) throw err;
+      const delay = payloadRetryBackoffMs(attempt);
+      debugLog.warn('payload', `retry attempt=${attempt + 2}/${PAYLOAD_FETCH_ATTEMPTS} delay_ms=${delay} reason=${String((err as Error)?.message ?? err)} file=${opts.fileName ?? fileNameFromUrl(url)}`);
+      await retrySleep(delay);
+      if (opts.signal?.aborted) throw new Error('Payload download cancelled');
+    }
+  }
+}
+
+async function downloadWireBytesOnce(
   url: string,
   opts: DownloadOpts & { phase?: PayloadProgressPhase; legacySha?: string } = {},
 ): Promise<ArrayBuffer> {
@@ -155,7 +194,7 @@ async function downloadWireBytes(
       const response = await globalThis.fetch(url, { signal: controller.signal, headers: legacyHeaders });
       if (!response.ok) {
         if (deliveryUrl && response.status === 404) throw new MissingPublicPayloadError(url);
-        throw new Error(`asset HTTP ${response.status}`);
+        throw new PayloadTransportError('http', response.status);
       }
       const buf = await response.arrayBuffer();
       if (opts.maxCompressedBytes != null && buf.byteLength > opts.maxCompressedBytes) {
@@ -179,7 +218,7 @@ async function downloadWireBytes(
     if (opts.legacySha) xhr.setRequestHeader('X-AR-Legacy-SHA256', opts.legacySha);
     xhr.timeout = timeoutMs;
     xhr.responseType = 'arraybuffer';
-    xhr.ontimeout = () => reject(new Error('network timeout'));
+    xhr.ontimeout = () => reject(new PayloadTransportError('timeout'));
     xhr.onprogress = (event) => {
       if (opts.maxCompressedBytes != null && event.loaded > opts.maxCompressedBytes) {
         xhr.abort();
@@ -229,12 +268,12 @@ async function downloadWireBytes(
         return;
       }
       logFetchHttpError(url, xhr.status, phase);
-      reject(deliveryUrl && xhr.status === 404 ? new MissingPublicPayloadError(url) : new Error(`asset HTTP ${xhr.status}`));
+      reject(deliveryUrl && xhr.status === 404 ? new MissingPublicPayloadError(url) : new PayloadTransportError('http', xhr.status));
     };
     xhr.onerror = () => {
       debugLog.error('payload', `download failed url=${url}`);
       logFetchHttpError(url, 0, `${phase}:network_error`);
-      reject(new Error('network error'));
+      reject(new PayloadTransportError('network'));
     };
     const abort = () => { xhr.abort(); reject(new Error('Payload download cancelled')); };
     opts.signal?.addEventListener('abort', abort, { once: true });
