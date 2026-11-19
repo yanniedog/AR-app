@@ -2677,9 +2677,11 @@ export async function runJourney(
         }
       },
       settle: async () => {
-        await outsideStepBudget(watchdog, () => settleUi());
-        // Let Fabric finish unmounting the left screen before the next route mounts.
-        await delay(JOURNEY_UNMOUNT_GRACE_MS);
+        await outsideStepBudget(watchdog, async () => {
+          await settleUi();
+          // Let Fabric finish unmounting the left screen before the next route mounts.
+          await delay(JOURNEY_UNMOUNT_GRACE_MS);
+        });
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
       },
