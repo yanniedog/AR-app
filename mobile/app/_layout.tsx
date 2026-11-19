@@ -63,7 +63,7 @@ const ROUTE_TITLES: readonly (readonly [string,UiLabel])[] = [
   ['calculator','Calculate'],['product/[key]','Product'],['bank/[provider]','Bank'],['compare','Compare'],
   ['rate-receipt','Bank-call brief'],['calculation-receipt','Open calculation receipt'],
   ['profile','Profile'],['settings','Settings'],['about','About'],['terms','Terms and privacy'],
-  ['third-party-notices','Third-party notices'],['research','Outlook'],['rba','RBA'],
+  ['third-party-notices','Third-party notices'],['research','Trends'],['rba','RBA'],
   ['rba-response','Bank response'],['bank-rates','Bank rates'],['debug-log','Debug log'],
   ['performance-audit','Performance audit'],['+not-found','Screen unavailable'],
 ];
@@ -329,7 +329,7 @@ function RootNavigator() {
               />
               <Stack.Screen name="profile" options={{ title: 'Profile', animation: 'fade' }} />
               <Stack.Screen name="settings" options={{ title: 'Settings', animation: 'fade' }} />
-              <Stack.Screen name="research" options={{ title: 'Market research', animation: 'fade' }} />
+              <Stack.Screen name="research" options={{ title: 'Trends', animation: 'fade' }} />
               <Stack.Screen name="trends" options={{ headerShown: false }} />
               <Stack.Screen name="about" options={{ title: 'About', animation: 'fade' }} />
               <Stack.Screen

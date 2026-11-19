@@ -478,12 +478,6 @@ export const AUDIT_PRODUCER_SCALARS = new Set<string>([
 ]);
 export const AUDIT_REGISTERED_ACTION_IDS = new Set<string>([
   "audit.pass.complete",
-  "browse.category.back",
-  "browse.category.deepest",
-  "browse.category.first",
-  "browse.open",
-  "browse.products.all",
-  "browse.section.next",
   "calculator.candidate.back",
   "calculator.candidate.first",
   "calculator.mode.next",
@@ -526,7 +520,6 @@ export const AUDIT_REGISTERED_ACTION_IDS = new Set<string>([
   "outlook.history.window.30d",
   "outlook.history.window.all",
   "outlook.open",
-  "outlook.rba-response.decision.previous",
   "outlook.section.next",
   "outlook.snapshot.browse.first",
   "product.calculate.open",

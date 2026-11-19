@@ -39,6 +39,8 @@ import { ChartSliceControls } from './charts/ChartSliceControls';
 import { AppText, Chip, Row } from './ui';
 
 const chartSessions = new Map<string, { window: HistoryWindow; date: string | null }>();
+/** The last window chosen in a memory group opens the next chart in that group. */
+const chosenWindows = new Map<string, HistoryWindow>();
 const EMPTY_SLICE = { dates: [] as string[], points: [] as BankHistoryPoint[], issue: null };
 
 const WINDOW_OPTIONS: { value: HistoryWindow; label: string }[] = [
@@ -107,6 +109,8 @@ export interface BankHistoryChartProps {
   statisticsInline?: boolean;
   onStatisticsChange?: (point: BankHistoryPoint | null) => void;
   stateKey?: string;
+  /** Charts sharing this key open with the window last chosen in any of them. */
+  windowMemory?: string;
   comparisonScope?: UiCopy;
   /** Audit-only bridge to the exact callbacks used by the visible chart controls. */
   auditActionsRef?: MutableRefObject<BankHistoryChartAuditActions | null>;
@@ -268,12 +272,18 @@ function BankHistoryChartView({
   auditActionsRef,
   contentRevision,
   onGraphicReady,
+  windowMemory,
 }: BankHistoryChartProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const [showComparison, setShowComparison] = useState(false);
   const showBenchmarks = !productHistory || showComparison;
-  const [window, setWindow] = useState<HistoryWindow>(() => stateKey ? chartSessions.get(stateKey)?.window ?? '30D' : '30D');
+  const initialWindow = (windowMemory && chosenWindows.get(windowMemory)) || '30D';
+  const [window, setWindowState] = useState<HistoryWindow>(() => stateKey ? chartSessions.get(stateKey)?.window ?? initialWindow : initialWindow);
+  const setWindow = useCallback((next: HistoryWindow) => {
+    if (windowMemory) chosenWindows.set(windowMemory, next);
+    setWindowState(next);
+  }, [windowMemory]);
   const [selectedDate, setSelectedDate] = useState<string | null>(() => stateKey ? chartSessions.get(stateKey)?.date ?? null : null);
   useEffect(() => {
     if (!stateKey) return;
@@ -392,7 +402,7 @@ function BankHistoryChartView({
     return () => {
       if (auditActionsRef.current === actions) auditActionsRef.current = null;
     };
-  }, [activeIndex, auditActionsRef, handleSlicePress, plotDates, window]);
+  }, [activeIndex, auditActionsRef, handleSlicePress, plotDates, setWindow, window]);
 
   const hasPlottableValues = plotPoints.some(
     (p) => isFiniteNumber(p.min) || isFiniteNumber(p.max) || isFiniteNumber(p.mean) || isFiniteNumber(p.median),

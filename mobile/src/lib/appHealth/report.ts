@@ -427,7 +427,7 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
 const PUBLIC_DISPLAY_SURFACES = new Set([
   'rates.results', 'browse.hierarchy', 'search.results', 'lenders.list',
   'market.overview', 'bank-rates.dashboard', 'moves.response-chart',
-  'outlook.dashboard', 'outlook.rba-response', 'outlook.economy', 'rba.dashboard', 'saved.list', 'settings.sections',
+  'outlook.dashboard', 'outlook.economy', 'rba.dashboard', 'saved.list', 'settings.sections',
   'calculator.results', 'projections.lifecycle-chart', 'profile.filters',
   'product.details', 'receipt.evidence', 'lender.details', 'compare.table',
   'about.overview', 'notices.document', 'calculations.receipt', 'terms.notices', 'debug-log.entries', 'projections.inputs', 'settings.app-update',

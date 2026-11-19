@@ -1,5 +1,4 @@
 import { uiLabel } from "../src/lib/uiCopy";
-import { BankRatesPanel } from '../src/components/passthrough/BankRatesPanel';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -75,10 +74,16 @@ export default function RbaResponseScreen() {
   if (!payload) {
     const suitabilityWarming = rawPayload !== null && !error && !suitabilityReady;
     const filteredEmpty = rawPayload !== null && !error && suitabilityReady;
+    if (rawPayload === null && !error) {
+      return (
+        <Screen>
+          <ScreenSkeleton />
+        </Screen>
+      );
+    }
     return (
       <Screen>
         <ScrollView><ScreenContent>
-        {suitabilityWarming ? null : <BankRatesPanel section={initialSection} />}
         <Card variant="outlined" style={{ gap: 12 }}>
           <AppText variant="h3">
             {suitabilityWarming

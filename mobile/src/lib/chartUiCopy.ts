@@ -2,7 +2,7 @@ import type { EconomicIndicatorId, EconomicPressure } from '../data/economicOutl
 import type { BankMoveDir } from '../data/bankInsights';
 import type { SectionKey } from '../types';
 import type { BankResponseReason } from '../data/bankResponseEvidence';
-import type { CompactBankResponseRow } from '../data/bankResponseModel';
+import type { BankResponseStatus, CompactBankResponseRow } from '../data/bankResponseModel';
 import { uiDate, uiDuration, uiJoin, uiLabel, uiNumber, uiPercentage, type UiText } from './uiCopy';
 
 export function uiBankResponseReason(reason: BankResponseReason): UiText {
@@ -21,14 +21,21 @@ export function uiBankResponseReason(reason: BankResponseReason): UiText {
 
 export function uiBankResponseMove(row: CompactBankResponseRow): UiText {
   if (row.movePp == null) return uiBankResponseReason(row.evidence.reason);
-  const move = uiChartPp(row.movePp);
-  return row.evidence.firstMoveVerified ? move : uiJoin(move, ' · ', 'Unverified');
+  return uiChartPp(row.movePp);
 }
 
 export function uiBankResponseTiming(row: CompactBankResponseRow): UiText {
   if (row.daysAfter == null && ['no-recorded-move', 'no-products'].includes(row.evidence.reason)) return uiLabel('—');
-  const timing = uiResponseDays(row.daysAfter);
-  return row.daysAfter == null || row.evidence.firstMoveVerified ? timing : uiJoin(timing, ' · ', 'Unverified');
+  return uiResponseDays(row.daysAfter);
+}
+
+export function uiBankResponseStatus(status: BankResponseStatus, open: boolean): UiText {
+  switch (status) {
+    case 'full': return uiLabel('Full');
+    case 'partial': return uiLabel('Partial');
+    case 'opposite': return uiLabel('Opposite');
+    case 'none': return uiLabel(open ? 'Pending' : 'None');
+  }
 }
 
 export function uiChartSection(section: SectionKey): UiText {
@@ -56,8 +63,8 @@ export function uiEconomicPressure(direction: EconomicPressure): UiText {
   return uiLabel(direction === 'higher' ? 'Higher' : direction === 'lower' ? 'Lower' : 'Balanced');
 }
 export function uiChartMove(section: SectionKey, direction: BankMoveDir): UiText {
-  return uiLabel(direction === 'mixed' ? 'Mixed' : section === 'Mortgage'
-    ? direction === 'cut' ? 'Cut' : 'Hike' : direction === 'cut' ? 'Decrease' : 'Increase');
+  void section;
+  return uiLabel(direction === 'mixed' ? 'Mixed' : direction === 'cut' ? 'Decrease' : 'Increase');
 }
 export function uiChartBps(value: number | null | undefined): UiText {
   return value == null || !Number.isFinite(value) ? uiLabel('Unknown')

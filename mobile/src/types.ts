@@ -2,6 +2,10 @@ export type SectionKey = 'Mortgage' | 'Savings' | 'TD';
 
 export const SECTION_KEYS: SectionKey[] = ['Mortgage', 'Savings', 'TD'];
 
+export function isSectionKey(value: unknown): value is SectionKey {
+  return value === 'Mortgage' || value === 'Savings' || value === 'TD';
+}
+
 /** A flattened rate row (a superset of the dashboard's BANK_SECTION_COLUMNS). */
 export interface RateRow {
   provider: string;
