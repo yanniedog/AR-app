@@ -413,6 +413,21 @@ class Explorer {
     return this.record('audit screen', {}, 60000, t0);
   }
 
+  /** Cancel a running audit so its overlay releases the UI; force-stop and relaunch if it will not end. */
+  async cancelAudit() {
+    const cancel = await this.find('Cancel', 3000);
+    if (cancel) sh(`input tap ${centre(cancel).join(' ')}`);
+    const t0 = Date.now();
+    while (Date.now() - t0 < 60000) {
+      await sleep(2000);
+      const text = (await dumpUi()).nodes.map(n => n.text).join(' ');
+      if (!/[\d,]+ \/ [\d,]+/.test(text)) return;
+    }
+    sh(`am force-stop ${PKG}`, { allowFail: true });
+    await this.relaunch();
+    await sleep(10000);
+  }
+
   /** About > Debug log > Upload and copy link, then fetch the uploaded text into debug-log.txt. */
   async uploadDebugLog() {
     if (!appPid()) { await this.relaunch(); await sleep(10000); }
@@ -505,6 +520,7 @@ class Explorer {
       if (Date.now() - lastProgressAt > stallMs) {
         outcome = `stalled at ${lastCounter ?? 'start'}`;
         await this.snapshot('audit stalled', { error: outcome, auditElapsedMs: Date.now() - t0 });
+        await this.cancelAudit();
         break;
       }
       const uploading = texts.some(t => /^(Preparing|Uploading|Verifying) ?$/.test(t.trim()));
