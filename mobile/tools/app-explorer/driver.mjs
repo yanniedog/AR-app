@@ -460,8 +460,11 @@ class Explorer {
     if (!row) return { error: 'Debug log row not found' };
     sh(`input tap ${centre(row).join(' ')}`);
     await this.record('debug log screen', {}, 60000);
+    const urlsIn = nodes => nodes.map(n => `${n.text} ${n.desc}`).join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/g) || [];
+    const priorUrls = new Set(urlsIn(this.current.nodes));
     const upload = await this.scrollUntil('Upload and copy link', 8);
     if (!upload) return { error: 'Upload and copy link not found' };
+    for (const u of urlsIn((await dumpUi()).nodes)) priorUrls.add(u);
     sh(`input tap ${centre(upload).join(' ')}`);
     await sleep(1500);
     const dialog = (await dumpUi()).nodes;
@@ -472,8 +475,9 @@ class Explorer {
     while (!url && Date.now() - t0 < 5 * 60000) {
       await sleep(3000);
       const nodes = (await dumpUi()).nodes;
-      const m = nodes.map(n => `${n.text} ${n.desc}`).join('\n').match(/https:\/\/paste\.(?:rs|c-net\.org)\/[A-Za-z0-9._~-]+/);
-      if (m) url = m[0];
+      const busy = nodes.some(n => /^(Preparing|Uploading|Verifying)/.test(n.text.trim()));
+      const fresh = urlsIn(nodes).find(u => !priorUrls.has(u));
+      if (fresh && !busy) url = fresh;
     }
     await this.snapshot('debug log uploaded', { debugLogUrl: url, error: url ? undefined : 'debug log upload URL not shown' });
     const result = { url, uploadMs: Date.now() - t0 };
