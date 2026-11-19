@@ -12,7 +12,7 @@ import { uiAccessBadge, uiConditionFact, uiListedLvrRange, uiLoanPurpose, uiRate
 import { scopedRateConditions } from '../../data/rateConditions';
 import { scopedFinancialConditionFacts } from '../../data/scopedFinancialConditionFacts';
 import { uiDetailItem, uiFeeCap, uiFeeDiscount, uiNormalizedProductFact, uiProductFactValue, type ProductPresentationFact } from '../../lib/productUiFacts';
-import { normalizedProductFacts } from '../../data/productFacts';
+import { curatedFeatureIdentityKey, featureAppliesToScope, featureEvidenceScope, normalizedProductFacts } from '../../data/productFacts';
 import { uiCount, uiJoin, uiLabel, type UiCopy, type UiLabel, type UiText } from '../../lib/uiCopy';
 import type { DetailItem, NormalizedProductFact, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
 import { FinancialFactRows } from './FinancialFactRows';
@@ -89,25 +89,26 @@ function feeValues(items: readonly DetailItem[]): UiText {
 function isOffset(key: string | undefined): boolean {
   return (key ?? '').trim().toUpperCase() === 'OFFSET';
 }
-/** Offset availability from the published feature value and its evidence state, never mere presence. */
-function offsetValue(detail: ProductDetailData | null): UiText {
-  const legacy = (detail?.features ?? []).find(item => isOffset(item.label ?? item.name));
-  if (legacy) {
-    const value = uiProductFactValue(uiDetailItem(legacy, 0, 'Features'));
-    return value === 'Included' ? uiLabel('Yes') : value;
-  }
-  const fact = normalizedProductFacts(detail).find(item => item.kind === 'feature'
-    && (isOffset(item.sourceType) || isOffset(item.canonicalKey.split(/[.:/]/).at(-1))));
-  return fact ? uiProductFactValue(uiNormalizedProductFact(fact)) : uiLabel('Unknown');
+function offsetValue(detail: ProductDetailData | null, row?: RateRow): UiText {
+  const normalized = normalizedProductFacts(detail).filter(fact => curatedFeatureIdentityKey(fact) === 'OFFSET');
+  const scope = featureEvidenceScope(row?.product_key ?? '', row, 'Mortgage');
+  const values = normalized.length
+    ? normalized.filter(fact => featureAppliesToScope(fact, scope))
+      .map(fact => uiProductFactValue(uiNormalizedProductFact(fact)))
+    : (detail?.features ?? []).filter(item => isOffset(item.label ?? item.name))
+      .map((item, index) => uiProductFactValue(uiDetailItem(item, index, 'Features')));
+  const distinct = [...new Set(values.map(value => value === 'Included' ? uiLabel('Yes') : value))];
+  if (distinct.length > 1) return uiLabel('Conflicting');
+  return distinct[0] ?? uiLabel('Unknown');
 }
 /** Headline cost facts from the published fee and feature lists. An absent fee is Unknown, never zero. */
-export function mortgageHeadlineFacts(detail: ProductDetailData | null): FinancialFactRow[] {
+export function mortgageHeadlineFacts(detail: ProductDetailData | null, row?: RateRow): FinancialFactRow[] {
   const fees = detail?.fees ?? [];
   const annual = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'ANNUAL_FEE' || /\bannual\b/i.test(fee.name ?? '')
     || (fee.label ?? '').toUpperCase() === 'PERIODIC' && String(fee.additionalValue ?? fee.accrualFrequency ?? '') === 'P1Y');
   const upfront = fees.filter(fee => (fee.label ?? '').toUpperCase() === 'UPFRONT');
   return [{ label: 'Annual fee', value: feeValues(annual) }, { label: 'Upfront fee', value: feeValues(upfront) },
-    { label: 'Offset account', value: offsetValue(detail) }];
+    { label: 'Offset account', value: offsetValue(detail, row) }];
 }
 export function ProductSpecs({ row, section, productDetails }: { row: RateRow; section: SectionKey; productDetails: ProductDetailData | null }) {
   const [open, setOpen] = useState(true);
@@ -121,7 +122,7 @@ export function ProductSpecs({ row, section, productDetails }: { row: RateRow; s
     <FinancialFactRows linkToProduct rows={[{ label: 'Rate type', value: humanizeEnum(row.rate_type) }, { label: 'Term', value: formatTerm(row) || uiLabel('Unknown') },
       ...(section === 'Mortgage' ? [{ label: 'Rate structure' as const, value: uiRateStructure(row) }, { label: 'Repayment' as const, value: uiRepayment(row) },
         { label: 'Loan purpose' as const, value: uiLoanPurpose(row) }, ...(sourceLvr.length ? sourceLvr.map(uiConditionFact) : [{ label: 'Listed LVR' as const, value: uiListedLvrRange(row) }]),
-        ...(productDetails ? mortgageHeadlineFacts(productDetails) : [])]
+        ...(productDetails ? mortgageHeadlineFacts(productDetails, row) : [])]
         : [{ label: 'Balance' as const, value: formatBalanceRange(row.balance_min, row.balance_max) || uiLabel('Unknown') }, { label: 'Interest paid' as const, value: humanizeEnum(row.interest_payment) || uiLabel('Unknown') }]),
       { label: 'Availability', value: availability }, { label: 'Eligibility', value: uiLabel('Unverified') }]} />
   </Disclosure>;

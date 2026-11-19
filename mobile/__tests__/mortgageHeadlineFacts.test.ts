@@ -1,7 +1,7 @@
 import { mortgageHeadlineFacts } from '../src/components/product/ProductDetailParts';
-import type { ProductDetail } from '../src/types';
+import type { ProductDetail, RateRow } from '../src/types';
 
-const facts = (detail: ProductDetail | null) => Object.fromEntries(mortgageHeadlineFacts(detail).map(row => [row.label, row.value]));
+const facts = (detail: ProductDetail | null, rateType?: string) => Object.fromEntries(mortgageHeadlineFacts(detail, rateType ? { rate_type: rateType } as RateRow : undefined).map(row => [row.label, row.value]));
 
 test('headline fees keep condition status and recognise legacy ANNUAL_FEE', () => {
   const detail = { fees: [
@@ -22,4 +22,16 @@ test('offset headline follows the published value and evidence state', () => {
   expect(facts(normalized('observed'))['Offset account']).toBe('Yes');
   expect(facts(normalized('unknown'))['Offset account']).toBe('Unknown');
   expect(facts(normalized('conflicting'))['Offset account']).toBe('Conflicting');
+});
+
+test('offset headline uses the selected rate scope before the legacy product feature', () => {
+  const variable = { id: 'variable', kind: 'feature', canonicalKey: 'features.OFFSET', sourceType: 'OFFSET',
+    value: true, unit: 'boolean', appliesTo: ['VARIABLE'] } as const;
+  const fixed = { ...variable, id: 'fixed', value: false, appliesTo: ['FIXED'] };
+  const detail = { facts: [variable, fixed], features: [{ label: 'OFFSET' }] } as unknown as ProductDetail;
+
+  expect(facts(detail, 'VARIABLE')['Offset account']).toBe('Yes');
+  expect(facts(detail, 'FIXED')['Offset account']).toBe('No');
+  expect(facts(detail)['Offset account']).toBe('Unknown');
+  expect(facts({ ...detail, facts: [...detail.facts!, { ...fixed, appliesTo: ['VARIABLE'] }] }, 'VARIABLE')['Offset account']).toBe('Conflicting');
 });
